@@ -6,3 +6,4 @@
 *.glb filter=lfs diff=lfs merge=lfs -text
 models/**/topology.bin filter=lfs diff=lfs merge=lfs -text
 models/**/topology.json filter=lfs diff=lfs merge=lfs -text
+assets/*.gif filter=lfs diff=lfs merge=lfs -text
