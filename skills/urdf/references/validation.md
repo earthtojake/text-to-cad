@@ -42,4 +42,4 @@ If mesh references changed, confirm the corresponding CAD/STL outputs were regen
 
 `scripts/gen_urdf --summary` prints a compact robot/link/joint summary after regeneration.
 
-The URDF source reader also validates XML structure and uses `yourdfpy` when available in the active Python environment.
+The URDF source reader also validates XML structure with `yourdfpy`, which must be installed in the active Python environment.

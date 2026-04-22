@@ -20,7 +20,7 @@ Use this skill for robot description outputs. URDF work is intentionally separat
 
 ## Commands
 
-Run with the Python environment for the project or workspace. Invoke the tool as a filesystem script, for example `python <urdf-skill>/scripts/gen_urdf ...`. Relative target paths are resolved from the current working directory; the tool does not prepend a harness root such as `models/`.
+Run with the Python environment for the project or workspace. If the environment lacks the URDF validation runtime packages, install this skill's script dependencies from `requirements.txt`. Invoke the tool as a filesystem script, for example `python <urdf-skill>/scripts/gen_urdf ...`. Relative target paths are resolved from the current working directory; the tool does not prepend a harness root such as `models/`.
 
 - URDF sidecars: `scripts/gen_urdf`
 
