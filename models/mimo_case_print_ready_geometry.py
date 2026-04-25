@@ -55,6 +55,8 @@ from mimo_case_geometry import (
     PCB_HEIGHT,
 )
 from mimo_pcb_geometry import (
+    AMBIENT_SENSOR_REFDES,
+    MIC_REFDES,
     load_board_metadata,
     pcb_component_center,
     pcb_component_size,
@@ -150,6 +152,19 @@ class PrintReadyParams:
     # Per-sensor sub-apertures inside the sensor window.
     pir_fresnel_diameter: float = 10.0  # Fresnel lens insert diameter for PIR
     pir_fresnel_depth_extra: float = 1.4  # extra recess past the screen recess for the lens dome
+
+    # MEMS microphone acoustic port. A small pinhole through the front wall;
+    # the mic's bottom-port faces it, with an acoustic mesh seated between.
+    mic_port_diameter: float = 1.0
+    mic_port_mesh_recess_diameter: float = 3.5
+    mic_port_mesh_recess_depth: float = 0.6
+
+    # Ambient (SHT45) side-face vent. A small horizontal slot lets nursery air
+    # reach the sensor without breaking the front cosmetic surface.
+    ambient_vent_w: float = 5.0  # along Y (case height)
+    ambient_vent_h: float = 1.6  # along Z (case depth)
+    ambient_vent_r: float = 0.6
+    ambient_vent_depth_through_wall: float = 4.0
 
     usb_cut_w: float = 12.0
     usb_cut_h: float = 5.5
@@ -343,6 +358,67 @@ def _pir_fresnel_cutout_raw(params: PrintReadyParams):
     return Cylinder(radius, cutter_depth).translate(
         (case_x, case_y, FRONT_Z - cutter_depth / 2.0 + 0.05)
     )
+
+
+def _mic_port_cutout_raw(params: PrintReadyParams):
+    """Acoustic pinhole through the front wall over the MEMS mic.
+
+    Creates a small Ø1 mm port (sound passage) plus a slightly larger shallow
+    recess on the inside face for the acoustic mesh to seat against. Position
+    is driven by the mic refdes on the PCB.
+    """
+    pcb_xy = pcb_component_center(MIC_REFDES)
+    if pcb_xy is None:
+        return None
+    case_x, case_y, _ = pcb_case_position(pcb_xy[0], pcb_xy[1])
+    front_half_depth = max(TOTAL_DEPTH - params.split_z, 1.0)
+    cutter_depth = max(front_half_depth + params.seam_root + 0.6, params.wall + 0.8)
+    pinhole = Cylinder(params.mic_port_diameter / 2.0, cutter_depth).translate(
+        (case_x, case_y, FRONT_Z - cutter_depth / 2.0 + 0.05)
+    )
+    mesh_recess = Cylinder(
+        params.mic_port_mesh_recess_diameter / 2.0,
+        params.mic_port_mesh_recess_depth,
+    ).translate(
+        (
+            case_x,
+            case_y,
+            FRONT_Z - params.wall - (params.mic_port_mesh_recess_depth / 2.0),
+        )
+    )
+    return pinhole + mesh_recess
+
+
+def _ambient_vent_cutout_raw(params: PrintReadyParams):
+    """Side-face vent slot that lets nursery air reach the SHT45.
+
+    Placed on whichever side face (+X or -X) the SHT45 lives nearest. The slot
+    runs along Y (case height) and pierces through the side wall at the
+    sensor's Z height, so a printed-in micro-grille could be added later
+    without re-routing the cut.
+    """
+    pcb_xy = pcb_component_center(AMBIENT_SENSOR_REFDES)
+    if pcb_xy is None:
+        return None
+    case_x, case_y, _ = pcb_case_position(pcb_xy[0], pcb_xy[1])
+    sensor_z_in_case = PCB_CASE_CENTER_Z + (PCB_THICKNESS / 2.0) + 0.4
+    side_sign = 1.0 if case_x >= 0 else -1.0
+    side_face_x = (CASE_WIDTH / 2.0) * side_sign
+    # Build a horizontal slot in the YZ plane at the side face, then push it
+    # inward through the wall.
+    plane = Plane(
+        origin=(side_face_x + 0.05 * side_sign, 0.0, 0.0),
+        x_dir=(0.0, 1.0, 0.0),
+        z_dir=(-side_sign, 0.0, 0.0),  # normal points into the case
+    )
+    with BuildSketch(plane) as sketch:
+        RectangleRounded(
+            params.ambient_vent_w,
+            params.ambient_vent_h,
+            params.ambient_vent_r,
+        )
+    slot = extrude(sketch.sketch, amount=params.ambient_vent_depth_through_wall)
+    return slot.translate((0.0, case_y, sensor_z_in_case))
 
 
 def pcb_mount_holes_from_metadata() -> list[tuple[float, float, float]]:
@@ -560,6 +636,14 @@ def front_back_halves_raw(
     pir_cut = _pir_fresnel_cutout_raw(params)
     if pir_cut is not None:
         outer = outer - pir_cut
+
+    mic_cut = _mic_port_cutout_raw(params)
+    if mic_cut is not None:
+        outer = outer - mic_cut
+
+    ambient_cut = _ambient_vent_cutout_raw(params)
+    if ambient_cut is not None:
+        outer = outer - ambient_cut
 
     back_cutter = _cutter_at(params.split_z - (params.split_gap / 2.0))
     front_cutter = _cutter_from(params.split_z + (params.split_gap / 2.0))

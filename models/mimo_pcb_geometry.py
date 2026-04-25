@@ -134,20 +134,29 @@ def pcb_usb_c_opening_center() -> tuple[float, float, float]:
     raise ValueError("Could not find J1 USB-C component in PCB metadata")
 
 
-# Refdes of components that need front-face optical/RF visibility (radar antenna,
-# thermal lens, PIR Fresnel, mic acoustic port). Update this list as the PCB
-# layout matures and sensors are tagged with explicit refdes.
+# Refdes of components that need front-face optical/RF visibility, mapped from
+# `mimo-board/subcircuits/*.tsx`:
+#   U2   → IWR6843AOP 60 GHz mmWave radar (radar.tsx)
+#   J2   → FLIR Lepton 3.5 thermal socket (thermal.tsx)
+#   PIR1 → Panasonic EKMC PIR (pir.tsx)
 #
-# Today the schematic only labels PIR1 explicitly. When the EE adds refdes for
-# the radar / Lepton socket / mic / SHT45, append them here and the case
-# auto-adapts (the front-face window expands to cover all tagged sensors).
-FRONT_FACE_SENSOR_REFDES = ("PIR1",)
+# The mic (U5) is excluded because it needs only a small acoustic port, not a
+# full visibility window — it gets its own pinhole via `MIC_REFDES`.
+#
+# Other excluded components:
+#   U1 ESP32-S3 MCU       — internal, no aperture
+#   U3 SHT45 ambient T/RH — needs OPEN-AIR side vent, not a front aperture
+#   U4 BMI270 IMU         — fully internal
+#   LED1 status LED       — separate light-pipe hole if needed
+FRONT_FACE_SENSOR_REFDES = ("U2", "J2", "PIR1")
 
-# Fallback sensor-cluster zone in PCB-local frame, derived from spec §8.1
-# placement diagram (radar top-left, Lepton bottom-left-center, mic adjacent,
-# PIR bottom area). Used as a seed bbox when tagged sensors don't fully
-# represent the cluster yet. Coordinates: (x_min, x_max, y_min, y_max).
-SENSOR_ZONE_PCB_HINT = (-25.0, 12.0, -22.0, 5.0)
+# Refdes of the MEMS microphone that needs an acoustic pinhole + mesh over its
+# bottom-port, not a full front-face window.
+MIC_REFDES = "U5"
+
+# Refdes of the ambient T/RH sensor that needs a side-face vent for open-air
+# access (not the front sensor window).
+AMBIENT_SENSOR_REFDES = "U3"
 
 
 def pcb_component_by_refdes(refdes: str) -> dict | None:
@@ -178,14 +187,12 @@ def pcb_component_size(refdes: str) -> tuple[float, float] | None:
 def pcb_front_sensor_cluster_bbox(margin: float = 4.0) -> tuple[float, float, float, float]:
     """Return (x_min, x_max, y_min, y_max) bounding all front-facing sensors in PCB frame.
 
-    Starts from the spec-derived `SENSOR_ZONE_PCB_HINT` seed and expands it to
-    cover every tagged sensor in `FRONT_FACE_SENSOR_REFDES` plus the requested
-    margin. As more sensors get tagged, the seed becomes redundant.
-
-    All coordinates are in PCB-local frame; convert to case frame via
-    `pcb_case_position()` if needed.
+    Computed from every tagged sensor in `FRONT_FACE_SENSOR_REFDES` plus the
+    requested margin. All coordinates are in PCB-local frame; convert to case
+    frame via `pcb_case_position()` if needed.
     """
-    x_min, x_max, y_min, y_max = SENSOR_ZONE_PCB_HINT
+    xs: list[float] = []
+    ys: list[float] = []
     data = load_board_metadata()
     names = source_component_names(data)
     for item in data:
@@ -197,11 +204,14 @@ def pcb_front_sensor_cluster_bbox(margin: float = 4.0) -> tuple[float, float, fl
         cy = float(item["center"]["y"])
         w = float(item.get("width") or 0) / 2.0
         h = float(item.get("height") or 0) / 2.0
-        x_min = min(x_min, cx - w)
-        x_max = max(x_max, cx + w)
-        y_min = min(y_min, cy - h)
-        y_max = max(y_max, cy + h)
-    return (x_min - margin, x_max + margin, y_min - margin, y_max + margin)
+        xs.extend([cx - w, cx + w])
+        ys.extend([cy - h, cy + h])
+    if not xs:
+        raise ValueError(
+            "No front-face sensors found on the PCB. Check that "
+            f"{FRONT_FACE_SENSOR_REFDES!r} are placed in mimo-board."
+        )
+    return (min(xs) - margin, max(xs) + margin, min(ys) - margin, max(ys) + margin)
 
 
 def pcb_shape_raw():
