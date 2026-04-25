@@ -134,6 +134,76 @@ def pcb_usb_c_opening_center() -> tuple[float, float, float]:
     raise ValueError("Could not find J1 USB-C component in PCB metadata")
 
 
+# Refdes of components that need front-face optical/RF visibility (radar antenna,
+# thermal lens, PIR Fresnel, mic acoustic port). Update this list as the PCB
+# layout matures and sensors are tagged with explicit refdes.
+#
+# Today the schematic only labels PIR1 explicitly. When the EE adds refdes for
+# the radar / Lepton socket / mic / SHT45, append them here and the case
+# auto-adapts (the front-face window expands to cover all tagged sensors).
+FRONT_FACE_SENSOR_REFDES = ("PIR1",)
+
+# Fallback sensor-cluster zone in PCB-local frame, derived from spec §8.1
+# placement diagram (radar top-left, Lepton bottom-left-center, mic adjacent,
+# PIR bottom area). Used as a seed bbox when tagged sensors don't fully
+# represent the cluster yet. Coordinates: (x_min, x_max, y_min, y_max).
+SENSOR_ZONE_PCB_HINT = (-25.0, 12.0, -22.0, 5.0)
+
+
+def pcb_component_by_refdes(refdes: str) -> dict | None:
+    data = load_board_metadata()
+    names = source_component_names(data)
+    for item in data:
+        if item.get("type") != "pcb_component":
+            continue
+        if names.get(item.get("source_component_id")) == refdes:
+            return item
+    return None
+
+
+def pcb_component_center(refdes: str) -> tuple[float, float] | None:
+    component = pcb_component_by_refdes(refdes)
+    if component is None:
+        return None
+    return (float(component["center"]["x"]), float(component["center"]["y"]))
+
+
+def pcb_component_size(refdes: str) -> tuple[float, float] | None:
+    component = pcb_component_by_refdes(refdes)
+    if component is None:
+        return None
+    return (float(component.get("width") or 0), float(component.get("height") or 0))
+
+
+def pcb_front_sensor_cluster_bbox(margin: float = 4.0) -> tuple[float, float, float, float]:
+    """Return (x_min, x_max, y_min, y_max) bounding all front-facing sensors in PCB frame.
+
+    Starts from the spec-derived `SENSOR_ZONE_PCB_HINT` seed and expands it to
+    cover every tagged sensor in `FRONT_FACE_SENSOR_REFDES` plus the requested
+    margin. As more sensors get tagged, the seed becomes redundant.
+
+    All coordinates are in PCB-local frame; convert to case frame via
+    `pcb_case_position()` if needed.
+    """
+    x_min, x_max, y_min, y_max = SENSOR_ZONE_PCB_HINT
+    data = load_board_metadata()
+    names = source_component_names(data)
+    for item in data:
+        if item.get("type") != "pcb_component":
+            continue
+        if names.get(item.get("source_component_id")) not in FRONT_FACE_SENSOR_REFDES:
+            continue
+        cx = float(item["center"]["x"])
+        cy = float(item["center"]["y"])
+        w = float(item.get("width") or 0) / 2.0
+        h = float(item.get("height") or 0) / 2.0
+        x_min = min(x_min, cx - w)
+        x_max = max(x_max, cx + w)
+        y_min = min(y_min, cy - h)
+        y_max = max(y_max, cy + h)
+    return (x_min - margin, x_max + margin, y_min - margin, y_max + margin)
+
+
 def pcb_shape_raw():
     return Compound([pcb_board_raw(), pcb_component_solids_raw()])
 

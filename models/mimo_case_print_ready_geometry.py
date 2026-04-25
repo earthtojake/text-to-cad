@@ -54,7 +54,16 @@ from mimo_case_geometry import (
     PCB_WIDTH,
     PCB_HEIGHT,
 )
-from mimo_pcb_geometry import load_board_metadata, pcb_components, pcb_holes, pcb_shape_raw, pcb_usb_c_opening_center
+from mimo_pcb_geometry import (
+    load_board_metadata,
+    pcb_component_center,
+    pcb_component_size,
+    pcb_components,
+    pcb_front_sensor_cluster_bbox,
+    pcb_holes,
+    pcb_shape_raw,
+    pcb_usb_c_opening_center,
+)
 
 # Print-ready enclosure mirrors the original mimo_case shell silhouette so the
 # product keeps its rounded, near-square personality. The previous 94x86x26
@@ -125,6 +134,11 @@ class PrintReadyParams:
     seam_wall: float = 1.2
     seam_clearance: float = 0.2
 
+    # Sensor window override knobs. When `screen_use_pcb_cluster=True` (default),
+    # the through-cut and recess are sized and positioned from the PCB sensor
+    # cluster bbox via `pcb_front_sensor_cluster_bbox()`. The hardcoded values
+    # below are only used as a fallback / override when the flag is False.
+    screen_use_pcb_cluster: bool = True
     screen_u: float = 0.5
     screen_v: float = 0.5
     screen_open_w: float = 56.0
@@ -132,6 +146,10 @@ class PrintReadyParams:
     screen_open_r: float = 8.0
     screen_recess_margin: float = 4.0
     screen_recess_depth: float = 1.8
+
+    # Per-sensor sub-apertures inside the sensor window.
+    pir_fresnel_diameter: float = 10.0  # Fresnel lens insert diameter for PIR
+    pir_fresnel_depth_extra: float = 1.4  # extra recess past the screen recess for the lens dome
 
     usb_cut_w: float = 12.0
     usb_cut_h: float = 5.5
@@ -223,22 +241,108 @@ def _usb_c_cutout_raw(params: PrintReadyParams):
     return extrude(sketch.sketch, amount=params.usb_cut_depth).translate((usb_x, 0.0, usb_z))
 
 
-def _screen_opening_cut_raw(params: PrintReadyParams, *, center_xy: tuple[float, float]):
+def _flat_front_face_half_extents() -> tuple[float, float, float, float]:
+    """Half-extents of the flat front-face zone (case planform inset by face fillet)."""
+    half_w = (CASE_WIDTH / 2.0) - BODY_FACE_BLEND_RADIUS
+    half_h = (CASE_HEIGHT / 2.0) - BODY_FACE_BLEND_RADIUS
+    corner_r = max(BODY_PLAN_RADIUS - BODY_FACE_BLEND_RADIUS, 0.5)
+    corner_center_x = half_w - corner_r
+    corner_center_y = half_h - corner_r
+    return half_w, half_h, corner_r, corner_center_x  # corner_center_y = corner_center_x in symmetric case
+
+
+def sensor_window_geometry(
+    params: PrintReadyParams,
+) -> tuple[tuple[float, float], float, float, float]:
+    """Return ((center_x, center_y), width, height, corner_radius) for the
+    sensor-window through-cut on the front face, in case coords.
+
+    When `params.screen_use_pcb_cluster` is True (default), pulls the sensor
+    cluster bbox from PCB metadata and translates it into case coords so the
+    case auto-adapts as the PCB layout evolves. Otherwise falls back to the
+    fixed `screen_*` overrides on `params`.
+    """
+    if not params.screen_use_pcb_cluster:
+        center_x, center_y, _ = front_anchor(params.screen_u, params.screen_v)
+        return (
+            (center_x, center_y),
+            params.screen_open_w,
+            params.screen_open_h,
+            params.screen_open_r,
+        )
+
+    pcb_x_min, pcb_x_max, pcb_y_min, pcb_y_max = pcb_front_sensor_cluster_bbox(margin=2.0)
+    case_x_min, case_y_min, _ = pcb_case_position(pcb_x_min, pcb_y_min)
+    case_x_max, case_y_max, _ = pcb_case_position(pcb_x_max, pcb_y_max)
+    center_x = (case_x_min + case_x_max) / 2.0
+    center_y = (case_y_min + case_y_max) / 2.0
+    width = case_x_max - case_x_min
+    height = case_y_max - case_y_min
+
+    # Clamp to fit within the flat front-face zone with a small safety margin.
+    safety = 1.5
+    half_w, half_h, corner_r, _ = _flat_front_face_half_extents()
+    max_half_w = half_w - safety
+    max_half_h = half_h - safety
+    if (width / 2.0) > max_half_w:
+        width = 2.0 * max_half_w
+    if (height / 2.0) > max_half_h:
+        height = 2.0 * max_half_h
+    # Clamp center so the recess outline doesn't run off the flat zone.
+    center_x = max(min(center_x, max_half_w - width / 2.0), -(max_half_w - width / 2.0))
+    center_y = max(min(center_y, max_half_h - height / 2.0), -(max_half_h - height / 2.0))
+
+    radius = min(params.screen_open_r, height / 2.0 - 0.1, width / 2.0 - 0.1)
+    return ((center_x, center_y), width, height, radius)
+
+
+def _screen_opening_cut_raw(
+    params: PrintReadyParams,
+    *,
+    center_xy: tuple[float, float],
+    width: float | None = None,
+    height: float | None = None,
+    radius: float | None = None,
+):
     center_x, center_y = center_xy
+    open_w = params.screen_open_w if width is None else width
+    open_h = params.screen_open_h if height is None else height
+    open_r = params.screen_open_r if radius is None else radius
     # Keep the through-cut mostly within the front half so we don't inadvertently
     # weaken or clip internal back-half features.
     front_half_depth = max(TOTAL_DEPTH - params.split_z, 1.0)
     cutter_depth = max(front_half_depth + params.seam_root + 0.6, params.wall + 0.8)
-    opening = _window_plate(
-        params.screen_open_w, params.screen_open_h, cutter_depth, params.screen_open_r
-    ).translate((center_x, center_y, FRONT_Z - cutter_depth + 0.05))
+    opening = _window_plate(open_w, open_h, cutter_depth, open_r).translate(
+        (center_x, center_y, FRONT_Z - cutter_depth + 0.05)
+    )
     recess = _window_plate(
-        params.screen_open_w + params.screen_recess_margin,
-        params.screen_open_h + params.screen_recess_margin,
+        open_w + params.screen_recess_margin,
+        open_h + params.screen_recess_margin,
         params.screen_recess_depth,
-        params.screen_open_r + params.screen_recess_margin / 2.0,
+        open_r + params.screen_recess_margin / 2.0,
     ).translate((center_x, center_y, FRONT_Z - params.screen_recess_depth + 0.02))
     return recess + opening
+
+
+def _pir_fresnel_cutout_raw(params: PrintReadyParams):
+    """Through-hole on the front face for the PIR Fresnel lens dome.
+
+    Position is driven by PIR1's center on the PCB. Returns None if the PIR
+    isn't tagged on the board yet.
+    """
+    pcb_xy = pcb_component_center("PIR1")
+    if pcb_xy is None:
+        return None
+    case_x, case_y, _ = pcb_case_position(pcb_xy[0], pcb_xy[1])
+    radius = params.pir_fresnel_diameter / 2.0
+    front_half_depth = max(TOTAL_DEPTH - params.split_z, 1.0)
+    cutter_depth = max(
+        front_half_depth + params.seam_root + 0.6 + params.pir_fresnel_depth_extra,
+        params.wall + 0.8,
+    )
+    return Cylinder(radius, cutter_depth).translate(
+        (case_x, case_y, FRONT_Z - cutter_depth / 2.0 + 0.05)
+    )
 
 
 def pcb_mount_holes_from_metadata() -> list[tuple[float, float, float]]:
@@ -434,14 +538,28 @@ def front_back_halves_raw(
     screen_center_xy: tuple[float, float] | None = None,
 ):
     params = PrintReadyParams() if params is None else params
+    window_xy, window_w, window_h, window_r = sensor_window_geometry(params)
+    # `screen_center_xy` is an explicit override for callers that need a non-
+    # PCB-driven center (rare). Default behavior derives everything from the
+    # PCB sensor cluster.
     if screen_center_xy is None:
-        screen_center_xy = front_anchor(params.screen_u, params.screen_v)[:2]
+        screen_center_xy = window_xy
 
     outer = enclosure_outer_raw()
     inner = enclosure_inner_raw(wall=params.wall)
 
     outer = outer - _usb_c_cutout_raw(params)
-    outer = outer - _screen_opening_cut_raw(params, center_xy=screen_center_xy)
+    outer = outer - _screen_opening_cut_raw(
+        params,
+        center_xy=screen_center_xy,
+        width=window_w,
+        height=window_h,
+        radius=window_r,
+    )
+
+    pir_cut = _pir_fresnel_cutout_raw(params)
+    if pir_cut is not None:
+        outer = outer - pir_cut
 
     back_cutter = _cutter_at(params.split_z - (params.split_gap / 2.0))
     front_cutter = _cutter_from(params.split_z + (params.split_gap / 2.0))
@@ -463,8 +581,8 @@ def front_back_halves_raw(
     # Ease the exterior edge around the screen recess when possible.
     try:
         x, y = screen_center_xy
-        w = params.screen_open_w + params.screen_recess_margin
-        h = params.screen_open_h + params.screen_recess_margin
+        w = window_w + params.screen_recess_margin
+        h = window_h + params.screen_recess_margin
         x_min = x - (w / 2.0) - 1.0
         x_max = x + (w / 2.0) + 1.0
         y_min = y - (h / 2.0) - 1.0
@@ -493,10 +611,15 @@ def validate_print_ready_alignment(
     *,
     params: PrintReadyParams | None = None,
     screen_center_xy: tuple[float, float] | None = None,
+    window_size: tuple[float, float] | None = None,
 ):
     params = PrintReadyParams() if params is None else params
-    if screen_center_xy is None:
-        screen_center_xy = front_anchor(params.screen_u, params.screen_v)[:2]
+    if screen_center_xy is None or window_size is None:
+        derived_xy, derived_w, derived_h, _ = sensor_window_geometry(params)
+        if screen_center_xy is None:
+            screen_center_xy = derived_xy
+        if window_size is None:
+            window_size = (derived_w, derived_h)
 
     inner_half_x = (CASE_WIDTH / 2.0) - params.wall
     inner_half_y = (CASE_HEIGHT / 2.0) - params.wall
@@ -563,12 +686,13 @@ def validate_print_ready_alignment(
         )
 
     opening_x, opening_y = screen_center_xy
-    opening_half_w = params.screen_open_w / 2.0
-    opening_half_h = params.screen_open_h / 2.0
+    opening_w, opening_h = window_size
+    opening_half_w = opening_w / 2.0
+    opening_half_h = opening_h / 2.0
     if opening_x - opening_half_w < LEFT_X + 6.0 or opening_x + opening_half_w > RIGHT_X - 6.0:
-        raise ValueError("Screen opening is too close to the left/right outer edges.")
+        raise ValueError("Sensor window is too close to the left/right outer edges.")
     if opening_y - opening_half_h < BOTTOM_Y + 6.0 or opening_y + opening_half_h > TOP_Y - 6.0:
-        raise ValueError("Screen opening is too close to the top/bottom outer edges.")
+        raise ValueError("Sensor window is too close to the top/bottom outer edges.")
 
     pcb_case_min_y = pcb_case_position(0.0, pcb_min_y, 0.0)[1]
     facts = {
@@ -588,7 +712,7 @@ def validate_print_ready_alignment(
         "usb_cutout_y_range_mm": (round(usb_cut_y0, 3), round(usb_cut_y1, 3)),
         "usb_cutout_xz_size_mm": (round(params.usb_cut_w, 3), round(params.usb_cut_h, 3)),
         "window_center_xy_mm": (round(opening_x, 3), round(opening_y, 3)),
-        "window_opening_mm": (round(params.screen_open_w, 3), round(params.screen_open_h, 3)),
+        "window_opening_mm": (round(opening_w, 3), round(opening_h, 3)),
         "pcb_case_bounds_xy_mm": (
             round(pcb_case_min_x, 3),
             round(pcb_case_max_x, 3),
