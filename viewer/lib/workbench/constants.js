@@ -22,6 +22,7 @@ export const RENDER_FORMAT = {
 
 export const TAB_TOOL_MODE = {
   REFERENCES: "references",
+  MEASURE: "measure",
   DRAW: "draw"
 };
 

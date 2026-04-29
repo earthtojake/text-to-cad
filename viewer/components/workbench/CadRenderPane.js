@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import CadViewer from "../CadViewer";
 import DxfViewer from "../DxfViewer";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
@@ -8,6 +9,33 @@ import { VIEWER_SCENE_SCALE } from "../../lib/viewer/sceneScale";
 import { VIEWER_PICK_MODE } from "../../lib/viewer/constants";
 
 const EMPTY_LIST = Object.freeze([]);
+const MEASUREMENT_CALLOUT_DEFAULT_OFFSET = Object.freeze({ x: 18, y: -58 });
+
+function splitMeasurementValue(value) {
+  const text = String(value || "").trim();
+  const match = text.match(/^(.+?)\s+(mm|cm|m)(?:\^([23]))?$/);
+  if (!match) {
+    return { value: text, unit: "" };
+  }
+  return {
+    value: match[1],
+    unit: match[2],
+    exponent: match[3] || ""
+  };
+}
+
+function MeasurementValue({ value }) {
+  const parts = splitMeasurementValue(value);
+  if (!parts.unit) {
+    return <>{parts.value}</>;
+  }
+  return (
+    <>
+      {parts.value} {parts.unit}
+      {parts.exponent ? <sup className="text-[0.62em] leading-none">{parts.exponent}</sup> : null}
+    </>
+  );
+}
 
 export default function CadRenderPane({
   viewerRef,
@@ -53,8 +81,15 @@ export default function CadRenderPane({
   copyButtonLabel,
   handleCopySelection,
   handleScreenshotCopy,
+  measureToolActive = false,
+  measurementResult = null,
+  measurementAnchor = null,
+  measurementSelectionCount = 0,
+  handleClearMeasurement,
   partIntroAnimation = null
 }) {
+  const [measurementDragOffset, setMeasurementDragOffset] = useState(MEASUREMENT_CALLOUT_DEFAULT_OFFSET);
+  const measurementDragRef = useRef(null);
   const viewerAlertVariant = viewerAlert?.severity === "warning" ? "warning" : "destructive";
   const viewerAlertSummaryClasses = viewerAlert?.severity === "warning" ? "text-chart-5" : "text-destructive";
   const dxfMode = renderFormat === RENDER_FORMAT.DXF;
@@ -77,6 +112,53 @@ export default function CadRenderPane({
   const ctaLabel = ctaMode === "screenshot" ? "Copy Screenshot" : copyButtonLabel;
   const ctaTitle = ctaMode === "screenshot" ? "Copy screenshot to clipboard" : copyButtonLabel;
   const ctaDisabled = ctaMode === "screenshot" ? viewerLoading || !activeMeshData : false;
+  const measurementValue = String(measurementResult?.formattedValue || "").trim();
+  const measurementTitle = String(measurementResult?.title || "").trim();
+  const measurementDetail = String(measurementResult?.detail || "").trim();
+  const measurementAnchorStyle = measurementAnchor && Number.isFinite(measurementAnchor.x) && Number.isFinite(measurementAnchor.y)
+    ? {
+      left: `${measurementAnchor.x + measurementDragOffset.x}px`,
+      top: `${measurementAnchor.y + measurementDragOffset.y}px`
+    }
+    : {
+      left: `calc(50% + ${measurementDragOffset.x}px)`,
+      bottom: isDesktop ? `calc(1rem - ${measurementDragOffset.y}px)` : `calc(env(safe-area-inset-bottom, 0px) + 7.25rem - ${measurementDragOffset.y}px)`,
+      transform: "translateX(-50%)"
+    };
+  const handleMeasurementDragStart = useCallback((event) => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    measurementDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offset: measurementDragOffset
+    };
+  }, [measurementDragOffset]);
+  const handleMeasurementDragMove = useCallback((event) => {
+    const dragState = measurementDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+    setMeasurementDragOffset({
+      x: dragState.offset.x + event.clientX - dragState.startX,
+      y: dragState.offset.y + event.clientY - dragState.startY
+    });
+  }, []);
+  const handleMeasurementDragEnd = useCallback((event) => {
+    const dragState = measurementDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+    measurementDragRef.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  }, []);
+  useEffect(() => {
+    setMeasurementDragOffset(MEASUREMENT_CALLOUT_DEFAULT_OFFSET);
+  }, [measurementResult?.referenceIds?.join("|")]);
 
   return (
     <div className="absolute inset-0">
@@ -114,6 +196,7 @@ export default function CadRenderPane({
           hoveredPartId={dxfMode || stlMode ? "" : hoveredPartId}
           hoveredReferenceId={dxfMode || stlMode ? "" : hoveredReferenceId}
           selectedReferenceIds={dxfMode || stlMode ? [] : selectedReferenceIds}
+          measurementResult={dxfMode || stlMode ? null : measurementResult}
           selectorRuntime={dxfMode || stlMode ? null : selectorRuntime}
           pickableFaces={dxfMode || stlMode ? [] : pickableFaces}
           pickableEdges={dxfMode || stlMode ? [] : pickableEdges}
@@ -168,6 +251,53 @@ export default function CadRenderPane({
         >
           STEP changed. Updating/regenerating references...
         </Alert>
+      ) : null}
+      {!previewMode && measureToolActive ? (
+        <div
+          className="pointer-events-none fixed z-30 w-fit max-w-[min(calc(100vw-2rem),28rem)]"
+          style={measurementAnchorStyle}
+        >
+          <div className="cad-glass-popover pointer-events-auto relative rounded-[0.85rem] border border-white/38 bg-popover/76 px-5 pb-4 pt-5 text-sidebar-foreground shadow-[0_14px_34px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.14)] backdrop-blur-xl">
+            <button
+              type="button"
+              className="absolute left-1/2 top-2 z-10 flex h-5 w-12 -translate-x-1/2 cursor-grab touch-none items-center justify-center bg-transparent active:cursor-grabbing"
+              aria-label="Move measurement panel"
+              onPointerDown={handleMeasurementDragStart}
+              onPointerMove={handleMeasurementDragMove}
+              onPointerUp={handleMeasurementDragEnd}
+              onPointerCancel={handleMeasurementDragEnd}
+            >
+              <span className="grid grid-cols-4 gap-1" aria-hidden="true">
+                {Array.from({ length: 8 }).map((_, index) => (
+                  <span key={index} className="size-1 rounded-full bg-white/60" />
+                ))}
+              </span>
+            </button>
+            <div className="flex min-w-0 items-center justify-between gap-8 pt-3">
+              <div className="min-w-0">
+                <p className="text-[0.82rem] font-semibold uppercase leading-none tracking-[0.28em] text-white/62">
+                  {measurementTitle || (measurementSelectionCount ? "Measure" : "Pick edge or corner")}
+                </p>
+                <p className="mt-2 truncate text-[1.45rem] font-semibold leading-none text-white">
+                  {measurementValue ? <MeasurementValue value={measurementValue} /> : "Select an edge, a cylinder, or two corners"}
+                </p>
+                {measurementDetail ? (
+                  <p className="mt-1.5 truncate text-xs text-white/58">{measurementDetail}</p>
+                ) : null}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 shrink-0 px-2 text-sm font-semibold text-sky-200 hover:bg-white/10 hover:text-sky-100"
+                disabled={!measurementSelectionCount && !measurementResult}
+                onClick={() => handleClearMeasurement?.()}
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
       {!previewMode && ctaMode && !stepUpdateInProgress ? (
         <div

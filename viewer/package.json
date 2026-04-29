@@ -3,12 +3,12 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "node node_modules/vite/bin/vite.js dev",
     "dev:ensure": "node scripts/ensure-dev-server.mjs",
-    "build": "vite build",
-    "build:app": "vite build --outDir dist-verify --emptyOutDir",
-    "test:node": "node --test --experimental-default-type=module lib/perspective.test.js lib/lookSettings.test.js lib/urdf/parseUrdf.test.js lib/urdf/kinematics.test.js lib/urdf/jointAnimation.test.js lib/dxf/parseDxf.test.js lib/workbench/sidebar.test.js lib/cadDirectoryScanner.test.mjs lib/viewer/sceneScale.test.js components/viewer/hooks/useViewerPicking.test.js lib/assembly/meshData.test.js lib/selectors/runtime.test.js lib/async/concurrency.test.js lib/clipboard.test.js",
-    "start": "vite preview"
+    "build": "node node_modules/vite/bin/vite.js build",
+    "build:app": "node node_modules/vite/bin/vite.js build --outDir dist-verify --emptyOutDir",
+    "test:node": "node --test --experimental-default-type=module lib/perspective.test.js lib/lookSettings.test.js lib/urdf/parseUrdf.test.js lib/urdf/kinematics.test.js lib/urdf/jointAnimation.test.js lib/dxf/parseDxf.test.js lib/workbench/sidebar.test.js lib/cadDirectoryScanner.test.mjs lib/viewer/sceneScale.test.js components/viewer/hooks/useViewerPicking.test.js lib/assembly/meshData.test.js lib/selectors/runtime.test.js lib/measurements/measureTopology.test.js lib/async/concurrency.test.js lib/clipboard.test.js",
+    "start": "node node_modules/vite/bin/vite.js preview"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

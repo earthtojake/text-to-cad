@@ -261,6 +261,11 @@ function buildReference({
     pickData: {
       selectorType,
       rowIndex,
+      surfaceType: row.surfaceType || null,
+      curveType: row.curveType || null,
+      length: row.length ?? null,
+      area: row.area ?? null,
+      volume: row.volume ?? null,
       bbox: row.bbox || null,
       center: row.center || null,
       normal: row.normal || null,

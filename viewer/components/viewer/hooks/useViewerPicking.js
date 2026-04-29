@@ -1033,7 +1033,11 @@ export function useViewerPicking({
       pointerDown.pointerType = "";
       pointerDown.referenceId = "";
       const referenceId = pointerDownReferenceId || pickActivationReference(event.clientX, event.clientY, event.pointerType || "");
-      onActivateReferenceRef.current?.(referenceId || "", { multiSelect: !!event.shiftKey });
+      onActivateReferenceRef.current?.(referenceId || "", {
+        multiSelect: !!event.shiftKey,
+        clientX: event.clientX,
+        clientY: event.clientY
+      });
     }
 
     function handleDoubleClick(event) {
@@ -1041,7 +1045,11 @@ export function useViewerPicking({
         return;
       }
       const referenceId = pickActivationReference(event.clientX, event.clientY, event.pointerType || "");
-      onDoubleActivateReferenceRef.current?.(referenceId || "", { multiSelect: !!event.shiftKey });
+      onDoubleActivateReferenceRef.current?.(referenceId || "", {
+        multiSelect: !!event.shiftKey,
+        clientX: event.clientX,
+        clientY: event.clientY
+      });
     }
 
     container.addEventListener("pointermove", handlePointerMove);
