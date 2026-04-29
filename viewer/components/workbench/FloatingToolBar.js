@@ -3,7 +3,8 @@ import {
   Download,
   MousePointer2,
   Play,
-  PenTool
+  PenTool,
+  Ruler
 } from "lucide-react";
 import { RENDER_FORMAT } from "../../lib/workbench/constants";
 import { TooltipProvider } from "../ui/tooltip";
@@ -23,6 +24,8 @@ function DesktopFloatingToolBar({
   renderFormat,
   floatingCadToolbarPosition,
   selectionToolActive,
+  measureToolActive,
+  measureToolDisabled,
   drawToolActive,
   handleSelectTabToolMode,
   viewerLoading,
@@ -74,6 +77,16 @@ function DesktopFloatingToolBar({
                     aria-pressed={drawToolActive}
                   >
                     <PenTool className="size-3.5" strokeWidth={2} aria-hidden="true" />
+                  </ToolbarButton>
+
+                  <ToolbarButton
+                    label="Measure"
+                    active={measureToolActive}
+                    onClick={() => handleSelectTabToolMode("measure")}
+                    disabled={viewerLoading || !selectedMeshData || measureToolDisabled}
+                    aria-pressed={measureToolActive}
+                  >
+                    <Ruler className="size-3.5" strokeWidth={2} aria-hidden="true" />
                   </ToolbarButton>
                 </>
               ) : null}
@@ -142,6 +155,8 @@ function MobileFloatingToolBar({
   handleClearDrawings,
   drawingStrokes,
   selectionToolActive,
+  measureToolActive,
+  measureToolDisabled,
   handleSelectTabToolMode,
   viewerLoading,
   selectedMeshData,
@@ -209,6 +224,20 @@ function MobileFloatingToolBar({
                     >
                       <PenTool className="size-4" strokeWidth={2} aria-hidden="true" />
                       <span>Draw</span>
+                    </ToolbarTextButton>
+
+                    <ToolbarTextButton
+                      label="Measure"
+                      active={measureToolActive}
+                      onClick={() => {
+                        handleSelectTabToolMode("measure");
+                      }}
+                      disabled={viewerLoading || !selectedMeshData || measureToolDisabled}
+                      className={MOBILE_TOOL_BUTTON_CLASS}
+                      aria-pressed={measureToolActive}
+                    >
+                      <Ruler className="size-4" strokeWidth={2} aria-hidden="true" />
+                      <span>Measure</span>
                     </ToolbarTextButton>
                   </>
                 )}

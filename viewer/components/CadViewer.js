@@ -2679,6 +2679,25 @@ function buildVertexMarkerMesh(runtime, THREE, reference, {
   return mesh;
 }
 
+function measurementLinePositionsFromReferences(references) {
+  const normalizedReferences = (Array.isArray(references) ? references : []).filter(Boolean);
+  if (normalizedReferences.length === 2 && normalizedReferences.every((reference) => reference.selectorType === "vertex")) {
+    const start = normalizedReferences[0]?.pickData?.center;
+    const end = normalizedReferences[1]?.pickData?.center;
+    if (isFinitePoint3(start) && isFinitePoint3(end)) {
+      return [...start, ...end];
+    }
+  }
+  if (normalizedReferences.length === 1) {
+    const reference = normalizedReferences[0];
+    const params = reference?.pickData?.params || {};
+    if ((reference.selectorType === "edge" || reference.selectorType === "face") && isFinitePoint3(params.center) && isFinitePoint3(reference?.pickData?.center)) {
+      return [...params.center, ...reference.pickData.center];
+    }
+  }
+  return null;
+}
+
 function subtract(a, b) {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 }
@@ -3982,6 +4001,7 @@ const CadViewer = forwardRef(function CadViewer({
   hoveredPartId = "",
   hoveredReferenceId = "",
   selectedReferenceIds = [],
+  measurementResult = null,
   selectorRuntime = null,
   pickableFaces = [],
   pickableEdges = [],
@@ -5355,6 +5375,29 @@ const CadViewer = forwardRef(function CadViewer({
       }
     }
 
+    const measurementReferenceIds = Array.isArray(measurementResult?.referenceIds)
+      ? measurementResult.referenceIds
+      : [];
+    if (measurementReferenceIds.length) {
+      const measurementReferences = measurementReferenceIds
+        .map((referenceId) => pickableReferenceMap.get(referenceId) || selectorRuntime?.referenceMap?.get(referenceId) || null)
+        .filter(Boolean);
+      const measurementLinePositions = measurementLinePositionsFromReferences(measurementReferences);
+      if (measurementLinePositions?.length) {
+        const measurementLine = createScreenSpaceLineSegments(runtime, measurementLinePositions, {
+          color: "#ef4444",
+          opacity: 1,
+          lineWidth: Math.max(baseEdgeThickness * 2.4, 3),
+          renderOrder: 80,
+          depthTest: false,
+          depthWrite: false
+        });
+        if (measurementLine) {
+          highlightGroup.add(measurementLine);
+        }
+      }
+    }
+
     highlightGroup.visible = highlightGroup.children.length > 0;
     faceFillGroup.visible = faceFillGroup.children.length > 0;
     runtime.requestRender();
@@ -5363,7 +5406,7 @@ const CadViewer = forwardRef(function CadViewer({
       clearOverlayGroup(runtime, highlightGroup);
       clearOverlayGroup(runtime, faceFillGroup);
     };
-  }, [hoveredReferenceId, pickableReferenceMap, selectedReferenceIds, selectorRuntime, viewerReadyTick, viewerTheme, normalizedLookSettings.edges]);
+  }, [hoveredReferenceId, measurementResult, pickableReferenceMap, selectedReferenceIds, selectorRuntime, viewerReadyTick, viewerTheme, normalizedLookSettings.edges]);
 
   useViewerDrawingOverlay({
     drawingCanvasRef,
