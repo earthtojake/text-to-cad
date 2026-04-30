@@ -40,6 +40,7 @@ const COARSE_POINTER_PINCH_ZOOM_SPEED = 2.4;
 const KEYBOARD_ORBIT_NUDGE_RAD = Math.PI / 32;
 const KEYBOARD_ORBIT_SPEED_RAD_PER_SEC = Math.PI * 0.42;
 const KEYBOARD_POLAR_EPSILON = 0.02;
+const MM_PER_INCH = 25.4;
 const PREVIEW_AUTO_ROTATE_SPEED = 1.0;
 const VIEW_PLANE_ACTIVE_DOT_THRESHOLD = 0.994;
 const VIEW_PLANE_TRANSITION_MS = 280;
@@ -54,7 +55,7 @@ const VIEW_PLANE_DEFAULT_PRESET = {
   id: "isometric",
   title: "Reset to default isometric view",
   direction: DEFAULT_VIEW_DIRECTION,
-  up: [0, 1, 0]
+  up: [0, 0, 1]
 };
 const CAD_EDGE_OPACITY = 0.84;
 const CAD_EDGE_THRESHOLD_DEG = 16;
@@ -166,46 +167,46 @@ const LOOK_BACKGROUND_TYPES = {
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
 const VIEW_PLANE_FACES = [
   {
-    id: "y",
-    label: "Y",
-    title: "Jump to top view",
-    direction: [0, 1, 0],
-    up: [0, 0, -1]
-  },
-  {
-    id: "yNeg",
-    label: "-Y",
-    title: "Jump to bottom view",
-    direction: [0, -1, 0],
-    up: [0, 0, 1]
-  },
-  {
     id: "z",
     label: "Z",
-    title: "Jump to front view",
+    title: "Jump to top view",
     direction: [0, 0, 1],
     up: [0, 1, 0]
   },
   {
     id: "zNeg",
     label: "-Z",
-    title: "Jump to back view",
+    title: "Jump to bottom view",
     direction: [0, 0, -1],
     up: [0, 1, 0]
+  },
+  {
+    id: "yNeg",
+    label: "-Y",
+    title: "Jump to front view",
+    direction: [0, -1, 0],
+    up: [0, 0, 1]
+  },
+  {
+    id: "y",
+    label: "Y",
+    title: "Jump to back view",
+    direction: [0, 1, 0],
+    up: [0, 0, 1]
   },
   {
     id: "x",
     label: "X",
     title: "Jump to right view",
     direction: [1, 0, 0],
-    up: [0, 1, 0]
+    up: [0, 0, 1]
   },
   {
     id: "xNeg",
     label: "-X",
     title: "Jump to left view",
     direction: [-1, 0, 0],
-    up: [0, 1, 0]
+    up: [0, 0, 1]
   }
 ];
 const VIEW_PLANE_FACE_BY_ID = Object.fromEntries(VIEW_PLANE_FACES.map((face) => [face.id, face]));
@@ -1273,6 +1274,66 @@ function readBoundsRadius(THREE, bounds) {
     return 0;
   }
   return max.sub(min).length() * 0.5;
+}
+
+function readBoundsDimensions(bounds) {
+  const min = bounds?.min;
+  const max = bounds?.max;
+  if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) {
+    return null;
+  }
+  const dimensions = [0, 1, 2].map((index) => Math.abs(toNumber(max[index], NaN) - toNumber(min[index], NaN)));
+  return dimensions.every(Number.isFinite) ? dimensions : null;
+}
+
+function formatMeasurementMm(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "0.0";
+  }
+  return numericValue >= 100 ? numericValue.toFixed(0) : numericValue.toFixed(1);
+}
+
+function formatMeasurementIn(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "0.00";
+  }
+  return (numericValue / MM_PER_INCH).toFixed(2);
+}
+
+function buildBoundsMeasurement(bounds) {
+  const dimensions = readBoundsDimensions(bounds);
+  if (!dimensions) {
+    return null;
+  }
+  return {
+    dimensions,
+    mmText: `${formatMeasurementMm(dimensions[0])} x ${formatMeasurementMm(dimensions[1])} x ${formatMeasurementMm(dimensions[2])} mm`,
+    inchText: `${formatMeasurementIn(dimensions[0])} x ${formatMeasurementIn(dimensions[1])} x ${formatMeasurementIn(dimensions[2])} in`
+  };
+}
+
+function findMeasurementPart(meshData, selectedPartIds, hoveredPartId, focusedPartId) {
+  const parts = Array.isArray(meshData?.parts) ? meshData.parts : [];
+  if (!parts.length) {
+    return null;
+  }
+  const preferredIds = [
+    ...(Array.isArray(selectedPartIds) ? selectedPartIds : []),
+    focusedPartId,
+    hoveredPartId
+  ].map((id) => String(id || "").trim()).filter(Boolean);
+  for (const partId of preferredIds) {
+    const part = parts.find((candidate) => (
+      String(candidate?.id || "").trim() === partId ||
+      String(candidate?.occurrenceId || "").trim() === partId
+    ));
+    if (part) {
+      return part;
+    }
+  }
+  return null;
 }
 
 function getActiveViewPlaneFaceId(runtime) {
@@ -4099,6 +4160,24 @@ const CadViewer = forwardRef(function CadViewer({
       ? (Array.isArray(pickableVertices) ? pickableVertices : []).filter((reference) => String(reference?.partId || "").trim() === focusedPartIdValue)
       : (Array.isArray(pickableVertices) ? pickableVertices : [])
   ), [focusedPartIdValue, pickableVertices]);
+  const measurementSummary = useMemo(() => {
+    const modelMeasurement = buildBoundsMeasurement(meshData?.bounds);
+    if (!modelMeasurement) {
+      return null;
+    }
+    const activePart = findMeasurementPart(meshData, selectedPartIds, hoveredPartId, focusedPartIdValue);
+    const partMeasurement = activePart ? buildBoundsMeasurement(activePart.bounds) : null;
+    return {
+      model: modelMeasurement,
+      part: partMeasurement
+        ? {
+          label: String(activePart?.label || activePart?.name || activePart?.id || "Selected part").trim(),
+          measurement: partMeasurement
+        }
+        : null,
+      partCount: Array.isArray(meshData?.parts) ? meshData.parts.length : 0
+    };
+  }, [meshData, selectedPartIds, hoveredPartId, focusedPartIdValue]);
   const pickableReferenceMap = useMemo(() => {
     if (selectorRuntime?.referenceMap instanceof Map) {
       return selectorRuntime.referenceMap;
@@ -5437,6 +5516,25 @@ const CadViewer = forwardRef(function CadViewer({
         activateViewPlaneFace={activateViewPlaneFace}
         activateDefaultViewPlane={activateDefaultViewPlane}
       />
+      {!previewMode && !isLoading && measurementSummary ? (
+        <div className="cad-glass-popover pointer-events-none absolute bottom-4 left-4 z-20 max-w-[min(24rem,calc(100vw-2rem))] rounded-[10px] border border-white/10 px-3 py-2 text-[11px] leading-5 text-popover-foreground shadow-[var(--ui-shadow-soft)]">
+          <p className="font-semibold uppercase tracking-[0.16em] text-muted-foreground">Dimensions</p>
+          <p className="mt-1 font-medium text-foreground">Model XYZ</p>
+          <p className="font-mono text-muted-foreground">{measurementSummary.model.mmText}</p>
+          <p className="font-mono text-muted-foreground">{measurementSummary.model.inchText}</p>
+          {measurementSummary.part ? (
+            <div className="mt-2 border-t border-white/10 pt-2">
+              <p className="truncate font-medium text-foreground" title={measurementSummary.part.label}>
+                {measurementSummary.part.label}
+              </p>
+              <p className="font-mono text-muted-foreground">{measurementSummary.part.measurement.mmText}</p>
+              <p className="font-mono text-muted-foreground">{measurementSummary.part.measurement.inchText}</p>
+            </div>
+          ) : measurementSummary.partCount > 1 ? (
+            <p className="mt-2 text-muted-foreground">Select or hover a part for part dimensions.</p>
+          ) : null}
+        </div>
+      ) : null}
       {error ? (
         <p className="cad-glass-popover pointer-events-none absolute left-4 top-24 z-20 rounded-[10px] border border-[var(--ui-error-bg)] px-4 py-3 text-sm text-[var(--ui-error-text)] shadow-[var(--ui-shadow-soft)] sm:top-20">
           {error}

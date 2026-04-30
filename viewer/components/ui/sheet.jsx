@@ -30,12 +30,13 @@ function SheetPortal({
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />;
 }
 
-function SheetOverlay({
+const SheetOverlay = React.forwardRef(function SheetOverlay({
   className,
   ...props
-}) {
+}, ref) {
   return (
     <SheetPrimitive.Overlay
+      ref={ref}
       data-slot="sheet-overlay"
       className={cn(
         "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
@@ -43,20 +44,21 @@ function SheetOverlay({
       )}
       {...props} />
   );
-}
+})
 
-function SheetContent({
+const SheetContent = React.forwardRef(function SheetContent({
   className,
   overlayClassName,
   children,
   side = "right",
   showCloseButton = true,
   ...props
-}) {
+}, ref) {
   return (
     <SheetPortal>
       <SheetOverlay className={overlayClassName} />
       <SheetPrimitive.Content
+        ref={ref}
         data-slot="sheet-content"
         className={cn(
           "cad-glass-popover fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500",
@@ -82,7 +84,7 @@ function SheetContent({
       </SheetPrimitive.Content>
     </SheetPortal>
   );
-}
+})
 
 function SheetHeader({
   className,
