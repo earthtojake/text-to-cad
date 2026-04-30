@@ -7,4 +7,3 @@ export function isCadWorkspaceDesktopViewport(width) {
   const numericWidth = Number(width);
   return Number.isFinite(numericWidth) && numericWidth >= CAD_WORKSPACE_BREAKPOINT_PX;
 }
-
