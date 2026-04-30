@@ -91,12 +91,6 @@ git clone https://github.com/earthtojake/text-to-cad.git
 cd text-to-cad
 ```
 
-Demo GIF assets are tracked with Git LFS but skipped by default so normal clones stay small. To hydrate them locally:
-
-```bash
-git lfs pull --include=".agents/skills/**/assets/*.gif" --exclude=""
-```
-
 Install Python CAD dependencies:
 
 ```bash

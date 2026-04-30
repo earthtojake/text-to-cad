@@ -37,12 +37,6 @@ The skill operates on explicit source files and imported STEP/STP files. It does
 
 Inside the text-to-cad harness, this bundled skill lives at `.agents/skills/cad`. In a standalone install, replace `.agents/skills/cad` with the path to the skill checkout.
 
-The demo GIF is tracked with Git LFS but skipped by default so normal clones stay small. To hydrate it locally in the standalone skill repo:
-
-```bash
-git lfs pull --include="assets/*.gif" --exclude=""
-```
-
 Install Python CAD dependencies:
 
 ```bash

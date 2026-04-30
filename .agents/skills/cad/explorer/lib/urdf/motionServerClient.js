@@ -5,6 +5,18 @@ const pendingRequests = new Map();
 let socket = null;
 let socketUrl = "";
 
+function defaultMotionServerEnabled() {
+  const env = typeof import.meta !== "undefined" ? import.meta.env : null;
+  if (env && typeof env === "object" && Object.hasOwn(env, "DEV")) {
+    return Boolean(env.DEV);
+  }
+  return true;
+}
+
+export function motionServerEnabled({ enabled = defaultMotionServerEnabled() } = {}) {
+  return Boolean(enabled);
+}
+
 function normalizeRequestId(value) {
   const id = String(value || "").trim();
   if (id) {
@@ -16,7 +28,10 @@ function normalizeRequestId(value) {
   return `motion-server-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-function configuredMotionServerUrl() {
+function configuredMotionServerUrl({ enabled = motionServerEnabled() } = {}) {
+  if (!motionServerEnabled({ enabled })) {
+    return "";
+  }
   const envUrl = typeof import.meta !== "undefined"
     ? String(import.meta.env?.EXPLORER_ROBOT_MOTION_WS_URL || "").trim()
     : "";
@@ -26,12 +41,15 @@ function configuredMotionServerUrl() {
   return DEFAULT_MOTION_SERVER_WS_URL;
 }
 
-export function motionServerUrl() {
+export function motionServerUrl({ enabled = motionServerEnabled() } = {}) {
+  if (!motionServerEnabled({ enabled })) {
+    return "";
+  }
   if (typeof window === "undefined") {
-    return configuredMotionServerUrl();
+    return configuredMotionServerUrl({ enabled });
   }
   const queryUrl = new URL(window.location.href).searchParams.get("motionWs");
-  return String(queryUrl || "").trim() || configuredMotionServerUrl();
+  return String(queryUrl || "").trim() || configuredMotionServerUrl({ enabled });
 }
 
 function rejectPendingRequests(message) {
@@ -105,18 +123,22 @@ function sendWhenOpen(activeSocket, message, resolve, reject) {
   activeSocket.addEventListener("open", handleOpen);
 }
 
-export function motionServerAvailable({ WebSocketImpl = globalThis.WebSocket } = {}) {
-  return Boolean(WebSocketImpl);
+export function motionServerAvailable({
+  WebSocketImpl = globalThis.WebSocket,
+  enabled = motionServerEnabled(),
+} = {}) {
+  return Boolean(enabled && WebSocketImpl);
 }
 
 export function checkMotionServerLive({
   timeoutMs = 1000,
   url = motionServerUrl(),
   WebSocketImpl = globalThis.WebSocket,
+  enabled = motionServerEnabled(),
 } = {}) {
   const safeTimeoutMs = Math.max(Number(timeoutMs) || 1000, 1);
   return new Promise((resolve) => {
-    if (!WebSocketImpl) {
+    if (!enabled || !url || !WebSocketImpl) {
       resolve(false);
       return;
     }
@@ -151,10 +173,15 @@ export function requestMotionServer(type, payload, {
   timeoutMs = DEFAULT_TIMEOUT_MS,
   url = motionServerUrl(),
   WebSocketImpl = globalThis.WebSocket,
+  enabled = motionServerEnabled(),
 } = {}) {
   const id = normalizeRequestId(payload?.id);
   const safeTimeoutMs = Math.max(Number(timeoutMs) || DEFAULT_TIMEOUT_MS, 1);
   return new Promise((resolve, reject) => {
+    if (!enabled || !url) {
+      reject(new Error("Motion server connections are only available in local development."));
+      return;
+    }
     let activeSocket;
     try {
       activeSocket = ensureMotionServerSocket(url, WebSocketImpl);

@@ -5,6 +5,7 @@ import {
   checkMotionServerLive,
   closeMotionServerConnection,
   motionServerAvailable,
+  motionServerEnabled,
   motionServerUrl,
   requestMotionServer,
 } from "./motionServerClient.js";
@@ -132,6 +133,12 @@ test("motionServerAvailable reflects WebSocket support", () => {
   assert.equal(motionServerAvailable({ WebSocketImpl: null }), false);
 });
 
+test("motionServerEnabled can disable production motion connections", () => {
+  assert.equal(motionServerEnabled({ enabled: true }), true);
+  assert.equal(motionServerEnabled({ enabled: false }), false);
+  assert.equal(motionServerAvailable({ WebSocketImpl: FakeWebSocket, enabled: false }), false);
+});
+
 test("checkMotionServerLive resolves true when websocket opens", async () => {
   const promise = checkMotionServerLive({
     url: "ws://motion.test/ws",
@@ -157,6 +164,31 @@ test("checkMotionServerLive resolves false when websocket errors before opening"
   assert.equal(await promise, false);
 });
 
+test("checkMotionServerLive does not open a websocket when disabled", async () => {
+  const live = await checkMotionServerLive({
+    url: "ws://motion.test/ws",
+    WebSocketImpl: FakeWebSocket,
+    enabled: false,
+    timeoutMs: 1000,
+  });
+
+  assert.equal(live, false);
+  assert.equal(FakeWebSocket.sockets.length, 0);
+});
+
+test("requestMotionServer rejects without opening a websocket when disabled", async () => {
+  await assert.rejects(
+    requestMotionServer("urdf.solvePose", { id: "req-disabled" }, {
+      url: "ws://motion.test/ws",
+      WebSocketImpl: FakeWebSocket,
+      enabled: false,
+      timeoutMs: 1000,
+    }),
+    /only available in local development/
+  );
+  assert.equal(FakeWebSocket.sockets.length, 0);
+});
+
 test("motionServerUrl uses the generic query override", () => {
   const originalWindow = globalThis.window;
   globalThis.window = {
@@ -166,6 +198,24 @@ test("motionServerUrl uses the generic query override", () => {
   };
   try {
     assert.equal(motionServerUrl(), "ws://motion.test/ws");
+  } finally {
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+  }
+});
+
+test("motionServerUrl ignores query overrides when disabled", () => {
+  const originalWindow = globalThis.window;
+  globalThis.window = {
+    location: {
+      href: "http://127.0.0.1:4178/?motionWs=ws%3A%2F%2Fmotion.test%2Fws",
+    },
+  };
+  try {
+    assert.equal(motionServerUrl({ enabled: false }), "");
   } finally {
     if (originalWindow === undefined) {
       delete globalThis.window;

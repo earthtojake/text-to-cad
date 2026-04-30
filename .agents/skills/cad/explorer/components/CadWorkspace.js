@@ -101,7 +101,7 @@ import {
   validateUrdfMotionTrajectory,
   validateUrdfMotionJointValues
 } from "../lib/urdf/motion";
-import { checkMotionServerLive, requestMotionServer } from "../lib/urdf/motionServerClient";
+import { checkMotionServerLive, motionServerEnabled, requestMotionServer } from "../lib/urdf/motionServerClient";
 import {
   advanceUrdfJointValues,
   jointValueMapsClose,
@@ -131,6 +131,7 @@ const DEFAULT_URDF_ANIMATION_SETTINGS = Object.freeze({
   introEnabled: false,
   speed: 1
 });
+const ROBOT_MOTION_SERVER_ENABLED = motionServerEnabled();
 const URDF_POSE_PICKER_DEFAULT_CENTER = Object.freeze([0, 0, 0]);
 const MIN_URDF_ANIMATION_SPEED = 0.25;
 const MAX_URDF_ANIMATION_SPEED = 2.5;
@@ -1407,7 +1408,7 @@ export default function CadWorkspace({
     return endEffectors.length ? { ...motion, endEffectors } : null;
   }, [selectedUrdfData]);
   const selectedUrdfMotionConfigKey = useMemo(() => {
-    if (!selectedUrdfFileRef || !selectedUrdfMotion?.motionServer) {
+    if (!ROBOT_MOTION_SERVER_ENABLED || !selectedUrdfFileRef || !selectedUrdfMotion?.motionServer) {
       return "";
     }
     return `${selectedUrdfFileRef}:${entryUrdfAssetHash(selectedEntry) || ""}`;

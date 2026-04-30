@@ -310,6 +310,39 @@ class MoveItPyProvider:
         pose.pose.orientation.w = 1.0
         return pose, end_effector
 
+    def _position_goal_constraints(self, target_pose: Any, end_effector: dict[str, Any]) -> list[Any]:
+        try:
+            from geometry_msgs.msg import Pose
+            from moveit_msgs.msg import Constraints, PositionConstraint
+            from shape_msgs.msg import SolidPrimitive
+        except ImportError as exc:
+            raise RuntimeError(
+                f"moveit_py provider could not import MoveIt position constraint messages for {sys.executable}. "
+                "Start motion_server from a RoboStack/ROS shell."
+            ) from exc
+
+        sphere = SolidPrimitive()
+        sphere.type = SolidPrimitive.SPHERE
+        sphere.dimensions = [float(end_effector.get("positionTolerance") or 0.002)]
+
+        center = Pose()
+        center.orientation.w = 1.0
+        center.position.x = target_pose.pose.position.x
+        center.position.y = target_pose.pose.position.y
+        center.position.z = target_pose.pose.position.z
+
+        position_constraint = PositionConstraint()
+        position_constraint.header.frame_id = target_pose.header.frame_id
+        position_constraint.link_name = str(end_effector.get("link") or "")
+        position_constraint.constraint_region.primitives.append(sphere)
+        position_constraint.constraint_region.primitive_poses.append(center)
+        position_constraint.weight = 1.0
+
+        constraints = Constraints()
+        constraints.name = f"{position_constraint.link_name}_position_goal"
+        constraints.position_constraints.append(position_constraint)
+        return [constraints]
+
     def _joint_values_from_state(self, robot_state: Any, request: Any) -> dict[str, float]:
         joint_names = _joint_names(request)
         planning_group = _planning_group(request)
@@ -387,10 +420,15 @@ class MoveItPyProvider:
         planning_component = self._planning_component(request, planning_group)
         start_state = self._robot_state(request)
         planning_component.set_start_state(robot_state=start_state)
-        planning_component.set_goal_state(
-            pose_stamped_msg=target_pose,
-            pose_link=end_effector.get("link"),
-        )
+        try:
+            planning_component.set_goal_state(
+                motion_plan_constraints=self._position_goal_constraints(target_pose, end_effector),
+            )
+        except TypeError:
+            planning_component.set_goal_state(
+                pose_stamped_msg=target_pose,
+                pose_link=end_effector.get("link"),
+            )
 
         plan_result = planning_component.plan()
         if not plan_result:

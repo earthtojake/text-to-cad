@@ -12,12 +12,6 @@ Generated robot-description tools for coding agents.
 
 The URDF skill operates on explicit Python sources that define `gen_urdf()`. It does not assume a project root or directory layout, so it can be used in any project that provides the required Python environment.
 
-The demo GIF is tracked with Git LFS but skipped by default so normal clones stay small. To hydrate it locally in the standalone skill repo:
-
-```bash
-git lfs pull --include="assets/*.gif" --exclude=""
-```
-
 ## What It Can Do
 
 - Regenerate `.urdf` outputs from Python `gen_urdf()` sources.

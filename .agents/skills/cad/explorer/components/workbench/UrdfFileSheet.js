@@ -426,22 +426,22 @@ export default function UrdfFileSheet({
                       variant="outline"
                       size="sm"
                       className="h-8 px-2 text-xs"
-                      onClick={() => {
-                        void onCopyJointAngles?.();
-                      }}
+                      onClick={onResetPose}
                     >
-                      <Copy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                      <span>Copy angles</span>
+                      <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                      <span>Reset pose</span>
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="h-8 px-2 text-xs"
-                      onClick={onResetPose}
+                      onClick={() => {
+                        void onCopyJointAngles?.();
+                      }}
                     >
-                      <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                      <span>Reset pose</span>
+                      <Copy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                      <span>Copy angles</span>
                     </Button>
                   </div>
                 </div>

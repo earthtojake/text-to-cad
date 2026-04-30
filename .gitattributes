@@ -5,6 +5,3 @@
 **/.*.step/**/*.glb filter=lfs diff=lfs merge=lfs -text
 **/.*.step/topology.bin filter=lfs diff=lfs merge=lfs -text
 **/.*.step/topology.json filter=lfs diff=lfs merge=lfs -text
-
-# Keep bulky demo media available through LFS without hydrating it in default clones.
-.agents/skills/**/assets/*.gif filter=lfs diff=lfs merge=lfs -text
