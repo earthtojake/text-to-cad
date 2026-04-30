@@ -56,13 +56,13 @@ export function useViewerRuntime({
     async function initializeViewer() {
       const [
         THREE,
-        { OrbitControls },
+        { TrackballControls },
         { LineSegments2 },
         { LineSegmentsGeometry },
         { LineMaterial }
       ] = await Promise.all([
         import("three"),
-        import("three/examples/jsm/controls/OrbitControls.js"),
+        import("three/examples/jsm/controls/TrackballControls.js"),
         import("three/examples/jsm/lines/LineSegments2.js"),
         import("three/examples/jsm/lines/LineSegmentsGeometry.js"),
         import("three/examples/jsm/lines/LineMaterial.js")
@@ -91,6 +91,7 @@ export function useViewerRuntime({
       const scene = new THREE.Scene();
 
       const camera = new THREE.PerspectiveCamera(48, width / height, 0.1, 50000);
+      camera.up.set(0, 0, 1);
       camera.position.set(180, 120, 180);
 
       const renderer = new THREE.WebGLRenderer({
@@ -110,15 +111,12 @@ export function useViewerRuntime({
       container.innerHTML = "";
       container.appendChild(renderer.domElement);
 
-      const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controls.dampingFactor = DEFAULT_DAMPING_FACTOR;
+      const controls = new TrackballControls(camera, renderer.domElement);
+      controls.staticMoving = false;
+      controls.dynamicDampingFactor = DEFAULT_DAMPING_FACTOR;
       controls.rotateSpeed = 1;
       controls.panSpeed = 1.35;
       controls.zoomSpeed = getDefaultZoomSpeed();
-      if ("zoomToCursor" in controls) {
-        controls.zoomToCursor = true;
-      }
 
       const hemisphereLight = new THREE.HemisphereLight(
         getViewerThemeValue(viewerTheme, "hemisphereSky", DEFAULT_LIGHTING.hemisphereSky),
@@ -311,6 +309,7 @@ export function useViewerRuntime({
         renderer.setSize(w, h);
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
+        controls.handleResize?.();
         applyCameraFrameInsets?.(runtimeRef.current, frameInsetsRef?.current, { updateProjection: false });
         syncScreenSpaceLineMaterials();
         syncDrawingCanvasSize(runtimeRef.current);
