@@ -2,13 +2,15 @@
   "name": "cad-explorer",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "scripts": {
     "dev": "vite dev",
     "dev:ensure": "node scripts/ensure-dev-server.mjs",
     "dev:stop": "node scripts/stop-dev-server.mjs",
     "build": "vite build",
     "build:app": "vite build --outDir dist-verify --emptyOutDir",
-    "test:node": "node --test --experimental-default-type=module lib/perspective.test.js lib/lookSettings.test.js lib/renderAssetClient.test.js lib/render/threeMfMeshData.test.js lib/urdf/parseUrdf.test.js lib/urdf/kinematics.test.js lib/urdf/motion.test.js lib/urdf/jointAnimation.test.js lib/urdf/motionServerClient.test.js lib/dxf/parseDxf.test.js lib/workbench/sidebar.test.js lib/cadDirectoryScanner.test.mjs lib/explorer/sceneScale.test.js lib/explorerConfig.test.mjs components/explorer/hooks/useExplorerPicking.test.js lib/assembly/meshData.test.js lib/selectors/runtime.test.js lib/async/concurrency.test.js lib/clipboard.test.js",
+    "test:node": "node --test lib/perspective.test.js lib/lookSettings.test.js lib/renderAssetClient.test.js lib/render/threeMfMeshData.test.js lib/urdf/parseUrdf.test.js lib/urdf/kinematics.test.js lib/urdf/motion.test.js lib/urdf/jointAnimation.test.js lib/urdf/motionServerClient.test.js lib/dxf/parseDxf.test.js lib/workbench/sidebar.test.js lib/cadDirectoryScanner.test.mjs lib/explorer/sceneScale.test.js lib/explorerConfig.test.mjs components/explorer/hooks/useExplorerPicking.test.js lib/assembly/meshData.test.js lib/selectors/runtime.test.js lib/async/concurrency.test.js lib/clipboard.test.js lib/ottoAuth.test.js lib/ottoAuthLocalCredentials.test.mjs",
+    "ottoauth:buy-parts": "node scripts/ottoauth-buy-parts.mjs",
     "start": "vite preview"
   },
   "dependencies": {

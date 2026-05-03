@@ -5,8 +5,8 @@ import {
   ToastViewport
 } from "../ui/toast";
 
-export default function StatusToast({ copyStatus, screenshotStatus, persistenceStatus, motionErrorStatus, previewMode, onClear }) {
-  const message = motionErrorStatus || copyStatus || screenshotStatus || persistenceStatus;
+export default function StatusToast({ copyStatus, ottoAuthStatus, screenshotStatus, persistenceStatus, motionErrorStatus, previewMode, onClear }) {
+  const message = motionErrorStatus || copyStatus || ottoAuthStatus || screenshotStatus || persistenceStatus;
   const isError = Boolean(motionErrorStatus);
   if (!message || previewMode) {
     return null;

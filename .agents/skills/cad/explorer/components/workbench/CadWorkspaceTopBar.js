@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { LoaderCircle, Palette, SlidersHorizontal } from "lucide-react";
+import { LoaderCircle, Palette, ShoppingCart, SlidersHorizontal } from "lucide-react";
 import { normalizeExplorerGithubUrl } from "../../lib/explorerConfig.mjs";
 import {
   Breadcrumb,
@@ -135,7 +135,8 @@ export default function CadWorkspaceTopBar({
   filenameLoadActivity = null,
   fileSheetKind = "",
   fileSheetOpen = false,
-  onToggleFileSheet
+  onToggleFileSheet,
+  onOpenOttoAuth
 }) {
   const { isMobile, state: sidebarState } = useSidebar();
 
@@ -212,6 +213,18 @@ export default function CadWorkspaceTopBar({
           <a href={githubUrl} target="_blank" rel="noreferrer">
             <GitHubMark className={topBarIconClasses} />
           </a>
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Buy parts now"
+          title="Buy parts now"
+          onClick={onOpenOttoAuth}
+          className={topBarIconButtonClasses}
+        >
+          <ShoppingCart className={topBarIconClasses} strokeWidth={2} aria-hidden="true" />
         </Button>
 
         <Button
