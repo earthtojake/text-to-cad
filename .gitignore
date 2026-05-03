@@ -22,6 +22,8 @@ node_modules
 dist
 dist-verify
 coverage
+.agents/ottoauth.local.json
+.agents/.env.ottoauth.local
 
 # Temporary files
 *.tmp

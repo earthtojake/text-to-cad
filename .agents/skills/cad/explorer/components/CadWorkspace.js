@@ -7,6 +7,7 @@ import CadRenderPane from "./workbench/CadRenderPane";
 import DxfFileSheet from "./workbench/DxfFileSheet";
 import FileExplorerSidebar from "./workbench/FileExplorerSidebar";
 import LookSettingsPopover from "./workbench/LookSettingsPopover";
+import OttoAuthOrderDialog from "./workbench/OttoAuthOrderDialog";
 import StepAssemblyFileSheet from "./workbench/StepAssemblyFileSheet";
 import StatusToast from "./workbench/StatusToast";
 import UrdfFileSheet from "./workbench/UrdfFileSheet";
@@ -1172,6 +1173,7 @@ export default function CadWorkspace({
   const [hoveredListPartId, setHoveredListPartId] = useState("");
   const [hoveredModelPartId, setHoveredModelPartId] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
+  const [ottoAuthStatus, setOttoAuthStatus] = useState("");
   const [stepUpdateInProgress, setStepUpdateInProgress] = useState(false);
   const [screenshotStatus, setScreenshotStatus] = useState("");
   const [persistenceStatus, setPersistenceStatus] = useState("");
@@ -1186,6 +1188,7 @@ export default function CadWorkspace({
   const [mobileFileSheetOpen, setMobileFileSheetOpen] = useState(false);
   const [desktopLookMenuOpen, setDesktopLookMenuOpen] = useState(false);
   const [mobileLookMenuOpen, setMobileLookMenuOpen] = useState(false);
+  const [ottoAuthDialogOpen, setOttoAuthDialogOpen] = useState(false);
   const [explorerAlertOpen, setExplorerAlertOpen] = useState(false);
   const [explorerRuntimeAlert, setExplorerRuntimeAlert] = useState(null);
   const [lookSettings, setLookSettings] = useState(readLookSettings);
@@ -4358,6 +4361,20 @@ export default function CadWorkspace({
     explorerLoading
   ]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("ottoauthCart") !== "1") {
+      return;
+    }
+    url.searchParams.delete("ottoauthCart");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    setOttoAuthStatus("");
+    setOttoAuthDialogOpen(true);
+  }, []);
+
   const toggleDirectory = (directoryId) => {
     setExpandedDirectoryIds((current) => {
       const next = new Set(current);
@@ -4509,6 +4526,10 @@ export default function CadWorkspace({
           fileSheetKind={selectedFileSheetKind}
           fileSheetOpen={fileSheetOpen}
           onToggleFileSheet={handleToggleFileSheet}
+          onOpenOttoAuth={() => {
+            setOttoAuthStatus("");
+            setOttoAuthDialogOpen(true);
+          }}
         />
 
         <div className="pointer-events-none relative min-h-0 flex-1 overflow-hidden">
@@ -4659,17 +4680,30 @@ export default function CadWorkspace({
 
         <StatusToast
           copyStatus={copyStatus}
+          ottoAuthStatus={ottoAuthStatus}
           screenshotStatus={screenshotStatus}
           persistenceStatus={persistenceStatus}
           motionErrorStatus={motionErrorStatus}
           previewMode={previewMode}
           onClear={() => {
             setCopyStatus("");
+            setOttoAuthStatus("");
             setScreenshotStatus("");
             setPersistenceStatus("");
             setMotionErrorStatus("");
             lastPersistenceFailureKeyRef.current = "";
           }}
+        />
+
+        <OttoAuthOrderDialog
+          open={ottoAuthDialogOpen}
+          onOpenChange={setOttoAuthDialogOpen}
+          selectedEntry={selectedEntry}
+          catalogEntries={catalogEntries}
+          assemblyParts={isAssemblyView ? assemblyLeafParts : EMPTY_LIST}
+          selectedPartIds={selectedPartIds}
+          catalogRootDir={catalogRootDir}
+          onStatus={setOttoAuthStatus}
         />
 
         <ExplorerAlertDialog

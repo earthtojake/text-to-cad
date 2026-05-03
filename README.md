@@ -33,6 +33,7 @@ An open source harness for generating 3D models with your favorite coding agent
 - **Generate** - Create source-controlled CAD models with coding agents like Codex and Claude Code.
 - **Export** - Produce STEP, STL, 3MF, DXF, GLB, topology data, and URDF robot descriptions.
 - **Browse** - Inspect generated geometry in CAD Explorer.
+- **Buy** - Connect OttoAuth, upload the current CAD project and assembly parts, choose a supplier, and submit a one-click parts-sourcing or manufacturing request.
 - **Reference** - Copy stable `@cad[...]` references so agents can make precise follow-up edits.
 - **Review** - Render quick snapshots for fast checks during an iteration loop.
 - **Reproduce** - Edit source files first, then regenerate explicit targets.

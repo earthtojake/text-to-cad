@@ -59,11 +59,14 @@ Do not hand-edit package-local generated CAD assets during normal CAD or CAD Exp
 - `npm run dev` starts `vite dev`, scans `EXPLORER_ROOT_DIR` relative to the Vite process's current working directory, and updates the workspace when matching CAD files or per-STEP CAD Explorer assets are added, changed, or removed.
 - `EXPLORER_DEFAULT_FILE` can be set to a scan-root-relative file path, including extension, to open that entry by default when the URL has no `?file=`.
 - `EXPLORER_GITHUB_URL` sets the top-bar GitHub button target and defaults to `https://github.com/earthtojake/text-to-cad`.
+- `EXPLORER_OTTOAUTH_BASE_URL` sets the OttoAuth server used by the top-bar Buy Parts Now action and defaults to the local OttoAuth app on port `3000`. In Vite dev, CAD Explorer uses the simplified OttoAuth SDK flow: `/api/sdk/connect`, `/api/sdk/me`, `/api/sdk/local-agent`, `/api/sdk/files`, and `/api/sdk/checkout`.
+- The Buy Parts Now action checks OttoAuth login state through `/__ottoauth/me`. If the human is not signed in, the cart opens a **Connect OttoAuth Account** state. Pressing **Connect OttoAuth** goes through OttoAuth Connect and returns to CAD Explorer with the cart reopened. Local OttoAuth login works without Google in development; Google can be added later with OAuth credentials.
+- After connect, CAD Explorer asks OttoAuth for the signed-in human's `cad-explorer` linked agent credential and saves it to `.agents/ottoauth.local.json` plus `.agents/.env.ottoauth.local`. Before checkout, CAD Explorer uploads the current project CAD files to OttoAuth and submits the final order through the linked agent. The checkout payload uses OttoAuth signed file URLs, not CAD Explorer localhost URLs, so OttoAuth can provide the STEP/STL/etc. files to the supplier flow. OttoAuth deletes those uploaded CAD blobs after the order completes. The browser never receives the private key on order submission; the local Vite server reads it and submits the API order as the linked agent.
 - URDF CAD Explorer defaults and poses load from `.<urdf>/explorer.json`. In local Vite dev only, IK and path-planning controls load from optional `.<urdf>/robot-motion/explorer.json` and use a separately started local motion websocket server. Vite never starts Python or ROS.
 - In local Vite dev, the browser connects to `EXPLORER_ROBOT_MOTION_WS_URL` when set, otherwise `ws://127.0.0.1:8765/ws`; `?motionWs=` can override the websocket URL for a single browser session. Production builds disable motion server connections.
 - Start the motion server with `.agents/skills/robot-motion/scripts/run-motion-server.sh`. Plain URDF entries never contact the motion server.
 - `npm run build` scans `EXPLORER_ROOT_DIR`, defaulting to the Vite process's current working directory when unset or empty, and bakes that scan into the static app.
-- Production builds read `EXPLORER_DEFAULT_FILE`, `EXPLORER_GITHUB_URL`, `EXPLORER_ROOT_DIR`, and `EXPLORER_WORKSPACE_ROOT` at build time. If the build command runs from `.agents/skills/cad/explorer`, CAD Explorer falls back to the containing workspace root; set `EXPLORER_WORKSPACE_ROOT=/path/to/workspace` explicitly when your deployment builds from a different directory layout.
+- Production builds read `EXPLORER_DEFAULT_FILE`, `EXPLORER_GITHUB_URL`, `EXPLORER_OTTOAUTH_BASE_URL`, `EXPLORER_ROOT_DIR`, and `EXPLORER_WORKSPACE_ROOT` at build time. If the build command runs from `.agents/skills/cad/explorer`, CAD Explorer falls back to the containing workspace root; set `EXPLORER_WORKSPACE_ROOT=/path/to/workspace` explicitly when your deployment builds from a different directory layout.
 - `npm run build:app` runs an isolated verification build for CAD Explorer-only changes.
 - Regenerate CAD assets outside the CAD Explorer package before these commands when CAD assets need to change.
 
@@ -102,3 +105,21 @@ npm --prefix .agents/skills/cad/explorer run dev:ensure
 Then open:
 
 - `http://localhost:4178`
+
+## OttoAuth CLI
+
+Coding agents can generate the same CAD-aware OttoAuth payload from the command line:
+
+```bash
+npm --prefix .agents/skills/cad/explorer run ottoauth:buy-parts -- --asset-base-url http://127.0.0.1:4178 --file path/to/model.step
+```
+
+After the first OttoAuth Connect through the Buy Parts Now button, CAD Explorer saves
+the linked agent credential locally. The CLI uses that file automatically, or
+falls back to explicit `OTTOAUTH_AGENT_USERNAME` and `OTTOAUTH_PRIVATE_KEY` env
+vars:
+
+```bash
+OTTOAUTH_BASE_URL=http://127.0.0.1:3000 \
+npm --prefix .agents/skills/cad/explorer run ottoauth:buy-parts -- --submit --asset-base-url http://127.0.0.1:4178 --file path/to/model.step --supplier Xometry --supplier-url https://www.xometry.com/
+```

@@ -17,6 +17,10 @@ import {
   normalizeExplorerDefaultFile,
   normalizeExplorerGithubUrl,
 } from "./lib/explorerConfig.mjs";
+import {
+  readOttoAuthLocalAgentCredential,
+  writeOttoAuthLocalAgentCredential,
+} from "./lib/ottoAuthLocalCredentials.mjs";
 
 const DEFAULT_EXPLORER_PORT = 4178;
 const resolvedPort = Number.parseInt(process.env.EXPLORER_PORT || "", 10);
@@ -28,6 +32,7 @@ const repoRoot = workspaceRoot;
 const buildExplorerRootDir = normalizeExplorerRootDir(process.env.EXPLORER_ROOT_DIR ?? DEFAULT_EXPLORER_ROOT_DIR);
 const buildExplorerDefaultFile = normalizeExplorerDefaultFile(process.env.EXPLORER_DEFAULT_FILE ?? "");
 const buildExplorerGithubUrl = normalizeExplorerGithubUrl(process.env.EXPLORER_GITHUB_URL ?? "");
+const buildOttoAuthBaseUrl = normalizeOttoAuthBaseUrl(process.env.EXPLORER_OTTOAUTH_BASE_URL ?? "http://127.0.0.1:3000");
 
 function resolveWorkspaceRoot() {
   if (process.env.EXPLORER_WORKSPACE_ROOT) {
@@ -163,6 +168,192 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function normalizeOttoAuthBaseUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim() || "http://127.0.0.1:3000");
+    url.pathname = url.pathname.replace(/\/+$/, "");
+    url.search = "";
+    url.hash = "";
+    return url.toString().replace(/\/+$/, "");
+  } catch {
+    return "http://127.0.0.1:3000";
+  }
+}
+
+function readRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+function forwardCookieHeader(req) {
+  return req.headers.cookie ? { "cookie": req.headers.cookie } : {};
+}
+
+async function proxyOttoAuthJson(req, res, {
+  path: upstreamPath,
+  method = req.method,
+  body = null,
+  headers = {},
+} = {}) {
+  try {
+    const upstreamResponse = await fetch(`${buildOttoAuthBaseUrl}${upstreamPath}`, {
+      method,
+      headers: {
+        "accept": "application/json",
+        ...forwardCookieHeader(req),
+        ...headers,
+      },
+      ...(body == null ? {} : { body }),
+      redirect: "manual",
+    });
+    const responseBody = await upstreamResponse.text();
+    res.statusCode = upstreamResponse.status;
+    res.setHeader(
+      "content-type",
+      upstreamResponse.headers.get("content-type") || "application/json; charset=utf-8"
+    );
+    res.setHeader("cache-control", "no-store");
+    res.end(responseBody);
+  } catch (error) {
+    sendJson(res, 502, {
+      error: `Could not reach OttoAuth at ${buildOttoAuthBaseUrl}.`,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function proxyOttoAuthRaw(req, res, {
+  path: upstreamPath,
+  method = req.method,
+  body = null,
+  headers = {},
+} = {}) {
+  try {
+    const upstreamResponse = await fetch(`${buildOttoAuthBaseUrl}${upstreamPath}`, {
+      method,
+      headers: {
+        "accept": "application/json",
+        ...forwardCookieHeader(req),
+        ...headers,
+      },
+      ...(body == null ? {} : { body }),
+      redirect: "manual",
+    });
+    const responseBody = await upstreamResponse.text();
+    res.statusCode = upstreamResponse.status;
+    res.setHeader(
+      "content-type",
+      upstreamResponse.headers.get("content-type") || "application/json; charset=utf-8"
+    );
+    res.setHeader("cache-control", "no-store");
+    res.end(responseBody);
+  } catch (error) {
+    sendJson(res, 502, {
+      error: `Could not reach OttoAuth at ${buildOttoAuthBaseUrl}.`,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function provisionLocalOttoAuthAgent(req, res, body = null) {
+  try {
+    const upstreamResponse = await fetch(`${buildOttoAuthBaseUrl}/api/sdk/local-agent`, {
+      method: "POST",
+      headers: {
+        "accept": "application/json",
+        "content-type": "application/json",
+        ...forwardCookieHeader(req),
+      },
+      body: body && body.length
+        ? body
+        : JSON.stringify({
+            tool_name: "cad-explorer",
+            app_id: "cad-explorer",
+            app_name: "CAD Explorer",
+            agent_name: "CAD Explorer local coding agent",
+          }),
+      redirect: "manual",
+    });
+    const responseText = await upstreamResponse.text();
+    let payload = null;
+    try {
+      payload = responseText ? JSON.parse(responseText) : null;
+    } catch {
+      payload = { error: responseText };
+    }
+
+    if (!upstreamResponse.ok) {
+      sendJson(res, upstreamResponse.status, payload || {
+        error: `OttoAuth request failed with status ${upstreamResponse.status}.`,
+      });
+      return;
+    }
+
+    const stored = writeOttoAuthLocalAgentCredential({
+      workspaceRoot,
+      payload,
+      baseUrl: buildOttoAuthBaseUrl,
+    });
+    sendJson(res, 200, stored);
+  } catch (error) {
+    sendJson(res, 502, {
+      error: `Could not provision local OttoAuth agent credentials from ${buildOttoAuthBaseUrl}.`,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function submitOttoAuthAgentTask(res, body) {
+  const credential = readOttoAuthLocalAgentCredential({ workspaceRoot });
+  if (!credential) {
+    sendJson(res, 409, {
+      error:
+        "No local OttoAuth linked agent credentials are available. Sign in with Google through OttoAuth, then reopen Buy Parts Now.",
+    });
+    return;
+  }
+
+  let payload = null;
+  try {
+    payload = body && body.length ? JSON.parse(body.toString("utf8")) : {};
+  } catch {
+    sendJson(res, 400, { error: "Invalid JSON body." });
+    return;
+  }
+
+  try {
+    const upstreamResponse = await fetch(`${buildOttoAuthBaseUrl}/api/sdk/checkout`, {
+      method: "POST",
+      headers: {
+        "accept": "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        ...payload,
+        username: credential.username,
+        private_key: credential.privateKey,
+      }),
+    });
+    const responseBody = await upstreamResponse.text();
+    res.statusCode = upstreamResponse.status;
+    res.setHeader(
+      "content-type",
+      upstreamResponse.headers.get("content-type") || "application/json; charset=utf-8"
+    );
+    res.setHeader("cache-control", "no-store");
+    res.end(responseBody);
+  } catch (error) {
+    sendJson(res, 502, {
+      error: `Could not submit OttoAuth agent task to ${buildOttoAuthBaseUrl}.`,
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 function cadCatalogPlugin() {
   const virtualId = "virtual:cad-catalog";
   const resolvedVirtualId = `\0${virtualId}`;
@@ -230,6 +421,134 @@ function cadCatalogPlugin() {
     },
     configureServer(server) {
       const servedExplorerRoot = activateDirectory(server, buildExplorerRootDir);
+      server.middlewares.use(async (req, res, next) => {
+        const requestUrl = new URL(req.url || "/", "http://localhost");
+        if (requestUrl.pathname !== "/__ottoauth/me") {
+          next();
+          return;
+        }
+        if (req.method !== "GET") {
+          res.setHeader("allow", "GET");
+          sendJson(res, 405, { error: "Method not allowed." });
+          return;
+        }
+        await proxyOttoAuthJson(req, res, {
+          path: "/api/sdk/me?app_id=cad-explorer&app_name=CAD%20Explorer",
+          method: "GET",
+        });
+      });
+      server.middlewares.use(async (req, res, next) => {
+        const requestUrl = new URL(req.url || "/", "http://localhost");
+        if (requestUrl.pathname !== "/__ottoauth/local-agent") {
+          next();
+          return;
+        }
+        if (req.method !== "POST" && req.method !== "GET") {
+          res.setHeader("allow", "GET, POST");
+          sendJson(res, 405, { error: "Method not allowed." });
+          return;
+        }
+
+        let body = null;
+        if (req.method === "POST") {
+          try {
+            body = await readRequestBody(req);
+          } catch (error) {
+            sendJson(res, 400, {
+              error: error instanceof Error ? error.message : "Could not read request body.",
+            });
+            return;
+          }
+        }
+
+        await provisionLocalOttoAuthAgent(req, res, body);
+      });
+      server.middlewares.use(async (req, res, next) => {
+        const requestUrl = new URL(req.url || "/", "http://localhost");
+        if (requestUrl.pathname !== "/__ottoauth/files") {
+          next();
+          return;
+        }
+        if (req.method !== "POST") {
+          res.setHeader("allow", "POST");
+          sendJson(res, 405, { error: "Method not allowed." });
+          return;
+        }
+
+        let body;
+        try {
+          body = await readRequestBody(req);
+        } catch (error) {
+          sendJson(res, 400, {
+            error: error instanceof Error ? error.message : "Could not read request body.",
+          });
+          return;
+        }
+
+        await proxyOttoAuthRaw(req, res, {
+          path: "/api/sdk/files",
+          method: "POST",
+          body,
+          headers: {
+            "content-type": req.headers["content-type"] || "application/octet-stream",
+          },
+        });
+      });
+      server.middlewares.use(async (req, res, next) => {
+        const requestUrl = new URL(req.url || "/", "http://localhost");
+        if (requestUrl.pathname !== "/__ottoauth/human-task") {
+          next();
+          return;
+        }
+        if (req.method !== "POST") {
+          res.setHeader("allow", "POST");
+          sendJson(res, 405, { error: "Method not allowed." });
+          return;
+        }
+
+        let body;
+        try {
+          body = await readRequestBody(req);
+        } catch (error) {
+          sendJson(res, 400, {
+            error: error instanceof Error ? error.message : "Could not read request body.",
+          });
+          return;
+        }
+
+        await proxyOttoAuthJson(req, res, {
+          path: "/api/sdk/checkout",
+          method: "POST",
+          body,
+          headers: {
+            "content-type": req.headers["content-type"] || "application/json",
+          },
+        });
+      });
+      server.middlewares.use(async (req, res, next) => {
+        const requestUrl = new URL(req.url || "/", "http://localhost");
+        if (requestUrl.pathname !== "/__ottoauth/agent-task") {
+          next();
+          return;
+        }
+        if (req.method !== "POST") {
+          res.setHeader("allow", "POST");
+          sendJson(res, 405, { error: "Method not allowed." });
+          return;
+        }
+
+        let body;
+        try {
+          body = await readRequestBody(req);
+        } catch (error) {
+          sendJson(res, 400, {
+            error: error instanceof Error ? error.message : "Could not read request body.",
+          });
+          return;
+        }
+
+        await submitOttoAuthAgentTask(res, body);
+      });
       server.middlewares.use((req, res, next) => {
         const requestUrl = new URL(req.url || "/", "http://localhost");
         if (requestUrl.pathname !== "/__cad/catalog") {
