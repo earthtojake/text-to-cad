@@ -160,13 +160,17 @@ def _linked_instance_node(
     world_transform = multiply_transforms(parent_world_transform, instance_transform)
     source_step_path = getattr(source_spec, "step_path", None) if source_spec is not None else None
     source_path = _relative_to_topology(topology_path, Path(source_step_path)) if source_step_path is not None else (instance.path or "")
+    # Prefer the user-supplied instance name (it is required by the generator
+    # contract and intentionally chosen for display); fall back to the source
+    # STEP filename stem only when no instance name is set, then to the
+    # instance-path component as a last resort.
     display_name = str(
-        (
+        instance.name
+        or (
             Path(source_step_path).stem
             if source_step_path is not None
             else Path(instance.path or "").stem
         )
-        or instance.name
         or instance_path[-1]
     ).strip()
     use_source_colors = parent_use_source_colors and bool(instance.use_source_colors)

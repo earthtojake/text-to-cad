@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   isServedCadAsset,
   normalizeExplorerRootDir,
+  resolveExplorerRoot,
   scanCadDirectory,
 } from "./cadDirectoryScanner.mjs";
 
@@ -104,6 +105,39 @@ test("normalizeExplorerRootDir rejects traversal", () => {
   assert.equal(normalizeExplorerRootDir(""), "");
   assert.equal(normalizeExplorerRootDir("workspace/samples"), "workspace/samples");
   assert.throws(() => normalizeExplorerRootDir("../workspace"), /inside the workspace/);
+});
+
+test("normalizeExplorerRootDir preserves absolute paths", () => {
+  // Previously the leading slash was stripped, which silently turned an
+  // absolute EXPLORER_ROOT_DIR into a workspace-relative join onto a
+  // nonsense path. Now the leading slash flows through to resolveExplorerRoot.
+  assert.equal(normalizeExplorerRootDir("/abs/path/exports"), "/abs/path/exports");
+  assert.equal(normalizeExplorerRootDir("/abs/path/exports/"), "/abs/path/exports");
+});
+
+test("resolveExplorerRoot accepts an absolute path inside the workspace", () => {
+  const repo = makeTempRepo();
+  try {
+    const absoluteDir = path.join(repo, "exports");
+    fs.mkdirSync(absoluteDir, { recursive: true });
+    const resolved = resolveExplorerRoot(repo, absoluteDir);
+    assert.equal(resolved.rootPath, path.resolve(absoluteDir));
+    assert.equal(resolved.rootName, "exports");
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test("resolveExplorerRoot rejects an absolute path outside the workspace", () => {
+  const repo = makeTempRepo();
+  try {
+    assert.throws(
+      () => resolveExplorerRoot(repo, "/elsewhere/outside"),
+      /inside the workspace/,
+    );
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
 });
 
 test("isServedCadAsset allows only explorer.json inside URDF sidecar directories", () => {
