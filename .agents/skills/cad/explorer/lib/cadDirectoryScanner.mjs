@@ -32,7 +32,7 @@ function encodeUrlPath(repoRelativePath) {
 
 export function normalizeExplorerRootDir(value = DEFAULT_EXPLORER_ROOT_DIR) {
   const rawValue = String(value ?? "").trim();
-  const slashNormalized = rawValue.replace(/\\/g, "/").replace(/^\/+/, "");
+  const slashNormalized = rawValue.replace(/\\/g, "/");
   const normalized = path.posix.normalize(slashNormalized);
   if (!normalized || normalized === ".") {
     return DEFAULT_EXPLORER_ROOT_DIR;
@@ -40,12 +40,19 @@ export function normalizeExplorerRootDir(value = DEFAULT_EXPLORER_ROOT_DIR) {
   if (normalized === ".." || normalized.startsWith("../")) {
     throw new Error(`Explorer root directory must stay inside the workspace: ${rawValue}`);
   }
-  return normalized.replace(/\/+$/, "");
+  // Preserve a leading slash so absolute paths flow through to
+  // resolveExplorerRoot intact; previously we stripped it, which made an
+  // absolute EXPLORER_ROOT_DIR silently resolve as a workspace-relative
+  // join onto a nonsensical location.
+  return normalized.replace(/(?!^\/)\/+$/, "");
 }
 
 export function resolveExplorerRoot(repoRoot, rootDir = DEFAULT_EXPLORER_ROOT_DIR) {
   const normalizedDir = normalizeExplorerRootDir(rootDir);
   const resolvedRepoRoot = path.resolve(repoRoot);
+  // path.resolve accepts absolute later arguments and uses them verbatim,
+  // so an absolute normalizedDir overrides resolvedRepoRoot here. The
+  // workspace-containment check below still rejects paths outside repoRoot.
   const rootPath = normalizedDir
     ? path.resolve(resolvedRepoRoot, normalizedDir)
     : resolvedRepoRoot;

@@ -280,7 +280,7 @@ class NativeAssemblyCompositionTests(unittest.TestCase):
             child["topologyCounts"],
         )
 
-    def test_linked_assembly_prefers_source_step_stem_over_custom_instance_name(self) -> None:
+    def test_linked_assembly_prefers_instance_name_over_source_step_stem(self) -> None:
         leaf_step_path = self._write_catalog_step("parts/leaf")
         self._write_source_topology(leaf_step_path)
         topology_path = self._write_topology(
@@ -330,7 +330,7 @@ class NativeAssemblyCompositionTests(unittest.TestCase):
         )
 
         child = payload["root"]["children"][0]
-        self.assertEqual("leaf", child["displayName"])
+        self.assertEqual("custom_leaf_instance", child["displayName"])
 
     def test_linked_generated_subassembly_expands_to_descendant_leaf_nodes(self) -> None:
         module_step_path = self._write_catalog_step("assemblies/module")
