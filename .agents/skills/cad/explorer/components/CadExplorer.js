@@ -3468,18 +3468,23 @@ function buildVertexMarkerMesh(runtime, THREE, reference, {
   if (!center || center.length < 3) {
     return null;
   }
-  const radius = Math.max(Number(runtime?.modelRadius || 1) * 0.0045, 0.2) * Math.max(Number(radiusScale) || 1, 0.2);
-  const geometry = new THREE.SphereGeometry(radius, 16, 16);
-  const material = new THREE.MeshBasicMaterial({
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array([
+    Number(center[0]),
+    Number(center[1]),
+    Number(center[2])
+  ]), 3));
+  const material = new THREE.PointsMaterial({
     color,
     transparent: true,
     opacity,
+    size: Math.max(3, 5.5 * Math.max(Number(radiusScale) || 1, 0.2)),
+    sizeAttenuation: false,
     depthTest,
     depthWrite: false,
     toneMapped: false,
   });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.set(center[0], center[1], center[2]);
+  const mesh = new THREE.Points(geometry, material);
   mesh.renderOrder = renderOrder;
   return mesh;
 }
@@ -6401,20 +6406,30 @@ const CadExplorer = forwardRef(function CadExplorer({
       seenReferenceIds.add(normalizedHoveredReferenceId);
     }
 
-    for (const reference of filteredPickableVertices) {
-      const referenceId = String(reference?.id || "").trim();
-      if (!referenceId || seenReferenceIds.has(referenceId)) {
-        continue;
-      }
-      const marker = buildVertexMarkerMesh(runtime, THREE, reference, {
-        color: REFERENCE_CORNER_COLOR,
-        opacity: 0.76,
-        renderOrder: 24,
-        radiusScale: 1.15,
-        depthTest: false
-      });
-      if (marker) {
-        highlightGroup.add(marker);
+    const selectedTopologyReferences = (Array.isArray(selectedReferenceIds) ? selectedReferenceIds : [])
+      .map((referenceId) => pickableReferenceMap.get(String(referenceId || "").trim()) || selectorRuntime?.referenceMap?.get(String(referenceId || "").trim()) || null)
+      .filter(Boolean);
+    if (
+      selectedTopologyReferences.length === 2 &&
+      selectedTopologyReferences.some((reference) => String(reference?.selectorType || "").trim() === "vertex")
+    ) {
+      const firstCenter = selectedTopologyReferences[0]?.pickData?.center;
+      const secondCenter = selectedTopologyReferences[1]?.pickData?.center;
+      if (isFinitePoint3(firstCenter) && isFinitePoint3(secondCenter)) {
+        const measurementLine = createScreenSpaceLineSegments(runtime, [
+          Number(firstCenter[0]), Number(firstCenter[1]), Number(firstCenter[2]),
+          Number(secondCenter[0]), Number(secondCenter[1]), Number(secondCenter[2])
+        ], {
+          color: SURFACE_LINE_COLOR,
+          opacity: 0.98,
+          lineWidth: Math.max(baseEdgeThickness * 2, 2),
+          renderOrder: 28,
+          depthTest: false,
+          depthWrite: false
+        });
+        if (measurementLine) {
+          highlightGroup.add(measurementLine);
+        }
       }
     }
 
@@ -6431,9 +6446,9 @@ const CadExplorer = forwardRef(function CadExplorer({
       const isHovered = referenceId === normalizedHoveredReferenceId;
       if (selectorType === "vertex") {
         const marker = buildVertexMarkerMesh(runtime, THREE, topologyReference, {
-          color: REFERENCE_CORNER_COLOR,
+          color: isHovered ? REFERENCE_HOVER_COLOR : REFERENCE_SELECTED_COLOR,
           opacity: isHovered ? 0.96 : 0.88,
-          radiusScale: isHovered ? 1.45 : 1.25,
+          radiusScale: isHovered ? 1.05 : 0.85,
           depthTest: false
         });
         if (marker) {
