@@ -1,8 +1,8 @@
 function finitePoint3(value) {
-  if (!Array.isArray(value) || value.length < 3) {
+  if (!(Array.isArray(value) || ArrayBuffer.isView(value)) || value.length < 3) {
     return null;
   }
-  const point = value.slice(0, 3).map((component) => Number(component));
+  const point = Array.from(value.slice(0, 3), (component) => Number(component));
   return point.every(Number.isFinite) ? point : null;
 }
 
@@ -45,7 +45,7 @@ function edgeProxyPoints(reference, selectorRuntime) {
   const positions = proxy.edgePositions;
   const indices = proxy.edgeIndices;
   const edgeIds = proxy.edgeIds;
-  if (!(positions instanceof Float32Array) || !(indices instanceof Uint32Array)) {
+  if (!ArrayBuffer.isView(positions) || !ArrayBuffer.isView(indices)) {
     return [];
   }
 

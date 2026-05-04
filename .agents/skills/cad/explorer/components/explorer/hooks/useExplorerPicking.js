@@ -16,10 +16,10 @@ const EDGE_HOVER_MAX_SCREEN_DISTANCE_PX = 6;
 const EDGE_HOVER_MAX_SCREEN_DISTANCE_WITH_FACE_PX = EDGE_HOVER_MAX_SCREEN_DISTANCE_PX;
 const EDGE_PICK_PRIORITY_WITH_FACE_PX = EDGE_PICK_MAX_SCREEN_DISTANCE_WITH_FACE_PX;
 const EDGE_HOVER_PRIORITY_WITH_FACE_PX = EDGE_HOVER_MAX_SCREEN_DISTANCE_WITH_FACE_PX;
-const CORNER_PICK_MAX_SCREEN_DISTANCE_PX = 5;
-const CORNER_HOVER_MAX_SCREEN_DISTANCE_PX = 4;
-const CORNER_PICK_PRIORITY_WITH_OTHER_PX = 4;
-const CORNER_HOVER_PRIORITY_WITH_OTHER_PX = 3;
+const CORNER_PICK_MAX_SCREEN_DISTANCE_PX = 14;
+const CORNER_HOVER_MAX_SCREEN_DISTANCE_PX = 11;
+const CORNER_PICK_PRIORITY_WITH_OTHER_PX = 14;
+const CORNER_HOVER_PRIORITY_WITH_OTHER_PX = 11;
 const HOVER_PICK_MIN_MOVE_PX = 2;
 const FINE_POINTER_TAP_SLOP_PX = 4;
 const COARSE_POINTER_TAP_SLOP_PX = 12;
@@ -531,6 +531,29 @@ export function useExplorerPicking({
       return Math.hypot(clientX - clientPoint.x, clientY - clientPoint.y);
     }
 
+    function vertexReferenceScreenDistance(reference, clientX, clientY) {
+      const center = reference?.pickData?.center;
+      if (!Array.isArray(center) || center.length < 3 || !runtime?.THREE) {
+        return Infinity;
+      }
+      const worldPoint = new runtime.THREE.Vector3(
+        Number(center[0]),
+        Number(center[1]),
+        Number(center[2])
+      );
+      if (![worldPoint.x, worldPoint.y, worldPoint.z].every(Number.isFinite)) {
+        return Infinity;
+      }
+      if (runtime.vertexPickGroup) {
+        runtime.vertexPickGroup.localToWorld(worldPoint);
+      }
+      const clientPoint = projectPointToClient(worldPoint);
+      if (!clientPoint) {
+        return Infinity;
+      }
+      return Math.hypot(clientX - clientPoint.x, clientY - clientPoint.y);
+    }
+
     function pickViewportHeightPx() {
       return container.clientHeight || container.getBoundingClientRect().height || 1;
     }
@@ -767,20 +790,32 @@ export function useExplorerPicking({
         filteredIntersections,
         (intersection) => edgeScreenDistance(intersection, clientX, clientY)
       );
-      if (!best) {
-        return null;
+      const bestScreenDistance = best ? edgeScreenDistance(best, clientX, clientY) : Infinity;
+      const reference = best && bestScreenDistance <= maxScreenDistancePx
+        ? vertexReferenceFromIntersection(best)
+        : null;
+      if (reference) {
+        return {
+          reference,
+          screenDistance: bestScreenDistance
+        };
       }
-      const bestScreenDistance = edgeScreenDistance(best, clientX, clientY);
-      if (Number.isFinite(bestScreenDistance) && bestScreenDistance > maxScreenDistancePx) {
-        return null;
+
+      let nearestReference = null;
+      let nearestDistance = Infinity;
+      for (const candidateReference of pickableVertices) {
+        const distance = vertexReferenceScreenDistance(candidateReference, clientX, clientY);
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestReference = candidateReference;
+        }
       }
-      const reference = vertexReferenceFromIntersection(best);
-      if (!reference) {
+      if (!nearestReference || !Number.isFinite(nearestDistance) || nearestDistance > maxScreenDistancePx) {
         return null;
       }
       return {
-        reference,
-        screenDistance: bestScreenDistance
+        reference: nearestReference,
+        screenDistance: nearestDistance
       };
     }
 
@@ -863,6 +898,9 @@ export function useExplorerPicking({
       );
       if (vertexCandidate) {
         const vertexPriorityDistancePx = hover ? CORNER_HOVER_PRIORITY_WITH_OTHER_PX : CORNER_PICK_PRIORITY_WITH_OTHER_PX;
+        if (Number(vertexCandidate.screenDistance) <= vertexPriorityDistancePx) {
+          return vertexCandidate.reference.id;
+        }
         const adjacentToEdge = edgeCandidate && areEdgeAndVertexAdjacent(edgeCandidate.reference, vertexCandidate.reference);
         const adjacentToFace = faceReference && areFaceAndVertexAdjacent(faceReference, vertexCandidate.reference);
         if (!faceReference && !edgeCandidate) {
@@ -903,7 +941,7 @@ export function useExplorerPicking({
 
     function pickActivationReference(clientX, clientY, pointerType = "") {
       if (canHoverWithPointer(pointerType)) {
-        return String(hoverState.hoveredReferenceId || "").trim() || pickReferenceAtPosition(clientX, clientY, { hover: true });
+        return pickReferenceAtPosition(clientX, clientY, { hover: true }) || String(hoverState.hoveredReferenceId || "").trim();
       }
       return pickReferenceAtPosition(clientX, clientY);
     }

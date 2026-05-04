@@ -6408,9 +6408,9 @@ const CadExplorer = forwardRef(function CadExplorer({
       }
       const marker = buildVertexMarkerMesh(runtime, THREE, reference, {
         color: REFERENCE_CORNER_COLOR,
-        opacity: 0.42,
+        opacity: 0.76,
         renderOrder: 24,
-        radiusScale: 0.62,
+        radiusScale: 1.15,
         depthTest: false
       });
       if (marker) {
@@ -6433,6 +6433,7 @@ const CadExplorer = forwardRef(function CadExplorer({
         const marker = buildVertexMarkerMesh(runtime, THREE, topologyReference, {
           color: REFERENCE_CORNER_COLOR,
           opacity: isHovered ? 0.96 : 0.88,
+          radiusScale: isHovered ? 1.45 : 1.25,
           depthTest: false
         });
         if (marker) {
