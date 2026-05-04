@@ -6,7 +6,7 @@
     "dev": "vite dev",
     "dev:ensure": "node scripts/ensure-dev.mjs",
     "build": "vite build",
-    "test": "node --test --experimental-default-type=module lib/perspective.test.js lib/lookSettings.test.js lib/renderAssetClient.test.js lib/render/threeMfMeshData.test.js lib/render/glbMeshData.test.js lib/urdf/parseUrdf.test.js lib/urdf/kinematics.test.js lib/urdf/motion.test.js lib/urdf/jointAnimation.test.js lib/urdf/motionServerClient.test.js lib/dxf/parseDxf.test.js lib/workbench/sidebar.test.js lib/cadDirectoryScanner.test.mjs lib/explorer/sceneScale.test.js lib/explorerConfig.test.mjs lib/explorerServerInfo.test.mjs components/explorer/hooks/useExplorerPicking.test.js lib/assembly/meshData.test.js lib/selectors/runtime.test.js lib/measurements/measureTopology.test.js lib/async/concurrency.test.js lib/clipboard.test.js scripts/ensure-dev.test.mjs"
+    "test": "node --test --experimental-default-type=module lib/perspective.test.js lib/lookSettings.test.js lib/renderAssetClient.test.js lib/render/threeMfMeshData.test.js lib/render/glbMeshData.test.js lib/urdf/parseUrdf.test.js lib/urdf/kinematics.test.js lib/urdf/motion.test.js lib/urdf/jointAnimation.test.js lib/urdf/motionServerClient.test.js lib/dxf/parseDxf.test.js lib/workbench/sidebar.test.js lib/cadDirectoryScanner.test.mjs lib/explorer/sceneScale.test.js lib/explorerConfig.test.mjs lib/explorerServerInfo.test.mjs components/explorer/hooks/useExplorerPicking.test.js lib/assembly/meshData.test.js lib/selectors/runtime.test.js lib/measurements/measurePoints.test.js lib/measurements/measureTopology.test.js lib/async/concurrency.test.js lib/clipboard.test.js scripts/ensure-dev.test.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

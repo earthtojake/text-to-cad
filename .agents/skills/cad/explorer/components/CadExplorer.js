@@ -3189,7 +3189,54 @@ function buildEdgePickLines(THREE, selectorRuntime) {
   return lines;
 }
 
-function buildVertexPickPoints(THREE, selectorRuntime) {
+function buildVertexPickPointsFromReferences(THREE, references) {
+  const pointReferences = (Array.isArray(references) ? references : [])
+    .map((reference) => {
+      const center = reference?.pickData?.center;
+      if (!isFinitePoint3(center)) {
+        return null;
+      }
+      return {
+        reference,
+        center: [Number(center[0]), Number(center[1]), Number(center[2])]
+      };
+    })
+    .filter(Boolean);
+  if (!pointReferences.length) {
+    return null;
+  }
+  const positions = new Float32Array(pointReferences.length * 3);
+  const vertexIds = new Uint32Array(pointReferences.length);
+  for (let index = 0; index < pointReferences.length; index += 1) {
+    const center = pointReferences[index].center;
+    positions[index * 3] = center[0];
+    positions[(index * 3) + 1] = center[1];
+    positions[(index * 3) + 2] = center[2];
+    vertexIds[index] = index;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.PointsMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0,
+    size: 1.5,
+    sizeAttenuation: false,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.userData.vertexIds = vertexIds;
+  points.userData.vertexReferences = pointReferences.map((entry) => entry.reference);
+  points.frustumCulled = false;
+  return points;
+}
+
+function buildVertexPickPoints(THREE, selectorRuntime, pickableVertices = []) {
+  const referencePoints = buildVertexPickPointsFromReferences(THREE, pickableVertices);
+  if (referencePoints) {
+    return referencePoints;
+  }
   const proxy = selectorRuntime?.proxy || {};
   if (!(proxy.vertexPositions instanceof Float32Array) || !proxy.vertexPositions.length) {
     return null;
@@ -3211,7 +3258,7 @@ function buildVertexPickPoints(THREE, selectorRuntime) {
   return points;
 }
 
-function syncSelectorPickGroups(runtime, selectorRuntime, modelOffset = null) {
+function syncSelectorPickGroups(runtime, selectorRuntime, modelOffset = null, pickableVertices = []) {
   if (!runtime?.THREE || !runtime?.facePickGroup || !runtime?.edgePickGroup || !runtime?.vertexPickGroup) {
     return;
   }
@@ -3237,7 +3284,7 @@ function syncSelectorPickGroups(runtime, selectorRuntime, modelOffset = null) {
     runtime.edgePickObjects = [edgePickLines];
   }
 
-  const vertexPickPoints = buildVertexPickPoints(runtime.THREE, selectorRuntime);
+  const vertexPickPoints = buildVertexPickPoints(runtime.THREE, selectorRuntime, pickableVertices);
   if (vertexPickPoints) {
     runtime.vertexPickPoints = vertexPickPoints;
     runtime.vertexPickGroup.add(vertexPickPoints);
@@ -3413,19 +3460,21 @@ function buildFaceBoundaryLinePositions(selectorRuntime, reference) {
 function buildVertexMarkerMesh(runtime, THREE, reference, {
   color,
   opacity,
-  renderOrder = 27
+  renderOrder = 27,
+  radiusScale = 1,
+  depthTest = true
 } = {}) {
   const center = Array.isArray(reference?.pickData?.center) ? reference.pickData.center : null;
   if (!center || center.length < 3) {
     return null;
   }
-  const radius = Math.max(Number(runtime?.modelRadius || 1) * 0.0045, 0.2);
+  const radius = Math.max(Number(runtime?.modelRadius || 1) * 0.0045, 0.2) * Math.max(Number(radiusScale) || 1, 0.2);
   const geometry = new THREE.SphereGeometry(radius, 16, 16);
   const material = new THREE.MeshBasicMaterial({
     color,
     transparent: true,
     opacity,
-    depthTest: true,
+    depthTest,
     depthWrite: false,
     toneMapped: false,
   });
@@ -4869,10 +4918,9 @@ const CadExplorer = forwardRef(function CadExplorer({
       : (Array.isArray(pickableVertices) ? pickableVertices : [])
   ), [focusedPartIdSet, pickableVertices]);
   const pickableReferenceMap = useMemo(() => {
-    if (selectorRuntime?.referenceMap instanceof Map) {
-      return selectorRuntime.referenceMap;
-    }
-    const map = new Map();
+    const map = selectorRuntime?.referenceMap instanceof Map
+      ? new Map(selectorRuntime.referenceMap)
+      : new Map();
     for (const reference of [...filteredPickableFaces, ...filteredPickableEdges, ...filteredPickableVertices]) {
       const referenceId = String(reference?.id || "").trim();
       if (!referenceId) {
@@ -5871,7 +5919,7 @@ const CadExplorer = forwardRef(function CadExplorer({
     facePickGroup.updateMatrixWorld(true);
     edgePickGroup.updateMatrixWorld(true);
     vertexPickGroup.updateMatrixWorld(true);
-    syncSelectorPickGroups(runtime, selectorRuntimeRef.current, modelOffset);
+    syncSelectorPickGroups(runtime, selectorRuntimeRef.current, modelOffset, filteredPickableVertices);
 
     const currentPartVisualState = partVisualStateRef.current;
     applyPartVisualState(THREE, displayRecords, shouldRenderParts
@@ -5941,6 +5989,7 @@ const CadExplorer = forwardRef(function CadExplorer({
     pickMode,
     renderPartsIndividually,
     pickableParts,
+    filteredPickableVertices,
     normalizedSceneScaleMode,
     resolvedFloorMode,
     explorerTheme,
@@ -6130,8 +6179,8 @@ const CadExplorer = forwardRef(function CadExplorer({
     }
 
     syncDisplayMeshFaceIds(runtime, meshData, selectorRuntime);
-    syncSelectorPickGroups(runtime, selectorRuntime, modelTransformRef.current.offset);
-  }, [meshData, modelKey, selectorRuntime, explorerReadyTick]);
+    syncSelectorPickGroups(runtime, selectorRuntime, modelTransformRef.current.offset, filteredPickableVertices);
+  }, [meshData, modelKey, selectorRuntime, filteredPickableVertices, explorerReadyTick]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -6349,6 +6398,24 @@ const CadExplorer = forwardRef(function CadExplorer({
     const normalizedHoveredReferenceId = String(hoveredReferenceId || "").trim();
     if (normalizedHoveredReferenceId && !seenReferenceIds.has(normalizedHoveredReferenceId)) {
       orderedReferenceIds.push(normalizedHoveredReferenceId);
+      seenReferenceIds.add(normalizedHoveredReferenceId);
+    }
+
+    for (const reference of filteredPickableVertices) {
+      const referenceId = String(reference?.id || "").trim();
+      if (!referenceId || seenReferenceIds.has(referenceId)) {
+        continue;
+      }
+      const marker = buildVertexMarkerMesh(runtime, THREE, reference, {
+        color: REFERENCE_CORNER_COLOR,
+        opacity: 0.42,
+        renderOrder: 24,
+        radiusScale: 0.62,
+        depthTest: false
+      });
+      if (marker) {
+        highlightGroup.add(marker);
+      }
     }
 
     for (const referenceId of orderedReferenceIds) {
@@ -6366,6 +6433,7 @@ const CadExplorer = forwardRef(function CadExplorer({
         const marker = buildVertexMarkerMesh(runtime, THREE, topologyReference, {
           color: REFERENCE_CORNER_COLOR,
           opacity: isHovered ? 0.96 : 0.88,
+          depthTest: false
         });
         if (marker) {
           highlightGroup.add(marker);
@@ -6423,7 +6491,7 @@ const CadExplorer = forwardRef(function CadExplorer({
       clearOverlayGroup(runtime, highlightGroup);
       clearOverlayGroup(runtime, faceFillGroup);
     };
-  }, [hoveredReferenceId, pickableReferenceMap, selectedReferenceIds, selectorRuntime, explorerReadyTick, explorerTheme, normalizedLookSettings.edges]);
+  }, [filteredPickableVertices, hoveredReferenceId, pickableReferenceMap, selectedReferenceIds, selectorRuntime, explorerReadyTick, explorerTheme, normalizedLookSettings.edges]);
 
   useExplorerDrawingOverlay({
     drawingCanvasRef,

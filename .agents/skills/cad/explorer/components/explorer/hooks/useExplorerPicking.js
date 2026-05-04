@@ -635,10 +635,13 @@ export function useExplorerPicking({
       const pointIndex = Number(intersection?.index);
       const vertexIds = intersection?.object?.userData?.vertexIds;
       const rowIndex = Number.isInteger(pointIndex) ? Number(vertexIds?.[pointIndex]) : NaN;
-      if (!Number.isInteger(rowIndex)) {
+      const directReference = Number.isInteger(pointIndex)
+        ? intersection?.object?.userData?.vertexReferences?.[pointIndex] || null
+        : null;
+      if (!Number.isInteger(rowIndex) && !directReference) {
         return null;
       }
-      const reference = selectorRuntimeRef.current?.vertexReferenceByRowIndex?.get?.(rowIndex) || null;
+      const reference = selectorRuntimeRef.current?.vertexReferenceByRowIndex?.get?.(rowIndex) || directReference || null;
       const referenceId = String(reference?.id || "").trim();
       const allowedVertexReferenceIds = allowedVertexReferenceIdsRef.current;
       if (!referenceId || (allowedVertexReferenceIds.size && !allowedVertexReferenceIds.has(referenceId))) {

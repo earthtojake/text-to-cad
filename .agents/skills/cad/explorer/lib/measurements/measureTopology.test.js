@@ -146,6 +146,25 @@ test("reports midpoint distance for two selected edges without vertex selectors"
   assert.equal(distance.value, 13);
 });
 
+test("measures distance between client-side measure points", () => {
+  const result = measurementForReferences([
+    {
+      id: "p1",
+      selectorType: "vertex",
+      pickData: { kind: "measure-point", center: [0, 0, 0] }
+    },
+    {
+      id: "p2",
+      selectorType: "vertex",
+      pickData: { kind: "measure-point", center: [6, 8, 0] }
+    }
+  ]);
+
+  assert.equal(result.title, "Point distance");
+  assert.equal(result.value, 10);
+  assert.equal(result.detail, "0, 0, 0 to 6, 8, 0");
+});
+
 test("measures the acute angle between two planar faces", () => {
   const result = measurementForReferences([
     {

@@ -114,6 +114,7 @@ import {
 } from "../lib/urdf/jointAnimation";
 import { buildSelectorRuntime } from "../lib/selectors/runtime";
 import { measurementKey, measurementsForReferences } from "../lib/measurements/measureTopology";
+import { buildMeasurePointReferences } from "../lib/measurements/measurePoints";
 import {
   assemblyBreadcrumb,
   buildAssemblyLeafToNodePickMap,
@@ -3066,11 +3067,31 @@ export default function CadWorkspace({
     }
     return map;
   }, [activeReferenceMap, effectiveVisibleReferences]);
+  const measureToolAvailable = effectiveRenderFormat === RENDER_FORMAT.STEP && selectedFileSheetKind === "stepPart" && !explorerInAssemblyMode;
+  const measureToolActive = measureToolAvailable && tabToolMode === TAB_TOOL_MODE.MEASURE;
+  const measureCandidateEdgeReferences = useMemo(
+    () => effectiveVisibleReferences.filter((reference) => isEdgeReference(reference)),
+    [effectiveVisibleReferences, isEdgeReference]
+  );
+  const measurePointReferences = useMemo(
+    () => measureToolActive ? buildMeasurePointReferences(measureCandidateEdgeReferences, effectiveSelectorRuntime) : EMPTY_LIST,
+    [effectiveSelectorRuntime, measureCandidateEdgeReferences, measureToolActive]
+  );
+  const measurementReferenceMap = useMemo(() => {
+    const map = new Map(effectiveActiveReferenceMap);
+    for (const reference of measurePointReferences) {
+      const referenceId = String(reference?.id || "").trim();
+      if (referenceId) {
+        map.set(referenceId, reference);
+      }
+    }
+    return map;
+  }, [effectiveActiveReferenceMap, measurePointReferences]);
   const measurementReferences = useMemo(() => (
     measurementReferenceIds
-      .map((id) => effectiveActiveReferenceMap.get(id))
+      .map((id) => measurementReferenceMap.get(id))
       .filter(Boolean)
-  ), [effectiveActiveReferenceMap, measurementReferenceIds]);
+  ), [measurementReferenceMap, measurementReferenceIds]);
   const activeMeasurementResults = useMemo(() => (
     selectedFileSheetKind === "stepPart"
       ? measurementsForReferences(measurementReferences, effectiveSelectorRuntime)
@@ -3119,7 +3140,7 @@ export default function CadWorkspace({
     () => explorerPickableReferences.filter((reference) => isEdgeReference(reference)),
     [isEdgeReference, explorerPickableReferences]
   );
-  const explorerPickableVertices = EMPTY_LIST;
+  const explorerPickableVertices = measureToolActive ? measurePointReferences : EMPTY_LIST;
   const referenceSelectionStatus = isAssemblyView && isInspectingAssemblyPart
     ? inspectedAssemblyReferenceStatus
     : referenceStatus;
@@ -4230,14 +4251,16 @@ export default function CadWorkspace({
       }
       return;
     }
-    if (!effectiveActiveReferenceMap.has(nextReferenceId)) {
+    const isMeasureActivation = tabToolMode === TAB_TOOL_MODE.MEASURE && selectedFileSheetKind === "stepPart";
+    const activeReferenceMapForActivation = isMeasureActivation ? measurementReferenceMap : effectiveActiveReferenceMap;
+    if (!activeReferenceMapForActivation.has(nextReferenceId)) {
       return;
     }
-    if (tabToolMode === TAB_TOOL_MODE.MEASURE && selectedFileSheetKind === "stepPart") {
+    if (isMeasureActivation) {
       const nextIds = computeNextMeasurementIds(
         measurementReferenceIds,
         nextReferenceId,
-        effectiveActiveReferenceMap,
+        measurementReferenceMap,
         effectiveSelectorRuntime
       );
       setMeasurementReferenceIds(nextIds);
@@ -4253,6 +4276,7 @@ export default function CadWorkspace({
     clearReferenceSelection,
     effectiveSelectorRuntime,
     effectiveActiveReferenceMap,
+    measurementReferenceMap,
     assemblyPickPartIdMap,
     measurementReferenceIds,
     selectedFileSheetKind,
@@ -4520,8 +4544,6 @@ export default function CadWorkspace({
     });
   };
   const selectionToolActive = effectiveRenderFormat === RENDER_FORMAT.STEP && tabToolMode === TAB_TOOL_MODE.REFERENCES;
-  const measureToolAvailable = effectiveRenderFormat === RENDER_FORMAT.STEP && selectedFileSheetKind === "stepPart" && !explorerInAssemblyMode;
-  const measureToolActive = measureToolAvailable && tabToolMode === TAB_TOOL_MODE.MEASURE;
   const drawToolActive = drawModeActive;
   const viewerSelectedReferenceIds = measureToolActive ? measurementReferenceIds : selectedReferenceIds;
   const selectionCount = measureToolActive ? 0 : selectionCountBase;
