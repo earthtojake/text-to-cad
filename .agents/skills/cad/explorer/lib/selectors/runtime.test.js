@@ -40,6 +40,8 @@ test("buildSelectorRuntime remaps source part rows onto an assembly occurrence",
 
   assert.deepEqual(faces.map((reference) => reference.displaySelector), ["o1.5.f1", "o1.5.f2"]);
   assert.equal(faces[1].copyText, "@cad[parts/root#o1.5.f2] plane area=1");
+  assert.equal(faces[1].pickData.surfaceType, "plane");
+  assert.equal(faces[1].pickData.area, 1);
 });
 
 test("buildSelectorRuntime remaps native occurrence prefixes onto assembly descendants", () => {

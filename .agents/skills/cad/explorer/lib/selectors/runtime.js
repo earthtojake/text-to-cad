@@ -313,6 +313,12 @@ function buildReference({
     pickData: {
       selectorType,
       rowIndex,
+      kind: row.kind || "",
+      surfaceType: row.surfaceType || "",
+      curveType: row.curveType || "",
+      length: row.length ?? null,
+      area: row.area ?? null,
+      volume: row.volume ?? null,
       bbox: row.bbox || null,
       center: row.center || null,
       normal: row.normal || null,

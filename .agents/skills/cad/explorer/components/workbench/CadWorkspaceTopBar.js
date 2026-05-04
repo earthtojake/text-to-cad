@@ -60,6 +60,9 @@ function fileSheetLabel(fileSheetKind) {
   if (fileSheetKind === "stepAssembly") {
     return "assembly sheet";
   }
+  if (fileSheetKind === "stepPart") {
+    return "measure sheet";
+  }
   return "file sheet";
 }
 

@@ -4,7 +4,8 @@ import {
   Download,
   MousePointer2,
   Play,
-  PenTool
+  PenTool,
+  Ruler
 } from "lucide-react";
 import { RENDER_FORMAT } from "../../lib/workbench/constants";
 import { TooltipProvider } from "../ui/tooltip";
@@ -19,6 +20,8 @@ function DesktopFloatingToolBar({
   renderFormat,
   floatingCadToolbarPosition,
   selectionToolActive,
+  measureToolAvailable = false,
+  measureToolActive = false,
   referenceSelectionPending = false,
   referenceSelectionUnavailable = false,
   urdfPosePickerAvailable = false,
@@ -48,6 +51,7 @@ function DesktopFloatingToolBar({
   const meshOnlyMode = stlMode || renderFormat === RENDER_FORMAT.THREE_MF;
   const captureDisabled = explorerLoading || (dxfMode ? !selectedDxfData : !selectedMeshData);
   const selectDisabled = explorerLoading || !selectedMeshData || referenceSelectionPending || referenceSelectionUnavailable;
+  const measureDisabled = !measureToolAvailable || selectDisabled;
   const posePickerDisabled = explorerLoading || !selectedMeshData || !urdfPosePickerAvailable;
   const selectLabel = referenceSelectionUnavailable
     ? "Selectable topology unavailable"
@@ -74,6 +78,16 @@ function DesktopFloatingToolBar({
                     aria-pressed={selectionToolActive}
                   >
                     <MousePointer2 className="size-3.5" strokeWidth={2} aria-hidden="true" />
+                  </ToolbarButton>
+
+                  <ToolbarButton
+                    label="Measure"
+                    active={measureToolActive}
+                    onClick={() => handleSelectTabToolMode("measure")}
+                    disabled={measureDisabled}
+                    aria-pressed={measureToolActive}
+                  >
+                    <Ruler className="size-3.5" strokeWidth={2} aria-hidden="true" />
                   </ToolbarButton>
 
                   <ToolbarButton

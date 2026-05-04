@@ -8,6 +8,7 @@ import DxfFileSheet from "./workbench/DxfFileSheet";
 import FileExplorerSidebar from "./workbench/FileExplorerSidebar";
 import LookSettingsPopover from "./workbench/LookSettingsPopover";
 import StepAssemblyFileSheet from "./workbench/StepAssemblyFileSheet";
+import StepPartInfoFileSheet from "./workbench/StepPartInfoFileSheet";
 import StatusToast from "./workbench/StatusToast";
 import UrdfFileSheet from "./workbench/UrdfFileSheet";
 import ExplorerAlertDialog from "./workbench/ExplorerAlertDialog";
@@ -112,6 +113,7 @@ import {
   URDF_JOINT_ANIMATION_FOLLOW_MS
 } from "../lib/urdf/jointAnimation";
 import { buildSelectorRuntime } from "../lib/selectors/runtime";
+import { measurementKey, measurementsForReferences } from "../lib/measurements/measureTopology";
 import {
   assemblyBreadcrumb,
   buildAssemblyLeafToNodePickMap,
@@ -146,6 +148,7 @@ const DESKTOP_TAB_TOOLS_MAX_WIDTH = 560;
 const DEFAULT_TAB_TOOLS_WIDTH = CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH;
 const CAD_WORKSPACE_TOP_BAR_HEIGHT = 44;
 const CAD_WORKSPACE_SESSION_PERSIST_DELAY_MS = 120;
+const DEFAULT_MEASURE_DENSITY_G_CM3 = "1.24";
 
 function clampPanelWidth(value, minWidth, maxWidth) {
   return Math.min(Math.max(value, minWidth), Math.max(minWidth, maxWidth));
@@ -559,6 +562,9 @@ function fileSheetKindForEntry(entry) {
   }
   if (kind === "assembly") {
     return "stepAssembly";
+  }
+  if (entrySourceFormat(entry) === RENDER_FORMAT.STEP && entryHasReferences(entry)) {
+    return "stepPart";
   }
   return "";
 }
@@ -1067,6 +1073,30 @@ function computeNextSelectionIds(currentIds, selectionId, { multiSelect = false 
   return [normalizedSelectionId];
 }
 
+function computeNextMeasurementIds(currentIds, selectionId, referenceMap, selectorRuntime) {
+  const normalizedSelectionId = String(selectionId || "").trim();
+  if (!normalizedSelectionId) {
+    return [];
+  }
+  const nextReference = referenceMap?.get?.(normalizedSelectionId);
+  if (!nextReference) {
+    return [];
+  }
+  const current = Array.isArray(currentIds) ? currentIds : [];
+  if (current.length === 1 && current[0] === normalizedSelectionId) {
+    return [];
+  }
+  const previousReference = current.length === 1 ? referenceMap.get(current[0]) : null;
+  if (
+    previousReference &&
+    previousReference.id !== normalizedSelectionId &&
+    measurementsForReferences([previousReference, nextReference], selectorRuntime).length
+  ) {
+    return [previousReference.id, normalizedSelectionId];
+  }
+  return [normalizedSelectionId];
+}
+
 function buildExplorerMeshAlert(entry, hasMeshData, loadError) {
   const fileRef = fileKey(entry);
   if (!fileRef) {
@@ -1220,6 +1250,9 @@ export default function CadWorkspace({
   const [drawingTool, setDrawingTool] = useState(DRAWING_TOOL.FREEHAND);
   const [explorerPerspective, setExplorerPerspective] = useState(null);
   const [tabToolMode, setTabToolMode] = useState(TAB_TOOL_MODE.REFERENCES);
+  const [measureDensity, setMeasureDensity] = useState(DEFAULT_MEASURE_DENSITY_G_CM3);
+  const [measurementReferenceIds, setMeasurementReferenceIds] = useState([]);
+  const [measurementHistory, setMeasurementHistory] = useState([]);
   const [drawingStrokes, setDrawingStrokes] = useState([]);
   const [drawingUndoStack, setDrawingUndoStack] = useState([]);
   const [drawingRedoStack, setDrawingRedoStack] = useState([]);
@@ -1234,6 +1267,8 @@ export default function CadWorkspace({
   const [inspectedAssemblyReferenceStatus, setInspectedAssemblyReferenceStatus] = useState(REFERENCE_STATUS.IDLE);
   const [, setInspectedAssemblyReferenceError] = useState("");
   const lastPersistenceFailureKeyRef = useRef("");
+  const measurementHistoryIdRef = useRef(0);
+  const lastMeasurementHistoryKeyRef = useRef("");
   const urdfTrajectoryPlaybackRef = useRef({
     frameId: 0,
     token: 0
@@ -2031,6 +2066,7 @@ export default function CadWorkspace({
     selectedReferenceIdsRef.current = [];
     setSelectedPartIds([]);
     setSelectedReferenceIds([]);
+    setMeasurementReferenceIds([]);
     setSelectedRenderPartIdByAssemblyPartId({});
     setSelectedWholeEntryCadRefToken("");
     setHoveredListReferenceId("");
@@ -2193,6 +2229,7 @@ export default function CadWorkspace({
     setReferenceQuery(nextTab.referenceQuery);
     selectedReferenceIdsRef.current = nextTab.selectedReferenceIds;
     setSelectedReferenceIds(nextTab.selectedReferenceIds);
+    setMeasurementReferenceIds([]);
     selectedPartIdsRef.current = nextTab.selectedPartIds;
     setSelectedPartIds(nextTab.selectedPartIds);
     setSelectedRenderPartIdByAssemblyPartId({});
@@ -2224,6 +2261,7 @@ export default function CadWorkspace({
     setDxfBendSettings([]);
     setReferenceQuery("");
     setSelectedReferenceIds([]);
+    setMeasurementReferenceIds([]);
     setSelectedPartIds([]);
     setSelectedRenderPartIdByAssemblyPartId({});
     setExpandedAssemblyPartIds([]);
@@ -2512,13 +2550,17 @@ export default function CadWorkspace({
 
   useEffect(() => {
     if (effectiveRenderFormat !== RENDER_FORMAT.STEP || !selectedEntryHasReferences) {
+      setTabToolMode((current) => (
+        current === TAB_TOOL_MODE.MEASURE || (current === TAB_TOOL_MODE.DRAW && !drawingStrokesRef.current.length)
+          ? TAB_TOOL_MODE.REFERENCES
+          : current
+      ));
       return;
     }
     setTabToolMode((current) => {
-      if (current !== TAB_TOOL_MODE.DRAW) {
-        return current;
-      }
-      return drawingStrokesRef.current.length ? current : TAB_TOOL_MODE.REFERENCES;
+      return current === TAB_TOOL_MODE.DRAW && !drawingStrokesRef.current.length
+        ? TAB_TOOL_MODE.REFERENCES
+        : current;
     });
   }, [effectiveRenderFormat, selectedKey, selectedEntryHasReferences]);
 
@@ -3024,6 +3066,44 @@ export default function CadWorkspace({
     }
     return map;
   }, [activeReferenceMap, effectiveVisibleReferences]);
+  const measurementReferences = useMemo(() => (
+    measurementReferenceIds
+      .map((id) => effectiveActiveReferenceMap.get(id))
+      .filter(Boolean)
+  ), [effectiveActiveReferenceMap, measurementReferenceIds]);
+  const activeMeasurementResults = useMemo(() => (
+    selectedFileSheetKind === "stepPart"
+      ? measurementsForReferences(measurementReferences, effectiveSelectorRuntime)
+      : []
+  ), [effectiveSelectorRuntime, measurementReferences, selectedFileSheetKind]);
+  const primaryMeasurementResult = activeMeasurementResults[0] || null;
+
+  useEffect(() => {
+    setMeasurementReferenceIds([]);
+    measurementHistoryIdRef.current = 0;
+    lastMeasurementHistoryKeyRef.current = "";
+    setMeasurementHistory([]);
+  }, [selectedKey]);
+
+  useEffect(() => {
+    const nextMeasurementKey = measurementKey(primaryMeasurementResult);
+    if (!nextMeasurementKey) {
+      lastMeasurementHistoryKeyRef.current = "";
+      return;
+    }
+    if (lastMeasurementHistoryKeyRef.current === nextMeasurementKey) {
+      return;
+    }
+    lastMeasurementHistoryKeyRef.current = nextMeasurementKey;
+    measurementHistoryIdRef.current += 1;
+    setMeasurementHistory((current) => [
+      {
+        ...primaryMeasurementResult,
+        id: `measurement:${measurementHistoryIdRef.current}`
+      },
+      ...current
+    ].slice(0, 30));
+  }, [primaryMeasurementResult]);
 
   const explorerPickableReferences = useMemo(() => {
     if (explorerInAssemblyMode) {
@@ -4143,19 +4223,43 @@ export default function CadWorkspace({
     }
     const nextReferenceId = String(referenceId || "").trim();
     if (!nextReferenceId) {
-      clearReferenceSelection();
+      if (tabToolMode === TAB_TOOL_MODE.MEASURE) {
+        setMeasurementReferenceIds([]);
+      } else {
+        clearReferenceSelection();
+      }
       return;
     }
     if (!effectiveActiveReferenceMap.has(nextReferenceId)) {
+      return;
+    }
+    if (tabToolMode === TAB_TOOL_MODE.MEASURE && selectedFileSheetKind === "stepPart") {
+      const nextIds = computeNextMeasurementIds(
+        measurementReferenceIds,
+        nextReferenceId,
+        effectiveActiveReferenceMap,
+        effectiveSelectorRuntime
+      );
+      setMeasurementReferenceIds(nextIds);
+      if (nextIds.length && selectedFileSheetKind === "stepPart") {
+        setLookMenuOpen(false);
+        setTabToolsOpen(true);
+      }
       return;
     }
     toggleReferenceSelection(nextReferenceId, { multiSelect });
   }, [
     clearAssemblySelection,
     clearReferenceSelection,
+    effectiveSelectorRuntime,
     effectiveActiveReferenceMap,
     assemblyPickPartIdMap,
+    measurementReferenceIds,
+    selectedFileSheetKind,
+    setLookMenuOpen,
+    setTabToolsOpen,
     stepUpdateInProgress,
+    tabToolMode,
     toggleReferenceSelection,
     togglePartSelection,
     explorerInAssemblyMode
@@ -4196,12 +4300,20 @@ export default function CadWorkspace({
 
   const handleSelectTabToolMode = useCallback((mode) => {
     setExplorerAlertOpen(false);
-    const normalizedMode = mode === TAB_TOOL_MODE.DRAW ? TAB_TOOL_MODE.DRAW : TAB_TOOL_MODE.REFERENCES;
+    const normalizedMode = mode === TAB_TOOL_MODE.DRAW
+      ? TAB_TOOL_MODE.DRAW
+      : mode === TAB_TOOL_MODE.MEASURE
+        ? TAB_TOOL_MODE.MEASURE
+        : TAB_TOOL_MODE.REFERENCES;
     setTabToolMode(normalizedMode);
+    if (normalizedMode === TAB_TOOL_MODE.MEASURE && selectedFileSheetKind === "stepPart") {
+      setLookMenuOpen(false);
+      setTabToolsOpen(true);
+    }
     if (normalizedMode === TAB_TOOL_MODE.DRAW && drawingTool === DRAWING_TOOL.SURFACE_LINE) {
       setDrawingTool(DRAWING_TOOL.FREEHAND);
     }
-  }, [drawingTool]);
+  }, [drawingTool, selectedFileSheetKind, setLookMenuOpen, setTabToolsOpen]);
 
   const handleToggleFileSheet = useCallback(() => {
     if (!selectedFileSheetKind) {
@@ -4408,8 +4520,11 @@ export default function CadWorkspace({
     });
   };
   const selectionToolActive = effectiveRenderFormat === RENDER_FORMAT.STEP && tabToolMode === TAB_TOOL_MODE.REFERENCES;
+  const measureToolAvailable = effectiveRenderFormat === RENDER_FORMAT.STEP && selectedFileSheetKind === "stepPart" && !explorerInAssemblyMode;
+  const measureToolActive = measureToolAvailable && tabToolMode === TAB_TOOL_MODE.MEASURE;
   const drawToolActive = drawModeActive;
-  const selectionCount = selectionCountBase;
+  const viewerSelectedReferenceIds = measureToolActive ? measurementReferenceIds : selectedReferenceIds;
+  const selectionCount = measureToolActive ? 0 : selectionCountBase;
   const canUndoDrawing = drawingUndoStack.length > 0;
   const canRedoDrawing = drawingRedoStack.length > 0;
   const lookSheetOpen = lookMenuOpen && !previewMode;
@@ -4479,7 +4594,7 @@ export default function CadWorkspace({
           selectedPartIds={explorerSelectedPartIds}
           hoveredPartId={explorerHoveredPartIds}
           hoveredReferenceId={hoveredReferenceId}
-          selectedReferenceIds={selectedReferenceIds}
+          selectedReferenceIds={viewerSelectedReferenceIds}
           selectorRuntime={effectiveSelectorRuntime}
           pickableFaces={explorerPickableFaces}
           pickableEdges={explorerPickableEdges}
@@ -4552,6 +4667,8 @@ export default function CadWorkspace({
                 renderFormat={effectiveRenderFormat}
                 floatingCadToolbarPosition={floatingCadToolbarPosition}
                 selectionToolActive={selectionToolActive}
+                measureToolAvailable={measureToolAvailable}
+                measureToolActive={measureToolActive}
                 referenceSelectionPending={referenceSelectionPending}
                 referenceSelectionUnavailable={referenceSelectionUnavailable}
                 urdfPosePickerAvailable={Boolean(selectedUrdfMotionControls)}
@@ -4633,6 +4750,28 @@ export default function CadWorkspace({
                 hideSelectedParts={handleHideSelectedParts}
                 showAllHiddenParts={handleShowAllHiddenParts}
                 inspectedAssemblyPart={inspectedAssemblyPart}
+              />
+            ) : null}
+
+            {selectedFileSheetKind === "stepPart" ? (
+              <StepPartInfoFileSheet
+                key={`stepPart:${selectedKey}`}
+                open={fileSheetOpen}
+                isDesktop={isDesktop}
+                width={activeSheetWidth || tabToolsWidth}
+                onStartResize={handleStartFileSheetResize}
+                selectedEntry={selectedEntry}
+                selectedMeshData={selectedMeshData}
+                selectorRuntime={effectiveSelectorRuntime}
+                selectedReferences={measureToolActive ? measurementReferences : EMPTY_LIST}
+                density={measureDensity}
+                onDensityChange={setMeasureDensity}
+                history={measurementHistory}
+                onClearHistory={() => {
+                  measurementHistoryIdRef.current = 0;
+                  lastMeasurementHistoryKeyRef.current = "";
+                  setMeasurementHistory([]);
+                }}
               />
             ) : null}
 
