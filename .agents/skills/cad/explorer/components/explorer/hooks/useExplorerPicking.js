@@ -763,7 +763,7 @@ export function useExplorerPicking({
       maxScreenDistancePx = CORNER_PICK_MAX_SCREEN_DISTANCE_PX
     } = {}) {
       const pickableVertices = Array.isArray(pickableVerticesRef.current) ? pickableVerticesRef.current : [];
-      if (!pickableVertices.length || !runtime.vertexPickPoints) {
+      if (!pickableVertices.length) {
         return null;
       }
       const vertexThreshold = currentPickThreshold(
@@ -775,25 +775,29 @@ export function useExplorerPicking({
       if (runtime.raycaster?.params?.Points) {
         runtime.raycaster.params.Points.threshold = vertexThreshold;
       }
-      let filteredIntersections = runtime.raycaster.intersectObject(runtime.vertexPickPoints, false);
-      const nearestSurfaceDistance = Number(modelIntersections?.[0]?.distance);
-      if (Number.isFinite(nearestSurfaceDistance)) {
-        const depthAllowance = Math.max(
-          EDGE_OCCLUSION_EPSILON_MIN,
-          vertexThreshold * EDGE_OCCLUSION_EPSILON_FACTOR
+      let reference = null;
+      let bestScreenDistance = Infinity;
+      if (runtime.vertexPickPoints) {
+        let filteredIntersections = runtime.raycaster.intersectObject(runtime.vertexPickPoints, false);
+        const nearestSurfaceDistance = Number(modelIntersections?.[0]?.distance);
+        if (Number.isFinite(nearestSurfaceDistance)) {
+          const depthAllowance = Math.max(
+            EDGE_OCCLUSION_EPSILON_MIN,
+            vertexThreshold * EDGE_OCCLUSION_EPSILON_FACTOR
+          );
+          filteredIntersections = filteredIntersections.filter(
+            (intersection) => Number(intersection?.distance) <= nearestSurfaceDistance + depthAllowance
+          );
+        }
+        const best = chooseBestEdgeIntersection(
+          filteredIntersections,
+          (intersection) => edgeScreenDistance(intersection, clientX, clientY)
         );
-        filteredIntersections = filteredIntersections.filter(
-          (intersection) => Number(intersection?.distance) <= nearestSurfaceDistance + depthAllowance
-        );
+        bestScreenDistance = best ? edgeScreenDistance(best, clientX, clientY) : Infinity;
+        reference = best && bestScreenDistance <= maxScreenDistancePx
+          ? vertexReferenceFromIntersection(best)
+          : null;
       }
-      const best = chooseBestEdgeIntersection(
-        filteredIntersections,
-        (intersection) => edgeScreenDistance(intersection, clientX, clientY)
-      );
-      const bestScreenDistance = best ? edgeScreenDistance(best, clientX, clientY) : Infinity;
-      const reference = best && bestScreenDistance <= maxScreenDistancePx
-        ? vertexReferenceFromIntersection(best)
-        : null;
       if (reference) {
         return {
           reference,

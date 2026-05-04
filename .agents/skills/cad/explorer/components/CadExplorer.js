@@ -3189,54 +3189,7 @@ function buildEdgePickLines(THREE, selectorRuntime) {
   return lines;
 }
 
-function buildVertexPickPointsFromReferences(THREE, references) {
-  const pointReferences = (Array.isArray(references) ? references : [])
-    .map((reference) => {
-      const center = reference?.pickData?.center;
-      if (!isFinitePoint3(center)) {
-        return null;
-      }
-      return {
-        reference,
-        center: [Number(center[0]), Number(center[1]), Number(center[2])]
-      };
-    })
-    .filter(Boolean);
-  if (!pointReferences.length) {
-    return null;
-  }
-  const positions = new Float32Array(pointReferences.length * 3);
-  const vertexIds = new Uint32Array(pointReferences.length);
-  for (let index = 0; index < pointReferences.length; index += 1) {
-    const center = pointReferences[index].center;
-    positions[index * 3] = center[0];
-    positions[(index * 3) + 1] = center[1];
-    positions[(index * 3) + 2] = center[2];
-    vertexIds[index] = index;
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  const material = new THREE.PointsMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0,
-    size: 1.5,
-    sizeAttenuation: false,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const points = new THREE.Points(geometry, material);
-  points.userData.vertexIds = vertexIds;
-  points.userData.vertexReferences = pointReferences.map((entry) => entry.reference);
-  points.frustumCulled = false;
-  return points;
-}
-
-function buildVertexPickPoints(THREE, selectorRuntime, pickableVertices = []) {
-  const referencePoints = buildVertexPickPointsFromReferences(THREE, pickableVertices);
-  if (referencePoints) {
-    return referencePoints;
-  }
+function buildVertexPickPoints(THREE, selectorRuntime) {
   const proxy = selectorRuntime?.proxy || {};
   if (!(proxy.vertexPositions instanceof Float32Array) || !proxy.vertexPositions.length) {
     return null;
@@ -3487,6 +3440,34 @@ function buildVertexMarkerMesh(runtime, THREE, reference, {
   const mesh = new THREE.Points(geometry, material);
   mesh.renderOrder = renderOrder;
   return mesh;
+}
+
+function buildMeasurementLineMesh(THREE, start, end, {
+  color,
+  opacity = 1,
+  renderOrder = 80,
+  depthTest = false
+} = {}) {
+  if (!isFinitePoint3(start) || !isFinitePoint3(end)) {
+    return null;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array([
+    Number(start[0]), Number(start[1]), Number(start[2]),
+    Number(end[0]), Number(end[1]), Number(end[2])
+  ]), 3));
+  const material = new THREE.LineBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    depthTest,
+    depthWrite: false,
+    toneMapped: false
+  });
+  const line = new THREE.LineSegments(geometry, material);
+  line.renderOrder = renderOrder;
+  line.frustumCulled = false;
+  return line;
 }
 
 function subtract(a, b) {
@@ -6416,6 +6397,15 @@ const CadExplorer = forwardRef(function CadExplorer({
       const firstCenter = selectedTopologyReferences[0]?.pickData?.center;
       const secondCenter = selectedTopologyReferences[1]?.pickData?.center;
       if (isFinitePoint3(firstCenter) && isFinitePoint3(secondCenter)) {
+        const measurementLineFallback = buildMeasurementLineMesh(THREE, firstCenter, secondCenter, {
+          color: SURFACE_LINE_COLOR,
+          opacity: 1,
+          renderOrder: 80,
+          depthTest: false
+        });
+        if (measurementLineFallback) {
+          highlightGroup.add(measurementLineFallback);
+        }
         const measurementLine = createScreenSpaceLineSegments(runtime, [
           Number(firstCenter[0]), Number(firstCenter[1]), Number(firstCenter[2]),
           Number(secondCenter[0]), Number(secondCenter[1]), Number(secondCenter[2])
@@ -6423,7 +6413,7 @@ const CadExplorer = forwardRef(function CadExplorer({
           color: SURFACE_LINE_COLOR,
           opacity: 0.98,
           lineWidth: Math.max(baseEdgeThickness * 2, 2),
-          renderOrder: 28,
+          renderOrder: 81,
           depthTest: false,
           depthWrite: false
         });
