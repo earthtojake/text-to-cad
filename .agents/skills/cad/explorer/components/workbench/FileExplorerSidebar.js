@@ -2,6 +2,7 @@ import {
   Bot,
   Boxes,
   ChevronRight,
+  Download,
   DraftingCompass,
   LoaderCircle,
   Package,
@@ -13,6 +14,12 @@ import {
   CollapsibleTrigger
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger
+} from "@/components/ui/context-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sidebar,
@@ -94,26 +101,48 @@ function FileEntryButton({
     String(entry?.source?.path || entry?.step?.path || "")
   ].filter(Boolean).join(" | ");
 
+  const handleDownload = () => {
+    const sourcePath = entry?.source?.path || entry?.step?.path;
+    if (!sourcePath) return;
+    const url = `/${sourcePath}`;
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = sourcePath.split("/").pop() || sourcePath;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  };
+
   return (
-    <SidebarMenuButton
-      type="button"
-      isActive={active}
-      size="sm"
-      title={title}
-      className={cn(
-        "min-w-0 w-full justify-start"
-      )}
-      onClick={() => {
-        onSelectEntry(key);
-        if (isMobile) {
-          setOpenMobile(false);
-        }
-      }}
-      tooltip={label}
-    >
-      <EntryIcon className={cn(pending && !missingArtifacts && "animate-spin")} aria-hidden="true" />
-      <span className="block min-w-0 flex-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{label}</span>
-    </SidebarMenuButton>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <SidebarMenuButton
+          type="button"
+          isActive={active}
+          size="sm"
+          title={title}
+          className={cn(
+            "min-w-0 w-full justify-start"
+          )}
+          onClick={() => {
+            onSelectEntry(key);
+            if (isMobile) {
+              setOpenMobile(false);
+            }
+          }}
+          tooltip={label}
+        >
+          <EntryIcon className={cn(pending && !missingArtifacts && "animate-spin")} aria-hidden="true" />
+          <span className="block min-w-0 flex-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap">{label}</span>
+        </SidebarMenuButton>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={handleDownload}>
+          <Download className="size-4" aria-hidden="true" />
+          Download
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
