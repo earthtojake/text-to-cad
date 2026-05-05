@@ -2,6 +2,7 @@ import {
   Copy,
   Crosshair,
   Download,
+  FileDown,
   MousePointer2,
   Play,
   PenTool
@@ -29,6 +30,7 @@ function DesktopFloatingToolBar({
   explorerLoading,
   selectedMeshData,
   selectedDxfData,
+  selectedEntry,
   drawingToolOptions,
   drawingTool,
   handleSelectDrawingTool,
@@ -129,6 +131,24 @@ function DesktopFloatingToolBar({
           >
             <Download className="size-3.5" strokeWidth={2} aria-hidden="true" />
           </ToolbarButton>
+
+          <ToolbarButton
+            label="Download file"
+            disabled={!selectedEntry}
+            onClick={() => {
+              const sourcePath = selectedEntry?.source?.path || selectedEntry?.step?.path;
+              if (!sourcePath) return;
+              const url = `/${sourcePath}`;
+              const anchor = document.createElement("a");
+              anchor.href = url;
+              anchor.download = sourcePath.split("/").pop() || sourcePath;
+              document.body.appendChild(anchor);
+              anchor.click();
+              document.body.removeChild(anchor);
+            }}
+          >
+            <FileDown className="size-3.5" strokeWidth={2} aria-hidden="true" />
+          </ToolbarButton>
         </div>
       </TooltipProvider>
 
@@ -159,5 +179,5 @@ export default function FloatingToolBar({
     return null;
   }
 
-  return <DesktopFloatingToolBar {...toolbarProps} />;
+  return <DesktopFloatingToolBar selectedEntry={selectedEntry} {...toolbarProps} />;
 }
