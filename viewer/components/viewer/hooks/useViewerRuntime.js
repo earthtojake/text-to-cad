@@ -56,13 +56,13 @@ export function useViewerRuntime({
     async function initializeViewer() {
       const [
         THREE,
-        { OrbitControls },
+        { TrackballControls },
         { LineSegments2 },
         { LineSegmentsGeometry },
         { LineMaterial }
       ] = await Promise.all([
         import("three"),
-        import("three/examples/jsm/controls/OrbitControls.js"),
+        import("three/examples/jsm/controls/TrackballControls.js"),
         import("three/examples/jsm/lines/LineSegments2.js"),
         import("three/examples/jsm/lines/LineSegmentsGeometry.js"),
         import("three/examples/jsm/lines/LineMaterial.js")
@@ -91,6 +91,7 @@ export function useViewerRuntime({
       const scene = new THREE.Scene();
 
       const camera = new THREE.PerspectiveCamera(48, width / height, 0.1, 50000);
+      camera.up.set(0, 0, 1);
       camera.position.set(180, 120, 180);
 
       const renderer = new THREE.WebGLRenderer({
@@ -110,15 +111,12 @@ export function useViewerRuntime({
       container.innerHTML = "";
       container.appendChild(renderer.domElement);
 
-      const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controls.dampingFactor = DEFAULT_DAMPING_FACTOR;
+      const controls = new TrackballControls(camera, renderer.domElement);
+      controls.staticMoving = false;
+      controls.dynamicDampingFactor = DEFAULT_DAMPING_FACTOR;
       controls.rotateSpeed = 1;
       controls.panSpeed = 1.35;
       controls.zoomSpeed = getDefaultZoomSpeed();
-      if ("zoomToCursor" in controls) {
-        controls.zoomToCursor = true;
-      }
 
       const hemisphereLight = new THREE.HemisphereLight(
         getViewerThemeValue(viewerTheme, "hemisphereSky", DEFAULT_LIGHTING.hemisphereSky),
@@ -311,6 +309,7 @@ export function useViewerRuntime({
         renderer.setSize(w, h);
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
+        controls.handleResize?.();
         applyCameraFrameInsets?.(runtimeRef.current, frameInsetsRef?.current, { updateProjection: false });
         syncScreenSpaceLineMaterials();
         syncDrawingCanvasSize(runtimeRef.current);
@@ -345,10 +344,100 @@ export function useViewerRuntime({
         beginInteraction();
       };
       const wheelListenerOptions = { passive: true, capture: true };
+      const commandPanState = {
+        active: false,
+        pointerId: null,
+        lastPageX: 0,
+        lastPageY: 0
+      };
+      const commandPanEye = new THREE.Vector3();
+      const commandPanDelta = new THREE.Vector3();
+      const commandPanUp = new THREE.Vector3();
+      const isCommandPanPointerDown = (event) => (
+        event.button === 0 &&
+        (event.metaKey || event.ctrlKey) &&
+        !previewModeRef.current
+      );
+      const stopCommandPanEvent = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+      };
+      const applyCommandPanDelta = (dx, dy) => {
+        const rect = renderer.domElement.getBoundingClientRect();
+        const width = rect.width || renderer.domElement.clientWidth || 1;
+        const height = rect.height || renderer.domElement.clientHeight || 1;
+        commandPanEye.copy(camera.position).sub(controls.target);
+        const panScale = commandPanEye.length() * controls.panSpeed;
+        commandPanDelta
+          .copy(commandPanEye)
+          .cross(camera.up)
+          .setLength((dx / width) * panScale);
+        commandPanDelta.add(
+          commandPanUp.copy(camera.up).setLength((dy / height) * panScale)
+        );
+        camera.position.add(commandPanDelta);
+        controls.target.add(commandPanDelta);
+        camera.lookAt(controls.target);
+        emitPerspectiveChange(runtimeRef.current);
+        requestRender();
+      };
+      const handleCommandPanPointerDown = (event) => {
+        if (!isCommandPanPointerDown(event)) {
+          return;
+        }
+        stopCommandPanEvent(event);
+        commandPanState.active = true;
+        commandPanState.pointerId = event.pointerId;
+        commandPanState.lastPageX = event.pageX;
+        commandPanState.lastPageY = event.pageY;
+        renderer.domElement.setPointerCapture?.(event.pointerId);
+        cancelCameraTransition(runtimeRef.current);
+        beginInteraction();
+      };
+      const handleCommandPanPointerMove = (event) => {
+        if (
+          !commandPanState.active ||
+          event.pointerId !== commandPanState.pointerId
+        ) {
+          return;
+        }
+        stopCommandPanEvent(event);
+        const dx = event.pageX - commandPanState.lastPageX;
+        const dy = event.pageY - commandPanState.lastPageY;
+        commandPanState.lastPageX = event.pageX;
+        commandPanState.lastPageY = event.pageY;
+        if (dx || dy) {
+          applyCommandPanDelta(dx, dy);
+        }
+      };
+      const endCommandPan = (event) => {
+        if (!commandPanState.active) {
+          return;
+        }
+        if (event?.pointerId != null && event.pointerId !== commandPanState.pointerId) {
+          return;
+        }
+        if (event) {
+          stopCommandPanEvent(event);
+          try {
+            renderer.domElement.releasePointerCapture?.(event.pointerId);
+          } catch {
+            // Pointer capture may already be gone after a browser-level cancel.
+          }
+        }
+        commandPanState.active = false;
+        commandPanState.pointerId = null;
+        scheduleIdleQuality();
+      };
 
       controls.addEventListener("start", handleControlsStart);
       controls.addEventListener("change", handleControlsChange);
       controls.addEventListener("end", handleControlsEnd);
+      renderer.domElement.addEventListener("pointerdown", handleCommandPanPointerDown, true);
+      renderer.domElement.addEventListener("pointermove", handleCommandPanPointerMove, true);
+      renderer.domElement.addEventListener("pointerup", endCommandPan, true);
+      renderer.domElement.addEventListener("pointercancel", endCommandPan, true);
       renderer.domElement.addEventListener("wheel", handleWheel, wheelListenerOptions);
 
       const handleKeyDown = (event) => {
@@ -504,6 +593,10 @@ export function useViewerRuntime({
         runtime.controls.removeEventListener("start", handleControlsStart);
         runtime.controls.removeEventListener("change", handleControlsChange);
         runtime.controls.removeEventListener("end", handleControlsEnd);
+        runtime.renderer.domElement.removeEventListener("pointerdown", handleCommandPanPointerDown, true);
+        runtime.renderer.domElement.removeEventListener("pointermove", handleCommandPanPointerMove, true);
+        runtime.renderer.domElement.removeEventListener("pointerup", endCommandPan, true);
+        runtime.renderer.domElement.removeEventListener("pointercancel", endCommandPan, true);
         runtime.renderer.domElement.removeEventListener("wheel", handleWheel, wheelListenerOptions);
         window.removeEventListener("keydown", handleKeyDown);
         window.removeEventListener("keyup", handleKeyUp);
