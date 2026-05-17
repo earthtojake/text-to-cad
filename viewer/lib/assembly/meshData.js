@@ -82,6 +82,82 @@ function meshUrlForPart(part) {
   return String(part?.assets?.glb?.url || part?.meshUrl || "").trim();
 }
 
+function labelForSourcePath(sourcePath) {
+  const basename = String(sourcePath || "").trim().split("/").filter(Boolean).pop() || "";
+  return basename.replace(/\.(?:step|stp|stl|glb)$/i, "");
+}
+
+function isOpaqueAssemblyLabel(value) {
+  const normalized = String(value || "").trim();
+  return !normalized ||
+    normalized.includes("=>") ||
+    /^o?\d+(?:[.:]\d+)*$/i.test(normalized) ||
+    /^\[?[0-9:.[\]-]+\]?$/.test(normalized);
+}
+
+function closeTo(value, target, tolerance = 2) {
+  return Math.abs(Number(value) - target) <= tolerance;
+}
+
+function inferredNativePartLabelFromBounds(bounds) {
+  const min = bounds?.min;
+  const max = bounds?.max;
+  if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) {
+    return "";
+  }
+  const dx = Number(max[0]) - Number(min[0]);
+  const dy = Number(max[1]) - Number(min[1]);
+  const dz = Number(max[2]) - Number(min[2]);
+  const cx = (Number(min[0]) + Number(max[0])) / 2;
+  const cy = (Number(min[1]) + Number(max[1])) / 2;
+  const minZ = Number(min[2]);
+
+  if (dz > 220 && dx < 65 && dy > 240) {
+    return cx < 0 ? "left_side_plate" : "right_side_plate";
+  }
+  if (dz > 220 && dx > 180 && dy < 70) {
+    return cy < 0 ? "front_panel" : "rear_panel";
+  }
+  if (closeTo(dx, 180, 4) && closeTo(dy, 204, 4) && dz >= 65 && dz <= 75) {
+    return "bottom_tray";
+  }
+  if (closeTo(dx, 180, 4) && closeTo(dy, 200, 4) && dz <= 8) {
+    return `equipment_shelf_z${Math.round(minZ)}`;
+  }
+  if (dx < 45 && dy > 120 && dz > 100 && minZ < 15) {
+    return cx < 0 ? "left_axle_insert" : "right_axle_insert";
+  }
+  if (closeTo(dx, 240, 4) && closeTo(dy, 256, 4) && dz <= 10 && closeTo(minZ, 240, 3)) {
+    return "top_lid";
+  }
+  if (closeTo(dx, 240, 4) && closeTo(dy, 226, 6) && dz > 90 && minZ >= 250) {
+    return "upper_compute_bay";
+  }
+  if (closeTo(dx, 128, 8) && closeTo(dy, 256, 6) && dz <= 10 && minZ >= 245) {
+    return cx < 0 ? "left_overwheel_pod" : "right_overwheel_pod";
+  }
+  if (closeTo(dx, 172, 8) && closeTo(dy, 76, 8) && dz >= 45 && minZ >= 350) {
+    return "upper_perception_pod";
+  }
+  return "";
+}
+
+function displayNameForPart(part, sourcePath, key) {
+  const explicitName = String(part?.displayName || part?.name || "").trim();
+  if (!isOpaqueAssemblyLabel(explicitName)) {
+    return explicitName;
+  }
+  const sourceLabel = labelForSourcePath(sourcePath);
+  if (sourceLabel) {
+    return sourceLabel;
+  }
+  const inferredLabel = inferredNativePartLabelFromBounds(part?.bbox);
+  if (inferredLabel) {
+    return inferredLabel;
+  }
+  return String(part?.occurrenceId || part?.instancePath || key || "").trim();
+}
+
 export function assemblyRootFromTopology(topologyManifest) {
   const root = topologyManifest?.assembly?.root;
   return root && typeof root === "object" ? root : null;
@@ -322,13 +398,7 @@ export function buildAssemblyMeshData(topologyManifest, meshesBySourcePath) {
     }
 
     const bounds = manifestPart?.bbox || transformBounds(sourceMesh.bounds, transform);
-    const displayName = String(
-      manifestPart?.displayName ||
-      manifestPart?.instancePath ||
-      manifestPart?.occurrenceId ||
-      sourcePath ||
-      key
-    ).trim();
+    const displayName = displayNameForPart(manifestPart, sourcePath, key);
     parts.push({
       ...manifestPart,
       id: String(manifestPart?.id || manifestPart?.occurrenceId || "").trim(),

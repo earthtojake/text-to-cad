@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { parseCadRefToken } from "../lib/cadRefs";
 import { copyImageBlobToClipboard } from "../lib/clipboard";
 import {
@@ -152,6 +153,11 @@ const BEND_GUIDE_COLOR = "#f59e0b";
 const BEND_GUIDE_WIDTH_MULTIPLIER = 1.35;
 const PART_HOVER_OPACITY_BOOST = 0.08;
 const PART_SELECTED_OPACITY_BOOST = 0.12;
+const MEASUREMENT_LINE_COLOR = "#facc15";
+const MEASUREMENT_POINT_COLOR = "#f97316";
+const MEASUREMENT_PENDING_COLOR = "#38bdf8";
+const MEASUREMENT_LABEL_UPDATE_EPSILON_PX = 0.5;
+const PART_LABEL_MAX_COUNT = 80;
 const URDF_PART_INTRO_STAGGER_MS = 150;
 const URDF_PART_INTRO_DURATION_MS = 620;
 const URDF_PART_INTRO_INITIAL_SCALE = 0.76;
@@ -1302,16 +1308,97 @@ function formatMeasurementIn(value) {
   return (numericValue / MM_PER_INCH).toFixed(2);
 }
 
+function formatMeasurementPoint(point) {
+  if (!Array.isArray(point) || point.length < 3) {
+    return "";
+  }
+  return `X ${formatMeasurementMm(point[0])}, Y ${formatMeasurementMm(point[1])}, Z ${formatMeasurementMm(point[2])} mm`;
+}
+
+function formatCount(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue < 0) {
+    return "";
+  }
+  return Math.round(numericValue).toLocaleString();
+}
+
+function formatVolumeCm3(valueMm3) {
+  const numericValue = Number(valueMm3);
+  if (!Number.isFinite(numericValue) || numericValue < 0) {
+    return "";
+  }
+  const cm3 = numericValue / 1000;
+  return cm3 >= 100 ? `${cm3.toFixed(0)} cm3` : `${cm3.toFixed(1)} cm3`;
+}
+
+function readBoundsPoint(bounds, key) {
+  const point = bounds?.[key];
+  if (!Array.isArray(point) || point.length < 3) {
+    return null;
+  }
+  const next = [Number(point[0]), Number(point[1]), Number(point[2])];
+  return next.every(Number.isFinite) ? next : null;
+}
+
 function buildBoundsMeasurement(bounds) {
   const dimensions = readBoundsDimensions(bounds);
   if (!dimensions) {
     return null;
   }
+  const volumeMm3 = dimensions[0] * dimensions[1] * dimensions[2];
   return {
     dimensions,
+    center: readBoundsCenterPoint(bounds),
+    min: readBoundsPoint(bounds, "min"),
+    max: readBoundsPoint(bounds, "max"),
+    volumeMm3,
     mmText: `${formatMeasurementMm(dimensions[0])} x ${formatMeasurementMm(dimensions[1])} x ${formatMeasurementMm(dimensions[2])} mm`,
-    inchText: `${formatMeasurementIn(dimensions[0])} x ${formatMeasurementIn(dimensions[1])} x ${formatMeasurementIn(dimensions[2])} in`
+    inchText: `${formatMeasurementIn(dimensions[0])} x ${formatMeasurementIn(dimensions[1])} x ${formatMeasurementIn(dimensions[2])} in`,
+    centerText: formatMeasurementPoint(readBoundsCenterPoint(bounds)),
+    minText: formatMeasurementPoint(readBoundsPoint(bounds, "min")),
+    maxText: formatMeasurementPoint(readBoundsPoint(bounds, "max")),
+    volumeText: formatVolumeCm3(volumeMm3)
   };
+}
+
+function buildPartFeatureRows(part) {
+  const rows = [];
+  const vertexCount = formatCount(part?.vertexCount);
+  const triangleCount = formatCount(part?.triangleCount);
+  if (vertexCount || triangleCount) {
+    rows.push({
+      label: "Mesh",
+      value: `${vertexCount || "0"} vertices / ${triangleCount || "0"} triangles`
+    });
+  }
+  const topologyCounts = part?.topologyCounts && typeof part.topologyCounts === "object" ? part.topologyCounts : null;
+  if (topologyCounts) {
+    const shapes = formatCount(topologyCounts.shapes);
+    const faces = formatCount(topologyCounts.faces);
+    const edges = formatCount(topologyCounts.edges);
+    const vertices = formatCount(topologyCounts.vertices);
+    const values = [
+      shapes && `${shapes} shapes`,
+      faces && `${faces} faces`,
+      edges && `${edges} edges`,
+      vertices && `${vertices} vertices`
+    ].filter(Boolean);
+    if (values.length) {
+      rows.push({
+        label: "Topology",
+        value: values.join(" / ")
+      });
+    }
+  }
+  const sourceKind = String(part?.sourceKind || "").trim();
+  if (sourceKind) {
+    rows.push({
+      label: "Source",
+      value: sourceKind
+    });
+  }
+  return rows;
 }
 
 function findMeasurementPart(meshData, selectedPartIds, hoveredPartId, focusedPartId) {
@@ -1334,6 +1421,161 @@ function findMeasurementPart(meshData, selectedPartIds, hoveredPartId, focusedPa
     }
   }
   return null;
+}
+
+function normalizeMeasurementPoint(point) {
+  if (!Array.isArray(point) || point.length < 3) {
+    return null;
+  }
+  const next = [Number(point[0]), Number(point[1]), Number(point[2])];
+  return next.every(Number.isFinite) ? next : null;
+}
+
+function distanceBetweenPoints(a, b) {
+  const start = normalizeMeasurementPoint(a);
+  const end = normalizeMeasurementPoint(b);
+  if (!start || !end) {
+    return 0;
+  }
+  return Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]);
+}
+
+function formatDistanceLabel(distanceMm) {
+  return `${formatMeasurementMm(distanceMm)} mm / ${formatMeasurementIn(distanceMm)} in`;
+}
+
+function measurementMidpoint(measurement) {
+  const start = normalizeMeasurementPoint(measurement?.start?.point);
+  const end = normalizeMeasurementPoint(measurement?.end?.point);
+  if (!start || !end) {
+    return null;
+  }
+  return [
+    (start[0] + end[0]) / 2,
+    (start[1] + end[1]) / 2,
+    (start[2] + end[2]) / 2
+  ];
+}
+
+function readBoundsCenterPoint(bounds) {
+  const min = bounds?.min;
+  const max = bounds?.max;
+  if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) {
+    return null;
+  }
+  const center = [0, 1, 2].map((index) => (Number(min[index]) + Number(max[index])) / 2);
+  return center.every(Number.isFinite) ? center : null;
+}
+
+function projectModelPointToOverlay(runtime, container, point) {
+  const modelPoint = normalizeMeasurementPoint(point);
+  if (!runtime?.THREE || !runtime?.camera || !container || !modelPoint) {
+    return null;
+  }
+  const worldPoint = new runtime.THREE.Vector3(modelPoint[0], modelPoint[1], modelPoint[2]);
+  if (runtime.edgesGroup?.localToWorld) {
+    runtime.edgesGroup.localToWorld(worldPoint);
+  } else if (runtime.modelGroup?.position) {
+    worldPoint.add(runtime.modelGroup.position);
+  }
+  const projected = worldPoint.project(runtime.camera);
+  if (
+    !Number.isFinite(projected.x) ||
+    !Number.isFinite(projected.y) ||
+    !Number.isFinite(projected.z) ||
+    projected.z < -1 ||
+    projected.z > 1
+  ) {
+    return null;
+  }
+  const rect = container.getBoundingClientRect();
+  return {
+    x: ((projected.x + 1) * 0.5) * rect.width,
+    y: ((1 - projected.y) * 0.5) * rect.height
+  };
+}
+
+function overlayPointsEqual(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index];
+    const right = b[index];
+    if (
+      left?.id !== right?.id ||
+      left?.label !== right?.label ||
+      Math.abs(Number(left?.x || 0) - Number(right?.x || 0)) > MEASUREMENT_LABEL_UPDATE_EPSILON_PX ||
+      Math.abs(Number(left?.y || 0) - Number(right?.y || 0)) > MEASUREMENT_LABEL_UPDATE_EPSILON_PX
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function normalizedMeasurementList(measurements) {
+  return Array.isArray(measurements)
+    ? measurements
+      .map((measurement) => {
+        const start = normalizeMeasurementPoint(measurement?.start?.point);
+        const end = normalizeMeasurementPoint(measurement?.end?.point);
+        if (!start || !end) {
+          return null;
+        }
+        const distanceMm = Number.isFinite(Number(measurement?.distanceMm))
+          ? Number(measurement.distanceMm)
+          : distanceBetweenPoints(start, end);
+        return {
+          ...measurement,
+          id: String(measurement?.id || `${start.join(",")}:${end.join(",")}`),
+          start: {
+            ...(measurement?.start || {}),
+            point: start
+          },
+          end: {
+            ...(measurement?.end || {}),
+            point: end
+          },
+          distanceMm
+        };
+      })
+      .filter(Boolean)
+    : [];
+}
+
+function buildMeasurementLinePositions(measurements, pendingMeasurementAnchor = null) {
+  const positions = [];
+  for (const measurement of normalizedMeasurementList(measurements)) {
+    positions.push(...measurement.start.point, ...measurement.end.point);
+  }
+  const pendingPoint = normalizeMeasurementPoint(pendingMeasurementAnchor?.point);
+  if (pendingPoint) {
+    const offset = 2.5;
+    positions.push(
+      pendingPoint[0] - offset, pendingPoint[1], pendingPoint[2],
+      pendingPoint[0] + offset, pendingPoint[1], pendingPoint[2],
+      pendingPoint[0], pendingPoint[1] - offset, pendingPoint[2],
+      pendingPoint[0], pendingPoint[1] + offset, pendingPoint[2],
+      pendingPoint[0], pendingPoint[1], pendingPoint[2] - offset,
+      pendingPoint[0], pendingPoint[1], pendingPoint[2] + offset
+    );
+  }
+  return positions;
+}
+
+function buildPartLabelEntries(parts, hiddenPartIds) {
+  const hidden = new Set(Array.isArray(hiddenPartIds) ? hiddenPartIds : []);
+  return (Array.isArray(parts) ? parts : [])
+    .filter((part) => !hidden.has(String(part?.id || "").trim()))
+    .map((part) => {
+      const id = String(part?.id || part?.occurrenceId || "").trim();
+      const label = String(part?.label || part?.name || part?.displayName || id).trim();
+      const point = readBoundsCenterPoint(part?.bounds);
+      return id && label && point ? { id, label, point } : null;
+    })
+    .filter(Boolean)
+    .slice(0, PART_LABEL_MAX_COUNT);
 }
 
 function getActiveViewPlaneFaceId(runtime) {
@@ -4049,10 +4291,14 @@ const CadViewer = forwardRef(function CadViewer({
   pickableVertices = [],
   surfaceLineFaceId = "",
   focusedPartId = "",
+  showPartLabels = false,
   drawingEnabled = false,
   drawingTool = DRAWING_TOOL.FREEHAND,
   drawingStrokes = [],
+  measurements = [],
+  pendingMeasurementAnchor = null,
   onDrawingStrokesChange,
+  onRemoveMeasurement,
   onPerspectiveChange,
   onHoverReferenceChange,
   onActivateReference,
@@ -4096,6 +4342,9 @@ const CadViewer = forwardRef(function CadViewer({
   const [viewerReadyTick, setViewerReadyTick] = useState(0);
   const [activeViewPlaneFace, setActiveViewPlaneFace] = useState("");
   const [viewPlaneOrientation, setViewPlaneOrientation] = useState(DEFAULT_VIEW_PLANE_ORIENTATION);
+  const [measurementLabelPositions, setMeasurementLabelPositions] = useState([]);
+  const [partLabelPositions, setPartLabelPositions] = useState([]);
+  const [measurementHudCollapsed, setMeasurementHudCollapsed] = useState(false);
   const activeViewPlaneFaceRef = useRef("");
   const previewModeRef = useRef(previewMode);
   const viewerTheme = theme || BASE_VIEWER_THEME;
@@ -4160,6 +4409,7 @@ const CadViewer = forwardRef(function CadViewer({
       ? (Array.isArray(pickableVertices) ? pickableVertices : []).filter((reference) => String(reference?.partId || "").trim() === focusedPartIdValue)
       : (Array.isArray(pickableVertices) ? pickableVertices : [])
   ), [focusedPartIdValue, pickableVertices]);
+  const visibleMeasurements = useMemo(() => normalizedMeasurementList(measurements), [measurements]);
   const measurementSummary = useMemo(() => {
     const modelMeasurement = buildBoundsMeasurement(meshData?.bounds);
     if (!modelMeasurement) {
@@ -4172,12 +4422,27 @@ const CadViewer = forwardRef(function CadViewer({
       part: partMeasurement
         ? {
           label: String(activePart?.label || activePart?.name || activePart?.id || "Selected part").trim(),
-          measurement: partMeasurement
+          id: String(activePart?.id || activePart?.occurrenceId || "").trim(),
+          measurement: partMeasurement,
+          featureRows: buildPartFeatureRows(activePart)
         }
         : null,
-      partCount: Array.isArray(meshData?.parts) ? meshData.parts.length : 0
+      partCount: Array.isArray(meshData?.parts) ? meshData.parts.length : 0,
+      spacingRows: visibleMeasurements.slice(-4).reverse().map((measurement) => ({
+        id: measurement.id,
+        label: `${String(measurement?.start?.label || "Part").trim()} -> ${String(measurement?.end?.label || "Part").trim()}`,
+        value: formatDistanceLabel(measurement.distanceMm)
+      }))
     };
-  }, [meshData, selectedPartIds, hoveredPartId, focusedPartIdValue]);
+  }, [meshData, selectedPartIds, hoveredPartId, focusedPartIdValue, visibleMeasurements]);
+  const visiblePartLabelEntries = useMemo(
+    () => (
+      showPartLabels && !focusedPartIdValue
+        ? buildPartLabelEntries(pickableParts, hiddenPartIds)
+        : []
+    ),
+    [focusedPartIdValue, hiddenPartIds, pickableParts, showPartLabels]
+  );
   const pickableReferenceMap = useMemo(() => {
     if (selectorRuntime?.referenceMap instanceof Map) {
       return selectorRuntime.referenceMap;
@@ -5311,6 +5576,136 @@ const CadViewer = forwardRef(function CadViewer({
     }
 
     const { THREE, edgesGroup } = runtime;
+    if (!runtime.measurementGroup || runtime.measurementGroup.parent !== edgesGroup) {
+      runtime.measurementGroup = new THREE.Group();
+      runtime.measurementGroup.renderOrder = 30;
+      edgesGroup.add(runtime.measurementGroup);
+    }
+    const measurementGroup = runtime.measurementGroup;
+    clearOverlayGroup(runtime, measurementGroup);
+
+    const linePositions = buildMeasurementLinePositions(visibleMeasurements, pendingMeasurementAnchor);
+    if (!linePositions.length) {
+      return () => {
+        clearOverlayGroup(runtime, measurementGroup);
+      };
+    }
+
+    const line = createScreenSpaceLineSegments(runtime, linePositions, {
+      color: MEASUREMENT_LINE_COLOR,
+      opacity: 0.98,
+      lineWidth: Math.max(getEdgeThickness(normalizedLookSettings.edges, viewerTheme) * 2.2, 2.2),
+      renderOrder: 31,
+      depthTest: false,
+      depthWrite: false
+    });
+    if (line) {
+      measurementGroup.add(line);
+    }
+
+    for (const measurement of visibleMeasurements) {
+      for (const point of [measurement.start.point, measurement.end.point]) {
+        const marker = buildVertexMarkerMesh(runtime, THREE, { pickData: { center: point } }, {
+          color: MEASUREMENT_POINT_COLOR,
+          opacity: 0.94
+        });
+        if (marker) {
+          marker.renderOrder = 32;
+          measurementGroup.add(marker);
+        }
+      }
+    }
+
+    const pendingPoint = normalizeMeasurementPoint(pendingMeasurementAnchor?.point);
+    if (pendingPoint) {
+      const marker = buildVertexMarkerMesh(runtime, THREE, { pickData: { center: pendingPoint } }, {
+        color: MEASUREMENT_PENDING_COLOR,
+        opacity: 0.98
+      });
+      if (marker) {
+        marker.renderOrder = 33;
+        measurementGroup.add(marker);
+      }
+    }
+
+    measurementGroup.visible = measurementGroup.children.length > 0;
+    runtime.requestRender();
+
+    return () => {
+      clearOverlayGroup(runtime, measurementGroup);
+    };
+  }, [pendingMeasurementAnchor, normalizedLookSettings.edges, visibleMeasurements, viewerReadyTick, viewerTheme]);
+
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    const container = interactionHostRef.current;
+    if (!runtime?.camera || !container || previewMode || (!visibleMeasurements.length && !pendingMeasurementAnchor && !visiblePartLabelEntries.length)) {
+      setMeasurementLabelPositions((current) => current.length ? [] : current);
+      setPartLabelPositions((current) => current.length ? [] : current);
+      return;
+    }
+
+    let cancelled = false;
+    let frameId = 0;
+    const updateLabels = () => {
+      if (cancelled) {
+        return;
+      }
+      const nextMeasurementLabels = visibleMeasurements
+        .map((measurement) => {
+          const point = measurementMidpoint(measurement);
+          const screenPoint = projectModelPointToOverlay(runtime, container, point);
+          if (!screenPoint) {
+            return null;
+          }
+          return {
+            id: measurement.id,
+            x: screenPoint.x,
+            y: screenPoint.y,
+            label: formatDistanceLabel(measurement.distanceMm)
+          };
+        })
+        .filter(Boolean);
+      const nextPartLabels = visiblePartLabelEntries
+        .map((entry) => {
+          const screenPoint = projectModelPointToOverlay(runtime, container, entry.point);
+          if (!screenPoint) {
+            return null;
+          }
+          return {
+            id: entry.id,
+            x: screenPoint.x,
+            y: screenPoint.y,
+            label: entry.label
+          };
+        })
+        .filter(Boolean);
+
+      setMeasurementLabelPositions((current) => (
+        overlayPointsEqual(current, nextMeasurementLabels) ? current : nextMeasurementLabels
+      ));
+      setPartLabelPositions((current) => (
+        overlayPointsEqual(current, nextPartLabels) ? current : nextPartLabels
+      ));
+      frameId = window.requestAnimationFrame(updateLabels);
+    };
+
+    frameId = window.requestAnimationFrame(updateLabels);
+    return () => {
+      cancelled = true;
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [pendingMeasurementAnchor, previewMode, visibleMeasurements, visiblePartLabelEntries, viewerReadyTick]);
+
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime?.THREE || !runtime?.edgesGroup) {
+      return;
+    }
+
+    const { THREE, edgesGroup } = runtime;
     if (!runtime.partHighlightGroup || runtime.partHighlightGroup.parent !== edgesGroup) {
       runtime.partHighlightGroup = new THREE.Group();
       runtime.partHighlightGroup.renderOrder = 22;
@@ -5516,22 +5911,129 @@ const CadViewer = forwardRef(function CadViewer({
         activateViewPlaneFace={activateViewPlaneFace}
         activateDefaultViewPlane={activateDefaultViewPlane}
       />
-      {!previewMode && !isLoading && measurementSummary ? (
-        <div className="cad-glass-popover pointer-events-none absolute bottom-[7.25rem] left-4 z-20 max-h-[calc(100%-9rem)] max-w-[min(24rem,calc(100vw-2rem))] overflow-auto rounded-[10px] border border-white/10 px-3 py-2 text-[11px] leading-5 text-popover-foreground shadow-[var(--ui-shadow-soft)]">
-          <p className="font-semibold uppercase tracking-[0.16em] text-muted-foreground">Dimensions</p>
-          <p className="mt-1 font-medium text-foreground">Model XYZ</p>
-          <p className="font-mono text-muted-foreground">{measurementSummary.model.mmText}</p>
-          <p className="font-mono text-muted-foreground">{measurementSummary.model.inchText}</p>
-          {measurementSummary.part ? (
-            <div className="mt-2 border-t border-white/10 pt-2">
-              <p className="truncate font-medium text-foreground" title={measurementSummary.part.label}>
-                {measurementSummary.part.label}
-              </p>
-              <p className="font-mono text-muted-foreground">{measurementSummary.part.measurement.mmText}</p>
-              <p className="font-mono text-muted-foreground">{measurementSummary.part.measurement.inchText}</p>
+      {!previewMode && !isLoading && partLabelPositions.length ? (
+        <div className="pointer-events-none absolute inset-0 z-20" aria-hidden="true">
+          {partLabelPositions.map((label) => (
+            <div
+              key={label.id}
+              className="absolute max-w-44 -translate-x-1/2 -translate-y-1/2 truncate rounded border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] font-medium leading-4 text-white shadow-sm backdrop-blur"
+              style={{
+                left: `${label.x}px`,
+                top: `${label.y}px`
+              }}
+              title={label.label}
+            >
+              {label.label}
             </div>
-          ) : measurementSummary.partCount > 1 ? (
-            <p className="mt-2 text-muted-foreground">Select or hover a part for part dimensions.</p>
+          ))}
+        </div>
+      ) : null}
+      {!previewMode && !isLoading && measurementLabelPositions.length ? (
+        <div className="pointer-events-none absolute inset-0 z-30" aria-label="Measurements">
+          {measurementLabelPositions.map((label) => (
+            <button
+              key={label.id}
+              type="button"
+              className="cad-glass-popover pointer-events-auto absolute max-w-44 -translate-x-1/2 -translate-y-1/2 truncate rounded-md border border-yellow-300/45 px-2 py-1 font-mono text-[11px] font-semibold leading-4 text-yellow-100 shadow-sm"
+              style={{
+                left: `${label.x}px`,
+                top: `${label.y}px`
+              }}
+              onClick={() => onRemoveMeasurement?.(label.id)}
+              title="Remove measurement"
+            >
+              {label.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {!previewMode && !isLoading && measurementSummary ? (
+        <div
+          className={`cad-glass-popover pointer-events-auto absolute z-20 max-h-[calc(100%-9rem)] w-[min(21.5rem,calc(100vw-2rem))] rounded-[10px] border border-white/10 px-2.5 py-2 text-[10px] leading-4 text-popover-foreground shadow-[var(--ui-shadow-soft)] ${measurementHudCollapsed ? "overflow-hidden" : "overflow-auto"}`}
+          style={{
+            left: `${normalizedViewportFrameInsets.left + 16}px`,
+            bottom: `${normalizedViewportFrameInsets.bottom + 116}px`
+          }}
+        >
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+            onClick={() => setMeasurementHudCollapsed((current) => !current)}
+            aria-expanded={!measurementHudCollapsed}
+            title={measurementHudCollapsed ? "Expand measure HUD" : "Minimize measure HUD"}
+          >
+            <span className="shrink-0 font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Measure
+            </span>
+            <span
+              className="min-w-0 flex-1 truncate text-[10px] font-medium text-foreground"
+              title={measurementSummary.part?.label || "Model XYZ"}
+            >
+              {measurementSummary.part?.label || "Model XYZ"}
+            </span>
+            {measurementHudCollapsed ? (
+              <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={2} aria-hidden="true" />
+            ) : (
+              <ChevronUp className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={2} aria-hidden="true" />
+            )}
+          </button>
+          {!measurementHudCollapsed ? (
+            <>
+              {measurementSummary.part ? (
+                <div className="mt-1 px-1.5">
+                  <p className="truncate font-medium text-foreground" title={measurementSummary.part.label}>
+                    {measurementSummary.part.label}
+                  </p>
+                  <p className="font-mono text-muted-foreground">{measurementSummary.part.measurement.mmText}</p>
+                  <p className="font-mono text-muted-foreground">{measurementSummary.part.measurement.inchText}</p>
+                  {measurementSummary.part.measurement.centerText ? (
+                    <p className="mt-1 font-mono text-muted-foreground">Center {measurementSummary.part.measurement.centerText}</p>
+                  ) : null}
+                  {measurementSummary.part.measurement.minText ? (
+                    <p className="font-mono text-muted-foreground">Min {measurementSummary.part.measurement.minText}</p>
+                  ) : null}
+                  {measurementSummary.part.measurement.maxText ? (
+                    <p className="font-mono text-muted-foreground">Max {measurementSummary.part.measurement.maxText}</p>
+                  ) : null}
+                  {measurementSummary.part.measurement.volumeText ? (
+                    <p className="font-mono text-muted-foreground">BBox {measurementSummary.part.measurement.volumeText}</p>
+                  ) : null}
+                  {measurementSummary.part.featureRows.length ? (
+                    <div className="mt-1 border-t border-white/10 pt-1">
+                      {measurementSummary.part.featureRows.map((row) => (
+                        <p key={row.label} className="font-mono text-muted-foreground">
+                          {row.label} {row.value}
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="mt-1 px-1.5">
+                  <p className="font-medium text-foreground">Model XYZ</p>
+                  <p className="font-mono text-muted-foreground">{measurementSummary.model.mmText}</p>
+                  <p className="font-mono text-muted-foreground">{measurementSummary.model.inchText}</p>
+                </div>
+              )}
+              {measurementSummary.spacingRows.length ? (
+                <div className="mx-1.5 mt-2 border-t border-white/10 pt-2">
+                  <p className="font-medium text-foreground">Spacing</p>
+                  {measurementSummary.spacingRows.map((row) => (
+                    <div key={row.id} className="mt-1">
+                      <p className="truncate text-muted-foreground" title={row.label}>{row.label}</p>
+                      <p className="font-mono text-yellow-100">{row.value}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {measurementSummary.part ? (
+                <div className="mx-1.5 mt-2 border-t border-white/10 pt-2">
+                  <p className="font-medium text-foreground">Assembly XYZ</p>
+                  <p className="font-mono text-muted-foreground">{measurementSummary.model.mmText}</p>
+                  <p className="font-mono text-muted-foreground">{measurementSummary.model.inchText}</p>
+                </div>
+              ) : null}
+            </>
           ) : null}
         </div>
       ) : null}

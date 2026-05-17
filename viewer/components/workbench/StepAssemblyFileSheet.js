@@ -28,6 +28,8 @@ export default function StepAssemblyFileSheet({
   selectedPartIds,
   hoveredPartId,
   hiddenPartIds,
+  partLabelsVisible,
+  setPartLabelsVisible,
   togglePartSelection,
   clearAssemblySelection,
   setHoveredListPartId,
@@ -140,6 +142,18 @@ export default function StepAssemblyFileSheet({
                 >
                   <Eye className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                   <span>Show all</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn(compactButtonClasses, partLabelsVisible && "bg-[var(--ui-panel-muted)] text-[var(--ui-text)]")}
+                  onClick={() => setPartLabelsVisible?.((current) => !current)}
+                  aria-pressed={!!partLabelsVisible}
+                  title={partLabelsVisible ? "Hide part names in the 3D view" : "Show part names in the 3D view"}
+                >
+                  <Eye className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
+                  <span>Names</span>
                 </Button>
               </div>
             </div>

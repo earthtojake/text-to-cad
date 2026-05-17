@@ -3,7 +3,9 @@ import {
   Download,
   MousePointer2,
   Play,
-  PenTool
+  PenTool,
+  Ruler,
+  Trash2
 } from "lucide-react";
 import { RENDER_FORMAT } from "../../lib/workbench/constants";
 import { TooltipProvider } from "../ui/tooltip";
@@ -24,6 +26,7 @@ function DesktopFloatingToolBar({
   floatingCadToolbarPosition,
   selectionToolActive,
   drawToolActive,
+  measureToolActive,
   handleSelectTabToolMode,
   viewerLoading,
   selectedMeshData,
@@ -37,6 +40,9 @@ function DesktopFloatingToolBar({
   canUndoDrawing,
   canRedoDrawing,
   drawingStrokes,
+  measurements,
+  pendingMeasurementAnchor,
+  handleClearMeasurements,
   handleEnterPreviewMode,
   handleScreenshotCopy,
   handleScreenshotDownload
@@ -74,6 +80,16 @@ function DesktopFloatingToolBar({
                     aria-pressed={drawToolActive}
                   >
                     <PenTool className="size-3.5" strokeWidth={2} aria-hidden="true" />
+                  </ToolbarButton>
+
+                  <ToolbarButton
+                    label="Measure"
+                    active={measureToolActive}
+                    onClick={() => handleSelectTabToolMode("measure")}
+                    disabled={viewerLoading || !selectedMeshData}
+                    aria-pressed={measureToolActive}
+                  >
+                    <Ruler className="size-3.5" strokeWidth={2} aria-hidden="true" />
                   </ToolbarButton>
                 </>
               ) : null}
@@ -124,6 +140,22 @@ function DesktopFloatingToolBar({
           drawingStrokes={drawingStrokes}
         />
       ) : null}
+
+      {!dxfMode && !stlMode && measureToolActive ? (
+        <div className={`pointer-events-auto flex items-center gap-2 self-end rounded-md px-2 py-1.5 text-[11px] ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
+          <span className="max-w-48 truncate text-sidebar-foreground/75">
+            {pendingMeasurementAnchor ? "Pick the second part" : "Pick a part"}
+          </span>
+          <ToolbarButton
+            label="Clear measurements"
+            tooltipSide="left"
+            onClick={handleClearMeasurements}
+            disabled={!measurements?.length && !pendingMeasurementAnchor}
+          >
+            <Trash2 className="size-3.5" strokeWidth={2} aria-hidden="true" />
+          </ToolbarButton>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -132,6 +164,7 @@ function MobileFloatingToolBar({
   renderFormat,
   mobileCadBottomBarPosition,
   drawToolActive,
+  measureToolActive,
   drawingToolOptions,
   drawingTool,
   handleSelectDrawingTool,
@@ -141,6 +174,9 @@ function MobileFloatingToolBar({
   canRedoDrawing,
   handleClearDrawings,
   drawingStrokes,
+  measurements,
+  pendingMeasurementAnchor,
+  handleClearMeasurements,
   selectionToolActive,
   handleSelectTabToolMode,
   viewerLoading,
@@ -176,6 +212,21 @@ function MobileFloatingToolBar({
           />
         ) : null}
 
+        {!dxfMode && !stlMode && measureToolActive ? (
+          <div className={`pointer-events-auto flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
+            <span className="min-w-0 flex-1 truncate text-sidebar-foreground/75">
+              {pendingMeasurementAnchor ? "Pick the second part" : "Pick a part"}
+            </span>
+            <ToolbarButton
+              label="Clear measurements"
+              onClick={handleClearMeasurements}
+              disabled={!measurements?.length && !pendingMeasurementAnchor}
+            >
+              <Trash2 className="size-4" strokeWidth={2} aria-hidden="true" />
+            </ToolbarButton>
+          </div>
+        ) : null}
+
         <div className={`pointer-events-auto flex w-full items-center rounded-md p-2 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
           <div
             className="grid w-full min-w-0 auto-cols-fr grid-flow-col gap-1"
@@ -209,6 +260,20 @@ function MobileFloatingToolBar({
                     >
                       <PenTool className="size-4" strokeWidth={2} aria-hidden="true" />
                       <span>Draw</span>
+                    </ToolbarTextButton>
+
+                    <ToolbarTextButton
+                      label="Measure"
+                      active={measureToolActive}
+                      onClick={() => {
+                        handleSelectTabToolMode("measure");
+                      }}
+                      disabled={viewerLoading || !selectedMeshData}
+                      className={MOBILE_TOOL_BUTTON_CLASS}
+                      aria-pressed={measureToolActive}
+                    >
+                      <Ruler className="size-4" strokeWidth={2} aria-hidden="true" />
+                      <span>Measure</span>
                     </ToolbarTextButton>
                   </>
                 )}

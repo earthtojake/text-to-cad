@@ -951,6 +951,144 @@ function computeNextSelectionIds(currentIds, selectionId, { multiSelect = false 
   return [normalizedSelectionId];
 }
 
+function readMeasurementPoint(value) {
+  if (!Array.isArray(value) || value.length < 3) {
+    return null;
+  }
+  const point = [Number(value[0]), Number(value[1]), Number(value[2])];
+  return point.every(Number.isFinite) ? point : null;
+}
+
+function readMeasurementBoundsCenter(bounds) {
+  const min = bounds?.min;
+  const max = bounds?.max;
+  if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) {
+    return null;
+  }
+  const point = [0, 1, 2].map((index) => (Number(min[index]) + Number(max[index])) / 2);
+  return point.every(Number.isFinite) ? point : null;
+}
+
+function measurementDistanceMm(startPoint, endPoint) {
+  const start = readMeasurementPoint(startPoint);
+  const end = readMeasurementPoint(endPoint);
+  if (!start || !end) {
+    return 0;
+  }
+  return Math.hypot(end[0] - start[0], end[1] - start[1], end[2] - start[2]);
+}
+
+function labelForMeasurementAnchor(source, fallback = "Point") {
+  return String(
+    source?.label ||
+    source?.name ||
+    source?.displayName ||
+    source?.displaySelector ||
+    source?.id ||
+    fallback
+  ).trim() || fallback;
+}
+
+function sourcePathLabel(sourcePath) {
+  return String(sourcePath || "").trim().split("/").filter(Boolean).pop()?.replace(/\.(?:step|stp|stl|glb)$/i, "") || "";
+}
+
+function isOpaqueAssemblyName(value) {
+  const normalized = String(value || "").trim();
+  return !normalized ||
+    normalized.includes("=>") ||
+    /^o?\d+(?:[.:]\d+)*$/i.test(normalized) ||
+    /^\[?[0-9:.[\]-]+\]?$/.test(normalized);
+}
+
+function closeTo(value, target, tolerance = 2) {
+  return Math.abs(Number(value) - target) <= tolerance;
+}
+
+function inferredNativePartLabelFromBounds(bounds) {
+  const min = bounds?.min;
+  const max = bounds?.max;
+  if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) {
+    return "";
+  }
+  const dx = Number(max[0]) - Number(min[0]);
+  const dy = Number(max[1]) - Number(min[1]);
+  const dz = Number(max[2]) - Number(min[2]);
+  const cx = (Number(min[0]) + Number(max[0])) / 2;
+  const cy = (Number(min[1]) + Number(max[1])) / 2;
+  const minZ = Number(min[2]);
+
+  if (dz > 220 && dx < 65 && dy > 240) {
+    return cx < 0 ? "left_side_plate" : "right_side_plate";
+  }
+  if (dz > 220 && dx > 180 && dy < 70) {
+    return cy < 0 ? "front_panel" : "rear_panel";
+  }
+  if (closeTo(dx, 180, 4) && closeTo(dy, 204, 4) && dz >= 65 && dz <= 75) {
+    return "bottom_tray";
+  }
+  if (closeTo(dx, 180, 4) && closeTo(dy, 200, 4) && dz <= 8) {
+    return `equipment_shelf_z${Math.round(minZ)}`;
+  }
+  if (dx < 45 && dy > 120 && dz > 100 && minZ < 15) {
+    return cx < 0 ? "left_axle_insert" : "right_axle_insert";
+  }
+  if (closeTo(dx, 240, 4) && closeTo(dy, 256, 4) && dz <= 10 && closeTo(minZ, 240, 3)) {
+    return "top_lid";
+  }
+  if (closeTo(dx, 240, 4) && closeTo(dy, 226, 6) && dz > 90 && minZ >= 250) {
+    return "upper_compute_bay";
+  }
+  if (closeTo(dx, 128, 8) && closeTo(dy, 256, 6) && dz <= 10 && minZ >= 245) {
+    return cx < 0 ? "left_overwheel_pod" : "right_overwheel_pod";
+  }
+  if (closeTo(dx, 172, 8) && closeTo(dy, 76, 8) && dz >= 45 && minZ >= 350) {
+    return "upper_perception_pod";
+  }
+  return "";
+}
+
+function readableAssemblyNodeName(node, leafPartMap = null) {
+  const ownName = String(node?.displayName || node?.name || node?.label || "").trim();
+  if (!isOpaqueAssemblyName(ownName)) {
+    return ownName;
+  }
+  const directSourceLabel = sourcePathLabel(node?.sourcePath || node?.partSourcePath);
+  if (directSourceLabel) {
+    return directSourceLabel;
+  }
+  const inferredLabel = inferredNativePartLabelFromBounds(node?.bbox || node?.bounds);
+  if (inferredLabel) {
+    return inferredLabel;
+  }
+  const leafPartIds = Array.isArray(node?.leafPartIds) && node.leafPartIds.length
+    ? node.leafPartIds
+    : descendantLeafPartIds(node);
+  const leafNames = [...new Set(
+    leafPartIds
+      .map((partId) => leafPartMap?.get?.(String(partId || "").trim()) || null)
+      .map((part) => String(part?.label || part?.name || sourcePathLabel(part?.sourcePath || part?.partSourcePath) || "").trim())
+      .filter((label) => label && !isOpaqueAssemblyName(label))
+  )];
+  if (leafNames.length === 1) {
+    return leafNames[0];
+  }
+  return String(node?.occurrenceId || node?.id || ownName || "Part").trim();
+}
+
+function buildMeasurementAnchorFromPart(part) {
+  const center = readMeasurementBoundsCenter(part?.bounds);
+  if (!center) {
+    return null;
+  }
+  return {
+    id: String(part?.id || part?.occurrenceId || "").trim(),
+    kind: "part",
+    label: readableAssemblyNodeName(part) || labelForMeasurementAnchor(part, "Part"),
+    point: center
+  };
+}
+
 function buildViewerMeshAlert(entry, hasMeshData, loadError) {
   const fileRef = fileKey(entry);
   if (!fileRef) {
@@ -1081,6 +1219,9 @@ export default function CadWorkspace({
   const [drawingStrokes, setDrawingStrokes] = useState([]);
   const [drawingUndoStack, setDrawingUndoStack] = useState([]);
   const [drawingRedoStack, setDrawingRedoStack] = useState([]);
+  const [measurements, setMeasurements] = useState([]);
+  const [pendingMeasurementAnchor, setPendingMeasurementAnchor] = useState(null);
+  const [partLabelsVisible, setPartLabelsVisible] = useState(false);
   const [jointValuesByFileRef, setJointValuesByFileRef] = useState({});
   const [urdfAnimationSettingsByFileRef, setUrdfAnimationSettingsByFileRef] = useState({});
   const [urdfEntryAnimationEnabled, setUrdfEntryAnimationEnabled] = useState(DEFAULT_URDF_ANIMATION_SETTINGS.introEnabled);
@@ -1090,6 +1231,7 @@ export default function CadWorkspace({
   const [, setInspectedAssemblyReferenceStatus] = useState(REFERENCE_STATUS.IDLE);
   const [, setInspectedAssemblyReferenceError] = useState("");
   const lastPersistenceFailureKeyRef = useRef("");
+  const measurementIdRef = useRef(0);
 
   const handlePersistenceWriteError = useCallback(({ key }) => {
     const failureKey = String(key || "browser-storage");
@@ -1367,14 +1509,26 @@ export default function CadWorkspace({
     () => assemblyBreadcrumb(assemblyRoot, assemblyCurrentNodeId),
     [assemblyCurrentNodeId, assemblyRoot]
   );
+  const assemblyLeafPartMap = useMemo(() => {
+    const map = new Map();
+    for (const part of assemblyLeafParts) {
+      const partId = String(part?.id || "").trim();
+      if (partId) {
+        map.set(partId, part);
+      }
+    }
+    return map;
+  }, [assemblyLeafParts]);
   const assemblyParts = useMemo(() => {
     return String(assemblyCurrentNode?.nodeType || "").trim() === "assembly"
       ? (Array.isArray(assemblyCurrentNode?.children) ? assemblyCurrentNode.children : []).map((node) => ({
         ...node,
-        leafPartIds: descendantLeafPartIds(node)
+        leafPartIds: descendantLeafPartIds(node),
+        name: readableAssemblyNodeName(node, assemblyLeafPartMap),
+        label: readableAssemblyNodeName(node, assemblyLeafPartMap)
       }))
       : [];
-  }, [assemblyCurrentNode]);
+  }, [assemblyCurrentNode, assemblyLeafPartMap]);
   const assemblyPickPartIdMap = useMemo(() => {
     return buildAssemblyLeafToNodePickMap(assemblyParts);
   }, [assemblyParts]);
@@ -1385,11 +1539,14 @@ export default function CadWorkspace({
     for (const node of assemblyNodes) {
       map.set(node.id, node);
     }
+    for (const part of assemblyParts) {
+      map.set(part.id, part);
+    }
     for (const part of assemblyLeafParts) {
       map.set(part.id, part);
     }
     return map;
-  }, [assemblyLeafParts, assemblyNodes]);
+  }, [assemblyLeafParts, assemblyNodes, assemblyParts]);
   const validAssemblySelectionIds = useMemo(
     () => assemblyNodes.map((node) => String(node?.id || "").trim()).filter(Boolean),
     [assemblyNodes]
@@ -1617,6 +1774,7 @@ export default function CadWorkspace({
     String(assemblyCurrentNode?.nodeType || "assembly").trim() === "assembly";
   const viewerMode = viewerInAssemblyMode ? "assembly" : "part";
   const drawModeActive = selectedEntrySourceFormat === RENDER_FORMAT.STEP && tabToolMode === TAB_TOOL_MODE.DRAW;
+  const measureToolActive = selectedEntrySourceFormat === RENDER_FORMAT.STEP && tabToolMode === TAB_TOOL_MODE.MEASURE;
   const selectionCountBase = selectedPartIds.length + selectedReferenceIds.length;
 
   const selectedReferenceIdsRef = useRef(selectedReferenceIds);
@@ -2110,6 +2268,12 @@ export default function CadWorkspace({
   useEffect(() => {
     selectedPartIdsRef.current = selectedPartIds;
   }, [selectedPartIds]);
+
+  useEffect(() => {
+    setMeasurements([]);
+    setPendingMeasurementAnchor(null);
+    measurementIdRef.current = 0;
+  }, [selectedKey]);
 
   useEffect(() => {
     const nextFileSheetKey = selectedKey && selectedFileSheetKind
@@ -3198,6 +3362,48 @@ export default function CadWorkspace({
     setHiddenPartIds((current) => (current.length > 1 ? [] : current));
   }, []);
 
+  const commitMeasurementAnchor = useCallback((anchor) => {
+    if (!anchor) {
+      setCopyStatus("Measure needs an assembly part.");
+      return;
+    }
+    setScreenshotStatus("");
+    setPendingMeasurementAnchor((current) => {
+      if (!current) {
+        setCopyStatus(`Measure from ${anchor.label}`);
+        return anchor;
+      }
+      if (current.id && anchor.id && current.id === anchor.id) {
+        setCopyStatus("Pick a different part to measure spacing.");
+        return current;
+      }
+      const distanceMm = measurementDistanceMm(current.point, anchor.point);
+      const nextMeasurement = {
+        id: `measure-${measurementIdRef.current += 1}`,
+        start: current,
+        end: anchor,
+        distanceMm
+      };
+      setMeasurements((existing) => [...existing, nextMeasurement]);
+      setCopyStatus(`Measured ${distanceMm >= 100 ? distanceMm.toFixed(0) : distanceMm.toFixed(1)} mm`);
+      return null;
+    });
+  }, []);
+
+  const handleRemoveMeasurement = useCallback((measurementId) => {
+    const normalizedMeasurementId = String(measurementId || "").trim();
+    if (!normalizedMeasurementId) {
+      return;
+    }
+    setMeasurements((current) => current.filter((measurement) => measurement.id !== normalizedMeasurementId));
+  }, []);
+
+  const handleClearMeasurements = useCallback(() => {
+    setMeasurements([]);
+    setPendingMeasurementAnchor(null);
+    setCopyStatus("Measurements cleared");
+  }, []);
+
   const handleModelHoverChange = useCallback((referenceId) => {
     if (viewerInAssemblyMode) {
       const pickedPartId = String(referenceId || "").trim();
@@ -3216,6 +3422,37 @@ export default function CadWorkspace({
 
   const handleModelReferenceActivate = useCallback((referenceId, { multiSelect = false } = {}) => {
     if (stepUpdateInProgress) {
+      return;
+    }
+    if (measureToolActive) {
+      const pickedId = String(referenceId || "").trim();
+      if (viewerInAssemblyMode) {
+        const nextPartId = assemblyPickPartIdMap.get(pickedId) || pickedId;
+        const part = nextPartId ? assemblyPartMap.get(nextPartId) || null : null;
+        const selectionIds = pendingMeasurementAnchor?.id && pendingMeasurementAnchor.id !== nextPartId
+          ? [pendingMeasurementAnchor.id, nextPartId]
+          : [nextPartId].filter(Boolean);
+        selectedPartIdsRef.current = selectionIds;
+        selectedReferenceIdsRef.current = [];
+        setSelectedPartIds(selectionIds);
+        setSelectedReferenceIds([]);
+        setSelectedWholeEntryCadRefToken("");
+        setSelectedRenderPartIdByAssemblyPartId(() => (
+          Object.fromEntries(
+            selectionIds
+              .map((partId) => [
+                partId,
+                partId === nextPartId
+                  ? renderPartIdForAssemblySelection(partId, pickedId)
+                  : renderPartIdForAssemblySelection(partId)
+              ])
+              .filter(([, renderPartId]) => renderPartId)
+          )
+        ));
+        commitMeasurementAnchor(buildMeasurementAnchorFromPart(part));
+        return;
+      }
+      setCopyStatus("Measure works on assembly parts. Open assembly view and pick a part.");
       return;
     }
     if (viewerInAssemblyMode) {
@@ -3240,8 +3477,12 @@ export default function CadWorkspace({
   }, [
     clearAssemblySelection,
     clearReferenceSelection,
-    effectiveActiveReferenceMap,
     assemblyPickPartIdMap,
+    assemblyPartMap,
+    commitMeasurementAnchor,
+    measureToolActive,
+    pendingMeasurementAnchor,
+    renderPartIdForAssemblySelection,
     stepUpdateInProgress,
     toggleReferenceSelection,
     togglePartSelection,
@@ -3283,7 +3524,11 @@ export default function CadWorkspace({
 
   const handleSelectTabToolMode = useCallback((mode) => {
     setViewerAlertOpen(false);
-    const normalizedMode = mode === TAB_TOOL_MODE.DRAW ? TAB_TOOL_MODE.DRAW : TAB_TOOL_MODE.REFERENCES;
+    const normalizedMode = mode === TAB_TOOL_MODE.DRAW
+      ? TAB_TOOL_MODE.DRAW
+      : mode === TAB_TOOL_MODE.MEASURE
+        ? TAB_TOOL_MODE.MEASURE
+        : TAB_TOOL_MODE.REFERENCES;
     setTabToolMode(normalizedMode);
     if (normalizedMode === TAB_TOOL_MODE.DRAW && drawingTool === DRAWING_TOOL.SURFACE_LINE) {
       setDrawingTool(DRAWING_TOOL.FREEHAND);
@@ -3488,7 +3733,7 @@ export default function CadWorkspace({
   };
   const selectionToolActive = effectiveRenderFormat === RENDER_FORMAT.STEP && tabToolMode === TAB_TOOL_MODE.REFERENCES;
   const drawToolActive = drawModeActive;
-  const selectionCount = selectionCountBase;
+  const selectionCount = measureToolActive ? 0 : selectionCountBase;
   const canUndoDrawing = drawingUndoStack.length > 0;
   const canRedoDrawing = drawingRedoStack.length > 0;
   const lookSheetOpen = lookMenuOpen && !previewMode;
@@ -3567,10 +3812,14 @@ export default function CadWorkspace({
           pickableEdges={viewerPickableEdges}
           pickableVertices={viewerPickableVertices}
           inspectedAssemblyPartId={isInspectingAssemblyPart ? inspectedAssemblyPartId : ""}
+          showPartLabels={viewerInAssemblyMode && partLabelsVisible}
           drawToolActive={drawToolActive}
           drawingTool={drawingTool}
           drawingStrokes={drawingStrokes}
+          measurements={measurements}
+          pendingMeasurementAnchor={pendingMeasurementAnchor}
           handleDrawingStrokesChange={handleDrawingStrokesChange}
+          handleRemoveMeasurement={handleRemoveMeasurement}
           handlePerspectiveChange={handlePerspectiveChange}
           handleModelHoverChange={handleModelHoverChange}
           handleModelReferenceActivate={handleModelReferenceActivate}
@@ -3631,6 +3880,7 @@ export default function CadWorkspace({
                 mobileCadBottomBarPosition={mobileCadBottomBarPosition}
                 selectionToolActive={selectionToolActive}
                 drawToolActive={drawToolActive}
+                measureToolActive={measureToolActive}
                 handleSelectTabToolMode={handleSelectTabToolMode}
                 viewerLoading={viewerLoading}
                 selectedMeshData={selectedMeshData}
@@ -3644,6 +3894,9 @@ export default function CadWorkspace({
                 canUndoDrawing={canUndoDrawing}
                 canRedoDrawing={canRedoDrawing}
                 drawingStrokes={drawingStrokes}
+                measurements={measurements}
+                pendingMeasurementAnchor={pendingMeasurementAnchor}
+                handleClearMeasurements={handleClearMeasurements}
                 handleEnterPreviewMode={handleEnterPreviewMode}
                 handleScreenshotCopy={handleScreenshotCopy}
                 handleScreenshotDownload={handleScreenshotDownload}
@@ -3693,6 +3946,8 @@ export default function CadWorkspace({
                 selectedPartIds={selectedPartIds}
                 hoveredPartId={hoveredPartId}
                 hiddenPartIds={hiddenPartIds}
+                partLabelsVisible={partLabelsVisible}
+                setPartLabelsVisible={setPartLabelsVisible}
                 togglePartSelection={togglePartSelection}
                 clearAssemblySelection={clearAssemblySelection}
                 setHoveredListPartId={setHoveredListPartId}

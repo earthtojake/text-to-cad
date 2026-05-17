@@ -40,10 +40,14 @@ export default function CadRenderPane({
   pickableEdges,
   pickableVertices,
   inspectedAssemblyPartId,
+  showPartLabels,
   drawToolActive,
   drawingTool,
   drawingStrokes,
+  measurements,
+  pendingMeasurementAnchor,
   handleDrawingStrokesChange,
+  handleRemoveMeasurement,
   handlePerspectiveChange,
   handleModelHoverChange,
   handleModelReferenceActivate,
@@ -119,10 +123,14 @@ export default function CadRenderPane({
           pickableEdges={dxfMode || stlMode ? [] : pickableEdges}
           pickableVertices={dxfMode || stlMode ? [] : pickableVertices}
           focusedPartId={dxfMode || stlMode ? "" : inspectedAssemblyPartId}
+          showPartLabels={!dxfMode && !stlMode && showPartLabels}
           drawingEnabled={!dxfMode && !stlMode && drawToolActive}
           drawingTool={drawingTool}
           drawingStrokes={dxfMode || stlMode ? [] : drawingStrokes}
+          measurements={dxfMode || stlMode ? [] : measurements}
+          pendingMeasurementAnchor={dxfMode || stlMode ? null : pendingMeasurementAnchor}
           onDrawingStrokesChange={handleDrawingStrokesChange}
+          onRemoveMeasurement={handleRemoveMeasurement}
           onPerspectiveChange={handlePerspectiveChange}
           onHoverReferenceChange={handleModelHoverChange}
           onActivateReference={handleModelReferenceActivate}

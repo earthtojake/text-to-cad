@@ -123,7 +123,13 @@ function normalizeDrawingTool(value) {
 
 function normalizeTabToolMode(value) {
   const normalized = normalizeString(value || TAB_TOOL_MODE.REFERENCES);
-  return normalized === TAB_TOOL_MODE.DRAW ? TAB_TOOL_MODE.DRAW : TAB_TOOL_MODE.REFERENCES;
+  if (normalized === TAB_TOOL_MODE.DRAW) {
+    return TAB_TOOL_MODE.DRAW;
+  }
+  if (normalized === TAB_TOOL_MODE.MEASURE) {
+    return TAB_TOOL_MODE.MEASURE;
+  }
+  return TAB_TOOL_MODE.REFERENCES;
 }
 
 function pointsEqualN(a, b, length) {
