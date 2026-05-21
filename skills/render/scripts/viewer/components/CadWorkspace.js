@@ -67,6 +67,10 @@ import {
   writeFileSessionState
 } from "../lib/workbench/fileSessionState";
 import {
+  buildCadViewState,
+  formatCadViewStateForClipboard
+} from "../lib/workbench/viewState";
+import {
   CAD_WORKSPACE_LAYOUT_MODE,
   getCadWorkspaceLayoutMode,
   shouldCadWorkspaceDefaultFileExplorerOpen,
@@ -4681,6 +4685,90 @@ export default function CadWorkspace({
     stepUpdateInProgress
   ]);
 
+  const handleCopyViewState = useCallback(async () => {
+    if (!selectedEntry) {
+      setCopyStatus("No file selected");
+      return;
+    }
+
+    try {
+      const selectedReferencesForCopy = selectedReferenceIdsRef.current
+        .map((id) => effectiveActiveReferenceMap.get(id))
+        .filter(Boolean);
+      if (!isAssemblyView && selectedPartIdsRef.current.includes(STEP_MODEL_ROOT_ID)) {
+        const wholeStepEntryReference = buildWholeStepEntryCopyReference(selectedEntry);
+        if (wholeStepEntryReference) {
+          selectedReferencesForCopy.push(wholeStepEntryReference);
+        }
+      }
+      const selectedPartsForCopy = supportsPartSelection && isAssemblyView
+        ? selectedPartIdsRef.current.map((id) => assemblyPartMap.get(id)).filter(Boolean)
+        : [];
+      const selectedCadRefs = buildSelectionCopyPayload({
+        references: selectedReferencesForCopy,
+        parts: selectedPartsForCopy,
+        entry: selectedEntry
+      }).lines;
+      const currentPerspective = clonePerspectiveSnapshot(
+        explorerRef.current?.getPerspective?.() ||
+        activePerspectiveRef.current ||
+        explorerPerspective
+      );
+      const state = buildCadViewState({
+        entry: selectedEntry,
+        cadPath: cadPathForEntry(selectedEntry),
+        renderFormat: effectiveRenderFormat,
+        perspective: currentPerspective,
+        selectedPartIds: selectedPartIdsRef.current,
+        selectedParts: selectedPartsForCopy,
+        selectedReferenceIds: selectedReferenceIdsRef.current,
+        selectedReferences: selectedReferencesForCopy,
+        selectedCadRefs,
+        hoveredPartId,
+        hoveredReferenceId,
+        hiddenPartIds,
+        expandedTreeNodeIds: expandedStepTreeNodeIds,
+        expandedAssemblyPartIds,
+        clipSettings: isStepView ? stepClipSettings : null,
+        themeSettings,
+        layout: {
+          sidebarOpen,
+          selectedFileSheetKind,
+          tabToolsOpen,
+          workspaceLayoutMode
+        },
+        url: typeof window !== "undefined" ? window.location.href : "",
+        notes: "Paste this payload into an issue, chat, or local repro script to restore the reviewed CAD context."
+      });
+      await copyTextToClipboard(formatCadViewStateForClipboard(state));
+      setScreenshotStatus("");
+      setCopyStatus("Copied view state");
+    } catch (error) {
+      setScreenshotStatus("");
+      setCopyStatus(error instanceof Error ? error.message : "Clipboard write failed");
+    }
+  }, [
+    assemblyPartMap,
+    effectiveActiveReferenceMap,
+    effectiveRenderFormat,
+    expandedAssemblyPartIds,
+    expandedStepTreeNodeIds,
+    explorerPerspective,
+    hiddenPartIds,
+    hoveredPartId,
+    hoveredReferenceId,
+    isAssemblyView,
+    isStepView,
+    selectedEntry,
+    selectedFileSheetKind,
+    sidebarOpen,
+    stepClipSettings,
+    supportsPartSelection,
+    tabToolsOpen,
+    themeSettings,
+    workspaceLayoutMode
+  ]);
+
   const expandStepTreeAroundNode = useCallback((nodeId, { expandSelf = false } = {}) => {
     const normalizedNodeId = String(nodeId || "").trim();
     if (!normalizedNodeId || !stepTreeRoot) {
@@ -5303,6 +5391,7 @@ export default function CadWorkspace({
                 canRedoDrawing={canRedoDrawing}
                 drawingStrokes={drawingStrokes}
                 handleEnterPreviewMode={handleEnterPreviewMode}
+                handleCopyViewState={handleCopyViewState}
                 handleScreenshotCopy={handleScreenshotCopy}
                 handleScreenshotDownload={handleScreenshotDownload}
               />

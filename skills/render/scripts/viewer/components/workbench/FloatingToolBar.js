@@ -1,4 +1,5 @@
 import {
+  ClipboardList,
   Copy,
   Crosshair,
   Download,
@@ -39,6 +40,7 @@ function DesktopFloatingToolBar({
   canRedoDrawing,
   drawingStrokes,
   handleEnterPreviewMode,
+  handleCopyViewState,
   handleScreenshotCopy,
   handleScreenshotDownload
 }) {
@@ -110,6 +112,16 @@ function DesktopFloatingToolBar({
               </ToolbarButton>
             </>
           ) : null}
+
+          <ToolbarButton
+            label="Copy view state"
+            onClick={() => {
+              void handleCopyViewState();
+            }}
+            disabled={explorerLoading || !selectedMeshData}
+          >
+            <ClipboardList className="size-3.5" strokeWidth={2} aria-hidden="true" />
+          </ToolbarButton>
 
           <ToolbarButton
             label="Copy screenshot to clipboard"
