@@ -35,7 +35,7 @@ if ($PSScriptRoot) {
     $projectRoot = Split-Path -Parent ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)
 }
 
-$explorerDir = Join-Path $projectRoot ".agents\skills\cad\explorer"
+$explorerDir = Join-Path $projectRoot "skills\render\scripts\viewer"
 $port        = 4178
 $url         = "http://127.0.0.1:$port"
 
