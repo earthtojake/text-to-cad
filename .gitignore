@@ -30,3 +30,11 @@ tmp/
 
 # Local build artifacts
 cad-explorer.exe
+
+# Explorer runtime logs
+.explorer.log
+.explorer.err.log
+
+# Local CAD working folders
+STEP/
+STL/
