@@ -27,3 +27,6 @@ coverage
 *.tmp
 *.swp
 tmp/
+
+# Local build artifacts
+cad-explorer.exe
