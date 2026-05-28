@@ -67,9 +67,98 @@ export const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
 
 const BACKGROUND_TEXTURE_SIZE = 1024;
 const FLOOR_GLOW_TEXTURE_SIZE = 512;
+const MIN_WIREFRAME_EDGE_CONTRAST = 3;
+const WIREFRAME_LIGHT_EDGE_COLOR = "#dbeafe";
+const WIREFRAME_DARK_EDGE_COLOR = "#111827";
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function normalizeHexColor(value, fallback = "") {
+  const normalized = String(value || "").trim();
+  if (!HEX_COLOR_PATTERN.test(normalized)) {
+    return fallback;
+  }
+  return normalized.length === 4
+    ? `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`.toLowerCase()
+    : normalized.toLowerCase();
+}
+
+function hexChannelToLinear(value) {
+  const srgb = value / 255;
+  return srgb <= 0.03928
+    ? srgb / 12.92
+    : ((srgb + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(value) {
+  const color = normalizeHexColor(value, "#000000");
+  const red = parseInt(color.slice(1, 3), 16);
+  const green = parseInt(color.slice(3, 5), 16);
+  const blue = parseInt(color.slice(5, 7), 16);
+  return (
+    0.2126 * hexChannelToLinear(red) +
+    0.7152 * hexChannelToLinear(green) +
+    0.0722 * hexChannelToLinear(blue)
+  );
+}
+
+function contrastRatio(colorA, colorB) {
+  const luminanceA = relativeLuminance(colorA);
+  const luminanceB = relativeLuminance(colorB);
+  const lighter = Math.max(luminanceA, luminanceB);
+  const darker = Math.min(luminanceA, luminanceB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function minimumContrast(color, backgroundColors) {
+  const normalizedBackgrounds = backgroundColors
+    .map((backgroundColor) => normalizeHexColor(backgroundColor, ""))
+    .filter(Boolean);
+  if (!normalizedBackgrounds.length) {
+    return Infinity;
+  }
+  return Math.min(...normalizedBackgrounds.map((backgroundColor) => contrastRatio(color, backgroundColor)));
+}
+
+function wireframeBackgroundColors(themeSettings = {}, viewerTheme = BASE_VIEWER_THEME) {
+  const background = themeSettings?.background || {};
+  const backgroundType = String(background.type || "").trim().toLowerCase();
+  const colors = [];
+  if (backgroundType === THEME_BACKGROUND_TYPES.LINEAR) {
+    colors.push(background.linearStart, background.linearEnd);
+  } else if (backgroundType === THEME_BACKGROUND_TYPES.RADIAL) {
+    colors.push(background.radialInner, background.radialOuter);
+  } else if (backgroundType === THEME_BACKGROUND_TYPES.SOLID) {
+    colors.push(background.solidColor);
+  }
+  const normalizedColors = colors
+    .map((backgroundColor) => normalizeHexColor(backgroundColor, ""))
+    .filter(Boolean);
+  return normalizedColors.length
+    ? normalizedColors
+    : [viewerTheme?.sceneBackground, BASE_VIEWER_THEME.sceneBackground];
+}
+
+export function resolveWireframeEdgeColor({
+  edgeColor = "",
+  themeSettings = {},
+  viewerTheme = BASE_VIEWER_THEME,
+  minimumContrastRatio = MIN_WIREFRAME_EDGE_CONTRAST
+} = {}) {
+  const normalizedEdgeColor = normalizeHexColor(edgeColor, "");
+  const backgroundColors = wireframeBackgroundColors(themeSettings, viewerTheme);
+  if (
+    normalizedEdgeColor &&
+    minimumContrast(normalizedEdgeColor, backgroundColors) >= minimumContrastRatio
+  ) {
+    return normalizedEdgeColor;
+  }
+  return minimumContrast(WIREFRAME_LIGHT_EDGE_COLOR, backgroundColors) >=
+    minimumContrast(WIREFRAME_DARK_EDGE_COLOR, backgroundColors)
+    ? WIREFRAME_LIGHT_EDGE_COLOR
+    : WIREFRAME_DARK_EDGE_COLOR;
 }
 
 export function getViewerThemeValue(viewerTheme, key, fallback) {

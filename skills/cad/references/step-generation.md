@@ -52,6 +52,8 @@ python scripts/inspect refs path/to/assembly.step --facts --planes --positioning
 
 Passing a generated assembly `.step` directly treats it as imported native STEP. Pass the `.py` assembly source when source-level assembly composition must be preserved.
 
+For generated build123d assemblies, prefer `cadpy.assembly.AssemblyHelper` in the Python source so native labels, named mate frames, and source-level relationships are preserved before STEP export.
+
 ## Direct STEP/STP targets
 
 Use direct STEP/STP targets only when the generator is unavailable or the user explicitly identifies a STEP/STP file as the target:
@@ -100,7 +102,7 @@ Before running the command:
 - Confirm the user request has been converted into a natural-language CAD brief.
 - Confirm the source defines `gen_step()`.
 - Prefer the Python generator over a generated STEP/STP file when both are available.
-- Confirm labels are assigned for exported parts and assembly children.
+- Confirm native labels are assigned for exported parts, assembly children, mate datums, and any retained feature shapes.
 - Confirm the target path is explicit.
 - Confirm expected bbox, labels, and positioning checks are known.
 

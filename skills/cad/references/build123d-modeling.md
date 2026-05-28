@@ -147,20 +147,26 @@ For source operations, prefer robust selectors such as top/bottom by axis or pos
 For assemblies, keep this file focused on BREP modeling patterns and labels. Use `positioning.md` as the single source of truth for:
 
 - part-local coordinate conventions
-- when to use build123d joints versus explicit `Location` transforms
+- when to use `cadpy.assembly.AssemblyHelper`, build123d joints, or explicit `Location` transforms
 - `connect_to()` behavior
 - CLI `inspect mate` as read-only validation
 - frame, measure, and positioning report expectations
 
 ## Labels and assemblies
 
-Label every exported part and assembly child:
+Label every exported part and assembly child with native build123d labels. Prefer semantic labels through `cadpy.assembly` helpers:
 
 ```python
-base.label = "base"
-lid.label = "lid"
-assembly.label = "electronics_enclosure"
+from cadpy.assembly import AssemblyHelper, label_shape
+
+asm = AssemblyHelper("electronics_enclosure")
+base = asm.add(make_base(), "base")
+lid = asm.add(make_lid(), "lid")
+
+boss = label_shape(Cylinder(radius=3.0, height=12.0), "feature", "m3_boss", "front_left")
 ```
+
+Useful label prefixes are `assembly:`, `module:`, `component:`, `feature:`, `datum:`, `mate:`, and `hardware:`. Feature labels survive STEP export best when the feature remains a labeled child shape in a `Compound`; boolean-subtracted or fused feature history should be represented by source parameters, named datums, and validation refs instead of assumed persistent feature labels.
 
 For repeated parts, keep transforms or joint connections explicit and inspect frames/positioning after generation.
 

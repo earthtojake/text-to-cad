@@ -17,6 +17,7 @@ import {
   normalizeGradientStops,
   resolveFloorMode,
   resolveStageFloorGlassFactor,
+  resolveWireframeEdgeColor,
   updateSpotLightTarget
 } from "./stageTheme.js";
 
@@ -60,6 +61,41 @@ test("stage color and floor sizing helpers preserve rendering defaults", () => {
 
   assert.equal(getStageFloorSize(0.25, VIEWER_SCENE_SCALE.URDF), 40);
   assert.equal(getStageFloorSize(2, VIEWER_SCENE_SCALE.CAD), 22400);
+});
+
+test("wireframe edge color uses contrast-safe colors on dark and light backgrounds", () => {
+  assert.equal(resolveWireframeEdgeColor({
+    edgeColor: "#132232",
+    themeSettings: {
+      background: {
+        type: "solid",
+        solidColor: "#09090b"
+      }
+    },
+    viewerTheme: BASE_VIEWER_THEME
+  }), "#dbeafe");
+
+  assert.equal(resolveWireframeEdgeColor({
+    edgeColor: "#66ff99",
+    themeSettings: {
+      background: {
+        type: "solid",
+        solidColor: "#09090b"
+      }
+    },
+    viewerTheme: BASE_VIEWER_THEME
+  }), "#66ff99");
+
+  assert.equal(resolveWireframeEdgeColor({
+    edgeColor: "#dbeafe",
+    themeSettings: {
+      background: {
+        type: "solid",
+        solidColor: "#fbfdff"
+      }
+    },
+    viewerTheme: BASE_VIEWER_THEME
+  }), "#111827");
 });
 
 test("stage plane factories return deterministic Three.js objects", () => {

@@ -59,6 +59,7 @@ import {
   getViewerThemeValue,
   getStageFloorSize,
   normalizeFloorMode,
+  resolveWireframeEdgeColor,
   resolveFloorMode,
   updateSpotLightTarget
 } from "cadjs/lib/viewer/stageTheme";
@@ -1056,8 +1057,12 @@ const CadViewer = forwardRef(function CadViewer({
   );
   const wireframeMode = normalizedDisplayMode === "wireframe";
   const wireframeEdgeColor = useMemo(
-    () => displayEdgeSettings?.color || "#132232",
-    [displayEdgeSettings]
+    () => resolveWireframeEdgeColor({
+      edgeColor: displayEdgeSettings?.color,
+      themeSettings: normalizedThemeSettings,
+      viewerTheme
+    }),
+    [displayEdgeSettings, normalizedThemeSettings, viewerTheme]
   );
   const wireframeEdgeOpacity = useMemo(() => {
     const baseOpacity = Number.isFinite(Number(displayEdgeSettings?.opacity))

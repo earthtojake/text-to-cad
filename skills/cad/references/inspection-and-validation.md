@@ -46,7 +46,7 @@ path/to/entry.step
 
 ## Relationship to build123d joints
 
-If the source uses build123d `Joint` objects, validate the generated STEP exactly as you would validate explicit `Location` placements. Source-level joints express and compute placement during generation; CLI `inspect mate` verifies the exported result by returning a translation delta between selected references. Do not confuse CLI `mate` with build123d `Joint.connect_to()`. Use `positioning.md` for authoritative source-authoring rules.
+If the source uses `cadpy.assembly.AssemblyHelper` or build123d `Joint` objects, validate the generated STEP exactly as you would validate explicit `Location` placements. Source-level helper relationships and joints express and compute placement during generation; CLI `inspect mate` verifies the exported result by returning a translation delta between selected references. Do not confuse CLI `mate` with build123d `Joint.connect_to()`. Use `positioning.md` for authoritative source-authoring rules.
 
 ## Validation hierarchy
 
@@ -108,7 +108,7 @@ Axis may be inferred when possible, but specify `x`, `y`, or `z` for determinist
 
 ## Mating checks
 
-Use CLI `mate` when two exported STEP references should be flush or centered. It returns a read-only translation delta; it does not edit source files and does not replace native build123d joints in source. When source uses build123d `Joint`/`connect_to()` placement, still validate the resulting exported geometry with `refs --positioning`, `frame`, `measure`, or CLI `mate`.
+Use CLI `mate` when two exported STEP references should be flush or centered. It returns a read-only translation delta; it does not edit source files and does not replace `AssemblyHelper` or native build123d joints in source. When source uses helper or build123d `Joint`/`connect_to()` placement, still validate the resulting exported geometry with `refs --positioning`, `frame`, `measure`, or CLI `mate`.
 
 ```bash
 python scripts/inspect mate \
@@ -118,7 +118,7 @@ python scripts/inspect mate \
   --axis z
 ```
 
-Apply any required correction in the Python source using build123d joint definitions, `.connect_to()` calls, `Location`, parameter changes, or assembly child placement. Regenerate and re-inspect.
+Apply any required correction in the Python source using `AssemblyHelper` relationships, build123d joint definitions, `.connect_to()` calls, `Location`, parameter changes, or assembly child placement. Regenerate and re-inspect.
 
 ## Frame inspection
 

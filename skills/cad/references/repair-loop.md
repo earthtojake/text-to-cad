@@ -130,6 +130,8 @@ Likely causes:
 
 - wrong part-local origin
 - child `Location` offset wrong
+- `AssemblyHelper` fixed and moving targets reversed
+- `AssemblyHelper` relationship offset attached to the wrong datum
 - build123d joint attached to the wrong datum
 - `.connect_to()` moved the wrong part
 - joint axis or orientation inverted
@@ -146,8 +148,8 @@ Fix:
 - inspect `refs --positioning`
 - run `frame` on relevant selectors or occurrences
 - run `mate` for read-only delta
-- verify the source-level build123d joint labels and `joint_location` definitions
-- apply correction to source build123d joint, `.connect_to()` call, `Location`, datum, or feature offset
+- verify the source-level `AssemblyHelper` target order, build123d joint labels, and `joint_location` definitions
+- apply correction to helper relationship, source build123d joint, `.connect_to()` call, `Location`, datum, or feature offset
 - adjust the smallest joint location, axis, angle, position, explicit transform, or part-local datum
 - regenerate the assembly from the Python source
 - rerun `refs --facts --planes --positioning` plus the failed `measure` or `mate` check

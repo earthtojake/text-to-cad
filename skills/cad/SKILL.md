@@ -11,7 +11,7 @@ repository link is only for provenance and release review.
 
 ## Purpose
 
-Create or modify parametric CAD models from natural-language requirements, generate validated STEP/STP artifacts, inspect geometry references, and return checked outputs. Treat STEP as the primary CAD artifact. Treat DXF, STL, 3MF, and native GLB as secondary workflows that branch from, or accompany, a STEP-first process. For assemblies, prefer source-level build123d joints and named mating datums when the parts have functional assembly relationships.
+Create or modify parametric CAD models from natural-language requirements, generate validated STEP/STP artifacts, inspect geometry references, and return checked outputs. Treat STEP as the primary CAD artifact. Treat DXF, STL, 3MF, and native GLB as secondary workflows that branch from, or accompany, a STEP-first process. For assemblies, prefer `cadpy.assembly.AssemblyHelper` with source-level build123d joints, named mating datums, and native labels when the parts have functional assembly relationships.
 
 ## Use this skill when
 
@@ -31,7 +31,7 @@ Use these defaults unless the user specifies otherwise. These are first-pass mod
 - Up/extrusion axis: positive Z.
 - Output geometry: closed, positive-volume solids unless the user requests surfaces or construction geometry.
 - STEP structure: one valid solid, a compound of solids, or a labeled assembly compound.
-- Assembly structure: fixed root part, part-local frames, named mating datums, build123d joints where applicable, and explicit generated placements.
+- Assembly structure: fixed root part, part-local frames, named mating datums, `AssemblyHelper` relationships backed by build123d joints where applicable, explicit generated placements, and verbose native labels.
 - Small plastic enclosure wall: 2.0-3.0 mm when unspecified.
 - Cosmetic fillet: 1.0-3.0 mm when safe for local geometry.
 - M3/M4/M5 normal clearance holes: 3.4/4.5/5.5 mm unless another standard is requested.
@@ -74,7 +74,7 @@ Use `python scripts/<tool> --help` for the complete current command interface; r
 2. **Load only the needed references.** Use the triggers below instead of reading the whole reference set.
 3. **Create a natural-language CAD brief.** Extract dimensions, units, coordinate convention, feature intent, output paths, assumptions, and validation targets.
 4. **Check named purchasable components.** When an assembly includes named off-the-shelf actuators, servos, motors, electronics boards, connectors, or other purchasable components, search `$step-parts` before creating simplified placeholder geometry. If no exact match is found, record the miss and then use a documented envelope.
-5. **Plan before coding.** Define parameters, labels, source paths, expected bounding boxes, and any mating/positioning datums before editing.
+5. **Plan before coding.** Define parameters, semantic labels, source paths, expected bounding boxes, and any mating/positioning datums before editing.
 6. **Edit source, not generated artifacts.** Prefer build123d Python with `gen_step()` for STEP generation.
 7. **Generate explicit targets.** Use `scripts/step` for STEP/STP generation, GLB/topology artifacts, and sidecars. When a Python generator exists, its GLB/topology artifact is Python-backed even when the STEP is also written. Use `--kind part` or `--kind assembly` only for direct STEP/STP imports. Use `--skip-step-write` only when explicitly generating a Python-backed GLB/topology artifact without writing STEP. Do not run directory-wide generation.
 8. **Validate geometrically.** Use `scripts/inspect refs --facts --planes --positioning`, then targeted `measure`, `mate`, `frame`, or `diff` when needed.
@@ -92,8 +92,8 @@ When verification snapshots are generated, also include the saved PNG/GIF snapsh
 - Treat generated STEP/STP, STL, 3MF, GLB/topology, DXF outputs, and render sidecars as derived artifacts.
 - Keep STEP as the primary validated CAD artifact; DXF/STL/3MF are secondary unless the user explicitly says otherwise.
 - When a Python generator exists, run `scripts/step` on the generator. Use a direct STEP/STP target only when the generator is unavailable or the user explicitly identifies that STEP/STP file as the target.
-- Use named parameters, closed solids, explicit labels, and source-controlled geometry intent.
-- Author assembly positioning in source with part-local datums, explicit `Location` transforms, or build123d joints. Treat CLI `inspect mate` as read-only validation, not as a source-editing API.
+- Use named parameters, closed solids, verbose native build123d labels, and source-controlled geometry intent.
+- Author assembly positioning in source with `cadpy.assembly.AssemblyHelper` when available. Define part-local datums as native build123d joints, connect them through semantic helper methods such as `face_to_face`, `coaxial`, `revolute`, or `linear`, and fall back to explicit parameterized `Location` transforms only for simple static layouts. Treat CLI `inspect mate` as read-only validation, not as a source-editing API.
 - Do not use `git status`, `git diff`, or file-size churn as CAD comparison for large exported STEP/STP, GLB/topology, STL, 3MF, or DXF artifacts. Compare source changes, `scripts/inspect` summaries, primary STEP/STP CAD `scripts/snapshot` outputs, or generated topology output instead; use path-limited git status only for bookkeeping.
 - Report only checks that actually ran or are directly supported by tool output.
 - If `$cad-viewer` is unavailable or fails, say so and rely on CLI inspection for validation.

@@ -4,8 +4,10 @@ Shared Python runtime for STEP-backed and Python-backed CAD Viewer GLB/topology 
 
 The package boundary is intentionally narrow: it owns artifact generation,
 validation, selector/topology extraction, mesh settings, source hashing, and the
-`cadpy-step-artifact` CLI. Skill-specific UX, prompts, viewer UI, and snapshot job
-orchestration stay in their owning skills.
+`cadpy-step-artifact` CLI. It also includes small generated-script helpers such
+as `cadpy.assembly.AssemblyHelper`, which wraps native build123d labels, joints,
+and compounds without owning skill-specific UX. Prompts, viewer UI, and snapshot
+job orchestration stay in their owning skills.
 
 ## Local Development
 
