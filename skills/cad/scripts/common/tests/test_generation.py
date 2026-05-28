@@ -8,6 +8,11 @@ from common import generation as cad_generation
 from common import render as cad_render
 from common import catalog as cad_catalog
 from common import source_hash as cad_source_hash
+from common.assembly_spec import (
+    AssemblyInstanceSpec,
+    AssemblyNodeSpec,
+    AssemblySpec,
+)
 from common.catalog import StepImportOptions
 from common.glb_topology import STEP_TOPOLOGY_SCHEMA_VERSION
 from common.step_scene import LoadedStepScene, OccurrenceNode, SelectorBundle
@@ -2731,6 +2736,74 @@ class CadGenerationTests(unittest.TestCase):
         self.assertIn("topology", events)
         self.assertLess(events.index("3mf"), events.index("topology"))
         self.assertTrue(three_mf_path.exists())
+
+    def test_expand_specs_walks_leaves_through_compound_grouping_nodes(self):
+        """Compound grouping AssemblyNodeSpec (``source_path=None`` with
+        nested children) is a valid pattern per the data model:
+        ``AssemblyNodeSpec.source_path`` is typed ``Path | None`` and
+        ``_leaf_instances_from_nodes`` recursively flattens nested groups.
+
+        Dependency expansion must therefore skip the compound itself
+        without crashing on ``compound.source_path.resolve()``, while still
+        discovering the nested leaf sources by way of
+        ``assembly_spec.instances`` (which is the flattened leaf view).
+        """
+
+        # Real part on disk so source resolution finds it.
+        leaf_script = self._generator_script("nested_part")
+
+        assembly_path = self.temp_root / "compound_root.py"
+        assembly_path.write_text("# noop\n", encoding="utf-8")
+
+        identity = tuple(IDENTITY_TRANSFORM)
+        leaf_step_rel = "nested_part.step"
+
+        leaf_instance = AssemblyInstanceSpec(
+            instance_id="nested_part",
+            source_path=leaf_script.resolve(),
+            path=leaf_step_rel,
+            name="nested_part",
+            transform=identity,
+        )
+        leaf_node = AssemblyNodeSpec(
+            instance_id="nested_part",
+            name="nested_part",
+            transform=identity,
+            source_path=leaf_script.resolve(),
+            path=leaf_step_rel,
+            children=(),
+        )
+        compound = AssemblyNodeSpec(
+            instance_id="leg_FR",
+            name="leg_FR",
+            transform=identity,
+            source_path=None,
+            path=None,
+            children=(leaf_node,),
+        )
+        fake_spec = AssemblySpec(
+            assembly_path=assembly_path.resolve(),
+            instances=(leaf_instance,),
+            children=(compound,),
+        )
+
+        entry = cad_generation.EntrySpec(
+            source_ref=self._cad_ref("compound_root"),
+            cad_ref=self._cad_ref("compound_root"),
+            kind="assembly",
+            source_path=assembly_path.resolve(),
+            display_name="compound_root",
+            source="generator",
+        )
+
+        with mock.patch.object(
+            cad_generation, "read_assembly_spec", return_value=fake_spec
+        ):
+            result = cad_generation._expand_specs_with_file_dependencies([entry])
+
+        discovered_paths = {spec.source_path for spec in result}
+        self.assertIn(assembly_path.resolve(), discovered_paths)
+        self.assertIn(leaf_script.resolve(), discovered_paths)
 
 
 if __name__ == "__main__":

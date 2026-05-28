@@ -1821,7 +1821,13 @@ def _expand_specs_with_file_dependencies(specs: Sequence[EntrySpec]) -> list[Ent
             assembly_spec = read_assembly_spec(spec.source_path)
         except Exception:
             continue
-        for instance in assembly_spec_children(assembly_spec):
+        # Iterate the flattened leaf view rather than top-level children:
+        # compound grouping nodes (``AssemblyNodeSpec.source_path is None``,
+        # only nested children) are a valid pattern per the data model and
+        # would otherwise crash on ``.source_path.resolve()``. ``instances``
+        # is recursively flattened by ``_leaf_instances_from_nodes`` and every
+        # entry is guaranteed to carry a real ``source_path``.
+        for instance in assembly_spec.instances:
             if instance.source_path.resolve() in seen_step_paths:
                 continue
             source = source_for_path(instance.source_path)
