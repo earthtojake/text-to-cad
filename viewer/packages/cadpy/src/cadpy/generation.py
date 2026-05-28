@@ -1948,7 +1948,9 @@ def _expand_specs_with_file_dependencies(specs: Sequence[EntrySpec]) -> list[Ent
             assembly_spec = read_assembly_spec(spec.source_path)
         except Exception:
             continue
-        for instance in assembly_spec_children(assembly_spec):
+        # Walk the flattened leaf view rather than top-level children. Compound
+        # grouping nodes have no source_path, but every flattened instance does.
+        for instance in assembly_spec.instances:
             if instance.source_path.resolve() in seen_step_paths:
                 continue
             source = source_for_path(instance.source_path)

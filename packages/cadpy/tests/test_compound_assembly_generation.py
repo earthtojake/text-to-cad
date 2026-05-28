@@ -14,6 +14,13 @@ if str(PACKAGE_SRC) not in sys.path:
     sys.path.insert(0, str(PACKAGE_SRC))
 
 from cadpy import generation
+from cadpy.assembly_spec import (
+    IDENTITY_TRANSFORM,
+    AssemblyInstanceSpec,
+    AssemblyNodeSpec,
+    AssemblySpec,
+)
+from cadpy.catalog import CadSource
 from cadpy.metadata import parse_generator_metadata
 from cadpy.step_export import _create_bin_xcaf_doc, export_build123d_step_scene
 from cadpy.step_scene import LoadedStepScene, _bbox_from_shape, scene_leaf_occurrences, scene_occurrence_shape
@@ -250,8 +257,77 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
                     force=True,
                 )
 
-        self.assertEqual("assembly", result.spec.kind)
-        self.assertIs(result.selector_bundle, selector_bundle)
+            self.assertEqual("assembly", result.spec.kind)
+            self.assertIs(result.selector_bundle, selector_bundle)
+
+    def test_dependency_expansion_walks_flattened_grouping_node_leaves(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="cadpy-dependencies-") as tempdir:
+            root = Path(tempdir)
+            assembly_path = root / "grouped_assembly.py"
+            assembly_step = root / "grouped_assembly.step"
+            leaf_step = root / "nested_part.step"
+            assembly_path.write_text("def gen_step():\n    return None\n", encoding="utf-8")
+            leaf_step.write_text("ISO-10303-21; END-ISO-10303-21;\n", encoding="utf-8")
+
+            identity = tuple(IDENTITY_TRANSFORM)
+            leaf_instance = AssemblyInstanceSpec(
+                instance_id="nested_part",
+                source_path=leaf_step.resolve(),
+                path="nested_part.step",
+                name="nested_part",
+                transform=identity,
+            )
+            leaf_node = AssemblyNodeSpec(
+                instance_id="nested_part",
+                name="nested_part",
+                transform=identity,
+                source_path=leaf_step.resolve(),
+                path="nested_part.step",
+                children=(),
+            )
+            grouping_node = AssemblyNodeSpec(
+                instance_id="front_group",
+                name="front_group",
+                transform=identity,
+                source_path=None,
+                path=None,
+                children=(leaf_node,),
+            )
+            assembly_spec = AssemblySpec(
+                assembly_path=assembly_path.resolve(),
+                instances=(leaf_instance,),
+                children=(grouping_node,),
+            )
+            entry = generation.EntrySpec(
+                source_ref="grouped_assembly.py",
+                cad_ref="grouped_assembly",
+                kind="assembly",
+                source_path=assembly_path.resolve(),
+                display_name="grouped_assembly",
+                source="generated",
+                step_path=assembly_step.resolve(),
+                script_path=assembly_path.resolve(),
+            )
+            leaf_source = CadSource(
+                source_ref="nested_part.step",
+                cad_ref="nested_part",
+                kind="part",
+                source_path=leaf_step.resolve(),
+                source="imported",
+                origin_path=leaf_step.resolve(),
+                step_path=leaf_step.resolve(),
+            )
+
+            with (
+                mock.patch.object(generation, "read_assembly_spec", return_value=assembly_spec),
+                mock.patch.object(generation, "_source_lookup_by_path", return_value={leaf_step.resolve(): leaf_source}),
+            ):
+                expanded = generation._expand_specs_with_file_dependencies([entry])
+
+        self.assertEqual(
+            [assembly_path.resolve(), leaf_step.resolve()],
+            [spec.source_path for spec in expanded],
+        )
 
 
 if __name__ == "__main__":
