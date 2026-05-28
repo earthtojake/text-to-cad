@@ -6,7 +6,7 @@ development should link the source skills directly, as described in
 
 ## CAD
 
-`plugins/cad` is the first plugin package. It is versioned as `0.1.5`
+`plugins/cad` is the first plugin package. It is versioned as `0.1.6`
 and bundles every supported CAD Skills skill as a generated materialized copy
 of the canonical `skills/` directories.
 

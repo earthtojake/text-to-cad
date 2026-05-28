@@ -2,7 +2,7 @@
   "name": "cad-viewer",
   "private": true,
   "type": "module",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "scripts": {
     "dev": "vite dev",
     "dev:ensure": "node scripts/ensure-dev.mjs",

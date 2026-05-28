@@ -1,6 +1,6 @@
 # CAD Plugin
 
-Version: `0.1.5`
+Version: `0.1.6`
 
 This plugin bundles the supported CAD Skills skill set for production agent
 installs while keeping the root `skills/` directory as the source of truth.

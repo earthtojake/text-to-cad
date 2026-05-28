@@ -16,7 +16,7 @@ from pathlib import Path
 repo_root = Path(sys.argv[1])
 
 plugin_name = "cad"
-version = "0.1.5"
+version = "0.1.6"
 skills = [
     "bambu-labs",
     "cad",

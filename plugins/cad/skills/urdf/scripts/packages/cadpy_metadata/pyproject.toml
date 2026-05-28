@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cadpy-metadata"
-version = "0.1.5"
+version = "0.1.6"
 description = "Dependency-free metadata helpers for Python-generated CAD outputs."
 requires-python = ">=3.11"
 dependencies = []
