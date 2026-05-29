@@ -51,6 +51,19 @@ def build_parser() -> argparse.ArgumentParser:
     modal.add_argument("--maxh", type=float, default=0.0, help="Max mesh element size (model units). 0 = auto.")
     modal.add_argument("--order", type=int, default=2, help="FE polynomial order. Default: 2.")
     modal.add_argument("--units", choices=("mm", "m"), default="mm", help="STEP length units. Default: mm.")
+    modal.add_argument(
+        "--modal-glb",
+        default="",
+        help="Write an animated modal GLB (one morph target + baked animation "
+        "clip per mode) to this path for browser playback in CAD Viewer.",
+    )
+    modal.add_argument(
+        "--amplitude",
+        type=float,
+        default=0.12,
+        help="Peak mode-shape deflection as a fraction of the model diagonal "
+        "(morph weight=1). Default: 0.12.",
+    )
     _add_output_arguments(modal)
     modal.set_defaults(handler=run_modal)
 
@@ -114,6 +127,8 @@ def run_modal(args: argparse.Namespace) -> int:
             maxh=args.maxh,
             units_mm=(args.units == "mm"),
             order=args.order,
+            emit_glb=(args.modal_glb or None),
+            amplitude=args.amplitude,
         )
     except modal_mod.ModalError as exc:
         result = {"ok": False, "errors": [{"message": str(exc)}]}

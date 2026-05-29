@@ -36,6 +36,58 @@ class ModalError(Exception):
     """User-facing modal-analysis failure."""
 
 
+# ----------------------------------------------------------- surface extraction
+
+
+def _extract_surface(mesh) -> tuple[np.ndarray, np.ndarray, list]:
+    """Return (vertices, triangles, point_ids) for the FE mesh boundary.
+
+    Coordinates are in the mesh's current units (metres, after Scale). Triangles
+    index into the returned vertex array; point_ids are the netgen PointIds in
+    the same order, for sampling the solution field.
+    """
+    ngm = mesh.ngmesh
+    pts = ngm.Points()
+    used: dict = {}
+    verts: list[list[float]] = []
+    tris: list[list[int]] = []
+
+    def vid(pid) -> int:
+        key = int(pid.nr) if hasattr(pid, "nr") else int(pid)
+        if key not in used:
+            p = pts[pid]
+            c = p.p if hasattr(p, "p") else (p[0], p[1], p[2])
+            used[key] = (len(verts), pid)
+            verts.append([float(c[0]), float(c[1]), float(c[2])])
+        return used[key][0]
+
+    for el in ngm.Elements2D():
+        vs = list(el.vertices)
+        if len(vs) == 3:
+            tris.append([vid(vs[0]), vid(vs[1]), vid(vs[2])])
+        elif len(vs) == 4:
+            a, b, c, d = (vid(vs[0]), vid(vs[1]), vid(vs[2]), vid(vs[3]))
+            tris.append([a, b, c])
+            tris.append([a, c, d])
+
+    order = [pid for (_, pid) in sorted(used.values(), key=lambda t: t[0])]
+    return np.asarray(verts, dtype=float), np.asarray(tris, dtype=int), order
+
+
+def _sample_displacement(mesh, fes, vec, verts: np.ndarray) -> np.ndarray:
+    import ngsolve as ngs
+
+    gfu = ngs.GridFunction(fes)
+    gfu.vec.data = vec
+    disp = np.zeros_like(verts)
+    for i, (x, y, z) in enumerate(verts):
+        try:
+            disp[i] = np.asarray(gfu(mesh(float(x), float(y), float(z))))
+        except Exception:  # noqa: BLE001 - point just outside; leave zero
+            pass
+    return disp
+
+
 # ---------------------------------------------------------------- face picking
 
 
@@ -158,6 +210,8 @@ def run_modal(
     maxh: float = 0.0,
     units_mm: bool = True,
     order: int = 2,
+    emit_glb: str | None = None,
+    amplitude: float = 0.12,
 ) -> dict:
     import build123d as bd
     import ngsolve as ngs
@@ -238,7 +292,7 @@ def run_modal(
             **label,
         })
 
-    return {
+    result = {
         "ok": True,
         "target": str(path),
         "material": {"name": material.name, "E": material.E, "nu": material.nu, "rho": material.rho},
@@ -247,3 +301,33 @@ def run_modal(
         "units": "mm" if units_mm else "m",
         "modes": modes,
     }
+
+    # Optional: emit an animated modal GLB (dedicated tessellated model with one
+    # morph target + one baked animation clip per mode).
+    if emit_glb:
+        from .modal_glb import build_modal_glb
+
+        verts, tris, _ids = _extract_surface(mesh)
+        if verts.size and tris.size:
+            diag = float(np.linalg.norm(verts.max(axis=0) - verts.min(axis=0))) or 1.0
+            target_amp = max(amplitude, 0.0) * diag
+            glb_modes = []
+            for i in range(len(lams)):
+                disp = _sample_displacement(mesh, fes, evecs[i], verts)
+                peak = float(np.linalg.norm(disp, axis=1).max())
+                if peak > 0:
+                    disp = disp * (target_amp / peak)
+                glb_modes.append({
+                    "index": modes[i]["index"],
+                    "frequencyHz": modes[i]["frequencyHz"],
+                    "label": modes[i].get("description", modes[i].get("dominant", "")),
+                    "displacement": disp,
+                })
+            build_modal_glb(emit_glb, verts, tris, glb_modes)
+            result["modalGlb"] = str(emit_glb)
+            result["modalAmplitude"] = round(target_amp, 6)
+        else:
+            result["modalGlb"] = None
+            result["warnings"] = ["surface extraction produced no triangles; GLB not written"]
+
+    return result
