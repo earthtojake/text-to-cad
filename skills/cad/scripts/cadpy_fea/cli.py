@@ -67,15 +67,23 @@ def _add_output_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def run_materials(args: argparse.Namespace) -> int:
-    table = {
-        name: {"E": m.E, "nu": m.nu, "rho": m.rho}
-        for name, m in sorted(materials_mod.MATERIALS.items())
-    }
+    items = sorted(
+        materials_mod.MATERIALS.items(),
+        key=lambda kv: (kv[1].category, kv[0]),
+    )
     if getattr(args, "format", "json") == "text":
-        for name, m in sorted(materials_mod.MATERIALS.items()):
-            print(f"{name:12s} E={m.E:.3g} Pa  nu={m.nu}  rho={m.rho} kg/m^3")
+        current = None
+        for name, m in items:
+            if m.category != current:
+                current = m.category
+                print(f"# {current}")
+            print(f"  {name:16s} E={m.E:.3g} Pa  nu={m.nu}  rho={m.rho} kg/m^3")
         return 0
-    print(json.dumps({"ok": True, "materials": table}, indent=2))
+    table = {
+        name: {"E": m.E, "nu": m.nu, "rho": m.rho, "category": m.category}
+        for name, m in items
+    }
+    print(json.dumps({"ok": True, "count": len(table), "materials": table}, indent=2))
     return 0
 
 

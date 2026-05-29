@@ -87,8 +87,13 @@ degenerate pair — never assume mode order equals Tx/Ty/Tz.
 
 Key flags:
 
-- `--material` — name from `fea materials` (steel, aluminum, titanium, pla,
-  fr4, ...). Add custom values by editing `cadpy_fea/materials.py`.
+- `--material` — name from `fea materials` (44 built-ins spanning metals,
+  3D-printing and engineering plastics, composites, wood, ceramics, and
+  elastomers; common aliases like `al`, `ss`, `pom`, `pc`, `carbon` resolve to
+  the canonical key). Add or override values by editing `cadpy_fea/materials.py`.
+  Anisotropic materials (wood, fiber composites, printed parts) use
+  isotropic-equivalent estimates, and elastomers are linear approximations of
+  hyperelastic behavior — treat those as ballpark.
 - `--fixed` — which face(s) to clamp:
   - `bottom` / `top` — largest planar face in the global min/max Z plane.
   - `outer` — the outer wall face spanning the full XYZ extent (e.g. the rim of

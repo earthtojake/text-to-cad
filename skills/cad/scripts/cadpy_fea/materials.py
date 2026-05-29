@@ -1,8 +1,13 @@
 """Isotropic linear-elastic material table for first-pass modal FEA.
 
 Pure Python (no heavy imports) so the CLI and tests can use it without ngsolve.
-E in pascals, density in kg/m^3, nu dimensionless. These are nominal handbook
-values for design iteration, not certified datasheet figures.
+E in pascals, density in kg/m^3, nu dimensionless. Values are nominal handbook
+figures for design iteration across common 3D-printing, machining, sheet-metal,
+and structural materials -- not certified datasheet numbers. For anisotropic
+materials (wood, fiber composites, printed parts) these are isotropic-equivalent
+estimates; treat resonance results as ballpark.
+
+Add or override a material by editing the MATERIALS dict below.
 """
 from __future__ import annotations
 
@@ -12,9 +17,10 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Material:
     name: str
-    E: float       # Young's modulus [Pa]
-    nu: float      # Poisson ratio
-    rho: float     # density [kg/m^3]
+    E: float          # Young's modulus [Pa]
+    nu: float         # Poisson ratio
+    rho: float        # density [kg/m^3]
+    category: str = "other"
 
     def lame(self) -> tuple[float, float]:
         """Return (lambda, mu) Lame parameters."""
@@ -23,18 +29,81 @@ class Material:
         return lam, mu
 
 
-MATERIALS: dict[str, Material] = {
-    "steel": Material("steel", 200e9, 0.30, 7850.0),
-    "stainless": Material("stainless", 193e9, 0.30, 8000.0),
-    "aluminum": Material("aluminum", 69e9, 0.33, 2700.0),
-    "titanium": Material("titanium", 114e9, 0.34, 4430.0),
-    "brass": Material("brass", 100e9, 0.34, 8500.0),
-    "abs": Material("abs", 2.3e9, 0.35, 1050.0),
-    "pla": Material("pla", 3.5e9, 0.36, 1240.0),
-    "nylon": Material("nylon", 2.0e9, 0.39, 1140.0),
-    "delrin": Material("delrin", 3.1e9, 0.35, 1410.0),
-    "fr4": Material("fr4", 22e9, 0.18, 1850.0),
-    "acrylic": Material("acrylic", 3.2e9, 0.37, 1180.0),
+def _m(name, E, nu, rho, category):
+    return Material(name, E, nu, rho, category)
+
+
+_MATERIAL_LIST = [
+    # --- Metals: machining, sheet metal, casting ---
+    _m("steel", 200e9, 0.30, 7850.0, "metal"),            # mild / low-carbon (A36, 1018)
+    _m("stainless", 193e9, 0.30, 8000.0, "metal"),        # austenitic 304/316
+    _m("tool_steel", 210e9, 0.30, 7800.0, "metal"),       # hardened tool/alloy steel
+    _m("cast_iron", 170e9, 0.26, 7200.0, "metal"),        # gray cast iron
+    _m("aluminum", 69e9, 0.33, 2700.0, "metal"),          # 6061
+    _m("aluminum_7075", 71.7e9, 0.33, 2810.0, "metal"),   # 7075 aerospace
+    _m("titanium", 114e9, 0.34, 4430.0, "metal"),         # Ti-6Al-4V
+    _m("magnesium", 45e9, 0.35, 1770.0, "metal"),         # AZ31
+    _m("brass", 100e9, 0.34, 8500.0, "metal"),
+    _m("bronze", 110e9, 0.34, 8800.0, "metal"),
+    _m("copper", 117e9, 0.34, 8960.0, "metal"),
+    _m("zinc", 108e9, 0.25, 7140.0, "metal"),             # die-cast zamak ~ this range
+    _m("nickel", 207e9, 0.31, 8900.0, "metal"),
+    _m("inconel", 200e9, 0.29, 8190.0, "metal"),          # 718 nickel superalloy
+    _m("lead", 16e9, 0.44, 11340.0, "metal"),
+    _m("tungsten", 411e9, 0.28, 19300.0, "metal"),
+
+    # --- 3D-printing & engineering thermoplastics ---
+    _m("pla", 3.5e9, 0.36, 1240.0, "plastic"),
+    _m("abs", 2.3e9, 0.35, 1050.0, "plastic"),
+    _m("asa", 2.0e9, 0.35, 1070.0, "plastic"),
+    _m("petg", 2.1e9, 0.37, 1270.0, "plastic"),
+    _m("nylon", 2.0e9, 0.39, 1140.0, "plastic"),          # PA6/PA66 generic
+    _m("nylon_cf", 7.0e9, 0.35, 1150.0, "composite"),     # carbon-filled nylon (printed)
+    _m("polycarbonate", 2.3e9, 0.37, 1200.0, "plastic"),  # PC
+    _m("resin", 2.8e9, 0.35, 1180.0, "plastic"),          # generic SLA/DLP photopolymer
+    _m("tpu", 0.026e9, 0.48, 1210.0, "elastomer"),        # flexible filament (very soft)
+    _m("acrylic", 3.2e9, 0.37, 1180.0, "plastic"),        # PMMA
+    _m("delrin", 3.1e9, 0.35, 1410.0, "plastic"),         # POM / acetal
+    _m("hdpe", 1.0e9, 0.42, 950.0, "plastic"),
+    _m("polypropylene", 1.5e9, 0.42, 905.0, "plastic"),   # PP
+    _m("ptfe", 0.5e9, 0.46, 2200.0, "plastic"),           # Teflon
+    _m("pvc", 3.0e9, 0.38, 1400.0, "plastic"),
+    _m("peek", 3.6e9, 0.38, 1320.0, "plastic"),
+    _m("ultem", 3.2e9, 0.36, 1270.0, "plastic"),          # PEI
+
+    # --- Composites / boards / wood ---
+    _m("fr4", 22e9, 0.18, 1850.0, "composite"),           # PCB laminate
+    _m("cfrp", 70e9, 0.30, 1600.0, "composite"),          # quasi-isotropic carbon laminate
+    _m("gfrp", 25e9, 0.28, 1900.0, "composite"),          # fiberglass laminate
+    _m("plywood", 8e9, 0.30, 600.0, "wood"),
+    _m("wood", 10e9, 0.35, 500.0, "wood"),                # softwood, along grain (nominal)
+    _m("mdf", 3.6e9, 0.25, 750.0, "wood"),
+
+    # --- Ceramics / glass / mineral ---
+    _m("glass", 70e9, 0.22, 2500.0, "ceramic"),
+    _m("alumina", 370e9, 0.22, 3950.0, "ceramic"),        # Al2O3 technical ceramic
+    _m("concrete", 30e9, 0.20, 2400.0, "mineral"),
+
+    # --- Elastomers (linear estimate only; real behavior is hyperelastic) ---
+    _m("rubber", 0.01e9, 0.48, 1100.0, "elastomer"),
+    _m("silicone", 0.01e9, 0.48, 1100.0, "elastomer"),
+]
+
+MATERIALS: dict[str, Material] = {m.name: m for m in _MATERIAL_LIST}
+
+# Common aliases / standard designations -> canonical key.
+ALIASES: dict[str, str] = {
+    "mild_steel": "steel", "carbon_steel": "steel", "a36": "steel", "1018": "steel",
+    "ss": "stainless", "stainless_steel": "stainless", "304": "stainless", "316": "stainless",
+    "al": "aluminum", "aluminium": "aluminum", "6061": "aluminum", "7075": "aluminum_7075",
+    "ti": "titanium", "ti64": "titanium",
+    "pom": "delrin", "acetal": "delrin",
+    "pmma": "acrylic", "plexiglass": "acrylic",
+    "pc": "polycarbonate", "pei": "ultem",
+    "pp": "polypropylene", "teflon": "ptfe",
+    "pa": "nylon", "pa6": "nylon", "pa12": "nylon",
+    "carbon_fiber": "cfrp", "carbon": "cfrp", "fiberglass": "gfrp",
+    "pcb": "fr4", "g10": "fr4",
 }
 
 # Physical constants for composite (e.g. PCB) density estimates.
@@ -42,7 +111,8 @@ RHO_COPPER = 8960.0  # kg/m^3
 
 
 def get_material(name: str) -> Material:
-    key = name.strip().lower()
+    key = name.strip().lower().replace("-", "_").replace(" ", "_")
+    key = ALIASES.get(key, key)
     if key not in MATERIALS:
         options = ", ".join(sorted(MATERIALS))
         raise KeyError(f"Unknown material '{name}'. Available: {options}")

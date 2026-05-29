@@ -98,6 +98,32 @@ class MaterialMathTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             materials_mod.get_material("unobtanium")
 
+    def test_table_covers_common_categories(self) -> None:
+        categories = {m.category for m in materials_mod.MATERIALS.values()}
+        for expected in ("metal", "plastic", "composite", "elastomer", "wood", "ceramic"):
+            self.assertIn(expected, categories)
+        # A representative spread across 3D printing, machining, and sheet metal.
+        for key in ("pla", "petg", "tpu", "peek", "steel", "aluminum",
+                    "titanium", "copper", "brass", "fr4", "acrylic"):
+            self.assertIn(key, materials_mod.MATERIALS)
+        self.assertGreaterEqual(len(materials_mod.MATERIALS), 30)
+
+    def test_every_material_is_physically_valid(self) -> None:
+        for name, m in materials_mod.MATERIALS.items():
+            self.assertGreater(m.E, 0, name)
+            self.assertGreater(m.rho, 0, name)
+            self.assertGreaterEqual(m.nu, 0.0, name)
+            self.assertLess(m.nu, 0.5, name)  # finite Lame parameters
+            lam, mu = m.lame()
+            self.assertGreater(mu, 0, name)
+
+    def test_aliases_resolve(self) -> None:
+        self.assertIs(materials_mod.get_material("AL"), materials_mod.MATERIALS["aluminum"])
+        self.assertIs(materials_mod.get_material("SS"), materials_mod.MATERIALS["stainless"])
+        self.assertIs(materials_mod.get_material("pom"), materials_mod.MATERIALS["delrin"])
+        self.assertIs(materials_mod.get_material("ti"), materials_mod.MATERIALS["titanium"])
+        self.assertIs(materials_mod.get_material("Carbon Fiber"), materials_mod.MATERIALS["cfrp"])
+
 
 @unittest.skipUnless(
     _has("ngsolve") and _has("netgen") and _has("build123d"),
