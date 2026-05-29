@@ -20,7 +20,9 @@ Use this skill when the user asks for CAD files, STEP/STP files, build123d sourc
 
 Also use it when the user asks for DXF, STL, 3MF, or native GLB output from CAD geometry. Keep those workflows secondary and load `dxf.md` or `supported-exports.md` for details.
 
-Do not use this skill for render-only concept art, CAM toolpaths, engineering certification, FEA conclusions, architectural BIM, or freehand illustration unless the user also needs CAD geometry.
+Also use it for structural analysis of STEP geometry: mass properties and inertia tensors, interference/overlap, clearance and wall thickness, cross-section area, and first-pass modal / natural-frequency estimates. Load `analysis-and-fea.md` for those workflows.
+
+Do not use this skill for render-only concept art, CAM toolpaths, engineering certification, architectural BIM, or freehand illustration unless the user also needs CAD geometry. Modal FEA here is a first-pass linear-elastic design estimate, not certified structural analysis.
 
 ## Default assumptions
 
@@ -63,7 +65,14 @@ python scripts/step ...
 python scripts/snapshot ...
 python scripts/inspect ...
 python scripts/dxf ...
+python scripts/analyze ...
+python scripts/fea ...
 ```
+
+`scripts/analyze` computes mass properties, interference, clearance, and
+cross-sections from STEP geometry (build123d/OCP only). `scripts/fea` is the
+opt-in modal/natural-frequency estimator (requires `ngsolve` + `netgen`,
+imported lazily). See `analysis-and-fea.md`.
 
 Use the active project Python interpreter. Treat `python` in examples as an interpreter placeholder; if bare `python` is unavailable or lacks dependencies, substitute `python3`, a project virtualenv interpreter, or the configured interpreter path while keeping the root model above explicit.
 
@@ -112,6 +121,7 @@ Load these files only when their trigger applies:
 - `references/dxf.md` — secondary DXF workflow.
 - `references/supported-exports.md` — secondary STL/3MF/native GLB sidecar workflows.
 - `references/build123d-modeling.md` — build123d modeling patterns, topology, selectors, features, assemblies.
+- `references/analysis-and-fea.md` — mass properties, inertia, interference, clearance, cross-sections (`scripts/analyze`), and opt-in modal/natural-frequency FEA (`scripts/fea`).
 - `references/repair-loop.md` — diagnosis and repair procedures.
 
 Final responses should include generated files, returned `$cad-viewer` viewer links, verification snapshots, validation actually run, assumptions, and caveats. Use `references/inspection-and-validation.md` for report structure.
