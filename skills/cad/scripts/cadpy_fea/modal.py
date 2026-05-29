@@ -4,7 +4,7 @@ Importing this module pulls in build123d, netgen, and ngsolve. Keep it out of
 the CLI's module-level imports (load it inside the handler) so ``fea --help``
 and the material table work without the solver stack installed.
 
-Pipeline (battle-tested on flexure / orthoplanar-spring designs):
+Pipeline:
   1. Load STEP with build123d, export to a temp BREP.
      (Direct shape passing between build123d's and netgen's OCCT wrappers does
      not work; BREP file interchange is the reliable bridge.)

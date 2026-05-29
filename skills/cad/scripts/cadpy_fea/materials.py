@@ -128,8 +128,8 @@ def pcb_composite_density(
 ) -> float:
     """Volume-weighted density of an FR-4 board with embedded copper planes.
 
-    Copper-free flexure arms keep the base FR-4 density; copper-bearing hub/ring
-    regions use this composite value. Default is 8 x 35 um (1 oz) layers.
+    Copper-free regions keep the base FR-4 density; copper-bearing regions
+    (planes and pours) use this composite value. Default is 8 x 35 um (1 oz) layers.
     """
     if board_thickness_m <= 0:
         raise ValueError("board_thickness_m must be positive")

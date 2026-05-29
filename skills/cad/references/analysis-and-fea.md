@@ -97,7 +97,7 @@ Key flags:
 - `--fixed` — which face(s) to clamp:
   - `bottom` / `top` — largest planar face in the global min/max Z plane.
   - `outer` — the outer wall face spanning the full XYZ extent (e.g. the rim of
-    a disk-shaped flexure). It must span full Z, which is what distinguishes the
+    a disk-shaped part or ring). It must span full Z, which is what distinguishes the
     wall from the flat top/bottom faces.
   - `largest` — single largest-area face (fallback).
   - `auto` — bottom if present, else largest.
@@ -109,27 +109,6 @@ Key flags:
 - `--modes`, `--order` — number of modes and FE polynomial order.
 
 Install the solver stack with `pip install ngsolve netgen-occt`.
-
-### Flexure / isotropic-resonance notes
-
-These come from tuning orthoplanar springs (flexure translational stages) and
-generalize to most planar flexures:
-
-- **N>=3-fold rotational symmetry makes the in-plane stiffness tensor
-  isotropic**, so the two in-plane translational modes are automatically
-  degenerate (Tx == Ty). Confirm with `analyze props` (Ixx == Iyy, zero
-  products of inertia).
-- **Balancing the out-of-plane mode (Tz) against the in-plane pair is a tuning
-  problem.** Out-of-plane bending stiffness scales as `w*t^3`; in-plane as
-  `t*w^3` plus arm axial stretch. Tune the arm cross-section ratio `t/w` and the
-  hub size: a larger hub shrinks the radial corridor, makes arms more
-  tangential, and moves the isotropy point to wider, more manufacturable arms.
-- **A thicker sheet wants wider arms** for the same balance — `t` and `w` track
-  together. More spiral wraps (sweep > 360 deg) does not help isotropy and
-  invites self-collision.
-- **The geometric isotropy ratio is material-independent** to first order;
-  frequencies scale as `sqrt(E/rho)`. So tune geometry once, then read the
-  frequency for any material with `fea modal --material ...`.
 
 ### Gotcha: face selection
 
