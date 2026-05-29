@@ -55,6 +55,8 @@ def build_modal_glb(
     *,
     loop_seconds: float = _DEFAULT_LOOP_SECONDS,
     keyframes: int = _DEFAULT_KEYFRAMES,
+    damping_ratio: float = 0.01,
+    material: str | None = None,
 ) -> Path:
     """Write an animated modal GLB.
 
@@ -177,7 +179,12 @@ def build_modal_glb(
                 "targets": [{"POSITION": a} for a in target_accessors],
             }],
             "weights": [0.0] * n_modes,
-            "extras": {"modes": mode_meta, "loopSeconds": float(loop_seconds)},
+            "extras": {
+                "modes": mode_meta,
+                "loopSeconds": float(loop_seconds),
+                "dampingRatio": float(damping_ratio),
+                "material": material,
+            },
         }],
         "animations": animations,
         "buffers": [{"byteLength": len(bin_blob)}],

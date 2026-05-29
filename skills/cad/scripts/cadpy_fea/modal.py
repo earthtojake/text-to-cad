@@ -295,7 +295,10 @@ def run_modal(
     result = {
         "ok": True,
         "target": str(path),
-        "material": {"name": material.name, "E": material.E, "nu": material.nu, "rho": material.rho},
+        "material": {
+            "name": material.name, "E": material.E, "nu": material.nu,
+            "rho": material.rho, "zeta": getattr(material, "zeta", 0.01),
+        },
         "fixed": {"strategy": fixed, "faceCount": len(fixed_faces), "areaMm2": round(fixed_area, 4)},
         "mesh": {"elements": mesh.ne, "vertices": mesh.nv, "maxh": round(maxh, 4), "order": order},
         "units": "mm" if units_mm else "m",
@@ -323,9 +326,14 @@ def run_modal(
                     "label": modes[i].get("description", modes[i].get("dominant", "")),
                     "displacement": disp,
                 })
-            build_modal_glb(emit_glb, verts, tris, glb_modes)
+            build_modal_glb(
+                emit_glb, verts, tris, glb_modes,
+                damping_ratio=getattr(material, "zeta", 0.01),
+                material=material.name,
+            )
             result["modalGlb"] = str(emit_glb)
             result["modalAmplitude"] = round(target_amp, 6)
+            result["dampingRatio"] = getattr(material, "zeta", 0.01)
         else:
             result["modalGlb"] = None
             result["warnings"] = ["surface extraction produced no triangles; GLB not written"]

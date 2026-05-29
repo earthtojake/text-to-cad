@@ -90,10 +90,10 @@ def run_materials(args: argparse.Namespace) -> int:
             if m.category != current:
                 current = m.category
                 print(f"# {current}")
-            print(f"  {name:16s} E={m.E:.3g} Pa  nu={m.nu}  rho={m.rho} kg/m^3")
+            print(f"  {name:16s} E={m.E:.3g} Pa  nu={m.nu}  rho={m.rho} kg/m^3  zeta={m.zeta}")
         return 0
     table = {
-        name: {"E": m.E, "nu": m.nu, "rho": m.rho, "category": m.category}
+        name: {"E": m.E, "nu": m.nu, "rho": m.rho, "category": m.category, "zeta": m.zeta}
         for name, m in items
     }
     print(json.dumps({"ok": True, "count": len(table), "materials": table}, indent=2))

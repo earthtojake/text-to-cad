@@ -116,6 +116,17 @@ class MaterialMathTests(unittest.TestCase):
             self.assertLess(m.nu, 0.5, name)  # finite Lame parameters
             lam, mu = m.lame()
             self.assertGreater(mu, 0, name)
+            self.assertGreater(m.zeta, 0, name)
+            self.assertLess(m.zeta, 1.0, name)  # underdamped
+
+    def test_damping_ordering_metals_ring_plastics_damp(self) -> None:
+        # Metals should ring far longer than plastics/elastomers.
+        self.assertLess(materials_mod.get_material("steel").zeta,
+                        materials_mod.get_material("pla").zeta)
+        self.assertLess(materials_mod.get_material("aluminum").zeta,
+                        materials_mod.get_material("abs").zeta)
+        self.assertLess(materials_mod.get_material("pla").zeta,
+                        materials_mod.get_material("rubber").zeta)
 
     def test_aliases_resolve(self) -> None:
         self.assertIs(materials_mod.get_material("AL"), materials_mod.MATERIALS["aluminum"])
