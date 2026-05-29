@@ -186,9 +186,14 @@ export class ModalInteractionController {
     const q0 = Array.from(this._influences());
     let velocities = q0.map(() => 0);
     if (this.grab && (this._velocity[0] || this._velocity[1] || this._velocity[2])) {
+      // The drag velocity is in real seconds, but the physics clock runs in
+      // slowed time (tau = t_real / slowdown), so the physical initial velocity
+      // is d(disp)/d(tau) = v_real * slowdown. Without this factor the flick
+      // energy is `slowdown`x too small to see.
+      const physVelocity = this._velocity.map((c) => c * this.slowdown);
       velocities = solveDragWeights({
         deltas: this.grab.deltas,
-        target: this._velocity,
+        target: physVelocity,
         frequencies: this.frequencies,
       });
     }

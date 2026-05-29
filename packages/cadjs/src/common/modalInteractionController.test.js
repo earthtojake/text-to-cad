@@ -114,6 +114,26 @@ test("stationary (clamped) vertices are not grabbable", () => {
   assert.equal(controller.pickAtNDC(mobile.x, mobile.y), true);
 });
 
+test("flick velocity propagates to modal velocity and scales with slowdown", () => {
+  function setup(slowdown) {
+    const mesh = buildQuad();
+    const c = new ModalInteractionController({
+      THREE, camera: topDownCamera(), mesh, frequencies: [10, 40], damping: 0, slowdown,
+    });
+    c.pickAtNDC(0, 0);          // grab a (mobile) vertex
+    c._velocity = [0.2, 0, 0];  // in-plane x flick -> engages the x mode
+    c.release();
+    return c;
+  }
+  const slow = setup(50);
+  const fast = setup(100);
+  // Mode 1 (x) gets a nonzero initial velocity.
+  assert.ok(Math.abs(slow.superposition.v0[1]) > 0, "x-mode should get velocity");
+  // Doubling slowdown doubles the physical initial velocity.
+  const ratio = fast.superposition.v0[1] / slow.superposition.v0[1];
+  assert.ok(Math.abs(ratio - 2) < 1e-6, `expected 2x, got ${ratio}`);
+});
+
 test("reset clears influences and state", () => {
   const mesh = buildQuad();
   const controller = new ModalInteractionController({
