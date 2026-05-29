@@ -1,6 +1,6 @@
 {
   "name": "cad",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "CAD, robotics, fabrication, and local review skills packaged for agent plugin installs.",
   "author": {
     "name": "earthtojake",

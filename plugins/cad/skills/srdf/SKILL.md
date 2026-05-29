@@ -5,7 +5,7 @@ description: MoveIt2 SRDF generation, validation, and planning-semantics workflo
 
 # SRDF
 
-Release version: `0.1.11`.
+Release version: `0.1.12`.
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 Use the installed local skill files as the runtime source of truth; the
 repository link is only for provenance and release review.

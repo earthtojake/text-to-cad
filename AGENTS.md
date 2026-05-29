@@ -57,7 +57,7 @@ product and `models/` as the shared fixture/artifact area.
 - Keep release versioning in lockstep: the git tag, plugin manifests and
   `plugins/*/VERSION`, package manifests/locks, Python `pyproject.toml` files,
   and any other repo-owned release version numbers should all match. The
-  current release version is `0.1.11`. Use `scripts/release/bump-version.sh`
+  current release version is `0.1.12`. Use `scripts/release/bump-version.sh`
   for version bumps as described in `COMMIT.md`.
 
 ## Environments

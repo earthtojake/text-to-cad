@@ -95,7 +95,7 @@ write_runtime_package_json() {
   "name": "cad-viewer-runtime",
   "private": true,
   "type": "module",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "scripts": {
     "serve": "node backend/server.mjs",
     "start": "node backend/server.mjs",
