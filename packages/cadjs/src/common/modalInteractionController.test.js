@@ -114,11 +114,23 @@ test("stationary (clamped) vertices are not grabbable", () => {
   assert.equal(controller.pickAtNDC(mobile.x, mobile.y), true);
 });
 
+test("flick velocity is off by default (pure displacement pluck)", () => {
+  const mesh = buildQuad();
+  const c = new ModalInteractionController({
+    THREE, camera: topDownCamera(), mesh, frequencies: [10, 40], slowdown: 50,
+  });
+  c.pickAtNDC(0, 0);
+  c._velocity = [0.2, 0, 0];
+  c.release();
+  assert.ok(c.superposition.v0.every((v) => v === 0), "default release has zero modal velocity");
+});
+
 test("flick velocity propagates to modal velocity and scales with slowdown", () => {
   function setup(slowdown) {
     const mesh = buildQuad();
     const c = new ModalInteractionController({
       THREE, camera: topDownCamera(), mesh, frequencies: [10, 40], damping: 0, slowdown,
+      useVelocity: true,
     });
     c.pickAtNDC(0, 0);          // grab a (mobile) vertex
     c._velocity = [0.2, 0, 0];  // in-plane x flick -> engages the x mode

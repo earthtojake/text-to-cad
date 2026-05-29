@@ -69,6 +69,7 @@ export class ModalInteractionController {
     domElement = null,
     onChange = null,
     minMobilityFraction = 0.02,
+    useVelocity = false,
   }) {
     if (!THREE) throw new Error("ModalInteractionController requires THREE.");
     this.THREE = THREE;
@@ -83,6 +84,9 @@ export class ModalInteractionController {
     // asking the solver to make them follow the cursor blows up the weights.
     this.minMobilityFraction = minMobilityFraction;
     this.maxMobility = mesh ? maxMeshMobility(mesh) : 0;
+    // Off by default: carrying the flick velocity is fun but can fling the part
+    // hard and surprise users. Opt in via the UI / setUseVelocity().
+    this.useVelocity = useVelocity;
 
     this.raycaster = new THREE.Raycaster();
     this.state = "idle"; // idle | dragging | ringing
@@ -185,7 +189,8 @@ export class ModalInteractionController {
     if (this.state !== "dragging") return;
     const q0 = Array.from(this._influences());
     let velocities = q0.map(() => 0);
-    if (this.grab && (this._velocity[0] || this._velocity[1] || this._velocity[2])) {
+    if (this.useVelocity && this.grab &&
+        (this._velocity[0] || this._velocity[1] || this._velocity[2])) {
       // The drag velocity is in real seconds, but the physics clock runs in
       // slowed time (tau = t_real / slowdown), so the physical initial velocity
       // is d(disp)/d(tau) = v_real * slowdown. Without this factor the flick
@@ -231,6 +236,7 @@ export class ModalInteractionController {
 
   setDamping(d) { this.damping = Math.max(0, Number(d) || 0); }
   setSlowdown(s) { this.slowdown = Math.max(1e-6, Number(s) || 1); }
+  setUseVelocity(on) { this.useVelocity = Boolean(on); }
 
   isActive() { return this.state !== "idle"; }
 }
