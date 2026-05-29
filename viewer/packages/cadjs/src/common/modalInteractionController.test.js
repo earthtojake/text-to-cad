@@ -5,6 +5,8 @@ import * as THREE from "three";
 import {
   vertexModeDeltas,
   nearestFaceVertex,
+  vertexMobility,
+  maxMeshMobility,
   ModalInteractionController,
 } from "./modalInteractionController.js";
 
@@ -79,6 +81,69 @@ test("pick + drag deforms toward the cursor; release rings and decays", () => {
   assert.ok(controller.superposition === null || controller.superposition.energyFraction() < 1,
     "vibration should decay");
   assert.ok(before > 0);
+});
+
+test("stationary (clamped) vertices are not grabbable", () => {
+  // Quad where vertex 0 is fixed (zero modal motion) and the rest move.
+  const geometry = new THREE.BufferGeometry();
+  const base = new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]);
+  geometry.setAttribute("position", new THREE.BufferAttribute(base, 3));
+  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  geometry.computeVertexNormals();
+  // Mode pushes +z everywhere EXCEPT the clamped vertex 0.
+  const dz = new Float32Array([0, 0, 0, 0, 0, 0.5, 0, 0, 0.5, 0, 0, 0.5]);
+  geometry.morphAttributes.position = [new THREE.BufferAttribute(dz, 3)];
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+  mesh.morphTargetInfluences = [0];
+  mesh.updateMatrixWorld(true);
+
+  assert.equal(vertexMobility(vertexModeDeltas(mesh, 0)), 0);   // clamped
+  assert.ok(maxMeshMobility(mesh) > 0);
+
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 0, 5); camera.lookAt(0, 0, 0); camera.updateMatrixWorld(true);
+  const controller = new ModalInteractionController({ THREE, camera, mesh, frequencies: [10] });
+
+  // Aim just inside the clamped corner (nearest face vertex = clamped #0).
+  const corner = new THREE.Vector3(-0.8, -0.8, 0).project(camera);
+  assert.equal(controller.pickAtNDC(corner.x, corner.y), false); // refused
+  assert.equal(controller.state, "idle");
+
+  // Just inside a mobile corner (nearest face vertex = #2) is grabbable.
+  const mobile = new THREE.Vector3(0.8, 0.8, 0).project(camera);
+  assert.equal(controller.pickAtNDC(mobile.x, mobile.y), true);
+});
+
+test("flick velocity is off by default (pure displacement pluck)", () => {
+  const mesh = buildQuad();
+  const c = new ModalInteractionController({
+    THREE, camera: topDownCamera(), mesh, frequencies: [10, 40], slowdown: 50,
+  });
+  c.pickAtNDC(0, 0);
+  c._velocity = [0.2, 0, 0];
+  c.release();
+  assert.ok(c.superposition.v0.every((v) => v === 0), "default release has zero modal velocity");
+});
+
+test("flick velocity propagates to modal velocity and scales with slowdown", () => {
+  function setup(slowdown) {
+    const mesh = buildQuad();
+    const c = new ModalInteractionController({
+      THREE, camera: topDownCamera(), mesh, frequencies: [10, 40], damping: 0, slowdown,
+      useVelocity: true,
+    });
+    c.pickAtNDC(0, 0);          // grab a (mobile) vertex
+    c._velocity = [0.2, 0, 0];  // in-plane x flick -> engages the x mode
+    c.release();
+    return c;
+  }
+  const slow = setup(50);
+  const fast = setup(100);
+  // Mode 1 (x) gets a nonzero initial velocity.
+  assert.ok(Math.abs(slow.superposition.v0[1]) > 0, "x-mode should get velocity");
+  // Doubling slowdown doubles the physical initial velocity.
+  const ratio = fast.superposition.v0[1] / slow.superposition.v0[1];
+  assert.ok(Math.abs(ratio - 2) < 1e-6, `expected 2x, got ${ratio}`);
 });
 
 test("reset clears influences and state", () => {

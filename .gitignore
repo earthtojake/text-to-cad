@@ -53,3 +53,7 @@ tmp/
 
 # Local printer credentials
 /bambu-printers.json
+
+# standalone modal demo page (deployed to Cloudflare Pages, not shipped in repo)
+/viewer/modal.html
+/viewer/src/client/modal/
