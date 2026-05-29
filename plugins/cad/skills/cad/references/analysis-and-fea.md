@@ -110,6 +110,18 @@ Key flags:
 
 Install the solver stack with `pip install ngsolve netgen-occt`.
 
+### Animated modal GLB (`--modal-glb`)
+
+`fea modal --modal-glb out.glb` writes a dedicated tessellated model of the FE
+surface carrying one **morph target per mode** and one baked glTF **animation
+clip per mode** (a sine-oscillated morph weight, named by frequency), with the
+mode frequencies, the material damping ratio, and the material name in the mesh
+`extras`. It is a standard glTF 2.0 file: it self-plays its mode shapes in any
+glTF viewer (three.js `AnimationMixer`, Blender, gltf-viewer) and can be handed
+to `$cad-viewer`. The morph basis also drives interactive "pluck" playback
+(drag a vertex; release to ring down at the damped natural frequencies) via the
+cadjs `modalInteraction` / `modalAnimation` runtime.
+
 ### Gotcha: face selection
 
 netgen's `faces.Nearest(point)` compares to face *centres*, and a cylindrical
