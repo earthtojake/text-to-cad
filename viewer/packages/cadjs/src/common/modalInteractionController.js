@@ -18,6 +18,27 @@ export function vertexModeDeltas(mesh, vertexIndex) {
   ]);
 }
 
+// Largest single-mode displacement a vertex sees across all modes -- its modal
+// "mobility". Clamped (near-)fixed boundary vertices have ~zero mobility.
+export function vertexMobility(deltas) {
+  let m = 0;
+  for (const d of deltas) m = Math.max(m, Math.hypot(d[0], d[1], d[2]));
+  return m;
+}
+
+export function maxMeshMobility(mesh) {
+  const morphs = mesh?.geometry?.morphAttributes?.position || [];
+  if (!morphs.length) return 0;
+  const count = mesh.geometry.attributes.position.count;
+  let maxM = 0;
+  for (let v = 0; v < count; v += 1) {
+    for (const attr of morphs) {
+      maxM = Math.max(maxM, Math.hypot(attr.getX(v), attr.getY(v), attr.getZ(v)));
+    }
+  }
+  return maxM;
+}
+
 // Closest of a hit face's three vertices to the hit point (world space).
 export function nearestFaceVertex(THREE, mesh, face, worldPoint) {
   const pos = mesh.geometry.attributes.position;
@@ -47,6 +68,7 @@ export class ModalInteractionController {
     slowdown = 200,
     domElement = null,
     onChange = null,
+    minMobilityFraction = 0.02,
   }) {
     if (!THREE) throw new Error("ModalInteractionController requires THREE.");
     this.THREE = THREE;
@@ -57,6 +79,10 @@ export class ModalInteractionController {
     this.slowdown = slowdown;
     this.domElement = domElement;
     this.onChange = onChange;
+    // Reject grabs on (near-)fixed vertices: they have ~zero modal motion, so
+    // asking the solver to make them follow the cursor blows up the weights.
+    this.minMobilityFraction = minMobilityFraction;
+    this.maxMobility = mesh ? maxMeshMobility(mesh) : 0;
 
     this.raycaster = new THREE.Raycaster();
     this.state = "idle"; // idle | dragging | ringing
@@ -90,6 +116,12 @@ export class ModalInteractionController {
     if (!hits.length || !hits[0].face) return false;
     const hit = hits[0];
     const index = nearestFaceVertex(THREE, this.mesh, hit.face, hit.point);
+    const deltas = vertexModeDeltas(this.mesh, index);
+    // Ignore grabs on clamped/stationary vertices (no modal authority).
+    if (this.maxMobility > 0 &&
+        vertexMobility(deltas) < this.minMobilityFraction * this.maxMobility) {
+      return false;
+    }
     const localStart = new THREE.Vector3().fromBufferAttribute(
       this.mesh.geometry.attributes.position, index,
     );
@@ -97,7 +129,7 @@ export class ModalInteractionController {
     this.mesh.localToWorld(worldStart);
     this.grab = {
       index,
-      deltas: vertexModeDeltas(this.mesh, index),
+      deltas,
       worldStart,
       localStart,
       planeNormal: this.camera.getWorldDirection(new THREE.Vector3()).clone(),
