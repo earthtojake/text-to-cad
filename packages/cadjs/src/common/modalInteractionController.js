@@ -161,7 +161,8 @@ export class ModalInteractionController {
     };
     this.state = "dragging";
     this.superposition = null;
-    this._history = [];
+    // Seed with the rest position so even a one-event flick has two samples.
+    this._history = [{ target: [0, 0, 0], t: this._now() }];
     return true;
   }
 
