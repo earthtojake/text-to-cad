@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from "node:fs";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-import { isModalGltfJson, parseModalGltf } from "./modalScene.js";
+import { isModalGltfJson, parseModalGltf, isModalGlbBuffer } from "./modalScene.js";
 
 test("isModalGltfJson detects modal mesh extras", () => {
   assert.equal(isModalGltfJson({ meshes: [{ extras: { modes: [{ index: 1 }] } }] }), true);
@@ -19,6 +19,13 @@ const CANDIDATES = [
   "/tmp/modal-workbench/spring_pla.glb",
 ];
 const GLB = CANDIDATES.find((p) => existsSync(p));
+
+test("isModalGlbBuffer detects a modal GLB from its bytes", { skip: !GLB }, () => {
+  const buffer = readFileSync(GLB);
+  const ab = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  assert.equal(isModalGlbBuffer(ab), true);
+  assert.equal(isModalGlbBuffer(new ArrayBuffer(8)), false);
+});
 
 test("parseModalGltf extracts morph mesh + modes from a real modal GLB", { skip: !GLB }, async () => {
   const buffer = readFileSync(GLB);

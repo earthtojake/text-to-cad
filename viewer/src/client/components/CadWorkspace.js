@@ -88,6 +88,7 @@ import {
 } from "@/workbench/referenceSelection";
 import {
   entryAssetHash,
+  entryAssetUrl,
   entryHasDisplayEdges,
   entryHasDxf,
   entryHasGcode,
@@ -707,6 +708,11 @@ export default function CadWorkspace({
   const isAssemblyView = selectedEntry?.kind === "assembly";
   const isUrdfView = isRobotRenderFormat(selectedEntrySourceFormat);
   const isGcodeView = selectedEntrySourceFormat === RENDER_FORMAT.GCODE;
+  // Standalone GLBs may be animated modal models; CadRenderPane sniffs the bytes
+  // and, if so, opens the interactive ModalViewer instead of the static path.
+  const selectedGlbUrl = selectedEntrySourceFormat === RENDER_FORMAT.GLB
+    ? entryAssetUrl(selectedEntry, "glb")
+    : "";
   const selectedStepModuleUrl = isStepView ? entryStepModuleUrl(selectedEntry) : "";
   const selectedStepModuleCadPath = selectedStepModuleUrl ? cadPathForEntry(selectedEntry) : "";
   const selectedStepModuleDefinition = stepModuleLoadState.url === selectedStepModuleUrl
@@ -5780,6 +5786,7 @@ export default function CadWorkspace({
           renderPartsIndividually={isUrdfView || Boolean(selectedStepParameterRuntime)}
           stepParameters={selectedStepParameterRuntime}
           selectedMeshData={selectedMeshData}
+          selectedGlbUrl={selectedGlbUrl}
           selectedDxfData={selectedDxfData}
           selectedDxfMeshData={selectedDxfMeshData}
           selectedKey={selectedKey}

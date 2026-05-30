@@ -17,6 +17,21 @@ export function isModalGltfJson(json) {
   );
 }
 
+// Cheap modal check straight off a .glb ArrayBuffer (reads only the JSON
+// chunk) so the viewer can branch to the modal path without a full parse.
+export function isModalGlbBuffer(buffer) {
+  try {
+    const dv = new DataView(buffer);
+    if (dv.getUint32(0, true) !== 0x46546c67) return false; // "glTF"
+    const jsonLen = dv.getUint32(12, true);
+    if (dv.getUint32(16, true) !== 0x4e4f534a) return false; // "JSON"
+    const json = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 20, jsonLen)));
+    return isModalGltfJson(json);
+  } catch {
+    return false;
+  }
+}
+
 function findMorphMesh(root) {
   let found = null;
   root?.traverse?.((obj) => {

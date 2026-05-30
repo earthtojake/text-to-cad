@@ -1,6 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import CadViewer from "../CadViewer";
 import DxfViewer from "../DxfViewer";
+import ModalViewer from "../ModalViewer";
+import { isModalGlbBuffer } from "cadjs/common/modalScene.js";
 import { CircleAlert, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -91,8 +93,22 @@ export default function CadRenderPane({
   copyButtonLabel,
   handleCopySelection,
   handleScreenshotCopy,
+  selectedGlbUrl = "",
   urdfPosePicker = null
 }) {
+  // A modal GLB (morph target + baked clip per mode) opens in the interactive
+  // ModalViewer instead of the static CAD pipeline. Detect it from the bytes.
+  const [modalUrl, setModalUrl] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    setModalUrl("");
+    if (!selectedGlbUrl) return undefined;
+    fetch(selectedGlbUrl)
+      .then((r) => r.arrayBuffer())
+      .then((buf) => { if (!cancelled && isModalGlbBuffer(buf)) setModalUrl(selectedGlbUrl); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [selectedGlbUrl]);
   const resolvedStepParameters = stepParameters;
   const viewerAlertIconLabel = "Viewer error. See the Issues section for details.";
   const dxfMode = renderFormat === RENDER_FORMAT.DXF;
@@ -177,7 +193,14 @@ export default function CadRenderPane({
 
   return (
     <div className="absolute inset-0">
-      {dxfMode && !dxfMeshPreviewReady ? (
+      {modalUrl ? (
+        <ModalViewer
+          ref={viewerRef}
+          assetUrl={modalUrl}
+          modelKey={activeModelKey}
+          onViewerAlertChange={handleViewerAlertChange}
+        />
+      ) : dxfMode && !dxfMeshPreviewReady ? (
         <DxfViewer
           ref={viewerRef}
           dxfData={selectedDxfData}
