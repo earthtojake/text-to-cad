@@ -47,6 +47,20 @@ def _pad(buf: bytearray, alignment: int = 4, fill: int = 0) -> None:
         buf.append(fill)
 
 
+def _vertex_normals(vertices: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    """Area-weighted vertex normals from a triangle mesh."""
+    v = np.asarray(vertices, dtype=np.float64)
+    tris = np.asarray(triangles, dtype=np.int64)
+    normals = np.zeros_like(v)
+    a, b, c = v[tris[:, 0]], v[tris[:, 1]], v[tris[:, 2]]
+    face = np.cross(b - a, c - a)  # length ~ 2*area, so this is area-weighted
+    for k in range(3):
+        np.add.at(normals, tris[:, k], face)
+    lengths = np.linalg.norm(normals, axis=1)
+    lengths[lengths == 0] = 1.0
+    return normals / lengths[:, None]
+
+
 def build_modal_glb(
     path: str | Path,
     vertices: np.ndarray,
@@ -78,6 +92,7 @@ def build_modal_glb(
         raise ValueError("need at least one mode")
 
     base = _y_up(vertices).astype(np.float32)
+    normals = _vertex_normals(base, triangles).astype(np.float32)
 
     bin_blob = bytearray()
     buffer_views: list[dict] = []
@@ -112,6 +127,10 @@ def build_modal_glb(
         pos_view, _FLOAT, int(base.shape[0]), "VEC3",
         mn=base.min(axis=0).tolist(), mx=base.max(axis=0).tolist(),
     )
+
+    # Base NORMAL (without it the mesh renders unlit/black under shading).
+    nrm_view = add_view(normals.reshape(-1).astype("<f4").tobytes(), target=34962)
+    nrm_acc = add_accessor(nrm_view, _FLOAT, int(normals.shape[0]), "VEC3")
 
     # Morph targets: one POSITION-delta accessor per mode
     target_accessors: list[int] = []
@@ -174,8 +193,9 @@ def build_modal_glb(
         "meshes": [{
             "name": "modal",
             "primitives": [{
-                "attributes": {"POSITION": pos_acc},
+                "attributes": {"POSITION": pos_acc, "NORMAL": nrm_acc},
                 "indices": idx_acc,
+                "material": 0,
                 "targets": [{"POSITION": a} for a in target_accessors],
             }],
             "weights": [0.0] * n_modes,
@@ -185,6 +205,15 @@ def build_modal_glb(
                 "dampingRatio": float(damping_ratio),
                 "material": material,
             },
+        }],
+        "materials": [{
+            "name": "modal",
+            "pbrMetallicRoughness": {
+                "baseColorFactor": [0.62, 0.67, 0.74, 1.0],
+                "metallicFactor": 0.0,
+                "roughnessFactor": 0.55,
+            },
+            "doubleSided": True,
         }],
         "animations": animations,
         "buffers": [{"byteLength": len(bin_blob)}],
