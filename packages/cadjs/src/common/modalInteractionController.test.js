@@ -120,7 +120,7 @@ test("flick velocity is off by default (pure displacement pluck)", () => {
     THREE, camera: topDownCamera(), mesh, frequencies: [10, 40], slowdown: 50,
   });
   c.pickAtNDC(0, 0);
-  c._velocity = [0.2, 0, 0];
+  c._history = [{ target: [0, 0, 0], t: 0 }, { target: [0.2, 0, 0], t: 0.1 }];
   c.release();
   assert.ok(c.superposition.v0.every((v) => v === 0), "default release has zero modal velocity");
 });
@@ -133,7 +133,8 @@ test("flick velocity propagates to modal velocity and scales with slowdown", () 
       useVelocity: true,
     });
     c.pickAtNDC(0, 0);          // grab a (mobile) vertex
-    c._velocity = [0.2, 0, 0];  // in-plane x flick -> engages the x mode
+    // Trailing-window flick: +0.2 in x over 0.1 s -> 2 units/s in-plane.
+    c._history = [{ target: [0, 0, 0], t: 0 }, { target: [0.2, 0, 0], t: 0.1 }];
     c.release();
     return c;
   }

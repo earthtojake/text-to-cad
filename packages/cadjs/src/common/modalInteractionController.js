@@ -93,8 +93,29 @@ export class ModalInteractionController {
     this.grab = null;     // { index, deltas, worldStart, localStart }
     this.superposition = null;
     this._boundDown = null;
-    this._lastDrag = null;      // { target:[x,y,z], t:seconds }
-    this._velocity = [0, 0, 0]; // smoothed vertex velocity (local units / s)
+    this._history = [];          // recent { target:[x,y,z], t } drag samples
+    this.flickWindowSec = 0.08;  // estimate flick velocity over this trailing window
+  }
+
+  // Average vertex velocity over the trailing flick window. Robust to touch
+  // flicks that decelerate just before lift and to coalesced-event timing,
+  // which a last-pair instantaneous estimate gets wrong.
+  _flickVelocity() {
+    const h = this._history;
+    if (h.length < 2) return [0, 0, 0];
+    const latest = h[h.length - 1];
+    let ref = h[0];
+    for (let i = h.length - 1; i >= 0; i -= 1) {
+      ref = h[i];
+      if (latest.t - h[i].t >= this.flickWindowSec) break;
+    }
+    const dt = latest.t - ref.t;
+    if (dt <= 1e-4) return [0, 0, 0];
+    return [
+      (latest.target[0] - ref.target[0]) / dt,
+      (latest.target[1] - ref.target[1]) / dt,
+      (latest.target[2] - ref.target[2]) / dt,
+    ];
   }
 
   _now() {
@@ -140,8 +161,7 @@ export class ModalInteractionController {
     };
     this.state = "dragging";
     this.superposition = null;
-    this._lastDrag = null;
-    this._velocity = [0, 0, 0];
+    this._history = [];
     return true;
   }
 
@@ -165,15 +185,10 @@ export class ModalInteractionController {
       localNow.y - this.grab.localStart.y,
       localNow.z - this.grab.localStart.z,
     ];
-    if (this._lastDrag) {
-      const dt = Math.max(1e-3, now - this._lastDrag.t);
-      const a = 0.5; // exponential smoothing of the noisy per-event velocity
-      for (let k = 0; k < 3; k += 1) {
-        const inst = (target[k] - this._lastDrag.target[k]) / dt;
-        this._velocity[k] = a * inst + (1 - a) * this._velocity[k];
-      }
-    }
-    this._lastDrag = { target, t: now };
+    this._history.push({ target, t: now });
+    // Keep a little more than the flick window so the trailing estimate is stable.
+    const cutoff = now - Math.max(0.25, this.flickWindowSec * 2);
+    while (this._history.length > 2 && this._history[0].t < cutoff) this._history.shift();
     const q = solveDragWeights({
       deltas: this.grab.deltas,
       target,
@@ -189,18 +204,20 @@ export class ModalInteractionController {
     if (this.state !== "dragging") return;
     const q0 = Array.from(this._influences());
     let velocities = q0.map(() => 0);
-    if (this.useVelocity && this.grab &&
-        (this._velocity[0] || this._velocity[1] || this._velocity[2])) {
-      // The drag velocity is in real seconds, but the physics clock runs in
-      // slowed time (tau = t_real / slowdown), so the physical initial velocity
-      // is d(disp)/d(tau) = v_real * slowdown. Without this factor the flick
-      // energy is `slowdown`x too small to see.
-      const physVelocity = this._velocity.map((c) => c * this.slowdown);
-      velocities = solveDragWeights({
-        deltas: this.grab.deltas,
-        target: physVelocity,
-        frequencies: this.frequencies,
-      });
+    if (this.useVelocity && this.grab) {
+      const v = this._flickVelocity();
+      if (v[0] || v[1] || v[2]) {
+        // The drag velocity is in real seconds, but the physics clock runs in
+        // slowed time (tau = t_real / slowdown), so the physical initial
+        // velocity is d(disp)/d(tau) = v_real * slowdown. Without this factor
+        // the flick energy is `slowdown`x too small to see.
+        const physVelocity = v.map((c) => c * this.slowdown);
+        velocities = solveDragWeights({
+          deltas: this.grab.deltas,
+          target: physVelocity,
+          frequencies: this.frequencies,
+        });
+      }
     }
     this.superposition = new ModalSuperposition({
       frequencies: this.frequencies,
