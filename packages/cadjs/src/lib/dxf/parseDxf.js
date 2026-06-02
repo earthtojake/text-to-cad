@@ -37,6 +37,10 @@ function pointOnCircle(center, radius, angleDeg) {
   ];
 }
 
+function angleDegForPoint(center, point) {
+  return normalizeAngle((Math.atan2(point[1] - center[1], point[0] - center[0]) * 180) / Math.PI);
+}
+
 function arcExtremaPoints(arc) {
   const points = [
     pointOnCircle(arc.center, arc.radius, arc.startAngleDeg),
@@ -200,6 +204,61 @@ function parseCircleEntity(records) {
   };
 }
 
+function bulgeArcFromSegment(layer, start, end, bulge) {
+  if (Math.abs(bulge) <= ANGLE_EPSILON) {
+    return null;
+  }
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const chordLength = Math.hypot(dx, dy);
+  if (chordLength <= ANGLE_EPSILON) {
+    return null;
+  }
+  const sweepRadians = Math.abs(4 * Math.atan(bulge));
+  if (sweepRadians <= ANGLE_EPSILON) {
+    return null;
+  }
+  const radius = (chordLength * (1 + bulge * bulge)) / (4 * Math.abs(bulge));
+  const midpoint = [
+    (start[0] + end[0]) / 2,
+    (start[1] + end[1]) / 2
+  ];
+  const leftNormal = [
+    -dy / chordLength,
+    dx / chordLength
+  ];
+  const centerOffset = (chordLength * (1 - bulge * bulge)) / (4 * bulge);
+  const center = [
+    midpoint[0] + leftNormal[0] * centerOffset,
+    midpoint[1] + leftNormal[1] * centerOffset
+  ];
+  const startPoint = bulge > 0 ? start : end;
+  const startAngleDeg = angleDegForPoint(center, startPoint);
+  const sweepAngleDeg = (sweepRadians * 180) / Math.PI;
+  return {
+    layer,
+    center,
+    radius,
+    startAngleDeg,
+    sweepAngleDeg,
+    endAngleDeg: startAngleDeg + sweepAngleDeg
+  };
+}
+
+function appendLwpolylineSegment(result, layer, startVertex, endVertex) {
+  const start = startVertex.point;
+  const end = endVertex.point;
+  if (start[0] === end[0] && start[1] === end[1]) {
+    return;
+  }
+  const arc = bulgeArcFromSegment(layer, start, end, startVertex.bulge);
+  if (arc) {
+    result.arcs.push(arc);
+    return;
+  }
+  result.lines.push({ layer, start, end });
+}
+
 function parseLwpolylineEntity(records) {
   const layer = normalizeLayerName(records.find((record) => record.code === 8)?.value);
   const flags = Math.trunc(toFiniteNumber(records.find((record) => record.code === 70)?.value, 0));
@@ -207,46 +266,37 @@ function parseLwpolylineEntity(records) {
   let currentVertex = null;
   for (const record of records) {
     if (record.code === 10) {
-      if (currentVertex && Number.isFinite(currentVertex[0]) && Number.isFinite(currentVertex[1])) {
+      if (currentVertex && Number.isFinite(currentVertex.point[0]) && Number.isFinite(currentVertex.point[1])) {
         vertices.push(currentVertex);
       }
-      currentVertex = [toFiniteNumber(record.value), Number.NaN];
+      currentVertex = { point: [toFiniteNumber(record.value), Number.NaN], bulge: 0 };
       continue;
     }
     if (record.code === 20 && currentVertex) {
-      currentVertex[1] = toFiniteNumber(record.value);
+      currentVertex.point[1] = toFiniteNumber(record.value);
       continue;
     }
-    if (record.code === 42) {
-      const bulge = toFiniteNumber(record.value);
-      if (Math.abs(bulge) > ANGLE_EPSILON) {
-        throw new Error("Unsupported DXF LWPOLYLINE bulge; only straight segments are supported");
-      }
+    if (record.code === 42 && currentVertex) {
+      currentVertex.bulge = toFiniteNumber(record.value);
     }
   }
-  if (currentVertex && Number.isFinite(currentVertex[0]) && Number.isFinite(currentVertex[1])) {
+  if (currentVertex && Number.isFinite(currentVertex.point[0]) && Number.isFinite(currentVertex.point[1])) {
     vertices.push(currentVertex);
   }
   if (vertices.length < 2) {
     throw new Error("Invalid DXF LWPOLYLINE; expected at least 2 vertices");
   }
-  const lines = [];
+  const result = {
+    lines: [],
+    arcs: []
+  };
   for (let index = 0; index < vertices.length - 1; index += 1) {
-    const start = vertices[index];
-    const end = vertices[index + 1];
-    if (start[0] === end[0] && start[1] === end[1]) {
-      continue;
-    }
-    lines.push({ layer, start, end });
+    appendLwpolylineSegment(result, layer, vertices[index], vertices[index + 1]);
   }
   if ((flags & 1) !== 0) {
-    const start = vertices[vertices.length - 1];
-    const end = vertices[0];
-    if (!(start[0] === end[0] && start[1] === end[1])) {
-      lines.push({ layer, start, end });
-    }
+    appendLwpolylineSegment(result, layer, vertices[vertices.length - 1], vertices[0]);
   }
-  return lines;
+  return result;
 }
 
 function parseEntities(records) {
@@ -285,7 +335,9 @@ function parseEntities(records) {
       circles.push(parseCircleEntity(entityRecords));
       continue;
     }
-    lines.push(...parseLwpolylineEntity(entityRecords));
+    const polyline = parseLwpolylineEntity(entityRecords);
+    lines.push(...polyline.lines);
+    arcs.push(...polyline.arcs);
   }
   if (!lines.length && !arcs.length && !circles.length) {
     throw new Error("No supported DXF entities found");

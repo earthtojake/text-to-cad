@@ -7,6 +7,10 @@ function dxfText(lines) {
   return `${lines.join("\n")}\n`;
 }
 
+function assertNear(actual, expected, epsilon = 1e-6) {
+  assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be within ${epsilon} of ${expected}`);
+}
+
 test("parseDxf normalizes closed lwpolyline, circles, and bends", () => {
   const payload = parseDxf(dxfText([
     "0", "SECTION",
@@ -52,23 +56,58 @@ test("parseDxf normalizes closed lwpolyline, circles, and bends", () => {
   assert.deepEqual(payload.layers.map((layer) => layer.name), ["BEND", "CUT"]);
 });
 
-test("parseDxf rejects lwpolyline bulges", () => {
-  assert.throws(
-    () => parseDxf(dxfText([
-      "0", "SECTION",
-      "2", "ENTITIES",
-      "0", "LWPOLYLINE",
-      "8", "CUT",
-      "90", "2",
-      "70", "0",
-      "10", "0",
-      "20", "0",
-      "42", "0.5",
-      "10", "10",
-      "20", "0",
-      "0", "ENDSEC",
-      "0", "EOF"
-    ])),
-    /bulge/
-  );
+test("parseDxf converts lwpolyline bulges into arcs", () => {
+  const payload = parseDxf(dxfText([
+    "0", "SECTION",
+    "2", "ENTITIES",
+    "0", "LWPOLYLINE",
+    "8", "CUT",
+    "90", "2",
+    "70", "0",
+    "10", "1",
+    "20", "0",
+    "42", String(Math.tan(Math.PI / 8)),
+    "10", "0",
+    "20", "1",
+    "0", "ENDSEC",
+    "0", "EOF"
+  ]));
+
+  assert.equal(payload.geometry.lines.length, 0);
+  assert.equal(payload.geometry.arcs.length, 1);
+  assert.equal(payload.counts.paths, 1);
+  assert.match(payload.paths[0].d, /\bA\b/);
+  const arc = payload.geometry.arcs[0];
+  assertNear(arc.center[0], 0);
+  assertNear(arc.center[1], 0);
+  assertNear(arc.radius, 1);
+  assertNear(arc.startAngleDeg, 0);
+  assertNear(arc.sweepAngleDeg, 90);
+});
+
+test("parseDxf supports clockwise lwpolyline bulges", () => {
+  const payload = parseDxf(dxfText([
+    "0", "SECTION",
+    "2", "ENTITIES",
+    "0", "LWPOLYLINE",
+    "8", "CUT",
+    "90", "2",
+    "70", "0",
+    "10", "1",
+    "20", "0",
+    "42", String(-Math.tan(Math.PI / 8)),
+    "10", "0",
+    "20", "-1",
+    "0", "ENDSEC",
+    "0", "EOF"
+  ]));
+
+  assert.equal(payload.geometry.lines.length, 0);
+  assert.equal(payload.geometry.arcs.length, 1);
+  const arc = payload.geometry.arcs[0];
+  assertNear(arc.center[0], 0);
+  assertNear(arc.center[1], 0);
+  assertNear(arc.radius, 1);
+  assertNear(arc.startAngleDeg, 270);
+  assertNear(arc.sweepAngleDeg, 90);
 });
