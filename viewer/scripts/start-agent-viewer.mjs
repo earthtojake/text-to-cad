@@ -17,6 +17,7 @@ import { parseServerLifetimeMs } from "../src/server/serverLifetime.mjs";
 const scriptPath = fileURLToPath(import.meta.url);
 const defaultPackageRoot = path.resolve(path.dirname(scriptPath), "..");
 const startModeFlag = "--viewer-start-mode";
+const defaultRootDirFlag = "--dir";
 const startModes = new Set(["auto", "dev", "serve"]);
 const defaultAgentHost = "127.0.0.1";
 const defaultPortScanLimit = 64;
@@ -108,6 +109,35 @@ export function stripShutdownAfterArgs(argv = []) {
       continue;
     }
     if (arg === "--shutdown-after") {
+      index += 1;
+      continue;
+    }
+    stripped.push(arg);
+  }
+  return stripped;
+}
+
+export function forwardedDefaultRootDir(argv = []) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg.startsWith(`${defaultRootDirFlag}=`)) {
+      return arg.slice(defaultRootDirFlag.length + 1).trim();
+    }
+    if (arg === defaultRootDirFlag) {
+      return requiredValue(argv, index, arg).trim();
+    }
+  }
+  return "";
+}
+
+export function stripDefaultRootDirArgs(argv = []) {
+  const stripped = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg.startsWith(`${defaultRootDirFlag}=`)) {
+      continue;
+    }
+    if (arg === defaultRootDirFlag) {
       index += 1;
       continue;
     }
@@ -256,6 +286,15 @@ function envWithGit(env, git) {
   };
 }
 
+function envWithGitAndDefaultRootDir(env, git, defaultRootDir = "") {
+  const nextEnv = envWithGit(env, git);
+  const normalizedRootDir = String(defaultRootDir || "").trim();
+  if (normalizedRootDir) {
+    nextEnv.VIEWER_DEFAULT_ROOT_DIR = normalizedRootDir;
+  }
+  return nextEnv;
+}
+
 export function buildAgentStartCommand({
   mode,
   packageRoot = defaultPackageRoot,
@@ -267,7 +306,7 @@ export function buildAgentStartCommand({
 } = {}) {
   const resolvedPackageRoot = path.resolve(packageRoot);
   if (mode === "dev") {
-    const nextEnv = envWithGit(env, git);
+    const nextEnv = envWithGitAndDefaultRootDir(env, git, forwardedDefaultRootDir(forwardedArgs));
     if (shutdownAfterMs !== null) {
       nextEnv.VIEWER_SERVER_LIFETIME_MS = String(shutdownAfterMs);
     }
@@ -276,7 +315,7 @@ export function buildAgentStartCommand({
       args: [
         path.join(resolvedPackageRoot, "node_modules", "vite", "bin", "vite.js"),
         "dev",
-        ...stripShutdownAfterArgs(forwardedArgs),
+        ...stripShutdownAfterArgs(stripDefaultRootDirArgs(forwardedArgs)),
       ],
       cwd: resolvedPackageRoot,
       env: nextEnv,
@@ -330,13 +369,51 @@ function serverInfoGitAllowsReuse(serverInfo, git) {
   return !currentGit || !serverGit || currentGit === serverGit;
 }
 
-export function isReusableAgentViewerServer(serverInfo, git) {
+function normalizeComparableDir(value) {
+  return String(value || "").trim().replace(/\\/g, "/").replace(/(?!^)\/+$/g, "");
+}
+
+function activeDirectoryMatchesDefaultRoot(option, defaultRootDir, workspaceRoot = "") {
+  const requestedDir = String(defaultRootDir || "").trim();
+  if (!requestedDir) {
+    return true;
+  }
+  const requestedAbsolute = path.isAbsolute(requestedDir)
+    ? path.resolve(requestedDir)
+    : workspaceRoot
+      ? path.resolve(workspaceRoot, requestedDir)
+      : "";
+  const optionRootPath = String(option?.rootPath || "").trim();
+  if (requestedAbsolute && optionRootPath && path.resolve(optionRootPath) === requestedAbsolute) {
+    return true;
+  }
+  const optionDir = String(option?.dir || "").trim();
+  if (requestedAbsolute && path.isAbsolute(optionDir) && path.resolve(optionDir) === requestedAbsolute) {
+    return true;
+  }
+  if (!requestedAbsolute && normalizeComparableDir(optionDir) === normalizeComparableDir(requestedDir)) {
+    return true;
+  }
+  return false;
+}
+
+function serverInfoDefaultRootAllowsReuse(serverInfo, defaultRootDir) {
+  const requestedDir = String(defaultRootDir || "").trim();
+  if (!requestedDir) {
+    return true;
+  }
+  const activeDirectories = Array.isArray(serverInfo?.activeDirectories) ? serverInfo.activeDirectories : [];
+  return activeDirectoryMatchesDefaultRoot(activeDirectories[0], requestedDir, serverInfo?.workspaceRoot);
+}
+
+export function isReusableAgentViewerServer(serverInfo, git, defaultRootDir = "") {
   return Boolean(
     serverInfo &&
     serverInfo.app === VIEWER_SERVER_APP_ID &&
     Number(serverInfo.serverApiVersion || 0) >= VIEWER_SERVER_API_VERSION &&
     serverInfo.dynamicRoot === true &&
-    serverInfoGitAllowsReuse(serverInfo, git)
+    serverInfoGitAllowsReuse(serverInfo, git) &&
+    serverInfoDefaultRootAllowsReuse(serverInfo, defaultRootDir)
   );
 }
 
@@ -411,8 +488,9 @@ export async function resolveAgentViewerPort({
   portScanLimit = defaultPortScanLimit,
 } = {}) {
   const target = forwardedServerTarget(forwardedArgs);
+  const defaultRootDir = forwardedDefaultRootDir(forwardedArgs);
   const reusableRegistryServers = registryServers
-    .filter((serverInfo) => isReusableAgentViewerServer(serverInfo, git))
+    .filter((serverInfo) => isReusableAgentViewerServer(serverInfo, git, defaultRootDir))
     .sort((left, right) => Number(left.port) - Number(right.port));
   for (const serverInfo of reusableRegistryServers) {
     const host = registryHost(serverInfo, target.host);
@@ -420,7 +498,7 @@ export async function resolveAgentViewerPort({
     if (probe.status === "blocked") {
       throw new Error(`CAD Viewer port probe was blocked for ${probe.baseUrl}; rerun agent:start with local network permission.`);
     }
-    if (probe.status === "viewer" && isReusableAgentViewerServer(probe.serverInfo, git)) {
+    if (probe.status === "viewer" && isReusableAgentViewerServer(probe.serverInfo, git, defaultRootDir)) {
       return {
         action: "reuse",
         host,
@@ -440,7 +518,7 @@ export async function resolveAgentViewerPort({
     if (probe.status === "blocked") {
       throw new Error(`CAD Viewer port probe was blocked for ${probe.baseUrl}; rerun agent:start with local network permission.`);
     }
-    if (probe.status === "viewer" && isReusableAgentViewerServer(probe.serverInfo, git)) {
+    if (probe.status === "viewer" && isReusableAgentViewerServer(probe.serverInfo, git, defaultRootDir)) {
       return {
         action: "reuse",
         host: target.host,

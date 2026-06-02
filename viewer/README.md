@@ -40,21 +40,23 @@ npm run dev -- --host 127.0.0.1
 
 Open the URL printed by Vite and add paths, for example
 `?dir=/path/to/root&file=assemblies/robot-arm/robot-arm.step`.
-Local tools should not assume a fixed port. Use `npm run agent:start` for
-agent-driven review: it starts at port `4178`, reuses a compatible existing
-Viewer, skips viewers with a different launcher-provided `git` value, and
-starts on the first free candidate port. Use Vite's standard `--port` argument
-only when a specific dev port is needed. Local dev and production servers stay
-running unless `VIEWER_SERVER_LIFETIME_MS` is set or production `serve` is
-started with `--shutdown-after <duration>`.
+Local tools should not assume a fixed port. Use
+`npm run agent:start -- --dir /path/to/root` for agent-driven review. It starts
+at port `4178`, reuses a compatible existing Viewer, skips viewers with a
+different launcher-provided `git` value or a different requested default
+`--dir`, and starts on the first free candidate port. Use Vite's standard
+`--port` argument only when a specific dev port is needed. Local dev and
+production servers stay running unless `VIEWER_SERVER_LIFETIME_MS` is set or
+production `serve` is started with `--shutdown-after <duration>`.
 
 The local filesystem backend accepts absolute or startup-directory-relative
 `?dir=` values directly in the Viewer URL. Once seen, the active directory is
 stored in tab-local `sessionStorage`, so subsequent navigation can omit `?dir=`
-and continue using the same workspace. The directory where the Viewer was
-started is always the first active workspace. If multiple workspaces have been
-scanned and no `?dir=` or stored workspace is active, the Viewer shows a
-workspace picker. `?file=` is always relative to the active workspace.
+and continue using the same workspace. The `--dir` startup path is the first
+active workspace; when omitted, the startup directory is used. If multiple
+workspaces have been scanned and no `?dir=` or stored workspace is active, the
+Viewer shows a workspace picker. `?file=` is always relative to the active
+workspace.
 
 Install the local Python artifact package when iterating on local STEP
 regeneration:
@@ -116,6 +118,9 @@ Important environment variables:
 
 - `VIEWER_ASSET_BACKEND`: `local-fs` for local files or `vercel-blob` for hosted
   Blob assets.
+- `VIEWER_DEFAULT_ROOT_DIR`: default local workspace root used by Vite dev mode.
+  `npm run agent:start -- --dir <path>` sets this automatically when it launches
+  Vite.
 - `VIEWER_DEFAULT_FILE`: active-directory-relative file opened when `?file=`
   is absent and a `?dir=` or stored active directory is available.
 - `VIEWER_SERVER_LIFETIME_MS`: optional server lifetime in milliseconds for
@@ -138,7 +143,8 @@ Important environment variables:
 
 `VIEWER_LOCAL_ROOT_DIR` and `VIEWER_LOCAL_WORKSPACE_ROOT` are removed for local
 filesystem viewing. Setting either variable, or using the old fixed-root startup
-flag, is a hard startup error; use an absolute `?dir=` URL parameter instead.
+flag, is a hard startup error; use `--dir` for the startup default and an
+absolute `?dir=` URL parameter for review links.
 
 Vercel Blob backend variables:
 

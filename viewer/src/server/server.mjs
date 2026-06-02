@@ -98,6 +98,7 @@ const backend = backendKind === VIEWER_ASSET_BACKENDS.VERCEL_BLOB
     })
   : createLocalAssetBackend({
       workspaceRoot,
+      rootDir: runtime.args.rootDir || "",
       defaultFile: normalizeViewerDefaultFile(runtimeEnv.VIEWER_DEFAULT_FILE || ""),
       githubUrl: normalizeViewerGithubUrl(runtimeEnv.VIEWER_GITHUB_URL || ""),
     });

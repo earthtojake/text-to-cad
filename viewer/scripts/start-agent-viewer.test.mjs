@@ -8,6 +8,7 @@ import test from "node:test";
 import {
   buildAgentViewerGit,
   buildAgentStartCommand,
+  forwardedDefaultRootDir,
   forwardedServerTarget,
   isReusableAgentViewerServer,
   parseAgentStartArgs,
@@ -17,6 +18,7 @@ import {
   resolveAgentStartCommand,
   resolveAgentViewerPort,
   selectAgentStartMode,
+  stripDefaultRootDirArgs,
   stripShutdownAfterArgs,
 } from "./start-agent-viewer.mjs";
 
@@ -28,6 +30,8 @@ test("parseAgentStartArgs consumes launcher mode and preserves server flags", ()
       "--viewer-start-mode=dev",
       "--host",
       "127.0.0.1",
+      "--dir",
+      "/workspace/models",
       "--port=4178",
       "--shutdown-after",
       "12h",
@@ -37,6 +41,8 @@ test("parseAgentStartArgs consumes launcher mode and preserves server flags", ()
       forwardedArgs: [
         "--host",
         "127.0.0.1",
+        "--dir",
+        "/workspace/models",
         "--port=4178",
         "--shutdown-after",
         "12h",
@@ -44,6 +50,15 @@ test("parseAgentStartArgs consumes launcher mode and preserves server flags", ()
       shutdownAfterMs: twelveHoursMs,
       portScanLimit: 64,
     }
+  );
+});
+
+test("forwardedDefaultRootDir reads and strips default workspace flags", () => {
+  assert.equal(forwardedDefaultRootDir(["--host", "127.0.0.1", "--dir=/workspace/models"]), "/workspace/models");
+  assert.equal(forwardedDefaultRootDir(["--dir", "models", "--port", "4178"]), "models");
+  assert.deepEqual(
+    stripDefaultRootDirArgs(["--host", "127.0.0.1", "--dir", "/workspace/models", "--port=4178"]),
+    ["--host", "127.0.0.1", "--port=4178"]
   );
 });
 
@@ -120,7 +135,7 @@ test("buildAgentStartCommand translates shutdown-after for dev mode", () => {
   const command = buildAgentStartCommand({
     mode: "dev",
     packageRoot: "/workspace/viewer",
-    forwardedArgs: ["--host", "127.0.0.1", "--shutdown-after", "12h", "--port", "4178"],
+    forwardedArgs: ["--host", "127.0.0.1", "--dir", "/workspace/models", "--shutdown-after", "12h", "--port", "4178"],
     shutdownAfterMs: twelveHoursMs,
     env: {},
     nodePath: "/node",
@@ -137,12 +152,13 @@ test("buildAgentStartCommand translates shutdown-after for dev mode", () => {
     "4178",
   ]);
   assert.equal(command.env.VIEWER_SERVER_LIFETIME_MS, String(twelveHoursMs));
+  assert.equal(command.env.VIEWER_DEFAULT_ROOT_DIR, "/workspace/models");
   assert.equal(command.env.VIEWER_GIT, "git-a");
 });
 
-test("resolveAgentStartCommand keeps shutdown-after on the production server path", () => {
+test("resolveAgentStartCommand keeps server-only flags on the production server path", () => {
   const command = resolveAgentStartCommand({
-    argv: ["--viewer-start-mode", "serve", "--shutdown-after", "12h"],
+    argv: ["--viewer-start-mode", "serve", "--dir", "/workspace/models", "--shutdown-after", "12h"],
     env: {},
     packageRoot: "/workspace/viewer",
     nodePath: "/node",
@@ -151,6 +167,8 @@ test("resolveAgentStartCommand keeps shutdown-after on the production server pat
   assert.equal(command.mode, "serve");
   assert.deepEqual(command.args, [
     "/workspace/viewer/src/server/server.mjs",
+    "--dir",
+    "/workspace/models",
     "--shutdown-after",
     "12h",
   ]);
@@ -189,8 +207,39 @@ test("isReusableAgentViewerServer uses git only when both sides report it", () =
       serverApiVersion: 2,
       dynamicRoot: true,
       git: "git-a",
-    }, ""),
+      activeDirectories: [{
+        dir: "/workspace/models",
+        rootPath: "/workspace/models",
+      }],
+    }, "", "/workspace/models"),
     true
+  );
+  assert.equal(
+    isReusableAgentViewerServer({
+      app: "cad-viewer",
+      serverApiVersion: 2,
+      dynamicRoot: true,
+      git: "git-a",
+      workspaceRoot: "/workspace",
+      activeDirectories: [{
+        dir: "/workspace/models",
+        rootPath: "/workspace/models",
+      }],
+    }, "git-a", "models"),
+    true
+  );
+  assert.equal(
+    isReusableAgentViewerServer({
+      app: "cad-viewer",
+      serverApiVersion: 2,
+      dynamicRoot: true,
+      git: "git-a",
+      activeDirectories: [{
+        dir: "/workspace/skill",
+        rootPath: "/workspace/skill",
+      }],
+    }, "git-a", "/workspace/models"),
+    false
   );
 });
 

@@ -15,8 +15,12 @@ live review links. The expected input is one or more explicit file paths.
 
 ## Start Viewer
 
-Start or reuse one local CAD Viewer with `npm run agent:start`, then select
-local files by URL. The launcher uses Vite dev mode when this skill's
+Start or reuse one local CAD Viewer with `npm run agent:start`, passing the
+absolute artifact root as `--dir`, then select local files by URL. Directory
+selection is required in both places: pass startup `--dir <absolute-model-root>`
+to set the Viewer's first workspace, and include `?dir=<absolute-model-root>` on
+every returned link. Both values must be absolute paths and should usually be
+the same root. The launcher uses Vite dev mode when this skill's
 `scripts/viewer` path is a development symlink, and the packaged `dist/` server
 for production skill installs. Every Viewer link returned from this skill MUST
 include `?dir=` with an absolute path. Set `?dir=` to the workspace-local
@@ -26,7 +30,9 @@ should be the shared directory containing STEP/STL/GLB/URDF/SRDF/SDF/G-code/DXF
 files, not a relative path and not just the selected file's parent when a
 broader model workspace root exists. The `?file=` value must be relative to
 `?dir=`; choose a `?dir=` root that makes the relative `?file=` stable and
-readable. The `agent:start` launcher
+readable. Pass that same absolute root to `agent:start --dir` so a newly started
+Viewer uses the model directory, not the skill directory, as its first workspace.
+The `agent:start` launcher
 owns port selection: it starts from its requested or default port candidate,
 checks the local CAD Viewer server registry, probes candidate ports with
 `GET /__cad/server`, reuses a compatible live Viewer when found, or starts a new
@@ -34,7 +40,9 @@ Viewer on the first free port. When git is available, the launcher passes a
 single `git` value derived from the worktree git dir and branch; a live Viewer
 with a different `git` value is treated as another worktree or branch and
 skipped. If either side has no `git` value, git is not used as a port reuse
-condition.
+condition. When `--dir` is passed, a live Viewer whose first workspace is a
+different directory is also skipped so the requested default workspace is
+preserved.
 
 If you need to inspect a running server manually, `GET /__cad/server` returns
 JSON with `app: "cad-viewer"`, `dynamicRoot: true`, `serverApiVersion >= 2`,
@@ -56,7 +64,7 @@ directories; the same local server can scan a new absolute `?dir=`.
 Run from this skill directory:
 
 ```bash
-npm --prefix scripts/viewer run agent:start -- --host 127.0.0.1 --shutdown-after 12h
+npm --prefix scripts/viewer run agent:start -- --host 127.0.0.1 --dir <absolute-model-root> --shutdown-after 12h
 ```
 
 Use the printed base URL and append query parameters:

@@ -46,6 +46,7 @@ const repoRoot = workspaceRoot;
 normalizeViewerAssetBackend(process.env.VIEWER_ASSET_BACKEND);
 const buildViewerDefaultFile = normalizeViewerDefaultFile(process.env.VIEWER_DEFAULT_FILE ?? "");
 const buildViewerGithubUrl = normalizeViewerGithubUrl(process.env.VIEWER_GITHUB_URL ?? "");
+const buildViewerDefaultRootDir = String(process.env.VIEWER_DEFAULT_ROOT_DIR || "").trim();
 const viewerAllowedHosts = normalizeViewerAllowedHosts(process.env.VIEWER_ALLOWED_HOSTS ?? "");
 const viewerServerLifetimeMs = normalizeServerLifetimeMs(process.env.VIEWER_SERVER_LIFETIME_MS);
 assertNoDeprecatedLocalRootEnv(process.env);
@@ -58,6 +59,7 @@ const localServerFeatures = [
 ];
 const localAssetBackend = createLocalAssetBackend({
   workspaceRoot,
+  rootDir: buildViewerDefaultRootDir,
   defaultFile: buildViewerDefaultFile,
   githubUrl: buildViewerGithubUrl,
 });

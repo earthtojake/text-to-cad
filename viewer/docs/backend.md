@@ -52,10 +52,11 @@ not write `catalog.json` or any hidden catalog cache file.
 
 Local filesystem deployments are intentionally URL-driven. `?dir=` may be
 absolute or relative to the directory where the Viewer was started; when omitted
-it defaults to that startup directory. The startup directory is also the first
-active workspace. `?file=` values are always relative to the active `?dir=`
-workspace. `VIEWER_LOCAL_ROOT_DIR`, `VIEWER_LOCAL_WORKSPACE_ROOT`, and the old
-fixed-root startup flag have been removed and now fail at startup.
+it defaults to the startup `--dir`, or to the startup directory if `--dir` was
+not passed. That default directory is also the first active workspace. `?file=`
+values are always relative to the active `?dir=` workspace.
+`VIEWER_LOCAL_ROOT_DIR`, `VIEWER_LOCAL_WORKSPACE_ROOT`, and the old fixed-root
+startup flag have been removed and now fail at startup.
 
 The local backend serves asset bytes from the active root and writes regenerated
 artifacts back into it. It rejects path traversal and only serves or writes

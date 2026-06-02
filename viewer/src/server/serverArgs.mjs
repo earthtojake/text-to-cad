@@ -20,6 +20,7 @@ export function parseServerArgs(argv = []) {
   const options = {
     port: null,
     host: "",
+    rootDir: "",
     shutdownAfterMs: null,
     help: false,
   };
@@ -34,6 +35,15 @@ export function parseServerArgs(argv = []) {
     }
     if (arg === "--root-dir") {
       throw new Error("--root-dir has been removed; pass ?dir= in the Viewer URL.");
+    }
+    if (arg.startsWith("--dir=")) {
+      options.rootDir = arg.slice("--dir=".length).trim();
+      continue;
+    }
+    if (arg === "--dir") {
+      options.rootDir = requiredValue(argv, index, arg).trim();
+      index += 1;
+      continue;
     }
     if (arg.startsWith("--port=")) {
       options.port = parsePort(arg.slice("--port=".length), "--port");
@@ -73,6 +83,7 @@ export function serverHelpText() {
 Options:
   --port <number>    Port to bind. Defaults to 4178.
   --host <host>      Host to bind. Defaults to 127.0.0.1.
+  --dir <path>       Default local workspace root. Defaults to startup directory.
   --shutdown-after <time>
                      Shut down after a duration such as 12h, 30m, or 60000.
   -h, --help         Show this help.
