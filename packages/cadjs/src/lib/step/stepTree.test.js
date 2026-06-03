@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   buildStepTreeRoot,
+  buildStepTreeRootWithTopology,
   collectStepTreeAncestorIds,
   flattenVisibleStepTreeRows,
   STEP_MODEL_RENDER_PART_ID,
@@ -184,6 +185,122 @@ test("plain STEP parts get a synthetic selectable root", () => {
   assert.equal(root.id, STEP_MODEL_ROOT_ID);
   assert.equal(root.displayName, "bracket.step");
   assert.deepEqual(root.leafPartIds, [STEP_MODEL_RENDER_PART_ID]);
+});
+
+test("STEP tree topology rows attach below their owning part", () => {
+  const root = {
+    id: "root",
+    nodeType: "assembly",
+    displayName: "root assembly",
+    children: [
+      {
+        id: "part-a",
+        nodeType: "part",
+        displayName: "part A",
+        children: []
+      }
+    ]
+  };
+  const augmented = buildStepTreeRootWithTopology({
+    root,
+    references: [
+      {
+        id: "topology|part-a|occurrence|fixture.base",
+        selectorType: "occurrence",
+        displaySelector: "fixture.base",
+        summary: "base_plate",
+        partId: "part-a",
+        rowIndex: 0
+      },
+      {
+        id: "topology|part-a|shape|fixture.base.s1",
+        selectorType: "shape",
+        displaySelector: "fixture.base.s1",
+        occurrenceId: "fixture.base",
+        summary: "base_plate solid volume=1200",
+        partId: "part-a",
+        pickData: {
+          name: "base_plate"
+        },
+        rowIndex: 0
+      },
+      {
+        id: "topology|part-a|face|fixture.base.f1",
+        selectorType: "face",
+        displaySelector: "fixture.base.f1",
+        occurrenceId: "fixture.base",
+        shapeId: "fixture.base.s1",
+        summary: "plane area=100",
+        partId: "part-a",
+        rowIndex: 0
+      },
+      {
+        id: "topology|part-a|edge|fixture.base.e1",
+        selectorType: "edge",
+        displaySelector: "fixture.base.e1",
+        occurrenceId: "fixture.base",
+        shapeId: "fixture.base.s1",
+        summary: "line length=10",
+        partId: "part-a",
+        rowIndex: 0
+      }
+    ]
+  });
+
+  assert.equal(root.children[0].children.length, 0);
+  assert.equal(augmented.children[0].children.length, 1);
+  assert.equal(augmented.children[0].children[0].displayName, "base_plate");
+  assert.deepEqual(
+    augmented.children[0].children[0].children.map((child) => [child.nodeType, child.displayName, child.detail]),
+    [
+      ["topology-shape", "base_plate", "base_plate solid volume=1200"],
+      ["topology-face", "Face f1", "plane area=100"],
+      ["topology-edge", "Edge e1", "line length=10"]
+    ]
+  );
+
+  assert.deepEqual(
+    flattenVisibleStepTreeRows(augmented, [
+      "root",
+      "part-a",
+      "step-topology:part-a:occurrence:fixture.base"
+    ]).map((row) => [row.nodeType, row.label, row.detail]),
+    [
+      ["assembly", "root assembly", ""],
+      ["part", "part A", ""],
+      ["topology-occurrence", "base_plate", ""],
+      ["topology-shape", "base_plate", "base_plate solid volume=1200"],
+      ["topology-face", "Face f1", "plane area=100"],
+      ["topology-edge", "Edge e1", "line length=10"]
+    ]
+  );
+});
+
+test("STEP tree synthetic occurrence rows expose selectable topology ids", () => {
+  const root = {
+    id: "root",
+    nodeType: "part",
+    displayName: "part",
+    children: []
+  };
+  const augmented = buildStepTreeRootWithTopology({
+    root,
+    references: [
+      {
+        id: "topology|part-a|face|fixture.base.f1",
+        selectorType: "face",
+        displaySelector: "fixture.base.f1",
+        occurrenceId: "fixture.base",
+        partId: "root",
+        rowIndex: 0
+      }
+    ]
+  });
+  const occurrence = augmented.children[0];
+
+  assert.equal(occurrence.nodeType, "topology-occurrence");
+  assert.equal(occurrence.id, "step-topology:root:occurrence:fixture.base");
+  assert.equal(occurrence.topologyReferenceId, occurrence.id);
 });
 
 test("ancestor ids are collected without the selected node", () => {

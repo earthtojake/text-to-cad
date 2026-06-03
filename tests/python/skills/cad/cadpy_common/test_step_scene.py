@@ -131,6 +131,40 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
             run_triangle_count = sum(int(bundle.buffers["faceRuns"][index + 3]) for index in range(0, len(bundle.buffers["faceRuns"]), 5))
             self.assertEqual(row_triangle_count, run_triangle_count)
 
+    def test_shape_rows_include_occurrence_and_prototype_names(self) -> None:
+        transform = (
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        )
+        scene = LoadedStepScene(
+            step_path=Path("labeled.step"),
+            roots=[
+                OccurrenceNode(
+                    path=(1,),
+                    name="component:base:front_left",
+                    source_name="component:base",
+                    transform=transform,
+                    prototype_key=7,
+                )
+            ],
+            prototype_shapes={7: build123d.Box(1, 1, 1).wrapped},
+            prototype_names={7: "component:base"},
+        )
+
+        bundle = extract_selectors_from_scene(
+            scene,
+            cad_ref="fixtures/labeled",
+            profile=SelectorProfile.REFS,
+            options=SelectorOptions(linear_deflection=0.1, angular_deflection=0.1),
+        )
+
+        shape_columns = bundle.manifest["tables"]["shapeColumns"]
+        shape = dict(zip(shape_columns, bundle.manifest["shapes"][0]))
+        self.assertEqual("component:base:front_left", shape["name"])
+        self.assertEqual("component:base", shape["sourceName"])
+
     def test_adaptive_mesh_resolution_prefers_finer_defaults_for_small_simple_parts(self) -> None:
         with temporary_directory(prefix="cad-adaptive-mesh-") as temp_dir:
             step_path = Path(temp_dir) / "box.step"

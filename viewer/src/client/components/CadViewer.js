@@ -2,6 +2,7 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { parseCadRefToken } from "cadjs/lib/cadRefs";
+import { STEP_TREE_TOPOLOGY_NODE_PREFIX } from "cadjs/lib/step/stepTree";
 import { copyImageBlobToClipboard } from "@/ui/clipboard";
 import { triggerBlobDownload } from "@/ui/download";
 import {
@@ -236,6 +237,53 @@ const VIEW_PLANE_FACES = [
   }
 ];
 const VIEW_PLANE_FACE_BY_ID = Object.fromEntries(VIEW_PLANE_FACES.map((face) => [face.id, face]));
+
+function referenceSelectorType(reference) {
+  return String(reference?.selectorType || "").trim();
+}
+
+function referenceOccurrenceSelector(reference) {
+  const selectorType = referenceSelectorType(reference);
+  if (selectorType === "occurrence") {
+    return String(reference?.normalizedSelector || reference?.displaySelector || "").trim();
+  }
+  return String(reference?.occurrenceId || "").trim();
+}
+
+function referenceMatchesOccurrenceSubtree(reference, occurrenceSelector) {
+  const candidate = referenceOccurrenceSelector(reference);
+  const selector = String(occurrenceSelector || "").trim();
+  return Boolean(candidate && selector && (candidate === selector || candidate.startsWith(`${selector}.`)));
+}
+
+function referenceShapeSelector(reference) {
+  const selectorType = referenceSelectorType(reference);
+  if (selectorType === "shape") {
+    return String(reference?.normalizedSelector || reference?.displaySelector || "").trim();
+  }
+  return String(reference?.shapeId || "").trim();
+}
+
+function referenceMatchesShape(reference, shapeSelector, occurrenceSelector = "") {
+  const candidate = referenceShapeSelector(reference);
+  const selector = String(shapeSelector || "").trim();
+  if (!candidate || !selector || candidate !== selector) {
+    return false;
+  }
+  const occurrence = String(occurrenceSelector || "").trim();
+  return !occurrence || referenceMatchesOccurrenceSubtree(reference, occurrence);
+}
+
+function syntheticOccurrenceSelectorFromReferenceId(referenceId) {
+  const normalizedReferenceId = String(referenceId || "").trim();
+  if (!normalizedReferenceId.startsWith(STEP_TREE_TOPOLOGY_NODE_PREFIX)) {
+    return "";
+  }
+  const body = normalizedReferenceId.slice(STEP_TREE_TOPOLOGY_NODE_PREFIX.length);
+  const marker = ":occurrence:";
+  const markerIndex = body.lastIndexOf(marker);
+  return markerIndex >= 0 ? body.slice(markerIndex + marker.length).trim() : "";
+}
 
 function viewPlaneOrientationEqual(a, b, epsilon = 1e-4) {
   if (!a || !b) {
@@ -2947,32 +2995,91 @@ const CadViewer = forwardRef(function CadViewer({
     const highlightEdgeColor = getHighlightEdgeColor(displayEdgeSettings);
     const highlightEdgeOpacity = getHighlightEdgeOpacity(displayEdgeSettings);
 
-    const seenReferenceIds = new Set();
-    const orderedReferenceIds = [];
-    for (const referenceId of Array.isArray(selectedReferenceIds) ? selectedReferenceIds : []) {
+    const highlightReferenceStates = new Map();
+    const runtimeReferences = Array.isArray(activeSelectorRuntime?.references)
+      ? activeSelectorRuntime.references
+      : activeSelectorRuntime?.referenceMap instanceof Map
+        ? [...activeSelectorRuntime.referenceMap.values()]
+        : [];
+    const addHighlightReference = (referenceId, { hovered = false } = {}) => {
       const normalizedReferenceId = String(referenceId || "").trim();
-      if (!normalizedReferenceId || seenReferenceIds.has(normalizedReferenceId)) {
-        continue;
+      if (!normalizedReferenceId) {
+        return;
       }
-      seenReferenceIds.add(normalizedReferenceId);
-      orderedReferenceIds.push(normalizedReferenceId);
+      const current = highlightReferenceStates.get(normalizedReferenceId);
+      if (current) {
+        current.hovered = current.hovered || hovered;
+        return;
+      }
+      highlightReferenceStates.set(normalizedReferenceId, { hovered });
+    };
+    const addReferenceSelection = (referenceId, { hovered = false } = {}) => {
+      const normalizedReferenceId = String(referenceId || "").trim();
+      const topologyReference = pickableReferenceMap.get(normalizedReferenceId) || activeSelectorRuntime?.referenceMap?.get(normalizedReferenceId) || null;
+      if (!topologyReference) {
+        const syntheticOccurrenceSelector = syntheticOccurrenceSelectorFromReferenceId(normalizedReferenceId);
+        if (syntheticOccurrenceSelector) {
+          for (const childReference of runtimeReferences) {
+            const childSelectorType = referenceSelectorType(childReference);
+            if (
+              (childSelectorType === "face" || childSelectorType === "edge" || childSelectorType === "vertex") &&
+              referenceMatchesOccurrenceSubtree(childReference, syntheticOccurrenceSelector)
+            ) {
+              addHighlightReference(childReference?.id, { hovered });
+            }
+          }
+        }
+        return;
+      }
+      const selectorType = referenceSelectorType(topologyReference);
+      if (selectorType === "occurrence") {
+        const occurrenceSelector = referenceOccurrenceSelector(topologyReference);
+        for (const childReference of runtimeReferences) {
+          const childSelectorType = referenceSelectorType(childReference);
+          if (
+            (childSelectorType === "face" || childSelectorType === "edge" || childSelectorType === "vertex") &&
+            referenceMatchesOccurrenceSubtree(childReference, occurrenceSelector)
+          ) {
+            addHighlightReference(childReference?.id, { hovered });
+          }
+        }
+        return;
+      }
+      if (selectorType === "shape") {
+        const shapeSelector = referenceShapeSelector(topologyReference);
+        const occurrenceSelector = referenceOccurrenceSelector(topologyReference);
+        for (const childReference of runtimeReferences) {
+          const childSelectorType = referenceSelectorType(childReference);
+          if (
+            (childSelectorType === "face" || childSelectorType === "edge" || childSelectorType === "vertex") &&
+            referenceMatchesShape(childReference, shapeSelector, occurrenceSelector)
+          ) {
+            addHighlightReference(childReference?.id, { hovered });
+          }
+        }
+        return;
+      }
+      addHighlightReference(normalizedReferenceId, { hovered });
+    };
+    for (const referenceId of Array.isArray(selectedReferenceIds) ? selectedReferenceIds : []) {
+      addReferenceSelection(referenceId);
     }
     const normalizedHoveredReferenceId = String(hoveredReferenceId || "").trim();
-    if (normalizedHoveredReferenceId && !seenReferenceIds.has(normalizedHoveredReferenceId)) {
-      orderedReferenceIds.push(normalizedHoveredReferenceId);
+    if (normalizedHoveredReferenceId) {
+      addReferenceSelection(normalizedHoveredReferenceId, { hovered: true });
     }
 
-    for (const referenceId of orderedReferenceIds) {
+    for (const [referenceId, highlightState] of highlightReferenceStates.entries()) {
       const topologyReference = pickableReferenceMap.get(referenceId) || activeSelectorRuntime?.referenceMap?.get(referenceId) || null;
       if (!topologyReference) {
         continue;
       }
-      const selectorType = String(topologyReference?.selectorType || "").trim();
+      const selectorType = referenceSelectorType(topologyReference);
       if (selectorType !== "face" && selectorType !== "edge" && selectorType !== "vertex") {
         continue;
       }
 
-      const isHovered = referenceId === normalizedHoveredReferenceId;
+      const isHovered = Boolean(highlightState?.hovered);
       if (selectorType === "vertex") {
         const marker = buildVertexMarkerMesh(runtime, THREE, topologyReference, {
           color: REFERENCE_CORNER_COLOR,

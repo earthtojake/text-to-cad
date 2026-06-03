@@ -268,6 +268,7 @@ import {
 } from "cadjs/lib/assembly/meshData";
 import {
   buildStepTreeRoot,
+  buildStepTreeRootWithTopology,
   collectStepTreeAncestorIds,
   STEP_MODEL_ROOT_ID,
   STEP_MODEL_RENDER_PART_ID,
@@ -538,6 +539,20 @@ function buildDxfCacheKey(entry) {
 
 function ownProperty(object, key) {
   return Object.prototype.hasOwnProperty.call(object || {}, key);
+}
+
+function referenceOccurrenceSelector(reference) {
+  const selectorType = String(reference?.selectorType || "").trim();
+  if (selectorType === "occurrence") {
+    return String(reference?.normalizedSelector || reference?.displaySelector || "").trim();
+  }
+  return String(reference?.occurrenceId || "").trim();
+}
+
+function referenceMatchesOccurrenceSubtree(reference, occurrenceId) {
+  const selector = referenceOccurrenceSelector(reference);
+  const root = String(occurrenceId || "").trim();
+  return Boolean(root && (selector === root || selector.startsWith(`${root}.`)));
 }
 
 function mergeStepSourceStatusIntoEntry(entry, stepSourceStatus) {
@@ -4457,11 +4472,12 @@ export default function CadWorkspace({
 
   const {
     inspectedAssemblyPartId,
-    inspectedAssemblyPart,
-    isInspectingAssemblyPart,
-    activeReferenceMap,
-    inspectedAssemblyPartReferences,
-    hoveredReferenceId,
+  inspectedAssemblyPart,
+  isInspectingAssemblyPart,
+  currentReferences,
+  activeReferenceMap,
+  inspectedAssemblyPartReferences,
+  hoveredReferenceId,
     hoveredPartId,
     visibleReferences
   } = useCadWorkspaceSelectors({
@@ -4557,7 +4573,7 @@ export default function CadWorkspace({
           partId: inspectedAssemblyPart.id
         });
         const references = nextReferenceState.references
-          .filter((reference) => String(reference?.occurrenceId || "").trim() === occurrenceId)
+          .filter((reference) => referenceMatchesOccurrenceSubtree(reference, occurrenceId))
           .map((reference) => ({ ...reference, partId: inspectedAssemblyPart.id }));
         setInspectedAssemblyReferenceState({
           ...nextReferenceState,
@@ -4704,6 +4720,47 @@ export default function CadWorkspace({
     }
     return visibleReferences;
   }, [effectiveInspectedAssemblyPartReferences, isAssemblyView, isInspectingAssemblyPart, visibleReferences]);
+  const stepTreeTopologyReferences = useMemo(() => {
+    if (!isStepView) {
+      return [];
+    }
+    if (isAssemblyView) {
+      return isInspectingAssemblyPart ? inspectedAssemblyPartReferences : [];
+    }
+    return currentReferences;
+  }, [
+    currentReferences,
+    inspectedAssemblyPartReferences,
+    isAssemblyView,
+    isInspectingAssemblyPart,
+    isStepView
+  ]);
+  const displayStepTreeRoot = useMemo(() => buildStepTreeRootWithTopology({
+    root: stepTreeRoot,
+    references: stepTreeTopologyReferences,
+    fallbackPartId: isAssemblyView ? inspectedAssemblyPartId : STEP_MODEL_ROOT_ID
+  }), [
+    inspectedAssemblyPartId,
+    isAssemblyView,
+    stepTreeRoot,
+    stepTreeTopologyReferences
+  ]);
+  useEffect(() => {
+    if (!stepTreeTopologyReferences.length) {
+      return;
+    }
+    const nodeId = isAssemblyView ? inspectedAssemblyPartId : STEP_MODEL_ROOT_ID;
+    if (!nodeId) {
+      return;
+    }
+    setExpandedStepTreeNodeIds((current) => (
+      current.includes(nodeId) ? current : [...current, nodeId]
+    ));
+  }, [
+    inspectedAssemblyPartId,
+    isAssemblyView,
+    stepTreeTopologyReferences
+  ]);
   const effectiveSelectorRuntime = useMemo(() => {
     if (isAssemblyView && isInspectingAssemblyPart) {
       return inspectedAssemblyReferenceState?.selectorRuntime || null;
@@ -6045,6 +6102,14 @@ export default function CadWorkspace({
     treeSelectableAssemblyNodeIdSet
   ]);
 
+  const selectStepTreeReferenceNode = useCallback((referenceId, { multiSelect = false } = {}) => {
+    const normalizedReferenceId = String(referenceId || "").trim();
+    if (!normalizedReferenceId) {
+      return;
+    }
+    toggleReferenceSelection(normalizedReferenceId, { multiSelect });
+  }, [toggleReferenceSelection]);
+
   const inspectStepTreeNode = useCallback((nodeId) => {
     inspectAssemblyNode(nodeId, { toggle: true, source: "tree" });
   }, [inspectAssemblyNode]);
@@ -7033,17 +7098,19 @@ export default function CadWorkspace({
                 selectedEntry={selectedEntry}
                 viewerLoading={viewerLoading || assemblySidebarLoading}
                 isAssemblyView={isAssemblyView}
-                stepTreeRoot={stepTreeRoot}
+                stepTreeRoot={displayStepTreeRoot}
                 expandedTreeNodeIds={expandedStepTreeNodeIds}
                 stepTreeRootShowMore={stepTreeRootShowMore}
                 onStepTreeRootShowMoreChange={setStepTreeRootShowMore}
                 selectedPartIds={selectedPartIds}
+                selectedReferenceIds={selectedReferenceIds}
                 inspectedNodeId={effectiveInspectedAssemblyNodeId}
                 selectableNodeIds={isAssemblyView ? treeSelectableAssemblyNodeIds : null}
                 activeTreeNodeId={activeStepTreeNodeId}
                 hoveredPartId={hoveredPartId}
                 hiddenPartIds={hiddenPartIds}
                 onSelectTreeNode={selectStepTreeNode}
+                onSelectReferenceNode={selectStepTreeReferenceNode}
                 onToggleTreeNode={toggleStepTreeNode}
                 onInspectTreeNode={inspectStepTreeNode}
                 onClearSelection={clearAssemblySelection}

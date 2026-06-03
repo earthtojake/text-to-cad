@@ -6,7 +6,7 @@ Read this file when writing or repairing build123d Python source.
 
 - Modeling objective
 - Topology stack
-- Source envelope
+- Source return
 - Parameters first
 - Coordinate system
 - Builder contexts
@@ -29,6 +29,14 @@ Think in this order:
 Vertex → Edge → Wire → Face → Shell → Solid → Compound
 ```
 
+For assemblies, use these repo topology terms consistently:
+
+- **Occurrence**: a placed node in the assembly tree. An occurrence has a parent, transform, path, and user-facing role such as `component:lid` or `hardware:m3_screw:front_left`.
+- **Shape**: an exported geometry/body inside an occurrence. Shape rows own topology; faces and edges belong to a shape, and the shape belongs to an occurrence.
+- **Face/edge**: selectable topology owned by a shape. Do not assume arbitrary faces or edges have persistent semantic labels; inspect them by occurrence, shape, ordinal, surface/curve type, and measured geometry.
+
+When inspecting topology, follow `assembly occurrence -> shape/body -> faces -> edges`. Every face/edge row should be traceable through both `occurrenceId` and `shapeId`.
+
 For normal STEP output, return one of:
 
 - a valid `Solid`
@@ -37,14 +45,14 @@ For normal STEP output, return one of:
 
 Avoid returning loose wires, open faces, or construction surfaces unless the user explicitly requested them.
 
-## Source envelope
+## Source return
 
 Generated sources should define:
 
 ```python
 def gen_step():
     ...
-    return shape_or_compound
+    return step_ready_shape_or_labeled_compound
 ```
 
 Do not hardcode output paths inside `gen_step()`. The CLI owns output paths.
@@ -168,7 +176,18 @@ boss = label_shape(Cylinder(radius=3.0, height=12.0), "feature", "m3_boss", "fro
 
 Useful label prefixes are `assembly:`, `module:`, `component:`, `feature:`, `datum:`, `mate:`, and `hardware:`. Feature labels survive STEP export best when the feature remains a labeled child shape in a `Compound`; boolean-subtracted or fused feature history should be represented by source parameters, named datums, and validation refs instead of assumed persistent feature labels.
 
-For repeated parts, keep transforms or joint connections explicit and inspect frames/positioning after generation.
+Label for inspection:
+
+- Label the root assembly.
+- Label every exported part, subassembly/module, and repeated component occurrence.
+- Use occurrence labels for assembly role and placement, especially repeated parts: `hardware:m3_screw:front_left`, `hardware:m3_screw:rear_right`.
+- Use shape labels for retained exported geometry/body roles where useful.
+- Use feature/datum labels only when that geometry remains exported as a child shape.
+- Use named mate datums for source-level positioning intent, then validate the exported STEP topology and occurrence frames.
+
+Occurrence and shape labels are exported through STEP names and surfaced in `STEP_topology` when available. The viewer uses occurrence labels for assembly/tree references and shape labels for shape references. Faces and edges inherit their context from `occurrenceId` and `shapeId`; do not promise persistent face/edge semantic labels unless explicit tested support exists.
+
+For repeated parts, keep occurrence labels, transforms, or joint connections explicit and inspect frames/positioning after generation.
 
 ## Common failure modes
 

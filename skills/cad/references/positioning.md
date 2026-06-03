@@ -131,6 +131,8 @@ standoff = asm.feature(Cylinder(radius=3.0, height=12.0), "m3_standoff", "front_
 hinge_axis = asm.rigid_frame(lid, "hinge_axis", Location((0, -25, 0)))
 ```
 
+Assembly labels name the root occurrence. `asm.add()` labels child component occurrences and their exported shape context. For repeated hardware or library parts, use role/location labels such as `front_left` and `rear_right` so STEP topology and viewer selections remain traceable after export.
+
 Feature labels survive best when the labeled geometry remains a child shape in a `Compound`. Labels on boolean-subtracted or fused feature history are not reliable STEP feature history.
 
 Use the frame method that matches native build123d joint inputs: `rigid_frame()` and `ball_frame()` take a `Location`; `revolute_frame()`, `linear_frame()`, and `cylindrical_frame()` take an `Axis` plus optional native range/reference arguments.

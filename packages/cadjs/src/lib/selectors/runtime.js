@@ -221,7 +221,9 @@ function referenceSummary(selectorType, row) {
     return String(row.name || row.sourceName || row.id || "").trim();
   }
   if (selectorType === "shape") {
-    return `${row.kind || "shape"}${row.volume ? ` volume=${row.volume}` : row.area ? ` area=${row.area}` : ""}`;
+    const name = String(row.name || row.sourceName || "").trim();
+    const detail = `${row.kind || "shape"}${row.volume ? ` volume=${row.volume}` : row.area ? ` area=${row.area}` : ""}`;
+    return name ? `${name} ${detail}` : detail;
   }
   if (selectorType === "face") {
     return `${row.surfaceType || "face"} area=${row.area ?? 0}`;
@@ -295,6 +297,45 @@ function selectorForRow(selectorType, row, rowIndex, singleOccurrenceId, remapOc
   return selectorPrefix(singleOccurrenceId, String(row?.id || "").trim());
 }
 
+function selectorWithRemappedOccurrence(selector, singleOccurrenceId, remapOccurrenceId = "", remapOccurrencePrefix = null) {
+  const normalizedSelector = String(selector || "").trim();
+  if (!normalizedSelector) {
+    return "";
+  }
+  const match = normalizedSelector.match(/^(.*)\.([sfe]\d+)$/i);
+  if (!match) {
+    return selectorPrefix(singleOccurrenceId, normalizedSelector);
+  }
+  const occurrenceId = String(match[1] || "").trim();
+  const selectorToken = String(match[2] || "").trim();
+  if (!occurrenceId || !selectorToken) {
+    return selectorPrefix(singleOccurrenceId, normalizedSelector);
+  }
+  if (remapOccurrencePrefix && typeof remapOccurrencePrefix === "object") {
+    const remappedOccurrenceId = remapSourceOccurrenceId(occurrenceId, remapOccurrencePrefix);
+    return remappedOccurrenceId ? `${remappedOccurrenceId}.${selectorToken}` : "";
+  }
+  const targetOccurrenceId = String(remapOccurrenceId || "").trim();
+  if (targetOccurrenceId) {
+    return `${targetOccurrenceId}.${selectorToken}`;
+  }
+  return selectorPrefix(singleOccurrenceId, normalizedSelector);
+}
+
+function occurrenceIdForReference(selectorType, row, singleOccurrenceId, remapOccurrenceId = "", remapOccurrencePrefix = null) {
+  if (selectorType === "occurrence") {
+    return "";
+  }
+  const occurrenceId = String(row?.occurrenceId || "").trim();
+  if (!occurrenceId) {
+    return "";
+  }
+  if (remapOccurrencePrefix && typeof remapOccurrencePrefix === "object") {
+    return remapSourceOccurrenceId(occurrenceId, remapOccurrencePrefix);
+  }
+  return String(remapOccurrenceId || "").trim() || selectorPrefix(singleOccurrenceId, occurrenceId);
+}
+
 function buildAdjacencySelectors(row, relationRows, targetRows, singleOccurrenceId, idKey, startKey, countKey, targetSelectorType, remapOccurrenceId, remapOccurrencePrefix) {
   const start = Number(row?.[startKey] || 0);
   const count = Number(row?.[countKey] || 0);
@@ -365,12 +406,15 @@ function buildReference({
     shortSummary: summary,
     copyText: summary ? `${copyText} ${summary}` : copyText,
     partId,
-    occurrenceId: row.occurrenceId ? selectorPrefix(singleOccurrenceId, String(row.occurrenceId)) : "",
-    shapeId: row.shapeId ? selectorPrefix(singleOccurrenceId, String(row.shapeId)) : "",
+    occurrenceId: occurrenceIdForReference(selectorType, row, singleOccurrenceId, remapOccurrenceId, remapOccurrencePrefix),
+    shapeId: selectorWithRemappedOccurrence(row.shapeId, singleOccurrenceId, remapOccurrenceId, remapOccurrencePrefix),
     rowIndex,
     pickData: {
       selectorType,
       rowIndex,
+      name: row.name || null,
+      sourceName: row.sourceName || null,
+      kind: row.kind || null,
       bbox: row.bbox || null,
       surfaceType: row.surfaceType || null,
       center: row.center || null,

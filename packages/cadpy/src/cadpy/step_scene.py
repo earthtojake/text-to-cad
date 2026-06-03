@@ -2081,6 +2081,8 @@ def extract_selectors_from_scene(
         "occurrenceId",
         "ordinal",
         "kind",
+        "name",
+        "sourceName",
         "bbox",
         "center",
         "area",
@@ -2090,6 +2092,8 @@ def extract_selectors_from_scene(
         "edgeStart",
         "edgeCount",
     ]
+    shape_face_start_column = shape_columns.index("faceStart")
+    shape_edge_start_column = shape_columns.index("edgeStart")
     face_columns = [
         "id",
         "occurrenceId",
@@ -2228,6 +2232,21 @@ def extract_selectors_from_scene(
         start_shape = len(shape_rows)
         start_face = len(face_rows)
         start_edge = len(edge_rows)
+        shape_count = len(prototype.get("shapes", []))
+        prototype_name = (
+            scene.prototype_names.get(node.prototype_key)
+            if node.prototype_key is not None
+            else None
+        )
+        occurrence_shape_name = node.name or node.source_name or prototype_name
+
+        def scoped_shape_name(base: str | None, ordinal: int) -> str | None:
+            text = str(base or "").strip()
+            if not text:
+                return None
+            if shape_count <= 1:
+                return text
+            return f"{text}:s{ordinal}"
 
         if profile == SelectorProfile.SUMMARY:
             summary_shape_count += int(prototype.get("shapeCount") or 0)
@@ -2247,13 +2266,16 @@ def extract_selectors_from_scene(
 
         local_shape_index_to_global_row: dict[int, int] = {}
         for shape_entry in prototype.get("shapes", []):
-            local_shape_index_to_global_row[int(shape_entry["ordinal"])] = len(shape_rows)
+            shape_ordinal = int(shape_entry["ordinal"])
+            local_shape_index_to_global_row[shape_ordinal] = len(shape_rows)
             shape_rows.append(
                 [
-                    f"{occurrence_id}.s{shape_entry['ordinal']}",
+                    f"{occurrence_id}.s{shape_ordinal}",
                     occurrence_id,
-                    int(shape_entry["ordinal"]),
+                    shape_ordinal,
                     shape_entry["kind"],
+                    scoped_shape_name(occurrence_shape_name, shape_ordinal),
+                    scoped_shape_name(prototype_name or node.source_name, shape_ordinal),
                     _compact_bbox(_transform_bbox(shape_entry["bbox"], node.transform), normalized_options.digits),
                     _round_point(_apply_transform_point(node.transform, shape_entry["center"]), normalized_options.digits),
                     _round_value(shape_entry.get("area", 0.0), normalized_options.digits),
@@ -2342,8 +2364,8 @@ def extract_selectors_from_scene(
                 first_edge_global = local_edge_index_to_global_row[shape_entry["edgeOrdinals"][0]]
             else:
                 first_edge_global = len(edge_rows)
-            shape_rows[global_shape_row][8] = first_face_global
-            shape_rows[global_shape_row][10] = first_edge_global
+            shape_rows[global_shape_row][shape_face_start_column] = first_face_global
+            shape_rows[global_shape_row][shape_edge_start_column] = first_edge_global
 
         for face_entry in prototype.get("faces", []):
             global_face_row = local_face_index_to_global_row[int(face_entry["ordinal"])]

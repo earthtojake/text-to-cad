@@ -93,6 +93,37 @@ test("buildSelectorRuntime remaps native occurrence prefixes onto assembly desce
   assert.equal(runtime.occurrenceIdByRowIndex.get(2), "o9.4.1.2");
 });
 
+test("buildSelectorRuntime uses STEP topology shape names in shape references", () => {
+  const bundle = {
+    manifest: {
+      cadRef: "parts/labeled",
+      tables: {
+        occurrenceColumns: ["id", "path", "name", "sourceName", "parentId", "transform", "bbox", "shapeStart", "shapeCount", "faceStart", "faceCount", "edgeStart", "edgeCount"],
+        shapeColumns: ["id", "occurrenceId", "ordinal", "kind", "name", "sourceName", "bbox", "center", "area", "volume", "faceStart", "faceCount", "edgeStart", "edgeCount"],
+        faceColumns: ["id", "occurrenceId", "shapeId", "ordinal", "surfaceType", "area", "center", "normal", "bbox", "edgeStart", "edgeCount", "relevance", "flags", "params", "triangleStart", "triangleCount"],
+        edgeColumns: ["id", "occurrenceId", "shapeId", "ordinal", "curveType", "length", "center", "bbox", "faceStart", "faceCount", "relevance", "flags", "params", "segmentStart", "segmentCount"],
+      },
+      occurrences: [
+        ["o1", "1", "component:base:front_left", "component:base", null, null, null, 0, 1, 0, 0, 0, 0]
+      ],
+      shapes: [
+        ["o1.s1", "o1", 1, "solid", "component:base:front_left", "component:base", null, null, 24, 12, 0, 0, 0, 0]
+      ],
+      faces: [],
+      edges: []
+    },
+    buffers: {}
+  };
+
+  const runtime = buildSelectorRuntime(bundle, { copyCadPath: "parts/labeled" });
+  const shape = runtime.references.find((reference) => reference.selectorType === "shape");
+
+  assert.equal(shape.summary, "component:base:front_left solid volume=12");
+  assert.equal(shape.copyText, "@cad[parts/labeled#s1] component:base:front_left solid volume=12");
+  assert.equal(shape.pickData.name, "component:base:front_left");
+  assert.equal(shape.pickData.sourceName, "component:base");
+});
+
 test("buildSelectorRuntime exposes v1 GLB face runs from selector buffers", () => {
   const bundle = {
     manifest: {

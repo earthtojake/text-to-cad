@@ -1,5 +1,8 @@
 export const STEP_MODEL_ROOT_ID = "__step_model__";
 export const STEP_MODEL_RENDER_PART_ID = "__model__";
+export const STEP_TREE_TOPOLOGY_NODE_PREFIX = "step-topology:";
+
+const STEP_TREE_TOPOLOGY_SELECTOR_TYPES = new Set(["occurrence", "shape", "face", "edge"]);
 
 function normalizeString(value, fallback = "") {
   return String(value ?? fallback).trim();
@@ -37,8 +40,24 @@ export function stepTreeNodeLabel(node) {
   );
 }
 
+export function stepTreeNodeDetail(node) {
+  return normalizeString(node?.detail || node?.summary || node?.shortSummary);
+}
+
 export function stepTreeNodeChildren(node) {
   return Array.isArray(node?.children) ? node.children : [];
+}
+
+export function stepTreeNodeTopologyType(node) {
+  const nodeType = normalizeString(node?.nodeType);
+  if (!nodeType.startsWith("topology-")) {
+    return "";
+  }
+  return nodeType.slice("topology-".length);
+}
+
+export function stepTreeNodeIsTopology(node) {
+  return Boolean(stepTreeNodeTopologyType(node));
 }
 
 export function stepTreeNodeHasChildren(node) {
@@ -117,12 +136,253 @@ function nodeMatchesQuery(node, query) {
   }
   const haystack = [
     stepTreeNodeLabel(node),
+    stepTreeNodeDetail(node),
     stepTreeNodeId(node),
     node?.occurrenceId,
+    node?.topologyReferenceId,
+    node?.displaySelector,
     node?.sourcePath,
     node?.partSourcePath
   ].map((value) => normalizeString(value).toLowerCase()).join(" ");
   return haystack.includes(normalizedQuery);
+}
+
+function topologyReferenceSelector(reference) {
+  return normalizeString(reference?.displaySelector || reference?.normalizedSelector || reference?.id);
+}
+
+function topologySelectorToken(selector) {
+  const normalizedSelector = normalizeString(selector);
+  if (!normalizedSelector) {
+    return "";
+  }
+  return normalizedSelector.split(".").filter(Boolean).pop() || normalizedSelector;
+}
+
+function topologyOccurrenceIdFromSelector(selector) {
+  const normalizedSelector = normalizeString(selector);
+  if (!normalizedSelector) {
+    return "";
+  }
+  const match = normalizedSelector.match(/^(.*)\.[sfe]\d+$/i);
+  return match ? match[1] : normalizedSelector;
+}
+
+function topologyReferenceOccurrenceId(reference) {
+  const selectorType = normalizeString(reference?.selectorType);
+  if (selectorType === "occurrence") {
+    return topologyReferenceSelector(reference);
+  }
+  return normalizeString(reference?.occurrenceId) ||
+    topologyOccurrenceIdFromSelector(topologyReferenceSelector(reference));
+}
+
+function topologyReferenceName(reference) {
+  const pickData = reference?.pickData && typeof reference.pickData === "object"
+    ? reference.pickData
+    : {};
+  return normalizeString(
+    reference?.name ||
+    reference?.sourceName ||
+    pickData.name ||
+    pickData.sourceName
+  );
+}
+
+function topologyReferenceLabel(reference) {
+  const selectorType = normalizeString(reference?.selectorType);
+  const selector = topologyReferenceSelector(reference);
+  const selectorToken = topologySelectorToken(selector);
+  const name = topologyReferenceName(reference);
+  const summary = normalizeString(reference?.summary || reference?.shortSummary);
+
+  if (selectorType === "occurrence") {
+    return summary || name || selector || "Occurrence";
+  }
+  if (selectorType === "shape") {
+    return name || (selectorToken ? `Shape ${selectorToken}` : "Shape");
+  }
+  if (selectorType === "face") {
+    return selectorToken ? `Face ${selectorToken}` : "Face";
+  }
+  if (selectorType === "edge") {
+    return selectorToken ? `Edge ${selectorToken}` : "Edge";
+  }
+  return summary || selector || "Topology";
+}
+
+function topologyReferenceDetail(reference) {
+  const selectorType = normalizeString(reference?.selectorType);
+  const selector = topologyReferenceSelector(reference);
+  const label = topologyReferenceLabel(reference);
+  const summary = normalizeString(reference?.summary || reference?.shortSummary);
+  if (selectorType === "occurrence") {
+    return summary && summary !== selector && summary !== label ? selector : "";
+  }
+  if (selectorType === "shape") {
+    return summary && summary !== label ? summary : selector;
+  }
+  return summary;
+}
+
+function topologyNodeId(partId, selectorType, selector) {
+  return `${STEP_TREE_TOPOLOGY_NODE_PREFIX}${partId || "part"}:${selectorType}:${selector || "item"}`;
+}
+
+function compareTopologyReferences(a, b) {
+  const aRowIndex = Number(a?.rowIndex);
+  const bRowIndex = Number(b?.rowIndex);
+  if (Number.isFinite(aRowIndex) && Number.isFinite(bRowIndex) && aRowIndex !== bRowIndex) {
+    return aRowIndex - bRowIndex;
+  }
+  if (Number.isFinite(aRowIndex)) {
+    return -1;
+  }
+  if (Number.isFinite(bRowIndex)) {
+    return 1;
+  }
+  return topologyReferenceSelector(a).localeCompare(topologyReferenceSelector(b));
+}
+
+function buildTopologyReferenceNode({ reference, selectorType, partId, occurrenceId }) {
+  const selector = topologyReferenceSelector(reference);
+  return {
+    id: topologyNodeId(partId, selectorType, selector || normalizeString(reference?.id)),
+    nodeType: `topology-${selectorType}`,
+    displayName: topologyReferenceLabel(reference),
+    detail: topologyReferenceDetail(reference),
+    topologyReferenceId: normalizeString(reference?.id),
+    displaySelector: selector,
+    partId,
+    occurrenceId,
+    shapeId: normalizeString(reference?.shapeId),
+    children: []
+  };
+}
+
+function buildSyntheticOccurrenceNode({ partId, occurrenceId, children }) {
+  const id = topologyNodeId(partId, "occurrence", occurrenceId);
+  return {
+    id,
+    nodeType: "topology-occurrence",
+    displayName: occurrenceId || "Occurrence",
+    detail: "",
+    topologyReferenceId: id,
+    displaySelector: occurrenceId,
+    partId,
+    occurrenceId,
+    children
+  };
+}
+
+function topologyReferencePartId(reference, fallbackPartId) {
+  return normalizeString(reference?.partId) || normalizeString(fallbackPartId);
+}
+
+function buildTopologyChildrenByPart(references, fallbackPartId) {
+  const byPart = new Map();
+  for (const reference of Array.isArray(references) ? references : []) {
+    const selectorType = normalizeString(reference?.selectorType);
+    if (!STEP_TREE_TOPOLOGY_SELECTOR_TYPES.has(selectorType)) {
+      continue;
+    }
+    const partId = topologyReferencePartId(reference, fallbackPartId);
+    const occurrenceId = topologyReferenceOccurrenceId(reference);
+    if (!partId || !occurrenceId) {
+      continue;
+    }
+    let partGroup = byPart.get(partId);
+    if (!partGroup) {
+      partGroup = new Map();
+      byPart.set(partId, partGroup);
+    }
+    let occurrenceGroup = partGroup.get(occurrenceId);
+    if (!occurrenceGroup) {
+      occurrenceGroup = {
+        occurrence: null,
+        shapes: [],
+        faces: [],
+        edges: []
+      };
+      partGroup.set(occurrenceId, occurrenceGroup);
+    }
+    if (selectorType === "occurrence") {
+      occurrenceGroup.occurrence = reference;
+    } else if (selectorType === "shape") {
+      occurrenceGroup.shapes.push(reference);
+    } else if (selectorType === "face") {
+      occurrenceGroup.faces.push(reference);
+    } else if (selectorType === "edge") {
+      occurrenceGroup.edges.push(reference);
+    }
+  }
+
+  return new Map([...byPart.entries()].map(([partId, occurrenceGroups]) => {
+    const occurrenceNodes = [...occurrenceGroups.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([occurrenceId, group]) => {
+        const children = [
+          ...group.shapes.sort(compareTopologyReferences).map((reference) => buildTopologyReferenceNode({
+            reference,
+            selectorType: "shape",
+            partId,
+            occurrenceId
+          })),
+          ...group.faces.sort(compareTopologyReferences).map((reference) => buildTopologyReferenceNode({
+            reference,
+            selectorType: "face",
+            partId,
+            occurrenceId
+          })),
+          ...group.edges.sort(compareTopologyReferences).map((reference) => buildTopologyReferenceNode({
+            reference,
+            selectorType: "edge",
+            partId,
+            occurrenceId
+          }))
+        ];
+        if (group.occurrence) {
+          return {
+            ...buildTopologyReferenceNode({
+              reference: group.occurrence,
+              selectorType: "occurrence",
+              partId,
+              occurrenceId
+            }),
+            children
+          };
+        }
+        return buildSyntheticOccurrenceNode({ partId, occurrenceId, children });
+      });
+    return [partId, occurrenceNodes];
+  }));
+}
+
+export function buildStepTreeRootWithTopology({ root = null, references = [], fallbackPartId = "" } = {}) {
+  if (!root || typeof root !== "object") {
+    return root;
+  }
+  const topologyChildrenByPart = buildTopologyChildrenByPart(references, fallbackPartId || stepTreeNodeId(root));
+  if (!topologyChildrenByPart.size) {
+    return root;
+  }
+
+  function cloneWithTopology(node) {
+    const id = stepTreeNodeId(node);
+    const children = stepTreeNodeChildren(node).map((child) => cloneWithTopology(child));
+    const topologyChildren = normalizeString(node?.nodeType) === "part"
+      ? topologyChildrenByPart.get(id) || []
+      : [];
+    if (!children.length && !topologyChildren.length) {
+      return node;
+    }
+    return {
+      ...node,
+      children: [...children, ...topologyChildren]
+    };
+  }
+
+  return cloneWithTopology(root);
 }
 
 function subtreeMatchesQuery(node, query) {
@@ -199,6 +459,10 @@ export function flattenVisibleStepTreeRows(root, expandedNodeIds = [], {
       id,
       node,
       label: stepTreeNodeLabel(node),
+      detail: stepTreeNodeDetail(node),
+      nodeType: normalizeString(node?.nodeType),
+      topologyType: stepTreeNodeTopologyType(node),
+      topologyReferenceId: normalizeString(node?.topologyReferenceId),
       depth,
       hasChildren,
       expanded: isExpanded,

@@ -2,7 +2,7 @@
 
 Read this file only when the user requests DXF or 2D drawing output from CAD geometry.
 
-DXF is secondary. Generate and validate the STEP envelope first when the geometry originates from a CAD source. Do not treat DXF layers as STEP part/assembly structure.
+DXF is secondary. Generate and validate the STEP output first when the geometry originates from a CAD source. Do not treat DXF layers as STEP part/assembly structure.
 
 ## Tool
 
@@ -14,7 +14,7 @@ python scripts/dxf targets... [flags]
 
 Plain generated Python targets write sibling `.dxf` outputs. Use `-o`/`--output` only with one plain generated Python target, or use `SOURCE.py=OUTPUT.dxf` positional pairs for per-target custom outputs. Paired output paths resolve from the command cwd.
 
-Do not put output-path fields such as `dxf_output` in the `gen_dxf()` return envelope. The supported path controls are the sibling default, `-o`/`--output`, and `SOURCE.py=OUTPUT.dxf`.
+Do not put output paths in the `gen_dxf()` return value. The supported path controls are the sibling default, `-o`/`--output`, and `SOURCE.py=OUTPUT.dxf`.
 
 ## Source requirements
 
@@ -26,18 +26,18 @@ def gen_dxf():
     return document
 ```
 
-The same file must also define a valid `gen_step()` envelope because discovery uses the CAD source catalog.
+The same file must also define a valid `gen_step()` return because discovery uses the CAD source catalog.
 
 ```python
 def gen_step():
     ...
-    return shape_or_compound
+    return step_ready_shape_or_labeled_compound
 ```
 
 ## Workflow
 
 1. Convert the user's prose into a natural-language CAD brief.
-2. Build or validate the `gen_step()` envelope.
+2. Build or validate the `gen_step()` return.
 3. Generate STEP with lightweight facts/planes/positioning inspection.
 4. Hand the generated STEP path to `$cad-viewer` when available and return its link.
 5. Add or update `gen_dxf()` for the requested projection, layout, or drawing output.
