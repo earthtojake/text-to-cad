@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SKILL_ROOT = Path(__file__).resolve().parents[3]
+SKILL_ROOT = Path(__file__).resolve().parents[5] / "skills" / "cad"
 
 
 def _has_build123d() -> bool:
