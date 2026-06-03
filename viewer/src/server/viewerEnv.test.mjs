@@ -18,7 +18,7 @@ test("viewer env rejects deprecated local root environment variables", () => {
     /no longer supported/
   );
   assert.throws(
-    () => assertNoDeprecatedLocalRootEnv({ VIEWER_LOCAL_WORKSPACE_ROOT: "/tmp/workspace" }),
+    () => assertNoDeprecatedLocalRootEnv({ VIEWER_LOCAL_WORKSPACE_ROOT: "/tmp/directory" }),
     /no longer supported/
   );
 });

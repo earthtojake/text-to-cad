@@ -13,11 +13,11 @@ import {
 } from "./viewerServerInfo.mjs";
 
 test("buildViewerServerInfo returns dev-server identity without catalog data", () => {
-  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cad-viewer-server-"));
-  fs.mkdirSync(path.join(workspaceRoot, "models"), { recursive: true });
+  const directoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cad-viewer-server-"));
+  fs.mkdirSync(path.join(directoryRoot, "models"), { recursive: true });
 
   const info = buildViewerServerInfo({
-    workspaceRoot,
+    directoryRoot,
     rootDir: "models",
     port: 4184,
     pid: 12345,
@@ -31,9 +31,9 @@ test("buildViewerServerInfo returns dev-server identity without catalog data", (
     serverFeatures: [],
     backend: "local-fs",
     dynamicRoot: false,
-    workspaceRoot,
+    directoryRoot,
     rootDir: "models",
-    rootPath: path.join(workspaceRoot, "models"),
+    rootPath: path.join(directoryRoot, "models"),
     rootName: "models",
     activeDirectories: [],
     port: 4184,
@@ -47,10 +47,10 @@ test("buildViewerServerInfo returns dev-server identity without catalog data", (
 });
 
 test("buildViewerServerInfo can describe a dynamic rootless local viewer", () => {
-  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cad-viewer-server-"));
+  const directoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cad-viewer-server-"));
 
   const info = buildViewerServerInfo({
-    workspaceRoot,
+    directoryRoot,
     rootDir: "",
     port: 4185,
     pid: 12346,
@@ -69,7 +69,7 @@ test("buildViewerServerInfo can describe a dynamic rootless local viewer", () =>
     serverFeatures: ["dynamic-root"],
     backend: "local-fs",
     dynamicRoot: true,
-    workspaceRoot,
+    directoryRoot,
     rootDir: "",
     rootPath: "",
     rootName: "",
@@ -83,14 +83,14 @@ test("buildViewerServerInfo can describe a dynamic rootless local viewer", () =>
 });
 
 test("buildViewerServerInfo normalizes active directory options", () => {
-  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cad-viewer-server-"));
-  const modelsRoot = path.join(workspaceRoot, "models");
-  const fixturesRoot = path.join(workspaceRoot, "fixtures");
+  const directoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cad-viewer-server-"));
+  const modelsRoot = path.join(directoryRoot, "models");
+  const fixturesRoot = path.join(directoryRoot, "fixtures");
   fs.mkdirSync(modelsRoot, { recursive: true });
   fs.mkdirSync(fixturesRoot, { recursive: true });
 
   const info = buildViewerServerInfo({
-    workspaceRoot,
+    directoryRoot,
     rootDir: "",
     activeDirectories: [
       { dir: "fixtures" },

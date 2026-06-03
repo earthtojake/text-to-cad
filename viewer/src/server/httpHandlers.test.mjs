@@ -139,6 +139,93 @@ test("CAD Viewer API middleware activates request roots for file params", async 
 });
 
 
+test("CAD Viewer API middleware activates directories without reading the catalog", async () => {
+  const calls = [];
+  const activatedRoots = [];
+  const activatedRequests = [];
+  const resolvedRoot = {
+    dir: "/tmp/file-root",
+    rootPath: "/tmp/file-root",
+    rootName: "file-root",
+  };
+  let readCatalogCalls = 0;
+  const middleware = createCadViewerApiMiddleware({
+    backend: {
+      readCatalog: async () => {
+        readCatalogCalls += 1;
+        return { schemaVersion: 4, entries: [] };
+      },
+      resolveRequestRoot: (request) => {
+        calls.push(request);
+        return resolvedRoot;
+      },
+    },
+    serverInfo: ({ rootDir, fileRef }) => ({
+      app: "cad-viewer",
+      rootDir,
+      fileRef,
+      activeDirectories: [resolvedRoot],
+    }),
+    onDirectoryActivated: (root, request) => {
+      activatedRoots.push(root);
+      activatedRequests.push(request);
+    },
+  });
+  const req = {
+    method: "POST",
+    url: "/__cad/directory/activate?dir=/tmp/file-root",
+  };
+  const res = createResponse();
+  let nextCalled = false;
+
+  await middleware(req, res, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, false);
+  assert.equal(readCatalogCalls, 0);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(calls, [
+    { rootDir: "/tmp/file-root", fileRef: "" },
+  ]);
+  assert.deepEqual(activatedRoots, [resolvedRoot]);
+  assert.deepEqual(activatedRequests, [
+    { rootDir: "/tmp/file-root", fileRef: "" },
+  ]);
+  assert.deepEqual(JSON.parse(res.body), {
+    ok: true,
+    directory: resolvedRoot,
+    server: {
+      app: "cad-viewer",
+      rootDir: "/tmp/file-root",
+      fileRef: "",
+      activeDirectories: [resolvedRoot],
+    },
+  });
+});
+
+
+test("CAD Viewer API middleware requires POST for directory activation", async () => {
+  const middleware = createCadViewerApiMiddleware({
+    backend: {
+      resolveRoot: () => ({ dir: "/tmp/file-root", rootPath: "/tmp/file-root", rootName: "file-root" }),
+      readCatalog: async () => ({ schemaVersion: 4, entries: [] }),
+    },
+  });
+  const req = {
+    method: "GET",
+    url: "/__cad/directory/activate?dir=/tmp/file-root",
+  };
+  const res = createResponse();
+
+  await middleware(req, res, () => {});
+
+  assert.equal(res.statusCode, 405);
+  assert.equal(res.getHeader("allow"), "POST");
+  assert.match(JSON.parse(res.body).error, /POST/);
+});
+
+
 test("production static assets get browser-safe content types", () => {
   assert.equal(contentTypeForStaticAsset("dist/index.html"), "text/html; charset=utf-8");
   assert.equal(contentTypeForStaticAsset("dist/assets/index-abc.js"), "text/javascript; charset=utf-8");
@@ -180,7 +267,7 @@ test("production static assets are no-store and missing assets do not fall back 
   assert.equal(missingAssetResponse.bodyText(), "Not found");
 
   const routeResponse = createWritableResponse();
-  middleware({ url: "/workspace/tom" }, routeResponse, () => {});
+  middleware({ url: "/project/tom" }, routeResponse, () => {});
   await routeResponse.finished;
   assert.equal(routeResponse.statusCode, 200);
   assert.equal(routeResponse.getHeader("content-type"), "text/html; charset=utf-8");
@@ -409,7 +496,7 @@ test("CAD Viewer API middleware exports implicit CAD files through local backend
     ],
   };
   const changedRoots = [];
-  const resolvedRoot = { rootPath: "/workspace/models", rootDir: "models" };
+  const resolvedRoot = { rootPath: "/project/models", rootDir: "models" };
   const middleware = createCadViewerApiMiddleware({
     rootDir: "models",
     backend: {
@@ -494,7 +581,7 @@ test("CAD Viewer API middleware rejects implicit exports for hosted backends", a
     backend: {
       kind: "hosted",
       readCatalog: async () => ({ schemaVersion: 4, entries: [] }),
-      resolveRoot: () => ({ rootPath: "/workspace/models" }),
+      resolveRoot: () => ({ rootPath: "/project/models" }),
       generateImplicitExport: async () => {
         called = true;
       },

@@ -23,7 +23,7 @@ import {
   normalizeViewerDefaultFile,
   normalizeViewerGithubUrl,
 } from "../shared/viewerConfig.mjs";
-import { resolveWorkspaceRoot } from "./workspaceRoot.mjs";
+import { resolveDirectoryRoot } from "./directoryRoot.mjs";
 import {
   normalizeViewerAssetBackend,
   assertNoDeprecatedLocalRootEnv,
@@ -44,7 +44,7 @@ const serverModuleDir = path.dirname(fileURLToPath(import.meta.url));
 const viewerAppRoot = path.basename(path.dirname(serverModuleDir)) === "src"
   ? path.resolve(serverModuleDir, "..", "..")
   : path.resolve(serverModuleDir, "..");
-const defaultWorkspaceRoot = path.resolve(viewerAppRoot, "..");
+const defaultDirectoryRoot = path.resolve(viewerAppRoot, "..");
 
 function readViewerPackageVersion(appRoot) {
   try {
@@ -59,7 +59,8 @@ const viewerVersion = readViewerPackageVersion(viewerAppRoot);
 const localServerFeatures = [
   "dynamic-root",
   "relative-dir-query",
-  "default-root-dir",
+  "default-dir",
+  "directory-activation",
 ];
 let runtime;
 try {
@@ -80,11 +81,11 @@ try {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
   process.exit(1);
 }
-const workspaceRoot = resolveWorkspaceRoot({
+const directoryRoot = resolveDirectoryRoot({
   env: runtimeEnv,
   cwd: process.cwd(),
   appRoot: viewerAppRoot,
-  defaultWorkspaceRoot,
+  defaultDirectoryRoot,
 });
 const backendKind = normalizeViewerAssetBackend(runtimeEnv.VIEWER_ASSET_BACKEND);
 const port = normalizeViewerPort(runtime.args.port, DEFAULT_VIEWER_PORT);
@@ -97,7 +98,7 @@ const backend = backendKind === VIEWER_ASSET_BACKENDS.VERCEL_BLOB
       readOnly: true,
     })
   : createLocalAssetBackend({
-      workspaceRoot,
+      directoryRoot,
       rootDir: runtime.args.rootDir || "",
       defaultFile: normalizeViewerDefaultFile(runtimeEnv.VIEWER_DEFAULT_FILE || ""),
       githubUrl: normalizeViewerGithubUrl(runtimeEnv.VIEWER_GITHUB_URL || ""),
@@ -132,7 +133,7 @@ if (localAssetBackendEnabled) {
   try {
     trackActiveDirectory(backend.resolveRoot(""));
   } catch (error) {
-    process.stderr.write(`Failed to activate default CAD Viewer workspace: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`Failed to activate default CAD Viewer directory: ${error instanceof Error ? error.message : String(error)}\n`);
   }
 }
 
@@ -147,7 +148,7 @@ const middlewares = [
       }
       const infoRootDir = rootDir || "";
       return buildViewerServerInfo({
-        workspaceRoot,
+        directoryRoot,
         rootDir: infoRootDir,
         port,
         pid: process.pid,
@@ -161,6 +162,9 @@ const middlewares = [
       });
     },
     onCatalogActivated: (resolvedRoot) => {
+      trackActiveDirectory(resolvedRoot);
+    },
+    onDirectoryActivated: (resolvedRoot) => {
       trackActiveDirectory(resolvedRoot);
     },
   }),

@@ -20,7 +20,7 @@ export function normalizeViewerPort(value, fallback = DEFAULT_VIEWER_PORT) {
   return fallback;
 }
 
-function normalizeViewerActiveDirectory(value, workspaceRoot) {
+function normalizeViewerActiveDirectory(value, directoryRoot) {
   if (!value || typeof value !== "object") {
     return null;
   }
@@ -30,7 +30,7 @@ function normalizeViewerActiveDirectory(value, workspaceRoot) {
     return null;
   }
   const resolvedRawRootPath = rawRootPath
-    ? path.resolve(path.isAbsolute(rawRootPath) ? rawRootPath : path.join(workspaceRoot, rawRootPath))
+    ? path.resolve(path.isAbsolute(rawRootPath) ? rawRootPath : path.join(directoryRoot, rawRootPath))
     : "";
   const resolvedRoot = rawRootPath
     ? {
@@ -44,7 +44,7 @@ function normalizeViewerActiveDirectory(value, workspaceRoot) {
           rootPath: path.resolve(rawDir),
           rootName: path.basename(path.resolve(rawDir)),
         }
-      : resolveViewerRoot(workspaceRoot, normalizeViewerRootDir(rawDir));
+      : resolveViewerRoot(directoryRoot, normalizeViewerRootDir(rawDir));
   const dir = rawDir || resolvedRoot.dir || "";
   const rootPath = resolvedRoot.rootPath || "";
   if (!rootPath) {
@@ -53,18 +53,18 @@ function normalizeViewerActiveDirectory(value, workspaceRoot) {
   return {
     dir,
     rootPath,
-    rootName: String(value.rootName || resolvedRoot.rootName || path.basename(rootPath) || dir || "Workspace"),
+    rootName: String(value.rootName || resolvedRoot.rootName || path.basename(rootPath) || dir || "Directory"),
   };
 }
 
-export function normalizeViewerActiveDirectories(activeDirectories, workspaceRoot) {
-  if (!Array.isArray(activeDirectories) || !workspaceRoot) {
+export function normalizeViewerActiveDirectories(activeDirectories, directoryRoot) {
+  if (!Array.isArray(activeDirectories) || !directoryRoot) {
     return [];
   }
   const seen = new Set();
   const normalized = [];
   for (const value of activeDirectories) {
-    const directory = normalizeViewerActiveDirectory(value, workspaceRoot);
+    const directory = normalizeViewerActiveDirectory(value, directoryRoot);
     if (!directory || !directory.dir || seen.has(directory.rootPath)) {
       continue;
     }
@@ -75,7 +75,7 @@ export function normalizeViewerActiveDirectories(activeDirectories, workspaceRoo
 }
 
 export function buildViewerServerInfo({
-  workspaceRoot,
+  directoryRoot,
   rootDir = DEFAULT_VIEWER_ROOT_DIR,
   port = DEFAULT_VIEWER_PORT,
   pid = process.pid,
@@ -88,10 +88,10 @@ export function buildViewerServerInfo({
   serverFeatures = [],
   activeDirectories = [],
 } = {}) {
-  if (!workspaceRoot) {
-    throw new Error("workspaceRoot is required");
+  if (!directoryRoot) {
+    throw new Error("directoryRoot is required");
   }
-  const resolvedWorkspaceRoot = path.resolve(workspaceRoot);
+  const resolvedDirectoryRoot = path.resolve(directoryRoot);
   const rawRootDir = String(rootDir || "").trim();
   const resolvedViewerRoot = rawRootDir
     ? path.isAbsolute(rawRootDir)
@@ -100,7 +100,7 @@ export function buildViewerServerInfo({
           rootPath: path.resolve(rawRootDir),
           rootName: path.basename(path.resolve(rawRootDir)),
         }
-      : resolveViewerRoot(resolvedWorkspaceRoot, normalizeViewerRootDir(rawRootDir))
+      : resolveViewerRoot(resolvedDirectoryRoot, normalizeViewerRootDir(rawRootDir))
     : {
         dir: DEFAULT_VIEWER_ROOT_DIR,
         rootPath: "",
@@ -108,7 +108,7 @@ export function buildViewerServerInfo({
       };
   const normalizedPort = normalizeViewerPort(port);
   const normalizedGit = String(git || "").trim();
-  const normalizedActiveDirectories = normalizeViewerActiveDirectories(activeDirectories, resolvedWorkspaceRoot);
+  const normalizedActiveDirectories = normalizeViewerActiveDirectories(activeDirectories, resolvedDirectoryRoot);
   return {
     schemaVersion: VIEWER_SERVER_INFO_SCHEMA_VERSION,
     serverApiVersion: VIEWER_SERVER_API_VERSION,
@@ -120,7 +120,7 @@ export function buildViewerServerInfo({
       : [],
     backend,
     dynamicRoot: Boolean(dynamicRoot),
-    workspaceRoot: resolvedWorkspaceRoot,
+    directoryRoot: resolvedDirectoryRoot,
     rootDir: resolvedViewerRoot.dir,
     rootPath: resolvedViewerRoot.rootPath,
     rootName: resolvedViewerRoot.rootName,

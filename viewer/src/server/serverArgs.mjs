@@ -83,7 +83,7 @@ export function serverHelpText() {
 Options:
   --port <number>    Port to bind. Defaults to 4178.
   --host <host>      Host to bind. Defaults to 127.0.0.1.
-  --dir <path>       Default local workspace root. Defaults to startup directory.
+  --dir <path>       Default local directory root. Defaults to startup directory.
   --shutdown-after <time>
                      Shut down after a duration such as 12h, 30m, or 60000.
   -h, --help         Show this help.

@@ -52,11 +52,11 @@ production `serve` is started with `--shutdown-after <duration>`.
 The local filesystem backend accepts absolute or startup-directory-relative
 `?dir=` values directly in the Viewer URL. Once seen, the active directory is
 stored in tab-local `sessionStorage`, so subsequent navigation can omit `?dir=`
-and continue using the same workspace. The `--dir` startup path is the first
-active workspace; when omitted, the startup directory is used. If multiple
-workspaces have been scanned and no `?dir=` or stored workspace is active, the
-Viewer shows a workspace picker. `?file=` is always relative to the active
-workspace.
+and continue using the same directory. The `--dir` startup path is the first
+active directory; when omitted, the startup directory is used. If multiple
+directories have been scanned and no `?dir=` or stored directory is active, the
+Viewer shows a directory picker. `?file=` is always relative to the active
+directory.
 
 Install the local Python artifact package when iterating on local STEP
 regeneration:
@@ -118,7 +118,7 @@ Important environment variables:
 
 - `VIEWER_ASSET_BACKEND`: `local-fs` for local files or `vercel-blob` for hosted
   Blob assets.
-- `VIEWER_DEFAULT_ROOT_DIR`: default local workspace root used by Vite dev mode.
+- `VIEWER_DEFAULT_DIR`: default local directory used by Vite dev mode.
   `npm run agent:start -- --dir <path>` sets this automatically when it launches
   Vite.
 - `VIEWER_DEFAULT_FILE`: active-directory-relative file opened when `?file=`

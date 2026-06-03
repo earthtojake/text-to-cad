@@ -16,12 +16,14 @@ live review links. The expected input is one or more explicit file paths.
 ## Start Viewer
 
 Start or reuse one local CAD Viewer with `npm run agent:start`, passing the
-absolute artifact workspace as `--dir`. The `agent:start` launcher owns port
-selection, compatible-server reuse, workspace activation, and the `?dir=` query
-parameter. Use the Viewer URL printed by `agent:start` as-is, then add only a
-`file=` query value for the artifact you want to review.
+absolute artifact directory as `--dir`. The `agent:start` launcher owns port
+selection, compatible-server reuse, directory activation, and the `?dir=` query
+parameter. It activates reused servers through the Viewer's lightweight
+directory activation API, without requiring agents to probe ports or trigger
+catalog scans manually. Use the Viewer URL printed by `agent:start` as-is, then
+add only a `file=` query value for the artifact you want to review.
 
-Choose `--dir` as the absolute workspace folder that contains the model
+Choose `--dir` as the absolute directory that contains the model
 artifacts and sidecars, commonly `<repo>/models` or the consuming project's
 equivalent model directory. The `file=` value must be relative to that `--dir`.
 Do not manually choose ports, probe servers, rewrite `?dir=`, or start a
@@ -41,7 +43,7 @@ npm --prefix scripts/viewer run agent:start -- --host 127.0.0.1 --dir <absolute-
 Use the printed Viewer URL and append `file=`:
 
 ```bash
-http://127.0.0.1:<printed-port>/?dir=/absolute/workspace/models&file=path/to/model.step
+http://127.0.0.1:<printed-port>/?dir=/absolute/project/models&file=path/to/model.step
 ```
 
 If a non-Viewer process or another worktree's Viewer occupies the candidate
@@ -52,7 +54,7 @@ rerun the same command with the needed permission/escalation.
 ## Links
 
 - Return one Viewer URL per requested file.
-- Start/reuse the Viewer once per absolute workspace `--dir`, then append
+- Start/reuse the Viewer once per absolute directory `--dir`, then append
   `file=<path>` for each requested file. The file path must be relative to
   `--dir`.
 - For directory-only review links, return the URL printed by `agent:start`

@@ -9,9 +9,9 @@ import {
 } from "./fileAccessAssets.js";
 
 const viewerServerInfo = {
-  workspaceRoot: "/workspace/text-to-cad",
+  directoryRoot: "/project/text-to-cad",
   rootDir: "models",
-  rootPath: "/workspace/text-to-cad/models",
+  rootPath: "/project/text-to-cad/models",
 };
 
 const hostedViewerServerInfo = {
@@ -102,7 +102,7 @@ test("file access assets prefer loaded STEP source status filenames", () => {
 
   assert.equal(assets.source?.filename, "robot_module.py");
   assert.equal(assets.source?.label, "robot_module.py");
-  assert.equal(assets.source?.workspaceRelativePath, "models/generated/source/robot_module.py");
+  assert.equal(assets.source?.directoryRelativePath, "models/generated/source/robot_module.py");
 });
 
 test("file access assets expose explicit catalog source files without changing catalog schema", () => {
@@ -117,7 +117,7 @@ test("file access assets expose explicit catalog source files without changing c
   assert.equal(assets.source?.rootRelativePath, "generated/robot_source.py");
 });
 
-test("file access assets preserve workspace-relative generator source paths", () => {
+test("file access assets preserve directory-relative generator source paths", () => {
   const assets = fileAccessAssetsForEntry({
     file: "robots/tom/robot_arm.urdf",
     kind: "urdf",
@@ -130,7 +130,7 @@ test("file access assets preserve workspace-relative generator source paths", ()
 
   assert.equal(assets.source?.filename, "robot_arm_urdf.py");
   assert.equal(assets.source?.rootRelativePath, "");
-  assert.equal(assets.source?.workspaceRelativePath, "models/robots/tom/robot_arm_urdf.py");
+  assert.equal(assets.source?.directoryRelativePath, "models/robots/tom/robot_arm_urdf.py");
 });
 
 test("file access download URLs target exact output or source assets", () => {
@@ -155,44 +155,44 @@ test("file access open URLs target the local reveal endpoint", () => {
   );
 });
 
-test("file access copy targets include absolute and workspace-relative local paths", () => {
+test("file access copy targets include absolute and directory-relative local paths", () => {
   const targets = copyTargetsForFileAccessAsset({
     rootRelativePath: "assemblies/robot-arm/robot-arm.step",
   }, {
-    workspaceRoot: "/workspace/text-to-cad",
+    directoryRoot: "/project/text-to-cad",
     rootDir: "models",
-    rootPath: "/workspace/text-to-cad/models",
+    rootPath: "/project/text-to-cad/models",
   });
 
   assert.deepEqual(targets, {
-    path: "/workspace/text-to-cad/models/assemblies/robot-arm/robot-arm.step",
+    path: "/project/text-to-cad/models/assemblies/robot-arm/robot-arm.step",
     relativePath: "assemblies/robot-arm/robot-arm.step",
   });
 });
 
-test("file access copy targets prefer loaded source workspace-relative paths", () => {
+test("file access copy targets prefer loaded source directory-relative paths", () => {
   const targets = copyTargetsForFileAccessAsset({
     rootRelativePath: "generated/robot.py",
-    workspaceRelativePath: "models/generated/source/robot_module.py",
+    directoryRelativePath: "models/generated/source/robot_module.py",
   }, {
-    workspaceRoot: "/workspace/text-to-cad",
+    directoryRoot: "/project/text-to-cad",
     rootDir: "models",
-    rootPath: "/workspace/text-to-cad/models",
+    rootPath: "/project/text-to-cad/models",
   });
 
   assert.deepEqual(targets, {
-    path: "/workspace/text-to-cad/models/generated/source/robot_module.py",
+    path: "/project/text-to-cad/models/generated/source/robot_module.py",
     relativePath: "generated/source/robot_module.py",
   });
 });
 
-test("file access copy targets preserve workspace-relative paths outside the viewer root", () => {
+test("file access copy targets preserve directory-relative paths outside the viewer root", () => {
   const targets = copyTargetsForFileAccessAsset({
-    workspaceRelativePath: "cad/source/robot_module.py",
+    directoryRelativePath: "cad/source/robot_module.py",
   }, viewerServerInfo);
 
   assert.deepEqual(targets, {
-    path: "/workspace/text-to-cad/cad/source/robot_module.py",
+    path: "/project/text-to-cad/cad/source/robot_module.py",
     relativePath: "cad/source/robot_module.py",
   });
 });

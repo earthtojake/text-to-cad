@@ -19,7 +19,7 @@ test("parseServerArgs accepts direct backend port and host flags", () => {
   );
 });
 
-test("parseServerArgs accepts a default workspace directory", () => {
+test("parseServerArgs accepts a default directory", () => {
   assert.deepEqual(
     parseServerArgs(["--dir=/tmp/models", "--port", "4190"]),
     {
@@ -66,7 +66,7 @@ test("parseServerArgs rejects removed root-dir flags", () => {
 test("applyServerArgsToEnv preserves env while keeping CLI port in parsed args", () => {
   const result = applyServerArgsToEnv({
     argv: ["--port", "4190", "--dir", "/tmp/models"],
-    cwd: "/tmp/workspace",
+    cwd: "/tmp/project",
     env: {
       VIEWER_ASSET_BACKEND: "local-fs",
     },

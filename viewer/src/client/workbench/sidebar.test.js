@@ -27,19 +27,19 @@ import {
   CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH,
   CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH,
   CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH,
-  CAD_WORKSPACE_SESSION_STORAGE_KEY,
-  createWorkspaceSessionThemeSlice,
+  CAD_DIRECTORY_SESSION_STORAGE_KEY,
+  createDirectorySessionThemeSlice,
   createTabRecord,
   deleteCustomThemePreset,
   getAvailableThemePresetIdForSettings,
-  isWorkspaceSessionThemeSlice,
-  readCadWorkspaceSessionState,
+  isDirectorySessionThemeSlice,
+  readCadDirectorySessionState,
   readCadWorkspaceGlassTone,
   readCustomThemePresets,
   readThemeSettings,
   readThemeSettingsState,
   readThemeSettingsStateFromAppearanceQuery,
-  readWorkspaceThemeSettingsState,
+  readDirectoryThemeSettingsState,
   resetThemePresetToDefault,
   restoreDefaultThemePresets,
   saveAndActivateCustomThemePreset,
@@ -47,7 +47,7 @@ import {
   serializeThemeSettingsForStorage,
   THEME_STORAGE_KEY,
   updateThemePresetSettings,
-  writeCadWorkspaceSessionState,
+  writeCadDirectorySessionState,
   writeCustomThemePresets,
   writeCustomThemePresetLibrary,
   writeThemeSettings
@@ -69,7 +69,7 @@ import {
 import {
   createSessionBackedTabRecord,
   shouldActivateUrlSelection
-} from "../components/workbench/hooks/useCadWorkspaceSession.js";
+} from "../components/workbench/hooks/useCadDirectorySession.js";
 import {
   CAD_WORKSPACE_LAYOUT_MODE,
   CAD_WORKSPACE_DESKTOP_BREAKPOINT_PX,
@@ -100,8 +100,8 @@ import {
   fileSessionStorageKey
 } from "./fileSessionState.js";
 import {
-  CAD_WORKSPACE_STORAGE_EVENT_ACTION,
-  cadWorkspaceStorageEventAction
+  CAD_DIRECTORY_STORAGE_EVENT_ACTION,
+  cadDirectoryStorageEventAction
 } from "./storageEvents.js";
 
 function createMemoryStorage() {
@@ -803,26 +803,26 @@ test("workspace URL selection overrides restored sidebar selection", () => {
   );
 });
 
-test("workspace storage events never sync per-file session state across tabs", () => {
+test("directory storage events never sync per-file session state across tabs", () => {
   assert.equal(
-    cadWorkspaceStorageEventAction(fileSessionStorageKey("models", "parts/bracket.step")),
-    CAD_WORKSPACE_STORAGE_EVENT_ACTION.IGNORE
+    cadDirectoryStorageEventAction(fileSessionStorageKey("models", "parts/bracket.step")),
+    CAD_DIRECTORY_STORAGE_EVENT_ACTION.IGNORE
   );
   assert.equal(
-    cadWorkspaceStorageEventAction(fileSessionIndexStorageKey("models")),
-    CAD_WORKSPACE_STORAGE_EVENT_ACTION.IGNORE
+    cadDirectoryStorageEventAction(fileSessionIndexStorageKey("models")),
+    CAD_DIRECTORY_STORAGE_EVENT_ACTION.IGNORE
   );
   assert.equal(
-    cadWorkspaceStorageEventAction(CAD_WORKSPACE_SESSION_STORAGE_KEY),
-    CAD_WORKSPACE_STORAGE_EVENT_ACTION.IGNORE
+    cadDirectoryStorageEventAction(CAD_DIRECTORY_SESSION_STORAGE_KEY),
+    CAD_DIRECTORY_STORAGE_EVENT_ACTION.IGNORE
   );
   assert.equal(
-    cadWorkspaceStorageEventAction(COLOR_SCHEME_STORAGE_KEY),
-    CAD_WORKSPACE_STORAGE_EVENT_ACTION.COLOR_SCHEME
+    cadDirectoryStorageEventAction(COLOR_SCHEME_STORAGE_KEY),
+    CAD_DIRECTORY_STORAGE_EVENT_ACTION.COLOR_SCHEME
   );
   assert.equal(
-    cadWorkspaceStorageEventAction(THEME_STORAGE_KEY),
-    CAD_WORKSPACE_STORAGE_EVENT_ACTION.THEME
+    cadDirectoryStorageEventAction(THEME_STORAGE_KEY),
+    CAD_DIRECTORY_STORAGE_EVENT_ACTION.THEME
   );
 });
 
@@ -917,7 +917,7 @@ test("workspace global session state stores global panel open state and only cus
   const customFileViewerWidth = CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH + 64;
   const customFileSheetWidth = CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH + 72;
 
-  assert.deepEqual(readCadWorkspaceSessionState({ storage }), {
+  assert.deepEqual(readCadDirectorySessionState({ storage }), {
     fileViewerOpen: false,
     fileViewerExpandedDirectoryIds: null,
     fileViewerWidthPx: null,
@@ -926,34 +926,34 @@ test("workspace global session state stores global panel open state and only cus
     theme: null
   });
 
-  assert.equal(writeCadWorkspaceSessionState({
+  assert.equal(writeCadDirectorySessionState({
     fileViewerWidthPx: CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH,
     fileSheetWidthPx: CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH
   }, { storage }), true);
-  assert.equal(storage.getItem(CAD_WORKSPACE_SESSION_STORAGE_KEY), null);
+  assert.equal(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY), null);
 
-  assert.equal(writeCadWorkspaceSessionState({
+  assert.equal(writeCadDirectorySessionState({
     fileSheetWidthPx: CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH
   }, {
     storage,
     defaultFileSheetWidthPx: CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH
   }), true);
-  assert.equal(storage.getItem(CAD_WORKSPACE_SESSION_STORAGE_KEY), null);
+  assert.equal(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY), null);
 
-  assert.equal(writeCadWorkspaceSessionState({
+  assert.equal(writeCadDirectorySessionState({
     fileSheetWidthPx: CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH
   }, {
     storage,
     defaultFileSheetWidthPx: CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH
   }), true);
   assert.deepEqual(
-    JSON.parse(storage.getItem(CAD_WORKSPACE_SESSION_STORAGE_KEY)),
+    JSON.parse(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY)),
     {
       version: 1,
       fileSheetWidthPx: CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH
     }
   );
-  assert.deepEqual(readCadWorkspaceSessionState({
+  assert.deepEqual(readCadDirectorySessionState({
     storage,
     defaultFileSheetWidthPx: CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH
   }), {
@@ -965,19 +965,19 @@ test("workspace global session state stores global panel open state and only cus
     theme: null
   });
 
-  assert.equal(writeCadWorkspaceSessionState({
+  assert.equal(writeCadDirectorySessionState({
     fileViewerWidthPx: customFileViewerWidth,
     fileSheetWidthPx: customFileSheetWidth
   }, { storage }), true);
   assert.deepEqual(
-    JSON.parse(storage.getItem(CAD_WORKSPACE_SESSION_STORAGE_KEY)),
+    JSON.parse(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY)),
     {
       version: 1,
       fileViewerWidthPx: customFileViewerWidth,
       fileSheetWidthPx: customFileSheetWidth
     }
   );
-  assert.deepEqual(readCadWorkspaceSessionState({ storage }), {
+  assert.deepEqual(readCadDirectorySessionState({ storage }), {
     fileViewerOpen: false,
     fileViewerExpandedDirectoryIds: null,
     fileViewerWidthPx: customFileViewerWidth,
@@ -986,14 +986,14 @@ test("workspace global session state stores global panel open state and only cus
     theme: null
   });
 
-  assert.equal(writeCadWorkspaceSessionState({
+  assert.equal(writeCadDirectorySessionState({
     fileViewerOpen: true,
     fileViewerWidthPx: customFileViewerWidth,
     fileSheetOpen: false,
     fileSheetWidthPx: customFileSheetWidth
   }, { storage }), true);
   assert.deepEqual(
-    JSON.parse(storage.getItem(CAD_WORKSPACE_SESSION_STORAGE_KEY)),
+    JSON.parse(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY)),
     {
       version: 1,
       fileViewerOpen: true,
@@ -1002,7 +1002,7 @@ test("workspace global session state stores global panel open state and only cus
       fileSheetWidthPx: customFileSheetWidth
     }
   );
-  assert.deepEqual(readCadWorkspaceSessionState({ storage }), {
+  assert.deepEqual(readCadDirectorySessionState({ storage }), {
     fileViewerOpen: true,
     fileViewerExpandedDirectoryIds: null,
     fileViewerWidthPx: customFileViewerWidth,
@@ -1011,21 +1011,21 @@ test("workspace global session state stores global panel open state and only cus
     theme: null
   });
 
-  assert.equal(writeCadWorkspaceSessionState({
+  assert.equal(writeCadDirectorySessionState({
     fileViewerOpen: false,
     fileViewerWidthPx: CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH,
     fileSheetOpen: true,
     fileSheetWidthPx: CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH
   }, { storage }), true);
   assert.deepEqual(
-    JSON.parse(storage.getItem(CAD_WORKSPACE_SESSION_STORAGE_KEY)),
+    JSON.parse(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY)),
     {
       version: 1,
       fileViewerOpen: false,
       fileSheetOpen: true
     }
   );
-  assert.deepEqual(readCadWorkspaceSessionState({ storage }), {
+  assert.deepEqual(readCadDirectorySessionState({ storage }), {
     fileViewerOpen: false,
     fileViewerExpandedDirectoryIds: null,
     fileViewerWidthPx: null,
@@ -1034,17 +1034,17 @@ test("workspace global session state stores global panel open state and only cus
     theme: null
   });
 
-  assert.equal(writeCadWorkspaceSessionState({
+  assert.equal(writeCadDirectorySessionState({
     fileViewerExpandedDirectoryIds: ["assemblies", "parts/servo", "assemblies"]
   }, { storage }), true);
   assert.deepEqual(
-    JSON.parse(storage.getItem(CAD_WORKSPACE_SESSION_STORAGE_KEY)),
+    JSON.parse(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY)),
     {
       version: 1,
       fileViewerExpandedDirectoryIds: ["assemblies", "parts/servo"]
     }
   );
-  assert.deepEqual(readCadWorkspaceSessionState({ storage }), {
+  assert.deepEqual(readCadDirectorySessionState({ storage }), {
     fileViewerOpen: false,
     fileViewerExpandedDirectoryIds: ["assemblies", "parts/servo"],
     fileViewerWidthPx: null,
@@ -1053,17 +1053,17 @@ test("workspace global session state stores global panel open state and only cus
     theme: null
   });
 
-  assert.equal(writeCadWorkspaceSessionState({
+  assert.equal(writeCadDirectorySessionState({
     fileViewerExpandedDirectoryIds: []
   }, { storage }), true);
   assert.deepEqual(
-    JSON.parse(storage.getItem(CAD_WORKSPACE_SESSION_STORAGE_KEY)),
+    JSON.parse(storage.getItem(CAD_DIRECTORY_SESSION_STORAGE_KEY)),
     {
       version: 1,
       fileViewerExpandedDirectoryIds: []
     }
   );
-  assert.deepEqual(readCadWorkspaceSessionState({ storage }), {
+  assert.deepEqual(readCadDirectorySessionState({ storage }), {
     fileViewerOpen: false,
     fileViewerExpandedDirectoryIds: [],
     fileViewerWidthPx: null,
@@ -1252,7 +1252,7 @@ test("theme persistence does not store unsaved built-in theme edits", () => {
   });
 });
 
-test("workspace session theme slices keep dirty settings against the active theme", () => {
+test("directory session theme slices keep dirty settings against the active theme", () => {
   const blueThemeSettings = cloneThemePresetSettings("blue");
   const customThemeSettings = normalizeThemeSettings({
     ...blueThemeSettings,
@@ -1262,12 +1262,12 @@ test("workspace session theme slices keep dirty settings against the active them
     }
   });
 
-  assert.equal(createWorkspaceSessionThemeSlice({
+  assert.equal(createDirectorySessionThemeSlice({
     presetId: "blue",
     settings: blueThemeSettings
   }), null);
 
-  const slice = createWorkspaceSessionThemeSlice({
+  const slice = createDirectorySessionThemeSlice({
     presetId: "blue",
     settings: customThemeSettings
   });
@@ -1275,10 +1275,10 @@ test("workspace session theme slices keep dirty settings against the active them
     presetId: "blue",
     settings: customThemeSettings
   });
-  assert.equal(isWorkspaceSessionThemeSlice(slice), true);
+  assert.equal(isDirectorySessionThemeSlice(slice), true);
 });
 
-test("workspace theme state restores unsaved session settings globally", () => {
+test("directory theme state restores unsaved session settings globally", () => {
   const originalWindow = globalThis.window;
   const blueThemeSettings = cloneThemePresetSettings("blue");
   const customThemeSettings = normalizeThemeSettings({
@@ -1296,14 +1296,14 @@ test("workspace theme state restores unsaved session settings globally", () => {
 
   try {
     assert.equal(writeThemeSettings(blueThemeSettings, { presetId: "blue" }), true);
-    globalThis.window.sessionStorage.setItem(CAD_WORKSPACE_SESSION_STORAGE_KEY, JSON.stringify({
+    globalThis.window.sessionStorage.setItem(CAD_DIRECTORY_SESSION_STORAGE_KEY, JSON.stringify({
       version: 1,
       theme: {
         presetId: "blue",
         settings: customThemeSettings
       }
     }));
-    assert.deepEqual(readWorkspaceThemeSettingsState(), {
+    assert.deepEqual(readDirectoryThemeSettingsState(), {
       presetId: "blue",
       settings: customThemeSettings
     });

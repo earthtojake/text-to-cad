@@ -348,20 +348,20 @@ function SidebarResizeHandle({ onStartResize }) {
   );
 }
 
-function workspaceLabelForOption(option) {
+function directoryLabelForOption(option) {
   const rootName = String(option?.rootName || "").trim();
   if (rootName) {
     return rootName;
   }
   const pathLabel = String(option?.rootPath || option?.dir || "").trim().replace(/\\/g, "/").replace(/\/+$/g, "");
-  return pathLabel.split("/").filter(Boolean).pop() || pathLabel || "Workspace";
+  return pathLabel.split("/").filter(Boolean).pop() || pathLabel || "Directory";
 }
 
-function workspacePathLabelForOption(option) {
+function directoryPathLabelForOption(option) {
   return String(option?.rootPath || option?.dir || "").trim();
 }
 
-function normalizeWorkspaceOptions(options) {
+function normalizeDirectoryOptions(options) {
   const seen = new Set();
   const result = [];
   for (const option of Array.isArray(options) ? options : []) {
@@ -381,20 +381,20 @@ function normalizeWorkspaceOptions(options) {
   return result;
 }
 
-function WorkspaceSwitcher({
-  workspaceOptions = [],
-  activeWorkspaceDir = "",
-  onSelectWorkspace
+function DirectorySwitcher({
+  directoryOptions = [],
+  activeDirectory = "",
+  onSelectDirectory
 }) {
-  const options = normalizeWorkspaceOptions(workspaceOptions);
+  const options = normalizeDirectoryOptions(directoryOptions);
   if (options.length <= 1) {
     return null;
   }
 
-  const activeDir = String(activeWorkspaceDir || "").trim();
+  const activeDir = String(activeDirectory || "").trim();
   const activeOption = options.find((option) => option.dir === activeDir || option.rootPath === activeDir) || options[0];
-  const activeLabel = workspaceLabelForOption(activeOption);
-  const activePathLabel = workspacePathLabelForOption(activeOption);
+  const activeLabel = directoryLabelForOption(activeOption);
+  const activePathLabel = directoryPathLabelForOption(activeOption);
 
   return (
     <DropdownMenu>
@@ -417,8 +417,8 @@ function WorkspaceSwitcher({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width] max-w-[min(28rem,calc(100vw-1rem))]">
         {options.map((option) => {
-          const label = workspaceLabelForOption(option);
-          const pathLabel = workspacePathLabelForOption(option);
+          const label = directoryLabelForOption(option);
+          const pathLabel = directoryPathLabelForOption(option);
           const active = option.dir === activeOption.dir || option.rootPath === activeOption.rootPath;
           return (
             <DropdownMenuItem
@@ -428,8 +428,8 @@ function WorkspaceSwitcher({
                 active && "bg-accent text-accent-foreground"
               )}
               onSelect={() => {
-                if (typeof onSelectWorkspace === "function" && option.dir !== activeOption.dir) {
-                  onSelectWorkspace(option.dir);
+                if (typeof onSelectDirectory === "function" && option.dir !== activeOption.dir) {
+                  onSelectDirectory(option.dir);
                 }
               }}
               title={pathLabel || label}
@@ -479,9 +479,9 @@ function FileViewerContents({
   catalogHydrated = false,
   catalogRefreshing = false,
   catalogError = "",
-  workspaceOptions = [],
-  activeWorkspaceDir = "",
-  onSelectWorkspace,
+  directoryOptions = [],
+  activeDirectory = "",
+  onSelectDirectory,
   resizable = true,
   onStartResize
 }) {
@@ -494,10 +494,10 @@ function FileViewerContents({
   return (
     <>
       <SidebarHeader className="gap-2">
-        <WorkspaceSwitcher
-          workspaceOptions={workspaceOptions}
-          activeWorkspaceDir={activeWorkspaceDir}
-          onSelectWorkspace={onSelectWorkspace}
+        <DirectorySwitcher
+          directoryOptions={directoryOptions}
+          activeDirectory={activeDirectory}
+          onSelectDirectory={onSelectDirectory}
         />
         <SidebarInput
           type="search"
@@ -625,9 +625,9 @@ export default function FileViewerSidebar({
   catalogHydrated = false,
   catalogRefreshing = false,
   catalogError = "",
-  workspaceOptions = [],
-  activeWorkspaceDir = "",
-  onSelectWorkspace,
+  directoryOptions = [],
+  activeDirectory = "",
+  onSelectDirectory,
   resizable = true,
   onStartResize
 }) {
@@ -668,9 +668,9 @@ export default function FileViewerSidebar({
       catalogHydrated={catalogHydrated}
       catalogRefreshing={catalogRefreshing}
       catalogError={catalogError}
-      workspaceOptions={workspaceOptions}
-      activeWorkspaceDir={activeWorkspaceDir}
-      onSelectWorkspace={onSelectWorkspace}
+      directoryOptions={directoryOptions}
+      activeDirectory={activeDirectory}
+      onSelectDirectory={onSelectDirectory}
       resizable={resizable}
       onStartResize={onStartResize}
     />

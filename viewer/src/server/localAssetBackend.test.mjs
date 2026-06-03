@@ -6,12 +6,12 @@ import test from "node:test";
 
 import { createLocalAssetBackend } from "./localAssetBackend.mjs";
 
-async function withTempWorkspace(callback) {
-  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cad-viewer-backend-"));
+async function withTempDirectoryRoot(callback) {
+  const directoryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cad-viewer-backend-"));
   try {
-    return await callback(workspaceRoot);
+    return await callback(directoryRoot);
   } finally {
-    fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    fs.rmSync(directoryRoot, { recursive: true, force: true });
   }
 }
 
@@ -30,14 +30,14 @@ function writeStepWithSourceMetadata(filePath, sourcePath) {
 }
 
 test("local backend serves catalog from an in-memory scan without writing catalog files", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
-    const hiddenCatalogPath = path.join(workspaceRoot, ".catalog.json");
-    const visibleCatalogPath = path.join(workspaceRoot, "catalog.json");
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
+    const hiddenCatalogPath = path.join(directoryRoot, ".catalog.json");
+    const visibleCatalogPath = path.join(directoryRoot, "catalog.json");
     const modelCatalogPath = path.join(modelRoot, "catalog.json");
     fs.mkdirSync(modelRoot, { recursive: true });
     fs.writeFileSync(path.join(modelRoot, "sample.stl"), "solid sample\nendsolid sample\n");
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
 
     const refreshed = backend.refreshCatalog();
     const catalog = backend.readCatalog();
@@ -72,46 +72,46 @@ test("local backend serves catalog from an in-memory scan without writing catalo
   });
 });
 
-test("local backend defaults directory mode to the workspace root", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    fs.writeFileSync(path.join(workspaceRoot, "sample.stl"), "solid sample\nendsolid sample\n");
-    const backend = createLocalAssetBackend({ workspaceRoot });
+test("local backend defaults directory mode to the directory root", async () => {
+  await withTempDirectoryRoot((directoryRoot) => {
+    fs.writeFileSync(path.join(directoryRoot, "sample.stl"), "solid sample\nendsolid sample\n");
+    const backend = createLocalAssetBackend({ directoryRoot });
 
     assert.deepEqual(backend.readCatalog().entries.map((entry) => entry.rootRelativeFile), ["sample.stl"]);
   });
 });
 
-test("local backend accepts relative request directories from the workspace root", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    fs.mkdirSync(path.join(workspaceRoot, "models"), { recursive: true });
-    fs.writeFileSync(path.join(workspaceRoot, "models", "sample.stl"), "solid sample\nendsolid sample\n");
-    const backend = createLocalAssetBackend({ workspaceRoot });
+test("local backend accepts relative request directories from the directory root", async () => {
+  await withTempDirectoryRoot((directoryRoot) => {
+    fs.mkdirSync(path.join(directoryRoot, "models"), { recursive: true });
+    fs.writeFileSync(path.join(directoryRoot, "models", "sample.stl"), "solid sample\nendsolid sample\n");
+    const backend = createLocalAssetBackend({ directoryRoot });
 
     assert.deepEqual(backend.readCatalog({ rootDir: "models" }).entries.map((entry) => entry.rootRelativeFile), ["sample.stl"]);
   });
 });
 
 test("local backend keeps directory mode for file params that look absolute", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    fs.mkdirSync(path.join(workspaceRoot, "models"), { recursive: true });
-    fs.mkdirSync(path.join(workspaceRoot, "other"), { recursive: true });
-    fs.writeFileSync(path.join(workspaceRoot, "models", "inside.stl"), "solid inside\nendsolid inside\n");
-    const outsidePath = path.join(workspaceRoot, "other", "solo.stl");
+  await withTempDirectoryRoot((directoryRoot) => {
+    fs.mkdirSync(path.join(directoryRoot, "models"), { recursive: true });
+    fs.mkdirSync(path.join(directoryRoot, "other"), { recursive: true });
+    fs.writeFileSync(path.join(directoryRoot, "models", "inside.stl"), "solid inside\nendsolid inside\n");
+    const outsidePath = path.join(directoryRoot, "other", "solo.stl");
     fs.writeFileSync(outsidePath, "solid solo\nendsolid solo\n");
-    const backend = createLocalAssetBackend({ workspaceRoot });
+    const backend = createLocalAssetBackend({ directoryRoot });
 
     const catalog = backend.readCatalog({ rootDir: "models", fileRef: outsidePath });
 
     assert.deepEqual(catalog.entries.map((entry) => entry.rootRelativeFile), ["inside.stl"]);
-    assert.deepEqual(catalog.entries.map((entry) => entry.file), [path.join(workspaceRoot, "models", "inside.stl")]);
+    assert.deepEqual(catalog.entries.map((entry) => entry.file), [path.join(directoryRoot, "models", "inside.stl")]);
   });
 });
 
 test("local backend keeps directory mode for missing relative file params", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    fs.mkdirSync(path.join(workspaceRoot, "models"), { recursive: true });
-    fs.writeFileSync(path.join(workspaceRoot, "models", "sample.stl"), "solid sample\nendsolid sample\n");
-    const backend = createLocalAssetBackend({ workspaceRoot });
+  await withTempDirectoryRoot((directoryRoot) => {
+    fs.mkdirSync(path.join(directoryRoot, "models"), { recursive: true });
+    fs.writeFileSync(path.join(directoryRoot, "models", "sample.stl"), "solid sample\nendsolid sample\n");
+    const backend = createLocalAssetBackend({ directoryRoot });
 
     assert.deepEqual(
       backend.readCatalog({ rootDir: "models", fileRef: "missing.stl" }).entries.map((entry) => entry.rootRelativeFile),
@@ -121,8 +121,8 @@ test("local backend keeps directory mode for missing relative file params", asyn
 });
 
 test("local backend reports missing request directories", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const backend = createLocalAssetBackend({ workspaceRoot });
+  await withTempDirectoryRoot((directoryRoot) => {
+    const backend = createLocalAssetBackend({ directoryRoot });
 
     assert.throws(
       () => backend.readCatalog({ rootDir: "missing-models" }),
@@ -132,13 +132,13 @@ test("local backend reports missing request directories", async () => {
 });
 
 test("local backend incrementally refreshes changed CAD catalog entries", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(modelRoot, { recursive: true });
     const firstPath = path.join(modelRoot, "first.stl");
     const secondPath = path.join(modelRoot, "second.stl");
     fs.writeFileSync(firstPath, "solid first\nendsolid first\n");
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
 
     assert.deepEqual(backend.readCatalog().entries.map((entry) => entry.rootRelativeFile), ["first.stl"]);
 
@@ -158,13 +158,13 @@ test("local backend incrementally refreshes changed CAD catalog entries", async 
 });
 
 test("local backend refreshes requested files against a cached dynamic root catalog", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(modelRoot, { recursive: true });
     const firstPath = path.join(modelRoot, "first.stl");
     const secondPath = path.join(modelRoot, "second.stl");
     fs.writeFileSync(firstPath, "solid first\nendsolid first\n");
-    const backend = createLocalAssetBackend({ workspaceRoot });
+    const backend = createLocalAssetBackend({ directoryRoot });
 
     assert.deepEqual(
       backend.readCatalog({ rootDir: modelRoot, fileRef: "first.stl" }).entries.map((entry) => entry.rootRelativeFile),
@@ -186,13 +186,13 @@ test("local backend refreshes requested files against a cached dynamic root cata
 });
 
 test("local backend incrementally refreshes STEP entries when sidecars change", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     const stepPath = path.join(modelRoot, "part.step");
     const modulePath = path.join(modelRoot, ".part.step.js");
     fs.mkdirSync(modelRoot, { recursive: true });
     fs.writeFileSync(stepPath, "ISO-10303-21;\nEND-ISO-10303-21;\n");
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
 
     assert.equal(backend.readCatalog().entries[0].moduleUrl, undefined);
 
@@ -208,8 +208,8 @@ test("local backend incrementally refreshes STEP entries when sidecars change", 
 });
 
 test("local backend reports active generator status for the active root", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     const statusPath = path.join(modelRoot, ".part.step.run-1.generation.lock.json");
     const updatedAt = new Date().toISOString();
     fs.mkdirSync(modelRoot, { recursive: true });
@@ -223,7 +223,7 @@ test("local backend reports active generator status for the active root", async 
       generator: "gen_step",
       outputs: [{ path: "models/part.step", kind: "step" }],
     }));
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
 
     const status = backend.readGenerationStatus();
 
@@ -235,11 +235,11 @@ test("local backend reports active generator status for the active root", async 
 });
 
 test("local backend resolves same-stem Python generators without requiring a STEP file", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(modelRoot, { recursive: true });
     fs.writeFileSync(path.join(modelRoot, "box.py"), "def gen_step():\n    return None\n");
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
 
     const resolved = backend.resolveStepSource("box.py");
 
@@ -249,14 +249,14 @@ test("local backend resolves same-stem Python generators without requiring a STE
 });
 
 test("local backend rejects Viewer artifact regeneration when same-stem Python has no STEP file", async () => {
-  await withTempWorkspace(async (workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot(async (directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     const generatorPath = path.join(modelRoot, "robot", "robot.py");
     fs.mkdirSync(path.dirname(generatorPath), { recursive: true });
     fs.writeFileSync(generatorPath, "def gen_step():\n    return None\n");
     const stepPath = path.join(modelRoot, "robot", "robot.step");
     const backend = createLocalAssetBackend({
-      workspaceRoot,
+      directoryRoot,
       rootDir: "models",
       stepArtifactGenerator: async () => {
         throw new Error("Python generators should not be invoked by Viewer regeneration.");
@@ -278,15 +278,15 @@ test("local backend rejects Viewer artifact regeneration when same-stem Python h
 });
 
 test("local backend regenerates same-stem Python STEP artifacts from the STEP file", async () => {
-  await withTempWorkspace(async (workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot(async (directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     const generatorPath = path.join(modelRoot, "robot", "robot.py");
     fs.mkdirSync(path.dirname(generatorPath), { recursive: true });
     fs.writeFileSync(generatorPath, "def gen_step():\n    return None\n");
     const stepPath = path.join(modelRoot, "robot", "robot.step");
     fs.writeFileSync(stepPath, "ISO-10303-21;\nEND-ISO-10303-21;\n");
     const backend = createLocalAssetBackend({
-      workspaceRoot,
+      directoryRoot,
       rootDir: "models",
       stepArtifactGenerator: async (request) => {
         assert.equal(request.stepPath, stepPath);
@@ -313,13 +313,13 @@ test("local backend regenerates same-stem Python STEP artifacts from the STEP fi
 });
 
 test("local backend regenerates GLB artifacts for imported STEP files", async () => {
-  await withTempWorkspace(async (workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot(async (directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(path.join(modelRoot, "robot"), { recursive: true });
     const stepPath = path.join(modelRoot, "robot", "robot.step");
     fs.writeFileSync(stepPath, "ISO-10303-21;\nEND-ISO-10303-21;\n");
     const backend = createLocalAssetBackend({
-      workspaceRoot,
+      directoryRoot,
       rootDir: "models",
       stepArtifactGenerator: async (request) => {
         assert.equal(request.stepPath, stepPath);
@@ -342,14 +342,14 @@ test("local backend regenerates GLB artifacts for imported STEP files", async ()
 });
 
 test("local backend regenerates Python metadata STEP artifacts from the STEP file", async () => {
-  await withTempWorkspace(async (workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot(async (directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(path.join(modelRoot, "generated"), { recursive: true });
     fs.writeFileSync(path.join(modelRoot, "generated", "source.py"), "def gen_step():\n    return None\n");
     const stepPath = path.join(modelRoot, "generated", "part.step");
     writeStepWithSourceMetadata(stepPath, "models/generated/source.py");
     const backend = createLocalAssetBackend({
-      workspaceRoot,
+      directoryRoot,
       rootDir: "models",
       stepArtifactGenerator: async (request) => {
         assert.equal(request.stepPath, stepPath);
@@ -372,12 +372,12 @@ test("local backend regenerates Python metadata STEP artifacts from the STEP fil
 });
 
 test("local backend rejects artifact regeneration for non-STEP files", async () => {
-  await withTempWorkspace(async (workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot(async (directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(modelRoot, { recursive: true });
     fs.writeFileSync(path.join(modelRoot, "robot.urdf"), "<robot name=\"r\" />\n");
     const backend = createLocalAssetBackend({
-      workspaceRoot,
+      directoryRoot,
       rootDir: "models",
       stepArtifactGenerator: async () => {
         throw new Error("Non-STEP files should not invoke STEP artifact generation.");
@@ -395,11 +395,11 @@ test("local backend rejects artifact regeneration for non-STEP files", async () 
 });
 
 test("local backend reports missing Python-backed STEP files dynamically", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(modelRoot, { recursive: true });
     fs.writeFileSync(path.join(modelRoot, "box.py"), "def gen_step():\n    return None\n");
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
 
     const status = backend.readStepSourceStatus({ fileRef: "box.step" });
 
@@ -411,11 +411,11 @@ test("local backend reports missing Python-backed STEP files dynamically", async
 });
 
 test("local backend defers STEP artifact status to current-file status reads", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(modelRoot, { recursive: true });
     fs.writeFileSync(path.join(modelRoot, "part.step"), "ISO-10303-21;\nEND-ISO-10303-21;\n");
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
 
     const catalogEntry = backend.readCatalog().entries[0];
     const status = backend.readStepSourceStatus({ fileRef: "part.step" });
@@ -429,15 +429,15 @@ test("local backend defers STEP artifact status to current-file status reads", a
 });
 
 test("local backend resolves selected output files instead of generated GLB artifacts", async () => {
-  await withTempWorkspace(async (workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot(async (directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(modelRoot, { recursive: true });
     const stepPath = path.join(modelRoot, "part.step");
     fs.writeFileSync(stepPath, "ISO-10303-21;\nEND-ISO-10303-21;\n");
     fs.writeFileSync(path.join(modelRoot, ".part.step.glb"), "glb");
     const openedPaths = [];
     const backend = createLocalAssetBackend({
-      workspaceRoot,
+      directoryRoot,
       rootDir: "models",
       sourceFileOpener: async (filePath) => {
         openedPaths.push(filePath);
@@ -471,14 +471,14 @@ test("local backend resolves selected output files instead of generated GLB arti
 });
 
 test("local backend resolves generated GLB artifact assets from catalog URLs", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(modelRoot, { recursive: true });
     const stepPath = path.join(modelRoot, "part.step");
     const artifactPath = path.join(modelRoot, ".part.step.glb");
     fs.writeFileSync(stepPath, "ISO-10303-21;\nEND-ISO-10303-21;\n");
     fs.writeFileSync(artifactPath, "glb");
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
     const catalog = backend.refreshCatalog();
 
     const access = backend.resolveFileAssetAccess({
@@ -497,12 +497,12 @@ test("local backend resolves generated GLB artifact assets from catalog URLs", a
 });
 
 test("local backend resolves catalog output files whose names begin with two dots", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(modelRoot, { recursive: true });
     const stepPath = path.join(modelRoot, "..part.step");
     fs.writeFileSync(stepPath, "ISO-10303-21;\nEND-ISO-10303-21;\n");
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
     const catalog = backend.refreshCatalog();
 
     const access = backend.resolveFileAssetAccess({
@@ -519,14 +519,14 @@ test("local backend resolves catalog output files whose names begin with two dot
 });
 
 test("local backend resolves Python source code separately from output files", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(modelRoot, { recursive: true });
     const stepPath = path.join(modelRoot, "part.step");
     const sourcePath = path.join(modelRoot, "part.py");
     fs.writeFileSync(stepPath, "ISO-10303-21;\nEND-ISO-10303-21;\n");
     fs.writeFileSync(sourcePath, "def gen_step():\n    return None\n");
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
     const catalog = backend.refreshCatalog();
 
     const output = backend.resolveFileAssetAccess({ fileRef: "part.step", asset: "output", catalog });
@@ -540,16 +540,16 @@ test("local backend resolves Python source code separately from output files", a
   });
 });
 
-test("local backend resolves workspace-relative catalog source files", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+test("local backend resolves directory-root-relative catalog source files", async () => {
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     const robotDir = path.join(modelRoot, "robots");
     fs.mkdirSync(robotDir, { recursive: true });
     const urdfPath = path.join(robotDir, "robot.urdf");
     const sourcePath = path.join(robotDir, "robot_urdf.py");
     fs.writeFileSync(urdfPath, "<robot name=\"sample\" />\n");
     fs.writeFileSync(sourcePath, "def gen_urdf():\n    return {'xml': '<robot name=\"sample\" />'}\n");
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
     const catalog = {
       schemaVersion: 4,
       entries: [{
@@ -569,10 +569,10 @@ test("local backend resolves workspace-relative catalog source files", async () 
 });
 
 test("local backend file asset access requires a catalog entry inside the active root", async () => {
-  await withTempWorkspace((workspaceRoot) => {
-    fs.writeFileSync(path.join(workspaceRoot, "secret.step"), "ISO-10303-21;\nEND-ISO-10303-21;\n");
-    fs.mkdirSync(path.join(workspaceRoot, "models"), { recursive: true });
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+  await withTempDirectoryRoot((directoryRoot) => {
+    fs.writeFileSync(path.join(directoryRoot, "secret.step"), "ISO-10303-21;\nEND-ISO-10303-21;\n");
+    fs.mkdirSync(path.join(directoryRoot, "models"), { recursive: true });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
 
     assert.throws(
       () => backend.resolveFileAssetAccess({
@@ -594,8 +594,8 @@ test("local backend file asset access requires a catalog entry inside the active
 });
 
 test("local backend ignores same-stem Python metadata when regenerating existing STEP artifacts", async () => {
-  await withTempWorkspace(async (workspaceRoot) => {
-    const modelRoot = path.join(workspaceRoot, "models");
+  await withTempDirectoryRoot(async (directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
     fs.mkdirSync(path.join(modelRoot, "robot"), { recursive: true });
     fs.writeFileSync(path.join(modelRoot, "robot", "__init__.py"), "\n");
     const generatorPath = path.join(modelRoot, "robot", "robot.py");
@@ -603,7 +603,7 @@ test("local backend ignores same-stem Python metadata when regenerating existing
     const stepPath = path.join(modelRoot, "robot", "robot.step");
     fs.writeFileSync(stepPath, "ISO-10303-21;\nEND-ISO-10303-21;\n");
     const backend = createLocalAssetBackend({
-      workspaceRoot,
+      directoryRoot,
       rootDir: "models",
       stepArtifactGenerator: async (request) => {
         assert.equal(request.stepPath, stepPath);
@@ -624,17 +624,17 @@ test("local backend ignores same-stem Python metadata when regenerating existing
 });
 
 test("local backend writes only served CAD assets inside the active root", async () => {
-  await withTempWorkspace(async (workspaceRoot) => {
-    fs.mkdirSync(path.join(workspaceRoot, "models"), { recursive: true });
-    const backend = createLocalAssetBackend({ workspaceRoot, rootDir: "models" });
+  await withTempDirectoryRoot(async (directoryRoot) => {
+    fs.mkdirSync(path.join(directoryRoot, "models"), { recursive: true });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
 
     const written = await backend.writeAsset({ fileRef: ".box.step.glb", body: Buffer.from("glb") });
     const writtenDotDotPrefix = await backend.writeAsset({ fileRef: "..box.step.glb", body: Buffer.from("glb") });
 
     assert.equal(written.bytes, 3);
     assert.equal(writtenDotDotPrefix.bytes, 3);
-    assert.equal(fs.readFileSync(path.join(workspaceRoot, "models", ".box.step.glb"), "utf8"), "glb");
-    assert.equal(fs.readFileSync(path.join(workspaceRoot, "models", "..box.step.glb"), "utf8"), "glb");
+    assert.equal(fs.readFileSync(path.join(directoryRoot, "models", ".box.step.glb"), "utf8"), "glb");
+    assert.equal(fs.readFileSync(path.join(directoryRoot, "models", "..box.step.glb"), "utf8"), "glb");
     await assert.rejects(
       () => backend.writeAsset({ fileRef: "../escape.glb", body: Buffer.from("bad") }),
       /inside the active CAD Viewer root/

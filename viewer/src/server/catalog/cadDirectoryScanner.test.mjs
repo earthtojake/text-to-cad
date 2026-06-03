@@ -838,7 +838,7 @@ test("scanCadDirectory can filter scan-root-relative files and directories", () 
   assert.ok(!visited.includes("file:excluded/skipped_part.step"));
 });
 
-test("scanCadDirectory defaults to the workspace root without emitting root metadata", () => {
+test("scanCadDirectory defaults to the directory root without emitting root metadata", () => {
   const repoRoot = makeTempRepo();
   writeFile(path.join(repoRoot, "workspace/imports/sample_part.step"), "ISO-10303-21;\nEND-ISO-10303-21;\n");
   writeFile(path.join(repoRoot, ".agents/ignored.step"), "ISO-10303-21;\nEND-ISO-10303-21;\n");
@@ -853,7 +853,7 @@ test("normalizeViewerRootDir rejects traversal", () => {
   assert.equal(normalizeViewerRootDir(""), "");
   assert.equal(normalizeViewerRootDir("workspace/samples"), "workspace/samples");
   assert.equal(normalizeViewerRootDir("..workspace/samples"), "..workspace/samples");
-  assert.throws(() => normalizeViewerRootDir("../workspace"), /inside the workspace/);
+  assert.throws(() => normalizeViewerRootDir("../workspace"), /inside the directory root/);
 });
 
 test("normalizeViewerRootDir preserves absolute paths", () => {
@@ -862,7 +862,7 @@ test("normalizeViewerRootDir preserves absolute paths", () => {
   assert.equal(normalizeViewerRootDir("/"), "/");
 });
 
-test("resolveViewerRoot accepts an absolute path inside the workspace", () => {
+test("resolveViewerRoot accepts an absolute path inside the directory root", () => {
   const repo = makeTempRepo();
   try {
     const absoluteDir = path.join(repo, "exports");
@@ -875,7 +875,7 @@ test("resolveViewerRoot accepts an absolute path inside the workspace", () => {
   }
 });
 
-test("resolveViewerRoot accepts workspace child names beginning with two dots", () => {
+test("resolveViewerRoot accepts directory child names beginning with two dots", () => {
   const repo = makeTempRepo();
   try {
     const rootDir = "..exports";
@@ -889,12 +889,12 @@ test("resolveViewerRoot accepts workspace child names beginning with two dots", 
   }
 });
 
-test("resolveViewerRoot rejects an absolute path outside the workspace", () => {
+test("resolveViewerRoot rejects an absolute path outside the directory root", () => {
   const repo = makeTempRepo();
   try {
     assert.throws(
       () => resolveViewerRoot(repo, "/elsewhere/outside"),
-      /inside the workspace/,
+      /inside the directory root/,
     );
   } finally {
     fs.rmSync(repo, { recursive: true, force: true });

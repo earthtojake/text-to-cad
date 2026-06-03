@@ -27,7 +27,7 @@ import {
   useCadWorkspaceLayout
 } from "./workbench/hooks/useCadWorkspaceLayout";
 import { useCadWorkspaceSelection } from "./workbench/hooks/useCadWorkspaceSelection";
-import { useCadWorkspaceSession } from "./workbench/hooks/useCadWorkspaceSession";
+import { useCadDirectorySession } from "./workbench/hooks/useCadDirectorySession";
 import { useCadWorkspaceSelectors } from "./workbench/hooks/useCadWorkspaceSelectors";
 import { useCadWorkspaceShortcuts } from "./workbench/hooks/useCadWorkspaceShortcuts";
 import {
@@ -110,23 +110,23 @@ import {
 import {
   buildAvailableThemePresets,
   cadWorkspaceDefaultFileSheetWidthForViewport,
-  createWorkspaceSessionThemeSlice,
+  createDirectorySessionThemeSlice,
   cloneDrawingStrokes,
   cloneTabSnapshot,
   createTabRecord,
   deleteCustomThemePreset,
   drawingStrokesEqual,
   getAvailableThemePresetIdForSettings,
-  readCadWorkspaceSessionState,
+  readCadDirectorySessionState,
   readCustomThemePresets,
   readThemeSettingsState,
   readThemeSettingsStateFromAppearanceQuery,
-  readWorkspaceThemeSettingsState,
+  readDirectoryThemeSettingsState,
   resetThemePresetToDefault,
   restoreDefaultThemePresets,
   saveAndActivateCustomThemePreset,
   updateThemePresetSettings,
-  writeCadWorkspaceSessionState,
+  writeCadDirectorySessionState,
   writeCustomThemePresets,
   writeThemeSettings,
   tabSnapshotEqual,
@@ -141,8 +141,8 @@ import {
   writeFileSessionState
 } from "@/workbench/fileSessionState";
 import {
-  CAD_WORKSPACE_STORAGE_EVENT_ACTION,
-  cadWorkspaceStorageEventAction
+  CAD_DIRECTORY_STORAGE_EVENT_ACTION,
+  cadDirectoryStorageEventAction
 } from "@/workbench/storageEvents";
 import {
   clampNumber,
@@ -334,7 +334,7 @@ function normalizeLargeFileState(value = {}) {
   };
 }
 
-function readWorkspaceViewportWidth() {
+function readViewerViewportWidth() {
   if (typeof window === "undefined") {
     return 1600;
   }
@@ -342,41 +342,41 @@ function readWorkspaceViewportWidth() {
   return Number.isFinite(width) && width > 0 ? width : 1600;
 }
 
-function readWorkspacePrefersDark() {
+function readViewerPrefersDark() {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return false;
   }
   return window.matchMedia("(prefers-color-scheme: dark)").matches === true;
 }
 
-function readWorkspaceLayoutMode() {
-  return getCadWorkspaceLayoutMode(readWorkspaceViewportWidth());
+function readViewerLayoutMode() {
+  return getCadWorkspaceLayoutMode(readViewerViewportWidth());
 }
 
-function readWorkspaceSessionState(viewportWidth = readWorkspaceViewportWidth()) {
-  return readCadWorkspaceSessionState({
+function readDirectorySessionState(viewportWidth = readViewerViewportWidth()) {
+  return readCadDirectorySessionState({
     defaultFileSheetWidthPx: cadWorkspaceDefaultFileSheetWidthForViewport(viewportWidth)
   });
 }
 
 function readInitialFileSheetOpen() {
-  const storedOpen = readWorkspaceSessionState().fileSheetOpen;
+  const storedOpen = readDirectorySessionState().fileSheetOpen;
   return typeof storedOpen === "boolean"
     ? storedOpen
-    : shouldCadWorkspaceDefaultFileSettingsOpen(readWorkspaceViewportWidth());
+    : shouldCadWorkspaceDefaultFileSettingsOpen(readViewerViewportWidth());
 }
 
 function readInitialFileSheetWidth() {
-  const viewportWidth = readWorkspaceViewportWidth();
+  const viewportWidth = readViewerViewportWidth();
   return (
-    readWorkspaceSessionState(viewportWidth).fileSheetWidthPx ||
+    readDirectorySessionState(viewportWidth).fileSheetWidthPx ||
     cadWorkspaceDefaultFileSheetWidthForViewport(viewportWidth)
   );
 }
 
 function readInitialFileSheetWidthIsCustom() {
-  const viewportWidth = readWorkspaceViewportWidth();
-  return readWorkspaceSessionState(viewportWidth).fileSheetWidthPx != null;
+  const viewportWidth = readViewerViewportWidth();
+  return readDirectorySessionState(viewportWidth).fileSheetWidthPx != null;
 }
 
 function buildStepModuleAnimationFrameValues({
@@ -570,7 +570,7 @@ function mergeStepSourceStatusIntoEntry(entry, stepSourceStatus) {
   return nextEntry;
 }
 
-function normalizeViewerWorkspaceOptions(viewerServerInfo) {
+function normalizeViewerDirectoryOptions(viewerServerInfo) {
   const seen = new Set();
   const options = [];
   for (const option of Array.isArray(viewerServerInfo?.activeDirectories) ? viewerServerInfo.activeDirectories : []) {
@@ -614,7 +614,7 @@ export default function CadWorkspace({
   const [query, setQuery] = useState("");
   const initialFileViewerDirectoryStateRef = useRef(null);
   if (!initialFileViewerDirectoryStateRef.current) {
-    const storedExpandedDirectoryIds = readWorkspaceSessionState().fileViewerExpandedDirectoryIds;
+    const storedExpandedDirectoryIds = readDirectorySessionState().fileViewerExpandedDirectoryIds;
     initialFileViewerDirectoryStateRef.current = {
       hasStoredState: Array.isArray(storedExpandedDirectoryIds),
       expandedDirectoryIds: Array.isArray(storedExpandedDirectoryIds) ? storedExpandedDirectoryIds : []
@@ -670,24 +670,24 @@ export default function CadWorkspace({
   const [persistenceStatus, setPersistenceStatus] = useState("");
   const [motionErrorStatus, setMotionErrorStatus] = useState("");
   const [moveit2ServerLive, setMoveIt2ServerLive] = useState(false);
-  const [workspaceLayoutMode, setWorkspaceLayoutMode] = useState(readWorkspaceLayoutMode);
+  const [viewerLayoutMode, setViewerLayoutMode] = useState(readViewerLayoutMode);
   const [sidebarOpen, setSidebarOpen] = useState(() => (
-    readWorkspaceSessionState().fileViewerOpen
+    readDirectorySessionState().fileViewerOpen
   ));
   const [sidebarWidth, setSidebarWidth] = useState(() => (
-    readWorkspaceSessionState().fileViewerWidthPx || DEFAULT_SIDEBAR_WIDTH
+    readDirectorySessionState().fileViewerWidthPx || DEFAULT_SIDEBAR_WIDTH
   ));
-  const [layoutViewportWidth, setLayoutViewportWidth] = useState(readWorkspaceViewportWidth);
-  const isDesktop = workspaceLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP;
+  const [layoutViewportWidth, setLayoutViewportWidth] = useState(readViewerViewportWidth);
+  const isDesktop = viewerLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP;
   const [fileSheetOpenIntent, setFileSheetOpenIntent] = useState(readInitialFileSheetOpen);
   const [viewerAlertOpen, setViewerAlertOpen] = useState(false);
   const [viewerRuntimeAlert, setViewerRuntimeAlert] = useState(null);
   const [customThemePresets, setCustomThemePresets] = useState(readCustomThemePresets);
-  const [themeState, setThemeState] = useState(() => readWorkspaceThemeSettingsState(readCustomThemePresets()));
+  const [themeState, setThemeState] = useState(() => readDirectoryThemeSettingsState(readCustomThemePresets()));
   const themeSettings = themeState.settings;
   const themePresetId = themeState.presetId;
   const availableThemePresets = useMemo(() => buildAvailableThemePresets(customThemePresets), [customThemePresets]);
-  const [systemPrefersDark, setSystemPrefersDark] = useState(readWorkspacePrefersDark);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(readViewerPrefersDark);
   const [colorSchemePreference, setColorSchemePreference] = useState(readColorSchemePreference);
   const resolvedColorSchemeMode = useMemo(
     () => resolveColorSchemeMode(colorSchemePreference, { prefersDark: systemPrefersDark }),
@@ -936,25 +936,25 @@ export default function CadWorkspace({
   );
   const selectedEntrySourceFormat = entrySourceFormat(selectedEntry);
   const selectedFileSheetKind = fileSheetKindForEntry(selectedEntry);
-  const workspaceOptions = useMemo(
-    () => normalizeViewerWorkspaceOptions(viewerServerInfo),
+  const directoryOptions = useMemo(
+    () => normalizeViewerDirectoryOptions(viewerServerInfo),
     [viewerServerInfo]
   );
   const activeViewerDir = readActiveCadDir({ assetBackend: viewerAssetBackend });
-  const activeWorkspaceDir = catalogRootDir || activeViewerDir;
-  const workspaceSelectionEligible = !explicitDirParam && !activeWorkspaceDir;
-  const workspaceSelectionActive = workspaceSelectionEligible && workspaceOptions.length > 1;
-  const workspaceAutoEnterDir = workspaceSelectionEligible && !String(explicitFileParam || "").trim() && workspaceOptions.length === 1
-    ? workspaceOptions[0].dir
+  const activeDirectory = catalogRootDir || activeViewerDir;
+  const directorySelectionEligible = !explicitDirParam && !activeDirectory;
+  const directorySelectionActive = directorySelectionEligible && directoryOptions.length > 1;
+  const directoryAutoEnterDir = directorySelectionEligible && !String(explicitFileParam || "").trim() && directoryOptions.length === 1
+    ? directoryOptions[0].dir
     : "";
-  const directoryNavigationAvailable = !workspaceSelectionActive;
+  const directoryNavigationAvailable = !directorySelectionActive;
   const stepArtifactGenerationAvailable = viewerServerInfo
     ? viewerServerInfo.stepArtifactGenerationAvailable !== false
     : viewerAssetBackend === LOCAL_ASSET_BACKEND;
   const fileAccessBackend = viewerServerInfo ? (viewerServerBackend || "local-fs") : "";
   const fileRevealAvailable = fileAccessBackend === "local-fs";
   const filePathCopyAvailable = fileAccessBackend === "local-fs" && Boolean(
-    viewerServerInfo?.rootPath || viewerServerInfo?.workspaceRoot
+    viewerServerInfo?.rootPath || viewerServerInfo?.directoryRoot
   );
   const fileLinkCopyAvailable = fileAccessBackend === "vercel-blob";
   const isStepView = selectedEntrySourceFormat === RENDER_FORMAT.STEP;
@@ -1171,17 +1171,17 @@ export default function CadWorkspace({
   }, [catalogRootDir, explicitFileParam]);
 
   useEffect(() => {
-    if (!workspaceAutoEnterDir) {
+    if (!directoryAutoEnterDir) {
       return;
     }
-    writeCadDirParam(workspaceAutoEnterDir);
+    writeCadDirParam(directoryAutoEnterDir);
     refreshCadCatalog({ markRefreshing: true }).catch((error) => {
       if (import.meta.env.DEV) {
         console.warn("Failed to refresh CAD catalog", error);
       }
     });
     refreshCadGenerationStatus();
-  }, [workspaceAutoEnterDir]);
+  }, [directoryAutoEnterDir]);
 
   useEffect(() => {
     let active = true;
@@ -2606,7 +2606,7 @@ export default function CadWorkspace({
   const activePerspectiveRef = useRef(null);
   const tabToolsResizeStateRef = useRef(null);
   const selectedFileSheetKeyRef = useRef("");
-  const cadWorkspaceSessionBootstrappedRef = useRef(false);
+  const cadDirectorySessionBootstrappedRef = useRef(false);
 
   useEffect(() => {
     openTabsRef.current = openTabs;
@@ -2629,18 +2629,18 @@ export default function CadWorkspace({
       typeof value === "function" ? value(current) : value
     ));
   }, []);
-  const workspaceSessionThemeSlice = useMemo(
-    () => createWorkspaceSessionThemeSlice(themeState, customThemePresets),
+  const directorySessionThemeSlice = useMemo(
+    () => createDirectorySessionThemeSlice(themeState, customThemePresets),
     [customThemePresets, themeState]
   );
   useEffect(() => {
-    writeCadWorkspaceSessionState({
+    writeCadDirectorySessionState({
       fileViewerOpen: sidebarOpen,
       fileViewerExpandedDirectoryIds: fileViewerDirectoryStateInitialized ? fileViewerExpandedDirectoryIdList : null,
       fileViewerWidthPx: sidebarWidth,
       fileSheetOpen: tabToolsOpen,
       fileSheetWidthPx: fileSheetWidthIsCustom ? tabToolsWidth : defaultFileSheetWidth,
-      theme: workspaceSessionThemeSlice
+      theme: directorySessionThemeSlice
     }, {
       defaultFileSheetWidthPx: defaultFileSheetWidth,
       onWriteError: handlePersistenceWriteError
@@ -2655,7 +2655,7 @@ export default function CadWorkspace({
     sidebarWidth,
     tabToolsOpen,
     tabToolsWidth,
-    workspaceSessionThemeSlice
+    directorySessionThemeSlice
   ]);
 
   useEffect(() => {
@@ -3456,7 +3456,7 @@ export default function CadWorkspace({
     setSelectedKey(nextTab.key);
   }, [fileSheetSelectionKeyForTab]);
 
-  const resetActiveWorkspace = useCallback(() => {
+  const resetActiveDirectory = useCallback(() => {
     selectedReferenceIdsRef.current = [];
     selectedPartIdsRef.current = [];
     setSelectedWholeEntryCadRefToken("");
@@ -3491,10 +3491,10 @@ export default function CadWorkspace({
   }, [setTabToolsOpen]);
 
   useEffect(() => {
-    if (workspaceSelectionActive && selectedKey) {
-      resetActiveWorkspace();
+    if (directorySelectionActive && selectedKey) {
+      resetActiveDirectory();
     }
-  }, [resetActiveWorkspace, selectedKey, workspaceSelectionActive]);
+  }, [resetActiveDirectory, selectedKey, directorySelectionActive]);
 
   const activateEntryTab = useCallback((key) => {
     if (!key || !entryMap.has(key)) {
@@ -3620,10 +3620,10 @@ export default function CadWorkspace({
     []
   );
 
-  useCadWorkspaceSession({
+  useCadDirectorySession({
     manifestEntries,
     cadFileParamForEntry: cadFileParamForSelectedEntry,
-    cadWorkspaceSessionBootstrappedRef,
+    cadDirectorySessionBootstrappedRef,
     setOpenTabs,
     applyTabRecord,
     selectedEntryKeyFromUrl,
@@ -3646,7 +3646,7 @@ export default function CadWorkspace({
     readCadRefQueryParams,
     setPendingCadRefQueryParams,
     activateEntryTab,
-    resetActiveWorkspace,
+    resetActiveDirectory,
     writeCadParam,
     readEntrySessionState,
     applyEntrySessionState
@@ -3722,11 +3722,11 @@ export default function CadWorkspace({
 
   useEffect(() => {
     const handleStorage = (event) => {
-      const action = cadWorkspaceStorageEventAction(event.key);
-      if (action === CAD_WORKSPACE_STORAGE_EVENT_ACTION.IGNORE) {
+      const action = cadDirectoryStorageEventAction(event.key);
+      if (action === CAD_DIRECTORY_STORAGE_EVENT_ACTION.IGNORE) {
         return;
       }
-      if (action === CAD_WORKSPACE_STORAGE_EVENT_ACTION.COLOR_SCHEME) {
+      if (action === CAD_DIRECTORY_STORAGE_EVENT_ACTION.COLOR_SCHEME) {
         setColorSchemePreference(readColorSchemePreference());
         return;
       }
@@ -3894,7 +3894,7 @@ export default function CadWorkspace({
 
   useCadWorkspaceLayout({
     isDesktop,
-    setLayoutMode: setWorkspaceLayoutMode,
+    setLayoutMode: setViewerLayoutMode,
     setSidebarOpen,
     setTabToolsOpen,
     setLayoutViewportWidth,
@@ -5739,14 +5739,14 @@ export default function CadWorkspace({
   ]);
 
   useEffect(() => {
-    if (!cadWorkspaceSessionBootstrappedRef.current || pendingCadRefQueryParams.length) {
+    if (!cadDirectorySessionBootstrappedRef.current || pendingCadRefQueryParams.length) {
       return;
     }
     writeCadRefQueryParams(cadRefQueryParamsForUrlSignature ? cadRefQueryParamsForUrlSignature.split("\n") : []);
   }, [
     cadRefQueryParamsForUrlSignature,
     pendingCadRefQueryParams,
-    cadWorkspaceSessionBootstrappedRef
+    cadDirectorySessionBootstrappedRef
   ]);
 
   const expandStepTreeAroundNode = useCallback((nodeId, { expandSelf = false } = {}) => {
@@ -6221,16 +6221,16 @@ export default function CadWorkspace({
     }
   }, [activateEntryTab, entryMap, isDesktop, writeCadParam]);
 
-  const handleSelectWorkspace = useCallback((dir) => {
+  const handleSelectDirectory = useCallback((dir) => {
     const normalizedDir = String(dir || "").trim();
     if (!normalizedDir) {
       return;
     }
-    resetActiveWorkspace();
+    resetActiveDirectory();
     setQuery("");
     writeCadDirParam(normalizedDir, {
       history: "push",
-      preserveFile: Boolean(workspaceSelectionActive && explicitFileParam)
+      preserveFile: Boolean(directorySelectionActive && explicitFileParam)
     });
     refreshCadCatalog({ markRefreshing: true }).catch((error) => {
       if (import.meta.env.DEV) {
@@ -6238,7 +6238,7 @@ export default function CadWorkspace({
       }
     });
     refreshCadGenerationStatus();
-  }, [explicitFileParam, resetActiveWorkspace, workspaceSelectionActive]);
+  }, [explicitFileParam, resetActiveDirectory, directorySelectionActive]);
 
   const handleRevealEntryInExplorerView = useCallback((entry) => {
     const targetKey = fileKey(entry);
@@ -6901,9 +6901,9 @@ export default function CadWorkspace({
               catalogHydrated={catalogHydrated}
               catalogRefreshing={catalogRefreshing}
               catalogError={catalogError}
-              workspaceOptions={workspaceOptions}
-              activeWorkspaceDir={activeWorkspaceDir || explicitDirParam || ""}
-              onSelectWorkspace={handleSelectWorkspace}
+              directoryOptions={directoryOptions}
+              activeDirectory={activeDirectory || explicitDirParam || ""}
+              onSelectDirectory={handleSelectDirectory}
               resizable={isDesktop}
               onStartResize={handleStartSidebarResize}
             />
@@ -6942,16 +6942,16 @@ export default function CadWorkspace({
                 handleScreenshotDownload={handleScreenshotDownload}
               />
 
-              {!previewMode && (workspaceSelectionActive || (!selectedEntry && !missingFileRef && !fileParamSelectionPending)) ? (
+              {!previewMode && (directorySelectionActive || (!selectedEntry && !missingFileRef && !fileParamSelectionPending)) ? (
                 <CadWorkspaceHome
                   entries={catalogEntries}
                   onSelectEntry={handleSelectEntry}
                   catalogHydrated={catalogHydrated}
                   catalogRefreshing={catalogRefreshing}
                   catalogError={catalogError}
-                  workspaceSelectionActive={workspaceSelectionActive}
-                  workspaceOptions={workspaceOptions}
-                  onSelectWorkspace={handleSelectWorkspace}
+                  directorySelectionActive={directorySelectionActive}
+                  directoryOptions={directoryOptions}
+                  onSelectDirectory={handleSelectDirectory}
                 />
               ) : null}
 

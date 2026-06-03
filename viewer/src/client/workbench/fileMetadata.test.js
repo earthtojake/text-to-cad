@@ -17,9 +17,9 @@ function rowByLabel(groups, label) {
 }
 
 const viewerServerInfo = {
-  workspaceRoot: "/workspace/text-to-cad",
+  directoryRoot: "/project/text-to-cad",
   rootDir: "models",
-  rootPath: "/workspace/text-to-cad/models",
+  rootPath: "/project/text-to-cad/models",
 };
 
 const hostedViewerServerInfo = {

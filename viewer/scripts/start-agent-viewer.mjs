@@ -23,6 +23,7 @@ const defaultAgentHost = "127.0.0.1";
 const defaultPortScanLimit = 64;
 const probeTimeoutMs = 350;
 const activationTimeoutMs = 30_000;
+const directoryActivationFeature = "directory-activation";
 
 function requiredValue(argv, index, flag) {
   const value = argv[index + 1];
@@ -56,10 +57,10 @@ function parsePositiveInteger(value, flag) {
   return parsed;
 }
 
-export function normalizeAgentWorkspaceDir(value, { fsImpl = fs } = {}) {
+export function normalizeAgentDirectory(value, { fsImpl = fs } = {}) {
   const rawDir = String(value || "").trim();
   if (!rawDir) {
-    throw new Error("agent:start requires --dir <absolute-workspace-directory>");
+    throw new Error("agent:start requires --dir <absolute-directory>");
   }
   if (!path.isAbsolute(rawDir)) {
     throw new Error("agent:start --dir must be an absolute path");
@@ -106,7 +107,7 @@ export function parseAgentStartArgs(argv = [], { fsImpl = fs } = {}) {
   const options = {
     startMode: "auto",
     forwardedArgs: [],
-    workspaceDir: "",
+    directory: "",
     shutdownAfterMs: null,
     portScanLimit: defaultPortScanLimit,
   };
@@ -146,8 +147,8 @@ export function parseAgentStartArgs(argv = [], { fsImpl = fs } = {}) {
     options.forwardedArgs.push(arg);
   }
 
-  options.workspaceDir = normalizeAgentWorkspaceDir(forwardedDefaultRootDir(options.forwardedArgs), { fsImpl });
-  options.forwardedArgs = replaceForwardedDefaultRootDir(options.forwardedArgs, options.workspaceDir);
+  options.directory = normalizeAgentDirectory(forwardedDefaultRootDir(options.forwardedArgs), { fsImpl });
+  options.forwardedArgs = replaceForwardedDefaultRootDir(options.forwardedArgs, options.directory);
   return options;
 }
 
@@ -336,11 +337,11 @@ function envWithGit(env, git) {
   };
 }
 
-function envWithGitAndDefaultRootDir(env, git, defaultRootDir = "") {
+function envWithGitAndDefaultDir(env, git, defaultDir = "") {
   const nextEnv = envWithGit(env, git);
-  const normalizedRootDir = String(defaultRootDir || "").trim();
-  if (normalizedRootDir) {
-    nextEnv.VIEWER_DEFAULT_ROOT_DIR = normalizedRootDir;
+  const normalizedDir = String(defaultDir || "").trim();
+  if (normalizedDir) {
+    nextEnv.VIEWER_DEFAULT_DIR = normalizedDir;
   }
   return nextEnv;
 }
@@ -356,7 +357,7 @@ export function buildAgentStartCommand({
 } = {}) {
   const resolvedPackageRoot = path.resolve(packageRoot);
   if (mode === "dev") {
-    const nextEnv = envWithGitAndDefaultRootDir(env, git, forwardedDefaultRootDir(forwardedArgs));
+    const nextEnv = envWithGitAndDefaultDir(env, git, forwardedDefaultRootDir(forwardedArgs));
     if (shutdownAfterMs !== null) {
       nextEnv.VIEWER_SERVER_LIFETIME_MS = String(shutdownAfterMs);
     }
@@ -413,9 +414,9 @@ function normalizeBaseUrl(host, port) {
   return `http://${host}:${port}`;
 }
 
-export function agentViewerUrl(baseUrl, workspaceDir) {
+export function agentViewerUrl(baseUrl, directory) {
   const url = new URL("/", String(baseUrl || "").endsWith("/") ? baseUrl : `${baseUrl}/`);
-  url.searchParams.set("dir", normalizeAgentWorkspaceDir(workspaceDir));
+  url.searchParams.set("dir", normalizeAgentDirectory(directory));
   return url.toString();
 }
 
@@ -425,23 +426,31 @@ function serverInfoGitAllowsReuse(serverInfo, git) {
   return !currentGit || !serverGit || currentGit === serverGit;
 }
 
+function serverInfoHasFeature(serverInfo, feature) {
+  const features = Array.isArray(serverInfo?.serverFeatures) ? serverInfo.serverFeatures : [];
+  return features.includes(feature);
+}
+
 export function isReusableAgentViewerServer(serverInfo, git) {
   return Boolean(
     serverInfo &&
     serverInfo.app === VIEWER_SERVER_APP_ID &&
     Number(serverInfo.serverApiVersion || 0) >= VIEWER_SERVER_API_VERSION &&
     serverInfo.dynamicRoot === true &&
+    serverInfoHasFeature(serverInfo, directoryActivationFeature) &&
     serverInfoGitAllowsReuse(serverInfo, git)
   );
 }
 
-async function fetchWithTimeout(fetchImpl, url, timeoutMs) {
+async function fetchWithTimeout(fetchImpl, url, optionsOrTimeoutMs = {}, timeoutMs = probeTimeoutMs) {
+  const requestOptions = typeof optionsOrTimeoutMs === "number" ? {} : { ...optionsOrTimeoutMs };
+  const effectiveTimeoutMs = typeof optionsOrTimeoutMs === "number" ? optionsOrTimeoutMs : timeoutMs;
   const controller = typeof AbortController === "function" ? new AbortController() : null;
   const timeout = controller
-    ? setTimeout(() => controller.abort(), timeoutMs)
+    ? setTimeout(() => controller.abort(), effectiveTimeoutMs)
     : null;
   try {
-    return await fetchImpl(url, controller ? { signal: controller.signal } : {});
+    return await fetchImpl(url, controller ? { ...requestOptions, signal: controller.signal } : requestOptions);
   } finally {
     if (timeout) {
       clearTimeout(timeout);
@@ -498,35 +507,48 @@ async function responseSnippet(response) {
   }
 }
 
-export async function activateAgentViewerWorkspace({
+export async function activateAgentViewerDirectory({
   baseUrl,
-  workspaceDir,
+  directory,
   fetchImpl = globalThis.fetch,
   timeoutMs = activationTimeoutMs,
 } = {}) {
   if (typeof fetchImpl !== "function") {
-    throw new Error("fetch is unavailable; cannot activate CAD Viewer workspace");
+    throw new Error("fetch is unavailable; cannot activate CAD Viewer directory");
   }
-  const normalizedWorkspaceDir = normalizeAgentWorkspaceDir(workspaceDir);
-  const catalogUrl = new URL("/__cad/catalog", String(baseUrl || "").endsWith("/") ? baseUrl : `${baseUrl}/`);
-  catalogUrl.searchParams.set("dir", normalizedWorkspaceDir);
+  const normalizedDirectory = normalizeAgentDirectory(directory);
+  const activationUrl = new URL("/__cad/directory/activate", String(baseUrl || "").endsWith("/") ? baseUrl : `${baseUrl}/`);
+  activationUrl.searchParams.set("dir", normalizedDirectory);
   let response = null;
   try {
-    response = await fetchWithTimeout(fetchImpl, String(catalogUrl), timeoutMs);
+    response = await fetchWithTimeout(fetchImpl, String(activationUrl), {
+      method: "POST",
+    }, timeoutMs);
   } catch (error) {
     if (probeBlockedByPermissions(error)) {
-      throw new Error(`CAD Viewer workspace activation was blocked for ${baseUrl}; rerun agent:start with local network permission.`);
+      throw new Error(`CAD Viewer directory activation was blocked for ${baseUrl}; rerun agent:start with local network permission.`);
     }
     throw error;
   }
   if (!response?.ok) {
     const detail = response ? await responseSnippet(response) : "";
     const status = response ? `${response.status || "unknown"} ${response.statusText || ""}`.trim() : "unknown";
-    throw new Error(`Failed to activate CAD Viewer workspace ${normalizedWorkspaceDir}: ${status}${detail ? ` - ${detail}` : ""}`);
+    throw new Error(`Failed to activate CAD Viewer directory ${normalizedDirectory}: ${status}${detail ? ` - ${detail}` : ""}`);
+  }
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error(`CAD Viewer directory activation did not return JSON for ${normalizedDirectory}`);
+  }
+  if (!payload?.ok) {
+    throw new Error(`CAD Viewer directory activation failed for ${normalizedDirectory}`);
   }
   return {
-    workspaceDir: normalizedWorkspaceDir,
-    viewerUrl: agentViewerUrl(baseUrl, normalizedWorkspaceDir),
+    directory: normalizedDirectory,
+    viewerUrl: agentViewerUrl(baseUrl, normalizedDirectory),
+    activeDirectory: payload.directory || null,
+    serverInfo: payload.server || null,
   };
 }
 
@@ -619,8 +641,8 @@ export async function resolveAgentStartLaunch({
     return {
       ...portResolution,
       git,
-      workspaceDir: parsed.workspaceDir,
-      viewerUrl: agentViewerUrl(portResolution.baseUrl, parsed.workspaceDir),
+      directory: parsed.directory,
+      viewerUrl: agentViewerUrl(portResolution.baseUrl, parsed.directory),
     };
   }
 
@@ -635,8 +657,8 @@ export async function resolveAgentStartLaunch({
     port: portResolution.port,
     baseUrl: portResolution.baseUrl,
     git,
-    workspaceDir: parsed.workspaceDir,
-    viewerUrl: agentViewerUrl(portResolution.baseUrl, parsed.workspaceDir),
+    directory: parsed.directory,
+    viewerUrl: agentViewerUrl(portResolution.baseUrl, parsed.directory),
     command: buildAgentStartCommand({
       mode,
       packageRoot,
@@ -652,9 +674,9 @@ export async function resolveAgentStartLaunch({
 export async function runAgentStart(options = {}) {
   const launch = await resolveAgentStartLaunch(options);
   if (launch.action === "reuse") {
-    await activateAgentViewerWorkspace({
+    await activateAgentViewerDirectory({
       baseUrl: launch.baseUrl,
-      workspaceDir: launch.workspaceDir,
+      directory: launch.directory,
       fetchImpl: options.fetchImpl,
     });
     console.log(`CAD Viewer already running at ${launch.viewerUrl}`);

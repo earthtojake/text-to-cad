@@ -399,17 +399,17 @@ function absolutizeGenerationStatus(status, rootPath) {
 }
 
 export function createLocalAssetBackend({
-  workspaceRoot = process.cwd(),
+  directoryRoot = process.cwd(),
   rootDir = "",
   defaultFile = "",
   githubUrl = "",
   stepArtifactGenerator = ensureStepTopologyArtifact,
   sourceFileOpener = defaultSourceFileOpener,
 } = {}) {
-  const baseWorkspaceRoot = path.resolve(workspaceRoot || process.cwd());
+  const baseDirectoryRoot = path.resolve(directoryRoot || process.cwd());
   const defaultRootDir = rootDir
-    ? absoluteFileRef(normalizedRootDir(rootDir, baseWorkspaceRoot))
-    : absoluteFileRef(baseWorkspaceRoot);
+    ? absoluteFileRef(normalizedRootDir(rootDir, baseDirectoryRoot))
+    : absoluteFileRef(baseDirectoryRoot);
   const catalogCache = new Map();
 
   function effectiveRootDirForRequest(rootDir = "") {
@@ -417,7 +417,7 @@ export function createLocalAssetBackend({
   }
 
   function resolveRoot(rootDir = defaultRootDir) {
-    const rootPath = normalizedRootDir(rootDir || defaultRootDir, baseWorkspaceRoot);
+    const rootPath = normalizedRootDir(rootDir || defaultRootDir, baseDirectoryRoot);
     if (!rootPath) {
       throw new Error("CAD Viewer local filesystem requests must include a ?dir= path");
     }
@@ -435,8 +435,8 @@ export function createLocalAssetBackend({
 
   function scanContextForRoot(resolvedRoot) {
     const rootPath = path.resolve(resolvedRoot.rootPath);
-    const scanRepoRoot = pathIsInsideOrEqual(rootPath, baseWorkspaceRoot)
-      ? baseWorkspaceRoot
+    const scanRepoRoot = pathIsInsideOrEqual(rootPath, baseDirectoryRoot)
+      ? baseDirectoryRoot
       : rootPath;
     const scanRootDir = scanRepoRoot === rootPath
       ? ""
@@ -451,7 +451,7 @@ export function createLocalAssetBackend({
 
   function readCatalog({ rootDir: nextRootDir = defaultRootDir, fileRef = "" } = {}) {
     const effectiveRootDir = effectiveRootDirForRequest(nextRootDir);
-    const normalizedDir = absoluteFileRef(normalizedRootDir(effectiveRootDir, baseWorkspaceRoot));
+    const normalizedDir = absoluteFileRef(normalizedRootDir(effectiveRootDir, baseDirectoryRoot));
     const normalizedFile = normalizedFileRef(fileRef);
     const cacheKey = `dir:${normalizedDir}`;
     if (!catalogCache.has(cacheKey)) {
@@ -754,7 +754,7 @@ export function createLocalAssetBackend({
     if (explicitSourceRef) {
       const sourceCandidates = [
         filePathFromRef(explicitSourceRef, resolvedRoot),
-        path.resolve(baseWorkspaceRoot, explicitSourceRef),
+        path.resolve(baseDirectoryRoot, explicitSourceRef),
       ];
       for (const sourcePath of [...new Set(sourceCandidates)]) {
         if (
@@ -983,7 +983,7 @@ export function createLocalAssetBackend({
   return {
     kind: "local-fs",
     canGenerateStepArtifacts: true,
-    repoRoot: baseWorkspaceRoot,
+    repoRoot: baseDirectoryRoot,
     rootDir: "",
     defaultFile,
     githubUrl,

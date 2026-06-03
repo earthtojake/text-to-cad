@@ -165,7 +165,7 @@ function iconForEntry(entry, sourceFormat, status) {
 }
 
 function directoryTitle(directory) {
-  return String(directory?.id || directory?.name || "Workspace");
+  return String(directory?.id || directory?.name || "Directory");
 }
 
 function buildBreadcrumbNodes({

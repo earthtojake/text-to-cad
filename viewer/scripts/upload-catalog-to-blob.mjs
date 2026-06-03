@@ -351,11 +351,9 @@ function resolveExistingFileInsideRoot({ repoRoot, rootPath, fileRef }) {
 function sourceFileRefsForEntry(entry, { includeSourceCode = true } = {}) {
   const refs = [
     entry?.sourceFile,
-    entry?.sourceWorkspaceFile,
     entry?.source?.file,
     entry?.source?.path,
     entry?.source?.sourcePath,
-    entry?.source?.workspaceFile,
   ].map(cleanPosixPath).filter(Boolean);
   return includeSourceCode ? refs : refs.filter((ref) => !isPythonSourceFileRef(ref));
 }
@@ -493,7 +491,6 @@ const SOURCE_CODE_CATALOG_KEYS = new Set([
   "sourcePath",
   "sourceStatus",
   "sourceUrl",
-  "sourceWorkspaceFile",
 ]);
 
 function stripSourceCodeReferences(value, key = "") {

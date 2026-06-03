@@ -230,9 +230,9 @@ function stepSourceStatusMessage(stepStatus, stepSourceStatus) {
   if (stepStatus?.missing) {
     return sourceKindLabel(stepSourceStatus?.sourceKind) === "python"
       ? "STEP file was not generated for this Python script; only a GLB artifact is available."
-      : "STEP file is missing from the workspace.";
+      : "STEP file is missing from the directory.";
   }
-  return cleanText(stepStatus?.message) || "STEP file is missing from the workspace.";
+  return cleanText(stepStatus?.message) || "STEP file is missing from the directory.";
 }
 
 function generatedSourceStatusTitle(sourceStatus) {

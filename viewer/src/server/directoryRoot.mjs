@@ -2,14 +2,14 @@ import path from "node:path";
 
 import { pathIsInside } from "cadjs/lib/pathUtils.mjs";
 
-export function resolveWorkspaceRoot({
-  workspaceRoot = "",
+export function resolveDirectoryRoot({
+  directoryRoot = "",
   env = process.env,
   cwd = process.cwd(),
   appRoot = "",
-  defaultWorkspaceRoot = "",
+  defaultDirectoryRoot = "",
 } = {}) {
-  const explicitRoot = workspaceRoot || "";
+  const explicitRoot = directoryRoot || "";
   if (explicitRoot) {
     return path.resolve(cwd, explicitRoot);
   }
@@ -25,5 +25,5 @@ export function resolveWorkspaceRoot({
     }
   }
 
-  return defaultWorkspaceRoot ? path.resolve(defaultWorkspaceRoot) : path.resolve(cwd);
+  return defaultDirectoryRoot ? path.resolve(defaultDirectoryRoot) : path.resolve(cwd);
 }

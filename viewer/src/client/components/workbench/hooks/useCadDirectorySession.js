@@ -24,10 +24,10 @@ export function createSessionBackedTabRecord({
   return createTabRecord(key, restoredTabSnapshot || initialSelectedTabSnapshot || {});
 }
 
-export function useCadWorkspaceSession({
+export function useCadDirectorySession({
   manifestEntries,
   cadFileParamForEntry = () => "",
-  cadWorkspaceSessionBootstrappedRef,
+  cadDirectorySessionBootstrappedRef,
   setOpenTabs,
   applyTabRecord,
   selectedEntryKeyFromUrl,
@@ -45,7 +45,7 @@ export function useCadWorkspaceSession({
   readCadRefQueryParams = () => [],
   setPendingCadRefQueryParams = () => {},
   activateEntryTab,
-  resetActiveWorkspace,
+  resetActiveDirectory,
   writeCadParam,
   readEntrySessionState = () => null,
   applyEntrySessionState = () => {}
@@ -54,10 +54,10 @@ export function useCadWorkspaceSession({
   const initialUnresolvedUrlSelectionRef = useRef(false);
 
   useLayoutEffect(() => {
-    if (cadWorkspaceSessionBootstrappedRef.current) {
+    if (cadDirectorySessionBootstrappedRef.current) {
       return;
     }
-    cadWorkspaceSessionBootstrappedRef.current = true;
+    cadDirectorySessionBootstrappedRef.current = true;
 
     const initialCadRefQueryParams = readCadRefQueryParams();
     if (initialCadRefQueryParams.length) {
@@ -91,7 +91,7 @@ export function useCadWorkspaceSession({
     setPendingCadRefQueryParams,
     upsertTabRecord,
     initialSelectedTabSnapshot,
-    cadWorkspaceSessionBootstrappedRef
+    cadDirectorySessionBootstrappedRef
   ]);
 
   useEffect(() => {
@@ -125,7 +125,7 @@ export function useCadWorkspaceSession({
         if (manifestRevision === initialManifestRevisionRef.current && !entryMap.size) {
           return;
         }
-        resetActiveWorkspace();
+        resetActiveDirectory();
       }
       return;
     }
@@ -141,7 +141,7 @@ export function useCadWorkspaceSession({
     manifestRevision,
     readCadParam,
     readCadRefQueryParams,
-    resetActiveWorkspace,
+    resetActiveDirectory,
     selectedEntryKeyFromUrl,
     selectedKey,
     setOpenTabs,
@@ -158,7 +158,7 @@ export function useCadWorkspaceSession({
         activateEntryTab(nextSelectedKey);
         return;
       }
-      resetActiveWorkspace();
+      resetActiveDirectory();
     };
 
     window.addEventListener("popstate", syncSelectionFromHistory);
@@ -169,7 +169,7 @@ export function useCadWorkspaceSession({
     activateEntryTab,
     catalogEntries,
     readCadRefQueryParams,
-    resetActiveWorkspace,
+    resetActiveDirectory,
     selectedEntryKeyFromUrl,
     setPendingCadRefQueryParams
   ]);

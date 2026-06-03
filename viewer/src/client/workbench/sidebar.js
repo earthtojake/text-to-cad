@@ -392,8 +392,8 @@ function finalizeSidebarDirectoryNode(node) {
   };
 }
 
-export function buildSidebarDirectoryTree(entries, { rootName = "Workspace" } = {}) {
-  const root = createSidebarDirectoryNode("", String(rootName || "Workspace"));
+export function buildSidebarDirectoryTree(entries, { rootName = "Directory" } = {}) {
+  const root = createSidebarDirectoryNode("", String(rootName || "Directory"));
 
   for (const entry of entries) {
     const directoryId = sidebarDirectoryIdForEntry(entry);

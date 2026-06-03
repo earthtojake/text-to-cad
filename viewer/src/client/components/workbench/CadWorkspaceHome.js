@@ -78,20 +78,20 @@ function pathLabelForEntry(entry) {
   return String(entry?.file || "").trim();
 }
 
-function workspaceLabelForOption(option) {
+function directoryLabelForOption(option) {
   const rootName = String(option?.rootName || "").trim();
   if (rootName) {
     return rootName;
   }
   const pathLabel = String(option?.rootPath || option?.dir || "").trim().replace(/\\/g, "/").replace(/\/+$/g, "");
-  return pathLabel.split("/").filter(Boolean).pop() || pathLabel || "Workspace";
+  return pathLabel.split("/").filter(Boolean).pop() || pathLabel || "Directory";
 }
 
-function workspacePathLabelForOption(option) {
+function directoryPathLabelForOption(option) {
   return String(option?.rootPath || option?.dir || "").trim();
 }
 
-function normalizeWorkspaceOptions(options) {
+function normalizeDirectoryOptions(options) {
   const seen = new Set();
   const result = [];
   for (const option of Array.isArray(options) ? options : []) {
@@ -162,18 +162,18 @@ export default function CadWorkspaceHome({
   catalogHydrated = false,
   catalogRefreshing = false,
   catalogError = "",
-  workspaceSelectionActive = false,
-  workspaceOptions = [],
-  onSelectWorkspace
+  directorySelectionActive = false,
+  directoryOptions = [],
+  onSelectDirectory
 }) {
   const homeEntries = selectHomeEntries(entries);
-  const normalizedWorkspaceOptions = normalizeWorkspaceOptions(workspaceOptions);
+  const normalizedDirectoryOptions = normalizeDirectoryOptions(directoryOptions);
   const hasEntries = homeEntries.length > 0;
-  const hasWorkspaceOptions = normalizedWorkspaceOptions.length > 0;
+  const hasDirectoryOptions = normalizedDirectoryOptions.length > 0;
   const catalogErrorMessage = String(catalogError || "").trim();
   const catalogLoading = !catalogHydrated || (catalogRefreshing && !hasEntries);
-  const heading = workspaceSelectionActive
-    ? "Select a workspace"
+  const heading = directorySelectionActive
+    ? "Select a directory"
     : "Select a file";
 
   return (
@@ -189,10 +189,10 @@ export default function CadWorkspaceHome({
         </div>
 
         <div className="divide-y divide-sidebar-border/70">
-          {workspaceSelectionActive ? (
-            hasWorkspaceOptions ? normalizedWorkspaceOptions.map((option) => {
-              const label = workspaceLabelForOption(option);
-              const pathLabel = workspacePathLabelForOption(option);
+          {directorySelectionActive ? (
+            hasDirectoryOptions ? normalizedDirectoryOptions.map((option) => {
+              const label = directoryLabelForOption(option);
+              const pathLabel = directoryPathLabelForOption(option);
 
               return (
                 <Button
@@ -201,8 +201,8 @@ export default function CadWorkspaceHome({
                   variant="ghost"
                   className="group h-auto w-full justify-start rounded-none px-5 py-3 text-left hover:bg-sidebar-accent/80 focus-visible:ring-inset has-[>svg]:px-5 sm:px-6 sm:has-[>svg]:px-6"
                   onClick={() => {
-                    if (typeof onSelectWorkspace === "function") {
-                      onSelectWorkspace(option.dir);
+                    if (typeof onSelectDirectory === "function") {
+                      onSelectDirectory(option.dir);
                     }
                   }}
                   title={pathLabel || label}
@@ -224,14 +224,14 @@ export default function CadWorkspaceHome({
                       "max-sm:hidden"
                     )}
                   >
-                    DIR
+                    Directory
                   </span>
                   <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden="true" />
                 </Button>
               );
             }) : (
               <p className="px-5 py-5 text-sm text-muted-foreground sm:px-6">
-                No active workspaces found.
+                No active directories found.
               </p>
             )
           ) : hasEntries ? homeEntries.map((entry) => {

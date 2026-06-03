@@ -80,10 +80,10 @@ function explicitSourceFileRef(entry) {
   );
 }
 
-function explicitSourceWorkspaceFileRef(entry) {
+function explicitSourceDirectoryFileRef(entry) {
   return (
-    normalizedFilePath(entry?.sourceWorkspaceFile) ||
-    normalizedFilePath(entry?.source?.workspaceFile) ||
+    normalizedFilePath(entry?.sourceDirectoryFile) ||
+    normalizedFilePath(entry?.source?.directoryFile) ||
     normalizedFilePath(entry?.source?.sourcePath)
   );
 }
@@ -132,21 +132,21 @@ function joinLocalPath(basePath, relativePath) {
   return `${normalizedBase}${separator}${normalizedRelative}`;
 }
 
-function workspacePathIsInsideViewerRoot(workspaceRelativePath, rootDir) {
-  const workspacePath = normalizedRelativePath(workspaceRelativePath);
+function directoryPathIsInsideViewerRoot(directoryRelativePath, rootDir) {
+  const directoryPath = normalizedRelativePath(directoryRelativePath);
   const normalizedRootDir = normalizedRelativePath(rootDir);
-  if (!workspacePath) {
+  if (!directoryPath) {
     return false;
   }
   if (!normalizedRootDir) {
     return true;
   }
-  return workspacePath === normalizedRootDir || workspacePath.startsWith(`${normalizedRootDir}/`);
+  return directoryPath === normalizedRootDir || directoryPath.startsWith(`${normalizedRootDir}/`);
 }
 
-function rootRelativePathFromWorkspaceRelativePath(workspaceRelativePath, rootDir) {
-  return workspacePathIsInsideViewerRoot(workspaceRelativePath, rootDir)
-    ? stripViewerRootDirPrefix(workspaceRelativePath, rootDir)
+function rootRelativePathFromDirectoryRelativePath(directoryRelativePath, rootDir) {
+  return directoryPathIsInsideViewerRoot(directoryRelativePath, rootDir)
+    ? stripViewerRootDirPrefix(directoryRelativePath, rootDir)
     : "";
 }
 
@@ -174,21 +174,21 @@ export function fileAccessAssetsForEntry(entry, {
   const sourceKind = String(stepSourceStatus?.sourceKind || entryStepSourceKind(entry)).trim().toLowerCase();
   const stepSourcePath = normalizedFilePath(stepSourceStatus?.sourcePath);
   const explicitSourceRef = explicitSourceFileRef(entry);
-  const explicitSourceWorkspaceRef = explicitSourceWorkspaceFileRef(entry);
+  const explicitSourceDirectoryRef = explicitSourceDirectoryFileRef(entry);
   const inferredSourceRootRef = sourceKind === "python" && isStepFileRef(outputFileRef)
     ? sameStemPythonFileRef(outputFileRef)
     : "";
   const sourceRef = explicitSourceRef || stepSourcePath || inferredSourceRootRef;
-  const sourceWorkspaceRef = stepSourcePath || explicitSourceWorkspaceRef;
+  const sourceDirectoryRef = stepSourcePath || explicitSourceDirectoryRef;
   const hasViewerPathContext = Boolean(
     viewerServerInfo?.rootDir ||
     viewerServerInfo?.rootPath ||
-    viewerServerInfo?.workspaceRoot
+    viewerServerInfo?.directoryRoot
   );
   const sourceRootRef = sourceRef
     ? hasViewerPathContext
       ? (viewerRootRelativePath(sourceRef, viewerServerInfo, { anchorFile: outputFileRef }) || sourceRef)
-      : sourceWorkspaceRef ? "" : (explicitSourceRef || inferredSourceRootRef)
+      : sourceDirectoryRef ? "" : (explicitSourceRef || inferredSourceRootRef)
     : "";
   const sourceFilename = sourceRootRef || sourceRef
     ? (basenameFromFileRef(sourceRootRef || sourceRef) || sameStemPythonFilename(outputFileRef))
@@ -217,7 +217,7 @@ export function fileAccessAssetsForEntry(entry, {
       filename: sourceFilename,
       label: sourceFilename,
       rootRelativePath: sourceRootRef,
-      workspaceRelativePath: sourceWorkspaceRef,
+      directoryRelativePath: sourceDirectoryRef,
     } : null,
   };
 }
@@ -248,17 +248,17 @@ export function openUrlForFileAsset(fileRef, asset = "output", baseUrl = "") {
 
 export function copyTargetsForFileAccessAsset(asset, viewerServerInfo = {}) {
   const rootDir = normalizedRelativePath(viewerServerInfo?.rootDir);
-  const workspaceRelativePath = normalizedRelativePath(asset?.workspaceRelativePath);
-  const workspaceRootRelativePath = rootRelativePathFromWorkspaceRelativePath(workspaceRelativePath, rootDir);
-  const rawRootRelativePath = workspaceRootRelativePath || normalizedRelativePath(asset?.rootRelativePath);
+  const directoryRelativePath = normalizedRelativePath(asset?.directoryRelativePath);
+  const directoryRootRelativePath = rootRelativePathFromDirectoryRelativePath(directoryRelativePath, rootDir);
+  const rawRootRelativePath = directoryRootRelativePath || normalizedRelativePath(asset?.rootRelativePath);
   const rootRelativePath = rawRootRelativePath
     ? viewerRootRelativePath(rawRootRelativePath, viewerServerInfo, { anchorFile: asset?.fileRef })
     : "";
-  const relativePath = rootRelativePath || workspaceRelativePath;
+  const relativePath = rootRelativePath || directoryRelativePath;
   const absolutePath = rootRelativePath && viewerServerInfo?.rootPath
       ? joinLocalPath(viewerServerInfo.rootPath, rootRelativePath)
-      : workspaceRelativePath && viewerServerInfo?.workspaceRoot
-        ? joinLocalPath(viewerServerInfo.workspaceRoot, workspaceRelativePath)
+      : directoryRelativePath && viewerServerInfo?.directoryRoot
+        ? joinLocalPath(viewerServerInfo.directoryRoot, directoryRelativePath)
         : "";
 
   return {

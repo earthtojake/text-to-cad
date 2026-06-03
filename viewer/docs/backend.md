@@ -53,8 +53,8 @@ not write `catalog.json` or any hidden catalog cache file.
 Local filesystem deployments are intentionally URL-driven. `?dir=` may be
 absolute or relative to the directory where the Viewer was started; when omitted
 it defaults to the startup `--dir`, or to the startup directory if `--dir` was
-not passed. That default directory is also the first active workspace. `?file=`
-values are always relative to the active `?dir=` workspace.
+not passed. That default directory is also the first active directory. `?file=`
+values are always relative to the active `?dir=` directory.
 `VIEWER_LOCAL_ROOT_DIR`, `VIEWER_LOCAL_WORKSPACE_ROOT`, and the old fixed-root
 startup flag have been removed and now fail at startup.
 

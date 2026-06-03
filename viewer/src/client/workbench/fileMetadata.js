@@ -109,9 +109,9 @@ function sourcePathForEntry(entry, sourceAsset, viewerServerInfo = {}) {
   const rawPath = cleanText(
     entry?.source?.sourcePath ||
     entry?.source?.file ||
-    entry?.sourceWorkspaceFile ||
+    entry?.sourceDirectoryFile ||
+    sourceAsset?.directoryRelativePath ||
     entry?.sourceFile ||
-    sourceAsset?.workspaceRelativePath ||
     sourceAsset?.rootRelativePath
   );
   return viewerRootRelativePath(rawPath, viewerServerInfo, { anchorFile: entry?.file }) || rawPath;

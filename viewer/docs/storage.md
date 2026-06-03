@@ -11,11 +11,11 @@ GLB/topology artifacts, and hosted Blob uploads are backend concerns; use
 
 Use query params only for shareable state that should survive copying a URL:
 
-- `file`: active catalog entry, always relative to the active `dir` workspace.
+- `file`: active catalog entry, always relative to the active `dir` directory.
 - `dir`: local filesystem directory to scan. It may be absolute or relative to
   the directory where the Viewer server was started. When omitted, the Viewer
-  uses the active workspace remembered for the tab, or the directory where the
-  server was started when that is the only active workspace.
+  uses the active directory remembered for the tab, or the directory where the
+  server was started when that is the only active directory.
 - `refs`: copied CAD references and selection targets.
 - `moveit2Ws`: explicit MoveIt2 websocket override for local or hosted sessions.
 
@@ -36,9 +36,9 @@ Avoid adding file-specific state to `localStorage`. If the value depends on the
 selected file, the active root directory, a generated asset hash, or a tab
 interaction, it belongs in per-file session state instead.
 
-## Workspace sessionStorage
+## Directory sessionStorage
 
-Use workspace-level `sessionStorage` for temporary app-wide UI state that should
+Use directory-level `sessionStorage` for temporary app-wide UI state that should
 survive reloads in the same browser tab, should not become a durable global
 preference, and should not vary by selected file. Use
 `src/client/workbench/persistence.js` rather than creating one-off storage keys.
@@ -46,11 +46,11 @@ preference, and should not vary by selected file. Use
 Current keys:
 
 ```text
-cad-viewer:workspace-session:v1
+cad-viewer:directory-session:v1
 cad-viewer:active-dir:v1
 ```
 
-Current `cad-viewer:workspace-session:v1` fields:
+Current `cad-viewer:directory-session:v1` fields:
 
 - `fileViewerOpen`: app-wide file viewer open/closed state.
 - `fileViewerExpandedDirectoryIds`: app-wide open folder ids for the file
@@ -64,11 +64,11 @@ Current `cad-viewer:workspace-session:v1` fields:
 - `theme`: app-wide unsaved theme settings for the current tab. Saved theme
   presets and the active saved preset id still belong to `localStorage`.
 
-`cad-viewer:active-dir:v1` stores the tab's preferred workspace after a `?dir=`
-URL is loaded or a workspace is selected.
+`cad-viewer:active-dir:v1` stores the tab's preferred directory after a `?dir=`
+URL is loaded or a directory is selected.
 
 Do not put selected-file state, model controls, drawing state, or
-generated-asset decisions in workspace session state. Those belong in per-file
+generated-asset decisions in directory session state. Those belong in per-file
 session state.
 
 ## Per-File sessionStorage

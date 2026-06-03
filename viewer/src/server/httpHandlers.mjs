@@ -199,6 +199,7 @@ export function createCadViewerApiMiddleware({
   preferFileDownloadRedirects = false,
   onCatalogChanged = () => {},
   onCatalogActivated = () => {},
+  onDirectoryActivated = () => {},
   rootDir,
 } = {}) {
   if (!backend) {
@@ -210,6 +211,43 @@ export function createCadViewerApiMiddleware({
     const activeFileRef = requestFileRef(requestUrl);
     if (requestUrl.pathname === "/__cad/server") {
       sendJson(res, 200, serverInfo({ rootDir: activeRootDir, fileRef: activeFileRef }));
+      return;
+    }
+    if (requestUrl.pathname === "/__cad/directory/activate") {
+      const method = String(req.method || "GET").toUpperCase();
+      if (method !== "POST") {
+        res.setHeader("allow", "POST");
+        sendJson(res, 405, {
+          error: "Use POST to activate a CAD Viewer directory",
+        });
+        return;
+      }
+      if (typeof backend.resolveRequestRoot !== "function" && typeof backend.resolveRoot !== "function") {
+        sendJson(res, 501, {
+          error: "Directory activation requires a local filesystem CAD Viewer backend",
+        });
+        return;
+      }
+      try {
+        const resolvedRoot = typeof backend.resolveRequestRoot === "function"
+          ? backend.resolveRequestRoot({ rootDir: activeRootDir, fileRef: activeFileRef })
+          : backend.resolveRoot(activeRootDir);
+        onDirectoryActivated(resolvedRoot, { rootDir: activeRootDir, fileRef: activeFileRef });
+        sendJson(res, 200, {
+          ok: true,
+          directory: {
+            dir: String(resolvedRoot?.dir || activeRootDir || ""),
+            rootPath: String(resolvedRoot?.rootPath || ""),
+            rootName: String(resolvedRoot?.rootName || ""),
+          },
+          server: serverInfo({ rootDir: String(resolvedRoot?.dir || activeRootDir || ""), fileRef: activeFileRef }),
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok: false,
+          error: errorMessage(error),
+        });
+      }
       return;
     }
     if (requestUrl.pathname === "/__cad/catalog") {

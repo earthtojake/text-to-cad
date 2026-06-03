@@ -92,10 +92,10 @@ export function viewerRootRelativePath(value, viewerServerInfo = {}, {
     return normalizeRelativePath(rootPathRelative);
   }
 
-  const workspaceRelative = pathRelativeToPrefix(stripQueryAndHash(text), viewerServerInfo?.workspaceRoot);
-  if (workspaceRelative) {
+  const directoryRootRelative = pathRelativeToPrefix(stripQueryAndHash(text), viewerServerInfo?.directoryRoot);
+  if (directoryRootRelative) {
     return suffixFromAnchorDirectory(
-      stripViewerRootDirPrefix(workspaceRelative, viewerServerInfo?.rootDir),
+      stripViewerRootDirPrefix(directoryRootRelative, viewerServerInfo?.rootDir),
       anchorFile
     );
   }
@@ -111,6 +111,6 @@ export function viewerPathOptionsFromServerInfo(viewerServerInfo = {}) {
   return {
     rootDir: viewerServerInfo?.rootDir || "",
     rootPath: viewerServerInfo?.rootPath || "",
-    workspaceRoot: viewerServerInfo?.workspaceRoot || "",
+    directoryRoot: viewerServerInfo?.directoryRoot || "",
   };
 }

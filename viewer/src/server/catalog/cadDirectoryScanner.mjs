@@ -95,7 +95,7 @@ export function normalizeViewerRootDir(value = DEFAULT_VIEWER_ROOT_DIR) {
     return DEFAULT_VIEWER_ROOT_DIR;
   }
   if (normalized === ".." || normalized.startsWith("../")) {
-    throw new Error(`CAD Viewer root directory must stay inside the workspace: ${rawValue}`);
+    throw new Error(`CAD Viewer root directory must stay inside the directory root: ${rawValue}`);
   }
   return normalized.replace(/(?!^\/)\/+$/, "");
 }
@@ -108,7 +108,7 @@ export function resolveViewerRoot(repoRoot, rootDir = DEFAULT_VIEWER_ROOT_DIR) {
     : resolvedRepoRoot;
   const relativePath = path.relative(resolvedRepoRoot, rootPath);
   if (!relativePathStaysInsideRoot(relativePath)) {
-    throw new Error(`CAD Viewer root directory must stay inside the workspace: ${normalizedDir}`);
+    throw new Error(`CAD Viewer root directory must stay inside the directory root: ${normalizedDir}`);
   }
   return {
     dir: normalizedDir,

@@ -19,8 +19,8 @@ const THEME_STORAGE_VERSION = 11;
 const CUSTOM_THEME_PRESET_ID_PREFIX = "custom:";
 export const THEME_APPEARANCE_QUERY_PARAM = "appearance";
 
-export const CAD_WORKSPACE_SESSION_STORAGE_VERSION = 1;
-export const CAD_WORKSPACE_SESSION_STORAGE_KEY = `cad-viewer:workspace-session:v${CAD_WORKSPACE_SESSION_STORAGE_VERSION}`;
+export const CAD_DIRECTORY_SESSION_STORAGE_VERSION = 1;
+export const CAD_DIRECTORY_SESSION_STORAGE_KEY = `cad-viewer:directory-session:v${CAD_DIRECTORY_SESSION_STORAGE_VERSION}`;
 export const CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH = 280;
 export const CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH = 365;
 export const CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH = 280;
@@ -500,7 +500,7 @@ function browserSessionStorage() {
   return typeof window !== "undefined" ? window.sessionStorage : null;
 }
 
-export function createCadWorkspaceSessionState(overrides = {}, options = {}) {
+export function createCadDirectorySessionState(overrides = {}, options = {}) {
   return {
     fileViewerOpen: normalizeBoolean(overrides?.fileViewerOpen, false),
     fileViewerExpandedDirectoryIds: normalizeNullableUniqueStringList(overrides?.fileViewerExpandedDirectoryIds),
@@ -513,14 +513,14 @@ export function createCadWorkspaceSessionState(overrides = {}, options = {}) {
       overrides?.fileSheetWidthPx,
       options.defaultFileSheetWidthPx
     ),
-    theme: normalizeWorkspaceSessionThemeSlice(overrides?.theme)
+    theme: normalizeDirectorySessionThemeSlice(overrides?.theme)
   };
 }
 
-function buildCadWorkspaceSessionStoragePayload(state = {}, options = {}) {
-  const normalizedState = createCadWorkspaceSessionState(state, options);
+function buildCadDirectorySessionStoragePayload(state = {}, options = {}) {
+  const normalizedState = createCadDirectorySessionState(state, options);
   const payload = {
-    version: CAD_WORKSPACE_SESSION_STORAGE_VERSION
+    version: CAD_DIRECTORY_SESSION_STORAGE_VERSION
   };
   if (normalizedState.fileViewerOpen || hasOwn(state || {}, "fileViewerOpen")) {
     payload.fileViewerOpen = normalizedState.fileViewerOpen;
@@ -543,28 +543,28 @@ function buildCadWorkspaceSessionStoragePayload(state = {}, options = {}) {
   return Object.keys(payload).length > 1 ? payload : null;
 }
 
-export function readCadWorkspaceSessionState(options = {}) {
+export function readCadDirectorySessionState(options = {}) {
   const storage = options.storage || browserSessionStorage();
   if (!storage) {
-    return createCadWorkspaceSessionState({}, options);
+    return createCadDirectorySessionState({}, options);
   }
-  const rawValue = readStorageJson(storage, CAD_WORKSPACE_SESSION_STORAGE_KEY);
-  if (!rawValue || rawValue.version !== CAD_WORKSPACE_SESSION_STORAGE_VERSION) {
-    return createCadWorkspaceSessionState({}, options);
+  const rawValue = readStorageJson(storage, CAD_DIRECTORY_SESSION_STORAGE_KEY);
+  if (!rawValue || rawValue.version !== CAD_DIRECTORY_SESSION_STORAGE_VERSION) {
+    return createCadDirectorySessionState({}, options);
   }
-  return createCadWorkspaceSessionState(rawValue, options);
+  return createCadDirectorySessionState(rawValue, options);
 }
 
-export function writeCadWorkspaceSessionState(state = {}, options = {}) {
+export function writeCadDirectorySessionState(state = {}, options = {}) {
   const storage = options.storage || browserSessionStorage();
   if (!storage) {
     return true;
   }
-  const payload = buildCadWorkspaceSessionStoragePayload(state, options);
+  const payload = buildCadDirectorySessionStoragePayload(state, options);
   if (!payload) {
-    return removeStorageItem(storage, CAD_WORKSPACE_SESSION_STORAGE_KEY, options);
+    return removeStorageItem(storage, CAD_DIRECTORY_SESSION_STORAGE_KEY, options);
   }
-  return writeStorageJson(storage, CAD_WORKSPACE_SESSION_STORAGE_KEY, payload, options);
+  return writeStorageJson(storage, CAD_DIRECTORY_SESSION_STORAGE_KEY, payload, options);
 }
 
 function readSystemPrefersDark() {
@@ -1020,7 +1020,7 @@ function isPlainStorageObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function normalizeWorkspaceSessionThemeSlice(value) {
+function normalizeDirectorySessionThemeSlice(value) {
   if (!isPlainStorageObject(value) || !isPlainStorageObject(value.settings)) {
     return null;
   }
@@ -1034,7 +1034,7 @@ function normalizeWorkspaceSessionThemeSlice(value) {
   };
 }
 
-export function createWorkspaceSessionThemeSlice(themeState = {}, customPresets = readCustomThemePresets()) {
+export function createDirectorySessionThemeSlice(themeState = {}, customPresets = readCustomThemePresets()) {
   if (!isPlainStorageObject(themeState) || !isPlainStorageObject(themeState.settings)) {
     return null;
   }
@@ -1053,18 +1053,18 @@ export function createWorkspaceSessionThemeSlice(themeState = {}, customPresets 
   };
 }
 
-export function isWorkspaceSessionThemeSlice(themeSlice) {
-  return normalizeWorkspaceSessionThemeSlice(themeSlice) !== null;
+export function isDirectorySessionThemeSlice(themeSlice) {
+  return normalizeDirectorySessionThemeSlice(themeSlice) !== null;
 }
 
-export function readWorkspaceThemeSettingsState(customPresets = readCustomThemePresets()) {
+export function readDirectoryThemeSettingsState(customPresets = readCustomThemePresets()) {
   const queryState = readThemeSettingsStateFromAppearanceQuery(customPresets);
   if (queryState) {
     return queryState;
   }
   const globalThemeState = readThemeSettingsState(customPresets);
-  const sessionTheme = readCadWorkspaceSessionState({ customPresets }).theme;
-  if (!isWorkspaceSessionThemeSlice(sessionTheme)) {
+  const sessionTheme = readCadDirectorySessionState({ customPresets }).theme;
+  if (!isDirectorySessionThemeSlice(sessionTheme)) {
     return globalThemeState;
   }
   const themes = normalizeThemeLibraryPayload(customPresets);
