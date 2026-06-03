@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import CadWorkspace from "./components/CadWorkspace";
 import faviconUrl from "./assets/favicon.ico";
 import "./styles/globals.css";
-import { getCadManifestSnapshot, subscribeCadManifest } from "cadjs/lib/cadManifestStore";
+import { getCadManifestSnapshot, subscribeCadManifest } from "./workbench/cadManifestStore.js";
 
 const ROOT_ID = "root";
 const ROOT_CACHE_KEY = "__cadViewerRoot";

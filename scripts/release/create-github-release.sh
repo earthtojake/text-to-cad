@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
 
-BUMP_VERSION="$SCRIPT_DIR/bump-version.py"
+BUMP_VERSION="$SCRIPT_DIR/bump-version.sh"
 REMOTE="${RELEASE_REMOTE:-origin}"
 REPO=""
 DRY_RUN=0
@@ -23,19 +23,19 @@ Usage:
 
 Runs the repo release-prep flow:
 
-1. calls scripts/release/bump-version.py
-2. refreshes generated skill/plugin outputs
-3. runs generated-output checks and plugin validation
+1. calls scripts/release/bump-version.sh
+2. bundles generated skill/plugin outputs
+3. runs generated-output and plugin checks
 4. commits the release version bump
 5. creates and pushes the git tag
 6. creates a draft GitHub Release for that tag
 
 Options:
-  --from-version X.Y.Z  Pass through to bump-version.py.
-  --set-version X.Y.Z   Pass through to bump-version.py instead of bumping a part.
+  --from-version X.Y.Z  Pass through to bump-version.sh.
+  --set-version X.Y.Z   Pass through to bump-version.sh instead of bumping a part.
   --dry-run             Show the planned bump and release steps without writing.
-  --skip-checks         Skip build/check scripts after bumping.
-  --run-tests           Run scripts/test.sh before committing.
+  --skip-checks         Skip bundle/check scripts after bumping.
+  --run-tests           Run scripts/test/test.sh before committing.
   --skip-push           Do not push the branch or tag.
   --skip-release        Do not create the GitHub Release.
   --publish             Publish the GitHub Release immediately instead of creating a draft.
@@ -44,6 +44,8 @@ Options:
   -h, --help            Show this help.
 
 The worktree must be clean before a non-dry-run release prep starts.
+This is a manual all-in-one fallback. Prefer the Prepare Release and Publish
+GitHub Actions workflows for normal releases.
 EOF
 }
 
@@ -116,22 +118,21 @@ fi
 
 bump_output="$("$BUMP_VERSION" "${BUMP_ARGS[@]}" --dry-run)"
 version_pair="$(printf '%s\n' "$bump_output" | sed -nE 's/^Version bump: ([0-9]+\.[0-9]+\.[0-9]+) -> ([0-9]+\.[0-9]+\.[0-9]+)$/\1 \2/p')"
-[ -n "$version_pair" ] || die "could not determine target version from bump-version.py"
+[ -n "$version_pair" ] || die "could not determine target version from bump-version.sh"
 read -r current_version next_version <<<"$version_pair"
 
 if [ "$DRY_RUN" -eq 1 ]; then
   printf '%s\n' "$bump_output"
   echo ""
   echo "Release prep dry run for $current_version -> $next_version:"
-  echo "- Refresh generated outputs with scripts/build.sh"
+  echo "- Bundle generated outputs with scripts/bundle/bundle.sh"
   if [ "$SKIP_CHECKS" -eq 0 ]; then
-    echo "- Check generated outputs with scripts/build.sh --check"
-    echo "- Validate plugin package with scripts/check/validate-plugins.sh"
+    echo "- Check generated outputs and plugin metadata with scripts/bundle/bundle.sh --check"
   fi
   if [ "$RUN_TESTS" -eq 1 ]; then
-    echo "- Run scripts/test.sh"
+    echo "- Run scripts/test/test.sh"
   fi
-  echo "- Commit release metadata as: Release $next_version"
+  echo "- Commit canonical release version and bundled outputs as: Release $next_version"
   echo "- Create git tag: $next_version"
   if [ "$SKIP_PUSH" -eq 0 ]; then
     echo "- Push current branch and tag to $REMOTE"
@@ -179,15 +180,14 @@ fi
 
 "$BUMP_VERSION" "${BUMP_ARGS[@]}"
 
-"$REPO_ROOT/scripts/build.sh"
+"$REPO_ROOT/scripts/bundle/bundle.sh"
 
 if [ "$SKIP_CHECKS" -eq 0 ]; then
-  "$REPO_ROOT/scripts/build.sh" --check
-  "$REPO_ROOT/scripts/check/validate-plugins.sh"
+  "$REPO_ROOT/scripts/bundle/bundle.sh" --check
 fi
 
 if [ "$RUN_TESTS" -eq 1 ]; then
-  "$REPO_ROOT/scripts/test.sh"
+  "$REPO_ROOT/scripts/test/test.sh"
 fi
 
 git add -A

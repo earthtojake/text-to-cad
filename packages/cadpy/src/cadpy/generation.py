@@ -64,7 +64,6 @@ from cadpy.render import (
 from cadpy.source_hash import PythonSourceHash, python_source_hash
 from cadpy.stl import export_part_stl_from_scene
 from cadpy.step_export import build_build123d_step_scene, export_build123d_step_scene
-from cadpy.step_metadata import read_text_to_cad_step_metadata
 from cadpy.threemf import export_part_3mf_from_scene
 from cadpy.step_scene import (
     ColorRGBA,
@@ -898,7 +897,6 @@ def _write_shape_step_payload(
         output_path,
         text_to_cad_entry_kind=entry_kind,
         source_path=relative_to_file(script_path, output_path),
-        source_fingerprint=source_identity.source_fingerprint,
         source_hash=source_identity.source_hash,
     )
     _mark_scene_python_backed(scene, source_identity=source_identity, source_path=script_path)
@@ -917,7 +915,6 @@ def _mark_scene_python_backed(
         return scene
     scene.source_kind = "python"
     scene.source_hash = source_identity.source_hash
-    scene.source_fingerprint = source_identity.source_fingerprint
     scene.source_path = relative_to_file(source_path, scene.step_path)
     return scene
 
@@ -959,30 +956,12 @@ def _write_assembly_step_payload(
             _mark_scene_python_backed(scene, source_identity=source_identity, source_path=script_path)
             _mark_scene_step_payload(scene, entry_kind="assembly", payload_kind="assembly_spec")
             return scene
-    if not force and output_path.is_file():
-        try:
-            metadata = read_text_to_cad_step_metadata(output_path)
-        except Exception:
-            metadata = {}
-        if (
-            metadata.get("entryKind") == "assembly"
-            and metadata.get("sourceFingerprint") == source_identity.source_fingerprint
-        ):
-            logger.debug(f"reused current STEP: {_display_path(output_path)}")
-            if not load_current_scene:
-                return None
-            scene = load_step_scene(output_path)
-            _mark_scene_python_backed(scene, source_identity=source_identity, source_path=script_path)
-            _mark_scene_step_payload(scene, entry_kind="assembly", payload_kind="assembly_spec")
-            return scene
-
     with logger.timed(f"write assembly STEP {relative_to_repo(output_path)}"):
         scene = export_assembly_step_scene(
             assembly_spec,
             output_path=output_path,
             text_to_cad_entry_kind="assembly",
             source_path=relative_to_file(script_path, output_path),
-            source_fingerprint=source_identity.source_fingerprint,
             source_hash=source_identity.source_hash,
             resolver=resolver,
             logger=logger,
@@ -1014,7 +993,6 @@ def _write_dxf_payload(
         text_to_cad_identity_metadata(
             source_path=relative_to_file(script_path, output_path),
             source_hash=source_identity.source_hash,
-            source_fingerprint=source_identity.source_fingerprint,
         ),
     )
     logger.debug(f"wrote DXF: {_display_path(output_path)}")
@@ -1509,17 +1487,17 @@ def _edge_visibility_classes_match_manifest(
 
 def _artifact_source_kind_matches_spec(spec: EntrySpec, manifest: Mapping[str, object]) -> bool:
     source_kind = str(manifest.get("sourceKind") or "step").strip().lower()
+    if spec.source != "generated" and spec.step_path is not None and spec.step_path.is_file():
+        if source_kind == "python":
+            return bool(str(manifest.get("stepHash") or "").strip())
+        return source_kind == "step"
     expected = "python" if spec.source == "generated" and spec.script_path is not None else "step"
     return source_kind == expected
 
 
-def _artifact_source_identity_matches_spec(spec: EntrySpec, manifest: Mapping[str, object]) -> bool:
-    if spec.source == "generated" and spec.script_path is not None:
-        expected = python_source_hash(spec.script_path)
-        artifact_fingerprint = str(manifest.get("sourceFingerprint") or "").strip()
-        return artifact_fingerprint == expected.source_fingerprint
+def _artifact_step_hash_matches_spec(spec: EntrySpec, manifest: Mapping[str, object]) -> bool:
     if spec.step_path is None or not spec.step_path.is_file():
-        return False
+        return True
     expected_hash = step_file_hash(spec.step_path)
     return str(manifest.get("stepHash") or "").strip() == expected_hash
 
@@ -1552,7 +1530,7 @@ def _existing_topology_artifact_matches_spec_without_scene(
         return False
     if not _artifact_source_kind_matches_spec(spec, artifact.manifest):
         return False
-    if not _artifact_source_identity_matches_spec(spec, artifact.manifest):
+    if not _artifact_step_hash_matches_spec(spec, artifact.manifest):
         return False
     mesh = artifact.manifest.get("mesh")
     if not isinstance(mesh, Mapping):
@@ -1595,7 +1573,7 @@ def _existing_topology_artifact_matches_options(spec: EntrySpec, selector_option
         return False
     if not _artifact_source_kind_matches_spec(spec, artifact.manifest):
         return False
-    if not _artifact_source_identity_matches_spec(spec, artifact.manifest):
+    if not _artifact_step_hash_matches_spec(spec, artifact.manifest):
         return False
     mesh = artifact.manifest.get("mesh")
     if not isinstance(mesh, Mapping):

@@ -72,6 +72,65 @@ test("local backend serves catalog from an in-memory scan without writing catalo
   });
 });
 
+test("local backend defaults directory mode to the workspace root", async () => {
+  await withTempWorkspace((workspaceRoot) => {
+    fs.writeFileSync(path.join(workspaceRoot, "sample.stl"), "solid sample\nendsolid sample\n");
+    const backend = createLocalAssetBackend({ workspaceRoot });
+
+    assert.deepEqual(backend.readCatalog().entries.map((entry) => entry.rootRelativeFile), ["sample.stl"]);
+  });
+});
+
+test("local backend accepts relative request directories from the workspace root", async () => {
+  await withTempWorkspace((workspaceRoot) => {
+    fs.mkdirSync(path.join(workspaceRoot, "models"), { recursive: true });
+    fs.writeFileSync(path.join(workspaceRoot, "models", "sample.stl"), "solid sample\nendsolid sample\n");
+    const backend = createLocalAssetBackend({ workspaceRoot });
+
+    assert.deepEqual(backend.readCatalog({ rootDir: "models" }).entries.map((entry) => entry.rootRelativeFile), ["sample.stl"]);
+  });
+});
+
+test("local backend keeps directory mode for file params that look absolute", async () => {
+  await withTempWorkspace((workspaceRoot) => {
+    fs.mkdirSync(path.join(workspaceRoot, "models"), { recursive: true });
+    fs.mkdirSync(path.join(workspaceRoot, "other"), { recursive: true });
+    fs.writeFileSync(path.join(workspaceRoot, "models", "inside.stl"), "solid inside\nendsolid inside\n");
+    const outsidePath = path.join(workspaceRoot, "other", "solo.stl");
+    fs.writeFileSync(outsidePath, "solid solo\nendsolid solo\n");
+    const backend = createLocalAssetBackend({ workspaceRoot });
+
+    const catalog = backend.readCatalog({ rootDir: "models", fileRef: outsidePath });
+
+    assert.deepEqual(catalog.entries.map((entry) => entry.rootRelativeFile), ["inside.stl"]);
+    assert.deepEqual(catalog.entries.map((entry) => entry.file), [path.join(workspaceRoot, "models", "inside.stl")]);
+  });
+});
+
+test("local backend keeps directory mode for missing relative file params", async () => {
+  await withTempWorkspace((workspaceRoot) => {
+    fs.mkdirSync(path.join(workspaceRoot, "models"), { recursive: true });
+    fs.writeFileSync(path.join(workspaceRoot, "models", "sample.stl"), "solid sample\nendsolid sample\n");
+    const backend = createLocalAssetBackend({ workspaceRoot });
+
+    assert.deepEqual(
+      backend.readCatalog({ rootDir: "models", fileRef: "missing.stl" }).entries.map((entry) => entry.rootRelativeFile),
+      ["sample.stl"]
+    );
+  });
+});
+
+test("local backend reports missing request directories", async () => {
+  await withTempWorkspace((workspaceRoot) => {
+    const backend = createLocalAssetBackend({ workspaceRoot });
+
+    assert.throws(
+      () => backend.readCatalog({ rootDir: "missing-models" }),
+      /CAD Viewer directory not found/
+    );
+  });
+});
+
 test("local backend incrementally refreshes changed CAD catalog entries", async () => {
   await withTempWorkspace((workspaceRoot) => {
     const modelRoot = path.join(workspaceRoot, "models");
@@ -108,19 +167,19 @@ test("local backend refreshes requested files against a cached dynamic root cata
     const backend = createLocalAssetBackend({ workspaceRoot });
 
     assert.deepEqual(
-      backend.readCatalog({ rootDir: modelRoot, fileRef: firstPath }).entries.map((entry) => entry.rootRelativeFile),
+      backend.readCatalog({ rootDir: modelRoot, fileRef: "first.stl" }).entries.map((entry) => entry.rootRelativeFile),
       ["first.stl"]
     );
 
     fs.writeFileSync(secondPath, "solid second\nendsolid second\n");
     assert.deepEqual(
-      backend.readCatalog({ rootDir: modelRoot, fileRef: secondPath }).entries.map((entry) => entry.rootRelativeFile),
+      backend.readCatalog({ rootDir: modelRoot, fileRef: "second.stl" }).entries.map((entry) => entry.rootRelativeFile),
       ["first.stl", "second.stl"]
     );
 
     fs.unlinkSync(firstPath);
     assert.deepEqual(
-      backend.readCatalog({ rootDir: modelRoot, fileRef: firstPath }).entries.map((entry) => entry.rootRelativeFile),
+      backend.readCatalog({ rootDir: modelRoot, fileRef: "first.stl" }).entries.map((entry) => entry.rootRelativeFile),
       ["second.stl"]
     );
   });
@@ -189,7 +248,7 @@ test("local backend resolves same-stem Python generators without requiring a STE
   });
 });
 
-test("local backend rejects Viewer artifact regeneration for same-stem Python generators", async () => {
+test("local backend rejects Viewer artifact regeneration when same-stem Python has no STEP file", async () => {
   await withTempWorkspace(async (workspaceRoot) => {
     const modelRoot = path.join(workspaceRoot, "models");
     const generatorPath = path.join(modelRoot, "robot", "robot.py");
@@ -213,8 +272,43 @@ test("local backend rejects Viewer artifact regeneration for same-stem Python ge
         fileRef: "robot/robot.step",
         force: true,
       }),
-      /only regenerates GLB artifacts for imported STEP files/
+      /only regenerates GLB artifacts for existing STEP\/STP files/
     );
+  });
+});
+
+test("local backend regenerates same-stem Python STEP artifacts from the STEP file", async () => {
+  await withTempWorkspace(async (workspaceRoot) => {
+    const modelRoot = path.join(workspaceRoot, "models");
+    const generatorPath = path.join(modelRoot, "robot", "robot.py");
+    fs.mkdirSync(path.dirname(generatorPath), { recursive: true });
+    fs.writeFileSync(generatorPath, "def gen_step():\n    return None\n");
+    const stepPath = path.join(modelRoot, "robot", "robot.step");
+    fs.writeFileSync(stepPath, "ISO-10303-21;\nEND-ISO-10303-21;\n");
+    const backend = createLocalAssetBackend({
+      workspaceRoot,
+      rootDir: "models",
+      stepArtifactGenerator: async (request) => {
+        assert.equal(request.stepPath, stepPath);
+        assert.equal(request.sourcePath, "");
+        assert.equal(request.skipStepWrite, false);
+        assert.equal(request.writeStepAfterArtifact, false);
+        assert.equal(request.force, true);
+        return { ok: true, validation: { ok: true } };
+      },
+    });
+    const resolved = backend.resolveStepSource("robot/robot.step");
+
+    assert.equal(resolved.stepPath, stepPath);
+    assert.equal(resolved.sourcePath, generatorPath);
+    assert.equal(resolved.skipStepWrite, true);
+    const result = await backend.generateStepArtifact({
+      fileRef: "robot/robot.step",
+      force: true,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.stepPath, stepPath);
   });
 });
 
@@ -247,7 +341,7 @@ test("local backend regenerates GLB artifacts for imported STEP files", async ()
   });
 });
 
-test("local backend rejects Viewer artifact regeneration for Python metadata STEP files", async () => {
+test("local backend regenerates Python metadata STEP artifacts from the STEP file", async () => {
   await withTempWorkspace(async (workspaceRoot) => {
     const modelRoot = path.join(workspaceRoot, "models");
     fs.mkdirSync(path.join(modelRoot, "generated"), { recursive: true });
@@ -257,18 +351,45 @@ test("local backend rejects Viewer artifact regeneration for Python metadata STE
     const backend = createLocalAssetBackend({
       workspaceRoot,
       rootDir: "models",
-      stepArtifactGenerator: async () => {
-        throw new Error("Python metadata sources should not be invoked by Viewer regeneration.");
+      stepArtifactGenerator: async (request) => {
+        assert.equal(request.stepPath, stepPath);
+        assert.equal(request.sourcePath, "");
+        assert.equal(request.skipStepWrite, false);
+        assert.equal(request.writeStepAfterArtifact, false);
+        return { ok: true, validation: { ok: true } };
       },
     });
     const catalog = backend.refreshCatalog();
 
+    const result = await backend.generateStepArtifact({
+      fileRef: "generated/part.step",
+      catalog,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.stepPath, stepPath);
+  });
+});
+
+test("local backend rejects artifact regeneration for non-STEP files", async () => {
+  await withTempWorkspace(async (workspaceRoot) => {
+    const modelRoot = path.join(workspaceRoot, "models");
+    fs.mkdirSync(modelRoot, { recursive: true });
+    fs.writeFileSync(path.join(modelRoot, "robot.urdf"), "<robot name=\"r\" />\n");
+    const backend = createLocalAssetBackend({
+      workspaceRoot,
+      rootDir: "models",
+      stepArtifactGenerator: async () => {
+        throw new Error("Non-STEP files should not invoke STEP artifact generation.");
+      },
+    });
+
     await assert.rejects(
       () => backend.generateStepArtifact({
-        fileRef: "generated/part.step",
-        catalog,
+        fileRef: "robot.urdf",
+        force: true,
       }),
-      /only regenerates GLB artifacts for imported STEP files/
+      /Only STEP\/STP sources or same-stem Python generators can generate STEP topology artifacts/
     );
   });
 });
@@ -472,7 +593,7 @@ test("local backend file asset access requires a catalog entry inside the active
   });
 });
 
-test("local backend refuses same-stem Python artifacts instead of catalog source metadata", async () => {
+test("local backend ignores same-stem Python metadata when regenerating existing STEP artifacts", async () => {
   await withTempWorkspace(async (workspaceRoot) => {
     const modelRoot = path.join(workspaceRoot, "models");
     fs.mkdirSync(path.join(modelRoot, "robot"), { recursive: true });
@@ -484,17 +605,21 @@ test("local backend refuses same-stem Python artifacts instead of catalog source
     const backend = createLocalAssetBackend({
       workspaceRoot,
       rootDir: "models",
-      stepArtifactGenerator: async () => {
-        throw new Error("Python generators should not be invoked by Viewer regeneration.");
+      stepArtifactGenerator: async (request) => {
+        assert.equal(request.stepPath, stepPath);
+        assert.equal(request.sourcePath, "");
+        assert.equal(request.skipStepWrite, false);
+        assert.equal(request.writeStepAfterArtifact, false);
+        return { ok: true, validation: { ok: true } };
       },
     });
 
-    await assert.rejects(
-      () => backend.generateStepArtifact({
-        fileRef: "robot/robot.step",
-      }),
-      /only regenerates GLB artifacts for imported STEP files/
-    );
+    const result = await backend.generateStepArtifact({
+      fileRef: "robot/robot.step",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.stepPath, stepPath);
   });
 });
 

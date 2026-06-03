@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implicit CAD"
+  short_description: "Write shader-native implicit CAD files."
+  default_prompt: "Use $implicit-cad to create browser-rendered implicit CAD `.implicit.js` files with GLSL SDF primitives and snapshots."

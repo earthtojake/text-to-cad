@@ -79,7 +79,7 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError) {
     : null;
   if (stepArtifactError && !hasMeshData) {
     const code = String(stepArtifactError.error || "").trim();
-    const stale = stepArtifactError.stale === true || code === "stale_source_identity";
+    const stale = stepArtifactError.stale === true || code === "stale_step_artifact";
     const missingGlb = code === "missing_glb";
     const summary = stale
       ? "STEP artifact stale"
@@ -165,5 +165,30 @@ export function buildViewerDxfAlert(fileRef, hasDxfData, loadError, previewError
     };
   }
 
+  return null;
+}
+
+export function buildViewerImplicitAlert(fileRef, hasImplicitData, loadError) {
+  if (!fileRef) {
+    return null;
+  }
+  if (loadError) {
+    return {
+      severity: "error",
+      summary: "Implicit CAD load failed",
+      title: "Failed to load implicit CAD module",
+      message: loadError,
+      resolution: "Check the exported GLSL distance function and reload the page."
+    };
+  }
+  if (!hasImplicitData) {
+    return {
+      severity: "error",
+      summary: "Implicit CAD unavailable",
+      title: "No implicit CAD model is available",
+      message: "The selected entry is listed in the CAD catalog but the implicit CAD module did not load.",
+      resolution: "Confirm the .implicit.js or .implicit.mjs file exists and exports an implicit.js/0.1.0 model."
+    };
+  }
   return null;
 }

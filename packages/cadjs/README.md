@@ -2,8 +2,12 @@
 
 `cadjs` is the shared JavaScript runtime for CAD Viewer, documentation previews,
 and generated snapshot browser assets. It owns reusable parsing, scene-building,
-rendering, STEP topology, selector, mesh, robot-description, and artifact
-helpers without depending on React or application chrome.
+explicit-CAD rendering, STEP topology, selector, mesh, robot-description, and
+artifact helpers without depending on React or application chrome.
+
+Implicit CAD model loading, shader rendering, snapshots, SDF sampling, and
+mesh exports live in the sibling `implicitjs` package. Consumers that need
+implicit CAD should depend on `implicitjs` directly alongside `cadjs`.
 
 ## Install
 
@@ -25,9 +29,8 @@ pick up edits without copying generated bundles.
 - `src/index.js`: public package entrypoint.
 - `src/common/`: browser-safe render pipeline used by interactive viewer,
   docs previews, and snapshot browser runtime.
-- `src/lib/`: lower-level first-party helpers for CAD catalogs, assets,
-  formats, mesh decoding, selector runtimes, STEP artifacts, URDF/SRDF/SDF, and
-  server registry/config utilities.
+- `src/lib/`: lower-level first-party helpers for assets, formats, mesh
+  decoding, selector runtimes, STEP sidecars, and URDF/SRDF/SDF.
 - `src/lib/viewer/`: shared non-React 3D viewer runtime helpers such as picking,
   clipping, drawing geometry, reference geometry, stage theme, scene scale, and
   visual state.
@@ -47,8 +50,10 @@ Prefer moving logic into `cadjs` when it is reusable across:
 - interactive CAD Viewer rendering,
 - docs or marketing previews,
 - generated snapshot browser runtime,
-- local server/catalog support,
 - testable CAD parsing or sidecar preparation.
+
+Prefer moving implicit model, shader, snapshot, SDF, or mesh-export behavior
+into `implicitjs` instead.
 
 Keep app-specific workflows in the app. A useful rule of thumb: `cadjs` should
 understand CAD data and rendering state, while `viewer/` should understand user

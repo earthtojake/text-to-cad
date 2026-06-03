@@ -5,6 +5,7 @@ export const RENDER_FORMAT = Object.freeze({
   GLB: "glb",
   GCODE: "gcode",
   DXF: "dxf",
+  IMPLICIT: "implicit",
   URDF: "urdf",
   SRDF: "srdf",
   SDF: "sdf"
@@ -41,6 +42,7 @@ export function normalizeRenderFormat(value, { defaultFormat = RENDER_FORMAT.STE
     normalized === RENDER_FORMAT.GLB ||
     normalized === RENDER_FORMAT.GCODE ||
     normalized === RENDER_FORMAT.DXF ||
+    normalized === RENDER_FORMAT.IMPLICIT ||
     normalized === RENDER_FORMAT.URDF ||
     normalized === RENDER_FORMAT.SRDF ||
     normalized === RENDER_FORMAT.SDF
@@ -70,6 +72,9 @@ export function entrySourceFormat(entry) {
   }
   if (kind === RENDER_FORMAT.GCODE) {
     return RENDER_FORMAT.GCODE;
+  }
+  if (kind === RENDER_FORMAT.IMPLICIT) {
+    return RENDER_FORMAT.IMPLICIT;
   }
   if (kind === RENDER_FORMAT.URDF) {
     return RENDER_FORMAT.URDF;
@@ -120,6 +125,9 @@ export function fileSheetKindForEntry(entry) {
   if (kind === RENDER_FORMAT.GCODE) {
     return RENDER_FORMAT.GCODE;
   }
+  if (kind === RENDER_FORMAT.IMPLICIT) {
+    return RENDER_FORMAT.IMPLICIT;
+  }
   if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
     return RENDER_FORMAT.STEP;
   }
@@ -165,6 +173,9 @@ export function renderFormatFromExtension(extension) {
   if (normalized === "gcode") {
     return RENDER_FORMAT.GCODE;
   }
+  if (normalized === "implicit" || normalized === "implicit.js" || normalized === "implicit.mjs") {
+    return RENDER_FORMAT.IMPLICIT;
+  }
   if (normalized === "dxf") {
     return RENDER_FORMAT.DXF;
   }
@@ -181,5 +192,16 @@ export function renderFormatFromExtension(extension) {
 }
 
 export function renderFormatFromPath(value, options = {}) {
+  const rawValue = String(value || "").trim();
+  let pathname = rawValue;
+  try {
+    pathname = new URL(rawValue, options.baseUrl || "http://localhost/").pathname;
+  } catch {
+    pathname = rawValue.split("?")[0].split("#")[0];
+  }
+  const normalizedPath = pathname.toLowerCase();
+  if (normalizedPath.endsWith(".implicit.js") || normalizedPath.endsWith(".implicit.mjs")) {
+    return RENDER_FORMAT.IMPLICIT;
+  }
   return renderFormatFromExtension(fileExtensionFromPath(value, options));
 }

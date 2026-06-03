@@ -1,1 +1,0 @@
-"""SRDF generator tests."""

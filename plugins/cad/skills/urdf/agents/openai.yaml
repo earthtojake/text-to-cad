@@ -1,4 +1,0 @@
-interface:
-  display_name: "URDF"
-  short_description: "Generate and validate URDF robot descriptions."
-  default_prompt: "Use $urdf to generate, update, and validate URDF robot descriptions from Python sources, handing generated URDFs to $cad-viewer when available."

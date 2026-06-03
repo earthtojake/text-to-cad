@@ -1,1 +1,0 @@
---editable ./scripts/viewer/packages/cadpy

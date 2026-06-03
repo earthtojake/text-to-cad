@@ -4,51 +4,6 @@ set -eu
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-if ! git diff --cached --quiet -- \
-  packages/cadjs/src/common \
-  packages/cadjs/src/lib \
-  packages/cadjs/src/lib/render \
-  packages/cadjs/src/lib/selectors \
-  packages/cadjs/src/lib/viewer/topologyDisplayEdgeLine.js \
-  packages/cadpy \
-  skills/cad/scripts/packages/cadpy \
-  skills/cad/scripts/cadpy_snapshot \
-  scripts/build/build-cad-skill.sh
-then
-  scripts/build/build-cad-skill.sh --check
-fi
-
-if ! git diff --cached --quiet -- \
-  packages/cadpy_metadata \
-  skills/urdf/scripts/packages/cadpy_metadata \
-  scripts/build/build-urdf-skill.sh
-then
-  scripts/build/build-urdf-skill.sh --check
-fi
-
-if ! git diff --cached --quiet -- \
-  packages/cadpy_metadata \
-  skills/srdf/scripts/packages/cadpy_metadata \
-  scripts/build/build-srdf-skill.sh
-then
-  scripts/build/build-srdf-skill.sh --check
-fi
-
-if ! git diff --cached --quiet -- \
-  packages/cadpy_metadata \
-  skills/sdf/scripts/packages/cadpy_metadata \
-  scripts/build/build-sdf-skill.sh
-then
-  scripts/build/build-sdf-skill.sh --check
-fi
-
-if ! git diff --cached --quiet -- \
-  viewer \
-  packages/cadjs \
-  packages/cadpy \
-  skills/cad-viewer/scripts/viewer \
-  scripts/build/build-viewer.sh \
-  scripts/build/build-cad-viewer-skill.sh
-then
-  scripts/build/build-cad-viewer-skill.sh --check
+if ! git diff --cached --quiet -- packages viewer skills plugins/cad/skills scripts/bundle; then
+  scripts/bundle/bundle.sh --check
 fi

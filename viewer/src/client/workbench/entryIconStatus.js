@@ -4,6 +4,7 @@ import {
 } from "cadjs/lib/fileFormats.js";
 import {
   stepArtifactCanGenerate,
+  stepArtifactGenerationInProgress,
   stepArtifactIsStale,
   stepArtifactNeedsWarning
 } from "./stepArtifactStatus.js";
@@ -14,6 +15,7 @@ export function entryIconStatus(entry, {
   hasMesh = true,
   hasDxf = true,
   hasGcode = true,
+  hasImplicit = true,
   hasUrdf = true,
   activeGenerationFiles = [],
   activeStepArtifactGenerationFile = "",
@@ -51,24 +53,37 @@ export function entryIconStatus(entry, {
   const pending = normalizedSourceFormat === RENDER_FORMAT.DXF
     ? !hasDxf
     : normalizedSourceFormat === RENDER_FORMAT.GCODE
-      ? !hasGcode
+    ? !hasGcode
+    : normalizedSourceFormat === RENDER_FORMAT.IMPLICIT
+      ? !hasImplicit
     : isRobotRenderFormat(normalizedSourceFormat)
       ? !hasUrdf
       : !hasMesh;
-  const options = { generationAvailable: stepArtifactGenerationAvailable };
+  const artifactGenerationFiles = [
+    ...activeArtifactGenerationFileSet,
+    ...activeScriptGenerationFileSet
+  ];
+  const artifactGenerationInProgress = stepArtifactGenerationInProgress({
+    entry,
+    activeGenerationFiles: artifactGenerationFiles
+  });
+  const options = {
+    generationAvailable: stepArtifactGenerationAvailable || artifactGenerationInProgress
+  };
   const artifactCanGenerate = stepArtifactCanGenerate(entry, normalizedSourceFormat, options);
-  const artifactBuildable = artifactCanGenerate && !hasMesh;
+  const artifactBuildable = artifactCanGenerate;
   const artifactStale = stepArtifactIsStale(entry, normalizedSourceFormat);
   const artifactErrorCode = String(entry?.artifact?.error || "").trim();
   const generatorRunning = Boolean(entryKey && activeScriptGenerationFileSet.has(entryKey));
-  const artifactWarning = !generatorRunning && (
-    stepArtifactNeedsWarning(entry, normalizedSourceFormat, options) ||
-    (artifactCanGenerate && hasMesh)
-  );
+  const artifactWarning = !generatorRunning &&
+    !artifactGenerationInProgress &&
+    stepArtifactNeedsWarning(entry, normalizedSourceFormat, {
+      generationAvailable: stepArtifactGenerationAvailable
+    });
   const artifactGenerating = Boolean(
     artifactBuildable &&
-    entryKey &&
-    activeArtifactGenerationFileSet.has(entryKey)
+    !generatorRunning &&
+    artifactGenerationInProgress
   );
   const loading = generatorRunning || artifactGenerating || (pending && !artifactWarning && !artifactBuildable);
   const statusLabel = generatorRunning

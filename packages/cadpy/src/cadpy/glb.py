@@ -163,7 +163,7 @@ def build_step_topology_index_manifest(
         "profile": "index",
         "entryKind": resolved_entry_kind,
     }
-    for key in ("capabilities", "sourceKind", "sourcePath", "sourceHash", "sourceFingerprint", "generatedAt", "stepPath", "stepHash", "bbox", "stats", "edgeRendering", "mesh"):
+    for key in ("capabilities", "sourceKind", "sourcePath", "sourceHash", "generatedAt", "stepPath", "stepHash", "bbox", "stats", "edgeRendering", "mesh"):
         value = manifest.get(key)
         if value is not None:
             index[key] = value
@@ -200,7 +200,6 @@ def build_step_surface_edge_manifest(
         "sourceKind": manifest.get("sourceKind", "step"),
         "sourcePath": manifest.get("sourcePath"),
         "sourceHash": manifest.get("sourceHash"),
-        "sourceFingerprint": manifest.get("sourceFingerprint"),
         "stepPath": manifest.get("stepPath"),
         "stepHash": manifest.get("stepHash"),
         "bbox": manifest.get("bbox"),

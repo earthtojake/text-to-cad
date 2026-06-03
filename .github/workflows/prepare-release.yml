@@ -1,0 +1,123 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semver part to bump when set_version is empty.
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      set_version:
+        description: Exact X.Y.Z version to release instead of bumping.
+        required: false
+        type: string
+      base_branch:
+        description: Branch to open the release PR against.
+        required: true
+        default: develop
+        type: string
+      dry_run:
+        description: Show the planned release PR changes without pushing.
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: prepare-release-${{ inputs.base_branch }}
+  cancel-in-progress: false
+
+jobs:
+  prepare-release:
+    name: Prepare Release PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_branch }}
+          fetch-depth: 0
+
+      - name: Fetch release comparison refs
+        run: |
+          git fetch --tags origin
+          git fetch --no-tags origin main:refs/remotes/origin/main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Prepare canonical version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+          SET_VERSION: ${{ inputs.set_version }}
+        run: |
+          if [ -n "$SET_VERSION" ]; then
+            scripts/release/bump-version.sh --set-version "$SET_VERSION" --no-commit
+          else
+            scripts/release/bump-version.sh "$BUMP" --no-commit
+          fi
+          node scripts/release/sync-version.mjs
+          version="$(tr -d '[:space:]' < plugins/cad/VERSION)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check release version metadata
+        run: |
+          scripts/release/check-version.sh --incremented-from origin/main
+          node scripts/release/sync-version.mjs --check
+          latest_tag="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1 || true)"
+          if [ -n "$latest_tag" ]; then
+            scripts/release/check-version.sh --incremented-from "refs/tags/$latest_tag"
+          fi
+
+      - name: Check development symlink layout
+        run: scripts/dev/setup-symlinks.sh --check
+
+      - name: Show dry-run diff
+        if: inputs.dry_run
+        run: |
+          git diff --stat
+          git diff -- plugins/cad/VERSION
+
+      - name: Create release pull request
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ inputs.base_branch }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          branch="release/$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No canonical version changes to commit."
+            exit 0
+          fi
+          git commit -m "Release $VERSION"
+          git push --force-with-lease origin "$branch"
+          if gh pr view "$branch" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh pr edit "$branch" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Release $VERSION" \
+              --body "Bumps plugins/cad/VERSION and derived package/plugin metadata to $VERSION. Merging this PR into develop lets Test run version consistency checks and the production bundle check, then Publish ships only if the version is newer than main and the latest tag. Publish writes the main production commit, creates the GitHub tag, and opens a draft release."
+          else
+            gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "$BASE_BRANCH" \
+              --head "$branch" \
+              --title "Release $VERSION" \
+              --body "Bumps plugins/cad/VERSION and derived package/plugin metadata to $VERSION. Merging this PR into develop lets Test run version consistency checks and the production bundle check, then Publish ships only if the version is newer than main and the latest tag. Publish writes the main production commit, creates the GitHub tag, and opens a draft release."
+          fi

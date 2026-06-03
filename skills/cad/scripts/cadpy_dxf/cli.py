@@ -13,7 +13,17 @@ from cadpy_common.package_path import ensure_cadpy_package_path
 
 ensure_cadpy_package_path()
 
-from cadpy.generation import generate_dxf_targets, run_tool_cli
+
+def generate_dxf_targets(*args, **kwargs):
+    from cadpy.generation import generate_dxf_targets as generate
+
+    return generate(*args, **kwargs)
+
+
+def run_tool_cli(*args, **kwargs):
+    from cadpy.generation import run_tool_cli as run
+
+    return run(*args, **kwargs)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

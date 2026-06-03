@@ -69,6 +69,33 @@ test("hosted CAD API serves catalog through an injected Blob backend", async () 
 });
 
 
+test("hosted CAD API ignores local dir query params", async () => {
+  const calls = [];
+  const backend = {
+    kind: "vercel-blob",
+    catalogPath: "demo/catalog.json",
+    readCatalog: async (request) => {
+      calls.push(request);
+      return { schemaVersion: 4, entries: [{ file: "part.step" }] };
+    },
+  };
+  const req = { method: "GET", url: "/api/cad/catalog?dir=%2Ftmp%2Fmodels&file=part.step" };
+  const res = createResponse();
+
+  await handleHostedCadApi(req, res, {
+    cadPath: "/__cad/catalog",
+    backend,
+    env: { VIEWER_ASSET_BACKEND: "vercel-blob" },
+  });
+
+  assert.equal(req.url, "/api/cad/catalog?dir=%2Ftmp%2Fmodels&file=part.step");
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(calls, [
+    { rootDir: "", fileRef: "part.step" },
+  ]);
+});
+
+
 test("hosted CAD API redirects catalog reads to public Blob URLs when configured", async () => {
   const backend = {
     kind: "vercel-blob",

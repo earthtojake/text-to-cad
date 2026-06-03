@@ -1,4 +1,0 @@
-interface:
-  display_name: "SRDF"
-  short_description: "Generate and validate MoveIt2 SRDF semantics."
-  default_prompt: "Use $srdf to generate and validate MoveIt2 SRDF files, then hand generated SRDFs to $cad-viewer for review and optional MoveIt2 controls."

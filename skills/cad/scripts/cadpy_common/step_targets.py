@@ -20,6 +20,7 @@ from cadpy_common.glb_topology import (
 )
 from cadpy_common.render import existing_part_glb_path, part_glb_path
 from cadpy_common.selector_types import SelectorBundle
+from cadpy_common.step_hash import step_file_hash
 
 
 STEP_SUFFIXES = (".step", ".stp")
@@ -253,23 +254,22 @@ def validate_step_topology_artifact(
                 step_path=target.step_path,
                 glb_path=resolved_glb_path,
             )
-        source_hash = str(manifest.get("sourceHash") or "").strip()
-        if not source_hash:
+    step_hash = str(manifest.get("stepHash") or "").strip()
+    if target.step_path.is_file():
+        if not step_hash:
             raise _topology_artifact_error(
-                code="missing_source_identity",
-                reason="GLB STEP_topology is missing Python generator identity",
+                code="missing_step_hash",
+                reason="GLB STEP_topology is missing STEP file identity",
                 cad_path=target.cad_path,
                 kind=target.kind,
                 source_path=target.source_path,
                 step_path=target.step_path,
                 glb_path=resolved_glb_path,
             )
-    else:
-        step_hash = str(manifest.get("stepHash") or "").strip()
-        if not step_hash:
+        if step_hash != step_file_hash(target.step_path):
             raise _topology_artifact_error(
-                code="missing_source_identity",
-                reason="GLB STEP_topology is missing STEP file identity",
+                code="stale_step_artifact",
+                reason="Generated GLB doesn't match the hash of the STEP file",
                 cad_path=target.cad_path,
                 kind=target.kind,
                 source_path=target.source_path,
@@ -305,15 +305,7 @@ def validate_step_topology_artifact(
         if isinstance(index_edge_rendering, dict)
         else ()
     )
-    edge_matches_source = False
-    if source_kind == "python":
-        edge_matches_source = (
-            str(edge_manifest.get("sourceKind") or "").strip().lower() == "python"
-            and str(edge_manifest.get("sourceHash") or "").strip() == str(manifest.get("sourceHash") or "").strip()
-        )
-    else:
-        step_hash = str(manifest.get("stepHash") or "").strip()
-        edge_matches_source = str(edge_manifest.get("stepHash") or "").strip() == step_hash
+    edge_matches_source = not step_hash or str(edge_manifest.get("stepHash") or "").strip() == step_hash
     if (
         edge_schema_version != STEP_TOPOLOGY_SCHEMA_VERSION
         or edge_manifest.get("profile") != "surface-edges"

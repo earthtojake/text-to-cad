@@ -13,10 +13,8 @@ Those skill-local copies can be installed from the consuming skill directory:
 python -m pip install -r requirements.txt
 ```
 
-Refresh those generated copies with the skill-specific build scripts:
+Refresh a generated copy with the skill bundle router:
 
 ```bash
-scripts/build/build-urdf-skill.sh
-scripts/build/build-srdf-skill.sh
-scripts/build/build-sdf-skill.sh
+scripts/bundle/bundle-skill.sh <skill-id>
 ```

@@ -1,0 +1,44 @@
+{
+  "name": "implicitjs",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Standalone browser-native implicit CAD runtime, renderer, mesh sampler, and exporters.",
+  "exports": {
+    ".": {
+      "browser": "./src/browser.js",
+      "default": "./src/index.js"
+    },
+    "./browser": "./src/browser.js",
+    "./schema": "./src/lib/implicitCad/schema.js",
+    "./animation": "./src/lib/implicitCad/animation.js",
+    "./model": "./src/lib/implicitCad/model.js",
+    "./implicit": "./src/browser.js",
+    "./loader": "./src/lib/implicitCad/loader.js",
+    "./render": "./src/lib/implicitCad/render.js",
+    "./snapshot": "./src/lib/implicitCad/snapshot.js",
+    "./graphicsSettings": "./src/lib/implicitCad/graphicsSettings.js",
+    "./mesh": "./src/lib/implicitCad/mesh.js",
+    "./meshQuality": "./src/lib/implicitCad/meshQuality.js",
+    "./exportModel": "./src/lib/implicitCad/exportModel.js",
+    "./export": "./src/lib/implicitCad/export.js",
+    "./exporters": "./src/lib/implicitCad/exporters.js",
+    "./sdfEvaluator": "./src/lib/implicitCad/sdfEvaluator.js",
+    "./headlessRenderEntry": "./src/common/implicitHeadlessRenderEntry.js",
+    "./common/*": "./src/common/*",
+    "./lib/implicitCad/*": "./src/lib/implicitCad/*"
+  },
+  "scripts": {
+    "export": "node scripts/export.mjs",
+    "snapshot": "node scripts/snapshot.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "verify:exports": "node scripts/verify-implicit-cad-exports.mjs"
+  },
+  "sideEffects": [
+    "./src/common/implicitHeadlessRenderEntry.js"
+  ],
+  "dependencies": {
+    "gifenc": "^1.0.3",
+    "playwright": "^1.52.0",
+    "three": "0.160.0"
+  }
+}

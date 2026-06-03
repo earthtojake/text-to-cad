@@ -1,4 +1,0 @@
-interface:
-  display_name: "G-code"
-  short_description: "Generate G-code from 3D mesh files"
-  default_prompt: "Use $gcode to generate printer-profiled G-code from a mesh file."

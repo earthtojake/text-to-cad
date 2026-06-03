@@ -1,6 +1,11 @@
 import { buildCadRefToken, parseCadRefToken } from "cadjs/lib/cadRefs.js";
-import { normalizeViewerDefaultFile } from "cadjs/lib/viewerConfig.mjs";
+import {
+  readStoredActiveCadDir,
+  rememberActiveCadDir
+} from "./cadViewerDirectorySession.mjs";
+import { normalizeViewerDefaultFile } from "../../shared/viewerConfig.mjs";
 
+const CAD_DIR_QUERY_PARAM = "dir";
 const CAD_QUERY_PARAM = "file";
 const CAD_REF_QUERY_PARAM = "refs";
 
@@ -8,27 +13,35 @@ export function fileKey(entry) {
   return String(entry?.file || "").trim();
 }
 
-export function cadPathForEntry(entry) {
+export function cadFileParamForEntry(entry) {
   const file = fileKey(entry);
+  const rootRelativeFile = String(entry?.rootRelativeFile || "").trim();
+  return rootRelativeFile || file;
+}
+
+export function cadPathForEntry(entry) {
+  const file = cadFileParamForEntry(entry);
   return file.replace(/\.(step|stp|stl|3mf|glb|gcode|dxf|urdf|srdf|sdf)$/i, "");
 }
 
-function replaceUrl(url) {
+function writeUrl(url, { history = "replace" } = {}) {
   const nextSearch = url.searchParams.toString();
   const nextUrl = `${url.pathname}${nextSearch ? `?${nextSearch}` : ""}${url.hash}`;
   const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   if (nextUrl === currentUrl) {
     return false;
   }
-  window.history.replaceState({}, "", nextUrl);
+  if (history === "push" && typeof window.history?.pushState === "function") {
+    window.history.pushState({}, "", nextUrl);
+  } else {
+    window.history.replaceState({}, "", nextUrl);
+  }
   return true;
 }
 
 function normalizeUrlPath(value) {
   const normalized = String(value || "").trim().replace(/\\/g, "/").replace(/\/+$/, "");
-  return normalized.startsWith("/")
-    ? normalized
-    : normalized.replace(/^\/+/, "");
+  return normalized.replace(/^\/+/, "");
 }
 
 export function normalizeCadFileQueryParam(value) {
@@ -60,7 +73,7 @@ function fileAliasesForEntry(entry) {
     }
   };
 
-  const file = fileKey(entry);
+  const file = cadFileParamForEntry(entry);
   addAlias(file);
 
   const cadPath = cadPathForEntry(entry);
@@ -115,6 +128,18 @@ export function readCadParam() {
   const value = params.get(CAD_QUERY_PARAM);
   const normalizedValue = typeof value === "string"
     ? normalizeCadFileQueryParam(value)
+    : "";
+  return normalizedValue || null;
+}
+
+export function readCadDirParam() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get(CAD_DIR_QUERY_PARAM);
+  const normalizedValue = typeof value === "string"
+    ? String(value).trim()
     : "";
   return normalizedValue || null;
 }
@@ -197,17 +222,44 @@ export function selectedEntryKeyFromUrl(entries, { cadRefs = readCadRefQueryPara
   return match ? fileKey(match) : "";
 }
 
-export function writeCadParam(urlPath) {
+export function writeCadParam(urlPath, { history = "replace" } = {}) {
   if (typeof window === "undefined") {
     return;
   }
+  const normalizedUrlPath = normalizeCadFileQueryParam(urlPath);
   const url = new URL(window.location.href);
-  if (urlPath) {
-    url.searchParams.set(CAD_QUERY_PARAM, urlPath);
+  if (normalizedUrlPath) {
+    url.searchParams.set(CAD_QUERY_PARAM, normalizedUrlPath);
+    if (url.searchParams.has(CAD_DIR_QUERY_PARAM)) {
+      const activeDir = rememberActiveCadDir(url.searchParams.get(CAD_DIR_QUERY_PARAM));
+      if (activeDir && readStoredActiveCadDir() !== activeDir) {
+        writeUrl(url, { history });
+        return;
+      }
+      url.searchParams.delete(CAD_DIR_QUERY_PARAM);
+    }
   } else {
     url.searchParams.delete(CAD_QUERY_PARAM);
   }
-  replaceUrl(url);
+  writeUrl(url, { history });
+}
+
+export function writeCadDirParam(dirPath, { history = "replace", preserveFile = false } = {}) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const normalizedDirPath = String(dirPath || "").trim();
+  const url = new URL(window.location.href);
+  if (!preserveFile) {
+    url.searchParams.delete(CAD_QUERY_PARAM);
+  }
+  if (normalizedDirPath) {
+    url.searchParams.set(CAD_DIR_QUERY_PARAM, normalizedDirPath);
+    rememberActiveCadDir(normalizedDirPath);
+  } else {
+    url.searchParams.delete(CAD_DIR_QUERY_PARAM);
+  }
+  return writeUrl(url, { history });
 }
 
 export function writeCadRefQueryParams(cadRefs) {
@@ -222,7 +274,7 @@ export function writeCadRefQueryParams(cadRefs) {
       url.searchParams.append(CAD_REF_QUERY_PARAM, queryValue);
     }
   }
-  replaceUrl(url);
+  writeUrl(url);
 }
 
 function compareSidebarLabels(a, b) {
@@ -267,7 +319,7 @@ export function filenameLabelForEntry(entry) {
     return "";
   }
   const kind = String(entry?.kind || "").trim().toLowerCase();
-  const directSourceFormats = new Set(["dxf", "urdf", "srdf", "sdf", "stl", "3mf", "glb", "gcode"]);
+  const directSourceFormats = new Set(["dxf", "urdf", "srdf", "sdf", "stl", "3mf", "glb", "gcode", "implicit"]);
   const sourceFormat = directSourceFormats.has(kind)
     ? kind
     : String(sourceExtensionForEntry(entry) || "step").trim().toLowerCase();
@@ -295,6 +347,9 @@ export function filenameLabelForEntry(entry) {
   }
   if (sourceFormat === "gcode" || entry?.kind === "gcode") {
     return `${stem}.gcode`;
+  }
+  if (sourceFormat === "implicit" || entry?.kind === "implicit") {
+    return entryLeafName(entry);
   }
   return `${stem}.${sourceFormat === "stp" ? "stp" : "step"}`;
 }

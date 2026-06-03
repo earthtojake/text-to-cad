@@ -91,7 +91,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       kind: "part",
       artifact: {
         ok: false,
-        error: "stale_source_identity",
+        error: "stale_step_artifact",
         stale: true,
         message: "STEP artifact is stale."
       }
@@ -114,7 +114,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       hash: "glb-hash",
       artifact: {
         ok: false,
-        error: "stale_source_identity",
+        error: "stale_step_artifact",
         stale: true,
         message: "STEP artifact is stale."
       }
@@ -138,7 +138,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       hash: "glb-hash",
       artifact: {
         ok: false,
-        error: "stale_source_identity",
+        error: "stale_step_artifact",
         stale: true,
         message: "STEP artifact is stale."
       }

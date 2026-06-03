@@ -1,1 +1,0 @@
-"""SDF script tests."""

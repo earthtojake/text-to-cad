@@ -1,10 +1,4 @@
-import crypto from "node:crypto";
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-
-import { inlineStepGlbArtifactPathForSource } from "cadjs/common/stepSidecars.mjs";
-import { ensureStepTopologyArtifact } from "cadjs/lib/step/stepArtifactCompiler.mjs";
 
 function normalizePrefix(value) {
   const rawValue = String(value || "").trim();
@@ -161,51 +155,6 @@ export function contentTypeForFileRef(fileRef, fallback = "") {
 
 const contentTypeForSourceRef = contentTypeForFileRef;
 
-function glbRefForStepEntry(entry, catalog, requestedFileRef) {
-  const sourceRef = normalizeFileRef(entry?.file || requestedFileRef);
-  if (!sourceRef) {
-    return "";
-  }
-  return normalizeFileRef(path.posix.join(path.posix.dirname(sourceRef), `.${path.posix.basename(sourceRef)}.glb`));
-}
-
-function sha256Buffer(buffer) {
-  return crypto.createHash("sha256").update(buffer).digest("hex");
-}
-
-async function fetchBytes(url, { fetchImpl }) {
-  if (!fetchImpl) {
-    throw new Error("Vercel Blob backend requires fetch to download STEP sources");
-  }
-  const response = await fetchImpl(url);
-  if (!response.ok) {
-    throw new Error(`Failed to download STEP source from Blob: ${response.status} ${response.statusText}`);
-  }
-  return Buffer.from(await response.arrayBuffer());
-}
-
-function resolveInside(rootPath, fileRef) {
-  const normalized = normalizeFileRef(fileRef);
-  if (!normalized) {
-    throw new Error("Missing Blob file path");
-  }
-  const resolved = path.resolve(rootPath, normalized);
-  const relative = path.relative(rootPath, resolved);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error(`Blob file path must stay inside the temporary workspace: ${fileRef}`);
-  }
-  return resolved;
-}
-
-function updateCatalogEntry(catalog, previousEntry, nextEntry) {
-  return {
-    ...catalog,
-    entries: Array.isArray(catalog?.entries)
-      ? catalog.entries.map((entry) => (entry === previousEntry ? nextEntry : entry))
-      : [],
-  };
-}
-
 async function loadBlobClient(client) {
   if (client) {
     return client;
@@ -254,17 +203,12 @@ export function createVercelBlobAssetBackend({
   catalogUrl = "",
   client = null,
   fetchImpl = globalThis.fetch,
-  artifactCompiler = ensureStepTopologyArtifact,
-  stepArtifactGenerator = undefined,
   token = process.env.VIEWER_VERCEL_BLOB_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN,
   readOnly = false,
 } = {}) {
   const normalizedPrefix = normalizePrefix(prefix);
   const normalizedCatalogPath = joinBlobPath(normalizedPrefix, catalogPath || "catalog.json");
   const resolvedCatalogUrl = catalogUrl || publicBlobUrlForRef(prefix, catalogPath || "catalog.json");
-  const canGenerateStepArtifacts = !readOnly && (
-    stepArtifactGenerator === undefined || typeof stepArtifactGenerator === "function"
-  );
 
   async function blobClient() {
     return loadBlobClient(client);
@@ -453,109 +397,10 @@ export function createVercelBlobAssetBackend({
     };
   }
 
-  async function generateStepArtifactFromBlob({ fileRef, force = false, catalog = null } = {}) {
-    const requestedFileRef = normalizeFileRef(fileRef);
-    const currentCatalog = catalog || await readCatalog();
-    const entry = catalogEntryForFileRef(currentCatalog, requestedFileRef);
-    if (!entry) {
-      throw new Error(`STEP catalog entry not found: ${requestedFileRef || "(missing)"}`);
-    }
-    const repoStepRef = normalizeFileRef(entry.file || requestedFileRef);
-    const sourceUrl = await urlForBlobRef(repoStepRef);
-    if (!sourceUrl) {
-      throw new Error(`STEP source is not available in Vercel Blob for ${requestedFileRef}`);
-    }
-
-    const repoSourceRef = repoStepRef;
-    const glbRef = glbRefForStepEntry(entry, currentCatalog, requestedFileRef);
-    if (!repoStepRef || !repoSourceRef || !glbRef) {
-      throw new Error(`STEP catalog entry is missing source or GLB artifact paths: ${requestedFileRef}`);
-    }
-
-    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cad-viewer-blob-step-"));
-    try {
-      const stepPath = resolveInside(tempRoot, repoStepRef);
-      const sourcePath = "";
-      const downloadedSourcePath = stepPath;
-      fs.mkdirSync(path.dirname(downloadedSourcePath), { recursive: true });
-      fs.writeFileSync(downloadedSourcePath, await fetchBytes(sourceUrl, { fetchImpl }));
-
-      const result = await artifactCompiler({
-        repoRoot: tempRoot,
-        stepPath,
-        force,
-      });
-      const generatedGlbPath = inlineStepGlbArtifactPathForSource(stepPath);
-      if (!result?.ok || !fs.existsSync(generatedGlbPath)) {
-        return {
-          ok: false,
-          error: result?.error || result?.validation?.error?.message || "STEP artifact generation failed.",
-          result,
-          entry,
-          catalog: currentCatalog,
-        };
-      }
-
-      const body = fs.readFileSync(generatedGlbPath);
-      const hash = sha256Buffer(body);
-      const upload = await writeAsset({
-        fileRef: glbRef,
-        body,
-        contentType: "model/gltf-binary",
-      });
-      const glbAsset = {
-        url: upload.url,
-        hash,
-        bytes: body.length,
-      };
-      const nextEntry = {
-        file: repoStepRef,
-        kind: ["part", "assembly"].includes(String(result?.entryKind || "").trim().toLowerCase())
-          ? String(result.entryKind).trim().toLowerCase()
-          : String(entry.kind || "part").trim().toLowerCase(),
-        ...glbAsset,
-      };
-      const nextCatalog = updateCatalogEntry(currentCatalog, entry, nextEntry);
-      await writeCatalog(nextCatalog);
-      return {
-        ok: true,
-        error: "",
-        result: {
-          ...result,
-          upload,
-        },
-        entry: nextEntry,
-        catalog: nextCatalog,
-      };
-    } finally {
-      fs.rmSync(tempRoot, { recursive: true, force: true });
-    }
-  }
-
-  async function generateStepArtifact(request = {}) {
-    if (stepArtifactGenerator === null) {
-      throw new Error(
-        "Vercel Blob backend does not run local CAD generation. Provide stepArtifactGenerator to delegate generation to a CAD-capable worker, then upload generated assets with writeAsset()."
-      );
-    }
-    if (typeof stepArtifactGenerator === "function") {
-      return stepArtifactGenerator({
-        ...request,
-        writeAsset,
-        writeCatalog,
-      });
-    }
-    return generateStepArtifactFromBlob({
-      ...request,
-      writeAsset,
-      writeCatalog,
-    });
-  }
-
   const backend = {
     kind: "vercel-blob",
     readOnly: Boolean(readOnly),
-    canGenerateStepArtifacts,
+    canGenerateStepArtifacts: false,
     prefix: normalizedPrefix,
     catalogPath: normalizedCatalogPath,
     readCatalog,
@@ -573,7 +418,6 @@ export function createVercelBlobAssetBackend({
       ...backend,
       writeAsset,
       writeCatalog,
-      generateStepArtifact,
     };
   }
 

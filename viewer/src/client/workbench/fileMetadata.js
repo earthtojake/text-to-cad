@@ -179,7 +179,6 @@ function sourceRowsForEntry(entry, {
       : null,
     suppressDynamicStatus ? null : metadataRow("Status", sourceStatus.status),
     metadataRow("Source hash", source.sourceHash || sourceStatus.sourceHash, { mono: true, short: true, copy: true }),
-    metadataRow("Fingerprint", source.sourceFingerprint || sourceStatus.artifactHash, { mono: true, short: true, copy: true }),
     suppressDynamicStatus ? null : metadataRow("Current", sourceStatus.currentHash, { mono: true, short: true, copy: true })
   ]);
 }

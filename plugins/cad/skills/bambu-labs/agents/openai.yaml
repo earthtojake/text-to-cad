@@ -1,4 +1,0 @@
-interface:
-  display_name: "Bambu Labs"
-  short_description: "Dry-run and start local Bambu G-code handoffs"
-  default_prompt: "Use $bambu-labs to dry-run a validated plain G-code handoff before starting it."

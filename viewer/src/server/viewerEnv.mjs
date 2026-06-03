@@ -30,7 +30,7 @@ export function assertNoDeprecatedLocalRootEnv(env = process.env) {
   if (configured.length) {
     throw new Error(
       `${configured.join(", ")} ${configured.length === 1 ? "is" : "are"} no longer supported. ` +
-      "Pass an absolute ?dir= path in the Viewer URL instead."
+      "Pass ?dir= in the Viewer URL instead."
     );
   }
 }

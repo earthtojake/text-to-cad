@@ -2,9 +2,11 @@ import {
   Bot,
   Boxes,
   ChevronRight,
+  Code,
   Cuboid,
   DraftingCompass,
   FileBox,
+  FolderOpen,
   Layers3,
   Package,
   Route
@@ -32,6 +34,7 @@ const ENTRY_ICON_COMPONENTS = {
   [ENTRY_ICON_KIND.ASSEMBLY]: Boxes,
   [ENTRY_ICON_KIND.DXF]: DraftingCompass,
   [ENTRY_ICON_KIND.GCODE]: Route,
+  [ENTRY_ICON_KIND.IMPLICIT]: Code,
   [ENTRY_ICON_KIND.ROBOT]: Bot,
   [ENTRY_ICON_KIND.STEP_PART]: Package,
   [ENTRY_ICON_KIND.STL_MESH]: Cuboid,
@@ -53,6 +56,9 @@ function formatLabelForEntry(entry, sourceFormat) {
   if (sourceFormat === RENDER_FORMAT.GCODE) {
     return "G-code";
   }
+  if (sourceFormat === RENDER_FORMAT.IMPLICIT) {
+    return "Implicit";
+  }
   if (entry?.kind === "srdf") {
     return "SRDF";
   }
@@ -70,6 +76,39 @@ function formatLabelForEntry(entry, sourceFormat) {
 
 function pathLabelForEntry(entry) {
   return String(entry?.file || "").trim();
+}
+
+function workspaceLabelForOption(option) {
+  const rootName = String(option?.rootName || "").trim();
+  if (rootName) {
+    return rootName;
+  }
+  const pathLabel = String(option?.rootPath || option?.dir || "").trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+  return pathLabel.split("/").filter(Boolean).pop() || pathLabel || "Workspace";
+}
+
+function workspacePathLabelForOption(option) {
+  return String(option?.rootPath || option?.dir || "").trim();
+}
+
+function normalizeWorkspaceOptions(options) {
+  const seen = new Set();
+  const result = [];
+  for (const option of Array.isArray(options) ? options : []) {
+    const dir = String(option?.dir || "").trim();
+    const rootPath = String(option?.rootPath || "").trim();
+    const key = rootPath || dir;
+    if (!dir || !key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push({
+      dir,
+      rootPath,
+      rootName: String(option?.rootName || "").trim()
+    });
+  }
+  return result;
 }
 
 function compareEntryLabels(a, b) {
@@ -97,6 +136,7 @@ export function selectHomeEntries(entries) {
     (entry) => entrySourceFormat(entry) === RENDER_FORMAT.STEP && entry?.kind !== "assembly",
     (entry) => entrySourceFormat(entry) === RENDER_FORMAT.DXF,
     (entry) => entrySourceFormat(entry) === RENDER_FORMAT.GCODE,
+    (entry) => entrySourceFormat(entry) === RENDER_FORMAT.IMPLICIT,
     (entry) => isRobotRenderFormat(entrySourceFormat(entry)) || entry?.kind === "srdf",
     (entry) => isMeshRenderFormat(entrySourceFormat(entry))
   ];
@@ -122,14 +162,19 @@ export default function CadWorkspaceHome({
   catalogHydrated = false,
   catalogRefreshing = false,
   catalogError = "",
-  directoryCatalogActive = true,
-  explicitFileParam = ""
+  workspaceSelectionActive = false,
+  workspaceOptions = [],
+  onSelectWorkspace
 }) {
   const homeEntries = selectHomeEntries(entries);
+  const normalizedWorkspaceOptions = normalizeWorkspaceOptions(workspaceOptions);
   const hasEntries = homeEntries.length > 0;
+  const hasWorkspaceOptions = normalizedWorkspaceOptions.length > 0;
   const catalogErrorMessage = String(catalogError || "").trim();
   const catalogLoading = !catalogHydrated || (catalogRefreshing && !hasEntries);
-  const showDirectUrlPrompt = !directoryCatalogActive && !String(explicitFileParam || "").trim();
+  const heading = workspaceSelectionActive
+    ? "Select a workspace"
+    : "Select a file";
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 flex min-w-0 items-center justify-center px-4 py-6">
@@ -139,15 +184,56 @@ export default function CadWorkspaceHome({
       >
         <div className="border-b border-sidebar-border px-5 py-4 sm:px-6">
           <h1 className="text-lg font-medium leading-6 text-foreground sm:text-xl">
-            {showDirectUrlPrompt ? "Open a CAD file" : "Select a file"}
+            {heading}
           </h1>
         </div>
 
         <div className="divide-y divide-sidebar-border/70">
-          {showDirectUrlPrompt ? (
-            <p className="px-5 py-5 text-sm leading-6 text-muted-foreground sm:px-6">
-              Add an absolute <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs text-foreground">?file=</code> path to render one file, or an absolute <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs text-foreground">?dir=</code> path to scan a directory.
-            </p>
+          {workspaceSelectionActive ? (
+            hasWorkspaceOptions ? normalizedWorkspaceOptions.map((option) => {
+              const label = workspaceLabelForOption(option);
+              const pathLabel = workspacePathLabelForOption(option);
+
+              return (
+                <Button
+                  key={option.rootPath || option.dir}
+                  type="button"
+                  variant="ghost"
+                  className="group h-auto w-full justify-start rounded-none px-5 py-3 text-left hover:bg-sidebar-accent/80 focus-visible:ring-inset has-[>svg]:px-5 sm:px-6 sm:has-[>svg]:px-6"
+                  onClick={() => {
+                    if (typeof onSelectWorkspace === "function") {
+                      onSelectWorkspace(option.dir);
+                    }
+                  }}
+                  title={pathLabel || label}
+                >
+                  <FolderOpen className="size-4 shrink-0 text-muted-foreground group-hover:text-foreground" aria-hidden="true" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block min-w-0 truncate text-sm font-medium text-foreground">
+                      {label}
+                    </span>
+                    {pathLabel ? (
+                      <span className="mt-0.5 block min-w-0 truncate text-[11px] font-normal text-muted-foreground">
+                        {pathLabel}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-md border border-sidebar-border px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none text-muted-foreground",
+                      "max-sm:hidden"
+                    )}
+                  >
+                    DIR
+                  </span>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden="true" />
+                </Button>
+              );
+            }) : (
+              <p className="px-5 py-5 text-sm text-muted-foreground sm:px-6">
+                No active workspaces found.
+              </p>
+            )
           ) : hasEntries ? homeEntries.map((entry) => {
             const key = fileKey(entry);
             const sourceFormat = entrySourceFormat(entry);

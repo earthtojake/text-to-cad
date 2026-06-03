@@ -9,6 +9,7 @@ export const ENTRY_ICON_KIND = Object.freeze({
   ASSEMBLY: "assembly",
   DXF: "dxf",
   GCODE: "gcode",
+  IMPLICIT: "implicit",
   ROBOT: "robot",
   STEP_PART: "step-part",
   STL_MESH: "stl-mesh",
@@ -35,6 +36,9 @@ export function entryIconKind(entry, {
   }
   if (normalizedSourceFormat === RENDER_FORMAT.GCODE || normalizedKind === RENDER_FORMAT.GCODE) {
     return ENTRY_ICON_KIND.GCODE;
+  }
+  if (normalizedSourceFormat === RENDER_FORMAT.IMPLICIT || normalizedKind === RENDER_FORMAT.IMPLICIT) {
+    return ENTRY_ICON_KIND.IMPLICIT;
   }
   if (isRobotRenderFormat(normalizedSourceFormat) || normalizedKind === "srdf") {
     return ENTRY_ICON_KIND.ROBOT;

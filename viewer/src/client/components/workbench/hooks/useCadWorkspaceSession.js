@@ -26,7 +26,7 @@ export function createSessionBackedTabRecord({
 
 export function useCadWorkspaceSession({
   manifestEntries,
-  fileKey,
+  cadFileParamForEntry = () => "",
   cadWorkspaceSessionBootstrappedRef,
   setOpenTabs,
   applyTabRecord,
@@ -176,7 +176,7 @@ export function useCadWorkspaceSession({
 
   useEffect(() => {
     if (selectedEntry) {
-      writeCadParam(fileKey(selectedEntry));
+      writeCadParam(cadFileParamForEntry(selectedEntry));
       return;
     }
     if (!selectedKey) {
@@ -198,7 +198,7 @@ export function useCadWorkspaceSession({
     }
   }, [
     catalogEntries,
-    fileKey,
+    cadFileParamForEntry,
     manifestRevision,
     readCadParam,
     readCadRefQueryParams,

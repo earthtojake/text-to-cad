@@ -65,7 +65,6 @@ from cadpy_common.render import (
 from cadpy_common.source_hash import PythonSourceHash, python_source_hash
 from cadpy_common.stl import export_part_stl_from_scene
 from cadpy_common.step_export import build_build123d_step_scene, export_build123d_step_scene
-from cadpy_common.step_metadata import read_text_to_cad_step_metadata
 from cadpy_common.threemf import export_part_3mf_from_scene
 from cadpy_common.step_scene import (
     ColorRGBA,
@@ -851,7 +850,6 @@ def _write_assembly_step_payload(
 ) -> LoadedStepScene | None:
     from .assembly_export import (
         _AssemblyCatalogResolver,
-        assembly_source_fingerprint,
         build_direct_assembly_step_scene,
         export_assembly_step_scene,
     )
@@ -875,37 +873,12 @@ def _write_assembly_step_payload(
                 logger=logger,
             )
             return _mark_scene_python_backed(scene, source_identity=source_identity, source_path=script_path)
-    with logger.timed(f"fingerprint assembly {relative_to_repo(output_path)}"):
-        source_fingerprint = assembly_source_fingerprint(
-            assembly_spec,
-            output_label=output_path.expanduser().resolve().stem,
-            text_to_cad_entry_kind="assembly",
-            resolver=resolver,
-        )
-    if not force and output_path.is_file():
-        try:
-            metadata = read_text_to_cad_step_metadata(output_path)
-        except Exception:
-            metadata = {}
-        if (
-            metadata.get("entryKind") == "assembly"
-            and metadata.get("sourceFingerprint") == source_fingerprint
-        ):
-            logger.debug(f"reused current STEP: {_display_path(output_path)}")
-            if not load_current_scene:
-                return None
-            return _mark_scene_python_backed(
-                load_step_scene(output_path),
-                source_identity=source_identity,
-                source_path=script_path,
-            )
 
     with logger.timed(f"write assembly STEP {relative_to_repo(output_path)}"):
         scene = export_assembly_step_scene(
             assembly_spec,
             output_path=output_path,
             text_to_cad_entry_kind="assembly",
-            source_fingerprint=source_fingerprint,
             source_hash=source_identity.digest,
             resolver=resolver,
             logger=logger,
@@ -1393,16 +1366,17 @@ def _edge_visibility_classes_match_manifest(
 
 def _artifact_source_kind_matches_spec(spec: EntrySpec, manifest: Mapping[str, object]) -> bool:
     source_kind = str(manifest.get("sourceKind") or "step").strip().lower()
+    if spec.source != "generated" and spec.step_path is not None and spec.step_path.is_file():
+        if source_kind == "python":
+            return bool(str(manifest.get("stepHash") or "").strip())
+        return source_kind == "step"
     expected = "python" if spec.source == "generated" and spec.script_path is not None else "step"
     return source_kind == expected
 
 
-def _artifact_source_identity_matches_spec(spec: EntrySpec, manifest: Mapping[str, object]) -> bool:
-    if spec.source == "generated" and spec.script_path is not None:
-        expected_hash = python_source_hash(spec.script_path).digest
-        return str(manifest.get("sourceHash") or "").strip() == expected_hash
+def _artifact_step_hash_matches_spec(spec: EntrySpec, manifest: Mapping[str, object]) -> bool:
     if spec.step_path is None or not spec.step_path.is_file():
-        return False
+        return True
     expected_hash = step_file_hash(spec.step_path)
     return str(manifest.get("stepHash") or "").strip() == expected_hash
 
@@ -1435,7 +1409,7 @@ def _existing_topology_artifact_matches_spec_without_scene(
         return False
     if not _artifact_source_kind_matches_spec(spec, artifact.manifest):
         return False
-    if not _artifact_source_identity_matches_spec(spec, artifact.manifest):
+    if not _artifact_step_hash_matches_spec(spec, artifact.manifest):
         return False
     mesh = artifact.manifest.get("mesh")
     if not isinstance(mesh, Mapping):
@@ -1478,7 +1452,7 @@ def _existing_topology_artifact_matches_options(spec: EntrySpec, selector_option
         return False
     if not _artifact_source_kind_matches_spec(spec, artifact.manifest):
         return False
-    if not _artifact_source_identity_matches_spec(spec, artifact.manifest):
+    if not _artifact_step_hash_matches_spec(spec, artifact.manifest):
         return False
     mesh = artifact.manifest.get("mesh")
     if not isinstance(mesh, Mapping):

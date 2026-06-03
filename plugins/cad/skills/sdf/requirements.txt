@@ -1,1 +1,0 @@
---editable ./scripts/packages/cadpy_metadata

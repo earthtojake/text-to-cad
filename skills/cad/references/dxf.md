@@ -60,8 +60,8 @@ Files:
 - DXF: /absolute/project/models/path/to/output.dxf
 
 CAD Viewer:
-- STEP: http://127.0.0.1:4178/?dir=/absolute/project/models&file=/absolute/project/models/path/to/source.step
-- DXF: http://127.0.0.1:4178/?dir=/absolute/project/models&file=/absolute/project/models/path/to/output.dxf
+- STEP: http://127.0.0.1:4178/?dir=/absolute/project/models&file=path/to/source.step
+- DXF: http://127.0.0.1:4178/?dir=/absolute/project/models&file=path/to/output.dxf
 
 Validation:
 - STEP geometry: checked with facts/planes/positioning

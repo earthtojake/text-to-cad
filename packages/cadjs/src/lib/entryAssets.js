@@ -141,7 +141,6 @@ export function entryHasUrdf(entry) {
 export function entryHasReferences(entry) {
   return Boolean(
     entrySourceFormat(entry) === RENDER_FORMAT.STEP &&
-    entry?.artifact?.ok !== false &&
     entryAssetUrl(entry, "glb") &&
     entryAssetHash(entry, "selectorTopology")
   );
@@ -150,7 +149,6 @@ export function entryHasReferences(entry) {
 export function entryHasDisplayEdges(entry) {
   return Boolean(
     entrySourceFormat(entry) === RENDER_FORMAT.STEP &&
-    entry?.artifact?.ok !== false &&
     entryAssetUrl(entry, "glb") &&
     entryAssetHash(entry, "displayEdgeTopology")
   );
@@ -162,6 +160,10 @@ export function entryHasDxf(entry) {
 
 export function entryHasGcode(entry) {
   return Boolean(entryAssetUrl(entry, "gcode") && entryAssetHash(entry, "gcode"));
+}
+
+export function entryHasImplicitCad(entry) {
+  return Boolean(entryAssetUrl(entry, "implicit") && entryAssetHash(entry, "implicit"));
 }
 
 export function entryStepModuleUrl(entry) {

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildSidebarDirectoryTree,
+  cadFileParamForEntry,
   findSidebarDirectoryById,
   findEntryByUrlPath,
   missingFileRefForCatalog,
@@ -11,10 +12,12 @@ import {
   filenameLabelForEntry,
   normalizeCadFileQueryParam,
   normalizeCadRefQueryParams,
+  readCadDirParam,
   sidebarDirectoryPath,
   sidebarDirectoryIdForEntry,
   sidebarLabelForEntry,
   shouldDeferFileParamSelection,
+  writeCadDirParam,
   writeCadParam,
   writeCadRefQueryParams
 } from "./sidebar.js";
@@ -53,6 +56,9 @@ import {
   cloneThemePresetSettings,
   normalizeThemeSettings
 } from "cadjs/lib/themeSettings.js";
+import {
+  readStoredActiveCadDir
+} from "./cadViewerDirectorySession.mjs";
 import {
   CAD_WORKSPACE_MIN_MODEL_VIEWPORT_WIDTH,
   canFitDesktopPanels,
@@ -176,6 +182,62 @@ test("entryIconStatus marks buildable STEP artifacts as generating in production
       sourceFormat: "step",
       entryKey: "benchmarks/bracket.step",
       hasMesh: false,
+      activeGenerationFiles: ["benchmarks/.bracket.step.glb"],
+      stepArtifactGenerationAvailable: false
+    }),
+    {
+      artifactBuildable: true,
+      artifactGenerating: true,
+      artifactStale: false,
+      artifactWarning: false,
+      loading: true,
+      pending: true,
+      sourceFormat: "step",
+      statusLabel: "generating artifact"
+    }
+  );
+
+  assert.equal(
+    entryIconStatus({
+      file: "benchmarks/stale.step",
+      kind: "part",
+      artifact: {
+        ok: false,
+        error: "stale_step_artifact",
+        stale: true
+      }
+    }, {
+      sourceFormat: "step",
+      entryKey: "benchmarks/stale.step",
+      hasMesh: false
+    }).artifactBuildable,
+    true
+  );
+
+  assert.equal(
+    entryIconStatus({
+      file: "benchmarks/generated.step",
+      kind: "part",
+      sourceKind: "python",
+      artifact: {
+        ok: false,
+        error: "stale_step_artifact",
+        stale: true,
+        sourceKind: "python"
+      }
+    }, {
+      sourceFormat: "step",
+      entryKey: "benchmarks/generated.step",
+      hasMesh: false
+    }).artifactBuildable,
+    true
+  );
+
+  assert.deepEqual(
+    entryIconStatus(entry, {
+      sourceFormat: "step",
+      entryKey: "benchmarks/bracket.step",
+      hasMesh: false,
       stepArtifactGenerationAvailable: false
     }),
     {
@@ -221,14 +283,14 @@ test("entryIconStatus marks buildable STEP artifacts as generating in production
       hasMesh: true
     }),
     {
-      artifactBuildable: false,
+      artifactBuildable: true,
       artifactGenerating: false,
       artifactStale: false,
-      artifactWarning: true,
+      artifactWarning: false,
       loading: false,
       pending: false,
       sourceFormat: "step",
-      statusLabel: "artifact warning"
+      statusLabel: "artifact generates on open"
     }
   );
 
@@ -238,7 +300,7 @@ test("entryIconStatus marks buildable STEP artifacts as generating in production
       kind: "part",
       artifact: {
         ok: false,
-        error: "stale_source_identity",
+        error: "stale_step_artifact",
         stale: true
       }
     }, {
@@ -273,14 +335,14 @@ test("entryIconStatus marks buildable STEP artifacts as generating in production
       hasMesh: false
     }),
     {
-      artifactBuildable: false,
+      artifactBuildable: true,
       artifactGenerating: false,
       artifactStale: false,
-      artifactWarning: true,
+      artifactWarning: false,
       loading: false,
       pending: true,
       sourceFormat: "step",
-      statusLabel: "artifacts missing"
+      statusLabel: "artifact generates on open"
     }
   );
 });
@@ -349,7 +411,7 @@ test("entryIconStatus treats active generator runs as loading and suppresses art
     sourceKind: "python",
     artifact: {
       ok: false,
-      error: "stale_source_identity",
+      error: "stale_step_artifact",
       stale: true,
       sourceKind: "python"
     }
@@ -363,7 +425,7 @@ test("entryIconStatus treats active generator runs as loading and suppresses art
       activeGenerationFiles: ["robots/tom/robot_arm.step"]
     }),
     {
-      artifactBuildable: false,
+      artifactBuildable: true,
       artifactGenerating: false,
       artifactStale: true,
       artifactWarning: false,
@@ -1905,6 +1967,68 @@ test("findEntryByUrlPath matches catalog-root file params exactly", () => {
   );
 });
 
+test("findEntryByUrlPath matches local backend root-relative file params", () => {
+  const entry = {
+    file: "/tmp/workspace/models/examples/sample_assembly.step",
+    rootRelativeFile: "examples/sample_assembly.step",
+    kind: "assembly"
+  };
+
+  assert.equal(
+    findEntryByUrlPath([entry], "examples/sample_assembly.step"),
+    entry
+  );
+  assert.equal(
+    findEntryByUrlPath([entry], "/tmp/workspace/models/examples/sample_assembly.step"),
+    null
+  );
+  assert.equal(
+    findEntryByUrlPath([entry], "models/examples/sample_assembly.step"),
+    null
+  );
+});
+
+test("cadFileParamForEntry keeps directory navigation root-relative", () => {
+  const entry = {
+    file: "/tmp/workspace/models/examples/sample_assembly.step",
+    rootRelativeFile: "examples/sample_assembly.step",
+    kind: "assembly"
+  };
+
+  assert.equal(
+    cadFileParamForEntry(entry),
+    "examples/sample_assembly.step"
+  );
+});
+
+test("selectedEntryKeyFromUrl restores root-relative local backend file params", () => {
+  const originalWindow = globalThis.window;
+  globalThis.window = {
+    location: {
+      search: "?file=examples%2Fsample_assembly.step"
+    }
+  };
+
+  try {
+    assert.equal(
+      selectedEntryKeyFromUrl([
+        {
+          file: "/tmp/workspace/models/examples/sample_assembly.step",
+          rootRelativeFile: "examples/sample_assembly.step",
+          kind: "assembly"
+        }
+      ]),
+      "/tmp/workspace/models/examples/sample_assembly.step"
+    );
+  } finally {
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+  }
+});
+
 test("file query waits for live catalog hydration before surfacing missing file errors", () => {
   assert.equal(
     shouldDeferFileParamSelection({
@@ -1971,10 +2095,10 @@ test("file query stays pending while a matched catalog entry is being activated"
   );
 });
 
-test("normalizeCadFileQueryParam keeps scan-relative and absolute file params unchanged", () => {
+test("normalizeCadFileQueryParam normalizes file params as relative paths", () => {
   assert.equal(normalizeCadFileQueryParam("parts/sample_plate.step"), "parts/sample_plate.step");
   assert.equal(normalizeCadFileQueryParam("workspace/parts/sample_plate.step"), "workspace/parts/sample_plate.step");
-  assert.equal(normalizeCadFileQueryParam("/workspace/imports/widget.step/"), "/workspace/imports/widget.step");
+  assert.equal(normalizeCadFileQueryParam("/workspace/imports/widget.step/"), "workspace/imports/widget.step");
 });
 
 test("selectedEntryKeyFromUrl restores the selected canonical ref query param", () => {
@@ -2032,6 +2156,164 @@ test("writeCadParam skips unchanged URL replacements", () => {
     writeCadParam("parts/sample_base.step");
     assert.equal(calls.length, 1);
     assert.equal(calls[0][2], "/?file=parts%2Fsample_base.step&refs=parts%2Fsample_plate%23f2");
+  } finally {
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+  }
+});
+
+test("writeCadParam can push user navigation history", () => {
+  const originalWindow = globalThis.window;
+  const calls = [];
+  globalThis.window = {
+    location: {
+      href: "http://viewer.test/",
+      pathname: "/",
+      search: "",
+      hash: ""
+    },
+    history: {
+      replaceState: (...args) => calls.push(["replace", ...args]),
+      pushState: (...args) => calls.push(["push", ...args])
+    }
+  };
+
+  try {
+    writeCadParam("parts/sample_plate.step", { history: "push" });
+    assert.deepEqual(calls.map((call) => call[0]), ["push"]);
+    assert.equal(calls[0][3], "/?file=parts%2Fsample_plate.step");
+  } finally {
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+  }
+});
+
+test("writeCadParam stores active dir and omits dir for directory file selections", () => {
+  const originalWindow = globalThis.window;
+  const calls = [];
+  globalThis.window = {
+    location: {
+      href: "http://viewer.test/?dir=docs%2Fpublic&refs=parts%2Fsample_plate%23f2",
+      pathname: "/",
+      search: "?dir=docs%2Fpublic&refs=parts%2Fsample_plate%23f2",
+      hash: ""
+    },
+    history: {
+      replaceState: (...args) => calls.push(args)
+    },
+    sessionStorage: createMemoryStorage()
+  };
+
+  try {
+    writeCadParam("hero/planetary_gear_assembly.step.glb");
+    assert.equal(calls.length, 1);
+    const nextUrl = new URL(`http://viewer.test${calls[0][2]}`);
+    assert.equal(nextUrl.searchParams.has("dir"), false);
+    assert.equal(nextUrl.searchParams.get("file"), "hero/planetary_gear_assembly.step.glb");
+    assert.equal(nextUrl.searchParams.get("refs"), "parts/sample_plate#f2");
+    assert.equal(readStoredActiveCadDir(), "docs/public");
+  } finally {
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+  }
+});
+
+test("writeCadParam keeps explicit dir when clearing file selection", () => {
+  const originalWindow = globalThis.window;
+  const calls = [];
+  globalThis.window = {
+    location: {
+      href: "http://viewer.test/?dir=docs%2Fpublic&file=hero%2Fplanetary_gear_assembly.step.glb",
+      pathname: "/",
+      search: "?dir=docs%2Fpublic&file=hero%2Fplanetary_gear_assembly.step.glb",
+      hash: ""
+    },
+    history: {
+      replaceState: (...args) => calls.push(args)
+    },
+    sessionStorage: createMemoryStorage()
+  };
+
+  try {
+    writeCadParam("");
+    assert.equal(calls.length, 1);
+    const nextUrl = new URL(`http://viewer.test${calls[0][2]}`);
+    assert.equal(nextUrl.searchParams.get("dir"), "docs/public");
+    assert.equal(nextUrl.searchParams.has("file"), false);
+  } finally {
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+  }
+});
+
+test("writeCadParam keeps explicit dir when active dir cannot be stored", () => {
+  const originalWindow = globalThis.window;
+  const calls = [];
+  globalThis.window = {
+    location: {
+      href: "http://viewer.test/?dir=docs%2Fpublic",
+      pathname: "/",
+      search: "?dir=docs%2Fpublic",
+      hash: ""
+    },
+    history: {
+      replaceState: (...args) => calls.push(args)
+    }
+  };
+
+  try {
+    writeCadParam("hero/planetary_gear_assembly.step.glb");
+    assert.equal(calls.length, 1);
+    const nextUrl = new URL(`http://viewer.test${calls[0][2]}`);
+    assert.equal(nextUrl.searchParams.get("dir"), "docs/public");
+    assert.equal(nextUrl.searchParams.get("file"), "hero/planetary_gear_assembly.step.glb");
+  } finally {
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+  }
+});
+
+test("writeCadDirParam selects a workspace and clears file selection", () => {
+  const originalWindow = globalThis.window;
+  const calls = [];
+  globalThis.window = {
+    location: {
+      href: "http://viewer.test/?file=parts%2Fsample_plate.step&refs=parts%2Fsample_plate%23f2",
+      pathname: "/",
+      search: "?file=parts%2Fsample_plate.step&refs=parts%2Fsample_plate%23f2",
+      hash: ""
+    },
+    history: {
+      replaceState: (...args) => calls.push(["replace", ...args]),
+      pushState: (...args) => calls.push(["push", ...args])
+    },
+    sessionStorage: createMemoryStorage()
+  };
+
+  try {
+    assert.equal(readCadDirParam(), null);
+    writeCadDirParam("/workspace/models", { history: "push" });
+    assert.deepEqual(calls.map((call) => call[0]), ["push"]);
+    const nextUrl = new URL(`http://viewer.test${calls[0][3]}`);
+    assert.equal(nextUrl.searchParams.get("dir"), "/workspace/models");
+    assert.equal(nextUrl.searchParams.has("file"), false);
+    assert.equal(nextUrl.searchParams.get("refs"), "parts/sample_plate#f2");
+    assert.equal(readStoredActiveCadDir(), "/workspace/models");
   } finally {
     if (originalWindow === undefined) {
       delete globalThis.window;

@@ -14,8 +14,19 @@ from cadpy_common.package_path import ensure_cadpy_package_path
 ensure_cadpy_package_path()
 
 from cadpy.catalog import StepImportOptions
-from cadpy.generation import generate_step_targets, targets_include_output_pairs
 from cadpy.metadata import normalize_mesh_numeric
+
+
+def generate_step_targets(*args, **kwargs):
+    from cadpy.generation import generate_step_targets as generate
+
+    return generate(*args, **kwargs)
+
+
+def targets_include_output_pairs(targets) -> bool:
+    from cadpy.generation import targets_include_output_pairs as includes_pairs
+
+    return includes_pairs(targets)
 
 
 def _normalize_cli_numeric(value: object, *, field_name: str, parser: argparse.ArgumentParser) -> float | None:

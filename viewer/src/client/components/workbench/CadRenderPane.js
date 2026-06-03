@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import CadViewer from "../CadViewer";
 import DxfViewer from "../DxfViewer";
 import ModalViewer from "../ModalViewer";
+import ImplicitCadViewer from "../ImplicitCadViewer";
 import { isModalGlbBuffer } from "cadjs/common/modalScene.js";
 import { CircleAlert, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
@@ -14,6 +15,7 @@ import {
 } from "cadjs/lib/fileFormats";
 import { VIEWER_SCENE_SCALE } from "cadjs/lib/viewer/sceneScale";
 import { VIEWER_PICK_MODE } from "cadjs/lib/viewer/constants";
+import { useStepAnimationSnapshot } from "@/workbench/stepAnimationStore";
 
 const EMPTY_LIST = Object.freeze([]);
 const VIEWPORT_ISSUE_META = Object.freeze({
@@ -49,6 +51,9 @@ export default function CadRenderPane({
   selectedMeshData,
   selectedDxfData,
   selectedDxfMeshData,
+  selectedImplicitModel,
+  implicitDynamicRenderActive = false,
+  implicitGraphicsSettings = null,
   selectedKey,
   selectedDxfKey,
   missingFileRef = "",
@@ -109,11 +114,29 @@ export default function CadRenderPane({
       .catch(() => {});
     return () => { cancelled = true; };
   }, [selectedGlbUrl]);
-  const resolvedStepParameters = stepParameters;
+  const liveStepAnimation = useStepAnimationSnapshot();
+  const resolvedStepParameters = useMemo(() => {
+    if (!stepParameters?.animationState?.playing) {
+      return stepParameters;
+    }
+    const liveParameterValues = liveStepAnimation?.parameterValues;
+    if (!liveParameterValues || typeof liveParameterValues !== "object") {
+      return stepParameters;
+    }
+    return {
+      ...stepParameters,
+      parameterValues: liveParameterValues,
+      animationState: {
+        ...stepParameters.animationState,
+        elapsedSec: liveStepAnimation.elapsedSec
+      }
+    };
+  }, [stepParameters, liveStepAnimation]);
   const viewerAlertIconLabel = "Viewer error. See the Issues section for details.";
   const dxfMode = renderFormat === RENDER_FORMAT.DXF;
   const gcodeMode = renderFormat === RENDER_FORMAT.GCODE;
   const urdfMode = isRobotRenderFormat(renderFormat);
+  const implicitMode = renderFormat === RENDER_FORMAT.IMPLICIT;
   const meshOnlyMode = isMeshRenderFormat(renderFormat);
   const pathPreviewMode = meshOnlyMode || gcodeMode;
   const dxfMeshPreviewReady = dxfMode && !!selectedDxfMeshData;
@@ -156,7 +179,9 @@ export default function CadRenderPane({
   const ctaLabel = ctaMode === "screenshot" ? "Copy Screenshot" : copyButtonLabel;
   const ctaTitle = ctaMode === "screenshot" ? "Copy screenshot to clipboard" : copyButtonLabel;
   const ctaDisabled = ctaMode === "screenshot" ? viewerLoading || !activeMeshData : false;
-  const viewportHasRenderableContent = dxfMode && !dxfMeshPreviewReady
+  const viewportHasRenderableContent = implicitMode
+    ? !!selectedImplicitModel
+    : dxfMode && !dxfMeshPreviewReady
     ? !!selectedDxfData
     : !!activeMeshData;
   const blockingViewerAlert = viewerAlert && viewerAlert.blocking !== false && (
@@ -198,6 +223,24 @@ export default function CadRenderPane({
           ref={viewerRef}
           assetUrl={modalUrl}
           modelKey={activeModelKey}
+          onViewerAlertChange={handleViewerAlertChange}
+        />
+      ) : implicitMode ? (
+        <ImplicitCadViewer
+          key={`implicit:${activeModelKey}`}
+          ref={viewerRef}
+          model={selectedImplicitModel}
+          modelKey={activeModelKey}
+          isLoading={viewerLoading}
+          previewMode={previewMode}
+          viewportFrameInsets={viewportFrameInsets}
+          viewPlaneOffsetRight={viewPlaneOffsetRight}
+          themeSettings={themeSettings}
+          graphicsSettings={implicitGraphicsSettings}
+          dynamicRenderActive={implicitDynamicRenderActive}
+          perspective={viewerPerspective}
+          perspectiveRef={viewerPerspectiveRef}
+          onPerspectiveChange={handlePerspectiveChange}
           onViewerAlertChange={handleViewerAlertChange}
         />
       ) : dxfMode && !dxfMeshPreviewReady ? (

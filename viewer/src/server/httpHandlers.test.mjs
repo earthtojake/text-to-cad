@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { Writable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 
 import {
   contentTypeForStaticAsset,
@@ -52,6 +52,17 @@ function createWritableResponse() {
   return response;
 }
 
+function createJsonRequest({
+  method = "POST",
+  url,
+  body = {},
+} = {}) {
+  const req = Readable.from([JSON.stringify(body)]);
+  req.method = method;
+  req.url = url;
+  return req;
+}
+
 
 test("CAD Viewer API middleware awaits async backend catalog reads", async () => {
   const middleware = createCadViewerApiMiddleware({
@@ -76,7 +87,7 @@ test("CAD Viewer API middleware awaits async backend catalog reads", async () =>
   });
 });
 
-test("CAD Viewer API middleware activates direct file roots", async () => {
+test("CAD Viewer API middleware activates request roots for file params", async () => {
   const calls = [];
   const resolvedRoots = [];
   const activatedRoots = [];
@@ -104,7 +115,7 @@ test("CAD Viewer API middleware activates direct file roots", async () => {
   });
   const req = {
     method: "GET",
-    url: "/__cad/catalog?file=%2Ftmp%2Ffile-root%2Fpart.step",
+    url: "/__cad/catalog?file=part.step",
   };
   const res = createResponse();
   let nextCalled = false;
@@ -116,14 +127,14 @@ test("CAD Viewer API middleware activates direct file roots", async () => {
   assert.equal(nextCalled, false);
   assert.equal(res.statusCode, 200);
   assert.deepEqual(calls, [
-    { rootDir: "", fileRef: "/tmp/file-root/part.step" },
+    { rootDir: "", fileRef: "part.step" },
   ]);
   assert.deepEqual(resolvedRoots, [
-    { rootDir: "", fileRef: "/tmp/file-root/part.step" },
+    { rootDir: "", fileRef: "part.step" },
   ]);
   assert.deepEqual(activatedRoots, [resolvedRoot]);
   assert.deepEqual(activatedRequests, [
-    { rootDir: "", fileRef: "/tmp/file-root/part.step" },
+    { rootDir: "", fileRef: "part.step" },
   ]);
 });
 
@@ -384,6 +395,123 @@ test("CAD Viewer API middleware rejects hosted reveal requests", async () => {
   assert.match(JSON.parse(res.body).error, /local filesystem/);
 });
 
+test("CAD Viewer API middleware exports implicit CAD files through local backend", async () => {
+  const calls = [];
+  const catalog = {
+    schemaVersion: 4,
+    entries: [{ file: "implicit-cad/orb.implicit.js", kind: "implicit" }],
+  };
+  const nextCatalog = {
+    schemaVersion: 4,
+    entries: [
+      { file: "implicit-cad/orb.implicit.js", kind: "implicit" },
+      { file: "implicit-cad/orb.glb", kind: "mesh" },
+    ],
+  };
+  const changedRoots = [];
+  const resolvedRoot = { rootPath: "/workspace/models", rootDir: "models" };
+  const middleware = createCadViewerApiMiddleware({
+    rootDir: "models",
+    backend: {
+      kind: "local-fs",
+      readCatalog: async () => catalog,
+      resolveRoot: () => resolvedRoot,
+      generateImplicitExport: async (request) => {
+        calls.push(request);
+        return {
+          ok: true,
+          format: request.format,
+          outputFileRef: "implicit-cad/orb.glb",
+          filename: "orb.glb",
+          entry: { file: "implicit-cad/orb.glb", kind: "mesh" },
+          catalog: nextCatalog,
+        };
+      },
+    },
+    onCatalogChanged: (root) => {
+      changedRoots.push(root);
+    },
+  });
+  const req = createJsonRequest({
+    url: "/__cad/implicit-export?file=implicit-cad%2Forb.implicit.js&format=glb",
+    body: {
+      parameterValues: { radius: 18 },
+      animationState: { activeId: "pulse", elapsedSec: 0.5 },
+      resolution: 40,
+      maxCells: 12345,
+    },
+  });
+  const res = createResponse();
+
+  await middleware(req, res, () => {});
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(
+    calls.map((call) => ({
+      fileRef: call.fileRef,
+      format: call.format,
+      parameterValues: call.parameterValues,
+      animationState: call.animationState,
+      resolution: call.resolution,
+      maxCells: call.maxCells,
+      resolvedRoot: call.resolvedRoot,
+      rootDir: call.rootDir,
+      catalog: call.catalog,
+    })),
+    [{
+      fileRef: "implicit-cad/orb.implicit.js",
+      format: "glb",
+      parameterValues: { radius: 18 },
+      animationState: { activeId: "pulse", elapsedSec: 0.5 },
+      resolution: 40,
+      maxCells: 12345,
+      resolvedRoot,
+      rootDir: "models",
+      catalog,
+    }],
+  );
+  assert.deepEqual(changedRoots, [resolvedRoot]);
+  assert.deepEqual(JSON.parse(res.body), {
+    ok: true,
+    result: {
+      ok: true,
+      format: "glb",
+      outputFileRef: "implicit-cad/orb.glb",
+      filename: "orb.glb",
+      entry: { file: "implicit-cad/orb.glb", kind: "mesh" },
+      catalog: nextCatalog,
+    },
+    entry: { file: "implicit-cad/orb.glb", kind: "mesh" },
+    catalog: nextCatalog,
+    downloadUrl: "/__cad/download?dir=models&file=implicit-cad%2Forb.glb&asset=output",
+    filename: "orb.glb",
+  });
+});
+
+test("CAD Viewer API middleware rejects implicit exports for hosted backends", async () => {
+  let called = false;
+  const middleware = createCadViewerApiMiddleware({
+    backend: {
+      kind: "hosted",
+      readCatalog: async () => ({ schemaVersion: 4, entries: [] }),
+      resolveRoot: () => ({ rootPath: "/workspace/models" }),
+      generateImplicitExport: async () => {
+        called = true;
+      },
+    },
+  });
+  const req = createJsonRequest({
+    url: "/__cad/implicit-export?file=implicit-cad%2Forb.implicit.js&format=glb",
+  });
+  const res = createResponse();
+
+  await middleware(req, res, () => {});
+
+  assert.equal(called, false);
+  assert.equal(res.statusCode, 405);
+  assert.match(JSON.parse(res.body).error, /local filesystem/);
+});
+
 
 test("CAD Viewer API middleware leaves STEP artifact route unclaimed when generation is disabled", async () => {
   const middleware = createCadViewerApiMiddleware({
@@ -427,7 +555,7 @@ test("CAD Viewer API middleware can claim disabled STEP artifact routes with JSO
 });
 
 
-test("CAD Viewer API middleware supports non-filesystem STEP artifact backends", async () => {
+test("CAD Viewer API middleware rejects non-filesystem STEP artifact backends", async () => {
   const calls = [];
   const middleware = createCadViewerApiMiddleware({
     backend: {
@@ -452,19 +580,9 @@ test("CAD Viewer API middleware supports non-filesystem STEP artifact backends",
 
   await middleware(req, res, () => {});
 
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(
-    calls.map((call) => ({ fileRef: call.fileRef, force: call.force, hasCatalog: !!call.catalog })),
-    [{ fileRef: "part.step", force: true, hasCatalog: true }],
-  );
+  assert.equal(res.statusCode, 501);
+  assert.deepEqual(calls, []);
   assert.deepEqual(JSON.parse(res.body), {
-    ok: true,
-    error: "",
-    result: { uploaded: true },
-    entry: { file: "part.step", kind: "part", url: "/.part.step.glb", hash: "hash", bytes: 3 },
-    catalog: {
-      schemaVersion: 4,
-      entries: [{ file: "part.step", kind: "part", url: "/.part.step.glb", hash: "hash", bytes: 3 }]
-    },
+    error: "STEP artifact generation requires a local filesystem CAD Viewer backend",
   });
 });

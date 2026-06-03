@@ -76,8 +76,8 @@ test("entry availability helpers preserve existing viewer gates", () => {
   assert.equal(entryHasReferences(stepEntry()), true);
   assert.equal(entryHasDisplayEdges(stepEntry()), true);
   assert.equal(entryHasMesh(stepEntry({ artifact: { ok: false } })), true);
-  assert.equal(entryHasReferences(stepEntry({ artifact: { ok: false } })), false);
-  assert.equal(entryHasDisplayEdges(stepEntry({ artifact: { ok: false } })), false);
+  assert.equal(entryHasReferences(stepEntry({ artifact: { ok: false } })), true);
+  assert.equal(entryHasDisplayEdges(stepEntry({ artifact: { ok: false } })), true);
   assert.equal(entryHasDisplayEdges(stepEntry({ hash: "" })), false);
   assert.equal(entryHasReferences(stepEntry({ hash: "" })), false);
   assert.equal(entryHasDxf({ kind: "dxf", url: "/plate.dxf", hash: "dxf-hash" }), true);

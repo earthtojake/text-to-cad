@@ -1,8 +1,12 @@
-import { Fragment } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   Bot,
   Boxes,
+  Check,
   ChevronDown,
+  CircleCheck,
+  Code,
+  Copy,
   Cuboid,
   DraftingCompass,
   FileBox,
@@ -16,9 +20,15 @@ import {
   Sun
 } from "lucide-react";
 import {
+  DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND,
+  isViewerReleaseMajorMinorNewer,
+  isViewerReleaseNewer,
+  viewerGithubLatestReleaseApiUrl,
+  viewerGithubLatestReleaseUrl,
   normalizeViewerGithubUrl,
-  viewerGithubReleaseUrl
-} from "cadjs/lib/viewerConfig.mjs";
+  viewerGithubReleaseUrl,
+  viewerSkillsInstallCommandFromText
+} from "../../../shared/viewerConfig.mjs";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -37,7 +47,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from "@/components/ui/tooltip";
 import { cn } from "@/ui/utils";
+import { copyTextToClipboard } from "@/ui/clipboard";
 import {
   themeSettingsSupportsSystemColorMode
 } from "cadjs/lib/themeSettings";
@@ -88,6 +105,9 @@ function fileSheetLabel(fileSheetKind) {
   if (fileSheetKind === "step") {
     return "STEP sheet";
   }
+  if (fileSheetKind === "implicit") {
+    return "Implicit CAD sheet";
+  }
   return "file sheet";
 }
 
@@ -132,6 +152,7 @@ const ENTRY_ICON_COMPONENTS = {
   [ENTRY_ICON_KIND.ASSEMBLY]: Boxes,
   [ENTRY_ICON_KIND.DXF]: DraftingCompass,
   [ENTRY_ICON_KIND.GCODE]: Route,
+  [ENTRY_ICON_KIND.IMPLICIT]: Code,
   [ENTRY_ICON_KIND.ROBOT]: Bot,
   [ENTRY_ICON_KIND.STEP_PART]: Package,
   [ENTRY_ICON_KIND.STL_MESH]: Cuboid,
@@ -287,6 +308,7 @@ function BreadcrumbDirectoryMenuItems({
   canCopyFileAssetPaths = false,
   fileAccessBusyKey = "",
   onDownloadFileAsset,
+  onExportImplicitFile,
   onRevealFileAsset,
   onCopyFileAssetReference
 }) {
@@ -323,6 +345,7 @@ function BreadcrumbDirectoryMenuItems({
           canCopyFileAssetPaths={canCopyFileAssetPaths}
           fileAccessBusyKey={fileAccessBusyKey}
           onDownloadFileAsset={onDownloadFileAsset}
+          onExportImplicitFile={onExportImplicitFile}
           onRevealFileAsset={onRevealFileAsset}
           onCopyFileAssetReference={onCopyFileAssetReference}
         />
@@ -349,6 +372,7 @@ function BreadcrumbDirectoryMenuItems({
         canCopyFileAssetPaths={canCopyFileAssetPaths}
         fileAccessBusyKey={fileAccessBusyKey}
         onDownloadFileAsset={onDownloadFileAsset}
+        onExportImplicitFile={onExportImplicitFile}
         onRevealFileAsset={onRevealFileAsset}
         onCopyFileAssetReference={onCopyFileAssetReference}
       />
@@ -386,6 +410,7 @@ function BreadcrumbDirectorySubMenu({
   canCopyFileAssetPaths = false,
   fileAccessBusyKey = "",
   onDownloadFileAsset,
+  onExportImplicitFile,
   onRevealFileAsset,
   onCopyFileAssetReference
 }) {
@@ -420,6 +445,7 @@ function BreadcrumbDirectorySubMenu({
             canCopyFileAssetPaths={canCopyFileAssetPaths}
             fileAccessBusyKey={fileAccessBusyKey}
             onDownloadFileAsset={onDownloadFileAsset}
+            onExportImplicitFile={onExportImplicitFile}
             onRevealFileAsset={onRevealFileAsset}
             onCopyFileAssetReference={onCopyFileAssetReference}
           />
@@ -449,6 +475,7 @@ function BreadcrumbNodeDropdown({
   canCopyFileAssetPaths = false,
   fileAccessBusyKey = "",
   onDownloadFileAsset,
+  onExportImplicitFile,
   onRevealFileAsset,
   onRevealInExplorerView,
   onCopyFileAssetReference,
@@ -490,6 +517,7 @@ function BreadcrumbNodeDropdown({
         canCopyFileAssetPaths={canCopyFileAssetPaths}
         busyKey={fileAccessBusyKey}
         onDownloadFileAsset={onDownloadFileAsset}
+        onExportImplicitFile={onExportImplicitFile}
         onRevealFileAsset={onRevealFileAsset}
         onRevealInExplorerView={onRevealInExplorerView}
         onCopyFileAssetReference={onCopyFileAssetReference}
@@ -543,6 +571,7 @@ function BreadcrumbNodeDropdown({
             canCopyFileAssetPaths={canCopyFileAssetPaths}
             fileAccessBusyKey={fileAccessBusyKey}
             onDownloadFileAsset={onDownloadFileAsset}
+            onExportImplicitFile={onExportImplicitFile}
             onRevealFileAsset={onRevealFileAsset}
             onCopyFileAssetReference={onCopyFileAssetReference}
           />
@@ -570,6 +599,7 @@ function BreadcrumbEllipsisDropdown({
   canCopyFileAssetPaths = false,
   fileAccessBusyKey = "",
   onDownloadFileAsset,
+  onExportImplicitFile,
   onRevealFileAsset,
   onCopyFileAssetReference,
   title
@@ -613,6 +643,7 @@ function BreadcrumbEllipsisDropdown({
                   canCopyFileAssetPaths={canCopyFileAssetPaths}
                   fileAccessBusyKey={fileAccessBusyKey}
                   onDownloadFileAsset={onDownloadFileAsset}
+                  onExportImplicitFile={onExportImplicitFile}
                   onRevealFileAsset={onRevealFileAsset}
                   onCopyFileAssetReference={onCopyFileAssetReference}
                 />
@@ -640,6 +671,7 @@ function BreadcrumbEllipsisDropdown({
                   canCopyFileAssetPaths={canCopyFileAssetPaths}
                   fileAccessBusyKey={fileAccessBusyKey}
                   onDownloadFileAsset={onDownloadFileAsset}
+                  onExportImplicitFile={onExportImplicitFile}
                   onRevealFileAsset={onRevealFileAsset}
                   onCopyFileAssetReference={onCopyFileAssetReference}
                 />
@@ -689,6 +721,17 @@ function GitHubMark(props) {
 
 const topBarIconButtonClasses = "size-7";
 const topBarIconClasses = "size-4";
+const latestReleaseCacheKeyPrefix = "cad-viewer:latest-release:v1:";
+const latestReleaseCacheTtlMs = 6 * 60 * 60 * 1000;
+const updateVersionTooltipDelayMs = 250;
+const passiveVersionTooltipDelayMs = 700;
+const emptyLatestReleaseCheck = Object.freeze({
+  updateAvailable: false,
+  latestVersion: "",
+  releaseUrl: "",
+  installCommand: DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND,
+  latestReleaseNewer: false
+});
 
 function nextColorMode(currentColorMode) {
   return currentColorMode === DARK_COLOR_SCHEME_ID
@@ -696,32 +739,348 @@ function nextColorMode(currentColorMode) {
     : DARK_COLOR_SCHEME_ID;
 }
 
-function VersionReleaseLink({ releaseUrl }) {
-  const version = String(viewerPackage.version || "").trim();
+function latestReleaseCacheKey(apiUrl) {
+  return `${latestReleaseCacheKeyPrefix}${apiUrl}`;
+}
 
-  if (!version) {
+function readLatestReleaseCache(apiUrl, now = Date.now()) {
+  if (!apiUrl || typeof window === "undefined" || !window.localStorage) {
     return null;
   }
 
-  const label = releaseUrl ? `Open release ${version}` : `Version ${version}`;
+  try {
+    const rawValue = window.localStorage.getItem(latestReleaseCacheKey(apiUrl));
+    const value = rawValue ? JSON.parse(rawValue) : null;
+    const expiresAt = Number(value?.expiresAt || 0);
+    const latestVersion = String(value?.latestVersion || "").trim();
+    const releaseUrl = String(value?.releaseUrl || "").trim();
+    const installCommand = String(value?.installCommand || "").trim();
+    if (!latestVersion || expiresAt <= now) {
+      return null;
+    }
+    return { latestVersion, releaseUrl, installCommand };
+  } catch {
+    return null;
+  }
+}
+
+function writeLatestReleaseCache(apiUrl, release, now = Date.now()) {
+  if (!apiUrl || typeof window === "undefined" || !window.localStorage) {
+    return;
+  }
+
+  const latestVersion = String(release?.latestVersion || "").trim();
+  if (!latestVersion) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(latestReleaseCacheKey(apiUrl), JSON.stringify({
+      latestVersion,
+      releaseUrl: String(release?.releaseUrl || "").trim(),
+      installCommand: String(release?.installCommand || "").trim(),
+      expiresAt: now + latestReleaseCacheTtlMs
+    }));
+  } catch {
+    // Local storage availability is browser-policy dependent; the release check is optional.
+  }
+}
+
+function latestReleaseFromPayload(payload, fallbackReleaseUrl = "") {
+  const latestVersion = String(payload?.tag_name || "").trim();
+  if (!latestVersion) {
+    return null;
+  }
+  return {
+    latestVersion,
+    releaseUrl: String(payload?.html_url || fallbackReleaseUrl || "").trim(),
+    installCommand: viewerSkillsInstallCommandFromText(
+      payload?.body,
+      DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
+    )
+  };
+}
+
+function latestReleaseCheckState(currentVersion, release) {
+  const latestVersion = String(release?.latestVersion || "").trim();
+  const releaseUrl = String(release?.releaseUrl || "").trim();
+  const installCommand = String(release?.installCommand || DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND).trim();
+  if (!latestVersion) {
+    return emptyLatestReleaseCheck;
+  }
+  const latestReleaseNewer = isViewerReleaseNewer(currentVersion, latestVersion);
+
+  return {
+    updateAvailable: isViewerReleaseMajorMinorNewer(currentVersion, latestVersion),
+    latestVersion,
+    releaseUrl,
+    installCommand,
+    latestReleaseNewer
+  };
+}
+
+function useViewerLatestReleaseCheck({
+  currentVersion,
+  latestReleaseApiUrl,
+  latestReleaseUrl,
+  mockLatestVersion = "",
+  mockLatestReleaseUrl = ""
+}) {
+  const [releaseCheck, setReleaseCheck] = useState(emptyLatestReleaseCheck);
+
+  useEffect(() => {
+    const version = String(currentVersion || "").trim();
+    const apiUrl = String(latestReleaseApiUrl || "").trim();
+    const mockedVersion = String(mockLatestVersion || "").trim();
+    if (!version) {
+      setReleaseCheck(emptyLatestReleaseCheck);
+      return undefined;
+    }
+
+    if (mockedVersion) {
+      setReleaseCheck(latestReleaseCheckState(version, {
+        latestVersion: mockedVersion,
+        releaseUrl: String(mockLatestReleaseUrl || latestReleaseUrl || "").trim(),
+        installCommand: DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
+      }));
+      return undefined;
+    }
+
+    if (!apiUrl || typeof fetch !== "function") {
+      setReleaseCheck(emptyLatestReleaseCheck);
+      return undefined;
+    }
+
+    const cachedRelease = readLatestReleaseCache(apiUrl);
+    if (cachedRelease) {
+      setReleaseCheck(latestReleaseCheckState(version, cachedRelease));
+      return undefined;
+    }
+
+    setReleaseCheck(emptyLatestReleaseCheck);
+    const controller = new AbortController();
+    fetch(apiUrl, {
+      signal: controller.signal,
+      headers: {
+        Accept: "application/vnd.github+json"
+      }
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`GitHub latest release check failed with ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((payload) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        const release = latestReleaseFromPayload(payload, latestReleaseUrl);
+        if (!release) {
+          if (!cachedRelease) {
+            setReleaseCheck(emptyLatestReleaseCheck);
+          }
+          return;
+        }
+        writeLatestReleaseCache(apiUrl, release);
+        setReleaseCheck(latestReleaseCheckState(version, release));
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") {
+          return;
+        }
+        if (!cachedRelease) {
+          setReleaseCheck(emptyLatestReleaseCheck);
+        }
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [currentVersion, latestReleaseApiUrl, latestReleaseUrl, mockLatestReleaseUrl, mockLatestVersion]);
+
+  return releaseCheck;
+}
+
+function VersionTooltipRow({ label, version, action = null }) {
+  const normalizedVersion = String(version || "").trim();
+  if (!normalizedVersion) {
+    return null;
+  }
 
   return (
+    <div className="flex min-w-0 flex-col items-start gap-1.5 px-0.5 text-left">
+      <span className="text-[11px] font-medium leading-none text-muted-foreground">{label}</span>
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="min-w-0 text-left font-mono text-[12px] leading-5 text-foreground tabular-nums">
+          {normalizedVersion}
+        </span>
+        {action}
+      </div>
+    </div>
+  );
+}
+
+function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestReleaseCheck }) {
+  const normalizedVersion = String(version || "").trim();
+  const [installCopyStatus, setInstallCopyStatus] = useState("");
+  const copyGestureHandledRef = useRef(false);
+
+  if (!normalizedVersion) {
+    return null;
+  }
+
+  const updateAvailable = Boolean(releaseCheck?.updateAvailable);
+  const targetReleaseUrl = updateAvailable
+    ? String(releaseCheck?.releaseUrl || releaseUrl || "").trim()
+    : String(releaseUrl || "").trim();
+  const latestVersion = String(releaseCheck?.latestVersion || "").trim();
+  const latestReleaseNewer = Boolean(releaseCheck?.latestReleaseNewer);
+  const latestVersionVisible = latestVersion && latestReleaseNewer;
+  const latestReleaseUrl = latestVersionVisible
+    ? String(releaseCheck?.releaseUrl || "").trim()
+    : "";
+  const installCommand = String(
+    releaseCheck?.installCommand || DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
+  ).trim() || DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND;
+  const upToDate = Boolean(latestVersion) && !latestReleaseNewer;
+  const label = updateAvailable
+    ? "Update CAD Viewer"
+    : (targetReleaseUrl ? `Open release ${normalizedVersion}` : `Version ${normalizedVersion}`);
+
+  const handleCopyInstallCommand = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (copyGestureHandledRef.current) {
+      return;
+    }
+    copyGestureHandledRef.current = true;
+    globalThis.setTimeout(() => {
+      copyGestureHandledRef.current = false;
+    }, 250);
+    try {
+      await copyTextToClipboard(installCommand);
+      setInstallCopyStatus("copied");
+      globalThis.setTimeout(() => {
+        setInstallCopyStatus("");
+      }, 1600);
+    } catch {
+      setInstallCopyStatus("failed");
+    }
+  };
+
+  const releaseButton = (
     <Button
-      asChild={Boolean(releaseUrl)}
-      variant="ghost"
+      asChild={Boolean(targetReleaseUrl)}
+      variant={updateAvailable ? "default" : "ghost"}
       size="xs"
-      className="hidden h-7 rounded-sm px-2 text-xs font-medium leading-none text-muted-foreground tabular-nums hover:text-sidebar-foreground md:inline-flex"
+      className={cn(
+        "inline-flex rounded-sm px-2 text-xs font-medium leading-none",
+        updateAvailable
+          ? "h-6 px-2 text-[11px]"
+          : "h-7 text-muted-foreground tabular-nums hover:text-sidebar-foreground"
+      )}
       aria-label={label}
-      title={label}
     >
-      {releaseUrl ? (
-        <a href={releaseUrl} target="_blank" rel="noreferrer">
-          v{version}
+      {targetReleaseUrl ? (
+        <a href={targetReleaseUrl} target="_blank" rel="noreferrer">
+          <span className="inline-flex items-center gap-1">
+            {updateAvailable ? (
+              <span>Update</span>
+            ) : (
+              <span>{normalizedVersion}</span>
+            )}
+          </span>
         </a>
       ) : (
-        <span>v{version}</span>
+        <span className="inline-flex items-center gap-1">
+          {updateAvailable ? (
+            <span>Update</span>
+          ) : (
+            <span>{normalizedVersion}</span>
+          )}
+        </span>
       )}
     </Button>
+  );
+
+  return (
+    <Tooltip delayDuration={updateAvailable ? updateVersionTooltipDelayMs : passiveVersionTooltipDelayMs}>
+      <TooltipTrigger asChild>
+        {releaseButton}
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        sideOffset={6}
+        className="cad-glass-popover w-fit max-w-[calc(100vw-1rem)] border border-border bg-popover p-2 text-left text-popover-foreground shadow-lg shadow-black/10"
+        arrowClassName="bg-popover fill-popover"
+      >
+        <div className="inline-flex max-w-full flex-col gap-3">
+          {latestVersionVisible ? (
+            <div className="grid w-full min-w-0 grid-cols-2 gap-3">
+              <VersionTooltipRow
+                label="Current Version"
+                version={normalizedVersion}
+              />
+              <VersionTooltipRow
+                label="Latest Version"
+                version={latestVersion}
+                action={latestReleaseUrl ? (
+                  <Button
+                    asChild
+                    variant="default"
+                    size="xs"
+                    className="h-4 !min-h-0 rounded-sm !px-1.5 !py-0 text-[10px] font-medium leading-none"
+                    aria-label={`Update CAD Viewer to ${latestVersion}`}
+                  >
+                    <a href={latestReleaseUrl} target="_blank" rel="noreferrer">
+                      Update
+                    </a>
+                  </Button>
+                ) : null}
+              />
+            </div>
+          ) : (
+            <VersionTooltipRow
+              label="Current Version"
+              version={normalizedVersion}
+            />
+          )}
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <div className="px-0.5 text-[11px] font-medium leading-none text-muted-foreground">Update Command</div>
+            <div className="flex h-8 min-w-0 items-center gap-2 rounded-sm border border-border/60 bg-muted/35 p-1 pl-2">
+              <code className="min-w-0 flex-1 whitespace-nowrap font-mono text-[11px] leading-5 text-foreground">
+                {installCommand}
+              </code>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-border text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                aria-label={installCopyStatus === "copied" ? "Install command copied" : "Copy install command"}
+                onPointerDown={handleCopyInstallCommand}
+                onClick={handleCopyInstallCommand}
+              >
+                {installCopyStatus === "copied" ? (
+                  <Check className="size-3" aria-hidden="true" />
+                ) : (
+                  <Copy className="size-3" aria-hidden="true" />
+                )}
+              </Button>
+            </div>
+          </div>
+          {installCopyStatus === "failed" ? (
+            <div className="text-[11px] text-muted-foreground">Copy failed</div>
+          ) : null}
+          {upToDate ? (
+            <div className="flex items-center gap-1.5 px-0.5 text-[11px] font-medium text-muted-foreground">
+              <CircleCheck className="size-3 text-primary" aria-hidden="true" />
+              <span>You are up to date</span>
+            </div>
+          ) : null}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -760,6 +1119,7 @@ export default function CadWorkspaceTopBar({
   canCopyFileAssetPaths = false,
   fileAccessBusyKey = "",
   onDownloadFileAsset,
+  onExportImplicitFile,
   onRevealFileAsset,
   onRevealInExplorerView,
   onCopyFileAssetReference,
@@ -768,6 +1128,25 @@ export default function CadWorkspaceTopBar({
   onToggleFileSheet,
   navigationAvailable = true
 }) {
+  const viewerVersion = String(viewerPackage.version || "").trim();
+  const githubUrl = normalizeViewerGithubUrl(import.meta.env?.VIEWER_GITHUB_URL);
+  const releaseUrl = viewerGithubReleaseUrl(viewerVersion, githubUrl);
+  const latestReleaseUrl = viewerGithubLatestReleaseUrl(githubUrl);
+  const latestReleaseApiUrl = previewMode ? "" : viewerGithubLatestReleaseApiUrl(githubUrl);
+  const mockLatestVersion = import.meta.env.DEV
+    ? String(import.meta.env?.VIEWER_MOCK_LATEST_VERSION || "").trim()
+    : "";
+  const mockLatestReleaseUrl = mockLatestVersion
+    ? viewerGithubReleaseUrl(mockLatestVersion, githubUrl)
+    : "";
+  const releaseCheck = useViewerLatestReleaseCheck({
+    currentVersion: viewerVersion,
+    latestReleaseApiUrl,
+    latestReleaseUrl,
+    mockLatestVersion,
+    mockLatestReleaseUrl
+  });
+
   if (previewMode) {
     return null;
   }
@@ -792,8 +1171,6 @@ export default function CadWorkspaceTopBar({
   const fileSheetToggleLabel = fileSheetOpen
     ? `Collapse ${fileSheetLabel(fileSheetKind)}`
     : `Expand ${fileSheetLabel(fileSheetKind)}`;
-  const githubUrl = normalizeViewerGithubUrl(import.meta.env?.VIEWER_GITHUB_URL);
-  const releaseUrl = viewerGithubReleaseUrl(viewerPackage.version, githubUrl);
   const showThemeColorModeToggle = themeSettingsSupportsSystemColorMode(themeSettings);
   const activeColorSchemeMode = resolvedColorSchemeMode === DARK_COLOR_SCHEME_ID
     ? DARK_COLOR_SCHEME_ID
@@ -854,6 +1231,7 @@ export default function CadWorkspaceTopBar({
                   canCopyFileAssetPaths={canCopyFileAssetPaths}
                   fileAccessBusyKey={fileAccessBusyKey}
                   onDownloadFileAsset={onDownloadFileAsset}
+                  onExportImplicitFile={onExportImplicitFile}
                   onRevealFileAsset={onRevealFileAsset}
                   onRevealInExplorerView={onRevealInExplorerView}
                   onCopyFileAssetReference={onCopyFileAssetReference}
@@ -885,6 +1263,7 @@ export default function CadWorkspaceTopBar({
                       canCopyFileAssetPaths={canCopyFileAssetPaths}
                       fileAccessBusyKey={fileAccessBusyKey}
                       onDownloadFileAsset={onDownloadFileAsset}
+                      onExportImplicitFile={onExportImplicitFile}
                       onRevealFileAsset={onRevealFileAsset}
                       onCopyFileAssetReference={onCopyFileAssetReference}
                       title={selectedFileTitle}
@@ -910,6 +1289,7 @@ export default function CadWorkspaceTopBar({
                       canCopyFileAssetPaths={canCopyFileAssetPaths}
                       fileAccessBusyKey={fileAccessBusyKey}
                       onDownloadFileAsset={onDownloadFileAsset}
+                      onExportImplicitFile={onExportImplicitFile}
                       onRevealFileAsset={onRevealFileAsset}
                       onRevealInExplorerView={onRevealInExplorerView}
                       onCopyFileAssetReference={onCopyFileAssetReference}
@@ -929,71 +1309,77 @@ export default function CadWorkspaceTopBar({
         <div className="min-w-0 flex-1" />
       )}
 
-      <div className="flex shrink-0 items-center gap-0.5">
-        <VersionReleaseLink releaseUrl={releaseUrl} />
-        {githubUrl ? (
-          <Button
-            asChild
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Open GitHub repository"
-            title="Open GitHub repository"
-            className={topBarIconButtonClasses}
-          >
-            <a href={githubUrl} target="_blank" rel="noreferrer">
-              <GitHubMark className={topBarIconClasses} />
-            </a>
-          </Button>
-        ) : null}
+      <TooltipProvider delayDuration={250}>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <VersionReleaseLink
+            version={viewerVersion}
+            releaseUrl={releaseUrl}
+            releaseCheck={releaseCheck}
+          />
+          {githubUrl ? (
+            <Button
+              asChild
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Open GitHub repository"
+              title="Open GitHub repository"
+              className={topBarIconButtonClasses}
+            >
+              <a href={githubUrl} target="_blank" rel="noreferrer">
+                <GitHubMark className={topBarIconClasses} />
+              </a>
+            </Button>
+          ) : null}
 
-        <ThemePresetDropdown
-          themePresets={themePresets}
-          themeSettings={themeSettings}
-          themePresetId={themePresetId}
-          updateThemeSettings={updateThemeSettings}
-          handleResetThemeSettings={handleResetThemeSettings}
-          handleSaveCustomThemePreset={handleSaveCustomThemePreset}
-          handleUpdateThemePresetSettings={handleUpdateThemePresetSettings}
-          handleDeleteCustomThemePreset={handleDeleteCustomThemePreset}
-          handleEditThemePreset={handleEditThemePreset}
-          handleResetThemePresetToDefault={handleResetThemePresetToDefault}
-          handleRestoreDefaultThemePresets={handleRestoreDefaultThemePresets}
-          triggerClassName={topBarIconButtonClasses}
-          iconClassName={topBarIconClasses}
-        />
+          <ThemePresetDropdown
+            themePresets={themePresets}
+            themeSettings={themeSettings}
+            themePresetId={themePresetId}
+            updateThemeSettings={updateThemeSettings}
+            handleResetThemeSettings={handleResetThemeSettings}
+            handleSaveCustomThemePreset={handleSaveCustomThemePreset}
+            handleUpdateThemePresetSettings={handleUpdateThemePresetSettings}
+            handleDeleteCustomThemePreset={handleDeleteCustomThemePreset}
+            handleEditThemePreset={handleEditThemePreset}
+            handleResetThemePresetToDefault={handleResetThemePresetToDefault}
+            handleRestoreDefaultThemePresets={handleRestoreDefaultThemePresets}
+            triggerClassName={topBarIconButtonClasses}
+            iconClassName={topBarIconClasses}
+          />
 
-        {showThemeColorModeToggle ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={colorModeToggleLabel}
-            title={colorModeToggleLabel}
-            disabled={typeof onColorSchemePreferenceChange !== "function"}
-            onClick={handleThemeColorModeToggle}
-            className={topBarIconButtonClasses}
-          >
-            <ColorModeIcon className={topBarIconClasses} />
-            <span className="sr-only">{colorModeToggleLabel}</span>
-          </Button>
-        ) : null}
+          {showThemeColorModeToggle ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={colorModeToggleLabel}
+              title={colorModeToggleLabel}
+              disabled={typeof onColorSchemePreferenceChange !== "function"}
+              onClick={handleThemeColorModeToggle}
+              className={topBarIconButtonClasses}
+            >
+              <ColorModeIcon className={topBarIconClasses} />
+              <span className="sr-only">{colorModeToggleLabel}</span>
+            </Button>
+          ) : null}
 
-        {showFileSheetToggle ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={fileSheetToggleLabel}
-            title={fileSheetToggleLabel}
-            aria-pressed={fileSheetOpen}
-            onClick={onToggleFileSheet}
-            className={`${topBarIconButtonClasses} ${fileSheetOpen ? activeIconButtonClasses : ""}`}
-          >
-            <SlidersHorizontal className={topBarIconClasses} />
-            <span className="sr-only">{fileSheetToggleLabel}</span>
-          </Button>
-        ) : null}
-      </div>
+          {showFileSheetToggle ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={fileSheetToggleLabel}
+              title={fileSheetToggleLabel}
+              aria-pressed={fileSheetOpen}
+              onClick={onToggleFileSheet}
+              className={`${topBarIconButtonClasses} ${fileSheetOpen ? activeIconButtonClasses : ""}`}
+            >
+              <SlidersHorizontal className={topBarIconClasses} />
+              <span className="sr-only">{fileSheetToggleLabel}</span>
+            </Button>
+          ) : null}
+        </div>
+      </TooltipProvider>
     </header>
   );
 }

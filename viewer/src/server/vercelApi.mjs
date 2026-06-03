@@ -94,6 +94,7 @@ export async function handleHostedCadApi(req, res, {
 
   const originalUrl = req.url || "/";
   const originalRequestUrl = new URL(originalUrl, "http://localhost");
+  originalRequestUrl.searchParams.delete("dir");
   req.url = `${normalizedCadPath}${originalRequestUrl.search}`;
   try {
     const middleware = createCadViewerApiMiddleware({

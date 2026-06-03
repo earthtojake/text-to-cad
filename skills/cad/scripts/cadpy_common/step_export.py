@@ -102,7 +102,6 @@ def export_xcaf_doc_step_scene(
     label: str | None = None,
     originating_system: str = "build123d",
     text_to_cad_entry_kind: str | None = None,
-    source_fingerprint: str | None = None,
     source_hash: str | None = None,
     logger: object | None = None,
 ) -> LoadedStepScene:
@@ -112,7 +111,6 @@ def export_xcaf_doc_step_scene(
         label=label,
         originating_system=originating_system,
         text_to_cad_entry_kind=text_to_cad_entry_kind,
-        source_fingerprint=source_fingerprint,
         source_hash=source_hash,
         logger=logger,
     )
@@ -131,7 +129,6 @@ def write_xcaf_doc_step_file(
     label: str | None = None,
     originating_system: str = "build123d",
     text_to_cad_entry_kind: str | None = None,
-    source_fingerprint: str | None = None,
     source_hash: str | None = None,
     logger: object | None = None,
 ) -> str:
@@ -189,7 +186,6 @@ def write_xcaf_doc_step_file(
             inject_text_to_cad_step_metadata(
                 output_path,
                 entry_kind=text_to_cad_entry_kind,
-                source_fingerprint=source_fingerprint,
                 source_hash=source_hash,
             )
     return step_file_hash(output_path)

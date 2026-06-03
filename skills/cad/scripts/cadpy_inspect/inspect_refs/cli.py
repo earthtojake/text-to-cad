@@ -17,35 +17,20 @@ if __package__ in {None, ""}:
     from cadpy_common.package_path import ensure_cadpy_package_path
 
     ensure_cadpy_package_path()
-    from cadpy_inspect.inspect_refs.inspect import (
-        CadRefError,
-        cad_path_from_target,
-        cad_ref_error_payload,
-        diff_entry_targets,
-        entry_target_from_target,
-        inspect_target_frame,
-        inspect_cad_refs,
-        mate_targets,
-        measure_targets,
-    )
 else:
-    from .inspect import (
-        CadRefError,
-        cad_path_from_target,
-        cad_ref_error_payload,
-        diff_entry_targets,
-        entry_target_from_target,
-        inspect_target_frame,
-        inspect_cad_refs,
-        mate_targets,
-        measure_targets,
-    )
-
     from cadpy_common.package_path import ensure_cadpy_package_path
 
     ensure_cadpy_package_path()
 
 from cadpy.cli_logging import CliLogger
+
+
+def _inspect_api():
+    if __package__ in {None, ""}:
+        from cadpy_inspect.inspect_refs import inspect
+    else:
+        from . import inspect
+    return inspect
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -225,9 +210,10 @@ def _add_plane_report_arguments(
 
 
 def run_refs(args: argparse.Namespace) -> int:
+    inspect = _inspect_api()
     try:
         text = _read_input_text(args)
-        result = inspect_cad_refs(
+        result = inspect.inspect_cad_refs(
             text,
             detail=bool(args.detail),
             include_topology=bool(args.topology),
@@ -238,11 +224,11 @@ def run_refs(args: argparse.Namespace) -> int:
             plane_min_area_ratio=float(args.plane_min_area_ratio),
             plane_limit=int(args.plane_limit),
         )
-    except CadRefError as exc:
+    except inspect.CadRefError as exc:
         result = {
             "ok": False,
             "tokens": [],
-            "errors": [cad_ref_error_payload(exc)],
+            "errors": [inspect.cad_ref_error_payload(exc)],
         }
 
     _emit_result(args, result, _format_refs_text)
@@ -250,8 +236,9 @@ def run_refs(args: argparse.Namespace) -> int:
 
 
 def run_diff(args: argparse.Namespace) -> int:
+    inspect = _inspect_api()
     try:
-        result = diff_entry_targets(
+        result = inspect.diff_entry_targets(
             args.left,
             args.right,
             planes=bool(args.planes),
@@ -259,12 +246,12 @@ def run_diff(args: argparse.Namespace) -> int:
             plane_min_area_ratio=float(args.plane_min_area_ratio),
             plane_limit=int(args.plane_limit),
         )
-    except CadRefError as exc:
+    except inspect.CadRefError as exc:
         result = {
             "ok": False,
             "left": {"cadPath": _safe_cad_path(args.left)},
             "right": {"cadPath": _safe_cad_path(args.right)},
-            "errors": [cad_ref_error_payload(exc)],
+            "errors": [inspect.cad_ref_error_payload(exc)],
         }
 
     _emit_result(args, result, _format_diff_text)
@@ -272,13 +259,14 @@ def run_diff(args: argparse.Namespace) -> int:
 
 
 def run_frame(args: argparse.Namespace) -> int:
+    inspect = _inspect_api()
     try:
-        result = inspect_target_frame(args.target)
-    except CadRefError as exc:
+        result = inspect.inspect_target_frame(args.target)
+    except inspect.CadRefError as exc:
         result = {
             "ok": False,
             "target": args.target,
-            "errors": [cad_ref_error_payload(exc)],
+            "errors": [inspect.cad_ref_error_payload(exc)],
         }
 
     _emit_result(args, result, _format_frame_text)
@@ -286,14 +274,15 @@ def run_frame(args: argparse.Namespace) -> int:
 
 
 def run_measure(args: argparse.Namespace) -> int:
+    inspect = _inspect_api()
     try:
-        result = measure_targets(args.from_target, args.to_target, axis=args.axis)
-    except CadRefError as exc:
+        result = inspect.measure_targets(args.from_target, args.to_target, axis=args.axis)
+    except inspect.CadRefError as exc:
         result = {
             "ok": False,
             "from": args.from_target,
             "to": args.to_target,
-            "errors": [cad_ref_error_payload(exc)],
+            "errors": [inspect.cad_ref_error_payload(exc)],
         }
 
     _emit_result(args, result, _format_measure_text)
@@ -301,20 +290,21 @@ def run_measure(args: argparse.Namespace) -> int:
 
 
 def run_mate(args: argparse.Namespace) -> int:
+    inspect = _inspect_api()
     try:
-        result = mate_targets(
+        result = inspect.mate_targets(
             args.moving,
             args.target,
             mode=args.mode,
             offset=float(args.offset),
             axis=args.axis,
         )
-    except CadRefError as exc:
+    except inspect.CadRefError as exc:
         result = {
             "ok": False,
             "moving": args.moving,
             "target": args.target,
-            "errors": [cad_ref_error_payload(exc)],
+            "errors": [inspect.cad_ref_error_payload(exc)],
         }
 
     _emit_result(args, result, _format_mate_text)
@@ -385,9 +375,10 @@ def inspect_command_result(argv: Sequence[str]) -> tuple[int, dict[str, object]]
     try:
         if args.command == "refs":
             if not args.inputs and not args.input_file:
-                raise CadRefError("No input text provided.")
+                raise _inspect_api().CadRefError("No input text provided.")
             text = _read_input_text(args)
-            result = inspect_cad_refs(
+            inspect = _inspect_api()
+            result = inspect.inspect_cad_refs(
                 text,
                 detail=bool(args.detail),
                 include_topology=bool(args.topology),
@@ -399,7 +390,8 @@ def inspect_command_result(argv: Sequence[str]) -> tuple[int, dict[str, object]]
                 plane_limit=int(args.plane_limit),
             )
         elif args.command == "diff":
-            result = diff_entry_targets(
+            inspect = _inspect_api()
+            result = inspect.diff_entry_targets(
                 args.left,
                 args.right,
                 planes=bool(args.planes),
@@ -408,11 +400,11 @@ def inspect_command_result(argv: Sequence[str]) -> tuple[int, dict[str, object]]
                 plane_limit=int(args.plane_limit),
             )
         elif args.command == "frame":
-            result = inspect_target_frame(args.target)
+            result = _inspect_api().inspect_target_frame(args.target)
         elif args.command == "measure":
-            result = measure_targets(args.from_target, args.to_target, axis=args.axis)
+            result = _inspect_api().measure_targets(args.from_target, args.to_target, axis=args.axis)
         elif args.command == "mate":
-            result = mate_targets(
+            result = _inspect_api().mate_targets(
                 args.moving,
                 args.target,
                 mode=args.mode,
@@ -420,9 +412,9 @@ def inspect_command_result(argv: Sequence[str]) -> tuple[int, dict[str, object]]
                 axis=args.axis,
             )
         else:
-            raise CadRefError(f"Unsupported inspect command: {args.command}")
-    except CadRefError as exc:
-        result = {"ok": False, "errors": [cad_ref_error_payload(exc)]}
+            raise _inspect_api().CadRefError(f"Unsupported inspect command: {args.command}")
+    except _inspect_api().CadRefError as exc:
+        result = {"ok": False, "errors": [_inspect_api().cad_ref_error_payload(exc)]}
     except Exception as exc:
         result = {"ok": False, "errors": [_exception_error_payload(exc)]}
     return (0 if bool(result.get("ok")) else 2), result
@@ -439,8 +431,9 @@ def _system_exit_result(exc: SystemExit, *, stderr: str = "") -> tuple[int, dict
 
 
 def _exception_error_payload(exc: Exception) -> dict[str, object]:
-    if isinstance(exc, CadRefError):
-        return cad_ref_error_payload(exc)
+    inspect = _inspect_api()
+    if isinstance(exc, inspect.CadRefError):
+        return inspect.cad_ref_error_payload(exc)
     return {
         "type": type(exc).__name__,
         "message": str(exc),
@@ -587,34 +580,36 @@ def _format_errors(result: dict[str, object]) -> str:
 
 
 def _read_input_text(args: argparse.Namespace) -> str:
+    inspect = _inspect_api()
     raw_inputs = [str(value) for value in getattr(args, "inputs", ()) if str(value).strip()]
     input_sources = sum(1 for source in (args.input_file, raw_inputs) if source)
     if input_sources > 1:
-        raise CadRefError("Pass either positional refs/targets or --input-file, not both.")
+        raise inspect.CadRefError("Pass either positional refs/targets or --input-file, not both.")
 
     if raw_inputs:
         lines: list[str] = []
         for raw_input in raw_inputs:
-            parsed = entry_target_from_target(raw_input)
+            parsed = inspect.entry_target_from_target(raw_input)
             lines.append(parsed.token)
         text = "\n".join(lines)
     elif args.input_file:
         try:
             text = args.input_file.read_text(encoding="utf-8")
         except OSError as exc:
-            raise CadRefError(f"Failed to read input file: {args.input_file}") from exc
+            raise inspect.CadRefError(f"Failed to read input file: {args.input_file}") from exc
     else:
         text = sys.stdin.read()
 
     if not str(text).strip():
-        raise CadRefError("No input text provided.")
+        raise inspect.CadRefError("No input text provided.")
     return text
 
 
 def _safe_cad_path(target: str) -> str:
+    inspect = _inspect_api()
     try:
-        return cad_path_from_target(target)
-    except CadRefError:
+        return inspect.cad_path_from_target(target)
+    except inspect.CadRefError:
         return str(target)
 
 
@@ -626,8 +621,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with logger.timed(command_label):
             return int(args.handler(args))
-    except CadRefError as exc:
-        _emit_result(args, {"ok": False, "errors": [cad_ref_error_payload(exc)]}, _format_errors)
+    except _inspect_api().CadRefError as exc:
+        _emit_result(args, {"ok": False, "errors": [_inspect_api().cad_ref_error_payload(exc)]}, _format_errors)
         return 2
 
 

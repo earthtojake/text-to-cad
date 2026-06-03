@@ -1,3 +1,0 @@
---editable ./scripts/packages/cadpy
-ezdxf
-playwright

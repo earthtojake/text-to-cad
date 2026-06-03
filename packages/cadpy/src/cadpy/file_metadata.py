@@ -7,19 +7,16 @@ from pathlib import Path
 TEXT_TO_CAD_METADATA_PREFIX = "cadpy:"
 TEXT_TO_CAD_SOURCE_PATH_KEY = "sourcePath"
 TEXT_TO_CAD_SOURCE_HASH_KEY = "sourceHash"
-TEXT_TO_CAD_SOURCE_FINGERPRINT_KEY = "sourceFingerprint"
 
 
 def text_to_cad_identity_metadata(
     *,
     source_path: str,
     source_hash: str,
-    source_fingerprint: str,
 ) -> dict[str, str]:
     return {
         TEXT_TO_CAD_SOURCE_PATH_KEY: source_path,
         TEXT_TO_CAD_SOURCE_HASH_KEY: source_hash,
-        TEXT_TO_CAD_SOURCE_FINGERPRINT_KEY: source_fingerprint,
     }
 
 

@@ -95,6 +95,33 @@ function legacyCadAssetFileRef(requestUrl, req) {
   return siblingFileRef(requestFileRef(refererUrl), relativePath);
 }
 
+function readJsonBody(req, { limitBytes = 256 * 1024 } = {}) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.setEncoding?.("utf8");
+    req.on("data", (chunk) => {
+      body += chunk;
+      if (Buffer.byteLength(body) > limitBytes) {
+        reject(new Error("Request body is too large"));
+        req.destroy?.();
+      }
+    });
+    req.on("error", reject);
+    req.on("end", () => {
+      const text = body.trim();
+      if (!text) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(text));
+      } catch {
+        reject(new Error("Request body must be valid JSON"));
+      }
+    });
+  });
+}
+
 function fileAssetRequest(backend, requestUrl, {
   rootDir,
   catalog,
@@ -370,6 +397,64 @@ export function createCadViewerApiMiddleware({
       }
       return;
     }
+    if (requestUrl.pathname === "/__cad/implicit-export") {
+      const method = String(req.method || "GET").toUpperCase();
+      if (method !== "POST") {
+        res.setHeader("allow", "POST");
+        sendJson(res, 405, {
+          error: "Use POST to export implicit CAD files",
+        });
+        return;
+      }
+      if (
+        backend.kind !== "local-fs" ||
+        typeof backend.generateImplicitExport !== "function" ||
+        typeof backend.resolveRoot !== "function"
+      ) {
+        sendJson(res, 405, {
+          error: "Implicit CAD export is only available for the local filesystem backend",
+        });
+        return;
+      }
+      try {
+        const body = await readJsonBody(req);
+        const catalog = await backend.readCatalog({ rootDir: activeRootDir, fileRef: activeFileRef });
+        const resolvedRoot = typeof backend.resolveRequestRoot === "function"
+          ? backend.resolveRequestRoot({ rootDir: activeRootDir, fileRef: activeFileRef })
+          : backend.resolveRoot(activeRootDir);
+        const format = requestUrl.searchParams.get("format") || body.format || "glb";
+        const result = await backend.generateImplicitExport({
+          fileRef: activeFileRef || body.file,
+          format,
+          parameterValues: body.parameterValues || body.params || null,
+          animationState: body.animationState || body.implicitAnimationState || null,
+          resolution: body.resolution,
+          maxCells: body.maxCells,
+          resolvedRoot,
+          rootDir: activeRootDir,
+          catalog,
+        });
+        onCatalogChanged(resolvedRoot);
+        sendJson(res, 200, {
+          ok: true,
+          result,
+          entry: result.entry || null,
+          catalog: result.catalog || (
+            typeof backend.refreshCatalog === "function"
+              ? await backend.refreshCatalog({ rootDir: activeRootDir, fileRef: activeFileRef })
+              : await backend.readCatalog({ rootDir: activeRootDir, fileRef: activeFileRef })
+          ),
+          downloadUrl: `/__cad/download?dir=${encodeURIComponent(activeRootDir)}&file=${encodeURIComponent(result.outputFileRef)}&asset=output`,
+          filename: result.filename,
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok: false,
+          error: errorMessage(error),
+        });
+      }
+      return;
+    }
     if (requestUrl.pathname === "/__cad/step-source-status") {
       if (typeof backend.readStepSourceStatus !== "function") {
         sendJson(res, 501, {
@@ -414,30 +499,14 @@ export function createCadViewerApiMiddleware({
         });
         return;
       }
+      if (typeof backend.resolveRoot !== "function") {
+        sendJson(res, 501, {
+          error: "STEP artifact generation requires a local filesystem CAD Viewer backend",
+        });
+        return;
+      }
       try {
         const catalog = await backend.readCatalog({ rootDir: activeRootDir, fileRef: activeFileRef });
-        if (typeof backend.resolveRoot !== "function") {
-          const result = await backend.generateStepArtifact({
-            fileRef: activeFileRef,
-            force: requestUrl.searchParams.get("force") === "1",
-            rootDir: activeRootDir,
-            catalog,
-          });
-          const nextCatalog = result?.catalog || (
-            typeof backend.refreshCatalog === "function"
-              ? await backend.refreshCatalog({ rootDir: activeRootDir, fileRef: activeFileRef })
-              : await backend.readCatalog({ rootDir: activeRootDir, fileRef: activeFileRef })
-          );
-          sendJson(res, result?.ok ? 200 : 500, {
-            ok: Boolean(result?.ok),
-            error: result?.ok ? "" : String(result?.error || "STEP artifact generation failed."),
-            result: result?.result ?? result,
-            entry: result?.entry ?? null,
-            catalog: nextCatalog,
-          });
-          return;
-        }
-
         const resolvedRoot = typeof backend.resolveRequestRoot === "function"
           ? backend.resolveRequestRoot({ rootDir: activeRootDir, fileRef: activeFileRef })
           : backend.resolveRoot(activeRootDir);

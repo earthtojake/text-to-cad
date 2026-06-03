@@ -156,8 +156,7 @@ test("file metadata includes a local open action for Python-generated files", ()
     source: {
       file: "models/robots/tom/base_clamp.py",
       sourcePath: "models/robots/tom/base_clamp.py",
-      sourceHash: "7fe65652f2cea885534dc08b69b8ca69bc6d5677f007778e0fdd088428b3bd3e",
-      sourceFingerprint: "748818359d381d88ae902cd1b301163f3c5885f62863cf8f75b71ceeadc8ea96"
+      sourceHash: "7fe65652f2cea885534dc08b69b8ca69bc6d5677f007778e0fdd088428b3bd3e"
     }
   }, {
     includeFileOpenActions: true,
@@ -173,8 +172,6 @@ test("file metadata includes a local open action for Python-generated files", ()
   assert.equal(sourceRow.asset?.asset, "source");
   assert.equal(rowByLabel(groups, "Source hash").displayValue, "7fe65652f2ce...28b3bd3e");
   assert.equal(rowByLabel(groups, "Source hash").copyValue, "7fe65652f2cea885534dc08b69b8ca69bc6d5677f007778e0fdd088428b3bd3e");
-  assert.equal(rowByLabel(groups, "Fingerprint").displayValue, "748818359d38...adc8ea96");
-  assert.equal(rowByLabel(groups, "Fingerprint").copyValue, "748818359d381d88ae902cd1b301163f3c5885f62863cf8f75b71ceeadc8ea96");
 });
 
 test("file metadata lists module and relation catalog data", () => {
@@ -212,13 +209,13 @@ test("file metadata can suppress dynamic source and artifact status while genera
     sourceKind: "python",
     sourceStatus: {
       status: "stale",
-      currentHash: "new-fingerprint"
+      currentHash: "new-hash"
     },
     artifact: {
-      error: "stale_source_identity",
+      error: "stale_step_artifact",
       artifactHash: "old-hash",
       currentHash: "new-hash",
-      message: "Generated GLB doesn't match the hash of the Python generator script."
+      message: "Generated GLB doesn't match the hash of the STEP file."
     }
   }, {
     includePythonSource: true,

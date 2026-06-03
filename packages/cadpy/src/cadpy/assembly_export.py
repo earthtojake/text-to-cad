@@ -2,7 +2,6 @@ from __future__ import annotations
 import copy
 from contextlib import nullcontext
 import hashlib
-import json
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -40,7 +39,6 @@ from cadpy.step_scene import (
 
 
 GIT_LFS_POINTER_PREFIX = b"version https://git-lfs.github.com/spec/v1\n"
-ASSEMBLY_SOURCE_FINGERPRINT_VERSION = 1
 
 
 @dataclass
@@ -328,129 +326,6 @@ def _cached_source_color_for_cad_ref(cad_ref: str, *, cache: _AssemblyBuildCache
         color = cache.resolver.source_color_for_cad_ref(cad_ref)
         cache.source_colors[cad_ref] = None if color is None else tuple(float(value) for value in color)
     return cache.source_colors[cad_ref]
-
-
-def _fingerprint_color(color: object) -> list[float] | None:
-    if color is None:
-        return None
-    return [float(value) for value in color]
-
-
-def _fingerprint_transform(transform: tuple[float, ...]) -> list[float]:
-    return [float(value) for value in transform]
-
-
-def assembly_source_fingerprint(
-    assembly_spec: AssemblySpec,
-    *,
-    output_label: str | None = None,
-    text_to_cad_entry_kind: str | None = "assembly",
-    resolver: "_AssemblyCatalogResolver | None" = None,
-) -> str:
-    resolver = resolver or _AssemblyCatalogResolver()
-    root_source = resolver.source_for_path(assembly_spec.assembly_path)
-    root_source_ref = (
-        root_source.source_ref
-        if root_source is not None
-        else _relative_to_repo(assembly_spec.assembly_path)
-    )
-    file_hashes: dict[Path, str] = {}
-
-    def file_hash(path: Path) -> str:
-        resolved = path.resolve()
-        cached = file_hashes.get(resolved)
-        if cached is None:
-            cached = _file_sha256(resolved)
-            file_hashes[resolved] = cached
-        return cached
-
-    def entry_payload(entry: CatalogEntry, *, use_source_colors: bool, stack: tuple[str, ...]) -> dict[str, object]:
-        payload: dict[str, object] = {
-            "kind": entry.kind,
-            "cadRef": entry.cad_ref,
-            "sourceRef": entry.source_ref,
-            "useSourceColors": bool(use_source_colors),
-            "sourceColor": _fingerprint_color(
-                resolver.source_color_for_cad_ref(entry.cad_ref) if use_source_colors else None
-            ),
-        }
-        if entry.kind == "assembly":
-            if entry.assembly_spec is None:
-                raise RuntimeError(f"Assembly source {entry.source_ref} is missing assembly spec data")
-            stack_key = entry.source_ref
-            if stack_key in stack:
-                cycle = " -> ".join((*stack, stack_key))
-                raise RuntimeError(f"Assembly cycle detected while fingerprinting: {cycle}")
-            payload["children"] = nodes_payload(
-                assembly_spec_children(entry.assembly_spec),
-                parent_use_source_colors=use_source_colors,
-                stack=(*stack, stack_key),
-            )
-            return payload
-        if entry.step_path is None:
-            raise RuntimeError(f"Part source {entry.source_ref} is missing STEP source path")
-        payload["stepPath"] = _relative_to_repo(entry.step_path)
-        payload["stepHash"] = file_hash(entry.step_path)
-        return payload
-
-    def node_payload(
-        node: AssemblyNodeSpec,
-        *,
-        parent_use_source_colors: bool,
-        stack: tuple[str, ...],
-    ) -> dict[str, object]:
-        use_source_colors = parent_use_source_colors and node.use_source_colors
-        payload: dict[str, object] = {
-            "instanceId": node.instance_id,
-            "name": node.name,
-            "transform": _fingerprint_transform(node.transform),
-            "useSourceColors": bool(use_source_colors),
-        }
-        if node.children:
-            payload["children"] = nodes_payload(
-                node.children,
-                parent_use_source_colors=use_source_colors,
-                stack=stack,
-            )
-            return payload
-        if node.source_path is None or node.path is None:
-            raise RuntimeError(f"Assembly node {node.instance_id} is missing a STEP source path")
-        child_entry = resolver.entry_for_path(node.source_path)
-        if child_entry is None:
-            raise RuntimeError(f"Assembly node {node.instance_id} references missing CAD source {node.path}")
-        payload["path"] = node.path
-        payload["sourcePath"] = _relative_to_repo(node.source_path)
-        payload["entry"] = entry_payload(child_entry, use_source_colors=use_source_colors, stack=stack)
-        return payload
-
-    def nodes_payload(
-        nodes: Sequence[AssemblyNodeSpec],
-        *,
-        parent_use_source_colors: bool,
-        stack: tuple[str, ...],
-    ) -> list[dict[str, object]]:
-        return [
-            node_payload(
-                node,
-                parent_use_source_colors=parent_use_source_colors,
-                stack=stack,
-            )
-            for node in nodes
-        ]
-
-    payload = {
-        "version": ASSEMBLY_SOURCE_FINGERPRINT_VERSION,
-        "entryKind": text_to_cad_entry_kind,
-        "outputLabel": output_label or "",
-        "rootSourceRef": root_source_ref,
-        "children": nodes_payload(
-            assembly_spec_children(assembly_spec),
-            parent_use_source_colors=True,
-            stack=(root_source_ref,),
-        ),
-    }
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def _clear_shape_colors(shape: object) -> None:
@@ -965,6 +840,7 @@ class _DirectXcafAssemblyWriter:
             return definition_label
         definition_label = self.shape_tool.AddShape(_topods_shape_without_location(shape.wrapped), False)
         self.shape_definitions[key] = definition_label
+        self._set_label_name(definition_label, getattr(shape, "label", None))
         self._set_label_color(definition_label, getattr(shape, "color", None))
         return definition_label
 
@@ -984,7 +860,6 @@ def export_direct_assembly_step_scene(
     *,
     text_to_cad_entry_kind: str | None = "assembly",
     source_path: str | None = None,
-    source_fingerprint: str | None = None,
     source_hash: str | None = None,
     resolver: _AssemblyCatalogResolver | None = None,
     logger: object | None = None,
@@ -1001,7 +876,6 @@ def export_direct_assembly_step_scene(
             originating_system="tom-cad direct XCAF assembly",
             text_to_cad_entry_kind=text_to_cad_entry_kind,
             source_path=source_path,
-            source_fingerprint=source_fingerprint,
             source_hash=source_hash,
             logger=logger,
         )
@@ -1051,7 +925,6 @@ def export_assembly_step_scene(
     *,
     text_to_cad_entry_kind: str | None = "assembly",
     source_path: str | None = None,
-    source_fingerprint: str | None = None,
     source_hash: str | None = None,
     resolver: _AssemblyCatalogResolver | None = None,
     logger: object | None = None,
@@ -1062,7 +935,6 @@ def export_assembly_step_scene(
             output_path,
             text_to_cad_entry_kind=text_to_cad_entry_kind,
             source_path=source_path,
-            source_fingerprint=source_fingerprint,
             source_hash=source_hash,
             resolver=resolver,
             logger=logger,

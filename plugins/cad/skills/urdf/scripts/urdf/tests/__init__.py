@@ -1,1 +1,0 @@
-"""URDF script tests."""

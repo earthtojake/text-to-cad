@@ -2,11 +2,13 @@ import {
   ArrowUpFromLine,
   Bot,
   Boxes,
+  ChevronDown,
   ChevronRight,
   Code,
   Cuboid,
   DraftingCompass,
   FileBox,
+  FolderOpen,
   Layers3,
   LoaderCircle,
   Package,
@@ -18,6 +20,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger
 } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
@@ -64,6 +72,7 @@ const ENTRY_ICON_COMPONENTS = {
   [ENTRY_ICON_KIND.ASSEMBLY]: Boxes,
   [ENTRY_ICON_KIND.DXF]: DraftingCompass,
   [ENTRY_ICON_KIND.GCODE]: Route,
+  [ENTRY_ICON_KIND.IMPLICIT]: Code,
   [ENTRY_ICON_KIND.ROBOT]: Bot,
   [ENTRY_ICON_KIND.STEP_PART]: Package,
   [ENTRY_ICON_KIND.STL_MESH]: Cuboid,
@@ -93,6 +102,7 @@ function FileEntryButton({
   canCopyFileAssetPaths = false,
   fileAccessBusyKey = "",
   onDownloadFileAsset,
+  onExportImplicitFile,
   onRevealFileAsset,
   onRevealInExplorerView,
   onCopyFileAssetReference,
@@ -173,6 +183,7 @@ function FileEntryButton({
       canCopyFileAssetPaths={canCopyFileAssetPaths}
       busyKey={fileAccessBusyKey}
       onDownloadFileAsset={onDownloadFileAsset}
+      onExportImplicitFile={onExportImplicitFile}
       onRevealFileAsset={onRevealFileAsset}
       onRevealInExplorerView={onRevealInExplorerView}
       onCopyFileAssetReference={onCopyFileAssetReference}
@@ -203,6 +214,7 @@ function DirectoryNode({
   canCopyFileAssetPaths = false,
   fileAccessBusyKey = "",
   onDownloadFileAsset,
+  onExportImplicitFile,
   onRevealFileAsset,
   onRevealInExplorerView,
   onCopyFileAssetReference,
@@ -270,6 +282,7 @@ function DirectoryNode({
                     canCopyFileAssetPaths={canCopyFileAssetPaths}
                     fileAccessBusyKey={fileAccessBusyKey}
                     onDownloadFileAsset={onDownloadFileAsset}
+                    onExportImplicitFile={onExportImplicitFile}
                     onRevealFileAsset={onRevealFileAsset}
                     onRevealInExplorerView={onRevealInExplorerView}
                     onCopyFileAssetReference={onCopyFileAssetReference}
@@ -297,6 +310,7 @@ function DirectoryNode({
                     canCopyFileAssetPaths={canCopyFileAssetPaths}
                     fileAccessBusyKey={fileAccessBusyKey}
                     onDownloadFileAsset={onDownloadFileAsset}
+                    onExportImplicitFile={onExportImplicitFile}
                     onRevealFileAsset={onRevealFileAsset}
                     onRevealInExplorerView={onRevealInExplorerView}
                     onCopyFileAssetReference={onCopyFileAssetReference}
@@ -334,6 +348,107 @@ function SidebarResizeHandle({ onStartResize }) {
   );
 }
 
+function workspaceLabelForOption(option) {
+  const rootName = String(option?.rootName || "").trim();
+  if (rootName) {
+    return rootName;
+  }
+  const pathLabel = String(option?.rootPath || option?.dir || "").trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+  return pathLabel.split("/").filter(Boolean).pop() || pathLabel || "Workspace";
+}
+
+function workspacePathLabelForOption(option) {
+  return String(option?.rootPath || option?.dir || "").trim();
+}
+
+function normalizeWorkspaceOptions(options) {
+  const seen = new Set();
+  const result = [];
+  for (const option of Array.isArray(options) ? options : []) {
+    const dir = String(option?.dir || "").trim();
+    const rootPath = String(option?.rootPath || "").trim();
+    const key = rootPath || dir;
+    if (!dir || !key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push({
+      dir,
+      rootPath,
+      rootName: String(option?.rootName || "").trim()
+    });
+  }
+  return result;
+}
+
+function WorkspaceSwitcher({
+  workspaceOptions = [],
+  activeWorkspaceDir = "",
+  onSelectWorkspace
+}) {
+  const options = normalizeWorkspaceOptions(workspaceOptions);
+  if (options.length <= 1) {
+    return null;
+  }
+
+  const activeDir = String(activeWorkspaceDir || "").trim();
+  const activeOption = options.find((option) => option.dir === activeDir || option.rootPath === activeDir) || options[0];
+  const activeLabel = workspaceLabelForOption(activeOption);
+  const activePathLabel = workspacePathLabelForOption(activeOption);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 w-full justify-between gap-2 rounded-md p-2 text-xs font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          title={activePathLabel || activeLabel}
+        >
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+              <FolderOpen className="size-4 text-muted-foreground" />
+            </span>
+            <span className="min-w-0 truncate">{activeLabel}</span>
+          </span>
+          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width] max-w-[min(28rem,calc(100vw-1rem))]">
+        {options.map((option) => {
+          const label = workspaceLabelForOption(option);
+          const pathLabel = workspacePathLabelForOption(option);
+          const active = option.dir === activeOption.dir || option.rootPath === activeOption.rootPath;
+          return (
+            <DropdownMenuItem
+              key={option.rootPath || option.dir}
+              className={cn(
+                "min-w-0 items-start gap-2 text-xs",
+                active && "bg-accent text-accent-foreground"
+              )}
+              onSelect={() => {
+                if (typeof onSelectWorkspace === "function" && option.dir !== activeOption.dir) {
+                  onSelectWorkspace(option.dir);
+                }
+              }}
+              title={pathLabel || label}
+            >
+              <FolderOpen className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{label}</span>
+                {pathLabel ? (
+                  <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{pathLabel}</span>
+                ) : null}
+              </span>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function FileViewerContents({
   query,
   onQueryChange,
@@ -357,12 +472,16 @@ function FileViewerContents({
   canCopyFileAssetPaths = false,
   fileAccessBusyKey = "",
   onDownloadFileAsset,
+  onExportImplicitFile,
   onRevealFileAsset,
   onRevealInExplorerView,
   onCopyFileAssetReference,
   catalogHydrated = false,
   catalogRefreshing = false,
   catalogError = "",
+  workspaceOptions = [],
+  activeWorkspaceDir = "",
+  onSelectWorkspace,
   resizable = true,
   onStartResize
 }) {
@@ -374,7 +493,12 @@ function FileViewerContents({
 
   return (
     <>
-      <SidebarHeader>
+      <SidebarHeader className="gap-2">
+        <WorkspaceSwitcher
+          workspaceOptions={workspaceOptions}
+          activeWorkspaceDir={activeWorkspaceDir}
+          onSelectWorkspace={onSelectWorkspace}
+        />
         <SidebarInput
           type="search"
           placeholder="Search files, ids, or paths..."
@@ -416,6 +540,7 @@ function FileViewerContents({
                           canCopyFileAssetPaths={canCopyFileAssetPaths}
                           fileAccessBusyKey={fileAccessBusyKey}
                           onDownloadFileAsset={onDownloadFileAsset}
+                          onExportImplicitFile={onExportImplicitFile}
                           onRevealFileAsset={onRevealFileAsset}
                           onRevealInExplorerView={onRevealInExplorerView}
                           onCopyFileAssetReference={onCopyFileAssetReference}
@@ -442,6 +567,7 @@ function FileViewerContents({
                           canCopyFileAssetPaths={canCopyFileAssetPaths}
                           fileAccessBusyKey={fileAccessBusyKey}
                           onDownloadFileAsset={onDownloadFileAsset}
+                          onExportImplicitFile={onExportImplicitFile}
                           onRevealFileAsset={onRevealFileAsset}
                           onRevealInExplorerView={onRevealInExplorerView}
                           onCopyFileAssetReference={onCopyFileAssetReference}
@@ -492,12 +618,16 @@ export default function FileViewerSidebar({
   canCopyFileAssetPaths = false,
   fileAccessBusyKey = "",
   onDownloadFileAsset,
+  onExportImplicitFile,
   onRevealFileAsset,
   onRevealInExplorerView,
   onCopyFileAssetReference,
   catalogHydrated = false,
   catalogRefreshing = false,
   catalogError = "",
+  workspaceOptions = [],
+  activeWorkspaceDir = "",
+  onSelectWorkspace,
   resizable = true,
   onStartResize
 }) {
@@ -531,12 +661,16 @@ export default function FileViewerSidebar({
       canCopyFileAssetPaths={canCopyFileAssetPaths}
       fileAccessBusyKey={fileAccessBusyKey}
       onDownloadFileAsset={onDownloadFileAsset}
+      onExportImplicitFile={onExportImplicitFile}
       onRevealFileAsset={onRevealFileAsset}
       onRevealInExplorerView={onRevealInExplorerView}
       onCopyFileAssetReference={onCopyFileAssetReference}
       catalogHydrated={catalogHydrated}
       catalogRefreshing={catalogRefreshing}
       catalogError={catalogError}
+      workspaceOptions={workspaceOptions}
+      activeWorkspaceDir={activeWorkspaceDir}
+      onSelectWorkspace={onSelectWorkspace}
       resizable={resizable}
       onStartResize={onStartResize}
     />

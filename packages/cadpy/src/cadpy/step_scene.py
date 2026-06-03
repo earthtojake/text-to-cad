@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import hashlib
 import json
 import math
 import os
@@ -75,6 +74,7 @@ from cadpy.glb_topology import (
 )
 from cadpy.metadata import DEFAULT_MESH_ANGULAR_TOLERANCE, DEFAULT_MESH_TOLERANCE, MeshSettings
 from cadpy.selector_types import SelectorBundle, SelectorProfile
+from cadpy.step_hash import step_file_hash
 
 
 REPO_ROOT = Path.cwd().resolve()
@@ -108,7 +108,6 @@ class LoadedStepScene:
     source_kind: str = "step"
     source_path: str | None = None
     source_hash: str | None = None
-    source_fingerprint: str | None = None
     mesh_signature: tuple[float, float, bool] | None = None
     glb_mesh_payloads: dict[tuple[object, ...], Any] = field(default_factory=dict)
     export_shape: Any | None = None
@@ -1966,15 +1965,7 @@ def _artifact_relative_manifest_path(raw_path: str, artifact_dir: Path) -> str:
 
 
 def _step_hash(step_path: Path) -> str:
-    digest = hashlib.sha256()
-    with step_path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def step_file_hash(step_path: Path) -> str:
-    return _step_hash(step_path.expanduser().resolve())
+    return step_file_hash(step_path)
 
 
 def _normalize_selector_options(options: SelectorOptions | None) -> SelectorOptions:
@@ -2567,12 +2558,12 @@ def extract_selectors_from_scene(
         source_hash = str(getattr(scene, "source_hash", "") or "").strip()
         if source_hash:
             manifest["sourceHash"] = source_hash
-        source_fingerprint = str(getattr(scene, "source_fingerprint", "") or "").strip()
-        if source_fingerprint:
-            manifest["sourceFingerprint"] = source_fingerprint
         manifest["generatedAt"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    else:
-        manifest["stepHash"] = _scene_step_hash(scene)
+    step_hash = str(getattr(scene, "step_hash", "") or "").strip()
+    if not step_hash and scene.step_path.is_file():
+        step_hash = _scene_step_hash(scene)
+    if step_hash:
+        manifest["stepHash"] = step_hash
 
     if profile != SelectorProfile.SUMMARY:
         if profile == SelectorProfile.ARTIFACT:

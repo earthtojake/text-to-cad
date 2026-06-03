@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import hashlib
 import json
 import math
 import os
@@ -75,6 +74,7 @@ from cadpy_common.glb_topology import (
 )
 from cadpy_common.metadata import DEFAULT_MESH_ANGULAR_TOLERANCE, DEFAULT_MESH_TOLERANCE, MeshSettings
 from cadpy_common.selector_types import SelectorBundle, SelectorProfile
+from cadpy_common.step_hash import step_file_hash
 
 
 REPO_ROOT = Path.cwd().resolve()
@@ -1948,15 +1948,7 @@ def _relative_step_path(step_path: Path) -> str:
 
 
 def _step_hash(step_path: Path) -> str:
-    digest = hashlib.sha256()
-    with step_path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def step_file_hash(step_path: Path) -> str:
-    return _step_hash(step_path.expanduser().resolve())
+    return step_file_hash(step_path)
 
 
 def _normalize_selector_options(options: SelectorOptions | None) -> SelectorOptions:
@@ -2549,7 +2541,7 @@ def extract_selectors_from_scene(
         if source_hash:
             manifest["sourceHash"] = source_hash
         manifest["generatedAt"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    else:
+    if scene.step_path.is_file():
         manifest["stepHash"] = _scene_step_hash(scene)
 
     if profile != SelectorProfile.SUMMARY:

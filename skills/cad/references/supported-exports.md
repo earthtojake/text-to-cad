@@ -70,9 +70,9 @@ Files:
 - GLB: /absolute/project/models/meshes/bracket.glb
 
 CAD Viewer:
-- STEP: http://127.0.0.1:4178/?dir=/absolute/project/models&file=/absolute/project/models/bracket.step
-- STL: http://127.0.0.1:4178/?dir=/absolute/project/models&file=/absolute/project/models/meshes/bracket.stl
-- GLB: http://127.0.0.1:4178/?dir=/absolute/project/models&file=/absolute/project/models/meshes/bracket.glb
+- STEP: http://127.0.0.1:4178/?dir=/absolute/project/models&file=bracket.step
+- STL: http://127.0.0.1:4178/?dir=/absolute/project/models&file=meshes/bracket.stl
+- GLB: http://127.0.0.1:4178/?dir=/absolute/project/models&file=meshes/bracket.glb
 
 Validation:
 - STEP geometry validated; STL/3MF/native GLB generated as requested sidecars.

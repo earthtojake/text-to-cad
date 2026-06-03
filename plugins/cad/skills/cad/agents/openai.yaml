@@ -1,4 +1,0 @@
-interface:
-  display_name: "CAD"
-  short_description: "Generate and validate CAD artifacts."
-  default_prompt: "Use $cad to create, regenerate, inspect, and validate explicit CAD files and @cad references, handing supported outputs to $cad-viewer when available."

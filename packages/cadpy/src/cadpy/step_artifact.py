@@ -115,7 +115,6 @@ def _result_payload(
     glb_path: Path,
     step_hash: str | None = None,
     source_hash: str | None = None,
-    source_fingerprint: str | None = None,
     stats: dict[str, object] | None = None,
     load_elapsed_ms: float | None = None,
     skipped: bool = False,
@@ -134,8 +133,6 @@ def _result_payload(
         payload["stepHash"] = step_hash
     if source_hash:
         payload["sourceHash"] = source_hash
-    if source_fingerprint:
-        payload["sourceFingerprint"] = source_fingerprint
     if load_elapsed_ms is not None:
         payload["loadElapsedMs"] = round(load_elapsed_ms, 1)
     if skipped:
@@ -146,13 +143,15 @@ def _result_payload(
 def _generated_result_payload(spec: EntrySpec, scene: LoadedStepScene, stats: dict[str, object] | None = None) -> dict[str, object]:
     glb_path = part_glb_path(spec.step_path)
     source_kind = str(getattr(scene, "source_kind", "step") or "step").strip().lower()
+    step_hash = str(getattr(scene, "step_hash", "") or "").strip()
+    if not step_hash and spec.step_path is not None and spec.step_path.is_file():
+        step_hash = step_file_hash(spec.step_path)
     return _result_payload(
         spec,
         entry_kind=spec.kind,
         source_kind=source_kind,
-        step_hash=step_file_hash(spec.step_path) if source_kind != "python" else None,
+        step_hash=step_hash or None,
         source_hash=getattr(scene, "source_hash", None) if source_kind == "python" else None,
-        source_fingerprint=getattr(scene, "source_fingerprint", None) if source_kind == "python" else None,
         glb_path=glb_path,
         stats=stats,
         load_elapsed_ms=scene.load_elapsed * 1000.0,
@@ -164,7 +163,6 @@ def _existing_result_payload(spec: EntrySpec, artifact: StepTopologyArtifact) ->
     source_kind = str(artifact.manifest.get("sourceKind") or "step").strip().lower()
     step_hash = str(artifact.manifest.get("stepHash") or "")
     source_hash = str(artifact.manifest.get("sourceHash") or "")
-    source_fingerprint = str(artifact.manifest.get("sourceFingerprint") or "")
     if source_kind != "python" and not step_hash:
         step_hash = step_file_hash(spec.step_path)
     stats = artifact.manifest.get("stats")
@@ -174,7 +172,6 @@ def _existing_result_payload(spec: EntrySpec, artifact: StepTopologyArtifact) ->
         source_kind=source_kind,
         step_hash=step_hash or None,
         source_hash=source_hash or None,
-        source_fingerprint=source_fingerprint or None,
         glb_path=artifact.glb_path,
         stats=stats if isinstance(stats, dict) else {},
         skipped=True,
@@ -186,11 +183,6 @@ def _write_step_after_artifact(spec: EntrySpec, scene: LoadedStepScene, *, logge
         raise RuntimeError(f"Cannot write STEP after GLB artifact; scene has no XCAF document: {spec.step_path}")
     source_hash = (
         str(getattr(scene, "source_hash", "") or "").strip()
-        if str(getattr(scene, "source_kind", "") or "").strip().lower() == "python"
-        else ""
-    )
-    source_fingerprint = (
-        str(getattr(scene, "source_fingerprint", "") or "").strip()
         if str(getattr(scene, "source_kind", "") or "").strip().lower() == "python"
         else ""
     )
@@ -206,7 +198,6 @@ def _write_step_after_artifact(spec: EntrySpec, scene: LoadedStepScene, *, logge
         originating_system="tom-cad direct XCAF assembly" if spec.kind == "assembly" else "build123d",
         text_to_cad_entry_kind=spec.kind,
         source_path=source_path or None,
-        source_fingerprint=source_fingerprint or None,
         source_hash=source_hash or None,
         logger=logger,
     )
@@ -327,12 +318,6 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
     glb_path = part_glb_path(step_path)
-    if not args.force:
-        existing_artifact = _current_artifact_for_spec(existing_spec)
-        if existing_artifact is not None:
-            print(json.dumps(_existing_result_payload(existing_spec, existing_artifact), separators=(",", ":")))
-            return 0
-
     if bool(args.skip_step_write):
         scene = run_script_generator(
             existing_spec,
@@ -345,6 +330,9 @@ def main(argv: list[str] | None = None) -> int:
         if scene is None:
             raise RuntimeError(f"Python generator did not produce a STEP scene: {existing_spec.source_ref}")
         spec = existing_spec
+        if bool(args.write_step_after_artifact):
+            step_hash = _write_step_after_artifact(spec, scene, logger=logger)
+            scene.step_hash = step_hash
     else:
         with logger.timed(f"load STEP {relative_to_repo(step_path)}"):
             scene = load_step_scene(step_path)
@@ -368,38 +356,7 @@ def main(argv: list[str] | None = None) -> int:
     stats = result.selector_bundle.manifest.get("stats") if result.selector_bundle is not None else {}
     payload = _generated_result_payload(spec, scene, stats if isinstance(stats, dict) else {})
     if bool(args.write_step_after_artifact):
-        print(json.dumps({**payload, "stepWrite": {"status": "pending"}}, separators=(",", ":")), flush=True)
-        try:
-            step_hash = _write_step_after_artifact(spec, scene, logger=logger)
-        except Exception as exc:
-            print(
-                json.dumps(
-                    {
-                        **payload,
-                        "stepWrite": {
-                            "status": "error",
-                            "error": str(exc),
-                        },
-                    },
-                    separators=(",", ":"),
-                ),
-                flush=True,
-            )
-            raise
-        print(
-            json.dumps(
-                {
-                    **payload,
-                    "stepHash": step_hash,
-                    "stepWrite": {
-                        "status": "complete",
-                        "stepHash": step_hash,
-                    },
-                },
-                separators=(",", ":"),
-            ),
-            flush=True,
-        )
+        print(json.dumps({**payload, "stepWrite": {"status": "complete", "stepHash": payload.get("stepHash", "")}}, separators=(",", ":")))
     else:
         print(json.dumps(payload, separators=(",", ":")))
     logger.total()

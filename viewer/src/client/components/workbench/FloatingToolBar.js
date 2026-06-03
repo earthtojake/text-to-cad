@@ -34,6 +34,7 @@ function DesktopFloatingToolBar({
   viewerLoading,
   selectedMeshData,
   selectedDxfData,
+  selectedImplicitModel,
   drawingToolOptions,
   drawingTool,
   handleSelectDrawingTool,
@@ -48,10 +49,12 @@ function DesktopFloatingToolBar({
   handleScreenshotDownload
 }) {
   const dxfMode = renderFormat === RENDER_FORMAT.DXF;
+  const implicitMode = renderFormat === RENDER_FORMAT.IMPLICIT;
   const urdfMode = renderFormat === RENDER_FORMAT.URDF;
   const robotMode = isRobotRenderFormat(renderFormat);
   const meshOnlyMode = isMeshRenderFormat(renderFormat);
-  const captureDisabled = viewerLoading || (dxfMode ? !selectedDxfData : !selectedMeshData);
+  const renderReady = implicitMode ? !!selectedImplicitModel : dxfMode ? !!selectedDxfData : !!selectedMeshData;
+  const captureDisabled = viewerLoading || !renderReady;
   const selectDisabled = viewerLoading ||
     !selectedMeshData ||
     referenceSelectionPending ||
@@ -67,7 +70,7 @@ function DesktopFloatingToolBar({
     >
       <TooltipProvider delayDuration={250}>
         <div className={`pointer-events-auto inline-flex w-fit items-center gap-1 self-end rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
-          {!dxfMode && !robotMode && !meshOnlyMode ? (
+          {!dxfMode && !implicitMode && !robotMode && !meshOnlyMode ? (
             <>
               <ToolbarButton
                 label={selectLabel}
@@ -107,7 +110,7 @@ function DesktopFloatingToolBar({
             <ToolbarButton
               label="Open orbit preview"
               onClick={handleEnterPreviewMode}
-              disabled={viewerLoading || !selectedMeshData}
+              disabled={viewerLoading || !renderReady}
             >
               <Play className="size-3.5" strokeWidth={2} aria-hidden="true" />
             </ToolbarButton>

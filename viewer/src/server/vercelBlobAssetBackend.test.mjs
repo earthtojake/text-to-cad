@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
 
 import {
@@ -125,7 +123,8 @@ test("Vercel Blob backend reads catalog and writes deterministic asset paths", a
     token: "test-token",
   });
 
-  assert.equal(backend.canGenerateStepArtifacts, true);
+  assert.equal(backend.canGenerateStepArtifacts, false);
+  assert.equal("generateStepArtifact" in backend, false);
   assert.deepEqual(await backend.readCatalog(), {
     schemaVersion: 4,
     url: "https://blob.test/catalog.json",
@@ -141,86 +140,6 @@ test("Vercel Blob backend reads catalog and writes deterministic asset paths", a
   assert.equal(putCalls[0].options.addRandomSuffix, false);
   assert.equal(putCalls[0].options.allowOverwrite, true);
   assert.equal(putCalls[0].options.access, "public");
-});
-
-test("Vercel Blob backend can regenerate STEP artifacts from Blob storage", async () => {
-  const stepBytes = Buffer.from("ISO-10303-21;\nEND-ISO-10303-21;\n");
-  const catalog = {
-    schemaVersion: 4,
-    entries: [
-      {
-        file: "benchmarks/part.step",
-        kind: "part",
-        url: "https://blob.test/demo/benchmarks/.part.step.glb",
-        hash: "",
-        bytes: 0,
-        artifact: {
-          ok: false,
-          error: "missing_edge_topology",
-        },
-      },
-    ],
-  };
-  const putCalls = [];
-  const backend = createVercelBlobAssetBackend({
-    prefix: "demo",
-    client: {
-      list: async ({ prefix }) => ({
-        blobs: prefix === "demo/benchmarks/part.step"
-          ? [{ pathname: prefix, url: "https://blob.test/demo/benchmarks/part.step" }]
-          : [],
-      }),
-      put: async (pathname, body, options) => {
-        putCalls.push({ pathname, body, options });
-        return { pathname, url: `https://blob.test/${pathname}` };
-      },
-    },
-    fetchImpl: async (url) => {
-      assert.equal(url, "https://blob.test/demo/benchmarks/part.step");
-      return {
-        ok: true,
-        arrayBuffer: async () => stepBytes.buffer.slice(stepBytes.byteOffset, stepBytes.byteOffset + stepBytes.byteLength),
-      };
-    },
-    artifactCompiler: async ({ stepPath, force }) => {
-      assert.equal(force, true);
-      assert.equal(fs.readFileSync(stepPath, "utf-8"), stepBytes.toString("utf-8"));
-      const glbPath = path.join(path.dirname(stepPath), `.${path.basename(stepPath)}.glb`);
-      fs.writeFileSync(glbPath, Buffer.from("glb"));
-      return {
-        ok: true,
-        glbPath,
-        validation: {
-          ok: true,
-          glbPath: "models/benchmarks/.part.step.glb",
-          stepHash: "step-hash",
-        },
-      };
-    },
-    token: "test-token",
-  });
-
-  const result = await backend.generateStepArtifact({
-    fileRef: "benchmarks/part.step",
-    force: true,
-    catalog,
-  });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.entry.url, "https://blob.test/demo/benchmarks/.part.step.glb");
-  assert.equal(result.entry.hash.length, 64);
-  assert.equal(result.entry.bytes, 3);
-  assert.equal(result.entry.artifact, undefined);
-  assert.equal(result.entry.assets, undefined);
-  assert.equal(result.entry.step, undefined);
-  assert.equal(result.entry.stepArtifact, undefined);
-  assert.equal(result.catalog.entries[0], result.entry);
-  assert.equal(putCalls[0].pathname, "demo/benchmarks/.part.step.glb");
-  assert.equal(putCalls[0].options.contentType, "model/gltf-binary");
-  assert.equal(putCalls[0].options.allowOverwrite, true);
-  assert.equal(putCalls[1].pathname, "demo/catalog.json");
-  assert.equal(putCalls[1].options.contentType, "application/json; charset=utf-8");
-  assert.equal(putCalls[1].options.allowOverwrite, true);
 });
 
 test("Vercel Blob backend downloads STEP output files instead of generated GLB artifacts", async () => {
@@ -504,16 +423,11 @@ test("Vercel Blob backend refuses explicitly cataloged source code assets", asyn
   );
 });
 
-test("Vercel Blob backend can explicitly disable STEP artifact generation", async () => {
-  const backend = createVercelBlobAssetBackend({
-    stepArtifactGenerator: null,
-  });
+test("Vercel Blob backend never exposes STEP artifact generation", async () => {
+  const backend = createVercelBlobAssetBackend();
 
   assert.equal(backend.canGenerateStepArtifacts, false);
-  await assert.rejects(
-    () => backend.generateStepArtifact({ fileRef: "part.step" }),
-    /does not run local CAD generation/
-  );
+  assert.equal("generateStepArtifact" in backend, false);
 });
 
 test("Vercel Blob backend can be constructed read-only for hosted deployments", async () => {
@@ -536,40 +450,5 @@ test("Vercel Blob backend can be constructed read-only for hosted deployments", 
   assert.deepEqual(await backend.readCatalog(), {
     schemaVersion: 4,
     url: "https://blob.test/models2/catalog.json",
-  });
-});
-
-test("Vercel Blob backend can delegate STEP artifact generation to a worker hook", async () => {
-  const backend = createVercelBlobAssetBackend({
-    client: {
-      put: async (pathname) => ({ pathname, url: `https://blob.test/${pathname}` }),
-    },
-    fetchImpl: async () => ({
-      ok: true,
-      json: async () => ({ schemaVersion: 4, entries: [] }),
-    }),
-    stepArtifactGenerator: async ({ fileRef, writeAsset }) => {
-      const upload = await writeAsset({
-        fileRef: "models/.part.step.glb",
-        body: Buffer.from("glb"),
-        contentType: "model/gltf-binary",
-      });
-      return {
-        ok: true,
-        fileRef,
-        upload,
-      };
-    },
-    token: "test-token",
-  });
-
-  assert.equal(backend.canGenerateStepArtifacts, true);
-  assert.deepEqual(await backend.generateStepArtifact({ fileRef: "models/part.step" }), {
-    ok: true,
-    fileRef: "models/part.step",
-    upload: {
-      pathname: "models/.part.step.glb",
-      url: "https://blob.test/models/.part.step.glb",
-    },
   });
 });

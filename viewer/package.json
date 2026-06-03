@@ -2,9 +2,10 @@
   "name": "cad-viewer",
   "private": true,
   "type": "module",
-  "version": "0.1.12",
+  "version": "0.2.1",
   "scripts": {
     "dev": "vite dev",
+    "agent:start": "node scripts/start-agent-viewer.mjs",
     "serve": "node src/server/server.mjs",
     "upload:blob": "node scripts/upload-catalog-to-blob.mjs",
     "start": "node src/server/server.mjs",
@@ -12,10 +13,8 @@
     "moveit2:check": "moveit2_server/check-moveit2-server.sh",
     "moveit2:serve": "moveit2_server/run-moveit2-server.sh",
     "build": "vite build",
-    "python:build": "../scripts/build/build-viewer.sh",
-    "python:check": "../scripts/build/build-viewer.sh --check",
-    "runtime:build": "../scripts/build/build-cad-viewer-skill.sh",
-    "runtime:check": "../scripts/build/build-cad-viewer-skill.sh --check",
+    "runtime:bundle": "../scripts/bundle/bundle-skill.sh cad-viewer",
+    "runtime:check": "../scripts/bundle/bundle-skill.sh cad-viewer --check",
     "test": "node scripts/run-tests.mjs"
   },
   "dependencies": {
@@ -23,6 +22,7 @@
     "cadjs": "file:./packages/cadjs",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "implicitjs": "file:./packages/implicitjs",
     "lucide-react": "^1.8.0",
     "radix-ui": "^1.4.3",
     "react": "18.3.1",

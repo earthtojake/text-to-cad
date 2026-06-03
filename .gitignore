@@ -22,8 +22,11 @@ node_modules
 dist
 dist-verify
 coverage
-!skills/render/scripts/viewer/runtime/dist/
-!skills/render/scripts/viewer/runtime/dist/**
+
+# Production CAD Viewer runtime dist is committed on main. On dev,
+# skills/cad-viewer/scripts/viewer must stay a symlink to viewer/.
+!skills/cad-viewer/scripts/viewer/dist/
+!skills/cad-viewer/scripts/viewer/dist/**
 
 # Local model workspace and generated artifacts
 /models/

@@ -22,8 +22,8 @@ local source checkouts that import the package directly.
 The CAD skill's checked-in requirements install the generated, skill-local
 package copy under `skills/cad/scripts/packages/cadpy`. The root Viewer carries
 its generated copy under `viewer/packages/cadpy`. Refresh those copies with
-`scripts/build/build-cad-skill.sh` or `scripts/build/build-viewer.sh` after
-changing this package.
+`scripts/bundle/bundle-skill.sh cad` or `scripts/bundle/bundle-skill.sh cad-viewer`
+after changing this package.
 
 ## Production Bundling
 

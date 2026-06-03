@@ -233,7 +233,7 @@ packageJson.dependencies = {
   cadjs: "file:./packages/cadjs",
 };
 if (packageJson.scripts) {
-  delete packageJson.scripts["runtime:build"];
+  delete packageJson.scripts["runtime:bundle"];
   delete packageJson.scripts["runtime:check"];
 }
 writeJson("package.json", packageJson);
@@ -263,7 +263,7 @@ const pathReplacements = [
   ["npm --prefix viewer run upload:blob", "npm run upload:blob"],
   ["npm run build\nnpm run runtime:check", "npm run build"],
   [
-    "\nWhen changing Viewer source that feeds the cad-viewer skill runtime, refresh the\ngenerated runtime from the repository root:\n\n```bash\nscripts/build/build-cad-viewer-skill.sh\nscripts/build/build-cad-viewer-skill.sh --check\n```\n",
+    "\nWhen changing Viewer source that feeds the cad-viewer skill runtime, refresh the\ngenerated runtime from the repository root:\n\n```bash\nscripts/bundle/bundle-skill.sh cad-viewer\nscripts/bundle/bundle-skill.sh cad-viewer --check\n```\n",
     "\n",
   ],
   [

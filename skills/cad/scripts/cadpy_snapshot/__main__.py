@@ -1050,7 +1050,6 @@ class BatchSnapshotRenderer:
             self.browser = await self.playwright.chromium.launch(
                 headless=True,
                 timeout=RENDER_BROWSER_STARTUP_TIMEOUT_MS,
-                args=["--single-process"],
             )
             self.context = await self.browser.new_context(
                 viewport={"width": SIMPLE_RENDER_WIDTH, "height": SIMPLE_RENDER_HEIGHT},

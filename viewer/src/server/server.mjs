@@ -18,12 +18,12 @@ import {
   DEFAULT_VIEWER_PORT,
   buildViewerServerInfo,
   normalizeViewerPort,
-} from "cadjs/lib/viewerServerInfo.mjs";
+} from "./viewerServerInfo.mjs";
 import {
   normalizeViewerDefaultFile,
   normalizeViewerGithubUrl,
-} from "cadjs/lib/viewerConfig.mjs";
-import { resolveWorkspaceRoot } from "cadjs/lib/pathUtils.mjs";
+} from "../shared/viewerConfig.mjs";
+import { resolveWorkspaceRoot } from "./workspaceRoot.mjs";
 import {
   normalizeViewerAssetBackend,
   assertNoDeprecatedLocalRootEnv,
@@ -58,8 +58,8 @@ function readViewerPackageVersion(appRoot) {
 const viewerVersion = readViewerPackageVersion(viewerAppRoot);
 const localServerFeatures = [
   "dynamic-root",
-  "absolute-file-query",
-  "session-dir-cache",
+  "relative-dir-query",
+  "default-root-dir",
 ];
 let runtime;
 try {
@@ -73,6 +73,7 @@ if (runtime.args.help) {
   process.exit(0);
 }
 const runtimeEnv = runtime.env;
+const viewerGit = String(runtimeEnv.VIEWER_GIT || "").trim();
 try {
   assertNoDeprecatedLocalRootEnv(runtimeEnv);
 } catch (error) {
@@ -102,17 +103,48 @@ const backend = backendKind === VIEWER_ASSET_BACKENDS.VERCEL_BLOB
     });
 const localAssetBackendEnabled = backend.kind === "local-fs";
 const stepArtifactBackendEnabled = localAssetBackendEnabled && typeof backend.generateStepArtifact === "function";
+const activeDirectories = new Map();
+
+function trackActiveDirectory(resolvedRoot) {
+  const dir = String(resolvedRoot?.dir || "").trim();
+  const rootPath = String(resolvedRoot?.rootPath || "").trim();
+  if (!dir || !rootPath) {
+    return;
+  }
+  activeDirectories.set(rootPath, {
+    dir,
+    rootPath,
+    rootName: String(resolvedRoot?.rootName || path.basename(rootPath) || dir),
+  });
+}
+
+function activeDirectoryOptions({ rootDir = "" } = {}) {
+  const options = [...activeDirectories.values()];
+  const requestedRootDir = String(rootDir || "").trim();
+  if (requestedRootDir && !options.some((option) => option.dir === requestedRootDir)) {
+    options.push({ dir: requestedRootDir });
+  }
+  return options;
+}
+
+if (localAssetBackendEnabled) {
+  try {
+    trackActiveDirectory(backend.resolveRoot(""));
+  } catch (error) {
+    process.stderr.write(`Failed to activate default CAD Viewer workspace: ${error instanceof Error ? error.message : String(error)}\n`);
+  }
+}
 
 const middlewares = [
   createCadViewerApiMiddleware({
     backend,
     enableStepArtifactBackend: stepArtifactBackendEnabled,
     claimDisabledStepArtifactRoute: true,
-    serverInfo: ({ rootDir = "", fileRef = "" } = {}) => {
+    serverInfo: ({ rootDir = "" } = {}) => {
       if (!localAssetBackendEnabled) {
         return buildHostedViewerServerInfo({ backend, env: runtimeEnv, rootDir: "" });
       }
-      const infoRootDir = rootDir || (path.isAbsolute(String(fileRef || "")) ? path.dirname(path.resolve(fileRef)) : "");
+      const infoRootDir = rootDir || "";
       return buildViewerServerInfo({
         workspaceRoot,
         rootDir: infoRootDir,
@@ -122,8 +154,13 @@ const middlewares = [
         dynamicRoot: true,
         stepArtifactGenerationAvailable: stepArtifactBackendEnabled,
         viewerVersion,
+        git: viewerGit,
         serverFeatures: localServerFeatures,
+        activeDirectories: activeDirectoryOptions({ rootDir: infoRootDir }),
       });
+    },
+    onCatalogActivated: (resolvedRoot) => {
+      trackActiveDirectory(resolvedRoot);
     },
   }),
   ...(localAssetBackendEnabled ? [createLocalAssetMiddleware({ backend })] : []),

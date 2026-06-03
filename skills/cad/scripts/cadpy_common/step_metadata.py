@@ -7,7 +7,6 @@ from pathlib import Path
 TEXT_TO_CAD_GENERATOR = "cadpy"
 TEXT_TO_CAD_GENERATOR_PROPERTY = "cadpy:generator"
 TEXT_TO_CAD_ENTRY_KIND_PROPERTY = "cadpy:entryKind"
-TEXT_TO_CAD_SOURCE_FINGERPRINT_PROPERTY = "cadpy:sourceFingerprint"
 TEXT_TO_CAD_SOURCE_HASH_PROPERTY = "cadpy:sourceHash"
 TEXT_TO_CAD_METADATA_GROUP = "cadpy metadata"
 TEXT_TO_CAD_METADATA_TAIL_BYTES = 1024 * 1024
@@ -109,7 +108,6 @@ def inject_text_to_cad_step_metadata(
     *,
     entry_kind: str,
     generator: str = TEXT_TO_CAD_GENERATOR,
-    source_fingerprint: str | None = None,
     source_hash: str | None = None,
 ) -> None:
     normalized_entry_kind = normalize_text_to_cad_entry_kind(entry_kind)
@@ -121,7 +119,6 @@ def inject_text_to_cad_step_metadata(
         step_path,
         entry_kind=normalized_entry_kind,
         generator=generator,
-        source_fingerprint=source_fingerprint,
         source_hash=source_hash,
     ):
         return
@@ -137,8 +134,6 @@ def inject_text_to_cad_step_metadata(
         (TEXT_TO_CAD_GENERATOR_PROPERTY, generator),
         (TEXT_TO_CAD_ENTRY_KIND_PROPERTY, normalized_entry_kind),
     ]
-    if source_fingerprint:
-        properties.append((TEXT_TO_CAD_SOURCE_FINGERPRINT_PROPERTY, source_fingerprint))
     if source_hash:
         properties.append((TEXT_TO_CAD_SOURCE_HASH_PROPERTY, source_hash))
 
@@ -164,7 +159,6 @@ def _try_inject_text_to_cad_step_metadata_tail(
     *,
     entry_kind: str,
     generator: str,
-    source_fingerprint: str | None,
     source_hash: str | None,
 ) -> bool:
     tail_payload, offset, is_full_file = _read_step_tail_payload(step_path)
@@ -187,8 +181,6 @@ def _try_inject_text_to_cad_step_metadata_tail(
         (TEXT_TO_CAD_GENERATOR_PROPERTY, generator),
         (TEXT_TO_CAD_ENTRY_KIND_PROPERTY, entry_kind),
     ]
-    if source_fingerprint:
-        properties.append((TEXT_TO_CAD_SOURCE_FINGERPRINT_PROPERTY, source_fingerprint))
     if source_hash:
         properties.append((TEXT_TO_CAD_SOURCE_HASH_PROPERTY, source_hash))
     entities = _metadata_entities(
@@ -249,7 +241,6 @@ def read_text_to_cad_step_metadata_text(step_text: str) -> dict[str, str]:
         if property_name in {
             TEXT_TO_CAD_GENERATOR_PROPERTY,
             TEXT_TO_CAD_ENTRY_KIND_PROPERTY,
-            TEXT_TO_CAD_SOURCE_FINGERPRINT_PROPERTY,
             TEXT_TO_CAD_SOURCE_HASH_PROPERTY,
             "cadpy:entry_kind",
         }:
@@ -278,8 +269,6 @@ def read_text_to_cad_step_metadata_text(step_text: str) -> dict[str, str]:
             normalized_entry_kind = normalize_text_to_cad_entry_kind(value)
             if normalized_entry_kind is not None:
                 metadata["entryKind"] = normalized_entry_kind
-        elif property_name == TEXT_TO_CAD_SOURCE_FINGERPRINT_PROPERTY:
-            metadata["sourceFingerprint"] = value
         elif property_name == TEXT_TO_CAD_SOURCE_HASH_PROPERTY:
             metadata["sourceHash"] = value
     return metadata
@@ -295,7 +284,7 @@ def read_text_to_cad_step_metadata(step_path: Path) -> dict[str, str]:
     if (
         TEXT_TO_CAD_GENERATOR_PROPERTY not in tail_text
         and TEXT_TO_CAD_ENTRY_KIND_PROPERTY not in tail_text
-        and TEXT_TO_CAD_SOURCE_FINGERPRINT_PROPERTY not in tail_text
+        and TEXT_TO_CAD_SOURCE_HASH_PROPERTY not in tail_text
     ):
         return {}
     metadata = read_text_to_cad_step_metadata_text(tail_text)

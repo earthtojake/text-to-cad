@@ -13,7 +13,7 @@ import {
   isServedCadAsset,
   scanCadDirectory,
   VIEWER_SKIPPED_DIRECTORIES,
-} from "cadjs/lib/cadDirectoryScanner.mjs";
+} from "../src/server/catalog/cadDirectoryScanner.mjs";
 import {
   pathIsInsideOrEqual,
   toPosixPath,

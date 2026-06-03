@@ -2,9 +2,11 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger
 } from "@/components/ui/context-menu";
 import { fileAccessAssetsForEntry } from "@/workbench/fileAccessAssets";
+import { IMPLICIT_EXPORT_FORMATS } from "@/workbench/implicitExport";
 
 function ExplorerViewSection({
   entry,
@@ -105,6 +107,41 @@ function FileAccessSection({
   );
 }
 
+function ImplicitExportSection({
+  entry,
+  busyKey = "",
+  onExportImplicitFile
+}) {
+  if (
+    String(entry?.kind || "").trim().toLowerCase() !== "implicit" ||
+    typeof onExportImplicitFile !== "function"
+  ) {
+    return null;
+  }
+  const fileRef = String(entry?.file || entry?.id || "").trim();
+  return (
+    <>
+      <ContextMenuSeparator />
+      {IMPLICIT_EXPORT_FORMATS.map((format) => {
+        const upperFormat = format.toUpperCase();
+        const key = `${fileRef}:export:${format}`;
+        return (
+          <ContextMenuItem
+            key={format}
+            className="text-xs"
+            disabled={busyKey === key}
+            onSelect={() => {
+              onExportImplicitFile(entry, format);
+            }}
+          >
+            <span className="min-w-0 truncate">Export to {upperFormat}</span>
+          </ContextMenuItem>
+        );
+      })}
+    </>
+  );
+}
+
 export default function FileAccessContextMenu({
   entry,
   canRevealFileAssets = false,
@@ -112,6 +149,7 @@ export default function FileAccessContextMenu({
   canCopyFileAssetPaths = false,
   busyKey = "",
   onDownloadFileAsset,
+  onExportImplicitFile,
   onRevealFileAsset,
   onRevealInExplorerView,
   onCopyFileAssetReference,
@@ -119,12 +157,14 @@ export default function FileAccessContextMenu({
 }) {
   const revealInExplorerViewAvailable = entry && typeof onRevealInExplorerView === "function";
   const assetActionsAvailable = entry && typeof onDownloadFileAsset === "function";
-  if (!revealInExplorerViewAvailable && !assetActionsAvailable) {
+  const implicitExportAvailable = entry && typeof onExportImplicitFile === "function" &&
+    String(entry?.kind || "").trim().toLowerCase() === "implicit";
+  if (!revealInExplorerViewAvailable && !assetActionsAvailable && !implicitExportAvailable) {
     return children;
   }
 
   const assets = fileAccessAssetsForEntry(entry);
-  if (!revealInExplorerViewAvailable && !assets.output) {
+  if (!revealInExplorerViewAvailable && !assets.output && !implicitExportAvailable) {
     return children;
   }
 
@@ -154,6 +194,11 @@ export default function FileAccessContextMenu({
             onCopyFileAssetReference={onCopyFileAssetReference}
           />
         ) : null}
+        <ImplicitExportSection
+          entry={entry}
+          busyKey={busyKey}
+          onExportImplicitFile={onExportImplicitFile}
+        />
       </ContextMenuContent>
     </ContextMenu>
   );

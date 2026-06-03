@@ -10,7 +10,7 @@ from cadpy_common.assembly_spec import (
     assembly_spec_children,
     multiply_transforms,
 )
-from cadpy_common.glb import read_step_topology_manifest_from_glb
+from cadpy_common.glb_topology import read_step_topology_manifest_from_glb
 from cadpy_common.render import existing_part_glb_path, part_glb_path, relative_to_repo, sha256_file
 
 

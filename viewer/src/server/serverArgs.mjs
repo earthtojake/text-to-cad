@@ -30,10 +30,10 @@ export function parseServerArgs(argv = []) {
       continue;
     }
     if (arg.startsWith("--root-dir=")) {
-      throw new Error("--root-dir has been removed; pass an absolute ?dir= path in the Viewer URL.");
+      throw new Error("--root-dir has been removed; pass ?dir= in the Viewer URL.");
     }
     if (arg === "--root-dir") {
-      throw new Error("--root-dir has been removed; pass an absolute ?dir= path in the Viewer URL.");
+      throw new Error("--root-dir has been removed; pass ?dir= in the Viewer URL.");
     }
     if (arg.startsWith("--port=")) {
       options.port = parsePort(arg.slice("--port=".length), "--port");

@@ -11,6 +11,7 @@ export const FILE_SHEET_SECTION_IDS = Object.freeze({
   ROBOT_SDF: "sdf",
   ROBOT_MOTION: "motion",
   ROBOT_JOINTS: "joints",
+  IMPLICIT_GRAPHICS: "graphics",
   THEME_DISPLAY: "display",
   THEME_APPEARANCE: "appearance",
   FILE_METADATA: "metadata"
@@ -80,6 +81,14 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
         ...THEME_SECTION_IDS,
         FILE_SHEET_SECTION_IDS.FILE_METADATA
       ];
+    case "implicit":
+      return [
+        ...(options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : []),
+        ...(options.hasImplicitParameterPanel ? [FILE_SHEET_SECTION_IDS.STEP_PARAMETERS] : []),
+        FILE_SHEET_SECTION_IDS.IMPLICIT_GRAPHICS,
+        ...THEME_SECTION_IDS,
+        FILE_SHEET_SECTION_IDS.FILE_METADATA
+      ];
     default:
       return [];
   }
@@ -119,6 +128,11 @@ export function defaultOpenFileSheetSectionIds(kind, options = {}) {
     case "mesh":
       return [
         ...(options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : [])
+      ];
+    case "implicit":
+      return [
+        ...(options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : []),
+        ...(options.hasImplicitParameterPanel ? [FILE_SHEET_SECTION_IDS.STEP_PARAMETERS] : [])
       ];
     default:
       return [];

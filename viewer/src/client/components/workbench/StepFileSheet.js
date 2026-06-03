@@ -6,6 +6,7 @@ import {
   stepTreeNodeChildren
 } from "cadjs/lib/step/stepTree";
 import { resolveStepModuleNumberControlStep } from "@/workbench/stepModuleParameterControls";
+import { useStepAnimationElapsed } from "@/workbench/stepAnimationStore";
 import {
   Accordion
 } from "../ui/accordion";
@@ -108,6 +109,48 @@ function scrollTreeNodeIntoView(target) {
   if (targetRect.bottom > viewportRect.bottom) {
     viewport.scrollTop += targetRect.bottom - viewportRect.bottom;
   }
+}
+
+function StepModuleAnimationTimeControl({
+  animationState,
+  duration,
+  enabled,
+  onScrub
+}) {
+  const liveElapsedSec = useStepAnimationElapsed();
+  const rawElapsedSec = animationState?.playing
+    ? liveElapsedSec
+    : Number(animationState?.elapsedSec) || 0;
+  const elapsedSec = Math.min(Math.max(rawElapsedSec, 0), duration);
+
+  return (
+    <FileSheetSliderField
+      label="Time"
+      value={formatSeconds(elapsedSec)}
+      onValueCommit={(nextValue) => {
+        onScrub?.(parseFileSheetNumberInput(nextValue, {
+          fallback: elapsedSec,
+          min: 0,
+          max: duration
+        }));
+      }}
+      valueInputProps={{
+        disabled: !enabled,
+        ariaLabel: "STEP animation time value"
+      }}
+    >
+      <Slider
+        className={FILE_SHEET_PRECISION_SLIDER_CLASSES}
+        value={[elapsedSec]}
+        min={0}
+        max={duration}
+        step={0.01}
+        onValueChange={(nextValue) => onScrub?.(nextValue?.[0] ?? 0)}
+        disabled={!enabled}
+        aria-label="STEP animation time"
+      />
+    </FileSheetSliderField>
+  );
 }
 
 export default function StepFileSheet({
@@ -564,32 +607,12 @@ export default function StepFileSheet({
                         </Button>
                       </div>
                     </FileSheetControlRow>
-                    <FileSheetSliderField
-                      label="Time"
-                      value={formatSeconds(stepModuleAnimationState.elapsedSec)}
-                      onValueCommit={(nextValue) => {
-                        stepModule?.onAnimationScrub?.(parseFileSheetNumberInput(nextValue, {
-                          fallback: stepModuleAnimationState.elapsedSec,
-                          min: 0,
-                          max: stepModuleAnimationDuration
-                        }));
-                      }}
-                      valueInputProps={{
-                        disabled: !stepModuleEnabled,
-                        ariaLabel: "STEP animation time value"
-                      }}
-                    >
-                      <Slider
-                        className={FILE_SHEET_PRECISION_SLIDER_CLASSES}
-                        value={[Number(stepModuleAnimationState.elapsedSec) || 0]}
-                        min={0}
-                        max={stepModuleAnimationDuration}
-                        step={0.01}
-                        onValueChange={(nextValue) => stepModule?.onAnimationScrub?.(nextValue?.[0] ?? 0)}
-                        disabled={!stepModuleEnabled}
-                        aria-label="STEP animation time"
-                      />
-                    </FileSheetSliderField>
+                    <StepModuleAnimationTimeControl
+                      animationState={stepModuleAnimationState}
+                      duration={stepModuleAnimationDuration}
+                      enabled={stepModuleEnabled}
+                      onScrub={stepModule?.onAnimationScrub}
+                    />
                     <FileSheetSliderField
                       label="Speed"
                       value={`${formatControlNumber(stepModuleAnimationState.speed || 1)}x`}

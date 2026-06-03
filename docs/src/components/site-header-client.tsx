@@ -45,7 +45,7 @@ function VersionLink({ version }: { version: string }) {
       aria-label={`Open GitHub releases for version ${normalizedVersion}`}
       title={`Open GitHub releases for version ${normalizedVersion}`}
     >
-      v{normalizedVersion}
+      {normalizedVersion}
     </a>
   );
 }

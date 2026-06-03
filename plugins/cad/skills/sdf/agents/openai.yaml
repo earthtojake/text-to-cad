@@ -1,4 +1,0 @@
-interface:
-  display_name: "SDF"
-  short_description: "Generate and validate SDFormat robot models."
-  default_prompt: "Use $sdf to generate, update, and validate SDFormat/SDF robot or simulator models from Python sources, handing generated SDFs to $cad-viewer when available."

@@ -11,11 +11,11 @@ GLB/topology artifacts, and hosted Blob uploads are backend concerns; use
 
 Use query params only for shareable state that should survive copying a URL:
 
-- `file`: active catalog entry.
-- `dir`: absolute local filesystem directory to scan. The value is copied into
-  tab-local `sessionStorage` when present so future navigation can omit it.
-  Agent handoff links should still include `dir` explicitly on every returned
-  URL.
+- `file`: active catalog entry, always relative to the active `dir` workspace.
+- `dir`: local filesystem directory to scan. It may be absolute or relative to
+  the directory where the Viewer server was started. When omitted, the Viewer
+  uses the active workspace remembered for the tab, or the directory where the
+  server was started when that is the only active workspace.
 - `refs`: copied CAD references and selection targets.
 - `moveit2Ws`: explicit MoveIt2 websocket override for local or hosted sessions.
 
@@ -47,7 +47,7 @@ Current keys:
 
 ```text
 cad-viewer:workspace-session:v1
-__cadViewerDir
+cad-viewer:active-dir:v1
 ```
 
 Current `cad-viewer:workspace-session:v1` fields:
@@ -63,9 +63,9 @@ Current `cad-viewer:workspace-session:v1` fields:
   differs from the default.
 - `theme`: app-wide unsaved theme settings for the current tab. Saved theme
   presets and the active saved preset id still belong to `localStorage`.
-- `__cadViewerDir`: the last absolute `?dir=` value seen by the tab. This key is
-  deliberately global to the tab rather than per file so same-tab navigation can
-  continue using the same scanned directory during a review session.
+
+`cad-viewer:active-dir:v1` stores the tab's preferred workspace after a `?dir=`
+URL is loaded or a workspace is selected.
 
 Do not put selected-file state, model controls, drawing state, or
 generated-asset decisions in workspace session state. Those belong in per-file

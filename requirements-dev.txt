@@ -26,3 +26,4 @@ playwright
 networkx
 lxml
 pytest
+trimesh
