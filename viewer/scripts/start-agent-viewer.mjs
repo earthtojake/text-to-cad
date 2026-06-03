@@ -22,6 +22,7 @@ const startModes = new Set(["auto", "dev", "serve"]);
 const defaultAgentHost = "127.0.0.1";
 const defaultPortScanLimit = 64;
 const probeTimeoutMs = 350;
+const activationTimeoutMs = 30_000;
 
 function requiredValue(argv, index, flag) {
   const value = argv[index + 1];
@@ -55,10 +56,57 @@ function parsePositiveInteger(value, flag) {
   return parsed;
 }
 
-export function parseAgentStartArgs(argv = []) {
+export function normalizeAgentWorkspaceDir(value, { fsImpl = fs } = {}) {
+  const rawDir = String(value || "").trim();
+  if (!rawDir) {
+    throw new Error("agent:start requires --dir <absolute-workspace-directory>");
+  }
+  if (!path.isAbsolute(rawDir)) {
+    throw new Error("agent:start --dir must be an absolute path");
+  }
+  const resolvedDir = path.resolve(rawDir);
+  let stats = null;
+  try {
+    stats = fsImpl.statSync(resolvedDir);
+  } catch {
+    throw new Error(`agent:start --dir directory not found: ${resolvedDir}`);
+  }
+  if (!stats?.isDirectory?.()) {
+    throw new Error(`agent:start --dir is not a directory: ${resolvedDir}`);
+  }
+  return resolvedDir;
+}
+
+export function replaceForwardedDefaultRootDir(argv = [], rootDir) {
+  const normalizedRootDir = String(rootDir || "").trim();
+  const nextArgs = [];
+  let replaced = false;
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg.startsWith(`${defaultRootDirFlag}=`)) {
+      nextArgs.push(`${defaultRootDirFlag}=${normalizedRootDir}`);
+      replaced = true;
+      continue;
+    }
+    if (arg === defaultRootDirFlag) {
+      nextArgs.push(arg, normalizedRootDir);
+      replaced = true;
+      index += 1;
+      continue;
+    }
+    nextArgs.push(arg);
+  }
+  if (!replaced) {
+    nextArgs.push(defaultRootDirFlag, normalizedRootDir);
+  }
+  return nextArgs;
+}
+
+export function parseAgentStartArgs(argv = [], { fsImpl = fs } = {}) {
   const options = {
     startMode: "auto",
     forwardedArgs: [],
+    workspaceDir: "",
     shutdownAfterMs: null,
     portScanLimit: defaultPortScanLimit,
   };
@@ -98,6 +146,8 @@ export function parseAgentStartArgs(argv = []) {
     options.forwardedArgs.push(arg);
   }
 
+  options.workspaceDir = normalizeAgentWorkspaceDir(forwardedDefaultRootDir(options.forwardedArgs), { fsImpl });
+  options.forwardedArgs = replaceForwardedDefaultRootDir(options.forwardedArgs, options.workspaceDir);
   return options;
 }
 
@@ -363,57 +413,25 @@ function normalizeBaseUrl(host, port) {
   return `http://${host}:${port}`;
 }
 
+export function agentViewerUrl(baseUrl, workspaceDir) {
+  const url = new URL("/", String(baseUrl || "").endsWith("/") ? baseUrl : `${baseUrl}/`);
+  url.searchParams.set("dir", normalizeAgentWorkspaceDir(workspaceDir));
+  return url.toString();
+}
+
 function serverInfoGitAllowsReuse(serverInfo, git) {
   const currentGit = String(git || "");
   const serverGit = String(serverInfo?.git || "");
   return !currentGit || !serverGit || currentGit === serverGit;
 }
 
-function normalizeComparableDir(value) {
-  return String(value || "").trim().replace(/\\/g, "/").replace(/(?!^)\/+$/g, "");
-}
-
-function activeDirectoryMatchesDefaultRoot(option, defaultRootDir, workspaceRoot = "") {
-  const requestedDir = String(defaultRootDir || "").trim();
-  if (!requestedDir) {
-    return true;
-  }
-  const requestedAbsolute = path.isAbsolute(requestedDir)
-    ? path.resolve(requestedDir)
-    : workspaceRoot
-      ? path.resolve(workspaceRoot, requestedDir)
-      : "";
-  const optionRootPath = String(option?.rootPath || "").trim();
-  if (requestedAbsolute && optionRootPath && path.resolve(optionRootPath) === requestedAbsolute) {
-    return true;
-  }
-  const optionDir = String(option?.dir || "").trim();
-  if (requestedAbsolute && path.isAbsolute(optionDir) && path.resolve(optionDir) === requestedAbsolute) {
-    return true;
-  }
-  if (!requestedAbsolute && normalizeComparableDir(optionDir) === normalizeComparableDir(requestedDir)) {
-    return true;
-  }
-  return false;
-}
-
-function serverInfoDefaultRootAllowsReuse(serverInfo, defaultRootDir) {
-  const requestedDir = String(defaultRootDir || "").trim();
-  if (!requestedDir) {
-    return true;
-  }
-  const activeDirectories = Array.isArray(serverInfo?.activeDirectories) ? serverInfo.activeDirectories : [];
-  return activeDirectoryMatchesDefaultRoot(activeDirectories[0], requestedDir, serverInfo?.workspaceRoot);
-}
-
-export function isReusableAgentViewerServer(serverInfo, git, defaultRootDir = "") {
+export function isReusableAgentViewerServer(serverInfo, git) {
   return Boolean(
     serverInfo &&
     serverInfo.app === VIEWER_SERVER_APP_ID &&
     Number(serverInfo.serverApiVersion || 0) >= VIEWER_SERVER_API_VERSION &&
     serverInfo.dynamicRoot === true &&
-    serverInfoGitAllowsReuse(serverInfo, git) &&
-    serverInfoDefaultRootAllowsReuse(serverInfo, defaultRootDir)
+    serverInfoGitAllowsReuse(serverInfo, git)
   );
 }
 
@@ -471,6 +489,47 @@ export async function probeAgentViewerPort({
   }
 }
 
+async function responseSnippet(response) {
+  try {
+    const text = await response.text();
+    return String(text || "").trim().slice(0, 500);
+  } catch {
+    return "";
+  }
+}
+
+export async function activateAgentViewerWorkspace({
+  baseUrl,
+  workspaceDir,
+  fetchImpl = globalThis.fetch,
+  timeoutMs = activationTimeoutMs,
+} = {}) {
+  if (typeof fetchImpl !== "function") {
+    throw new Error("fetch is unavailable; cannot activate CAD Viewer workspace");
+  }
+  const normalizedWorkspaceDir = normalizeAgentWorkspaceDir(workspaceDir);
+  const catalogUrl = new URL("/__cad/catalog", String(baseUrl || "").endsWith("/") ? baseUrl : `${baseUrl}/`);
+  catalogUrl.searchParams.set("dir", normalizedWorkspaceDir);
+  let response = null;
+  try {
+    response = await fetchWithTimeout(fetchImpl, String(catalogUrl), timeoutMs);
+  } catch (error) {
+    if (probeBlockedByPermissions(error)) {
+      throw new Error(`CAD Viewer workspace activation was blocked for ${baseUrl}; rerun agent:start with local network permission.`);
+    }
+    throw error;
+  }
+  if (!response?.ok) {
+    const detail = response ? await responseSnippet(response) : "";
+    const status = response ? `${response.status || "unknown"} ${response.statusText || ""}`.trim() : "unknown";
+    throw new Error(`Failed to activate CAD Viewer workspace ${normalizedWorkspaceDir}: ${status}${detail ? ` - ${detail}` : ""}`);
+  }
+  return {
+    workspaceDir: normalizedWorkspaceDir,
+    viewerUrl: agentViewerUrl(baseUrl, normalizedWorkspaceDir),
+  };
+}
+
 function registryHost(serverInfo, fallbackHost) {
   try {
     const url = new URL(String(serverInfo?.url || ""));
@@ -488,9 +547,8 @@ export async function resolveAgentViewerPort({
   portScanLimit = defaultPortScanLimit,
 } = {}) {
   const target = forwardedServerTarget(forwardedArgs);
-  const defaultRootDir = forwardedDefaultRootDir(forwardedArgs);
   const reusableRegistryServers = registryServers
-    .filter((serverInfo) => isReusableAgentViewerServer(serverInfo, git, defaultRootDir))
+    .filter((serverInfo) => isReusableAgentViewerServer(serverInfo, git))
     .sort((left, right) => Number(left.port) - Number(right.port));
   for (const serverInfo of reusableRegistryServers) {
     const host = registryHost(serverInfo, target.host);
@@ -498,7 +556,7 @@ export async function resolveAgentViewerPort({
     if (probe.status === "blocked") {
       throw new Error(`CAD Viewer port probe was blocked for ${probe.baseUrl}; rerun agent:start with local network permission.`);
     }
-    if (probe.status === "viewer" && isReusableAgentViewerServer(probe.serverInfo, git, defaultRootDir)) {
+    if (probe.status === "viewer" && isReusableAgentViewerServer(probe.serverInfo, git)) {
       return {
         action: "reuse",
         host,
@@ -518,7 +576,7 @@ export async function resolveAgentViewerPort({
     if (probe.status === "blocked") {
       throw new Error(`CAD Viewer port probe was blocked for ${probe.baseUrl}; rerun agent:start with local network permission.`);
     }
-    if (probe.status === "viewer" && isReusableAgentViewerServer(probe.serverInfo, git, defaultRootDir)) {
+    if (probe.status === "viewer" && isReusableAgentViewerServer(probe.serverInfo, git)) {
       return {
         action: "reuse",
         host: target.host,
@@ -558,7 +616,12 @@ export async function resolveAgentStartLaunch({
     portScanLimit: parsed.portScanLimit,
   });
   if (portResolution.action === "reuse") {
-    return { ...portResolution, git };
+    return {
+      ...portResolution,
+      git,
+      workspaceDir: parsed.workspaceDir,
+      viewerUrl: agentViewerUrl(portResolution.baseUrl, parsed.workspaceDir),
+    };
   }
 
   const mode = selectAgentStartMode({
@@ -572,6 +635,8 @@ export async function resolveAgentStartLaunch({
     port: portResolution.port,
     baseUrl: portResolution.baseUrl,
     git,
+    workspaceDir: parsed.workspaceDir,
+    viewerUrl: agentViewerUrl(portResolution.baseUrl, parsed.workspaceDir),
     command: buildAgentStartCommand({
       mode,
       packageRoot,
@@ -587,13 +652,20 @@ export async function resolveAgentStartLaunch({
 export async function runAgentStart(options = {}) {
   const launch = await resolveAgentStartLaunch(options);
   if (launch.action === "reuse") {
-    console.log(`CAD Viewer already running at ${launch.baseUrl}/`);
+    await activateAgentViewerWorkspace({
+      baseUrl: launch.baseUrl,
+      workspaceDir: launch.workspaceDir,
+      fetchImpl: options.fetchImpl,
+    });
+    console.log(`CAD Viewer already running at ${launch.viewerUrl}`);
+    console.log(`CAD Viewer URL: ${launch.viewerUrl}`);
     console.log(`CAD Viewer git: ${launch.git || "none"}`);
     return null;
   }
 
   const command = launch.command;
-  console.log(`Starting CAD Viewer ${command.mode} server at ${launch.baseUrl}/`);
+  console.log(`Starting CAD Viewer ${command.mode} server at ${launch.viewerUrl}`);
+  console.log(`CAD Viewer URL: ${launch.viewerUrl}`);
   console.log(`CAD Viewer git: ${launch.git || "none"}`);
   const child = spawn(command.command, command.args, {
     cwd: command.cwd,

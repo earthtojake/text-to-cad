@@ -6,10 +6,13 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  activateAgentViewerWorkspace,
+  agentViewerUrl,
   buildAgentViewerGit,
   buildAgentStartCommand,
   forwardedDefaultRootDir,
   forwardedServerTarget,
+  normalizeAgentWorkspaceDir,
   isReusableAgentViewerServer,
   parseAgentStartArgs,
   probeAgentViewerPort,
@@ -24,14 +27,17 @@ import {
 
 const twelveHoursMs = 12 * 60 * 60 * 1000;
 
-test("parseAgentStartArgs consumes launcher mode and preserves server flags", () => {
+test("parseAgentStartArgs consumes launcher mode and preserves server flags", async (t) => {
+  const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "cad-viewer-agent-start-workspace-"));
+  t.after(() => fs.rm(workspaceDir, { recursive: true, force: true }));
+
   assert.deepEqual(
     parseAgentStartArgs([
       "--viewer-start-mode=dev",
       "--host",
       "127.0.0.1",
       "--dir",
-      "/workspace/models",
+      workspaceDir,
       "--port=4178",
       "--shutdown-after",
       "12h",
@@ -42,11 +48,12 @@ test("parseAgentStartArgs consumes launcher mode and preserves server flags", ()
         "--host",
         "127.0.0.1",
         "--dir",
-        "/workspace/models",
+        workspaceDir,
         "--port=4178",
         "--shutdown-after",
         "12h",
       ],
+      workspaceDir,
       shutdownAfterMs: twelveHoursMs,
       portScanLimit: 64,
     }
@@ -60,6 +67,19 @@ test("forwardedDefaultRootDir reads and strips default workspace flags", () => {
     stripDefaultRootDirArgs(["--host", "127.0.0.1", "--dir", "/workspace/models", "--port=4178"]),
     ["--host", "127.0.0.1", "--port=4178"]
   );
+});
+
+test("parseAgentStartArgs requires agent:start --dir to be an absolute existing directory", async (t) => {
+  const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "cad-viewer-agent-start-workspace-"));
+  t.after(() => fs.rm(workspaceDir, { recursive: true, force: true }));
+  const filePath = path.join(workspaceDir, "not-a-dir");
+  await fs.writeFile(filePath, "");
+
+  assert.equal(normalizeAgentWorkspaceDir(workspaceDir), workspaceDir);
+  assert.throws(() => parseAgentStartArgs(["--host", "127.0.0.1"]), /requires --dir/);
+  assert.throws(() => parseAgentStartArgs(["--dir", "models"]), /absolute path/);
+  assert.throws(() => parseAgentStartArgs(["--dir", path.join(workspaceDir, "missing")]), /directory not found/);
+  assert.throws(() => parseAgentStartArgs(["--dir", filePath]), /is not a directory/);
 });
 
 test("parseAgentStartArgs rejects invalid launcher modes", () => {
@@ -156,9 +176,12 @@ test("buildAgentStartCommand translates shutdown-after for dev mode", () => {
   assert.equal(command.env.VIEWER_GIT, "git-a");
 });
 
-test("resolveAgentStartCommand keeps server-only flags on the production server path", () => {
+test("resolveAgentStartCommand keeps server-only flags on the production server path", async (t) => {
+  const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "cad-viewer-agent-start-workspace-"));
+  t.after(() => fs.rm(workspaceDir, { recursive: true, force: true }));
+
   const command = resolveAgentStartCommand({
-    argv: ["--viewer-start-mode", "serve", "--dir", "/workspace/models", "--shutdown-after", "12h"],
+    argv: ["--viewer-start-mode", "serve", "--dir", workspaceDir, "--shutdown-after", "12h"],
     env: {},
     packageRoot: "/workspace/viewer",
     nodePath: "/node",
@@ -168,7 +191,7 @@ test("resolveAgentStartCommand keeps server-only flags on the production server 
   assert.deepEqual(command.args, [
     "/workspace/viewer/src/server/server.mjs",
     "--dir",
-    "/workspace/models",
+    workspaceDir,
     "--shutdown-after",
     "12h",
   ]);
@@ -211,7 +234,7 @@ test("isReusableAgentViewerServer uses git only when both sides report it", () =
         dir: "/workspace/models",
         rootPath: "/workspace/models",
       }],
-    }, "", "/workspace/models"),
+    }, ""),
     true
   );
   assert.equal(
@@ -225,7 +248,7 @@ test("isReusableAgentViewerServer uses git only when both sides report it", () =
         dir: "/workspace/models",
         rootPath: "/workspace/models",
       }],
-    }, "git-a", "models"),
+    }, "git-a"),
     true
   );
   assert.equal(
@@ -238,9 +261,40 @@ test("isReusableAgentViewerServer uses git only when both sides report it", () =
         dir: "/workspace/skill",
         rootPath: "/workspace/skill",
       }],
-    }, "git-a", "/workspace/models"),
-    false
+    }, "git-a"),
+    true
   );
+});
+
+test("agentViewerUrl includes the selected absolute workspace dir", async (t) => {
+  const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "cad-viewer-agent-start-workspace-"));
+  t.after(() => fs.rm(workspaceDir, { recursive: true, force: true }));
+
+  const url = agentViewerUrl("http://127.0.0.1:4178", workspaceDir);
+  assert.equal(new URL(url).searchParams.get("dir"), workspaceDir);
+});
+
+test("activateAgentViewerWorkspace reads the catalog for the requested dir", async (t) => {
+  const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "cad-viewer-agent-start-workspace-"));
+  t.after(() => fs.rm(workspaceDir, { recursive: true, force: true }));
+  const requestedUrls = [];
+
+  const result = await activateAgentViewerWorkspace({
+    baseUrl: "http://127.0.0.1:4178",
+    workspaceDir,
+    fetchImpl: async (url) => {
+      requestedUrls.push(String(url));
+      return {
+        ok: true,
+        json: async () => ({ entries: [] }),
+      };
+    },
+  });
+
+  assert.equal(result.workspaceDir, workspaceDir);
+  assert.equal(new URL(result.viewerUrl).searchParams.get("dir"), workspaceDir);
+  assert.equal(new URL(requestedUrls[0]).pathname, "/__cad/catalog");
+  assert.equal(new URL(requestedUrls[0]).searchParams.get("dir"), workspaceDir);
 });
 
 test("resolveAgentViewerPort reuses matching registry servers before free lower ports", async () => {
@@ -326,9 +380,12 @@ test("probeAgentViewerPort reports permission-blocked local probes", async () =>
   assert.equal(result.port, 4178);
 });
 
-test("resolveAgentStartLaunch starts the selected free port", async () => {
+test("resolveAgentStartLaunch starts the selected free port", async (t) => {
+  const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "cad-viewer-agent-start-workspace-"));
+  t.after(() => fs.rm(workspaceDir, { recursive: true, force: true }));
+
   const result = await resolveAgentStartLaunch({
-    argv: ["--viewer-start-mode", "serve", "--host", "127.0.0.1", "--port", "4178", "--shutdown-after", "12h"],
+    argv: ["--viewer-start-mode", "serve", "--host", "127.0.0.1", "--dir", workspaceDir, "--port", "4178", "--shutdown-after", "12h"],
     env: {},
     packageRoot: "/workspace/viewer",
     nodePath: "/node",
@@ -346,9 +403,12 @@ test("resolveAgentStartLaunch starts the selected free port", async () => {
     "/workspace/viewer/src/server/server.mjs",
     "--host",
     "127.0.0.1",
+    "--dir",
+    workspaceDir,
     "--port",
     "4179",
     "--shutdown-after",
     "12h",
   ]);
+  assert.equal(new URL(result.viewerUrl).searchParams.get("dir"), workspaceDir);
 });

@@ -16,50 +16,21 @@ live review links. The expected input is one or more explicit file paths.
 ## Start Viewer
 
 Start or reuse one local CAD Viewer with `npm run agent:start`, passing the
-absolute artifact root as `--dir`, then select local files by URL. Directory
-selection is required in both places: pass startup `--dir <absolute-model-root>`
-to set the Viewer's first workspace, and include `?dir=<absolute-model-root>` on
-every returned link. Both values must be absolute paths and should usually be
-the same root. The launcher uses Vite dev mode when this skill's
-`scripts/viewer` path is a development symlink, and the packaged `dist/` server
-for production skill installs. Every Viewer link returned from this skill MUST
-include `?dir=` with an absolute path. Set `?dir=` to the workspace-local
-artifact root that owns the model files and related sidecars, usually the
-project `models/` directory, such as `/Users/name/project/models`. This root
-should be the shared directory containing STEP/STL/GLB/URDF/SRDF/SDF/G-code/DXF
-files, not a relative path and not just the selected file's parent when a
-broader model workspace root exists. The `?file=` value must be relative to
-`?dir=`; choose a `?dir=` root that makes the relative `?file=` stable and
-readable. Pass that same absolute root to `agent:start --dir` so a newly started
-Viewer uses the model directory, not the skill directory, as its first workspace.
-The `agent:start` launcher
-owns port selection: it starts from its requested or default port candidate,
-checks the local CAD Viewer server registry, probes candidate ports with
-`GET /__cad/server`, reuses a compatible live Viewer when found, or starts a new
-Viewer on the first free port. When git is available, the launcher passes a
-single `git` value derived from the worktree git dir and branch; a live Viewer
-with a different `git` value is treated as another worktree or branch and
-skipped. If either side has no `git` value, git is not used as a port reuse
-condition. When `--dir` is passed, a live Viewer whose first workspace is a
-different directory is also skipped so the requested default workspace is
-preserved.
+absolute artifact workspace as `--dir`. The `agent:start` launcher owns port
+selection, compatible-server reuse, workspace activation, and the `?dir=` query
+parameter. Use the Viewer URL printed by `agent:start` as-is, then add only a
+`file=` query value for the artifact you want to review.
 
-If you need to inspect a running server manually, `GET /__cad/server` returns
-JSON with `app: "cad-viewer"`, `dynamicRoot: true`, `serverApiVersion >= 2`,
-`viewerVersion`, an optional `git` value, and the selected `port`. Treat a legacy
-root-bound CAD Viewer without the dynamic-root fields as incompatible because
-returned links must support absolute `?dir=` values and relative `?file=` values
-inside that root.
+Choose `--dir` as the absolute workspace folder that contains the model
+artifacts and sidecars, commonly `<repo>/models` or the consuming project's
+equivalent model directory. The `file=` value must be relative to that `--dir`.
+Do not manually choose ports, probe servers, rewrite `?dir=`, or start a
+separate Viewer just to change directories.
 
 Always start new local Viewer servers with `--shutdown-after 12h` so forgotten
 review servers clean themselves up. Do not rely on a default shutdown; the
 server stays alive until stopped unless this flag or `VIEWER_SERVER_LIFETIME_MS`
 is set.
-
-Do not manually choose or increment ports. Run `agent:start`, use the base URL
-it prints, and append the requested absolute `?dir=` plus a `?file=` relative
-to `?dir=`. Do not start a separate Viewer just to change
-directories; the same local server can scan a new absolute `?dir=`.
 
 Run from this skill directory:
 
@@ -67,33 +38,25 @@ Run from this skill directory:
 npm --prefix scripts/viewer run agent:start -- --host 127.0.0.1 --dir <absolute-model-root> --shutdown-after 12h
 ```
 
-Use the printed base URL and append query parameters:
+Use the printed Viewer URL and append `file=`:
 
 ```bash
 http://127.0.0.1:<printed-port>/?dir=/absolute/workspace/models&file=path/to/model.step
 ```
 
-Use the base URL printed by `agent:start`. If a non-Viewer process or another
-worktree's Viewer occupies the candidate port, the launcher will continue to
-the next port automatically. In sandboxed agent environments, local binding
-failures such as `EPERM` or `EACCES` can be expected; rerun the same command
-with the needed permission/escalation.
+If a non-Viewer process or another worktree's Viewer occupies the candidate
+port, the launcher will continue automatically. In sandboxed agent environments,
+local binding or probe failures such as `EPERM` or `EACCES` can be expected;
+rerun the same command with the needed permission/escalation.
 
 ## Links
 
-- Return the printed Viewer link for each requested file.
-- If a compatible Viewer server is already running, reuse its port and vary the
-  `?dir=`/`?file=` query only.
-- ALWAYS include `?dir=<absolute-model-root>` on every returned Viewer link.
-  This is mandatory for cad-viewer handoffs: do not omit it for convenience, do
-  not use a relative path, and do not rely on the Viewer's session-storage
-  `?dir=` fallback.
-- Choose `?dir=` as the absolute workspace folder that contains the model
-  artifacts, commonly `<repo>/models` or the consuming project's equivalent
-  model directory.
-- Include `file=<path>` for each requested file, one URL per file. The file path
-  must be relative to `?dir=`. For directory-only review links, include
-  `?dir=<absolute-root>` without `file=`.
+- Return one Viewer URL per requested file.
+- Start/reuse the Viewer once per absolute workspace `--dir`, then append
+  `file=<path>` for each requested file. The file path must be relative to
+  `--dir`.
+- For directory-only review links, return the URL printed by `agent:start`
+  without adding `file=`.
 - Do not stop an existing Viewer server unless the user asks.
 - If Viewer startup fails, report the failure and continue with the owning skill's non-GUI validation or artifacts.
 
