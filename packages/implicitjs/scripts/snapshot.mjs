@@ -715,6 +715,14 @@ async function withSnapshotTimeout(promise, timeoutSeconds, label = "snapshot") 
   }
 }
 
+export function chromiumLaunchOptions() {
+  return {
+    headless: true,
+    timeout: RENDER_BROWSER_STARTUP_TIMEOUT_MS,
+    args: [],
+  };
+}
+
 class BatchSnapshotRenderer {
   constructor() {
     this.browser = null;
@@ -734,11 +742,7 @@ class BatchSnapshotRenderer {
           `Implicit CAD snapshot requires the JavaScript playwright package. Install implicitjs dependencies and run playwright install chromium if needed. ${error instanceof Error ? error.message : String(error)}`
         );
       });
-      this.browser = await chromium.launch({
-        headless: true,
-        timeout: RENDER_BROWSER_STARTUP_TIMEOUT_MS,
-        args: ["--single-process"],
-      });
+      this.browser = await chromium.launch(chromiumLaunchOptions());
       this.context = await this.browser.newContext({
         viewport: { width: DEFAULT_RENDER_WIDTH, height: DEFAULT_RENDER_HEIGHT },
         deviceScaleFactor: 1,

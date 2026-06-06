@@ -9,6 +9,7 @@ import {
   RENDER_HTML_PATH,
   SNAPSHOT_ORIGIN,
   SnapshotError,
+  chromiumLaunchOptions,
   loadJobFromOptions,
   parseSnapshotArgs,
   resolveRenderJobPacket,
@@ -241,4 +242,8 @@ test("snapshot routes are package-owned and self-contained", () => {
     () => resolveSnapshotRouteFile(`${SNAPSHOT_ORIGIN}/__render_asset/orb.implicit.js`),
     SnapshotError
   );
+});
+
+test("snapshot renderer does not force Chromium single-process mode", () => {
+  assert.notEqual(chromiumLaunchOptions().args?.includes("--single-process"), true);
 });
