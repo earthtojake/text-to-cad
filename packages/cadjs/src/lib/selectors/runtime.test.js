@@ -104,10 +104,10 @@ test("buildSelectorRuntime uses STEP topology shape names in shape references", 
         edgeColumns: ["id", "occurrenceId", "shapeId", "ordinal", "curveType", "length", "center", "bbox", "faceStart", "faceCount", "relevance", "flags", "params", "segmentStart", "segmentCount"],
       },
       occurrences: [
-        ["o1", "1", "component:base:front_left", "component:base", null, null, null, 0, 1, 0, 0, 0, 0]
+        ["o1", "1", "base:front_left", "base", null, null, null, 0, 1, 0, 0, 0, 0]
       ],
       shapes: [
-        ["o1.s1", "o1", 1, "solid", "component:base:front_left", "component:base", null, null, 24, 12, 0, 0, 0, 0]
+        ["o1.s1", "o1", 1, "solid", "base:front_left", "base", null, null, 24, 12, 0, 0, 0, 0]
       ],
       faces: [],
       edges: []
@@ -118,10 +118,10 @@ test("buildSelectorRuntime uses STEP topology shape names in shape references", 
   const runtime = buildSelectorRuntime(bundle, { copyCadPath: "parts/labeled" });
   const shape = runtime.references.find((reference) => reference.selectorType === "shape");
 
-  assert.equal(shape.summary, "component:base:front_left solid volume=12");
-  assert.equal(shape.copyText, "#s1 component:base:front_left solid volume=12");
-  assert.equal(shape.pickData.name, "component:base:front_left");
-  assert.equal(shape.pickData.sourceName, "component:base");
+  assert.equal(shape.summary, "base:front_left solid volume=12");
+  assert.equal(shape.copyText, "#s1 base:front_left solid volume=12");
+  assert.equal(shape.pickData.name, "base:front_left");
+  assert.equal(shape.pickData.sourceName, "base");
 });
 
 test("buildSelectorRuntime exposes v1 GLB face runs from selector buffers", () => {

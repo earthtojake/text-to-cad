@@ -91,7 +91,7 @@ Avoid untraceable placement constants inside geometry calls. Put all meaningful 
 
 ## AssemblyHelper pattern
 
-Use `AssemblyHelper` for generated assembly scripts. It keeps the LLM-facing code semantic while still using native build123d labels, `Joint` objects, and `Compound` assemblies.
+Use `AssemblyHelper` for generated assembly scripts. It keeps the LLM-facing code intent-focused while still using native build123d labels, `Joint` objects, and `Compound` assemblies.
 
 ```python
 from build123d import *
@@ -258,7 +258,7 @@ In the final response, report only checks that were run:
 ```text
 Positioning/joints:
 - source used RigidJoint lid_seat → underside
-- base/lid Z mate: flush, delta 0.00 mm
+- base/lid Z mate flush, delta 0.00 mm
 - screw boss axis alignment: checked in XY by measurement
 - lid occurrence frame: +Z up, origin at assembly centerline
 ```

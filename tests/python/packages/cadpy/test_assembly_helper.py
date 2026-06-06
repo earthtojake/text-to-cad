@@ -5,7 +5,7 @@ import types
 import unittest
 from contextlib import contextmanager
 
-from cadpy.assembly import AssemblyHelper, MateTarget, label_shape, semantic_label, target
+from cadpy.assembly import AssemblyHelper, MateTarget, label_shape, label_text, target
 
 
 class FakeLocation:
@@ -64,20 +64,20 @@ def fake_build123d():
 
 
 class AssemblyHelperTests(unittest.TestCase):
-    def test_semantic_label_normalizes_tokens(self) -> None:
+    def test_label_text_normalizes_tokens(self) -> None:
         self.assertEqual(
-            "component:base_plate:left_side",
-            semantic_label("component", "base plate", "left:side"),
+            "base_plate:left_side",
+            label_text("base plate", "left:side"),
         )
 
     def test_label_shape_sets_native_label_and_color(self) -> None:
         shape = types.SimpleNamespace()
         color = object()
 
-        returned = label_shape(shape, "feature", "m3 standoff", "front left", color=color)
+        returned = label_shape(shape, "m3 standoff", "front left", color=color)
 
         self.assertIs(returned, shape)
-        self.assertEqual("feature:m3_standoff:front_left", shape.label)
+        self.assertEqual("m3_standoff:front_left", shape.label)
         self.assertIs(color, shape.color)
 
     def test_helper_connects_fixed_joint_to_moving_joint(self) -> None:
@@ -90,11 +90,11 @@ class AssemblyHelperTests(unittest.TestCase):
 
             relation = assembly.face_to_face(base_frame, lid_frame)
 
-        fixed_joint = base.joints["mate:lid_seat"]
-        moving_joint = lid.joints["mate:underside"]
+        fixed_joint = base.joints["lid_seat"]
+        moving_joint = lid.joints["underside"]
         self.assertEqual("face_to_face", relation.relation)
-        self.assertEqual("mate:lid_seat", relation.fixed)
-        self.assertEqual("mate:underside", relation.moving)
+        self.assertEqual("lid_seat", relation.fixed)
+        self.assertEqual("underside", relation.moving)
         self.assertEqual([(moving_joint, {})], fixed_joint.connections)
 
     def test_helper_accepts_existing_native_joint_labels(self) -> None:
@@ -135,8 +135,8 @@ class AssemblyHelperTests(unittest.TestCase):
                 angular_range=(-90, 90),
             )
 
-        self.assertEqual(MateTarget(frame, "mate:hinge_axis"), frame_target)
-        joint = frame.joints["mate:hinge_axis"]
+        self.assertEqual(MateTarget(frame, "hinge_axis"), frame_target)
+        joint = frame.joints["hinge_axis"]
         self.assertIsNone(joint.location)
         self.assertEqual({"axis": "Axis.Z", "angular_range": (-90, 90)}, joint.options)
 
@@ -150,10 +150,10 @@ class AssemblyHelperTests(unittest.TestCase):
 
             relation = assembly.face_to_face(base_frame, lid_frame, offset=0.5)
 
-        offset_joint = base.joints["mate_target:mate_seat:offset"]
+        offset_joint = base.joints["seat:offset"]
         self.assertIsInstance(offset_joint.location, FakeLocation)
         self.assertEqual(("mul", "base", (0.0, 0.0, 0.5)), offset_joint.location.value)
-        self.assertEqual("mate_target:mate_seat:offset", relation.fixed)
+        self.assertEqual("seat:offset", relation.fixed)
 
     def test_build_returns_labeled_compound(self) -> None:
         with fake_build123d():
@@ -163,7 +163,7 @@ class AssemblyHelperTests(unittest.TestCase):
 
             compound = assembly.build()
 
-        self.assertEqual("assembly:robot_arm", compound.label)
+        self.assertEqual("robot_arm", compound.label)
         self.assertEqual((base, arm), compound.children)
 
     def test_target_tuple_is_available_for_call_sites(self) -> None:

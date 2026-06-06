@@ -74,7 +74,7 @@ Use `python scripts/<tool> --help` for the complete current command interface; r
 2. **Load only the needed references.** Use the triggers below instead of reading the whole reference set.
 3. **Create a natural-language CAD brief.** Extract dimensions, units, coordinate convention, feature intent, output paths, assumptions, and validation targets.
 4. **Check named purchasable components.** When an assembly includes named off-the-shelf actuators, servos, motors, electronics boards, connectors, or other purchasable components, search `$step-parts` before creating simplified placeholder geometry. If no exact match is found, record the miss and then use a documented envelope.
-5. **Plan before coding.** Define parameters, semantic labels, source paths, expected bounding boxes, and any mating/positioning datums before editing.
+5. **Plan before coding.** Define parameters, intent labels, source paths, expected bounding boxes, and any mating/positioning datums before editing.
 6. **Edit source, not generated artifacts.** Prefer build123d Python with `gen_step()` for STEP generation.
 7. **Generate explicit targets.** Use `scripts/step` for STEP/STP generation, GLB/topology artifacts, and sidecars. When a Python generator exists, its GLB/topology artifact is Python-backed even when the STEP is also written. Use `--kind part` or `--kind assembly` only for direct STEP/STP imports. Use `--skip-step-write` only when explicitly generating a Python-backed GLB/topology artifact without writing STEP. Do not run directory-wide generation.
 8. **Validate geometrically.** Use `scripts/inspect refs <step-or-cad-target> --facts --planes --positioning`, then targeted `measure`, `mate`, `frame`, or `diff` when needed.

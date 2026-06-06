@@ -4,19 +4,6 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 
-SEMANTIC_LABEL_KINDS = {
-    "assembly",
-    "component",
-    "module",
-    "feature",
-    "datum",
-    "mate",
-    "mate_target",
-    "hardware",
-    "tool",
-}
-
-
 @dataclass(frozen=True)
 class MateTarget:
     """A named native build123d joint on a part-like shape."""
@@ -36,56 +23,48 @@ class MateRelation:
     parameters: Mapping[str, Any] = field(default_factory=dict)
 
 
-def semantic_label(kind: str, name: str, *details: object) -> str:
-    """Build a compact STEP-friendly semantic label such as component:base."""
+def label_text(name: str, *details: object) -> str:
+    """Build a compact STEP-friendly label such as m3_standoff:front_left."""
 
-    label_kind = _normalize_label_token(kind, field_name="kind")
-    if label_kind not in SEMANTIC_LABEL_KINDS:
-        allowed = ", ".join(sorted(SEMANTIC_LABEL_KINDS))
-        raise ValueError(f"Unsupported semantic label kind {kind!r}; expected one of {allowed}")
     tokens = [_normalize_label_token(name, field_name="name")]
     tokens.extend(_normalize_label_token(detail, field_name="detail") for detail in details)
-    return ":".join((label_kind, *tokens))
+    return ":".join(tokens)
 
 
 def label_shape(
     shape: Any,
-    kind: str,
     name: str,
     *details: object,
     color: Any | None = None,
 ) -> Any:
     """Assign native build123d label/color metadata and return the shape."""
 
-    shape.label = semantic_label(kind, name, *details)
+    shape.label = label_text(name, *details)
     if color is not None:
         shape.color = color
     return shape
 
 
 def mate_label(name: str) -> str:
-    """Return the native joint label used for semantic mate frames."""
+    """Return the native joint label used for named mate frames."""
 
-    raw = str(name).strip()
-    if raw.startswith("mate:"):
-        return raw
-    return semantic_label("mate", raw)
+    return label_text(name)
 
 
 def target(part: Any, frame: str) -> MateTarget:
-    return MateTarget(part=part, frame=str(frame).strip())
+    return MateTarget(part=part, frame=label_text(frame))
 
 
 class AssemblyHelper:
     """Small semantic wrapper around native build123d joints and compounds.
 
-    Generated CAD scripts should express named part-local frames and semantic
+    Generated CAD scripts should express named part-local frames and source
     relationships here; this helper realizes those relationships with native
     build123d Joint objects and returns a labeled Compound assembly.
     """
 
-    def __init__(self, name: str, *, kind: str = "assembly") -> None:
-        self.label = semantic_label(kind, name)
+    def __init__(self, name: str) -> None:
+        self.label = label_text(name)
         self.children: list[Any] = []
         self.relations: list[MateRelation] = []
 
@@ -93,16 +72,15 @@ class AssemblyHelper:
         self,
         shape: Any,
         name: str,
-        *,
-        kind: str = "component",
+        *details: object,
         color: Any | None = None,
     ) -> Any:
-        label_shape(shape, kind, name, color=color)
+        label_shape(shape, name, *details, color=color)
         self.children.append(shape)
         return shape
 
-    def add_module(self, name: str, children: Sequence[Any], *, color: Any | None = None) -> Any:
-        module = self.compound(children, label=semantic_label("module", name))
+    def add_module(self, name: str, children: Sequence[Any], *details: object, color: Any | None = None) -> Any:
+        module = self.compound(children, label=label_text(name, *details))
         if color is not None:
             module.color = color
         self.children.append(module)
@@ -115,7 +93,7 @@ class AssemblyHelper:
         *details: object,
         color: Any | None = None,
     ) -> Any:
-        return label_shape(shape, "feature", name, *details, color=color)
+        return label_shape(shape, name, *details, color=color)
 
     def datum(
         self,
@@ -124,7 +102,7 @@ class AssemblyHelper:
         *details: object,
         color: Any | None = None,
     ) -> Any:
-        return label_shape(shape, "datum", name, *details, color=color)
+        return label_shape(shape, name, *details, color=color)
 
     def rigid_frame(self, part: Any, name: str, location: Any) -> MateTarget:
         return add_rigid_frame(part, name, location)
@@ -163,7 +141,7 @@ class AssemblyHelper:
         options = {key: value for key, value in connect_options.items() if value is not None}
         fixed_joint.connect_to(moving_joint, **options)
         relation_record = MateRelation(
-            label=label or semantic_label("mate", relation, fixed_joint_label, moving_joint_label),
+            label=label_text(label) if label is not None else label_text(relation, fixed_joint_label, moving_joint_label),
             relation=relation,
             fixed=fixed_joint_label,
             moving=moving_joint_label,
@@ -286,7 +264,7 @@ def offset_target(
         raise ValueError(f"Joint {fixed_joint_label!r} does not expose a location")
     offset_location = _offset_location(offset)
     target_location = location * offset_location
-    target_label = semantic_label("mate_target", label or fixed_joint_label, "offset")
+    target_label = label_text(label or fixed_joint_label, "offset")
     build123d.RigidJoint(
         label=target_label,
         to_part=fixed_target.part,
@@ -299,7 +277,7 @@ def _normalize_target(value: MateTarget | tuple[Any, str]) -> MateTarget:
     if isinstance(value, MateTarget):
         return value
     if isinstance(value, tuple) and len(value) == 2:
-        return MateTarget(part=value[0], frame=str(value[1]).strip())
+        return MateTarget(part=value[0], frame=label_text(value[1]))
     raise TypeError("Mate target must be MateTarget or (part, frame_name)")
 
 
@@ -307,14 +285,9 @@ def _joint_for_target(target_value: MateTarget) -> tuple[str, Any]:
     joints = getattr(target_value.part, "joints", None)
     if not isinstance(joints, Mapping):
         raise ValueError("Mate target part does not expose a build123d joints mapping")
-    candidates = [target_value.frame]
-    semantic = mate_label(target_value.frame)
-    if semantic not in candidates:
-        candidates.append(semantic)
-    for candidate in candidates:
-        joint = joints.get(candidate)
-        if joint is not None:
-            return candidate, joint
+    joint = joints.get(target_value.frame)
+    if joint is not None:
+        return target_value.frame, joint
     raise KeyError(f"Part does not define mate frame {target_value.frame!r}")
 
 

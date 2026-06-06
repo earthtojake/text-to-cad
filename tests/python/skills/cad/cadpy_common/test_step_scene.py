@@ -143,14 +143,14 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
             roots=[
                 OccurrenceNode(
                     path=(1,),
-                    name="component:base:front_left",
-                    source_name="component:base",
+                    name="base:front_left",
+                    source_name="base",
                     transform=transform,
                     prototype_key=7,
                 )
             ],
             prototype_shapes={7: build123d.Box(1, 1, 1).wrapped},
-            prototype_names={7: "component:base"},
+            prototype_names={7: "base"},
         )
 
         bundle = extract_selectors_from_scene(
@@ -162,8 +162,8 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
 
         shape_columns = bundle.manifest["tables"]["shapeColumns"]
         shape = dict(zip(shape_columns, bundle.manifest["shapes"][0]))
-        self.assertEqual("component:base:front_left", shape["name"])
-        self.assertEqual("component:base", shape["sourceName"])
+        self.assertEqual("base:front_left", shape["name"])
+        self.assertEqual("base", shape["sourceName"])
 
     def test_adaptive_mesh_resolution_prefers_finer_defaults_for_small_simple_parts(self) -> None:
         with temporary_directory(prefix="cad-adaptive-mesh-") as temp_dir:
