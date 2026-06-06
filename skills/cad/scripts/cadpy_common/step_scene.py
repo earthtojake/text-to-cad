@@ -2012,7 +2012,7 @@ def extract_selectors_from_scene(
     resolved_step_path = scene.step_path
     # Retain the argument for existing callers, but topology artifacts are
     # identified by their colocated STEP file plus stepHash, not by a stored
-    # repo-relative CAD ref.
+    # repo-relative CAD target.
     _ = cad_ref
 
     normalized_options = _normalize_selector_options(options)

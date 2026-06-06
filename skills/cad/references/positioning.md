@@ -29,7 +29,7 @@ Use these terms carefully:
 
 - **AssemblyHelper** is the preferred generated-script wrapper from `cadpy.assembly`. It records semantic relationships such as `face_to_face`, `coaxial`, `revolute`, and `linear`, then realizes them with native build123d joints.
 - **build123d joints** are source-level objects such as `RigidJoint`, `RevoluteJoint`, `LinearJoint`, `CylindricalJoint`, and `BallJoint`. They are attached to `Solid` or `Compound` objects and can reposition parts with `connect_to()`.
-- **CLI `inspect mate`** is a validation tool. It computes a read-only translation delta between selected `@cad[...]` references. It does not edit source code or patch exported STEP files.
+- **CLI `inspect mate`** is a validation tool. It computes a read-only translation delta between selected local refs in a STEP/CAD entry. It does not edit source code or patch exported STEP files.
 - **Mating intent** is the design relationship: flush, centered, coaxial, offset, hinge-like, slider-like, or otherwise datum-driven.
 
 There is no general instruction to ignore the CLI because build123d has joints. Use `AssemblyHelper` and build123d joints to express and compute source assembly placement where appropriate, then use CLI inspection to validate the generated STEP.
@@ -188,12 +188,12 @@ python scripts/inspect refs path/to/assembly.step \
   --facts --planes --positioning
 ```
 
-Then select moving and target references from the returned `@cad[...]` refs and compute read-only deltas:
+Then select moving and target refs from the returned local selector refs and compute read-only deltas:
 
 ```bash
-python scripts/inspect mate \
-  --moving '@cad[path/to/assembly.step#moving_selector]' \
-  --target '@cad[path/to/assembly.step#target_selector]' \
+python scripts/inspect mate path/to/assembly.step \
+  --moving '#moving_selector' \
+  --target '#target_selector' \
   --mode flush \
   --axis z
 ```
@@ -205,7 +205,7 @@ Use `--mode flush` for coplanar face alignment. Use `--mode center` for centerli
 Use `frame` to inspect an occurrence or selector's world frame:
 
 ```bash
-python scripts/inspect frame '@cad[path/to/assembly.step#selector]'
+python scripts/inspect frame path/to/assembly.step '#selector'
 ```
 
 Use this when:
@@ -221,9 +221,9 @@ Use this when:
 Use `measure` for scalar checks:
 
 ```bash
-python scripts/inspect measure \
-  --from '@cad[path/to/assembly.step#selector_a]' \
-  --to '@cad[path/to/assembly.step#selector_b]' \
+python scripts/inspect measure path/to/assembly.step \
+  --from '#selector_a' \
+  --to '#selector_b' \
   --axis z
 ```
 

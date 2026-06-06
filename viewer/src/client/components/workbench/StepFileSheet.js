@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Boxes, ChevronRight, ClipboardPaste, Copy, Crosshair, Eye, EyeOff, Package, Pause, Play, RotateCcw } from "lucide-react";
+import { Boxes, ChevronRight, ClipboardPaste, Copy, Eye, EyeOff, Package, Pause, Play, RotateCcw } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
   flattenVisibleStepTreeRows,
@@ -11,6 +11,12 @@ import {
   Accordion
 } from "../ui/accordion";
 import { Button } from "../ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger
+} from "../ui/context-menu";
 import { ColorPicker } from "../ui/color-picker";
 import {
   Select,
@@ -37,8 +43,9 @@ import FileStatusSection from "./FileStatusSection";
 
 const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
 const compactInputClasses = FILE_SHEET_COMPACT_INPUT_CLASSES;
-const compactIconButtonClasses = "size-6 text-muted-foreground hover:text-foreground";
-const treeRowButtonClasses = "h-7 min-w-0 rounded-md px-1.5 text-xs font-normal text-sidebar-foreground shadow-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
+const treeActionButtonClasses = "h-7 w-6 rounded-sm text-muted-foreground hover:text-foreground";
+const treeChevronButtonClasses = "h-7 rounded-sm px-0 pr-1 text-muted-foreground hover:text-sidebar-accent-foreground";
+const treeRowButtonClasses = "h-7 min-w-0 rounded-sm px-0 text-xs font-normal text-sidebar-foreground shadow-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
 const treeSectionId = "tree";
 const treeRevealScrollPaddingTopPx = 120;
 export const STEP_TREE_ROOT_ITEM_LIMIT = 15;
@@ -83,7 +90,23 @@ function leafIdsHidden(leafPartIds, hiddenPartIds) {
   return leafIds.every((id) => hidden.has(id));
 }
 
-function scrollTreeNodeIntoView(target) {
+function hiddenStepTreeRowIds(visibleRows, hiddenPartIds) {
+  const hiddenRows = new Set();
+  const hiddenByDepth = [];
+  for (const row of Array.isArray(visibleRows) ? visibleRows : []) {
+    const depth = Math.max(Number(row?.depth) || 0, 0);
+    hiddenByDepth.length = depth;
+    const parentHidden = depth > 0 && hiddenByDepth[depth - 1] === true;
+    const rowHidden = parentHidden || leafIdsHidden(row?.leafPartIds, hiddenPartIds);
+    hiddenByDepth[depth] = rowHidden;
+    if (rowHidden) {
+      hiddenRows.add(String(row?.id || "").trim());
+    }
+  }
+  return hiddenRows;
+}
+
+function scrollTreeNodeIntoView(target, { block = "nearest" } = {}) {
   if (!target) {
     return;
   }
@@ -91,7 +114,7 @@ function scrollTreeNodeIntoView(target) {
   const viewport = target.closest("[data-slot='scroll-area-viewport']");
   if (!viewport) {
     target.scrollIntoView?.({
-      block: "nearest",
+      block,
       behavior: "instant"
     });
     return;
@@ -99,6 +122,14 @@ function scrollTreeNodeIntoView(target) {
 
   const targetRect = target.getBoundingClientRect();
   const viewportRect = viewport.getBoundingClientRect();
+
+  if (block === "center") {
+    const targetCenter = targetRect.top + targetRect.height / 2;
+    const viewportCenter = viewportRect.top + viewportRect.height / 2;
+    viewport.scrollTop += targetCenter - viewportCenter;
+    return;
+  }
+
   const paddedTop = viewportRect.top + treeRevealScrollPaddingTopPx;
 
   if (targetRect.top < paddedTop) {
@@ -120,8 +151,58 @@ function topologyTreeRowType(row) {
   return nodeType.startsWith("topology-") ? nodeType.slice("topology-".length) : "";
 }
 
-function TopologyTreeGlyph({ type }) {
+function topologyTreeRowDetailText(row) {
+  return String(row?.detail || row?.node?.detail || row?.summary || row?.node?.summary || "").trim();
+}
+
+function topologyTreeRowKind(row, type) {
+  const detail = topologyTreeRowDetailText(row).toLowerCase();
+  const label = String(row?.label || row?.node?.displayName || "").trim().toLowerCase();
+  const haystack = `${detail} ${label}`;
+  if (type === "face") {
+    if (/\bplane\b/.test(haystack)) return "plane";
+    if (/\bcylinder\b/.test(haystack)) return "cylinder";
+    if (/\bcone\b/.test(haystack)) return "cone";
+    if (/\bsphere\b/.test(haystack)) return "sphere";
+    if (/\btorus\b/.test(haystack)) return "torus";
+    if (/\bbspline\b|\bspline\b|\bbezier\b/.test(haystack)) return "spline";
+    return "face";
+  }
+  if (type === "edge") {
+    if (/\bcircle\b/.test(haystack)) return "circle";
+    if (/\bellipse\b/.test(haystack)) return "ellipse";
+    if (/\bline\b/.test(haystack)) return "line";
+    if (/\bbspline\b|\bspline\b|\bbezier\b/.test(haystack)) return "spline";
+    return "edge";
+  }
+  if (type === "shape") {
+    if (/\bsolid\b/.test(haystack)) return "solid";
+    if (/\bshell\b/.test(haystack)) return "shell";
+  }
+  return type;
+}
+
+function TopologySvg({ children }) {
+  return (
+    <svg
+      className="size-3.5 shrink-0 text-sidebar-foreground/55"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.45"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      shapeRendering="geometricPrecision"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+}
+
+function TopologyTreeGlyph({ row, type }) {
   const normalizedType = String(type || "").trim();
+  const kind = topologyTreeRowKind(row, normalizedType);
   const common = "relative size-3.5 shrink-0 text-sidebar-foreground/55";
   if (normalizedType === "occurrence") {
     return (
@@ -132,6 +213,14 @@ function TopologyTreeGlyph({ type }) {
     );
   }
   if (normalizedType === "shape") {
+    if (kind === "shell") {
+      return (
+        <TopologySvg>
+          <path d="M4.5 4.5h7v7h-7z" />
+          <path d="M6.25 6.25h3.5v3.5h-3.5z" />
+        </TopologySvg>
+      );
+    }
     return (
       <span className={common} aria-hidden="true">
         <span className="absolute left-[3px] top-[3px] size-2.5 rotate-45 rounded-[1px] border border-current" />
@@ -139,6 +228,50 @@ function TopologyTreeGlyph({ type }) {
     );
   }
   if (normalizedType === "face") {
+    if (kind === "cylinder") {
+      return (
+        <TopologySvg>
+          <ellipse cx="8" cy="4" rx="4" ry="2" />
+          <path d="M4 4v8" />
+          <path d="M12 4v8" />
+          <ellipse cx="8" cy="12" rx="4" ry="2" />
+        </TopologySvg>
+      );
+    }
+    if (kind === "cone") {
+      return (
+        <TopologySvg>
+          <path d="M8 3 4 12" />
+          <path d="M8 3l4 9" />
+          <path d="M4 12c1.25 1.25 6.75 1.25 8 0" />
+        </TopologySvg>
+      );
+    }
+    if (kind === "sphere") {
+      return (
+        <TopologySvg>
+          <circle cx="8" cy="8" r="5" />
+          <path d="M8 3c1.3 1.35 2 3.05 2 5s-.7 3.65-2 5" />
+          <path d="M3 8h10" />
+        </TopologySvg>
+      );
+    }
+    if (kind === "torus") {
+      return (
+        <TopologySvg>
+          <ellipse cx="8" cy="8" rx="5.2" ry="3.4" />
+          <ellipse cx="8" cy="8" rx="2.2" ry="1.25" />
+        </TopologySvg>
+      );
+    }
+    if (kind === "spline") {
+      return (
+        <TopologySvg>
+          <path d="M3 11.5c2.1-6.6 7.6 1 10-5.8" />
+          <path d="M3.5 12.7h8.8" opacity="0.45" />
+        </TopologySvg>
+      );
+    }
     return (
       <span className={common} aria-hidden="true">
         <span className="absolute inset-[3px] rounded-[1px] border border-current bg-current/15" />
@@ -146,6 +279,30 @@ function TopologyTreeGlyph({ type }) {
     );
   }
   if (normalizedType === "edge") {
+    if (kind === "circle") {
+      return (
+        <TopologySvg>
+          <circle cx="8" cy="8" r="4.6" />
+          <circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none" opacity="0.25" />
+        </TopologySvg>
+      );
+    }
+    if (kind === "ellipse") {
+      return (
+        <TopologySvg>
+          <ellipse cx="8" cy="8" rx="5.4" ry="3.2" />
+        </TopologySvg>
+      );
+    }
+    if (kind === "spline") {
+      return (
+        <TopologySvg>
+          <path d="M2.8 10.6c2.1-5.8 5.2 2.8 10.4-4.8" />
+          <circle cx="2.8" cy="10.6" r="0.9" fill="currentColor" stroke="none" />
+          <circle cx="13.2" cy="5.8" r="0.9" fill="currentColor" stroke="none" />
+        </TopologySvg>
+      );
+    }
     return (
       <span className={common} aria-hidden="true">
         <span className="absolute left-[2px] top-[7px] h-px w-3 rotate-[-28deg] rounded-full bg-current" />
@@ -160,7 +317,7 @@ function TopologyTreeGlyph({ type }) {
 function StepTreeRowGlyph({ row }) {
   const topologyType = topologyTreeRowType(row);
   if (topologyType) {
-    return <TopologyTreeGlyph type={topologyType} />;
+    return <TopologyTreeGlyph row={row} type={topologyType} />;
   }
   const nodeType = String(row?.nodeType || row?.node?.nodeType || "").trim();
   const iconClasses = "size-3.5 shrink-0 text-sidebar-foreground/55";
@@ -227,17 +384,21 @@ export default function StepFileSheet({
   onStepTreeRootShowMoreChange,
   selectedPartIds,
   selectedReferenceIds = [],
-  inspectedNodeId = "",
   selectableNodeIds = null,
   activeTreeNodeId: activeTreeNodeIdProp = "",
   hoveredPartId,
+  hoveredReferenceId = "",
   hiddenPartIds,
+  focusedNodeIds = [],
   onSelectTreeNode,
   onSelectReferenceNode,
+  onCopyTreeNodeReference,
+  onFocusTreeNode,
+  onUnfocusTreeNode,
   onToggleTreeNode,
-  onInspectTreeNode,
   onClearSelection,
   onHoverTreeNode,
+  onHoverReferenceNode,
   treeSelectionDisabled = false,
   treeSelectionDisabledReason = "",
   onTogglePartVisibility,
@@ -256,39 +417,64 @@ export default function StepFileSheet({
   onOpenSectionIdsChange
 }) {
   const rowRefs = useRef(new Map());
-  const treeSelectClickTimerRef = useRef(null);
   const selectedIds = Array.isArray(selectedPartIds) ? selectedPartIds : [];
   const selectedReferenceIdSet = useMemo(
     () => new Set((Array.isArray(selectedReferenceIds) ? selectedReferenceIds : []).map((id) => String(id || "").trim()).filter(Boolean)),
     [selectedReferenceIds]
   );
   const hiddenIds = Array.isArray(hiddenPartIds) ? hiddenPartIds : [];
-  const normalizedInspectedNodeId = String(inspectedNodeId || "").trim();
+  const focusedNodeIdSet = useMemo(
+    () => new Set((Array.isArray(focusedNodeIds) ? focusedNodeIds : []).map((id) => String(id || "").trim()).filter(Boolean)),
+    [focusedNodeIds]
+  );
+  const normalizedHoveredReferenceId = String(hoveredReferenceId || "").trim();
   const selectableNodeIdSet = useMemo(() => {
     if (!Array.isArray(selectableNodeIds)) {
       return null;
     }
     return new Set(selectableNodeIds.map((id) => String(id || "").trim()).filter(Boolean));
   }, [selectableNodeIds]);
-  const elideRootAssemblyRow = isAssemblyView && stepTreeNodeChildren(stepTreeRoot).length > 0;
-  const rootTreeItemCount = elideRootAssemblyRow ? stepTreeNodeChildren(stepTreeRoot).length : 0;
+  const treeRoot = stepTreeRoot;
+  const elideRootAssemblyRow = isAssemblyView && stepTreeNodeChildren(treeRoot).length > 0;
+  const rootTreeItemCount = elideRootAssemblyRow ? stepTreeNodeChildren(treeRoot).length : 0;
   const rootTreeHasOverflow = rootTreeItemCount > STEP_TREE_ROOT_ITEM_LIMIT;
   const showAllRootTreeItems = !rootTreeHasOverflow || stepTreeRootShowMore === true;
   const hiddenRootTreeItemCount = Math.max(rootTreeItemCount - STEP_TREE_ROOT_ITEM_LIMIT, 0);
   const visibleRows = useMemo(
-    () => flattenVisibleStepTreeRows(stepTreeRoot, expandedTreeNodeIds, {
+    () => flattenVisibleStepTreeRows(treeRoot, expandedTreeNodeIds, {
       omitRoot: elideRootAssemblyRow,
       rootChildLimit: STEP_TREE_ROOT_ITEM_LIMIT,
       showAllRootChildren: showAllRootTreeItems
     }),
-    [elideRootAssemblyRow, expandedTreeNodeIds, showAllRootTreeItems, stepTreeRoot]
+    [elideRootAssemblyRow, expandedTreeNodeIds, showAllRootTreeItems, treeRoot]
   );
   const visibleRowIdsSignature = useMemo(
     () => visibleRows.map((row) => String(row?.id || "")).join("\n"),
     [visibleRows]
   );
+  const hiddenTreeRowIds = useMemo(
+    () => hiddenStepTreeRowIds(visibleRows, hiddenIds),
+    [hiddenIds, visibleRows]
+  );
   const hasAssemblyTree = isAssemblyView ? visibleRows.length > 0 : visibleRows.some((row) => row?.hasChildren);
-  const activeTreeNodeId = String(activeTreeNodeIdProp || selectedIds[selectedIds.length - 1] || "").trim();
+  const activeSelectedReferenceId = String(
+    Array.isArray(selectedReferenceIds) ? selectedReferenceIds[selectedReferenceIds.length - 1] || "" : ""
+  ).trim();
+  const activeReferenceTreeRow = useMemo(
+    () => activeSelectedReferenceId
+      ? visibleRows.find((row) => String(row?.topologyReferenceId || "").trim() === activeSelectedReferenceId) || null
+      : null,
+    [activeSelectedReferenceId, visibleRows]
+  );
+  const rawActiveTreeNodeId = String(activeTreeNodeIdProp || selectedIds[selectedIds.length - 1] || "").trim();
+  const activeTreeNodeId = String(activeReferenceTreeRow?.id || rawActiveTreeNodeId || "").trim();
+  const activeTreeRow = useMemo(
+    () => activeTreeNodeId
+      ? visibleRows.find((row) => String(row?.id || "").trim() === activeTreeNodeId) || null
+      : null,
+    [activeTreeNodeId, visibleRows]
+  );
+  const activeTreeNodeIsTopology = Boolean(topologyTreeRowType(activeTreeRow));
   const selectedPartCount = selectedIds.length;
   const hiddenPartCount = hiddenIds.length;
   const showTreeVisibilityControls = isAssemblyView === true;
@@ -311,7 +497,9 @@ export default function StepFileSheet({
       return;
     }
     const scrollToActiveTreeNode = () => {
-      scrollTreeNodeIntoView(rowRefs.current.get(activeTreeNodeId));
+      scrollTreeNodeIntoView(rowRefs.current.get(activeTreeNodeId), {
+        block: activeTreeNodeIsTopology ? "center" : "nearest"
+      });
     };
     if (typeof window === "undefined") {
       scrollToActiveTreeNode();
@@ -321,14 +509,7 @@ export default function StepFileSheet({
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [activeTreeNodeId, treeSectionOpen, visibleRowIdsSignature]);
-
-  useEffect(() => () => {
-    if (treeSelectClickTimerRef.current) {
-      window.clearTimeout(treeSelectClickTimerRef.current);
-      treeSelectClickTimerRef.current = null;
-    }
-  }, []);
+  }, [activeTreeNodeId, activeTreeNodeIsTopology, treeSectionOpen, visibleRowIdsSignature]);
 
   if (!selectedEntry) {
     return null;
@@ -413,183 +594,235 @@ export default function StepFileSheet({
                   const topologyType = topologyTreeRowType(row);
                   const topologyRow = Boolean(topologyType);
                   const topologyReferenceId = String(row.topologyReferenceId || "").trim();
-                  const selectableTopologyRow = (topologyType === "occurrence" || topologyType === "shape") &&
+                  const selectableTopologyRow = Boolean(topologyType) &&
                     topologyReferenceId &&
                     typeof onSelectReferenceNode === "function";
                   const rowDetail = String(row.detail || "").trim();
                   const selected = topologyRow
                     ? selectedReferenceIdSet.has(topologyReferenceId)
                     : selectedIds.includes(row.id);
-                  const inspected = normalizedInspectedNodeId === row.id;
                   const selectable = topologyRow
                     ? selectableTopologyRow
                     : (!selectableNodeIdSet || selectableNodeIdSet.has(row.id) || selected);
-                  const rowSelectionDisabled = treeSelectionDisabled || !selectable;
-                  const showSelectedRowState = selected;
-                  const hovered = !topologyRow && hoveredPartId === row.id;
-                  const hidden = !topologyRow && leafIdsHidden(row.leafPartIds, hiddenIds);
+                  const hidden = hiddenTreeRowIds.has(String(row.id || "").trim());
+                  const focused = !topologyRow && focusedNodeIdSet.has(String(row.id || "").trim());
+                  const rowSelectionDisabled = treeSelectionDisabled || hidden || !selectable;
+                  const showSelectedRowState = selected && !hidden;
+                  const hovered = !hidden && (
+                    topologyRow
+                      ? topologyReferenceId && normalizedHoveredReferenceId === topologyReferenceId
+                      : hoveredPartId === row.id
+                  );
                   const VisibilityIcon = hidden ? EyeOff : Eye;
                   const visibilityLabel = hidden ? "Show" : "Hide";
-                  const inspectLabel = inspected ? `Exit inspection for ${row.label}` : `Inspect ${row.label}`;
+                  const primaryLabel = `Select ${row.label}`;
                   const rowTitle = treeSelectionTitle ||
                     (topologyRow
                       ? [row.label, rowDetail].filter(Boolean).join(" - ")
-                      : selectable ? row.label : inspected ? `Inspecting ${row.label}` : "Inspect this node to select its children");
-                  const rowDepthPx = Math.min(Math.max(row.depth, 0) * 24, 144);
+                      : selectable ? row.label : "Focus this node to select its children");
+                  const rowDepthPx = Math.min(Math.max(row.depth, 0) * 18, 132);
+                  const chevronButtonWidthPx = rowDepthPx + 20;
+                  const selectRow = (event) => {
+                    const multiSelect = event.shiftKey;
+                    if (topologyRow) {
+                      onSelectReferenceNode?.(topologyReferenceId, { multiSelect });
+                    } else {
+                      onSelectTreeNode?.(row.id, { multiSelect });
+                    }
+                  };
+                  const contextFocusLabel = focused ? "Unfocus" : "Focus";
+                  const contextFocusActionAvailable = focused
+                    ? typeof onUnfocusTreeNode === "function"
+                    : typeof onFocusTreeNode === "function";
+                  const contextSelectDisabled = treeSelectionDisabled || (!selectable && !selected) || (hidden && !selected);
+                  const contextFocusDisabled = topologyRow || treeSelectionDisabled || !contextFocusActionAvailable;
+                  const contextVisibilityDisabled = topologyRow ||
+                    !showTreeVisibilityControls ||
+                    typeof onTogglePartVisibility !== "function";
+                  const copyReferenceTargetId = topologyRow ? topologyReferenceId : row.id;
                   return (
-                    <div
-                      key={row.id}
-                      ref={(node) => {
-                        if (node) {
-                          rowRefs.current.set(row.id, node);
-                          return;
-                        }
-                        rowRefs.current.delete(row.id);
-                      }}
-                      role="treeitem"
-                      aria-expanded={row.hasChildren ? row.expanded : undefined}
-                      aria-selected={selected}
-                      aria-current={inspected ? "true" : undefined}
-                      data-selection-disabled={rowSelectionDisabled ? "true" : undefined}
-                      className={cn("min-w-0 max-w-full rounded-md", hidden && "opacity-45")}
-                      title={rowTitle}
-                    >
-                      <div className="flex h-7 min-w-0 max-w-full items-center gap-0.5">
-                        <div className="flex min-w-0 flex-1 items-center gap-0 overflow-hidden" style={{ paddingLeft: rowDepthPx }}>
-                          {row.hasChildren ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              className="size-6 shrink-0 rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                onToggleTreeNode?.(row.id);
-                              }}
-                              aria-label={row.expanded ? `Collapse ${row.label}` : `Expand ${row.label}`}
-                              title={row.expanded ? "Collapse" : "Expand"}
-                            >
-                              <ChevronRight
-                                className={cn("size-3.5 transition-transform", row.expanded && "rotate-90")}
-                                strokeWidth={2}
-                                aria-hidden="true"
-                              />
-                            </Button>
-                          ) : (
-                            <span className="size-6 shrink-0" aria-hidden="true" />
-                          )}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className={cn(
-                              treeRowButtonClasses,
-                              "w-0 flex-1 touch-manipulation justify-start gap-1.5 overflow-hidden !px-2 text-left",
-                              rowSelectionDisabled && "text-sidebar-foreground/55",
-                              showSelectedRowState
-                                ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                                : hovered && "bg-sidebar-accent text-sidebar-accent-foreground"
-                            )}
-                            title={rowTitle}
-                            tabIndex={rowSelectionDisabled ? -1 : undefined}
-                            onClick={(event) => {
-                              if (rowSelectionDisabled) {
-                                return;
-                              }
-                              const multiSelect = event.shiftKey;
-                              if (treeSelectClickTimerRef.current) {
-                                window.clearTimeout(treeSelectClickTimerRef.current);
-                              }
-                              treeSelectClickTimerRef.current = window.setTimeout(() => {
-                                treeSelectClickTimerRef.current = null;
-                                if (topologyRow) {
-                                  onSelectReferenceNode?.(topologyReferenceId, { multiSelect });
-                                } else {
-                                  onSelectTreeNode?.(row.id, { multiSelect });
-                                }
-                              }, 180);
-                            }}
-                            onDoubleClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              if (treeSelectClickTimerRef.current) {
-                                window.clearTimeout(treeSelectClickTimerRef.current);
-                                treeSelectClickTimerRef.current = null;
-                              }
-                              if (!topologyRow) {
-                                onInspectTreeNode?.(row.id);
-                              }
-                            }}
-                            onMouseEnter={() => {
-                              if (!rowSelectionDisabled && !topologyRow) {
-                                onHoverTreeNode?.(row.id);
-                              }
-                            }}
-                            onMouseLeave={() => {
-                              if (!rowSelectionDisabled && !topologyRow) {
-                                onHoverTreeNode?.("");
-                              }
-                            }}
-                          >
-                            <StepTreeRowGlyph row={row} />
-                            <span className="min-w-0 flex-1 overflow-hidden">
-                              <span className="flex min-w-0 items-baseline gap-1.5 overflow-hidden text-xs font-medium leading-4">
-                                <span className="min-w-0 truncate">
-                                  {row.label}
-                                </span>
-                                {rowDetail ? (
-                                  <span className="min-w-0 truncate text-[10px] font-normal text-sidebar-foreground/50">
-                                    {rowDetail}
+                    <ContextMenu key={row.id} modal={false}>
+                      <ContextMenuTrigger asChild>
+                        <div
+                          ref={(node) => {
+                            if (node) {
+                              rowRefs.current.set(row.id, node);
+                              return;
+                            }
+                            rowRefs.current.delete(row.id);
+                          }}
+                          role="treeitem"
+                          aria-expanded={row.hasChildren ? row.expanded : undefined}
+                          aria-selected={selected}
+                          data-selection-disabled={rowSelectionDisabled ? "true" : undefined}
+                          className={cn("min-w-0 max-w-full rounded-sm", hidden && "opacity-45")}
+                          title={rowTitle}
+                        >
+                          <div className="flex h-7 min-w-0 max-w-full items-center gap-0">
+                            <div className="flex min-w-0 flex-1 overflow-hidden">
+                              {row.hasChildren ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className={cn(
+                                    treeChevronButtonClasses,
+                                    "justify-end hover:bg-sidebar-accent"
+                                  )}
+                                  style={{
+                                    width: chevronButtonWidthPx,
+                                    minWidth: chevronButtonWidthPx
+                                  }}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    onToggleTreeNode?.(row.id);
+                                  }}
+                                  aria-label={row.expanded ? `Collapse ${row.label}` : `Expand ${row.label}`}
+                                  title={row.expanded ? "Collapse" : "Expand"}
+                                >
+                                  <ChevronRight
+                                    className={cn("size-3.5 transition-transform", row.expanded && "rotate-90")}
+                                    strokeWidth={2}
+                                    aria-hidden="true"
+                                  />
+                                </Button>
+                              ) : (
+                                <span
+                                  className="h-7 shrink-0"
+                                  style={{
+                                    width: chevronButtonWidthPx,
+                                    minWidth: chevronButtonWidthPx
+                                  }}
+                                  aria-hidden="true"
+                                />
+                              )}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className={cn(
+                                  treeRowButtonClasses,
+                                  "min-w-0 flex-1 shrink touch-manipulation justify-start gap-1 overflow-hidden !px-1 text-left",
+                                  rowSelectionDisabled && "text-sidebar-foreground/55",
+                                  showSelectedRowState
+                                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                                    : hovered && "bg-sidebar-accent text-sidebar-accent-foreground"
+                                )}
+                                title={rowTitle}
+                                aria-label={primaryLabel}
+                                tabIndex={rowSelectionDisabled ? -1 : undefined}
+                                disabled={rowSelectionDisabled}
+                                onClick={(event) => {
+                                  if (rowSelectionDisabled) {
+                                    return;
+                                  }
+                                  selectRow(event);
+                                }}
+                                onMouseEnter={() => {
+                                  if (topologyRow) {
+                                    if (!treeSelectionDisabled && topologyReferenceId) {
+                                      onHoverReferenceNode?.(topologyReferenceId);
+                                    }
+                                    return;
+                                  }
+                                  if (!rowSelectionDisabled) {
+                                    onHoverTreeNode?.(row.id);
+                                  }
+                                }}
+                                onMouseLeave={() => {
+                                  if (topologyRow) {
+                                    if (topologyReferenceId) {
+                                      onHoverReferenceNode?.("");
+                                    }
+                                    return;
+                                  }
+                                  if (!rowSelectionDisabled) {
+                                    onHoverTreeNode?.("");
+                                  }
+                                }}
+                              >
+                                <StepTreeRowGlyph row={row} />
+                                <span className="min-w-0 flex-1 overflow-hidden">
+                                  <span className="flex min-w-0 items-baseline gap-1.5 overflow-hidden text-xs font-medium leading-4">
+                                    <span className="min-w-0 truncate">
+                                      {row.label}
+                                    </span>
+                                    {rowDetail ? (
+                                      <span className="min-w-0 truncate text-[10px] font-normal text-sidebar-foreground/50">
+                                        {rowDetail}
+                                      </span>
+                                    ) : null}
                                   </span>
-                                ) : null}
-                              </span>
-                            </span>
-                          </Button>
+                                </span>
+                              </Button>
+                            </div>
+
+                            {showTreeVisibilityControls && !topologyRow ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                className={cn(
+                                  treeActionButtonClasses,
+                                  "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                  hidden && "bg-sidebar-accent text-sidebar-accent-foreground"
+                                )}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onTogglePartVisibility?.(row.id);
+                                }}
+                                aria-label={`${visibilityLabel} ${row.label}`}
+                                title={visibilityLabel}
+                              >
+                                <VisibilityIcon className="size-3" strokeWidth={2} aria-hidden="true" />
+                              </Button>
+                            ) : null}
+                          </div>
                         </div>
-
-                        {showTreeVisibilityControls && !topologyRow ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            className={cn(
-                              compactIconButtonClasses,
-                              "rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                              inspected && "text-sidebar-foreground ring-1 ring-sidebar-border"
-                            )}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onInspectTreeNode?.(row.id);
-                            }}
-                            aria-label={inspectLabel}
-                            title={inspectLabel}
-                          >
-                            <Crosshair className="size-2.5" strokeWidth={2} aria-hidden="true" />
-                          </Button>
-                        ) : null}
-
-                        {showTreeVisibilityControls && !topologyRow ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            className={cn(
-                              compactIconButtonClasses,
-                              "rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                              hidden && "bg-sidebar-accent text-sidebar-accent-foreground"
-                            )}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onTogglePartVisibility?.(row.id);
-                            }}
-                            aria-label={`${visibilityLabel} ${row.label}`}
-                            title={visibilityLabel}
-                          >
-                            <VisibilityIcon className="size-2.5" strokeWidth={2} aria-hidden="true" />
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent className="w-44">
+                        <ContextMenuItem
+                          className="text-xs"
+                          disabled={!copyReferenceTargetId || typeof onCopyTreeNodeReference !== "function"}
+                          onSelect={() => {
+                            onCopyTreeNodeReference?.(copyReferenceTargetId, { topology: topologyRow });
+                          }}
+                        >
+                          <span className="min-w-0 truncate">Copy Reference</span>
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          className="text-xs"
+                          disabled={contextSelectDisabled}
+                          onSelect={(event) => {
+                            selectRow(event);
+                          }}
+                        >
+                          <span className="min-w-0 truncate">{selected ? "Deselect" : "Select"}</span>
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          className="text-xs"
+                          disabled={contextFocusDisabled}
+                          onSelect={() => {
+                            if (focused) {
+                              onUnfocusTreeNode?.(row.id);
+                              return;
+                            }
+                            onFocusTreeNode?.(row.id);
+                          }}
+                        >
+                          <span className="min-w-0 truncate">{contextFocusLabel}</span>
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                          className="text-xs"
+                          disabled={contextVisibilityDisabled}
+                          onSelect={() => {
+                            onTogglePartVisibility?.(row.id);
+                          }}
+                        >
+                          <span className="min-w-0 truncate">{hidden ? "Reveal" : "Hide"}</span>
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
                   );
                 })
                 : null}

@@ -255,7 +255,7 @@ test("buildModel selection can focus and hide subassembly occurrence descendants
     theme: cloneThemeSettings("workbench"),
     renderPartsIndividually: true,
     selection: {
-      focus: ["@cad[models/assembly#o1.2]"]
+      focus: ["#o1.2"]
     }
   });
 
@@ -526,7 +526,10 @@ test("buildModel applies selection, clipping, and STEP parameter effects", () =>
   const right = scene.displayRecords.find((record) => record.partId === "right");
 
   assert.equal(left.mesh.visible, false);
-  assert.equal(right.mesh.visible, false);
+  assert.equal(right.mesh.visible, true);
+  assert.equal(right.material.transparent, true);
+  assert.equal(right.material.depthWrite, false);
+  assert.equal(right.material.opacity, 0.035);
   assert.equal(left.material.clippingPlanes.length, 1);
   assert.equal(scene.bounds.min[0], 2);
   assert.equal(scene.bounds.max[0], 3);

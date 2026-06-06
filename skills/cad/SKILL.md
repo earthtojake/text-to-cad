@@ -1,6 +1,6 @@
 ---
 name: cad
-description: Create, modify, inspect, and validate STEP-first build123d/Python CAD parts and assemblies. Use for natural-language CAD specs, STEP/STP generation or direct inspection, build123d source, build123d source-level joints, @cad references, geometry facts, measurements, mating deltas, CAD Viewer handoffs, snapshots, and secondary DXF/STL/3MF/native GLB outputs from CAD geometry.
+description: Create, modify, inspect, and validate STEP-first build123d/Python CAD parts and assemblies. Use for natural-language CAD specs, STEP/STP generation or direct inspection, build123d source, build123d source-level joints, selector references, geometry facts, measurements, mating deltas, CAD Viewer handoffs, snapshots, and secondary DXF/STL/3MF/native GLB outputs from CAD geometry.
 ---
 
 # CAD generation, inspection, and validation
@@ -15,7 +15,7 @@ Create or modify parametric CAD models from natural-language requirements, gener
 
 ## Use this skill when
 
-Use this skill when the user asks for CAD files, STEP/STP files, build123d source, `@cad[...]` references, mechanical parts, assemblies, enclosures, brackets, fixtures, holes, counterbores, countersinks, slots, pockets, bosses, standoffs, ribs, fillets, chamfers, shells, source-level joints, mating, or measurements.
+Use this skill when the user asks for CAD files, STEP/STP files, build123d source, selector refs such as `#o1.2.f1`, mechanical parts, assemblies, enclosures, brackets, fixtures, holes, counterbores, countersinks, slots, pockets, bosses, standoffs, ribs, fillets, chamfers, shells, source-level joints, mating, or measurements.
 
 Also use it when the user asks for DXF, STL, 3MF, or native GLB output from CAD geometry. Keep those workflows secondary and load `dxf.md` or `supported-exports.md` for details.
 
@@ -77,7 +77,7 @@ Use `python scripts/<tool> --help` for the complete current command interface; r
 5. **Plan before coding.** Define parameters, semantic labels, source paths, expected bounding boxes, and any mating/positioning datums before editing.
 6. **Edit source, not generated artifacts.** Prefer build123d Python with `gen_step()` for STEP generation.
 7. **Generate explicit targets.** Use `scripts/step` for STEP/STP generation, GLB/topology artifacts, and sidecars. When a Python generator exists, its GLB/topology artifact is Python-backed even when the STEP is also written. Use `--kind part` or `--kind assembly` only for direct STEP/STP imports. Use `--skip-step-write` only when explicitly generating a Python-backed GLB/topology artifact without writing STEP. Do not run directory-wide generation.
-8. **Validate geometrically.** Use `scripts/inspect refs --facts --planes --positioning`, then targeted `measure`, `mate`, `frame`, or `diff` when needed.
+8. **Validate geometrically.** Use `scripts/inspect refs <step-or-cad-target> --facts --planes --positioning`, then targeted `measure`, `mate`, `frame`, or `diff` when needed.
 9. **Verify primary STEP visually with snapshots.** After creating or visibly updating a primary STEP/STP part or assembly, ALWAYS run CAD `scripts/snapshot` against the primary STEP/STP artifact for visual verification/review. Do not skip snapshots for speed, convenience, confidence, or because deterministic checks passed. Skip only when `references/snapshot-review.md` says no visible geometry changed or no valid artifact exists, and report that reason. Use PNGs for static reviews and GIFs for motion/animation reviews; `scripts/inspect`, measurements, mating checks, frames, and diffs are complementary, not replacements.
 10. **Repair and rerun.** If a check fails, change the smallest responsible source section, regenerate, and rerun the failed validation.
 
@@ -105,7 +105,7 @@ Load these files only when their trigger applies:
 - `references/natural-language-specs.md` — converting prose requirements into a CAD brief without requiring user JSON.
 - `references/parameters.md` — parameter, control, and animation design best practices.
 - `references/step-generation.md` — STEP generation, direct STEP/STP targets, part-vs-assembly behavior, and post-generation inspection.
-- `references/inspection-and-validation.md` — validation gates, `@cad[...]` refs, facts, planes, topology, measurements, mating, diff, frame, and final validation reporting.
+- `references/inspection-and-validation.md` — validation gates, selector refs, facts, planes, topology, measurements, mating, diff, frame, and final validation reporting.
 - `references/snapshot-review.md` — risk-based snapshot triggers, small snapshot packets, targeted visual views, multimodal critique, and converting visual findings into geometry checks.
 - `references/positioning.md` — part-local datums, assembly transforms, build123d joints, CLI mate validation, and positioning reports.
 - `references/dxf.md` — secondary DXF workflow.

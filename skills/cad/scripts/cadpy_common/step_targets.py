@@ -107,10 +107,7 @@ def cad_path_from_target(target: str) -> str:
 def entry_target_from_target(target: str) -> EntryTarget:
     parsed_tokens = parse_cad_tokens(target)
     if parsed_tokens:
-        if len(parsed_tokens) != 1:
-            raise CadRefError("Expected exactly one @cad[...] token.")
-        parsed = parsed_tokens[0]
-        return EntryTarget(parsed.cad_path, parsed.selectors)
+        raise CadRefError("Selector refs require an explicit STEP target argument.")
     raw_target = str(target or "").strip()
     if _raw_step_path(raw_target) is not None:
         normalized = normalize_cad_path(raw_target)
@@ -174,7 +171,7 @@ def resolve_step_target(target: str) -> ResolvedStepTarget:
             step_path=source.step_path.resolve(),
         )
     if source is not None:
-        raise CadRefError(f"CAD ref '{cad_path}' is not STEP-backed.")
+        raise CadRefError(f"CAD target '{cad_path}' is not STEP-backed.")
 
     direct_step_path = _direct_step_path(cad_path)
     if direct_step_path is not None:

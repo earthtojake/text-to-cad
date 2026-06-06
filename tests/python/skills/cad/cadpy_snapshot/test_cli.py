@@ -99,8 +99,8 @@ class SnapshotCliTests(unittest.TestCase):
                     "--output",
                     "tmp/assembly.png",
                     "--focus",
-                    "@cad[models/assembly#o1.2]",
-                    "--hide=@cad[models/assembly#o1.3.1]",
+                    "#o1.2",
+                    "--hide=#o1.3.1",
                 ]
             )
 
@@ -112,8 +112,8 @@ class SnapshotCliTests(unittest.TestCase):
                 "--output",
                 "tmp/assembly.png",
                 "--focus",
-                "@cad[models/assembly#o1.2]",
-                "@cad[models/assembly#o1.3]",
+                "#o1.2",
+                "#o1.3",
             ]
         )
 
@@ -122,7 +122,7 @@ class SnapshotCliTests(unittest.TestCase):
         self.assertEqual(
             job["selection"],
             {
-                "focus": ["@cad[models/assembly#o1.2]", "@cad[models/assembly#o1.3]"],
+                "focus": ["#o1.2", "#o1.3"],
             },
         )
 
@@ -291,7 +291,7 @@ class SnapshotCliTests(unittest.TestCase):
                 resolve_render_job_packet(
                     {
                         "input": "models/assembly.step",
-                        "selection": {"focus": ["@cad[models/assembly#o1.2]"]},
+                        "selection": {"focus": ["#o1.2"]},
                         "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
                     },
                     cwd=root,
@@ -304,7 +304,7 @@ class SnapshotCliTests(unittest.TestCase):
         self.assertEqual(target.step_path, step_path)
         self.assertTrue(kwargs["require_selector"])
 
-    def test_render_job_normalizes_focus_cad_refs(self) -> None:
+    def test_render_job_normalizes_focus_selector_refs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory).resolve()
             models = root / "models"
@@ -324,7 +324,7 @@ class SnapshotCliTests(unittest.TestCase):
                     {
                         "input": "models/assembly.step",
                         "selection": {
-                            "focus": ["@cad[models/assembly#o1.2,o1.3]"],
+                            "focus": ["#o1.2", "#o1.3"],
                         },
                         "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
                     },
@@ -336,7 +336,7 @@ class SnapshotCliTests(unittest.TestCase):
         selection = packet["jobs"][0]["selection"]
         self.assertEqual(selection["focus"], ["o1.2", "o1.3"])
 
-    def test_render_job_normalizes_hide_cad_refs(self) -> None:
+    def test_render_job_normalizes_hide_selector_refs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory).resolve()
             models = root / "models"
@@ -355,7 +355,7 @@ class SnapshotCliTests(unittest.TestCase):
                 packet = resolve_render_job_packet(
                     {
                         "input": "models/assembly.step",
-                        "selection": {"hide": ["@cad[models/assembly.step#o1.2.1]"]},
+                        "selection": {"hide": ["#o1.2.1"]},
                         "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
                     },
                     cwd=root,
@@ -381,7 +381,7 @@ class SnapshotCliTests(unittest.TestCase):
                     resolve_render_job_packet(
                         {
                             "input": "models/assembly.step",
-                            "selection": {"focus": ["@cad[models/assembly#o1.2.f1]"]},
+                            "selection": {"focus": ["#o1.2.f1"]},
                             "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
                         },
                         cwd=root,
@@ -409,8 +409,8 @@ class SnapshotCliTests(unittest.TestCase):
                         {
                             "input": "models/assembly.step",
                             "selection": {
-                                "focus": ["@cad[models/assembly#o1.2]"],
-                                "hide": ["@cad[models/assembly#o1.3]"],
+                                "focus": ["#o1.2"],
+                                "hide": ["#o1.3"],
                             },
                             "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
                         },

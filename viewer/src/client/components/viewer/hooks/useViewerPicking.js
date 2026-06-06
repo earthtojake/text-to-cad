@@ -433,10 +433,12 @@ export function useViewerPicking({
   pickableFaces,
   pickableEdges,
   pickableVertices,
+  hiddenPartIds,
   focusedPartId,
   onHoverReferenceChange,
   onActivateReference,
   onDoubleActivateReference,
+  onContextReference,
   viewerReadyTick
 }) {
   // Keep pointer listeners stable across parent rerenders; hover itself updates parent state.
@@ -445,10 +447,12 @@ export function useViewerPicking({
   const pickableFacesRef = useRef(pickableFaces);
   const pickableEdgesRef = useRef(pickableEdges);
   const pickableVerticesRef = useRef(pickableVertices);
+  const hiddenPartIdsRef = useRef(hiddenPartIds);
   const focusedPartIdRef = useRef(focusedPartId);
   const onHoverReferenceChangeRef = useRef(onHoverReferenceChange);
   const onActivateReferenceRef = useRef(onActivateReference);
   const onDoubleActivateReferenceRef = useRef(onDoubleActivateReference);
+  const onContextReferenceRef = useRef(onContextReference);
   const allowedFaceReferenceIdsRef = useRef(new Set());
   const allowedEdgeReferenceIdsRef = useRef(new Set());
   const allowedVertexReferenceIdsRef = useRef(new Set());
@@ -458,10 +462,12 @@ export function useViewerPicking({
   pickableFacesRef.current = pickableFaces;
   pickableEdgesRef.current = pickableEdges;
   pickableVerticesRef.current = pickableVertices;
+  hiddenPartIdsRef.current = hiddenPartIds;
   focusedPartIdRef.current = focusedPartId;
   onHoverReferenceChangeRef.current = onHoverReferenceChange;
   onActivateReferenceRef.current = onActivateReference;
   onDoubleActivateReferenceRef.current = onDoubleActivateReference;
+  onContextReferenceRef.current = onContextReference;
   allowedFaceReferenceIdsRef.current = new Set(
     (Array.isArray(pickableFaces) ? pickableFaces : [])
       .map((reference) => String(reference?.id || "").trim())
@@ -575,9 +581,13 @@ export function useViewerPicking({
 
     function visibleModelMeshes() {
       const focusIds = focusedPartIdSet(focusedPartIdRef.current);
+      const hiddenIds = focusedPartIdSet(hiddenPartIdsRef.current);
       return runtime.displayRecords
         .filter((record) => {
           if (!record?.mesh?.visible) {
+            return false;
+          }
+          if (hiddenIds.has(String(record?.partId || "").trim())) {
             return false;
           }
           if (focusIds.size && !focusIds.has(String(record?.partId || "").trim())) {
@@ -598,9 +608,13 @@ export function useViewerPicking({
 
     function pickPartReferenceFromIntersections(intersections) {
       const focusIds = focusedPartIdSet(focusedPartIdRef.current);
+      const hiddenIds = focusedPartIdSet(hiddenPartIdsRef.current);
       for (const intersection of intersections) {
         const partId = intersection?.object?.userData?.partId;
         if (!partId) {
+          continue;
+        }
+        if (hiddenIds.has(String(partId || "").trim())) {
           continue;
         }
         if (focusIds.size && !focusIds.has(String(partId || "").trim())) {
@@ -1101,10 +1115,28 @@ export function useViewerPicking({
       onDoubleActivateReferenceRef.current?.(referenceId || "", { multiSelect: !!event.shiftKey });
     }
 
+    function handleContextMenu(event) {
+      if (!isSceneInteractionTarget(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      clearPendingActivation();
+      const referenceId = pickReferenceAtPosition(event.clientX, event.clientY, { hover: true }) ||
+        pickReferenceAtPosition(event.clientX, event.clientY) ||
+        "";
+      onContextReferenceRef.current?.(referenceId || "", {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        multiSelect: !!event.shiftKey
+      });
+    }
+
     container.addEventListener("pointermove", handlePointerMove);
     container.addEventListener("pointerleave", handlePointerLeave);
     container.addEventListener("pointerdown", handlePointerDown);
     container.addEventListener("pointerup", handlePointerUp);
+    container.addEventListener("contextmenu", handleContextMenu);
     if (doubleClickEnabled) {
       container.addEventListener("dblclick", handleDoubleClick);
     }
@@ -1114,6 +1146,7 @@ export function useViewerPicking({
       container.removeEventListener("pointerleave", handlePointerLeave);
       container.removeEventListener("pointerdown", handlePointerDown);
       container.removeEventListener("pointerup", handlePointerUp);
+      container.removeEventListener("contextmenu", handleContextMenu);
       if (doubleClickEnabled) {
         container.removeEventListener("dblclick", handleDoubleClick);
       }

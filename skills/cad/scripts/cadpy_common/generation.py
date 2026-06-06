@@ -1017,7 +1017,7 @@ def _report_selector_manifest_change(
         return
     if bool(change.get("topologyChanged")):
         logger.warning(
-            f"{spec.cad_ref} selector topology changed; re-resolve @cad refs before using old face or edge selectors."
+            f"{spec.cad_ref} selector topology changed; re-resolve selector refs before using old face or edge selectors."
         )
         return
     if bool(change.get("geometryChanged")):

@@ -96,10 +96,10 @@ export function normalizeCadRefQueryParams(values) {
     const lines = String(sourceValue || "").split(/\r?\n/);
     for (const line of lines) {
       const normalizedLine = String(line || "").trim();
-      const parsedToken = parseCadRefToken(normalizedLine) || parseCadRefToken(`@cad[${normalizedLine}]`);
+      const parsedToken = parseCadRefToken(normalizedLine);
       const token = String(
         parsedToken
-          ? buildCadRefToken({ cadPath: parsedToken.cadPath, selectors: parsedToken.selectors })
+          ? buildCadRefToken({ selectors: parsedToken.selectors })
           : ""
       ).trim();
       if (!token || seenTokens.has(token)) {
@@ -115,8 +115,8 @@ export function normalizeCadRefQueryParams(values) {
 
 function cadRefQueryValueFromToken(token) {
   const parsedToken = parseCadRefToken(token);
-  return parsedToken?.token
-    ? parsedToken.token.slice("@cad[".length, -1)
+  return parsedToken
+    ? parsedToken.token
     : "";
 }
 
@@ -198,16 +198,8 @@ export function missingFileRefForCatalog({
 }
 
 export function findEntryByCadRefParams(entries, cadRefs = readCadRefQueryParams()) {
-  for (const cadRef of Array.isArray(cadRefs) ? cadRefs : [cadRefs]) {
-    const cadPath = String(parseCadRefToken(cadRef)?.cadPath || "").trim();
-    if (!cadPath) {
-      continue;
-    }
-    const match = entries.find((entry) => cadPathForEntry(entry) === cadPath);
-    if (match) {
-      return match;
-    }
-  }
+  void entries;
+  void cadRefs;
   return null;
 }
 

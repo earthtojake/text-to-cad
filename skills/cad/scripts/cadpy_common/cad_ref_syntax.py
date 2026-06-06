@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 
 
-CAD_TOKEN_RE = re.compile(r"^\s*@cad\[([^\]#]+)(?:#([^\]]+))?\]")
+CAD_TOKEN_RE = re.compile(r"^\s*#([^\s]*)")
 OCCURRENCE_SELECTOR_RE = re.compile(r"^o((?:\d+)(?:\.\d+)*)$")
 OCCURRENCE_ENTITY_SELECTOR_RE = re.compile(r"^o((?:\d+)(?:\.\d+)*)\.([sfev])(\d+)$")
 ENTITY_SELECTOR_RE = re.compile(r"^([sfev])(\d+)$")
@@ -42,15 +42,13 @@ def parse_cad_tokens(text: str) -> list[ParsedToken]:
         match = CAD_TOKEN_RE.match(line)
         if match is None:
             continue
-        cad_path = normalize_cad_path(str(match.group(1) or ""))
-        if not cad_path:
-            continue
+        selector_text = str(match.group(1) or "")
         tokens.append(
             ParsedToken(
                 line=line_no,
                 token=match.group(0),
-                cad_path=cad_path,
-                selectors=tuple(normalize_selector_list(str(match.group(2) or ""))),
+                cad_path="",
+                selectors=tuple(normalize_selector_list(selector_text)),
             )
         )
     return tokens
@@ -137,9 +135,7 @@ def normalize_selector_list(raw_selector_list: str) -> list[str]:
 
 
 def build_cad_token(cad_path: str, selector: str = "") -> str:
-    normalized_cad_path = normalize_cad_path(cad_path or "")
-    if not normalized_cad_path:
-        raise ValueError("cad_path is required")
+    _ = cad_path
     if not selector:
-        return f"@cad[{normalized_cad_path}]"
-    return f"@cad[{normalized_cad_path}#{selector}]"
+        return "#"
+    return f"#{selector}"

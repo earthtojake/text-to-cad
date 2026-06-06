@@ -279,6 +279,98 @@ function topologyReferencePartId(reference, fallbackPartId) {
   return normalizeString(reference?.partId) || normalizeString(fallbackPartId);
 }
 
+function addStepTreeTopologyPartTarget(targets, seenTargets, partId, occurrenceId) {
+  const normalizedPartId = normalizeString(partId);
+  const normalizedOccurrenceId = normalizeString(occurrenceId);
+  if (!normalizedPartId || !normalizedOccurrenceId) {
+    return;
+  }
+  const key = `${normalizedPartId}\0${normalizedOccurrenceId}`;
+  if (seenTargets.has(key)) {
+    return;
+  }
+  seenTargets.add(key);
+  targets.push({
+    partId: normalizedPartId,
+    occurrenceId: normalizedOccurrenceId
+  });
+}
+
+function collectStepTreeTopologyPartTargets(root) {
+  const targets = [];
+  const seenTargets = new Set();
+  const stack = root ? [root] : [];
+
+  while (stack.length) {
+    const node = stack.pop();
+    const children = stepTreeNodeChildren(node);
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push(children[index]);
+    }
+
+    if (normalizeString(node?.nodeType) !== "part") {
+      continue;
+    }
+
+    const partId = stepTreeNodeId(node);
+    if (!partId) {
+      continue;
+    }
+
+    addStepTreeTopologyPartTarget(targets, seenTargets, partId, partId);
+    addStepTreeTopologyPartTarget(targets, seenTargets, partId, node?.occurrenceId);
+    addStepTreeTopologyPartTarget(targets, seenTargets, partId, node?.sourceOccurrenceId);
+    addStepTreeTopologyPartTarget(targets, seenTargets, partId, node?.sourceRootTargetOccurrenceId);
+    for (const leafPartId of stepTreeNodeLeafPartIds(node)) {
+      addStepTreeTopologyPartTarget(targets, seenTargets, partId, leafPartId);
+    }
+  }
+
+  return targets.sort((a, b) => b.occurrenceId.length - a.occurrenceId.length);
+}
+
+function occurrenceMatchesStepTreePartTarget(occurrenceId, targetOccurrenceId) {
+  const normalizedOccurrenceId = normalizeString(occurrenceId);
+  const normalizedTargetOccurrenceId = normalizeString(targetOccurrenceId);
+  return Boolean(
+    normalizedOccurrenceId &&
+    normalizedTargetOccurrenceId &&
+    (
+      normalizedOccurrenceId === normalizedTargetOccurrenceId ||
+      normalizedOccurrenceId.startsWith(`${normalizedTargetOccurrenceId}.`)
+    )
+  );
+}
+
+export function assignStepTreeTopologyReferencePartIds(root = null, references = []) {
+  const normalizedReferences = Array.isArray(references) ? references : [];
+  const targets = collectStepTreeTopologyPartTargets(root);
+  if (!normalizedReferences.length || !targets.length) {
+    return normalizedReferences;
+  }
+
+  let changed = false;
+  const assignedReferences = normalizedReferences.map((reference) => {
+    if (!reference || typeof reference !== "object" || normalizeString(reference.partId)) {
+      return reference;
+    }
+    const occurrenceId = topologyReferenceOccurrenceId(reference);
+    const target = targets.find((candidate) => (
+      occurrenceMatchesStepTreePartTarget(occurrenceId, candidate.occurrenceId)
+    ));
+    if (!target) {
+      return reference;
+    }
+    changed = true;
+    return {
+      ...reference,
+      partId: target.partId
+    };
+  });
+
+  return changed ? assignedReferences : normalizedReferences;
+}
+
 function buildTopologyChildrenByPart(references, fallbackPartId) {
   const byPart = new Map();
   for (const reference of Array.isArray(references) ? references : []) {

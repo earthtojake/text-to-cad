@@ -139,7 +139,7 @@ test("copyTextToClipboard falls back to execCommand when async clipboard rejects
   const restoreDocument = replaceGlobal("document", fakeDocument.document);
 
   try {
-    await copyTextToClipboard("@cad[part#f1]");
+    await copyTextToClipboard("#f1");
   } finally {
     restoreDocument();
     restoreNavigator();
@@ -147,7 +147,7 @@ test("copyTextToClipboard falls back to execCommand when async clipboard rejects
 
   assert.deepEqual(fakeDocument.commands, ["copy"]);
   assert.equal(fakeDocument.appendedCount, 0);
-  assert.equal(fakeDocument.textarea.value, "@cad[part#f1]");
+  assert.equal(fakeDocument.textarea.value, "#f1");
   assert.equal(fakeDocument.textarea.selected, true);
   assert.deepEqual(fakeDocument.restoredRanges, [{ id: "existing-selection" }]);
   assert.equal(fakeDocument.activeElement.focusCalls, 1);

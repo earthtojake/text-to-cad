@@ -17,6 +17,7 @@ const AXIS_INDEX = Object.freeze({
   y: 1,
   z: 2
 });
+const ACTIVE_CLIP_OFFSET_EPSILON = 1e-6;
 
 function normalizeNumber(value, fallback) {
   const numericValue = Number(value);
@@ -47,14 +48,17 @@ export function normalizeStepClipSettings(value = null) {
       )
     ])
   );
+  const activeOffset = offsets[axis];
+  const offsetEnabled = activeOffset > ACTIVE_CLIP_OFFSET_EPSILON;
+  const requestedEnabled = source.enabled === true
+    ? true
+    : source.enabled === false
+      ? false
+      : offsetEnabled;
   return {
-    enabled: source.enabled === true
-      ? true
-      : source.enabled === false
-        ? false
-        : DEFAULT_STEP_CLIP_SETTINGS.enabled,
+    enabled: requestedEnabled && offsetEnabled,
     axis,
-    offset: offsets[axis],
+    offset: activeOffset,
     offsets,
     invert: source.invert === true
   };
@@ -100,6 +104,9 @@ export function pointVisibleByClipPlane(clipPlane, point, epsilon = 1e-5) {
 export function buildStepClipPatch(settings, patch) {
   const current = normalizeStepClipSettings(settings);
   const rawPatch = patch && typeof patch === "object" ? patch : {};
+  const hasExplicitEnabled = Object.prototype.hasOwnProperty.call(rawPatch, "enabled");
+  const hasOffsetPatch = Object.prototype.hasOwnProperty.call(rawPatch, "offset") ||
+    (rawPatch.offsets && typeof rawPatch.offsets === "object");
   const patchedAxis = STEP_CLIP_AXES.includes(String(rawPatch.axis || "").toLowerCase())
     ? String(rawPatch.axis).toLowerCase()
     : current.axis;
@@ -110,9 +117,11 @@ export function buildStepClipPatch(settings, patch) {
   if (Object.prototype.hasOwnProperty.call(rawPatch, "offset")) {
     offsets[patchedAxis] = rawPatch.offset;
   }
+  const activeOffset = clamp(normalizeNumber(offsets[patchedAxis], 0), 0, 1);
   return normalizeStepClipSettings({
     ...current,
     ...rawPatch,
+    ...(!hasExplicitEnabled && hasOffsetPatch ? { enabled: activeOffset > ACTIVE_CLIP_OFFSET_EPSILON } : {}),
     axis: patchedAxis,
     offsets,
     offset: offsets[patchedAxis]

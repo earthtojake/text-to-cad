@@ -85,12 +85,9 @@ export function parseAssemblyPartReferenceSelectionId(referenceId) {
 }
 
 function buildCadRefGroupKey(cadPath, selector = "") {
-  const compactCadPath = String(cadPath || "").trim();
-  if (!compactCadPath) {
-    return "";
-  }
+  void cadPath;
   const groupKind = String(selector || "").trim() || "root";
-  return `${compactCadPath}::${groupKind}`;
+  return `selector-ref::${groupKind}`;
 }
 
 function ensureCadRefGroup(groups, outputOrder, groupKey, cadPath) {
@@ -203,10 +200,7 @@ export function copySelectedReferenceText(references) {
 }
 
 export function buildAssemblyPartCopyText(part, entry) {
-  const cadPath = cadPathForEntry(entry);
-  if (!cadPath) {
-    return "";
-  }
+  void entry;
 
   const partId = String(part?.id || "").trim();
   const selector = String(part?.occurrenceId || partId).trim();
@@ -215,19 +209,17 @@ export function buildAssemblyPartCopyText(part, entry) {
   }
   const partName = String(part?.name || partId).trim() || partId;
   return `${buildCadRefToken({
-    cadPath,
     selector
   })} Assembly part "${partName}"`;
 }
 
 export function buildWholeStepEntryCopyReference(entry) {
-  const cadPath = cadPathForEntry(entry);
-  if (!cadPath) {
+  if (!entry) {
     return null;
   }
   return {
     id: "step-entry:whole",
-    copyText: `${buildCadRefToken({ cadPath })} STEP file`
+    copyText: `${buildCadRefToken()} STEP file`
   };
 }
 
@@ -332,26 +324,17 @@ export function resolveTopologyRelativeFile(entry, sourcePath) {
 }
 
 export function cadRefQueryHasKnownEntry(cadRefs, entries) {
-  const cadPaths = new Set();
-  for (const cadRef of Array.isArray(cadRefs) ? cadRefs : []) {
-    const cadPath = String(parseCadRefToken(cadRef)?.cadPath || "").trim();
-    if (cadPath) {
-      cadPaths.add(cadPath);
-    }
-  }
-  if (!cadPaths.size) {
-    return false;
-  }
-  return (Array.isArray(entries) ? entries : []).some((entry) => cadPaths.has(cadPathForEntry(entry)));
+  void cadRefs;
+  void entries;
+  return false;
 }
 
 export function collectCadRefSelectionRequest(cadRefs, entry) {
-  const cadPath = cadPathForEntry(entry);
   const selectors = [];
   let hasMatchingToken = false;
   let hasWholeEntryToken = false;
 
-  if (!cadPath) {
+  if (!entry) {
     return {
       hasMatchingToken,
       hasWholeEntryToken,
@@ -363,7 +346,7 @@ export function collectCadRefSelectionRequest(cadRefs, entry) {
 
   for (const cadRef of Array.isArray(cadRefs) ? cadRefs : []) {
     const parsedToken = parseCadRefToken(cadRef);
-    if (!parsedToken || parsedToken.cadPath !== cadPath) {
+    if (!parsedToken) {
       continue;
     }
     hasMatchingToken = true;
@@ -395,9 +378,9 @@ export function collectCadRefSelectionRequest(cadRefs, entry) {
   };
 }
 
-function addTokenSelectorsToMap(map, copyText, value, cadPath) {
+function addTokenSelectorsToMap(map, copyText, value) {
   const parsedToken = parseCadRefToken(copyText);
-  if (!parsedToken || parsedToken.cadPath !== cadPath) {
+  if (!parsedToken) {
     return;
   }
   for (const selector of parsedToken.selectors) {
@@ -422,6 +405,7 @@ function addReferenceIdSelectorToMap(map, reference, value) {
 }
 
 export function buildReferenceSelectorMap(references, cadPath) {
+  void cadPath;
   const map = new Map();
   for (const reference of Array.isArray(references) ? references : []) {
     const referenceId = String(reference?.id || "").trim();
@@ -432,13 +416,14 @@ export function buildReferenceSelectorMap(references, cadPath) {
       id: referenceId,
       partId: String(reference?.partId || "").trim()
     };
-    addTokenSelectorsToMap(map, reference?.copyText, value, cadPath);
+    addTokenSelectorsToMap(map, reference?.copyText, value);
     addReferenceIdSelectorToMap(map, reference, value);
   }
   return map;
 }
 
 export function buildAssemblyPartSelectorMap(parts, cadPath) {
+  void cadPath;
   const map = new Map();
   for (const part of Array.isArray(parts) ? parts : []) {
     const partId = String(part?.id || "").trim();
@@ -450,22 +435,8 @@ export function buildAssemblyPartSelectorMap(parts, cadPath) {
       cadPath,
       selector
     });
-    addTokenSelectorsToMap(map, copyText, partId, cadPath);
-    addTokenSelectorsToMap(map, selector, partId, cadPath);
-  }
-  return map;
-}
-
-function buildAssemblyParentIdMap(nodes) {
-  const map = new Map();
-  for (const node of Array.isArray(nodes) ? nodes : []) {
-    const parentId = String(node?.id || "").trim();
-    for (const child of Array.isArray(node?.children) ? node.children : []) {
-      const childId = String(child?.id || "").trim();
-      if (childId && parentId && !map.has(childId)) {
-        map.set(childId, parentId);
-      }
-    }
+    addTokenSelectorsToMap(map, copyText, partId);
+    addTokenSelectorsToMap(map, selector, partId);
   }
   return map;
 }
@@ -475,11 +446,9 @@ export function resolveCadRefSelection({ cadRefs = [], entry = null, references 
   const cadPath = cadPathForEntry(entry);
   const referenceSelectorMap = buildReferenceSelectorMap(references, cadPath);
   const assemblyPartSelectorMap = buildAssemblyPartSelectorMap(assemblyParts, cadPath);
-  const assemblyParentIdMap = buildAssemblyParentIdMap(assemblyParts);
   const selectedReferenceIds = [];
   const selectedPartIds = [];
-  const inspectedReferenceNodeIds = [];
-  const inspectedPartParentNodeIds = [];
+  const expandedAssemblyPartIds = [];
 
   for (const selector of request.selectors) {
     const parsedSelector = parseCadRefSelector(selector);
@@ -492,7 +461,7 @@ export function resolveCadRefSelection({ cadRefs = [], entry = null, references 
       const partId = assemblyPartSelectorMap.get(canonicalSelector);
       if (partId) {
         selectedPartIds.push(partId);
-        inspectedPartParentNodeIds.push(assemblyParentIdMap.get(partId) || "root");
+        expandedAssemblyPartIds.push(partId);
       }
       continue;
     }
@@ -503,20 +472,16 @@ export function resolveCadRefSelection({ cadRefs = [], entry = null, references 
     }
     selectedReferenceIds.push(reference.id);
     if (isAssemblyView && reference.partId) {
-      inspectedReferenceNodeIds.push(reference.partId);
+      expandedAssemblyPartIds.push(reference.partId);
     }
   }
 
-  const inspectedAssemblyNodeId = uniqueStringList([
-    ...inspectedReferenceNodeIds,
-    ...inspectedPartParentNodeIds
-  ])[0] || "";
   return {
     ...request,
     selectedReferenceIds: uniqueStringList(selectedReferenceIds),
     selectedPartIds: uniqueStringList(selectedPartIds),
-    inspectedAssemblyNodeId,
-    expandedAssemblyPartIds: inspectedAssemblyNodeId ? [inspectedAssemblyNodeId] : []
+    inspectedAssemblyNodeId: "",
+    expandedAssemblyPartIds: uniqueStringList(expandedAssemblyPartIds)
   };
 }
 

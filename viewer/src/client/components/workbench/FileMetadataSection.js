@@ -158,12 +158,15 @@ export default function FileMetadataSection({
               {group.rows.map((row) => (
                 <div
                   key={`${group.title}:${row.label}`}
-                  className="grid min-w-0 grid-cols-[5.25rem_minmax(0,1fr)] gap-2"
+                  className="min-w-0 space-y-0.5 py-0.5"
                 >
-                  <dt className={cn(FILE_SHEET_FIELD_LABEL_CLASSES, "self-start")} title={row.label}>
+                  <dt
+                    className={cn(FILE_SHEET_FIELD_LABEL_CLASSES, "leading-4")}
+                    title={row.label}
+                  >
                     {row.label}
                   </dt>
-                  <dd className="min-w-0 text-sidebar-foreground">
+                  <dd className="min-w-0 flex-1 text-sidebar-foreground">
                     <MetadataValue
                       entry={entry}
                       row={row}

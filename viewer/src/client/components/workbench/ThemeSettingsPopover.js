@@ -1482,7 +1482,7 @@ export function DisplaySettingsSection({
       axis,
       offset: resolvedOffset,
       offsets: { [axis]: resolvedOffset },
-      ...(!normalizedClipSettings.enabled && resolvedOffset > 0 ? { enabled: true } : {})
+      enabled: resolvedOffset > 0
     });
   };
 
@@ -1498,12 +1498,6 @@ export function DisplaySettingsSection({
 
       {showClip ? (
         <ControlSubsection title="Clip" hideFirstSeparator={false}>
-          <ThemeToggleRow
-            label="Enable"
-            checked={normalizedClipSettings.enabled}
-            onChange={(checked) => setClip({ enabled: checked })}
-          />
-
           {AXIS_OPTIONS.map((axis) => {
             const axisOffset = normalizedClipSettings.offsets?.[axis] ?? DEFAULT_STEP_CLIP_SETTINGS.offsets[axis];
             const axisSettings = {

@@ -103,7 +103,7 @@ test("STEP module features resolve CAD occurrence refs to render part ids and bo
       schemaVersion: 1,
       features: {
         planet: {
-          ref: "@cad[models/fun/planetary_gear_assembly#o1.4]"
+          ref: "#o1.4"
         }
       }
     }
@@ -134,7 +134,7 @@ test("STEP module local feature refs resolve against the sidecar parent CAD path
           ref: "#o1.2"
         },
         hinges: {
-          ref: "@cad[#o1.3,o1.4]"
+          ref: "#o1.3,o1.4"
         },
         latch: {
           selectors: ["o1.5"]
@@ -147,9 +147,9 @@ test("STEP module local feature refs resolve against the sidecar parent CAD path
   });
 
   assert.equal(definition.cadPath, "models/mechanisms/box");
-  assert.equal(definition.features[0].ref, "@cad[models/mechanisms/box#o1.2]");
-  assert.equal(definition.features[1].ref, "@cad[models/mechanisms/box#o1.3,o1.4]");
-  assert.equal(definition.features[2].ref, "@cad[models/mechanisms/box#o1.5]");
+  assert.equal(definition.features[0].ref, "#o1.2");
+  assert.equal(definition.features[1].ref, "#o1.3,o1.4");
+  assert.equal(definition.features[2].ref, "#o1.5");
 });
 
 test("STEP module local feature refs prefer explicit relative STEP path", () => {
@@ -178,7 +178,7 @@ test("STEP module local feature refs prefer explicit relative STEP path", () => 
   });
   assert.equal(definition.manifest.step.path, "models/mechanisms/actual-box.step");
   assert.equal(definition.cadPath, "models/mechanisms/actual-box");
-  assert.equal(definition.features[0].ref, "@cad[models/mechanisms/actual-box#o1.2]");
+  assert.equal(definition.features[0].ref, "#o1.2");
 });
 
 test("STEP module invalid explicit STEP paths fall back to sidecar URL inference", () => {
@@ -206,7 +206,7 @@ test("STEP module invalid explicit STEP paths fall back to sidecar URL inference
   });
   assert.equal(definition.manifest.step, undefined);
   assert.equal(definition.cadPath, "models/mechanisms/box");
-  assert.equal(definition.features[0].ref, "@cad[models/mechanisms/box#o1.2]");
+  assert.equal(definition.features[0].ref, "#o1.2");
 });
 
 test("STEP module CAD path can be inferred from sidecar URL", () => {
@@ -224,7 +224,7 @@ test("STEP module CAD path can be inferred from sidecar URL", () => {
   });
 
   assert.equal(definition.cadPath, "models/fun/gearbox");
-  assert.equal(definition.features[0].ref, "@cad[models/fun/gearbox#o1.2]");
+  assert.equal(definition.features[0].ref, "#o1.2");
 });
 
 test("STEP module display transforms respect baked assembly part transforms", () => {

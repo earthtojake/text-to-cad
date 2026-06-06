@@ -5,6 +5,12 @@ import ImplicitCadViewer from "../ImplicitCadViewer";
 import { CircleAlert, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "../ui/dropdown-menu";
 import { cn } from "@/ui/utils";
 import { RENDER_FORMAT } from "@/workbench/constants";
 import {
@@ -40,6 +46,113 @@ function viewportIssueMetaForAlert(alert) {
   return alert?.severity === "warning"
     ? VIEWPORT_ISSUE_META.warning
     : VIEWPORT_ISSUE_META.error;
+}
+
+function viewerContextMenuAnchorStyle(menu, viewportFrameInsets) {
+  if (!menu) {
+    return null;
+  }
+  const margin = 8;
+  const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 0;
+  const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 0;
+  const minX = viewportInsetPx(viewportFrameInsets?.left) + margin;
+  const minY = viewportInsetPx(viewportFrameInsets?.top) + margin;
+  const maxX = viewportWidth > 0
+    ? Math.max(minX, viewportWidth - viewportInsetPx(viewportFrameInsets?.right) - margin)
+    : Number(menu.x) || minX;
+  const maxY = viewportHeight > 0
+    ? Math.max(minY, viewportHeight - viewportInsetPx(viewportFrameInsets?.bottom) - margin)
+    : Number(menu.y) || minY;
+  const x = Math.min(Math.max(Number(menu.x) || minX, minX), maxX);
+  const y = Math.min(Math.max(Number(menu.y) || minY, minY), maxY);
+  return {
+    position: "fixed",
+    left: `${x}px`,
+    top: `${y}px`,
+    width: "1px",
+    height: "1px"
+  };
+}
+
+function ViewerContextMenu({
+  menu,
+  positionStyle,
+  onClose,
+  onCopyReference,
+  onSelect,
+  onFocus,
+  onHide,
+  onReveal
+}) {
+  if (!menu || !positionStyle) {
+    return null;
+  }
+
+  const itemClassName = "text-xs";
+  const handleAction = (action) => {
+    action?.(menu);
+    onClose?.();
+  };
+  const selected = menu.selected === true;
+  const hidden = menu.hidden === true;
+  const focused = menu.focused === true;
+
+  return (
+    <DropdownMenu
+      open={true}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          onClose?.();
+        }
+      }}
+    >
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden="true"
+          className="pointer-events-none fixed size-px opacity-0"
+          style={positionStyle}
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        side="bottom"
+        sideOffset={4}
+        className="w-44"
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+      >
+        <DropdownMenuItem
+          className={itemClassName}
+          disabled={!String(menu.copyText || "").trim()}
+          onSelect={() => handleAction(onCopyReference)}
+        >
+          <span className="min-w-0 truncate">Copy Reference</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className={itemClassName}
+          onSelect={() => handleAction(onSelect)}
+        >
+          <span className="min-w-0 truncate">{selected ? "Deselect" : "Select"}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className={itemClassName}
+          onSelect={() => handleAction(onFocus)}
+        >
+          <span className="min-w-0 truncate">{focused ? "Unfocus" : "Focus"}</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className={itemClassName}
+          onSelect={() => handleAction(hidden ? onReveal : onHide)}
+        >
+          <span className="min-w-0 truncate">{hidden ? "Reveal" : "Hide"}</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export default function CadRenderPane({
@@ -90,6 +203,14 @@ export default function CadRenderPane({
   handleModelHoverChange,
   handleModelReferenceActivate,
   handleModelReferenceDoubleActivate,
+  handleModelReferenceContext,
+  viewerContextMenu = null,
+  onViewerContextMenuClose,
+  onViewerContextMenuCopyReference,
+  onViewerContextMenuSelect,
+  onViewerContextMenuFocus,
+  onViewerContextMenuHide,
+  onViewerContextMenuReveal,
   handleViewerAlertChange,
   handleStepModuleTransformDetectedChange,
   selectionCount,
@@ -176,6 +297,10 @@ export default function CadRenderPane({
     ? viewerAlert
     : null;
   const viewportIssueMeta = viewportIssueMetaForAlert(blockingViewerAlert);
+  const viewerContextMenuStyle = useMemo(
+    () => viewerContextMenuAnchorStyle(viewerContextMenu, viewportFrameInsets),
+    [viewerContextMenu, viewportFrameInsets]
+  );
 
   useEffect(() => {
     if (!urdfPosePickerActive || typeof window === "undefined" || typeof document === "undefined") {
@@ -274,11 +399,24 @@ export default function CadRenderPane({
           onHoverReferenceChange={handleModelHoverChange}
           onActivateReference={handleModelReferenceActivate}
           onDoubleActivateReference={handleModelReferenceDoubleActivate}
+          onContextReference={handleModelReferenceContext}
           onViewerAlertChange={handleViewerAlertChange}
           onStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
           urdfPosePicker={urdfPosePicker}
         />
       )}
+      {!previewMode ? (
+        <ViewerContextMenu
+          menu={viewerContextMenu}
+          positionStyle={viewerContextMenuStyle}
+          onClose={onViewerContextMenuClose}
+          onCopyReference={onViewerContextMenuCopyReference}
+          onSelect={onViewerContextMenuSelect}
+          onFocus={onViewerContextMenuFocus}
+          onHide={onViewerContextMenuHide}
+          onReveal={onViewerContextMenuReveal}
+        />
+      ) : null}
       {!previewMode && missingFileLabel ? (
         <div
           className="pointer-events-none absolute z-30 flex min-w-0 items-center justify-center px-4 py-4"

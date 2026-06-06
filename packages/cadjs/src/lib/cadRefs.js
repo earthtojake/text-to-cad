@@ -1,4 +1,4 @@
-const CAD_TOKEN_RE = /^\s*@cad\[([^\]#]+)(?:#([^\]]+))?\]/;
+const CAD_TOKEN_RE = /^\s*#([^\s]*)/;
 const OCCURRENCE_SELECTOR_RE = /^o((?:\d+)(?:\.\d+)*)$/;
 const OCCURRENCE_ENTITY_SELECTOR_RE = /^o((?:\d+)(?:\.\d+)*)\.([sfev])(\d+)$/;
 const ENTITY_SELECTOR_RE = /^([sfev])(\d+)$/;
@@ -153,28 +153,22 @@ export function sortCadRefSelectors(selectors) {
 
 export function parseCadRefToken(copyText) {
   const match = String(copyText || "").trim().match(CAD_TOKEN_RE);
-  if (!match?.[1]) {
+  if (!match) {
     return null;
   }
-  const cadPath = normalizeCadPath(match[1]);
-  if (!cadPath) {
-    return null;
-  }
+  const selectorText = String(match[1] || "").trim();
   return {
     token: match[0],
-    cadPath,
-    selectors: normalizeCadRefSelectors(match[2])
+    cadPath: "",
+    selectors: normalizeCadRefSelectors(selectorText)
   };
 }
 
 export function buildCadRefToken({ cadPath = "", selector = "", selectors } = {}) {
-  const normalizedCadPath = normalizeCadPath(cadPath);
-  if (!normalizedCadPath) {
-    return "";
-  }
+  void cadPath;
   const selectorList = selectors !== undefined ? sortCadRefSelectors(selectors) : sortCadRefSelectors(selector ? [selector] : []);
   if (!selectorList.length) {
-    return `@cad[${normalizedCadPath}]`;
+    return "#";
   }
-  return `@cad[${normalizedCadPath}#${selectorList.join(",")}]`;
+  return `#${selectorList.join(",")}`;
 }

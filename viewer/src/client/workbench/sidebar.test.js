@@ -1724,10 +1724,10 @@ test("theme persistence ignores legacy full preset payloads", () => {
   }
 });
 
-test("normalizeCadRefQueryParams accepts relative refs", () => {
+test("normalizeCadRefQueryParams accepts selector refs", () => {
   assert.deepEqual(
-    normalizeCadRefQueryParams(["parts/sample_plate#f2", "@cad[parts/sample_base#e1]"]),
-    ["@cad[parts/sample_plate#f2]", "@cad[parts/sample_base#e1]"]
+    normalizeCadRefQueryParams(["#f2", "#o1.2,f1"]),
+    ["#f2", "#o1.2,o1.2.f1"]
   );
 });
 
@@ -1834,7 +1834,7 @@ test("selectedEntryKeyFromUrl does not use refs to mask a missing explicit file 
   const originalWindow = globalThis.window;
   globalThis.window = {
     location: {
-      search: "?file=parts%2Fmissing.step&refs=parts%2Fsample_plate%23f2"
+      search: "?file=parts%2Fmissing.step&refs=%23f2"
     }
   };
 
@@ -1858,11 +1858,11 @@ test("selectedEntryKeyFromUrl does not use refs to mask a missing explicit file 
   }
 });
 
-test("selectedEntryKeyFromUrl prefers explicit refs over VIEWER_DEFAULT_FILE when no file param exists", () => {
+test("selectedEntryKeyFromUrl does not use selector refs as file identity", () => {
   const originalWindow = globalThis.window;
   globalThis.window = {
     location: {
-      search: "?refs=parts%2Fsample_plate%23f2"
+      search: "?refs=%23f2"
     }
   };
 
@@ -1880,7 +1880,7 @@ test("selectedEntryKeyFromUrl prefers explicit refs over VIEWER_DEFAULT_FILE whe
           kind: "part"
         }
       ], { defaultFile: "parts/sample_base.step" }),
-      "parts/sample_plate.step"
+      "parts/sample_base.step"
     );
   } finally {
     if (originalWindow === undefined) {
@@ -2101,11 +2101,11 @@ test("normalizeCadFileQueryParam normalizes file params as relative paths", () =
   assert.equal(normalizeCadFileQueryParam("/workspace/imports/widget.step/"), "workspace/imports/widget.step");
 });
 
-test("selectedEntryKeyFromUrl restores the selected canonical ref query param", () => {
+test("selectedEntryKeyFromUrl ignores selector refs without a file context", () => {
   const originalWindow = globalThis.window;
   globalThis.window = {
     location: {
-      search: "?refs=parts%2Fsample_plate%23f2"
+      search: "?refs=%23f2"
     }
   };
 
@@ -2123,7 +2123,7 @@ test("selectedEntryKeyFromUrl restores the selected canonical ref query param", 
           kind: "part"
         }
       ]),
-      "parts/sample_plate.step"
+      ""
     );
   } finally {
     if (originalWindow === undefined) {
@@ -2139,9 +2139,9 @@ test("writeCadParam skips unchanged URL replacements", () => {
   const calls = [];
   globalThis.window = {
     location: {
-      href: "http://viewer.test/?file=parts%2Fsample_plate.step&refs=parts%2Fsample_plate%23f2",
+      href: "http://viewer.test/?file=parts%2Fsample_plate.step&refs=%23f2",
       pathname: "/",
-      search: "?file=parts%2Fsample_plate.step&refs=parts%2Fsample_plate%23f2",
+      search: "?file=parts%2Fsample_plate.step&refs=%23f2",
       hash: ""
     },
     history: {
@@ -2155,7 +2155,7 @@ test("writeCadParam skips unchanged URL replacements", () => {
 
     writeCadParam("parts/sample_base.step");
     assert.equal(calls.length, 1);
-    assert.equal(calls[0][2], "/?file=parts%2Fsample_base.step&refs=parts%2Fsample_plate%23f2");
+    assert.equal(calls[0][2], "/?file=parts%2Fsample_base.step&refs=%23f2");
   } finally {
     if (originalWindow === undefined) {
       delete globalThis.window;
@@ -2199,9 +2199,9 @@ test("writeCadParam stores active dir and omits dir for directory file selection
   const calls = [];
   globalThis.window = {
     location: {
-      href: "http://viewer.test/?dir=docs%2Fpublic&refs=parts%2Fsample_plate%23f2",
+      href: "http://viewer.test/?dir=docs%2Fpublic&refs=%23f2",
       pathname: "/",
-      search: "?dir=docs%2Fpublic&refs=parts%2Fsample_plate%23f2",
+      search: "?dir=docs%2Fpublic&refs=%23f2",
       hash: ""
     },
     history: {
@@ -2216,7 +2216,7 @@ test("writeCadParam stores active dir and omits dir for directory file selection
     const nextUrl = new URL(`http://viewer.test${calls[0][2]}`);
     assert.equal(nextUrl.searchParams.has("dir"), false);
     assert.equal(nextUrl.searchParams.get("file"), "hero/planetary_gear_assembly.step.glb");
-    assert.equal(nextUrl.searchParams.get("refs"), "parts/sample_plate#f2");
+    assert.equal(nextUrl.searchParams.get("refs"), "#f2");
     assert.equal(readStoredActiveCadDir(), "docs/public");
   } finally {
     if (originalWindow === undefined) {
@@ -2293,9 +2293,9 @@ test("writeCadDirParam selects a workspace and clears file selection", () => {
   const calls = [];
   globalThis.window = {
     location: {
-      href: "http://viewer.test/?file=parts%2Fsample_plate.step&refs=parts%2Fsample_plate%23f2",
+      href: "http://viewer.test/?file=parts%2Fsample_plate.step&refs=%23f2",
       pathname: "/",
-      search: "?file=parts%2Fsample_plate.step&refs=parts%2Fsample_plate%23f2",
+      search: "?file=parts%2Fsample_plate.step&refs=%23f2",
       hash: ""
     },
     history: {
@@ -2312,7 +2312,7 @@ test("writeCadDirParam selects a workspace and clears file selection", () => {
     const nextUrl = new URL(`http://viewer.test${calls[0][3]}`);
     assert.equal(nextUrl.searchParams.get("dir"), "/workspace/models");
     assert.equal(nextUrl.searchParams.has("file"), false);
-    assert.equal(nextUrl.searchParams.get("refs"), "parts/sample_plate#f2");
+    assert.equal(nextUrl.searchParams.get("refs"), "#f2");
     assert.equal(readStoredActiveCadDir(), "/workspace/models");
   } finally {
     if (originalWindow === undefined) {
@@ -2328,9 +2328,9 @@ test("writeCadRefQueryParams skips unchanged URL replacements", () => {
   const calls = [];
   globalThis.window = {
     location: {
-      href: "http://viewer.test/?file=parts%2Fsample_plate.step&refs=parts%2Fsample_plate%23f2",
+      href: "http://viewer.test/?file=parts%2Fsample_plate.step&refs=%23f2",
       pathname: "/",
-      search: "?file=parts%2Fsample_plate.step&refs=parts%2Fsample_plate%23f2",
+      search: "?file=parts%2Fsample_plate.step&refs=%23f2",
       hash: ""
     },
     history: {
@@ -2339,12 +2339,12 @@ test("writeCadRefQueryParams skips unchanged URL replacements", () => {
   };
 
   try {
-    writeCadRefQueryParams(["@cad[parts/sample_plate#f2]"]);
+    writeCadRefQueryParams(["#f2"]);
     assert.equal(calls.length, 0);
 
-    writeCadRefQueryParams(["@cad[parts/sample_plate#e1]"]);
+    writeCadRefQueryParams(["#e1"]);
     assert.equal(calls.length, 1);
-    assert.equal(calls[0][2], "/?file=parts%2Fsample_plate.step&refs=parts%2Fsample_plate%23e1");
+    assert.equal(calls[0][2], "/?file=parts%2Fsample_plate.step&refs=%23e1");
   } finally {
     if (originalWindow === undefined) {
       delete globalThis.window;

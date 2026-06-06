@@ -53,7 +53,8 @@ EntryContextProvider = Callable[[str, SelectorProfile], EntryContext | None]
 
 
 def inspect_cad_refs(
-    text: str,
+    entry_target: str,
+    refs_text: str = "",
     *,
     detail: bool = False,
     include_topology: bool = False,
@@ -65,11 +66,12 @@ def inspect_cad_refs(
     plane_limit: int = 12,
     context_provider: EntryContextProvider | None = None,
 ) -> dict[str, object]:
-    parsed_tokens = syntax.parse_cad_tokens(text)
+    entry = entry_target_from_target(entry_target)
+    parsed_tokens = _parse_entry_ref_tokens(entry.cad_path, refs_text)
     if not parsed_tokens:
         raise CadRefError(
-            "No @cad[...] token found. Expected @cad[<cad-path>] or @cad[<cad-path>#<selector>] "
-            "where selector can be o<path>, o<path>.s<n>, o<path>.f<n>, o<path>.e<n>, o<path>.v<n>, or s<n>/f<n>/e<n>/v<n> for single-occurrence entries."
+            "No selector ref found. Expected refs like #o<path>, #o<path>.s<n>, #o<path>.f<n>, "
+            "#o<path>.e<n>, #o<path>.v<n>, or #s<n>/#f<n>/#e<n>/#v<n> for single-occurrence entries."
         )
 
     contexts: dict[str, EntryContext] = {}
@@ -179,6 +181,37 @@ def inspect_cad_refs(
         "tokens": token_results,
         "errors": errors,
     }
+
+
+def _parse_entry_ref_tokens(cad_path: str, refs_text: str = "") -> list[syntax.ParsedToken]:
+    text = str(refs_text or "").strip()
+    if not text:
+        return [
+            syntax.ParsedToken(
+                line=1,
+                token=syntax.build_cad_token(cad_path),
+                cad_path=cad_path,
+                selectors=(),
+            )
+        ]
+    tokens: list[syntax.ParsedToken] = []
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        normalized_line = line.strip()
+        if not normalized_line:
+            continue
+        parsed_tokens = syntax.parse_cad_tokens(normalized_line)
+        if len(parsed_tokens) != 1 or parsed_tokens[0].token.strip() != normalized_line:
+            raise CadRefError(f"Invalid selector ref {normalized_line!r}; expected #o1.2, #f1, or #o1.2.f1.")
+        parsed = parsed_tokens[0]
+        tokens.append(
+            syntax.ParsedToken(
+                line=line_no,
+                token=parsed.token,
+                cad_path=cad_path,
+                selectors=parsed.selectors,
+            )
+        )
+    return tokens
 
 
 def _relative_to_repo(path: Path) -> str:
@@ -479,18 +512,21 @@ def load_entry_context_for_target(
     return _load_entry_context(cad_path_from_target(target), profile=profile, context_provider=context_provider)
 
 
-def _parse_single_target_token(target: str) -> syntax.ParsedToken:
-    parsed_tokens = syntax.parse_cad_tokens(target)
-    if len(parsed_tokens) == 1:
-        return parsed_tokens[0]
-    if len(parsed_tokens) > 1:
-        raise CadRefError("Expected exactly one @cad[...] target.")
-    entry_target = entry_target_from_target(target)
+def _parse_single_target_token(entry_target_text: str, selector: str = "") -> syntax.ParsedToken:
+    entry_target = entry_target_from_target(entry_target_text)
+    selector_text = str(selector or "").strip()
+    if not selector_text:
+        selectors: tuple[str, ...] = ()
+    else:
+        parsed_tokens = syntax.parse_cad_tokens(selector_text)
+        if len(parsed_tokens) != 1 or parsed_tokens[0].token.strip() != selector_text:
+            raise CadRefError(f"Expected exactly one selector ref such as #o1.2.f1; got {selector!r}.")
+        selectors = parsed_tokens[0].selectors
     return syntax.ParsedToken(
         line=1,
-        token=entry_target.token,
+        token=syntax.build_cad_token(entry_target.cad_path, ",".join(selectors)),
         cad_path=entry_target.cad_path,
-        selectors=entry_target.selectors,
+        selectors=selectors,
     )
 
 
@@ -508,12 +544,13 @@ def _default_root_occurrence(index: lookup.SelectorIndex) -> dict[str, object]:
 
 
 def resolve_target_selection(
-    target: str,
+    entry_target: str,
+    selector: str = "",
     *,
     default_root_occurrence: bool = False,
     context_provider: EntryContextProvider | None = None,
 ) -> TargetSelection:
-    parsed = _parse_single_target_token(target)
+    parsed = _parse_single_target_token(entry_target, selector)
     context = _load_entry_context(parsed.cad_path, profile=SelectorProfile.REFS, context_provider=context_provider)
     if context.selector_index is None:
         raise CadRefError(f"Selector index unavailable for {parsed.cad_path}")
@@ -521,7 +558,7 @@ def resolve_target_selection(
     selectors = parsed.selectors
     if not selectors:
         if not default_root_occurrence:
-            raise CadRefError(f"Expected a selector in target {target!r}.")
+            raise CadRefError(f"Expected a selector ref for target {entry_target!r}.")
         row = _default_root_occurrence(context.selector_index)
         normalized_selector = str(row.get("id") or "")
         display_selector = lookup.display_selector(normalized_selector, context.selector_index)
@@ -534,7 +571,7 @@ def resolve_target_selection(
             copy_text=syntax.build_cad_token(parsed.cad_path, display_selector),
         )
     if len(selectors) != 1:
-        raise CadRefError(f"Expected exactly one selector in target {target!r}.")
+        raise CadRefError(f"Expected exactly one selector in target {entry_target!r}.")
 
     raw_selector = selectors[0]
     lookup_result = lookup.lookup_selector(raw_selector, context.selector_index)
@@ -593,18 +630,19 @@ def _primary_vector(positioning: dict[str, object]) -> object:
 
 
 def inspect_target_frame(
-    target: str,
+    entry_target: str,
+    selector: str = "",
     *,
     context_provider: EntryContextProvider | None = None,
 ) -> dict[str, object]:
-    selection = resolve_target_selection(target, default_root_occurrence=True, context_provider=context_provider)
+    selection = resolve_target_selection(entry_target, selector, default_root_occurrence=True, context_provider=context_provider)
     if selection.selector_type == "occurrence":
         occurrence_row = selection.row
     else:
         occurrence_id = str(selection.row.get("occurrenceId") or "")
         occurrence_row = selection.context.selector_index.occurrence_by_id.get(occurrence_id) if selection.context.selector_index else None
         if occurrence_row is None:
-            raise CadRefError(f"Target {target!r} does not resolve to an occurrence-backed selector.")
+            raise CadRefError(f"Target {entry_target!r} does not resolve to an occurrence-backed selector.")
     frame = analysis.positioning_facts_for_row("occurrence", occurrence_row, selection.context.selector_index)
     result = {
         "ok": True,
@@ -617,14 +655,15 @@ def inspect_target_frame(
 
 
 def measure_targets(
-    from_target: str,
-    to_target: str,
+    entry_target: str,
+    from_selector: str,
+    to_selector: str,
     *,
     axis: str | None = None,
     context_provider: EntryContextProvider | None = None,
 ) -> dict[str, object]:
-    from_selection = resolve_target_selection(from_target, default_root_occurrence=True, context_provider=context_provider)
-    to_selection = resolve_target_selection(to_target, default_root_occurrence=True, context_provider=context_provider)
+    from_selection = resolve_target_selection(entry_target, from_selector, default_root_occurrence=True, context_provider=context_provider)
+    to_selection = resolve_target_selection(entry_target, to_selector, default_root_occurrence=True, context_provider=context_provider)
     from_positioning = _selection_positioning_payload(from_selection)
     to_positioning = _selection_positioning_payload(to_selection)
     resolved_axis = _axis_or_infer(axis, from_positioning, to_positioning)
@@ -672,8 +711,9 @@ def measure_targets(
 
 
 def mate_targets(
-    moving_target: str,
-    target_target: str,
+    entry_target: str,
+    moving_selector: str,
+    target_selector: str,
     *,
     mode: str = "flush",
     offset: float = 0.0,
@@ -681,12 +721,14 @@ def mate_targets(
     context_provider: EntryContextProvider | None = None,
 ) -> dict[str, object]:
     moving_selection = resolve_target_selection(
-        moving_target,
+        entry_target,
+        moving_selector,
         default_root_occurrence=True,
         context_provider=context_provider,
     )
     target_selection = resolve_target_selection(
-        target_target,
+        entry_target,
+        target_selector,
         default_root_occurrence=True,
         context_provider=context_provider,
     )

@@ -27,7 +27,7 @@ Before coding, write a compact internal parameter brief:
 
 - What geometry or motion each parameter controls.
 - Units, defaults, min/max, step size, and whether the value is dimensionless.
-- Which named features, datums, pivots, axes, faces, or `@cad[...]` refs each parameter affects.
+- Which named features, datums, pivots, axes, faces, or local selector refs each parameter affects.
 - Which values are independent inputs and which are derived from constraints.
 - What validation proves the parameter is correct.
 
@@ -84,7 +84,7 @@ If a parameter changes a source-level CAD generator, regenerate STEP and validat
 Named features are the bridge between parameters and geometry.
 
 - Label source parts and assembly children explicitly.
-- Expose sidecar `manifest.features` with stable local refs such as `#o1.2` or full `@cad[...]` refs when needed.
+- Expose sidecar `manifest.features` with stable local refs such as `#o1.2`; keep file identity in `manifest.step.path`.
 - Prefer feature ids like `lid`, `hingePin`, `inputGear`, `lowerRocker`, not occurrence ids as public names.
 - In code, group constants and transforms by feature role so the logic reads like the mechanism.
 - Resolve and inspect refs when a parameter targets a specific face, edge, part, pivot, or assembly child.

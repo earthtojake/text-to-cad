@@ -174,19 +174,13 @@ function normalizeManifestStep(value, normalizedStep) {
 function normalizeFeatureRef(rawFeature, cadPath = "") {
   const raw = isObject(rawFeature) ? rawFeature : {};
   const ref = normalizeString(raw.ref);
-  const localCadPath = normalizeCadPath(cadPath);
+  void cadPath;
   const fullToken = parseCadRefToken(ref);
   if (fullToken) {
-    return buildCadRefToken({ cadPath: fullToken.cadPath, selectors: fullToken.selectors });
-  }
-  if (!localCadPath) {
-    return ref;
+    return buildCadRefToken({ selectors: fullToken.selectors });
   }
 
-  const localTokenMatch = ref.match(/^@cad\[#([^\]]+)\]\s*$/);
-  const rawSelectors = localTokenMatch?.[1]
-    ?? (ref.startsWith("#") ? ref.slice(1) : "")
-    ?? "";
+  const rawSelectors = ref.startsWith("#") ? ref.slice(1) : "";
   const selectors = normalizeCadRefSelectors(
     rawSelectors ||
     raw.selector ||
@@ -196,7 +190,7 @@ function normalizeFeatureRef(rawFeature, cadPath = "") {
     []
   );
   return selectors.length
-    ? buildCadRefToken({ cadPath: localCadPath, selectors })
+    ? buildCadRefToken({ selectors })
     : ref;
 }
 

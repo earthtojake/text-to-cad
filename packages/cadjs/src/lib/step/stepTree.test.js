@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  assignStepTreeTopologyReferencePartIds,
   buildStepTreeRoot,
   buildStepTreeRootWithTopology,
   collectStepTreeAncestorIds,
@@ -301,6 +302,94 @@ test("STEP tree synthetic occurrence rows expose selectable topology ids", () =>
   assert.equal(occurrence.nodeType, "topology-occurrence");
   assert.equal(occurrence.id, "step-topology:root:occurrence:fixture.base");
   assert.equal(occurrence.topologyReferenceId, occurrence.id);
+});
+
+test("STEP tree can assign topology references to assembly parts by occurrence id", () => {
+  const root = {
+    id: "root",
+    occurrenceId: "o1",
+    nodeType: "assembly",
+    displayName: "root assembly",
+    children: [
+      {
+        id: "servo-part",
+        occurrenceId: "o1.3.2",
+        nodeType: "part",
+        displayName: "servo",
+        children: []
+      },
+      {
+        id: "gripper-part",
+        occurrenceId: "o1.4",
+        nodeType: "part",
+        displayName: "gripper",
+        children: []
+      }
+    ]
+  };
+  const references = [
+    {
+      id: "o1",
+      selectorType: "occurrence",
+      displaySelector: "o1",
+      summary: "root"
+    },
+    {
+      id: "o1.3.2",
+      selectorType: "occurrence",
+      displaySelector: "o1.3.2",
+      summary: "servo"
+    },
+    {
+      id: "o1.3.2.s1",
+      selectorType: "shape",
+      displaySelector: "o1.3.2.s1",
+      occurrenceId: "o1.3.2",
+      summary: "servo solid"
+    },
+    {
+      id: "o1.3.2.f1",
+      selectorType: "face",
+      displaySelector: "o1.3.2.f1",
+      occurrenceId: "o1.3.2",
+      summary: "plane area=10"
+    },
+    {
+      id: "o1.4.s1",
+      selectorType: "shape",
+      displaySelector: "o1.4.s1",
+      occurrenceId: "o1.4",
+      summary: "gripper solid"
+    },
+    {
+      id: "manual-part-ref",
+      selectorType: "shape",
+      displaySelector: "o1.9.s1",
+      occurrenceId: "o1.9",
+      partId: "explicit-part",
+      summary: "explicit part"
+    }
+  ];
+
+  const assigned = assignStepTreeTopologyReferencePartIds(root, references);
+
+  assert.deepEqual(
+    assigned.map((reference) => reference.partId || ""),
+    ["", "servo-part", "servo-part", "servo-part", "gripper-part", "explicit-part"]
+  );
+  assert.equal(references[1].partId, undefined);
+
+  const augmented = buildStepTreeRootWithTopology({ root, references: assigned });
+  assert.deepEqual(
+    augmented.children.map((child) => [
+      child.id,
+      child.children.map((topologyChild) => topologyChild.displaySelector)
+    ]),
+    [
+      ["servo-part", ["o1.3.2"]],
+      ["gripper-part", ["o1.4"]]
+    ]
+  );
 });
 
 test("ancestor ids are collected without the selected node", () => {

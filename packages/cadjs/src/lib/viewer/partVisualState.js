@@ -1,14 +1,9 @@
 import { syncLineMaterialOpacity } from "../../common/renderEdges.js";
-import {
-  REFERENCE_HOVER_COLOR,
-  REFERENCE_SELECTED_COLOR
-} from "./referenceGeometry.js";
+import { REFERENCE_SELECTED_COLOR } from "./referenceGeometry.js";
 import { BASE_VIEWER_THEME } from "./stageTheme.js";
 import { readSourceColor } from "./surfaceMaterials.js";
 
 const CAD_EDGE_OPACITY = 0.84;
-const PART_HOVER_OPACITY_BOOST = 0.08;
-const PART_SELECTED_OPACITY_BOOST = 0.12;
 const PART_HIGHLIGHT_SURFACE_RENDER_ORDER = 23;
 const PART_HIGHLIGHT_EDGE_RENDER_ORDER = 26;
 export const FOCUSED_DIMMED_SURFACE_OPACITY = 0.035;
@@ -17,12 +12,15 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-export function getPartHighlightColors(THREE) {
+export function getPartHighlightColors(THREE, {
+  edgeSettings = null
+} = {}) {
+  const highlightColor = String(edgeSettings?.highlightColor || REFERENCE_SELECTED_COLOR).trim() || REFERENCE_SELECTED_COLOR;
   return {
-    hoveredSurfaceColor: new THREE.Color(REFERENCE_HOVER_COLOR),
-    hoveredEdgeColor: new THREE.Color(REFERENCE_SELECTED_COLOR),
-    selectedSurfaceColor: new THREE.Color(REFERENCE_SELECTED_COLOR),
-    selectedEdgeColor: new THREE.Color(REFERENCE_SELECTED_COLOR)
+    hoveredSurfaceColor: new THREE.Color(highlightColor),
+    hoveredEdgeColor: new THREE.Color(highlightColor),
+    selectedSurfaceColor: new THREE.Color(highlightColor),
+    selectedEdgeColor: new THREE.Color(highlightColor)
   };
 }
 
@@ -78,6 +76,50 @@ function syncSurfaceTransparency(record, forceTransparent, opacity, {
   material.depthWrite = nextTransparent && !writeTransparentDepth ? false : record.baseDepthWrite;
 }
 
+const CAD_SURFACE_EDGE_OPACITY_UNIFORMS = Object.freeze({
+  feature: "cadSurfaceFeatureOpacity",
+  tangent: "cadSurfaceTangentOpacity",
+  seam: "cadSurfaceSeamOpacity",
+  degenerate: "cadSurfaceDegenerateOpacity"
+});
+
+function syncCadSurfaceEdgeHighlight(THREE, record, edgeColor, edgeOpacity = null) {
+  const material = record?.material;
+  const userData = material?.userData;
+  if (!material || userData?.cadSurfaceEdges !== true) {
+    return;
+  }
+  const nextColor = edgeColor?.isColor
+    ? edgeColor
+    : readSourceColor(THREE, edgeColor) || userData.cadSurfaceEdgeBaseColor;
+  if (nextColor?.isColor) {
+    userData.cadSurfaceEdgeColor = nextColor.clone();
+    const colorUniform = userData.cadSurfaceEdgeShader?.uniforms?.cadSurfaceEdgeColor;
+    if (colorUniform?.value?.copy) {
+      colorUniform.value.copy(nextColor);
+    }
+  }
+
+  const highlightedOpacity = edgeOpacity !== null && edgeOpacity !== undefined && Number.isFinite(Number(edgeOpacity))
+    ? clamp(Number(edgeOpacity), 0, 1)
+    : null;
+  const baseClassSettings = userData.cadSurfaceEdgeBaseClassSettings || {};
+  const uniforms = userData.cadSurfaceEdgeShader?.uniforms || null;
+  for (const [classId, uniformName] of Object.entries(CAD_SURFACE_EDGE_OPACITY_UNIFORMS)) {
+    const baseOpacity = Number(baseClassSettings[classId]?.opacity);
+    const nextOpacity = highlightedOpacity === null
+      ? (Number.isFinite(baseOpacity) ? baseOpacity : null)
+      : highlightedOpacity;
+    if (nextOpacity === null) {
+      continue;
+    }
+    userData[`cadSurfaceEdge${classId}Opacity`] = nextOpacity;
+    if (uniforms?.[uniformName]) {
+      uniforms[uniformName].value = nextOpacity;
+    }
+  }
+}
+
 export function applyPartVisualState(THREE, records, {
   viewerTheme,
   edgeSettings,
@@ -103,12 +145,15 @@ export function applyPartVisualState(THREE, records, {
   const baseEdgeOpacity = Number.isFinite(Number(edgeSettings?.opacity))
     ? clamp(Number(edgeSettings.opacity), 0, 1)
     : (viewerTheme?.edgeOpacity ?? BASE_VIEWER_THEME.edgeOpacity ?? CAD_EDGE_OPACITY);
+  const highlightEdgeOpacity = Number.isFinite(Number(edgeSettings?.highlightOpacity))
+    ? clamp(Number(edgeSettings.highlightOpacity), 0, 1)
+    : 1;
   const {
     hoveredSurfaceColor,
     hoveredEdgeColor,
     selectedSurfaceColor,
     selectedEdgeColor
-  } = getPartHighlightColors(THREE);
+  } = getPartHighlightColors(THREE, { edgeSettings });
 
   for (const record of Array.isArray(records) ? records : []) {
     const effectStyle = record.effectStyle && typeof record.effectStyle === "object" ? record.effectStyle : {};
@@ -117,15 +162,15 @@ export function applyPartVisualState(THREE, records, {
     const effectEdgeColor = readSourceColor(THREE, effectStyle.edgeColor);
     const effectEmissive = readSourceColor(THREE, effectStyle.emissive);
     const isHidden = hidden.has(record.partId);
-    const isSelected = selected.has(record.partId) || record.effectHighlighted === true;
+    const isSelected = !isHidden && (selected.has(record.partId) || record.effectHighlighted === true);
     const isHovered = !isHidden && !effectHidden && hovered.has(record.partId);
     const isFocused = !isHidden && !effectHidden && hasFocus && focusIds.has(record.partId);
     const isDimmed = !isHidden && !effectHidden && hasFocus && !isFocused;
     const isHighlighted = isSelected || isHovered;
 
-    record.mesh.visible = !isHidden && !effectHidden;
+    record.mesh.visible = !effectHidden && !isHidden;
     if (record.edges) {
-      record.edges.visible = showEdges && !isHidden && !effectHidden;
+      record.edges.visible = showEdges && !effectHidden && !isHidden;
     }
     syncHighlightRenderOrder(record, record.mesh, "baseMeshRenderOrder", isHighlighted, PART_HIGHLIGHT_SURFACE_RENDER_ORDER);
     syncHighlightRenderOrder(record, record.edges, "baseEdgeRenderOrder", isHighlighted, PART_HIGHLIGHT_EDGE_RENDER_ORDER);
@@ -139,17 +184,14 @@ export function applyPartVisualState(THREE, records, {
     const effectEdgeOpacity = Number.isFinite(Number(effectStyle.edgeOpacity))
       ? clamp(Number(effectStyle.edgeOpacity), 0, 1)
       : effectOpacity;
-    const dimmedSurfaceOpacity = hasFocus
-      ? Math.min(baseSurfaceOpacity * effectOpacity, FOCUSED_DIMMED_SURFACE_OPACITY)
+    const highlightedEdgeOpacity = (isSelected || isHovered) ? highlightEdgeOpacity * effectEdgeOpacity : null;
+    const dimmedSurfaceOpacity = Math.min(baseSurfaceOpacity * effectOpacity, FOCUSED_DIMMED_SURFACE_OPACITY);
+    const highlightedSurfaceOpacity = isHighlighted
+      ? clamp(highlightEdgeOpacity * effectOpacity, 0, 1)
       : baseSurfaceOpacity * effectOpacity;
-    const highlightedSurfaceOpacity = isSelected
-      ? clamp((baseSurfaceOpacity * effectOpacity) + PART_SELECTED_OPACITY_BOOST, 0, 1)
-      : isHovered
-        ? clamp((baseSurfaceOpacity * effectOpacity) + PART_HOVER_OPACITY_BOOST, 0, 1)
-        : baseSurfaceOpacity * effectOpacity;
-    const nextSurfaceOpacity = isDimmed ? dimmedSurfaceOpacity : highlightedSurfaceOpacity;
-    syncSurfaceTransparency(record, isDimmed || isHighlighted, nextSurfaceOpacity, {
-      writeTransparentDepth: !isDimmed
+    const nextSurfaceOpacity = isHidden ? 0 : isDimmed ? dimmedSurfaceOpacity : highlightedSurfaceOpacity;
+    syncSurfaceTransparency(record, isHidden || isDimmed || isHighlighted, nextSurfaceOpacity, {
+      writeTransparentDepth: !isHidden && !isDimmed
     });
     record.material.opacity = nextSurfaceOpacity;
 
@@ -165,9 +207,9 @@ export function applyPartVisualState(THREE, records, {
 
     if ("emissive" in record.material && record.material.emissive) {
       if (isSelected) {
-        record.material.emissive.set(REFERENCE_SELECTED_COLOR);
+        record.material.emissive.copy(selectedSurfaceColor);
       } else if (isHovered) {
-        record.material.emissive.set(REFERENCE_HOVER_COLOR);
+        record.material.emissive.copy(hoveredSurfaceColor);
       } else if (record.baseEmissiveColor && record.baseEmissiveIntensity > 0) {
         record.material.emissive.copy(record.baseEmissiveColor);
       } else {
@@ -185,19 +227,20 @@ export function applyPartVisualState(THREE, records, {
       }
     }
 
+    const nextEdgeColor = isSelected
+      ? selectedEdgeColor
+      : isHovered
+        ? hoveredEdgeColor
+        : effectEdgeColor || baseEdgeColor;
+    syncCadSurfaceEdgeHighlight(THREE, record, nextEdgeColor, highlightedEdgeOpacity);
+
     if (record.edgeMaterial) {
-      record.edgeMaterial.color.set(
-        isSelected
-          ? selectedEdgeColor
-          : isHovered
-            ? hoveredEdgeColor
-            : effectEdgeColor || baseEdgeColor
-      );
+      record.edgeMaterial.color.set(nextEdgeColor);
       syncLineMaterialOpacity(record.edgeMaterial, isSelected
-        ? baseEdgeOpacity * effectEdgeOpacity
+        ? highlightEdgeOpacity * effectEdgeOpacity
         : isHovered
-          ? baseEdgeOpacity * effectEdgeOpacity
-          : isDimmed
+          ? highlightEdgeOpacity * effectEdgeOpacity
+          : isHidden || isDimmed
             ? nextSurfaceOpacity
             : baseEdgeOpacity * effectEdgeOpacity);
     }

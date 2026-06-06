@@ -145,7 +145,7 @@ Avoid fragile topology order when possible. Select by:
 - plane grouping
 - feature intent
 - stable construction plane
-- inspected `@cad[...]` reference for downstream validation
+- inspected local selector ref for downstream validation
 
 For source operations, prefer robust selectors such as top/bottom by axis or position rather than arbitrary list indexes.
 

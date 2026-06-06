@@ -39,9 +39,16 @@ Common data-output flags on inspection commands:
 Accepted target forms:
 
 ```text
-@cad[path/to/entry#selector]
 path/to/entry
 path/to/entry.step
+```
+
+Selector refs are local to the STEP/CAD entry target passed to the command. They do not include file paths:
+
+```text
+#o1.2
+#o1.2.f1
+#f1
 ```
 
 ## Relationship to build123d joints
@@ -73,7 +80,7 @@ python scripts/inspect refs path/to/model.step \
 Detailed selector inspection:
 
 ```bash
-python scripts/inspect refs '@cad[path/to/model.step#selector]' \
+python scripts/inspect refs path/to/model.step '#selector' \
   --detail --positioning
 ```
 
@@ -98,9 +105,9 @@ Use lower plane limits and compact facts for normal validation. Use topology enu
 Use `measure` for bounding distances, clearances, offsets, part spacing, plate thickness, hole-to-face distances, and alignment verification.
 
 ```bash
-python scripts/inspect measure \
-  --from '@cad[path/to/model.step#selector_a]' \
-  --to '@cad[path/to/model.step#selector_b]' \
+python scripts/inspect measure path/to/model.step \
+  --from '#selector_a' \
+  --to '#selector_b' \
   --axis x
 ```
 
@@ -111,9 +118,9 @@ Axis may be inferred when possible, but specify `x`, `y`, or `z` for determinist
 Use CLI `mate` when two exported STEP references should be flush or centered. It returns a read-only translation delta; it does not edit source files and does not replace `AssemblyHelper` or native build123d joints in source. When source uses helper or build123d `Joint`/`connect_to()` placement, still validate the resulting exported geometry with `refs --positioning`, `frame`, `measure`, or CLI `mate`.
 
 ```bash
-python scripts/inspect mate \
-  --moving '@cad[path/to/assembly.step#moving_selector]' \
-  --target '@cad[path/to/assembly.step#target_selector]' \
+python scripts/inspect mate path/to/assembly.step \
+  --moving '#moving_selector' \
+  --target '#target_selector' \
   --mode flush \
   --axis z
 ```
@@ -125,7 +132,7 @@ Apply any required correction in the Python source using `AssemblyHelper` relati
 Use `frame` to validate occurrence transforms and selected-reference world frames:
 
 ```bash
-python scripts/inspect frame '@cad[path/to/model.step#selector]'
+python scripts/inspect frame path/to/model.step '#selector'
 ```
 
 Frame output is useful for assemblies, part-local-to-world conversion, and placement debugging.
@@ -142,7 +149,7 @@ Use diff when a repair, feature addition, or source edit could affect unrelated 
 
 ## CAD Viewer handoff
 
-For every final response involving a generated or modified supported artifact (`.step`, `.stp`, `.stl`, `.3mf`, `.dxf`, or native `.glb`), hand off the explicit artifact path to `$cad-viewer` when available and return the link it prints. If an important selector was inspected, return the textual `@cad[...]` reference beside the owning CAD Viewer link.
+For every final response involving a generated or modified supported artifact (`.step`, `.stp`, `.stl`, `.3mf`, `.dxf`, or native `.glb`), hand off the explicit artifact path to `$cad-viewer` when available and return the link it prints. If an important selector was inspected, return the local selector ref beside the owning CAD Viewer link.
 
 Use `snapshot-review.md` to choose packet size and documented skip cases after deterministic checks. For visible created or updated primary STEP/STP artifacts, ALWAYS prefer CAD `scripts/snapshot` over manual viewer or Playwright inspection for visual feedback. Viewer handoff alone does not count as saved snapshot review.
 
