@@ -9,8 +9,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "../ui/dropdown-menu";
+import AssemblyContextMenuItems from "./AssemblyContextMenuItems";
 import { cn } from "@/ui/utils";
 import { RENDER_FORMAT } from "@/workbench/constants";
 import {
@@ -81,6 +83,7 @@ function ViewerContextMenu({
   onCopyReference,
   onSelect,
   onFocus,
+  onHideOther,
   onHide,
   onReveal
 }) {
@@ -125,31 +128,26 @@ function ViewerContextMenu({
           event.stopPropagation();
         }}
       >
-        <DropdownMenuItem
-          className={itemClassName}
-          disabled={!String(menu.copyText || "").trim()}
-          onSelect={() => handleAction(onCopyReference)}
-        >
-          <span className="min-w-0 truncate">Copy Reference</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className={itemClassName}
+        <AssemblyContextMenuItems
+          Item={DropdownMenuItem}
+          Separator={DropdownMenuSeparator}
+          itemClassName={itemClassName}
+          selected={selected}
+          isolated={focused}
+          hidden={hidden}
+          actionCount={menu.actionCount}
+          copyReferenceDisabled={!String(menu.copyText || "").trim()}
+          showIsolate={menu.showIsolate !== false}
+          showHideOther={menu.showHideOther !== false}
+          showVisibility={menu.showVisibility !== false}
+          showHideAll={menu.showHideAll === true}
+          hideOtherDisabled={hidden}
+          onCopyReference={() => handleAction(onCopyReference)}
           onSelect={() => handleAction(onSelect)}
-        >
-          <span className="min-w-0 truncate">{selected ? "Deselect" : "Select"}</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className={itemClassName}
-          onSelect={() => handleAction(onFocus)}
-        >
-          <span className="min-w-0 truncate">{focused ? "Unfocus" : "Focus"}</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className={itemClassName}
-          onSelect={() => handleAction(hidden ? onReveal : onHide)}
-        >
-          <span className="min-w-0 truncate">{hidden ? "Reveal" : "Hide"}</span>
-        </DropdownMenuItem>
+          onIsolate={() => handleAction(onFocus)}
+          onHideOther={() => handleAction(onHideOther)}
+          onToggleVisibility={() => handleAction(hidden ? onReveal : onHide)}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -209,6 +207,7 @@ export default function CadRenderPane({
   onViewerContextMenuCopyReference,
   onViewerContextMenuSelect,
   onViewerContextMenuFocus,
+  onViewerContextMenuHideOther,
   onViewerContextMenuHide,
   onViewerContextMenuReveal,
   handleViewerAlertChange,
@@ -413,6 +412,7 @@ export default function CadRenderPane({
           onCopyReference={onViewerContextMenuCopyReference}
           onSelect={onViewerContextMenuSelect}
           onFocus={onViewerContextMenuFocus}
+          onHideOther={onViewerContextMenuHideOther}
           onHide={onViewerContextMenuHide}
           onReveal={onViewerContextMenuReveal}
         />

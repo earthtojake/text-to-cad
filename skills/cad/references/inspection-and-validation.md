@@ -51,6 +51,8 @@ Selector refs are local to the STEP/CAD entry target passed to the command. They
 #f1
 ```
 
+Pass selector refs as `#...` tokens. The STEP/CAD file path or entry target is a separate CLI argument.
+
 ## Relationship to build123d joints
 
 If the source uses `cadpy.assembly.AssemblyHelper` or build123d `Joint` objects, validate the generated STEP exactly as you would validate explicit `Location` placements. Source-level helper relationships and joints express and compute placement during generation; CLI `inspect mate` verifies the exported result by returning a translation delta between selected references. Do not confuse CLI `mate` with build123d `Joint.connect_to()`. Use `positioning.md` for authoritative source-authoring rules.

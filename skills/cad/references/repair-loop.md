@@ -185,7 +185,7 @@ Fix:
 - generate STEP first
 - snapshot the primary `.step` or `.stp` artifact with CAD `scripts/snapshot` rather than manual viewer or Playwright inspection
 - retry only with simpler supported snapshot jobs, starting with a single `view` output before wireframe display or `section`
-- for CAD review packets, use still-image modes `view` and `section`; set `display.mode` to `wireframe` for wire output
+- for CAD review packets, use still-image modes `view` and `section`; set `display.mode` to `solid`, `transparent`, `hidden_edges`, `hidden_lines_removed`, or `wireframe` when explicit linework helps the visual check
 - generate GIFs only for STEP-module parameter animation review
 - rerun snapshots only after a source repair changed visible geometry or a specific visual finding needs confirmation
 - skip saved snapshots when they are not needed under `snapshot-review.md`

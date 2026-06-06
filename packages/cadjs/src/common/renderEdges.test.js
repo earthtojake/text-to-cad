@@ -79,6 +79,27 @@ test("screen-space display edge creation registers material settings", () => {
   assert.equal(edgeMaterial.resolution.y, 480);
 });
 
+test("screen-space display edges can render through surfaces", () => {
+  const { edgeMaterial } = createDisplayEdgeObject(edgeContext(), {
+    geometry: twoPointGeometry(),
+    edgeSettings: {
+      color: "#123456",
+      opacity: 0.42,
+      thickness: 2,
+      depthTest: false
+    },
+    baseTheme: {
+      edge: "#000000",
+      edgeOpacity: 0.84
+    },
+    partId: "part-a",
+    displayMode: "hidden_edges",
+    thickness: 2
+  });
+
+  assert.equal(edgeMaterial.depthTest, false);
+});
+
 test("wireframe display edges preserve high opacity and basic line material", () => {
   const { edgeMesh, edgeMaterial } = createDisplayEdgeObject(edgeContext(), {
     geometry: twoPointGeometry(),

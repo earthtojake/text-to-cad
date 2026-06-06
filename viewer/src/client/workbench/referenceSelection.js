@@ -249,7 +249,7 @@ export function buildSelectionCopyPayload({ references = [], parts = [], entry =
   };
 }
 
-export function buildSelectionCopyButtonLabel(lines, { count = 0, limit = 1 } = {}) {
+export function buildSelectionCopyButtonLabel(lines, { limit = 1 } = {}) {
   const copyLines = Array.isArray(lines) ? lines : [];
   const normalizedLimit = Math.max(1, Number(limit) || 1);
   const tokens = copyLines
@@ -260,10 +260,8 @@ export function buildSelectionCopyButtonLabel(lines, { count = 0, limit = 1 } = 
     return "Copy refs";
   }
 
-  const requestedCount = Math.trunc(Number(count) || 0);
-  const copiedCount = requestedCount > 0 ? requestedCount : tokens.length;
   const visibleTokens = tokens.slice(0, normalizedLimit);
-  return `Copy [${copiedCount} ref${copiedCount === 1 ? "" : "s"}] ${visibleTokens.join(", ")}`;
+  return `Copy ${visibleTokens.join(", ")}`;
 }
 
 export function orderedStringListEqual(a, b) {

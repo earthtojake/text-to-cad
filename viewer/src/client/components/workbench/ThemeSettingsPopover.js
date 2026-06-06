@@ -1,5 +1,5 @@
 import { Children, isValidElement, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Box, Contrast, FlipHorizontal2, Grid3x3, Moon, MoreHorizontal, Pencil, Plus, RotateCcw, Sun, Trash2, X } from "lucide-react";
+import { Contrast, FlipHorizontal2, Moon, MoreHorizontal, Pencil, Plus, RotateCcw, Sun, Trash2, X } from "lucide-react";
 import {
   Accordion
 } from "../ui/accordion";
@@ -40,7 +40,8 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectTrigger
+  SelectTrigger,
+  SelectValue
 } from "../ui/select";
 import { Slider } from "../ui/slider";
 import {
@@ -97,8 +98,13 @@ const BACKGROUND_MODE_OPTIONS = [
 ];
 
 const DISPLAY_MODE_OPTIONS = [
-  { value: CAD_DISPLAY_MODE.SOLID, label: "Solid", Icon: Box },
-  { value: CAD_DISPLAY_MODE.WIREFRAME, label: "Wire", Icon: Grid3x3 }
+  { value: CAD_DISPLAY_MODE.SOLID, label: "Solid", title: "Shaded with CAD edges" },
+  { value: CAD_DISPLAY_MODE.RENDERED, label: "Rendered", title: "Shaded material appearance without edge overlay" },
+  { value: CAD_DISPLAY_MODE.TRANSPARENT, label: "X-Ray", title: "Transparent solids with visible CAD edges" },
+  { value: CAD_DISPLAY_MODE.HIDDEN_EDGES, label: "Hidden", title: "Shaded with hidden edges visible" },
+  { value: CAD_DISPLAY_MODE.HIDDEN_LINES_REMOVED, label: "Lines", title: "Visible lines with hidden lines removed" },
+  { value: CAD_DISPLAY_MODE.UNSHADED, label: "Flat", title: "Unshaded flat color" },
+  { value: CAD_DISPLAY_MODE.WIREFRAME, label: "Wire", title: "Full wireframe" }
 ];
 
 const FLOOR_MODE_OPTIONS = [
@@ -600,7 +606,8 @@ function FillColorEditor({ colors, onChange, cycleColors = false }) {
 }
 
 function SegmentedControl({ value, onChange, options }) {
-  const templateColumns = `repeat(${Math.max(options.length, 1)}, minmax(0, 1fr))`;
+  const columnCount = Math.max(1, Math.min(options.length, options.length > 4 ? 3 : 4));
+  const templateColumns = `repeat(${columnCount}, minmax(0, 1fr))`;
   return (
     <ToggleGroup
       type="single"
@@ -613,7 +620,7 @@ function SegmentedControl({ value, onChange, options }) {
         }
         onChange(nextValue);
       }}
-      className="grid h-7 w-full min-w-0"
+      className="grid min-h-7 w-full min-w-0 auto-rows-[1.75rem]"
       style={{ gridTemplateColumns: templateColumns }}
     >
       {options.map((option) => {
@@ -1489,11 +1496,21 @@ export function DisplaySettingsSection({
   return (
     <Section title="Display" value="display">
       <Field label="Mode">
-        <SegmentedControl
+        <Select
           value={normalizedDisplaySettings.mode}
-          options={DISPLAY_MODE_OPTIONS}
-          onChange={(nextValue) => setDisplay({ mode: nextValue })}
-        />
+          onValueChange={(nextValue) => setDisplay({ mode: nextValue })}
+        >
+          <SelectTrigger size="sm" className="h-7 !text-[11px]" aria-label="Display mode">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DISPLAY_MODE_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value} className="text-xs" title={option.title}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Field>
 
       {showClip ? (

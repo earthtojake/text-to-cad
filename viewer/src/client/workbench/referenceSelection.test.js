@@ -132,7 +132,7 @@ test("copy helpers merge selector refs and keep plain fallback lines", () => {
     id: "step-entry:whole",
     copyText: "# STEP file"
   });
-  assert.equal(buildSelectionCopyButtonLabel(payload.lines, { count: payload.copiedCount }), "Copy [2 refs] #e1,o1.2");
+  assert.equal(buildSelectionCopyButtonLabel(payload.lines, { count: payload.copiedCount }), "Copy #e1,o1.2");
   assert.equal(buildSelectionCopyButtonLabel([]), "Copy refs");
 });
 

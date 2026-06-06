@@ -62,6 +62,42 @@ CONTACT_SHEET_RENDER_WIDTH = 2400
 CONTACT_SHEET_RENDER_HEIGHT = 1600
 
 DISPLAY_OPTION_KEYS = {"mode", "clip"}
+DISPLAY_MODE_ALIASES = {
+    "solid": "solid",
+    "edges": "solid",
+    "edge": "solid",
+    "shaded_edges": "solid",
+    "shaded_with_edges": "solid",
+    "with_edges": "solid",
+    "shaded": "rendered",
+    "shaded_without_edges": "rendered",
+    "without_edges": "rendered",
+    "transparent": "transparent",
+    "translucent": "transparent",
+    "xray": "transparent",
+    "x_ray": "transparent",
+    "see_through": "transparent",
+    "hidden_edges": "hidden_edges",
+    "hidden_edge": "hidden_edges",
+    "hidden_edges_visible": "hidden_edges",
+    "hidden_edge_display": "hidden_edges",
+    "shaded_hidden_edges": "hidden_edges",
+    "hidden_lines_removed": "hidden_lines_removed",
+    "hidden_line_removed": "hidden_lines_removed",
+    "hidden_lines": "hidden_lines_removed",
+    "hidden_edges_removed": "hidden_lines_removed",
+    "visible_edges": "hidden_lines_removed",
+    "visible_edges_only": "hidden_lines_removed",
+    "unshaded": "unshaded",
+    "flat": "unshaded",
+    "rendered": "rendered",
+    "appearance": "rendered",
+    "material": "rendered",
+    "materials": "rendered",
+    "wireframe": "wireframe",
+    "wire_frame": "wireframe",
+    "wire": "wireframe",
+}
 APPEARANCE_OPTION_KEYS = {
     "materials",
     "edges",
@@ -115,7 +151,7 @@ def help_text() -> str:
   python scripts/snapshot --job -
   python scripts/snapshot --input models/part.step --output /tmp/part.png --appearance workbench
 
-Shortcut flags are for common STEP/STP snapshots. --job accepts one render job, an array of render jobs, or { "jobs": [...] }. Every job input must be a relative or absolute .step/.stp path, or a same-stem Python generator; direct GLB/STL/3MF/DXF/G-code/robot-description inputs are unsupported. The default appearance is the workbench saved theme. --appearance accepts a saved theme name, an inline JSON appearance settings object, or a JSON appearance settings file path. --display accepts solid, wireframe, an inline JSON display settings object, or a JSON display settings file path. --camera accepts a preset, azimuth:elevation pair, or JSON object with preset, position, target, up, and zoom fields. --focus and --hide accept one or more selector refs such as #o1.2 for parts or subassemblies; pass the flag repeatedly or list refs after the flag. Option JSON is direct settings JSON, not a wrapped job fragment. Full JSON jobs use top-level appearance and display. Use --view-labels to burn the camera/view label into shortcut outputs. Use --params with STEP parameter sidecar JSON values, and --size-profile for default dimensions such as simple, diagnostic, labeled, assembly, presentation, orbit, or contact-sheet. Output file names are saved with a shared UTC seconds timestamp before the extension.
+Shortcut flags are for common STEP/STP snapshots. --job accepts one render job, an array of render jobs, or { "jobs": [...] }. Every job input must be a relative or absolute .step/.stp path, or a same-stem Python generator; direct GLB/STL/3MF/DXF/G-code/robot-description inputs are unsupported. The default appearance is the workbench saved theme. --appearance accepts a saved theme name, an inline JSON appearance settings object, or a JSON appearance settings file path. --display accepts solid, rendered, transparent, hidden_edges, hidden_lines_removed, unshaded, wireframe, an inline JSON display settings object, or a JSON display settings file path. --camera accepts a preset, azimuth:elevation pair, or JSON object with preset, position, target, up, and zoom fields. --focus and --hide accept one or more selector refs such as #o1.2 for parts or subassemblies; pass the flag repeatedly or list refs after the flag. Option JSON is direct settings JSON, not a wrapped job fragment. Full JSON jobs use top-level appearance and display. Use --view-labels to burn the camera/view label into shortcut outputs. Use --params with STEP parameter sidecar JSON values, and --size-profile for default dimensions such as simple, diagnostic, labeled, assembly, presentation, orbit, or contact-sheet. Output file names are saved with a shared UTC seconds timestamp before the extension.
 """
 
 
@@ -345,7 +381,11 @@ def load_display_option(raw_display: object, *, cwd: Path) -> dict[str, object]:
     display_path = Path(display) if Path(display).is_absolute() else cwd / display
     looks_like_file = display.lower().endswith(".json") or "/" in display or "\\" in display
     if not looks_like_file and not display_path.exists():
-        return {"mode": "wireframe" if display.lower() == "wireframe" else "solid"}
+        normalized_mode = re.sub(r"[\s-]+", "_", display.lower())
+        if normalized_mode not in DISPLAY_MODE_ALIASES:
+            supported = ", ".join(sorted(set(DISPLAY_MODE_ALIASES.values())))
+            raise SnapshotError(f"Unsupported display mode: {display}. Supported modes: {supported}")
+        return {"mode": DISPLAY_MODE_ALIASES[normalized_mode]}
     if not display_path.exists():
         raise SnapshotError(f"Display JSON file does not exist: {display}")
     return validate_direct_settings_payload(
@@ -844,7 +884,7 @@ def resolve_render_job(
     if mode not in SUPPORTED_RENDER_MODES:
         raise SnapshotError(f"Unsupported render mode: {mode or '(missing)'}")
     if has_param_render and mode != "view":
-        raise SnapshotError("stepParameters support only view mode; set display.mode for solid or wire output")
+        raise SnapshotError("stepParameters support only view mode; set display.mode for display-style changes")
     if has_param_render and not step_parameter_path.exists():
         raise SnapshotError(
             f"STEP/STP render stepParameters require a CAD Viewer STEP parameter sidecar: {step_parameter_path}"

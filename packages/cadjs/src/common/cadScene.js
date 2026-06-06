@@ -5,6 +5,12 @@ import {
 } from "./themeSettings.js";
 import {
   CAD_DISPLAY_MODE,
+  displayModeAllowsEdges,
+  displayModeForcesEdges,
+  displayModeIsWireframe,
+  displayModeShowsThroughEdges,
+  displayModeSurfaceOpacity,
+  displayModeUsesUnlitSurfaces,
   normalizeDisplayMode
 } from "./displaySettings.js";
 import {
@@ -530,6 +536,17 @@ function createWireframeSurfaceMaterial(THREE, materialSettings, fillIndex = 0) 
   });
 }
 
+function createUnshadedSurfaceMaterial(THREE, { color, useVertexColors = false, opacity = 1 } = {}) {
+  return new THREE.MeshBasicMaterial({
+    color: color || DEFAULT_THEME.surface,
+    side: THREE.DoubleSide,
+    vertexColors: useVertexColors,
+    transparent: opacity < 0.999,
+    opacity,
+    depthWrite: opacity >= 0.999
+  });
+}
+
 function sourceColorForPart(THREE, part, meshData) {
   return readSourceColor(THREE, part?.color || meshData?.sourceColor);
 }
@@ -718,7 +735,7 @@ function buildEdgeGeometry(THREE, meshData, part, sourceGeometry, displayMode, e
   }
 
   let geometry = null;
-  if (displayMode === CAD_DISPLAY_MODE.WIREFRAME) {
+  if (displayModeIsWireframe(displayMode)) {
     geometry = new THREE.WireframeGeometry(sourceGeometry);
   } else if (part) {
     const edgeIndexOffset = toNumber(part?.edgeIndexOffset, 0);
@@ -769,14 +786,15 @@ function syncLineMaterialOpacity(material, opacity) {
 }
 
 function createDefaultEdgeObject(THREE, geometry, baseTheme, edgeSettings, partId, displayMode) {
-  const wireframeMode = displayMode === CAD_DISPLAY_MODE.WIREFRAME;
+  const wireframeMode = displayModeIsWireframe(displayMode);
+  const depthTest = edgeSettings?.depthTest === false ? false : !wireframeMode;
   const material = new THREE.LineBasicMaterial({
     color: edgeSettings?.color || baseTheme?.edge || DEFAULT_THEME.edge,
     transparent: true,
     opacity: wireframeMode
       ? Math.max(toNumber(edgeSettings?.opacity, 0.92), 0.9)
       : toNumber(edgeSettings?.opacity, baseTheme?.edgeOpacity ?? CAD_EDGE_OPACITY),
-    depthTest: !wireframeMode,
+    depthTest,
     depthWrite: false
   });
   const object = new THREE.LineSegments(geometry, material);
@@ -852,7 +870,7 @@ function createSilhouetteMesh(THREE, geometry, edgeSettings, radius) {
 function shouldBuildSilhouette(edgeSettings, displayMode, settings = {}) {
   return (
     settings.silhouette !== false &&
-    displayMode !== CAD_DISPLAY_MODE.WIREFRAME &&
+    !displayModeIsWireframe(displayMode) &&
     edgeSettings.silhouette === true &&
     (edgeSettings.enabled === true || settings.silhouette === true)
   );
@@ -910,7 +928,7 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
   if (!record?.material || !materialSettings) {
     return;
   }
-  const wireframeMode = displayMode === CAD_DISPLAY_MODE.WIREFRAME;
+  const wireframeMode = displayModeIsWireframe(displayMode);
   const forceFill = materialSettings.overrideSourceColors === true || wireframeMode;
   const hasVertexColors = !forceFill && !!record.hasVertexColors;
   record.useVertexColors = hasVertexColors;
@@ -927,7 +945,7 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
     if (record.material.color && record.baseColor) {
       record.material.color.copy(record.baseColor);
     }
-    record.baseOpacity = 0.035;
+    record.baseOpacity = displayModeSurfaceOpacity(displayMode, 0.035);
     record.material.opacity = record.baseOpacity;
     record.material.transparent = true;
     record.material.depthWrite = false;
@@ -939,9 +957,10 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
   record.material.metalness = clamp(Number(materialSettings.metalness) || 0, 0, 1);
   record.material.clearcoat = clamp(Number(materialSettings.clearcoat) || 0, 0, 1);
   record.material.clearcoatRoughness = clamp(Number(materialSettings.clearcoatRoughness) || 0, 0, 1);
-  record.baseOpacity = clamp(Number(materialSettings.opacity) || 0, 0, 1);
+  record.baseOpacity = clamp(displayModeSurfaceOpacity(displayMode, materialSettings.opacity), 0, 1);
   record.material.opacity = record.baseOpacity;
   record.material.transparent = record.baseOpacity < 0.999;
+  record.material.depthWrite = displayMode === CAD_DISPLAY_MODE.TRANSPARENT ? false : record.baseOpacity >= 0.999;
   record.material.envMapIntensity = Math.max(Number(materialSettings.envMapIntensity) || 0, 0);
   if (record.material.color && record.baseColor) {
     record.material.color.copy(record.baseColor);
@@ -1639,9 +1658,11 @@ function buildDisplayRecords(THREE, runtime, meshData, settings) {
 
   const makeRecord = ({ part = null, geometryEntry, fillIndex = 0, baseTransform = null }) => {
     const partId = part ? String(part?.id || part?.occurrenceId || `part:${records.length}`) : MODEL_PART_ID;
-    const forceFill = materialSettings.overrideSourceColors === true || displayMode === CAD_DISPLAY_MODE.WIREFRAME;
+    const wireframeMode = displayModeIsWireframe(displayMode);
+    const forceFill = materialSettings.overrideSourceColors === true || wireframeMode;
     const sourceVertexColors = !!geometryEntry.geometry.getAttribute("color");
-    const useSurfaceEdges = displayMode !== CAD_DISPLAY_MODE.WIREFRAME &&
+    const useSurfaceEdges = !wireframeMode &&
+      !displayModeShowsThroughEdges(displayMode) &&
       edgeSettings.enabled &&
       geometryHasSurfaceEdgeAttributes(geometryEntry.geometry);
     const sourceColor = sourceColorForPart(THREE, part, meshData);
@@ -1655,14 +1676,20 @@ function buildDisplayRecords(THREE, runtime, meshData, settings) {
       fillIndex,
       forceFill: forceFill || !hasSourceColor
     });
-    const material = displayMode === CAD_DISPLAY_MODE.WIREFRAME
+    const material = wireframeMode
       ? createWireframeSurfaceMaterial(THREE, materialSettings, fillIndex)
-      : createSurfaceMaterial(THREE, baseTheme, {
+      : displayModeUsesUnlitSurfaces(displayMode)
+        ? createUnshadedSurfaceMaterial(THREE, {
+            color: baseColor,
+            useVertexColors: hasVertexColors,
+            opacity: displayModeSurfaceOpacity(displayMode, materialSettings.opacity)
+          })
+        : createSurfaceMaterial(THREE, baseTheme, {
           color: baseColor,
           useVertexColors: hasVertexColors,
           edgeSettings: useSurfaceEdges ? edgeSettings : null
         });
-    if (edgeSettings.enabled && displayMode !== CAD_DISPLAY_MODE.WIREFRAME && !useSurfaceEdges) {
+    if (edgeSettings.enabled && !wireframeMode && !useSurfaceEdges) {
       material.polygonOffset = true;
       material.polygonOffsetFactor = 1;
       material.polygonOffsetUnits = 1;
@@ -1716,7 +1743,7 @@ function buildDisplayRecords(THREE, runtime, meshData, settings) {
       }
     }
 
-    if (settings.selection?.showEdges !== false && !useSurfaceEdges && (edgeSettings.enabled || displayMode === CAD_DISPLAY_MODE.WIREFRAME)) {
+    if (settings.selection?.showEdges !== false && !useSurfaceEdges && (edgeSettings.enabled || wireframeMode)) {
       addEdgeObject(
         THREE,
         runtime,
@@ -1774,8 +1801,21 @@ function settingsSignature(meshData, theme, settings) {
 }
 
 function normalizeSettings(settings = {}) {
-  const theme = normalizeThemeSettings(settings.theme || settings.themeSettings || settings.settings || undefined);
   const displayMode = normalizeDisplayMode(settings.displayMode);
+  const normalizedTheme = normalizeThemeSettings(settings.theme || settings.themeSettings || settings.settings || undefined);
+  const themeEdgeSettings = resolveThemeDisplayEdgeSettings(normalizedTheme);
+  const applyDisplayModeEdgePolicy = settings.applyDisplayModeEdgePolicy !== false;
+  const theme = {
+    ...normalizedTheme,
+    edges: applyDisplayModeEdgePolicy
+      ? {
+          ...themeEdgeSettings,
+          enabled: displayModeAllowsEdges(displayMode) &&
+            (displayModeForcesEdges(displayMode) || themeEdgeSettings.enabled === true),
+          depthTest: displayModeShowsThroughEdges(displayMode) ? false : themeEdgeSettings.depthTest
+        }
+      : themeEdgeSettings
+  };
   const scale = normalizeCadSceneScale(settings.scale ?? settings.sceneScale ?? settings.sceneScaleMode);
   const callbacks = settings.callbacks && typeof settings.callbacks === "object" ? settings.callbacks : {};
   const baseTheme = settings.baseTheme && typeof settings.baseTheme === "object" ? settings.baseTheme : DEFAULT_THEME;
@@ -1800,7 +1840,10 @@ function setRuntimeTheme(runtime, settings) {
   runtime.displayMode = settings.displayMode;
   runtime.scale = settings.scale;
   runtime.baseTheme = settings.baseTheme;
-  runtime.edgeSettings = resolveThemeDisplayEdgeSettings(settings.theme);
+  runtime.edgeSettings = {
+    ...resolveThemeDisplayEdgeSettings(settings.theme),
+    depthTest: displayModeShowsThroughEdges(settings.displayMode) ? false : undefined
+  };
   runtime.materialSettings = settings.materialSettings;
   applyEdgeRenderingToRuntime(runtime, settings.edgeRendering);
 }

@@ -3,7 +3,7 @@ import {
   Copy,
   Crosshair,
   MousePointer2,
-  Play,
+  Orbit,
   PenTool
 } from "lucide-react";
 import { RENDER_FORMAT } from "@/workbench/constants";
@@ -112,7 +112,7 @@ function DesktopFloatingToolBar({
               onClick={handleEnterPreviewMode}
               disabled={viewerLoading || !renderReady}
             >
-              <Play className="size-3.5" strokeWidth={2} aria-hidden="true" />
+              <Orbit className="size-3.5" strokeWidth={2} aria-hidden="true" />
             </ToolbarButton>
           ) : null}
 

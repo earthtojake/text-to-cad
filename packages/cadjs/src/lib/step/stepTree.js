@@ -275,6 +275,35 @@ function buildSyntheticOccurrenceNode({ partId, occurrenceId, children }) {
   };
 }
 
+function topologyOccurrenceNodeIsRedundantForPart(partNode, occurrenceNode, siblingCount) {
+  if (normalizeString(occurrenceNode?.nodeType) !== "topology-occurrence") {
+    return false;
+  }
+  const occurrenceId = normalizeString(occurrenceNode?.occurrenceId || occurrenceNode?.displaySelector);
+  if (!occurrenceId) {
+    return false;
+  }
+  const partSelectors = [
+    stepTreeNodeId(partNode),
+    partNode?.occurrenceId,
+    partNode?.sourceOccurrenceId,
+    partNode?.sourceRootTargetOccurrenceId
+  ].map((value) => normalizeString(value)).filter(Boolean);
+  if (partSelectors.includes(occurrenceId)) {
+    return true;
+  }
+  return stepTreeNodeId(partNode) === STEP_MODEL_ROOT_ID && siblingCount === 1;
+}
+
+function flattenRedundantTopologyOccurrenceNodes(partNode, topologyChildren) {
+  const children = Array.isArray(topologyChildren) ? topologyChildren : [];
+  return children.flatMap((child) => (
+    topologyOccurrenceNodeIsRedundantForPart(partNode, child, children.length)
+      ? stepTreeNodeChildren(child)
+      : [child]
+  ));
+}
+
 function topologyReferencePartId(reference, fallbackPartId) {
   return normalizeString(reference?.partId) || normalizeString(fallbackPartId);
 }
@@ -463,7 +492,7 @@ export function buildStepTreeRootWithTopology({ root = null, references = [], fa
     const id = stepTreeNodeId(node);
     const children = stepTreeNodeChildren(node).map((child) => cloneWithTopology(child));
     const topologyChildren = normalizeString(node?.nodeType) === "part"
-      ? topologyChildrenByPart.get(id) || []
+      ? flattenRedundantTopologyOccurrenceNodes(node, topologyChildrenByPart.get(id) || [])
       : [];
     if (!children.length && !topologyChildren.length) {
       return node;

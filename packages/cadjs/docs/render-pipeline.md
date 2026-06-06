@@ -103,7 +103,8 @@ Three.js object graph and its mutable state.
 Common settings:
 
 - `theme`: normalized or raw theme settings.
-- `displayMode`: `solid` or `wireframe`.
+- `displayMode`: `solid`, `rendered`, `transparent`, `hidden_edges`,
+  `hidden_lines_removed`, `unshaded`, or `wireframe`.
 - `scale`/`sceneScale`: CAD or robot scene scale.
 - `selection`: internal selection/filtering state. `focus`, `refs`, and `hide`
   filter rendered parts before records are built. Viewer-only fields such as

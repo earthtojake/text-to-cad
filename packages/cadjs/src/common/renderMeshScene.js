@@ -8,6 +8,10 @@ import {
   resolveThemeDisplayEdgeSettings
 } from "./themeSettings.js";
 import {
+  displayModeForcesEdges,
+  displayModeIsWireframe,
+  displayModeShowsEdges,
+  displayModeShowsThroughEdges,
   normalizeDisplaySettings
 } from "./displaySettings.js";
 import {
@@ -655,12 +659,19 @@ export function renderJobContext(meshData, job = {}) {
     lighting: theme.lighting || null,
     renderScale: job.render?.renderScale ?? job.renderScale ?? DEFAULT_RENDER_SCALE
   });
-  const edgeSettings = resolveThemeDisplayEdgeSettings(theme);
+  const baseEdgeSettings = resolveThemeDisplayEdgeSettings(theme);
+  const edgeSettings = {
+    ...baseEdgeSettings,
+    enabled: displayModeForcesEdges(displayMode) ? true : baseEdgeSettings.enabled,
+    depthTest: displayModeShowsThroughEdges(displayMode) ? false : baseEdgeSettings.depthTest
+  };
+  const wireframeMode = displayModeIsWireframe(displayMode);
+  const edgesVisible = stepDisplayEnabled && displayModeShowsEdges(displayMode, edgeSettings);
   const selectorRuntime = job.stepParameters?.selectorRuntime || job.selectorRuntime || null;
   const displayEdgeRuntime = job.stepParameters?.displayEdgeRuntime || job.displayEdgeRuntime || null;
   const topologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
-    edgesVisible: stepDisplayEnabled && edgeSettings.enabled,
-    wireframeMode: displayMode === "wireframe",
+    edgesVisible,
+    wireframeMode,
     cadEdgeSource: stepDisplayEnabled,
     displayEdgeRuntime,
     selectorRuntime,
@@ -670,11 +681,19 @@ export function renderJobContext(meshData, job = {}) {
     ? {
         ...theme,
         edges: {
-          ...(theme.edges || {}),
+          ...edgeSettings,
           enabled: false
         }
       }
-    : theme;
+    : {
+        ...theme,
+        edges: edgesVisible
+          ? edgeSettings
+          : {
+              ...edgeSettings,
+              enabled: false
+            }
+      };
   return {
     mode,
     theme,
@@ -684,6 +703,8 @@ export function renderJobContext(meshData, job = {}) {
     stepDisplayEnabled,
     displaySettings,
     displayMode,
+    wireframeMode,
+    edgesVisible,
     bounds,
     outputs,
     warnings,
@@ -699,13 +720,14 @@ export function modelOptionsForRenderJob(context, job = {}) {
   return {
     theme: context.sceneTheme,
     displayMode: context.displayMode,
+    applyDisplayModeEdgePolicy: !context.topologyDisplayEdgesVisible,
     scale: context.sceneScale,
     clip: context.sharedRenderOptions.clip,
     silhouette: context.topologyDisplayEdgesVisible && context.edgeSettings.silhouette === true,
     renderPartsIndividually: true,
     selection: {
       ...(job.selection || {}),
-      showEdges: context.stepDisplayEnabled
+      showEdges: context.edgesVisible
     },
     edgeRendering: {
       mode: "screen-space",

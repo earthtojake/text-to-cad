@@ -302,6 +302,7 @@ test("buildModel renders STEP surface-owned edges from mesh attributes without l
   ]);
   const scene = buildModel(THREE, meshData, {
     theme: cloneThemeSettings("workbench"),
+    displayMode: CAD_DISPLAY_MODE.SOLID,
     renderPartsIndividually: true
   });
 
@@ -336,11 +337,13 @@ test("buildModel rebuilds surface edge shader materials when edge theme settings
   const theme = cloneThemeSettings("workbench");
   const scene = buildModel(THREE, meshData, {
     theme,
+    displayMode: CAD_DISPLAY_MODE.SOLID,
     renderPartsIndividually: true
   });
   const originalMaterial = scene.displayRecords[0].material;
 
   scene.update({
+    displayMode: CAD_DISPLAY_MODE.SOLID,
     theme: {
       ...theme,
       edges: {
@@ -426,6 +429,48 @@ test("buildModel wireframe mode keeps a translucent surface and wire edges", () 
   scene.dispose();
 });
 
+test("buildModel display modes control edges, transparency, and flat surfaces", () => {
+  const theme = cloneThemeSettings("workbench");
+  const renderedScene = buildModel(THREE, sampleMeshData(), {
+    theme,
+    displayMode: CAD_DISPLAY_MODE.RENDERED,
+    renderPartsIndividually: true
+  });
+  assert.equal(renderedScene.displayRecords[0].edges, null);
+  assert.equal(renderedScene.displayRecords[0].material.opacity, 1);
+
+  const transparentScene = buildModel(THREE, sampleMeshData(), {
+    theme,
+    displayMode: CAD_DISPLAY_MODE.TRANSPARENT,
+    renderPartsIndividually: true
+  });
+  assert.equal(transparentScene.displayRecords[0].material.opacity, 0.22);
+  assert.equal(transparentScene.displayRecords[0].material.transparent, true);
+  assert.equal(transparentScene.displayRecords[0].material.depthWrite, false);
+  assert.equal(transparentScene.displayRecords[0].edgeMaterial.depthTest, false);
+
+  const hiddenEdgeScene = buildModel(THREE, sampleMeshData(), {
+    theme,
+    displayMode: CAD_DISPLAY_MODE.HIDDEN_EDGES,
+    renderPartsIndividually: true
+  });
+  assert.equal(hiddenEdgeScene.displayRecords[0].material.opacity, 1);
+  assert.equal(hiddenEdgeScene.displayRecords[0].edgeMaterial.depthTest, false);
+
+  const unshadedScene = buildModel(THREE, sampleMeshData(), {
+    theme,
+    displayMode: CAD_DISPLAY_MODE.UNSHADED,
+    renderPartsIndividually: true
+  });
+  assert.equal(unshadedScene.displayRecords[0].material.type, "MeshBasicMaterial");
+  assert.equal(unshadedScene.displayRecords[0].edges, null);
+
+  renderedScene.dispose();
+  transparentScene.dispose();
+  hiddenEdgeScene.dispose();
+  unshadedScene.dispose();
+});
+
 test("buildModel ignores deprecated mesh edge detail and keeps wireframe all-edge mode", () => {
   const baseTheme = cloneThemeSettings("workbench");
   const deprecatedDetailScene = buildModel(THREE, squareMeshData(), {
@@ -435,7 +480,8 @@ test("buildModel ignores deprecated mesh edge detail and keeps wireframe all-edg
         ...baseTheme.edges,
         topologyFilter: "all"
       }
-    }
+    },
+    displayMode: CAD_DISPLAY_MODE.SOLID
   });
   const wireScene = buildModel(THREE, squareMeshData(), {
     theme: baseTheme,
@@ -453,6 +499,7 @@ test("buildModel ignores deprecated mesh edge detail and keeps wireframe all-edg
 test("buildModel creates screen-space edges from declarative edge rendering options", () => {
   const scene = buildModel(THREE, squareMeshData(), {
     theme: cloneThemeSettings("workbench"),
+    displayMode: CAD_DISPLAY_MODE.SOLID,
     edgeRendering: {
       mode: "screen-space",
       LineSegments2,
@@ -481,6 +528,7 @@ test("buildModel can render silhouette contours without derived mesh edges", () 
         silhouetteScale: 0.004
       }
     },
+    displayMode: CAD_DISPLAY_MODE.RENDERED,
     silhouette: true,
     renderPartsIndividually: true
   });

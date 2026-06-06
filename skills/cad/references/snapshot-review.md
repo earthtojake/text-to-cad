@@ -38,7 +38,7 @@ Use a small packet first. Prefer a single `view` JSON job with these outputs:
   "input": "models/part.step",
   "mode": "view",
   "outputs": [
-    { "path": "/tmp/render/iso_shaded_edges.png", "camera": "iso", "width": 1600, "height": 1200 },
+    { "path": "/tmp/render/iso_solid.png", "camera": "iso", "width": 1600, "height": 1200 },
     { "path": "/tmp/render/front_ortho.png", "camera": "front", "width": 1600, "height": 1200 },
     { "path": "/tmp/render/top_ortho.png", "camera": "top", "width": 1600, "height": 1200 },
     { "path": "/tmp/render/right_ortho.png", "camera": "right", "width": 1600, "height": 1200 }
@@ -47,11 +47,11 @@ Use a small packet first. Prefer a single `view` JSON job with these outputs:
 }
 ```
 
-Set `input` to the primary STEP/STP artifact using a relative or absolute path. The snapshot CLI derives its internal render root from that input path. It defaults to `appearance: "workbench"` and `display.mode: "solid"`, matching CAD Viewer; labeled/section views default to 1600x1200 when dimensions are omitted. Use `render.sizeProfile: "assembly"` or `"assembly-large"` for complex assemblies that need 1800x1200 or 1920x1440. For CAD review packets, use still-image render modes `view` and `section`; set `display.mode` to `wireframe` for wire output.
+Set `input` to the primary STEP/STP artifact using a relative or absolute path. The snapshot CLI derives its internal render root from that input path. It defaults to `appearance: "workbench"` and `display.mode: "solid"`, matching CAD Viewer; labeled/section views default to 1600x1200 when dimensions are omitted. Use `render.sizeProfile: "assembly"` or `"assembly-large"` for complex assemblies that need 1800x1200 or 1920x1440. For CAD review packets, use still-image render modes `view` and `section`; set `display.mode` to `solid`, `transparent`, `hidden_edges`, `hidden_lines_removed`, or `wireframe` when the visual check benefits from explicit CAD linework.
 
 Use `--focus '#o1.2' ...` to render only specific part or subassembly occurrence refs, or `--hide '#o1.2' ...` to omit them. Do not combine focus and hide in the same snapshot command or job. These filters accept occurrence refs only, not face, edge, vertex, or shape selectors.
 
-The snapshot CLI appends one shared UTC seconds timestamp before each output file extension when saving a packet, so readable paths like `iso_shaded_edges.png` become names such as `iso_shaded_edges_20260527T163012Z.png`.
+The snapshot CLI appends one shared UTC seconds timestamp before each output file extension when saving a packet, so readable paths like `iso_solid.png` become names such as `iso_solid_20260527T163012Z.png`.
 
 ## Targeted additions
 
@@ -59,8 +59,12 @@ Add views only when the brief or a failure mode calls for them:
 
 - rear or bottom camera: features may be hidden from the default packet
 - `section`: shell, bore, internal cavity, passage, blind hole, enclosure, or wall/floor relationship
-- `display.mode: "wireframe"`: internal overlap, hidden interference, or assembly collision suspicion
-- transparent appearance settings in a JSON job: overlap, collision, or enclosure readability when transparency adds information and wireframe is too noisy; otherwise treat transparent views as presentation-only
+- `display.mode: "solid"`: shaded CAD view with explicit edge linework
+- `display.mode: "rendered"`: shaded material view without edge overlay
+- `display.mode: "transparent"`: overlap, collision, enclosure readability, or hidden contact checks when transparency adds information and wireframe is too noisy
+- `display.mode: "hidden_edges"`: opaque shaded context with hidden/occluded CAD edges visible through solids
+- `display.mode: "hidden_lines_removed"`: line-focused review where hidden/occluded edges should be suppressed
+- `display.mode: "wireframe"`: internal overlap, hidden interference, or assembly collision suspicion when full triangle wire is useful
 - labeled or annotated review: use supported CAD Viewer refs, selections, screenshots, or GUI review links
 
 Exploded or labeled review is an intent, not a render mode. Satisfy it through supported CAD Viewer mechanisms, supported JSON job settings, or the GUI link.

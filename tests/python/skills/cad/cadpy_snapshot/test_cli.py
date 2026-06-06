@@ -104,6 +104,43 @@ class SnapshotCliTests(unittest.TestCase):
                 ]
             )
 
+    def test_display_shortcut_accepts_cad_display_modes(self) -> None:
+        for raw_mode, expected_mode in [
+            ("edges", "solid"),
+            ("x-ray", "transparent"),
+            ("hidden edges visible", "hidden_edges"),
+            ("hidden-lines-removed", "hidden_lines_removed"),
+            ("flat", "unshaded"),
+            ("appearance", "rendered"),
+            ("wire", "wireframe"),
+        ]:
+            options = parse_snapshot_args(
+                [
+                    "--input",
+                    "models/simple/cylindrical_cap.step",
+                    "--output",
+                    "tmp/cap.png",
+                    "--display",
+                    raw_mode,
+                ]
+            )
+            job = load_job_from_options(options, stdin=_TtyStringIO(), cwd=Path.cwd())
+            self.assertEqual(job["display"], {"mode": expected_mode})
+
+    def test_display_shortcut_rejects_unknown_modes(self) -> None:
+        options = parse_snapshot_args(
+            [
+                "--input",
+                "models/simple/cylindrical_cap.step",
+                "--output",
+                "tmp/cap.png",
+                "--display",
+                "mist",
+            ]
+        )
+        with self.assertRaisesRegex(SnapshotError, "Unsupported display mode"):
+            load_job_from_options(options, stdin=_TtyStringIO(), cwd=Path.cwd())
+
     def test_shortcut_focus_flags_apply_selection(self) -> None:
         options = parse_snapshot_args(
             [

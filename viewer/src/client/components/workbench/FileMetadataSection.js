@@ -61,8 +61,8 @@ function MetadataValue({
       return valueNode;
     }
     return (
-      <div className="flex min-w-0 items-start gap-1.5">
-        <div className="min-w-0 flex-1">{valueNode}</div>
+      <div className="inline-flex max-w-full items-center gap-1.5 align-top">
+        <div className="min-w-0 max-w-full">{valueNode}</div>
         <MetadataCopyButton value={copyValue} label={row.label} />
       </div>
     );

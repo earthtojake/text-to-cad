@@ -234,7 +234,7 @@ export async function runHeadlessRenderJob(job) {
     displayEdgeRuntime: source.displayEdgeRuntime
   };
   if (stepParameterSource && explicitParams && String(job.mode || "view").toLowerCase() !== "view") {
-    throw new Error("stepParameters support only view mode; set display.mode for solid or wire output");
+    throw new Error("stepParameters support only view mode; set display.mode for display-style changes");
   }
   const renderJobWithStepParameters = stepParameterSource
     ? {

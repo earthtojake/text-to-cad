@@ -68,6 +68,8 @@ Use the active project Python interpreter. Treat `python` in examples as an inte
 
 Use `python scripts/<tool> --help` for the complete current command interface; reference docs show recommended workflows, not every flag.
 
+CAD references are `#...` selector tokens, for example `#o1.2` or `#o1.2.f1`. Pass the STEP/CAD file as a separate target argument when using CAD CLIs.
+
 ## Required workflow
 
 1. **Classify the task.** Identify whether this is a new part, new assembly, source modification, direct STEP/STP inspection, reference selection, measurement/mating check, snapshot review, or secondary output request.

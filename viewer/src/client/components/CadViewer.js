@@ -35,6 +35,12 @@ import {
   shouldShowRecordDisplayEdges
 } from "cadjs/lib/viewer/displayEdgePolicy";
 import {
+  displayModeForcesEdges,
+  displayModeIsWireframe,
+  displayModeShowsEdges,
+  displayModeShowsThroughEdges
+} from "cadjs/lib/displaySettings";
+import {
   createUrdfPosePickerHoverCellMesh,
   createUrdfPosePickerHoverCellOutline,
   createUrdfPosePickerShell,
@@ -1102,7 +1108,9 @@ const CadViewer = forwardRef(function CadViewer({
     () => resolveThemeSettingsDisplayEdgeSettings(normalizedThemeSettings),
     [normalizedThemeSettings]
   );
-  const wireframeMode = normalizedDisplayMode === "wireframe";
+  const wireframeMode = displayModeIsWireframe(normalizedDisplayMode);
+  const displayModeForceEdges = displayModeForcesEdges(normalizedDisplayMode);
+  const displayModeThroughEdges = displayModeShowsThroughEdges(normalizedDisplayMode);
   const wireframeEdgeColor = useMemo(
     () => resolveWireframeEdgeColor({
       edgeColor: displayEdgeSettings?.color,
@@ -1117,15 +1125,28 @@ const CadViewer = forwardRef(function CadViewer({
       : (viewerTheme?.edgeOpacity ?? BASE_VIEWER_THEME.edgeOpacity ?? CAD_EDGE_OPACITY);
     return Math.max(baseOpacity, 0.9);
   }, [displayEdgeSettings, viewerTheme]);
-  const visualEdgeSettings = useMemo(() => wireframeMode
-    ? {
-        ...displayEdgeSettings,
-        contrastMode: "manual",
-        color: wireframeEdgeColor,
-        opacity: wireframeEdgeOpacity
-      }
-    : displayEdgeSettings,
-  [displayEdgeSettings, wireframeEdgeColor, wireframeEdgeOpacity, wireframeMode]);
+  const visualEdgeSettings = useMemo(() => {
+    const forcedSettings = {
+      ...displayEdgeSettings,
+      enabled: displayModeForceEdges ? true : displayEdgeSettings.enabled,
+      depthTest: displayModeThroughEdges ? false : displayEdgeSettings.depthTest
+    };
+    return wireframeMode
+      ? {
+          ...forcedSettings,
+          contrastMode: "manual",
+          color: wireframeEdgeColor,
+          opacity: wireframeEdgeOpacity
+        }
+      : forcedSettings;
+  }, [
+    displayEdgeSettings,
+    displayModeForceEdges,
+    displayModeThroughEdges,
+    wireframeEdgeColor,
+    wireframeEdgeOpacity,
+    wireframeMode
+  ]);
   const focusedPartIds = useMemo(() => normalizePartIdList(focusedPartId), [focusedPartId]);
   const focusedPartIdSet = useMemo(() => new Set(focusedPartIds), [focusedPartIds]);
   const hiddenPartIdSet = useMemo(() => new Set(normalizePartIdList(hiddenPartIds)), [hiddenPartIds]);
@@ -1165,7 +1186,7 @@ const CadViewer = forwardRef(function CadViewer({
     floorMode,
     normalizedThemeSettings.floor
   ), [normalizedThemeSettings.floor]);
-  const edgesVisible = showEdges && shouldUseCadEdgeSource && (displayEdgeSettings.enabled || wireframeMode);
+  const edgesVisible = showEdges && shouldUseCadEdgeSource && displayModeShowsEdges(normalizedDisplayMode, visualEdgeSettings);
   const topologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
     edgesVisible,
     wireframeMode,
@@ -2213,6 +2234,7 @@ const CadViewer = forwardRef(function CadViewer({
     const cadScene = buildModel(THREE, meshData, {
       theme: sceneTheme,
       displayMode: normalizedDisplayMode,
+      applyDisplayModeEdgePolicy: !topologyDisplayEdgesVisible,
       scale: normalizedSceneScaleMode,
       baseTheme: viewerTheme,
       materialSettings,

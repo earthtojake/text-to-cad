@@ -3,8 +3,8 @@
 CAD Viewer is a browser workbench for inspecting CAD files,
 robot-description files, and generated CAD artifacts from a URL-selected local
 directory or hosted catalog. It is built for engineering review loops where you
-need to open a model quickly, understand the source tree, copy stable
-`@cad[...]` references, and verify generated assets without leaving the browser.
+need to open a model quickly, understand the source tree, copy stable `#...`
+CAD references, and verify generated assets without leaving the browser.
 
 ## Features
 

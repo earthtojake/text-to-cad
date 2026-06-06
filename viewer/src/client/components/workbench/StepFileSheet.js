@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Boxes, ChevronRight, ClipboardPaste, Copy, Eye, EyeOff, Package, Pause, Play, RotateCcw } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
+  STEP_MODEL_ROOT_ID,
   flattenVisibleStepTreeRows,
   stepTreeNodeChildren
 } from "cadjs/lib/step/stepTree";
@@ -15,6 +16,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger
 } from "../ui/context-menu";
 import { ColorPicker } from "../ui/color-picker";
@@ -38,14 +40,17 @@ import FileSheet, {
   FileSheetToggleRow,
   parseFileSheetNumberInput
 } from "./FileSheet";
+import AssemblyContextMenuItems from "./AssemblyContextMenuItems";
 import FileMetadataSection from "./FileMetadataSection";
 import FileStatusSection from "./FileStatusSection";
 
 const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
 const compactInputClasses = FILE_SHEET_COMPACT_INPUT_CLASSES;
-const treeActionButtonClasses = "h-7 w-6 rounded-sm text-muted-foreground hover:text-foreground";
-const treeChevronButtonClasses = "h-7 rounded-sm px-0 pr-1 text-muted-foreground hover:text-sidebar-accent-foreground";
-const treeRowButtonClasses = "h-7 min-w-0 rounded-sm px-0 text-xs font-normal text-sidebar-foreground shadow-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
+const treeChevronButtonClasses = "h-7 w-4 rounded-sm px-0 text-current/60 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45";
+const treeRowActionButtonClasses = "mr-1 h-5 w-5 rounded-sm px-0 text-current/60 shadow-none hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45 focus-visible:text-sidebar-accent-foreground";
+const treeRowContentClasses = "h-7 min-w-0 text-xs font-normal";
+const treeDepthIndentPx = 16;
+const treeDepthMaxPx = 128;
 const treeSectionId = "tree";
 const treeRevealScrollPaddingTopPx = 120;
 export const STEP_TREE_ROOT_ITEM_LIMIT = 15;
@@ -104,6 +109,55 @@ function hiddenStepTreeRowIds(visibleRows, hiddenPartIds) {
     }
   }
   return hiddenRows;
+}
+
+function stepTreeNodeId(node) {
+  return String(node?.id || node?.occurrenceId || "").trim();
+}
+
+function expandableStepTreeNodeIds(root, { omitRoot = false } = {}) {
+  if (!root) {
+    return [];
+  }
+  const ids = [];
+  const stack = [root];
+  while (stack.length) {
+    const node = stack.pop();
+    const nodeId = stepTreeNodeId(node);
+    const children = stepTreeNodeChildren(node);
+    if ((!omitRoot || node !== root) && nodeId && children.length) {
+      ids.push(nodeId);
+    }
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push(children[index]);
+    }
+  }
+  return ids;
+}
+
+function isolatedStepTreeRowIds(visibleRows, focusedNodeIds) {
+  const focused = new Set(
+    (Array.isArray(focusedNodeIds) ? focusedNodeIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean)
+  );
+  if (!focused.size) {
+    return null;
+  }
+  const isolatedRows = new Set();
+  const isolatedByDepth = [];
+  for (const row of Array.isArray(visibleRows) ? visibleRows : []) {
+    const rowId = String(row?.id || "").trim();
+    const depth = Math.max(Number(row?.depth) || 0, 0);
+    isolatedByDepth.length = depth;
+    const parentIsolated = depth > 0 && isolatedByDepth[depth - 1] === true;
+    const rowIsolated = parentIsolated || focused.has(rowId);
+    isolatedByDepth[depth] = rowIsolated;
+    if (rowIsolated && rowId) {
+      isolatedRows.add(rowId);
+    }
+  }
+  return isolatedRows;
 }
 
 function scrollTreeNodeIntoView(target, { block = "nearest" } = {}) {
@@ -180,6 +234,26 @@ function topologyTreeRowKind(row, type) {
     if (/\bshell\b/.test(haystack)) return "shell";
   }
   return type;
+}
+
+function capitalizeTreeLabel(value) {
+  const text = String(value || "").trim();
+  return text ? `${text.slice(0, 1).toUpperCase()}${text.slice(1)}` : "";
+}
+
+function stepTreeRowAriaLabel(row, topologyType, detail = "") {
+  const label = String(row?.label || row?.node?.displayName || "").trim();
+  const normalizedTopologyType = String(topologyType || "").trim();
+  const normalizedDetail = String(detail || "").trim();
+  if (normalizedTopologyType) {
+    const prefix = capitalizeTreeLabel(normalizedTopologyType);
+    const normalizedLabel = label.toLowerCase();
+    const shouldPrefix = prefix && !normalizedLabel.startsWith(normalizedTopologyType.toLowerCase());
+    return [shouldPrefix ? prefix : "", label, normalizedDetail].filter(Boolean).join(" ");
+  }
+  const nodeType = String(row?.nodeType || row?.node?.nodeType || "").trim();
+  const prefix = nodeType === "assembly" ? "Assembly" : "Component";
+  return [prefix, label, normalizedDetail].filter(Boolean).join(" ");
 }
 
 function TopologySvg({ children }) {
@@ -395,6 +469,7 @@ export default function StepFileSheet({
   onCopyTreeNodeReference,
   onFocusTreeNode,
   onUnfocusTreeNode,
+  onHideOtherTreeNode,
   onToggleTreeNode,
   onClearSelection,
   onHoverTreeNode,
@@ -403,6 +478,7 @@ export default function StepFileSheet({
   treeSelectionDisabledReason = "",
   onTogglePartVisibility,
   hideSelectedParts,
+  hideAllParts,
   showAllHiddenParts,
   stepModule = null,
   fileDownloadAvailable = false,
@@ -435,28 +511,42 @@ export default function StepFileSheet({
     return new Set(selectableNodeIds.map((id) => String(id || "").trim()).filter(Boolean));
   }, [selectableNodeIds]);
   const treeRoot = stepTreeRoot;
-  const elideRootAssemblyRow = isAssemblyView && stepTreeNodeChildren(treeRoot).length > 0;
-  const rootTreeItemCount = elideRootAssemblyRow ? stepTreeNodeChildren(treeRoot).length : 0;
+  const treeRootChildren = stepTreeNodeChildren(treeRoot);
+  const elideRootTreeRow = treeRootChildren.length > 0 && (
+    isAssemblyView ||
+    stepTreeNodeId(treeRoot) === STEP_MODEL_ROOT_ID
+  );
+  const rootTreeItemCount = elideRootTreeRow ? treeRootChildren.length : 0;
   const rootTreeHasOverflow = rootTreeItemCount > STEP_TREE_ROOT_ITEM_LIMIT;
   const showAllRootTreeItems = !rootTreeHasOverflow || stepTreeRootShowMore === true;
   const hiddenRootTreeItemCount = Math.max(rootTreeItemCount - STEP_TREE_ROOT_ITEM_LIMIT, 0);
   const visibleRows = useMemo(
     () => flattenVisibleStepTreeRows(treeRoot, expandedTreeNodeIds, {
-      omitRoot: elideRootAssemblyRow,
+      omitRoot: elideRootTreeRow,
       rootChildLimit: STEP_TREE_ROOT_ITEM_LIMIT,
       showAllRootChildren: showAllRootTreeItems
     }),
-    [elideRootAssemblyRow, expandedTreeNodeIds, showAllRootTreeItems, treeRoot]
+    [elideRootTreeRow, expandedTreeNodeIds, showAllRootTreeItems, treeRoot]
   );
   const visibleRowIdsSignature = useMemo(
     () => visibleRows.map((row) => String(row?.id || "")).join("\n"),
     [visibleRows]
   );
+  const expandableTreeNodeIds = useMemo(
+    () => expandableStepTreeNodeIds(treeRoot, { omitRoot: elideRootTreeRow }),
+    [elideRootTreeRow, treeRoot]
+  );
   const hiddenTreeRowIds = useMemo(
     () => hiddenStepTreeRowIds(visibleRows, hiddenIds),
     [hiddenIds, visibleRows]
   );
-  const hasAssemblyTree = isAssemblyView ? visibleRows.length > 0 : visibleRows.some((row) => row?.hasChildren);
+  const isolatedTreeRowIds = useMemo(
+    () => isolatedStepTreeRowIds(visibleRows, focusedNodeIds),
+    [focusedNodeIds, visibleRows]
+  );
+  const hasAssemblyTree = isAssemblyView || elideRootTreeRow
+    ? visibleRows.length > 0
+    : visibleRows.some((row) => row?.hasChildren);
   const activeSelectedReferenceId = String(
     Array.isArray(selectedReferenceIds) ? selectedReferenceIds[selectedReferenceIds.length - 1] || "" : ""
   ).trim();
@@ -475,13 +565,53 @@ export default function StepFileSheet({
     [activeTreeNodeId, visibleRows]
   );
   const activeTreeNodeIsTopology = Boolean(topologyTreeRowType(activeTreeRow));
-  const selectedPartCount = selectedIds.length;
-  const hiddenPartCount = hiddenIds.length;
+  const isolateActive = focusedNodeIdSet.size > 0;
   const showTreeVisibilityControls = isAssemblyView === true;
   const treeSectionOpen = Array.isArray(openSectionIds) && openSectionIds.includes(treeSectionId);
   const treeSelectionTitle = treeSelectionDisabled
     ? String(treeSelectionDisabledReason || "Tree selection is disabled in the current parameter state.").trim()
     : "";
+  const expandedTreeNodeIdSet = useMemo(
+    () => new Set((Array.isArray(expandedTreeNodeIds) ? expandedTreeNodeIds : []).map((id) => String(id || "").trim()).filter(Boolean)),
+    [expandedTreeNodeIds]
+  );
+  const collapsedExpandableTreeNodeIds = useMemo(
+    () => expandableTreeNodeIds.filter((nodeId) => !expandedTreeNodeIdSet.has(nodeId)),
+    [expandableTreeNodeIds, expandedTreeNodeIdSet]
+  );
+  const expandedExpandableTreeNodeIds = useMemo(
+    () => expandableTreeNodeIds.filter((nodeId) => expandedTreeNodeIdSet.has(nodeId)),
+    [expandableTreeNodeIds, expandedTreeNodeIdSet]
+  );
+  const visibleRowById = useMemo(() => {
+    const map = new Map();
+    for (const row of visibleRows) {
+      const rowId = String(row?.id || "").trim();
+      if (rowId) {
+        map.set(rowId, row);
+      }
+    }
+    return map;
+  }, [visibleRows]);
+
+  const focusTreeRowAtIndex = (startIndex, direction = 1) => {
+    if (!visibleRows.length) {
+      return;
+    }
+    const step = direction < 0 ? -1 : 1;
+    let index = Math.min(Math.max(Number(startIndex) || 0, 0), visibleRows.length - 1);
+    while (index >= 0 && index < visibleRows.length) {
+      const rowId = String(visibleRows[index]?.id || "").trim();
+      const node = rowId ? rowRefs.current.get(rowId) : null;
+      if (node && node.getAttribute("aria-disabled") !== "true") {
+        node.focus?.();
+        scrollTreeNodeIntoView(node, { block: "nearest" });
+        return;
+      }
+      index += step;
+    }
+  };
+
   const stepModuleDefinition = stepModule?.definition || null;
   const stepModuleParameters = Array.isArray(stepModuleDefinition?.parameters) ? stepModuleDefinition.parameters : [];
   const stepModuleAnimations = Array.isArray(stepModuleDefinition?.animations) ? stepModuleDefinition.animations : [];
@@ -536,40 +666,9 @@ export default function StepFileSheet({
           title="Tree"
           triggerProps={{ title: treeSelectionTitle || undefined }}
         >
-            {showTreeVisibilityControls ? (
-              <div className="space-y-1.5 px-3 py-1.5">
-                <div className="flex flex-wrap gap-1.5">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={compactButtonClasses}
-                    onClick={hideSelectedParts}
-                    disabled={treeSelectionDisabled || selectedPartCount < 2}
-                    title={treeSelectionDisabled ? treeSelectionTitle : selectedPartCount > 1 ? `Hide ${selectedPartCount} selected nodes` : "Select multiple nodes to hide them together"}
-                  >
-                    <EyeOff className="size-3" strokeWidth={2} aria-hidden="true" />
-                    <span>Hide all</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={compactButtonClasses}
-                    onClick={showAllHiddenParts}
-                    disabled={hiddenPartCount < 1}
-                    title={hiddenPartCount > 0 ? `Show ${hiddenPartCount} hidden ${hiddenPartCount === 1 ? "part" : "parts"}` : "No hidden parts to show"}
-                  >
-                    <Eye className="size-3" strokeWidth={2} aria-hidden="true" />
-                    <span>Show all</span>
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
             <div className="max-w-full overflow-hidden px-1.5 pb-2">
               <div
-                className="space-y-px"
+                className="select-none space-y-px"
                 role="tree"
                 aria-multiselectable="true"
                 aria-disabled={treeSelectionDisabled}
@@ -590,7 +689,7 @@ export default function StepFileSheet({
               ) : null}
 
               {hasAssemblyTree
-                ? visibleRows.map((row) => {
+                ? visibleRows.map((row, rowIndex) => {
                   const topologyType = topologyTreeRowType(row);
                   const topologyRow = Boolean(topologyType);
                   const topologyReferenceId = String(row.topologyReferenceId || "").trim();
@@ -598,14 +697,17 @@ export default function StepFileSheet({
                     topologyReferenceId &&
                     typeof onSelectReferenceNode === "function";
                   const rowDetail = String(row.detail || "").trim();
+                  const rowAriaLabel = stepTreeRowAriaLabel(row, topologyType, rowDetail);
                   const selected = topologyRow
                     ? selectedReferenceIdSet.has(topologyReferenceId)
                     : selectedIds.includes(row.id);
+                  const insideIsolation = !isolatedTreeRowIds || isolatedTreeRowIds.has(String(row.id || "").trim());
                   const selectable = topologyRow
-                    ? selectableTopologyRow
-                    : (!selectableNodeIdSet || selectableNodeIdSet.has(row.id) || selected);
+                    ? selectableTopologyRow && insideIsolation
+                    : insideIsolation && (!selectableNodeIdSet || selectableNodeIdSet.has(row.id) || selected);
                   const hidden = hiddenTreeRowIds.has(String(row.id || "").trim());
                   const focused = !topologyRow && focusedNodeIdSet.has(String(row.id || "").trim());
+                  const isolationMuted = isolateActive && !insideIsolation;
                   const rowSelectionDisabled = treeSelectionDisabled || hidden || !selectable;
                   const showSelectedRowState = selected && !hidden;
                   const hovered = !hidden && (
@@ -613,15 +715,11 @@ export default function StepFileSheet({
                       ? topologyReferenceId && normalizedHoveredReferenceId === topologyReferenceId
                       : hoveredPartId === row.id
                   );
-                  const VisibilityIcon = hidden ? EyeOff : Eye;
-                  const visibilityLabel = hidden ? "Show" : "Hide";
-                  const primaryLabel = `Select ${row.label}`;
                   const rowTitle = treeSelectionTitle ||
                     (topologyRow
                       ? [row.label, rowDetail].filter(Boolean).join(" - ")
-                      : selectable ? row.label : "Focus this node to select its children");
-                  const rowDepthPx = Math.min(Math.max(row.depth, 0) * 18, 132);
-                  const chevronButtonWidthPx = rowDepthPx + 20;
+                      : selectable ? row.label : isolateActive ? "Exit isolate to select this node" : "Select a parent assembly to inspect this node");
+                  const rowDepthPx = Math.min(Math.max(row.depth, 0) * treeDepthIndentPx, treeDepthMaxPx);
                   const selectRow = (event) => {
                     const multiSelect = event.shiftKey;
                     if (topologyRow) {
@@ -630,18 +728,134 @@ export default function StepFileSheet({
                       onSelectTreeNode?.(row.id, { multiSelect });
                     }
                   };
-                  const contextFocusLabel = focused ? "Unfocus" : "Focus";
+                  const handleRowHoverStart = () => {
+                    if (rowSelectionDisabled) {
+                      return;
+                    }
+                    if (topologyRow) {
+                      if (topologyReferenceId) {
+                        onHoverReferenceNode?.(topologyReferenceId);
+                      }
+                      return;
+                    }
+                    onHoverTreeNode?.(row.id);
+                  };
+                  const handleRowHoverEnd = () => {
+                    if (topologyRow) {
+                      if (topologyReferenceId) {
+                        onHoverReferenceNode?.("");
+                      }
+                      return;
+                    }
+                    if (!rowSelectionDisabled) {
+                      onHoverTreeNode?.("");
+                    }
+                  };
+                  const handleRowClick = (event) => {
+                    if (rowSelectionDisabled) {
+                      event.preventDefault();
+                      return;
+                    }
+                    selectRow(event);
+                  };
+                  const handleRowKeyDown = (event) => {
+                    if (event.target !== event.currentTarget || rowSelectionDisabled) {
+                      return;
+                    }
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      focusTreeRowAtIndex(rowIndex + 1, 1);
+                      return;
+                    }
+                    if (event.key === "ArrowUp") {
+                      event.preventDefault();
+                      focusTreeRowAtIndex(rowIndex - 1, -1);
+                      return;
+                    }
+                    if (event.key === "Home") {
+                      event.preventDefault();
+                      focusTreeRowAtIndex(0, 1);
+                      return;
+                    }
+                    if (event.key === "End") {
+                      event.preventDefault();
+                      focusTreeRowAtIndex(visibleRows.length - 1, -1);
+                      return;
+                    }
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      selectRow(event);
+                      return;
+                    }
+                    if (row.hasChildren && event.key === "ArrowRight" && !row.expanded) {
+                      event.preventDefault();
+                      onToggleTreeNode?.(row.id);
+                      return;
+                    }
+                    if (row.hasChildren && event.key === "ArrowLeft" && row.expanded) {
+                      event.preventDefault();
+                      onToggleTreeNode?.(row.id);
+                    }
+                  };
                   const contextFocusActionAvailable = focused
                     ? typeof onUnfocusTreeNode === "function"
                     : typeof onFocusTreeNode === "function";
                   const contextSelectDisabled = treeSelectionDisabled || (!selectable && !selected) || (hidden && !selected);
                   const contextFocusDisabled = topologyRow || treeSelectionDisabled || !contextFocusActionAvailable;
+                  const contextHideOtherDisabled = topologyRow ||
+                    treeSelectionDisabled ||
+                    hidden ||
+                    typeof onHideOtherTreeNode !== "function";
+                  const contextHideAllDisabled = topologyRow ||
+                    treeSelectionDisabled ||
+                    (hidden
+                      ? typeof showAllHiddenParts !== "function"
+                      : typeof hideAllParts !== "function");
                   const contextVisibilityDisabled = topologyRow ||
                     !showTreeVisibilityControls ||
                     typeof onTogglePartVisibility !== "function";
+                  const selectedContextNodeIds = !topologyRow && selected
+                    ? selectedIds
+                      .map((id) => String(id || "").trim())
+                      .filter(Boolean)
+                    : [];
+                  const actionNodeIds = !topologyRow
+                    ? (selectedContextNodeIds.length ? selectedContextNodeIds : [String(row.id || "").trim()].filter(Boolean))
+                    : [];
+                  const actionRows = actionNodeIds
+                    .map((nodeId) => visibleRowById.get(nodeId) || null)
+                    .filter(Boolean);
+                  const collapsedActionNodeIds = actionRows
+                    .filter((actionRow) => actionRow?.hasChildren && !expandedTreeNodeIdSet.has(String(actionRow.id || "").trim()))
+                    .map((actionRow) => String(actionRow.id || "").trim())
+                    .filter(Boolean);
+                  const expandedActionNodeIds = actionRows
+                    .filter((actionRow) => actionRow?.hasChildren && expandedTreeNodeIdSet.has(String(actionRow.id || "").trim()))
+                    .map((actionRow) => String(actionRow.id || "").trim())
+                    .filter(Boolean);
+                  const contextActionCount = actionNodeIds.length || 1;
+                  const expandSelectedDisabled = collapsedActionNodeIds.length < 1 ||
+                    typeof onToggleTreeNode !== "function";
+                  const collapseSelectedDisabled = expandedActionNodeIds.length < 1 ||
+                    typeof onToggleTreeNode !== "function";
+                  const expandAllDisabled = collapsedExpandableTreeNodeIds.length < 1 ||
+                    typeof onToggleTreeNode !== "function";
+                  const collapseAllDisabled = expandedExpandableTreeNodeIds.length < 1 ||
+                    typeof onToggleTreeNode !== "function";
                   const copyReferenceTargetId = topologyRow ? topologyReferenceId : row.id;
                   return (
-                    <ContextMenu key={row.id} modal={false}>
+                    <div key={row.id} className="flex h-7 min-w-0 max-w-full items-center">
+                      {rowDepthPx > 0 ? (
+                        <span
+                          className="h-7 shrink-0"
+                          style={{
+                            width: rowDepthPx,
+                            minWidth: rowDepthPx
+                          }}
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                    <ContextMenu modal={false}>
                       <ContextMenuTrigger asChild>
                         <div
                           ref={(node) => {
@@ -654,25 +868,34 @@ export default function StepFileSheet({
                           role="treeitem"
                           aria-expanded={row.hasChildren ? row.expanded : undefined}
                           aria-selected={selected}
+                          aria-label={rowAriaLabel}
                           data-selection-disabled={rowSelectionDisabled ? "true" : undefined}
-                          className={cn("min-w-0 max-w-full rounded-sm", hidden && "opacity-45")}
+                          aria-disabled={rowSelectionDisabled}
+                          tabIndex={rowSelectionDisabled ? -1 : 0}
+                          className={cn(
+                            "group/tree-row flex h-7 min-w-0 max-w-full flex-1 items-center rounded-sm outline-none",
+                            rowSelectionDisabled
+                              ? "cursor-default text-sidebar-foreground/55"
+                              : "cursor-pointer text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground",
+                            showSelectedRowState
+                              ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                              : hovered && "bg-sidebar-accent text-sidebar-accent-foreground",
+                            (hidden || isolationMuted) && "opacity-45"
+                          )}
                           title={rowTitle}
+                          onClick={handleRowClick}
+                          onKeyDown={handleRowKeyDown}
+                          onMouseEnter={handleRowHoverStart}
+                          onMouseLeave={handleRowHoverEnd}
                         >
-                          <div className="flex h-7 min-w-0 max-w-full items-center gap-0">
+                          <div className="flex min-w-0 max-w-full flex-1 items-center gap-0">
                             <div className="flex min-w-0 flex-1 overflow-hidden">
                               {row.hasChildren ? (
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="icon-sm"
-                                  className={cn(
-                                    treeChevronButtonClasses,
-                                    "justify-end hover:bg-sidebar-accent"
-                                  )}
-                                  style={{
-                                    width: chevronButtonWidthPx,
-                                    minWidth: chevronButtonWidthPx
-                                  }}
+                                  className={treeChevronButtonClasses}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     onToggleTreeNode?.(row.id);
@@ -687,59 +910,14 @@ export default function StepFileSheet({
                                   />
                                 </Button>
                               ) : (
-                                <span
-                                  className="h-7 shrink-0"
-                                  style={{
-                                    width: chevronButtonWidthPx,
-                                    minWidth: chevronButtonWidthPx
-                                  }}
-                                  aria-hidden="true"
-                                />
+                                null
                               )}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
+                              <div
                                 className={cn(
-                                  treeRowButtonClasses,
-                                  "min-w-0 flex-1 shrink touch-manipulation justify-start gap-1 overflow-hidden !px-1 text-left",
-                                  rowSelectionDisabled && "text-sidebar-foreground/55",
-                                  showSelectedRowState
-                                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                                    : hovered && "bg-sidebar-accent text-sidebar-accent-foreground"
+                                  treeRowContentClasses,
+                                  "flex min-w-0 flex-1 shrink touch-manipulation items-center justify-start gap-1.5 overflow-hidden px-0 text-left",
+                                  rowSelectionDisabled && "text-sidebar-foreground/55"
                                 )}
-                                title={rowTitle}
-                                aria-label={primaryLabel}
-                                tabIndex={rowSelectionDisabled ? -1 : undefined}
-                                disabled={rowSelectionDisabled}
-                                onClick={(event) => {
-                                  if (rowSelectionDisabled) {
-                                    return;
-                                  }
-                                  selectRow(event);
-                                }}
-                                onMouseEnter={() => {
-                                  if (topologyRow) {
-                                    if (!treeSelectionDisabled && topologyReferenceId) {
-                                      onHoverReferenceNode?.(topologyReferenceId);
-                                    }
-                                    return;
-                                  }
-                                  if (!rowSelectionDisabled) {
-                                    onHoverTreeNode?.(row.id);
-                                  }
-                                }}
-                                onMouseLeave={() => {
-                                  if (topologyRow) {
-                                    if (topologyReferenceId) {
-                                      onHoverReferenceNode?.("");
-                                    }
-                                    return;
-                                  }
-                                  if (!rowSelectionDisabled) {
-                                    onHoverTreeNode?.("");
-                                  }
-                                }}
                               >
                                 <StepTreeRowGlyph row={row} />
                                 <span className="min-w-0 flex-1 overflow-hidden">
@@ -754,75 +932,122 @@ export default function StepFileSheet({
                                     ) : null}
                                   </span>
                                 </span>
-                              </Button>
+                              </div>
                             </div>
-
-                            {showTreeVisibilityControls && !topologyRow ? (
+                            {!topologyRow && showTreeVisibilityControls ? (
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon-sm"
                                 className={cn(
-                                  treeActionButtonClasses,
-                                  "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                                  hidden && "bg-sidebar-accent text-sidebar-accent-foreground"
+                                  treeRowActionButtonClasses,
+                                  "shrink-0",
+                                  !hidden && !showSelectedRowState && !hovered && !focused && "opacity-0 group-hover/tree-row:opacity-100 focus-visible:opacity-100",
+                                  hidden && "text-current/75",
+                                  treeSelectionDisabled && "cursor-default text-current/35 hover:!bg-transparent hover:!text-current/35"
                                 )}
+                                disabled={treeSelectionDisabled || typeof onTogglePartVisibility !== "function"}
+                                aria-label={hidden ? `Show ${row.label}` : `Hide ${row.label}`}
+                                title={hidden ? "Show" : "Hide"}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   onTogglePartVisibility?.(row.id);
                                 }}
-                                aria-label={`${visibilityLabel} ${row.label}`}
-                                title={visibilityLabel}
                               >
-                                <VisibilityIcon className="size-3" strokeWidth={2} aria-hidden="true" />
+                                {hidden ? (
+                                  <Eye className="size-3" strokeWidth={1.8} aria-hidden="true" />
+                                ) : (
+                                  <EyeOff className="size-3" strokeWidth={1.8} aria-hidden="true" />
+                                )}
                               </Button>
                             ) : null}
                           </div>
                         </div>
                       </ContextMenuTrigger>
                       <ContextMenuContent className="w-44">
-                        <ContextMenuItem
-                          className="text-xs"
-                          disabled={!copyReferenceTargetId || typeof onCopyTreeNodeReference !== "function"}
-                          onSelect={() => {
+                        <AssemblyContextMenuItems
+                          Item={ContextMenuItem}
+                          Separator={ContextMenuSeparator}
+                          selected={selected}
+                          isolated={focused}
+                          hidden={hidden}
+                          actionCount={contextActionCount}
+                          copyReferenceDisabled={!copyReferenceTargetId || typeof onCopyTreeNodeReference !== "function"}
+                          selectDisabled={contextSelectDisabled}
+                          showIsolate={!topologyRow}
+                          isolateDisabled={contextFocusDisabled}
+                          showHideOther={!topologyRow}
+                          hideOtherDisabled={contextHideOtherDisabled}
+                          hideAllDisabled={contextHideAllDisabled}
+                          hideAllLabel={hidden ? "Reveal all instances" : "Hide all instances"}
+                          showVisibility={!topologyRow}
+                          visibilityDisabled={contextVisibilityDisabled}
+                          showHideAll={!topologyRow}
+                          showExpandCollapse={row.hasChildren || actionRows.some((actionRow) => actionRow?.hasChildren) || expandableTreeNodeIds.length > 0}
+                          expandSelectedDisabled={expandSelectedDisabled}
+                          collapseSelectedDisabled={collapseSelectedDisabled}
+                          expandAllDisabled={expandAllDisabled}
+                          collapseAllDisabled={collapseAllDisabled}
+                          onCopyReference={() => {
                             onCopyTreeNodeReference?.(copyReferenceTargetId, { topology: topologyRow });
                           }}
-                        >
-                          <span className="min-w-0 truncate">Copy Reference</span>
-                        </ContextMenuItem>
-                        <ContextMenuItem
-                          className="text-xs"
-                          disabled={contextSelectDisabled}
                           onSelect={(event) => {
+                            if (!topologyRow && selectedContextNodeIds.length > 1) {
+                              onClearSelection?.();
+                              return;
+                            }
                             selectRow(event);
                           }}
-                        >
-                          <span className="min-w-0 truncate">{selected ? "Deselect" : "Select"}</span>
-                        </ContextMenuItem>
-                        <ContextMenuItem
-                          className="text-xs"
-                          disabled={contextFocusDisabled}
-                          onSelect={() => {
+                          onIsolate={() => {
                             if (focused) {
                               onUnfocusTreeNode?.(row.id);
                               return;
                             }
-                            onFocusTreeNode?.(row.id);
+                            onFocusTreeNode?.(actionNodeIds);
                           }}
-                        >
-                          <span className="min-w-0 truncate">{contextFocusLabel}</span>
-                        </ContextMenuItem>
-                        <ContextMenuItem
-                          className="text-xs"
-                          disabled={contextVisibilityDisabled}
-                          onSelect={() => {
-                            onTogglePartVisibility?.(row.id);
+                          onHideOther={() => {
+                            onHideOtherTreeNode?.(actionNodeIds);
                           }}
-                        >
-                          <span className="min-w-0 truncate">{hidden ? "Reveal" : "Hide"}</span>
-                        </ContextMenuItem>
+                          onHideAll={() => {
+                            if (hidden) {
+                              showAllHiddenParts?.();
+                              return;
+                            }
+                            hideAllParts?.();
+                          }}
+                          onToggleVisibility={() => {
+                            if (!hidden && selectedContextNodeIds.length > 1 && typeof hideSelectedParts === "function") {
+                              hideSelectedParts();
+                              return;
+                            }
+                            for (const nodeId of actionNodeIds) {
+                              onTogglePartVisibility?.(nodeId);
+                            }
+                          }}
+                          onExpandSelected={() => {
+                            for (const nodeId of collapsedActionNodeIds) {
+                              onToggleTreeNode?.(nodeId);
+                            }
+                          }}
+                          onCollapseSelected={() => {
+                            for (const nodeId of expandedActionNodeIds) {
+                              onToggleTreeNode?.(nodeId);
+                            }
+                          }}
+                          onExpandAll={() => {
+                            for (const nodeId of collapsedExpandableTreeNodeIds) {
+                              onToggleTreeNode?.(nodeId);
+                            }
+                          }}
+                          onCollapseAll={() => {
+                            for (const nodeId of expandedExpandableTreeNodeIds) {
+                              onToggleTreeNode?.(nodeId);
+                            }
+                          }}
+                        />
                       </ContextMenuContent>
                     </ContextMenu>
+                    </div>
                   );
                 })
                 : null}

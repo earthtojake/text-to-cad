@@ -911,10 +911,16 @@ export function useViewerPicking({
       return edgeCandidate?.reference?.id || faceReference?.id || vertexCandidate?.reference?.id || null;
     }
 
-    function pickReferenceAtPosition(clientX, clientY, { hover = false } = {}) {
+    function pickReferenceAtPosition(clientX, clientY, { hover = false, preferTopology = false } = {}) {
       setPointerFromPosition(clientX, clientY);
       const modelIntersections = intersectVisibleModelMeshes();
       const pickMode = pickModeRef.current;
+      if (preferTopology) {
+        const topologyReference = pickTopologyReference(modelIntersections, clientX, clientY, { hover });
+        if (topologyReference) {
+          return topologyReference;
+        }
+      }
       if (pickMode === VIEWER_PICK_MODE.PARTS) {
         return pickPartReferenceFromIntersections(modelIntersections);
       }
@@ -1122,7 +1128,7 @@ export function useViewerPicking({
       event.preventDefault();
       event.stopPropagation();
       clearPendingActivation();
-      const referenceId = pickReferenceAtPosition(event.clientX, event.clientY, { hover: true }) ||
+      const referenceId = pickReferenceAtPosition(event.clientX, event.clientY, { hover: true, preferTopology: true }) ||
         pickReferenceAtPosition(event.clientX, event.clientY) ||
         "";
       onContextReferenceRef.current?.(referenceId || "", {

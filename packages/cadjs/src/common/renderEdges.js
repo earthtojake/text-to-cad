@@ -2,6 +2,9 @@ import {
   buildTopologyDisplayEdgePolylines,
   buildTopologyDisplayEdgePositions
 } from "./topologyDisplayEdges.js";
+import {
+  displayModeIsWireframe
+} from "./displaySettings.js";
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -424,7 +427,8 @@ export function createDisplayEdgeObject(context = {}, {
   wireframeEdgeColor = ""
 }, materials = null) {
   const THREE = context.THREE;
-  const wireframeMode = displayMode === "wireframe";
+  const wireframeMode = displayModeIsWireframe(displayMode);
+  const depthTest = edgeSettings?.depthTest === false ? false : true;
   const edgeOpacity = Number.isFinite(Number(edgeSettings?.opacity))
     ? clamp(Number(edgeSettings.opacity), 0, 1)
     : (baseTheme?.edgeOpacity ?? 0.84);
@@ -453,7 +457,7 @@ export function createDisplayEdgeObject(context = {}, {
     opacity: edgeOpacity,
     lineWidth: Number.isFinite(Number(thickness)) ? Number(thickness) : 1,
     renderOrder: 3,
-    depthTest: true,
+    depthTest,
     depthWrite: false,
     depthBias: topologyLineDepthBiasForWidth(thickness)
   }, materials);
@@ -491,7 +495,7 @@ export function createTopologyDisplayEdgeObject(context = {}, selectorRuntime, e
     color: edgeSettings?.color || baseTheme?.edge || "#18181b",
     lineWidth: thickness,
     renderOrder: 3,
-    depthTest: true,
+    depthTest: edgeSettings?.depthTest === false ? false : true,
     depthWrite: false,
     depthBias: topologyLineDepthBiasForWidth(thickness)
   };

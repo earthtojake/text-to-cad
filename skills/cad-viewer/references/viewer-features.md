@@ -4,7 +4,7 @@ Load this only when a task needs Viewer file-support details or UI control guida
 
 ## Supported Files
 
-- `.step`, `.stp`: STEP/STP review through hidden GLB sidecars; supports assembly trees, part hide/show, inspect/focus, face/edge/vertex/part selection, copied `@cad[...]` references, display modes, clip planes, and optional STEP module parameters/animations when a sidecar module exists.
+- `.step`, `.stp`: STEP/STP review through hidden GLB sidecars; supports assembly trees, part hide/show, inspect/focus, face/edge/vertex/part selection, copied `#...` CAD references, display modes, clip planes, and optional STEP module parameters/animations when a sidecar module exists.
 - `.stl`, `.3mf`, `.glb`: mesh viewing with orbit/pan/zoom, screenshots, appearance controls, and solid/wireframe display where available.
 - `.dxf`: read-only flat-pattern viewing, plus plate thickness and bend direction/angle controls when bend preview data is available.
 - `.gcode`: diagnostic toolpath preview; shows layer-colored extrusion ribbons, optional travel moves, visible-layer and detail controls, feature markers, movement stats, bounds, and parser warnings. It does not reslice, simulate firmware, or replace G-code validation.
