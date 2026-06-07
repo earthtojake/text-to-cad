@@ -53,6 +53,11 @@ rerun the same command with the needed permission/escalation.
 
 ## Links
 
+- Before returning any `file=` link, resolve `<dir>/<file>` and confirm the
+  artifact exists. Pass the generated artifact (e.g. `.step`), not its
+  generator source (e.g. `.py`). If the resolved path is missing, do not
+  return the link, and instead report the problem and point to the correct
+  generated artifact path.
 - Return one Viewer URL per requested file.
 - Start/reuse the Viewer once per absolute directory `--dir`, then append
   `file=<path>` for each requested file. The file path must be relative to
