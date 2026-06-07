@@ -6793,6 +6793,18 @@ export default function CadWorkspace({
     setIsolatedAssemblyNodeIds((current) => (current.length ? [] : current));
   }, []);
 
+  const handleExitSingleIsolate = useCallback((nodeId) => {
+    const normalizedNodeId = String(nodeId || "").trim();
+    if (!normalizedNodeId) {
+      handleExitIsolate();
+      return;
+    }
+    setIsolatedAssemblyNodeIds((current) => {
+      const next = current.filter((id) => String(id || "").trim() !== normalizedNodeId);
+      return next.length === current.length ? current : next;
+    });
+  }, [handleExitIsolate]);
+
   const clearAssemblySelection = useCallback(() => {
     clearAssemblySelectionForFocus();
     setHoveredListPartId("");
@@ -7286,6 +7298,8 @@ export default function CadWorkspace({
       selectDisabled: focused || (!selected && hidden),
       showIsolate: true,
       isolateDisabled: false,
+      showExitAllIsolate: focusedAssemblyNodeIds.length > 1,
+      exitAllIsolateDisabled: focusedAssemblyNodeIds.length < 2,
       showHideOther: true,
       hideOtherDisabled: hidden,
       showVisibility: !focused,
@@ -7486,7 +7500,7 @@ export default function CadWorkspace({
       return;
     }
     if (menu?.focused === true) {
-      handleExitIsolate();
+      handleExitSingleIsolate(nodeId);
       return;
     }
     const actionNodeIds = uniqueStringList(
@@ -7497,7 +7511,7 @@ export default function CadWorkspace({
     focusStepTreeNode(actionNodeIds);
   }, [
     focusStepTreeNode,
-    handleExitIsolate
+    handleExitSingleIsolate
   ]);
 
   const hideViewerContextMenuNode = useCallback((menu) => {
@@ -8206,6 +8220,7 @@ export default function CadWorkspace({
           onViewerContextMenuCopyReference={copyViewerContextMenuReference}
           onViewerContextMenuSelect={selectViewerContextMenuNode}
           onViewerContextMenuFocus={focusViewerContextMenuNode}
+          onViewerContextMenuExitAllIsolate={handleExitIsolate}
           onViewerContextMenuHideOther={hideOtherViewerContextMenuNode}
           onViewerContextMenuHideAll={hideAllViewerContextMenuNodes}
           onViewerContextMenuHide={hideViewerContextMenuNode}
@@ -8463,7 +8478,8 @@ export default function CadWorkspace({
                 onCopyTreeNodeReference={copyStepTreeContextMenuReference}
                 onCopyMateNodeReference={copyStepTreeMateReference}
                 onFocusTreeNode={focusStepTreeNode}
-                onUnfocusTreeNode={handleExitIsolate}
+                onUnfocusTreeNode={handleExitSingleIsolate}
+                onExitAllIsolate={handleExitIsolate}
                 onHideOtherTreeNode={handleHideOtherTreeNode}
                 onToggleTreeNode={toggleStepTreeNode}
                 onClearSelection={clearAssemblySelection}

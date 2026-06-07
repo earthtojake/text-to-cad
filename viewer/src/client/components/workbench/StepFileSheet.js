@@ -557,6 +557,7 @@ export default function StepFileSheet({
   onCopyMateNodeReference,
   onFocusTreeNode,
   onUnfocusTreeNode,
+  onExitAllIsolate,
   onHideOtherTreeNode,
   onToggleTreeNode,
   onClearSelection,
@@ -936,6 +937,10 @@ export default function StepFileSheet({
                     : typeof onFocusTreeNode === "function";
                   const contextSelectDisabled = treeSelectionDisabled || (!selectable && !selected) || (hidden && !selected);
                   const contextFocusDisabled = topologyRow || treeSelectionDisabled || !contextFocusActionAvailable;
+                  const contextExitAllIsolateAvailable = !topologyRow &&
+                    isolateActive &&
+                    focusedNodeIdSet.size > 1 &&
+                    typeof onExitAllIsolate === "function";
                   const contextHideOtherDisabled = topologyRow ||
                     treeSelectionDisabled ||
                     hidden ||
@@ -1117,6 +1122,8 @@ export default function StepFileSheet({
                           selectDisabled={contextSelectDisabled}
                           showIsolate={!topologyRow}
                           isolateDisabled={contextFocusDisabled}
+                          showExitAllIsolate={contextExitAllIsolateAvailable}
+                          exitAllIsolateDisabled={treeSelectionDisabled || !contextExitAllIsolateAvailable}
                           showHideOther={!topologyRow}
                           hideOtherDisabled={contextHideOtherDisabled}
                           hideAllDisabled={contextHideAllDisabled}
@@ -1145,6 +1152,9 @@ export default function StepFileSheet({
                               return;
                             }
                             onFocusTreeNode?.(actionNodeIds);
+                          }}
+                          onExitAllIsolate={() => {
+                            onExitAllIsolate?.();
                           }}
                           onHideOther={() => {
                             onHideOtherTreeNode?.(actionNodeIds);

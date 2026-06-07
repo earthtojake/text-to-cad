@@ -84,6 +84,7 @@ function ViewerContextMenu({
   onCopyReference,
   onSelect,
   onFocus,
+  onExitAllIsolate,
   onHideOther,
   onHideAll,
   onHide,
@@ -146,6 +147,8 @@ function ViewerContextMenu({
           selectDisabled={menu.selectDisabled === true}
           showIsolate={menu.showIsolate !== false}
           isolateDisabled={menu.isolateDisabled === true}
+          showExitAllIsolate={menu.showExitAllIsolate === true}
+          exitAllIsolateDisabled={menu.exitAllIsolateDisabled === true}
           showHideOther={menu.showHideOther !== false}
           hideOtherDisabled={menu.hideOtherDisabled === true}
           showVisibility={menu.showVisibility !== false}
@@ -161,6 +164,7 @@ function ViewerContextMenu({
           onCopyReference={() => handleAction(onCopyReference)}
           onSelect={() => handleAction(onSelect)}
           onIsolate={() => handleAction(onFocus)}
+          onExitAllIsolate={() => handleAction(onExitAllIsolate)}
           onHideOther={() => handleAction(onHideOther)}
           onHideAll={() => handleAction(onHideAll)}
           onToggleVisibility={() => handleAction(hidden ? onReveal : onHide)}
@@ -231,6 +235,7 @@ export default function CadRenderPane({
   onViewerContextMenuCopyReference,
   onViewerContextMenuSelect,
   onViewerContextMenuFocus,
+  onViewerContextMenuExitAllIsolate,
   onViewerContextMenuHideOther,
   onViewerContextMenuHideAll,
   onViewerContextMenuHide,
@@ -450,6 +455,7 @@ export default function CadRenderPane({
           onCopyReference={onViewerContextMenuCopyReference}
           onSelect={onViewerContextMenuSelect}
           onFocus={onViewerContextMenuFocus}
+          onExitAllIsolate={onViewerContextMenuExitAllIsolate}
           onHideOther={onViewerContextMenuHideOther}
           onHideAll={onViewerContextMenuHideAll}
           onHide={onViewerContextMenuHide}

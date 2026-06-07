@@ -14,6 +14,8 @@ export default function AssemblyContextMenuItems({
   selectDisabled = false,
   showIsolate = true,
   isolateDisabled = false,
+  showExitAllIsolate = false,
+  exitAllIsolateDisabled = false,
   showHideOther = true,
   hideOtherDisabled = false,
   hideAllDisabled = true,
@@ -29,6 +31,7 @@ export default function AssemblyContextMenuItems({
   onCopyReference,
   onSelect,
   onIsolate,
+  onExitAllIsolate,
   onHideOther,
   onHideAll,
   onToggleVisibility,
@@ -73,6 +76,15 @@ export default function AssemblyContextMenuItems({
           onSelect={onIsolate}
         >
           <AssemblyContextMenuItemLabel>{isolateLabel}</AssemblyContextMenuItemLabel>
+        </Item>
+      ) : null}
+      {showExitAllIsolate ? (
+        <Item
+          className={itemClassName}
+          disabled={exitAllIsolateDisabled}
+          onSelect={onExitAllIsolate}
+        >
+          <AssemblyContextMenuItemLabel>Exit all isolates</AssemblyContextMenuItemLabel>
         </Item>
       ) : null}
       {showHideOther || showHideAll || showVisibility ? <Separator /> : null}
