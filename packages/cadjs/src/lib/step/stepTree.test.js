@@ -249,10 +249,8 @@ test("STEP tree topology rows attach below their owning part", () => {
   });
 
   assert.equal(root.children[0].children.length, 0);
-  assert.equal(augmented.children[0].children.length, 1);
-  assert.equal(augmented.children[0].children[0].displayName, "base_plate");
   assert.deepEqual(
-    augmented.children[0].children[0].children.map((child) => [child.nodeType, child.displayName, child.detail]),
+    augmented.children[0].children.map((child) => [child.nodeType, child.displayName, child.detail]),
     [
       ["topology-shape", "base_plate", "base_plate solid volume=1200"],
       ["topology-face", "Face f1", "plane area=100"],
@@ -263,13 +261,11 @@ test("STEP tree topology rows attach below their owning part", () => {
   assert.deepEqual(
     flattenVisibleStepTreeRows(augmented, [
       "root",
-      "part-a",
-      "step-topology:part-a:occurrence:fixture.base"
+      "part-a"
     ]).map((row) => [row.nodeType, row.label, row.detail]),
     [
       ["assembly", "root assembly", ""],
       ["part", "part A", ""],
-      ["topology-occurrence", "base_plate", ""],
       ["topology-shape", "base_plate", "base_plate solid volume=1200"],
       ["topology-face", "Face f1", "plane area=100"],
       ["topology-edge", "Edge e1", "line length=10"]
@@ -277,7 +273,7 @@ test("STEP tree topology rows attach below their owning part", () => {
   );
 });
 
-test("STEP tree synthetic occurrence rows expose selectable topology ids", () => {
+test("STEP tree keeps occurrence rows when one part owns multiple topology occurrences", () => {
   const root = {
     id: "root",
     nodeType: "part",
@@ -294,6 +290,14 @@ test("STEP tree synthetic occurrence rows expose selectable topology ids", () =>
         occurrenceId: "fixture.base",
         partId: "root",
         rowIndex: 0
+      },
+      {
+        id: "topology|part-a|face|fixture.lid.f1",
+        selectorType: "face",
+        displaySelector: "fixture.lid.f1",
+        occurrenceId: "fixture.lid",
+        partId: "root",
+        rowIndex: 1
       }
     ]
   });
@@ -302,6 +306,118 @@ test("STEP tree synthetic occurrence rows expose selectable topology ids", () =>
   assert.equal(occurrence.nodeType, "topology-occurrence");
   assert.equal(occurrence.id, "step-topology:root:occurrence:fixture.base");
   assert.equal(occurrence.topologyReferenceId, occurrence.id);
+  assert.deepEqual(
+    augmented.children.map((child) => [child.nodeType, child.displaySelector, child.children.length]),
+    [
+      ["topology-occurrence", "fixture.base", 1],
+      ["topology-occurrence", "fixture.lid", 1]
+    ]
+  );
+});
+
+test("STEP tree flattens duplicate semantic occurrence wrappers", () => {
+  const root = {
+    id: "o1.6",
+    occurrenceId: "o1.6",
+    nodeType: "part",
+    displayName: "triangular_prism",
+    children: []
+  };
+  const augmented = buildStepTreeRootWithTopology({
+    root,
+    references: [
+      {
+        id: "topology|o1.6|face|triangular_prism.f1",
+        selectorType: "face",
+        displaySelector: "triangular_prism.f1",
+        occurrenceId: "triangular_prism",
+        partId: "o1.6",
+        rowIndex: 0
+      },
+      {
+        id: "topology|o1.6|face|fixture.lid.f1",
+        selectorType: "face",
+        displaySelector: "fixture.lid.f1",
+        occurrenceId: "fixture.lid",
+        partId: "o1.6",
+        rowIndex: 1
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    augmented.children.map((child) => [child.nodeType, child.displaySelector, child.children.length]),
+    [
+      ["topology-occurrence", "fixture.lid", 1],
+      ["topology-face", "triangular_prism.f1", 0]
+    ]
+  );
+});
+
+test("STEP tree flattens duplicate numbered component occurrence wrappers", () => {
+  const root = {
+    id: "root",
+    occurrenceId: "o1",
+    nodeType: "assembly",
+    displayName: "root assembly",
+    children: [
+      {
+        id: "o1.7.1",
+        occurrenceId: "o1.7.1",
+        nodeType: "part",
+        displayName: "cube_top_pad",
+        children: []
+      }
+    ]
+  };
+  const augmented = buildStepTreeRootWithTopology({
+    root,
+    references: [
+      {
+        id: "o1.7.1",
+        selectorType: "occurrence",
+        displaySelector: "o1.7.1",
+        summary: "cube_top_pad",
+        partId: "o1.7.1",
+        rowIndex: 0
+      },
+      {
+        id: "o1.7.1.s1",
+        selectorType: "shape",
+        displaySelector: "o1.7.1.s1",
+        occurrenceId: "o1.7.1",
+        summary: "cube_top_pad solid volume=490",
+        partId: "o1.7.1",
+        rowIndex: 0
+      },
+      {
+        id: "fixture.lid.f1",
+        selectorType: "face",
+        displaySelector: "fixture.lid.f1",
+        occurrenceId: "fixture.lid",
+        partId: "o1.7.1",
+        rowIndex: 1
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    augmented.children[0].children.map((child) => [child.nodeType, child.displaySelector, child.children.length]),
+    [
+      ["topology-occurrence", "fixture.lid", 1],
+      ["topology-shape", "o1.7.1.s1", 0]
+    ]
+  );
+
+  assert.deepEqual(
+    flattenVisibleStepTreeRows(augmented, ["root", "o1.7.1"]).map((row) => [row.id, row.depth]),
+    [
+      ["root", 0],
+      ["o1.7.1", 1],
+      ["step-topology:o1.7.1:occurrence:fixture.lid", 2],
+      ["step-topology:o1.7.1:shape:o1.7.1.s1", 2]
+    ]
+  );
 });
 
 test("STEP tree can assign topology references to assembly parts by occurrence id", () => {

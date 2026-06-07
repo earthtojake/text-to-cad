@@ -25,7 +25,7 @@ Use programmatic geometry checks as the validation source of truth. Use CAD View
 The launcher lives in the CAD skill directory:
 
 ```bash
-python scripts/inspect {refs|diff|frame|measure|mate|worker|batch} ...
+python scripts/inspect {refs|diff|frame|measure|align|worker|batch} ...
 ```
 
 Inspection targets are resolved from the command cwd unless absolute. Keep the root model in `SKILL.md` explicit when choosing whether to run from the workspace root or the skill directory.
@@ -55,7 +55,7 @@ Pass selector refs as `#...` tokens. The STEP/CAD file path or entry target is a
 
 ## Relationship to build123d joints
 
-If the source uses `cadpy.assembly.AssemblyHelper` or build123d `Joint` objects, validate the generated STEP exactly as you would validate explicit `Location` placements. Source-level helper relationships and joints express and compute placement during generation; CLI `inspect mate` verifies the exported result by returning a translation delta between selected references. Do not confuse CLI `mate` with build123d `Joint.connect_to()`. Use `positioning.md` for authoritative source-authoring rules.
+If the source uses `cadpy.assembly.AssemblyHelper` or build123d `Joint` objects, validate the generated STEP exactly as you would validate explicit `Location` placements. Source-level helper relationships and joints express and compute placement during generation; CLI `inspect align` verifies selected exported references by returning a translation delta. Do not confuse CLI `align` with authored mates, helper relationships, or build123d `Joint.connect_to()`. Use `positioning.md` for authoritative source-authoring rules.
 
 ## Validation hierarchy
 
@@ -64,7 +64,7 @@ Default validation sequence:
 1. Generation completed and the STEP/STP file exists.
 2. `refs --facts --planes --positioning` confirms scale, labels, major planes, and placement-ready references.
 3. `measure` confirms critical dimensions and offsets.
-4. `mate` confirms read-only alignment deltas for assembly interfaces or ref-to-ref positioning; it does not create source-level build123d joints.
+4. `align` confirms read-only selector-pair alignment deltas for assembly interfaces or ref-to-ref positioning; it does not create source-level build123d joints or authored mates.
 5. `frame` confirms world frame for occurrences or selected references.
 6. `diff` compares before/after geometry for modifications.
 7. Created or modified supported artifacts are handed to `$cad-viewer` for live viewer links when available.
@@ -115,12 +115,12 @@ python scripts/inspect measure path/to/model.step \
 
 Axis may be inferred when possible, but specify `x`, `y`, or `z` for deterministic checks.
 
-## Mating checks
+## Alignment checks
 
-Use CLI `mate` when two exported STEP references should be flush or centered. It returns a read-only translation delta; it does not edit source files and does not replace `AssemblyHelper` or native build123d joints in source. When source uses helper or build123d `Joint`/`connect_to()` placement, still validate the resulting exported geometry with `refs --positioning`, `frame`, `measure`, or CLI `mate`.
+Use CLI `align` when two exported STEP references should be flush or centered. It returns a read-only translation delta; it does not edit source files and does not replace `AssemblyHelper`, authored mates, or native build123d joints in source. When source uses helper or build123d `Joint`/`connect_to()` placement, still validate the resulting exported geometry with `refs --positioning`, `frame`, `measure`, or CLI `align`.
 
 ```bash
-python scripts/inspect mate path/to/assembly.step \
+python scripts/inspect align path/to/assembly.step \
   --moving '#moving_selector' \
   --target '#target_selector' \
   --mode flush \
@@ -167,7 +167,7 @@ Validation:
 - Solids/assembly: <counts and labels>
 - Bounding box: <dimensions and units>
 - Major planes/refs: <summary>
-- Positioning: <frame/measure/mate results if relevant>
+- Positioning: <frame/measure/align results if relevant>
 - Feature checks: <holes, cutouts, bosses, etc.>
 - Visual review: `$cad-viewer` viewer link returned; CAD `scripts/snapshot` PNG/GIF included or skipped with reason; follow-up geometry checks for any visual findings
 ```

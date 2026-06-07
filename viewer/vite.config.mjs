@@ -398,6 +398,12 @@ export default defineConfig(({ command }) => ({
   server: {
     host: "127.0.0.1",
     allowedHosts: viewerAllowedHosts,
+    fs: {
+      allow: [
+        viewerAppRoot,
+        cadJsPackageRoot,
+      ],
+    },
   },
   preview: {
     host: "127.0.0.1",

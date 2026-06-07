@@ -4,7 +4,7 @@ Read this file when choosing saved CAD `scripts/snapshot` outputs for primary ST
 
 ## Principle
 
-CAD Viewer links are the live handoff layer and should be returned for every generated or modified supported artifact when `$cad-viewer` is available. Saved snapshots are ALWAYS required for visual verification/review when creating or visibly updating primary STEP/STP parts or assemblies and should be included in final responses when generated. Do not skip snapshots for speed, convenience, confidence, or because deterministic checks passed. Use CAD `scripts/snapshot` over opening the viewer manually or using Playwright; snapshots are faster, lighter, more precise, and more agent-friendly. Snapshots complement STEP generation, `scripts/inspect`, measurements, mating checks, frames, and diffs.
+CAD Viewer links are the live handoff layer and should be returned for every generated or modified supported artifact when `$cad-viewer` is available. Saved snapshots are ALWAYS required for visual verification/review when creating or visibly updating primary STEP/STP parts or assemblies and should be included in final responses when generated. Do not skip snapshots for speed, convenience, confidence, or because deterministic checks passed. Use CAD `scripts/snapshot` over opening the viewer manually or using Playwright; snapshots are faster, lighter, more precise, and more agent-friendly. Snapshots complement STEP generation, `scripts/inspect`, measurements, alignment checks, frames, and diffs.
 
 Skip saved snapshots only when no visible geometry was created or updated:
 

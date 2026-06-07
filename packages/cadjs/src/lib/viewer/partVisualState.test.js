@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as THREE from "three";
+import { CAD_DISPLAY_MODE } from "../../common/displaySettings.js";
 import {
   applyPartVisualState,
   getPartHighlightColors,
@@ -243,4 +244,41 @@ test("part visual state restores depth and render order after highlight", () => 
   assert.equal(record.material.depthWrite, true);
   assert.equal(record.mesh.renderOrder, 2);
   assert.equal(record.edges.renderOrder, 3);
+});
+
+test("part visual state keeps selected x-ray surfaces translucent", () => {
+  const selectedRecord = createRecord("selected", {
+    baseOpacity: 0.22
+  });
+  selectedRecord.material.depthWrite = false;
+  selectedRecord.baseDepthWrite = true;
+  const hoveredRecord = createRecord("hovered", {
+    baseOpacity: 0.22
+  });
+  hoveredRecord.material.depthWrite = false;
+  hoveredRecord.baseDepthWrite = true;
+
+  applyPartVisualState(THREE, [selectedRecord, hoveredRecord], {
+    viewerTheme: {
+      edge: "#111111",
+      edgeOpacity: 0.4
+    },
+    edgeSettings: {
+      highlightColor: "#8dc5ff",
+      highlightOpacity: 0.9
+    },
+    hiddenPartIds: [],
+    hoveredPartId: "hovered",
+    focusedPartId: [],
+    selectedPartIds: ["selected"],
+    showEdges: true,
+    displayMode: CAD_DISPLAY_MODE.TRANSPARENT
+  });
+
+  assertNear(selectedRecord.material.opacity, 0.34, "selected x-ray opacity");
+  assert.equal(selectedRecord.material.transparent, true);
+  assert.equal(selectedRecord.material.depthWrite, false);
+  assertNear(hoveredRecord.material.opacity, 0.3, "hovered x-ray opacity");
+  assert.equal(hoveredRecord.material.transparent, true);
+  assert.equal(hoveredRecord.material.depthWrite, false);
 });

@@ -163,7 +163,20 @@ def build_step_topology_index_manifest(
         "profile": "index",
         "entryKind": resolved_entry_kind,
     }
-    for key in ("capabilities", "sourceKind", "sourcePath", "sourceHash", "generatedAt", "stepPath", "stepHash", "bbox", "stats", "edgeRendering", "mesh"):
+    for key in (
+        "capabilities",
+        "sourceKind",
+        "sourcePath",
+        "sourceHash",
+        "generatedAt",
+        "stepPath",
+        "stepHash",
+        "bbox",
+        "stats",
+        "edgeRendering",
+        "mesh",
+        "assemblyMates",
+    ):
         value = manifest.get(key)
         if value is not None:
             index[key] = value

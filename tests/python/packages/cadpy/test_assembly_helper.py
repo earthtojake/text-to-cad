@@ -6,6 +6,7 @@ import unittest
 from contextlib import contextmanager
 
 from cadpy.assembly import AssemblyHelper, MateTarget, label_shape, label_text, target
+from cadpy.step_export import _collect_assembly_mates
 
 
 class FakeLocation:
@@ -95,7 +96,64 @@ class AssemblyHelperTests(unittest.TestCase):
         self.assertEqual("face_to_face", relation.relation)
         self.assertEqual("lid_seat", relation.fixed)
         self.assertEqual("underside", relation.moving)
+        self.assertEqual({"part": "base", "frame": "lid_seat"}, relation.fixed_endpoint)
+        self.assertEqual({"part": "lid", "frame": "underside"}, relation.moving_endpoint)
         self.assertEqual([(moving_joint, {})], fixed_joint.connections)
+
+    def test_build_records_mate_endpoint_payloads(self) -> None:
+        with fake_build123d():
+            assembly = AssemblyHelper("enclosure")
+            base = assembly.add(FakePart(), "base")
+            lid = assembly.add(FakePart(), "lid")
+            base_frame = assembly.rigid_frame(base, "lid_seat", FakeLocation("base_frame"))
+            lid_frame = assembly.rigid_frame(lid, "underside", FakeLocation("lid_frame"))
+
+            assembly.face_to_face(base_frame, lid_frame, label="lid_mate")
+            compound = assembly.build()
+
+        self.assertEqual(
+            [
+                {
+                    "id": "m1",
+                    "label": "m1",
+                    "sourceLabel": "lid_mate",
+                    "type": "face_to_face",
+                    "relation": "face_to_face",
+                    "fixed": "lid_seat",
+                    "moving": "underside",
+                    "parameters": {},
+                    "fixedEndpoint": {"part": "base", "frame": "lid_seat"},
+                    "movingEndpoint": {"part": "lid", "frame": "underside"},
+                }
+            ],
+            compound.assembly_mates,
+        )
+
+    def test_export_collection_renumbers_mates_globally(self) -> None:
+        with fake_build123d():
+            first = AssemblyHelper("first")
+            first_base = first.add(FakePart(), "first_base")
+            first_lid = first.add(FakePart(), "first_lid")
+            first_base_frame = first.rigid_frame(first_base, "seat", FakeLocation("first_base"))
+            first_lid_frame = first.rigid_frame(first_lid, "underside", FakeLocation("first_lid"))
+            first.face_to_face(first_base_frame, first_lid_frame, label="first_mate")
+            first_compound = first.build()
+
+            second = AssemblyHelper("second")
+            second_base = second.add(FakePart(), "second_base")
+            second_lid = second.add(FakePart(), "second_lid")
+            second_base_frame = second.rigid_frame(second_base, "seat", FakeLocation("second_base"))
+            second_lid_frame = second.rigid_frame(second_lid, "underside", FakeLocation("second_lid"))
+            second.face_to_face(second_base_frame, second_lid_frame, label="second_mate")
+            second_compound = second.build()
+
+            root = FakeCompound(label="root", children=[first_compound, second_compound])
+
+        mates = _collect_assembly_mates(root)
+
+        self.assertEqual(["m1", "m2"], [mate["id"] for mate in mates])
+        self.assertEqual(["m1", "m2"], [mate["label"] for mate in mates])
+        self.assertEqual(["first_mate", "second_mate"], [mate["sourceLabel"] for mate in mates])
 
     def test_helper_accepts_existing_native_joint_labels(self) -> None:
         with fake_build123d():

@@ -1,4 +1,8 @@
 import { syncLineMaterialOpacity } from "../../common/renderEdges.js";
+import {
+  CAD_DISPLAY_MODE,
+  displayModeUsesTransparentSurfaces
+} from "../../common/displaySettings.js";
 import { REFERENCE_SELECTED_COLOR } from "./referenceGeometry.js";
 import { BASE_VIEWER_THEME } from "./stageTheme.js";
 import { readSourceColor } from "./surfaceMaterials.js";
@@ -6,6 +10,8 @@ import { readSourceColor } from "./surfaceMaterials.js";
 const CAD_EDGE_OPACITY = 0.84;
 const PART_HIGHLIGHT_SURFACE_RENDER_ORDER = 23;
 const PART_HIGHLIGHT_EDGE_RENDER_ORDER = 26;
+const PART_HOVER_OPACITY_BOOST = 0.08;
+const PART_SELECTED_OPACITY_BOOST = 0.12;
 export const FOCUSED_DIMMED_SURFACE_OPACITY = 0.035;
 
 function clamp(value, min, max) {
@@ -127,7 +133,8 @@ export function applyPartVisualState(THREE, records, {
   hoveredPartId,
   focusedPartId,
   selectedPartIds,
-  showEdges
+  showEdges,
+  displayMode = CAD_DISPLAY_MODE.SOLID
 }) {
   const hidden = new Set(Array.isArray(hiddenPartIds) ? hiddenPartIds : []);
   const selected = new Set(Array.isArray(selectedPartIds) ? selectedPartIds : []);
@@ -145,6 +152,7 @@ export function applyPartVisualState(THREE, records, {
   const baseEdgeOpacity = Number.isFinite(Number(edgeSettings?.opacity))
     ? clamp(Number(edgeSettings.opacity), 0, 1)
     : (viewerTheme?.edgeOpacity ?? BASE_VIEWER_THEME.edgeOpacity ?? CAD_EDGE_OPACITY);
+  const transparentDisplayMode = displayModeUsesTransparentSurfaces(displayMode);
   const highlightEdgeOpacity = Number.isFinite(Number(edgeSettings?.highlightOpacity))
     ? clamp(Number(edgeSettings.highlightOpacity), 0, 1)
     : 1;
@@ -186,12 +194,19 @@ export function applyPartVisualState(THREE, records, {
       : effectOpacity;
     const highlightedEdgeOpacity = (isSelected || isHovered) ? highlightEdgeOpacity * effectEdgeOpacity : null;
     const dimmedSurfaceOpacity = Math.min(baseSurfaceOpacity * effectOpacity, FOCUSED_DIMMED_SURFACE_OPACITY);
+    const baseEffectSurfaceOpacity = baseSurfaceOpacity * effectOpacity;
     const highlightedSurfaceOpacity = isHighlighted
-      ? clamp(highlightEdgeOpacity * effectOpacity, 0, 1)
-      : baseSurfaceOpacity * effectOpacity;
+      ? transparentDisplayMode
+        ? clamp(
+            baseEffectSurfaceOpacity + (isSelected ? PART_SELECTED_OPACITY_BOOST : PART_HOVER_OPACITY_BOOST) * effectOpacity,
+            0,
+            1
+          )
+        : clamp(highlightEdgeOpacity * effectOpacity, 0, 1)
+      : baseEffectSurfaceOpacity;
     const nextSurfaceOpacity = isHidden ? 0 : isDimmed ? dimmedSurfaceOpacity : highlightedSurfaceOpacity;
     syncSurfaceTransparency(record, isHidden || isDimmed || isHighlighted, nextSurfaceOpacity, {
-      writeTransparentDepth: !isHidden && !isDimmed
+      writeTransparentDepth: !isHidden && !isDimmed && !transparentDisplayMode
     });
     record.material.opacity = nextSurfaceOpacity;
 

@@ -96,7 +96,10 @@ export function normalizeCadRefQueryParams(values) {
     const lines = String(sourceValue || "").split(/\r?\n/);
     for (const line of lines) {
       const normalizedLine = String(line || "").trim();
-      const parsedToken = parseCadRefToken(normalizedLine);
+      const parsedToken = parseCadRefToken(normalizedLine) ||
+        (normalizedLine && !normalizedLine.startsWith("#")
+          ? parseCadRefToken(`#${normalizedLine}`)
+          : null);
       const token = String(
         parsedToken
           ? buildCadRefToken({ selectors: parsedToken.selectors })
@@ -115,9 +118,10 @@ export function normalizeCadRefQueryParams(values) {
 
 function cadRefQueryValueFromToken(token) {
   const parsedToken = parseCadRefToken(token);
-  return parsedToken
-    ? parsedToken.token
-    : "";
+  if (!parsedToken) {
+    return "";
+  }
+  return parsedToken.selectors.length ? parsedToken.selectors.join(",") : parsedToken.token;
 }
 
 export function readCadParam() {
@@ -150,6 +154,30 @@ export function readCadRefQueryParams() {
   }
   const params = new URLSearchParams(window.location.search);
   return normalizeCadRefQueryParams(params.getAll(CAD_REF_QUERY_PARAM));
+}
+
+export function cadRefQueryParamsFromUrl(urlValue, baseUrl = "") {
+  const normalizedUrl = String(urlValue || "").trim();
+  if (!normalizedUrl) {
+    return [];
+  }
+  try {
+    const url = new URL(normalizedUrl, baseUrl || "http://localhost/");
+    return normalizeCadRefQueryParams(url.searchParams.getAll(CAD_REF_QUERY_PARAM));
+  } catch {
+    return [];
+  }
+}
+
+export function readNavigationCadRefQueryParams() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  const entries = typeof window.performance?.getEntriesByType === "function"
+    ? window.performance.getEntriesByType("navigation")
+    : [];
+  const navigationUrl = String(entries?.[0]?.name || "").trim();
+  return cadRefQueryParamsFromUrl(navigationUrl, window.location.href);
 }
 
 export function findEntryByUrlPath(entries, urlPath) {

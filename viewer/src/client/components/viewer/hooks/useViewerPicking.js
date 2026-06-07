@@ -1128,9 +1128,7 @@ export function useViewerPicking({
       event.preventDefault();
       event.stopPropagation();
       clearPendingActivation();
-      const referenceId = pickReferenceAtPosition(event.clientX, event.clientY, { hover: true, preferTopology: true }) ||
-        pickReferenceAtPosition(event.clientX, event.clientY) ||
-        "";
+      const referenceId = pickActivationReference(event.clientX, event.clientY, event.pointerType || "") || "";
       onContextReferenceRef.current?.(referenceId || "", {
         clientX: event.clientX,
         clientY: event.clientY,

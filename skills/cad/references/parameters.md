@@ -129,7 +129,7 @@ Validate parameter behavior at representative values:
 Use deterministic checks first:
 
 - `scripts/inspect refs --facts --planes --positioning` for scale, labels, frames, and major datums.
-- `scripts/inspect frame`, `measure`, or `mate` for pivots, axes, mating faces, and distances.
+- `scripts/inspect frame`, `measure`, or `align` for pivots, axes, mating faces, and distances.
 - Source-level assertions for derived dimensions or joint limits when practical.
 
 Use CAD Viewer links and CAD `scripts/snapshot` review for visual semantics:

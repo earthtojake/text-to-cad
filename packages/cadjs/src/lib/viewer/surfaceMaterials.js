@@ -1,5 +1,10 @@
 import { resolveThemeFillColor } from "../themeSettings.js";
 import {
+  CAD_DISPLAY_MODE,
+  displayModeIsWireframe,
+  displayModeSurfaceOpacity
+} from "../../common/displaySettings.js";
+import {
   BASE_VIEWER_THEME,
   createSafeColor,
   getViewerThemeNumber,
@@ -156,11 +161,14 @@ export function resolveSourceBaseColor(THREE, {
   return shapeSourceColor(THREE, sourceColor, materialSettings);
 }
 
-export function applyMaterialSettingsToRecord(THREE, record, materialSettings) {
+export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
+  displayMode = CAD_DISPLAY_MODE.SOLID
+} = {}) {
   if (!record?.material || !materialSettings) {
     return;
   }
-  const forceFill = materialSettings.overrideSourceColors === true;
+  const wireframeMode = displayModeIsWireframe(displayMode);
+  const forceFill = materialSettings.overrideSourceColors === true || wireframeMode;
   const hasVertexColors = !forceFill && !!record.hasVertexColors;
   const nextUseVertexColors = hasVertexColors;
   record.useVertexColors = nextUseVertexColors;
@@ -177,9 +185,12 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings) {
   record.material.metalness = clamp(Number(materialSettings.metalness) || 0, 0, 1);
   record.material.clearcoat = clamp(Number(materialSettings.clearcoat) || 0, 0, 1);
   record.material.clearcoatRoughness = clamp(Number(materialSettings.clearcoatRoughness) || 0, 0, 1);
-  record.baseOpacity = clamp(Number(materialSettings.opacity) || 0, 0, 1);
+  record.baseOpacity = clamp(displayModeSurfaceOpacity(displayMode, Number(materialSettings.opacity) || 0), 0, 1);
   record.material.opacity = record.baseOpacity;
-  record.material.transparent = record.baseOpacity < 0.999;
+  record.material.transparent = wireframeMode || record.baseOpacity < 0.999;
+  record.material.depthWrite = displayMode === CAD_DISPLAY_MODE.TRANSPARENT || wireframeMode
+    ? false
+    : record.baseOpacity >= 0.999;
   record.material.envMapIntensity = Math.max(Number(materialSettings.envMapIntensity) || 0, 0);
   if (record.material.color && record.baseColor) {
     record.material.color.copy(record.baseColor);

@@ -275,7 +275,35 @@ function buildSyntheticOccurrenceNode({ partId, occurrenceId, children }) {
   };
 }
 
+function topologySelectorAliases(value) {
+  const normalizedValue = normalizeString(value);
+  if (!normalizedValue) {
+    return [];
+  }
+  const aliases = [normalizedValue];
+  if (normalizedValue.startsWith("#")) {
+    aliases.push(normalizedValue.slice(1));
+  }
+  if (normalizedValue.startsWith(STEP_TREE_TOPOLOGY_NODE_PREFIX)) {
+    const internalSelector = normalizeString(normalizedValue.split(":").pop());
+    if (internalSelector) {
+      aliases.push(internalSelector);
+    }
+  }
+  return [...new Set(aliases.filter(Boolean))];
+}
+
 function topologyOccurrenceNodeIsRedundantForPart(partNode, occurrenceNode, siblingCount) {
+  if (normalizeString(occurrenceNode?.nodeType) !== "topology-occurrence") {
+    return false;
+  }
+  if (siblingCount === 1) {
+    return true;
+  }
+  return topologyOccurrenceNodeDuplicatesPart(partNode, occurrenceNode);
+}
+
+function topologyOccurrenceNodeDuplicatesPart(partNode, occurrenceNode) {
   if (normalizeString(occurrenceNode?.nodeType) !== "topology-occurrence") {
     return false;
   }
@@ -287,12 +315,23 @@ function topologyOccurrenceNodeIsRedundantForPart(partNode, occurrenceNode, sibl
     stepTreeNodeId(partNode),
     partNode?.occurrenceId,
     partNode?.sourceOccurrenceId,
-    partNode?.sourceRootTargetOccurrenceId
-  ].map((value) => normalizeString(value)).filter(Boolean);
-  if (partSelectors.includes(occurrenceId)) {
-    return true;
-  }
-  return stepTreeNodeId(partNode) === STEP_MODEL_ROOT_ID && siblingCount === 1;
+    partNode?.sourceRootTargetOccurrenceId,
+    partNode?.topologyReferenceId,
+    partNode?.displaySelector,
+    partNode?.displayName,
+    partNode?.name,
+    partNode?.label
+  ].flatMap(topologySelectorAliases);
+  const occurrenceSelectors = [
+    occurrenceId,
+    stepTreeNodeId(occurrenceNode),
+    occurrenceNode?.topologyReferenceId,
+    occurrenceNode?.displaySelector,
+    occurrenceNode?.displayName,
+    occurrenceNode?.name,
+    occurrenceNode?.label
+  ].flatMap(topologySelectorAliases);
+  return occurrenceSelectors.some((selector) => partSelectors.includes(selector));
 }
 
 function flattenRedundantTopologyOccurrenceNodes(partNode, topologyChildren) {
@@ -567,7 +606,7 @@ export function flattenVisibleStepTreeRows(root, expandedNodeIds = [], {
       : children;
   }
 
-  function visit(node, depth, options = {}) {
+  function visit(node, depth, options = {}, parentNode = null) {
     if (normalizedQuery && !subtreeMatchesQuery(node, normalizedQuery)) {
       return;
     }
@@ -576,31 +615,35 @@ export function flattenVisibleStepTreeRows(root, expandedNodeIds = [], {
     const hasChildren = children.length > 0;
     const expandedByQuery = Boolean(normalizedQuery && hasChildren);
     const isExpanded = expandedByQuery || expanded.has(id);
-    rows.push({
-      id,
-      node,
-      label: stepTreeNodeLabel(node),
-      detail: stepTreeNodeDetail(node),
-      nodeType: normalizeString(node?.nodeType),
-      topologyType: stepTreeNodeTopologyType(node),
-      topologyReferenceId: normalizeString(node?.topologyReferenceId),
-      depth,
-      hasChildren,
-      expanded: isExpanded,
-      leafPartIds: stepTreeNodeLeafPartIds(node)
-    });
-    if (!hasChildren || !isExpanded) {
+    const elideRedundantTopologyOccurrence = parentNode &&
+      topologyOccurrenceNodeDuplicatesPart(parentNode, node);
+    if (!elideRedundantTopologyOccurrence) {
+      rows.push({
+        id,
+        node,
+        label: stepTreeNodeLabel(node),
+        detail: stepTreeNodeDetail(node),
+        nodeType: normalizeString(node?.nodeType),
+        topologyType: stepTreeNodeTopologyType(node),
+        topologyReferenceId: normalizeString(node?.topologyReferenceId),
+        depth,
+        hasChildren,
+        expanded: isExpanded,
+        leafPartIds: stepTreeNodeLeafPartIds(node)
+      });
+    }
+    if (!hasChildren || (!isExpanded && !elideRedundantTopologyOccurrence)) {
       return;
     }
     const childRows = options.isRoot ? rootChildrenForVisit(children) : children;
     for (const child of childRows) {
-      visit(child, depth + 1);
+      visit(child, elideRedundantTopologyOccurrence ? depth : depth + 1, {}, node);
     }
   }
 
   if (omitRoot) {
     for (const child of rootChildrenForVisit(stepTreeNodeChildren(root))) {
-      visit(child, 0);
+      visit(child, 0, {}, root);
     }
   } else {
     visit(root, 0, { isRoot: true });

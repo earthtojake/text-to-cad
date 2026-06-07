@@ -53,6 +53,70 @@ import { buildDisplayEdgeRuntime } from "cadjs/lib/selectors/runtime";
 
 const ROBOT_MESH_LOAD_CONCURRENCY = 3;
 
+function toVectorArray(value) {
+  if (!Array.isArray(value) || value.length < 3) {
+    return null;
+  }
+  const vector = value.slice(0, 3).map((component) => Number(component));
+  return vector.every((component) => Number.isFinite(component)) ? vector : null;
+}
+
+function normalizeMateEndpoint(endpoint) {
+  if (!endpoint || typeof endpoint !== "object") {
+    return null;
+  }
+  const result = {
+    part: String(endpoint.part || "").trim(),
+    frame: String(endpoint.frame || "").trim()
+  };
+  const position = toVectorArray(endpoint.position);
+  const orientation = toVectorArray(endpoint.orientation);
+  if (position) {
+    result.position = position;
+  }
+  if (orientation) {
+    result.orientation = orientation;
+  }
+  const axes = endpoint.axes && typeof endpoint.axes === "object" ? endpoint.axes : null;
+  if (axes) {
+    const normalizedAxes = {};
+    for (const key of ["x", "y", "z"]) {
+      const axis = toVectorArray(axes[key]);
+      if (axis) {
+        normalizedAxes[key] = axis;
+      }
+    }
+    if (Object.keys(normalizedAxes).length) {
+      result.axes = normalizedAxes;
+    }
+  }
+  return result.position || result.orientation || result.part || result.frame ? result : null;
+}
+
+function assemblyMatesFromTopology(topologyManifest) {
+  const mates = topologyManifest?.assemblyMates;
+  if (!Array.isArray(mates)) {
+    return [];
+  }
+  return mates
+    .filter((mate) => mate && typeof mate === "object")
+    .map((mate, index) => {
+      const id = String(mate.id || `m${index + 1}`).trim() || `m${index + 1}`;
+      return {
+        id,
+        label: String(mate.label || id).trim() || id,
+        sourceLabel: String(mate.sourceLabel || mate.name || "").trim(),
+        type: String(mate.type || mate.relation || "mate").trim(),
+        relation: String(mate.relation || mate.type || "mate").trim(),
+        fixed: String(mate.fixed || "").trim(),
+        moving: String(mate.moving || "").trim(),
+        parameters: mate.parameters && typeof mate.parameters === "object" ? mate.parameters : {},
+        fixedEndpoint: normalizeMateEndpoint(mate.fixedEndpoint),
+        movingEndpoint: normalizeMateEndpoint(mate.movingEndpoint)
+      };
+    });
+}
+
 function abortLoad(controllerRef) {
   controllerRef.current?.abort();
   controllerRef.current = null;
@@ -130,7 +194,8 @@ function createAssemblyPreviewMeshData(meshData, topologyManifest = null) {
   return {
     ...meshData,
     parts: null,
-    assemblyRoot: assemblyRootFromTopology(topologyManifest)
+    assemblyRoot: assemblyRootFromTopology(topologyManifest),
+    assemblyMates: assemblyMatesFromTopology(topologyManifest)
   };
 }
 
@@ -193,11 +258,15 @@ export function useCadAssets({
   }, []);
 
   const buildSelfContainedAssemblyMeshState = useCallback((entry, topologyManifest, meshData) => {
+    const assemblyMeshData = buildSelfContainedAssemblyMeshData(topologyManifest, meshData);
     return {
       file: entry.file,
       kind: entry.kind,
       meshHash: getAssemblyMeshHash(entry),
-      meshData: buildSelfContainedAssemblyMeshData(topologyManifest, meshData),
+      meshData: {
+        ...assemblyMeshData,
+        assemblyMates: assemblyMatesFromTopology(topologyManifest)
+      },
       assemblyStructureReady: true,
       assemblyInteractionReady: true,
       assemblyBackgroundError: ""

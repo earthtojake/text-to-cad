@@ -9,6 +9,48 @@ from cadpy.step_scene import LoadedStepScene, load_step_scene_from_xcaf_doc, ste
 from cadpy.step_metadata import TEXT_TO_CAD_GENERATOR, inject_text_to_cad_step_metadata
 
 
+def _collect_assembly_mates(shape: Any) -> list[dict[str, Any]]:
+    mates: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def visit(node: Any) -> None:
+        raw_mates = getattr(node, "assembly_mates", None)
+        if isinstance(raw_mates, list):
+            for raw_mate in raw_mates:
+                if not isinstance(raw_mate, dict):
+                    continue
+                key = repr(raw_mate)
+                if key in seen:
+                    continue
+                seen.add(key)
+                mate = dict(raw_mate)
+                mate_id = f"m{len(mates) + 1}"
+                source_label = str(
+                    mate.get("sourceLabel") or
+                    mate.get("name") or
+                    mate.get("label") or
+                    mate.get("id") or
+                    ""
+                ).strip()
+                mate["id"] = mate_id
+                mate["label"] = mate_id
+                if source_label and source_label != mate_id:
+                    mate["sourceLabel"] = source_label
+                mates.append(mate)
+        for child in list(getattr(node, "children", []) or []):
+            visit(child)
+
+    visit(shape)
+    return mates
+
+
+def _attach_assembly_mates(scene: LoadedStepScene, shape: Any) -> LoadedStepScene:
+    assembly_mates = _collect_assembly_mates(shape)
+    if assembly_mates:
+        scene.assembly_mates = assembly_mates
+    return scene
+
+
 def create_bin_xcaf_doc() -> Any:
     from OCP.BinXCAFDrivers import BinXCAFDrivers
     from build123d.exporters3d import (
@@ -274,7 +316,7 @@ def export_build123d_step_scene(
     source_hash: str | None = None,
 ) -> LoadedStepScene:
     doc = _create_bin_xcaf_doc(to_export)
-    return export_xcaf_doc_step_scene(
+    scene = export_xcaf_doc_step_scene(
         doc,
         output_path,
         label=getattr(to_export, "label", None),
@@ -282,6 +324,7 @@ def export_build123d_step_scene(
         source_path=source_path,
         source_hash=source_hash,
     )
+    return _attach_assembly_mates(scene, to_export)
 
 
 def build_build123d_step_scene(
@@ -292,9 +335,10 @@ def build_build123d_step_scene(
     source_hash: str | None = None,
 ) -> LoadedStepScene:
     doc = _create_bin_xcaf_doc(to_export)
-    return load_step_scene_from_xcaf_doc(
+    scene = load_step_scene_from_xcaf_doc(
         output_path,
         doc,
         source_kind=source_kind,
         source_hash=source_hash,
     )
+    return _attach_assembly_mates(scene, to_export)

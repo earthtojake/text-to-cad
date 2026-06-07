@@ -141,18 +141,18 @@ Likely causes:
 - joint location defined in world coordinates when a part-local datum was intended
 - duplicate or incorrect joint labels
 - explicit `Location` not recomputed after a parameter change
-- CLI `inspect mate` delta was treated as an edit instead of a diagnostic
+- CLI `inspect align` delta was treated as an edit instead of a diagnostic
 
 Fix:
 
 - inspect `refs --positioning`
 - run `frame` on relevant selectors or occurrences
-- run `mate` for read-only delta
+- run `align` for read-only selector-pair delta
 - verify the source-level `AssemblyHelper` target order, build123d joint labels, and `joint_location` definitions
 - apply correction to helper relationship, source build123d joint, `.connect_to()` call, `Location`, datum, or feature offset
 - adjust the smallest joint location, axis, angle, position, explicit transform, or part-local datum
 - regenerate the assembly from the Python source
-- rerun `refs --facts --planes --positioning` plus the failed `measure` or `mate` check
+- rerun `refs --facts --planes --positioning` plus the failed `measure` or `align` check
 
 ### CAD Viewer Startup Or Link Failure
 

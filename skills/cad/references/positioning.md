@@ -1,6 +1,6 @@
 # Positioning logic, joints, and mating
 
-Read this file when geometry has mating interfaces, repeated features, assembly children, axes, datums, motion, or user-specified alignment. This is the authoritative reference for assembly positioning, build123d joints, explicit `Location` transforms, CLI `inspect mate`, and positioning report content.
+Read this file when geometry has mating interfaces, repeated features, assembly children, axes, datums, motion, or user-specified alignment. This is the authoritative reference for assembly positioning, build123d joints, explicit `Location` transforms, CLI `inspect align`, and positioning report content.
 
 ## Contents
 
@@ -13,7 +13,7 @@ Read this file when geometry has mating interfaces, repeated features, assembly 
 - When to use build123d joints
 - Joint type selection
 - Assembly positioning workflow
-- CLI mating validation
+- CLI alignment validation
 - Frame validation
 - Measurement validation
 - Source-level positioning corrections
@@ -29,7 +29,7 @@ Use these terms carefully:
 
 - **AssemblyHelper** is the preferred generated-script wrapper from `cadpy.assembly`. It records semantic relationships such as `face_to_face`, `coaxial`, `revolute`, and `linear`, then realizes them with native build123d joints.
 - **build123d joints** are source-level objects such as `RigidJoint`, `RevoluteJoint`, `LinearJoint`, `CylindricalJoint`, and `BallJoint`. They are attached to `Solid` or `Compound` objects and can reposition parts with `connect_to()`.
-- **CLI `inspect mate`** is a validation tool. It computes a read-only translation delta between selected local refs in a STEP/CAD entry. It does not edit source code or patch exported STEP files.
+- **CLI `inspect align`** is a selector-pair validation tool. It computes a read-only translation delta between selected local refs in a STEP/CAD entry. It does not edit source code, patch exported STEP files, or represent an authored mate feature.
 - **Mating intent** is the design relationship: flush, centered, coaxial, offset, hinge-like, slider-like, or otherwise datum-driven.
 
 There is no general instruction to ignore the CLI because build123d has joints. Use `AssemblyHelper` and build123d joints to express and compute source assembly placement where appropriate, then use CLI inspection to validate the generated STEP.
@@ -44,7 +44,7 @@ root component
 → named datums / joint locations
 → AssemblyHelper semantic relationships backed by native build123d joints
 → labeled Compound assembly with verbose native labels
-→ refs/measure/frame/mate validation
+→ refs/measure/frame/align validation
 ```
 
 A numeric `Location(...)` should usually correspond to a stated datum, offset, clearance, screw axis, face contact, or joint relationship.
@@ -179,7 +179,7 @@ python scripts/inspect refs path/to/assembly.step --facts --planes --positioning
 
 Passing a generated assembly STEP directly treats it as imported native STEP and does not preserve source-level composition semantics.
 
-## CLI mating validation
+## CLI alignment validation
 
 After generation, use CLI inspection to validate the STEP result:
 
@@ -191,7 +191,7 @@ python scripts/inspect refs path/to/assembly.step \
 Then select moving and target refs from the returned local selector refs and compute read-only deltas:
 
 ```bash
-python scripts/inspect mate path/to/assembly.step \
+python scripts/inspect align path/to/assembly.step \
   --moving '#moving_selector' \
   --target '#target_selector' \
   --mode flush \

@@ -176,6 +176,12 @@ export function useCadDirectorySession({
 
   useEffect(() => {
     if (selectedEntry) {
+      const currentCadRefQueryParams = readCadRefQueryParams();
+      if (currentCadRefQueryParams.length) {
+        setPendingCadRefQueryParams((current) => (
+          Array.isArray(current) && current.length ? current : currentCadRefQueryParams
+        ));
+      }
       writeCadParam(cadFileParamForEntry(selectedEntry));
       return;
     }
@@ -205,6 +211,7 @@ export function useCadDirectorySession({
     selectedEntry,
     selectedEntryKeyFromUrl,
     selectedKey,
+    setPendingCadRefQueryParams,
     writeCadParam
   ]);
 

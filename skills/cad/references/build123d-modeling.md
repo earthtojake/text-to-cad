@@ -157,7 +157,7 @@ For assemblies, keep this file focused on BREP modeling patterns and labels. Use
 - part-local coordinate conventions
 - when to use `cadpy.assembly.AssemblyHelper`, build123d joints, or explicit `Location` transforms
 - `connect_to()` behavior
-- CLI `inspect mate` as read-only validation
+- CLI `inspect align` as read-only selector-pair alignment validation
 - frame, measure, and positioning report expectations
 
 ## Labels and assemblies
@@ -196,7 +196,7 @@ For repeated parts, keep occurrence labels, transforms, or joint connections exp
 - Open sketch profile produces invalid or missing face.
 - Face selector changes after a boolean or fillet.
 - Source-level assembly composition is lost by re-importing generated STEP instead of using the Python assembly source.
-- Part origin is arbitrary and later mating checks become ambiguous.
+- Part origin is arbitrary and later alignment checks become ambiguous.
 - Joint labels are duplicated within the same part.
 - Source-level joints are treated as if they were persistent STEP constraints rather than one-time source placement operations.
 - Joint labels are missing, duplicated, or attached to the wrong local datum.

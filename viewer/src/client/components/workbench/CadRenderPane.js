@@ -22,6 +22,7 @@ import {
 import { VIEWER_SCENE_SCALE } from "cadjs/lib/viewer/sceneScale";
 import { VIEWER_PICK_MODE } from "cadjs/lib/viewer/constants";
 import { useStepAnimationSnapshot } from "@/workbench/stepAnimationStore";
+import { viewerPickModeForRenderPane } from "@/workbench/viewerPickMode";
 
 const EMPTY_LIST = Object.freeze([]);
 const VIEWPORT_ISSUE_META = Object.freeze({
@@ -84,8 +85,13 @@ function ViewerContextMenu({
   onSelect,
   onFocus,
   onHideOther,
+  onHideAll,
   onHide,
-  onReveal
+  onReveal,
+  onExpandSelected,
+  onCollapseSelected,
+  onExpandAll,
+  onCollapseAll
 }) {
   if (!menu || !positionStyle) {
     return null;
@@ -137,16 +143,31 @@ function ViewerContextMenu({
           hidden={hidden}
           actionCount={menu.actionCount}
           copyReferenceDisabled={!String(menu.copyText || "").trim()}
+          selectDisabled={menu.selectDisabled === true}
           showIsolate={menu.showIsolate !== false}
+          isolateDisabled={menu.isolateDisabled === true}
           showHideOther={menu.showHideOther !== false}
+          hideOtherDisabled={menu.hideOtherDisabled === true}
           showVisibility={menu.showVisibility !== false}
           showHideAll={menu.showHideAll === true}
-          hideOtherDisabled={hidden}
+          hideAllDisabled={menu.hideAllDisabled === true}
+          hideAllLabel={String(menu.hideAllLabel || "").trim() || (hidden ? "Reveal all instances" : "Hide all instances")}
+          visibilityDisabled={menu.visibilityDisabled === true}
+          showExpandCollapse={menu.showExpandCollapse === true}
+          expandSelectedDisabled={menu.expandSelectedDisabled !== false}
+          collapseSelectedDisabled={menu.collapseSelectedDisabled !== false}
+          expandAllDisabled={menu.expandAllDisabled !== false}
+          collapseAllDisabled={menu.collapseAllDisabled !== false}
           onCopyReference={() => handleAction(onCopyReference)}
           onSelect={() => handleAction(onSelect)}
           onIsolate={() => handleAction(onFocus)}
           onHideOther={() => handleAction(onHideOther)}
+          onHideAll={() => handleAction(onHideAll)}
           onToggleVisibility={() => handleAction(hidden ? onReveal : onHide)}
+          onExpandSelected={() => handleAction(onExpandSelected)}
+          onCollapseSelected={() => handleAction(onCollapseSelected)}
+          onExpandAll={() => handleAction(onExpandAll)}
+          onCollapseAll={() => handleAction(onCollapseAll)}
         />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -183,6 +204,9 @@ export default function CadRenderPane({
   hiddenPartIds,
   selectedPartIds,
   hoveredPartId,
+  assemblyMates = EMPTY_LIST,
+  selectedMateIds = EMPTY_LIST,
+  hoveredMateId = "",
   hoveredReferenceId,
   selectedReferenceIds,
   selectorRuntime,
@@ -208,8 +232,13 @@ export default function CadRenderPane({
   onViewerContextMenuSelect,
   onViewerContextMenuFocus,
   onViewerContextMenuHideOther,
+  onViewerContextMenuHideAll,
   onViewerContextMenuHide,
   onViewerContextMenuReveal,
+  onViewerContextMenuExpandSelected,
+  onViewerContextMenuCollapseSelected,
+  onViewerContextMenuExpandAll,
+  onViewerContextMenuCollapseAll,
   handleViewerAlertChange,
   handleStepModuleTransformDetectedChange,
   selectionCount,
@@ -371,16 +400,25 @@ export default function CadRenderPane({
           compactViewPlane={false}
           viewportFrameInsets={viewportFrameInsets}
           isLoading={viewerLoading}
-          pickMode={
-            urdfMode || pathPreviewMode || topologySelectionPending || topologySelectionUnavailable || topologySelectionDeferred
-              ? VIEWER_PICK_MODE.NONE
-              : (!dxfMode && viewerMode === "assembly" ? VIEWER_PICK_MODE.ASSEMBLY : VIEWER_PICK_MODE.AUTO)
-          }
+          pickMode={urdfMode
+            ? VIEWER_PICK_MODE.NONE
+            : viewerPickModeForRenderPane({
+              dxfMode,
+              pathPreviewMode,
+              topologySelectionPending,
+              topologySelectionUnavailable,
+              topologySelectionDeferred,
+              viewerMode,
+              focusedPartIds
+            })}
           renderPartsIndividually={urdfMode ? true : (renderPartsIndividually || Boolean(resolvedStepParameters?.definition))}
           pickableParts={dxfMode || urdfMode || pathPreviewMode ? EMPTY_LIST : assemblyParts}
           hiddenPartIds={dxfMode || pathPreviewMode ? [] : hiddenPartIds}
           selectedPartIds={dxfMode || pathPreviewMode ? [] : selectedPartIds}
           hoveredPartId={dxfMode || pathPreviewMode ? "" : hoveredPartId}
+          assemblyMates={dxfMode || pathPreviewMode ? [] : assemblyMates}
+          selectedMateIds={dxfMode || pathPreviewMode ? [] : selectedMateIds}
+          hoveredMateId={dxfMode || pathPreviewMode ? "" : hoveredMateId}
           hoveredReferenceId={dxfMode || pathPreviewMode ? "" : hoveredReferenceId}
           selectedReferenceIds={dxfMode || pathPreviewMode ? [] : selectedReferenceIds}
           selectorRuntime={dxfMode || pathPreviewMode ? null : selectorRuntime}
@@ -413,8 +451,13 @@ export default function CadRenderPane({
           onSelect={onViewerContextMenuSelect}
           onFocus={onViewerContextMenuFocus}
           onHideOther={onViewerContextMenuHideOther}
+          onHideAll={onViewerContextMenuHideAll}
           onHide={onViewerContextMenuHide}
           onReveal={onViewerContextMenuReveal}
+          onExpandSelected={onViewerContextMenuExpandSelected}
+          onCollapseSelected={onViewerContextMenuCollapseSelected}
+          onExpandAll={onViewerContextMenuExpandAll}
+          onCollapseAll={onViewerContextMenuCollapseAll}
         />
       ) : null}
       {!previewMode && missingFileLabel ? (

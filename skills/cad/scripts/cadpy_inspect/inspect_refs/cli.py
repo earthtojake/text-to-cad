@@ -42,6 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
             "examples:\n"
             "  inspect refs STEP/foo.step '#f9' --detail --facts\n"
             "  inspect measure STEP/foo.step --from '#f1' --to '#f2' --axis z\n"
+            "  inspect align STEP/foo.step --moving '#f1' --target '#f2' --mode flush --axis z\n"
         ),
     )
     parser.add_argument(
@@ -137,18 +138,18 @@ def build_parser() -> argparse.ArgumentParser:
     _add_output_arguments(measure_parser)
     measure_parser.set_defaults(handler=run_measure)
 
-    mate_parser = subparsers.add_parser(
-        "mate",
-        help="Calculate a read-only translation delta for simple selector mating.",
+    align_parser = subparsers.add_parser(
+        "align",
+        help="Calculate a read-only translation delta for simple selector alignment.",
     )
-    mate_parser.add_argument("entry", help="CAD STEP path or CAD entry target.")
-    mate_parser.add_argument("--moving", required=True, help="Moving/source selector ref.")
-    mate_parser.add_argument("--target", required=True, help="Target selector ref.")
-    mate_parser.add_argument("--mode", choices=("flush", "center"), default="flush", help="Mate mode. Default: flush.")
-    mate_parser.add_argument("--offset", type=float, default=0.0, help="Offset in mm. For flush, applies along target normal when axis-aligned.")
-    mate_parser.add_argument("--axis", choices=("x", "y", "z"), help="Axis to use for flush or one-axis center mating.")
-    _add_output_arguments(mate_parser)
-    mate_parser.set_defaults(handler=run_mate)
+    align_parser.add_argument("entry", help="CAD STEP path or CAD entry target.")
+    align_parser.add_argument("--moving", required=True, help="Moving/source selector ref.")
+    align_parser.add_argument("--target", required=True, help="Target selector ref.")
+    align_parser.add_argument("--mode", choices=("flush", "center"), default="flush", help="Alignment mode. Default: flush.")
+    align_parser.add_argument("--offset", type=float, default=0.0, help="Offset in mm. For flush, applies along target normal when axis-aligned.")
+    align_parser.add_argument("--axis", choices=("x", "y", "z"), help="Axis to use for flush or one-axis center alignment.")
+    _add_output_arguments(align_parser)
+    align_parser.set_defaults(handler=run_align)
 
     worker_parser = subparsers.add_parser(
         "worker",
@@ -294,10 +295,10 @@ def run_measure(args: argparse.Namespace) -> int:
     return 0 if bool(result.get("ok")) else 2
 
 
-def run_mate(args: argparse.Namespace) -> int:
+def run_align(args: argparse.Namespace) -> int:
     inspect = _inspect_api()
     try:
-        result = inspect.mate_targets(
+        result = inspect.align_targets(
             args.entry,
             args.moving,
             args.target,
@@ -314,7 +315,7 @@ def run_mate(args: argparse.Namespace) -> int:
             "errors": [inspect.cad_ref_error_payload(exc)],
         }
 
-    _emit_result(args, result, _format_mate_text)
+    _emit_result(args, result, _format_align_text)
     return 0 if bool(result.get("ok")) else 2
 
 
@@ -411,8 +412,8 @@ def inspect_command_result(argv: Sequence[str]) -> tuple[int, dict[str, object]]
             result = _inspect_api().inspect_target_frame(args.entry, args.selector)
         elif args.command == "measure":
             result = _inspect_api().measure_targets(args.entry, args.from_selector, args.to_selector, axis=args.axis)
-        elif args.command == "mate":
-            result = _inspect_api().mate_targets(
+        elif args.command == "align":
+            result = _inspect_api().align_targets(
                 args.entry,
                 args.moving,
                 args.target,
@@ -572,13 +573,13 @@ def _format_measure_text(result: dict[str, object], *, quiet: bool, verbose: boo
     return "\n".join(lines)
 
 
-def _format_mate_text(result: dict[str, object], *, quiet: bool, verbose: bool) -> str:
+def _format_align_text(result: dict[str, object], *, quiet: bool, verbose: bool) -> str:
     if not result.get("ok"):
         return _format_errors(result)
-    mate = result.get("mate") if isinstance(result.get("mate"), dict) else {}
-    lines = [f"mode={result.get('mode')} axis={result.get('axis')} translation={mate.get('translationVector')}"]
+    alignment = result.get("alignment") if isinstance(result.get("alignment"), dict) else {}
+    lines = [f"mode={result.get('mode')} axis={result.get('axis')} translation={alignment.get('translationVector')}"]
     if verbose and not quiet:
-        lines.append(f"transformTranslationDelta={mate.get('transformTranslationDelta')}")
+        lines.append(f"transformTranslationDelta={alignment.get('transformTranslationDelta')}")
     return "\n".join(lines)
 
 

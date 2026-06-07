@@ -110,6 +110,7 @@ class LoadedStepScene:
     source_hash: str | None = None
     mesh_signature: tuple[float, float, bool] | None = None
     glb_mesh_payloads: dict[tuple[object, ...], Any] = field(default_factory=dict)
+    assembly_mates: list[dict[str, Any]] = field(default_factory=list)
     export_shape: Any | None = None
     doc: Any | None = None
 
@@ -2586,6 +2587,9 @@ def extract_selectors_from_scene(
         step_hash = _scene_step_hash(scene)
     if step_hash:
         manifest["stepHash"] = step_hash
+    assembly_mates = getattr(scene, "assembly_mates", None)
+    if isinstance(assembly_mates, list) and assembly_mates:
+        manifest["assemblyMates"] = assembly_mates
 
     if profile != SelectorProfile.SUMMARY:
         if profile == SelectorProfile.ARTIFACT:

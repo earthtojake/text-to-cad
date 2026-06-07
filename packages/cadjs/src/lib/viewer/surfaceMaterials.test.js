@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as THREE from "three";
+import { CAD_DISPLAY_MODE } from "../../common/displaySettings.js";
 import {
   applyMaterialSettingsToRecord,
   createMaterialFillColor,
@@ -142,4 +143,45 @@ test("fill colors and record material settings preserve override semantics", () 
   assert.equal(record.baseEmissiveIntensity, 0.8);
   assert.equal(record.material.emissiveIntensity, 0.8);
   assert.ok(record.material.version > initialMaterialVersion);
+});
+
+test("record material settings preserve display-mode surface opacity", () => {
+  const transparentMaterial = new THREE.MeshPhysicalMaterial({ color: "#000000" });
+  const transparentRecord = {
+    material: transparentMaterial,
+    hasVertexColors: false,
+    fillIndex: 0
+  };
+
+  applyMaterialSettingsToRecord(THREE, transparentRecord, {
+    defaultColor: "#445566",
+    opacity: 1
+  }, {
+    displayMode: CAD_DISPLAY_MODE.TRANSPARENT
+  });
+
+  assert.equal(transparentRecord.baseOpacity, 0.22);
+  assert.equal(transparentRecord.material.opacity, 0.22);
+  assert.equal(transparentRecord.material.transparent, true);
+  assert.equal(transparentRecord.material.depthWrite, false);
+
+  const wireframeMaterial = new THREE.MeshPhysicalMaterial({ color: "#000000" });
+  const wireframeRecord = {
+    material: wireframeMaterial,
+    hasVertexColors: true,
+    fillIndex: 0
+  };
+
+  applyMaterialSettingsToRecord(THREE, wireframeRecord, {
+    defaultColor: "#445566",
+    opacity: 1
+  }, {
+    displayMode: CAD_DISPLAY_MODE.WIREFRAME
+  });
+
+  assert.equal(wireframeRecord.useVertexColors, false);
+  assert.equal(wireframeRecord.baseOpacity, 0.035);
+  assert.equal(wireframeRecord.material.opacity, 0.035);
+  assert.equal(wireframeRecord.material.transparent, true);
+  assert.equal(wireframeRecord.material.depthWrite, false);
 });

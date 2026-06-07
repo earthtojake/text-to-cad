@@ -28,6 +28,70 @@ export function assemblyRootFromTopology(topologyManifest) {
   return root && typeof root === "object" ? root : null;
 }
 
+function toVectorArray(value) {
+  if (!Array.isArray(value) || value.length < 3) {
+    return null;
+  }
+  const vector = value.slice(0, 3).map((component) => Number(component));
+  return vector.every((component) => Number.isFinite(component)) ? vector : null;
+}
+
+function normalizeMateEndpoint(endpoint) {
+  if (!endpoint || typeof endpoint !== "object") {
+    return null;
+  }
+  const result = {
+    part: String(endpoint.part || "").trim(),
+    frame: String(endpoint.frame || "").trim()
+  };
+  const position = toVectorArray(endpoint.position);
+  const orientation = toVectorArray(endpoint.orientation);
+  if (position) {
+    result.position = position;
+  }
+  if (orientation) {
+    result.orientation = orientation;
+  }
+  const axes = endpoint.axes && typeof endpoint.axes === "object" ? endpoint.axes : null;
+  if (axes) {
+    const normalizedAxes = {};
+    for (const key of ["x", "y", "z"]) {
+      const axis = toVectorArray(axes[key]);
+      if (axis) {
+        normalizedAxes[key] = axis;
+      }
+    }
+    if (Object.keys(normalizedAxes).length) {
+      result.axes = normalizedAxes;
+    }
+  }
+  return result.position || result.orientation || result.part || result.frame ? result : null;
+}
+
+export function assemblyMatesFromTopology(topologyManifest) {
+  const mates = topologyManifest?.assemblyMates;
+  if (!Array.isArray(mates)) {
+    return [];
+  }
+  return mates
+    .filter((mate) => mate && typeof mate === "object")
+    .map((mate, index) => {
+      const id = String(mate.id || `m${index + 1}`).trim() || `m${index + 1}`;
+      return {
+        id,
+        label: String(mate.label || id).trim() || id,
+        sourceLabel: String(mate.sourceLabel || mate.name || "").trim(),
+        type: String(mate.type || mate.relation || "mate").trim(),
+        relation: String(mate.relation || mate.type || "mate").trim(),
+        fixed: String(mate.fixed || "").trim(),
+        moving: String(mate.moving || "").trim(),
+        parameters: mate.parameters && typeof mate.parameters === "object" ? mate.parameters : {},
+        fixedEndpoint: normalizeMateEndpoint(mate.fixedEndpoint),
+        movingEndpoint: normalizeMateEndpoint(mate.movingEndpoint)
+      };
+    });
+}
+
 export function flattenAssemblyLeafParts(root) {
   const leafParts = [];
   const stack = root ? [root] : [];
@@ -461,6 +525,7 @@ export function buildSelfContainedAssemblyMeshData(topologyManifest, meshData) {
     parts,
     bounds: mergeBounds(parts.map((part) => part.bounds)) || meshData?.bounds,
     assemblyRoot,
+    assemblyMates: assemblyMatesFromTopology(topologyManifest),
     meshlessLeafPartIds,
     partTransformsBaked: true,
     has_source_colors: hasSourceColors

@@ -3,12 +3,14 @@ import { test } from "node:test";
 
 import {
   buildAssemblyPartCopyText,
+  buildAssemblyMateCopyText,
   buildNormalizedReferenceState,
   buildReferenceCacheKey,
   buildSelectionCopyButtonLabel,
   buildSelectionCopyPayload,
   buildWholeStepEntryCopyReference,
   cadRefQueryHasKnownEntry,
+  canonicalCadRefCopyText,
   collectCadRefSelectionRequest,
   computeNextSelectionIds,
   copySelectedReferenceText,
@@ -93,17 +95,17 @@ test("reference state normalization trims reference metadata and preserves cache
   assert.deepEqual(
     referenceState.references.map((reference) => reference.copyText),
     [
-      "#o1 Root",
-      "#s1 solid volume=1",
-      "#f1 plane area=4",
-      "#e1 line length=2"
+      "#o1",
+      "#s1",
+      "#f1",
+      "#e1"
     ]
   );
 });
 
 test("copy helpers merge selector refs and keep plain fallback lines", () => {
   const copyResult = copySelectedReferenceText([
-    { id: "f2", copyText: "#f2" },
+    { id: "f2", copyText: "#f2 plane area=12" },
     { id: "f1", copyText: "#f1" },
     { id: "f1-duplicate", copyText: "#f1" },
     { id: "plain", copyText: "plain reference" }
@@ -114,25 +116,40 @@ test("copy helpers merge selector refs and keep plain fallback lines", () => {
     references: [{ id: "e1", copyText: "#e1" }],
     parts: [
       { id: "part-b", occurrenceId: "o1.2", name: "Bracket" },
+      { occurrenceId: "o1.6", name: "triangular_prism" },
       { id: "", name: "Missing selector" }
     ],
     entry: STEP_ENTRY
   });
   assert.deepEqual(payload.lines, [
-    "#e1,o1.2"
+    "#e1,o1.2,o1.6"
   ]);
-  assert.equal(payload.copiedCount, 2);
+  assert.equal(payload.copiedCount, 3);
   assert.deepEqual(payload.missingPartNames, ["Missing selector"]);
 
   assert.equal(
     buildAssemblyPartCopyText({ id: "part-b", occurrenceId: "o1.2", name: "Bracket" }, STEP_ENTRY),
-    '#o1.2 Assembly part "Bracket"'
+    "#o1.2"
+  );
+  assert.equal(
+    buildAssemblyPartCopyText({ occurrenceId: "o1.6", name: "triangular_prism" }, STEP_ENTRY),
+    "#o1.6"
+  );
+  assert.equal(
+    buildAssemblyPartCopyText({ id: "internal-node", displaySelector: "o1.7.1.s1", name: "cube_top_pad" }, STEP_ENTRY),
+    "#o1.7.1.s1"
+  );
+  assert.equal(
+    buildAssemblyPartCopyText({ id: "cube_top_pad", name: "cube_top_pad" }, STEP_ENTRY),
+    ""
   );
   assert.deepEqual(buildWholeStepEntryCopyReference(STEP_ENTRY), {
     id: "step-entry:whole",
-    copyText: "# STEP file"
+    copyText: "#"
   });
-  assert.equal(buildSelectionCopyButtonLabel(payload.lines, { count: payload.copiedCount }), "Copy #e1,o1.2");
+  assert.equal(buildSelectionCopyButtonLabel(payload.lines, { count: payload.copiedCount }), "Copy #e1,o1.2,o1.6");
+  assert.equal(buildSelectionCopyButtonLabel(["#o1.7.1.s1 cube_top_pad solid volume=490"]), "Copy #o1.7.1.s1");
+  assert.equal(canonicalCadRefCopyText("#o1.7.1.f4 plane area=35"), "#o1.7.1.f4");
   assert.equal(buildSelectionCopyButtonLabel([]), "Copy refs");
 });
 
@@ -150,6 +167,7 @@ test("selector ref query helpers classify and resolve selected references and pa
     hasWholeEntryToken: false,
     selectors: ["o1.2", "o1.2.f1"],
     needsParts: true,
+    needsMates: false,
     needsReferences: true
   });
 
@@ -176,6 +194,53 @@ test("selector ref query helpers classify and resolve selected references and pa
   assert.deepEqual(resolved.selectedPartIds, ["part-b"]);
   assert.equal(resolved.inspectedAssemblyNodeId, "");
   assert.deepEqual(resolved.expandedAssemblyPartIds, ["part-b", "part-a"]);
+});
+
+test("selector ref query helpers copy and resolve assembly mate refs", () => {
+  const assemblyEntry = {
+    ...STEP_ENTRY,
+    kind: "assembly"
+  };
+  const mate = {
+    id: "m1",
+    label: "m1",
+    sourceLabel: "block mate",
+    type: "face_to_face",
+    fixed: "block_pocket_floor:offset",
+    moving: "bottom_center"
+  };
+  const mateCopyText = buildAssemblyMateCopyText(mate, assemblyEntry);
+  assert.equal(
+    mateCopyText,
+    "#m1"
+  );
+
+  const payload = buildSelectionCopyPayload({
+    mates: [mate],
+    entry: assemblyEntry
+  });
+  assert.deepEqual(payload.lines, [
+    "#m1"
+  ]);
+  assert.equal(payload.copiedCount, 1);
+  assert.deepEqual(collectCadRefSelectionRequest(payload.lines, assemblyEntry), {
+    hasMatchingToken: true,
+    hasWholeEntryToken: false,
+    selectors: ["m1"],
+    needsParts: false,
+    needsMates: true,
+    needsReferences: false
+  });
+
+  const resolved = resolveCadRefSelection({
+    cadRefs: payload.lines,
+    entry: assemblyEntry,
+    isAssemblyView: true,
+    assemblyMates: [mate]
+  });
+  assert.deepEqual(resolved.selectedMateIds, [mate.id]);
+  assert.deepEqual(resolved.selectedPartIds, []);
+  assert.deepEqual(resolved.selectedReferenceIds, []);
 });
 
 test("selector ref query resolves nested occurrence selection without entering focus", () => {

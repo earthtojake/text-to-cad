@@ -404,7 +404,7 @@ function buildReference({
     label: `${selectorTypeLabel(selectorType)} ${displaySelector}`,
     summary,
     shortSummary: summary,
-    copyText: summary ? `${copyText} ${summary}` : copyText,
+    copyText,
     partId,
     occurrenceId: occurrenceIdForReference(selectorType, row, singleOccurrenceId, remapOccurrenceId, remapOccurrencePrefix),
     shapeId: selectorWithRemappedOccurrence(row.shapeId, singleOccurrenceId, remapOccurrenceId, remapOccurrencePrefix),
