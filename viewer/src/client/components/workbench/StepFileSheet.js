@@ -51,6 +51,7 @@ const treeRowActionButtonClasses = "h-5 w-5 rounded-sm px-0 text-current/60 shad
 const treeRowContentClasses = "h-7 min-w-0 text-xs font-normal";
 const treeGroupLabelClasses = "px-1.5 pb-1 pt-2 text-[10px] font-medium text-sidebar-foreground/45";
 const treeGlyphIconClasses = "size-3.5 shrink-0 text-current/60";
+const treeMateIconSlotClasses = "grid h-5 w-5 shrink-0 place-items-center text-current/60";
 const treeDepthIndentPx = 22;
 const treeDepthGuideOffsetPx = 14;
 const treeDepthMaxPx = 128;
@@ -1269,7 +1270,9 @@ export default function StepFileSheet({
                               }
                             }}
                           >
-                            <Link2 className={treeGlyphIconClasses} strokeWidth={1.8} aria-hidden="true" />
+                            <span className={treeMateIconSlotClasses} aria-hidden="true">
+                              <Link2 className="size-3.5" strokeWidth={1.8} />
+                            </span>
                             <span className="min-w-0 flex-1 truncate font-medium leading-4">
                               {mate.label}
                             </span>
