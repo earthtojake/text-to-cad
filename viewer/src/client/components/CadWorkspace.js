@@ -266,6 +266,12 @@ import {
   resolveAssemblyPickedPartId
 } from "cadjs/lib/assembly/meshData";
 import {
+  assemblyNodeContainsNode,
+  assemblyPathToNode,
+  minimalAssemblyIsolationNodeIds,
+  selectableTreeNodeIdsForIsolation
+} from "@/workbench/assemblyIsolation";
+import {
   assignStepTreeTopologyReferencePartIds,
   buildStepTreeRoot,
   buildStepTreeRootWithTopology,
@@ -754,40 +760,6 @@ function findStepTreeTopologyNodeIdForReference(root, referenceId) {
   return "";
 }
 
-function assemblyPathToNode(root, nodeId) {
-  const normalizedNodeId = String(nodeId || "").trim();
-  if (!root || !normalizedNodeId) {
-    return [];
-  }
-  const rootId = rootAssemblyInspectionNodeId(root);
-  if (normalizedNodeId === rootId || normalizedNodeId === "root") {
-    return [root];
-  }
-  const stack = [{ node: root, path: [root] }];
-  while (stack.length) {
-    const { node, path } = stack.pop();
-    if (String(node?.id || "").trim() === normalizedNodeId) {
-      return path;
-    }
-    const children = Array.isArray(node?.children) ? node.children : [];
-    for (let index = children.length - 1; index >= 0; index -= 1) {
-      const child = children[index];
-      stack.push({ node: child, path: [...path, child] });
-    }
-  }
-  return [];
-}
-
-function assemblyNodeContainsNode(root, ancestorNodeId, descendantNodeId) {
-  const normalizedAncestorNodeId = String(ancestorNodeId || "").trim();
-  const normalizedDescendantNodeId = String(descendantNodeId || "").trim();
-  if (!root || !normalizedAncestorNodeId || !normalizedDescendantNodeId) {
-    return false;
-  }
-  return assemblyPathToNode(root, normalizedDescendantNodeId)
-    .some((node) => String(node?.id || "").trim() === normalizedAncestorNodeId);
-}
-
 function focusedAssemblyInteractionNodeId(root, nodeIds) {
   if (!root || !Array.isArray(nodeIds) || !nodeIds.length) {
     return "";
@@ -812,35 +784,6 @@ function focusedAssemblyInteractionNodeId(root, nodeIds) {
     bestDepth = path.length;
   }
   return bestNodeId;
-}
-
-function selectableTreeNodeIdsForIsolation(root, isolatedNodeIds, rootId) {
-  if (!root) {
-    return [];
-  }
-  const rootNodeId = String(rootId || "").trim();
-  const validNodeIds = (nodes) => flattenAssemblyNodes(nodes)
-    .map((node) => String(node?.id || "").trim())
-    .filter((nodeId) => nodeId && nodeId !== rootNodeId);
-  const normalizedIsolatedNodeIds = uniqueStringList(
-    (Array.isArray(isolatedNodeIds) ? isolatedNodeIds : [])
-      .map((nodeId) => String(nodeId || "").trim())
-      .filter(Boolean)
-  );
-  if (!normalizedIsolatedNodeIds.length) {
-    return validNodeIds(root);
-  }
-  const selectable = new Set();
-  for (const nodeId of normalizedIsolatedNodeIds) {
-    const node = findAssemblyNode(root, nodeId);
-    for (const selectableNodeId of validNodeIds(node)) {
-      if (selectableNodeId === nodeId) {
-        continue;
-      }
-      selectable.add(selectableNodeId);
-    }
-  }
-  return [...selectable];
 }
 
 function childAssemblyNodeIdForPickedLeaf(node, leafPartId) {
@@ -2811,16 +2754,10 @@ export default function CadWorkspace({
     if (!isAssemblyView || !assemblyRoot || !isolatedAssemblyNodeIds.length) {
       return [];
     }
-    const validNodeIds = new Set(assemblyNodes
-      .map((node) => String(node?.id || "").trim())
-      .filter((nodeId) => nodeId && nodeId !== assemblyRootNodeId)
-    );
-    return uniqueStringList(isolatedAssemblyNodeIds
-      .map((nodeId) => String(nodeId || "").trim())
-      .filter((nodeId) => validNodeIds.has(nodeId))
-    );
+    return minimalAssemblyIsolationNodeIds(assemblyRoot, isolatedAssemblyNodeIds, {
+      rootId: assemblyRootNodeId
+    });
   }, [
-    assemblyNodes,
     assemblyRoot,
     assemblyRootNodeId,
     isolatedAssemblyNodeIds,
@@ -2835,20 +2772,6 @@ export default function CadWorkspace({
     () => (isAssemblyView ? focusedAssemblyInteractionNodeId(assemblyRoot, focusedAssemblyNodeIds) : ""),
     [assemblyRoot, focusedAssemblyNodeIds, isAssemblyView]
   );
-  const focusedAssemblyPartId = useMemo(() => {
-    if (!isAssemblyView || !assemblyRoot) {
-      return "";
-    }
-    const focusedPartIds = focusedAssemblyNodeIds.filter((nodeId) => {
-      const node = findAssemblyNode(assemblyRoot, nodeId);
-      return String(node?.nodeType || "").trim() === "part";
-    });
-    return focusedPartIds.length === 1 ? focusedPartIds[0] : "";
-  }, [
-    assemblyRoot,
-    focusedAssemblyNodeIds,
-    isAssemblyView
-  ]);
   const assemblyInteractionNodeId = focusedAssemblyInteractionId || assemblyCurrentNodeId;
   const assemblyInteractionNode = useMemo(
     () => findAssemblyNode(assemblyRoot, assemblyInteractionNodeId) || assemblyRoot,
@@ -2913,20 +2836,16 @@ export default function CadWorkspace({
       setIsolatedAssemblyNodeIds((current) => (current.length ? [] : current));
       return;
     }
-    const validNodeIds = new Set(validAssemblySelectionIds.filter((id) => id && id !== assemblyRootNodeId));
     setIsolatedAssemblyNodeIds((current) => {
-      const next = uniqueStringList(
-        current
-          .map((nodeId) => String(nodeId || "").trim())
-          .filter((nodeId) => validNodeIds.has(nodeId))
-      );
+      const next = minimalAssemblyIsolationNodeIds(assemblyRoot, current, {
+        rootId: assemblyRootNodeId
+      });
       return orderedStringListEqual(next, current) ? current : next;
     });
   }, [
     assemblyRoot,
     assemblyRootNodeId,
-    isAssemblyView,
-    validAssemblySelectionIds
+    isAssemblyView
   ]);
   const validAssemblyLeafIds = useMemo(
     () => stepLeafParts.map((part) => String(part?.id || "").trim()).filter(Boolean),
@@ -3184,10 +3103,10 @@ export default function CadWorkspace({
     }
     setDxfBendSettings((current) => normalizeDxfBendSettings(selectedDxfData, current));
   }, [selectedDxfData, selectedDxfFileRef]);
-  const focusedAssemblyPartTopologyActive = Boolean(isAssemblyView && focusedAssemblyPartId);
+  const focusedAssemblyTopologyActive = Boolean(isAssemblyView && focusedAssemblyNodeIds.length);
   const viewerInAssemblyMode =
     isAssemblyView &&
-    !focusedAssemblyPartTopologyActive &&
+    !focusedAssemblyTopologyActive &&
     String(assemblyCurrentNode?.nodeType || "assembly").trim() === "assembly";
   const viewerMode = viewerInAssemblyMode ? "assembly" : "part";
   const drawModeActive = selectedEntrySourceFormat === RENDER_FORMAT.STEP && tabToolMode === TAB_TOOL_MODE.DRAW;
@@ -5191,29 +5110,45 @@ export default function CadWorkspace({
     selectedReferencesMatch,
     stepTreeRoot
   ]);
-  const focusedAssemblyPartReferences = useMemo(() => {
-    if (!isAssemblyView || !focusedAssemblyPartId) {
+  const focusedAssemblyRenderPartIds = useMemo(() => {
+    if (!isAssemblyView || !focusedAssemblyNodeIds.length) {
       return [];
     }
+    return uniqueStringList(
+      focusedAssemblyNodeIds
+        .flatMap((nodeId) => renderPartIdsForAssemblySelection(nodeId))
+        .map((partId) => String(partId || "").trim())
+        .filter(Boolean)
+    );
+  }, [
+    focusedAssemblyNodeIds,
+    isAssemblyView,
+    renderPartIdsForAssemblySelection
+  ]);
+  const focusedAssemblyPartReferences = useMemo(() => {
+    if (!isAssemblyView || !focusedAssemblyRenderPartIds.length) {
+      return [];
+    }
+    const focusedPartIdSet = new Set(focusedAssemblyRenderPartIds);
     return assemblyStepTreeTopologyReferences.filter((reference) => (
-      referencePartId(reference) === focusedAssemblyPartId &&
+      focusedPartIdSet.has(referencePartId(reference)) &&
       isStepTopologyReference(reference)
     ));
   }, [
     assemblyStepTreeTopologyReferences,
-    focusedAssemblyPartId,
+    focusedAssemblyRenderPartIds,
     isAssemblyView,
     isStepTopologyReference,
     referencePartId
   ]);
   const effectiveVisibleReferences = useMemo(() => {
-    if (isAssemblyView && focusedAssemblyPartId) {
+    if (isAssemblyView && focusedAssemblyTopologyActive) {
       return focusedAssemblyPartReferences;
     }
     return visibleReferences;
   }, [
-    focusedAssemblyPartId,
     focusedAssemblyPartReferences,
+    focusedAssemblyTopologyActive,
     isAssemblyView,
     visibleReferences
   ]);
@@ -5319,7 +5254,7 @@ export default function CadWorkspace({
     viewerPickableVertices.length
   );
   const topologySelectionActive =
-    (isAssemblyView && focusedAssemblyPartTopologyActive) ||
+    (isAssemblyView && focusedAssemblyTopologyActive) ||
     topLevelReferenceSelectionActive;
   const referenceSelectionUnavailable = stepModuleTreeSelectionDisabled || (
     effectiveRenderFormat === RENDER_FORMAT.STEP &&
@@ -5577,19 +5512,9 @@ export default function CadWorkspace({
   ]);
   const effectiveHoveredReferenceId = String(viewerContextMenu?.referenceId || "").trim() || hoveredReferenceId;
   const viewerFocusedPartIds = useMemo(() => {
-    if (isAssemblyView && focusedAssemblyNodeIds.length) {
-      return uniqueStringList(
-        focusedAssemblyNodeIds
-          .flatMap((nodeId) => renderPartIdsForAssemblySelection(nodeId))
-          .map((partId) => String(partId || "").trim())
-          .filter(Boolean)
-      );
-    }
-    return [];
+    return focusedAssemblyRenderPartIds;
   }, [
-    focusedAssemblyNodeIds,
-    isAssemblyView,
-    renderPartIdsForAssemblySelection
+    focusedAssemblyRenderPartIds
   ]);
   const viewerHiddenPartIds = useMemo(() => {
     return hiddenPartIds;
@@ -6822,20 +6747,21 @@ export default function CadWorkspace({
     if (!isAssemblyView || !assemblyRoot) {
       return;
     }
-    const normalizedNodeIds = uniqueStringList(
+    const requestedNodeIds = uniqueStringList(
       (Array.isArray(nodeId) ? nodeId : [nodeId])
         .map((id) => String(id || "").trim())
         .filter(Boolean)
     );
-    const targetNodes = normalizedNodeIds
-      .filter((id) => id !== assemblyRootNodeId)
+    const targetNodeIds = minimalAssemblyIsolationNodeIds(assemblyRoot, requestedNodeIds, {
+      rootId: assemblyRootNodeId
+    });
+    const targetNodes = targetNodeIds
       .map((id) => ({ id, node: findAssemblyNode(assemblyRoot, id) }))
       .filter(({ node }) => Boolean(node));
     if (!targetNodes.length) {
       setIsolatedAssemblyNodeIds((current) => (current.length ? [] : current));
       return;
     }
-    const targetNodeIds = targetNodes.map(({ id }) => id);
     const targetLeafIds = targetNodes.flatMap(({ node }) => descendantLeafPartIds(node))
       .map((id) => String(id || "").trim())
       .filter(Boolean);
