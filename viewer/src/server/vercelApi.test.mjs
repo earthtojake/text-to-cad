@@ -96,15 +96,17 @@ test("hosted CAD API ignores local dir query params", async () => {
 });
 
 
-test("hosted CAD API redirects catalog reads to public Blob URLs when configured", async () => {
+test("hosted CAD API serves catalog through the backend when a public Blob URL is configured", async () => {
+  const calls = [];
   const backend = {
     kind: "vercel-blob",
     catalogPath: "models2/catalog-0.1.3.json",
-    readCatalog: async () => {
-      throw new Error("catalog should be served by public Blob redirect");
+    readCatalog: async (request) => {
+      calls.push(request);
+      return { schemaVersion: 4, entries: [{ file: "robots/tom/robot_arm.urdf" }] };
     },
   };
-  const req = { method: "GET", url: "/api/cad/catalog" };
+  const req = { method: "GET", url: "/api/cad/catalog?file=robots%2Ftom%2Frobot_arm.urdf" };
   const res = createResponse();
 
   await handleHostedCadApi(req, res, {
@@ -118,13 +120,16 @@ test("hosted CAD API redirects catalog reads to public Blob URLs when configured
     },
   });
 
-  assert.equal(res.statusCode, 307);
-  assert.equal(
-    res.getHeader("location"),
-    "https://tbc5qqrytrzknlqz.public.blob.vercel-storage.com/models2/catalog-0.1.3.json"
-  );
-  assert.equal(res.getHeader("cache-control"), "no-store");
-  assert.equal(res.getHeader("access-control-allow-origin"), "*");
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.getHeader("location"), undefined);
+  assert.equal(res.getHeader("content-type"), "application/json; charset=utf-8");
+  assert.deepEqual(calls, [
+    { rootDir: "", fileRef: "robots/tom/robot_arm.urdf" },
+  ]);
+  assert.deepEqual(JSON.parse(res.body), {
+    schemaVersion: 4,
+    entries: [{ file: "robots/tom/robot_arm.urdf" }],
+  });
 });
 
 

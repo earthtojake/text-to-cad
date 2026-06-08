@@ -162,6 +162,25 @@ test("parseSdf reads SO101-style model-level SDF robot data", () => {
   assert.equal(sdfData.srdf, null);
 });
 
+test("parseSdf preserves remote origins when resolving hosted mesh URIs", () => {
+  const root = sdfRoot([
+    el("model", { name: "hosted_robot" }, [
+      link("base_link")
+    ])
+  ]);
+
+  const sdfData = parseWithRoot(root, "https://blob.example.test/models2/robots/so101/robot.sdf");
+
+  assert.equal(
+    sdfData.links[0].visuals[0].meshUrl,
+    "https://blob.example.test/models2/robots/so101/meshes/base_link.stl"
+  );
+  assert.equal(
+    sdfData.links[0].collisions[0].meshUrl,
+    "https://blob.example.test/models2/robots/so101/meshes/base_link_collision.stl"
+  );
+});
+
 test("parseSdf preserves CAD occurrence ids encoded in visual names", () => {
   const root = sdfRoot([
     el("model", { name: "sample" }, [

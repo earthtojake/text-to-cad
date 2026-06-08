@@ -98,6 +98,30 @@ function normalizeAbsoluteUrl(url) {
   return new URL(url, globalThis.window?.location?.href || "http://localhost/").toString();
 }
 
+function urlHasExplicitOrigin(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return Boolean(url.origin && url.origin !== "null");
+  } catch {
+    return false;
+  }
+}
+
+function assetRefHasExplicitOrigin(value) {
+  const rawValue = String(value || "").trim();
+  if (!rawValue || rawValue.startsWith("package://")) {
+    return false;
+  }
+  return urlHasExplicitOrigin(rawValue);
+}
+
+function resolvedMeshUrlString(resolvedUrl, { filename, sourceUrl }) {
+  if (urlHasExplicitOrigin(sourceUrl) || assetRefHasExplicitOrigin(filename)) {
+    return resolvedUrl.toString();
+  }
+  return `${resolvedUrl.pathname}${resolvedUrl.search}`;
+}
+
 function normalizeFileRefSegments(value) {
   const rawValue = String(value || "").replace(/\\/g, "/");
   const absolute = rawValue.startsWith("/");
@@ -163,7 +187,7 @@ function resolveMeshUrl(filename, sourceUrl) {
   } else {
     resolvedUrl = new URL(filename, normalizedSourceUrl);
   }
-  return `${resolvedUrl.pathname}${resolvedUrl.search}`;
+  return resolvedMeshUrlString(resolvedUrl, { filename, sourceUrl });
 }
 
 function labelForMeshFilename(filename) {

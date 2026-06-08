@@ -87,6 +87,36 @@ test("parseUrdf resolves relative mesh paths through local CAD asset URLs", () =
   );
 });
 
+test("parseUrdf preserves remote origins when resolving hosted mesh paths", () => {
+  const robot = new FakeElement("robot", { name: "tom" }, [
+    new FakeElement("link", { name: "base_link" }, [
+      new FakeElement("visual", {}, [
+        new FakeElement("geometry", {}, [
+          new FakeElement("mesh", { filename: "STL/sts3250.stl" })
+        ])
+      ]),
+      new FakeElement("visual", {}, [
+        new FakeElement("geometry", {}, [
+          new FakeElement("mesh", { filename: "https://cdn.example.test/meshes/tool.stl" })
+        ])
+      ])
+    ])
+  ]);
+
+  const urdfData = withFakeDomParser(new FakeDocument(robot), () => parseUrdf("<robot />", {
+    sourceUrl: "https://blob.example.test/models2/robots/tom/robot_arm.urdf"
+  }));
+
+  assert.equal(
+    urdfData.links[0].visuals[0].meshUrl,
+    "https://blob.example.test/models2/robots/tom/STL/sts3250.stl"
+  );
+  assert.equal(
+    urdfData.links[0].visuals[1].meshUrl,
+    "https://cdn.example.test/meshes/tool.stl"
+  );
+});
+
 test("parseUrdf accepts primitive box visuals", () => {
   const robot = new FakeElement("robot", { name: "primitive_robot" }, [
     new FakeElement("material", { name: "aluminum" }, [

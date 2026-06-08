@@ -82,16 +82,6 @@ export async function handleHostedCadApi(req, res, {
     return;
   }
 
-  const blobConfig = vercelBlobConfigFromEnv(env);
-  if (req.method === "GET" && normalizedCadPath === "/__cad/catalog" && blobConfig.catalogUrl) {
-    res.statusCode = 307;
-    res.setHeader("location", blobConfig.catalogUrl);
-    res.setHeader("cache-control", "no-store");
-    res.setHeader("access-control-allow-origin", "*");
-    res.end("");
-    return;
-  }
-
   const originalUrl = req.url || "/";
   const originalRequestUrl = new URL(originalUrl, "http://localhost");
   originalRequestUrl.searchParams.delete("dir");
