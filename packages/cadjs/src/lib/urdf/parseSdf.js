@@ -149,6 +149,22 @@ function normalizeAbsoluteUrl(url) {
   return new URL(String(url || "/"), globalThis.window?.location?.href || "http://localhost/").toString();
 }
 
+function urlHasExplicitOrigin(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return Boolean(url.origin && url.origin !== "null");
+  } catch {
+    return false;
+  }
+}
+
+function resolvedMeshUrlString(resolvedUrl, { sourceUrl }) {
+  if (urlHasExplicitOrigin(sourceUrl)) {
+    return resolvedUrl.toString();
+  }
+  return `${resolvedUrl.pathname}${resolvedUrl.search}`;
+}
+
 function resolveMeshUrl(uri, sourceUrl) {
   const rawUri = String(uri || "").trim();
   if (!rawUri) {
@@ -163,7 +179,7 @@ function resolveMeshUrl(uri, sourceUrl) {
   } else {
     resolvedUrl = new URL(rawUri, normalizedSourceUrl);
   }
-  return `${resolvedUrl.pathname}${resolvedUrl.search}`;
+  return resolvedMeshUrlString(resolvedUrl, { sourceUrl });
 }
 
 function labelForMeshUri(uri) {
