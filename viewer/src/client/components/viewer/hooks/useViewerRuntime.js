@@ -125,9 +125,33 @@ export function useViewerRuntime({
 
       const scene = new THREE.Scene();
 
-      const camera = new THREE.PerspectiveCamera(48, width / height, 0.1, 50000);
+      const syncCameraViewport = (targetCamera, nextWidth = width, nextHeight = height) => {
+        if (!targetCamera) {
+          return;
+        }
+        const aspect = Math.max(nextWidth, 1) / Math.max(nextHeight, 1);
+        if (targetCamera.isPerspectiveCamera) {
+          targetCamera.aspect = aspect;
+        } else if (targetCamera.isOrthographicCamera) {
+          const halfHeight = Math.max(Number(targetCamera.userData?.cadHalfHeight) || 120, 1e-3);
+          targetCamera.left = -halfHeight * aspect;
+          targetCamera.right = halfHeight * aspect;
+          targetCamera.top = halfHeight;
+          targetCamera.bottom = -halfHeight;
+        }
+        targetCamera.updateProjectionMatrix?.();
+      };
+
+      const perspectiveCamera = new THREE.PerspectiveCamera(48, width / height, 0.1, 50000);
+      const orthographicCamera = new THREE.OrthographicCamera(-120, 120, 120, -120, 0.1, 50000);
+      orthographicCamera.userData.cadHalfHeight = 120;
+      const camera = perspectiveCamera;
       camera.up.set(0, 0, 1);
       camera.position.set(180, -180, 120);
+      orthographicCamera.up.copy(camera.up);
+      orthographicCamera.position.copy(camera.position);
+      syncCameraViewport(perspectiveCamera, width, height);
+      syncCameraViewport(orthographicCamera, width, height);
 
       const renderer = createWebGlRenderer(THREE);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -340,7 +364,7 @@ export function useViewerRuntime({
           emitPerspectiveChange(runtimeRef.current);
         }
         const previewOrbitActive = !!runtimeRef.current?.previewOrbitEnabled;
-        renderer.render(scene, camera);
+        renderer.render(scene, runtimeRef.current?.camera || camera);
         const nextActiveFace = getActiveViewPlaneFaceId(runtimeRef.current);
         if (nextActiveFace !== activeViewPlaneFaceRef.current) {
           activeViewPlaneFaceRef.current = nextActiveFace;
@@ -393,8 +417,8 @@ export function useViewerRuntime({
         const h = container.clientHeight || 640;
         applyRenderQuality(interactionState.pixelRatioCap);
         renderer.setSize(w, h);
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
+        syncCameraViewport(perspectiveCamera, w, h);
+        syncCameraViewport(orthographicCamera, w, h);
         applyCameraFrameInsets?.(runtimeRef.current, frameInsetsRef?.current, { updateProjection: false });
         syncScreenSpaceLineMaterials();
         syncDrawingCanvasSize(runtimeRef.current);
@@ -531,6 +555,10 @@ export function useViewerRuntime({
         THREE,
         scene,
         camera,
+        perspectiveCamera,
+        orthographicCamera,
+        projection: "perspective",
+        syncCameraViewport,
         renderer,
         Line2,
         LineGeometry,

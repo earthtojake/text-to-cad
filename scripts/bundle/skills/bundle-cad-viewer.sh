@@ -17,7 +17,8 @@ VIEWER_CADPY_DIR="$VIEWER_DIR/packages/cadpy"
 VIEWER_IMPLICITJS_DIR="$VIEWER_DIR/packages/implicitjs"
 RUNTIME_DIR="$REPO_ROOT/skills/cad-viewer/scripts/viewer"
 CHECK_DIR="${CAD_VIEWER_RUNTIME_CHECK_DIR:-${RENDER_VIEWER_RUNTIME_CHECK_DIR:-$REPO_ROOT/tmp/cad-viewer-runtime-check}}"
-ESBUILD_BIN="$VIEWER_DIR/node_modules/.bin/esbuild"
+VIEWER_PACKAGE_MANAGER="${CAD_VIEWER_PACKAGE_MANAGER:-}"
+ESBUILD_BIN="${CAD_VIEWER_ESBUILD_BIN:-}"
 RELEASE_VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/plugins/cad/VERSION")"
 
 usage() {
@@ -33,7 +34,7 @@ Options:
   --check     Bundle into tmp/ and fail if viewer package copies or
               skills/cad-viewer/scripts/viewer are stale.
   --clean     Remove generated package copies and temporary check directories first.
-  --no-build  Reuse the current viewer/dist instead of running npm run build.
+  --no-build  Reuse the current viewer/dist instead of rebuilding the viewer.
               The existing dist must already include client sourcemaps.
   -h, --help  Show this help.
 EOF
@@ -77,6 +78,55 @@ require_command() {
     echo "$1 is required to build the CAD Viewer runtime." >&2
     exit 1
   fi
+}
+
+resolve_viewer_package_manager() {
+  if [ -n "$VIEWER_PACKAGE_MANAGER" ]; then
+    echo "$VIEWER_PACKAGE_MANAGER"
+    return
+  fi
+  if command -v pnpm >/dev/null 2>&1; then
+    echo "pnpm"
+    return
+  fi
+  echo "npm"
+}
+
+run_viewer_build() {
+  local package_manager
+  package_manager="$(resolve_viewer_package_manager)"
+  require_command "$package_manager"
+  case "$package_manager" in
+    pnpm)
+      CI=true pnpm --dir "$VIEWER_DIR" run build --sourcemap true
+      ;;
+    npm)
+      npm --prefix "$VIEWER_DIR" run build -- --sourcemap true
+      ;;
+    *)
+      echo "Unsupported CAD Viewer package manager: $package_manager" >&2
+      echo "Set CAD_VIEWER_PACKAGE_MANAGER to pnpm or npm." >&2
+      exit 1
+      ;;
+  esac
+}
+
+resolve_esbuild_bin() {
+  if [ -n "$ESBUILD_BIN" ]; then
+    echo "$ESBUILD_BIN"
+    return
+  fi
+  if [ -x "$VIEWER_DIR/node_modules/.bin/esbuild" ]; then
+    echo "$VIEWER_DIR/node_modules/.bin/esbuild"
+    return
+  fi
+  local pnpm_esbuild_bin
+  pnpm_esbuild_bin="$(find "$VIEWER_DIR/node_modules/.pnpm" -path '*/node_modules/esbuild/bin/esbuild' -type f -perm -111 -print -quit 2>/dev/null || true)"
+  if [ -n "$pnpm_esbuild_bin" ]; then
+    echo "$pnpm_esbuild_bin"
+    return
+  fi
+  echo "$VIEWER_DIR/node_modules/.bin/esbuild"
 }
 
 require_client_sourcemaps() {
@@ -271,6 +321,20 @@ build_viewer_packages() {
   echo "Bundled ${VIEWER_IMPLICITJS_DIR#$REPO_ROOT/}"
 }
 
+ensure_viewer_cadjs_node_module_subpaths() {
+  local cadjs_node_module="$VIEWER_DIR/node_modules/cadjs"
+  if [ ! -d "$cadjs_node_module" ]; then
+    return
+  fi
+  local subpath
+  for subpath in common lib; do
+    if [ -d "$VIEWER_CADJS_DIR/src/$subpath" ] && [ ! -e "$cadjs_node_module/$subpath/stepSidecars.mjs" ] && [ ! -e "$cadjs_node_module/$subpath/pathUtils.mjs" ]; then
+      rm -rf "$cadjs_node_module/$subpath"
+      ln -s "$VIEWER_CADJS_DIR/src/$subpath" "$cadjs_node_module/$subpath"
+    fi
+  done
+}
+
 check_viewer_packages() {
   check_cadjs_package
   check_cadpy_package
@@ -367,7 +431,7 @@ build_runtime() {
 
   (
     cd "$REPO_ROOT"
-    "$ESBUILD_BIN" "$VIEWER_DIR/src/server/server.mjs" \
+    "$(resolve_esbuild_bin)" "$VIEWER_DIR/src/server/server.mjs" \
       --bundle \
       --format=esm \
       --platform=node \
@@ -403,7 +467,6 @@ check_runtime() {
   echo "CAD Viewer runtime is up to date."
 }
 
-require_command npm
 require_command rsync
 require_path "$CADJS_PACKAGE_DIR/package.json" "cadjs package"
 require_path "$CADJS_PACKAGE_DIR/src" "cadjs source"
@@ -412,7 +475,7 @@ require_path "$CADPY_PACKAGE_DIR/src/cadpy" "cadpy source"
 require_path "$IMPLICITJS_PACKAGE_DIR/package.json" "implicitjs package"
 require_path "$IMPLICITJS_PACKAGE_DIR/src" "implicitjs source"
 require_path "$VIEWER_DIR/package.json" "viewer package"
-require_path "$ESBUILD_BIN" "viewer esbuild binary; run npm install --prefix viewer"
+require_path "$(resolve_esbuild_bin)" "viewer esbuild binary; install viewer dependencies"
 
 if [ "$MODE" = "check" ]; then
   check_viewer_packages
@@ -429,7 +492,8 @@ if [ "$CLEAN" -eq 1 ]; then
 fi
 
 if [ "$BUILD" -eq 1 ]; then
-  npm --prefix "$VIEWER_DIR" run build -- --sourcemap true
+  ensure_viewer_cadjs_node_module_subpaths
+  run_viewer_build
 fi
 
 require_path "$VIEWER_DIR/dist/index.html" "viewer production bundle"

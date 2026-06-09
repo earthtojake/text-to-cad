@@ -1,5 +1,9 @@
 import { buildCadRefToken, parseCadRefToken } from "cadjs/lib/cadRefs.js";
 import {
+  CAMERA_PROJECTION,
+  normalizeCameraProjection
+} from "cadjs/lib/perspective.js";
+import {
   readStoredActiveCadDir,
   rememberActiveCadDir
 } from "./cadViewerDirectorySession.mjs";
@@ -8,6 +12,7 @@ import { normalizeViewerDefaultFile } from "../../shared/viewerConfig.mjs";
 const CAD_DIR_QUERY_PARAM = "dir";
 const CAD_QUERY_PARAM = "file";
 const CAD_REF_QUERY_PARAM = "refs";
+const CAD_PROJECTION_QUERY_PARAM = "projection";
 
 export function fileKey(entry) {
   return String(entry?.file || "").trim();
@@ -154,6 +159,28 @@ export function readCadRefQueryParams() {
   }
   const params = new URLSearchParams(window.location.search);
   return normalizeCadRefQueryParams(params.getAll(CAD_REF_QUERY_PARAM));
+}
+
+export function readViewerProjectionParam() {
+  if (typeof window === "undefined") {
+    return CAMERA_PROJECTION.PERSPECTIVE;
+  }
+  const params = new URLSearchParams(window.location.search);
+  return normalizeCameraProjection(params.get(CAD_PROJECTION_QUERY_PARAM));
+}
+
+export function writeViewerProjectionParam(projection, { history = "replace" } = {}) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const normalizedProjection = normalizeCameraProjection(projection);
+  const url = new URL(window.location.href);
+  if (normalizedProjection === CAMERA_PROJECTION.ORTHOGRAPHIC) {
+    url.searchParams.set(CAD_PROJECTION_QUERY_PARAM, normalizedProjection);
+  } else {
+    url.searchParams.delete(CAD_PROJECTION_QUERY_PARAM);
+  }
+  return writeUrl(url, { history });
 }
 
 export function cadRefQueryParamsFromUrl(urlValue, baseUrl = "") {

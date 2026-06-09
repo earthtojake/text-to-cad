@@ -70,6 +70,10 @@ import {
   normalizeExplodedViewSettings
 } from "cadjs/lib/displaySettings";
 import {
+  CAMERA_PROJECTION,
+  normalizeCameraProjection
+} from "cadjs/lib/perspective";
+import {
   buildStepClipPatch,
   clipAxisBounds,
   clipAxisPosition,
@@ -107,6 +111,11 @@ const DISPLAY_MODE_OPTIONS = [
   { value: CAD_DISPLAY_MODE.HIDDEN_LINES_REMOVED, label: "Lines", title: "Visible lines with hidden lines removed" },
   { value: CAD_DISPLAY_MODE.UNSHADED, label: "Flat", title: "Unshaded flat color" },
   { value: CAD_DISPLAY_MODE.WIREFRAME, label: "Wire", title: "Full wireframe" }
+];
+
+const PROJECTION_MODE_OPTIONS = [
+  { value: CAMERA_PROJECTION.PERSPECTIVE, label: "Perspective", title: "Depth projection with vanishing lines" },
+  { value: CAMERA_PROJECTION.ORTHOGRAPHIC, label: "Orthographic", title: "Parallel projection for CAD inspection" }
 ];
 
 const FLOOR_MODE_OPTIONS = [
@@ -1465,6 +1474,8 @@ function PositionPad({ value, onChange }) {
 export function DisplaySettingsSection({
   displaySettings,
   updateDisplaySettings,
+  viewerProjection = CAMERA_PROJECTION.PERSPECTIVE,
+  onViewerProjectionChange,
   clipBounds = null,
   showClip = false
 }) {
@@ -1504,6 +1515,7 @@ export function DisplaySettingsSection({
       };
     });
   };
+  const normalizedViewerProjection = normalizeCameraProjection(viewerProjection);
   const updateClipAxisOffset = (axis, nextOffset) => {
     const numericOffset = Number(nextOffset);
     const resolvedOffset = Number.isFinite(numericOffset) ? numericOffset : 0;
@@ -1633,6 +1645,14 @@ export function DisplaySettingsSection({
           </>
         ) : null}
       </ControlSubsection>
+
+      <Field label="Projection">
+        <SegmentedControl
+          value={normalizedViewerProjection}
+          onChange={onViewerProjectionChange}
+          options={PROJECTION_MODE_OPTIONS}
+        />
+      </Field>
 
       {showClip ? (
         <ControlSubsection title="Clip" hideFirstSeparator={false}>

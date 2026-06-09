@@ -3,6 +3,10 @@ import test from "node:test";
 
 import {
   annotatePerspectiveSnapshot,
+  CAMERA_PROJECTION,
+  clonePerspectiveSnapshot,
+  normalizeCameraProjection,
+  perspectiveSnapshotEqual,
   perspectiveSnapshotMatchesScene,
   resolvePerspectiveSnapshot
 } from "./perspective.js";
@@ -72,5 +76,37 @@ test("perspective snapshots match scene metadata when present", () => {
       coordinateSystem: "cad-z-up-v1"
     }),
     true
+  );
+});
+
+test("perspective snapshots preserve and compare camera projection", () => {
+  assert.equal(normalizeCameraProjection("ORTHOGRAPHIC"), CAMERA_PROJECTION.ORTHOGRAPHIC);
+  assert.equal(normalizeCameraProjection("unknown"), CAMERA_PROJECTION.PERSPECTIVE);
+  assert.equal(normalizeCameraProjection("unknown", CAMERA_PROJECTION.ORTHOGRAPHIC), CAMERA_PROJECTION.ORTHOGRAPHIC);
+
+  assert.deepEqual(
+    clonePerspectiveSnapshot({
+      ...PERSPECTIVE_A,
+      projection: "orthographic"
+    }),
+    {
+      ...PERSPECTIVE_A,
+      projection: CAMERA_PROJECTION.ORTHOGRAPHIC
+    }
+  );
+
+  assert.equal(
+    perspectiveSnapshotEqual(PERSPECTIVE_A, {
+      ...PERSPECTIVE_A,
+      projection: CAMERA_PROJECTION.PERSPECTIVE
+    }),
+    true
+  );
+  assert.equal(
+    perspectiveSnapshotEqual(PERSPECTIVE_A, {
+      ...PERSPECTIVE_A,
+      projection: CAMERA_PROJECTION.ORTHOGRAPHIC
+    }),
+    false
   );
 });

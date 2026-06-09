@@ -8,7 +8,9 @@ import { copyImageBlobToClipboard } from "@/ui/clipboard";
 import { triggerBlobDownload } from "@/ui/download";
 import {
   annotatePerspectiveSnapshot,
+  CAMERA_PROJECTION,
   clonePerspectiveSnapshot,
+  normalizeCameraProjection,
   perspectiveSnapshotEqual,
   perspectiveSnapshotMatchesScene,
   resolvePerspectiveSnapshot
@@ -737,6 +739,53 @@ function getFitDistanceForBoundingSphere(camera, radius, sceneScaleMode, frameAs
   return safeRadius / Math.sin(limitingHalfFov);
 }
 
+function runtimeCameraProjection(runtime) {
+  return normalizeCameraProjection(
+    runtime?.projection || (runtime?.camera?.isOrthographicCamera ? CAMERA_PROJECTION.ORTHOGRAPHIC : CAMERA_PROJECTION.PERSPECTIVE)
+  );
+}
+
+function syncRuntimeCameraClipPlanes(runtime, near, far) {
+  for (const camera of [runtime?.perspectiveCamera, runtime?.orthographicCamera].filter(Boolean)) {
+    camera.near = near;
+    camera.far = far;
+    camera.updateProjectionMatrix?.();
+  }
+}
+
+function getOrthographicHalfHeightForBoundingSphere(radius, sceneScaleMode, frameMetrics = {}) {
+  const safeRadius = Math.max(radius * AUTO_ZOOM_PADDING, getSceneScaleSettings(sceneScaleMode).minModelRadius);
+  const frameAspect = Math.max(Number(frameMetrics.aspect) || 1, 1e-3);
+  const viewportHeight = Math.max(Number(frameMetrics.height) || 1, 1);
+  const framedHeight = Math.max(Number(frameMetrics.framedHeight) || viewportHeight, 1);
+  return (safeRadius / Math.min(frameAspect, 1)) * (viewportHeight / framedHeight);
+}
+
+function syncOrthographicCameraFrame(runtime, radius, sceneScaleMode, frameMetrics = null) {
+  const camera = runtime?.orthographicCamera;
+  if (!camera?.isOrthographicCamera) {
+    return;
+  }
+  const metrics = frameMetrics || getViewportFrameMetrics(runtime, runtime?.frameInsetsRef?.current);
+  camera.userData.cadHalfHeight = getOrthographicHalfHeightForBoundingSphere(radius, sceneScaleMode, metrics);
+  runtime.syncCameraViewport?.(camera, metrics.width, metrics.height);
+}
+
+function frameRuntimeCameraForBoundingSphere(runtime, radius, sceneScaleMode, frameMetrics) {
+  const activeCamera = runtime?.camera;
+  const fitCamera = activeCamera?.isPerspectiveCamera
+    ? activeCamera
+    : runtime?.perspectiveCamera || activeCamera;
+  const fitDistance = getFitDistanceForBoundingSphere(fitCamera, radius, sceneScaleMode, frameMetrics.aspect);
+  if (activeCamera?.isOrthographicCamera) {
+    syncOrthographicCameraFrame(runtime, radius, sceneScaleMode, frameMetrics);
+  } else {
+    activeCamera?.updateProjectionMatrix?.();
+  }
+  applyCameraFrameInsets(runtime, runtime?.frameInsetsRef?.current, { updateProjection: false });
+  return fitDistance;
+}
+
 function transitionCameraToBounds(runtime, bounds, sceneScaleMode, frameInsets, {
   durationMs = AUTO_ZOOM_SPEED_MS.DEFAULT,
   easing = AUTO_ZOOM_TRANSITION_EASING,
@@ -749,8 +798,11 @@ function transitionCameraToBounds(runtime, bounds, sceneScaleMode, frameInsets, 
     return false;
   }
   const frameMetrics = getViewportFrameMetrics(runtime, frameInsets);
+  const frameCamera = runtime.camera?.isPerspectiveCamera
+    ? runtime.camera
+    : runtime.perspectiveCamera || runtime.camera;
   const frame = autoZoomFrameForBounds(runtime.THREE, {
-    camera: runtime.camera,
+    camera: frameCamera,
     controls: runtime.controls,
     bounds,
     modelOffset: runtime.modelGroup?.position,
@@ -764,6 +816,9 @@ function transitionCameraToBounds(runtime, bounds, sceneScaleMode, frameInsets, 
   if (!frame) {
     return false;
   }
+  if (runtime.camera?.isOrthographicCamera) {
+    syncOrthographicCameraFrame(runtime, frame.radius, sceneScaleMode, frameMetrics);
+  }
   if (
     runtime.camera.position.distanceToSquared(frame.position) <= 1e-8 &&
     runtime.controls.target.distanceToSquared(frame.target) <= 1e-8 &&
@@ -775,11 +830,53 @@ function transitionCameraToBounds(runtime, bounds, sceneScaleMode, frameInsets, 
     position: [frame.position.x, frame.position.y, frame.position.z],
     target: [frame.target.x, frame.target.y, frame.target.z],
     up: [frame.up.x, frame.up.y, frame.up.z],
-    zoom: frame.zoom
+    zoom: runtime.camera.zoom
   };
   return animate
     ? transitionCameraToPerspectiveSnapshot(runtime, nextPerspective, { durationMs, easing })
     : applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false });
+}
+
+function syncRuntimeCameraProjection(runtime, projection, { scheduleIdle = true } = {}) {
+  if (!runtime?.camera || !runtime?.controls) {
+    return false;
+  }
+  const nextProjection = normalizeCameraProjection(projection);
+  const nextCamera = nextProjection === CAMERA_PROJECTION.ORTHOGRAPHIC
+    ? runtime.orthographicCamera
+    : runtime.perspectiveCamera;
+  if (!nextCamera) {
+    return false;
+  }
+  const previousCamera = runtime.camera;
+  if (previousCamera !== nextCamera) {
+    nextCamera.position.copy(previousCamera.position);
+    nextCamera.up.copy(previousCamera.up);
+    nextCamera.near = previousCamera.near;
+    nextCamera.far = previousCamera.far;
+    nextCamera.zoom = Number.isFinite(previousCamera.zoom) && previousCamera.zoom > 0 ? previousCamera.zoom : 1;
+    runtime.camera = nextCamera;
+    runtime.controls.object = nextCamera;
+  }
+  runtime.projection = nextProjection;
+  const frameMetrics = getViewportFrameMetrics(runtime, runtime.frameInsetsRef?.current);
+  if (nextCamera.isOrthographicCamera) {
+    syncOrthographicCameraFrame(
+      runtime,
+      Number.isFinite(Number(runtime.modelRadius)) ? Number(runtime.modelRadius) : 1,
+      runtime.sceneScaleMode,
+      frameMetrics
+    );
+  } else {
+    runtime.syncCameraViewport?.(nextCamera, frameMetrics.width, frameMetrics.height);
+  }
+  applyCameraFrameInsets(runtime, runtime.frameInsetsRef?.current, { updateProjection: false });
+  runtime.controls.update?.();
+  if (scheduleIdle) {
+    runtime.scheduleIdleQuality?.();
+  }
+  runtime.requestRender?.();
+  return true;
 }
 
 function easeInOutCubic(t) {
@@ -816,7 +913,8 @@ function readPerspectiveSnapshot(runtime) {
     position: [runtime.camera.position.x, runtime.camera.position.y, runtime.camera.position.z],
     target: [runtime.controls.target.x, runtime.controls.target.y, runtime.controls.target.z],
     up: [runtime.camera.up.x, runtime.camera.up.y, runtime.camera.up.z],
-    zoom: runtime.camera.zoom
+    zoom: runtime.camera.zoom,
+    projection: runtimeCameraProjection(runtime)
   };
 }
 
@@ -987,6 +1085,9 @@ function applyPerspectiveSnapshot(runtime, perspective, { scheduleIdle = true } 
   }
   cancelCameraTransition(runtime, { scheduleIdle: false });
   clearKeyboardOrbitState(runtime.keyboardOrbitState);
+  if (Object.prototype.hasOwnProperty.call(nextPerspective, "projection")) {
+    syncRuntimeCameraProjection(runtime, nextPerspective.projection, { scheduleIdle: false });
+  }
   runtime.camera.position.set(...nextPerspective.position);
   runtime.controls.target.set(...nextPerspective.target);
   runtime.camera.up.set(...nextPerspective.up);
@@ -1014,6 +1115,9 @@ function transitionCameraToPerspectiveSnapshot(runtime, perspective, {
   }
   cancelCameraTransition(runtime, { scheduleIdle: false });
   clearKeyboardOrbitState(runtime.keyboardOrbitState);
+  if (Object.prototype.hasOwnProperty.call(nextPerspective, "projection")) {
+    syncRuntimeCameraProjection(runtime, nextPerspective.projection, { scheduleIdle: false });
+  }
   const endPosition = new runtime.THREE.Vector3(...nextPerspective.position);
   const endTarget = new runtime.THREE.Vector3(...nextPerspective.target);
   const endUp = new runtime.THREE.Vector3(...nextPerspective.up);
@@ -1477,6 +1581,7 @@ const CadViewer = forwardRef(function CadViewer({
   renderFormat = "",
   perspective = null,
   perspectiveRef = null,
+  projection = CAMERA_PROJECTION.PERSPECTIVE,
   showEdges,
   recomputeNormals,
   theme = BASE_VIEWER_THEME,
@@ -1526,6 +1631,7 @@ const CadViewer = forwardRef(function CadViewer({
 }, ref) {
   const stepParameterRuntime = stepParameters;
   const normalizedSceneScaleMode = normalizeSceneScaleMode(scale || sceneScaleMode);
+  const normalizedProjection = normalizeCameraProjection(projection);
   const meshGeometrySource = meshData?.geometrySource && typeof meshData.geometrySource === "object"
     ? meshData.geometrySource
     : meshData;
@@ -2554,6 +2660,18 @@ const CadViewer = forwardRef(function CadViewer({
     if (!runtime) {
       return;
     }
+    if (!syncRuntimeCameraProjection(runtime, normalizedProjection)) {
+      return;
+    }
+    emitPerspectiveChange(runtime);
+    syncViewPlaneOrientation(runtime);
+  }, [normalizedProjection, viewerReadyTick]);
+
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime) {
+      return;
+    }
 
     applySceneBackground(runtime, viewerTheme, normalizedThemeSettings.background);
     runtime.renderer.toneMappingExposure = Math.max(normalizedThemeSettings.lighting.toneMappingExposure, 0.05);
@@ -2860,7 +2978,7 @@ const CadViewer = forwardRef(function CadViewer({
 
     clearDisplayedModel();
 
-    const { camera, controls } = runtime;
+    const { controls } = runtime;
     const hasFillRotation = normalizedThemeSettings.materials.cycleColors === true &&
       Array.isArray(normalizedThemeSettings.materials.fillColors) &&
       normalizedThemeSettings.materials.fillColors.length > 1;
@@ -3084,9 +3202,7 @@ const CadViewer = forwardRef(function CadViewer({
     modelGroup.updateMatrixWorld(true);
     edgesGroup.updateMatrixWorld(true);
 
-    camera.near = Math.max(radius / 1200, 0.01);
-    camera.far = Math.max(radius * 600, 2000);
-    camera.updateProjectionMatrix();
+    syncRuntimeCameraClipPlanes(runtime, Math.max(radius / 1200, 0.01), Math.max(radius * 600, 2000));
     applyCameraFrameInsets(runtime, viewportFrameInsetsRef.current, { updateProjection: false });
     controls.minDistance = Math.max(radius / 2200, 0.02);
     controls.maxDistance = Math.max(radius * 140, 50);
@@ -3110,11 +3226,12 @@ const CadViewer = forwardRef(function CadViewer({
         ) {
           cancelCameraTransition(runtime);
           const frameMetrics = getViewportFrameMetrics(runtime, viewportFrameInsetsRef.current);
-          const fitDistance = getFitDistanceForBoundingSphere(camera, radius, normalizedSceneScaleMode, frameMetrics.aspect);
+          const camera = runtime.camera;
+          const fitDistance = frameRuntimeCameraForBoundingSphere(runtime, radius, normalizedSceneScaleMode, frameMetrics);
           const viewDirection = new THREE.Vector3(...DEFAULT_VIEW_DIRECTION).normalize();
           camera.zoom = 1;
           camera.up.set(...WORLD_UP);
-          camera.updateProjectionMatrix();
+          frameRuntimeCameraForBoundingSphere(runtime, radius, normalizedSceneScaleMode, frameMetrics);
           applyCameraFrameInsets(runtime, viewportFrameInsetsRef.current, { updateProjection: false });
           camera.position.copy(viewDirection.multiplyScalar(fitDistance));
           controls.target.set(0, 0, 0);

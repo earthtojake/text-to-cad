@@ -192,6 +192,7 @@ export default function CadRenderPane({
   selectedDxfKey,
   missingFileRef = "",
   viewerPerspective,
+  viewerProjection,
   viewerPerspectiveRef,
   themeSettings,
   previewMode,
@@ -393,6 +394,7 @@ export default function CadRenderPane({
           modelKey={activeModelKey}
           renderFormat={renderFormat}
           perspective={viewerPerspective}
+          projection={viewerProjection}
           perspectiveRef={viewerPerspectiveRef}
           showEdges={!gcodeMode}
           recomputeNormals={false}

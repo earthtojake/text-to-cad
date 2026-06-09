@@ -15,13 +15,15 @@ import {
   normalizeCadRefQueryParams,
   readCadDirParam,
   readNavigationCadRefQueryParams,
+  readViewerProjectionParam,
   sidebarDirectoryPath,
   sidebarDirectoryIdForEntry,
   sidebarLabelForEntry,
   shouldDeferFileParamSelection,
   writeCadDirParam,
   writeCadParam,
-  writeCadRefQueryParams
+  writeCadRefQueryParams,
+  writeViewerProjectionParam
 } from "./sidebar.js";
 import {
   buildAvailableThemePresets,
@@ -2385,6 +2387,38 @@ test("writeCadRefQueryParams skips unchanged URL replacements", () => {
     writeCadRefQueryParams(["#e1"]);
     assert.equal(calls.length, 1);
     assert.equal(calls[0][2], "/?file=parts%2Fsample_plate.step&refs=e1");
+  } finally {
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+  }
+});
+
+test("viewer projection query param reads orthographic and omits perspective defaults", () => {
+  const originalWindow = globalThis.window;
+  const calls = [];
+  globalThis.window = {
+    location: {
+      href: "http://viewer.test/?file=parts%2Fsample_plate.step&projection=orthographic&refs=f2",
+      pathname: "/",
+      search: "?file=parts%2Fsample_plate.step&projection=orthographic&refs=f2",
+      hash: ""
+    },
+    history: {
+      replaceState: (...args) => calls.push(args)
+    }
+  };
+
+  try {
+    assert.equal(readViewerProjectionParam(), "orthographic");
+    assert.equal(writeViewerProjectionParam("orthographic"), false);
+    assert.equal(calls.length, 0);
+
+    assert.equal(writeViewerProjectionParam("perspective"), true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][2], "/?file=parts%2Fsample_plate.step&refs=f2");
   } finally {
     if (originalWindow === undefined) {
       delete globalThis.window;

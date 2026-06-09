@@ -50,7 +50,10 @@ import {
   displayModeIsWireframe,
   normalizeDisplaySettings
 } from "cadjs/lib/displaySettings";
-import { clonePerspectiveSnapshot } from "cadjs/lib/perspective";
+import {
+  clonePerspectiveSnapshot,
+  normalizeCameraProjection
+} from "cadjs/lib/perspective";
 import {
   ASSET_STATUS,
   DRAWING_TOOL,
@@ -195,6 +198,7 @@ import {
   readCadParam,
   readCadRefQueryParams,
   readNavigationCadRefQueryParams,
+  readViewerProjectionParam,
   selectedEntryKeyFromUrl,
   sidebarDirectoryIdForEntry,
   sidebarLabelForEntry,
@@ -202,6 +206,7 @@ import {
   writeCadDirParam,
   writeCadParam,
   writeCadRefQueryParams,
+  writeViewerProjectionParam,
 } from "@/workbench/sidebar";
 import { buildCadRefToken } from "cadjs/lib/cadRefs.js";
 import {
@@ -1234,6 +1239,11 @@ export default function CadWorkspace({
       typeof nextValue === "function" ? nextValue(current) : nextValue
     ));
   }, []);
+  const updateViewerProjection = useCallback((nextValue) => {
+    const normalizedProjection = normalizeCameraProjection(nextValue);
+    setViewerProjection(normalizedProjection);
+    writeViewerProjectionParam(normalizedProjection);
+  }, []);
   const updateImplicitGraphicsSettings = useCallback((nextValue) => {
     setImplicitGraphicsSettings((current) => normalizeImplicitGraphicsSettings(
       typeof nextValue === "function" ? nextValue(current) : nextValue
@@ -1244,6 +1254,7 @@ export default function CadWorkspace({
   const [fileSheetWidthIsCustom, setFileSheetWidthIsCustom] = useState(readInitialFileSheetWidthIsCustom);
   const [drawingTool, setDrawingTool] = useState(DRAWING_TOOL.FREEHAND);
   const [viewerPerspective, setViewerPerspective] = useState(null);
+  const [viewerProjection, setViewerProjection] = useState(readViewerProjectionParam);
   const [tabToolMode, setTabToolMode] = useState(TAB_TOOL_MODE.REFERENCES);
   const [drawingStrokes, setDrawingStrokes] = useState([]);
   const [drawingUndoStack, setDrawingUndoStack] = useState([]);
@@ -4103,6 +4114,9 @@ export default function CadWorkspace({
   const applyTabRecord = useCallback((tabRecord) => {
     const nextTab = createTabRecord(tabRecord?.key || "", tabRecord || {});
     const nextPerspective = clonePerspectiveSnapshot(nextTab.camera);
+    const nextProjection = nextPerspective && Object.prototype.hasOwnProperty.call(nextPerspective, "projection")
+      ? normalizeCameraProjection(nextPerspective.projection)
+      : readViewerProjectionParam();
     selectedFileSheetKeyRef.current = fileSheetSelectionKeyForTab(nextTab.key);
     setDxfThicknessMm(nextTab.dxfThicknessMm);
     setReferenceQuery(nextTab.referenceQuery);
@@ -4130,6 +4144,7 @@ export default function CadWorkspace({
     setDrawingTool(nextTab.drawingTool);
     activePerspectiveRef.current = nextPerspective;
     setViewerPerspective(nextPerspective);
+    setViewerProjection(nextProjection);
     setDrawingStrokes(nextTab.drawingStrokes);
     setDrawingUndoStack(nextTab.drawingUndoStack);
     setDrawingRedoStack(nextTab.drawingRedoStack);
@@ -4167,6 +4182,7 @@ export default function CadWorkspace({
     setDrawingTool(DRAWING_TOOL.FREEHAND);
     activePerspectiveRef.current = null;
     setViewerPerspective(null);
+    setViewerProjection(readViewerProjectionParam());
     setDrawingStrokes([]);
     setDrawingUndoStack([]);
     setDrawingRedoStack([]);
@@ -6355,6 +6371,11 @@ export default function CadWorkspace({
     viewerRef.current?.setPerspective?.(restoredPerspective, { animate: true });
     activePerspectiveRef.current = restoredPerspective;
     setViewerPerspective(restoredPerspective);
+    if (Object.prototype.hasOwnProperty.call(restoredPerspective, "projection")) {
+      const restoredProjection = normalizeCameraProjection(restoredPerspective.projection);
+      setViewerProjection(restoredProjection);
+      writeViewerProjectionParam(restoredProjection);
+    }
     return true;
   }, []);
   const handleBeginUrdfPosePicker = useCallback(() => {
@@ -8236,6 +8257,13 @@ export default function CadWorkspace({
     const normalizedPerspective = clonePerspectiveSnapshot(nextPerspective);
     if (normalizedPerspective) {
       activePerspectiveRef.current = normalizedPerspective;
+      if (Object.prototype.hasOwnProperty.call(normalizedPerspective, "projection")) {
+        const normalizedProjection = normalizeCameraProjection(normalizedPerspective.projection);
+        if (normalizedProjection !== viewerProjection) {
+          setViewerProjection(normalizedProjection);
+          writeViewerProjectionParam(normalizedProjection);
+        }
+      }
       scheduleActiveFileSessionSave();
     }
     const hasPerspectiveDependentDrawings =
@@ -8251,7 +8279,7 @@ export default function CadWorkspace({
     setDrawingStrokes([]);
     setDrawingUndoStack([]);
     setDrawingRedoStack([]);
-  }, [scheduleActiveFileSessionSave]);
+  }, [scheduleActiveFileSessionSave, viewerProjection]);
 
   useCadWorkspaceShortcuts({
     copyStatus,
@@ -8429,6 +8457,8 @@ export default function CadWorkspace({
         <DisplaySettingsSection
           displaySettings={displaySettings}
           updateDisplaySettings={updateDisplaySettings}
+          viewerProjection={viewerProjection}
+          onViewerProjectionChange={updateViewerProjection}
           clipBounds={selectedMeshData?.bounds || null}
           showClip
         />
@@ -8474,6 +8504,7 @@ export default function CadWorkspace({
           selectedDxfKey={selectedDxfPreviewKey}
           missingFileRef={missingFileRef}
           viewerPerspective={viewerPerspective}
+          viewerProjection={viewerProjection}
           viewerPerspectiveRef={activePerspectiveRef}
           themeSettings={resolvedThemeSettings}
           displaySettings={renderDisplaySettings}

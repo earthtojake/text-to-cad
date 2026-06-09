@@ -100,12 +100,19 @@ function findRootPackageSrc(packageDirName) {
 }
 
 function resolveCadJsPackageRoot() {
+  const bundledPackageSrc = path.join(viewerAppRoot, "packages", "cadjs", "src");
+  if (fs.existsSync(bundledPackageSrc)) {
+    return bundledPackageSrc;
+  }
+  const rootPackageSrc = findRootPackageSrc("cadjs");
+  if (rootPackageSrc) {
+    return rootPackageSrc;
+  }
   const installedPackageSrc = path.join(viewerAppRoot, "node_modules", "cadjs", "src");
   if (fs.existsSync(installedPackageSrc)) {
     return installedPackageSrc;
   }
-  const rootPackageSrc = findRootPackageSrc("cadjs");
-  return rootPackageSrc || path.resolve(viewerAppRoot, "../packages/cadjs/src");
+  return path.resolve(viewerAppRoot, "../packages/cadjs/src");
 }
 
 function resolveDirectoryRoot() {
