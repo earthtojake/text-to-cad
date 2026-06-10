@@ -1,4 +1,5 @@
 import {
+  ClipboardList,
   Crosshair,
   Focus,
   MousePointer2,
@@ -44,6 +45,7 @@ function DesktopFloatingToolBar({
   canRedoDrawing,
   drawingStrokes,
   handleEnterPreviewMode,
+  handleCopyViewState,
   handleScreenshotCopy
 }) {
   const dxfMode = renderFormat === RENDER_FORMAT.DXF;
@@ -113,6 +115,16 @@ function DesktopFloatingToolBar({
               <Orbit className="size-3.5" strokeWidth={2} aria-hidden="true" />
             </ToolbarButton>
           ) : null}
+
+          <ToolbarButton
+            label="Copy view URL"
+            onClick={() => {
+              void handleCopyViewState();
+            }}
+            disabled={viewerLoading || !selectedMeshData}
+          >
+            <ClipboardList className="size-3.5" strokeWidth={2} aria-hidden="true" />
+          </ToolbarButton>
 
           <ToolbarButton
             label="Copy screenshot to clipboard"

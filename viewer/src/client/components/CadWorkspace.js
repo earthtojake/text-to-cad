@@ -299,6 +299,12 @@ import {
   normalizeParameterValues
 } from "implicitjs/common/parameters.js";
 import { copyTextToClipboard, readTextFromClipboard } from "@/ui/clipboard";
+import {
+  buildCadViewState,
+  buildCadViewStateFromParams,
+  buildCadViewStateQueryString,
+  normalizeCadViewStateForApply
+} from "@/workbench/viewState";
 import { triggerUrlDownload } from "@/ui/download";
 import {
   copyTargetsForFileAccessAsset,
@@ -1090,6 +1096,47 @@ function normalizeViewerDirectoryOptions(viewerServerInfo) {
   return options;
 }
 
+function readCurrentExplorerPerspective({ explorerRef, activePerspectiveRef, fallbackPerspective } = {}) {
+  return clonePerspectiveSnapshot(
+    explorerRef?.current?.getPerspective?.() ||
+    activePerspectiveRef?.current ||
+    fallbackPerspective
+  );
+}
+
+function buildWorkspaceLayoutViewState({
+  sidebarOpen,
+  selectedFileSheetKind,
+  tabToolsOpen,
+  workspaceLayoutMode
+} = {}) {
+  return {
+    sidebarOpen,
+    selectedFileSheetKind,
+    tabToolsOpen,
+    workspaceLayoutMode
+  };
+}
+
+function applyRestoredExplorerPerspective(explorerRef, perspective) {
+  const restoredPerspective = clonePerspectiveSnapshot(perspective);
+  if (!restoredPerspective) {
+    return false;
+  }
+
+  const apply = () => explorerRef.current?.setPerspective?.(restoredPerspective, { animate: false }) === true;
+  const applied = apply();
+  if (typeof window !== "undefined") {
+    window.requestAnimationFrame?.(() => {
+      apply();
+    });
+    window.setTimeout(() => {
+      apply();
+    }, 120);
+  }
+  return applied;
+}
+
 export default function CadWorkspace({
   manifestEntries: manifestEntriesProp = [],
   generationStatus = null,
@@ -1258,6 +1305,20 @@ export default function CadWorkspace({
   const implicitParameterInteractionTimerRef = useRef(0);
   const [urdfPosePickerState, setUrdfPosePickerState] = useState(emptyUrdfPosePickerState);
   const [pendingCadRefQueryParams, setPendingCadRefQueryParams] = useState(() => readCadRefQueryParams());
+  const pendingViewStateErrorRef = useRef("");
+  const pendingViewStateRef = useRef(null);
+  const pendingViewStateParsedRef = useRef(false);
+  if (!pendingViewStateParsedRef.current && typeof window !== "undefined") {
+    pendingViewStateParsedRef.current = true;
+    try {
+      pendingViewStateRef.current = buildCadViewStateFromParams(
+        new URLSearchParams(window.location.search),
+        { cadPath: readCadParam() || "" }
+      );
+    } catch (error) {
+      pendingViewStateErrorRef.current = error instanceof Error ? error.message : "Invalid CAD review state URL";
+    }
+  }
   const lastPersistenceFailureKeyRef = useRef("");
   const urdfTrajectoryPlaybackRef = useRef({
     frameId: 0,
@@ -6639,6 +6700,166 @@ export default function CadWorkspace({
     cadDirectorySessionBootstrappedRef
   ]);
 
+  // Apply view state from URL query params on initial page load.
+  const viewStateFromUrlAppliedRef = useRef(false);
+  useEffect(() => {
+    if (viewStateFromUrlAppliedRef.current) return;
+    if (pendingViewStateErrorRef.current) {
+      setCopyStatus(pendingViewStateErrorRef.current);
+      viewStateFromUrlAppliedRef.current = true;
+      return;
+    }
+    const viewState = pendingViewStateRef.current;
+    if (!viewState) {
+      viewStateFromUrlAppliedRef.current = true;
+      return;
+    }
+    if (!selectedEntry) return;
+    const viewStateCadPath = String(viewState.file?.cadPath || "").trim();
+    const viewStateFileKey = String(viewState.file?.key || viewState.file?.entry?.file || "").trim();
+    const selectedEntryFileKey = fileKey(selectedEntry);
+    const selectedEntryCadPath = cadPathForEntry(selectedEntry);
+    if (
+      (viewStateFileKey || viewStateCadPath) &&
+      selectedEntryFileKey !== viewStateFileKey &&
+      selectedEntryFileKey !== viewStateCadPath &&
+      selectedEntryCadPath !== viewStateFileKey &&
+      selectedEntryCadPath !== viewStateCadPath
+    ) {
+      viewStateFromUrlAppliedRef.current = true;
+      pendingViewStateRef.current = null;
+      return;
+    }
+    if (!selectedMeshMatches) return;
+    if (typeof viewerRef.current?.setPerspective !== "function") return;
+
+    const normalized = normalizeCadViewStateForApply(viewState);
+
+    // Camera
+    const perspective = normalized.camera?.perspective;
+    if (perspective) {
+      applyRestoredExplorerPerspective(viewerRef, perspective);
+      setViewerPerspective(perspective);
+      activePerspectiveRef.current = perspective;
+    }
+
+    // Selection
+    selectedPartIdsRef.current = normalized.selection.selectedPartIds;
+    setSelectedPartIds(normalized.selection.selectedPartIds);
+    selectedReferenceIdsRef.current = normalized.selection.selectedReferenceIds;
+    setSelectedReferenceIds(normalized.selection.selectedReferenceIds);
+
+    // Assembly / scene
+    setHiddenPartIds(normalized.assembly.hiddenPartIds);
+    setExpandedStepTreeNodeIds(normalized.assembly.expandedTreeNodeIds);
+    setIsolatedAssemblyNodeIds(
+      isAssemblyView
+        ? normalized.assembly.expandedAssemblyPartIds.filter((id) => id && id !== assemblyRootNodeId)
+        : []
+    );
+    setSelectedRenderPartIdByAssemblyPartId(normalized.scene.selectedRenderPartIdByAssemblyPartId);
+
+    // Clip
+    if (isStepView && normalized.view.clipSettings) {
+      updateDisplaySettings((current) => ({
+        ...current,
+        clip: normalized.view.clipSettings
+      }));
+    }
+
+    pendingViewStateRef.current = null;
+    viewStateFromUrlAppliedRef.current = true;
+  }, [assemblyRootNodeId, isAssemblyView, isStepView, selectedEntry, selectedMeshMatches]);
+
+  const handleCopyViewState = useCallback(async () => {
+    if (!selectedEntry) {
+      setCopyStatus("No file selected");
+      return;
+    }
+
+    try {
+      const selectedPartIds = selectedPartIdsRef.current;
+      const selectedReferenceIds = selectedReferenceIdsRef.current;
+      const currentPerspective = readCurrentExplorerPerspective({
+        explorerRef: viewerRef,
+        activePerspectiveRef,
+        fallbackPerspective: viewerPerspective
+      });
+      const layout = buildWorkspaceLayoutViewState({
+        sidebarOpen,
+        selectedFileSheetKind,
+        tabToolsOpen,
+        workspaceLayoutMode
+      });
+      const copiedExpandedAssemblyPartIds = isAssemblyView ? focusedAssemblyNodeIds : [];
+      const state = buildCadViewState({
+        entry: selectedEntry,
+        cadPath: cadPathForEntry(selectedEntry),
+        renderFormat: effectiveRenderFormat,
+        perspective: currentPerspective,
+        selectedPartIds,
+        selectedReferenceIds,
+        selectedCadRefs: copySelectionPayload.lines,
+        hoveredPartId,
+        hoveredReferenceId,
+        hiddenPartIds,
+        expandedTreeNodeIds: expandedStepTreeNodeIds,
+        expandedAssemblyPartIds: copiedExpandedAssemblyPartIds,
+        selectedRenderPartIdByAssemblyPartId,
+        clipSettings: isStepView ? displaySettings.clip : null,
+        themeSettings,
+        layout,
+        url: typeof window !== "undefined" ? window.location.href : "",
+        notes: "Open this copied review URL to restore the reviewed CAD context."
+      });
+      const queryString = buildCadViewStateQueryString(state);
+      const url = new URL(typeof window !== "undefined" ? window.location.href : "about:blank");
+      if (!url.searchParams.get("dir") && catalogRootDir) {
+        url.searchParams.set("dir", catalogRootDir);
+      }
+      if (!url.searchParams.get("file")) {
+        url.searchParams.set("file", fileKey(selectedEntry));
+      }
+      // Remove any existing view-state params before setting the full review-state payload.
+      for (const key of ["view", "v", "sr", "sp", "hp", "cp"]) {
+        url.searchParams.delete(key);
+      }
+      if (queryString) {
+        const viewParams = new URLSearchParams(queryString);
+        for (const [key, value] of viewParams.entries()) {
+          url.searchParams.set(key, value);
+        }
+      }
+      await copyTextToClipboard(url.href);
+      setScreenshotStatus("");
+      setCopyStatus("Copied view state URL");
+    } catch (error) {
+      setScreenshotStatus("");
+      setCopyStatus(error instanceof Error ? error.message : "Clipboard write failed");
+    }
+  }, [
+    catalogRootDir,
+    effectiveRenderFormat,
+    displaySettings,
+    expandedStepTreeNodeIds,
+    copySelectionPayload,
+    focusedAssemblyNodeIds,
+    selectedRenderPartIdByAssemblyPartId,
+    hiddenPartIds,
+    hoveredPartId,
+    hoveredReferenceId,
+    isAssemblyView,
+    isStepView,
+    selectedEntry,
+    selectedFileSheetKind,
+    sidebarOpen,
+    supportsPartSelection,
+    tabToolsOpen,
+    themeSettings,
+    viewerPerspective,
+    workspaceLayoutMode
+  ]);
+
   const expandStepTreeAroundNode = useCallback((nodeId, {
     expandSelf = false,
     includeVisualOnlyAncestors = true
@@ -8589,6 +8810,7 @@ export default function CadWorkspace({
                 canRedoDrawing={canRedoDrawing}
                 drawingStrokes={drawingStrokes}
                 handleEnterPreviewMode={handleEnterPreviewMode}
+                handleCopyViewState={handleCopyViewState}
                 handleScreenshotCopy={handleScreenshotCopy}
               />
 
