@@ -19,6 +19,7 @@ import UrdfFileSheet from "./workbench/UrdfFileSheet";
 import ViewerAlertDialog from "./workbench/ViewerAlertDialog";
 import ViewerLoadingOverlay from "./workbench/ViewerLoadingOverlay";
 import FloatingToolBar from "./workbench/FloatingToolBar";
+import FeedbackPanel from "./workbench/FeedbackPanel";
 import CadWorkspaceTopBar from "./workbench/CadWorkspaceTopBar";
 import CadWorkspaceHome from "./workbench/CadWorkspaceHome";
 import { useCadAssets } from "./workbench/hooks/useCadAssets";
@@ -1246,6 +1247,7 @@ export default function CadWorkspace({
   const [viewerPerspective, setViewerPerspective] = useState(null);
   const [tabToolMode, setTabToolMode] = useState(TAB_TOOL_MODE.REFERENCES);
   const [drawingStrokes, setDrawingStrokes] = useState([]);
+  const [feedbackPanelOpen, setFeedbackPanelOpen] = useState(false);
   const [drawingUndoStack, setDrawingUndoStack] = useState([]);
   const [drawingRedoStack, setDrawingRedoStack] = useState([]);
   const [jointValuesByFileRef, setJointValuesByFileRef] = useState({});
@@ -5175,6 +5177,8 @@ export default function CadWorkspace({
   const {
     currentReferences,
     activeReferenceMap,
+    selectedReferences,
+    selectedParts,
     hoveredReferenceId,
     hoveredPartId,
     visibleReferences
@@ -8663,6 +8667,7 @@ export default function CadWorkspace({
                 drawingStrokes={drawingStrokes}
                 handleEnterPreviewMode={handleEnterPreviewMode}
                 handleScreenshotCopy={handleScreenshotCopy}
+                handleOpenFeedback={() => setFeedbackPanelOpen(true)}
               />
 
               {!previewMode && (directorySelectionActive || (!selectedEntry && !missingFileRef && !fileParamSelectionPending)) ? (
@@ -8976,6 +8981,24 @@ export default function CadWorkspace({
           viewerAlert={viewerAlert}
           previewMode={previewMode}
           setViewerAlertOpen={setViewerAlertOpen}
+        />
+
+        <FeedbackPanel
+          open={feedbackPanelOpen}
+          onOpenChange={setFeedbackPanelOpen}
+          selectedReferences={[
+            ...selectedReferences,
+            ...(selectedParts || []).map((part) => ({
+              id: part.id,
+              label: part.name || part.displayName || part.label || part.id,
+              partId: part.partId || part.id,
+              copyText: part.copyText || part.displaySelector || "",
+              selectorType: "part",
+            })),
+          ]}
+          drawingStrokes={drawingStrokes}
+          getPerspective={() => viewerRef.current?.getPerspective?.()}
+          captureScreenshotBlob={() => viewerRef.current?.captureScreenshotBlob?.()}
         />
       </SidebarInset>
     </SidebarProvider>

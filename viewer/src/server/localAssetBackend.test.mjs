@@ -641,3 +641,84 @@ test("local backend writes only served CAD assets inside the active root", async
     );
   });
 });
+
+test("local backend appends feedback sidecars next to the model", async () => {
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
+    fs.mkdirSync(modelRoot, { recursive: true });
+    fs.writeFileSync(path.join(modelRoot, "box.step"), "ISO-10303-21;\n");
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
+
+    assert.deepEqual(backend.readFeedback({ fileRef: "box.step" }), []);
+
+    const first = backend.appendFeedback({
+      fileRef: "box.step",
+      item: {
+        comment: "this fillet is too sharp",
+        references: [{ id: "f42", label: "Face 42", copyText: "f42" }],
+        camera: { position: { x: 1, y: 2, z: 3 } },
+        drawingStrokes: [{ id: "s1", tool: "arrow", points: [{ x: 1, y: 2 }] }],
+      },
+      screenshotBase64: "data:image/png;base64,iVBORw0KGgo=",
+    });
+
+    assert.equal(first.ok, true);
+    assert.equal(first.id, "fb-0001");
+    assert.equal(first.item.screenshot, "box.step.feedback/fb-0001.png");
+    assert.equal(
+      fs.existsSync(path.join(modelRoot, "box.step.feedback", "fb-0001.png")),
+      true
+    );
+
+    const second = backend.appendFeedback({
+      fileRef: "box.step",
+      item: { comment: "hole should be 6mm" },
+    });
+    assert.equal(second.id, "fb-0002");
+    assert.equal(second.item.screenshot, null);
+
+    const feedback = backend.readFeedback({ fileRef: "box.step" });
+    assert.equal(feedback.length, 2);
+    assert.equal(feedback[0].comment, "this fillet is too sharp");
+    assert.equal(feedback[0].references[0].copyText, "f42");
+    assert.equal(feedback[1].comment, "hole should be 6mm");
+    assert.match(feedback[0].createdAt, /^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+test("local backend rejects feedback that escapes the active root and empty comments", async () => {
+  await withTempDirectoryRoot((directoryRoot) => {
+    fs.mkdirSync(path.join(directoryRoot, "models"), { recursive: true });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
+
+    assert.throws(
+      () => backend.appendFeedback({ fileRef: "../escape.step", item: { comment: "nope" } }),
+      /inside the active CAD Viewer root/
+    );
+    assert.throws(
+      () => backend.appendFeedback({ fileRef: "box.step", item: { comment: "   " } }),
+      /requires a comment/
+    );
+  });
+});
+
+test("local backend refuses to overwrite a corrupt feedback sidecar and ids from max", async () => {
+  await withTempDirectoryRoot((directoryRoot) => {
+    const modelRoot = path.join(directoryRoot, "models");
+    fs.mkdirSync(modelRoot, { recursive: true });
+    const backend = createLocalAssetBackend({ directoryRoot, rootDir: "models" });
+
+    fs.writeFileSync(path.join(modelRoot, "box.step.feedback.json"), "{ not json");
+    assert.throws(
+      () => backend.appendFeedback({ fileRef: "box.step", item: { comment: "x" } }),
+      /not valid JSON/
+    );
+
+    fs.writeFileSync(
+      path.join(modelRoot, "box.step.feedback.json"),
+      JSON.stringify([{ id: "fb-0007", comment: "old" }])
+    );
+    const appended = backend.appendFeedback({ fileRef: "box.step", item: { comment: "new" } });
+    assert.equal(appended.id, "fb-0008");
+  });
+});

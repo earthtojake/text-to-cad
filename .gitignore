@@ -35,5 +35,9 @@ coverage
 *.stp.glb.lock
 tmp/
 
+# CAD Viewer feedback sidecars (local review artifacts)
+*.feedback.json
+*.feedback/
+
 # Local printer credentials
 /bambu-printers.json

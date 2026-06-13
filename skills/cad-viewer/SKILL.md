@@ -90,6 +90,47 @@ initializing. For a `"start"` result, probe `GET /__cad/server` on the base
 URL (e.g. `http://127.0.0.1:<port>/__cad/server`) until it returns HTTP 200
 before passing the `url` value to the Claude Preview tool.
 
+## Review Feedback
+
+Users can attach feedback to a model from inside CAD Viewer: select a face,
+edge, or part, open the feedback panel (message icon in the floating toolbar),
+type what is wrong, and submit. Each submission is persisted as a sidecar next to
+the reviewed model, in the same `--dir` model root:
+
+- `<model>.feedback.json` — JSON array, one object appended per submission.
+- `<model>.feedback/<id>.png` — screenshot for that submission (the `screenshot`
+  field is a path relative to the `--dir` model root, not inlined).
+
+Read `<model>.feedback.json` on demand (when the user says they left feedback, or
+when re-reviewing a model) and act on each item. Item shape:
+
+```json
+{
+  "id": "fb-0001",
+  "createdAt": "<ISO8601>",
+  "comment": "this fillet is too sharp",
+  "references": [
+    { "id": "f42", "label": "Face 42", "copyText": "f42",
+      "partId": "...", "entityType": "ADVANCED_FACE", "selectorType": "face" }
+  ],
+  "camera": { "position": {...}, "target": {...}, "up": {...}, "zoom": 1 },
+  "drawingStrokes": [ { "id": "...", "tool": "arrow", "points": [{"x":..,"y":..}] } ],
+  "screenshot": "<model>.feedback/fb-0001.png"
+}
+```
+
+Use `comment` for the user's intent and `references[].copyText` as the exact CAD
+selector token to locate the entity to change. Open the `screenshot` PNG for
+visual context, and use `camera` to reconstruct the exact view if needed. Empty
+`references` means the comment applies to the whole model.
+
+After you have acted on a feedback item, remove it from `<model>.feedback.json`
+(and delete its `screenshot` PNG) so it is not processed again on the next read.
+When every item is handled, delete the empty `<model>.feedback.json` and the
+`<model>.feedback/` directory. Submitting new feedback recreates them. There is
+no automatic notification or cleanup — feedback is only read when asked, and only
+cleared by you once resolved.
+
 ## References
 
 - Read `references/development.md` when the user asks to modify, debug, or

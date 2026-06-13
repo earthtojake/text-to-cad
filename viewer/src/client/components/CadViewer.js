@@ -2353,6 +2353,16 @@ const CadViewer = forwardRef(function CadViewer({
       const blob = await blobPromise;
       return triggerBlobDownload(blob, { filename });
     },
+    async captureScreenshotBlob() {
+      const runtime = runtimeRef.current;
+      if (!runtime?.renderer || !runtime?.scene || !runtime?.camera) {
+        throw new Error("CAD Viewer not ready");
+      }
+      renderDrawingOverlay();
+      return buildCompositeScreenshotBlob(runtime, drawingCanvasRef.current, {
+        crop: getViewportFrameCrop(runtime, viewportFrameInsetsRef.current)
+      });
+    },
     getPerspective() {
       return readScopedPerspectiveSnapshot(runtimeRef.current, {
         modelKey,

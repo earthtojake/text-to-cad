@@ -980,6 +980,116 @@ export function createLocalAssetBackend({
     };
   }
 
+  // Feedback sidecars live next to the model as `<model>.feedback.json` plus a
+  // `<model>.feedback/` directory of screenshots. They are not served CAD assets,
+  // so they cannot go through `writeAsset` (its `isServedCadAsset` gate rejects
+  // `.json`/`.png`). These helpers do their own inside-root validation instead.
+  function resolveFeedbackPaths(fileRef, resolvedRoot) {
+    const filePath = filePathFromRef(fileRef, resolvedRoot);
+    if (!filePath) {
+      throw new Error("Missing model path for feedback");
+    }
+    const jsonPath = `${filePath}.feedback.json`;
+    const dirPath = `${filePath}.feedback`;
+    if (!pathIsInside(jsonPath, resolvedRoot.rootPath) || !pathIsInside(dirPath, resolvedRoot.rootPath)) {
+      const error = new Error("Feedback writes must stay inside the active CAD Viewer root");
+      error.statusCode = 403;
+      throw error;
+    }
+    const relativeBase = relativeFileRef(resolvedRoot.rootPath, filePath);
+    return { filePath, jsonPath, dirPath, relativeBase };
+  }
+
+  function parseFeedbackFile(jsonPath, { strict = false } = {}) {
+    let raw;
+    try {
+      raw = fs.readFileSync(jsonPath, "utf8");
+    } catch {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      if (strict) {
+        // Refuse to silently overwrite an unreadable sidecar — that would
+        // destroy any prior feedback the agent has not yet handled.
+        const corruptError = new Error("Existing feedback file is not valid JSON");
+        corruptError.statusCode = 409;
+        throw corruptError;
+      }
+      return [];
+    }
+  }
+
+  function readFeedback({ rootDir = defaultRootDir, fileRef = "", resolvedRoot = resolveRequestRoot({ rootDir }) } = {}) {
+    const { jsonPath } = resolveFeedbackPaths(fileRef, resolvedRoot);
+    return parseFeedbackFile(jsonPath);
+  }
+
+  function nextFeedbackId(existing) {
+    let max = 0;
+    for (const entry of existing) {
+      const match = /^fb-(\d+)$/.exec(String(entry?.id || ""));
+      if (match) {
+        max = Math.max(max, Number(match[1]));
+      }
+    }
+    return `fb-${String(max + 1).padStart(4, "0")}`;
+  }
+
+  function decodeScreenshot(screenshotBase64) {
+    const raw = String(screenshotBase64 || "").replace(/^data:[^;,]*;base64,/, "").trim();
+    if (!raw) {
+      return null;
+    }
+    const buffer = Buffer.from(raw, "base64");
+    if (buffer.length === 0) {
+      throw new Error("Screenshot payload is not valid base64");
+    }
+    return buffer;
+  }
+
+  function appendFeedback({
+    rootDir = defaultRootDir,
+    fileRef = "",
+    item = {},
+    screenshotBase64 = "",
+    resolvedRoot = resolveRequestRoot({ rootDir }),
+  } = {}) {
+    const { jsonPath, dirPath, relativeBase } = resolveFeedbackPaths(fileRef, resolvedRoot);
+    const comment = String(item?.comment || "").trim();
+    if (!comment) {
+      const error = new Error("Feedback requires a comment");
+      error.statusCode = 400;
+      throw error;
+    }
+    const existing = parseFeedbackFile(jsonPath, { strict: true });
+    const id = nextFeedbackId(existing);
+    const screenshotBuffer = decodeScreenshot(screenshotBase64);
+    const nextItem = {
+      id,
+      createdAt: new Date().toISOString(),
+      comment,
+      references: Array.isArray(item?.references) ? item.references : [],
+      camera: item?.camera ?? null,
+      drawingStrokes: Array.isArray(item?.drawingStrokes) ? item.drawingStrokes : [],
+      screenshot: null,
+    };
+    if (screenshotBuffer) {
+      fs.mkdirSync(dirPath, { recursive: true });
+      fs.writeFileSync(path.join(dirPath, `${id}.png`), screenshotBuffer);
+      nextItem.screenshot = `${relativeBase}.feedback/${id}.png`;
+    }
+    const nextFeedback = [...existing, nextItem];
+    fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
+    // Write-then-rename so a crash mid-write cannot corrupt the sidecar.
+    const tmpPath = `${jsonPath}.tmp`;
+    fs.writeFileSync(tmpPath, `${JSON.stringify(nextFeedback, null, 2)}\n`);
+    fs.renameSync(tmpPath, jsonPath);
+    return { ok: true, id, item: nextItem };
+  }
+
   return {
     kind: "local-fs",
     canGenerateStepArtifacts: true,
@@ -1007,6 +1117,8 @@ export function createLocalAssetBackend({
     entryForSourcePath,
     assetPathForFileRef,
     writeAsset,
+    readFeedback,
+    appendFeedback,
     contentTypeForPath,
   };
 }

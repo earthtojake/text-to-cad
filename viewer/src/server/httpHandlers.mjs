@@ -573,6 +573,50 @@ export function createCadViewerApiMiddleware({
       }
       return;
     }
+    if (requestUrl.pathname === "/__cad/feedback") {
+      const method = String(req.method || "GET").toUpperCase();
+      if (typeof backend.appendFeedback !== "function" || typeof backend.readFeedback !== "function") {
+        sendJson(res, 501, {
+          error: "Feedback is only available for the local filesystem CAD Viewer backend",
+        });
+        return;
+      }
+      if (method === "GET") {
+        try {
+          sendJson(res, 200, {
+            ok: true,
+            feedback: backend.readFeedback({ rootDir: activeRootDir, fileRef: activeFileRef }),
+          });
+        } catch (error) {
+          sendJson(res, error?.statusCode || 400, { ok: false, error: errorMessage(error) });
+        }
+        return;
+      }
+      if (method !== "POST") {
+        res.setHeader("allow", "GET, POST");
+        sendJson(res, 405, { error: "Use GET or POST for CAD Viewer feedback" });
+        return;
+      }
+      try {
+        // Screenshots are base64 PNGs; the default 256KB body cap is too small.
+        const body = await readJsonBody(req, { limitBytes: 8 * 1024 * 1024 });
+        const result = backend.appendFeedback({
+          rootDir: activeRootDir,
+          fileRef: activeFileRef,
+          item: {
+            comment: body.comment,
+            references: body.references,
+            camera: body.camera,
+            drawingStrokes: body.drawingStrokes,
+          },
+          screenshotBase64: body.screenshot || "",
+        });
+        sendJson(res, 200, result);
+      } catch (error) {
+        sendJson(res, error?.statusCode || 400, { ok: false, error: errorMessage(error) });
+      }
+      return;
+    }
     next();
   };
 }

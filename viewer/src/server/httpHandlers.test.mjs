@@ -673,3 +673,83 @@ test("CAD Viewer API middleware rejects non-filesystem STEP artifact backends", 
     error: "STEP artifact generation requires a local filesystem CAD Viewer backend",
   });
 });
+
+test("CAD Viewer API middleware appends feedback via POST", async () => {
+  const calls = [];
+  const middleware = createCadViewerApiMiddleware({
+    backend: {
+      readFeedback: () => [],
+      appendFeedback: (request) => {
+        calls.push(request);
+        return { ok: true, id: "fb-0001", item: { id: "fb-0001" } };
+      },
+    },
+  });
+  const req = createJsonRequest({
+    method: "POST",
+    url: "/__cad/feedback?dir=/models&file=box.step",
+    body: { comment: "too sharp", references: [{ id: "f1" }], screenshot: "iVBORw0KGgo=" },
+  });
+  const res = createResponse();
+
+  await middleware(req, res, () => {
+    throw new Error("next should not be called");
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(JSON.parse(res.body), { ok: true, id: "fb-0001", item: { id: "fb-0001" } });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].fileRef, "box.step");
+  assert.equal(calls[0].item.comment, "too sharp");
+  assert.equal(calls[0].screenshotBase64, "iVBORw0KGgo=");
+});
+
+test("CAD Viewer API middleware reads feedback via GET", async () => {
+  const middleware = createCadViewerApiMiddleware({
+    backend: {
+      readFeedback: () => [{ id: "fb-0001", comment: "too sharp" }],
+      appendFeedback: () => ({ ok: true }),
+    },
+  });
+  const req = { method: "GET", url: "/__cad/feedback?dir=/models&file=box.step" };
+  const res = createResponse();
+
+  await middleware(req, res, () => {
+    throw new Error("next should not be called");
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(JSON.parse(res.body), {
+    ok: true,
+    feedback: [{ id: "fb-0001", comment: "too sharp" }],
+  });
+});
+
+test("CAD Viewer API middleware rejects non-GET/POST feedback methods", async () => {
+  const middleware = createCadViewerApiMiddleware({
+    backend: { readFeedback: () => [], appendFeedback: () => ({ ok: true }) },
+  });
+  const req = { method: "DELETE", url: "/__cad/feedback" };
+  const res = createResponse();
+
+  await middleware(req, res, () => {
+    throw new Error("next should not be called");
+  });
+
+  assert.equal(res.statusCode, 405);
+  assert.equal(res.getHeader("allow"), "GET, POST");
+});
+
+test("CAD Viewer API middleware reports 501 when feedback is unsupported", async () => {
+  const middleware = createCadViewerApiMiddleware({
+    backend: { readCatalog: async () => ({ schemaVersion: 4, entries: [] }) },
+  });
+  const req = { method: "GET", url: "/__cad/feedback" };
+  const res = createResponse();
+
+  await middleware(req, res, () => {
+    throw new Error("next should not be called");
+  });
+
+  assert.equal(res.statusCode, 501);
+});

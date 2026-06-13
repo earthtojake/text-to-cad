@@ -1,6 +1,7 @@
 import {
   Crosshair,
   Focus,
+  MessageSquarePlus,
   MousePointer2,
   Orbit,
   Pause,
@@ -50,7 +51,8 @@ function DesktopFloatingToolBar({
   canRedoDrawing,
   drawingStrokes,
   handleEnterPreviewMode,
-  handleScreenshotCopy
+  handleScreenshotCopy,
+  handleOpenFeedback
 }) {
   const dxfMode = renderFormat === RENDER_FORMAT.DXF;
   const implicitMode = renderFormat === RENDER_FORMAT.IMPLICIT;
@@ -148,6 +150,15 @@ function DesktopFloatingToolBar({
           >
             <Focus className="size-3.5" strokeWidth={2} aria-hidden="true" />
           </ToolbarButton>
+
+          {handleOpenFeedback ? (
+            <ToolbarButton
+              label="Give feedback"
+              onClick={() => handleOpenFeedback()}
+            >
+              <MessageSquarePlus className="size-3.5" strokeWidth={2} aria-hidden="true" />
+            </ToolbarButton>
+          ) : null}
         </div>
       </TooltipProvider>
 

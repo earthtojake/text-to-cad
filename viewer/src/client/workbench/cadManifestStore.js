@@ -351,6 +351,65 @@ export async function requestStepArtifactGeneration(fileRef, { signal } = {}) {
   return payload;
 }
 
+export async function fetchFeedback({ signal } = {}) {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  const response = await fetch(cadApiUrl("/__cad/feedback", { includeFile: true }), {
+    method: "GET",
+    cache: "no-store",
+    signal,
+  });
+  if (response.status === 501) {
+    return [];
+  }
+  if (!response.ok) {
+    throw new Error(await readJsonError(
+      response,
+      `Failed to load feedback: ${response.status} ${response.statusText}`
+    ));
+  }
+  const payload = await response.json();
+  return Array.isArray(payload?.feedback) ? payload.feedback : [];
+}
+
+export async function submitFeedback({
+  comment,
+  references = [],
+  camera = null,
+  drawingStrokes = [],
+  screenshotBase64 = "",
+  signal,
+} = {}) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const trimmedComment = String(comment || "").trim();
+  if (!trimmedComment) {
+    throw new Error("Feedback requires a comment");
+  }
+  const response = await fetch(cadApiUrl("/__cad/feedback", { includeFile: true }), {
+    method: "POST",
+    cache: "no-store",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      comment: trimmedComment,
+      references,
+      camera,
+      drawingStrokes,
+      screenshot: screenshotBase64,
+    }),
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await readJsonError(
+      response,
+      `Failed to submit feedback: ${response.status} ${response.statusText}`
+    ));
+  }
+  return response.json();
+}
+
 export async function requestStepSourceStatus(fileRef, { signal } = {}) {
   if (typeof window === "undefined") {
     return null;

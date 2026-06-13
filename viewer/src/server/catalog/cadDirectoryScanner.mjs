@@ -1268,7 +1268,7 @@ function createSingleAssetEntry({ repoRoot, rootPath, sourcePath, extension }) {
 }
 
 function shouldSkipDirectory(name) {
-  return VIEWER_SKIPPED_DIRECTORIES.has(name) || isHiddenDirectoryName(name) || isPerStepViewerDirectoryName(name) || isPerUrdfViewerDirectoryName(name);
+  return VIEWER_SKIPPED_DIRECTORIES.has(name) || isHiddenDirectoryName(name) || isPerStepViewerDirectoryName(name) || isPerUrdfViewerDirectoryName(name) || String(name || "").endsWith(".feedback");
 }
 
 function scanPathIncluded(includePath, rootPath, entryPath, isDirectory) {
