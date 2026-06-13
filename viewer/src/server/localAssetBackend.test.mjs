@@ -669,6 +669,21 @@ test("local backend appends feedback sidecars next to the model", async () => {
       fs.existsSync(path.join(modelRoot, "box.step.feedback", "fb-0001.png")),
       true
     );
+    // Full strokes go to a sibling sidecar; feedback.json keeps a summary only.
+    assert.deepEqual(first.item.drawingStrokes, {
+      count: 1,
+      tools: ["arrow"],
+      path: "box.step.feedback/fb-0001.strokes.json",
+    });
+    assert.deepEqual(
+      JSON.parse(
+        fs.readFileSync(
+          path.join(modelRoot, "box.step.feedback", "fb-0001.strokes.json"),
+          "utf8"
+        )
+      ),
+      [{ id: "s1", tool: "arrow", points: [{ x: 1, y: 2 }] }]
+    );
 
     const second = backend.appendFeedback({
       fileRef: "box.step",
@@ -676,6 +691,11 @@ test("local backend appends feedback sidecars next to the model", async () => {
     });
     assert.equal(second.id, "fb-0002");
     assert.equal(second.item.screenshot, null);
+    assert.deepEqual(second.item.drawingStrokes, { count: 0, tools: [] });
+    assert.equal(
+      fs.existsSync(path.join(modelRoot, "box.step.feedback", "fb-0002.strokes.json")),
+      false
+    );
 
     const feedback = backend.readFeedback({ fileRef: "box.step" });
     assert.equal(feedback.length, 2);

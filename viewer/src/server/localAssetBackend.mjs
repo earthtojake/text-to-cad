@@ -1050,6 +1050,17 @@ export function createLocalAssetBackend({
     return buffer;
   }
 
+  function summarizeStrokes(strokes) {
+    const tools = [];
+    for (const stroke of strokes) {
+      const tool = stroke?.tool;
+      if (typeof tool === "string" && tool && !tools.includes(tool)) {
+        tools.push(tool);
+      }
+    }
+    return { count: strokes.length, tools };
+  }
+
   function appendFeedback({
     rootDir = defaultRootDir,
     fileRef = "",
@@ -1067,19 +1078,33 @@ export function createLocalAssetBackend({
     const existing = parseFeedbackFile(jsonPath, { strict: true });
     const id = nextFeedbackId(existing);
     const screenshotBuffer = decodeScreenshot(screenshotBase64);
+    const strokes = Array.isArray(item?.drawingStrokes) ? item.drawingStrokes : [];
     const nextItem = {
       id,
       createdAt: new Date().toISOString(),
       comment,
       references: Array.isArray(item?.references) ? item.references : [],
       camera: item?.camera ?? null,
-      drawingStrokes: Array.isArray(item?.drawingStrokes) ? item.drawingStrokes : [],
+      // Keep only a lightweight summary inline: the annotation is already
+      // visible in the screenshot, and the raw point arrays would bloat the
+      // agent's context on every feedback read. Full strokes go to a sibling
+      // sidecar, loaded on demand only when projecting annotations.
+      drawingStrokes: summarizeStrokes(strokes),
       screenshot: null,
     };
-    if (screenshotBuffer) {
+    if (screenshotBuffer || strokes.length > 0) {
       fs.mkdirSync(dirPath, { recursive: true });
+    }
+    if (screenshotBuffer) {
       fs.writeFileSync(path.join(dirPath, `${id}.png`), screenshotBuffer);
       nextItem.screenshot = `${relativeBase}.feedback/${id}.png`;
+    }
+    if (strokes.length > 0) {
+      fs.writeFileSync(
+        path.join(dirPath, `${id}.strokes.json`),
+        `${JSON.stringify(strokes, null, 2)}\n`
+      );
+      nextItem.drawingStrokes.path = `${relativeBase}.feedback/${id}.strokes.json`;
     }
     const nextFeedback = [...existing, nextItem];
     fs.mkdirSync(path.dirname(jsonPath), { recursive: true });

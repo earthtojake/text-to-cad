@@ -100,6 +100,10 @@ the reviewed model, in the same `--dir` model root:
 - `<model>.feedback.json` — JSON array, one object appended per submission.
 - `<model>.feedback/<id>.png` — screenshot for that submission (the `screenshot`
   field is a path relative to the `--dir` model root, not inlined).
+- `<model>.feedback/<id>.strokes.json` — full annotation strokes for that
+  submission, written only when the user drew annotations. `feedback.json`
+  keeps just a `{ count, tools, path }` summary; the raw point arrays live
+  here so they do not bloat context on every read.
 
 Read `<model>.feedback.json` on demand (when the user says they left feedback, or
 when re-reviewing a model) and act on each item. Item shape:
@@ -114,18 +118,24 @@ when re-reviewing a model) and act on each item. Item shape:
       "partId": "...", "entityType": "ADVANCED_FACE", "selectorType": "face" }
   ],
   "camera": { "position": {...}, "target": {...}, "up": {...}, "zoom": 1 },
-  "drawingStrokes": [ { "id": "...", "tool": "arrow", "points": [{"x":..,"y":..}] } ],
+  "drawingStrokes": { "count": 1, "tools": ["arrow"],
+    "path": "<model>.feedback/fb-0001.strokes.json" },
   "screenshot": "<model>.feedback/fb-0001.png"
 }
 ```
 
 Use `comment` for the user's intent and `references[].copyText` as the exact CAD
 selector token to locate the entity to change. Open the `screenshot` PNG for
-visual context, and use `camera` to reconstruct the exact view if needed. Empty
-`references` means the comment applies to the whole model.
+visual context — the annotation strokes are already drawn into it — and use
+`camera` to reconstruct the exact view if needed. Empty `references` means the
+comment applies to the whole model. `drawingStrokes` is a summary; only read the
+full strokes at `drawingStrokes.path` (normalized screen-space points) if you
+need the raw annotation geometry beyond what the screenshot shows. `count` is 0
+and `path` is absent when no annotations were drawn.
 
 After you have acted on a feedback item, remove it from `<model>.feedback.json`
-(and delete its `screenshot` PNG) so it is not processed again on the next read.
+(and delete its `screenshot` PNG and any `drawingStrokes.path` strokes file) so
+it is not processed again on the next read.
 When every item is handled, delete the empty `<model>.feedback.json` and the
 `<model>.feedback/` directory. Submitting new feedback recreates them. There is
 no automatic notification or cleanup — feedback is only read when asked, and only
