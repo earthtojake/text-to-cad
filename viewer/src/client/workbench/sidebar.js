@@ -1,8 +1,5 @@
 import { buildCadRefToken, parseCadRefToken } from "cadjs/lib/cadRefs.js";
-import {
-  readStoredActiveCadDir,
-  rememberActiveCadDir
-} from "./cadViewerDirectorySession.mjs";
+import { rememberActiveCadDir } from "./cadViewerDirectorySession.mjs";
 import { normalizeViewerDefaultFile } from "../../shared/viewerConfig.mjs";
 
 const CAD_DIR_QUERY_PARAM = "dir";
@@ -225,6 +222,21 @@ export function missingFileRefForCatalog({
   return normalizedFileParam;
 }
 
+export function autoEnterDirectoryForFileParam({
+  explicitDirParam = "",
+  activeDirectory = "",
+  directoryOptions = []
+} = {}) {
+  if (String(explicitDirParam || "").trim() || String(activeDirectory || "").trim()) {
+    return "";
+  }
+  const options = Array.isArray(directoryOptions) ? directoryOptions : [];
+  if (options.length !== 1) {
+    return "";
+  }
+  return String(options[0]?.dir || "").trim();
+}
+
 export function findEntryByCadRefParams(entries, cadRefs = readCadRefQueryParams()) {
   void entries;
   void cadRefs;
@@ -252,11 +264,9 @@ export function writeCadParam(urlPath, { history = "replace" } = {}) {
     url.searchParams.set(CAD_QUERY_PARAM, normalizedUrlPath);
     if (url.searchParams.has(CAD_DIR_QUERY_PARAM)) {
       const activeDir = rememberActiveCadDir(url.searchParams.get(CAD_DIR_QUERY_PARAM));
-      if (activeDir && readStoredActiveCadDir() !== activeDir) {
-        writeUrl(url, { history });
-        return;
+      if (activeDir) {
+        url.searchParams.set(CAD_DIR_QUERY_PARAM, activeDir);
       }
-      url.searchParams.delete(CAD_DIR_QUERY_PARAM);
     }
   } else {
     url.searchParams.delete(CAD_QUERY_PARAM);

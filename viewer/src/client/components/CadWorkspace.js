@@ -147,6 +147,7 @@ import {
   CAD_DIRECTORY_STORAGE_EVENT_ACTION,
   cadDirectoryStorageEventAction
 } from "@/workbench/storageEvents";
+import { createLatestAsyncCommitGuard } from "@/workbench/latestAsyncCommitGuard";
 import {
   clampNumber,
   shallowObjectValuesEqual,
@@ -188,6 +189,7 @@ import {
   cadPathForEntry,
   collectAncestorDirectoryIds,
   collectSidebarDirectoryIds,
+  autoEnterDirectoryForFileParam,
   findEntryByUrlPath,
   fileKey,
   missingFileRefForCatalog,
@@ -1265,6 +1267,10 @@ export default function CadWorkspace({
     elapsedSec: 0,
     speed: 1
   });
+  const stepModuleRequestGuardRef = useRef(null);
+  if (!stepModuleRequestGuardRef.current) {
+    stepModuleRequestGuardRef.current = createLatestAsyncCommitGuard();
+  }
   const stepModuleParameterValuesRef = useRef(stepModuleParameterValues);
   const stepModuleAnimationStateRef = useRef(stepModuleAnimationState);
   const [implicitParameterValues, setImplicitParameterValues] = useState({});
@@ -1477,9 +1483,12 @@ export default function CadWorkspace({
   const activeDirectory = catalogRootDir || activeViewerDir;
   const directorySelectionEligible = !explicitDirParam && !activeDirectory;
   const directorySelectionActive = directorySelectionEligible && directoryOptions.length > 1;
-  const directoryAutoEnterDir = directorySelectionEligible && !String(explicitFileParam || "").trim() && directoryOptions.length === 1
-    ? directoryOptions[0].dir
-    : "";
+  const directoryAutoEnterDir = autoEnterDirectoryForFileParam({
+    explicitDirParam,
+    activeDirectory,
+    explicitFileParam,
+    directoryOptions
+  });
   const directoryNavigationAvailable = !directorySelectionActive;
   const stepArtifactGenerationAvailable = viewerServerInfo
     ? viewerServerInfo.stepArtifactGenerationAvailable !== false
@@ -1727,14 +1736,16 @@ export default function CadWorkspace({
     if (!directoryAutoEnterDir) {
       return;
     }
-    writeCadDirParam(directoryAutoEnterDir);
+    writeCadDirParam(directoryAutoEnterDir, {
+      preserveFile: Boolean(explicitFileParam)
+    });
     refreshCadCatalog({ markRefreshing: true }).catch((error) => {
       if (import.meta.env.DEV) {
         console.warn("Failed to refresh CAD catalog", error);
       }
     });
     refreshCadGenerationStatus();
-  }, [directoryAutoEnterDir]);
+  }, [directoryAutoEnterDir, explicitFileParam]);
 
   useEffect(() => {
     let active = true;
@@ -1772,6 +1783,7 @@ export default function CadWorkspace({
   useEffect(() => {
     let cancelled = false;
     if (!selectedStepModuleUrl) {
+      stepModuleRequestGuardRef.current.clear();
       setStepModuleLoadState({
         url: "",
         status: "idle",
@@ -1787,6 +1799,9 @@ export default function CadWorkspace({
       };
     }
 
+    const requestToken = stepModuleRequestGuardRef.current.begin();
+    const canCommit = () => !cancelled && stepModuleRequestGuardRef.current.isLatest(requestToken);
+
     setStepModuleLoadState({
       url: selectedStepModuleUrl,
       status: "loading",
@@ -1799,7 +1814,7 @@ export default function CadWorkspace({
     resetStepAnimationStore();
 
     loadStepModuleDefinition(selectedStepModuleUrl, { cadPath: selectedStepModuleCadPath }).then((definition) => {
-      if (cancelled) {
+      if (!canCommit()) {
         return;
       }
       const restoredSessionState = readFileSessionState(
@@ -1837,7 +1852,7 @@ export default function CadWorkspace({
         parameterValues: nextParameterValues
       });
     }).catch((error) => {
-      if (cancelled) {
+      if (!canCommit()) {
         return;
       }
       setStepModuleLoadState({

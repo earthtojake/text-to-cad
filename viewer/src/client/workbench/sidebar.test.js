@@ -7,6 +7,7 @@ import {
   findSidebarDirectoryById,
   findEntryByUrlPath,
   missingFileRefForCatalog,
+  autoEnterDirectoryForFileParam,
   cadRefQueryParamsFromUrl,
   selectedEntryKeyFromUrl,
   listSidebarItems,
@@ -2234,7 +2235,7 @@ test("writeCadParam can push user navigation history", () => {
   }
 });
 
-test("writeCadParam stores active dir and omits dir for directory file selections", () => {
+test("writeCadParam keeps explicit dir for durable directory file selections", () => {
   const originalWindow = globalThis.window;
   const calls = [];
   globalThis.window = {
@@ -2254,7 +2255,7 @@ test("writeCadParam stores active dir and omits dir for directory file selection
     writeCadParam("hero/planetary_gear_assembly.step.glb");
     assert.equal(calls.length, 1);
     const nextUrl = new URL(`http://viewer.test${calls[0][2]}`);
-    assert.equal(nextUrl.searchParams.has("dir"), false);
+    assert.equal(nextUrl.searchParams.get("dir"), "docs/public");
     assert.equal(nextUrl.searchParams.get("file"), "hero/planetary_gear_assembly.step.glb");
     assert.equal(nextUrl.searchParams.get("refs"), "#f2");
     assert.equal(readStoredActiveCadDir(), "docs/public");
@@ -2265,6 +2266,36 @@ test("writeCadParam stores active dir and omits dir for directory file selection
       globalThis.window = originalWindow;
     }
   }
+});
+
+test("autoEnterDirectoryForFileParam enters only the single unambiguous directory", () => {
+  assert.equal(
+    autoEnterDirectoryForFileParam({
+      explicitFileParam: "parts/sample.step",
+      directoryOptions: [{ dir: "/workspace/models" }]
+    }),
+    "/workspace/models"
+  );
+
+  assert.equal(
+    autoEnterDirectoryForFileParam({
+      explicitFileParam: "parts/sample.step",
+      directoryOptions: [
+        { dir: "/workspace/a" },
+        { dir: "/workspace/b" }
+      ]
+    }),
+    ""
+  );
+
+  assert.equal(
+    autoEnterDirectoryForFileParam({
+      explicitDirParam: "/workspace/models",
+      explicitFileParam: "parts/sample.step",
+      directoryOptions: [{ dir: "/workspace/other" }]
+    }),
+    ""
+  );
 });
 
 test("writeCadParam keeps explicit dir when clearing file selection", () => {
