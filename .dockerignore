@@ -1,0 +1,14 @@
+.git
+.gitattributes
+.gitignore
+.lfsconfig
+assets/
+benchmarks/
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env
+.git-lfs/
+tmp/
+*.gif

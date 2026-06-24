@@ -1,0 +1,15 @@
+services:
+  cad-workbench:
+    build:
+      context: .
+      dockerfile: .docker/Dockerfile
+    ports:
+      - "8080:8080"    # ttyd → OpenCode Web Terminal
+      - "5173:5173"    # CAD Viewer Vite Dev Server
+    volumes:
+      - .:/workspace:cached
+      - opencode_data:/home/opencode/.local/share/opencode
+    restart: unless-stopped
+
+volumes:
+  opencode_data:
