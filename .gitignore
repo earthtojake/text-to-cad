@@ -17,6 +17,7 @@ htmlcov/
 # Local environments and caches
 .venv
 .cache
+.omo
 .agents/
 .vite
 node_modules
