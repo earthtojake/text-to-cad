@@ -12,14 +12,30 @@ if [ -d /opt/venv ] && [ ! -f /workspace/.venv/bin/activate ]; then
     ln -sf /opt/venv /workspace/.venv 2>/dev/null || true
 fi
 
-# Viewer node_modules — same tolerance
-if [ -d /opt/viewer-node-modules/node_modules ] && [ ! -f /workspace/viewer/node_modules/.package-lock.json ]; then
-    rm -rf /workspace/viewer/node_modules 2>/dev/null || true
-    mkdir -p /workspace/viewer 2>/dev/null || true
-    ln -sf /opt/viewer-node-modules/node_modules /workspace/viewer/node_modules 2>/dev/null || true
+# Viewer node_modules and packages — set up at non-shadowed path
+if [ -d /opt/viewer-source ]; then
+    # Fix packages symlinks (the build-time symlink chain is broken after COPY)
+    rm -f /opt/viewer-source/packages/cadjs /opt/viewer-source/packages/implicitjs 2>/dev/null || true
+    for pkg in cadjs implicitjs; do
+        if [ -d /opt/viewer-node-modules/packages/$pkg ]; then
+            ln -sf /opt/viewer-node-modules/packages/$pkg /opt/viewer-source/packages/$pkg 2>/dev/null || true
+        fi
+    done
+
+    # Link pre-installed node_modules
+    if [ ! -f /opt/viewer-source/node_modules/.package-lock.json ] && \
+       [ -d /opt/viewer-node-modules/viewer/node_modules ]; then
+        rm -rf /opt/viewer-source/node_modules 2>/dev/null || true
+        ln -sf /opt/viewer-node-modules/viewer/node_modules /opt/viewer-source/node_modules 2>/dev/null || true
+    fi
+
+    # Start Vite dev server in background
+    if [ -f /opt/viewer-source/node_modules/.bin/vite ]; then
+        cd /opt/viewer-source && nohup npx vite --host 0.0.0.0 --port 5173 > /tmp/vite-viewer.log 2>&1 &
+    fi
 fi
 
-# CAD Viewer packaged runtime
+# CAD Viewer packaged runtime (skill directory)
 SKILL_VIEWER_DIR="/workspace/skills/cad-viewer/scripts/viewer"
 if [ -d /opt/viewer-node-modules/skill-viewer ] && [ -d "$SKILL_VIEWER_DIR" ]; then
     if [ ! -f "$SKILL_VIEWER_DIR/node_modules/.package-lock.json" ]; then
@@ -44,10 +60,12 @@ export BUN_INSTALL=/home/opencode/.bun
 
 cd /workspace
 
-# ── Start ttyd with tmux + opencode ──
-# tmux runs in background so if the browser tab disconnects and reconnects,
-# ttyd reattaches to the same session instead of starting a new opencode process.
-exec ttyd -p 8080 -W \
-    tmux new-session -A -s oc \; \
-    send-keys "cd /workspace && . /opt/venv/bin/activate && exec opencode" Enter \; \
-    attach-session -t oc
+# ── Pre-create tmux session with opencode ──
+# Create a detached tmux session running opencode so it's ready when the
+# first browser tab connects.  Subsequent reconnects (e.g. after a tab
+# close) reattach to the same session, preserving the opencode process.
+tmux new-session -d -s oc \; \
+    send-keys "cd /workspace && . /opt/venv/bin/activate && exec opencode" Enter
+
+# ── Start ttyd → attach to existing tmux session ──
+exec ttyd -p 5080 -W tmux attach-session -t oc

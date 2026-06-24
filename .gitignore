@@ -19,6 +19,7 @@ htmlcov/
 .cache
 .omo
 .agents/
+.playwright-mcp/
 .vite
 node_modules
 dist

@@ -10,8 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-dev python3-pip python3-venv \
     git git-lfs \
     build-essential \
-    ttyd \
+    tmux ttyd \
     libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev \
+    libnspr4 libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 \
+    libcups2t64 libdrm2 libdbus-1-3 libxkbcommon0 \
+    libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+    libgbm1 libpango-1.0-0 libcairo2 libasound2t64 libatspi2.0-0t64 \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Node.js 22 (matches CI) ──
@@ -82,6 +86,7 @@ COPY viewer/packages/ viewer/packages/
 
 RUN mkdir -p /opt/viewer-node-modules && \
     cp -r viewer /opt/viewer-node-modules/ && \
+    cp -r packages /opt/viewer-node-modules/packages && \
     cd /opt/viewer-node-modules/viewer && \
     npm install --no-audit --no-fund 2>&1
 
@@ -122,11 +127,18 @@ COPY .docker/entrypoint.sh /entrypoint.sh
 # Project source
 WORKDIR /workspace
 COPY . .
-RUN chmod +x /entrypoint.sh
+
+# Preserve viewer source at non-shadowed path
+# (bind mount /workspace at runtime may shadow /workspace/viewer)
+RUN cp -r /workspace/viewer /opt/viewer-source && \
+    chmod +x /entrypoint.sh
 
 # Pre-create opencode data dir with correct ownership
 RUN mkdir -p /home/opencode/.config/opencode /home/opencode/.local/share/opencode && \
-    chown -R opencode:opencode /home/opencode /opt/venv /opt/viewer-node-modules /opt/opencode-defaults
+    chown -R opencode:opencode /home/opencode /opt/venv /opt/viewer-node-modules /opt/opencode-defaults /opt/viewer-source
+
+# Make bun + global bins (opencode, etc.) available to the opencode user
+RUN cp -r /root/.bun /home/opencode/.bun && chown -R opencode:opencode /home/opencode/.bun
 
 # Verify key tools
 RUN /opt/venv/bin/python -c "import build123d; print('build123d:', build123d.__version__)" && \
@@ -135,7 +147,11 @@ RUN /opt/venv/bin/python -c "import build123d; print('build123d:', build123d.__v
     opencode --version
 
 USER opencode
+
+# Pre-install Playwright browser for CAD Viewer testing
+RUN npx playwright install chromium 2>&1
+
 WORKDIR /workspace
 
-EXPOSE 8080 5173
+EXPOSE 5080 5173
 ENTRYPOINT ["/entrypoint.sh"]

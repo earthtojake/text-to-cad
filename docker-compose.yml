@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: .docker/Dockerfile
     ports:
-      - "8080:8080"    # ttyd → OpenCode Web Terminal
+      - "5080:5080"    # ttyd → OpenCode Web Terminal
       - "5173:5173"    # CAD Viewer Vite Dev Server
     volumes:
       - .:/workspace:cached
