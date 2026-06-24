@@ -6,26 +6,25 @@ set -e
 # .venv and node_modules shadow the ones we built during docker build.
 # We relocate deps to /opt/ and symlink them back at runtime.
 
-# Python venv
+# Python venv — tolerate failure when host volume prevents symlink
 if [ -d /opt/venv ] && [ ! -f /workspace/.venv/bin/activate ]; then
     rm -rf /workspace/.venv 2>/dev/null || true
-    ln -sf /opt/venv /workspace/.venv
+    ln -sf /opt/venv /workspace/.venv 2>/dev/null || true
 fi
 
-# Viewer node_modules
+# Viewer node_modules — same tolerance
 if [ -d /opt/viewer-node-modules/node_modules ] && [ ! -f /workspace/viewer/node_modules/.package-lock.json ]; then
     rm -rf /workspace/viewer/node_modules 2>/dev/null || true
-    mkdir -p /workspace/viewer
-    ln -sf /opt/viewer-node-modules/node_modules /workspace/viewer/node_modules
+    mkdir -p /workspace/viewer 2>/dev/null || true
+    ln -sf /opt/viewer-node-modules/node_modules /workspace/viewer/node_modules 2>/dev/null || true
 fi
 
-# CAD Viewer packaged runtime — the production viewer bundle lives inside
-# the cad-viewer skill directory for the agent:start command
+# CAD Viewer packaged runtime
 SKILL_VIEWER_DIR="/workspace/skills/cad-viewer/scripts/viewer"
 if [ -d /opt/viewer-node-modules/skill-viewer ] && [ -d "$SKILL_VIEWER_DIR" ]; then
     if [ ! -f "$SKILL_VIEWER_DIR/node_modules/.package-lock.json" ]; then
         rm -rf "$SKILL_VIEWER_DIR/node_modules" 2>/dev/null || true
-        ln -sf /opt/viewer-node-modules/skill-viewer/node_modules "$SKILL_VIEWER_DIR/node_modules"
+        ln -sf /opt/viewer-node-modules/skill-viewer/node_modules "$SKILL_VIEWER_DIR/node_modules" 2>/dev/null || true
     fi
 fi
 

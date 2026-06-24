@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git git-lfs \
     build-essential \
     ttyd \
+    libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Node.js 22 (matches CI) ──
@@ -34,36 +35,37 @@ RUN bun install -g opencode-ai && opencode --version
 FROM base AS python-deps
 WORKDIR /build
 
-# Copy only dependency manifests for layer caching
-COPY packages/cadpy/pyproject.toml packages/cadpy/
-COPY packages/cadpy_metadata/pyproject.toml packages/cadpy_metadata/
+# Copy package source trees for pip install
+COPY packages/cadpy/ packages/cadpy/
+COPY packages/cadpy_metadata/ packages/cadpy_metadata/
 
 RUN python3 -m venv /opt/venv && \
     . /opt/venv/bin/activate && \
     pip install --upgrade pip --quiet && \
     pip install build123d --quiet && \
-    pip install -e packages/cadpy --quiet && \
-    pip install -e packages/cadpy_metadata --quiet
+    pip install packages/cadpy --quiet && \
+    pip install packages/cadpy_metadata --quiet
 
-# Skill-specific Python deps
-COPY skills/cad/requirements.txt skills/cad/requirements.txt
-COPY skills/dxf/requirements.txt skills/dxf/requirements.txt
-COPY skills/urdf/requirements.txt skills/urdf/requirements.txt
-COPY skills/srdf/requirements.txt skills/srdf/requirements.txt
-COPY skills/sdf/requirements.txt skills/sdf/requirements.txt
-COPY skills/cad-viewer/requirements.txt skills/cad-viewer/requirements.txt
+# Skill-specific Python deps (cadpy/cadpy_metadata already installed above)
+COPY skills/cad/requirements.txt skills/cad/
+COPY skills/dxf/requirements.txt skills/dxf/
+COPY skills/urdf/requirements.txt skills/urdf/
+COPY skills/srdf/requirements.txt skills/srdf/
+COPY skills/sdf/requirements.txt skills/sdf/
+COPY skills/cad-viewer/requirements.txt skills/cad-viewer/
 
 RUN . /opt/venv/bin/activate && \
-    pip install \
-        -r skills/cad/requirements.txt \
-        -r skills/dxf/requirements.txt \
-        -r skills/urdf/requirements.txt \
-        -r skills/srdf/requirements.txt \
-        -r skills/sdf/requirements.txt \
-        -r skills/cad-viewer/requirements.txt \
-        --quiet && \
+    grep -h -v '^--editable' \
+        skills/cad/requirements.txt \
+        skills/dxf/requirements.txt \
+        skills/urdf/requirements.txt \
+        skills/srdf/requirements.txt \
+        skills/sdf/requirements.txt \
+        skills/cad-viewer/requirements.txt \
+        > /tmp/skill_reqs.txt && \
+    pip install -r /tmp/skill_reqs.txt --quiet && \
     pip install ezdxf networkx trimesh --quiet && \
-    rm -rf /root/.cache/pip
+    rm -rf /root/.cache/pip /tmp/skill_reqs.txt
 
 # =============================================================================
 # Stage: node-deps — Viewer and skill JS dependencies
@@ -101,8 +103,8 @@ RUN if [ -f skills/cad-viewer/scripts/viewer/package.json ]; then \
 
 FROM base AS final
 
-# Create runtime user
-RUN useradd -m -s /bin/bash -u 1000 opencode
+# Create runtime user (Ubuntu 24.04 ships an ubuntu user at UID 1000; remove it first)
+RUN userdel ubuntu 2>/dev/null; useradd -m -s /bin/bash -u 1000 opencode
 
 # Copy Python venv from python-deps stage
 COPY --from=python-deps /opt/venv /opt/venv
