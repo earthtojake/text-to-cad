@@ -49,5 +49,6 @@ cd /workspace
 # tmux runs in background so if the browser tab disconnects and reconnects,
 # ttyd reattaches to the same session instead of starting a new opencode process.
 exec ttyd -p 8080 -W \
-    tmux new-session -s oc -d \; \
-    send-keys "cd /workspace && . /opt/venv/bin/activate && exec opencode" Enter
+    tmux new-session -A -s oc \; \
+    send-keys "cd /workspace && . /opt/venv/bin/activate && exec opencode" Enter \; \
+    attach-session -t oc
