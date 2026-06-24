@@ -62,10 +62,8 @@ RUN . /opt/venv/bin/activate && \
         -r skills/sdf/requirements.txt \
         -r skills/cad-viewer/requirements.txt \
         --quiet && \
-    pip install ezdxf networkx trimesh --quiet
-
-# Clean pip cache to reduce image size
-RUN rm -rf /root/.cache/pip
+    pip install ezdxf networkx trimesh --quiet && \
+    rm -rf /root/.cache/pip
 
 # =============================================================================
 # Stage: node-deps — Viewer and skill JS dependencies
@@ -86,7 +84,10 @@ RUN mkdir -p /opt/viewer-node-modules && \
     npm install --no-audit --no-fund 2>&1
 
 # Also pre-install for the cad-viewer skill's viewer path
-COPY skills/cad-viewer/scripts/viewer/package.json skills/cad-viewer/scripts/viewer/ 2>/dev/null || true
+# COPY here (even without a conditional guard) brings the viewer source into
+# the build stage for npm install; the RUN cp to /opt preserves the same
+# directory structure the entrypoint symlink trick expects.
+COPY skills/cad-viewer/scripts/viewer/ /build/skills/cad-viewer/scripts/viewer/
 RUN if [ -f skills/cad-viewer/scripts/viewer/package.json ]; then \
         mkdir -p /opt/viewer-node-modules/skill-viewer && \
         cp -r skills/cad-viewer/scripts/viewer /opt/viewer-node-modules/skill-viewer/ && \
@@ -109,16 +110,16 @@ COPY --from=python-deps /opt/venv /opt/venv
 # Copy viewer node_modules from node-deps stage
 COPY --from=node-deps /opt/viewer-node-modules /opt/viewer-node-modules
 
-# Copy project source
-WORKDIR /workspace
-COPY . .
-
 # OpenCode defaults config
 RUN mkdir -p /opt/opencode-defaults
 COPY .docker/opencode.json /opt/opencode-defaults/opencode.json
 
 # Entrypoint
 COPY .docker/entrypoint.sh /entrypoint.sh
+
+# Project source
+WORKDIR /workspace
+COPY . .
 RUN chmod +x /entrypoint.sh
 
 # Pre-create opencode data dir with correct ownership
