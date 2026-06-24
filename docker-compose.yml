@@ -3,13 +3,18 @@ services:
     build:
       context: .
       dockerfile: .docker/Dockerfile
+    user: "0:0"
+    environment:
+      LOCAL_UID: "${LOCAL_UID:-1000}"
+      LOCAL_GID: "${LOCAL_GID:-1000}"
     ports:
-      - "5080:5080"    # ttyd → OpenCode Web Terminal
-      - "5173:5173"    # CAD Viewer Vite Dev Server
+      - "${OPENCODE_TTYD_PORT:-5080}:5080"    # ttyd → OpenCode Web Terminal
+      - "${VIEWER_HOST_PORT:-5173}:5173"      # CAD Viewer Vite Dev Server
     volumes:
-      - .:/workspace:cached
+      - opencode_workspace:/workspace
       - opencode_data:/home/opencode/.local/share/opencode
     restart: unless-stopped
 
 volumes:
+  opencode_workspace:
   opencode_data:

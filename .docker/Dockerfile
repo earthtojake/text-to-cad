@@ -124,13 +124,16 @@ COPY .docker/opencode.json /opt/opencode-defaults/opencode.json
 # Entrypoint
 COPY .docker/entrypoint.sh /entrypoint.sh
 
-# Project source
-WORKDIR /workspace
+# Project source — copied into an image-internal seed path so it can be
+# materialized into the /workspace named volume at container startup
+# without depending on a host bind mount.
+WORKDIR /opt/workspace-seed
 COPY . .
 
 # Preserve viewer source at non-shadowed path
-# (bind mount /workspace at runtime may shadow /workspace/viewer)
-RUN cp -r /workspace/viewer /opt/viewer-source && \
+# (named volume /workspace at runtime will shadow /opt/workspace-seed)
+RUN mkdir -p /opt/viewer-source && \
+    cp -r /opt/workspace-seed/viewer /opt/viewer-source && \
     chmod +x /entrypoint.sh
 
 # Pre-create opencode data dir with correct ownership
@@ -147,9 +150,6 @@ RUN /opt/venv/bin/python -c "import build123d; print('build123d:', build123d.__v
     opencode --version
 
 USER opencode
-
-# Pre-install Playwright browser for CAD Viewer testing
-RUN npx playwright install chromium 2>&1
 
 WORKDIR /workspace
 
