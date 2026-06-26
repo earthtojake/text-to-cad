@@ -80,6 +80,15 @@ robot description files, simulation, and local review.
 | Bambu Labs   | Dry-runs, uploads, and cautiously starts local Bambu Lab print jobs from validated `.gcode`.                                                       | [skills/bambu-labs](skills/bambu-labs/SKILL.md)     |
 | Implicit CAD | Creates browser-native implicit CAD models using GLSL signed-distance fields and CAD Viewer raymarch rendering. Experimental.                      | [skills/implicit-cad](skills/implicit-cad/SKILL.md) |
 
+### Experimental
+
+These early-stage skills are kept outside the supported `skills/` collection
+and CAD plugin bundle.
+
+| Skill    | Summary                                                              | Source                                                  |
+| -------- | -------------------------------------------------------------------- | ------------------------------------------------------- |
+| CAD Burr | Runs a Burr design-rule check and repair loop around CAD generation. | [experimental/cad-burr](experimental/cad-burr/SKILL.md) |
+
 ## 💻 Installation
 
 For production use, install or clone from `main`; that branch contains the

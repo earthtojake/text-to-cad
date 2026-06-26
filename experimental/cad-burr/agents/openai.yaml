@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAD Burr"
+  short_description: "Generate CAD with Burr design-rule checks in the loop."
+  default_prompt: "Use $cad-burr to create or modify STEP-first parametric CAD source, emit Burr design metadata, run an explicit rulepack, repair failed or incomplete source-level claims from Burr receipts, and provide checked outputs with honest caveats."

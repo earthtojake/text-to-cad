@@ -86,6 +86,15 @@ const skillGroups = [
   },
 ];
 
+const experimentalSkillGroups = [
+  {
+    name: "CAD Burr",
+    path: "experimental/cad-burr",
+    summary:
+      "Runs a Burr design-rule check and repair loop around CAD generation.",
+  },
+];
+
 function InstallCommand({
   item,
 }: {
@@ -175,6 +184,43 @@ function SkillLink({ skill }: { skill: (typeof skillGroups)[number] }) {
   );
 }
 
+function SkillsTable({ skills }: { skills: typeof skillGroups }) {
+  return (
+    <div className="border border-border bg-card">
+      <div className="grid grid-cols-[minmax(0,1fr)] border-b border-border px-3.5 py-2.5 text-xs uppercase tracking-[1.5px] text-muted-foreground md:grid-cols-[minmax(9rem,12rem)_minmax(0,1fr)_max-content] md:gap-5 md:pl-0 md:pr-3.5">
+        <span className="md:pl-3.5">skill</span>
+        <span className="hidden md:block">summary</span>
+        <span className="hidden text-right md:block">source</span>
+      </div>
+      <ul className="divide-y divide-border">
+        {skills.map((skill) => (
+          <li
+            key={skill.name}
+            className="card-glow grid gap-3 px-3.5 py-3 hover:bg-secondary/60 md:grid-cols-[minmax(9rem,12rem)_minmax(0,1fr)_max-content] md:items-center md:gap-5 md:pl-0 md:pr-3.5"
+          >
+            <div className="flex min-w-0 items-center md:pl-3.5">
+              <div className="min-w-0">
+                <h3 className="text-sm font-medium text-foreground">
+                  {skill.name}
+                </h3>
+                <p className="mt-0.5 text-label uppercase tracking-wider text-muted-foreground md:hidden">
+                  {skill.path}
+                </p>
+              </div>
+            </div>
+            <div className="min-w-0 text-sm leading-6 text-muted-foreground">
+              <p>{skill.summary}</p>
+            </div>
+            <div className="min-w-0 md:justify-self-end md:pt-0.5 md:text-right">
+              <SkillLink skill={skill} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -204,38 +250,21 @@ export default function Home() {
               description="Install the library to give agents focused workflows for CAD, fabrication, robot description files, simulation, and local review."
             />
 
-            <div className="border border-border bg-card">
-              <div className="grid grid-cols-[minmax(0,1fr)] border-b border-border px-3.5 py-2.5 text-xs uppercase tracking-[1.5px] text-muted-foreground md:grid-cols-[minmax(9rem,12rem)_minmax(0,1fr)_max-content] md:gap-5 md:pl-0 md:pr-3.5">
-                <span className="md:pl-3.5">skill</span>
-                <span className="hidden md:block">summary</span>
-                <span className="hidden text-right md:block">source</span>
-              </div>
-              <ul className="divide-y divide-border">
-                {skillGroups.map((skill) => (
-                  <li
-                    key={skill.name}
-                    className="card-glow grid gap-3 px-3.5 py-3 hover:bg-secondary/60 md:grid-cols-[minmax(9rem,12rem)_minmax(0,1fr)_max-content] md:items-center md:gap-5 md:pl-0 md:pr-3.5"
-                  >
-                    <div className="flex min-w-0 items-center md:pl-3.5">
-                      <div className="min-w-0">
-                        <h3 className="text-sm font-medium text-foreground">
-                          {skill.name}
-                        </h3>
-                        <p className="mt-0.5 text-label uppercase tracking-wider text-muted-foreground md:hidden">
-                          {skill.path}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="min-w-0 text-sm leading-6 text-muted-foreground">
-                      <p>{skill.summary}</p>
-                    </div>
-                    <div className="min-w-0 md:justify-self-end md:pt-0.5 md:text-right">
-                      <SkillLink skill={skill} />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <SkillsTable skills={skillGroups} />
+          </section>
+
+          <section
+            id="experimental-skills"
+            aria-labelledby="experimental-skills-title"
+            className="scroll-mt-20 space-y-3 py-6"
+          >
+            <SectionIntro
+              id="experimental-skills-title"
+              title="EXPERIMENTAL"
+              description="Early-stage skills kept outside the supported skills collection and CAD plugin bundle."
+            />
+
+            <SkillsTable skills={experimentalSkillGroups} />
           </section>
 
           <section
