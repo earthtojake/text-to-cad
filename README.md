@@ -33,6 +33,8 @@ A skills library for CAD, robotics, and hardware design agents
 
 # CAD Skills
 
+[![Listed on TakoAPI](https://img.shields.io/badge/Listed%20on-TakoAPI-7c3aed)](https://takoapi.com/agents/earthtojake-text-to-cad)
+
 CAD Skills is a library of agent skills for generating, inspecting, sourcing,
 slicing, and handing off CAD and robot-description artifacts from local project
 files.
