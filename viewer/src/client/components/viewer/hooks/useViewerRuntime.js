@@ -437,6 +437,73 @@ export function useViewerRuntime({
         : null;
       resizeObserver?.observe(container);
 
+      // Zoom-to-cursor leaves the orbit pivot (controls.target) drifting along the view ray
+      // at the new camera distance. Perspective pan and dolly both scale by the
+      // camera->pivot distance, so a drifted pivot makes panning and zooming feel slow when
+      // zoomed in and fast when zoomed out. After each wheel zoom, re-anchor the pivot depth
+      // onto the geometry under the cursor (falling back to the model centre), keeping it on
+      // the forward axis so the camera never re-orients or jumps the view.
+      const zoomReanchorPointer = new THREE.Vector2();
+      const zoomReanchorForward = new THREE.Vector3();
+      const zoomReanchorScratch = new THREE.Vector3();
+      const zoomReanchorCenter = new THREE.Vector3();
+      let zoomPivotReanchorPending = false;
+
+      const readModelWorldCenter = (out) => {
+        const runtime = runtimeRef.current;
+        const bounds = runtime?.modelBounds;
+        if (bounds && Array.isArray(bounds.min) && Array.isArray(bounds.max)) {
+          out.set(
+            (Number(bounds.min[0]) + Number(bounds.max[0])) / 2,
+            (Number(bounds.min[1]) + Number(bounds.max[1])) / 2,
+            (Number(bounds.min[2]) + Number(bounds.max[2])) / 2
+          );
+          if (runtime.modelGroup?.position) {
+            out.add(runtime.modelGroup.position);
+          }
+          return out;
+        }
+        return out.copy(runtime?.controls?.target || out.set(0, 0, 0));
+      };
+
+      const reanchorZoomPivot = () => {
+        const runtime = runtimeRef.current;
+        const activeCamera = runtime?.camera;
+        const activeControls = runtime?.controls;
+        // Orthographic pan/dolly do not depend on the pivot distance, so leave them alone.
+        if (!activeCamera?.isPerspectiveCamera || !activeControls?.target) {
+          return;
+        }
+        activeCamera.getWorldDirection(zoomReanchorForward);
+        // Depth of a world point along the view axis (never negative / behind the camera).
+        const depthOf = (point) => Math.max(
+          zoomReanchorScratch.copy(point).sub(activeCamera.position).dot(zoomReanchorForward),
+          0
+        );
+        let depth = 0;
+        if (runtime.raycaster && runtime.modelGroup) {
+          runtime.raycaster.setFromCamera(zoomReanchorPointer, activeCamera);
+          const hits = runtime.raycaster.intersectObject(runtime.modelGroup, true);
+          const hit = hits.find((entry) => entry?.point);
+          if (hit) {
+            depth = depthOf(hit.point);
+          }
+        }
+        if (!(depth > 0)) {
+          depth = depthOf(readModelWorldCenter(zoomReanchorCenter));
+        }
+        const minDepth = Math.max(
+          Number.isFinite(activeControls.minDistance) ? activeControls.minDistance : 0,
+          1e-4
+        );
+        const maxDepth = Number.isFinite(activeControls.maxDistance) && activeControls.maxDistance > 0
+          ? activeControls.maxDistance
+          : Number.POSITIVE_INFINITY;
+        depth = Math.min(Math.max(depth, minDepth), maxDepth);
+        // Only the pivot depth changes; the camera keeps looking down the same forward ray.
+        activeControls.target.copy(activeCamera.position).addScaledVector(zoomReanchorForward, depth);
+      };
+
       let controlsStartDistance = null;
       const readControlsDistance = () => {
         const activeRuntime = runtimeRef.current;
@@ -451,6 +518,10 @@ export function useViewerRuntime({
         beginInteraction();
       };
       const handleControlsChange = () => {
+        if (zoomPivotReanchorPending) {
+          zoomPivotReanchorPending = false;
+          reanchorZoomPivot();
+        }
         emitPerspectiveChange(runtimeRef.current);
         requestRender();
       };
@@ -472,6 +543,15 @@ export function useViewerRuntime({
         controls.zoomSpeed = getWheelZoomSpeed(isTrackpadLikeWheelEvent(event)
           ? getPinchZoomSpeed()
           : ACCELERATED_WHEEL_ZOOM_SPEED);
+        // Capture the cursor (NDC) so the post-zoom pivot re-anchor can raycast under it.
+        const rect = renderer.domElement.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          zoomReanchorPointer.set(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1
+          );
+          zoomPivotReanchorPending = true;
+        }
         beginInteraction();
       };
       const wheelListenerOptions = { passive: true, capture: true };
