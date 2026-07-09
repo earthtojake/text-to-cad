@@ -62,13 +62,13 @@ Scale depth to the task: a simple part needs a short brief and few spec-driven c
 
 1. **Classify the task.** New part, new assembly, source modification, direct STEP/STP inspection, reference selection, measurement/alignment check, snapshot review, or secondary output request.
 2. **Load only the needed references.** Use the triggers below instead of reading the whole reference set.
-3. **Write a natural-language CAD brief.** Extract dimensions, units, coordinate convention, feature intent, output paths, assumptions, and validation targets from all provided inputs — prose, reference images, technical drawings. Use `references/cad-brief.md`.
+3. **Write a natural-language CAD brief.** Extract dimensions, units, coordinate convention, feature intent, output paths, assumptions, and validation targets from all provided inputs - prose, reference images, technical drawings. Use `references/cad-brief.md`.
 4. **Check named purchasable components.** When an assembly includes named off-the-shelf actuators, servos, motors, electronics boards, connectors, or other purchasable components, search `$step-parts` before creating simplified placeholder geometry. If no exact match is found, record the miss and then use a documented envelope.
 5. **Plan before coding.** Define parameters, intent labels, source paths, expected bounding boxes, and any mating/positioning datums before editing.
 6. **Edit source, not generated artifacts.** Author build123d Python with `gen_step()`. When a Python generator exists, run `scripts/step` on the generator, never on its exported STEP. Use direct STEP/STP targets (`--kind part|assembly`) only for imports with no generator or when the user explicitly identifies the STEP/STP file as the target.
 7. **Generate explicit targets.** Run `scripts/step` on explicit targets only; do not run directory-wide generation.
 8. **Validate geometrically.** Run `scripts/inspect refs <step-or-cad-target> --facts --planes --positioning` as the baseline, then verify the dimensions and relationships the user's spec calls out with targeted `measure`, `align`, `frame`, or `diff` checks.
-9. **Snapshot the primary STEP — snapshot validation is mandatory.** After creating or visibly updating a primary STEP/STP part or assembly, ALWAYS run CAD `scripts/snapshot` against it and review the output; deterministic checks passing is not a reason to skip. The only skip cases are documented in `references/snapshot-review.md` (no visible geometry changed, or no valid artifact exists); report the reason when skipping.
+9. **Snapshot the primary STEP - snapshot validation is mandatory.** After creating or visibly updating a primary STEP/STP part or assembly, ALWAYS run CAD `scripts/snapshot` against it and review the output; deterministic checks passing is not a reason to skip. The only skip cases are documented in `references/snapshot-review.md` (no visible geometry changed, or no valid artifact exists); report the reason when skipping.
 10. **Repair and rerun.** If a check fails, change the smallest responsible source section, regenerate, and rerun the failed validation.
 
 ## Handoff
@@ -89,14 +89,14 @@ When verification snapshots are generated, include the saved PNG/GIF snapshot(s)
 
 Load these files only when their trigger applies:
 
-- `references/cad-brief.md` — converting prose, reference images, and technical drawings into a CAD brief.
-- `references/build123d-modeling.md` — build123d modeling patterns, topology, selectors, features, labels.
-- `references/step-generation.md` — STEP generation from Python source, direct STEP/STP imports, and post-generation steps.
-- `references/inspection-and-validation.md` — validation sequence, selector refs, facts, planes, measurements, alignment, diff, frame, and validation reporting.
-- `references/snapshot-review.md` — mandatory snapshot policy, packet sizing, targeted views, and converting visual findings into geometry checks.
-- `references/positioning.md` — part-local datums and origins, assembly transforms, build123d joints, CLI alignment validation, and positioning reports.
-- `references/parameters.md` — parameterizing or animating a STEP model: source parameters, `.step.js` sidecar modules, viewer controls, and animation design.
-- `references/supported-exports.md` — secondary STL/3MF/native GLB sidecar workflows.
-- `references/repair-loop.md` — diagnosis and repair procedures.
+- `references/cad-brief.md` - converting prose, reference images, and technical drawings into a CAD brief.
+- `references/build123d-modeling.md` - build123d modeling patterns, topology, selectors, features, labels.
+- `references/step-generation.md` - STEP generation from Python source, direct STEP/STP imports, and post-generation steps.
+- `references/inspection-and-validation.md` - validation sequence, selector refs, facts, planes, measurements, alignment, diff, frame, and validation reporting.
+- `references/snapshot-review.md` - mandatory snapshot policy, packet sizing, targeted views, and converting visual findings into geometry checks.
+- `references/positioning.md` - part-local datums and origins, assembly transforms, build123d joints, CLI alignment validation, and positioning reports.
+- `references/parameters.md` - parameterizing or animating a STEP model: source parameters, `.step.js` sidecar modules, viewer controls, and animation design.
+- `references/supported-exports.md` - secondary STL/3MF/native GLB sidecar workflows.
+- `references/repair-loop.md` - diagnosis and repair procedures.
 
 Final responses should include generated files, returned `$cad-viewer` viewer links, verification snapshots, validation actually run, assumptions, and caveats. Use `references/inspection-and-validation.md` for report structure.
