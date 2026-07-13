@@ -205,6 +205,29 @@ test("resolveAgentStartCommand keeps server-only flags on the production server 
   ]);
 });
 
+test("resolveAgentStartCommand uses the bundled backend in a production runtime", async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cad-viewer-agent-start-directory-"));
+  const packageRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cad-viewer-agent-start-runtime-"));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  t.after(() => fs.rm(packageRoot, { recursive: true, force: true }));
+  await fs.mkdir(path.join(packageRoot, "backend"), { recursive: true });
+  await fs.writeFile(path.join(packageRoot, "backend", "server.mjs"), "");
+
+  const command = resolveAgentStartCommand({
+    argv: ["--viewer-start-mode", "serve", "--dir", directory],
+    env: {},
+    packageRoot,
+    nodePath: "/node",
+  });
+
+  assert.equal(command.mode, "serve");
+  assert.deepEqual(command.args, [
+    path.join(packageRoot, "backend", "server.mjs"),
+    "--dir",
+    directory,
+  ]);
+});
+
 test("isReusableAgentViewerServer uses git only when both sides report it", () => {
   assert.equal(
     isReusableAgentViewerServer({

@@ -355,6 +355,7 @@ write_runtime_package_json() {
   "type": "module",
   "version": "$RELEASE_VERSION",
   "scripts": {
+    "agent:start": "node scripts/start-agent-viewer.mjs",
     "serve": "node backend/server.mjs",
     "start": "node backend/server.mjs",
     "moveit2:setup": "moveit2_server/setup.sh",
@@ -424,7 +425,7 @@ sync_dir() {
 build_runtime() {
   local target_dir="$1"
   rm -rf "$target_dir"
-  mkdir -p "$target_dir/backend"
+  mkdir -p "$target_dir/backend" "$target_dir/scripts"
 
   sync_dir "$VIEWER_DIR/dist" "$target_dir/dist"
 
@@ -444,6 +445,15 @@ build_runtime() {
       --main-fields=module,main \
       --legal-comments=none \
       --outfile="$target_dir/backend/server.mjs"
+
+    "$(resolve_esbuild_bin)" "$VIEWER_DIR/scripts/start-agent-viewer.mjs" \
+      --bundle \
+      --format=esm \
+      --platform=node \
+      --target=node22 \
+      --main-fields=module,main \
+      --legal-comments=none \
+      --outfile="$target_dir/scripts/start-agent-viewer.mjs"
 
   )
 
