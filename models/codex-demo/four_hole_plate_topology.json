@@ -1,0 +1,83 @@
+﻿{
+  "ok": true,
+  "tokens": [
+    {
+      "line": 1,
+      "token": "#",
+      "cadPath": "models/codex-demo/four_hole_plate",
+      "stepPath": "models/codex-demo/four_hole_plate.step",
+      "stepHash": "edf0caf223869414ebffabb6ae718ef3ca8c27c1842f3f4ad3e9f38bced7b395",
+      "summary": {
+        "kind": "part",
+        "occurrenceCount": 1,
+        "leafOccurrenceCount": 1,
+        "shapeCount": 1,
+        "faceCount": 10,
+        "edgeCount": 24,
+        "vertexCount": 0,
+        "bounds": {
+          "min": [
+            -60.0,
+            -30.0,
+            -2.5
+          ],
+          "max": [
+            60.0,
+            30.0,
+            2.5
+          ]
+        }
+      },
+      "selections": [],
+      "warnings": [],
+      "topology": {
+        "occurrences": [
+          "o1"
+        ],
+        "shapes": [
+          "s1"
+        ],
+        "faces": [
+          "f1",
+          "f2",
+          "f3",
+          "f4",
+          "f5",
+          "f6",
+          "f7",
+          "f8",
+          "f9",
+          "f10"
+        ],
+        "edges": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5",
+          "e6",
+          "e7",
+          "e8",
+          "e9",
+          "e10",
+          "e11",
+          "e12",
+          "e13",
+          "e14",
+          "e15",
+          "e16",
+          "e17",
+          "e18",
+          "e19",
+          "e20",
+          "e21",
+          "e22",
+          "e23",
+          "e24"
+        ],
+        "vertices": []
+      }
+    }
+  ],
+  "errors": []
+}
