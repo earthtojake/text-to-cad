@@ -1,3 +1,5 @@
+**English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
+
 <div align="center">
 
 <img src="assets/text-to-cad-demo.gif" alt="Demo of the CAD skill generating and previewing CAD geometry" width="100%">
