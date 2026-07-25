@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<!-- Hinged-lid mechanism for QA pipeline end-to-end validation.
+     SI units (meters, kilograms, radians); STL meshes are millimeter-scale
+     and scaled by 0.001 at reference. Hinge axis: +X at the back top edge
+     of the base; 0 rad = lid closed, upper limit 1.92 rad (~110 deg). -->
+<robot name="hinged_lid">
+  <link name="base">
+    <inertial>
+      <mass value="0.05"/>
+      <origin xyz="0 0 0.010"/>
+      <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+    <visual>
+      <geometry><mesh filename="base.stl" scale="0.001 0.001 0.001"/></geometry>
+    </visual>
+    <collision>
+      <!-- Primitive collision: the convex hull of the STL would bridge the
+           open top and jam the hinge; the box approximates the rim the lid
+           actually rests on. -->
+      <origin xyz="0 0 0.010"/>
+      <geometry><box size="0.060 0.040 0.020"/></geometry>
+    </collision>
+  </link>
+
+  <link name="lid">
+    <inertial>
+      <mass value="0.01"/>
+      <origin xyz="0 -0.020 0.001"/>
+      <inertia ixx="2e-6" ixy="0" ixz="0" iyy="2e-6" iyz="0" izz="4e-6"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 -0.020 -0.020"/>
+      <geometry><mesh filename="lid.stl" scale="0.001 0.001 0.001"/></geometry>
+    </visual>
+    <collision>
+      <!-- Primitive collision: lid plate only; the knuckle hull overlapped
+           the base lugs at the hinge and jammed rotation (see iteration
+           log). -->
+      <origin xyz="0 -0.020 0.001"/>
+      <geometry><box size="0.060 0.040 0.002"/></geometry>
+    </collision>
+  </link>
+
+  <joint name="hinge" type="revolute">
+    <parent link="base"/>
+    <child link="lid"/>
+    <origin xyz="0 0.020 0.020" rpy="0 0 0"/>
+    <axis xyz="-1 0 0"/>
+    <limit lower="0" upper="1.92" effort="10" velocity="10"/>
+    <dynamics damping="0.001"/>
+  </joint>
+</robot>
