@@ -19,8 +19,12 @@
 
 # Extra third-party requirements mirrored from skill-local runtime files.
 # - skills/cad/requirements.txt
+# - skills/mesh-qa/requirements.txt
+# - skills/sim-test/requirements.txt
 ezdxf
 playwright
+rtree
+pybullet
 
 # Extra third-party requirements used by repo tests.
 networkx

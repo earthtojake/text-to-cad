@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mesh QA"
+  short_description: "Validate mesh printability and geometry health"
+  default_prompt: "Use $mesh-qa to write programmatic printability checks for a generated part."

@@ -1,0 +1,3 @@
+trimesh
+numpy
+rtree

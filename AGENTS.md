@@ -105,7 +105,19 @@ flow, CI/CD-testing and resume options, and local/manual fallbacks.
 
 ## Environments
 
-- Prefer `./.venv/bin/python` for CAD Python work.
+- Prefer `./.venv/bin/python` for CAD Python work (`.venv/Scripts/python.exe`
+  on Windows).
+- Cross-platform Python dependencies: PyBullet publishes Linux wheels only;
+  on Windows/macOS build it from source, use WSL2, or follow the MuJoCo
+  alternative documented in the `sim-test` skill. trimesh, MuJoCo, and
+  build123d ship wheels for all three OSes. Engine-dependent tests should
+  skip via `pytest.importorskip` so suites collect everywhere.
+- Windows checkouts: enable Developer Mode (or run an elevated shell) and
+  set `git config core.symlinks true` before cloning, so the `develop`
+  symlink layout materializes as real symlinks instead of copies.
+  `scripts/bundle/bundle.sh` also needs `rsync`, which Git Bash lacks;
+  production bundles are built by CI on Linux, so local Windows development
+  does not need it.
 - Keep new branch checkouts and git worktrees lightweight by default. Do not
   copy `.venv/` or `models/` through `.worktreeinclude`; recreate `.venv/`
   inside the worktree only when Python dependencies are needed for the workflow.
@@ -179,6 +191,38 @@ fallbacks, and do not stop an existing Viewer server unless the user asks.
 Packaged Viewer runtime and handoff details belong in the `cad-viewer` skill
 instructions. Treat packaged Viewer checks as generated-output checks and use
 the master bundle wrapper unless you are debugging a lower-level script.
+
+## Part QA Loop
+
+Part-generation tasks follow a clarify → design → generate → test → review
+loop, using the `mesh-qa` and `sim-test` skills as tool guides. Those skills
+document APIs and reference values only; the agent running the task decides
+which checks are meaningful for each part.
+
+- Clarify: ask one short question only when a request is ambiguous on
+  fit-critical, material, or motion requirements. Otherwise proceed with a
+  reasonable assumption and state it.
+- Design note: for complex or moving parts, write a short design note (part
+  purpose, critical tolerances, which QA skills look relevant) before CAD
+  generation. Simple static parts may skip this step.
+- Generate: produce the part with the `cad` skill, keeping artifacts under
+  `models/` per the artifact rules above.
+- Test: decide which of `mesh-qa`, `sim-test`, and `gcode` apply, and write
+  pytest files under `tests/generated/<part-name>/`. Assert against design
+  intent with stated threshold bases, not against current measurements.
+  Commit the generated tests; they are durable regression artifacts and are
+  kept separate from the repo-owned suites in `tests/python/`.
+- Iterate: run the tests, read failures, fix the CAD source, and retry. Stop
+  after 3 attempts; when the budget is exhausted, report the current state
+  and remaining failures and ask the user for direction.
+- Review: after all tests pass, review the part and the tests against the
+  design note (missed requirements, superficial assertions) and present a
+  short review summary to the user.
+- Log: keep `tests/generated/<part-name>/iteration-log.md` current per
+  iteration — what passed or failed, what changed, and the review outcome.
+
+This loop does not conflict with the `cad-viewer` skill: visual verification
+and automated test verification are separate, complementary layers.
 
 ## Git And LFS
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sim Test"
+  short_description: "Validate mechanisms in a physics simulation"
+  default_prompt: "Use $sim-test to verify a URDF/SDF mechanism's motion, contact, and friction behavior in PyBullet."

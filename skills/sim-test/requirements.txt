@@ -1,0 +1,5 @@
+# PyBullet publishes Linux wheels only; on Windows/macOS either build it
+# from source, run under WSL2, or use the MuJoCo alternative documented in
+# references/mujoco-alternative.md.
+pybullet; sys_platform == "linux"
+numpy
