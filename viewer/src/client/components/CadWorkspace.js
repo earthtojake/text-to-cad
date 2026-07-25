@@ -19,6 +19,7 @@ import UrdfFileSheet from "./workbench/UrdfFileSheet";
 import ViewerAlertDialog from "./workbench/ViewerAlertDialog";
 import ViewerLoadingOverlay from "./workbench/ViewerLoadingOverlay";
 import FloatingToolBar from "./workbench/FloatingToolBar";
+import ThreeViewMarkupWorkspace from "./workbench/ThreeViewMarkupWorkspace";
 import CadWorkspaceTopBar from "./workbench/CadWorkspaceTopBar";
 import CadWorkspaceHome from "./workbench/CadWorkspaceHome";
 import { useCadAssets } from "./workbench/hooks/useCadAssets";
@@ -1224,6 +1225,12 @@ export default function CadWorkspace({
   const isDesktop = viewerLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP;
   const [fileSheetOpenIntent, setFileSheetOpenIntent] = useState(readInitialFileSheetOpen);
   const [viewerAlertOpen, setViewerAlertOpen] = useState(false);
+  const [threeViewMarkupOpen, setThreeViewMarkupOpen] = useState(() => {
+    if (typeof globalThis.window === "undefined") {
+      return false;
+    }
+    return new URLSearchParams(globalThis.window.location.search).get("markup") === "three-view";
+  });
   const [viewerRuntimeAlert, setViewerRuntimeAlert] = useState(null);
   const [customThemePresets, setCustomThemePresets] = useState(readCustomThemePresets);
   const [themeState, setThemeState] = useState(() => readDirectoryThemeSettingsState(readCustomThemePresets()));
@@ -8788,6 +8795,8 @@ export default function CadWorkspace({
                 canUndoDrawing={canUndoDrawing}
                 canRedoDrawing={canRedoDrawing}
                 drawingStrokes={drawingStrokes}
+                threeViewMarkupAvailable={isStepView && !!selectedMeshData && !viewerLoading}
+                handleOpenThreeViewMarkup={() => setThreeViewMarkupOpen(true)}
                 handleEnterPreviewMode={handleEnterPreviewMode}
                 handleScreenshotCopy={handleScreenshotCopy}
               />
@@ -9102,6 +9111,17 @@ export default function CadWorkspace({
           viewerAlert={viewerAlert}
           previewMode={previewMode}
           setViewerAlertOpen={setViewerAlertOpen}
+        />
+
+        <ThreeViewMarkupWorkspace
+          open={threeViewMarkupOpen && isStepView && !!selectedMeshData}
+          onOpenChange={setThreeViewMarkupOpen}
+          meshData={selectedMeshData}
+          modelKey={selectedKey}
+          sourceFile={fileKey(selectedEntry)}
+          renderFormat={effectiveRenderFormat}
+          themeSettings={resolvedThemeSettings}
+          displaySettings={renderDisplaySettings}
         />
       </SidebarInset>
     </SidebarProvider>

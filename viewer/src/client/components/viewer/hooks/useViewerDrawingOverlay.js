@@ -9,6 +9,7 @@ export function useViewerDrawingOverlay({
   drawingIdRef,
   drawingEnabled,
   drawingTool,
+  drawingStyle,
   meshData,
   previewMode,
   viewerReadyTick,
@@ -58,6 +59,7 @@ export function useViewerDrawingOverlay({
         ...drawingStrokesRef.current,
         {
           id: `stroke-${drawingIdRef.current}`,
+          ...(drawingStyle && typeof drawingStyle === "object" ? drawingStyle : {}),
           ...stroke
         }
       ]);
@@ -86,6 +88,7 @@ export function useViewerDrawingOverlay({
       drawingDraftRef.current = {
         id: "__draft__",
         tool: drawingTool,
+        ...(drawingStyle && typeof drawingStyle === "object" ? drawingStyle : {}),
         points: [point]
       };
       redrawDrawingCanvas(canvas, drawingStrokesRef.current, drawingDraftRef.current);
@@ -164,6 +167,7 @@ export function useViewerDrawingOverlay({
         drawingDraftRef.current = {
           id: "__draft__",
           tool: drawingTool,
+          ...(drawingStyle && typeof drawingStyle === "object" ? drawingStyle : {}),
           points: [anchor.screenPoint, anchor.screenPoint],
           surfaceLine: anchor.surfaceLine
         };
@@ -250,6 +254,7 @@ export function useViewerDrawingOverlay({
     drawingMinPointDistancePx,
     drawingMinStrokeLengthPx,
     drawingStrokesRef,
+    drawingStyle,
     drawingTool,
     drawingToolNeedsTwoPoints,
     meshData,

@@ -4,6 +4,7 @@ import {
   Focus,
   MousePointer2,
   Orbit,
+  PanelsTopLeft,
   Pause,
   Play,
   PenTool
@@ -57,6 +58,8 @@ function DesktopFloatingToolBar({
   canUndoDrawing,
   canRedoDrawing,
   drawingStrokes,
+  threeViewMarkupAvailable = false,
+  handleOpenThreeViewMarkup,
   handleEnterPreviewMode,
   handleScreenshotCopy
 }) {
@@ -109,6 +112,14 @@ function DesktopFloatingToolBar({
                 aria-pressed={drawToolActive}
               >
                 <PenTool className="size-3" strokeWidth={2} aria-hidden="true" />
+              </ToolbarButton>
+
+              <ToolbarButton
+                label="Orthographic markup"
+                onClick={handleOpenThreeViewMarkup}
+                disabled={!threeViewMarkupAvailable}
+              >
+                <PanelsTopLeft className="size-3" strokeWidth={2} aria-hidden="true" />
               </ToolbarButton>
 
               {displayControlAvailable ? (

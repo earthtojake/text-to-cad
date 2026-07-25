@@ -2082,6 +2082,7 @@ const CadViewer = forwardRef(function CadViewer({
   displaySettings = null,
   drawingEnabled = false,
   drawingTool = DRAWING_TOOL.FREEHAND,
+  drawingStyle = null,
   drawingStrokes = [],
   onDrawingStrokesChange,
   onPerspectiveChange,
@@ -2812,7 +2813,7 @@ const CadViewer = forwardRef(function CadViewer({
     setUrdfPosePickerGuidePoint((current) => (current ? null : current));
   };
 
-  const activateViewPlaneFace = (faceId) => {
+  const activateViewPlaneFace = (faceId, { animate = true } = {}) => {
     const runtime = runtimeRef.current;
     const face = VIEW_PLANE_FACE_BY_ID[faceId];
     if (!runtime || !face) {
@@ -2821,6 +2822,13 @@ const CadViewer = forwardRef(function CadViewer({
     activeViewPlaneFaceRef.current = face.id;
     setActiveViewPlaneFace(face.id);
     const transitioned = transitionCameraToViewPreset(runtime, face);
+    if (transitioned && !animate && runtime.cameraTransition) {
+      stepCameraTransition(
+        runtime,
+        runtime.cameraTransition.startTime + runtime.cameraTransition.durationMs
+      );
+      runtime.requestRender?.();
+    }
     if (transitioned) {
       defaultPerspectiveResettingRef.current = false;
       setDefaultPerspectiveDetached(true);
@@ -2919,8 +2927,8 @@ const CadViewer = forwardRef(function CadViewer({
       }
       return fitted;
     },
-    focusViewPreset(faceId) {
-      return activateViewPlaneFace(faceId);
+    focusViewPreset(faceId, options = {}) {
+      return activateViewPlaneFace(faceId, options);
     }
   }), [
     activeSelectorRuntime,
@@ -4693,6 +4701,7 @@ const CadViewer = forwardRef(function CadViewer({
     drawingIdRef,
     drawingEnabled,
     drawingTool,
+    drawingStyle,
     meshData,
     previewMode,
     viewerReadyTick,

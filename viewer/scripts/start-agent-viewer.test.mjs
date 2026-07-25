@@ -424,6 +424,45 @@ test("resolveAgentViewerPort reuses matching registry servers before free lower 
   assert.deepEqual(probes, ["127.0.0.1:5173"]);
 });
 
+test("resolveAgentViewerPort does not reuse a packaged viewer for dev source", async () => {
+  const probes = [];
+  const result = await resolveAgentViewerPort({
+    forwardedArgs: ["--host", "127.0.0.1", "--port", "4178"],
+    git: "git-a",
+    mode: "dev",
+    viewerVersion: "0.3.2",
+    registryServers: [],
+    portScanLimit: 2,
+    probePort: async ({ host, port }) => {
+      probes.push(port);
+      if (port === 4178) {
+        return {
+          status: "viewer",
+          port,
+          baseUrl: `http://${host}:${port}`,
+          serverInfo: {
+            app: "cad-viewer",
+            serverApiVersion: 2,
+            dynamicRoot: true,
+            serverFeatures: ["directory-activation"],
+            serverMode: "serve",
+            viewerVersion: "0.3.2",
+          },
+        };
+      }
+      return {
+        status: "closed",
+        port,
+        baseUrl: `http://${host}:${port}`,
+      };
+    },
+  });
+
+  assert.equal(result.action, "start");
+  assert.equal(result.port, 4179);
+  assert.deepEqual(probes, [4178, 4179]);
+});
+
 test("resolveAgentViewerPort reuses matching-version dist servers across git branches", async () => {
   const probes = [];
   const result = await resolveAgentViewerPort({

@@ -443,6 +443,12 @@ function serverInfoMode(serverInfo) {
   return normalizeReuseMode(serverInfo?.serverMode || serverInfo?.runtimeMode || serverInfo?.mode);
 }
 
+function serverInfoModeAllowsReuse(serverInfo, context) {
+  const currentMode = normalizeReuseMode(context?.mode);
+  const serverMode = serverInfoMode(serverInfo);
+  return !currentMode || !serverMode || currentMode === serverMode;
+}
+
 function serverInfoRequiresGitMatch(serverInfo, context) {
   const currentMode = normalizeReuseMode(context?.mode);
   const serverMode = serverInfoMode(serverInfo);
@@ -480,6 +486,7 @@ export function isReusableAgentViewerServer(serverInfo, contextOrGit = {}) {
     Number(serverInfo.serverApiVersion || 0) >= VIEWER_SERVER_API_VERSION &&
     serverInfo.dynamicRoot === true &&
     serverInfoHasFeature(serverInfo, directoryActivationFeature) &&
+    serverInfoModeAllowsReuse(serverInfo, context) &&
     serverInfoGitAllowsReuse(serverInfo, context) &&
     serverInfoVersionAllowsReuse(serverInfo, context)
   );
