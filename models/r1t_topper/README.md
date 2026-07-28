@@ -67,6 +67,11 @@ only as proportion references. Replace those section rows with
 common-coordinate scan slices later; the loft, assembly, export, and validation
 workflow can remain unchanged.
 
+For aesthetic work in Blender, follow
+`references/BLENDER_CAD_HANDOFF.md`. Blender is styling/visual-envelope
+authoring only; the CAD datum, interfaces, engineered geometry, STEP, and
+validation remain authoritative.
+
 ## CAD Explorer / CAD Viewer
 
 Start CAD Viewer with the repository's `cad-viewer` skill and use the repository
