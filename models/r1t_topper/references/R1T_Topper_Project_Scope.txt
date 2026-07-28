@@ -1,0 +1,223 @@
+================================================================================
+R1T PROFILE TOPPER SYSTEM — PROJECT SCOPE
+CubCrafters Manufacturing
+Draft v0.1
+================================================================================
+
+OVERVIEW
+--------
+A modular, aircraft-grade carbon fiber canopy topper for the Rivian R1T pickup
+truck. The topper completes the R1T's roofline to match the silhouette of the
+Rivian R1S SUV, transforming the truck's profile while adding functional,
+configurable utility. The launch use case is a ventilated, dog-friendly canopy.
+This is the first product in a planned ecosystem of R1T toppers and accessories.
+
+Target retail price: under $5,000
+Target market: Rivian R1T owners
+Distribution: direct to consumer, Rivian owner community channels
+
+
+--------------------------------------------------------------------------------
+FORM & FITMENT
+--------------------------------------------------------------------------------
+
+- Topper profile follows the R1S roofline from B-pillar rearward, scaled to
+  the R1T bed length and bed rail height.
+
+- Rivian R1T is unibody construction. The topper sits flush with both the bed
+  rails and the rear of the cab roofline — no gaps, no adapters.
+
+- The master reference geometry is the 2D side-profile spline curve of the R1S
+  roofline mapped onto R1T bed dimensions. All mold geometry derives from this
+  curve. Rivian collaboration or physical measurement of both vehicles required
+  to finalize this spline.
+
+- Approximate R1T bed dimensions: 54" wide x 44" deep. Precise dimensions to
+  be confirmed by physical measurement or Rivian-provided CAD data.
+
+
+--------------------------------------------------------------------------------
+MATERIALS & FABRICATION
+--------------------------------------------------------------------------------
+
+- Top panel: aircraft-grade carbon fiber, CNC-molded
+- Side panel frames: carbon fiber or aluminum extrusion (TBD)
+- Modular insert panels: carbon fiber frames with material per module type
+- Rear door: carbon fiber
+- Hardware: stainless or anodized aluminum throughout
+
+- Fabrication: CubCrafters facility, night shift production run
+- Each carbon fiber component produced from CNC-machined molds
+- Assembly joints designed for flat-pack shipping and driveway installation
+
+
+--------------------------------------------------------------------------------
+STRUCTURAL DESIGN
+--------------------------------------------------------------------------------
+
+FLAT-PACK / MODULAR ASSEMBLY
+- Topper ships in sections sized for standard freight
+- All joints are structural and visually seamless when assembled
+- Assembly achievable by one person with basic hand tools
+- Components indexed so assembly is foolproof — panels only fit one way
+- Joints designed with same philosophy as aircraft section assembly
+
+TOP PANEL
+- Single carbon fiber panel following the R1S roofline spline
+- Integrated mounting rail interface matching Rivian factory crossbar spec
+  (same attachment system used on the R1T cab section, extended aft)
+- Two crossbar positions on top surface — forward and aft of bed center
+- Top surface completely uninterrupted — no cutouts, no exposed hardware
+
+SIDE PANEL FRAMES
+- Structural frames run the length of the bed on each side
+- Each frame contains multiple slots accepting interchangeable insert modules
+- Consistent slot/locking interface shared across all module types
+- Three insert positions per side (approximate — confirm against bed length)
+
+REAR DOOR
+- Full-width swing-up door, gas-strut assisted
+- Flush hinges integrated into carbon fiber panel
+- Seals against topper frame when closed
+- Houses brake light and rear camera (see below)
+
+BASE RAIL / MOUNTING SYSTEM
+- Precision-machined brackets engage Rivian factory 500lb-rated bed anchor points
+- No drilling into vehicle required
+- Tool-free quick release
+- Topper removes as a unit or in sections
+
+
+--------------------------------------------------------------------------------
+MODULAR SIDE PANEL INSERT SYSTEM
+--------------------------------------------------------------------------------
+
+Each side slot accepts one of the following insert types. Buyers configure at
+purchase and can swap modules post-sale.
+
+MODULE TYPES (v1 planned):
+
+1. MESH / SCREEN
+   - Ventilated panel for airflow
+   - Primary panel for dog canopy use case
+   - UV-resistant mesh material
+
+2. TINTED OR CLEAR WINDOW
+   - Fixed glazing for weather protection with visibility
+   - Flush fit within carbon frame
+
+3. RECOVERY BOARD MOUNT
+   - External mounting surface for MaxTrax, TRED Pro, or equivalent
+   - Flush to topper side profile when boards loaded
+
+4. STRAP / TOW GEAR ORGANIZER
+   - External accessible storage for recovery straps, tow lines
+   - Accessed from outside without opening topper
+
+5. SIDE-OPENING TOOL CUBBY
+   - Swing-up lid with gas strut, accessed from the side
+   - Internal storage for tools, work site gear
+   - Lid stores flush to side panel when open
+   - Locking latch when closed
+
+
+--------------------------------------------------------------------------------
+INTEGRATED FEATURES
+--------------------------------------------------------------------------------
+
+BUTTON RELOCATION PANEL
+- Rivian R1T has control buttons on the top plane of the bed rail surface
+  (gear tunnel access, tonneau cover, tailgate controls)
+- Topper covers these buttons; mechanical extensions relocate all controls
+  to a flush panel on the side of the topper
+- Relocation panel positioned at an ergonomic reach height on the side
+- Top carbon surface remains completely uninterrupted
+
+INTERIOR LIGHTING
+- Flush LED strip or panel recessed into carbon fiber ceiling
+- Full bed area illumination
+- Use cases: dog visibility, gear access, camping/overnight
+
+BRAKE LIGHT
+- LED light bar integrated into rear door face
+- Mimics R1S taillight signature styling
+- DOT compliant
+- Wired through bed to vehicle lighting circuit
+- Required by law as topper covers OEM rear lighting
+
+REAR CAMERA
+- Flush-mounted camera housing in rear door
+- Wired to tap into Rivian's existing rear camera harness
+- Restores full reverse camera functionality blocked by topper
+- Camera positioned at equivalent height to OEM unit
+- Note: Rivian camera harness integration may require community
+  workaround or Rivian API access — design conduit and mount from day one
+  regardless of integration path
+
+CROSSBAR MOUNTS
+- Two sets of Rivian-compatible crossbar mounting rails on top surface
+- Identical interface to factory cab crossbar mounts
+- Allows owners to extend existing Rivian crossbar accessories aft
+- Owners with crossbars on cab can replicate same configuration on topper
+
+
+--------------------------------------------------------------------------------
+DOG CANOPY — LAUNCH USE CASE
+--------------------------------------------------------------------------------
+
+- Mesh side panels provide full ventilation on all sides
+- Interior LED lighting for visibility and comfort
+- Swing-up rear door for dog entry/exit
+- Optional food and water dish mounts (attachment points built into base rail)
+- Sized for one medium dog (approx 40–60 lbs reference animal: female
+  Timber Wolf / Husky mix)
+- Shade provided by carbon fiber top panel
+
+
+--------------------------------------------------------------------------------
+OPEN ITEMS / DEPENDENCIES
+--------------------------------------------------------------------------------
+
+1. RIVIAN COLLABORATION (recommended)
+   - Request official CAD reference geometry for R1T bed and R1S roofline
+   - Confirm crossbar mounting rail specification
+   - Confirm bed anchor point load ratings and interface dimensions
+   - Explore rear camera harness connector specification
+   - Rivian benefits: extends accessory ecosystem, fills R1T/R1S gap,
+     reflects well on platform
+
+2. PHYSICAL MEASUREMENT
+   - If Rivian CAD unavailable, measure reference R1T and R1S vehicles directly
+   - Critical: bed rail height, cab roofline height at rear, bed length/width,
+     anchor point positions, button positions on bed rail top surface
+
+3. SOLIDWORKS DEVELOPMENT SEQUENCE
+   a. Master reference sketch — R1T bed geometry as base
+   b. R1S roofline spline mapped onto R1T bed profile (the master curve)
+   c. Top panel surface model
+   d. Side panel frame family of parts with shared module interface
+   e. Rear door assembly with hinge and gas strut geometry
+   f. Button relocation panel and mechanical extension design
+   g. Camera mount housing
+   h. Brake light housing and wiring path
+   i. Interior light recess
+   j. Quick-release base bracket matched to Rivian anchor spec
+   k. Crossbar mount rail interface
+   l. Module library (each insert type as sub-assembly)
+   m. Flat-pack joint design and assembly sequence
+
+4. REGULATORY
+   - Brake light must meet DOT requirements
+   - Camera integration legality by state (confirm)
+   - Structural load rating for crossbar mounts with cargo
+
+5. FUTURE TOPPER ECOSYSTEM (same base shell)
+   - Hard shell fully enclosed carbon topper
+   - Pop-top / rooftop tent platform
+   - Overlanding / weather sealed expedition shell
+   - Sleeper pod configuration
+
+
+--------------------------------------------------------------------------------
+END OF DOCUMENT
+================================================================================
