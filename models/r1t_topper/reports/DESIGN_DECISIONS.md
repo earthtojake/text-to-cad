@@ -15,12 +15,12 @@
   remains provisional until the target truck is measured.
 - Phase 2 adds one translucent, closed master-envelope volume for silhouette
   review. Its 20 mm front/rear clearances, rail-width match, roof crown,
-  profile taper, and rearward fall are design decisions—not production fitment
-  claims.
-- Five editable cross-sections now approximate the R1T/R1S visual language:
-  nearly vertical lower sides, eased shoulders, a shallow roof crown, and a
-  modest rearward width/height taper. Their dimensions are `ESTIMATED` visual
-  inputs designed to be replaced row-for-row by scan slices.
+  and rear-corner treatment are design decisions—not production fitment claims.
+- Five editable cross-sections now approximate the R1S upper-body silhouette
+  over the R1T bed: nearly vertical lower sides, eased shoulders, a shallow
+  roof crown, and a roofline/plan outline that stays almost parallel before
+  narrowing and dropping locally at the rear corner. Their dimensions are
+  `ESTIMATED` visual inputs designed to be replaced row-for-row by scan slices.
 - Detailed shell offsets, modules, hatch, seals, joints, hardpoints, controls,
   ports, anchors, and mounting geometry remain intentionally absent until scan
   data establishes the vehicle interfaces.

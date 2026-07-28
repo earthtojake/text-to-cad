@@ -39,6 +39,12 @@ def run() -> None:
     assert all(a[0] < b[0] for a, b in zip(stations, stations[1:]))
     assert all(a[1] >= b[1] for a, b in zip(stations, stations[1:]))
     assert all(a[2] >= b[2] for a, b in zip(stations, stations[1:]))
+    # The R1S visual surrogate stays nearly parallel and level through the
+    # bed, then concentrates its taper in the final rear-corner segment.
+    assert stations[0][1] - stations[-2][1] <= 5.0
+    assert stations[-2][1] - stations[-1][1] >= 10.0
+    assert stations[0][4] - stations[-2][4] <= 12.0
+    assert stations[-2][4] - stations[-1][4] >= 40.0
     assert topper_silhouette_stations.provenance == "ESTIMATED"
     _close(stations[0][1], value(topper_front_height))
     _close(stations[-1][1], value(topper_rear_height))

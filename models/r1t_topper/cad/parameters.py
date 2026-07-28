@@ -175,22 +175,26 @@ topper_front_height = Parameter(
     "cab curvature and trailing roof section remain scan-required",
 )
 topper_rear_height = Parameter(
-    735.0, "mm", DESIGN_DECISION, "provisional gentle rearward fall"
+    745.0,
+    "mm",
+    DESIGN_DECISION,
+    "provisional R1S-like rear roof-corner drop",
+    "visual estimate; the roof stays nearly level ahead of the rear corner",
 )
 roof_crown = Parameter(35.0, "mm", DESIGN_DECISION, "provisional drainage crown")
 topper_silhouette_stations = Parameter(
     (
         # x fraction, height, base width, shoulder width, roof width, crown
         (0.00, 760.0, 1730.0, 1690.0, 1570.0, 35.0),
-        (0.22, 758.0, 1724.0, 1682.0, 1558.0, 34.0),
-        (0.52, 751.0, 1708.0, 1660.0, 1530.0, 32.0),
-        (0.78, 743.0, 1680.0, 1628.0, 1490.0, 30.0),
-        (1.00, 735.0, 1648.0, 1590.0, 1450.0, 28.0),
+        (0.22, 759.0, 1724.0, 1688.0, 1569.0, 35.0),
+        (0.52, 758.0, 1708.0, 1684.0, 1566.0, 35.0),
+        (0.78, 755.0, 1680.0, 1672.0, 1558.0, 34.0),
+        (1.00, 745.0, 1680.0, 1630.0, 1510.0, 32.0),
     ),
     "(length fraction, mm height, mm widths, mm crown)",
     ESTIMATED,
-    "visual approximation from Rivian owner-guide imagery and a CC-BY 2022 R1T artist mesh preview",
-    "replace station dimensions from common-coordinate scan slices before fitment work",
+    "visual approximation from operator-supplied R1S side and rear reference screenshots",
+    "near-parallel roof edges and a localized rear-corner taper; replace with registered scan slices",
 )
 rear_hatch_opening_width = Parameter(1450.0, "mm", DESIGN_DECISION, "provisional")
 rear_hatch_opening_height = Parameter(620.0, "mm", DESIGN_DECISION, "provisional")

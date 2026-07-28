@@ -17,6 +17,9 @@ Status: **PASS for conceptual envelope review only**
 - `cad/phase2_checks.py` verifies:
   - five ordered silhouette sections taper monotonically in height and base
     width from front to rear and remain tagged `ESTIMATED`;
+  - roof height and width remain nearly constant through the 78% station, with
+    the visible narrowing and drop concentrated in the final rear-corner
+    segment;
   - the master envelope spans `X=20..1357 mm`, leaving the intentional
     conceptual `20 mm` front and rear clearances within the `1377 mm`
     manufacturer-reference bed length;
@@ -31,9 +34,9 @@ Status: **PASS for conceptual envelope review only**
 - Stable occurrence references were confirmed for the bed, cab, tailgate,
   cab/topper keep-out, anchors, four crossbars, and coordinate artifact.
 - Six regenerated snapshots were visually reviewed. The master envelope is one
-  coherent blue concept volume with rounded crown/shoulders and a modest
-  rearward width/height taper; the cyan rail/crossbar references remain visibly
-  distinct placeholders.
+  coherent blue concept volume with rounded crown/shoulders, an R1S-like level
+  roof continuation, and a localized rear-corner taper; the cyan rail/crossbar
+  references remain visibly distinct placeholders.
 
 ## Intent review
 
@@ -45,7 +48,7 @@ Status: **PASS for conceptual envelope review only**
 | Crossbar reference elevations are consistent | PASS |
 | All crossbars are transverse, left-to-right along Y | PASS |
 | Concept volume occupies the intended bed-length envelope | PASS |
-| Estimated silhouette is symmetric and visually tapered | PASS |
+| Estimated silhouette is symmetric and visually R1S-like | PASS |
 | Concept volume remains visibly distinct from scan-required references | PASS |
 | Production cab-roof continuation and curvature | NOT TESTED — scan required |
 
@@ -57,6 +60,7 @@ values come from Rivian's September 2025 R1T Upfitting Guide and require
 confirmation on the target 2022 Gen 1 vehicle. The cab and bed rails remain
 intentionally crude block envelopes. The master topper is a solid design-volume
 proxy, not a shell, mold surface, mounting system, or clearance proof. This
+visual match is based on perspective screenshots, not measured sections. This
 report does not claim fitment, structural capacity, legal compliance,
 aerodynamic performance, electronics compatibility, manufacturability, or
 production readiness.
