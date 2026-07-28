@@ -55,6 +55,12 @@ topper solid is an external silhouette/design volume only; it is not a shell or
 mold surface. No hatch mechanism, module interface, structure, load rating,
 mounting geometry, seal, or tooling exists yet.
 
+The visual surrogate is driven by five editable cross-sections in
+`cad/parameters.py`. See `references/visual_reference_sources.md` for the
+official imagery and CC-BY artist mesh used only as proportion references.
+Replace those section rows with common-coordinate scan slices later; the loft,
+assembly, export, and validation workflow can remain unchanged.
+
 ## CAD Explorer / CAD Viewer
 
 Start CAD Viewer with the repository's `cad-viewer` skill and use the repository

@@ -12,6 +12,9 @@
 - Replace the conceptual topper width, front height, crown, taper, and
   front/rear clearances only after the bed rails and cab trailing section are
   captured in one scan coordinate system.
+- Replace all five visual silhouette station rows with registered scan sections;
+  the present rows are intentionally editable estimates, not reverse-engineered
+  body surfaces.
 - Confirm tailgate and rear-light swept envelopes.
 - Confirm all bed-anchor, control-button, and factory-crossbar interfaces.
 - Determine the engineered cab/topper shadow-gap or aerodynamic bridge only

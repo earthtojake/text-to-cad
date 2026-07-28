@@ -178,7 +178,20 @@ topper_rear_height = Parameter(
     735.0, "mm", DESIGN_DECISION, "provisional gentle rearward fall"
 )
 roof_crown = Parameter(35.0, "mm", DESIGN_DECISION, "provisional drainage crown")
-roof_side_taper = Parameter(45.0, "mm per side", DESIGN_DECISION, "provisional")
+topper_silhouette_stations = Parameter(
+    (
+        # x fraction, height, base width, shoulder width, roof width, crown
+        (0.00, 760.0, 1730.0, 1690.0, 1570.0, 35.0),
+        (0.22, 758.0, 1724.0, 1682.0, 1558.0, 34.0),
+        (0.52, 751.0, 1708.0, 1660.0, 1530.0, 32.0),
+        (0.78, 743.0, 1680.0, 1628.0, 1490.0, 30.0),
+        (1.00, 735.0, 1648.0, 1590.0, 1450.0, 28.0),
+    ),
+    "(length fraction, mm height, mm widths, mm crown)",
+    ESTIMATED,
+    "visual approximation from Rivian owner-guide imagery and a CC-BY 2022 R1T artist mesh preview",
+    "replace station dimensions from common-coordinate scan slices before fitment work",
+)
 rear_hatch_opening_width = Parameter(1450.0, "mm", DESIGN_DECISION, "provisional")
 rear_hatch_opening_height = Parameter(620.0, "mm", DESIGN_DECISION, "provisional")
 rear_hatch_angle = Parameter(4.0, "deg", DESIGN_DECISION, "provisional")

@@ -18,7 +18,10 @@ from parameters import (
     topper_base_outer_width,
     topper_front_height,
     topper_overall_length,
+    topper_rear_height,
     topper_rear_clearance,
+    topper_silhouette_stations,
+    roof_crown,
     value,
 )
 from topper_envelope import make_master_topper_envelope
@@ -29,6 +32,19 @@ def _close(actual: float, expected: float) -> None:
 
 
 def run() -> None:
+    stations = value(topper_silhouette_stations)
+    assert len(stations) == 5
+    assert stations[0][0] == 0.0
+    assert stations[-1][0] == 1.0
+    assert all(a[0] < b[0] for a, b in zip(stations, stations[1:]))
+    assert all(a[1] >= b[1] for a, b in zip(stations, stations[1:]))
+    assert all(a[2] >= b[2] for a, b in zip(stations, stations[1:]))
+    assert topper_silhouette_stations.provenance == "ESTIMATED"
+    _close(stations[0][1], value(topper_front_height))
+    _close(stations[-1][1], value(topper_rear_height))
+    _close(stations[0][2], value(topper_base_outer_width))
+    _close(stations[0][5], value(roof_crown))
+
     bounds = make_master_topper_envelope().bounding_box()
     _close(bounds.min.X, value(cab_to_topper_nominal_gap))
     _close(bounds.max.X, value(bed_inside_length) - value(topper_rear_clearance))

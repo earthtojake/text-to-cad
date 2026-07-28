@@ -15,6 +15,8 @@ Status: **PASS for conceptual envelope review only**
   - each crossbar envelope is `70 × 1750 × 28 mm` and is more than twenty times
     longer in Y than X.
 - `cad/phase2_checks.py` verifies:
+  - five ordered silhouette sections taper monotonically in height and base
+    width from front to rear and remain tagged `ESTIMATED`;
   - the master envelope spans `X=20..1357 mm`, leaving the intentional
     conceptual `20 mm` front and rear clearances within the `1377 mm`
     manufacturer-reference bed length;
@@ -23,14 +25,15 @@ Status: **PASS for conceptual envelope review only**
     `PLACEHOLDER REQUIRING SCAN`.
 - STEP generation passed for `R1T_TOPPER_ASSEMBLY.step`.
 - CAD inspection reported a labeled assembly with 22 leaf occurrences / shapes,
-  133 faces, 267 edges, and overall bounds:
+  134 faces, 270 edges, no warnings, and overall bounds:
   - minimum `[-685, -875, -510] mm`
   - maximum `[1462, 875, 813] mm`
 - Stable occurrence references were confirmed for the bed, cab, tailgate,
   cab/topper keep-out, anchors, four crossbars, and coordinate artifact.
 - Six regenerated snapshots were visually reviewed. The master envelope is one
-  coherent blue concept volume; the cyan rail/crossbar references remain
-  visibly distinct placeholders.
+  coherent blue concept volume with rounded crown/shoulders and a modest
+  rearward width/height taper; the cyan rail/crossbar references remain visibly
+  distinct placeholders.
 
 ## Intent review
 
@@ -42,6 +45,7 @@ Status: **PASS for conceptual envelope review only**
 | Crossbar reference elevations are consistent | PASS |
 | All crossbars are transverse, left-to-right along Y | PASS |
 | Concept volume occupies the intended bed-length envelope | PASS |
+| Estimated silhouette is symmetric and visually tapered | PASS |
 | Concept volume remains visibly distinct from scan-required references | PASS |
 | Production cab-roof continuation and curvature | NOT TESTED — scan required |
 
