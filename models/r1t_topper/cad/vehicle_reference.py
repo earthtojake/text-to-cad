@@ -107,16 +107,19 @@ def make_tailgate_envelope():
 
 
 def make_keep_out_zones() -> Compound:
-    gap = _box_at(
-        value(cab_to_topper_nominal_gap),
-        value(bed_rail_outer_width),
-        value(cab_roof_height_at_rear),
-        0.0,
-        0.0,
-        0.0,
-    )
-    gap.label = "CAB_TOPPER_NON_CONTACT_GAP"
-    gap.color = KEEP_OUT
+    keepouts = []
+    if value(cab_to_topper_nominal_gap) > 0.0:
+        gap = _box_at(
+            value(cab_to_topper_nominal_gap),
+            value(bed_rail_outer_width),
+            value(cab_roof_height_at_rear),
+            0.0,
+            0.0,
+            0.0,
+        )
+        gap.label = "CAB_TOPPER_NON_CONTACT_GAP"
+        gap.color = KEEP_OUT
+        keepouts.append(gap)
 
     light_x, light_y, light_z = value(rear_light_clearance)
     light = _box_at(
@@ -139,7 +142,7 @@ def make_keep_out_zones() -> Compound:
         keepout.color = KEEP_OUT
         buttons.append(keepout)
 
-    return Compound(label="KEEP_OUT_ZONES", children=[gap, light, *buttons])
+    return Compound(label="KEEP_OUT_ZONES", children=[*keepouts, light, *buttons])
 
 
 def make_anchor_references() -> Compound:

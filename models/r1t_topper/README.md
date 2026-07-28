@@ -55,6 +55,11 @@ topper solid is an external silhouette/design volume only; it is not a shell or
 mold surface. No hatch mechanism, module interface, structure, load rating,
 mounting geometry, seal, or tooling exists yet.
 
+The concept footprint covers the full provisional bed-plus-tailgate top plane:
+`X=0..1462 mm` and `Y=-865..865 mm`. Its rear face shares the provisional
+tailgate outer plane. These are editable layout decisions, not measured
+fitment, contact, or sealing geometry.
+
 The R1S-like visual surrogate is driven by five editable cross-sections in
 `cad/parameters.py`. See `references/visual_reference_sources.md` for the
 operator-supplied R1S screenshots, official imagery, and CC-BY artist mesh used

@@ -89,7 +89,11 @@ cab_rear_surface_angle = Parameter(
     8.0, "deg", PLACEHOLDER_REQUIRING_SCAN, "not applied to Checkpoint 1 block envelope"
 )
 cab_to_topper_nominal_gap = Parameter(
-    20.0, "mm", DESIGN_DECISION, "controlled non-contacting concept gap"
+    0.0,
+    "mm",
+    DESIGN_DECISION,
+    "concept envelope covers the bed plane from its forward edge",
+    "zero layout offset is not a production contact, seal, or clearance specification",
 )
 tailgate_height = Parameter(
     510.0, "mm", PLACEHOLDER_REQUIRING_SCAN, "reference-image proportion"
@@ -147,17 +151,17 @@ factory_crossbar_mount_interface_dimensions = Parameter(
 
 # TOPPER ENVELOPE
 topper_rear_clearance = Parameter(
-    20.0,
+    0.0,
     "mm",
     DESIGN_DECISION,
-    "concept-only rear non-contact allowance",
-    "not a production seal or tailgate clearance",
+    "concept rear face shares the tailgate outer plane",
+    "zero layout offset is not a production seal or tailgate clearance",
 )
 topper_overall_length = Parameter(
-    1337.0,
+    1462.0,
     "mm",
     DESIGN_DECISION,
-    "manufacturer-reference bed length minus provisional 20 mm front and rear clearances",
+    "manufacturer-reference bed length plus provisional tailgate thickness",
     "concept envelope only; scan the target vehicle before fitment work",
 )
 topper_base_outer_width = Parameter(
@@ -186,10 +190,10 @@ topper_silhouette_stations = Parameter(
     (
         # x fraction, height, base width, shoulder width, roof width, crown
         (0.00, 760.0, 1730.0, 1690.0, 1570.0, 35.0),
-        (0.22, 759.0, 1724.0, 1688.0, 1569.0, 35.0),
-        (0.52, 758.0, 1708.0, 1684.0, 1566.0, 35.0),
-        (0.78, 755.0, 1680.0, 1672.0, 1558.0, 34.0),
-        (1.00, 745.0, 1680.0, 1630.0, 1510.0, 32.0),
+        (0.22, 759.0, 1730.0, 1688.0, 1569.0, 35.0),
+        (0.52, 758.0, 1730.0, 1684.0, 1566.0, 35.0),
+        (0.78, 755.0, 1730.0, 1672.0, 1558.0, 34.0),
+        (1.00, 745.0, 1730.0, 1630.0, 1510.0, 32.0),
     ),
     "(length fraction, mm height, mm widths, mm crown)",
     ESTIMATED,
@@ -265,7 +269,7 @@ def validate_checkpoint_1() -> None:
     """Small deterministic guard against internally contradictory references."""
     assert value(bed_rail_outer_width) > value(bed_inside_width)
     assert value(tailgate_width) < value(bed_rail_outer_width)
-    assert value(cab_to_topper_nominal_gap) > 0
+    assert value(cab_to_topper_nominal_gap) == 0
     stations = value(factory_crossbar_mount_locations)
     assert len(stations) == 4
     assert all(station[1] == 0.0 for station in stations)
@@ -274,7 +278,7 @@ def validate_checkpoint_1() -> None:
         value(cab_to_topper_nominal_gap)
         + value(topper_overall_length)
         + value(topper_rear_clearance)
-        == value(bed_inside_length)
+        == value(bed_inside_length) + value(tailgate_thickness)
     )
 
 

@@ -10,7 +10,8 @@ Status: **PASS for conceptual envelope review only**
     wide, and `465 mm` deep;
   - the closed pickup tailgate extends from `Z=-510` to the bed-rail plane at
     `Z=0`;
-  - the future cab/topper non-contact zone is positive and spans `X=0..20`;
+  - the concept footprint begins at the forward bed plane (`X=0`); this does
+    not establish a production cab contact or seal;
   - all four crossbar references share one horizontal mounting elevation;
   - each crossbar envelope is `70 × 1750 × 28 mm` and is more than twenty times
     longer in Y than X.
@@ -20,19 +21,24 @@ Status: **PASS for conceptual envelope review only**
   - roof height and width remain nearly constant through the 78% station, with
     the visible narrowing and drop concentrated in the final rear-corner
     segment;
-  - the master envelope spans `X=20..1357 mm`, leaving the intentional
-    conceptual `20 mm` front and rear clearances within the `1377 mm`
-    manufacturer-reference bed length;
-  - its provisional maximum envelope is `1337 × 1730 × 760 mm`;
+  - the master envelope spans `X=0..1462 mm`, sharing the tailgate outer back
+    plane and covering the bed-plus-tailgate top-plane length;
+  - all five base sections are `1730 mm` wide, so the conceptual footprint
+    reaches both provisional bed edges for its full length;
+  - its provisional maximum envelope is `1462 × 1730 × 760 mm`;
   - the rail, cab, anchor, control, and crossbar mounting inputs remain tagged
     `PLACEHOLDER REQUIRING SCAN`.
 - STEP generation passed for `R1T_TOPPER_ASSEMBLY.step`.
-- CAD inspection reported a labeled assembly with 22 leaf occurrences / shapes,
-  134 faces, 270 edges, no warnings, and overall bounds:
+- CAD inspection reported a labeled assembly with 21 leaf occurrences / shapes,
+  128 faces, 258 edges, no warnings, and overall bounds:
   - minimum `[-685, -875, -510] mm`
   - maximum `[1462, 875, 813] mm`
+- The topper bottom face spans `X=0..1462 mm`, `Y=-865..865 mm` and has area
+  `2,529,260 mm²`, exactly the `1462 × 1730 mm` conceptual footprint.
+- The topper rear face and tailgate outer face are parallel at `X=1462 mm`;
+  the measured flush-alignment translation is `0 mm`.
 - Stable occurrence references were confirmed for the bed, cab, tailgate,
-  cab/topper keep-out, anchors, four crossbars, and coordinate artifact.
+  anchors, four crossbars, and coordinate artifact.
 - Six regenerated snapshots were visually reviewed. The master envelope is one
   coherent blue concept volume with rounded crown/shoulders, an R1S-like level
   roof continuation, and a localized rear-corner taper; the cyan rail/crossbar
@@ -44,10 +50,12 @@ Status: **PASS for conceptual envelope review only**
 | --- | --- |
 | Reference occupies the pickup bed, not an SUV conversion | PASS |
 | Original pickup tailgate remains at/below bed-rail plane | PASS |
-| Positive cab/topper non-contact zone exists | PASS |
+| Concept footprint starts at forward bed plane | PASS |
 | Crossbar reference elevations are consistent | PASS |
 | All crossbars are transverse, left-to-right along Y | PASS |
-| Concept volume occupies the intended bed-length envelope | PASS |
+| Concept volume occupies the intended bed-plus-tailgate envelope | PASS |
+| Rear face shares the tailgate outer back plane | PASS |
+| Base footprint reaches both bed edges for its full length | PASS |
 | Estimated silhouette is symmetric and visually R1S-like | PASS |
 | Concept volume remains visibly distinct from scan-required references | PASS |
 | Production cab-roof continuation and curvature | NOT TESTED — scan required |

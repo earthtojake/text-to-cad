@@ -38,10 +38,11 @@ def run() -> None:
     _close(tailgate.min.Z, -value(tailgate_height))
     _close(tailgate.max.Z, 0.0)
 
-    gap = make_keep_out_zones().children[0].bounding_box()
-    _close(gap.min.X, 0.0)
-    _close(gap.max.X, value(cab_to_topper_nominal_gap))
-    assert gap.max.X > gap.min.X
+    assert value(cab_to_topper_nominal_gap) == 0.0
+    assert all(
+        child.label != "CAB_TOPPER_NON_CONTACT_GAP"
+        for child in make_keep_out_zones().children
+    )
 
     crossbars = make_crossbar_reference_planes().children
     expected_x, _expected_y, expected_z = value(

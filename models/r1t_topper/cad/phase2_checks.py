@@ -21,6 +21,7 @@ from parameters import (
     topper_rear_height,
     topper_rear_clearance,
     topper_silhouette_stations,
+    tailgate_thickness,
     roof_crown,
     value,
 )
@@ -39,6 +40,7 @@ def run() -> None:
     assert all(a[0] < b[0] for a, b in zip(stations, stations[1:]))
     assert all(a[1] >= b[1] for a, b in zip(stations, stations[1:]))
     assert all(a[2] >= b[2] for a, b in zip(stations, stations[1:]))
+    assert all(station[2] == value(topper_base_outer_width) for station in stations)
     # The R1S visual surrogate stays nearly parallel and level through the
     # bed, then concentrates its taper in the final rear-corner segment.
     assert stations[0][1] - stations[-2][1] <= 5.0
@@ -53,7 +55,12 @@ def run() -> None:
 
     bounds = make_master_topper_envelope().bounding_box()
     _close(bounds.min.X, value(cab_to_topper_nominal_gap))
-    _close(bounds.max.X, value(bed_inside_length) - value(topper_rear_clearance))
+    _close(
+        bounds.max.X,
+        value(bed_inside_length)
+        + value(tailgate_thickness)
+        - value(topper_rear_clearance),
+    )
     _close(bounds.size.X, value(topper_overall_length))
     _close(bounds.size.Y, value(topper_base_outer_width))
     _close(bounds.min.Z, 0.0)
