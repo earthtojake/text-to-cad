@@ -1,0 +1,54 @@
+schema_version: 1
+checkpoint: 2
+target_vehicle: 2022 Rivian R1T (Gen 1)
+units: mm
+coordinate_system:
+  x: vehicle length, positive rearward
+  y: vehicle width, positive driver side
+  z: vertical, positive upward
+  origin: vehicle centerline at forward edge of bed-rail mounting plane
+provenance_policy:
+  - MEASURED
+  - MANUFACTURER REFERENCE
+  - ESTIMATED
+  - DESIGN DECISION
+  - PLACEHOLDER REQUIRING SCAN
+current_state:
+  measured_values: 0
+  manufacturer_reference_values: 3
+  warning: Manufacturer bed-envelope values are not a substitute for measuring the target vehicle mounting interface.
+manufacturer_references:
+  - parameter: bed_inside_length
+    value: 1377
+    source: Rivian R1T Upfitting Guide, September 2025, pp. 28 and 30
+    target_vehicle_note: Rivian's 2022 R1T sizing article corroborates a rounded 54 in bed length.
+  - parameter: bed_inside_width
+    value: 1299
+    source: Rivian R1T Upfitting Guide, September 2025, pp. 28 and 30
+    target_vehicle_note: Exposed cargo width; physically confirm on the target 2022 vehicle.
+  - parameter: bed_floor_depth_below_rail
+    value: 465
+    source: Rivian R1T Upfitting Guide, September 2025, pp. 28 and 30
+    target_vehicle_note: Maximum bed height; physically confirm on the target 2022 vehicle.
+high_risk_assumptions:
+  - bed rail outer width and section geometry
+  - cab rear roof height, width, curvature, and surface angle
+  - tailgate and rear-light motion/clearance envelopes
+  - factory bed anchor locations and interface geometry
+  - factory crossbar mount locations and interface geometry
+  - bed control locations and service keep-outs
+geometry_scope:
+  included:
+    - simplified bed floor and rail envelopes
+    - simplified cab rear and roof trailing plane
+    - pickup tailgate below the topper opening plane
+    - factory anchor and control keep-out placeholders
+    - two cab and two topper transverse crossbar references
+    - visible global coordinate artifact
+    - one closed conceptual master topper design volume
+  excluded:
+    - production body surfaces
+    - production topper exterior, shell, and structure
+    - hatch kinematics
+    - proprietary Rivian interface geometry
+    - structural validation
