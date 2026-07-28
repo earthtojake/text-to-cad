@@ -1,4 +1,4 @@
-# Design decisions — Checkpoint 1
+# Design decisions — Phase 2 conceptual envelope
 
 - Global coordinates follow the requested vehicle convention: +X rearward,
   +Y driver side, +Z upward.
@@ -10,3 +10,12 @@
   crossbars use cyan; the coordinate artifact uses RGB axes.
 - Checkpoint 1 uses simple closed solids. Curved body styling, tooling, and
   structural claims are intentionally deferred.
+- The target vehicle is a 2022 Gen 1 R1T. Published bed-envelope dimensions are
+  promoted to manufacturer references, while every topper-contacting interface
+  remains provisional until the target truck is measured.
+- Phase 2 adds one translucent, closed master-envelope volume for silhouette
+  review. Its 20 mm front/rear clearances, rail-width match, roof crown, side
+  taper, and rearward fall are design decisions—not production fitment claims.
+- Detailed shell offsets, modules, hatch, seals, joints, hardpoints, controls,
+  ports, anchors, and mounting geometry remain intentionally absent until scan
+  data establishes the vehicle interfaces.

@@ -1,9 +1,9 @@
 """Single source of truth for R1T topper dimensions.
 
-Units are millimetres, degrees, kilograms, or newtons as noted.  No value in
-this file has been physically measured yet.  Vehicle values must be replaced
-from a scan, direct measurement, or an approved manufacturer reference before
-fitment work.
+Units are millimetres, degrees, kilograms, or newtons as noted. No value in
+this file has been physically measured yet. Manufacturer-reference values are
+useful envelope inputs, but mounting geometry still requires direct measurement
+or a scan before fitment work.
 
 Global coordinates:
     X = vehicle length, positive rearward
@@ -50,10 +50,18 @@ def value(parameter: Parameter) -> Any:
 # VEHICLE REFERENCE
 vehicle_centerline = Parameter(0.0, "mm", DESIGN_DECISION, "coordinate convention")
 bed_inside_length = Parameter(
-    1117.6, "mm", ESTIMATED, "project brief: approximate 44 in bed depth"
+    1377.0,
+    "mm",
+    MANUFACTURER_REFERENCE,
+    "Rivian R1T Upfitting Guide, September 2025, pp. 28 and 30",
+    "54.2 in with tonneau open; Rivian's 2022 R1T sizing article gives a rounded 54 in",
 )
 bed_inside_width = Parameter(
-    1371.6, "mm", ESTIMATED, "project brief: approximate 54 in bed width"
+    1299.0,
+    "mm",
+    MANUFACTURER_REFERENCE,
+    "Rivian R1T Upfitting Guide, September 2025, pp. 28 and 30",
+    "exposed cargo width; applicability to the target 2022 vehicle requires physical confirmation",
 )
 bed_rail_outer_width = Parameter(
     1730.0, "mm", PLACEHOLDER_REQUIRING_SCAN, "visual proportion only"
@@ -65,7 +73,11 @@ bed_rail_section_width = Parameter(
     145.0, "mm", PLACEHOLDER_REQUIRING_SCAN, "derived provisional rail section"
 )
 bed_floor_depth_below_rail = Parameter(
-    500.0, "mm", PLACEHOLDER_REQUIRING_SCAN, "simplified bed context"
+    465.0,
+    "mm",
+    MANUFACTURER_REFERENCE,
+    "Rivian R1T Upfitting Guide, September 2025, pp. 28 and 30",
+    "maximum bed height; applicability to the target 2022 vehicle requires physical confirmation",
 )
 cab_roof_height_at_rear = Parameter(
     760.0, "mm", PLACEHOLDER_REQUIRING_SCAN, "reference-image proportion"
@@ -134,14 +146,33 @@ factory_crossbar_mount_interface_dimensions = Parameter(
 )
 
 # TOPPER ENVELOPE
+topper_rear_clearance = Parameter(
+    20.0,
+    "mm",
+    DESIGN_DECISION,
+    "concept-only rear non-contact allowance",
+    "not a production seal or tailgate clearance",
+)
 topper_overall_length = Parameter(
-    1090.0, "mm", DESIGN_DECISION, "provisional, leaves front and rear clearances"
+    1337.0,
+    "mm",
+    DESIGN_DECISION,
+    "manufacturer-reference bed length minus provisional 20 mm front and rear clearances",
+    "concept envelope only; scan the target vehicle before fitment work",
 )
 topper_base_outer_width = Parameter(
-    1730.0, "mm", DESIGN_DECISION, "provisional match to estimated rail outer width"
+    1730.0,
+    "mm",
+    DESIGN_DECISION,
+    "provisional match to scan-required rail outer-width envelope",
+    "not a production contact width",
 )
 topper_front_height = Parameter(
-    760.0, "mm", DESIGN_DECISION, "provisional cab-roof continuation"
+    760.0,
+    "mm",
+    DESIGN_DECISION,
+    "provisional cab-roof continuation",
+    "cab curvature and trailing roof section remain scan-required",
 )
 topper_rear_height = Parameter(
     735.0, "mm", DESIGN_DECISION, "provisional gentle rearward fall"
@@ -222,6 +253,12 @@ def validate_checkpoint_1() -> None:
     assert len(stations) == 4
     assert all(station[1] == 0.0 for station in stations)
     assert all(station[2] == stations[0][2] for station in stations)
+    assert (
+        value(cab_to_topper_nominal_gap)
+        + value(topper_overall_length)
+        + value(topper_rear_clearance)
+        == value(bed_inside_length)
+    )
 
 
 validate_checkpoint_1()

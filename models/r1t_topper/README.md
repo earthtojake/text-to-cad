@@ -1,8 +1,9 @@
 # R1T modular topper digital prototype
 
 This directory contains a source-controlled, STEP-first build123d engineering
-prototype. Checkpoint 1 includes nonproprietary vehicle reference envelopes
-only. It is not production-ready, structurally validated, or fitment-trustworthy.
+prototype. Phase 2 adds a conceptual master topper volume to the nonproprietary
+vehicle reference envelopes. It is not production-ready, structurally
+validated, or fitment-trustworthy.
 
 ## Regenerate
 
@@ -25,22 +26,34 @@ Run the Checkpoint 1 source checks with:
 ../../.venv/bin/python cad/checkpoint1_checks.py
 ```
 
+Run the Phase 2 concept-envelope checks with:
+
+```bash
+../../.venv/bin/python cad/phase2_checks.py
+```
+
 ## Parameter provenance
 
 Every major dimension is a `Parameter` in `cad/parameters.py` with one of:
 `MEASURED`, `MANUFACTURER REFERENCE`, `ESTIMATED`, `DESIGN DECISION`, or
 `PLACEHOLDER REQUIRING SCAN`.
 
-Checkpoint 1 contains no measured or manufacturer-reference vehicle values.
-After scanning, update the affected parameter records and their provenance,
-regenerate, inspect, and review every view before advancing the envelope.
+Checkpoint 1 targets a 2022 Gen 1 R1T. It contains three
+manufacturer-reference bed-envelope values: length, exposed cargo width, and
+maximum bed height. They are corroborated where possible by Rivian's 2022
+material, but come from the September 2025 R1T Upfitting Guide and must be
+checked on the target vehicle. Rail, cab, port, control, and swept-envelope
+geometry remains provisional. After scanning, update the affected parameter
+records and their provenance, regenerate, inspect, and review every view before
+advancing fitment geometry.
 
 ## Known limitations
 
 See `reports/OPEN_ITEMS.md` and `references/measurement_requirements.md`.
-The cab is a block envelope, interfaces are placeholders, and no topper shell,
-hatch mechanism, module interface, structure, load rating, or tooling exists
-yet.
+The cab is a block envelope and vehicle interfaces are placeholders. The blue
+topper solid is an external silhouette/design volume only; it is not a shell or
+mold surface. No hatch mechanism, module interface, structure, load rating,
+mounting geometry, seal, or tooling exists yet.
 
 ## CAD Explorer / CAD Viewer
 

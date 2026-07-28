@@ -3,7 +3,10 @@
 from math import isclose
 
 from parameters import (
+    MANUFACTURER_REFERENCE,
+    bed_floor_depth_below_rail,
     bed_inside_length,
+    bed_inside_width,
     cab_roof_width_at_rear,
     cab_to_topper_nominal_gap,
     factory_crossbar_mount_interface_dimensions,
@@ -23,6 +26,13 @@ def _close(actual: float, expected: float) -> None:
 
 
 def run() -> None:
+    assert value(bed_inside_length) == 1377.0
+    assert value(bed_inside_width) == 1299.0
+    assert value(bed_floor_depth_below_rail) == 465.0
+    assert bed_inside_length.provenance == MANUFACTURER_REFERENCE
+    assert bed_inside_width.provenance == MANUFACTURER_REFERENCE
+    assert bed_floor_depth_below_rail.provenance == MANUFACTURER_REFERENCE
+
     tailgate = make_tailgate_envelope().bounding_box()
     _close(tailgate.min.X, value(bed_inside_length))
     _close(tailgate.min.Z, -value(tailgate_height))

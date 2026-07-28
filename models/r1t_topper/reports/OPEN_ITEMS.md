@@ -1,10 +1,17 @@
-# Open items — Checkpoint 1
+# Open items — Phase 2 conceptual envelope
 
 - No direct vehicle measurements or approved manufacturer CAD are available.
-- Resolve the project brief's approximate `54 in wide × 44 in deep` wording
-  against a physical scan; it is used only as an estimate.
+- The project brief's approximate `54 in wide × 44 in deep` wording is
+  transposed relative to Rivian's published bed envelope. The model now uses
+  `1377 mm` length, `1299 mm` exposed cargo width, and `465 mm` maximum bed
+  height as manufacturer references. Confirm all three on the target 2022
+  vehicle because the precise millimetre values come from Rivian's September
+  2025 upfitting guide.
 - Replace the block cab envelope with scanned rear-wall and roof-trailing
   sections. The provisional rear-surface angle is not yet applied.
+- Replace the conceptual topper width, front height, crown, taper, and
+  front/rear clearances only after the bed rails and cab trailing section are
+  captured in one scan coordinate system.
 - Confirm tailgate and rear-light swept envelopes.
 - Confirm all bed-anchor, control-button, and factory-crossbar interfaces.
 - Determine the engineered cab/topper shadow-gap or aerodynamic bridge only
