@@ -10,7 +10,10 @@ generates.
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -20,6 +23,12 @@ SKILLS_ROOT = REPO_ROOT / "skills"
 AGENTS_DOC = REPO_ROOT / "AGENTS.md"
 VIEWER_RUNTIME_DIR = REPO_ROOT / "skills" / "cad-viewer" / "scripts" / "viewer"
 VIEWER_BUNDLER = REPO_ROOT / "scripts" / "bundle" / "skills" / "bundle-cad-viewer.sh"
+VIEWER_TEST_RUNNER = REPO_ROOT / "viewer" / "scripts" / "run-tests.mjs"
+PACKAGE_TEST_RUNNERS = (
+    REPO_ROOT / "packages" / "cadjs" / "scripts" / "run-tests.mjs",
+    REPO_ROOT / "packages" / "implicitjs" / "scripts" / "run-tests.mjs",
+    VIEWER_TEST_RUNNER,
+)
 SERVER_ARGS_SOURCE = REPO_ROOT / "viewer" / "src" / "server" / "serverArgs.mjs"
 
 # `npm --prefix <dir> run <script>`, the form every skill doc uses.
@@ -94,7 +103,82 @@ def targets_viewer_runtime(doc: Path, prefix: str) -> bool:
     return any((base / prefix).resolve() == runtime for base in bases)
 
 
+def resolved_viewer_package_manager(*lockfiles: str, override: str = "") -> str:
+    bundler = VIEWER_BUNDLER.read_text(encoding="utf-8")
+    match = re.search(
+        r"^resolve_viewer_package_manager\(\) \{.*?^\}\n",
+        bundler,
+        re.DOTALL | re.MULTILINE,
+    )
+    if match is None:
+        raise AssertionError("Could not find resolve_viewer_package_manager in the Viewer bundler")
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        bin_dir = root / "bin"
+        viewer_dir = root / "viewer"
+        bin_dir.mkdir()
+        viewer_dir.mkdir()
+        for command in ("npm", "pnpm"):
+            executable = bin_dir / command
+            executable.write_text("#!/usr/bin/env sh\nexit 0\n", encoding="utf-8")
+            executable.chmod(0o755)
+        for lockfile in lockfiles:
+            (viewer_dir / lockfile).touch()
+
+        env = os.environ.copy()
+        env.update(
+            {
+                "PATH": f"{bin_dir}:{env.get('PATH', '')}",
+                "VIEWER_DIR": str(viewer_dir),
+                "VIEWER_PACKAGE_MANAGER": override,
+            }
+        )
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                f"set -euo pipefail\n{match.group(0)}\nresolve_viewer_package_manager",
+            ],
+            check=True,
+            capture_output=True,
+            env=env,
+            text=True,
+        )
+        return result.stdout.strip()
+
+
 class DocumentedViewerCommandTests(unittest.TestCase):
+    def test_node_install_script_policies_are_explicit(self) -> None:
+        viewer_package = json.loads((REPO_ROOT / "viewer" / "package.json").read_text())
+        implicit_package = json.loads(
+            (REPO_ROOT / "packages" / "implicitjs" / "package.json").read_text()
+        )
+        self.assertTrue(viewer_package["allowScripts"]["esbuild@0.27.7"])
+        self.assertFalse(viewer_package["allowScripts"]["fsevents"])
+        self.assertFalse(implicit_package["allowScripts"]["fsevents"])
+
+    def test_viewer_test_runner_uses_current_node_symlink_flags(self) -> None:
+        for path in PACKAGE_TEST_RUNNERS:
+            runner = path.read_text(encoding="utf-8")
+            self.assertNotIn("--experimental-default-type=module", runner, str(path))
+        self.assertIn(
+            '"--preserve-symlinks"',
+            VIEWER_TEST_RUNNER.read_text(encoding="utf-8"),
+        )
+
+    def test_viewer_bundler_follows_the_committed_npm_lockfile(self) -> None:
+        self.assertEqual(resolved_viewer_package_manager("package-lock.json"), "npm")
+
+    def test_viewer_bundler_follows_a_pnpm_lockfile(self) -> None:
+        self.assertEqual(resolved_viewer_package_manager("pnpm-lock.yaml"), "pnpm")
+
+    def test_viewer_bundler_respects_an_explicit_package_manager_override(self) -> None:
+        self.assertEqual(
+            resolved_viewer_package_manager("package-lock.json", override="pnpm"),
+            "pnpm",
+        )
+
     def test_documented_npm_scripts_exist_in_the_bundled_runtime(self) -> None:
         available = generated_runtime_scripts()
         self.assertIn("serve", available, "the bundled runtime must define a startup script")

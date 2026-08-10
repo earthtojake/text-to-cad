@@ -2,6 +2,9 @@
   "name": "implicitjs",
   "version": "0.1.0",
   "type": "module",
+  "allowScripts": {
+    "fsevents": false
+  },
   "description": "Standalone browser-native implicit CAD runtime, renderer, mesh sampler, and exporters.",
   "exports": {
     ".": {

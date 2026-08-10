@@ -100,6 +100,14 @@ resolve_viewer_package_manager() {
     echo "$VIEWER_PACKAGE_MANAGER"
     return
   fi
+  if [ -f "$VIEWER_DIR/package-lock.json" ]; then
+    echo "npm"
+    return
+  fi
+  if [ -f "$VIEWER_DIR/pnpm-lock.yaml" ]; then
+    echo "pnpm"
+    return
+  fi
   if command -v pnpm >/dev/null 2>&1; then
     echo "pnpm"
     return

@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "version": "0.3.13",
+  "allowScripts": {
+    "esbuild@0.27.7": true,
+    "fsevents": false
+  },
   "scripts": {
     "dev": "vite dev",
     "agent:start": "node scripts/start-agent-viewer.mjs",

@@ -32,7 +32,6 @@ if (!tests.length) {
 
 const result = spawnSync(process.execPath, [
   "--test",
-  "--experimental-default-type=module",
   ...tests,
 ], {
   cwd: packageRoot,
