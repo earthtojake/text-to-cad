@@ -614,7 +614,7 @@ class SnapshotCliTests(unittest.TestCase):
     def test_timestamp_output_path_preserves_extension(self) -> None:
         self.assertEqual(
             timestamp_output_path("snapshots/review.png", "20260527T163012Z"),
-            "snapshots/review_20260527T163012Z.png",
+            str(Path("snapshots") / "review_20260527T163012Z.png"),
         )
 
     def test_removed_daemon_flags_stay_removed(self) -> None:

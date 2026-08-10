@@ -225,7 +225,7 @@ test("legacy top-level theme and params fields are rejected", () => withTempImpl
 test("timestamp output path preserves extension", () => {
   assert.equal(
     timestampOutputPath("snapshots/review.png", "20260527T163012Z"),
-    "snapshots/review_20260527T163012Z.png"
+    path.join("snapshots", "review_20260527T163012Z.png")
   );
 });
 
