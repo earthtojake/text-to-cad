@@ -8,7 +8,7 @@ from tests.python.support.tmp_root import temporary_directory
 
 add_repo_path("skills/dxf/scripts")
 
-from dxf.render_payload import build_dxf_render_payload
+from cadgen.drawing_render import build_dxf_render_payload
 
 
 class CadpyDxfTests(unittest.TestCase):

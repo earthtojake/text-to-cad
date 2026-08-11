@@ -1,6 +1,5 @@
-const DEFAULT_SITE_ORIGIN = "https://www.cadskills.xyz";
-const SITE_DESCRIPTION =
-  "A skills library for CAD, robotics, and hardware design agents";
+const DEFAULT_SITE_ORIGIN = "https://www.texttocad.dev";
+const SITE_DESCRIPTION = "A library of agent skills for CAD, CAE and CAM";
 const SITE_TITLE = `CAD Skills | ${SITE_DESCRIPTION}`;
 
 function normalizeOrigin(value: string | undefined, fallback: string) {

@@ -1,4 +1,4 @@
 from tests.python.support.paths import add_repo_path
 
 add_repo_path("skills/cad/scripts")
-add_repo_path("skills/cad/scripts/packages/cadpy/src")
+add_repo_path("skills/cad/scripts/packages/cadgen/src")

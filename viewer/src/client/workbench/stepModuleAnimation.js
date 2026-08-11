@@ -13,7 +13,10 @@ export function buildDefaultStepModuleAnimationState(definition) {
     activeId: animation?.id || "",
     playing: false,
     elapsedSec: 0,
-    speed: 1
+    speed: 1,
+    // Runtime loop preference; defaults to the active animation's manifest
+    // loop flag and can be toggled from the viewer without touching the model.
+    loopEnabled: animation?.loop !== false
   };
 }
 

@@ -19,7 +19,49 @@ from typing import Any
 
 DIRECT_MESH_EXTENSIONS = {".stl", ".obj", ".3mf"}
 CONVERT_TO_STL_EXTENSIONS = {".ply", ".glb", ".gltf"}
-UNSUPPORTED_EXTENSIONS = {".step", ".stp", ".dxf", ".svg", ".urdf", ".sdf"}
+
+_STEP_REMEDIATION = {
+    "skill": "cad",
+    "reason": "STEP/STP is boundary-representation CAD, not a mesh.",
+    "next_step": (
+        "Export an STL sidecar with $cad: `python scripts/step --kind part <input> --stl <output>.stl`. "
+        "When a Python generator exists, target it instead: `python scripts/step <model>.step.py --stl <output>.stl`. "
+        "Then slice the exported .stl with this skill."
+    ),
+}
+_FLAT_2D_REMEDIATION = {
+    "skill": "cad",
+    "reason": "This is a 2D drawing, not a printable solid, and this toolchain has no 2D-to-mesh conversion.",
+    "next_step": (
+        "For an FDM print, model the 3D solid in $cad with `gen_step()` and export an STL sidecar "
+        "(`python scripts/step <model>.step.py --stl <output>.stl`), then slice that .stl here. "
+        "If the part is a flat cut rather than a print, use $sendcutsend instead of this skill."
+    ),
+}
+
+
+def _robot_description_remediation(skill: str, label: str) -> dict[str, str]:
+    return {
+        "skill": skill,
+        "reason": f"{label} is a robot description that references per-link mesh files; it is not itself a mesh.",
+        "next_step": (
+            f"Slice the per-link .stl/.obj meshes the {label} references, one mesh at a time. "
+            f"If those meshes are missing or stale, regenerate them from the owning CAD source with $cad "
+            "(`python scripts/step <model>.step.py --stl <output>.stl`), then slice the exported mesh here. "
+            f"Use ${skill} for the robot description itself."
+        ),
+    }
+
+
+UNSUPPORTED_INPUT_REMEDIATION = {
+    ".step": _STEP_REMEDIATION,
+    ".stp": _STEP_REMEDIATION,
+    ".dxf": _FLAT_2D_REMEDIATION,
+    ".svg": _FLAT_2D_REMEDIATION,
+    ".urdf": _robot_description_remediation("urdf", "URDF"),
+    ".sdf": _robot_description_remediation("sdf", "SDF"),
+}
+UNSUPPORTED_EXTENSIONS = set(UNSUPPORTED_INPUT_REMEDIATION)
 SLICED_BAMBU_PLATE_RE = re.compile(r"^Metadata/plate_(\d+)\.gcode$")
 
 PREFERRED_BACKEND_ORDER = ["orcaslicer", "prusa-slicer", "curaengine"]
@@ -78,6 +120,10 @@ SUPPORTED_GCODE_COMMANDS = {
 
 class GCodeToolError(RuntimeError):
     """Raised for expected user-facing workflow errors."""
+
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.details = details or {}
 
 
 @dataclass(frozen=True)
@@ -351,9 +397,14 @@ def inspect_input(path: Path) -> InputInspection:
         raise GCodeToolError(f"Input file does not exist: {resolved}")
 
     extension = resolved.suffix.lower()
-    if extension in UNSUPPORTED_EXTENSIONS:
+    remediation = UNSUPPORTED_INPUT_REMEDIATION.get(extension)
+    if remediation is not None:
         supported = ", ".join(sorted(DIRECT_MESH_EXTENSIONS | CONVERT_TO_STL_EXTENSIONS))
-        raise GCodeToolError(f"{extension} is out of scope for this skill. Supported v1 mesh inputs: {supported}.")
+        raise GCodeToolError(
+            f"{extension} is out of scope for this skill. Supported v1 mesh inputs: {supported}. "
+            f"{remediation['reason']} {remediation['next_step']}",
+            details={"remediation": {"extension": extension, **remediation}},
+        )
     if extension not in DIRECT_MESH_EXTENSIONS | CONVERT_TO_STL_EXTENSIONS:
         supported = ", ".join(sorted(DIRECT_MESH_EXTENSIONS | CONVERT_TO_STL_EXTENSIONS))
         raise GCodeToolError(f"Unsupported input extension {extension or '<none>'}. Supported v1 mesh inputs: {supported}.")
@@ -733,7 +784,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except GCodeToolError as exc:
-        print_json({"ok": False, "error": str(exc)})
+        payload: dict[str, Any] = {"ok": False, "error": str(exc)}
+        payload.update(exc.details)
+        print_json(payload)
         return 2
 
 

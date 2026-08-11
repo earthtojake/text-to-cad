@@ -8,6 +8,14 @@ import {
   normalizePartIdList,
   referenceMatchesFocusedPart
 } from "./partVisualState.js";
+import {
+  PART_HOVER_EDGE_EMPHASIS,
+  PART_HOVER_EMISSIVE_INTENSITY,
+  PART_HOVER_HIGHLIGHT_BLEND,
+  PART_SELECTED_EMISSIVE_INTENSITY,
+  PART_SELECTED_HIGHLIGHT_BLEND,
+  partHighlightSurfaceColor
+} from "./partHighlight.js";
 
 const EPSILON = 1e-6;
 
@@ -116,20 +124,157 @@ test("part visual state applies hover and selected styling without changing visi
   assert.equal(hoverRecord.mesh.renderOrder, 23);
   assert.equal(hoverRecord.edges.renderOrder, 26);
   assertNear(hoverRecord.material.opacity, 0.9, "hover opacity");
-  assert.equal(hoverRecord.material.color.getHexString(), colors.hoveredSurfaceColor.getHexString());
+  assert.equal(
+    hoverRecord.material.color.getHexString(),
+    partHighlightSurfaceColor(
+      THREE,
+      new THREE.Color("#aaaaaa"),
+      colors.hoveredSurfaceColor,
+      PART_HOVER_HIGHLIGHT_BLEND
+    ).getHexString()
+  );
   assert.equal(hoverRecord.material.emissive.getHexString(), colors.hoveredSurfaceColor.getHexString());
-  assertNear(hoverRecord.material.emissiveIntensity, 0.12, "hover emissive");
+  assertNear(hoverRecord.material.emissiveIntensity, PART_HOVER_EMISSIVE_INTENSITY, "hover emissive");
   assert.equal(hoverRecord.edgeMaterial.color.getHexString(), colors.hoveredEdgeColor.getHexString());
-  assertNear(hoverRecord.edgeMaterial.opacity, 0.9, "hover edge opacity");
+  // Hover keeps a lighter outline than selection.
+  assertNear(hoverRecord.edgeMaterial.opacity, 0.9 * PART_HOVER_EDGE_EMPHASIS, "hover edge opacity");
+  assert.equal(hoverRecord.ghostMesh, undefined, "hover never builds an occlusion ghost");
 
   assertNear(selectedRecord.material.opacity, 0.9, "selected opacity");
   assert.equal(selectedRecord.material.transparent, true);
   assert.equal(selectedRecord.material.depthWrite, true);
   assert.equal(selectedRecord.mesh.renderOrder, 23);
   assert.equal(selectedRecord.edges.renderOrder, 26);
-  assert.equal(selectedRecord.material.color.getHexString(), colors.selectedSurfaceColor.getHexString());
+  // The surface blends toward the highlight color so the part stays
+  // recognizable; edges and emissive keep the full highlight color.
+  assert.equal(
+    selectedRecord.material.color.getHexString(),
+    partHighlightSurfaceColor(
+      THREE,
+      new THREE.Color("#aaaaaa"),
+      colors.selectedSurfaceColor,
+      PART_SELECTED_HIGHLIGHT_BLEND
+    ).getHexString()
+  );
+  assert.notEqual(selectedRecord.material.color.getHexString(), "aaaaaa");
+  assert.equal(selectedRecord.material.emissive.getHexString(), colors.selectedSurfaceColor.getHexString());
+  assertNear(selectedRecord.material.emissiveIntensity, PART_SELECTED_EMISSIVE_INTENSITY, "selected emissive");
   assert.equal(selectedRecord.edgeMaterial.color.getHexString(), colors.selectedEdgeColor.getHexString());
   assertNear(selectedRecord.edgeMaterial.opacity, 0.9, "selected edge opacity");
+
+  // Selection must read stronger than hover on every axis, or "about to pick"
+  // and "already picked" are indistinguishable.
+  assert.ok(
+    selectedRecord.material.emissiveIntensity > hoverRecord.material.emissiveIntensity,
+    "selection should glow more than hover"
+  );
+  assert.ok(
+    selectedRecord.edgeMaterial.opacity > hoverRecord.edgeMaterial.opacity,
+    "selection should outline harder than hover"
+  );
+});
+
+test("hover and selection use distinct colors", () => {
+  const colors = getPartHighlightColors(THREE, { edgeSettings: { highlightColor: "#4f9dff" } });
+  assert.notEqual(
+    colors.hoveredSurfaceColor.getHexString(),
+    colors.selectedSurfaceColor.getHexString(),
+    "hover and selection must be separate colors, not two strengths of one"
+  );
+  // A theme can override either independently.
+  const themed = getPartHighlightColors(THREE, {
+    edgeSettings: { highlightColor: "#ff0000", hoverColor: "#00ff00" }
+  });
+  assert.equal(themed.selectedSurfaceColor.getHexString(), "ff0000");
+  assert.equal(themed.hoveredEdgeColor.getHexString(), "00ff00");
+});
+
+test("hovering an already-selected part keeps the selected treatment", () => {
+  const record = createRecord("part");
+  const children = [];
+  record.mesh = { visible: true, renderOrder: 2, add: (child) => children.push(child) };
+  record.geometry = new THREE.BufferGeometry();
+
+  applyPartVisualState(THREE, [record], {
+    viewerTheme: { edge: "#111111", edgeOpacity: 0.4 },
+    edgeSettings: { highlightColor: "#4f9dff", highlightOpacity: 0.9 },
+    hiddenPartIds: [],
+    hoveredPartId: "part",
+    focusedPartId: [],
+    selectedPartIds: ["part"],
+    showEdges: true
+  });
+
+  const colors = getPartHighlightColors(THREE, { edgeSettings: { highlightColor: "#4f9dff" } });
+  assert.equal(record.material.emissive.getHexString(), colors.selectedSurfaceColor.getHexString());
+  assertNear(record.material.emissiveIntensity, PART_SELECTED_EMISSIVE_INTENSITY, "selected emissive wins");
+  assertNear(record.edgeMaterial.opacity, 0.9, "selected edge opacity wins");
+  assert.ok(record.ghostMesh?.visible, "a hovered selection still ghosts");
+});
+
+test("part highlight surface color blends the part color toward the highlight color", () => {
+  const base = new THREE.Color("#c05ac8");
+  const highlight = new THREE.Color("#4f9dff");
+
+  const selected = partHighlightSurfaceColor(THREE, base, highlight, PART_SELECTED_HIGHLIGHT_BLEND);
+  const hovered = partHighlightSurfaceColor(THREE, base, highlight, PART_HOVER_HIGHLIGHT_BLEND);
+
+  // A saturated part must still shift visibly; the pre-fix tone-shift left
+  // already-saturated colors essentially unchanged.
+  assert.notEqual(selected.getHexString(), base.getHexString());
+  assert.ok(
+    selected.b - base.b > 0.1,
+    `selected highlight should pull toward the highlight hue, got ${selected.getHexString()}`
+  );
+  // Hover is a weaker cue than selection.
+  assert.ok(hovered.b < selected.b, "hover blend should be weaker than selected blend");
+  // Parts with no base color (reference geometry) fall back to the flat color.
+  assert.equal(partHighlightSurfaceColor(THREE, null, highlight, 0.5), highlight);
+});
+
+test("occlusion ghost is built lazily and only while the part is selected", () => {
+  const record = createRecord("selected");
+  const children = [];
+  record.mesh = {
+    visible: true,
+    renderOrder: 2,
+    add: (child) => children.push(child)
+  };
+  record.geometry = new THREE.BufferGeometry();
+  record.material.clippingPlanes = [new THREE.Plane()];
+
+  const state = (selectedPartIds) => ({
+    viewerTheme: { edge: "#111111", edgeOpacity: 0.4 },
+    edgeSettings: { color: "#333333", opacity: 0.4, highlightColor: "#8dc5ff", highlightOpacity: 0.9 },
+    hiddenPartIds: [],
+    hoveredPartId: null,
+    focusedPartId: [],
+    selectedPartIds,
+    showEdges: true
+  });
+
+  // Unselected parts must not allocate a ghost mesh at all.
+  applyPartVisualState(THREE, [record], state([]));
+  assert.equal(record.ghostMesh, undefined);
+  assert.equal(children.length, 0);
+
+  applyPartVisualState(THREE, [record], state(["selected"]));
+  assert.ok(record.ghostMesh, "ghost mesh is created on selection");
+  assert.equal(children.length, 1);
+  assert.equal(record.ghostMesh.visible, true);
+  assert.equal(record.ghostMesh.userData.isOcclusionGhost, true);
+  assert.equal(record.ghostMesh.castShadow, false);
+  assert.equal(record.ghostMaterial.depthFunc, THREE.GreaterDepth);
+  assert.equal(record.ghostMaterial.depthWrite, false);
+  assert.equal(record.ghostMaterial.side, THREE.FrontSide);
+  // The ghost must honor the section clip planes the surface is using.
+  assert.equal(record.ghostMaterial.clippingPlanes, record.material.clippingPlanes);
+  assert.equal(record.ghostMaterial.color.getHexString(), "8dc5ff");
+
+  // Deselecting hides the existing ghost without building a second one.
+  applyPartVisualState(THREE, [record], state([]));
+  assert.equal(record.ghostMesh.visible, false);
+  assert.equal(children.length, 1);
 });
 
 test("part visual state highlights shader-rendered surface edges", () => {

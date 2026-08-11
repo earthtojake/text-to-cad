@@ -1,6 +1,6 @@
 # SDF design ledger
 
-Create or update this ledger before writing SDF XML. The ledger can live in the response, a project note, or comments in the generator source. The goal is to externalize spatial and simulator assumptions before they become hard-to-audit XML.
+Create or update this ledger before writing SDF XML. The ledger's canonical home is a comment block at the top of the `.sdf` file itself, optionally expanded in an adjacent note for large worlds. The goal is to externalize spatial and simulator assumptions before they become hard-to-audit XML.
 
 ## Document
 
@@ -80,7 +80,7 @@ Do not invent plugin filenames, topics, frame names, namespaces, controller para
 
 | URI kind | Allowed? | Resolution expectation | Notes |
 |---|---|---|---|
-| Relative local path | | Relative to generated `.sdf` location | |
+| Relative local path | | Relative to the `.sdf` file location | |
 | `file://` | | Absolute local file | |
 | `model://` | | Simulator model path | |
 | `package://` | | Simulator/ROS package environment | |

@@ -1,0 +1,744 @@
+<?xml version="1.0"?>
+<robot name="juno">
+  <!--
+    robot: juno | consumers: CAD Viewer, external URDF consumers (RViz/MoveIt/simulators)
+    units: meters, kilograms, radians | frames: +X forward, +Y robot-left, +Z up (REP-103)
+    root: base_footprint (frame-only) | source of dimensions: juno.step.py / juno_parts/chain.py (mm)
+    meshes: 3MF/, one mm 3MF export per link in that link's part-local frame (scale 0.001); link
+    frames coincide with juno_parts part-local frames, so all visual origins are identity
+    inertials: CAD volume properties (OCP BRepGProp on the part solids) at a uniform ASSUMED
+    density chosen so the whole robot masses 35 kg; COM and full tensor about the COM in the
+    link frame come from the CAD solids - only the density is assumed (confidence: estimated)
+    collisions: per-link axis-aligned CAD bounding boxes (intentionally coarse)
+    assumptions:
+    - joint limits/efforts are assumed G1-class values documented in juno_parts/chain.py
+    - total mass 35 kg is assumed, distributed by CAD volume
+  -->
+  <link name="base_footprint" />
+  <link name="pelvis">
+    <inertial>
+      <origin xyz="0.00053 0 -0.06066" rpy="0 0 0" />
+      <mass value="2.946515813" />
+      <inertia ixx="0.016827987" ixy="0" ixz="0.000043872" iyy="0.004752033" iyz="0" izz="0.015352781" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/pelvis.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.059" rpy="0 0 0" />
+      <geometry>
+        <box size="0.11139 0.265 0.122" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="torso">
+    <inertial>
+      <origin xyz="0.007794 0 0.191529" rpy="0 0 0" />
+      <mass value="9.719566422" />
+      <inertia ixx="0.099920305" ixy="-0.000000007" ixz="-0.000994366" iyy="0.083204085" iyz="0.000000004" izz="0.03883939" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/torso.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.009051 0 0.166" rpy="0 0 0" />
+      <geometry>
+        <box size="0.139496 0.264 0.328" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="neck_collar">
+    <inertial>
+      <origin xyz="0 0.000078 0.031736" rpy="0 0 0" />
+      <mass value="0.155441379" />
+      <inertia ixx="0.000072177" ixy="0" ixz="0" iyy="0.000064718" iyz="-0.000000173" izz="0.000039957" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/neck_collar.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.033" rpy="0 0 0" />
+      <geometry>
+        <box size="0.044 0.049 0.066" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="head">
+    <inertial>
+      <origin xyz="0.005892 0 0.078745" rpy="0 0 0" />
+      <mass value="2.276092679" />
+      <inertia ixx="0.004785595" ixy="0.000000001" ixz="0.00012017" iyy="0.004580225" iyz="0" izz="0.004162961" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/head.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.0073465 0 0.08075" rpy="0 0 0" />
+      <geometry>
+        <box size="0.124743 0.1372 0.1375" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="hip_bracket_left">
+    <inertial>
+      <origin xyz="0 0 -0.035975" rpy="0 0 0" />
+      <mass value="0.378989961" />
+      <inertia ixx="0.000321587" ixy="0" ixz="0" iyy="0.000535228" iyz="0" izz="0.000392719" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/hip_bracket_left.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.045" rpy="0 0 0" />
+      <geometry>
+        <box size="0.1 0.07 0.094" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="hip_carrier_left">
+    <inertial>
+      <origin xyz="0 -0.017245 -0.013249" rpy="0 0 0" />
+      <mass value="0.421628487" />
+      <inertia ixx="0.000603129" ixy="0" ixz="0" iyy="0.000526019" iyz="-0.000143031" izz="0.000368877" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/hip_carrier_left.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 -0.009 -0.04" rpy="0 0 0" />
+      <geometry>
+        <box size="0.076 0.078 0.14" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="thigh_left">
+    <inertial>
+      <origin xyz="0.005738 0.001309 -0.111338" rpy="0 0 0" />
+      <mass value="3.500056218" />
+      <inertia ixx="0.028774982" ixy="-0.000052087" ixz="0.000305603" iyy="0.029079831" iyz="0.000090451" izz="0.004411669" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/thigh_left.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.0033225 0 -0.1345" rpy="0 0 0" />
+      <geometry>
+        <box size="0.116645 0.0996 0.379" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="shin_left">
+    <inertial>
+      <origin xyz="-0.000561 0.000061 -0.096071" rpy="0 0 0" />
+      <mass value="2.448112772" />
+      <inertia ixx="0.018890212" ixy="-0.000000084" ixz="0.000080175" iyy="0.019354994" iyz="-0.00001439" izz="0.002211608" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/shin_left.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.132" rpy="0 0 0" />
+      <geometry>
+        <box size="0.106 0.07206 0.37" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="ankle_link_left">
+    <inertial>
+      <origin xyz="0 0 -0.009368" rpy="0 0 0" />
+      <mass value="0.218890617" />
+      <inertia ixx="0.000118134" ixy="0" ixz="0" iyy="0.000119315" iyz="0" izz="0.000068588" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/ankle_link_left.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.0125" rpy="0 0 0" />
+      <geometry>
+        <box size="0.054 0.046 0.079" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="foot_left">
+    <inertial>
+      <origin xyz="0.01616 0 -0.009901" rpy="0 0 0" />
+      <mass value="0.45051032" />
+      <inertia ixx="0.000195901" ixy="0" ixz="0.000032589" iyy="0.001176513" iyz="0" izz="0.001277272" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/foot_left.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.022 0 -0.0045" rpy="0 0 0" />
+      <geometry>
+        <box size="0.18 0.07 0.043" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="hip_bracket_right">
+    <inertial>
+      <origin xyz="0 0 -0.035975" rpy="0 0 0" />
+      <mass value="0.378989961" />
+      <inertia ixx="0.000321587" ixy="0" ixz="0" iyy="0.000535228" iyz="0" izz="0.000392719" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/hip_bracket_right.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.045" rpy="0 0 0" />
+      <geometry>
+        <box size="0.1 0.07 0.094" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="hip_carrier_right">
+    <inertial>
+      <origin xyz="0 0.017245 -0.013249" rpy="0 0 0" />
+      <mass value="0.421628487" />
+      <inertia ixx="0.000603129" ixy="0" ixz="0" iyy="0.000526019" iyz="0.000143031" izz="0.000368877" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/hip_carrier_right.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0.009 -0.04" rpy="0 0 0" />
+      <geometry>
+        <box size="0.076 0.078 0.14" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="thigh_right">
+    <inertial>
+      <origin xyz="0.005738 -0.001309 -0.111338" rpy="0 0 0" />
+      <mass value="3.500056218" />
+      <inertia ixx="0.028774982" ixy="0.000052087" ixz="0.000305603" iyy="0.029079831" iyz="-0.000090451" izz="0.004411669" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/thigh_right.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.0033225 0 -0.1345" rpy="0 0 0" />
+      <geometry>
+        <box size="0.116645 0.0996 0.379" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="shin_right">
+    <inertial>
+      <origin xyz="-0.000561 -0.000061 -0.096071" rpy="0 0 0" />
+      <mass value="2.448112772" />
+      <inertia ixx="0.018890212" ixy="0.000000084" ixz="0.000080175" iyy="0.019354994" iyz="0.00001439" izz="0.002211608" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/shin_right.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.132" rpy="0 0 0" />
+      <geometry>
+        <box size="0.106 0.07206 0.37" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="ankle_link_right">
+    <inertial>
+      <origin xyz="0 0 -0.009368" rpy="0 0 0" />
+      <mass value="0.218890617" />
+      <inertia ixx="0.000118134" ixy="0" ixz="0" iyy="0.000119315" iyz="0" izz="0.000068588" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/ankle_link_right.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.0125" rpy="0 0 0" />
+      <geometry>
+        <box size="0.054 0.046 0.079" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="foot_right">
+    <inertial>
+      <origin xyz="0.01616 0 -0.009901" rpy="0 0 0" />
+      <mass value="0.45051032" />
+      <inertia ixx="0.000195901" ixy="0" ixz="0.000032589" iyy="0.001176513" iyz="0" izz="0.001277272" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/foot_right.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.022 0 -0.0045" rpy="0 0 0" />
+      <geometry>
+        <box size="0.18 0.07 0.043" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="shoulder_pod_left">
+    <inertial>
+      <origin xyz="0 0.02805 -0.019091" rpy="0 0 0" />
+      <mass value="0.67718023" />
+      <inertia ixx="0.001137386" ixy="0" ixz="0" iyy="0.001195016" iyz="0.000142039" izz="0.000649174" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/shoulder_pod_left.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0.0235 -0.03" rpy="0 0 0" />
+      <geometry>
+        <box size="0.092 0.077 0.14" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="yaw_housing_left">
+    <inertial>
+      <origin xyz="0.000212 0 -0.001141" rpy="0 0 0" />
+      <mass value="0.352009153" />
+      <inertia ixx="0.000206786" ixy="0" ixz="-0.000000085" iyy="0.000194738" iyz="0" izz="0.000189945" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/yaw_housing_left.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.001 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.058 0.07 0.07" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="bicep_left">
+    <inertial>
+      <origin xyz="0 0 -0.071359" rpy="0 0 0" />
+      <mass value="0.480488819" />
+      <inertia ixx="0.001184858" ixy="0" ixz="0" iyy="0.001130229" iyz="0" izz="0.000223992" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/bicep_left.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.0905" rpy="0 0 0" />
+      <geometry>
+        <box size="0.056 0.076 0.181" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="forearm_left">
+    <inertial>
+      <origin xyz="0 0.000117 -0.040459" rpy="0 0 0" />
+      <mass value="0.451887358" />
+      <inertia ixx="0.001213911" ixy="0" ixz="0.000000004" iyy="0.001233275" iyz="-0.000002142" izz="0.000145639" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/forearm_left.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0.001 -0.0595" rpy="0 0 0" />
+      <geometry>
+        <box size="0.062 0.052 0.181" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="wrist_carrier_left">
+    <inertial>
+      <origin xyz="0 0.00019 -0.02478" rpy="0 0 0" />
+      <mass value="0.128739352" />
+      <inertia ixx="0.000040663" ixy="0" ixz="0" iyy="0.000041663" iyz="0.000000079" izz="0.000034072" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/wrist_carrier_left.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.026" rpy="0 0 0" />
+      <geometry>
+        <box size="0.048 0.044 0.052" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="hand_left">
+    <inertial>
+      <origin xyz="0.004151 -0.001046 -0.070129" rpy="0 0 0" />
+      <mass value="0.442699044" />
+      <inertia ixx="0.000849103" ixy="0.000003083" ixz="0.000004955" iyy="0.000909492" iyz="-0.000041809" izz="0.000268877" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/hand_left.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.0127165 -0.0001425 -0.0717875" rpy="0 0 0" />
+      <geometry>
+        <box size="0.096933 0.066685 0.191575" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="shoulder_pod_right">
+    <inertial>
+      <origin xyz="0 -0.027809 -0.019091" rpy="0 0 0" />
+      <mass value="0.67718023" />
+      <inertia ixx="0.001141924" ixy="0" ixz="0" iyy="0.001195016" iyz="-0.000145149" izz="0.000653712" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/shoulder_pod_right.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 -0.0225 -0.03" rpy="0 0 0" />
+      <geometry>
+        <box size="0.092 0.079 0.14" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="yaw_housing_right">
+    <inertial>
+      <origin xyz="0.000212 0 -0.001141" rpy="0 0 0" />
+      <mass value="0.352009153" />
+      <inertia ixx="0.000206786" ixy="0" ixz="-0.000000085" iyy="0.000194738" iyz="0" izz="0.000189945" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/yaw_housing_right.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.001 0 0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.058 0.07 0.07" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="bicep_right">
+    <inertial>
+      <origin xyz="0 0 -0.071359" rpy="0 0 0" />
+      <mass value="0.480488819" />
+      <inertia ixx="0.001184858" ixy="0" ixz="0" iyy="0.001130229" iyz="0" izz="0.000223992" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/bicep_right.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.0905" rpy="0 0 0" />
+      <geometry>
+        <box size="0.056 0.076 0.181" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="forearm_right">
+    <inertial>
+      <origin xyz="0 -0.000117 -0.040459" rpy="0 0 0" />
+      <mass value="0.45188704" />
+      <inertia ixx="0.00121391" ixy="0" ixz="0.000000004" iyy="0.001233274" iyz="0.000002142" izz="0.000145639" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/forearm_right.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 -0.001 -0.0595" rpy="0 0 0" />
+      <geometry>
+        <box size="0.062 0.052 0.181" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="wrist_carrier_right">
+    <inertial>
+      <origin xyz="0 0.00019 -0.02478" rpy="0 0 0" />
+      <mass value="0.128739352" />
+      <inertia ixx="0.000040663" ixy="0" ixz="0" iyy="0.000041663" iyz="0.000000079" izz="0.000034072" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/wrist_carrier_right.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.026" rpy="0 0 0" />
+      <geometry>
+        <box size="0.048 0.044 0.052" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="hand_right">
+    <inertial>
+      <origin xyz="0.004151 0.001046 -0.070129" rpy="0 0 0" />
+      <mass value="0.442699044" />
+      <inertia ixx="0.000849103" ixy="-0.000003083" ixz="0.000004955" iyy="0.000909492" iyz="0.000041809" izz="0.000268877" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="3MF/hand_right.3mf" scale="0.001 0.001 0.001" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.0127165 0.0001425 -0.0717875" rpy="0 0 0" />
+      <geometry>
+        <box size="0.096933 0.066685 0.191575" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="base_footprint_to_pelvis" type="fixed">
+    <parent link="base_footprint" />
+    <child link="pelvis" />
+    <origin xyz="0 0 0.898" rpy="0 0 0" />
+  </joint>
+  <joint name="waist_yaw" type="revolute">
+    <parent link="pelvis" />
+    <child link="torso" />
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <axis xyz="0 0 1" />
+    <limit lower="-2.617993878" upper="2.617993878" effort="60" velocity="8" />
+  </joint>
+  <joint name="neck_yaw" type="revolute">
+    <parent link="torso" />
+    <child link="neck_collar" />
+    <origin xyz="0 0 0.324" rpy="0 0 0" />
+    <axis xyz="0 0 1" />
+    <limit lower="-1.570796327" upper="1.570796327" effort="8" velocity="8" />
+  </joint>
+  <joint name="neck_pitch" type="revolute">
+    <parent link="neck_collar" />
+    <child link="head" />
+    <origin xyz="0 0 0.046" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-0.610865238" upper="0.785398163" effort="8" velocity="8" />
+  </joint>
+  <joint name="hip_yaw_left" type="revolute">
+    <parent link="pelvis" />
+    <child link="hip_bracket_left" />
+    <origin xyz="0 0.09 -0.12" rpy="0 0 0" />
+    <axis xyz="0 0 1" />
+    <limit lower="-1.047197551" upper="1.047197551" effort="120" velocity="15" />
+  </joint>
+  <joint name="hip_roll_left" type="revolute">
+    <parent link="hip_bracket_left" />
+    <child link="hip_carrier_left" />
+    <origin xyz="0 0 -0.064" rpy="0 0 0" />
+    <axis xyz="1 0 0" />
+    <limit lower="-0.34906585" upper="0.785398163" effort="120" velocity="15" />
+  </joint>
+  <joint name="hip_pitch_left" type="revolute">
+    <parent link="hip_carrier_left" />
+    <child link="thigh_left" />
+    <origin xyz="0 0 -0.078" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-2.094395102" upper="0.523598776" effort="120" velocity="15" />
+  </joint>
+  <joint name="knee_left" type="revolute">
+    <parent link="thigh_left" />
+    <child link="shin_left" />
+    <origin xyz="0 0 -0.29" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-0.087266463" upper="2.443460953" effort="120" velocity="15" />
+  </joint>
+  <joint name="ankle_pitch_left" type="revolute">
+    <parent link="shin_left" />
+    <child link="ankle_link_left" />
+    <origin xyz="0 0 -0.29" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-0.523598776" upper="0.872664626" effort="50" velocity="12" />
+  </joint>
+  <joint name="ankle_roll_left" type="revolute">
+    <parent link="ankle_link_left" />
+    <child link="foot_left" />
+    <origin xyz="0 0 -0.03" rpy="0 0 0" />
+    <axis xyz="1 0 0" />
+    <limit lower="-0.436332313" upper="0.436332313" effort="50" velocity="12" />
+  </joint>
+  <joint name="hip_yaw_right" type="revolute">
+    <parent link="pelvis" />
+    <child link="hip_bracket_right" />
+    <origin xyz="0 -0.09 -0.12" rpy="0 0 0" />
+    <axis xyz="0 0 1" />
+    <limit lower="-1.047197551" upper="1.047197551" effort="120" velocity="15" />
+  </joint>
+  <joint name="hip_roll_right" type="revolute">
+    <parent link="hip_bracket_right" />
+    <child link="hip_carrier_right" />
+    <origin xyz="0 0 -0.064" rpy="0 0 0" />
+    <axis xyz="1 0 0" />
+    <limit lower="-0.785398163" upper="0.34906585" effort="120" velocity="15" />
+  </joint>
+  <joint name="hip_pitch_right" type="revolute">
+    <parent link="hip_carrier_right" />
+    <child link="thigh_right" />
+    <origin xyz="0 0 -0.078" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-2.094395102" upper="0.523598776" effort="120" velocity="15" />
+  </joint>
+  <joint name="knee_right" type="revolute">
+    <parent link="thigh_right" />
+    <child link="shin_right" />
+    <origin xyz="0 0 -0.29" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-0.087266463" upper="2.443460953" effort="120" velocity="15" />
+  </joint>
+  <joint name="ankle_pitch_right" type="revolute">
+    <parent link="shin_right" />
+    <child link="ankle_link_right" />
+    <origin xyz="0 0 -0.29" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-0.523598776" upper="0.872664626" effort="50" velocity="12" />
+  </joint>
+  <joint name="ankle_roll_right" type="revolute">
+    <parent link="ankle_link_right" />
+    <child link="foot_right" />
+    <origin xyz="0 0 -0.03" rpy="0 0 0" />
+    <axis xyz="1 0 0" />
+    <limit lower="-0.436332313" upper="0.436332313" effort="50" velocity="12" />
+  </joint>
+  <joint name="shoulder_pitch_left" type="revolute">
+    <parent link="torso" />
+    <child link="shoulder_pod_left" />
+    <origin xyz="0 0.148 0.29" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-3.141592654" upper="1.047197551" effort="40" velocity="12" />
+  </joint>
+  <joint name="shoulder_roll_left" type="revolute">
+    <parent link="shoulder_pod_left" />
+    <child link="yaw_housing_left" />
+    <origin xyz="0 0.034 -0.072" rpy="0 0 0" />
+    <axis xyz="1 0 0" />
+    <limit lower="-0.436332313" upper="2.792526803" effort="40" velocity="12" />
+  </joint>
+  <joint name="shoulder_yaw_left" type="revolute">
+    <parent link="yaw_housing_left" />
+    <child link="bicep_left" />
+    <origin xyz="0 0 -0.024" rpy="0 0 0" />
+    <axis xyz="0 0 1" />
+    <limit lower="-2.094395102" upper="2.094395102" effort="40" velocity="12" />
+  </joint>
+  <joint name="elbow_left" type="revolute">
+    <parent link="bicep_left" />
+    <child link="forearm_left" />
+    <origin xyz="0 0 -0.156" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-2.530727415" upper="0.087266463" effort="35" velocity="12" />
+  </joint>
+  <joint name="wrist_roll_left" type="revolute">
+    <parent link="forearm_left" />
+    <child link="wrist_carrier_left" />
+    <origin xyz="0 0 -0.15" rpy="0 0 0" />
+    <axis xyz="0 0 1" />
+    <limit lower="-2.967059728" upper="2.967059728" effort="15" velocity="15" />
+  </joint>
+  <joint name="wrist_pitch_left" type="revolute">
+    <parent link="wrist_carrier_left" />
+    <child link="hand_left" />
+    <origin xyz="0 0 -0.028" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-1.221730476" upper="1.221730476" effort="15" velocity="15" />
+  </joint>
+  <joint name="shoulder_pitch_right" type="revolute">
+    <parent link="torso" />
+    <child link="shoulder_pod_right" />
+    <origin xyz="0 -0.148 0.29" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-3.141592654" upper="1.047197551" effort="40" velocity="12" />
+  </joint>
+  <joint name="shoulder_roll_right" type="revolute">
+    <parent link="shoulder_pod_right" />
+    <child link="yaw_housing_right" />
+    <origin xyz="0 -0.034 -0.072" rpy="0 0 0" />
+    <axis xyz="1 0 0" />
+    <limit lower="-2.792526803" upper="0.436332313" effort="40" velocity="12" />
+  </joint>
+  <joint name="shoulder_yaw_right" type="revolute">
+    <parent link="yaw_housing_right" />
+    <child link="bicep_right" />
+    <origin xyz="0 0 -0.024" rpy="0 0 0" />
+    <axis xyz="0 0 1" />
+    <limit lower="-2.094395102" upper="2.094395102" effort="40" velocity="12" />
+  </joint>
+  <joint name="elbow_right" type="revolute">
+    <parent link="bicep_right" />
+    <child link="forearm_right" />
+    <origin xyz="0 0 -0.156" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-2.530727415" upper="0.087266463" effort="35" velocity="12" />
+  </joint>
+  <joint name="wrist_roll_right" type="revolute">
+    <parent link="forearm_right" />
+    <child link="wrist_carrier_right" />
+    <origin xyz="0 0 -0.15" rpy="0 0 0" />
+    <axis xyz="0 0 1" />
+    <limit lower="-2.967059728" upper="2.967059728" effort="15" velocity="15" />
+  </joint>
+  <joint name="wrist_pitch_right" type="revolute">
+    <parent link="wrist_carrier_right" />
+    <child link="hand_right" />
+    <origin xyz="0 0 -0.028" rpy="0 0 0" />
+    <axis xyz="0 1 0" />
+    <limit lower="-1.221730476" upper="1.221730476" effort="15" velocity="15" />
+  </joint>
+</robot>

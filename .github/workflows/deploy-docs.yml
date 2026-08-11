@@ -57,4 +57,4 @@ jobs:
           scripts/github-workflows/deploy-vercel-app.sh \
             --label "Docs app" \
             --project-id "$VERCEL_DOCS_PROJECT_ID" \
-            --public-urls "https://www.cadskills.xyz https://cadskills.xyz https://www.cad.fun https://cad.fun"
+            --public-urls "https://www.texttocad.dev https://texttocad.dev"

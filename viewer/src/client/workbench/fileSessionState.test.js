@@ -72,24 +72,37 @@ test("file session state stores per-file records in isolated namespaces", () => 
   assert.equal(writeFileSessionState("models", entry.file, createFileSessionSnapshot({
     entry,
     slices: {
-      dxf: {
-        thicknessMm: 2.4,
-        bendSettings: []
-      }
+      tab: { referenceQuery: "models-query" }
     }
   }), { storage }), true);
   assert.equal(writeFileSessionState("fixtures", entry.file, createFileSessionSnapshot({
     entry,
     slices: {
-      dxf: {
-        thicknessMm: 4.8,
-        bendSettings: []
-      }
+      tab: { referenceQuery: "fixtures-query" }
     }
   }), { storage }), true);
 
-  assert.equal(readFileSessionState("models", entry.file, entry, { storage }).slices.dxf.thicknessMm, 2.4);
-  assert.equal(readFileSessionState("fixtures", entry.file, entry, { storage }).slices.dxf.thicknessMm, 4.8);
+  assert.equal(readFileSessionState("models", entry.file, entry, { storage }).slices.tab.referenceQuery, "models-query");
+  assert.equal(readFileSessionState("fixtures", entry.file, entry, { storage }).slices.tab.referenceQuery, "fixtures-query");
+});
+
+test("a stored dxf slice is dropped outright, not migrated", () => {
+  // The DXF thickness/bend controls drove a client-side mesh build that no longer exists:
+  // the preview is baked by the producer now. A record written before that has no meaning
+  // and gets no migration path (design §0.2, §7.4.3).
+  const storage = createMemoryStorage();
+  const entry = dxfEntry();
+  storage.setItem(fileSessionStorageKey("models", entry.file), JSON.stringify({
+    version: FILE_SESSION_STORAGE_VERSION,
+    fileKey: entry.file,
+    signatures: { tab: "whatever" },
+    slices: {
+      dxf: { thicknessMm: 2.4, bendSettings: [{ id: "bend-1", direction: "down", angleDeg: 91 }] },
+      implicit: { parameterValues: { radius: 3 }, animationState: { activeId: "spin" } }
+    }
+  }));
+  const restored = readFileSessionState("models", entry.file, entry, { storage });
+  assert.deepEqual(restored?.slices ?? {}, {});
 });
 
 test("file session state ignores invalid json and version mismatches", () => {
@@ -133,19 +146,13 @@ test("file session state writes, reads, indexes, and prunes file records", () =>
   writeFileSessionState("models", keptEntry.file, createFileSessionSnapshot({
     entry: keptEntry,
     slices: {
-      dxf: {
-        thicknessMm: 3.2,
-        bendSettings: [{ id: "bend-1", direction: "down", angleDeg: 91 }]
-      }
+      tab: { referenceQuery: "kept" }
     }
   }), { storage });
   writeFileSessionState("models", staleEntry.file, createFileSessionSnapshot({
     entry: staleEntry,
     slices: {
-      dxf: {
-        thicknessMm: 1.5,
-        bendSettings: [{ id: "bend-2", direction: "up", angleDeg: 45 }]
-      }
+      tab: { referenceQuery: "stale" }
     }
   }), { storage });
 
@@ -157,7 +164,7 @@ test("file session state writes, reads, indexes, and prunes file records", () =>
   assert.equal(pruneFileSessionState("models", [keptEntry.file], { storage }), true);
   assert.equal(storage.getItem(fileSessionStorageKey("models", staleEntry.file)), null);
   assert.deepEqual(JSON.parse(storage.getItem(fileSessionIndexStorageKey("models"))).files, [keptEntry.file]);
-  assert.equal(readFileSessionState("models", keptEntry.file, keptEntry, { storage }).slices.dxf.thicknessMm, 3.2);
+  assert.equal(readFileSessionState("models", keptEntry.file, keptEntry, { storage }).slices.tab.referenceQuery, "kept");
 });
 
 test("file session tab state stores file sheet open section ids", () => {
@@ -169,19 +176,17 @@ test("file session tab state stores file sheet open section ids", () => {
     slices: {
       tab: {
         inspectedAssemblyNodeId: "module-a",
-        stepTreeRootShowMore: true,
-        fileSheetOpenSectionIds: ["tree", "display", "appearance"]
+        fileSheetOpenSectionIds: ["tree", "display", "theme"]
       }
     }
   }), { storage });
 
   const restoredTab = readFileSessionState("models", entry.file, entry, { storage }).slices.tab;
   assert.equal(restoredTab.inspectedAssemblyNodeId, "module-a");
-  assert.equal(restoredTab.stepTreeRootShowMore, true);
   assert.deepEqual(restoredTab.fileSheetOpenSectionIds, [
     "tree",
     "display",
-    "appearance"
+    "theme"
   ]);
 });
 

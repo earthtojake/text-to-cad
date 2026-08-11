@@ -1,0 +1,10 @@
+{
+  "input": "REPLACE.step.py",
+  "mode": "view",
+  "appearance": "render/presentation_theme.json",
+  "display": { "mode": "solid" },
+  "outputs": [
+    { "path": "/tmp/moonwatch/REPLACE_iso.png", "camera": "iso", "sizeProfile": "presentation-large" }
+  ],
+  "render": { "padding": 0.1 }
+}

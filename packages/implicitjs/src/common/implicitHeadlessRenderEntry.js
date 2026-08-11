@@ -217,7 +217,7 @@ function implicitAnimationFrameOutputs(model, job) {
     durationSeconds,
     frameCount,
     loop: options?.loop !== false && animation.loop !== false,
-    appearance: output.appearance || job.appearance || "workbench",
+    theme: output.theme || job.theme || "workbench",
     graphics: {
       ...(isObject(job.graphics) ? job.graphics : {}),
       ...(isObject(output.graphics) ? output.graphics : {}),
@@ -306,7 +306,7 @@ async function renderImplicitGifFrames(model, job, frameSpec, { mode = "orbit" }
       width: frameSpec.width,
       height: frameSpec.height,
       camera: frameOutput.camera || job.camera || "iso",
-      appearance: frameOutput.appearance || frameSpec.appearance,
+      theme: frameOutput.theme || frameSpec.theme,
       graphics: {
         ...(isObject(frameSpec.graphics) ? frameSpec.graphics : {}),
         ...(isObject(frameOutput.graphics) ? frameOutput.graphics : {}),

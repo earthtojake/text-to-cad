@@ -8,6 +8,7 @@ import {
   exportImplicitCadAnimatedGlb,
   exportImplicitCadFile,
   exportImplicitCadModel,
+  exportImplicitCadModelFormats,
 } from "./export.js";
 
 const sphereModel = {
@@ -66,7 +67,34 @@ test("exportImplicitCadModel applies parameter values before meshing", () => {
   assert.ok(result.mesh.triangleCount > 0);
 });
 
-test("exportImplicitCadFile applies parameter values and writes next to source by default", async () => {
+test("exportImplicitCadModelFormats meshes once and serializes every requested format", () => {
+  const result = exportImplicitCadModelFormats(sphereModel, {
+    formats: ["stl", "3mf", "glb"],
+    resolution: 12,
+  });
+  assert.deepEqual(result.outputs.map((output) => output.format), ["stl", "3mf", "glb"]);
+  assert.ok(result.mesh.triangleCount > 0);
+  // One mesh, so every format reports the same geometry.
+  for (const output of result.outputs) {
+    assert.ok(output.body.length > 100);
+    assert.equal(Math.floor(result.mesh.positions.length / 9), result.mesh.triangleCount);
+  }
+  const single = exportImplicitCadModelFormats(sphereModel, { formats: ["stl"], resolution: 12 });
+  assert.deepEqual(
+    Buffer.from(single.outputs[0].body),
+    Buffer.from(result.outputs[0].body),
+    "an STL from a multi-format pass is byte-identical to a single-format one"
+  );
+});
+
+test("exportImplicitCadModelFormats rejects an unsupported format", () => {
+  assert.throws(
+    () => exportImplicitCadModelFormats(sphereModel, { formats: ["obj"], resolution: 12 }),
+    /Unsupported implicit CAD export format: obj/
+  );
+});
+
+function writeOrbFixture() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "implicit-cad-export-"));
   const input = path.join(tempDir, "orb.implicit.js");
   fs.writeFileSync(input, `
@@ -80,17 +108,76 @@ export default {
   glsl: \`float sdf(vec3 p) { return length(p) - radius; }\`
 };
 `, "utf-8");
+  return { tempDir, input };
+}
 
+test("exportImplicitCadFile applies parameter values and writes next to source by default", async () => {
+  const { tempDir, input } = writeOrbFixture();
   const result = await exportImplicitCadFile({
     input,
-    format: "stl",
+    outputs: [{ format: "stl" }],
     params: { radius: 6 },
     resolution: 10,
   });
   assert.equal(result.ok, true);
-  assert.equal(result.output, path.join(tempDir, "orb.stl"));
-  assert.equal(fs.existsSync(result.output), true);
+  assert.equal(result.files.length, 1);
+  assert.equal(result.files[0].output, path.join(tempDir, "orb.stl"));
+  assert.equal(fs.existsSync(result.files[0].output), true);
   assert.ok(result.triangleCount > 0);
+});
+
+test("exportImplicitCadFile writes every requested format from one mesh pass", async () => {
+  const { tempDir, input } = writeOrbFixture();
+  const result = await exportImplicitCadFile({
+    input,
+    outputs: [{ format: "stl" }, { format: "3mf" }, { format: "glb", output: path.join(tempDir, "custom.glb") }],
+    resolution: 10,
+  });
+  assert.deepEqual(result.files.map((file) => file.format), ["stl", "3mf", "glb"]);
+  assert.deepEqual(result.files.map((file) => file.output), [
+    path.join(tempDir, "orb.stl"),
+    path.join(tempDir, "orb.3mf"),
+    path.join(tempDir, "custom.glb"),
+  ]);
+  for (const file of result.files) {
+    assert.equal(fs.statSync(file.output).size, file.bytes);
+  }
+  const separate = await exportImplicitCadFile({
+    input,
+    outputs: [{ format: "stl", output: path.join(tempDir, "alone.stl") }],
+    resolution: 10,
+  });
+  assert.deepEqual(
+    fs.readFileSync(path.join(tempDir, "alone.stl")),
+    fs.readFileSync(path.join(tempDir, "orb.stl")),
+    "the shared mesh produces the same STL a single-format run does"
+  );
+  assert.equal(separate.triangleCount, result.triangleCount);
+});
+
+test("exportImplicitCadFile requires at least one format and rejects duplicates", async () => {
+  const { input } = writeOrbFixture();
+  await assert.rejects(
+    () => exportImplicitCadFile({ input, outputs: [], resolution: 10 }),
+    /At least one export format is required: --glb, --stl, --3mf\./
+  );
+  await assert.rejects(
+    () => exportImplicitCadFile({ input, outputs: [{ format: "stl" }, { format: "stl" }], resolution: 10 }),
+    /Duplicate implicit CAD export format: stl/
+  );
+});
+
+test("exportImplicitCadFile keeps --animated GLB-only", async () => {
+  const { input } = writeOrbFixture();
+  await assert.rejects(
+    () => exportImplicitCadFile({
+      input,
+      outputs: [{ format: "glb" }, { format: "stl" }],
+      animated: true,
+      resolution: 10,
+    }),
+    /Animated export is GLB-only/
+  );
 });
 
 test("implicit GLB exports include CAD-native millimeter metadata", () => {

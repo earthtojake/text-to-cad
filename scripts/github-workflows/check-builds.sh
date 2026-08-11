@@ -41,16 +41,36 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-check_no_symlinks() {
+# Ask the bundle scripts which paths they generate rather than repeating them
+# here, so this check cannot fall behind a new or renamed bundle output.
+generated_paths() {
+  "$REPO_ROOT/scripts/bundle/bundle-skill.sh" --all --print-outputs
+}
+
+check_generated_path() {
   local root="$1"
   local first_link
 
   if [ ! -e "$root" ]; then
     echo "Missing production bundle path: $root" >&2
+    echo "Run scripts/bundle/bundle.sh --clean and commit the generated outputs." >&2
     exit 1
   fi
 
-  first_link="$(find "$root" -type l -print -quit)"
+  # Bundling installs dependencies under some roots; only committed paths matter.
+  #
+  # This assertion is load-bearing, not tidiness. The three installers each treat
+  # symlinks differently, and one of them loses data silently:
+  #   - Skills CLI (npx skills): dereferences them into real files.
+  #   - Claude Code plugin install: preserves them verbatim.
+  #   - Codex plugin add: SILENTLY DROPS them. copy_dir_recursive in
+  #     codex-rs/core-plugins/src/store.rs branches only on is_dir()/is_file(),
+  #     and DirEntry::file_type() does not traverse symlinks, so a symlinked
+  #     entry matches neither branch and never reaches the plugin cache. No
+  #     error, no warning -- the file is simply missing at runtime.
+  # A symlink that reaches the published tree therefore ships a broken skill to
+  # every Codex user. Do not relax this check.
+  first_link="$(find "$root" -name node_modules -prune -o -type l -print -quit)"
   if [ -n "$first_link" ]; then
     echo "Production bundle paths must not contain symlinks." >&2
     echo "First symlink: $first_link" >&2
@@ -59,13 +79,9 @@ check_no_symlinks() {
   fi
 }
 
-check_no_symlinks "viewer/packages"
-check_no_symlinks "skills/cad/scripts/packages"
-check_no_symlinks "skills/cad-viewer/scripts/viewer"
-check_no_symlinks "skills/urdf/scripts/packages"
-check_no_symlinks "skills/srdf/scripts/packages"
-check_no_symlinks "skills/sdf/scripts/packages"
-check_no_symlinks "plugins/cad/skills"
+while IFS= read -r generated_path; do
+  check_generated_path "$generated_path"
+done < <(generated_paths)
 
 if [ "$RUN_BUNDLE_CHECK" -eq 1 ]; then
   "$REPO_ROOT/scripts/bundle/bundle.sh" --check

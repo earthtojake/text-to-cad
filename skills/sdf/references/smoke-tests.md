@@ -1,14 +1,14 @@
 # SDF smoke tests
 
-Use smoke tests after generated SDF passes bundled validation. The goal is to catch simulator and spatial failures that dependency-light XML checks cannot detect.
+Use smoke tests after the SDF passes bundled validation. The goal is to catch simulator and spatial failures that dependency-light XML checks cannot detect.
 
 ## Recommended checks
 
 ### Bundled validation
 
 ```bash
-python scripts/sdf path/to/model.py
-python scripts/sdf path/to/model.py --strict
+python scripts/validate path/to/model.sdf
+python scripts/validate path/to/model.sdf --strict
 ```
 
 Bundled validation runs during explicit target generation. Use `--strict` when warnings should block handoff.
@@ -24,7 +24,7 @@ gz sdf --check path/to/model.sdf
 or through the skill CLI:
 
 ```bash
-python scripts/sdf path/to/model.py --gz-check auto
+python scripts/validate path/to/model.sdf --gz-check auto
 ```
 
 Use the exact simulator environment that will consume the file when possible.
@@ -89,7 +89,7 @@ Assumptions:
 
 ## When to stop
 
-Stop and fix the generator when:
+Stop and fix the SDF (or its upstream assets) when:
 
 - bundled validation has errors;
 - `gz sdf --check` fails under a required external-check policy;

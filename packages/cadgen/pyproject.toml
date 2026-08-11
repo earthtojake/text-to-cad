@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cadgen"
+version = "0.4.2"
+description = "STEP-first CAD artifact generation runtime: build123d STEP/GLB/topology generation, validation, and inspection for CAD agent skills."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "earthtojake" }]
+keywords = ["cad", "step", "glb", "build123d", "parametric", "agent-skills"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Manufacturing",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Multimedia :: Graphics :: 3D Modeling",
+  "Topic :: Scientific/Engineering",
+]
+dependencies = [
+  "build123d",
+  "cadquery-ocp",
+  "ezdxf",
+  "shapely",
+]
+
+[project.urls]
+Homepage = "https://github.com/earthtojake/text-to-cad"
+Repository = "https://github.com/earthtojake/text-to-cad"
+Issues = "https://github.com/earthtojake/text-to-cad/issues"
+
+[project.scripts]
+cadgen-step-artifact = "cadgen.step_artifact:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["cadgen*"]
+
+[tool.setuptools.package-data]
+cadgen = ["py.typed"]
+# The Node builder bridge (cadgen/_internal/node_runtime.py) spawns node with
+# `--import node_resolve_register.mjs`; both .mjs files must ship with the package.
+"cadgen._internal" = ["*.mjs"]

@@ -6,6 +6,7 @@ import { normalizeImplicitCadModel } from "./model.js";
 import {
   exportImplicitCadAnimatedGlb,
   exportImplicitCadModel,
+  exportImplicitCadModelFormats,
   IMPLICIT_CAD_EXPORT_FORMATS,
   normalizeImplicitExportFormat
 } from "./exportModel.js";
@@ -18,8 +19,39 @@ function normalizeFormat(value) {
   return normalizeImplicitExportFormat(value);
 }
 
-function formatFromOutputPath(outputPath) {
-  return normalizeFormat(path.extname(String(outputPath || "")).slice(1));
+/** Normalize one requested output. A request is either a bare format string or
+ * `{ format, output }`; a missing/empty `output` means the default sibling path
+ * (`<name>.<ext>` beside the model). A supplied relative path resolves against the
+ * current working directory. */
+function normalizeOutputRequests(outputs, inputPath) {
+  const requests = [];
+  const seenFormats = new Set();
+  const seenPaths = new Map();
+  for (const entry of Array.isArray(outputs) ? outputs : [outputs]) {
+    if (!entry) {
+      continue;
+    }
+    const rawFormat = typeof entry === "string" ? entry : entry.format;
+    const rawOutput = typeof entry === "string" ? "" : entry.output;
+    const format = normalizeFormat(rawFormat);
+    if (!format) {
+      throw new Error(`Unsupported implicit CAD export format: ${rawFormat || "(missing)"}`);
+    }
+    if (seenFormats.has(format)) {
+      throw new Error(`Duplicate implicit CAD export format: ${format}`);
+    }
+    seenFormats.add(format);
+    const output = String(rawOutput || "").trim()
+      ? path.resolve(String(rawOutput).trim())
+      : path.resolve(defaultImplicitCadExportPath(inputPath, format));
+    const collision = seenPaths.get(output);
+    if (collision) {
+      throw new Error(`--${collision} and --${format} resolve to the same output path: ${output}`);
+    }
+    seenPaths.set(output, format);
+    requests.push({ format, output });
+  }
+  return requests;
 }
 
 export function defaultImplicitCadExportPath(inputPath, format = "glb") {
@@ -55,10 +87,12 @@ export async function loadImplicitCadModelFromPath(inputPath, {
   return defaultModel;
 }
 
+/** Export one implicit model file to every requested format from ONE mesh pass.
+ * `outputs` is a list of requested formats, each optionally carrying its own output
+ * path (`{ format, output }`); an omitted path writes the sibling `<name>.<ext>`. */
 export async function exportImplicitCadFile({
   input,
-  output = "",
-  format = "",
+  outputs = [],
   params = null,
   parameterValues = null,
   animationState = null,
@@ -71,47 +105,65 @@ export async function exportImplicitCadFile({
   smoothNormals = undefined,
 } = {}) {
   const inputPath = path.resolve(String(input || ""));
-  const outputFormat = animated ? "glb" : normalizeFormat(format) || formatFromOutputPath(output) || "glb";
-  const outputPath = path.resolve(output || defaultImplicitCadExportPath(inputPath, outputFormat));
+  const requests = normalizeOutputRequests(outputs, inputPath);
+  if (!requests.length) {
+    throw new Error(
+      `At least one export format is required: ${IMPLICIT_CAD_EXPORT_FORMATS.map((format) => `--${format}`).join(", ")}.`
+    );
+  }
+  if (animated && requests.some((request) => request.format !== "glb")) {
+    throw new Error("Animated export is GLB-only: --animated cannot be combined with --stl or --3mf.");
+  }
   const model = await loadImplicitCadModelFromPath(inputPath, {
     params,
     parameterValues,
     animationState,
   });
-  const result = animated
-    ? exportImplicitCadAnimatedGlb(model, {
-        animationId: animationState?.activeId,
-        params: model.parameterValues,
-        duration,
-        frames,
+  const built = animated
+    ? (() => {
+        const result = exportImplicitCadAnimatedGlb(model, {
+          animationId: animationState?.activeId,
+          params: model.parameterValues,
+          duration,
+          frames,
+          resolution,
+          maxCells,
+          normalEpsilon,
+          ...(smoothNormals === undefined ? {} : { smoothNormals }),
+        });
+        return { mesh: result.mesh, model: result.model, outputs: [result] };
+      })()
+    : exportImplicitCadModelFormats(model, {
+        formats: requests.map((request) => request.format),
         resolution,
         maxCells,
         normalEpsilon,
-        smoothNormals,
-      })
-    : exportImplicitCadModel(model, {
-        format: outputFormat,
-        resolution,
-        maxCells,
-        normalEpsilon,
-        smoothNormals,
+        ...(smoothNormals === undefined ? {} : { smoothNormals }),
       });
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
-  await fs.writeFile(outputPath, result.body);
+  const byFormat = new Map(built.outputs.map((exported) => [exported.format, exported]));
+  const files = [];
+  for (const request of requests) {
+    const exported = byFormat.get(request.format);
+    await fs.mkdir(path.dirname(request.output), { recursive: true });
+    await fs.writeFile(request.output, exported.body);
+    files.push({
+      format: request.format,
+      output: request.output,
+      contentType: exported.contentType,
+      bytes: exported.body.length,
+    });
+  }
   return {
     ok: true,
     input: inputPath,
-    output: outputPath,
-    format: result.format,
-    contentType: result.contentType,
-    bytes: result.body.length,
-    triangleCount: result.mesh.triangleCount,
-    vertexCount: result.mesh.vertexCount,
-    grid: result.mesh.grid,
+    files,
+    triangleCount: built.mesh.triangleCount,
+    vertexCount: built.mesh.vertexCount,
+    grid: built.mesh.grid,
     model: {
-      name: result.model.name,
-      bounds: result.model.bounds,
-      units: result.model.units,
+      name: built.model.name,
+      bounds: built.model.bounds,
+      units: built.model.units,
     },
   };
 }
@@ -119,5 +171,6 @@ export async function exportImplicitCadFile({
 export {
   exportImplicitCadAnimatedGlb,
   exportImplicitCadModel,
+  exportImplicitCadModelFormats,
   IMPLICIT_CAD_EXPORT_FORMATS
 };

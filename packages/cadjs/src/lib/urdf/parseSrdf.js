@@ -1,6 +1,3 @@
-const SRDF_METADATA_NAMESPACE = "https://text-to-cad.dev/srdf";
-const LEGACY_EXPLORER_NAMESPACE = "https://text-to-cad.dev/explorer";
-
 function isPlainObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -182,26 +179,6 @@ function disabledCollisionSource(reason) {
     return "assumed";
   }
   return "manual";
-}
-
-function parseLinkedUrdfRef(robot) {
-  const urdfElement = childElementsByTag(robot, "urdf").find((element) => (
-    element.namespaceURI === SRDF_METADATA_NAMESPACE ||
-    element.namespaceURI === LEGACY_EXPLORER_NAMESPACE ||
-    String(element.tagName || "").startsWith("tcad:") ||
-    String(element.tagName || "").startsWith("explorer:")
-  ));
-  const urdf = String(urdfElement?.getAttribute("path") || "").trim();
-  if (!urdf) {
-    throw new Error("SRDF must include <tcad:urdf path=\"...\"/> metadata; legacy <explorer:urdf/> is also accepted");
-  }
-  if (urdf.includes("\\") || urdf.startsWith("/") || urdf.split("/").some((part) => !part || part === ".")) {
-    throw new Error(`SRDF tcad:urdf path is invalid: ${urdf}`);
-  }
-  if (!urdf.toLowerCase().endsWith(".urdf")) {
-    throw new Error(`SRDF tcad:urdf path must end in .urdf: ${urdf}`);
-  }
-  return urdf;
 }
 
 function parsePlanningGroups(robot, urdfData) {
@@ -448,16 +425,16 @@ export function parseSrdf(xmlText, { sourceUrl = "", urdfData = null } = {}) {
     throw new Error("SRDF robot name is required");
   }
   if (urdfData?.robotName && urdfData.robotName !== robotName) {
-    throw new Error("SRDF robot name must match the linked URDF robot name");
+    // Pairing is by colocated URDF with a matching robot name; the caller
+    // resolves the URDF (catalog relations), this guards against mispairing.
+    throw new Error("SRDF robot name must match the paired URDF robot name");
   }
-  const urdf = parseLinkedUrdfRef(robot);
   const planningGroups = parsePlanningGroups(robot, urdfData);
   const endEffectors = parseEndEffectors(robot, urdfData, planningGroups);
   const groupStates = parseGroupStates(robot, urdfData, planningGroups);
   const disabledCollisionPairs = parseDisabledCollisionPairs(robot, urdfData);
   return {
     kind: "texttocad-srdf",
-    urdf,
     srdf: sourceUrl,
     robotName,
     planningGroups,

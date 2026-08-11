@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import tempfile
@@ -159,6 +161,59 @@ class GCodeToolTests(unittest.TestCase):
             step.write_text("ISO-10303-21;", encoding="utf-8")
             with self.assertRaisesRegex(gcode.GCodeToolError, "out of scope"):
                 gcode.inspect_input(step)
+
+    def test_rejected_inputs_name_the_conversion_skill_and_command(self) -> None:
+        expected_skills = {
+            ".step": "cad",
+            ".stp": "cad",
+            ".dxf": "cad",
+            ".svg": "cad",
+            ".urdf": "urdf",
+            ".sdf": "sdf",
+        }
+        self.assertEqual(gcode.UNSUPPORTED_EXTENSIONS, set(expected_skills))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for extension, skill in expected_skills.items():
+                with self.subTest(extension=extension):
+                    rejected = root / f"part{extension}"
+                    rejected.write_text("placeholder\n", encoding="utf-8")
+
+                    with self.assertRaises(gcode.GCodeToolError) as caught:
+                        gcode.inspect_input(rejected)
+                    remediation = caught.exception.details["remediation"]
+                    self.assertEqual(remediation["extension"], extension)
+                    self.assertEqual(remediation["skill"], skill)
+                    self.assertTrue(remediation["reason"])
+                    self.assertIn(f"${skill}", remediation["next_step"])
+                    self.assertIn(".stl", remediation["next_step"])
+
+                    stdout = io.StringIO()
+                    with contextlib.redirect_stdout(stdout):
+                        code = gcode.main(["inspect", "--input", str(rejected), "--json"])
+                    payload = json.loads(stdout.getvalue())
+                    self.assertEqual(code, 2)
+                    self.assertFalse(payload["ok"])
+                    self.assertIn("out of scope", payload["error"])
+                    self.assertEqual(payload["remediation"], remediation)
+
+            profile = write_profile(root)
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                code = gcode.main(
+                    [
+                        "slice",
+                        "--input",
+                        str(root / "part.step"),
+                        "--output",
+                        str(root / "part.gcode"),
+                        "--profile",
+                        str(profile),
+                        "--dry-run",
+                    ]
+                )
+            self.assertEqual(code, 2)
+            self.assertEqual(json.loads(stdout.getvalue())["remediation"]["skill"], "cad")
 
     def test_dry_run_command_construction_for_each_backend(self) -> None:
         cases = [

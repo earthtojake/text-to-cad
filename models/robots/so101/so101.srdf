@@ -1,6 +1,5 @@
 <?xml version="1.0"?>
-<robot xmlns:explorer="https://text-to-cad.dev/explorer" name="so101_new_calib">
-  <explorer:urdf path="so101.urdf" />
+<robot name="so101_new_calib">
   <group name="manipulator">
     <chain base_link="base_link" tip_link="gripper_frame_link" />
   </group>

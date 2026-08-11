@@ -8,16 +8,18 @@ import {
   gitLfsPointerDetailsFromBuffer,
   loadRender3Mf,
   loadRenderArrayBuffer,
-  loadRenderGcode,
   loadRenderGlb,
   loadRenderJson,
   loadRenderSdf,
   loadRenderDisplayEdgeBundle,
   loadRenderSelectorBundle,
   loadRenderTopologyIndex,
-  peekRenderGcode,
+  peekRenderJson,
   peekRenderSdf
 } from "./renderAssetClient.js";
+import {
+  setRenderAssetSourceScope
+} from "./renderAssetSourceScope.js";
 
 class FakeElement {
   constructor(tagName, attributes = {}, children = [], text = "") {
@@ -353,27 +355,176 @@ test("SDF robot descriptions load through the render cache", async (t) => {
   assert.equal(fetchCount, 1);
 });
 
-test("G-code toolpaths load and parse through the render cache", async (t) => {
+test("a cached render asset is not reused across source scopes", async (t) => {
   const originalFetch = globalThis.fetch;
-  const url = `/toolpath-${Date.now()}-${Math.random()}.gcode`;
+  const url = `/asset-${Date.now()}-${Math.random()}.json`;
   let fetchCount = 0;
 
-  globalThis.fetch = async (requestUrl) => {
+  globalThis.fetch = async () => {
     fetchCount += 1;
-    assert.equal(String(requestUrl), url);
-    return new Response("G21\nG90\nM82\nG0 X0 Y0 Z0.2\nG1 X5 Y0 E0.2\n", { status: 200 });
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  };
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    setRenderAssetSourceScope("");
+  });
+
+  setRenderAssetSourceScope("/models/first");
+  assert.deepEqual(await loadRenderJson(url), { ok: true });
+  assert.equal(fetchCount, 1);
+
+  setRenderAssetSourceScope("/models/second");
+  await assert.rejects(
+    () => loadRenderJson(url),
+    /cached for source \/models\/first but was requested for \/models\/second/
+  );
+  assert.equal(fetchCount, 1);
+});
+
+test("a peek reports a miss instead of handing back another source's entry", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const url = `/asset-${Date.now()}-${Math.random()}.json`;
+  let fetchCount = 0;
+
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  };
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    setRenderAssetSourceScope("");
+  });
+
+  setRenderAssetSourceScope("/models/first");
+  const first = await loadRenderJson(url);
+  assert.equal(peekRenderJson(url), first);
+
+  setRenderAssetSourceScope("/models/second");
+  assert.equal(peekRenderJson(url), null);
+  assert.equal(fetchCount, 1);
+
+  setRenderAssetSourceScope("/models/first");
+  assert.equal(peekRenderJson(url), first);
+});
+
+test("a failed load leaves no source claim on an uncached asset", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const url = `/asset-${Date.now()}-${Math.random()}.json`;
+  let fetchCount = 0;
+
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return fetchCount === 1
+      ? new Response("", { status: 503, statusText: "Unavailable" })
+      : new Response(JSON.stringify({ ok: true }), { status: 200 });
+  };
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    setRenderAssetSourceScope("");
+  });
+
+  setRenderAssetSourceScope("/models/first");
+  await assert.rejects(() => loadRenderJson(url), /503 Unavailable/);
+
+  setRenderAssetSourceScope("/models/second");
+  assert.deepEqual(await loadRenderJson(url), { ok: true });
+  assert.equal(fetchCount, 2);
+});
+
+test("an already-aborted array buffer request claims nothing", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const url = `/asset-${Date.now()}-${Math.random()}.bin`;
+  let fetchCount = 0;
+
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return new Response(new Uint8Array([9, 9, 9]), { status: 200 });
+  };
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    setRenderAssetSourceScope("");
+  });
+
+  const controller = new AbortController();
+  controller.abort();
+  setRenderAssetSourceScope("/models/first");
+  await assert.rejects(() => loadRenderArrayBuffer(url, { signal: controller.signal }), {
+    name: "AbortError"
+  });
+  assert.equal(fetchCount, 0);
+
+  setRenderAssetSourceScope("/models/second");
+  assert.equal((await loadRenderArrayBuffer(url)).byteLength, 3);
+  assert.equal(fetchCount, 1);
+});
+
+test("array buffer loads are scoped to their source as well", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const url = `/asset-${Date.now()}-${Math.random()}.bin`;
+  let fetchCount = 0;
+
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+  };
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    setRenderAssetSourceScope("");
+  });
+
+  setRenderAssetSourceScope("/models/first");
+  assert.equal((await loadRenderArrayBuffer(url)).byteLength, 3);
+
+  setRenderAssetSourceScope("/models/second");
+  await assert.rejects(() => loadRenderArrayBuffer(url), /refusing to reuse it/);
+  assert.equal(fetchCount, 1);
+});
+
+test("repeat loads within one source scope still share a single fetch", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const url = `/asset-${Date.now()}-${Math.random()}.json`;
+  let fetchCount = 0;
+
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  };
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    setRenderAssetSourceScope("");
+  });
+
+  setRenderAssetSourceScope("/models/only");
+  const first = await loadRenderJson(url);
+  const second = await loadRenderJson(url);
+
+  assert.equal(second, first);
+  assert.equal(fetchCount, 1);
+});
+
+test("an unset source scope leaves render asset caching untouched", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const url = `/asset-${Date.now()}-${Math.random()}.json`;
+  let fetchCount = 0;
+
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
   };
 
   t.after(() => {
     globalThis.fetch = originalFetch;
   });
 
-  const first = await loadRenderGcode(url);
-  const second = await loadRenderGcode(url);
+  const first = await loadRenderJson(url);
+  const second = await loadRenderJson(url);
 
-  assert.equal(first.layers.length, 1);
-  assert.equal(first.stats.extrusionMoves, 1);
   assert.equal(second, first);
-  assert.equal(peekRenderGcode(url), first);
   assert.equal(fetchCount, 1);
 });

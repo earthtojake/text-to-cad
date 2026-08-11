@@ -4,12 +4,11 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from srdf.source import SrdfSourceError, read_srdf_source
+from srdf.source import SrdfSourceError, parse_srdf_file, read_srdf_source
 
 
 SAMPLE_SRDF = """\
-<robot name="sample" xmlns:tcad="https://text-to-cad.dev/srdf">
-  <tcad:urdf path="robot.urdf"/>
+<robot name="sample">
   <group name="arm">
     <joint name="shoulder"/>
     <joint name="elbow"/>
@@ -26,11 +25,6 @@ SAMPLE_SRDF = """\
 </robot>
 """
 
-LEGACY_SAMPLE_SRDF = SAMPLE_SRDF.replace(
-    'xmlns:tcad="https://text-to-cad.dev/srdf"',
-    'xmlns:explorer="https://text-to-cad.dev/explorer"',
-).replace("tcad:urdf", "explorer:urdf")
-
 
 class SrdfSourceTests(unittest.TestCase):
     def test_reads_moveit2_srdf_inventory(self) -> None:
@@ -41,21 +35,25 @@ class SrdfSourceTests(unittest.TestCase):
             source = read_srdf_source(srdf_path)
 
             self.assertEqual(source.robot_name, "sample")
-            self.assertEqual(source.urdf_ref, "robot.urdf")
             self.assertEqual(source.planning_groups[0].name, "arm")
             self.assertEqual(source.planning_groups[0].joint_names, ("shoulder", "elbow"))
             self.assertEqual(source.end_effectors[0].name, "tcp")
-            self.assertEqual(source.group_states[0].joint_values_by_name_rad["elbow"], 1.57)
+            self.assertEqual(source.group_states[0].joint_values_by_name["elbow"], 1.57)
             self.assertEqual(source.disabled_collision_pairs[0].reason, "Adjacent")
 
-    def test_reads_legacy_explorer_urdf_metadata(self) -> None:
+    def test_retired_urdf_link_element_warns_deprecated(self) -> None:
+        legacy = SAMPLE_SRDF.replace(
+            '<robot name="sample">',
+            '<robot name="sample" xmlns:tcad="https://text-to-cad.dev/srdf">\n  <tcad:urdf path="robot.urdf"/>',
+        )
         with tempfile.TemporaryDirectory(prefix="tmp-srdf-source-") as tempdir:
             srdf_path = Path(tempdir) / "robot.srdf"
-            srdf_path.write_text(LEGACY_SAMPLE_SRDF, encoding="utf-8")
+            srdf_path.write_text(legacy, encoding="utf-8")
 
-            source = read_srdf_source(srdf_path)
+            source, result = parse_srdf_file(srdf_path)
 
-            self.assertEqual(source.urdf_ref, "robot.urdf")
+            self.assertIsNotNone(source)
+            self.assertIn("deprecated_urdf_link", {finding.code for finding in result.warnings})
 
     def test_rejects_non_robot_root(self) -> None:
         with tempfile.TemporaryDirectory(prefix="tmp-srdf-source-") as tempdir:

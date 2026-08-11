@@ -5,8 +5,77 @@ import {
   buildDisplayEdgeRuntime,
   buildSelectorRuntime,
   buildTransformedDisplayEdgeRuntime,
-  buildTransformedSelectorRuntime
+  buildTransformedSelectorRuntime,
+  composeSelectorRuntimes
 } from "./runtime.js";
+
+function fakeComponentRuntime(occurrenceId) {
+  // A minimal per-component selector runtime: 2 faces, 1 edge, one occurrence, with the face
+  // pick run (occurrenceRow, primitiveIndex, triangleStart, triangleCount, faceRow).
+  const ref = (selector, selectorType, rowIndex, pickData) => ({
+    id: selector, normalizedSelector: selector, displaySelector: selector, selectorType, rowIndex,
+    ...(pickData ? { pickData } : {})
+  });
+  return {
+    occurrences: [{ id: occurrenceId }],
+    shapes: [],
+    faces: [{ id: 0 }, { id: 1 }],
+    edges: [{ id: 0 }],
+    bbox: { min: [0, 0, 0], max: [1, 1, 1] },
+    references: [
+      ref(occurrenceId, "occurrence", 0),
+      ref(`${occurrenceId}.f1`, "face", 0, { triangleStart: 0, triangleCount: 1 }),
+      ref(`${occurrenceId}.f2`, "face", 1, { triangleStart: 0, triangleCount: 1 }),
+      ref(`${occurrenceId}.e1`, "edge", 0, { segmentStart: 0, segmentCount: 1 })
+    ],
+    occurrenceIdByRowIndex: new Map([[0, occurrenceId]]),
+    proxy: {
+      facePositions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      faceIndices: new Uint32Array([0, 1, 2]),
+      faceIds: new Uint32Array([0]),
+      faceRuns: new Uint32Array([0, 0, 0, 1, 0]),
+      faceRunColumns: ["occurrenceRow", "primitiveIndex", "triangleStart", "triangleCount", "faceRow"],
+      edgePositions: new Float32Array([0, 0, 0, 1, 0, 0]),
+      edgeIndices: new Uint32Array([0, 1]),
+      edgeIds: new Uint32Array([0])
+    }
+  };
+}
+
+test("composeSelectorRuntimes merges per-component runtimes with disjoint row/proxy offsets", () => {
+  const merged = composeSelectorRuntimes([fakeComponentRuntime("o1.1"), fakeComponentRuntime("o1.2")]);
+
+  // Tables concatenate; each component occupies a disjoint range.
+  assert.equal(merged.faces.length, 4);
+  assert.equal(merged.edges.length, 2);
+  assert.equal(merged.occurrences.length, 2);
+
+  // The second component's face reference rowIndex is offset past the first's faces.
+  assert.equal(merged.references.find((r) => r.normalizedSelector === "o1.2.f1").rowIndex, 2);
+  // faceReferenceByRowIndex resolves both components by their offset rows.
+  assert.equal(merged.faceReferenceByRowIndex.get(0).normalizedSelector, "o1.1.f1");
+  assert.equal(merged.faceReferenceByRowIndex.get(2).normalizedSelector, "o1.2.f1");
+  assert.equal(merged.occurrenceIdByRowIndex.get(0), "o1.1");
+  assert.equal(merged.occurrenceIdByRowIndex.get(1), "o1.2");
+
+  // The pick faceRuns concatenate, offsetting occurrenceRow and faceRow into the merged tables,
+  // and the face proxy ids/indices offset to stay consistent with faceReferenceByRowIndex.
+  assert.equal(merged.proxy.faceRuns.length, 10);
+  assert.equal(merged.proxy.faceRuns[5 + 0], 1); // occurrenceRow of component 2
+  assert.equal(merged.proxy.faceRuns[5 + 4], 2); // faceRow of component 2
+  assert.equal(merged.proxy.faceIds[1], 2);
+  assert.deepEqual([...merged.proxy.faceIndices], [0, 1, 2, 3, 4, 5]);
+
+  // Each reference's pickData segment/triangle start shifts into the CONCATENATED edge/face
+  // proxies so a non-first occurrence's highlight indexes its OWN geometry, not the first
+  // component's (the bug: selecting o1.2's edge highlighted o1.1). The first stays at 0; the
+  // second shifts past the first component's 1 triangle / 1 edge segment.
+  const refBySel = (sel) => merged.references.find((r) => r.normalizedSelector === sel);
+  assert.equal(refBySel("o1.1.e1").pickData.segmentStart, 0);
+  assert.equal(refBySel("o1.2.e1").pickData.segmentStart, 1);
+  assert.equal(refBySel("o1.1.f1").pickData.triangleStart, 0);
+  assert.equal(refBySel("o1.2.f1").pickData.triangleStart, 1);
+});
 
 test("buildSelectorRuntime remaps source part rows onto an assembly occurrence", () => {
   const bundle = {

@@ -1,0 +1,4 @@
+.review/
+render/out/
+render/gauntlet/
+__pycache__/

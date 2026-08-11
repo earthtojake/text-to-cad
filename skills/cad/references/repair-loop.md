@@ -13,6 +13,47 @@ Read this file when generation, export, inspection, positioning, snapshot review
 
 ## Failure classes and fixes
 
+### Multi-section loft: "Failed to create valid loft" / "Recovery failed"
+
+The message names neither the station nor the cause. Two checks, in this order:
+
+1. **Loft increasing PREFIXES** (`faces[:5]`, `[:10]`, `[:20]`, …) to bracket
+   where it breaks, and watch the reported volume as well as the exception — a
+   loft that "succeeds" with an absurd volume is already failing.
+2. **Loft every ADJACENT PAIR.** If every pair succeeds but the full set fails,
+   the sections are individually fine and the problem is global — almost always
+   that sections disagree on POINT COUNT. Guarantee a fixed sample count per
+   section.
+
+Two silent causes worth ruling out before either:
+
+- **A section that is genuinely disconnected** (two closed regions — e.g. a
+  station cutting two separate nacelles, or crossing an open slot) produces a
+  `Face` that raises nothing and reports a plausible area; only `Face.is_valid`
+  is False. The loft then fails dozens of stations away. End the loft at the last
+  connected station, or bridge the gap in the section and cut it back afterwards.
+  (`Face.is_valid` is a PROPERTY — calling `f.is_valid()` raises
+  `TypeError: 'bool' object is not callable`, which reads like a corrupt object.)
+- **Samples dropped where a component does not exist** make counts vary station
+  to station. Carry a value rather than dropping the sample.
+
+### Boolean against a large lofted surface never returns
+
+A subtract against a single large B-spline surface costs a full-surface
+classification PER TOOL and grows superlinearly in tool count — measured on one
+~4,900-control-point skin: 1 tool 24 s, 4 tools 70 s, 41 tools did not finish in
+15 minutes, and a 44-tool build ran over seven hours without completing. Batching
+into one list operand does NOT help; the cost is per tool, not per accumulation.
+
+Confirm rather than guess: the process stays at ~100 % CPU with the progress file
+frozen on its first phase, and a stack sample shows `Extrema_ExtPS::Perform` with
+`BSplSLib_Cache::BuildCache` rebuilding on nearly every evaluation.
+
+Fix by not cutting: shallow cosmetic recesses do not need to be booleans at all.
+At 19 m rendered to 1920 px, 1 px is ~10 mm, so a 4 mm groove is sub-pixel and
+reads only because the edge overlay draws feature edges. Keep booleans for
+openings that change the silhouette, and build the rest additively.
+
 ### Source import or syntax failure
 
 Likely causes:
@@ -125,12 +166,12 @@ Likely causes:
 
 - Node/npm unavailable
 - CAD Viewer app not built or cannot start
-- active Viewer URL is missing the absolute `?dir=` for the project
-- returned link is missing an absolute `file=` path or points outside `?dir=`
+- Viewer URL path is not the project's absolute model directory
+- returned link is missing `?file=`, or its `file=` is not relative to that directory
 
 Fix:
 
-- rerun `$cad-viewer` with the same absolute `?dir=` for the project and an absolute `file=` path for each artifact
+- rebuild each link as `<viewer-origin><absolute-model-directory>?file=<path relative to it>`
 - return one documented Viewer link per requested file
 - if unresolved, report the startup failure and rely on CLI facts/measurements plus snapshots for validation
 

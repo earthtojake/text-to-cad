@@ -21,7 +21,7 @@ export function useCadWorkspaceShortcuts({
   handleRedoDrawing,
   setPreviewMode,
   setViewerAlertOpen,
-  setThemeMenuOpen,
+  setThemeEditing,
   setTabToolsOpen,
   setSidebarOpen,
   setTabToolMode
@@ -74,7 +74,7 @@ export function useCadWorkspaceShortcuts({
           setPreviewMode(false);
           if (previousUiState) {
             setViewerAlertOpen(previousUiState.viewerAlertOpen);
-            setThemeMenuOpen(previousUiState.themeMenuOpen);
+            setThemeEditing(previousUiState.themeEditing);
             setSidebarOpen(previousUiState.sidebarOpen);
             setTabToolsOpen(previousUiState.tabToolsOpen);
             setTabToolMode(previousUiState.tabToolMode);
@@ -82,7 +82,7 @@ export function useCadWorkspaceShortcuts({
           return;
         }
         setViewerAlertOpen(false);
-        setThemeMenuOpen(false);
+        setThemeEditing(false);
         setTabToolsOpen(false);
         if (!isDesktop) {
           setSidebarOpen(false);
@@ -103,7 +103,7 @@ export function useCadWorkspaceShortcuts({
     themeSheetOpen,
     previewMode,
     previewUiStateRef,
-    setThemeMenuOpen,
+    setThemeEditing,
     setPreviewMode,
     setSidebarOpen,
     setTabToolMode,

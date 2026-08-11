@@ -43,6 +43,13 @@ export function buildPartTransformMatrix(THREE, transform) {
 }
 
 export function displayTransformForPart(meshData, part, renderPartsIndividually = true) {
+  // Composed packages declare partTransformsBaked: false — their shared component
+  // geometry is occurrence-local, so the occurrence transform must be applied no
+  // matter which render mode is active. Legacy meshDatas leave the flag undefined
+  // (vertices world-baked), where per-part transforms only apply in individual mode.
+  if (meshData?.partTransformsBaked === false) {
+    return part?.transform || null;
+  }
   if (!renderPartsIndividually || meshData?.partTransformsBaked === true) {
     return null;
   }

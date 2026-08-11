@@ -10,12 +10,14 @@ import {
   displayModeShowsEdges,
   displayModeShowsThroughEdges,
   CAMERA_PROJECTION,
+  normalizeDisplayEdgeSettings,
   normalizeDisplaySettings,
   normalizeCameraProjection,
   resolveDisplayEdgeSettings
 } from "./displaySettings.js";
 import {
-  buildModel
+  buildModel,
+  normalizedSelectorValues
 } from "./cadScene.js";
 import {
   applyDisplayRecordTransform
@@ -34,8 +36,8 @@ import {
 import {
   applyExplodedViewProgress,
   clearExplodedViewRecords,
-  createExplodedViewRecordStates,
-  explodedViewBoundsFromStates
+  computeExplodedViewLayout,
+  explodedViewBounds
 } from "../lib/viewer/explodedView.js";
 import {
   addFloor as addSharedFloor,
@@ -60,7 +62,7 @@ import {
   RENDER_VIEW_PRESETS,
   rendererDataUrlWithOptionalLabel as sharedRendererDataUrlWithOptionalLabel,
   resolveRenderView,
-  resolveAppearanceSettings,
+  resolveThemeSettings,
   shouldBurnInViewLabels as sharedShouldBurnInViewLabels
 } from "./renderOptions.js";
 import {
@@ -116,8 +118,8 @@ function resolveRenderSceneScale(job = {}, meshData = {}) {
   });
 }
 
-function resolveAppearance(job = {}) {
-  return resolveAppearanceSettings(job, { defaultThemeId: DEFAULT_RENDER_THEME_ID });
+function resolveTheme(job = {}) {
+  return resolveThemeSettings(job, { defaultThemeId: DEFAULT_RENDER_THEME_ID });
 }
 
 function resolveView(camera = "iso") {
@@ -633,27 +635,89 @@ function renderSectionPng(segments, width, height, themeSettings, {
   return canvas.toDataURL("image/png");
 }
 
+// Coordinates are millimetres. The mesh pipeline emits full float64 precision
+// (-2449.9999046325684 for what is 2450 mm), which is 16 significant figures of noise per
+// number, six numbers per part. Three decimals is a nanometre -- far below any tolerance
+// this repo models to -- and costs about a fifth of the payload.
+const LIST_BOUNDS_DECIMALS = 3;
+
+function roundedBounds(bounds) {
+  if (!bounds || typeof bounds !== "object") {
+    return null;
+  }
+  const axis = (values) => (Array.isArray(values)
+    ? values.map((value) => {
+      const numeric = toFiniteNumber(value, 0);
+      return Number(numeric.toFixed(LIST_BOUNDS_DECIMALS));
+    })
+    : null);
+  const min = axis(bounds.min);
+  const max = axis(bounds.max);
+  return min && max ? { min, max } : null;
+}
+
+// The parts inventory: what is in this model and what can be selected.
+//
+// This is the ONLY output whose size grows with the model -- everything else in the CLI
+// surface is constant (a 600-part assembly logs the same ~100 bytes a single part does).
+// So it is the one payload where redundancy is measured in tens of thousands of tokens:
+// on a 600-part rover the previous shape was 294 KB, of which `id`, `occurrenceId` and
+// `ref` were the same string three times over (identical in 600/600 parts), `label`
+// duplicated `name` (600/600), and the coordinates carried 16 significant figures.
+//
+// `ref` survives rather than `id`/`occurrenceId` because it is the form that goes
+// straight back into `--focus` / `--hide` / `inspect`; the bare id is one string slice
+// away for anyone who needs it.
 export function listRenderableParts(meshData) {
-  return toArray(meshData.parts).map((part, index) => ({
-    id: String(part?.id || part?.occurrenceId || `part:${index}`),
-    occurrenceId: String(part?.occurrenceId || part?.id || ""),
-    name: String(part?.name || part?.label || part?.id || `Part ${index + 1}`),
-    label: String(part?.label || part?.name || part?.id || `Part ${index + 1}`),
-    triangleCount: Math.max(0, Math.floor(toFiniteNumber(part?.triangleCount, 0))),
-    vertexCount: Math.max(0, Math.floor(toFiniteNumber(part?.vertexCount, 0))),
-    bounds: part?.bounds || null
-  }));
+  return toArray(meshData.parts).map((part, index) => {
+    const occurrenceId = String(part?.occurrenceId || part?.id || "");
+    return {
+      ref: occurrenceId ? `#${occurrenceId}` : "",
+      name: String(part?.name || part?.label || part?.id || `Part ${index + 1}`),
+      triangleCount: Math.max(0, Math.floor(toFiniteNumber(part?.triangleCount, 0))),
+      vertexCount: Math.max(0, Math.floor(toFiniteNumber(part?.vertexCount, 0))),
+      bounds: roundedBounds(part?.bounds)
+    };
+  });
+}
+
+// The camera used for an output is decided PER OUTPUT: the job/theme projection,
+// plus a forced perspective whenever that output's camera spec carries an explicit
+// position/target/up. Any projection echo must come from this same decision, or an
+// explicit-position camera on an orthographic theme gets reported as orthographic.
+export function resolveOutputCameraProjection(context, cameraSpec) {
+  const displayProjection = normalizeCameraProjection(
+    context?.projection,
+    CAMERA_PROJECTION.ORTHOGRAPHIC
+  );
+  const usePerspectiveCamera = displayProjection === CAMERA_PROJECTION.PERSPECTIVE ||
+    cameraSpecUsesPerspectiveProjection(cameraSpec, {
+      presets: RENDER_VIEW_PRESETS,
+      strict: true
+    });
+  return usePerspectiveCamera ? CAMERA_PROJECTION.PERSPECTIVE : CAMERA_PROJECTION.ORTHOGRAPHIC;
 }
 
 export function renderJobContext(meshData, job = {}) {
   const mode = String(job.mode || "view").trim().toLowerCase();
-  const theme = resolveAppearance(job);
+  const theme = resolveTheme(job);
   const sceneScale = resolveRenderSceneScale(job, meshData);
   const sourceKind = String(job.resolved?.kind || job.kind || meshData?.sourceFormat || "").trim().toLowerCase();
   const stepDisplayEnabled = sourceKind === "step" || sourceKind === "stp";
-  const displaySettings = stepDisplayEnabled
-    ? normalizeDisplaySettings(job.display)
-    : normalizeDisplaySettings({ projection: CAMERA_PROJECTION.PERSPECTIVE });
+  const displaySettings = normalizeDisplaySettings(stepDisplayEnabled ? job.display : undefined);
+  // Projection is a THEME trait, honoured by every format -- the same rule the viewer
+  // adopted in U1. An explicit job display projection still overrides it.
+  //
+  // Non-STEP sources used to be forced to PERSPECTIVE here regardless of the theme
+  // ("historical perspective framing"), which had a consequence nobody was reading it for:
+  // the tight frame that makes a render fill its canvas is orthographic-only, so every
+  // mesh, drawing, implicit and robot snapshot silently skipped it and sat in a sea of
+  // empty space while STEP filled its frame. Measured on tom.urdf: the gate reported
+  // usePerspectiveCamera=true and the tight frame never ran.
+  const projection = normalizeCameraProjection(
+    job.display?.projection,
+    normalizeCameraProjection(theme?.projection, CAMERA_PROJECTION.ORTHOGRAPHIC)
+  );
   const displayMode = displaySettings.mode;
   const bounds = meshData.bounds || boundsFromVertices(meshData.vertices || []);
   const outputs = toArray(job.outputs).length ? toArray(job.outputs) : [{ path: job.output || "", camera: job.camera || "iso" }];
@@ -669,7 +733,13 @@ export function renderJobContext(meshData, job = {}) {
     lighting: theme.lighting || null,
     renderScale: job.render?.renderScale ?? job.renderScale ?? DEFAULT_RENDER_SCALE
   });
-  const baseEdgeSettings = resolveDisplayEdgeSettings(displaySettings);
+  const displayEdgeSettings = resolveDisplayEdgeSettings(displaySettings);
+  // A theme that opts into its own outline (e.g. Terminal's neon-green
+  // linework) drives the edge theme; other themes leave it to display.
+  const themeEdges = theme?.edges;
+  const baseEdgeSettings = themeEdges && themeEdges.enabled === true
+    ? normalizeDisplayEdgeSettings({ ...displayEdgeSettings, ...themeEdges })
+    : displayEdgeSettings;
   const edgeSettings = {
     ...baseEdgeSettings,
     enabled: displayModeForcesEdges(displayMode) ? true : baseEdgeSettings.enabled,
@@ -712,6 +782,7 @@ export function renderJobContext(meshData, job = {}) {
     sourceKind,
     stepDisplayEnabled,
     displaySettings,
+    projection,
     displayMode,
     wireframeMode,
     edgesVisible,
@@ -728,11 +799,22 @@ export function renderJobContext(meshData, job = {}) {
 
 export function modelOptionsForRenderJob(context, job = {}) {
   const selection = job.selection || {};
-  const filterSelection = context.mode === "view" || context.mode === "orbit"
+  const keepsAllParts = context.mode === "view" || context.mode === "orbit";
+  const filterSelection = keepsAllParts
     ? {
         hide: selection.hide
       }
     : selection;
+  // View/orbit focus keeps every part in the scene so the frame retains
+  // assembly context (hide is the removal filter); the focused refs instead
+  // ghost the rest of the model through the same focusedPartId path the
+  // interactive viewer uses. Section mode still isolates via filterSelection.
+  const focusedPartId = keepsAllParts
+    ? [
+        ...normalizedSelectorValues(selection.focus),
+        ...normalizedSelectorValues(selection.refs)
+      ]
+    : [];
   return {
     theme: context.sceneTheme,
     displayMode: context.displayMode,
@@ -743,6 +825,7 @@ export function modelOptionsForRenderJob(context, job = {}) {
     renderPartsIndividually: true,
     selection: {
       ...(job.selection || {}),
+      ...(focusedPartId.length ? { focusedPartId } : {}),
       showEdges: context.edgesVisible
     },
     edgeRendering: {
@@ -834,24 +917,18 @@ function applyViewportExplodedView(viewport, bounds) {
     resetExplodedView();
     return bounds;
   }
-  const states = createExplodedViewRecordStates(
-    THREEImpl,
-    model.displayRecords,
-    bounds,
-    settings
-  );
-  if (!states.length) {
+  const layout = computeExplodedViewLayout(model.displayRecords, bounds);
+  if (!layout.entries.length) {
     resetExplodedView();
     return bounds;
   }
-  applyExplodedViewProgress(THREEImpl, states, 1);
+  const amount = clamp(Number(settings.amount ?? 1), 0, 1);
+  applyExplodedViewProgress(THREEImpl, layout, amount);
   for (const record of model.displayRecords) {
     applyDisplayRecordTransform(THREEImpl, record);
   }
   model.root?.updateMatrixWorld?.(true);
-  return settings.autoFrame === false
-    ? bounds
-    : explodedViewBoundsFromStates(THREEImpl, states, bounds, 1);
+  return explodedViewBounds(layout, bounds, amount);
 }
 
 function syncViewportTopologyDisplayEdges(viewport) {
@@ -914,7 +991,7 @@ export async function captureModel(viewport, captureOptions = {}) {
       ok: true,
       mode,
       parts: listRenderableParts(meshData),
-      bounds: modelBounds,
+      bounds: roundedBounds(modelBounds) || modelBounds,
       warnings
     };
   }
@@ -993,15 +1070,8 @@ export async function captureModel(viewport, captureOptions = {}) {
     syncViewportTopologyDisplayEdges(viewport);
     syncScreenSpaceLineMaterialResolution(viewport.model.runtime.screenSpaceLineMaterials, width, height);
     const cameraSpec = output.camera || job.camera || "iso";
-    const displayProjection = normalizeCameraProjection(
-      context.displaySettings?.projection,
-      CAMERA_PROJECTION.ORTHOGRAPHIC
-    );
-    const usePerspectiveCamera = displayProjection === CAMERA_PROJECTION.PERSPECTIVE ||
-      cameraSpecUsesPerspectiveProjection(cameraSpec, {
-      presets: RENDER_VIEW_PRESETS,
-      strict: true
-    });
+    const outputProjection = resolveOutputCameraProjection(context, cameraSpec);
+    const usePerspectiveCamera = outputProjection === CAMERA_PROJECTION.PERSPECTIVE;
     const cameraView = usePerspectiveCamera ? null : resolveView(cameraSpec);
     const resolvedCamera = usePerspectiveCamera
       ? fitPerspectiveCamera(viewport.perspectiveCamera, cameraSpec, lockedBounds || outputBounds, width, height, sceneScale)
@@ -1016,6 +1086,9 @@ export async function captureModel(viewport, captureOptions = {}) {
     renderedOutputs.push({
       path: String(output.path || ""),
       camera: resolvedCamera.name,
+      // Authoritative per-output echo: an explicit-position camera forces the
+      // perspective camera even on an orthographic theme.
+      projection: outputProjection,
       width,
       height,
       mimeType: "image/png",
@@ -1026,6 +1099,12 @@ export async function captureModel(viewport, captureOptions = {}) {
   return {
     ok: true,
     mode,
+    // Echo the display state actually applied. The job-level projection is the
+    // resolved theme/display projection; each rendered output additionally carries
+    // its own authoritative projection (explicit-position cameras force perspective
+    // per output, so outputs within one job can differ).
+    displayMode: context.displayMode,
+    projection: context.projection,
     outputs: renderedOutputs,
     timings: {
       sceneBuildMs,

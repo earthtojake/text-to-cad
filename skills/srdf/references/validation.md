@@ -1,117 +1,44 @@
-# SRDF validation
+# SRDF Validation and Verification
 
-Generation validates every `gen_srdf()` result against its linked URDF before writing. This catches many planning-semantics errors, but it is not a substitute for MoveIt Setup Assistant, MoveIt runtime tests, or collision-matrix sampling.
+Every created or modified `.srdf` runs this recipe before the task is reported complete.
 
-Generated or modified `.srdf` files should be handed to `$cad-viewer` for live viewer links when available.
+## Recipe
 
-## Current generation-time checks
+1. **Bundled validator** (always): `python scripts/validate path/to/robot.srdf`. It collects *all* findings in one pass (severity, code, XML path); fix them and re-run until clean. Use `--strict` to fail on warnings and `--format json` for machine-readable output.
+2. **Viewer review** (whenever `$cad-viewer` is available): load the SRDF, confirm the paired URDF resolves and renders, and exercise named group states. Include MoveIt2 controls for IK/path review when the task needs them.
+3. **MoveIt smoke test** (when a MoveIt environment is available): load the URDF+SRDF pair in MoveIt Setup Assistant or a project launch; solve IK for the primary group; plan to a named state. Report as skipped when unavailable.
 
-The current runtime checks that:
+## What the Bundled Validator Checks
 
-- `gen_srdf()` returns an envelope dictionary;
-- envelope fields are exactly `xml` and `urdf`;
-- the URDF path is relative to the generator source, uses POSIX separators, ends in `.urdf`, and exists;
-- SRDF XML parses and has root `<robot name="...">`;
-- SRDF robot name matches the URDF robot name;
-- local `tcad:urdf` metadata is injected or updated and matches the linked URDF path relative to the generated SRDF; legacy `explorer:urdf` metadata remains readable;
-- at least one planning group exists;
-- planning groups are named and unique;
-- each planning group defines joints, links, chains, or subgroups;
-- group joint names, link names, and subgroup names exist;
-- chain base/tip links exist;
-- end effectors reference existing parent links and groups;
-- end-effector groups do not overlap their parent group when a parent group is provided;
-- end-effector parent links are in the parent group or adjacent to the end-effector group;
-- group states reference existing groups;
-- group-state joints exist and belong to the selected group after group expansion;
-- group-state values are finite;
-- group states do not set fixed or mimic joints;
-- revolute/prismatic group-state values are within URDF limits when limits are available;
-- disabled collision pairs have distinct links, valid link references, non-empty reasons, and no reversed duplicates;
-- many manually reasoned disabled collision pairs trigger a warning.
+Structure and linkage:
 
-## Optional CAD Viewer MoveIt2 checks
+- root is `<robot>` with a non-empty name;
+- a paired URDF resolves: exactly one `.urdf` in the same folder declares the SRDF's robot name (`no_paired_urdf` / `ambiguous_paired_urdf` errors otherwise); a leftover `<tcad:urdf>`/`<explorer:urdf>` element warns as deprecated and is ignored;
+- unique group, end-effector, group-state, and collision-pair identities.
 
-When `$cad-viewer` starts its local MoveIt2 server for SRDF review, the server additionally checks:
+Against the paired URDF:
 
-- request `protocolVersion`;
-- request type;
-- repository-relative SRDF path and traversal safety;
-- linked URDF path from `tcad:urdf` metadata;
-- planning group selection;
-- target frame and target link existence;
-- target orientation shape and quaternion normalization;
-- position-only IK consistency;
-- native joint value parsing;
-- legacy degree-field conversion by joint type;
-- planner and IK setting basic numeric validity.
+- every group joint/link/subgroup name exists (joints in the URDF, links in the URDF, subgroups in the SRDF);
+- every chain `base_link`/`tip_link` exists **and** the chain is a real parent→child path in the URDF tree;
+- subgroup references contain no cycles;
+- at least one planning group is defined;
+- virtual joints: valid type (`fixed`/`floating`/`planar`), non-empty `parent_frame`, `child_link` exists in the URDF (name collisions with URDF joints warn);
+- passive joints exist in the URDF and are never set by group states;
+- end effectors: group exists, parent group exists when named, parent link exists, no link overlap between EE group and parent group, parent link in parent group or adjacent to the EE group;
+- group states: group exists, each joint exists and belongs to the group, no fixed/mimic/passive joints, values within URDF revolute/prismatic limits; states that omit group joints warn (MoveIt fills them from the current state);
+- disabled collisions: both links exist, distinct, non-empty reason, no (reversed) duplicates; pairs claiming reason `Adjacent` that are not actually joined by a URDF joint warn; warns when 25+ pairs are manually reasoned;
+- unknown elements under `<robot>` or `<group>` warn — misspelled elements are otherwise silently ignored by MoveIt;
+- a paired URDF that is not a single-rooted tree warns (chain/adjacency checks become unreliable).
 
-## Important current limitations
+## What Validation Cannot Prove
 
-Do not treat a passing validation as proof of planning correctness. The current lightweight runtime does not fully validate:
+- That the planning group matches the user's task intent (right arm vs left arm).
+- That the TCP/target link is the physically correct tool point.
+- That disabled pairs are safe at every reachable configuration — only sampling (Setup Assistant) approaches that.
+- That group-state poses are collision-free or useful.
 
-- full URDF graph consistency; duplicate URDF links or joints can be collapsed by shallow inventory parsing;
-- chain base/tip connectivity at generation time unless group-state expansion exposes the issue;
-- subgroup cycles as hard errors in every path;
-- `<virtual_joint>` inventory and validation;
-- `<passive_joint>` inventory and exclusion from all active groups;
-- collision matrix correctness through sampled self-collision analysis;
-- actual IK solver availability for each group;
-- actual planning success in the target MoveIt environment;
-- controller configuration;
-- full orientation-constraint behavior beyond request normalization.
+These are semantic decisions: document them in the ledger and verify interactively in the viewer or MoveIt when confidence matters. Visual rendering review alone cannot prove planning correctness.
 
-Use MoveIt Setup Assistant or a MoveIt runtime smoke test for these checks.
+## Failure Handling
 
-## Manual planning checks
-
-After generation, verify:
-
-### URDF dependency
-
-- URDF has been checked by the URDF workflow.
-- URDF collision geometry is suitable for MoveIt collision checking.
-- Active, fixed, mimic, and passive joints are understood.
-
-### Planning groups
-
-- Each chain has a real URDF path from base to tip.
-- Each group contains the intended active joints and no accidental fixed/mimic/passive joints.
-- Subgroups do not create ambiguous or cyclic group definitions.
-- The selected planner/IK solver supports the group.
-
-### End effectors
-
-- End-effector group and parent group do not share links.
-- Parent link is the real attachment point.
-- Target/TCP link is explicit for pose requests.
-
-### Group states
-
-- Values use radians/meters, not degrees.
-- Values are inside URDF limits.
-- Named states are collision-free when intended.
-
-### Disabled collisions
-
-- Pairs came from adjacency, sampling, Setup Assistant output, or explicit user evidence.
-- No broad disable list was invented by the model.
-- Manual pairs were reviewed for safety.
-
-## Validation report format
-
-Use a compact report:
-
-```text
-Checks run:
-- SRDF generation validation: passed
-- linked URDF validation: previously passed with URDF skill
-- CAD Viewer link: returned
-- MoveIt Setup Assistant review: skipped, unavailable
-- CAD Viewer MoveIt2 IK smoke test: passed for manipulator/tool0
-- collision matrix sampling: skipped, no MoveIt environment
-
-Assumptions:
-- Assumed tool0 is the desired TCP.
-- Disabled collisions are adjacency-only.
-```
+When validation fails against the URDF, decide which side is wrong before editing: a missing name may mean a typo in the SRDF **or** a rename in the URDF that invalidated existing semantics. Fix the owning file (`$urdf` for structure), then re-run the validator on the pair.

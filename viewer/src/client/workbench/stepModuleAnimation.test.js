@@ -25,14 +25,20 @@ test("STEP module animation default state mirrors CadWorkspace defaults", () => 
     activeId: "orbit",
     playing: false,
     elapsedSec: 0,
-    speed: 1
+    speed: 1,
+    loopEnabled: true
   });
   assert.deepEqual(buildDefaultStepModuleAnimationState(null), {
     activeId: "",
     playing: false,
     elapsedSec: 0,
-    speed: 1
+    speed: 1,
+    loopEnabled: true
   });
+  assert.equal(
+    buildDefaultStepModuleAnimationState({ animations: [{ id: "orbit", loop: false }] }).loopEnabled,
+    false
+  );
 });
 
 test("animationNowMs returns a finite monotonic-clock-compatible timestamp", () => {

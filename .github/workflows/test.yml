@@ -46,6 +46,9 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
 
+      - name: Check generated outputs against sources
+        run: scripts/bundle/bundle.sh --check
+
       - name: Bundle production outputs
         run: scripts/bundle/bundle.sh --clean
 

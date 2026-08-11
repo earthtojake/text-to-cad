@@ -12,14 +12,14 @@ add_repo_path("skills/cad/scripts/inspect")
 
 from inspect_refs import cli as inspect_cli
 from inspect_refs import inspect as refs_inspect
-from cadpy import cad_ref_syntax as refs_syntax
-from cadpy import assembly_spec
-from cadpy import generation as cad_generation
-from cadpy import step_targets
-from cadpy.glb_topology import STEP_TOPOLOGY_SCHEMA_VERSION
-from cadpy.render import part_glb_path
-from cadpy.selector_types import SelectorBundle, SelectorProfile
-from cadpy.source_hash import python_source_hash
+from cadgen import cad_ref_syntax as refs_syntax
+from cadgen._internal import assembly_spec
+from cadgen._internal import generation as cad_generation
+from cadgen import step_targets
+from cadgen._internal.glb_topology import STEP_TOPOLOGY_SCHEMA_VERSION
+from cadgen.catalog import render_package_dir
+from cadgen.selector_types import SelectorBundle, SelectorProfile
+from cadgen._internal.source_hash import python_source_hash
 from tests.python.support.cad_test_roots import IsolatedCadRoots
 
 
@@ -381,7 +381,7 @@ class InspectRefsTests(unittest.TestCase):
         tempdir = self._isolated_roots.temporary_cad_directory(prefix="tmp-refs-inspect-")
         self._tempdir = tempdir
         self.temp_root = Path(tempdir.name)
-        self.relative_dir = self.temp_root.relative_to(assembly_spec.CAD_ROOT).as_posix()
+        self.relative_dir = self.temp_root.relative_to(Path.cwd()).as_posix()
         self.lookup_ref = f"{self.relative_dir}/sample"
         self.cad_ref = self.lookup_ref
         self.step_path = self.temp_root / "sample.step"
@@ -390,7 +390,7 @@ class InspectRefsTests(unittest.TestCase):
         self.addCleanup(lambda: shutil.rmtree(self.temp_root, ignore_errors=True))
 
     def _touch_glb(self, step_path: Path | None = None) -> Path:
-        glb_path = part_glb_path(step_path or self.step_path)
+        glb_path = render_package_dir(step_path or self.step_path)
         glb_path.parent.mkdir(parents=True, exist_ok=True)
         glb_path.write_bytes(b"glb")
         return glb_path
@@ -457,7 +457,14 @@ class InspectRefsTests(unittest.TestCase):
             edge_manifest["sourceKind"] = "step"
             edge_manifest["sourcePath"] = topology_manifest.get("sourcePath")
             edge_manifest["stepHash"] = topology_manifest.get("stepHash")
+        # The render package is keyed by the ENTRY filename. Depending on how the entry
+        # resolves, production reads render_package_dir(spec.entry_path) at either the .py
+        # generator key (a python-backed entry with no STEP) or the .step key (resolved as
+        # imported). Touch the mock GLB at both candidate keys so the lookup succeeds
+        # regardless of which one this scenario resolves to.
         self._touch_glb(resolved_step_path)
+        if source_path != resolved_step_path:
+            self._touch_glb(source_path)
         stack = contextlib.ExitStack()
         with stack:
             stack.enter_context(mock.patch.object(step_targets, "find_step_path", return_value=resolved_step_path))
@@ -499,7 +506,7 @@ class InspectRefsTests(unittest.TestCase):
     def _manifest_path(self, path: Path) -> str:
         resolved = path.resolve()
         try:
-            return resolved.relative_to(assembly_spec.REPO_ROOT).as_posix()
+            return resolved.relative_to(Path.cwd().resolve()).as_posix()
         except ValueError:
             return resolved.as_posix()
 
@@ -540,7 +547,7 @@ class InspectRefsTests(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         token = result["tokens"][0]
-        self.assertEqual(refs_inspect._relative_to_repo(self.step_path), token["stepPath"])
+        self.assertEqual(refs_inspect._display_path(self.step_path), token["stepPath"])
         self.assertEqual(1, token["summary"]["occurrenceCount"])
 
     def test_context_provider_can_supply_in_memory_entry_context(self) -> None:
@@ -680,9 +687,9 @@ class InspectRefsTests(unittest.TestCase):
         error = result["errors"][0]
         self.assertEqual("glb_regeneration_failed", error["code"])
         self.assertIn("\nRegenerate STEP artifacts with the following command using the CAD skill:", error["message"])
-        self.assertNotIn("scripts.step", error["message"])
+        self.assertNotIn("scripts.gen", error["message"])
         self.assertIn("regenerateCommand", error)
-        self.assertEqual("python scripts/step", error["regenerateCommand"])
+        self.assertEqual("python scripts/gen", error["regenerateCommand"])
 
     def test_missing_selector_topology_is_an_inspect_error(self) -> None:
         with self._mock_glb_topology(_refs_manifest(self.cad_ref), include_selector=False):
@@ -750,8 +757,9 @@ class InspectRefsTests(unittest.TestCase):
         assembly_path = self.temp_root / "sample-assembly.py"
         assembly_step_path = self.temp_root / "sample-assembly.step"
         assembly_path.write_text(
+            "from build123d import Box, Compound\n"
             "def gen_step():\n"
-            "    return {'instances': []}\n",
+            "    return Compound(children=[Box(1, 1, 1), Box(1, 1, 1)], label='sample')\n",
             encoding="utf-8",
         )
         assembly_step_path.write_text("ISO-10303-21; END-ISO-10303-21;\n", encoding="utf-8")

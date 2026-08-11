@@ -8,18 +8,32 @@ LIST_SKILLS_SCRIPT="$REPO_ROOT/scripts/utils/list-skills.sh"
 
 cd "$REPO_ROOT"
 
-run_python_unittest "cadpy package Python tests" "tests/python/packages/cadpy" "packages/cadpy/src"
-run_python_unittest "cadpy_metadata package Python tests" "tests/python/packages/cadpy_metadata" "packages/cadpy_metadata/src"
+# Turn the render-package write-lock assertion into a hard failure for tests. In
+# production require_write_lock() only warns -- a missing lock must never be the reason a
+# user's build fails -- so CI is the only place the contract is actually enforced.
+export CADGEN_STRICT_LOCKS=1
+
+run_python_unittest "cadgen package Python tests" "tests/python/packages/cadgen" "packages/cadgen/src"
 
 while IFS= read -r skill; do
   test_dir="tests/python/skills/$skill"
   if [ -d "$test_dir" ]; then
     skill_paths=("skills/$skill/scripts")
     if [ "$skill" = "cad" ] || [ "$skill" = "dxf" ]; then
-      skill_paths+=("skills/$skill/scripts/packages/cadpy/src")
+      skill_paths+=("skills/$skill/scripts/packages/cadgen/src")
     fi
     run_python_unittest "$skill skill Python tests" "$test_dir" "${skill_paths[@]}"
   fi
 done < <("$LIST_SKILLS_SCRIPT")
 
 run_python_unittest "MoveIt2 server Python tests" "tests/python/viewer/moveit2_server" "viewer/moveit2_server"
+
+# The CAD Viewer backend keeps its tests beside the package it covers rather
+# than under tests/, so name the directory explicitly. It owns the only cross-process
+# coverage of the generation lock (test_artifact.py drives a real second process and
+# SIGKILLs it), which is why it must run in CI.
+# packages/cadgen/src is on the path because the viewer server imports cadgen's
+# stdlib-only modules directly (coordination, source_hash) rather than reimplementing
+# them. Without it an installed/editable cadgen from another checkout wins and the
+# coordination package is missing.
+run_python_unittest "CAD Viewer backend Python tests" "viewer/server_py/tests" "viewer" "packages/cadgen/src"

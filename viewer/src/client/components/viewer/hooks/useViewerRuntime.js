@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { isEditableTarget } from "../../../ui/dom";
 import {
   isWebGlContextCreationError,
+  isSoftwareWebGlRenderer,
   runtimeErrorMessage
 } from "cadjs/lib/viewer/webglSupport";
 import {
@@ -12,10 +13,16 @@ import {
 } from "cadjs/lib/viewer/renderQuality";
 import { updateOrbitControls } from "../orbitControls.js";
 
+// Perf experiment: render with a model-fitted depth range instead of a
+// logarithmic depth buffer so early-Z rejection stays enabled. Flip to false
+// to restore the log-depth renderer if depth artifacts appear.
+const FITTED_DEPTH_RANGE_ENABLED = true;
+
 function createWebGlRenderer(THREE) {
   return createCadWebGlRenderer(THREE, {
     allowFallback: true,
-    isRecoverableError: isWebGlContextCreationError
+    isRecoverableError: isWebGlContextCreationError,
+    logarithmicDepthBuffer: !FITTED_DEPTH_RANGE_ENABLED
   });
 }
 
@@ -155,13 +162,19 @@ export function useViewerRuntime({
       syncCameraViewport(orthographicCamera, width, height);
 
       const renderer = createWebGlRenderer(THREE);
+      const softwareRendering = isSoftwareWebGlRenderer(renderer);
+      const idlePixelRatioCap = softwareRendering ? 1 : IDLE_PIXEL_RATIO_CAP;
+      const interactionPixelRatioCap = softwareRendering ? 1 : INTERACTION_PIXEL_RATIO_CAP;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = getViewerThemeValue(viewerTheme, "toneMappingExposure", DEFAULT_LIGHTING.toneMappingExposure);
       renderer.localClippingEnabled = true;
-      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.enabled = !softwareRendering;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      renderer.setPixelRatio(getPixelRatioCap(IDLE_PIXEL_RATIO_CAP));
+      // Shadow maps are re-rendered only when the scene changes (see
+      // interactionState.shadowsDirty); camera-only frames reuse the last map.
+      renderer.shadowMap.autoUpdate = false;
+      renderer.setPixelRatio(getPixelRatioCap(idlePixelRatioCap));
       renderer.setSize(width, height);
       container.innerHTML = "";
       container.appendChild(renderer.domElement);
@@ -189,7 +202,7 @@ export function useViewerRuntime({
         getViewerThemeValue(viewerTheme, "keyLightIntensity", DEFAULT_LIGHTING.keyLightIntensity)
       );
       keyLight.position.set(240, -150, 340);
-      keyLight.castShadow = true;
+      keyLight.castShadow = !softwareRendering;
       keyLight.shadow.mapSize.set(2048, 2048);
       keyLight.shadow.bias = -0.00025;
       keyLight.shadow.normalBias = 0.024;
@@ -228,6 +241,11 @@ export function useViewerRuntime({
       const facePickGroup = new THREE.Group();
       const edgePickGroup = new THREE.Group();
       const vertexPickGroup = new THREE.Group();
+      // Pick proxies are opacity-0 raycast targets; keep them out of the render
+      // pass entirely. Raycaster does not check `visible`, so picking still works.
+      facePickGroup.visible = false;
+      edgePickGroup.visible = false;
+      vertexPickGroup.visible = false;
       scene.add(stageGroup);
       scene.add(modelGroup);
       scene.add(edgesGroup);
@@ -239,12 +257,14 @@ export function useViewerRuntime({
       const pointer = new THREE.Vector2();
       const interactionState = {
         active: false,
-        pixelRatioCap: IDLE_PIXEL_RATIO_CAP,
-        pixelRatio: getPixelRatioCap(IDLE_PIXEL_RATIO_CAP),
+        pixelRatioCap: idlePixelRatioCap,
+        pixelRatio: getPixelRatioCap(idlePixelRatioCap),
         renderQueued: false,
         renderQueuedAt: 0,
         renderFallbackTimerId: 0,
-        restoreTimerId: 0
+        restoreTimerId: 0,
+        shadowsDirty: true,
+        interactionQuality: false
       };
       const keyboardOrbitState = {
         pressedKeys: new Set(),
@@ -293,13 +313,29 @@ export function useViewerRuntime({
         onContextLost?.();
       };
       const handleContextRestored = () => {
+        interactionState.shadowsDirty = true;
         setError("");
         onContextRestored?.();
       };
 
-      const applyRenderQuality = (pixelRatioCap) => {
-        const nextPixelRatio = getPixelRatioCap(pixelRatioCap);
+      // A render type may tighten the pixel ratio further than the shared
+      // idle/interaction caps (the implicit raymarcher trades resolution for
+      // step budget while the camera moves). It only ever caps DOWN, so the
+      // mesh path — which installs no resolver — is unaffected.
+      const resolveRenderPixelRatio = (pixelRatioCap, interaction) => {
+        const base = getPixelRatioCap(pixelRatioCap);
+        const extraCap = Number(runtimeRef.current?.resolveExtraPixelRatioCap?.(interaction));
+        return Number.isFinite(extraCap) && extraCap > 0 ? Math.min(base, extraCap) : base;
+      };
+
+      const applyRenderQuality = (pixelRatioCap, { force = false, interaction = null } = {}) => {
+        const nextInteraction = interaction === null
+          ? interactionState.interactionQuality === true
+          : interaction === true;
+        interactionState.interactionQuality = nextInteraction;
+        const nextPixelRatio = resolveRenderPixelRatio(pixelRatioCap, nextInteraction);
         if (
+          !force &&
           Math.abs(interactionState.pixelRatioCap - pixelRatioCap) < 1e-4 &&
           Math.abs((interactionState.pixelRatio || 0) - nextPixelRatio) < 1e-4
         ) {
@@ -312,6 +348,31 @@ export function useViewerRuntime({
         syncScreenSpaceLineMaterials();
         syncDrawingCanvasSize(runtimeRef.current);
         renderDrawingOverlay();
+      };
+
+      const fitCameraDepthRange = (runtime) => {
+        const activeCamera = runtime?.camera;
+        if (
+          !FITTED_DEPTH_RANGE_ENABLED ||
+          !activeCamera?.isPerspectiveCamera ||
+          renderer.capabilities?.logarithmicDepthBuffer
+        ) {
+          return;
+        }
+        const radius = Math.max(Number(runtime?.modelRadius) || 1, 1e-6);
+        const sceneExtent = Math.max(radius, Number(runtime?.gridConfig?.radius) || 0);
+        const target = runtime?.controls?.target || controls.target;
+        const distance = Math.max(activeCamera.position.distanceTo(target), radius * 1e-3);
+        const near = Math.max(distance - radius * 4, distance / 250);
+        const far = Math.max(distance + sceneExtent * 50, near * 16);
+        if (
+          Math.abs(near - activeCamera.near) > activeCamera.near * 0.1 ||
+          Math.abs(far - activeCamera.far) > activeCamera.far * 0.1
+        ) {
+          activeCamera.near = near;
+          activeCamera.far = far;
+          activeCamera.updateProjectionMatrix();
+        }
       };
 
       let rafId = 0;
@@ -364,6 +425,9 @@ export function useViewerRuntime({
         if (cameraTransitionActive || keyboardOrbitMoved) {
           emitPerspectiveChange(runtimeRef.current);
         }
+        fitCameraDepthRange(runtimeRef.current);
+        renderer.shadowMap.needsUpdate = interactionState.shadowsDirty === true;
+        interactionState.shadowsDirty = false;
         renderer.render(scene, runtimeRef.current?.camera || camera);
         const previewOrbitActive = !!runtimeRef.current?.previewOrbitEnabled;
         if (!previewOrbitActive) {
@@ -378,7 +442,14 @@ export function useViewerRuntime({
           cameraTransitionActive ||
           keyboardOrbitMoved ||
           needsMoreFrames ||
-          interactionState.active ||
+          // Hold the loop open for the whole gesture so a mesh scene keeps
+          // repainting at interaction quality. A render type whose frame costs
+          // tens of milliseconds (the implicit raymarcher) opts out: it would
+          // otherwise re-render every vsync between wheel ticks even though the
+          // camera has not moved, and a 60 Hz pinch saturates the queue. Camera
+          // movement still repaints through the controls `change` handler, and
+          // damping/transition/keyboard/preview keep their own terms above.
+          (interactionState.active && runtimeRef.current?.renderOnDemandOnly !== true) ||
           previewOrbitActive
         ) {
           requestRender();
@@ -392,11 +463,11 @@ export function useViewerRuntime({
         }
         interactionState.active = true;
         applyRenderQuality(resolveInteractionPixelRatioCap({
-          idlePixelRatioCap: IDLE_PIXEL_RATIO_CAP,
-          interactionPixelRatioCap: INTERACTION_PIXEL_RATIO_CAP,
+          idlePixelRatioCap,
+          interactionPixelRatioCap,
           preservePixelRatio: runtimeRef.current?.preserveInteractionPixelRatio === true,
           screenSpaceLineMaterialCount: getScreenSpaceLineMaterialCount()
-        }));
+        }), { interaction: true });
         requestRender();
       };
 
@@ -404,15 +475,36 @@ export function useViewerRuntime({
         if (interactionState.restoreTimerId) {
           window.clearTimeout(interactionState.restoreTimerId);
         }
+        // Restoring full quality costs one expensive frame plus a drawing-buffer
+        // reallocation. At 140 ms that lands BETWEEN discrete wheel ticks, so a
+        // slow render type pays it repeatedly mid-gesture; such a type raises the
+        // delay past a comfortable tick cadence.
+        const idleDelayMs = Math.max(
+          Number(runtimeRef.current?.idleQualityDelayMs) || 0,
+          INTERACTION_IDLE_DELAY_MS
+        );
         interactionState.restoreTimerId = window.setTimeout(() => {
           interactionState.restoreTimerId = 0;
           interactionState.active = false;
           controls.enableDamping = true;
           controls.dampingFactor = DEFAULT_DAMPING_FACTOR;
           controls.zoomSpeed = getDefaultZoomSpeed();
-          applyRenderQuality(IDLE_PIXEL_RATIO_CAP);
+          // Two-stage restore: give the render type its idle quality and let it
+          // repaint, then raise the pixel ratio on the next tick so the costly
+          // frame and the buffer reallocation do not land on the same vsync.
+          const onIdleQuality = runtimeRef.current?.onIdleQualityRestore;
+          if (typeof onIdleQuality === "function") {
+            onIdleQuality();
+            requestRender();
+            window.setTimeout(() => {
+              applyRenderQuality(idlePixelRatioCap, { interaction: false });
+              requestRender();
+            }, 0);
+            return;
+          }
+          applyRenderQuality(idlePixelRatioCap, { interaction: false });
           requestRender();
-        }, INTERACTION_IDLE_DELAY_MS);
+        }, idleDelayMs);
       };
 
       const onResize = () => {
@@ -437,6 +529,76 @@ export function useViewerRuntime({
         : null;
       resizeObserver?.observe(container);
 
+      // Zoom-to-cursor leaves the orbit pivot (controls.target) drifting along the view ray
+      // at the new camera distance. Perspective pan and dolly both scale by the
+      // camera->pivot distance, so a drifted pivot makes panning and zooming feel slow when
+      // zoomed in and fast when zoomed out. After each wheel zoom, re-anchor the pivot depth
+      // onto the geometry under the cursor (falling back to the model centre), keeping it on
+      // the forward axis so the camera never re-orients or jumps the view.
+      const zoomReanchorPointer = new THREE.Vector2();
+      const zoomReanchorForward = new THREE.Vector3();
+      const zoomReanchorScratch = new THREE.Vector3();
+      const zoomReanchorCenter = new THREE.Vector3();
+      let zoomPivotReanchorPending = false;
+
+      const readModelWorldCenter = (out) => {
+        const runtime = runtimeRef.current;
+        const bounds = runtime?.modelBounds;
+        if (bounds && Array.isArray(bounds.min) && Array.isArray(bounds.max)) {
+          out.set(
+            (Number(bounds.min[0]) + Number(bounds.max[0])) / 2,
+            (Number(bounds.min[1]) + Number(bounds.max[1])) / 2,
+            (Number(bounds.min[2]) + Number(bounds.max[2])) / 2
+          );
+          if (runtime.modelGroup?.position) {
+            out.add(runtime.modelGroup.position);
+          }
+          return out;
+        }
+        return out.copy(runtime?.controls?.target || out.set(0, 0, 0));
+      };
+
+      const reanchorZoomPivot = () => {
+        const runtime = runtimeRef.current;
+        const activeCamera = runtime?.camera;
+        const activeControls = runtime?.controls;
+        // Orthographic pan/dolly do not depend on the pivot distance, so leave them alone.
+        if (!activeCamera?.isPerspectiveCamera || !activeControls?.target) {
+          return;
+        }
+        activeCamera.getWorldDirection(zoomReanchorForward);
+        // Depth of a world point along the view axis (never negative / behind the camera).
+        const depthOf = (point) => Math.max(
+          zoomReanchorScratch.copy(point).sub(activeCamera.position).dot(zoomReanchorForward),
+          0
+        );
+        let depth = 0;
+        if (runtime.raycaster && runtime.modelGroup) {
+          runtime.raycaster.setFromCamera(zoomReanchorPointer, activeCamera);
+          // Only the nearest hit matters here; lets BVH-backed meshes early-out.
+          runtime.raycaster.firstHitOnly = true;
+          const hits = runtime.raycaster.intersectObject(runtime.modelGroup, true);
+          runtime.raycaster.firstHitOnly = false;
+          const hit = hits.find((entry) => entry?.point);
+          if (hit) {
+            depth = depthOf(hit.point);
+          }
+        }
+        if (!(depth > 0)) {
+          depth = depthOf(readModelWorldCenter(zoomReanchorCenter));
+        }
+        const minDepth = Math.max(
+          Number.isFinite(activeControls.minDistance) ? activeControls.minDistance : 0,
+          1e-4
+        );
+        const maxDepth = Number.isFinite(activeControls.maxDistance) && activeControls.maxDistance > 0
+          ? activeControls.maxDistance
+          : Number.POSITIVE_INFINITY;
+        depth = Math.min(Math.max(depth, minDepth), maxDepth);
+        // Only the pivot depth changes; the camera keeps looking down the same forward ray.
+        activeControls.target.copy(activeCamera.position).addScaledVector(zoomReanchorForward, depth);
+      };
+
       let controlsStartDistance = null;
       const readControlsDistance = () => {
         const activeRuntime = runtimeRef.current;
@@ -451,6 +613,10 @@ export function useViewerRuntime({
         beginInteraction();
       };
       const handleControlsChange = () => {
+        if (zoomPivotReanchorPending) {
+          zoomPivotReanchorPending = false;
+          reanchorZoomPivot();
+        }
         emitPerspectiveChange(runtimeRef.current);
         requestRender();
       };
@@ -472,6 +638,15 @@ export function useViewerRuntime({
         controls.zoomSpeed = getWheelZoomSpeed(isTrackpadLikeWheelEvent(event)
           ? getPinchZoomSpeed()
           : ACCELERATED_WHEEL_ZOOM_SPEED);
+        // Capture the cursor (NDC) so the post-zoom pivot re-anchor can raycast under it.
+        const rect = renderer.domElement.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          zoomReanchorPointer.set(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1
+          );
+          zoomPivotReanchorPending = true;
+        }
         beginInteraction();
       };
       const wheelListenerOptions = { passive: true, capture: true };
@@ -563,6 +738,7 @@ export function useViewerRuntime({
         projection: "perspective",
         syncCameraViewport,
         renderer,
+        softwareRendering,
         Line2,
         LineGeometry,
         LineSegments2,
@@ -612,9 +788,34 @@ export function useViewerRuntime({
         onResize,
         resizeObserver,
         rafId,
-        requestRender,
+        // Renders requested through the runtime come from scene mutations
+        // (model/theme/params/overlay effects), so they also refresh shadows.
+        // Camera-driven paths use the closure-local requestRender and keep the
+        // last shadow map.
+        requestRender: () => {
+          interactionState.shadowsDirty = true;
+          requestRender();
+        },
+        invalidateShadows: () => {
+          interactionState.shadowsDirty = true;
+        },
         beginInteraction,
         scheduleIdleQuality,
+        // Hooks a render type installs to tune the shared loop for its own frame
+        // cost. All are inert on the mesh path, which leaves them at these
+        // defaults.
+        //
+        // renderOnDemandOnly  - do not hold the loop open for the whole gesture
+        // idleQualityDelayMs  - raise the idle-restore delay above the default
+        // onIdleQualityRestore- restore full quality before the pixel ratio
+        // resolveExtraPixelRatioCap - cap resolution below the shared caps
+        renderOnDemandOnly: false,
+        idleQualityDelayMs: 0,
+        onIdleQualityRestore: null,
+        resolveExtraPixelRatioCap: null,
+        refreshRenderQuality: () => {
+          applyRenderQuality(interactionState.pixelRatioCap, { force: true });
+        },
         applyCameraFrameInsets,
         frameInsetsRef,
         onManualCameraInteraction,

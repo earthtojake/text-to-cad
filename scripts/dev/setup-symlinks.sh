@@ -6,7 +6,6 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 MODE="write"
 SKILL_ARGS=()
-PLUGIN_ARGS=()
 
 usage() {
   cat <<'EOF'
@@ -27,7 +26,6 @@ while [ "$#" -gt 0 ]; do
     --check)
       MODE="check"
       SKILL_ARGS+=("--check")
-      PLUGIN_ARGS+=("--check")
       ;;
     -h|--help)
       usage
@@ -53,17 +51,6 @@ if [ "${#SKILL_ARGS[@]}" -gt 0 ]; then
   "$SCRIPT_DIR/setup-skill-symlink.sh" --all "${SKILL_ARGS[@]}"
 else
   "$SCRIPT_DIR/setup-skill-symlink.sh" --all
-fi
-
-if [ "$MODE" = "check" ]; then
-  echo "Checking plugin development symlinks..."
-else
-  echo "Setting up plugin development symlinks..."
-fi
-if [ "${#PLUGIN_ARGS[@]}" -gt 0 ]; then
-  "$SCRIPT_DIR/setup-plugin-symlink.sh" "${PLUGIN_ARGS[@]}"
-else
-  "$SCRIPT_DIR/setup-plugin-symlink.sh"
 fi
 
 if [ "$MODE" = "check" ]; then

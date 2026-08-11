@@ -2,10 +2,12 @@ import {
   normalizeCameraSpec
 } from "../../common/camera.js";
 import {
-  resolveAppearanceSettings
+  resolveThemeSettings
 } from "../../common/renderOptions.js";
 import {
-  normalizeThemeSettings
+  normalizeThemeSettings,
+  DEFAULT_FILL_LIGHT_SETTINGS,
+  DEFAULT_RIM_LIGHT_SETTINGS
 } from "../../common/themeSettings.js";
 import {
   normalizeImplicitGraphicsSettings
@@ -29,7 +31,7 @@ const FRAME_BOUNDS_SAMPLE_COUNT = 25;
 const FRAME_BOUNDS_THRESHOLD_STEP_FACTOR = 0.45;
 const FRAME_BOUNDS_MARGIN_STEP_FACTOR = 0.75;
 const FRAME_BOUNDS_MARGIN_SIZE_FACTOR = 0.015;
-const DEFAULT_APPEARANCE_ID = "workbench";
+const DEFAULT_THEME_ID = "workbench";
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -791,60 +793,14 @@ export function implicitCadCameraState(model, camera = "iso", {
   };
 }
 
-export function implicitCadFragmentShader(model) {
-  const maxSteps = Math.max(16, Math.min(Math.floor(finiteNumber(model.maxSteps, 192)), 768));
-  const uniforms = model.uniforms && typeof model.uniforms === "object" ? model.uniforms : {};
-  const customUniformDeclarations = implicitCadUniformDeclarations(uniforms);
-  const glslSource = normalizeImplicitCadGlslFloatLiterals(model.glslSource || model.distanceSource);
-  const hasColorFunction = /\bvec3\s+color\s*\(\s*vec3\s+\w+\s*,\s*vec3\s+\w+\s*\)/.test(glslSource);
-  return `
-precision highp float;
-
-uniform vec2 uResolution;
-uniform vec3 uCameraPosition;
-uniform mat4 uCameraWorld;
-uniform mat4 uProjectionInverse;
-uniform vec3 uBoundsMin;
-uniform vec3 uBoundsMax;
-uniform vec3 uSurfaceColor;
-uniform vec3 uBackgroundColor;
-uniform vec3 uBackgroundColorA;
-uniform vec3 uBackgroundColorB;
-uniform float uBackgroundMode;
-uniform float uBackgroundAngle;
-uniform float uBackgroundAlpha;
-uniform float uUseProceduralColor;
-uniform float uHitEpsilon;
-uniform float uNormalEpsilon;
-uniform float uMaxDistance;
-uniform float uStepScale;
-uniform float uMaxStep;
-uniform float uStepBudget;
-uniform float uShadowStrength;
-uniform float uAmbientOcclusionStrength;
-uniform float uRimStrength;
-uniform float uExposure;
-uniform vec3 uHemiSky;
-uniform vec3 uHemiGround;
-uniform vec3 uAmbientLight;
-uniform vec3 uKeyColor;
-uniform vec3 uKeyDir;
-uniform vec3 uFillColor;
-uniform vec3 uFillDir;
-uniform vec3 uBounceColor;
-uniform vec3 uBounceDir;
-uniform vec3 uRimColor;
-uniform float uFloorEnabled;
-uniform float uFloorShadowOpacity;
-uniform float uFloorZ;
-uniform vec2 uFloorCenter;
-uniform float uFloorFadeRadius;
-${customUniformDeclarations}
-varying vec2 vUv;
-
-const int IMPLICIT_MAX_STEPS = ${maxSteps};
-
-float implicit_clamp01(float value) {
+// The shader's helper library, lifted out of the fragment-shader template so it has a name.
+//
+// Every function here also exists, hand-written a second time, as a JS entry in the BUILTINS
+// table of `sdfEvaluator.js`: the GPU runs these bodies, the baked render artifact runs those.
+// Two implementations of one contract is the divergence design/unified-glb-render-artifacts.md
+// section 7.2 flags, so `sdfField.test.js` parses THIS text and differentially evaluates it
+// against the JS table. It is interpolated verbatim into the shader below.
+export const IMPLICIT_CAD_GLSL_LIBRARY = `float implicit_clamp01(float value) {
   return clamp(value, 0.0, 1.0);
 }
 
@@ -1296,7 +1252,64 @@ float implicit_triangular_honeycomb(vec3 p, vec2 size) {
     min(abs(dot(shifted, normalP60)), abs(dot(shifted, normalN60)))
   );
   return folded.y < quarterSize.y ? foldedStar : shiftedStar;
-}
+}`;
+
+export function implicitCadFragmentShader(model) {
+  const maxSteps = Math.max(16, Math.min(Math.floor(finiteNumber(model.maxSteps, 192)), 768));
+  const uniforms = model.uniforms && typeof model.uniforms === "object" ? model.uniforms : {};
+  const customUniformDeclarations = implicitCadUniformDeclarations(uniforms);
+  const glslSource = normalizeImplicitCadGlslFloatLiterals(model.glslSource || model.distanceSource);
+  const hasColorFunction = /\bvec3\s+color\s*\(\s*vec3\s+\w+\s*,\s*vec3\s+\w+\s*\)/.test(glslSource);
+  return `
+precision highp float;
+
+uniform vec2 uResolution;
+uniform vec3 uCameraPosition;
+uniform mat4 uCameraWorld;
+uniform mat4 uProjectionInverse;
+uniform vec3 uBoundsMin;
+uniform vec3 uBoundsMax;
+uniform vec3 uSurfaceColor;
+uniform vec3 uBackgroundColor;
+uniform vec3 uBackgroundColorA;
+uniform vec3 uBackgroundColorB;
+uniform float uBackgroundMode;
+uniform float uBackgroundAngle;
+uniform float uBackgroundAlpha;
+uniform float uPaintBackground;
+uniform float uOrthographic;
+uniform float uUseProceduralColor;
+uniform float uHitEpsilon;
+uniform float uNormalEpsilon;
+uniform float uMaxDistance;
+uniform float uStepScale;
+uniform float uMaxStep;
+uniform float uStepBudget;
+uniform float uShadowStrength;
+uniform float uAmbientOcclusionStrength;
+uniform float uRimStrength;
+uniform float uExposure;
+uniform vec3 uHemiSky;
+uniform vec3 uHemiGround;
+uniform vec3 uAmbientLight;
+uniform vec3 uKeyColor;
+uniform vec3 uKeyDir;
+uniform vec3 uFillColor;
+uniform vec3 uFillDir;
+uniform vec3 uBounceColor;
+uniform vec3 uBounceDir;
+uniform vec3 uRimColor;
+uniform float uFloorEnabled;
+uniform float uFloorShadowOpacity;
+uniform float uFloorZ;
+uniform vec2 uFloorCenter;
+uniform float uFloorFadeRadius;
+${customUniformDeclarations}
+varying vec2 vUv;
+
+const int IMPLICIT_MAX_STEPS = ${maxSteps};
+
+${IMPLICIT_CAD_GLSL_LIBRARY}
 
 ${glslSource}
 
@@ -1436,33 +1449,53 @@ float implicit_floor_shadow(vec3 origin, vec3 direction, float maxDistance) {
   return clamp(shadow, 0.0, 1.0);
 }
 
-// Stage-floor shadow matte for rays that miss the model, matching the mesh
-// viewer's shadow-catcher plane under the part.
-vec3 implicit_floor_shadowed_background(vec3 backgroundColor, vec3 rayOrigin, vec3 rayDirection) {
+// How much a ray that misses the model is darkened by the stage-floor shadow,
+// matching the mesh viewer's shadow-catcher plane under the part. 0 = unshadowed.
+float implicit_floor_shadow_strength(vec3 rayOrigin, vec3 rayDirection) {
   float shadowStrength = clamp(uShadowStrength, 0.0, 1.0);
   if (uFloorEnabled < 0.5 || shadowStrength < 0.001 || rayDirection.z > -1.0e-5) {
-    return backgroundColor;
+    return 0.0;
   }
   float tFloor = (uFloorZ - rayOrigin.z) / rayDirection.z;
   if (tFloor <= 0.0) {
-    return backgroundColor;
+    return 0.0;
   }
   vec3 floorPoint = rayOrigin + rayDirection * tFloor;
   float fade = 1.0 - smoothstep(uFloorFadeRadius * 0.5, uFloorFadeRadius, length(floorPoint.xy - uFloorCenter));
   if (fade < 0.002) {
-    return backgroundColor;
+    return 0.0;
   }
   vec3 shadowOrigin = vec3(floorPoint.xy, uFloorZ + max(uHitEpsilon * 6.0, uFloorFadeRadius * 0.0001));
   float lit = implicit_floor_shadow(shadowOrigin, uKeyDir, uFloorFadeRadius * 1.5);
   float occlusion = clamp(1.0 - lit, 0.0, 1.0);
-  float strength = occlusion * fade * clamp(uFloorShadowOpacity, 0.0, 1.0) * shadowStrength;
-  return backgroundColor * (1.0 - strength);
+  return occlusion * fade * clamp(uFloorShadowOpacity, 0.0, 1.0) * shadowStrength;
+}
+
+// A miss either paints this pass's own background (standalone renderers: the
+// snapshot CLI and renderImplicitCadToDataUrl) or leaves the pixel to whatever
+// is already in the framebuffer (the CAD Viewer, where the shared scene draws
+// the themed background, grid and stage floor and this pass composites over
+// them). In the composited case the shadow is emitted as black-with-alpha, so
+// ordinary blending darkens the floor underneath exactly as multiplying the
+// background used to.
+vec4 implicit_miss_color(vec3 backgroundColor, vec3 rayOrigin, vec3 rayDirection) {
+  float strength = implicit_floor_shadow_strength(rayOrigin, rayDirection);
+  if (uPaintBackground > 0.5) {
+    return vec4(backgroundColor * (1.0 - strength), uBackgroundAlpha);
+  }
+  return vec4(0.0, 0.0, 0.0, strength);
 }
 
 vec3 implicit_background_color(vec2 uv) {
   if (uBackgroundMode < 0.5) {
     return uBackgroundColor;
   }
+  // NOTE: this backdrop only paints in HEADLESS/standalone implicit renders. In the viewer
+  // the raymarch pass composites over the shared stage, so the on-screen backdrop comes
+  // from cadjs/lib/viewer/stageTheme.js and these ramps are not what you are looking at.
+  // The two do NOT agree: the canvas path ramps linearly between stops (radial 0.1 -> 0.75
+  // of the texture width), this one uses a smoothstep over 0..0.72. See the theme
+  // conformance section of viewer/docs/render-types.md before changing either.
   if (uBackgroundMode < 1.5) {
     vec2 direction = normalize(vec2(cos(uBackgroundAngle), sin(uBackgroundAngle)));
     float t = dot(uv - vec2(0.5), direction) * 0.7071067811865476 + 0.5;
@@ -1472,24 +1505,45 @@ vec3 implicit_background_color(vec2 uv) {
   return mix(uBackgroundColorA, uBackgroundColorB, radial);
 }
 
-vec3 implicit_ray_direction(vec2 uv) {
+// Perspective and orthographic are opposite constructions, and the difference is the
+// whole reason an implicit could not render under an ortho camera: a pinhole fans ONE
+// origin into per-pixel directions, while a parallel projection shares ONE direction
+// across per-pixel origins. Feeding an ortho projection matrix to the pinhole path
+// yields garbage directions, and the model vanishes.
+struct ImplicitRay {
+  vec3 origin;
+  vec3 direction;
+};
+
+ImplicitRay implicit_camera_ray(vec2 uv) {
   vec2 ndc = uv * 2.0 - 1.0;
   vec4 clip = vec4(ndc, -1.0, 1.0);
   vec4 view = uProjectionInverse * clip;
-  view = vec4(view.xy, -1.0, 0.0);
-  return normalize((uCameraWorld * view).xyz);
+  ImplicitRay ray;
+  if (uOrthographic > 0.5) {
+    // Unproject to a point on the near plane, then march along the camera's forward
+    // axis: every ray is parallel, offset across the image plane.
+    vec3 viewPoint = view.xyz / max(abs(view.w), 1.0e-6);
+    ray.origin = (uCameraWorld * vec4(viewPoint.xy, viewPoint.z, 1.0)).xyz;
+    ray.direction = normalize(-uCameraWorld[2].xyz);
+    return ray;
+  }
+  ray.origin = uCameraPosition;
+  ray.direction = normalize((uCameraWorld * vec4(view.xy, -1.0, 0.0)).xyz);
+  return ray;
 }
 
 void main() {
-  vec3 rayOrigin = uCameraPosition;
   vec2 screenUv = gl_FragCoord.xy / uResolution;
   vec3 backgroundColor = implicit_background_color(screenUv);
-  vec3 rayDirection = implicit_ray_direction(screenUv);
+  ImplicitRay cameraRay = implicit_camera_ray(screenUv);
+  vec3 rayOrigin = cameraRay.origin;
+  vec3 rayDirection = cameraRay.direction;
   vec2 boundsHit = implicit_ray_bounds(rayOrigin, rayDirection, uBoundsMin, uBoundsMax);
   float t = max(boundsHit.x, 0.0);
   float tEnd = min(boundsHit.y, uMaxDistance);
   if (boundsHit.x > boundsHit.y || tEnd < 0.0) {
-    gl_FragColor = vec4(implicit_floor_shadowed_background(backgroundColor, rayOrigin, rayDirection), uBackgroundAlpha);
+    gl_FragColor = implicit_miss_color(backgroundColor, rayOrigin, rayDirection);
     return;
   }
 
@@ -1516,7 +1570,7 @@ void main() {
   }
 
   if (!hit) {
-    gl_FragColor = vec4(implicit_floor_shadowed_background(backgroundColor, rayOrigin, rayDirection), uBackgroundAlpha);
+    gl_FragColor = implicit_miss_color(backgroundColor, rayOrigin, rayDirection);
     return;
   }
 
@@ -1615,6 +1669,11 @@ export function createImplicitCadMaterial(THREE, model) {
       uBackgroundMode: { value: 0 },
       uBackgroundAngle: { value: Math.PI },
       uBackgroundAlpha: { value: normalized.background.transparent ? 0 : 1 },
+      // Standalone renderers paint their own background; the CAD Viewer turns
+      // this off so the shared themed background/grid/stage show through.
+      uPaintBackground: { value: 1 },
+      // Perspective unless a host says otherwise, so snapshot/export are unchanged.
+      uOrthographic: { value: 0 },
       uUseProceduralColor: { value: normalized.colorSource ? 1 : 0 },
       uHitEpsilon: { value: normalized.epsilon },
       uNormalEpsilon: { value: normalized.normalEpsilon },
@@ -1676,15 +1735,15 @@ export function updateImplicitCadModelUniforms(THREE, material, model) {
   }
 }
 
-export function resolveImplicitCadAppearanceSettings({
-  appearance = DEFAULT_APPEARANCE_ID,
+export function resolveImplicitCadThemeSettings({
+  theme = DEFAULT_THEME_ID,
   themeSettings = null
 } = {}) {
   if (themeSettings && typeof themeSettings === "object" && !Array.isArray(themeSettings)) {
     return normalizeThemeSettings(themeSettings);
   }
-  return resolveAppearanceSettings({ appearance: appearance || DEFAULT_APPEARANCE_ID }, {
-    defaultThemeId: DEFAULT_APPEARANCE_ID
+  return resolveThemeSettings({ theme: theme || DEFAULT_THEME_ID }, {
+    defaultThemeId: DEFAULT_THEME_ID
   });
 }
 
@@ -1726,13 +1785,15 @@ function applyImplicitLightingUniforms(uniforms, normalizedTheme) {
   if (uniforms.uKeyDir) {
     uniforms.uKeyDir.value.set(...lightDirectionFromPosition(directional.position, rig.directional.position));
   }
-  const spot = lighting.spot || rig.spot;
+  // Fill is the theme's FILL light. This used to read `lighting.spot`, so every theme's
+  // fill settings were ignored and the spot was doing double duty.
+  const fill = lighting.fill || DEFAULT_FILL_LIGHT_SETTINGS;
   if (uniforms.uFillColor) {
-    const spotIntensity = spot.enabled === false ? 0 : finiteNumber(spot.intensity, rig.spot.intensity);
-    uniforms.uFillColor.value.set(...linearLightRgb(spot.color, spotIntensity, rig.spot.color));
+    const fillIntensity = fill.enabled === false ? 0 : finiteNumber(fill.intensity, DEFAULT_FILL_LIGHT_SETTINGS.intensity);
+    uniforms.uFillColor.value.set(...linearLightRgb(fill.color, fillIntensity, DEFAULT_FILL_LIGHT_SETTINGS.color));
   }
   if (uniforms.uFillDir) {
-    uniforms.uFillDir.value.set(...lightDirectionFromPosition(spot.position, rig.spot.position));
+    uniforms.uFillDir.value.set(...lightDirectionFromPosition(fill.position, DEFAULT_FILL_LIGHT_SETTINGS.position));
   }
   const point = lighting.point || rig.point;
   if (uniforms.uBounceColor) {
@@ -1742,8 +1803,12 @@ function applyImplicitLightingUniforms(uniforms, normalizedTheme) {
   if (uniforms.uBounceDir) {
     uniforms.uBounceDir.value.set(...lightDirectionFromPosition(point.position, rig.point.position));
   }
+  // Rim was pinned to the built-in rig, so switching theme moved the mesh renderer's rim
+  // and left the raymarcher's where it was — the single most visible way the two diverged.
+  const rim = lighting.rim || DEFAULT_RIM_LIGHT_SETTINGS;
   if (uniforms.uRimColor) {
-    uniforms.uRimColor.value.set(...linearLightRgb(rig.rimColor, rig.rimIntensity, rig.rimColor));
+    const rimIntensity = rim.enabled === false ? 0 : finiteNumber(rim.intensity, DEFAULT_RIM_LIGHT_SETTINGS.intensity);
+    uniforms.uRimColor.value.set(...linearLightRgb(rim.color, rimIntensity, DEFAULT_RIM_LIGHT_SETTINGS.color));
   }
   const floor = normalizedTheme?.floor || {};
   if (uniforms.uFloorEnabled) {
@@ -1757,17 +1822,17 @@ function applyImplicitLightingUniforms(uniforms, normalizedTheme) {
   }
 }
 
-export function updateImplicitCadAppearanceUniforms(THREE, material, model, {
-  appearance = DEFAULT_APPEARANCE_ID,
+export function updateImplicitCadThemeUniforms(THREE, material, model, {
+  theme = DEFAULT_THEME_ID,
   themeSettings = null,
   graphicsSettings = null,
   forceTransparent = false
 } = {}) {
   const uniforms = material?.uniforms;
   if (!uniforms) {
-    return resolveImplicitCadAppearanceSettings({ appearance, themeSettings });
+    return resolveImplicitCadThemeSettings({ theme, themeSettings });
   }
-  const normalizedTheme = resolveImplicitCadAppearanceSettings({ appearance, themeSettings });
+  const normalizedTheme = resolveImplicitCadThemeSettings({ theme, themeSettings });
   const normalizedGraphics = normalizeImplicitGraphicsSettings(graphicsSettings);
   const materialSettings = normalizedTheme.materials || {};
   const sourceColor = readSourceColor(THREE, model?.material?.color);
@@ -1858,8 +1923,24 @@ export function updateImplicitCadGraphicsUniforms(material, model, graphicsSetti
   return settings;
 }
 
+// Composited mode: the pass stops painting its own background and emits the
+// stage-floor shadow as black-with-alpha instead, so a host that already draws a
+// themed background, grid and floor (the CAD Viewer) shows through and gets the
+// shadow blended onto its own floor. Standalone renderers leave this alone.
+export function setImplicitCadBackgroundPainting(material, paintBackground) {
+  const uniform = material?.uniforms?.uPaintBackground;
+  if (!uniform) {
+    return false;
+  }
+  uniform.value = paintBackground === false ? 0 : 1;
+  return true;
+}
+
 export function updateImplicitCadMaterialUniforms(material, camera, width, height) {
   camera.updateMatrixWorld(true);
+  if (material.uniforms.uOrthographic) {
+    material.uniforms.uOrthographic.value = camera.isOrthographicCamera ? 1 : 0;
+  }
   material.uniforms.uResolution.value.set(Math.max(width, 1), Math.max(height, 1));
   material.uniforms.uCameraPosition.value.copy(camera.position);
   material.uniforms.uCameraWorld.value.copy(camera.matrixWorld);
@@ -1910,12 +1991,12 @@ export async function renderImplicitCadToDataUrl(THREE, modelValue, {
   width = 1200,
   height = 900,
   camera = "iso",
-  appearance = DEFAULT_APPEARANCE_ID,
+  theme = DEFAULT_THEME_ID,
   graphics = null,
   render = {},
 } = {}) {
   const model = normalizeImplicitCadModel(modelValue);
-  const themeSettings = resolveImplicitCadAppearanceSettings({ appearance });
+  const themeSettings = resolveImplicitCadThemeSettings({ theme });
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
     alpha: true,
@@ -1937,7 +2018,7 @@ export async function renderImplicitCadToDataUrl(THREE, modelValue, {
     frameMargin: render.frameMargin,
   });
   const { scene, material, dispose } = createImplicitCadFullscreenScene(THREE, model);
-  updateImplicitCadAppearanceUniforms(THREE, material, model, {
+  updateImplicitCadThemeUniforms(THREE, material, model, {
     themeSettings,
     graphicsSettings: graphics,
     forceTransparent: transparent
@@ -1957,8 +2038,8 @@ export const implicitVertexShader = implicitCadVertexShader;
 export const implicitFragmentShader = implicitCadFragmentShader;
 export const createImplicitMaterial = createImplicitCadMaterial;
 export const updateImplicitModelUniforms = updateImplicitCadModelUniforms;
-export const resolveImplicitAppearanceSettings = resolveImplicitCadAppearanceSettings;
-export const updateImplicitAppearanceUniforms = updateImplicitCadAppearanceUniforms;
+export const resolveImplicitThemeSettings = resolveImplicitCadThemeSettings;
+export const updateImplicitThemeUniforms = updateImplicitCadThemeUniforms;
 export const updateImplicitGraphicsUniforms = updateImplicitCadGraphicsUniforms;
 export const updateImplicitMaterialUniforms = updateImplicitCadMaterialUniforms;
 export const createImplicitFullscreenScene = createImplicitCadFullscreenScene;

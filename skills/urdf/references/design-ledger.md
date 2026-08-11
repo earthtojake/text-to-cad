@@ -1,8 +1,10 @@
 # URDF Design Ledger
 
-Use this reference before creating or editing a URDF generator. The ledger is the written spatial model that prevents silent frame, axis, unit, and mesh-scale mistakes.
+Use this reference before creating or editing a `.urdf`. The ledger is the written spatial model that prevents silent frame, axis, unit, and mesh-scale mistakes.
 
-The ledger may live in the generator source comments, adjacent project documentation, a README, or a task note. It must be specific enough that another engineer can audit the generated URDF without reverse-engineering the XML.
+The ledger's canonical home is a comment block at the top of the `.urdf` file itself (see the compact format in `references/authoring-contract.md`), optionally expanded in an adjacent README for large robots. It must be specific enough that another engineer can audit the URDF without reverse-engineering the XML, and it must be updated in the same edit that changes the modeled facts.
+
+The sections below are the checklist of what the ledger must cover. For small robots the per-link and per-joint tables can collapse into a few comment lines; the information, not the table format, is what is required.
 
 ## Required Sections
 
@@ -40,7 +42,7 @@ For every joint, record:
 | Field | Meaning |
 |---|---|
 | joint name | Exact URDF `<joint name="...">` value. |
-| type | `fixed`, `revolute`, `continuous`, or `prismatic` for the current `scripts/urdf` validator; record `floating` or `planar` only if the project has a different supported validation path. |
+| type | `fixed`, `revolute`, `continuous`, or `prismatic` for the bundled validator; record `floating` or `planar` only if the project has a different supported validation path. |
 | parent link | Link whose frame expresses the joint origin. |
 | child link | Link whose frame is created at the joint frame. |
 | origin xyz/rpy | Parent-link-frame transform from parent link to joint frame. |
@@ -95,7 +97,7 @@ Record every inferred or guessed value, including:
 - frame-only link intent
 - unverified package URI resolution
 
-Use named constants in generator code for assumed values. Prefer names like `ASSUMED_BASE_TO_SHOULDER_Z_M` over unlabelled numeric literals.
+List assumptions one per line in the ledger comment block so they survive with the file. In helper scripts, name assumed values by physical meaning (`ASSUMED_BASE_TO_SHOULDER_Z_M`), never as unlabelled numeric literals.
 
 ## When Information Is Missing
 
@@ -105,6 +107,6 @@ If spatial information is missing, do not invent a precise-looking transform. Ch
 2. create a frame-only or placeholder structure with explicit assumption comments;
 3. use a clearly named approximate constant;
 4. ask for dimensions or CAD data when the workflow allows interaction;
-5. report that the generated model is structurally valid but spatially provisional.
+5. report that the model is structurally valid but spatially provisional.
 
 A provisional URDF is acceptable when clearly labelled. A plausible but undocumented URDF is not.

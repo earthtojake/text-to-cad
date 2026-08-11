@@ -2,7 +2,7 @@ import { renderImplicitCadToDataUrl } from "./render.js";
 
 const DEFAULT_SNAPSHOT_WIDTH = 1200;
 const DEFAULT_SNAPSHOT_HEIGHT = 900;
-const DEFAULT_APPEARANCE = "workbench";
+const DEFAULT_THEME = "workbench";
 const PNG_MIME_TYPE = "image/png";
 
 function isPlainObject(value) {
@@ -37,7 +37,7 @@ export function snapshotImplicitCadOutputOptions(job = {}, output = {}) {
     width,
     height,
     camera: normalizedOutput.camera || normalizedJob.camera || "iso",
-    appearance: normalizedOutput.appearance || normalizedJob.appearance || DEFAULT_APPEARANCE,
+    theme: normalizedOutput.theme || normalizedJob.theme || DEFAULT_THEME,
     graphics: mergedPlainObject(normalizedJob.graphics, normalizedOutput.graphics),
     render: mergedPlainObject(normalizedJob.render, normalizedOutput.render),
   };
@@ -57,7 +57,7 @@ export async function snapshotImplicitCadModel(THREE, model, options = {}) {
       width: normalizedOptions.width,
       height: normalizedOptions.height,
       camera: normalizedOptions.camera,
-      appearance: normalizedOptions.appearance,
+      theme: normalizedOptions.theme,
       graphics: normalizedOptions.graphics,
       render: normalizedOptions.render,
     }),

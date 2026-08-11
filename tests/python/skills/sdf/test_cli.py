@@ -1,296 +1,155 @@
+from __future__ import annotations
+
+import contextlib
+import io
+from pathlib import Path
 import tempfile
 import unittest
-from pathlib import Path
-from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
 add_repo_path("skills/sdf/scripts")
 
 from sdf import cli
-from sdf.source import SdfSourceError
 
 
-def _write_sdf_source(path: Path, body: str) -> None:
-    path.write_text(
-        "\n".join(
-            [
-                "def gen_sdf():",
-                *[f"    {line}" for line in body.splitlines()],
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
+VALID_MODEL_SDF = """\
+<?xml version="1.0"?>
+<sdf version="1.12">
+  <model name="box_bot">
+    <link name="chassis">
+      <inertial>
+        <mass>1.0</mass>
+        <inertia>
+          <ixx>0.01</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>0.01</iyy><iyz>0</iyz><izz>0.01</izz>
+        </inertia>
+      </inertial>
+      <visual name="chassis_visual">
+        <geometry><box><size>0.2 0.2 0.1</size></box></geometry>
+      </visual>
+      <collision name="chassis_collision">
+        <geometry><box><size>0.2 0.2 0.1</size></box></geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>
+"""
 
 
-def _strip_cadpy_metadata_comments(text: str) -> str:
-    return "\n".join(
-        line for line in text.splitlines() if not line.startswith("<!-- cadpy:")
-    ) + "\n"
+VALID_WORLD_SDF = """\
+<?xml version="1.0"?>
+<sdf version="1.12">
+  <world name="empty_lit_world">
+    <light name="sun" type="directional">
+      <pose relative_to="world">0 0 10 0 0 0</pose>
+    </light>
+  </world>
+</sdf>
+"""
 
 
-class SdfCliTests(unittest.TestCase):
-    def test_requires_explicit_target(self) -> None:
-        with self.assertRaises(SystemExit) as cm:
-            cli.main([])
-        self.assertEqual(2, cm.exception.code)
+class SdfValidateCliTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tempdir = tempfile.TemporaryDirectory(prefix="tmp-sdf-cli-")
+        self.temp_root = Path(self._tempdir.name)
 
-    def test_rejects_summary_option(self) -> None:
-        with self.assertRaises(SystemExit) as cm:
-            cli.main(["sample_robot.py", "--summary"])
-        self.assertEqual(2, cm.exception.code)
+    def tearDown(self) -> None:
+        self._tempdir.cleanup()
 
-    def test_passes_targets_and_output(self) -> None:
-        with mock.patch.object(cli, "generate_sdf_targets", return_value=0) as generate:
-            self.assertEqual(0, cli.main(["sample_robot.py", "-o", "sample_robot.sdf"]))
+    def _write(self, name: str, body: str) -> Path:
+        path = self.temp_root / name
+        path.write_text(body, encoding="utf-8")
+        return path
 
-        generate.assert_called_once_with(["sample_robot.py"], output="sample_robot.sdf", gz_check="auto", strict=False)
+    def _run(self, *argv: str) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            exit_code = cli.main(list(argv))
+        return exit_code, stdout.getvalue(), stderr.getvalue()
 
-    def test_passes_gz_check_and_strict_options(self) -> None:
-        with mock.patch.object(cli, "generate_sdf_targets", return_value=0) as generate:
-            self.assertEqual(0, cli.main(["sample_robot.py", "--gz-check", "required", "--strict"]))
+    def test_valid_model_passes_with_summary(self) -> None:
+        sdf_path = self._write("model.sdf", VALID_MODEL_SDF)
+        exit_code, stdout, _ = self._run(str(sdf_path), "--gz-check", "never")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("OK", stdout)
+        self.assertIn("SDF 1.12", stdout)
+        self.assertIn("box_bot", stdout)
+        self.assertIn("1 links", stdout)
 
-        generate.assert_called_once_with(["sample_robot.py"], output=None, gz_check="required", strict=True)
+    def test_valid_world_only_document_passes(self) -> None:
+        sdf_path = self._write("world.sdf", VALID_WORLD_SDF)
+        exit_code, stdout, _ = self._run(str(sdf_path), "--gz-check", "never")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("worlds ['empty_lit_world']", stdout)
 
-    def test_rejects_output_with_pair_target(self) -> None:
-        with self.assertRaises(SystemExit) as cm:
-            cli.main(["sample_robot.py=sample_robot.sdf", "-o", "other.sdf"])
-        self.assertEqual(2, cm.exception.code)
+    def test_invalid_xml_fails(self) -> None:
+        sdf_path = self._write("broken.sdf", "<sdf version='1.12'><model></sdf>\n")
+        exit_code, _, stderr = self._run(str(sdf_path), "--gz-check", "never")
+        self.assertEqual(exit_code, 1)
+        self.assertIn("FAIL", stderr)
 
-    def test_generates_default_sibling_output_from_xml_string(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            source_path = Path(tempdir) / "sample_robot.py"
-            _write_sdf_source(
-                source_path,
-                "return '<sdf version=\"1.12\"><model name=\"sample\"><link name=\"base_link\" /></model></sdf>'",
-            )
+    def test_joint_referencing_missing_link_fails(self) -> None:
+        sdf_path = self._write(
+            "joint.sdf",
+            """\
+<?xml version="1.0"?>
+<sdf version="1.12">
+  <model name="broken_bot">
+    <link name="base"/>
+    <joint name="j1" type="revolute">
+      <parent>base</parent>
+      <child>missing_link</child>
+      <axis><xyz>0 0 1</xyz></axis>
+    </joint>
+  </model>
+</sdf>
+""",
+        )
+        exit_code, _, stderr = self._run(str(sdf_path), "--gz-check", "never")
+        self.assertEqual(exit_code, 1)
+        self.assertIn("missing_link", stderr)
 
-            self.assertEqual(0, cli.generate_sdf_targets([str(source_path)]))
+    def test_strict_mode_promotes_warnings(self) -> None:
+        sdf_path = self._write(
+            "warned.sdf",
+            """\
+<?xml version="1.0"?>
+<sdf version="1.12">
+  <model name="warn_bot">
+    <link name="base">
+      <pose degrees="true">0 0 0 0 0 90</pose>
+    </link>
+  </model>
+</sdf>
+""",
+        )
+        exit_code, _, _ = self._run(str(sdf_path), "--gz-check", "never")
+        self.assertEqual(exit_code, 0)
+        strict_exit, _, strict_stderr = self._run(str(sdf_path), "--gz-check", "never", "--strict")
+        self.assertEqual(strict_exit, 1)
+        self.assertIn("FAIL", strict_stderr)
 
-            output_text = source_path.with_suffix(".sdf").read_text(encoding="utf-8")
-            self.assertIn("<!-- cadpy:sourcePath=", output_text)
-            self.assertEqual(
-                '<sdf version="1.12"><model name="sample"><link name="base_link" /></model></sdf>\n',
-                _strip_cadpy_metadata_comments(output_text),
-            )
+    def test_gz_check_required_fails_when_gz_missing(self) -> None:
+        sdf_path = self._write("model.sdf", VALID_MODEL_SDF)
+        exit_code, _, stderr = self._run(str(sdf_path), "--gz-check", "required")
+        combined = stderr
+        if exit_code == 0:
+            self.skipTest("gz is installed in this environment")
+        self.assertEqual(exit_code, 1)
+        self.assertIn("gz", combined)
 
-    def test_validates_generated_sdf_before_writing_output(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            source_path = Path(tempdir) / "sample_robot.py"
-            output_path = source_path.with_suffix(".sdf")
-            output_path.write_text("original output\n", encoding="utf-8")
-            _write_sdf_source(
-                source_path,
-                "return '<robot name=\"not_sdf\" />'",
-            )
+    def test_missing_file_fails(self) -> None:
+        exit_code, _, stderr = self._run(str(self.temp_root / "absent.sdf"), "--gz-check", "never")
+        self.assertEqual(exit_code, 1)
+        self.assertIn("file not found", stderr)
 
-            with self.assertRaisesRegex(SdfSourceError, "root element must be <sdf>"):
-                cli.generate_sdf_targets([str(source_path)])
-
-            self.assertEqual("original output\n", output_path.read_text(encoding="utf-8"))
-
-    def test_generates_default_sibling_output_from_element_root(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            source_path = Path(tempdir) / "sample_robot.py"
-            source_path.write_text(
-                "\n".join(
-                    [
-                        "import xml.etree.ElementTree as ET",
-                        "",
-                        "def gen_sdf():",
-                        "    sdf = ET.Element('sdf', {'version': '1.12'})",
-                        "    model = ET.SubElement(sdf, 'model', {'name': 'sample'})",
-                        "    ET.SubElement(model, 'link', {'name': 'base_link'})",
-                        "    return sdf",
-                        "",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            self.assertEqual(0, cli.generate_sdf_targets([str(source_path)]))
-
-            output_text = source_path.with_suffix(".sdf").read_text(encoding="utf-8")
-            self.assertIn("<!-- cadpy:sourcePath=", output_text)
-            self.assertEqual(
-                '<?xml version="1.0"?>\n'
-                '<sdf version="1.12">\n'
-                '  <model name="sample">\n'
-                '    <link name="base_link" />\n'
-                '  </model>\n'
-                '</sdf>\n',
-                _strip_cadpy_metadata_comments(output_text),
-            )
-
-    def test_generates_envelope_output_from_element_root(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            source_path = Path(tempdir) / "sample_robot.py"
-            source_path.write_text(
-                "\n".join(
-                    [
-                        "import xml.etree.ElementTree as ET",
-                        "",
-                        "def gen_sdf():",
-                        "    sdf = ET.Element('sdf', {'version': '1.12'})",
-                        "    model = ET.SubElement(sdf, 'model', {'name': 'sample'})",
-                        "    ET.SubElement(model, 'link', {'name': 'base_link'})",
-                        "    return {'xml': sdf}",
-                        "",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            self.assertEqual(0, cli.generate_sdf_targets([str(source_path)]))
-
-            self.assertIn(
-                '<link name="base_link" />',
-                source_path.with_suffix(".sdf").read_text(encoding="utf-8"),
-            )
-
-    def test_generates_output_override_for_single_target(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            source_path = Path(tempdir) / "sample_robot.py"
-            output_path = Path(tempdir) / "custom" / "robot.sdf"
-            _write_sdf_source(
-                source_path,
-                "return '<sdf version=\"1.12\"><model name=\"sample\"><link name=\"base_link\" /></model></sdf>'",
-            )
-
-            self.assertEqual(0, cli.generate_sdf_targets([str(source_path)], output=str(output_path)))
-
-            self.assertTrue(output_path.exists())
-            self.assertFalse(source_path.with_suffix(".sdf").exists())
-
-    def test_generates_mixed_plain_and_paired_targets(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            root = Path(tempdir)
-            first_path = root / "first.py"
-            second_path = root / "second.py"
-            second_output = root / "custom" / "second.sdf"
-            _write_sdf_source(first_path, "return '<sdf version=\"1.12\"><model name=\"first\"><link name=\"base\" /></model></sdf>'")
-            _write_sdf_source(second_path, "return '<sdf version=\"1.12\"><model name=\"second\"><link name=\"base\" /></model></sdf>'")
-
-            self.assertEqual(0, cli.generate_sdf_targets([str(first_path), f"{second_path}={second_output}"]))
-
-            self.assertTrue(first_path.with_suffix(".sdf").exists())
-            self.assertTrue(second_output.exists())
-            self.assertFalse(second_path.with_suffix(".sdf").exists())
-
-    def test_rejects_legacy_sdf_output_field(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            source_path = Path(tempdir) / "sample_robot.py"
-            _write_sdf_source(
-                source_path,
-                "\n".join(
-                    [
-                        "return {",
-                        "    'xml': '<sdf version=\"1.12\"><model name=\"sample\"><link name=\"base_link\" /></model></sdf>',",
-                        "    'sdf_output': 'legacy/ignored.sdf',",
-                        "}",
-                    ]
-                ),
-            )
-
-            with self.assertRaisesRegex(TypeError, "unsupported field\\(s\\): sdf_output"):
-                cli.generate_sdf_targets([str(source_path)])
-
-            self.assertFalse(source_path.with_suffix(".sdf").exists())
-            self.assertFalse((Path(tempdir) / "legacy" / "ignored.sdf").exists())
-
-    def test_envelope_prints_assumptions_and_warnings(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            source_path = Path(tempdir) / "sample_robot.py"
-            _write_sdf_source(
-                source_path,
-                "\n".join(
-                    [
-                        "return {",
-                        "    'xml': '<sdf version=\"1.12\"><model name=\"sample\"><link name=\"base_link\" /></model></sdf>',",
-                        "    'metadata': {'target_consumer': 'CAD Viewer'},",
-                        "    'assumptions': [{'code': 'mesh_units', 'message': 'Assumed mesh units are meters'}],",
-                        "    'warnings': ['Plugin startup was not smoke-tested'],",
-                        "}",
-                    ]
-                ),
-            )
-
-            with mock.patch("builtins.print") as print_mock:
-                self.assertEqual(0, cli.generate_sdf_targets([str(source_path)], gz_check="never"))
-
-            printed = "\n".join(" ".join(str(arg) for arg in call.args) for call in print_mock.call_args_list)
-            self.assertIn("Assumption [mesh_units]", printed)
-            self.assertIn("generator_warning", printed)
-
-    def test_rejects_unknown_envelope_fields(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            source_path = Path(tempdir) / "sample_robot.py"
-            _write_sdf_source(
-                source_path,
-                "\n".join(
-                    [
-                        "return {",
-                        "    'xml': '<sdf version=\"1.12\"><model name=\"sample\"><link name=\"base_link\" /></model></sdf>',",
-                        "    'unexpected': True,",
-                        "}",
-                    ]
-                ),
-            )
-
-            with self.assertRaisesRegex(TypeError, "unsupported field"):
-                cli.generate_sdf_targets([str(source_path)], gz_check="never")
-
-    def test_strict_rejects_generator_warnings_before_writing(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            source_path = Path(tempdir) / "sample_robot.py"
-            _write_sdf_source(
-                source_path,
-                "\n".join(
-                    [
-                        "return {",
-                        "    'xml': '<sdf version=\"1.12\"><model name=\"sample\"><link name=\"base_link\" /></model></sdf>',",
-                        "    'warnings': ['Unverified plugin'],",
-                        "}",
-                    ]
-                ),
-            )
-
-            with self.assertRaisesRegex(SdfSourceError, "generator_warning"):
-                cli.generate_sdf_targets([str(source_path)], gz_check="never", strict=True)
-            self.assertFalse(source_path.with_suffix(".sdf").exists())
-
-    def test_gz_check_required_failure_prevents_write(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            source_path = Path(tempdir) / "sample_robot.py"
-            _write_sdf_source(
-                source_path,
-                "return '<sdf version=\"1.12\"><model name=\"sample\"><link name=\"base_link\" /></model></sdf>'",
-            )
-
-            with mock.patch("sdf.external.shutil.which", return_value=None):
-                with self.assertRaisesRegex(SdfSourceError, "gz_check_unavailable"):
-                    cli.generate_sdf_targets([str(source_path)], gz_check="required")
-            self.assertFalse(source_path.with_suffix(".sdf").exists())
-
-    def test_rejects_invalid_output_suffix(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            source_path = Path(tempdir) / "sample_robot.py"
-            _write_sdf_source(source_path, "return '<sdf version=\"1.12\"><model name=\"sample\" /></sdf>'")
-
-            with self.assertRaisesRegex(ValueError, "must end in .sdf"):
-                cli.generate_sdf_targets([f"{source_path}={Path(tempdir) / 'sample.xml'}"])
-
-    def test_rejects_duplicate_output_paths(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-sdf-") as tempdir:
-            first_path = Path(tempdir) / "first.py"
-            second_path = Path(tempdir) / "second.py"
-            output_path = Path(tempdir) / "same.sdf"
-            _write_sdf_source(first_path, "return '<sdf version=\"1.12\"><model name=\"first\"><link name=\"base\" /></model></sdf>'")
-            _write_sdf_source(second_path, "return '<sdf version=\"1.12\"><model name=\"second\"><link name=\"base\" /></model></sdf>'")
-
-            with self.assertRaisesRegex(ValueError, "used more than once"):
-                cli.generate_sdf_targets([f"{first_path}={output_path}", f"{second_path}={output_path}"])
+    def test_non_sdf_suffix_fails(self) -> None:
+        path = self._write("model.xml", VALID_MODEL_SDF)
+        exit_code, _, stderr = self._run(str(path), "--gz-check", "never")
+        self.assertEqual(exit_code, 1)
+        self.assertIn("must be a .sdf file", stderr)
 
 
 if __name__ == "__main__":

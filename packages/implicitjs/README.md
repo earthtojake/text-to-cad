@@ -167,13 +167,18 @@ const animated = await exportImplicitAnimatedGlb(model, {
 From a package checkout:
 
 ```bash
-npm run export -- --input examples/model.implicit.js --format glb --output /tmp/model.glb
-npm run export -- --input examples/model.implicit.js --format stl --resolution 96
-npm run export -- --input examples/model.implicit.js --format 3mf --params '{"radius":24}'
+npm run export -- --input examples/model.implicit.js --glb /tmp/model.glb
+npm run export -- --input examples/model.implicit.js --stl --resolution 96
+npm run export -- --input examples/model.implicit.js --3mf --params '{"radius":24}'
+npm run export -- --input examples/model.implicit.js --stl --3mf --glb
 ```
 
-Exports sample the model's SDF inside its bounds. Higher resolutions produce
-denser meshes and take longer.
+One flag per format, several allowed per run; at least one is required (no format
+flag exits 2). A flag with no path writes the sibling `<name>.<ext>` beside the
+model, and a supplied path resolves against the current directory. Exports sample
+the model's SDF inside its bounds — the model is meshed once per run, so all
+requested formats come from identical geometry. Higher resolutions produce denser
+meshes and take longer.
 
 ## Package Layout
 

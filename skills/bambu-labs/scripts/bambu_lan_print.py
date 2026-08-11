@@ -376,6 +376,9 @@ def discover_printer_serial(
     validate_local_host(host, allow_nonprivate_host)
     context = ssl.create_default_context()
     if not tls_verify:
+        # Bambu printer firmware serves self-signed LAN certificates; validate_local_host()
+        # above restricts this to private/loopback/link-local hosts, so disabling verification
+        # here only trusts the printer's subnet, not its actual certificate.
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
     with socket.create_connection((host, port), timeout=timeout) as raw_sock:
@@ -940,6 +943,9 @@ def upload_ftps(args: argparse.Namespace, local_path: Path, remote_path: str) ->
     validate_local_host(args.host, args.allow_nonprivate_host)
     context = ssl.create_default_context()
     if not args.tls_verify:
+        # Bambu printer firmware serves self-signed LAN certificates; validate_local_host()
+        # above restricts this to private/loopback/link-local hosts, so disabling verification
+        # here only trusts the printer's subnet, not its actual certificate.
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
     ftp = ImplicitFTP_TLS(context=context, timeout=args.timeout)
@@ -1149,6 +1155,9 @@ def publish_mqtt(
     validate_local_host(args.host, args.allow_nonprivate_host)
     context = ssl.create_default_context()
     if not args.tls_verify:
+        # Bambu printer firmware serves self-signed LAN certificates; validate_local_host()
+        # above restricts this to private/loopback/link-local hosts, so disabling verification
+        # here only trusts the printer's subnet, not its actual certificate.
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
     payload_bytes = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -1207,6 +1216,9 @@ def subscribe_mqtt_reports(
     validate_local_host(args.host, args.allow_nonprivate_host)
     context = ssl.create_default_context()
     if not args.tls_verify:
+        # Bambu printer firmware serves self-signed LAN certificates; validate_local_host()
+        # above restricts this to private/loopback/link-local hosts, so disabling verification
+        # here only trusts the printer's subnet, not its actual certificate.
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
     client_id = args.client_id or args.serial or f"codex-bambu-status-{int(time.time())}"

@@ -1,7 +1,7 @@
 import { entryHasMesh } from "cadjs/lib/entryAssets.js";
 import { RENDER_FORMAT } from "cadjs/lib/fileFormats.js";
 
-export const STEP_ARTIFACT_GENERATION_FAILURE_DISPLAY_THRESHOLD = 3;
+const STEP_ARTIFACT_GENERATION_FAILURE_DISPLAY_THRESHOLD = 3;
 
 export const BUILDABLE_STEP_ARTIFACT_ERROR_CODES = Object.freeze([
   "missing_glb",
@@ -64,12 +64,12 @@ function fileRefMatchesAny(file, candidates) {
   return candidates.some((candidate) => fileRefsMatch(file, candidate));
 }
 
-export function stepArtifactGenerationFailureCount(state) {
+function stepArtifactGenerationFailureCount(state) {
   const count = Number(state?.failureCount || 0);
   return Number.isFinite(count) && count > 0 ? Math.trunc(count) : 0;
 }
 
-export function stepArtifactGenerationFileRefs(entry = null, artifact = entry?.artifact) {
+function stepArtifactGenerationFileRefs(entry = null, artifact = entry?.artifact) {
   const refs = new Set();
   addStepFileRef(refs, entry?.file);
   addStepFileRef(refs, entry?.rootRelativeFile);
@@ -77,7 +77,7 @@ export function stepArtifactGenerationFileRefs(entry = null, artifact = entry?.a
   if (STEP_FILE_EXTENSION_RE.test(normalizeStepArtifactFileRef(artifact?.sourcePath))) {
     addStepFileRef(refs, artifact?.sourcePath);
   }
-  addFileRef(refs, artifact?.glbPath);
+  addFileRef(refs, artifact?.packagePath);
   return [...refs];
 }
 
@@ -130,103 +130,17 @@ export function stepArtifactIssueShouldSuppress({
     STEP_ARTIFACT_GENERATION_FAILURE_DISPLAY_THRESHOLD;
 }
 
-export function validateGeneratedStepArtifactPayload(payload, { file = "" } = {}) {
-  const generatedEntry = payload?.entry;
-  if (!generatedEntry) {
-    return;
-  }
-  const fileLabel = String(file || generatedEntry.file || "").trim();
-  if (!entryHasMesh(generatedEntry)) {
-    throw new Error(`Generated STEP artifact is not renderable: ${fileLabel || "STEP file"}`);
-  }
-  if (stepArtifactCanGenerate(generatedEntry, RENDER_FORMAT.STEP, { generationAvailable: true })) {
-    const code = String(generatedEntry?.artifact?.error || "step_artifact_unavailable").trim();
-    throw new Error(`Generated STEP artifact still reports ${code}: ${fileLabel || "STEP file"}`);
-  }
-}
-
-export async function runStepArtifactGenerationWithRetries({
-  key = "",
-  file = "",
-  initialFailureCount = 0,
-  generate,
-  isCurrent = () => true,
-  onState = () => {},
-  onFinalError = () => {},
-  threshold = STEP_ARTIFACT_GENERATION_FAILURE_DISPLAY_THRESHOLD,
-  validatePayload = null
-} = {}) {
-  if (typeof generate !== "function") {
-    throw new TypeError("STEP artifact generation requires a generate function.");
-  }
-
-  const maxFailures = Math.max(1, Math.trunc(Number(threshold) || 0));
-  let failureCount = Math.min(
-    stepArtifactGenerationFailureCount({ failureCount: initialFailureCount }),
-    maxFailures
-  );
-
-  while (failureCount < maxFailures) {
-    const attempt = failureCount + 1;
-    onState({
-      key,
-      file,
-      status: "loading",
-      failureCount,
-      attempt,
-      error: ""
-    });
-
-    try {
-      const payload = await generate(file, { attempt, failureCount });
-      if (!isCurrent()) {
-        return { status: "cancelled", failureCount };
-      }
-      if (typeof validatePayload === "function") {
-        validatePayload(payload);
-      }
-      const readyState = {
-        key,
-        file,
-        status: "ready",
-        failureCount: 0,
-        error: ""
-      };
-      onState(readyState);
-      return { status: "ready", state: readyState, payload };
-    } catch (generationError) {
-      if (!isCurrent()) {
-        return { status: "cancelled", failureCount };
-      }
-      failureCount += 1;
-      const message = generationError instanceof Error
-        ? generationError.message
-        : String(generationError);
-      const failedState = {
-        key,
-        file,
-        status: failureCount >= maxFailures ? "error" : "loading",
-        failureCount,
-        attempt: Math.min(failureCount + 1, maxFailures),
-        error: message
-      };
-      onState(failedState);
-      if (failedState.status === "error") {
-        onFinalError(message, failedState, generationError);
-        return { status: "error", state: failedState, error: generationError };
-      }
-    }
-  }
-
-  const exhaustedState = {
-    key,
-    file,
-    status: "error",
-    failureCount,
-    attempt: maxFailures,
-    error: ""
-  };
-  return { status: "error", state: exhaustedState };
+// The entry's failed STEP artifact record, or null.
+//
+// STEP-shaped on purpose, and NOT `artifactManaged`: DXF is artifact-managed too, but the
+// error codes, the `stale` flag and the renderable-GLB fallback below are all STEP package
+// vocabulary. Generalising the gate without generalising the vocabulary would show a DXF a
+// card about a STEP artifact. The generic "render artifact build failed" card in
+// viewerAlerts already covers every artifact-managed kind; this is the STEP detail on top.
+export function failedStepArtifact(entry, sourceFormat) {
+  return sourceFormat === RENDER_FORMAT.STEP && entry?.artifact?.ok === false
+    ? entry.artifact
+    : null;
 }
 
 export function stepArtifactIsStale(entry, sourceFormat) {

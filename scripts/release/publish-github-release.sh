@@ -19,9 +19,9 @@ Usage:
 
 Creates the immutable release identity for the current repo version:
 
-1. verifies plugins/cad/VERSION contains a valid canonical version
+1. verifies VERSION contains a valid canonical version
 2. verifies a new version is greater than the latest local semver tag
-3. creates and pushes the semver git tag for plugins/cad/VERSION
+3. creates and pushes the semver git tag for VERSION
 4. creates a GitHub Release for that tag with generated notes
 
 Options:
@@ -99,8 +99,8 @@ require_command git
 
 "$SCRIPT_DIR/check-version.sh"
 
-version="$(tr -d '[:space:]' < "$REPO_ROOT/plugins/cad/VERSION")"
-[ -n "$version" ] || die "plugins/cad/VERSION is empty"
+version="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
+[ -n "$version" ] || die "VERSION is empty"
 tag_name="$version"
 target_commit="$(git rev-parse "$TARGET_REF^{commit}")"
 latest_tag="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1 || true)"

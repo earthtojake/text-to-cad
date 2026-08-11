@@ -17,6 +17,10 @@ import {
 import {
   cloneThemeSettings
 } from "./themeSettings.js";
+import {
+  PART_SELECTED_HIGHLIGHT_BLEND,
+  partHighlightSurfaceColor
+} from "../lib/viewer/partHighlight.js";
 
 function sampleMeshData() {
   return {
@@ -219,6 +223,37 @@ test("applyPartVisualState keeps dimmed context from depth-occluding highlights"
   assert.equal(selected.material.depthWrite, true);
   assert.equal(selected.mesh.renderOrder, 2);
   assert.equal(selected.edges.renderOrder, 3);
+});
+
+test("applyPartVisualState highlights and ghosts identically to the viewer path", () => {
+  const selected = createDisplayRecord("selected");
+  const children = [];
+  selected.mesh = { visible: true, renderOrder: 2, add: (child) => children.push(child) };
+  selected.geometry = new THREE.BufferGeometry();
+
+  applyPartVisualState(THREE, [selected], {
+    baseTheme: {},
+    edgeSettings: {},
+    hiddenPartIds: [],
+    hoveredPartId: "",
+    focusedPartId: [],
+    selectedPartIds: ["selected"],
+    showEdges: true
+  });
+
+  // Headless renders must use the same blended surface highlight as the viewer
+  // so snapshots and docs GIFs match what the CAD Viewer shows.
+  const expected = partHighlightSurfaceColor(
+    THREE,
+    new THREE.Color("#aaaaaa"),
+    new THREE.Color("#4f9dff"),
+    PART_SELECTED_HIGHLIGHT_BLEND
+  );
+  assert.equal(selected.material.color.getHexString(), expected.getHexString());
+  assert.equal(selected.material.emissive.getHexString(), new THREE.Color("#4f9dff").getHexString());
+  assert.ok(selected.ghostMesh, "headless selection attaches the occlusion ghost");
+  assert.equal(selected.ghostMesh.visible, true);
+  assert.equal(selected.ghostMaterial.depthFunc, THREE.GreaterDepth);
 });
 
 test("buildModel renders solid part records and updates theme without rebuilding geometry", () => {

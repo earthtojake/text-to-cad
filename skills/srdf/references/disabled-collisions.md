@@ -12,7 +12,7 @@ Use one of these sources:
 - explicit user-provided collision matrix;
 - a manually reviewed pair with a specific rationale.
 
-Do not infer disabled collision pairs from visual appearance or vague prose.
+Do not infer disabled collision pairs from visual theme or vague prose.
 
 ## XML shape
 

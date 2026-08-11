@@ -1,0 +1,23 @@
+{
+  "name": "cad",
+  "version": "0.4.2",
+  "description": "CAD, robotics, fabrication, and local review skills.",
+  "author": {
+    "name": "earthtojake",
+    "url": "https://github.com/earthtojake"
+  },
+  "homepage": "https://www.texttocad.dev",
+  "repository": "https://github.com/earthtojake/text-to-cad",
+  "license": "MIT",
+  "keywords": [
+    "cad",
+    "robotics",
+    "fabrication",
+    "skills",
+    "step",
+    "urdf",
+    "sdf",
+    "gcode"
+  ],
+  "skills": "./skills/"
+}

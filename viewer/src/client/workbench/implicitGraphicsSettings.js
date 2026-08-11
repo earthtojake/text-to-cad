@@ -5,4 +5,4 @@ export {
   implicitGraphicsRenderSettings,
   implicitGraphicsSettingsEqual,
   normalizeImplicitGraphicsSettings
-} from "implicitjs/graphicsSettings";
+} from "cadjs/implicit/graphicsSettings";

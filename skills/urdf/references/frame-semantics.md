@@ -1,6 +1,6 @@
 # URDF Frame Semantics
 
-Use this reference whenever editing origins, axes, visual placement, collision placement, or inertials. Most URDF generation errors are frame errors.
+Use this reference whenever editing origins, axes, visual placement, collision placement, or inertials. Most URDF authoring errors are frame errors.
 
 ## Core Semantics
 
@@ -32,7 +32,7 @@ Use:
 - seconds for time;
 - right-handed coordinate frames unless the project documents an exception.
 
-Do not store revolute limits in degrees in generated URDF. Convert degrees to radians before emission.
+Do not store revolute limits in degrees in URDF. Convert degrees to radians before writing them.
 
 Do not use finite lower/upper limits for a `continuous` joint unless the project is intentionally not using URDF continuous-joint semantics.
 
@@ -69,7 +69,7 @@ For every visual or collision block, confirm:
 2. mesh scale converts the mesh source units into meters;
 3. visual and collision geometry are intentionally the same or intentionally different;
 4. collision geometry is simple enough for the intended physics/planning consumer;
-5. mesh paths are stable from the generated URDF's location or use an intended package URI.
+5. mesh paths are stable from the URDF file's location or use an intended package URI.
 
 Example:
 

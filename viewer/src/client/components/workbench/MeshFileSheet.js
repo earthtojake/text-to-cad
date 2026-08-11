@@ -1,12 +1,13 @@
-import {
-  Accordion
-} from "../ui/accordion";
 import FileSheet from "./FileSheet";
-import FileMetadataSection from "./FileMetadataSection";
-import FileStatusSection from "./FileStatusSection";
+import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
+import { buildFileStatusTab } from "./FileStatusSection";
 
+// The status-only file sheet, shared by every kind with no controls of its own: a plain
+// mesh, a DXF drawing and an implicit model. `kind` is the tab-arrangement namespace, so
+// each keeps its own persisted layout.
 export default function MeshFileSheet({
   open,
+  kind = "mesh",
   title = "Mesh",
   isDesktop,
   width,
@@ -20,10 +21,15 @@ export default function MeshFileSheet({
   onOpenFileAsset,
   suppressDynamicMetadataStatus = false,
   statusItems = [],
-  themeSections = null,
+  themeTabs = [],
   openSectionIds = [],
   onOpenSectionIdsChange
 }) {
+  const sections = [
+    buildFileStatusTab(statusItems),
+    ...themeTabs
+  ];
+
   return (
     <FileSheet
       open={open}
@@ -32,25 +38,14 @@ export default function MeshFileSheet({
       width={width}
       onOpenChange={onOpenChange}
       onStartResize={onStartResize}
+      scrollBody={false}
     >
-      <Accordion
-        type="multiple"
-        value={openSectionIds}
-        onValueChange={onOpenSectionIdsChange}
-        className="text-sm"
-      >
-        <FileStatusSection items={statusItems} />
-        {themeSections}
-        <FileMetadataSection
-          entry={selectedEntry}
-          fileDownloadAvailable={fileDownloadAvailable}
-          viewerServerInfo={viewerServerInfo}
-          localFileOpenAvailable={localFileOpenAvailable}
-          fileAccessBusyKey={fileAccessBusyKey}
-          onOpenFileAsset={onOpenFileAsset}
-          suppressDynamicStatus={suppressDynamicMetadataStatus}
-        />
-      </Accordion>
+      <FileSheetTabbedSurface
+        kind={kind}
+        sections={sections}
+        openSectionIds={openSectionIds}
+        onOpenSectionIdsChange={onOpenSectionIdsChange}
+      />
     </FileSheet>
   );
 }

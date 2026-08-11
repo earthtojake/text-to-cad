@@ -141,6 +141,7 @@ function readGeometryRecords(dxfData) {
   const cutPrimitives = [];
   const cutCircleLoops = [];
   const bendLines = [];
+  const engravePolylines = [];
 
   for (const record of lineRecords) {
     const start = normalizePoint(record?.start);
@@ -151,6 +152,13 @@ function readGeometryRecords(dxfData) {
       continue;
     }
     if (pointsEqual(start, end)) {
+      continue;
+    }
+    if (kind === "engrave") {
+      engravePolylines.push([start, end]);
+      continue;
+    }
+    if (kind && kind !== "cut") {
       continue;
     }
     cutPrimitives.push({ points: [start, end] });
@@ -173,6 +181,13 @@ function readGeometryRecords(dxfData) {
       bendLines.push([points[0], points[points.length - 1]]);
       continue;
     }
+    if (kind === "engrave") {
+      engravePolylines.push(points);
+      continue;
+    }
+    if (kind && kind !== "cut") {
+      continue;
+    }
     cutPrimitives.push({ points });
   }
 
@@ -183,7 +198,12 @@ function readGeometryRecords(dxfData) {
       continue;
     }
     const kind = String(record?.kind || "").trim().toLowerCase();
-    if (kind === "bend") {
+    if (kind === "engrave") {
+      const loop = sampleCirclePoints(center, radius);
+      engravePolylines.push([...loop, loop[0]]);
+      continue;
+    }
+    if (kind && kind !== "cut") {
       continue;
     }
     cutCircleLoops.push(sampleCirclePoints(center, radius));
@@ -192,19 +212,18 @@ function readGeometryRecords(dxfData) {
   return {
     cutPrimitives,
     cutCircleLoops,
-    bendLines
+    bendLines,
+    engravePolylines
   };
 }
 
-function buildCutLoops(dxfData) {
-  const { cutPrimitives, cutCircleLoops, bendLines } = readGeometryRecords(dxfData);
-  if (!cutPrimitives.length && !cutCircleLoops.length) {
-    throw new Error("DXF preview requires cut-layer contour geometry");
-  }
-
+/** Walk cut primitives into chains by coincident endpoints: closed chains become loops,
+ *  dead-ended ones are kept as OPEN chains (they render as score lines, not solids). */
+function chainCutPrimitives(cutPrimitives) {
   const adjacency = new Map();
   const visited = new Set();
   const loops = [];
+  const openChains = [];
 
   const addAdjacency = (key, value) => {
     const existing = adjacency.get(key);
@@ -228,33 +247,64 @@ function buildCutLoops(dxfData) {
     }
     visited.add(primitiveIndex);
     let loopPoints = [...cutPrimitives[primitiveIndex].points];
-    const startKey = pointKey(loopPoints[0]);
-    let currentKey = pointKey(loopPoints[loopPoints.length - 1]);
     let guard = 0;
 
-    while (currentKey !== startKey) {
-      const nextOptions = (adjacency.get(currentKey) || []).filter(({ index }) => !visited.has(index));
-      if (!nextOptions.length) {
-        throw new Error("DXF preview requires closed cut contours");
+    // Extend forward from the chain's tail until it closes on its head or dead-ends.
+    const extend = () => {
+      const startKey = pointKey(loopPoints[0]);
+      let currentKey = pointKey(loopPoints[loopPoints.length - 1]);
+      while (currentKey !== startKey) {
+        const nextOptions = (adjacency.get(currentKey) || []).filter(({ index }) => !visited.has(index));
+        if (!nextOptions.length) {
+          return false;
+        }
+        const nextOption = nextOptions[0];
+        visited.add(nextOption.index);
+        const primitivePoints = cutPrimitives[nextOption.index].points;
+        const orientedPoints = nextOption.reverse ? reversePoints(primitivePoints) : primitivePoints;
+        loopPoints = loopPoints.concat(orientedPoints.slice(1));
+        currentKey = pointKey(orientedPoints[orientedPoints.length - 1]);
+        guard += 1;
+        if (guard > cutPrimitives.length + 4) {
+          throw new Error("DXF preview contour walk did not terminate");
+        }
       }
+      return true;
+    };
 
-      const nextOption = nextOptions[0];
-      visited.add(nextOption.index);
-      const primitivePoints = cutPrimitives[nextOption.index].points;
-      const orientedPoints = nextOption.reverse ? reversePoints(primitivePoints) : primitivePoints;
-      loopPoints = loopPoints.concat(orientedPoints.slice(1));
-      currentKey = pointKey(orientedPoints[orientedPoints.length - 1]);
-      guard += 1;
-      if (guard > cutPrimitives.length + 4) {
-        throw new Error("DXF preview contour walk did not terminate");
-      }
+    let closed = extend();
+    if (!closed) {
+      // The seed may sit mid-chain: walk the OTHER direction too before giving up, so one
+      // polyline does not split into two chains at an arbitrary seed.
+      loopPoints = reversePoints(loopPoints);
+      closed = extend();
     }
 
-    loopPoints = removeConsecutiveDuplicates(loopPoints);
-    if (loopPoints.length >= 3) {
-      loops.push(loopPoints);
+    if (closed) {
+      loopPoints = removeConsecutiveDuplicates(loopPoints);
+      if (loopPoints.length >= 3) {
+        loops.push(loopPoints);
+      }
+      continue;
+    }
+    // A chain that does not close is not a solid boundary. It USED to be dropped outright;
+    // now it is kept as an open chain — a score/engrave path the viewer overlays on the
+    // sheet — so a witness line or a decorative score no longer silently vanishes.
+    if (loopPoints.length >= 2) {
+      openChains.push(loopPoints);
     }
   }
+
+  return { loops, openChains };
+}
+
+function buildCutLoops(dxfData) {
+  const { cutPrimitives, cutCircleLoops, bendLines } = readGeometryRecords(dxfData);
+  if (!cutPrimitives.length && !cutCircleLoops.length) {
+    throw new Error("DXF preview requires cut-layer contour geometry");
+  }
+
+  const { loops } = chainCutPrimitives(cutPrimitives);
 
   for (const circleLoop of cutCircleLoops) {
     if (circleLoop.length >= 3) {
@@ -270,6 +320,56 @@ function buildCutLoops(dxfData) {
     loops,
     bendLines
   };
+}
+
+/**
+ * Flat-pattern facts for the Material sheet: bounding size and the NET area (outer loops
+ * minus holes, holes-in-holes adding back — the even/odd containment rule the mesher
+ * triangulates by). Millimetres in, mm/mm^2 out; weight is the caller's multiply.
+ */
+export function computeDxfFlatStats(dxfData) {
+  const { cutPrimitives, cutCircleLoops } = readGeometryRecords(dxfData);
+  const { loops } = chainCutPrimitives(cutPrimitives);
+  for (const circleLoop of cutCircleLoops) {
+    if (circleLoop.length >= 3) {
+      loops.push(circleLoop);
+    }
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const loop of loops) {
+    for (const [x, y] of loop) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  const sorted = [...loops].sort((a, b) => Math.abs(polygonSignedArea(b)) - Math.abs(polygonSignedArea(a)));
+  const nodes = loopContainmentNodes(sorted);
+  let areaMm2 = 0;
+  for (const node of nodes) {
+    areaMm2 += (node.depth % 2 === 0 ? 1 : -1) * node.area;
+  }
+  return {
+    areaMm2: Math.max(areaMm2, 0),
+    widthMm: Number.isFinite(minX) ? Math.max(maxX - minX, 0) : 0,
+    heightMm: Number.isFinite(minY) ? Math.max(maxY - minY, 0) : 0
+  };
+}
+
+/**
+ * Every polyline that should render as a SCORE — an engraved/etched path lying on the
+ * sheet's surface rather than cut through it: engrave-layer geometry, plus any cut-layer
+ * chain that does not close (a witness line, a centre mark, a decorative score). Returned
+ * in flat-pattern mm; the viewer folds and elevates them.
+ */
+export function extractDxfScorePolylines(dxfData) {
+  const { cutPrimitives, engravePolylines } = readGeometryRecords(dxfData);
+  const { openChains } = chainCutPrimitives(cutPrimitives);
+  return [...engravePolylines, ...openChains];
 }
 
 function normalizeBendLine(line, index) {
@@ -309,15 +409,23 @@ export function extractOrderedDxfBendLines(dxfData) {
   return sortBendLines(bendLines);
 }
 
-function validateBendLines(bendLines) {
-  for (const bendLine of bendLines) {
+/** Only bends that are actually FOLDING need the banded strip decomposition, and that
+ *  decomposition is X-slab based — so the vertical-line requirement applies to active
+ *  bends, never to a flat pattern whose angled bend lines are just crease marks. (The
+ *  viewer's boxed fold handles any orientation; it catches this error and falls back.) */
+function validateActiveBendLines(bendLines, bendSettings) {
+  bendLines.forEach((bendLine, index) => {
+    const angleDeg = normalizeDxfBendAngleDeg(bendSettings?.[index]?.angleDeg, 0);
+    if (angleDeg === 0) {
+      return;
+    }
     if (Math.abs(bendLine.start[0] - bendLine.end[0]) > BEND_LINE_AXIS_EPSILON_MM) {
       throw new Error("DXF 3D bend preview currently requires vertical bend lines");
     }
     if (Math.abs(bendLine.end[1] - bendLine.start[1]) <= GEOMETRY_EPSILON_MM) {
       throw new Error("DXF bend line length is too small for preview bending");
     }
-  }
+  });
 }
 
 export function normalizeDxfBendDirection(value) {
@@ -563,7 +671,12 @@ function holeClassificationForStrip(loop, leftX, rightX) {
   return "intersects";
 }
 
-function buildBendProfiles(outerBounds, bendLines, bendSettings, halfThickness) {
+function buildBendProfiles(outerBounds, bendLines, bendSettings, halfThickness, bendGeometry = null) {
+  // Sheet-metal bend geometry the caller may pin: an explicit inside radius (mm) and a
+  // K-factor placing the neutral axis within the thickness. The defaults reproduce the
+  // historical visual bend: radius 0.6x thickness, neutral axis at mid-thickness (K=0.5).
+  const requestedRadius = toFiniteNumber(bendGeometry?.insideRadiusMm, 0);
+  const kFactor = clamp(toFiniteNumber(bendGeometry?.kFactor, 0.5), 0.05, 0.95);
   const profiles = bendLines.map((bendLine, index) => {
     const bendSetting = bendSettings[index] || {
       direction: DXF_BEND_DIRECTION.UP,
@@ -571,8 +684,10 @@ function buildBendProfiles(outerBounds, bendLines, bendSettings, halfThickness) 
     };
     const angleRadians = bendAngleRadiansForSetting(bendSetting);
     const angleMagnitude = Math.abs(angleRadians);
-    const insideRadius = Math.max(halfThickness * 2 * VISUAL_BEND_INSIDE_RADIUS_RATIO, GEOMETRY_EPSILON_MM);
-    const neutralRadius = insideRadius + halfThickness;
+    const insideRadius = requestedRadius > 0
+      ? Math.max(requestedRadius, GEOMETRY_EPSILON_MM)
+      : Math.max(halfThickness * 2 * VISUAL_BEND_INSIDE_RADIUS_RATIO, GEOMETRY_EPSILON_MM);
+    const neutralRadius = insideRadius + kFactor * halfThickness * 2;
     const desiredHalfWidth = angleMagnitude > 1e-6 ? (neutralRadius * angleMagnitude) / 2 : 0;
     return {
       bendLine,
@@ -608,7 +723,7 @@ function buildBendProfiles(outerBounds, bendLines, bendSettings, halfThickness) 
       ...profile,
       flatWidth,
       neutralRadius,
-      insideRadius: Math.max(neutralRadius - halfThickness, GEOMETRY_EPSILON_MM)
+      insideRadius: Math.max(neutralRadius - kFactor * halfThickness * 2, GEOMETRY_EPSILON_MM)
     };
   });
 }
@@ -860,18 +975,23 @@ function buildBendContinuationMatrix(bendProfile) {
   return translateToEnd.multiply(rotate).multiply(translateToTangent);
 }
 
-function buildSegmentTransforms(bendProfiles, halfThickness) {
+function buildSegmentTransforms(bendProfiles, halfThickness, guideElevationSign = 1) {
   const transforms = [new Matrix4().identity()];
   const bendTransforms = [];
   const guideLineSegments = [];
+  // Which face the bend guides hover over. The guides are one-sided (the solid is
+  // symmetric, they are not): a consumer whose axis convention maps this mesher's +Y to
+  // its own "down" (the CAD viewer's Z-up mapping does) asks for -1 so the guides land on
+  // the face the user is looking at instead of under the sheet.
+  const guideY = guideElevationSign * (halfThickness + BEND_LINE_ELEVATION_MM);
   let currentMatrix = new Matrix4().identity();
 
   for (const bendProfile of bendProfiles) {
     const bendLine = bendProfile.bendLine;
     const baseMatrix = currentMatrix.clone();
     guideLineSegments.push(
-      ...applyMatrixToPoint(baseMatrix, [bendLine.start[0], halfThickness + BEND_LINE_ELEVATION_MM, bendLine.start[1]]),
-      ...applyMatrixToPoint(baseMatrix, [bendLine.end[0], halfThickness + BEND_LINE_ELEVATION_MM, bendLine.end[1]])
+      ...applyMatrixToPoint(baseMatrix, [bendLine.start[0], guideY, bendLine.start[1]]),
+      ...applyMatrixToPoint(baseMatrix, [bendLine.end[0], guideY, bendLine.end[1]])
     );
 
     bendTransforms.push({
@@ -1161,7 +1281,6 @@ function buildTriangulatedFlatPattern(dxfData) {
   }
   const holeLoops = sortedLoops.slice(1).map((loop) => normalizeLoopWinding(loop, { clockwise: false }));
   const bendLines = sortBendLines(rawBendLines);
-  validateBendLines(bendLines);
   return {
     loops: sortedLoops,
     outerLoop,
@@ -1170,13 +1289,15 @@ function buildTriangulatedFlatPattern(dxfData) {
   };
 }
 
-export function buildDxfPreviewMeshData(dxfData, thicknessMm, bendSettings = null) {
+export function buildDxfPreviewMeshData(dxfData, thicknessMm, bendSettings = null, options = null) {
+  const guideElevationSign = options?.guideElevationSign === -1 ? -1 : 1;
   const { loops, outerLoop, holeLoops, bendLines } = buildTriangulatedFlatPattern(dxfData);
   const normalizedThicknessMm = normalizeDxfPreviewThicknessMm(
     thicknessMm,
     toFiniteNumber(dxfData?.defaultThicknessMm, DEFAULT_DXF_PREVIEW_THICKNESS_MM)
   );
   const normalizedBendSettings = normalizeDxfBendSettings(dxfData, bendSettings);
+  validateActiveBendLines(bendLines, normalizedBendSettings);
   const halfThickness = normalizedThicknessMm / 2;
   let strips;
   let bendTransforms;
@@ -1184,9 +1305,12 @@ export function buildDxfPreviewMeshData(dxfData, thicknessMm, bendSettings = nul
   let transforms;
   if (bendLines.length) {
     const outerBounds = loopBounds(outerLoop);
-    const bendProfiles = buildBendProfiles(outerBounds, bendLines, normalizedBendSettings, halfThickness);
+    const bendProfiles = buildBendProfiles(outerBounds, bendLines, normalizedBendSettings, halfThickness, {
+      insideRadiusMm: options?.bendInsideRadiusMm,
+      kFactor: options?.bendKFactor
+    });
     ({ strips } = buildStripDefinitions(outerLoop, holeLoops, bendProfiles));
-    ({ transforms, bendTransforms, guideLineSegments } = buildSegmentTransforms(bendProfiles, halfThickness));
+    ({ transforms, bendTransforms, guideLineSegments } = buildSegmentTransforms(bendProfiles, halfThickness, guideElevationSign));
   } else {
     strips = buildFlatStripDefinitions(loops);
     transforms = [new Matrix4().identity()];

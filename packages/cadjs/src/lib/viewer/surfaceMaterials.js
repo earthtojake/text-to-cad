@@ -181,11 +181,29 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
     forceFill
   });
   record.material.vertexColors = nextUseVertexColors;
-  record.material.roughness = clamp(Number(materialSettings.roughness) || 0, 0, 1);
-  record.material.metalness = clamp(Number(materialSettings.metalness) || 0, 0, 1);
-  record.material.clearcoat = clamp(Number(materialSettings.clearcoat) || 0, 0, 1);
-  record.material.clearcoatRoughness = clamp(Number(materialSettings.clearcoatRoughness) || 0, 0, 1);
-  record.baseOpacity = clamp(displayModeSurfaceOpacity(displayMode, Number(materialSettings.opacity) || 0), 0, 1);
+  // Per-part PBR overrides: a descriptor occurrence may carry a "material"
+  // object (see cadgen component_package._occurrence_material) so brushed,
+  // polished, lacquered, and transparent parts can differ in RESPONSE, not
+  // just albedo. The theme value is the fallback per property.
+  const partMaterial =
+    record.sourcePart?.material && typeof record.sourcePart.material === "object"
+      ? record.sourcePart.material
+      : null;
+  const resolveMaterialChannel = (key) => {
+    const override = partMaterial ? Number(partMaterial[key]) : NaN;
+    return clamp(Number.isFinite(override) ? override : Number(materialSettings[key]) || 0, 0, 1);
+  };
+  record.material.roughness = resolveMaterialChannel("roughness");
+  record.material.metalness = resolveMaterialChannel("metalness");
+  record.material.clearcoat = resolveMaterialChannel("clearcoat");
+  record.material.clearcoatRoughness = resolveMaterialChannel("clearcoatRoughness");
+  const partOpacity = Number(record.sourceOpacity);
+  const opacityScale = Number.isFinite(partOpacity) ? clamp(partOpacity, 0, 1) : 1;
+  record.baseOpacity = clamp(
+    displayModeSurfaceOpacity(displayMode, (Number(materialSettings.opacity) || 0) * opacityScale),
+    0,
+    1
+  );
   record.material.opacity = record.baseOpacity;
   record.material.transparent = wireframeMode || record.baseOpacity < 0.999;
   record.material.depthWrite = displayMode === CAD_DISPLAY_MODE.TRANSPARENT || wireframeMode

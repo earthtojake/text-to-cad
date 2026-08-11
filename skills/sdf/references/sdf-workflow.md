@@ -1,21 +1,20 @@
 # SDF workflow
 
-Use this reference when editing SDF robot model structure, world structure, mesh references, simulator metadata, or generated SDF output.
+Use this reference when editing SDF robot model structure, world structure, mesh references, or simulator metadata.
 
 ## Edit loop
 
-1. Find the Python source that defines `gen_sdf()`.
-2. Treat that source as authoritative. Do not hand-edit generated `.sdf` output unless explicitly instructed.
-3. Identify the target consumer and required SDFormat version.
-4. Decide whether the output is model-level, world-level, or model-in-world.
-5. Fill or update the design ledger before writing XML.
-6. For every pose and axis, state the frame in which it is expressed. Use `relative_to` / `expressed_in` where ambiguity would otherwise remain.
-7. Edit the generator source.
-8. Regenerate only the explicit target.
-9. Review bundled validation errors as structural guardrails, not exhaustive simulator proof.
-10. Hand generated or modified `.sdf` files to `$cad-viewer` for live viewer links when available.
-11. Run available smoke tests.
-12. Report assumptions and skipped checks.
+1. Locate the target `.sdf`. It is the source of truth; author and edit the XML directly.
+2. Identify the target consumer and required SDFormat version.
+3. Decide whether the output is model-level, world-level, or model-in-world.
+4. Fill or update the design ledger before writing XML; keep the compact form as a comment block in the `.sdf` (see `references/design-ledger.md`).
+5. If the model describes a robot that already has a URDF, derive the SDF from that URDF rather than re-authoring geometry from scratch (see `references/interoperability.md`).
+6. For every pose and axis, state the frame in which it is expressed. Write `relative_to` / `expressed_in` explicitly wherever ambiguity would otherwise remain (see `references/frame-semantics.md`).
+7. Author the XML per `references/authoring-contract.md`. Compute derived numbers — inertia tensors, unit conversions — with formulas or a throwaway helper script; never freehand them.
+8. Validate with `python scripts/validate <file.sdf>`; review errors as structural guardrails, not exhaustive simulator proof.
+9. Hand new or modified `.sdf` files to `$cad-viewer` for live viewer links when available.
+10. Run available smoke tests (`gz sdf --check`, simulator load).
+11. Report assumptions and skipped checks.
 
 ## Model vs world
 
@@ -37,16 +36,16 @@ The lightweight validator should allow pure world-only documents. A world-only d
 
 ## Mesh references
 
-SDF mesh URIs should be stable from the generated `.sdf` file's perspective or use a simulator/package URI convention understood by the consumer.
+SDF mesh URIs should be stable from the `.sdf` file's perspective or use a simulator/package URI convention understood by the consumer.
 
 Good URI choices include:
 
-- relative paths beside the generated SDF when the model is self-contained;
+- relative paths beside the SDF when the model is self-contained;
 - `model://...` for simulator model packages;
 - `package://...` when the simulator environment resolves package roots;
 - `fuel://...`, `http://...`, or `https://...` only when the consumer is expected to fetch external assets.
 
-Do not use generated SDF XML as the source of truth for mesh placement. Prefer deriving visual and collision mesh references from the same source data that owns mesh instance placement.
+Mesh assets themselves are owned by the CAD/mesh workflow: one asset per link, exported in the link's own frame, with source units recorded. If a mesh is wrong, fix the export, not the SDF poses.
 
 ## Inertials and physics
 

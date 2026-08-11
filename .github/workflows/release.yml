@@ -118,7 +118,7 @@ jobs:
             scripts/release/bump-version.sh "$BUMP" --no-commit
           fi
           node scripts/release/sync-version.mjs
-          version="$(tr -d '[:space:]' < plugins/cad/VERSION)"
+          version="$(tr -d '[:space:]' < VERSION)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           if git diff --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -151,7 +151,7 @@ jobs:
         if: inputs.dry_run
         run: |
           git diff --stat
-          git diff -- plugins/cad/VERSION
+          git diff -- VERSION
 
       - name: Stop after dry run
         if: inputs.dry_run
@@ -168,7 +168,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           branch="release/$VERSION"
-          body="Bumps plugins/cad/VERSION and derived package/plugin metadata to $VERSION. This PR was created by the one-button Release workflow, which merges it into $BASE_BRANCH immediately; the publish job revalidates the full production bundle before anything ships to the target branch."
+          body="Bumps VERSION and derived package/plugin metadata to $VERSION. This PR was created by the one-button Release workflow, which merges it into $BASE_BRANCH immediately; the publish job revalidates the full production bundle before anything ships to the target branch."
 
           git checkout -B "$branch"
           git add -A
@@ -243,6 +243,10 @@ jobs:
     needs: release-pr
     if: ${{ !inputs.dry_run && inputs.auto_merge }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # Trusted publishing (OIDC) for the PyPI upload that gates the main push.
+      id-token: write
     outputs:
       published: ${{ steps.push.outputs.published }}
       publish_sha: ${{ steps.commit.outputs.publish_sha }}
@@ -295,10 +299,13 @@ jobs:
             exit 2
           fi
 
-          current_version="$(tr -d '[:space:]' < plugins/cad/VERSION)"
+          current_version="$(tr -d '[:space:]' < VERSION)"
           latest_tag="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1 || true)"
           if ! scripts/release/check-version.sh --incremented-from origin/main >/tmp/publish-main-version-check.log 2>&1; then
-            main_version="$(git show origin/main:plugins/cad/VERSION | tr -d '[:space:]')"
+            # main published before the plugin package moved to the repository
+            # root keeps the canonical version at plugins/cad/VERSION.
+            main_version="$(git show origin/main:VERSION 2>/dev/null || git show origin/main:plugins/cad/VERSION)"
+            main_version="$(printf '%s' "$main_version" | tr -d '[:space:]')"
             if [ "$main_version" = "$current_version" ] && ! git rev-parse --verify --quiet "refs/tags/$current_version" >/dev/null; then
               echo "Release version already reached origin/main, but tag $current_version is missing; resuming publish."
             else
@@ -366,6 +373,16 @@ jobs:
             exit 1
           fi
 
+      # Published skills have no sibling packages/cadgen to install editable
+      # from, so the publish tree resolves cadgen from PyPI at this release's
+      # version. Runs after the bundle so vendored runtime copies are pinned too,
+      # and is verified below before the tree is committed.
+      - name: Pin cadgen requirements to the published PyPI version
+        if: steps.gate.outputs.should_publish == 'true'
+        run: |
+          scripts/release/pin-cadgen-requirements.sh
+          scripts/release/pin-cadgen-requirements.sh --check
+
       - name: Commit publish result
         if: steps.gate.outputs.should_publish == 'true'
         id: commit
@@ -383,7 +400,27 @@ jobs:
             exit 1
           fi
 
-          version="$(tr -d '[:space:]' < plugins/cad/VERSION)"
+          # Every gate above this line -- check-builds.sh, test.sh, test-docs.sh -- ran
+          # against the WORKING TREE, where bundle.sh had just written the generated outputs.
+          # `git add -A` honours .gitignore, so a generated path that is ignored (or unstaged
+          # for any other reason) passes all of them and still ships missing. This asserts
+          # against the INDEX, which is what actually becomes the commit. It is the check that
+          # would have caught skills/implicit-cad/scripts/snapshot/runtime shipping empty.
+          unstaged_generated=""
+          while IFS= read -r generated_path; do
+            [ -n "$generated_path" ] || continue
+            if [ -z "$(git ls-files -- "$generated_path" | head -n 1)" ]; then
+              unstaged_generated="$unstaged_generated$generated_path"$'\n'
+            fi
+          done <<< "$(scripts/bundle/bundle-skill.sh --all --print-outputs)"
+          if [ -n "$unstaged_generated" ]; then
+            echo "Generated outputs are missing from the publish commit:" >&2
+            printf '%s' "$unstaged_generated" | sed 's/^/- /' >&2
+            echo "They exist in the working tree but nothing staged them; check .gitignore." >&2
+            exit 1
+          fi
+
+          version="$(tr -d '[:space:]' < VERSION)"
           if target_base_sha="$(git rev-parse --verify "origin/$TARGET_BRANCH^{commit}" 2>/dev/null)"; then
             echo "Using existing $TARGET_BRANCH as publish parent: $target_base_sha"
           else
@@ -423,6 +460,34 @@ jobs:
           echo "publish_sha=$publish_commit" >> "$GITHUB_OUTPUT"
           echo "Created publish commit: $publish_commit"
 
+      # PyPI publish runs BEFORE the target-branch push: a failed upload must
+      # block the release, because production plugin bundles pin
+      # cadgen==<version> from PyPI and a main without the matching PyPI
+      # release would break skill installs. If PyPI succeeds but the push
+      # fails, rerun Release with set_version pinned; skip-existing makes the
+      # re-upload a no-op.
+      - name: Check cadgen package version matches the canonical release version
+        if: ${{ steps.gate.outputs.should_publish == 'true' && inputs.target_branch == 'main' }}
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if ! grep -Eq "^version = \"$version\"$" packages/cadgen/pyproject.toml; then
+            echo "packages/cadgen/pyproject.toml version does not match VERSION ($version)." >&2
+            exit 1
+          fi
+
+      - name: Build cadgen sdist and wheel
+        if: ${{ steps.gate.outputs.should_publish == 'true' && inputs.target_branch == 'main' }}
+        run: |
+          python3 -m pip install --upgrade build
+          python3 -m build packages/cadgen
+
+      - name: Publish cadgen to PyPI
+        if: ${{ steps.gate.outputs.should_publish == 'true' && inputs.target_branch == 'main' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/cadgen/dist
+          skip-existing: true
+
       - name: Push target branch
         if: steps.gate.outputs.should_publish == 'true'
         id: push
@@ -436,17 +501,6 @@ jobs:
           fi
           echo "published=true" >> "$GITHUB_OUTPUT"
 
-  upload-models:
-    name: Upload Models
-    needs:
-      - release-pr
-      - publish
-    if: ${{ needs.publish.outputs.published == 'true' && inputs.target_branch == 'main' }}
-    uses: ./.github/workflows/upload-models.yml
-    with:
-      ref: ${{ needs.release-pr.outputs.source_sha }}
-    secrets: inherit
-
   deploy-docs:
     name: Deploy Docs
     needs: publish
@@ -456,22 +510,11 @@ jobs:
       ref: ${{ needs.publish.outputs.publish_sha }}
     secrets: inherit
 
-  deploy-viewer:
-    name: Deploy Viewer
-    needs: publish
-    if: ${{ needs.publish.outputs.published == 'true' && inputs.target_branch == 'main' }}
-    uses: ./.github/workflows/deploy-viewer.yml
-    with:
-      ref: ${{ needs.publish.outputs.publish_sha }}
-    secrets: inherit
-
   tag-release:
     name: Tag and GitHub Release
     needs:
       - publish
-      - upload-models
       - deploy-docs
-      - deploy-viewer
     if: ${{ needs.publish.outputs.published == 'true' && inputs.target_branch == 'main' }}
     runs-on: ubuntu-latest
 

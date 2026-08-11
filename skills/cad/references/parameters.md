@@ -1,6 +1,6 @@
 # CAD parameters
 
-Read this file when the user asks to parameterize or animate a STEP model, or when designing or reviewing CAD source parameters, `.step.js` sidecar parameters, CAD Viewer controls, or animation controls.
+Read this file when the user asks to parameterize or animate a STEP model, or when designing or reviewing CAD source parameters, JS parameter/animation sidecars, CAD Viewer controls, or animation controls.
 
 ## Principle
 
@@ -30,7 +30,65 @@ Use snake_case semantic names that describe intent, matching the build123d Pytho
 - Keep sidecar parameter ids aligned with the Python source parameters they mirror, and keep source constants, manifest feature ids, UI labels, and comments aligned enough that an LLM can trace a control to geometry.
 - Module schema field names such as `schemaVersion`, `manifest.step.path`, and `durationSeconds` are fixed by the step-module schema; the snake_case convention applies to the parameter and feature ids you define.
 
-For STEP sidecars, strongly prefer an explicit target link in the module manifest:
+### Declaring and discovering the sidecar
+
+A generated model declares its JS sidecar from `gen_step()`, and the file can
+have any name; `<name>.params.js` is the convention. An imported `.step` has no
+generator, so it uses the `<name>.step.js` filename convention below instead.
+
+**A sidecar must be ONE self-contained file — it cannot import a sibling
+module.** Only the sidecar itself is served — the exact path a package
+descriptor names as `paramsPath`, or the `<name>.step.js` beside an imported
+STEP (`_is_declared_params_sidecar` / `is_step_sidecar_path` in
+`viewer/server_py/scanner.py`) — so
+`import { solve } from "./my_kinematics.js"` 404s in the browser. It resolves
+fine under node, so the failure appears only in the viewer. Splitting the maths
+out for testability is the natural first move and it does not work; inline it
+and use named exports alongside the default export if you want it node-testable:
+
+```js
+export function solveLinkage(t) { /* ... */ }   // testable under node
+export default { manifest: { /* ... */ }, update({ params, effects }) { /* ... */ } };
+```
+
+- A generated model declares the sidecar through the `gen_step()` envelope by
+  returning a `params` filepath alongside its `shape`. The path is relative to
+  the generator file:
+
+  ```python
+  def gen_step():
+      return {"shape": build_model(), "params": "<name>.params.js"}
+  ```
+
+  cadgen records that path as `paramsPath` in the package descriptor
+  (`assembly.json`, under `__cadgen__`), model-folder-relative. The CAD Viewer
+  reads `paramsPath` from the descriptor to load the sidecar. JS serving is
+  descriptor-gated: only a file a descriptor declares is served, never arbitrary
+  workspace JS.
+
+- An imported `.step` model has no `gen_step()` to declare anything, so the CAD
+  Viewer falls back to a filename convention for that case alone: a sidecar
+  named after the STEP file plus `.js`, in the same directory.
+
+  ```text
+  models/step/mechanisms/gear_rack_gripper.step      # the imported assembly
+  models/step/mechanisms/gear_rack_gripper.step.js   # its sidecar
+  ```
+
+  This applies to `.step` and `.stp`. The *filename convention* is viewer-only —
+  nothing in the CAD pipeline reads it, and no render package records it.
+  Serving stays gated: a `.js` is served under this rule only when the STEP file
+  it is named after actually exists beside it (`is_step_sidecar_path` in
+  `viewer/server_py/scanner.py`). `scripts/snapshot` renders the same file, but
+  you must name it explicitly with `--params-path` (see Validation below); it
+  never guesses by filename. Do not add a wrapper `<name>.step.py` that only
+  re-imports the `.step` to declare `params`; it makes the imported file look
+  generated and buys nothing.
+
+### `manifest.step.path` link
+
+Inside the sidecar, strongly prefer an explicit logical-link target in the
+module manifest:
 
 ```js
 export default {
@@ -43,7 +101,11 @@ export default {
 };
 ```
 
-`manifest.step.path` must be a workspace-relative path, never an absolute path, URL, or path with `..` segments. This link is provenance for humans and tools, not a freshness contract; do not add hashes or staleness checks to STEP parameter modules. Keep the sidecar named `.<step-stem>.step.js` when it lives next to its STEP file so existing viewers can fall back to the same-filename convention if `manifest.step.path` is absent.
+`manifest.step.path` is the workspace-relative logical `<name>.step` link used
+for provenance and cad-path derivation. It must be a workspace-relative path,
+never an absolute path, URL, or path with `..` segments. This link is provenance
+for humans and tools, not a freshness contract; do not add hashes or staleness
+checks to STEP parameter modules.
 
 ## Defaults And Bounds
 
@@ -89,7 +151,7 @@ Animation parameters should drive the smallest real degrees of freedom and deriv
 - Preserve source STEP/GLB material colors by default. Only override colors, add color controls, or assign viewer-time color styles when the user explicitly asks for recoloring, presentation styling, or diagnostic color coding.
 - Use comments for non-obvious kinematic choices, especially branch selection, sign conventions, datum origin, and derived ratios.
 
-For STEP sidecars, use JavaScript for live CAD Viewer interaction and Three.js hooks. Use Python/build123d as the source of truth for regenerating geometry. Python may generate `.step.js` modules, but CAD Viewer controls should not imply regeneration unless that workflow exists.
+For STEP sidecars, use JavaScript for live CAD Viewer interaction and Three.js hooks. Use Python/build123d as the source of truth for regenerating geometry. Python may generate `<name>.params.js` modules, but CAD Viewer controls should not imply regeneration unless that workflow exists.
 
 ## Controls
 
@@ -123,6 +185,21 @@ Use deterministic checks first:
 Use CAD `scripts/snapshot` review for visual semantics, following `snapshot-review.md` for packet sizing and PNG-vs-GIF mode selection:
 
 - Review several parameter poses, with GIFs for motion/animation review.
+- `--params` takes sidecar parameter *values*; the sidecar file itself comes
+  from wherever the model declares it. A generated model needs nothing extra.
+  An imported `.step`/`.stp` declares nothing, so name its sidecar with
+  `--params-path` (job field `stepParametersPath`) — `--params` alone is
+  rejected there, and `--params-path` is rejected on a generated model, whose
+  sidecar belongs in its `gen_step()`. The path must sit inside the model
+  folder, since the renderer serves assets relative to it.
+
+  ```bash
+  python scripts/snapshot --input models/step/mechanisms/gear_rack_gripper.step \
+    --params-path models/step/mechanisms/gear_rack_gripper.step.js \
+    --params '{"animate":{"stroke":{"from":0,"to":1}}}' \
+    --output tmp/gripper.gif
+  ```
+
 - Compare sidecar enabled vs disabled when viewer-time presentation is involved.
 - Check for disconnected hinges, drifting pivots, collisions, impossible branch blends, and looping jumps.
 - Convert visual concerns into measurements or explicit geometric facts before calling them fixed.

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import tempfile
 from pathlib import Path
 import unittest
@@ -44,12 +43,10 @@ def write_sample_robot(repo_root: Path, urdf_ref: str = "robot.urdf", srdf_ref: 
         </robot>
         """,
     )
-    relative_urdf_ref = Path(os.path.relpath(urdf_path, srdf_path.parent)).as_posix()
     write_file(
         srdf_path,
         f"""
-        <robot name="robot" xmlns:tcad="https://text-to-cad.dev/srdf">
-          <tcad:urdf path="{relative_urdf_ref}"/>
+        <robot name="robot">
           <group name="arm">
             <joint name="shoulder"/>
           </group>
@@ -149,8 +146,7 @@ class MoveIt2ContextTests(unittest.TestCase):
             write_file(
                 repo_root / "robot.srdf",
                 """
-                <robot name="robot" xmlns:tcad="https://text-to-cad.dev/srdf">
-                  <tcad:urdf path="robot.urdf"/>
+                <robot name="robot">
                   <group name="arm">
                     <chain base_link="base_link" tip_link="tool_link"/>
                   </group>

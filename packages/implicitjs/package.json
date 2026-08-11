@@ -18,6 +18,7 @@
     "./snapshot": "./src/lib/implicitCad/snapshot.js",
     "./graphicsSettings": "./src/lib/implicitCad/graphicsSettings.js",
     "./mesh": "./src/lib/implicitCad/mesh.js",
+    "./glb/*": "./src/lib/glb/*",
     "./meshQuality": "./src/lib/implicitCad/meshQuality.js",
     "./exportModel": "./src/lib/implicitCad/exportModel.js",
     "./export": "./src/lib/implicitCad/export.js",
@@ -29,7 +30,6 @@
   },
   "scripts": {
     "export": "node scripts/export.mjs",
-    "snapshot": "node scripts/snapshot.mjs",
     "test": "node scripts/run-tests.mjs",
     "verify:exports": "node scripts/verify-implicit-cad-exports.mjs"
   },
@@ -40,5 +40,8 @@
     "gifenc": "^1.0.3",
     "playwright": "^1.52.0",
     "three": "0.160.0"
+  },
+  "devDependencies": {
+    "meshoptimizer": "^1.2.0"
   }
 }

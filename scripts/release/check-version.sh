@@ -9,7 +9,7 @@ usage() {
 Usage:
   scripts/release/check-version.sh [--incremented-from REF]
 
-Checks that plugins/cad/VERSION contains a valid canonical release version.
+Checks that VERSION contains a valid canonical release version.
 With --incremented-from, also checks that the current version is greater than
 the version at REF.
 

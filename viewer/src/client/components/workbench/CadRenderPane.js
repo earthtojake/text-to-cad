@@ -1,7 +1,5 @@
 import { useEffect, useMemo } from "react";
 import CadViewer from "../CadViewer";
-import DxfViewer from "../DxfViewer";
-import ImplicitCadViewer from "../ImplicitCadViewer";
 import { CircleAlert, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
@@ -12,14 +10,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "../ui/dropdown-menu";
-import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import AssemblyContextMenuItems from "./AssemblyContextMenuItems";
+import TutorialTip from "./TutorialTip";
 import { cn } from "@/ui/utils";
 import { RENDER_FORMAT } from "@/workbench/constants";
+import { TUTORIAL_TIP_IDS } from "@/workbench/persistence";
 import {
-  isMeshRenderFormat,
-  isRobotRenderFormat
-} from "cadjs/lib/fileFormats";
+  PARAMETER_SOURCE,
+  renderCapabilities,
+  supportsTool,
+  viewportContentKind,
+  VIEWPORT_CONTENT
+} from "cadjs/lib/renderCapabilities";
 import {
   CAMERA_PROJECTION,
   normalizeCameraProjection
@@ -80,52 +82,6 @@ function viewerContextMenuAnchorStyle(menu, viewportFrameInsets) {
     width: "1px",
     height: "1px"
   };
-}
-
-function DxfViewModeControl({
-  value,
-  threeDimensionalAvailable = false,
-  onChange
-}) {
-  const normalizedValue = value === "3d" && threeDimensionalAvailable ? "3d" : "2d";
-
-  return (
-    <div className="cad-glass-surface rounded-md border border-sidebar-border p-0.5 shadow-sm">
-      <ToggleGroup
-        type="single"
-        variant="outline"
-        size="sm"
-        value={normalizedValue}
-        onValueChange={(nextValue) => {
-          if (!nextValue) {
-            return;
-          }
-          if (nextValue === "3d" && !threeDimensionalAvailable) {
-            return;
-          }
-          onChange?.(nextValue);
-        }}
-        className="grid h-7 w-[5.5rem] grid-cols-2"
-        aria-label="DXF view mode"
-      >
-        <ToggleGroupItem
-          value="2d"
-          className="!h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground data-[state=on]:!bg-accent data-[state=on]:!text-foreground data-[state=on]:font-semibold"
-          title="Show DXF flat pattern"
-        >
-          2D
-        </ToggleGroupItem>
-        <ToggleGroupItem
-          value="3d"
-          disabled={!threeDimensionalAvailable}
-          className="!h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground data-[state=on]:!bg-accent data-[state=on]:!text-foreground data-[state=on]:font-semibold"
-          title={threeDimensionalAvailable ? "Show DXF bend preview" : "3D bend preview unavailable"}
-        >
-          3D
-        </ToggleGroupItem>
-      </ToggleGroup>
-    </div>
-  );
 }
 
 function ViewerContextMenu({
@@ -210,6 +166,13 @@ function ViewerContextMenu({
                 >
                   Reset Zoom
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  className={itemClassName}
+                  disabled={menu.zoomToFitDisabled === true}
+                  onSelect={() => handleAction(onZoomToFit)}
+                >
+                  Zoom To Fit
+                </DropdownMenuItem>
               </>
             ) : null}
             {menu.showCameraActions !== false && menu.showExpandCollapse === true ? (
@@ -292,16 +255,12 @@ export default function CadRenderPane({
   renderFormat,
   renderPartsIndividually = false,
   selectedMeshData,
-  selectedDxfData,
-  selectedDxfMeshData,
-  dxfViewMode = "2d",
-  onDxfViewModeChange,
   selectedImplicitModel,
   implicitDynamicRenderActive = false,
   implicitGraphicsSettings = null,
   selectedKey,
-  selectedDxfKey,
   missingFileRef = "",
+  viewerServerInfo = null,
   viewerPerspective,
   viewerPerspectiveRef,
   themeSettings,
@@ -313,6 +272,21 @@ export default function CadRenderPane({
   referenceSelectionPending = false,
   referenceSelectionUnavailable = false,
   referenceSelectionDeferred = false,
+  drawingThicknessScale = 1,
+  planMode = false,
+  bendAxisX = null,
+  drawingBendLines = null,
+  bendAnglesRad = null,
+  drawingBends = null,
+  drawingBendStyle = "boxed",
+  drawingBendRadiusMm = 0,
+  drawingKFactor = 0.5,
+  drawingHiddenLayers = null,
+  drawingOrientation = null,
+  drawingMaterialColor = null,
+  drawingGeometry = null,
+  drawingThicknessMm = 0,
+  onCameraZoomPercentChange = null,
   viewPlaneOffsetRight = 16,
   viewerMode,
   assemblyPickingActive = false,
@@ -333,8 +307,6 @@ export default function CadRenderPane({
   pickableVertices,
   focusedPartIds = "",
   displaySettings = null,
-  onProjectionChange,
-  onDisplayModeChange,
   boundsAnimationActive = false,
   drawToolActive,
   drawingTool,
@@ -365,6 +337,8 @@ export default function CadRenderPane({
   handleStepModuleTransformDetectedChange,
   selectionCount,
   copyButtonLabel,
+  copyReferenceTipActive = false,
+  panToolActive = false,
   handleCopySelection,
   handleScreenshotCopy,
   urdfPosePicker = null
@@ -388,45 +362,67 @@ export default function CadRenderPane({
     };
   }, [stepParameters, liveStepAnimation]);
   const viewerAlertIconLabel = "Viewer error. See the Issues section for details.";
-  const dxfMode = renderFormat === RENDER_FORMAT.DXF;
-  const gcodeMode = renderFormat === RENDER_FORMAT.GCODE;
-  const urdfMode = isRobotRenderFormat(renderFormat);
-  const implicitMode = renderFormat === RENDER_FORMAT.IMPLICIT;
-  const meshOnlyMode = isMeshRenderFormat(renderFormat);
-  const pathPreviewMode = meshOnlyMode || gcodeMode;
-  const dxf3dAvailable = !!selectedDxfMeshData;
-  const activeDxfViewMode = dxfViewMode === "3d" && dxf3dAvailable ? "3d" : "2d";
-  const dxfMeshPreviewReady = dxfMode && activeDxfViewMode === "3d" && dxf3dAvailable;
-  const activeMeshData = dxfMeshPreviewReady ? selectedDxfMeshData : selectedMeshData;
-  const stepDisplaySettingsActive = renderFormat === RENDER_FORMAT.STEP && !!displaySettings && !dxfMode && !pathPreviewMode;
-  const cadProjection = stepDisplaySettingsActive
-    ? normalizeCameraProjection(displaySettings.projection)
-    : CAMERA_PROJECTION.PERSPECTIVE;
-  const activeModelKey = dxfMeshPreviewReady ? (selectedDxfKey || selectedKey) : selectedKey;
+  // One capability lookup replaces the per-format mode booleans. Every gate below asks
+  // what this format CAN do; none of them ask what it IS.
+  const capabilities = renderCapabilities(renderFormat);
+  const implicitMode = viewportContentKind(renderFormat) === VIEWPORT_CONTENT.IMPLICIT;
+  const drawEnabled = supportsTool(renderFormat, "draw");
+  // Formats with no per-part topology to select, annotate or explode: a plain mesh has
+  // no parts, and an implicit is a single SDF body. Both hand the viewer the same
+  // stripped-down prop set.
+  const hasParts = capabilities.parts;
+  const hasTopology = capabilities.topology;
+  const displaySettingsActive = capabilities.displayModes && !!displaySettings;
+  // Projection is a THEME trait, honoured by every format that declares it — not a
+  // STEP privilege. Leaving the others pinned to perspective meant the default
+  // workbench theme (which is orthographic) was being ignored by four formats out of
+  // five. A plan view additionally forces orthographic: a top-down lock still
+  // foreshortens off-centre under perspective, which is exactly what a plan view must
+  // not do.
+  const cadProjection = planMode
+    ? CAMERA_PROJECTION.ORTHOGRAPHIC
+    : capabilities.themeProjection
+      ? normalizeCameraProjection(themeSettings?.projection)
+      : CAMERA_PROJECTION.PERSPECTIVE;
   const stepBoundsAnimationActive = Boolean(resolvedStepParameters?.animationState?.playing);
   const cadViewerBoundsAnimationActive = Boolean(boundsAnimationActive || stepBoundsAnimationActive);
   const missingFileLabel = String(missingFileRef || "").trim();
-  const topologySelectionPending = Boolean(referenceSelectionPending && !dxfMode && !urdfMode && !pathPreviewMode);
-  const topologySelectionUnavailable = Boolean(referenceSelectionUnavailable && !dxfMode && !urdfMode && !pathPreviewMode);
-  const topologySelectionDeferred = Boolean(referenceSelectionDeferred && activeMeshData && !dxfMode && !urdfMode && !pathPreviewMode);
+  // A Viewer resolves paths against ITS OWN served root. Point one at an
+  // absolute path belonging to a different checkout — easy to do when an
+  // instance from another clone is already holding the default port — and the
+  // file is simply not found. Reporting that as "file does not exist" blames
+  // the model and sends you looking for a build problem that isn't there, so
+  // say which of the two it actually is.
+  const servedRoot = String(
+    viewerServerInfo?.rootPath || viewerServerInfo?.directoryRoot || ""
+  ).trim();
+  const missingFileOutsideRoot = Boolean(
+    missingFileLabel
+    && servedRoot
+    && missingFileLabel.startsWith("/")
+    && !missingFileLabel.startsWith(servedRoot.endsWith("/") ? servedRoot : `${servedRoot}/`)
+  );
+  const topologySelectionPending = Boolean(referenceSelectionPending && hasTopology);
+  const topologySelectionUnavailable = Boolean(referenceSelectionUnavailable && hasTopology);
+  const topologySelectionDeferred = Boolean(referenceSelectionDeferred && selectedMeshData && hasTopology);
   const urdfPosePickerActive = Boolean(urdfPosePicker?.active);
   const urdfPosePickerPrompt = "Select target";
   const posePickerExitStyle = {
     left: `calc(${Math.max(Number(viewportFrameInsets?.left) || 0, 0)}px + 0.75rem)`,
     top: `calc(${Math.max(Number(viewportFrameInsets?.top) || 0, 0)}px + 0.75rem)`
   };
-  const ctaMode = !dxfMode && !pathPreviewMode && drawToolActive
+  // Is there anything on screen? For every mesh-backed format that means mesh data -- DXF
+  // included, since it lost its 2D fallback in phase 3a and now renders its baked preview,
+  // so a failed build must read as "nothing renderable" and let the viewer alert block.
+  // An IMPLICIT renders by raymarching its own GLSL and never has mesh data, so asking the
+  // same question of it would treat every healthy implicit as an empty viewport; its content
+  // is the loaded model instead.
+  const viewportHasRenderableContent = implicitMode ? !!selectedImplicitModel : !!selectedMeshData;
+  const ctaMode = drawEnabled && drawToolActive
     ? "screenshot"
-    : !dxfMode && !pathPreviewMode && selectionCount > 0
+    : (hasParts || hasTopology) && selectionCount > 0
       ? "selection"
       : "";
-  const dxfViewPlaneHeader = dxfMode ? (
-    <DxfViewModeControl
-      value={activeDxfViewMode}
-      threeDimensionalAvailable={dxf3dAvailable}
-      onChange={onDxfViewModeChange}
-    />
-  ) : null;
   const bottomOverlayStyle = {
     bottom: "1rem"
   };
@@ -448,12 +444,9 @@ export default function CadRenderPane({
   };
   const ctaLabel = ctaMode === "screenshot" ? "Copy Screenshot" : copyButtonLabel;
   const ctaTitle = ctaMode === "screenshot" ? "Copy screenshot to clipboard" : copyButtonLabel;
-  const ctaDisabled = ctaMode === "screenshot" ? viewerLoading || !activeMeshData : false;
-  const viewportHasRenderableContent = implicitMode
-    ? !!selectedImplicitModel
-    : dxfMode && !dxfMeshPreviewReady
-    ? !!selectedDxfData
-    : !!activeMeshData;
+  const ctaDisabled = ctaMode === "screenshot"
+    ? viewerLoading || !viewportHasRenderableContent
+    : false;
   const blockingViewerAlert = viewerAlert && viewerAlert.blocking !== false && (
     viewerAlert.blocking ||
     viewerAlert.severity !== "warning" ||
@@ -492,108 +485,94 @@ export default function CadRenderPane({
 
   return (
     <div className="absolute inset-0">
-      {implicitMode ? (
-        <ImplicitCadViewer
-          key={`implicit:${activeModelKey}`}
-          ref={viewerRef}
-          model={selectedImplicitModel}
-          modelKey={activeModelKey}
-          isLoading={viewerLoading}
-          previewMode={previewMode}
-          viewportFrameInsets={viewportFrameInsets}
-          viewPlaneOffsetRight={viewPlaneOffsetRight}
-          themeSettings={themeSettings}
-          graphicsSettings={implicitGraphicsSettings}
-          dynamicRenderActive={implicitDynamicRenderActive}
-          perspective={viewerPerspective}
-          perspectiveRef={viewerPerspectiveRef}
-          onPerspectiveChange={handlePerspectiveChange}
-          onViewerAlertChange={handleViewerAlertChange}
-        />
-      ) : dxfMode && !dxfMeshPreviewReady ? (
-        <DxfViewer
-          ref={viewerRef}
-          dxfData={selectedDxfData}
-          modelKey={selectedDxfKey}
-          themeSettings={themeSettings}
-          viewPlaneOffsetRight={viewPlaneOffsetRight}
-          viewPlaneOffsetBottom="1rem"
-          viewPlaneHeader={dxfViewPlaneHeader}
-          onViewerAlertChange={handleViewerAlertChange}
-        />
-      ) : (
-        <CadViewer
-          ref={viewerRef}
-          meshData={activeMeshData}
-          modelKey={activeModelKey}
-          renderFormat={renderFormat}
-          perspective={viewerPerspective}
-          projection={cadProjection}
-          perspectiveRef={viewerPerspectiveRef}
-          onProjectionChange={stepDisplaySettingsActive ? onProjectionChange : undefined}
-          onDisplayModeChange={stepDisplaySettingsActive ? onDisplayModeChange : undefined}
-          showEdges={!gcodeMode}
-          recomputeNormals={false}
-          themeSettings={themeSettings}
-          displaySettings={stepDisplaySettingsActive ? displaySettings : null}
-          previewMode={dxfMode ? false : previewMode}
-          showViewPlane={dxfMode || gcodeMode ? true : !previewMode}
-          scale={urdfMode ? VIEWER_SCENE_SCALE.URDF : VIEWER_SCENE_SCALE.CAD}
-          viewPlaneOffsetRight={viewPlaneOffsetRight}
-          viewPlaneOffsetBottom="1rem"
-          viewPlaneHeader={dxfViewPlaneHeader}
-          compactViewPlane={false}
-          viewportFrameInsets={viewportFrameInsets}
-          isLoading={viewerLoading}
-          pickMode={urdfMode
-            ? VIEWER_PICK_MODE.NONE
-            : viewerPickModeForRenderPane({
-              dxfMode,
-              pathPreviewMode,
-              topologySelectionPending,
-              topologySelectionUnavailable,
-              topologySelectionDeferred,
-              topologyPickingActive: Boolean(
-                pickableFaces?.length ||
-                pickableEdges?.length ||
-                pickableVertices?.length
-              ),
-              viewerMode,
-              assemblyPickingActive,
-              focusedPartIds
-            })}
-          renderPartsIndividually={urdfMode ? true : (renderPartsIndividually || Boolean(resolvedStepParameters?.definition))}
-          pickableParts={dxfMode || urdfMode || pathPreviewMode ? EMPTY_LIST : assemblyParts}
-          hiddenPartIds={dxfMode || pathPreviewMode ? [] : hiddenPartIds}
-          selectedPartIds={dxfMode || pathPreviewMode ? [] : selectedPartIds}
-          hoveredPartId={dxfMode || pathPreviewMode ? "" : hoveredPartId}
-          assemblyMates={dxfMode || pathPreviewMode ? [] : assemblyMates}
-          selectedMateIds={dxfMode || pathPreviewMode ? [] : selectedMateIds}
-          hoveredMateId={dxfMode || pathPreviewMode ? "" : hoveredMateId}
-          hoveredReferenceId={dxfMode || pathPreviewMode ? "" : hoveredReferenceId}
-          selectedReferenceIds={dxfMode || pathPreviewMode ? [] : selectedReferenceIds}
-          selectorRuntime={dxfMode || pathPreviewMode ? null : selectorRuntime}
-          displayEdgeRuntime={dxfMode || pathPreviewMode ? null : displayEdgeRuntime}
-          stepParameters={dxfMode || pathPreviewMode ? null : resolvedStepParameters}
-          pickableFaces={dxfMode || pathPreviewMode ? [] : pickableFaces}
-          pickableEdges={dxfMode || pathPreviewMode ? [] : pickableEdges}
-          pickableVertices={dxfMode || pathPreviewMode ? [] : pickableVertices}
-          focusedPartId={dxfMode || pathPreviewMode ? "" : focusedPartIds}
-          boundsAnimationActive={cadViewerBoundsAnimationActive}
-          drawingEnabled={!dxfMode && !pathPreviewMode && drawToolActive}
-          drawingTool={drawingTool}
-          drawingStrokes={dxfMode || pathPreviewMode ? [] : drawingStrokes}
-          onDrawingStrokesChange={handleDrawingStrokesChange}
-          onPerspectiveChange={handlePerspectiveChange}
-          onHoverReferenceChange={handleModelHoverChange}
-          onActivateReference={handleModelReferenceActivate}
-          onDoubleActivateReference={handleModelReferenceDoubleActivate}
-          onContextReference={handleModelReferenceContext}
-          onViewerAlertChange={handleViewerAlertChange}
-          onStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
-          urdfPosePicker={urdfPosePicker}
-        />
-      )}
+      <CadViewer
+        ref={viewerRef}
+        meshData={selectedMeshData}
+        implicitModel={implicitMode ? selectedImplicitModel : null}
+        implicitGraphicsSettings={implicitMode ? implicitGraphicsSettings : null}
+        implicitDynamicRenderActive={implicitMode ? implicitDynamicRenderActive : false}
+        modelKey={selectedKey}
+        renderFormat={renderFormat}
+        drawingThicknessScale={drawingThicknessScale}
+        planMode={planMode}
+        bendAxisX={bendAxisX}
+        drawingBendLines={drawingBendLines}
+        bendAnglesRad={bendAnglesRad}
+        drawingBends={drawingBends}
+        drawingBendStyle={drawingBendStyle}
+        drawingBendRadiusMm={drawingBendRadiusMm}
+        drawingKFactor={drawingKFactor}
+        drawingHiddenLayers={drawingHiddenLayers}
+        drawingOrientation={drawingOrientation}
+        drawingMaterialColor={drawingMaterialColor}
+        drawingGeometry={drawingGeometry}
+        drawingThicknessMm={drawingThicknessMm}
+        onCameraZoomPercentChange={onCameraZoomPercentChange}
+        perspective={viewerPerspective}
+        projection={cadProjection}
+        perspectiveRef={viewerPerspectiveRef}
+        showEdges
+        recomputeNormals={false}
+        themeSettings={themeSettings}
+        displaySettings={displaySettingsActive ? displaySettings : null}
+        previewMode={previewMode}
+        showViewPlane={!previewMode}
+        scale={capabilities.sceneScale === "urdf" ? VIEWER_SCENE_SCALE.URDF : VIEWER_SCENE_SCALE.CAD}
+        viewPlaneOffsetRight={viewPlaneOffsetRight}
+        viewPlaneOffsetBottom="1rem"
+        compactViewPlane={false}
+        viewportFrameInsets={viewportFrameInsets}
+        isLoading={viewerLoading}
+        pickMode={!hasTopology && !hasParts
+          ? VIEWER_PICK_MODE.NONE
+          : viewerPickModeForRenderPane({
+            panToolActive,
+            topologySelectionPending,
+            topologySelectionUnavailable,
+            topologySelectionDeferred,
+            topologyPickingActive: Boolean(
+              pickableFaces?.length ||
+              pickableEdges?.length ||
+              pickableVertices?.length
+            ),
+            viewerMode,
+            assemblyPickingActive,
+            focusedPartIds
+          })}
+        panToolActive={panToolActive}
+        renderPartsIndividually={capabilities.sceneScale === "urdf"
+          ? true
+          : (renderPartsIndividually || Boolean(resolvedStepParameters?.definition))}
+        pickableParts={hasParts ? assemblyParts : EMPTY_LIST}
+        hiddenPartIds={hasParts ? hiddenPartIds : []}
+        selectedPartIds={hasParts ? selectedPartIds : []}
+        hoveredPartId={hasParts ? hoveredPartId : ""}
+        assemblyMates={hasParts ? assemblyMates : []}
+        selectedMateIds={hasParts ? selectedMateIds : []}
+        hoveredMateId={hasParts ? hoveredMateId : ""}
+        hoveredReferenceId={hasTopology ? hoveredReferenceId : ""}
+        selectedReferenceIds={hasTopology ? selectedReferenceIds : []}
+        selectorRuntime={hasTopology ? selectorRuntime : null}
+        displayEdgeRuntime={hasTopology ? displayEdgeRuntime : null}
+        stepParameters={capabilities.params === PARAMETER_SOURCE.SIDECAR ? resolvedStepParameters : null}
+        pickableFaces={hasTopology ? pickableFaces : []}
+        pickableEdges={hasTopology ? pickableEdges : []}
+        pickableVertices={hasTopology ? pickableVertices : []}
+        focusedPartId={hasParts ? focusedPartIds : ""}
+        boundsAnimationActive={cadViewerBoundsAnimationActive}
+        drawingEnabled={drawEnabled && drawToolActive}
+        drawingTool={drawingTool}
+        drawingStrokes={drawEnabled ? drawingStrokes : []}
+        onDrawingStrokesChange={handleDrawingStrokesChange}
+        onPerspectiveChange={handlePerspectiveChange}
+        onHoverReferenceChange={handleModelHoverChange}
+        onActivateReference={handleModelReferenceActivate}
+        onDoubleActivateReference={handleModelReferenceDoubleActivate}
+        onContextReference={handleModelReferenceContext}
+        onViewerAlertChange={handleViewerAlertChange}
+        onStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
+        urdfPosePicker={urdfPosePicker}
+      />
       {!previewMode ? (
         <ViewerContextMenu
           menu={viewerContextMenu}
@@ -622,14 +601,25 @@ export default function CadRenderPane({
         >
           <Alert
             variant="destructive"
-            className="cad-glass-popover pointer-events-auto w-full max-w-xl min-w-0 p-5 text-center shadow-lg"
+            className="cad-glass-popover pointer-events-auto w-full max-w-xl min-w-0 p-4 text-center shadow-lg"
           >
             <p className="col-start-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-destructive">
-              File does not exist
+              {missingFileOutsideRoot ? "Outside this viewer's root" : "File does not exist"}
             </p>
-            <AlertTitle className="col-start-1 mt-1 line-clamp-none text-lg text-foreground">File does not exist</AlertTitle>
+            <AlertTitle className="col-start-1 mt-1 line-clamp-none text-lg text-foreground">
+              {missingFileOutsideRoot ? "Outside this viewer's root" : "File does not exist"}
+            </AlertTitle>
             <AlertDescription className="col-start-1 mt-1 text-sm leading-6 text-muted-foreground">
               <code className="rounded-md bg-muted px-2 py-1 text-xs text-foreground">{missingFileLabel}</code>
+              {missingFileOutsideRoot ? (
+                <span className="mt-2 block text-xs leading-5">
+                  This viewer serves{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-foreground">{servedRoot}</code>.
+                  The path above is outside it — most likely a viewer from another
+                  checkout is holding this port. Start one for this workspace on a
+                  free port instead.
+                </span>
+              ) : null}
             </AlertDescription>
           </Alert>
         </div>
@@ -729,23 +719,30 @@ export default function CadRenderPane({
           className="pointer-events-none absolute z-20 flex min-w-0 justify-center"
           style={ctaOverlayStyle}
         >
-          <Button
-            type="button"
-            variant="default"
-            size="sm"
-            className="pointer-events-auto h-9 w-fit min-w-0 max-w-[min(28rem,100%)] shrink overflow-hidden border border-primary/20 bg-primary/85 px-4 text-[12px] font-semibold text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/75 focus-visible:ring-primary/35 max-sm:w-full"
-            disabled={ctaDisabled}
-            onClick={() => {
-              if (ctaMode === "screenshot") {
-                void handleScreenshotCopy?.();
-                return;
-              }
-              void handleCopySelection();
-            }}
-            title={ctaTitle}
+          <TutorialTip
+            tipId={TUTORIAL_TIP_IDS.COPY_REFERENCE}
+            active={ctaMode !== "screenshot" && copyReferenceTipActive}
+            side="top"
+            align="center"
           >
-            <span className="block min-w-0 max-w-full truncate">{ctaLabel}</span>
-          </Button>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="pointer-events-auto h-9 w-fit min-w-0 max-w-[min(28rem,100%)] shrink overflow-hidden border border-primary/20 bg-primary/85 px-4 text-[12px] font-semibold text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/75 focus-visible:ring-primary/35 max-sm:w-full"
+              disabled={ctaDisabled}
+              onClick={() => {
+                if (ctaMode === "screenshot") {
+                  void handleScreenshotCopy?.();
+                  return;
+                }
+                void handleCopySelection();
+              }}
+              title={ctaTitle}
+            >
+              <span className="block min-w-0 max-w-full truncate">{ctaLabel}</span>
+            </Button>
+          </TutorialTip>
         </div>
       ) : null}
     </div>

@@ -25,7 +25,6 @@ const CAD_EDGE_CLASS_SETTINGS = Object.freeze({
 
 const CAD_THEME_EDGE_SETTINGS = Object.freeze({
   enabled: true,
-  contrastMode: "manual",
   color: CAD_EDGE_COLOR,
   thickness: 1,
   classes: CAD_EDGE_CLASS_SETTINGS,
@@ -132,13 +131,6 @@ function normalizeMaterialTintMode(value, fallback = "multiply") {
     : fallback;
 }
 
-function normalizeEdgeContrastMode(value, fallback = "manual") {
-  const normalized = String(value || "").trim().toLowerCase();
-  return ["auto", "manual"].includes(normalized)
-    ? normalized
-    : fallback;
-}
-
 function normalizeEdgeClassSettings(value = {}, fallback = CAD_EDGE_CLASS_SETTINGS) {
   const source = value && typeof value === "object" ? value : {};
   return Object.fromEntries(CAD_EDGE_CLASS_IDS.map((classId) => {
@@ -153,6 +145,22 @@ function normalizeEdgeClassSettings(value = {}, fallback = CAD_EDGE_CLASS_SETTIN
     }];
   }));
 }
+
+// Fill and rim are declared per theme rather than in the base rig, so they need their own
+// fallbacks. Values match packages/cadjs/src/common/themeSettings.js — the mesh renderer
+// and the raymarcher must start from the same rig or the same theme reads as two looks.
+export const DEFAULT_FILL_LIGHT_SETTINGS = Object.freeze({
+  enabled: true,
+  color: "#6b7f95",
+  intensity: 0.46,
+  position: Object.freeze({ x: 120, y: 80, z: 210 })
+});
+export const DEFAULT_RIM_LIGHT_SETTINGS = Object.freeze({
+  enabled: true,
+  color: "#6db6e8",
+  intensity: 0.04,
+  position: Object.freeze({ x: -260, y: 240, z: 180 })
+});
 
 export const THEME_FLOOR_MODES = Object.freeze({
   STAGE: "stage",
@@ -1516,7 +1524,6 @@ export function normalizeThemeSettings(value = {}) {
     },
     edges: {
       enabled: normalizeBoolean(edges.enabled, DEFAULT_THEME_SETTINGS.edges.enabled),
-      contrastMode: normalizeEdgeContrastMode(edges.contrastMode, DEFAULT_THEME_SETTINGS.edges.contrastMode),
       color: normalizeColor(edges.color, DEFAULT_THEME_SETTINGS.edges.color),
       thickness: normalizeNumber(edges.thickness, DEFAULT_THEME_SETTINGS.edges.thickness, 0.5, 6),
       classes: normalizeEdgeClassSettings(edges.classes, DEFAULT_THEME_SETTINGS.edges.classes),
@@ -1580,6 +1587,24 @@ export function normalizeThemeSettings(value = {}) {
         color: normalizeColor(lighting.directional?.color, DEFAULT_THEME_SETTINGS.lighting.directional.color),
         intensity: normalizeNumber(lighting.directional?.intensity, DEFAULT_THEME_SETTINGS.lighting.directional.intensity, 0, 20),
         position: normalizePosition(lighting.directional?.position, DEFAULT_THEME_SETTINGS.lighting.directional.position)
+      },
+      // Fill and rim are part of the theme schema every theme preset declares. This
+      // normalizer used to drop them on the floor, which is why the raymarcher could not
+      // honour them however its uniforms were wired: the values never survived
+      // normalization. Kept in step with the same block in
+      // packages/cadjs/src/common/themeSettings.js — implicitjs must not import cadjs, so
+      // the schema is duplicated on purpose and has to be changed in both places.
+      fill: {
+        enabled: normalizeBoolean(lighting.fill?.enabled, DEFAULT_FILL_LIGHT_SETTINGS.enabled),
+        color: normalizeColor(lighting.fill?.color, DEFAULT_FILL_LIGHT_SETTINGS.color),
+        intensity: normalizeNumber(lighting.fill?.intensity, DEFAULT_FILL_LIGHT_SETTINGS.intensity, 0, 20),
+        position: normalizePosition(lighting.fill?.position, DEFAULT_FILL_LIGHT_SETTINGS.position)
+      },
+      rim: {
+        enabled: normalizeBoolean(lighting.rim?.enabled, DEFAULT_RIM_LIGHT_SETTINGS.enabled),
+        color: normalizeColor(lighting.rim?.color, DEFAULT_RIM_LIGHT_SETTINGS.color),
+        intensity: normalizeNumber(lighting.rim?.intensity, DEFAULT_RIM_LIGHT_SETTINGS.intensity, 0, 20),
+        position: normalizePosition(lighting.rim?.position, DEFAULT_RIM_LIGHT_SETTINGS.position)
       },
       spot: {
         enabled: normalizeBoolean(lighting.spot?.enabled, DEFAULT_THEME_SETTINGS.lighting.spot.enabled),

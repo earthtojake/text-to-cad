@@ -1,0 +1,129 @@
+{
+  "_comment": "Reveal-stage presentation theme for the hypercar. Authored, not a built-in preset: the default technical/workbench theme is a diagnostic look and makes a beauty render read as a QA screenshot. Environment HDRIs are remote URLs and unavailable offline, so the whole look is driven by explicit lights. Edges are kept on but very dark and low-contrast so shutlines read as fine panel gaps instead of CAD linework. NOTE: edge styling is NOT a theme key -- the snapshot CLI rejects a theme JSON containing `edges` (\"edges belongs in display JSON\"). It now lives in presentation_display.json beside this file; pass it as the job's `display`.",
+  "colorMode": "dark",
+  "projection": "perspective",
+  "materials": {
+    "defaultColor": "#c0121e",
+    "fillColors": [
+      "#c0121e"
+    ],
+    "cycleColors": false,
+    "overrideSourceColors": false,
+    "tintMode": "blend",
+    "tintStrength": 0,
+    "saturation": 1.0,
+    "contrast": 1.1,
+    "brightness": 1.16,
+    "roughness": 0.38,
+    "metalness": 0.1,
+    "clearcoat": 0.72,
+    "clearcoatRoughness": 0.16,
+    "opacity": 1,
+    "envMapIntensity": 0.0,
+    "emissiveIntensity": 0.04
+  },
+  "background": {
+    "type": "radial",
+    "solidColor": "#0c0e11",
+    "linearStart": "#171a1f",
+    "linearEnd": "#08090b",
+    "linearAngle": 135,
+    "radialInner": "#232830",
+    "radialOuter": "#0a0b0e"
+  },
+  "floor": {
+    "mode": "stage",
+    "enabled": true,
+    "followModel": true,
+    "color": "#171B21",
+    "roughness": 0.42,
+    "reflectivity": 0.34,
+    "shadowOpacity": 0.72,
+    "horizonBlend": 0.42,
+    "gridCenterColor": "#5a5f66",
+    "gridCellColor": "#2a2e34",
+    "gridOpacity": 0.0,
+    "gridDensity": 1,
+    "grid": {
+      "enabled": false,
+      "centerColor": "#5a5f66",
+      "cellColor": "#2a2e34",
+      "opacity": 0.0,
+      "density": 1
+    }
+  },
+  "environment": {
+    "enabled": false,
+    "presetId": "studio-hdri-43",
+    "intensity": 0.6,
+    "rotationY": -0.35,
+    "useAsBackground": false
+  },
+  "lighting": {
+    "toneMappingExposure": 1.28,
+    "directional": {
+      "enabled": true,
+      "color": "#fff6ea",
+      "intensity": 2.7,
+      "position": {
+        "x": 2600,
+        "y": -2200,
+        "z": 3000
+      }
+    },
+    "fill": {
+      "enabled": true,
+      "color": "#8fa6bd",
+      "intensity": 1.6,
+      "position": {
+        "x": -2800,
+        "y": -1600,
+        "z": 900
+      }
+    },
+    "rim": {
+      "enabled": true,
+      "color": "#dCe8f7",
+      "intensity": 2.8,
+      "position": {
+        "x": -3000,
+        "y": 2600,
+        "z": 1500
+      }
+    },
+    "spot": {
+      "enabled": true,
+      "color": "#ffffff",
+      "intensity": 1.1,
+      "angle": 0.85,
+      "distance": 0,
+      "position": {
+        "x": 400,
+        "y": 300,
+        "z": 4200
+      }
+    },
+    "point": {
+      "enabled": true,
+      "color": "#9ec2e8",
+      "intensity": 0.55,
+      "distance": 0,
+      "position": {
+        "x": -2400,
+        "y": 1200,
+        "z": -400
+      }
+    },
+    "ambient": {
+      "enabled": true,
+      "color": "#aebdcc",
+      "intensity": 0.55
+    },
+    "hemisphere": {
+      "enabled": true,
+      "skyColor": "#c4d3e2",
+      "groundColor": "#0e1014",
+      "intensity": 1.15
+    }
+  }
+}

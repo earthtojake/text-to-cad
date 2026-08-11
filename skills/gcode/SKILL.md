@@ -58,10 +58,6 @@ python scripts/gcode_tool.py validate \
   --json
 ```
 
-## CAD Viewer Handoff
-
-After completing G-code work that creates or modifies a plain `.gcode`, you must ALWAYS hand the explicit file path to `$cad-viewer` when that skill is installed. `$cad-viewer` must start CAD Viewer if it is not already running and return link(s) to the relevant created or updated file(s); the preview is diagnostic only and does not replace this skill's static validation. If `$cad-viewer` is unavailable or startup fails, report that instead of silently omitting the handoff.
-
 ## Profile Contract
 
 Every slice requires a wrapper profile JSON with an absolute native slicer profile path:
@@ -122,7 +118,11 @@ Preferred slicer backend order is `orcaslicer`, `prusa-slicer`, then `curaengine
 
 Pass `.stl`, `.obj`, and unsliced `.3mf` directly to the slicer. Convert `.ply`, `.glb`, and `.gltf` to temporary STL at execution time with optional `trimesh`; if `trimesh` is unavailable, ask the user to install it or provide `.stl`, `.obj`, or unsliced `.3mf`.
 
-Reject `.step`, `.stp`, `.dxf`, `.svg`, `.urdf`, and `.sdf` in v1. Use the existing CAD/render workflows to convert those to a supported mesh format before using this skill.
+Reject `.step`, `.stp`, `.dxf`, `.svg`, `.urdf`, and `.sdf` in v1. `inspect` and `slice` fail with a structured `remediation` object naming the skill and command that produce a sliceable mesh; use it instead of inferring a conversion workflow:
+
+- `.step`, `.stp`: boundary-representation CAD, not a mesh. Export an STL sidecar with `$cad` (`python scripts/step --kind part <input> --stl <output>.stl`, or target the generator with `python scripts/step <model>.step.py --stl <output>.stl`), then slice the exported `.stl` here.
+- `.dxf`, `.svg`: 2D drawings with no 2D-to-mesh conversion in this toolchain. Model the 3D solid in `$cad` with `gen_step()` and export an STL sidecar, then slice that. If the part is a flat cut rather than a print, use `$sendcutsend` instead of this skill.
+- `.urdf`, `.sdf`: robot descriptions that reference per-link mesh files. Slice the referenced `.stl`/`.obj` meshes one at a time; regenerate stale or missing ones from the owning CAD source with `$cad` first. Use `$urdf` or `$sdf` for the robot description itself.
 
 Read `references/slicer-backends.md` when backend behavior, profile expectations, or source links matter.
 

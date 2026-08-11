@@ -81,22 +81,37 @@ def _file_ref_relative_to_cad_dir(file_ref: str, *, cad_dir: str, cad_root: Path
 
 
 def _resolve_srdf_urdf_path(srdf_source: SrdfSource, *, srdf_path: Path, repo_root: Path) -> Path:
-    raw_value = str(srdf_source.urdf_ref or "").strip()
-    if not raw_value:
-        raise MotionProtocolError("SRDF must include tcad:urdf metadata")
-    if "\\" in raw_value:
-        raise MotionProtocolError("SRDF tcad:urdf path must use POSIX '/' separators")
-    raw_path = Path(raw_value)
-    if raw_path.is_absolute():
-        raise MotionProtocolError("SRDF tcad:urdf path must be relative")
-    candidate = (srdf_path.parent / raw_path).resolve()
-    if not _path_is_inside(candidate, repo_root):
-        raise MotionProtocolError(f"SRDF tcad:urdf path must stay inside the repository: {raw_value}")
-    if candidate.suffix.lower() != ".urdf":
-        raise MotionProtocolError(f"SRDF tcad:urdf path must end in .urdf: {raw_value}")
-    if not candidate.is_file():
-        raise MotionProtocolError(f"SRDF tcad:urdf file does not exist: {raw_value}")
-    return candidate
+    # An SRDF pairs with the same-directory URDF whose root <robot name>
+    # matches; the directory sits inside the repository by construction.
+    del repo_root
+    robot_name = str(srdf_source.robot_name or "").strip()
+    matches = [
+        candidate
+        for candidate in sorted(srdf_path.parent.glob("*.urdf"))
+        if _urdf_root_name(candidate) == robot_name
+    ]
+    if not matches:
+        raise MotionProtocolError(
+            f"no .urdf in {srdf_path.parent} declares robot name {robot_name!r}; "
+            "an SRDF pairs with the same-folder URDF whose robot name matches"
+        )
+    if len(matches) > 1:
+        raise MotionProtocolError(
+            f"multiple .urdf files in {srdf_path.parent} declare robot name {robot_name!r}: "
+            f"{[str(match) for match in matches]!r}"
+        )
+    return matches[0]
+
+
+def _urdf_root_name(urdf_path: Path) -> str | None:
+    try:
+        for _event, element in ET.iterparse(str(urdf_path), events=("start",)):
+            if element.tag != "robot":
+                return None
+            return str(element.attrib.get("name") or "").strip()
+    except (OSError, ET.ParseError):
+        return None
+    return None
 
 
 def _urdf_robot(urdf_path: Path) -> dict[str, Any]:
@@ -337,7 +352,7 @@ def _optional_object(value: Any, *, label: str) -> dict[str, Any]:
 
 def _validate_srdf_inventory(metadata: dict[str, Any], *, robot: dict[str, Any]) -> dict[str, Any]:
     if str(metadata.get("robotName") or "").strip() != str(robot.get("name") or "").strip():
-        raise MotionProtocolError("SRDF robotName must match the linked URDF robot name")
+        raise MotionProtocolError("SRDF robotName must match the paired URDF robot name")
 
     link_names = robot.get("links")
     joint_payload = robot.get("joints")
@@ -428,7 +443,6 @@ def _srdf_inventory_from_source(srdf_source: SrdfSource, *, srdf_path: Path, urd
                 "name": group_state.name,
                 "group": group_state.group,
                 "jointValuesByName": group_state.joint_values_by_name,
-                "jointValuesByNameRad": group_state.joint_values_by_name,
             }
             for group_state in srdf_source.group_states
         ],

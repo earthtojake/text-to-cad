@@ -11,12 +11,13 @@ GLB/topology artifacts, and hosted Blob uploads are backend concerns; use
 
 Use query params only for shareable state that should survive copying a URL:
 
-- `file`: active catalog entry, always relative to the active `dir` directory.
-- `dir`: local filesystem directory to scan. It may be absolute or relative to
-  the directory where the Viewer server was started. When omitted, the Viewer
-  uses the active directory remembered for the tab, or the directory where the
-  server was started when that is the only active directory.
+- `file`: active catalog entry, always relative to the directory in the URL path.
+  The path itself is the directory the Viewer scans — there is no `dir` param on
+  the page URL (`dir` survives only inside `/__cad/asset` request URLs).
 - `moveit2Ws`: explicit MoveIt2 websocket override for local or hosted sessions.
+- `resetTips`: debug-only. Clears the record of seen one-shot tutorial tips so
+  they fire again. It applies once during bootstrap and is then stripped from
+  the address bar, so it is a reset action rather than a persistent mode.
 
 Do not put dense viewer state, panel state, drawing state, or per-file controls
 in the URL.
@@ -28,8 +29,14 @@ unrelated CAD Viewer sessions, so it should only hold global preferences.
 
 Current intended use:
 
-- `cad-viewer:theme`: global saved-theme library, active theme id, and saved
-  appearance settings.
+- `cad-viewer:theme`: the active theme id (`system`, a built-in preset id, or
+  `custom`) plus the single custom settings blob, if the user has edited one.
+  Presets are read-only and are never stored — only named. The key is absent
+  while the theme is `system` with no custom slot.
+- `cad-viewer:tutorial-tips:v1`: ids of the one-shot tutorial tips the user has
+  dismissed. A tip is recorded only when its close button is pressed — clicking
+  away, Escape, and reloads all leave it unrecorded, so it comes back on the next
+  chance until it is actually acknowledged. Cleared by `?resetTips=1`.
 
 Avoid adding file-specific state to `localStorage`. If the value depends on the
 selected file, the active root directory, a generated asset hash, or a tab
@@ -60,8 +67,9 @@ Current `cad-viewer:directory-session:v1` fields:
 - `fileSheetOpen`: app-wide file sheet open/closed state.
 - `fileSheetWidthPx`: app-wide custom file sheet width, stored only when it
   differs from the default.
-- `theme`: app-wide unsaved theme settings for the current tab. Saved theme
-  presets and the active saved preset id still belong to `localStorage`.
+- `theme`: a directory-level theme override for the current tab, in the same
+  `{themeId, custom}` shape as the global key. The global theme itself belongs
+  to `localStorage`.
 
 `cad-viewer:active-dir:v1` stores the tab's preferred directory after a `?dir=`
 URL is loaded or a directory is selected.

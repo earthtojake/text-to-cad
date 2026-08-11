@@ -9,7 +9,9 @@ import {
 } from "./camera.js";
 import {
   cloneThemeSettings,
+  DEFAULT_FLOOR_AXIS_SETTINGS,
   DEFAULT_FLOOR_GRID_SETTINGS,
+  FLOOR_AXIS_RADIUS_MULTIPLE,
   getEnvironmentPresetById,
   MAX_FLOOR_GRID_DENSITY,
   MIN_FLOOR_GRID_DENSITY,
@@ -49,7 +51,7 @@ export const SHARED_RENDER_OPTION_KEYS = Object.freeze([
  * helpers after snapshot or viewer code has already chosen defaults.
  *
  * @typedef {Object} SharedRenderOptions
- * @property {Object|null} themeSettings Explicit, normalized appearance settings.
+ * @property {Object|null} themeSettings Explicit, normalized theme settings.
  * @property {Object|null} display Explicit display settings.
  * @property {Object|null} camera Explicit camera/view state.
  * @property {Object|null} framing Explicit framing settings.
@@ -108,17 +110,17 @@ export function inferRenderSceneScale({
     : RENDER_SCENE_SCALE.CAD;
 }
 
-export function resolveAppearanceJobConfig(job = {}, { defaultThemeId = "workbench" } = {}) {
-  if (typeof job.appearance === "string") {
+export function resolveThemeJobConfig(job = {}, { defaultThemeId = "workbench" } = {}) {
+  if (typeof job.theme === "string") {
     return {
-      themeId: job.appearance,
+      themeId: job.theme,
       settings: null
     };
   }
-  if (job.appearance && typeof job.appearance === "object" && !Array.isArray(job.appearance)) {
+  if (job.theme && typeof job.theme === "object" && !Array.isArray(job.theme)) {
     return {
       themeId: defaultThemeId,
-      settings: job.appearance
+      settings: job.theme
     };
   }
   return {
@@ -127,13 +129,17 @@ export function resolveAppearanceJobConfig(job = {}, { defaultThemeId = "workben
   };
 }
 
-export function resolveAppearanceSettings(job = {}, { defaultThemeId = "workbench" } = {}) {
-  const appearance = resolveAppearanceJobConfig(job, { defaultThemeId });
-  const themeSettings = cloneThemeSettings(appearance.themeId || defaultThemeId);
-  const normalized = normalizeThemeSettings(appearance.settings || themeSettings);
-  return typeof job.appearance === "string"
-    ? resolveThemeSettingsForColorMode(normalized, { prefersDark: false })
-    : normalized;
+export function resolveThemeSettings(job = {}, { defaultThemeId = "workbench" } = {}) {
+  const theme = resolveThemeJobConfig(job, { defaultThemeId });
+  const themeSettings = cloneThemeSettings(theme.themeId || defaultThemeId);
+  const normalized = normalizeThemeSettings(theme.settings || themeSettings);
+  // Applied for object themes too, not just saved-theme-id strings.
+  // resolveThemeSettingsForColorMode is the ONLY consumer of colorMode, so
+  // skipping it here made colorMode an accepted-but-inert key in theme
+  // JSON: "light" and "dark" produced byte-identical renders. For settings
+  // without an explicit modeColors block this is the identity, because
+  // normalizeThemeModeColors derives modeColors from the settings themselves.
+  return resolveThemeSettingsForColorMode(normalized, { prefersDark: false });
 }
 
 export function resolveRenderView(camera = "iso", viewPresets = RENDER_VIEW_PRESETS, {
@@ -289,6 +295,30 @@ export function applyLighting(scene, themeSettings) {
   directional.castShadow = true;
   addIfEnabled(directional, lighting.directional?.enabled !== false);
 
+  // Fill and rim mirror the interactive viewer's soft secondary directionals;
+  // normalized themes always carry them, legacy raw settings simply omit them.
+  const fill = new THREE.DirectionalLight(
+    lighting.fill?.color || "#6b7f95",
+    toFiniteNumber(lighting.fill?.intensity, 0)
+  );
+  fill.position.set(
+    toFiniteNumber(lighting.fill?.position?.x, 120),
+    toFiniteNumber(lighting.fill?.position?.y, 80),
+    toFiniteNumber(lighting.fill?.position?.z, 210)
+  );
+  addIfEnabled(fill, lighting.fill?.enabled === true);
+
+  const rim = new THREE.DirectionalLight(
+    lighting.rim?.color || "#6db6e8",
+    toFiniteNumber(lighting.rim?.intensity, 0)
+  );
+  rim.position.set(
+    toFiniteNumber(lighting.rim?.position?.x, -260),
+    toFiniteNumber(lighting.rim?.position?.y, 240),
+    toFiniteNumber(lighting.rim?.position?.z, 180)
+  );
+  addIfEnabled(rim, lighting.rim?.enabled === true);
+
   const spot = new THREE.SpotLight(
     lighting.spot?.color || "#ffffff",
     toFiniteNumber(lighting.spot?.intensity, 0),
@@ -328,12 +358,25 @@ export function addFloor(scene, bounds, themeSettings, sceneScale, settingsBySca
     ? floor.grid
     : {};
   const gridEnabled = gridSettings.enabled === true || mode === THEME_FLOOR_MODES.GRID;
-  if (!floorEnabled && !gridEnabled) {
+  const axisSettings = floor.axis && typeof floor.axis === "object" && !Array.isArray(floor.axis)
+    ? floor.axis
+    : {};
+  const axisEnabled = axisSettings.enabled === true;
+  if (!floorEnabled && !gridEnabled && !axisEnabled) {
     return;
   }
   const settings = renderSceneScaleSettings(sceneScale, settingsByScale);
   const { center, radius } = centerAndRadiusFromBounds(bounds, sceneScale, settingsByScale);
-  const minZ = Array.isArray(bounds?.min) ? toFiniteNumber(bounds.min[2]) : 0;
+  // The stage floor sits at world z=0, matching the viewer
+  // (resolveRuntimeModelFloorZ in lib/viewer/modelRuntime.js). This path used to
+  // glue the floor to bounds.min[2], which silently re-grounded EVERY model: a
+  // part authored 200 mm above the floor rendered as if it were resting on it,
+  // and snapshots could never agree with the viewer about whether something was
+  // grounded. Follow the model only downward, so geometry below z=0 pushes the
+  // floor down rather than clipping through it.
+  const boundsMinZ = Array.isArray(bounds?.min) ? toFiniteNumber(bounds.min[2]) : 0;
+  const followModel = floor.followModel !== false;
+  const minZ = followModel ? Math.min(0, boundsMinZ) : 0;
   const gridSize = Math.max(radius * 3, settings.minFloorSize);
   if (gridEnabled) {
     const gridDensity = clamp(
@@ -361,6 +404,30 @@ export function addFloor(scene, bounds, themeSettings, sceneScale, settingsBySca
     grid.rotation.x = Math.PI / 2;
     grid.position.set(center.x, center.y, minZ - 0.02);
     scene.add(grid);
+  }
+  if (axisEnabled) {
+    // Vertical line through the world origin, matching the viewer's
+    // updateOriginAxis so a snapshot shows the same reference the viewer does,
+    // depth-tested so model surfaces in front of it hide it.
+    const axisLength = Math.max(radius, 1) * FLOOR_AXIS_RADIUS_MULTIPLE;
+    const axis = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, -axisLength),
+        new THREE.Vector3(0, 0, axisLength)
+      ]),
+      new THREE.LineBasicMaterial({
+        color: axisSettings.color
+          || gridSettings.centerColor
+          || floor.gridCenterColor
+          || DEFAULT_FLOOR_GRID_SETTINGS.gridCenterColor,
+        transparent: true,
+        opacity: clamp(toFiniteNumber(axisSettings.opacity, DEFAULT_FLOOR_AXIS_SETTINGS.opacity), 0, 1),
+        depthWrite: false,
+        toneMapped: false
+      })
+    );
+    axis.position.set(0, 0, minZ);
+    scene.add(axis);
   }
   if (!floorEnabled) {
     return;

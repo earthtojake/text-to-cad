@@ -1,0 +1,979 @@
+# Falcon Heavy Reconstruction — Part Hierarchy
+
+> **Educational, non-functional public-source reconstruction. Not suitable for manufacture, propulsion, testing, or operational engineering.**
+
+Generated from the live `gen_step()` compound trees by `gen_hierarchy.py`;
+numbered repeats are collapsed with `_NN` and a count. Labels carry their
+geometry status (`__photogrammetric`, `__schematic`, `__decorative`,
+`__placeholder`, `__nonfunctional`) — see PROVENANCE.md for the key.
+
+## `falcon_heavy.step.py` — 2142 parts
+
+### center_core_group (693 parts)
+
+- `core_aft_skirt_octaweb_shell__photogrammetric`
+- `core_engine_bay_heat_shield_deck__schematic`
+- `core_tank_barrel__white_livery__photogrammetric`
+- `core_tank_band_NN__decorative` × 4
+- `core_raceway_NN__photogrammetric` × 2
+- `core_raceway_clamp_1_NN__decorative` × 6
+- `core_raceway_clamp_2_NN__decorative` × 6
+- `core_logo_panel__decorative_livery`
+- `core_flag_panel__decorative_livery`
+- `core_landing_leg_NN__stowed__photogrammetric` × 4
+- `core_leg_hold_down_shoe_NN__schematic` × 4
+- `core_leg_upper_fairing_NN__photogrammetric` × 4
+- `core_grid_fin_frame_NN__titanium__photogrammetric` × 4
+- `core_grid_fin_rib_1_NN__schematic` × 4
+- `core_grid_fin_actuator_hub_NN__schematic` × 4
+- `core_grid_fin_rib_2_NN__schematic` × 4
+- `core_grid_fin_rib_3_NN__schematic` × 4
+- `core_grid_fin_rib_4_NN__schematic` × 4
+- `nozzle_liner__dark_interior__decorative_thickness` × 9
+- `nozzle_regen_jacket__photogrammetric` × 9
+- `bell_stiffener_band_NN__decorative` × 54
+- `heat_tint_band_straw__decorative` × 9
+- `heat_tint_band_bronze__decorative` × 9
+- `heat_tint_band_blue__decorative` × 9
+- `nozzle_exit_stiffener_ring__photogrammetric` × 9
+- `chamber_liner__dark_interior__decorative_thickness` × 9
+- `chamber_envelope__photogrammetric` × 9
+- `chamber_interior_cap__decorative` × 9
+- `chamber_band_NN__decorative` × 27
+- `injector_dome__exterior_only__no_element_detail` × 9
+- `injector_dome_flange__photogrammetric` × 9
+- `lox_dome_inlet_neck__photogrammetric` × 9
+- `lox_dome_inlet_flange__simplified` × 9
+- `thrust_cone__photogrammetric` × 9
+- `thrust_cone_gusset_45deg__schematic` × 9
+- `thrust_cone_gusset_135deg__schematic` × 9
+- `thrust_cone_gusset_225deg__schematic` × 9
+- `thrust_cone_gusset_315deg__schematic` × 9
+- `gimbal_block__simplified_exterior` × 9
+- `gimbal_cross_pin_x__simplified` × 9
+- `gimbal_cross_pin_y__simplified` × 9
+- `vehicle_mount_plate__simplified` × 9
+- `gimbal_ear_x-120__simplified` × 9
+- `gimbal_ear_y-120__simplified` × 9
+- `gimbal_ear_x120__simplified` × 9
+- `gimbal_ear_y120__simplified` × 9
+- `mount_boss_-105_-105__simplified` × 9
+- `mount_boss_-105_NN__simplified` × 9
+- `mount_boss_105_-105__simplified` × 9
+- `mount_boss_105_NN__simplified` × 9
+- `tvc_clevis_bracket_60deg__photogrammetric` × 9
+- `tvc_pin_60deg__simplified` × 9
+- `tvc_actuator_housing_60deg__schematic` × 9
+- `tvc_actuator_rod_end_60deg__decorative` × 9
+- `tvc_clevis_bracket_120deg__photogrammetric` × 9
+- `tvc_pin_120deg__simplified` × 9
+- `tvc_actuator_housing_120deg__schematic` × 9
+- `tvc_actuator_rod_end_120deg__decorative` × 9
+- `turbopump_housing__exterior_placeholder__no_internals` × 9
+- `lox_pump_volute__simplified_exterior` × 9
+- `rp1_pump_volute__simplified_exterior` × 9
+- `turbine_housing__exterior_placeholder__no_internals` × 9
+- `pump_inlet_dome__exterior_placeholder` × 9
+- `pump_case_flange_NN__decorative` × 27
+- `pump_mount_bracket_NN__schematic` × 18
+- `pump_sensor_module__decorative` × 9
+- `gas_generator_body__exterior_placeholder__no_internals` × 9
+- `gas_generator_dome__exterior_placeholder__no_internals` × 9
+- `gg_flange__decorative` × 9
+- `gg_lox_feed_line__schematic_routing` × 9
+- `gg_fuel_feed_line__schematic_routing` × 9
+- `gg_lox_valve_housing__schematic__no_internals` × 9
+- `gg_fuel_valve_housing__schematic__no_internals` × 9
+- `turbine_exhaust_duct__photogrammetric` × 9
+- `exhaust_duct_exit_skirt__photogrammetric` × 9
+- `exhaust_duct_bracket_NN__schematic` × 18
+- `exhaust_heat_shield_panel__photogrammetric` × 9
+- `interstage_shell__black_livery__photogrammetric`
+- `interstage_avionics_module_NN__schematic_placeholder` × 3
+
+### port_booster_group (690 parts)
+
+- `port_aft_skirt_octaweb_shell__photogrammetric`
+- `port_engine_bay_heat_shield_deck__schematic`
+- `port_tank_barrel__white_livery__photogrammetric`
+- `port_tank_band_NN__decorative` × 4
+- `port_raceway_NN__photogrammetric` × 2
+- `port_raceway_clamp_1_NN__decorative` × 6
+- `port_raceway_clamp_2_NN__decorative` × 6
+- `port_logo_panel__decorative_livery`
+- `port_flag_panel__decorative_livery`
+- `port_landing_leg_NN__stowed__photogrammetric` × 4
+- `port_leg_hold_down_shoe_NN__schematic` × 4
+- `port_leg_upper_fairing_NN__photogrammetric` × 4
+- `port_grid_fin_frame_NN__titanium__photogrammetric` × 4
+- `port_grid_fin_rib_1_NN__schematic` × 4
+- `port_grid_fin_actuator_hub_NN__schematic` × 4
+- `port_grid_fin_rib_2_NN__schematic` × 4
+- `port_grid_fin_rib_3_NN__schematic` × 4
+- `port_grid_fin_rib_4_NN__schematic` × 4
+- `nozzle_liner__dark_interior__decorative_thickness` × 9
+- `nozzle_regen_jacket__photogrammetric` × 9
+- `bell_stiffener_band_NN__decorative` × 54
+- `heat_tint_band_straw__decorative` × 9
+- `heat_tint_band_bronze__decorative` × 9
+- `heat_tint_band_blue__decorative` × 9
+- `nozzle_exit_stiffener_ring__photogrammetric` × 9
+- `chamber_liner__dark_interior__decorative_thickness` × 9
+- `chamber_envelope__photogrammetric` × 9
+- `chamber_interior_cap__decorative` × 9
+- `chamber_band_NN__decorative` × 27
+- `injector_dome__exterior_only__no_element_detail` × 9
+- `injector_dome_flange__photogrammetric` × 9
+- `lox_dome_inlet_neck__photogrammetric` × 9
+- `lox_dome_inlet_flange__simplified` × 9
+- `thrust_cone__photogrammetric` × 9
+- `thrust_cone_gusset_45deg__schematic` × 9
+- `thrust_cone_gusset_135deg__schematic` × 9
+- `thrust_cone_gusset_225deg__schematic` × 9
+- `thrust_cone_gusset_315deg__schematic` × 9
+- `gimbal_block__simplified_exterior` × 9
+- `gimbal_cross_pin_x__simplified` × 9
+- `gimbal_cross_pin_y__simplified` × 9
+- `vehicle_mount_plate__simplified` × 9
+- `gimbal_ear_x-120__simplified` × 9
+- `gimbal_ear_y-120__simplified` × 9
+- `gimbal_ear_x120__simplified` × 9
+- `gimbal_ear_y120__simplified` × 9
+- `mount_boss_-105_-105__simplified` × 9
+- `mount_boss_-105_NN__simplified` × 9
+- `mount_boss_105_-105__simplified` × 9
+- `mount_boss_105_NN__simplified` × 9
+- `tvc_clevis_bracket_60deg__photogrammetric` × 9
+- `tvc_pin_60deg__simplified` × 9
+- `tvc_actuator_housing_60deg__schematic` × 9
+- `tvc_actuator_rod_end_60deg__decorative` × 9
+- `tvc_clevis_bracket_120deg__photogrammetric` × 9
+- `tvc_pin_120deg__simplified` × 9
+- `tvc_actuator_housing_120deg__schematic` × 9
+- `tvc_actuator_rod_end_120deg__decorative` × 9
+- `turbopump_housing__exterior_placeholder__no_internals` × 9
+- `lox_pump_volute__simplified_exterior` × 9
+- `rp1_pump_volute__simplified_exterior` × 9
+- `turbine_housing__exterior_placeholder__no_internals` × 9
+- `pump_inlet_dome__exterior_placeholder` × 9
+- `pump_case_flange_NN__decorative` × 27
+- `pump_mount_bracket_NN__schematic` × 18
+- `pump_sensor_module__decorative` × 9
+- `gas_generator_body__exterior_placeholder__no_internals` × 9
+- `gas_generator_dome__exterior_placeholder__no_internals` × 9
+- `gg_flange__decorative` × 9
+- `gg_lox_feed_line__schematic_routing` × 9
+- `gg_fuel_feed_line__schematic_routing` × 9
+- `gg_lox_valve_housing__schematic__no_internals` × 9
+- `gg_fuel_valve_housing__schematic__no_internals` × 9
+- `turbine_exhaust_duct__photogrammetric` × 9
+- `exhaust_duct_exit_skirt__photogrammetric` × 9
+- `exhaust_duct_bracket_NN__schematic` × 18
+- `exhaust_heat_shield_panel__photogrammetric` × 9
+- `port_nosecone__white__photogrammetric`
+
+### starboard_booster_group (690 parts)
+
+- `stbd_aft_skirt_octaweb_shell__photogrammetric`
+- `stbd_engine_bay_heat_shield_deck__schematic`
+- `stbd_tank_barrel__white_livery__photogrammetric`
+- `stbd_tank_band_NN__decorative` × 4
+- `stbd_raceway_NN__photogrammetric` × 2
+- `stbd_raceway_clamp_1_NN__decorative` × 6
+- `stbd_raceway_clamp_2_NN__decorative` × 6
+- `stbd_logo_panel__decorative_livery`
+- `stbd_flag_panel__decorative_livery`
+- `stbd_landing_leg_NN__stowed__photogrammetric` × 4
+- `stbd_leg_hold_down_shoe_NN__schematic` × 4
+- `stbd_leg_upper_fairing_NN__photogrammetric` × 4
+- `stbd_grid_fin_frame_NN__titanium__photogrammetric` × 4
+- `stbd_grid_fin_rib_1_NN__schematic` × 4
+- `stbd_grid_fin_actuator_hub_NN__schematic` × 4
+- `stbd_grid_fin_rib_2_NN__schematic` × 4
+- `stbd_grid_fin_rib_3_NN__schematic` × 4
+- `stbd_grid_fin_rib_4_NN__schematic` × 4
+- `nozzle_liner__dark_interior__decorative_thickness` × 9
+- `nozzle_regen_jacket__photogrammetric` × 9
+- `bell_stiffener_band_NN__decorative` × 54
+- `heat_tint_band_straw__decorative` × 9
+- `heat_tint_band_bronze__decorative` × 9
+- `heat_tint_band_blue__decorative` × 9
+- `nozzle_exit_stiffener_ring__photogrammetric` × 9
+- `chamber_liner__dark_interior__decorative_thickness` × 9
+- `chamber_envelope__photogrammetric` × 9
+- `chamber_interior_cap__decorative` × 9
+- `chamber_band_NN__decorative` × 27
+- `injector_dome__exterior_only__no_element_detail` × 9
+- `injector_dome_flange__photogrammetric` × 9
+- `lox_dome_inlet_neck__photogrammetric` × 9
+- `lox_dome_inlet_flange__simplified` × 9
+- `thrust_cone__photogrammetric` × 9
+- `thrust_cone_gusset_45deg__schematic` × 9
+- `thrust_cone_gusset_135deg__schematic` × 9
+- `thrust_cone_gusset_225deg__schematic` × 9
+- `thrust_cone_gusset_315deg__schematic` × 9
+- `gimbal_block__simplified_exterior` × 9
+- `gimbal_cross_pin_x__simplified` × 9
+- `gimbal_cross_pin_y__simplified` × 9
+- `vehicle_mount_plate__simplified` × 9
+- `gimbal_ear_x-120__simplified` × 9
+- `gimbal_ear_y-120__simplified` × 9
+- `gimbal_ear_x120__simplified` × 9
+- `gimbal_ear_y120__simplified` × 9
+- `mount_boss_-105_-105__simplified` × 9
+- `mount_boss_-105_NN__simplified` × 9
+- `mount_boss_105_-105__simplified` × 9
+- `mount_boss_105_NN__simplified` × 9
+- `tvc_clevis_bracket_60deg__photogrammetric` × 9
+- `tvc_pin_60deg__simplified` × 9
+- `tvc_actuator_housing_60deg__schematic` × 9
+- `tvc_actuator_rod_end_60deg__decorative` × 9
+- `tvc_clevis_bracket_120deg__photogrammetric` × 9
+- `tvc_pin_120deg__simplified` × 9
+- `tvc_actuator_housing_120deg__schematic` × 9
+- `tvc_actuator_rod_end_120deg__decorative` × 9
+- `turbopump_housing__exterior_placeholder__no_internals` × 9
+- `lox_pump_volute__simplified_exterior` × 9
+- `rp1_pump_volute__simplified_exterior` × 9
+- `turbine_housing__exterior_placeholder__no_internals` × 9
+- `pump_inlet_dome__exterior_placeholder` × 9
+- `pump_case_flange_NN__decorative` × 27
+- `pump_mount_bracket_NN__schematic` × 18
+- `pump_sensor_module__decorative` × 9
+- `gas_generator_body__exterior_placeholder__no_internals` × 9
+- `gas_generator_dome__exterior_placeholder__no_internals` × 9
+- `gg_flange__decorative` × 9
+- `gg_lox_feed_line__schematic_routing` × 9
+- `gg_fuel_feed_line__schematic_routing` × 9
+- `gg_lox_valve_housing__schematic__no_internals` × 9
+- `gg_fuel_valve_housing__schematic__no_internals` × 9
+- `turbine_exhaust_duct__photogrammetric` × 9
+- `exhaust_duct_exit_skirt__photogrammetric` × 9
+- `exhaust_duct_bracket_NN__schematic` × 18
+- `exhaust_heat_shield_panel__photogrammetric` × 9
+- `stbd_nosecone__white__photogrammetric`
+
+### booster_attachment_group (6 parts)
+
+- `port_nose_attach_block__schematic__no_internals`
+- `port_aft_attach_strut_NN__schematic__no_internals` × 2
+- `starboard_nose_attach_block__schematic__no_internals`
+- `starboard_aft_attach_strut_NN__schematic__no_internals` × 2
+
+### second_stage_group (59 parts)
+
+- `chamber_liner__dark_interior__decorative_thickness`
+- `chamber_envelope__photogrammetric`
+- `chamber_interior_cap__decorative`
+- `chamber_band_NN__decorative` × 3
+- `injector_dome__exterior_only__no_element_detail`
+- `injector_dome_flange__photogrammetric`
+- `lox_dome_inlet_neck__photogrammetric`
+- `lox_dome_inlet_flange__simplified`
+- `thrust_cone__photogrammetric`
+- `thrust_cone_gusset_45deg__schematic`
+- `thrust_cone_gusset_135deg__schematic`
+- `thrust_cone_gusset_225deg__schematic`
+- `thrust_cone_gusset_315deg__schematic`
+- `gimbal_block__simplified_exterior`
+- `gimbal_cross_pin_x__simplified`
+- `gimbal_cross_pin_y__simplified`
+- `vehicle_mount_plate__simplified`
+- `gimbal_ear_x-120__simplified`
+- `gimbal_ear_y-120__simplified`
+- `gimbal_ear_x120__simplified`
+- `gimbal_ear_y120__simplified`
+- `mount_boss_-105_-105__simplified`
+- `mount_boss_-105_01__simplified`
+- `mount_boss_105_-105__simplified`
+- `mount_boss_105_01__simplified`
+- `tvc_clevis_bracket_60deg__photogrammetric`
+- `tvc_pin_60deg__simplified`
+- `tvc_actuator_housing_60deg__schematic`
+- `tvc_actuator_rod_end_60deg__decorative`
+- `tvc_clevis_bracket_120deg__photogrammetric`
+- `tvc_pin_120deg__simplified`
+- `tvc_actuator_housing_120deg__schematic`
+- `tvc_actuator_rod_end_120deg__decorative`
+- `turbopump_housing__exterior_placeholder__no_internals`
+- `lox_pump_volute__simplified_exterior`
+- `rp1_pump_volute__simplified_exterior`
+- `turbine_housing__exterior_placeholder__no_internals`
+- `pump_inlet_dome__exterior_placeholder`
+- `pump_case_flange_NN__decorative` × 3
+- `pump_mount_bracket_NN__schematic` × 2
+- `pump_sensor_module__decorative`
+- `gas_generator_body__exterior_placeholder__no_internals`
+- `gas_generator_dome__exterior_placeholder__no_internals`
+- `gg_flange__decorative`
+- `gg_lox_feed_line__schematic_routing`
+- `gg_fuel_feed_line__schematic_routing`
+- `gg_lox_valve_housing__schematic__no_internals`
+- `gg_fuel_valve_housing__schematic__no_internals`
+- `mvac_regen_nozzle_section__schematic`
+- `mvac_niobium_skirt__estimate_2p9m_exit`
+- `mvac_exit_stiffener__decorative`
+- `second_stage_barrel__white__photogrammetric`
+- `s2_tank_band__decorative`
+- `s2_raceway__photogrammetric`
+
+### payload_fairing_group (4 parts)
+
+- `fairing_shell__composite__published_envelope`
+- `fairing_half_seam_90deg__photogrammetric`
+- `fairing_half_seam_270deg__photogrammetric`
+- `fairing_base_ring__schematic`
+
+## `falcon_heavy_cutaway.step.py` — 2164 parts
+
+### center_core_group (693 parts)
+
+- `core_aft_skirt_octaweb_shell__photogrammetric`
+- `core_engine_bay_heat_shield_deck__schematic`
+- `core_tank_barrel__white_livery__photogrammetric`
+- `core_tank_band_NN__decorative` × 4
+- `core_raceway_NN__photogrammetric` × 2
+- `core_raceway_clamp_1_NN__decorative` × 6
+- `core_raceway_clamp_2_NN__decorative` × 6
+- `core_logo_panel__decorative_livery`
+- `core_flag_panel__decorative_livery`
+- `core_landing_leg_NN__stowed__photogrammetric` × 4
+- `core_leg_hold_down_shoe_NN__schematic` × 4
+- `core_leg_upper_fairing_NN__photogrammetric` × 4
+- `core_grid_fin_frame_NN__titanium__photogrammetric` × 4
+- `core_grid_fin_rib_1_NN__schematic` × 4
+- `core_grid_fin_actuator_hub_NN__schematic` × 4
+- `core_grid_fin_rib_2_NN__schematic` × 4
+- `core_grid_fin_rib_3_NN__schematic` × 4
+- `core_grid_fin_rib_4_NN__schematic` × 4
+- `nozzle_liner__dark_interior__decorative_thickness` × 9
+- `nozzle_regen_jacket__photogrammetric` × 9
+- `bell_stiffener_band_NN__decorative` × 54
+- `heat_tint_band_straw__decorative` × 9
+- `heat_tint_band_bronze__decorative` × 9
+- `heat_tint_band_blue__decorative` × 9
+- `nozzle_exit_stiffener_ring__photogrammetric` × 9
+- `chamber_liner__dark_interior__decorative_thickness` × 9
+- `chamber_envelope__photogrammetric` × 9
+- `chamber_interior_cap__decorative` × 9
+- `chamber_band_NN__decorative` × 27
+- `injector_dome__exterior_only__no_element_detail` × 9
+- `injector_dome_flange__photogrammetric` × 9
+- `lox_dome_inlet_neck__photogrammetric` × 9
+- `lox_dome_inlet_flange__simplified` × 9
+- `thrust_cone__photogrammetric` × 9
+- `thrust_cone_gusset_45deg__schematic` × 9
+- `thrust_cone_gusset_135deg__schematic` × 9
+- `thrust_cone_gusset_225deg__schematic` × 9
+- `thrust_cone_gusset_315deg__schematic` × 9
+- `gimbal_block__simplified_exterior` × 9
+- `gimbal_cross_pin_x__simplified` × 9
+- `gimbal_cross_pin_y__simplified` × 9
+- `vehicle_mount_plate__simplified` × 9
+- `gimbal_ear_x-120__simplified` × 9
+- `gimbal_ear_y-120__simplified` × 9
+- `gimbal_ear_x120__simplified` × 9
+- `gimbal_ear_y120__simplified` × 9
+- `mount_boss_-105_-105__simplified` × 9
+- `mount_boss_-105_NN__simplified` × 9
+- `mount_boss_105_-105__simplified` × 9
+- `mount_boss_105_NN__simplified` × 9
+- `tvc_clevis_bracket_60deg__photogrammetric` × 9
+- `tvc_pin_60deg__simplified` × 9
+- `tvc_actuator_housing_60deg__schematic` × 9
+- `tvc_actuator_rod_end_60deg__decorative` × 9
+- `tvc_clevis_bracket_120deg__photogrammetric` × 9
+- `tvc_pin_120deg__simplified` × 9
+- `tvc_actuator_housing_120deg__schematic` × 9
+- `tvc_actuator_rod_end_120deg__decorative` × 9
+- `turbopump_housing__exterior_placeholder__no_internals` × 9
+- `lox_pump_volute__simplified_exterior` × 9
+- `rp1_pump_volute__simplified_exterior` × 9
+- `turbine_housing__exterior_placeholder__no_internals` × 9
+- `pump_inlet_dome__exterior_placeholder` × 9
+- `pump_case_flange_NN__decorative` × 27
+- `pump_mount_bracket_NN__schematic` × 18
+- `pump_sensor_module__decorative` × 9
+- `gas_generator_body__exterior_placeholder__no_internals` × 9
+- `gas_generator_dome__exterior_placeholder__no_internals` × 9
+- `gg_flange__decorative` × 9
+- `gg_lox_feed_line__schematic_routing` × 9
+- `gg_fuel_feed_line__schematic_routing` × 9
+- `gg_lox_valve_housing__schematic__no_internals` × 9
+- `gg_fuel_valve_housing__schematic__no_internals` × 9
+- `turbine_exhaust_duct__photogrammetric` × 9
+- `exhaust_duct_exit_skirt__photogrammetric` × 9
+- `exhaust_duct_bracket_NN__schematic` × 18
+- `exhaust_heat_shield_panel__photogrammetric` × 9
+- `interstage_shell__black_livery__photogrammetric`
+- `interstage_avionics_module_NN__schematic_placeholder` × 3
+
+### port_booster_group (690 parts)
+
+- `port_aft_skirt_octaweb_shell__photogrammetric`
+- `port_engine_bay_heat_shield_deck__schematic`
+- `port_tank_barrel__white_livery__photogrammetric`
+- `port_tank_band_NN__decorative` × 4
+- `port_raceway_NN__photogrammetric` × 2
+- `port_raceway_clamp_1_NN__decorative` × 6
+- `port_raceway_clamp_2_NN__decorative` × 6
+- `port_logo_panel__decorative_livery`
+- `port_flag_panel__decorative_livery`
+- `port_landing_leg_NN__stowed__photogrammetric` × 4
+- `port_leg_hold_down_shoe_NN__schematic` × 4
+- `port_leg_upper_fairing_NN__photogrammetric` × 4
+- `port_grid_fin_frame_NN__titanium__photogrammetric` × 4
+- `port_grid_fin_rib_1_NN__schematic` × 4
+- `port_grid_fin_actuator_hub_NN__schematic` × 4
+- `port_grid_fin_rib_2_NN__schematic` × 4
+- `port_grid_fin_rib_3_NN__schematic` × 4
+- `port_grid_fin_rib_4_NN__schematic` × 4
+- `nozzle_liner__dark_interior__decorative_thickness` × 9
+- `nozzle_regen_jacket__photogrammetric` × 9
+- `bell_stiffener_band_NN__decorative` × 54
+- `heat_tint_band_straw__decorative` × 9
+- `heat_tint_band_bronze__decorative` × 9
+- `heat_tint_band_blue__decorative` × 9
+- `nozzle_exit_stiffener_ring__photogrammetric` × 9
+- `chamber_liner__dark_interior__decorative_thickness` × 9
+- `chamber_envelope__photogrammetric` × 9
+- `chamber_interior_cap__decorative` × 9
+- `chamber_band_NN__decorative` × 27
+- `injector_dome__exterior_only__no_element_detail` × 9
+- `injector_dome_flange__photogrammetric` × 9
+- `lox_dome_inlet_neck__photogrammetric` × 9
+- `lox_dome_inlet_flange__simplified` × 9
+- `thrust_cone__photogrammetric` × 9
+- `thrust_cone_gusset_45deg__schematic` × 9
+- `thrust_cone_gusset_135deg__schematic` × 9
+- `thrust_cone_gusset_225deg__schematic` × 9
+- `thrust_cone_gusset_315deg__schematic` × 9
+- `gimbal_block__simplified_exterior` × 9
+- `gimbal_cross_pin_x__simplified` × 9
+- `gimbal_cross_pin_y__simplified` × 9
+- `vehicle_mount_plate__simplified` × 9
+- `gimbal_ear_x-120__simplified` × 9
+- `gimbal_ear_y-120__simplified` × 9
+- `gimbal_ear_x120__simplified` × 9
+- `gimbal_ear_y120__simplified` × 9
+- `mount_boss_-105_-105__simplified` × 9
+- `mount_boss_-105_NN__simplified` × 9
+- `mount_boss_105_-105__simplified` × 9
+- `mount_boss_105_NN__simplified` × 9
+- `tvc_clevis_bracket_60deg__photogrammetric` × 9
+- `tvc_pin_60deg__simplified` × 9
+- `tvc_actuator_housing_60deg__schematic` × 9
+- `tvc_actuator_rod_end_60deg__decorative` × 9
+- `tvc_clevis_bracket_120deg__photogrammetric` × 9
+- `tvc_pin_120deg__simplified` × 9
+- `tvc_actuator_housing_120deg__schematic` × 9
+- `tvc_actuator_rod_end_120deg__decorative` × 9
+- `turbopump_housing__exterior_placeholder__no_internals` × 9
+- `lox_pump_volute__simplified_exterior` × 9
+- `rp1_pump_volute__simplified_exterior` × 9
+- `turbine_housing__exterior_placeholder__no_internals` × 9
+- `pump_inlet_dome__exterior_placeholder` × 9
+- `pump_case_flange_NN__decorative` × 27
+- `pump_mount_bracket_NN__schematic` × 18
+- `pump_sensor_module__decorative` × 9
+- `gas_generator_body__exterior_placeholder__no_internals` × 9
+- `gas_generator_dome__exterior_placeholder__no_internals` × 9
+- `gg_flange__decorative` × 9
+- `gg_lox_feed_line__schematic_routing` × 9
+- `gg_fuel_feed_line__schematic_routing` × 9
+- `gg_lox_valve_housing__schematic__no_internals` × 9
+- `gg_fuel_valve_housing__schematic__no_internals` × 9
+- `turbine_exhaust_duct__photogrammetric` × 9
+- `exhaust_duct_exit_skirt__photogrammetric` × 9
+- `exhaust_duct_bracket_NN__schematic` × 18
+- `exhaust_heat_shield_panel__photogrammetric` × 9
+- `port_nosecone__white__photogrammetric`
+
+### starboard_booster_group (690 parts)
+
+- `stbd_aft_skirt_octaweb_shell__photogrammetric`
+- `stbd_engine_bay_heat_shield_deck__schematic`
+- `stbd_tank_barrel__white_livery__photogrammetric`
+- `stbd_tank_band_NN__decorative` × 4
+- `stbd_raceway_NN__photogrammetric` × 2
+- `stbd_raceway_clamp_1_NN__decorative` × 6
+- `stbd_raceway_clamp_2_NN__decorative` × 6
+- `stbd_logo_panel__decorative_livery`
+- `stbd_flag_panel__decorative_livery`
+- `stbd_landing_leg_NN__stowed__photogrammetric` × 4
+- `stbd_leg_hold_down_shoe_NN__schematic` × 4
+- `stbd_leg_upper_fairing_NN__photogrammetric` × 4
+- `stbd_grid_fin_frame_NN__titanium__photogrammetric` × 4
+- `stbd_grid_fin_rib_1_NN__schematic` × 4
+- `stbd_grid_fin_actuator_hub_NN__schematic` × 4
+- `stbd_grid_fin_rib_2_NN__schematic` × 4
+- `stbd_grid_fin_rib_3_NN__schematic` × 4
+- `stbd_grid_fin_rib_4_NN__schematic` × 4
+- `nozzle_liner__dark_interior__decorative_thickness` × 9
+- `nozzle_regen_jacket__photogrammetric` × 9
+- `bell_stiffener_band_NN__decorative` × 54
+- `heat_tint_band_straw__decorative` × 9
+- `heat_tint_band_bronze__decorative` × 9
+- `heat_tint_band_blue__decorative` × 9
+- `nozzle_exit_stiffener_ring__photogrammetric` × 9
+- `chamber_liner__dark_interior__decorative_thickness` × 9
+- `chamber_envelope__photogrammetric` × 9
+- `chamber_interior_cap__decorative` × 9
+- `chamber_band_NN__decorative` × 27
+- `injector_dome__exterior_only__no_element_detail` × 9
+- `injector_dome_flange__photogrammetric` × 9
+- `lox_dome_inlet_neck__photogrammetric` × 9
+- `lox_dome_inlet_flange__simplified` × 9
+- `thrust_cone__photogrammetric` × 9
+- `thrust_cone_gusset_45deg__schematic` × 9
+- `thrust_cone_gusset_135deg__schematic` × 9
+- `thrust_cone_gusset_225deg__schematic` × 9
+- `thrust_cone_gusset_315deg__schematic` × 9
+- `gimbal_block__simplified_exterior` × 9
+- `gimbal_cross_pin_x__simplified` × 9
+- `gimbal_cross_pin_y__simplified` × 9
+- `vehicle_mount_plate__simplified` × 9
+- `gimbal_ear_x-120__simplified` × 9
+- `gimbal_ear_y-120__simplified` × 9
+- `gimbal_ear_x120__simplified` × 9
+- `gimbal_ear_y120__simplified` × 9
+- `mount_boss_-105_-105__simplified` × 9
+- `mount_boss_-105_NN__simplified` × 9
+- `mount_boss_105_-105__simplified` × 9
+- `mount_boss_105_NN__simplified` × 9
+- `tvc_clevis_bracket_60deg__photogrammetric` × 9
+- `tvc_pin_60deg__simplified` × 9
+- `tvc_actuator_housing_60deg__schematic` × 9
+- `tvc_actuator_rod_end_60deg__decorative` × 9
+- `tvc_clevis_bracket_120deg__photogrammetric` × 9
+- `tvc_pin_120deg__simplified` × 9
+- `tvc_actuator_housing_120deg__schematic` × 9
+- `tvc_actuator_rod_end_120deg__decorative` × 9
+- `turbopump_housing__exterior_placeholder__no_internals` × 9
+- `lox_pump_volute__simplified_exterior` × 9
+- `rp1_pump_volute__simplified_exterior` × 9
+- `turbine_housing__exterior_placeholder__no_internals` × 9
+- `pump_inlet_dome__exterior_placeholder` × 9
+- `pump_case_flange_NN__decorative` × 27
+- `pump_mount_bracket_NN__schematic` × 18
+- `pump_sensor_module__decorative` × 9
+- `gas_generator_body__exterior_placeholder__no_internals` × 9
+- `gas_generator_dome__exterior_placeholder__no_internals` × 9
+- `gg_flange__decorative` × 9
+- `gg_lox_feed_line__schematic_routing` × 9
+- `gg_fuel_feed_line__schematic_routing` × 9
+- `gg_lox_valve_housing__schematic__no_internals` × 9
+- `gg_fuel_valve_housing__schematic__no_internals` × 9
+- `turbine_exhaust_duct__photogrammetric` × 9
+- `exhaust_duct_exit_skirt__photogrammetric` × 9
+- `exhaust_duct_bracket_NN__schematic` × 18
+- `exhaust_heat_shield_panel__photogrammetric` × 9
+- `stbd_nosecone__white__photogrammetric`
+
+### booster_attachment_group (6 parts)
+
+- `port_nose_attach_block__schematic__no_internals`
+- `port_aft_attach_strut_NN__schematic__no_internals` × 2
+- `starboard_nose_attach_block__schematic__no_internals`
+- `starboard_aft_attach_strut_NN__schematic__no_internals` × 2
+
+### second_stage_group (59 parts)
+
+- `chamber_liner__dark_interior__decorative_thickness`
+- `chamber_envelope__photogrammetric`
+- `chamber_interior_cap__decorative`
+- `chamber_band_NN__decorative` × 3
+- `injector_dome__exterior_only__no_element_detail`
+- `injector_dome_flange__photogrammetric`
+- `lox_dome_inlet_neck__photogrammetric`
+- `lox_dome_inlet_flange__simplified`
+- `thrust_cone__photogrammetric`
+- `thrust_cone_gusset_45deg__schematic`
+- `thrust_cone_gusset_135deg__schematic`
+- `thrust_cone_gusset_225deg__schematic`
+- `thrust_cone_gusset_315deg__schematic`
+- `gimbal_block__simplified_exterior`
+- `gimbal_cross_pin_x__simplified`
+- `gimbal_cross_pin_y__simplified`
+- `vehicle_mount_plate__simplified`
+- `gimbal_ear_x-120__simplified`
+- `gimbal_ear_y-120__simplified`
+- `gimbal_ear_x120__simplified`
+- `gimbal_ear_y120__simplified`
+- `mount_boss_-105_-105__simplified`
+- `mount_boss_-105_01__simplified`
+- `mount_boss_105_-105__simplified`
+- `mount_boss_105_01__simplified`
+- `tvc_clevis_bracket_60deg__photogrammetric`
+- `tvc_pin_60deg__simplified`
+- `tvc_actuator_housing_60deg__schematic`
+- `tvc_actuator_rod_end_60deg__decorative`
+- `tvc_clevis_bracket_120deg__photogrammetric`
+- `tvc_pin_120deg__simplified`
+- `tvc_actuator_housing_120deg__schematic`
+- `tvc_actuator_rod_end_120deg__decorative`
+- `turbopump_housing__exterior_placeholder__no_internals`
+- `lox_pump_volute__simplified_exterior`
+- `rp1_pump_volute__simplified_exterior`
+- `turbine_housing__exterior_placeholder__no_internals`
+- `pump_inlet_dome__exterior_placeholder`
+- `pump_case_flange_NN__decorative` × 3
+- `pump_mount_bracket_NN__schematic` × 2
+- `pump_sensor_module__decorative`
+- `gas_generator_body__exterior_placeholder__no_internals`
+- `gas_generator_dome__exterior_placeholder__no_internals`
+- `gg_flange__decorative`
+- `gg_lox_feed_line__schematic_routing`
+- `gg_fuel_feed_line__schematic_routing`
+- `gg_lox_valve_housing__schematic__no_internals`
+- `gg_fuel_valve_housing__schematic__no_internals`
+- `mvac_regen_nozzle_section__schematic`
+- `mvac_niobium_skirt__estimate_2p9m_exit`
+- `mvac_exit_stiffener__decorative`
+- `second_stage_barrel__white__photogrammetric`
+- `s2_tank_band__decorative`
+- `s2_raceway__photogrammetric`
+
+### payload_fairing_group (4 parts)
+
+- `fairing_shell__composite__published_envelope`
+- `fairing_half_seam_90deg__photogrammetric`
+- `fairing_half_seam_270deg__photogrammetric`
+- `fairing_base_ring__schematic`
+
+### schematic_interior_group (22 parts)
+
+- `s1_rp1_tank_volume__schematic_nonfunctional`
+- `s1_lox_tank_volume__schematic_nonfunctional`
+- `lox_transfer_tube__simplified_schematic`
+- `s1_common_dome__schematic`
+- `s1_lox_forward_dome__schematic`
+- `copv_helium_bottle_NN__supported_placeholder__nonfunctional` × 4
+- `octaweb_radial_frame_NN__schematic` × 8
+- `s2_lox_tank_volume__schematic_nonfunctional`
+- `s2_rp1_tank_volume__schematic_nonfunctional`
+- `payload_adapter_cone__schematic_placeholder`
+- `payload_placeholder__educational`
+- `separation_interface_block__schematic__no_internals`
+
+## `falcon_heavy_exploded.step.py` — 2144 parts
+
+### center_core_group (693 parts)
+
+- `core_aft_skirt_octaweb_shell__photogrammetric`
+- `core_engine_bay_heat_shield_deck__schematic`
+- `core_tank_barrel__white_livery__photogrammetric`
+- `core_tank_band_NN__decorative` × 4
+- `core_raceway_NN__photogrammetric` × 2
+- `core_raceway_clamp_1_NN__decorative` × 6
+- `core_raceway_clamp_2_NN__decorative` × 6
+- `core_logo_panel__decorative_livery`
+- `core_flag_panel__decorative_livery`
+- `core_landing_leg_NN__stowed__photogrammetric` × 4
+- `core_leg_hold_down_shoe_NN__schematic` × 4
+- `core_leg_upper_fairing_NN__photogrammetric` × 4
+- `core_grid_fin_frame_NN__titanium__photogrammetric` × 4
+- `core_grid_fin_rib_1_NN__schematic` × 4
+- `core_grid_fin_actuator_hub_NN__schematic` × 4
+- `core_grid_fin_rib_2_NN__schematic` × 4
+- `core_grid_fin_rib_3_NN__schematic` × 4
+- `core_grid_fin_rib_4_NN__schematic` × 4
+- `nozzle_liner__dark_interior__decorative_thickness` × 9
+- `nozzle_regen_jacket__photogrammetric` × 9
+- `bell_stiffener_band_NN__decorative` × 54
+- `heat_tint_band_straw__decorative` × 9
+- `heat_tint_band_bronze__decorative` × 9
+- `heat_tint_band_blue__decorative` × 9
+- `nozzle_exit_stiffener_ring__photogrammetric` × 9
+- `chamber_liner__dark_interior__decorative_thickness` × 9
+- `chamber_envelope__photogrammetric` × 9
+- `chamber_interior_cap__decorative` × 9
+- `chamber_band_NN__decorative` × 27
+- `injector_dome__exterior_only__no_element_detail` × 9
+- `injector_dome_flange__photogrammetric` × 9
+- `lox_dome_inlet_neck__photogrammetric` × 9
+- `lox_dome_inlet_flange__simplified` × 9
+- `thrust_cone__photogrammetric` × 9
+- `thrust_cone_gusset_45deg__schematic` × 9
+- `thrust_cone_gusset_135deg__schematic` × 9
+- `thrust_cone_gusset_225deg__schematic` × 9
+- `thrust_cone_gusset_315deg__schematic` × 9
+- `gimbal_block__simplified_exterior` × 9
+- `gimbal_cross_pin_x__simplified` × 9
+- `gimbal_cross_pin_y__simplified` × 9
+- `vehicle_mount_plate__simplified` × 9
+- `gimbal_ear_x-120__simplified` × 9
+- `gimbal_ear_y-120__simplified` × 9
+- `gimbal_ear_x120__simplified` × 9
+- `gimbal_ear_y120__simplified` × 9
+- `mount_boss_-105_-105__simplified` × 9
+- `mount_boss_-105_NN__simplified` × 9
+- `mount_boss_105_-105__simplified` × 9
+- `mount_boss_105_NN__simplified` × 9
+- `tvc_clevis_bracket_60deg__photogrammetric` × 9
+- `tvc_pin_60deg__simplified` × 9
+- `tvc_actuator_housing_60deg__schematic` × 9
+- `tvc_actuator_rod_end_60deg__decorative` × 9
+- `tvc_clevis_bracket_120deg__photogrammetric` × 9
+- `tvc_pin_120deg__simplified` × 9
+- `tvc_actuator_housing_120deg__schematic` × 9
+- `tvc_actuator_rod_end_120deg__decorative` × 9
+- `turbopump_housing__exterior_placeholder__no_internals` × 9
+- `lox_pump_volute__simplified_exterior` × 9
+- `rp1_pump_volute__simplified_exterior` × 9
+- `turbine_housing__exterior_placeholder__no_internals` × 9
+- `pump_inlet_dome__exterior_placeholder` × 9
+- `pump_case_flange_NN__decorative` × 27
+- `pump_mount_bracket_NN__schematic` × 18
+- `pump_sensor_module__decorative` × 9
+- `gas_generator_body__exterior_placeholder__no_internals` × 9
+- `gas_generator_dome__exterior_placeholder__no_internals` × 9
+- `gg_flange__decorative` × 9
+- `gg_lox_feed_line__schematic_routing` × 9
+- `gg_fuel_feed_line__schematic_routing` × 9
+- `gg_lox_valve_housing__schematic__no_internals` × 9
+- `gg_fuel_valve_housing__schematic__no_internals` × 9
+- `turbine_exhaust_duct__photogrammetric` × 9
+- `exhaust_duct_exit_skirt__photogrammetric` × 9
+- `exhaust_duct_bracket_NN__schematic` × 18
+- `exhaust_heat_shield_panel__photogrammetric` × 9
+- `interstage_shell__black_livery__photogrammetric`
+- `interstage_avionics_module_NN__schematic_placeholder` × 3
+
+### port_booster_group (690 parts)
+
+- `port_aft_skirt_octaweb_shell__photogrammetric`
+- `port_engine_bay_heat_shield_deck__schematic`
+- `port_tank_barrel__white_livery__photogrammetric`
+- `port_tank_band_NN__decorative` × 4
+- `port_raceway_NN__photogrammetric` × 2
+- `port_raceway_clamp_1_NN__decorative` × 6
+- `port_raceway_clamp_2_NN__decorative` × 6
+- `port_logo_panel__decorative_livery`
+- `port_flag_panel__decorative_livery`
+- `port_landing_leg_NN__stowed__photogrammetric` × 4
+- `port_leg_hold_down_shoe_NN__schematic` × 4
+- `port_leg_upper_fairing_NN__photogrammetric` × 4
+- `port_grid_fin_frame_NN__titanium__photogrammetric` × 4
+- `port_grid_fin_rib_1_NN__schematic` × 4
+- `port_grid_fin_actuator_hub_NN__schematic` × 4
+- `port_grid_fin_rib_2_NN__schematic` × 4
+- `port_grid_fin_rib_3_NN__schematic` × 4
+- `port_grid_fin_rib_4_NN__schematic` × 4
+- `nozzle_liner__dark_interior__decorative_thickness` × 9
+- `nozzle_regen_jacket__photogrammetric` × 9
+- `bell_stiffener_band_NN__decorative` × 54
+- `heat_tint_band_straw__decorative` × 9
+- `heat_tint_band_bronze__decorative` × 9
+- `heat_tint_band_blue__decorative` × 9
+- `nozzle_exit_stiffener_ring__photogrammetric` × 9
+- `chamber_liner__dark_interior__decorative_thickness` × 9
+- `chamber_envelope__photogrammetric` × 9
+- `chamber_interior_cap__decorative` × 9
+- `chamber_band_NN__decorative` × 27
+- `injector_dome__exterior_only__no_element_detail` × 9
+- `injector_dome_flange__photogrammetric` × 9
+- `lox_dome_inlet_neck__photogrammetric` × 9
+- `lox_dome_inlet_flange__simplified` × 9
+- `thrust_cone__photogrammetric` × 9
+- `thrust_cone_gusset_45deg__schematic` × 9
+- `thrust_cone_gusset_135deg__schematic` × 9
+- `thrust_cone_gusset_225deg__schematic` × 9
+- `thrust_cone_gusset_315deg__schematic` × 9
+- `gimbal_block__simplified_exterior` × 9
+- `gimbal_cross_pin_x__simplified` × 9
+- `gimbal_cross_pin_y__simplified` × 9
+- `vehicle_mount_plate__simplified` × 9
+- `gimbal_ear_x-120__simplified` × 9
+- `gimbal_ear_y-120__simplified` × 9
+- `gimbal_ear_x120__simplified` × 9
+- `gimbal_ear_y120__simplified` × 9
+- `mount_boss_-105_-105__simplified` × 9
+- `mount_boss_-105_NN__simplified` × 9
+- `mount_boss_105_-105__simplified` × 9
+- `mount_boss_105_NN__simplified` × 9
+- `tvc_clevis_bracket_60deg__photogrammetric` × 9
+- `tvc_pin_60deg__simplified` × 9
+- `tvc_actuator_housing_60deg__schematic` × 9
+- `tvc_actuator_rod_end_60deg__decorative` × 9
+- `tvc_clevis_bracket_120deg__photogrammetric` × 9
+- `tvc_pin_120deg__simplified` × 9
+- `tvc_actuator_housing_120deg__schematic` × 9
+- `tvc_actuator_rod_end_120deg__decorative` × 9
+- `turbopump_housing__exterior_placeholder__no_internals` × 9
+- `lox_pump_volute__simplified_exterior` × 9
+- `rp1_pump_volute__simplified_exterior` × 9
+- `turbine_housing__exterior_placeholder__no_internals` × 9
+- `pump_inlet_dome__exterior_placeholder` × 9
+- `pump_case_flange_NN__decorative` × 27
+- `pump_mount_bracket_NN__schematic` × 18
+- `pump_sensor_module__decorative` × 9
+- `gas_generator_body__exterior_placeholder__no_internals` × 9
+- `gas_generator_dome__exterior_placeholder__no_internals` × 9
+- `gg_flange__decorative` × 9
+- `gg_lox_feed_line__schematic_routing` × 9
+- `gg_fuel_feed_line__schematic_routing` × 9
+- `gg_lox_valve_housing__schematic__no_internals` × 9
+- `gg_fuel_valve_housing__schematic__no_internals` × 9
+- `turbine_exhaust_duct__photogrammetric` × 9
+- `exhaust_duct_exit_skirt__photogrammetric` × 9
+- `exhaust_duct_bracket_NN__schematic` × 18
+- `exhaust_heat_shield_panel__photogrammetric` × 9
+- `port_nosecone__white__photogrammetric`
+
+### starboard_booster_group (690 parts)
+
+- `stbd_aft_skirt_octaweb_shell__photogrammetric`
+- `stbd_engine_bay_heat_shield_deck__schematic`
+- `stbd_tank_barrel__white_livery__photogrammetric`
+- `stbd_tank_band_NN__decorative` × 4
+- `stbd_raceway_NN__photogrammetric` × 2
+- `stbd_raceway_clamp_1_NN__decorative` × 6
+- `stbd_raceway_clamp_2_NN__decorative` × 6
+- `stbd_logo_panel__decorative_livery`
+- `stbd_flag_panel__decorative_livery`
+- `stbd_landing_leg_NN__stowed__photogrammetric` × 4
+- `stbd_leg_hold_down_shoe_NN__schematic` × 4
+- `stbd_leg_upper_fairing_NN__photogrammetric` × 4
+- `stbd_grid_fin_frame_NN__titanium__photogrammetric` × 4
+- `stbd_grid_fin_rib_1_NN__schematic` × 4
+- `stbd_grid_fin_actuator_hub_NN__schematic` × 4
+- `stbd_grid_fin_rib_2_NN__schematic` × 4
+- `stbd_grid_fin_rib_3_NN__schematic` × 4
+- `stbd_grid_fin_rib_4_NN__schematic` × 4
+- `nozzle_liner__dark_interior__decorative_thickness` × 9
+- `nozzle_regen_jacket__photogrammetric` × 9
+- `bell_stiffener_band_NN__decorative` × 54
+- `heat_tint_band_straw__decorative` × 9
+- `heat_tint_band_bronze__decorative` × 9
+- `heat_tint_band_blue__decorative` × 9
+- `nozzle_exit_stiffener_ring__photogrammetric` × 9
+- `chamber_liner__dark_interior__decorative_thickness` × 9
+- `chamber_envelope__photogrammetric` × 9
+- `chamber_interior_cap__decorative` × 9
+- `chamber_band_NN__decorative` × 27
+- `injector_dome__exterior_only__no_element_detail` × 9
+- `injector_dome_flange__photogrammetric` × 9
+- `lox_dome_inlet_neck__photogrammetric` × 9
+- `lox_dome_inlet_flange__simplified` × 9
+- `thrust_cone__photogrammetric` × 9
+- `thrust_cone_gusset_45deg__schematic` × 9
+- `thrust_cone_gusset_135deg__schematic` × 9
+- `thrust_cone_gusset_225deg__schematic` × 9
+- `thrust_cone_gusset_315deg__schematic` × 9
+- `gimbal_block__simplified_exterior` × 9
+- `gimbal_cross_pin_x__simplified` × 9
+- `gimbal_cross_pin_y__simplified` × 9
+- `vehicle_mount_plate__simplified` × 9
+- `gimbal_ear_x-120__simplified` × 9
+- `gimbal_ear_y-120__simplified` × 9
+- `gimbal_ear_x120__simplified` × 9
+- `gimbal_ear_y120__simplified` × 9
+- `mount_boss_-105_-105__simplified` × 9
+- `mount_boss_-105_NN__simplified` × 9
+- `mount_boss_105_-105__simplified` × 9
+- `mount_boss_105_NN__simplified` × 9
+- `tvc_clevis_bracket_60deg__photogrammetric` × 9
+- `tvc_pin_60deg__simplified` × 9
+- `tvc_actuator_housing_60deg__schematic` × 9
+- `tvc_actuator_rod_end_60deg__decorative` × 9
+- `tvc_clevis_bracket_120deg__photogrammetric` × 9
+- `tvc_pin_120deg__simplified` × 9
+- `tvc_actuator_housing_120deg__schematic` × 9
+- `tvc_actuator_rod_end_120deg__decorative` × 9
+- `turbopump_housing__exterior_placeholder__no_internals` × 9
+- `lox_pump_volute__simplified_exterior` × 9
+- `rp1_pump_volute__simplified_exterior` × 9
+- `turbine_housing__exterior_placeholder__no_internals` × 9
+- `pump_inlet_dome__exterior_placeholder` × 9
+- `pump_case_flange_NN__decorative` × 27
+- `pump_mount_bracket_NN__schematic` × 18
+- `pump_sensor_module__decorative` × 9
+- `gas_generator_body__exterior_placeholder__no_internals` × 9
+- `gas_generator_dome__exterior_placeholder__no_internals` × 9
+- `gg_flange__decorative` × 9
+- `gg_lox_feed_line__schematic_routing` × 9
+- `gg_fuel_feed_line__schematic_routing` × 9
+- `gg_lox_valve_housing__schematic__no_internals` × 9
+- `gg_fuel_valve_housing__schematic__no_internals` × 9
+- `turbine_exhaust_duct__photogrammetric` × 9
+- `exhaust_duct_exit_skirt__photogrammetric` × 9
+- `exhaust_duct_bracket_NN__schematic` × 18
+- `exhaust_heat_shield_panel__photogrammetric` × 9
+- `stbd_nosecone__white__photogrammetric`
+
+### booster_attachment_group (6 parts)
+
+- `port_nose_attach_block__schematic__no_internals`
+- `port_aft_attach_strut_NN__schematic__no_internals` × 2
+- `starboard_nose_attach_block__schematic__no_internals`
+- `starboard_aft_attach_strut_NN__schematic__no_internals` × 2
+
+### second_stage_group (59 parts)
+
+- `chamber_liner__dark_interior__decorative_thickness`
+- `chamber_envelope__photogrammetric`
+- `chamber_interior_cap__decorative`
+- `chamber_band_NN__decorative` × 3
+- `injector_dome__exterior_only__no_element_detail`
+- `injector_dome_flange__photogrammetric`
+- `lox_dome_inlet_neck__photogrammetric`
+- `lox_dome_inlet_flange__simplified`
+- `thrust_cone__photogrammetric`
+- `thrust_cone_gusset_45deg__schematic`
+- `thrust_cone_gusset_135deg__schematic`
+- `thrust_cone_gusset_225deg__schematic`
+- `thrust_cone_gusset_315deg__schematic`
+- `gimbal_block__simplified_exterior`
+- `gimbal_cross_pin_x__simplified`
+- `gimbal_cross_pin_y__simplified`
+- `vehicle_mount_plate__simplified`
+- `gimbal_ear_x-120__simplified`
+- `gimbal_ear_y-120__simplified`
+- `gimbal_ear_x120__simplified`
+- `gimbal_ear_y120__simplified`
+- `mount_boss_-105_-105__simplified`
+- `mount_boss_-105_01__simplified`
+- `mount_boss_105_-105__simplified`
+- `mount_boss_105_01__simplified`
+- `tvc_clevis_bracket_60deg__photogrammetric`
+- `tvc_pin_60deg__simplified`
+- `tvc_actuator_housing_60deg__schematic`
+- `tvc_actuator_rod_end_60deg__decorative`
+- `tvc_clevis_bracket_120deg__photogrammetric`
+- `tvc_pin_120deg__simplified`
+- `tvc_actuator_housing_120deg__schematic`
+- `tvc_actuator_rod_end_120deg__decorative`
+- `turbopump_housing__exterior_placeholder__no_internals`
+- `lox_pump_volute__simplified_exterior`
+- `rp1_pump_volute__simplified_exterior`
+- `turbine_housing__exterior_placeholder__no_internals`
+- `pump_inlet_dome__exterior_placeholder`
+- `pump_case_flange_NN__decorative` × 3
+- `pump_mount_bracket_NN__schematic` × 2
+- `pump_sensor_module__decorative`
+- `gas_generator_body__exterior_placeholder__no_internals`
+- `gas_generator_dome__exterior_placeholder__no_internals`
+- `gg_flange__decorative`
+- `gg_lox_feed_line__schematic_routing`
+- `gg_fuel_feed_line__schematic_routing`
+- `gg_lox_valve_housing__schematic__no_internals`
+- `gg_fuel_valve_housing__schematic__no_internals`
+- `mvac_regen_nozzle_section__schematic`
+- `mvac_niobium_skirt__estimate_2p9m_exit`
+- `mvac_exit_stiffener__decorative`
+- `second_stage_barrel__white__photogrammetric`
+- `s2_tank_band__decorative`
+- `s2_raceway__photogrammetric`
+
+### payload_fairing_group (4 parts)
+
+- `fairing_shell__composite__published_envelope`
+- `fairing_half_seam_90deg__photogrammetric`
+- `fairing_half_seam_270deg__photogrammetric`
+- `fairing_base_ring__schematic`
+
+### explode_guides_group (2 parts)
+
+- `explode_guide_axis_z__annotation`
+- `explode_guide_axis_x__annotation`

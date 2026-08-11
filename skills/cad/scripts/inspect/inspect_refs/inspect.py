@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from cadpy import cad_ref_syntax as syntax
-from cadpy.reporting import (
+from cadgen import cad_ref_syntax as syntax
+from cadgen.reporting import (
     EntryReportOptions,
     entry_facts_payload,
     entry_positioning_payload,
@@ -13,8 +13,8 @@ from cadpy.reporting import (
     entry_summary_payload,
     major_planes_payload,
 )
-from cadpy.selector_types import SelectorProfile
-from cadpy.step_targets import (
+from cadgen.selector_types import SelectorProfile
+from cadgen.step_targets import (
     CadRefError,
     ResolvedStepTarget,
     cad_path_from_target,
@@ -23,10 +23,8 @@ from cadpy.step_targets import (
     resolve_step_target,
     step_path_from_target,
 )
-from cadpy import analysis
-from cadpy import lookup
-
-REPO_ROOT = Path.cwd().resolve()
+from cadgen import analysis
+from cadgen import lookup
 
 
 @dataclass
@@ -131,7 +129,7 @@ def inspect_cad_refs(
             "line": parsed.line,
             "token": parsed.token,
             "cadPath": parsed.cad_path,
-            "stepPath": _relative_to_repo(context.step_path) if context.step_path is not None else "",
+            "stepPath": _display_path(context.step_path) if context.step_path is not None else "",
             "stepHash": context.manifest.get("stepHash"),
             "summary": _entry_summary(context),
             "selections": [],
@@ -215,10 +213,10 @@ def _parse_entry_ref_tokens(cad_path: str, refs_text: str = "") -> list[syntax.P
     return tokens
 
 
-def _relative_to_repo(path: Path) -> str:
+def _display_path(path: Path) -> str:
     resolved = path.resolve()
     try:
-        return resolved.relative_to(REPO_ROOT).as_posix()
+        return resolved.relative_to(Path.cwd().resolve()).as_posix()
     except ValueError:
         return resolved.as_posix()
 
@@ -243,7 +241,7 @@ def _load_step_context(
     *,
     profile: SelectorProfile,
 ) -> EntryContext:
-    from cadpy.step_artifacts import ensure_step_topology_artifact
+    from cadgen.step_artifacts import ensure_step_topology_artifact
 
     artifact = ensure_step_topology_artifact(
         target,
@@ -716,7 +714,7 @@ def _selection_positioning_payload(selection: TargetSelection) -> dict[str, obje
 def _selection_result_payload(selection: TargetSelection) -> dict[str, object]:
     return {
         "cadPath": selection.context.cad_path,
-        "stepPath": _relative_to_repo(selection.context.step_path) if selection.context.step_path is not None else "",
+        "stepPath": _display_path(selection.context.step_path) if selection.context.step_path is not None else "",
         "selectorType": selection.selector_type,
         "normalizedSelector": selection.normalized_selector,
         "displaySelector": selection.display_selector,
@@ -949,14 +947,14 @@ def diff_entry_targets(
         "left": {
             "cadPath": left_context.cad_path,
             "kind": left_context.kind,
-            "stepPath": _relative_to_repo(left_context.step_path) if left_context.step_path is not None else "",
+            "stepPath": _display_path(left_context.step_path) if left_context.step_path is not None else "",
             "summary": _entry_summary(left_context),
             "entryFacts": _entry_facts(left_context),
         },
         "right": {
             "cadPath": right_context.cad_path,
             "kind": right_context.kind,
-            "stepPath": _relative_to_repo(right_context.step_path) if right_context.step_path is not None else "",
+            "stepPath": _display_path(right_context.step_path) if right_context.step_path is not None else "",
             "summary": _entry_summary(right_context),
             "entryFacts": _entry_facts(right_context),
         },

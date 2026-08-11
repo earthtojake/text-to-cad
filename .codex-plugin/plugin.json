@@ -1,0 +1,41 @@
+{
+  "name": "cad",
+  "version": "0.4.2",
+  "description": "CAD, robotics, fabrication, and local review skills packaged for agent plugin installs.",
+  "author": {
+    "name": "earthtojake",
+    "url": "https://github.com/earthtojake"
+  },
+  "homepage": "https://www.texttocad.dev",
+  "repository": "https://github.com/earthtojake/text-to-cad",
+  "license": "MIT",
+  "keywords": [
+    "cad",
+    "robotics",
+    "fabrication",
+    "skills",
+    "step",
+    "urdf",
+    "sdf",
+    "gcode"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "text-to-cad",
+    "shortDescription": "CAD, robotics, fabrication, and local review skills.",
+    "longDescription": "text-to-cad packages local agent workflows for generating CAD, inspecting models, sourcing STEP parts, writing robot description files, slicing mesh files, and preparing fabrication handoffs.",
+    "developerName": "earthtojake",
+    "category": "Productivity",
+    "capabilities": [
+      "Write",
+      "Interactive"
+    ],
+    "websiteURL": "https://www.texttocad.dev",
+    "defaultPrompt": [
+      "Create a CAD model and open it in CAD Viewer.",
+      "Generate a URDF and review it locally.",
+      "Slice a mesh into printer-ready G-code."
+    ],
+    "brandColor": "#00A676"
+  }
+}

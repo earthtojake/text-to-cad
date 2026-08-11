@@ -42,7 +42,19 @@ export default {
       }
     }
   },
-  bounds: [[-42, -42, -46], [42, 42, 46]],
+  // Derived, not guessed. The literal this replaced ([-42,-42,-46]..[42,42,46]) was 2.75mm
+  // too small in X/Y, so the flared rims crossed the sampling box and marching cubes capped
+  // them with flat vertical slices. The neck flares as neckRadius*cosh(z/neckRadius), which
+  // reaches its widest at the end plates, and the torus rings then sit outside that -- none
+  // of which the constant tracked when the params moved. It was also over-generous in Z
+  // (46 against a real 27.25), spending a third of the sampling budget on empty space.
+  bounds: ({ params }) => {
+    const neck = Math.max(params.neckRadius, 0.1);
+    const flare = neck * Math.cosh(params.height / (2 * neck));
+    const extent = flare + params.ringRadius * 1.25 + params.wallThickness + 2;
+    const z = params.height * 0.5 + params.ringRadius + 2;
+    return [[-extent, -extent, -z], [extent, extent, z]];
+  },
   render: { steps: 270, epsilon: 0.004, normalEpsilon: 0.045 },
   glsl: GLSL
 };

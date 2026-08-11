@@ -12,13 +12,14 @@ Use these durable entrypoints for normal work:
 | Run code tests | `scripts/test/test.sh` |
 | Run docs checks | `scripts/test/test-docs.sh` |
 | Check canonical release version | `scripts/release/check-version.sh` |
+| Pin cadgen to PyPI in a publish tree | `scripts/release/pin-cadgen-requirements.sh` |
 | Install local skills into agents | `scripts/install/install-skills.sh --agent codex` |
 | Uninstall local skill links | `scripts/install/uninstall-skills.sh --agent codex` |
 
 Lower-level scripts stay grouped by ownership:
 
-- `bundle/`: production bundle wrapper, skill bundle router, skill runtime
-  bundlers, and plugin package bundle/check scripts.
+- `bundle/`: production bundle wrapper, skill bundle router, and skill runtime
+  bundlers.
 - `test/`: code test runner and targeted test subcommands.
 - `github-workflows/`: release-layout and development-layout check entrypoints
   used by GitHub Actions.
@@ -33,14 +34,17 @@ skill, or app runtime.
 
 ## Bundle
 
-`scripts/bundle/bundle.sh` is the master production bundle script. It runs every
-bundle-capable skill through the skill bundle router and then refreshes the plugin
-package copy:
+`scripts/bundle/bundle.sh` is the master production bundle script. It stamps
+derived version metadata, then runs every bundle-capable skill through the skill
+bundle router:
 
 ```text
+scripts/release/sync-version.mjs
 scripts/bundle/bundle-skill.sh --all
-scripts/bundle/bundle-plugin.sh
 ```
+
+There is no separate plugin bundle step. The repository root is the plugin
+package and its skills are `skills/` directly, so nothing needs copying.
 
 Use:
 
@@ -50,14 +54,23 @@ scripts/bundle/bundle.sh --check
 scripts/bundle/bundle-skill.sh <skill-id> --check
 ```
 
-`scripts/github-workflows/check-builds.sh` is the release-layout gate. It verifies
-there are no symlinks under production runtime paths, then runs
-`scripts/bundle/bundle.sh --check` by default. Use `--skip-bundle-check` only in
-workflows that already ran `scripts/bundle/bundle.sh --clean` in the same
-checkout. Plugin skill-copy
-freshness and plugin metadata validation are part of
-`scripts/bundle/bundle-plugin.sh --check`, which runs through the master bundle
-check.
+Every bundle script also reports the paths it generates, so checks can discover
+production runtime paths instead of repeating them:
+
+```bash
+scripts/bundle/bundle-skill.sh --all --print-outputs
+```
+
+`scripts/github-workflows/check-builds.sh` is the release-layout gate. It asks the
+bundle scripts for their generated paths, verifies each one exists and contains no
+symlinks, then runs `scripts/bundle/bundle.sh --check` by default. Use
+`--skip-bundle-check` only in workflows that already ran
+`scripts/bundle/bundle.sh --clean` in the same checkout.
+
+The no-symlinks rule is load-bearing rather than cosmetic: agent installers
+disagree about symlinks, and Codex `plugin add` drops them silently, publishing a
+skill whose files are simply missing. Plugin manifest and marketplace validation
+lives in `tests/python/global/test_plugin_manifests.py`.
 
 `skills/cad-viewer/scripts/viewer/dist/` is generated and ignored in source
 layout, but the root `.gitignore` unignores that exact production-runtime path so
@@ -115,7 +128,7 @@ scripts/release/check-version.sh
 scripts/release/check-version.sh --incremented-from origin/main
 ```
 
-Normal development branches should not bump `plugins/cad/VERSION`. Use the
+Normal development branches should not bump `VERSION`. Use the
 `Release` GitHub Actions workflow to open and ship the release PR from
 `develop`; use `scripts/release/bump-version.sh` only as a local fallback for
 that release PR:
@@ -125,7 +138,7 @@ scripts/release/bump-version.sh patch --dry-run
 scripts/release/bump-version.sh patch --no-commit
 ```
 
-`plugins/cad/VERSION` is the only canonical release bump file. Duplicate
+`VERSION` is the only canonical release bump file. Duplicate
 package, plugin, lockfile, and Python `pyproject.toml` versions are derived from
 it; the `Release` workflow stamps them with `scripts/release/sync-version.mjs`,
 and `scripts/bundle/bundle.sh` re-checks the same metadata before writing or
@@ -133,7 +146,7 @@ checking production outputs.
 
 Use `scripts/release/publish-github-release.sh` only from the `Release`
 workflow after a main production bundle, or as a manual production-branch
-fallback. It creates the semver git tag from `plugins/cad/VERSION` and creates
+fallback. It creates the semver git tag from `VERSION` and creates
 a GitHub Release with generated notes; unlike the `Release` workflow, which
 publishes the release by default, the script creates a draft unless
 `--publish` is passed.
@@ -151,14 +164,12 @@ fallback, but the workflow path is preferred.
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to `develop`; PRs to `develop`; manual dispatch | Checks `plugins/cad/VERSION` and derived metadata as a separate job so the test job still runs if release metadata is wrong. The test job checks the `develop` symlink layout, bundles temporary production outputs, checks that layout without rebuilding it, and runs docs and code tests against the generated output. Superseded PR runs are cancelled. |
+| `test.yml` | pushes to `develop`; PRs to `develop`; manual dispatch | Checks `VERSION` and derived metadata as a separate job so the test job still runs if release metadata is wrong. The test job checks the `develop` symlink layout, bundles temporary production outputs, checks that layout without rebuilding it, and runs docs and code tests against the generated output. Superseded PR runs are cancelled. |
 | `release.yml` | manual dispatch | The single release workflow: release PR, production publish commit to the target branch, models upload, web-app deploys, semver tag, and GitHub Release in one run. See the Releases section in `CONTRIBUTING.md` for the full flow, CI/CD-testing, and resume options. |
 | `deploy-docs.yml` | manual dispatch; called by `release.yml` | Deploys the docs app to Vercel production from a production-layout ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
-| `deploy-viewer.yml` | manual dispatch; called by `release.yml` | Deploys the demo viewer app to Vercel production from a production-layout ref (default `main`), with the same protection and public URL checks as `deploy-docs.yml`. |
-| `upload-models.yml` | manual dispatch; called by `release.yml` | Uploads the `models/` catalog and CAD Viewer assets to Vercel Blob via `scripts/viewer/upload-viewer-models-catalog.sh`, skipping assets that already match remote and fetching only the missing LFS objects. Upload from a source ref (default `develop`); `main` does not contain `models/`. |
 
-In short: use `release.yml` for releases, use `deploy-docs.yml` and
-`deploy-viewer.yml` to redeploy the individual web apps from `main`, use
-`upload-models.yml` to push new models to Vercel Blob from `develop`, treat
-`develop` as the editable symlink branch, and keep `main` as the explicit
-publish-only production branch for user clones and published releases.
+In short: use `release.yml` for releases, use `deploy-docs.yml` to redeploy the
+docs site from `main`, treat `develop` as the editable symlink branch, and keep
+`main` as the explicit publish-only production branch for user clones and
+published releases. The CAD Viewer is a local-filesystem app with no hosted
+deployment.

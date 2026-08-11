@@ -7,14 +7,14 @@ This skill assumes agents are useful at structuring SDFormat documents and weak 
 - organize an SDF model or world into links, joints, frames, visuals, collisions, sensors, plugins, and includes;
 - translate user intent into a plausible document structure;
 - maintain naming consistency when names are explicit;
-- write small Python generators and ElementTree transformations;
+- write small throwaway Python scripts for derived numbers and transformations;
 - explain assumptions and create checklists;
 - preserve existing patterns when examples are nearby.
 
 ## What agents should not be trusted to infer silently
 
 - exact link poses, frame transforms, or joint origins;
-- positive joint-axis directions from visual appearance;
+- positive joint-axis directions from visual theme;
 - mesh units, mesh scale, or coordinate-system conventions;
 - center of mass or inertia tensors from rendered shape alone;
 - plugin filenames, parameters, topics, namespaces, or sensor schemas;
@@ -31,9 +31,9 @@ For every spatial, physical, or simulator-specific value, use one of these sourc
 2. upstream geometry, robot-description, planning-metadata, mesh manifest, or model package source;
 3. target simulator documentation;
 4. measured or calculated value with method stated;
-5. explicit assumption recorded in the generator envelope, design ledger, or final report.
+5. explicit assumption recorded in the ledger comment block and the final report.
 
-Do not hide guessed values in raw XML.
+Do not hide guessed values in raw XML: every non-obvious number carries a comment or a ledger line naming its source.
 
 ## Placeholder policy
 
@@ -41,16 +41,12 @@ Placeholders are allowed only when the user asks for a scaffold, draft, or minim
 
 Examples of acceptable placeholders:
 
-```python
-return {
-    "xml": sdf,
-    "assumptions": [
-        {
-            "code": "placeholder_inertial",
-            "message": "Inertial tensor uses a primitive approximation pending measured mass properties.",
-        }
-    ],
-}
+```xml
+<!-- placeholder_inertial: primitive approximation pending measured mass properties -->
+<inertial>
+  <mass>0.5</mass>
+  ...
+</inertial>
 ```
 
 Examples of unacceptable placeholders:
@@ -75,26 +71,22 @@ Before generating or modifying SDF, answer these questions in the ledger or fina
 | Are inertials measured, calculated, approximated, or omitted? | method and confidence |
 | Are plugin and sensor parameters copied from target docs? | target simulator/version and source |
 
-## Code-generation style
+## Authoring style
 
 Prefer this pattern:
 
-```python
-BASE_TO_CAMERA_XYZ_M = (0.18, 0.0, 0.12)
-BASE_TO_CAMERA_RPY_RAD = (0.0, -0.2, 0.0)
-CAMERA_FRAME = "camera_frame"
-
-# Source: project CAD frame export 2026-05-12. RPY radians.
-pose(camera_frame, BASE_TO_CAMERA_XYZ_M, BASE_TO_CAMERA_RPY_RAD, relative_to="base_link")
+```xml
+<!-- Source: project CAD frame export 2026-05-12. RPY radians. -->
+<pose relative_to="base_link">0.18 0 0.12 0 -0.2 0</pose>
 ```
 
 Avoid this pattern:
 
-```python
-ET.SubElement(camera, "pose").text = "0.18 0 .12 0 -11.5 0"
+```xml
+<pose>0.18 0 .12 0 -11.5 0</pose>
 ```
 
-The second version hides units, uses degrees without saying so, and makes the source of the transform impossible to audit.
+The second version omits the frame, uses degrees without saying so, and makes the source of the transform impossible to audit.
 
 ## Validation expectations
 
@@ -106,7 +98,7 @@ Report skipped checks explicitly. A skipped check is not automatically a failure
 
 When finishing an SDF task, state:
 
-- source generator path and generated target path;
+- the `.sdf` path(s) created or modified;
 - checks run and their result;
 - checks skipped and why;
 - assumptions and placeholders;

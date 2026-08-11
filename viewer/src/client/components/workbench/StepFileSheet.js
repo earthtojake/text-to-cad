@@ -1,17 +1,12 @@
 import { useEffect, useMemo, useRef } from "react";
-import { ChevronRight, ClipboardPaste, Copy, Eye, EyeOff, Link2, Pause, Play, RotateCcw, X } from "lucide-react";
+import { Box, Boxes, ChevronRight, Eye, EyeOff, Link2, X } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
   STEP_MODEL_ROOT_ID,
   flattenVisibleStepTreeRows,
-  stepTreeRootChildIndexForNode,
   stepTreeNodeChildren
 } from "cadjs/lib/step/stepTree";
-import { resolveStepModuleNumberControlStep } from "@/workbench/stepModuleParameterControls";
 import { useStepAnimationElapsed } from "@/workbench/stepAnimationStore";
-import {
-  Accordion
-} from "../ui/accordion";
 import { Button } from "../ui/button";
 import {
   ContextMenu,
@@ -20,74 +15,35 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger
 } from "../ui/context-menu";
-import { ColorPicker } from "../ui/color-picker";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "../ui/select";
 import { Slider } from "../ui/slider";
 import FileSheet, {
-  FILE_SHEET_COMPACT_BUTTON_CLASSES,
-  FILE_SHEET_COMPACT_INPUT_CLASSES,
   FILE_SHEET_PRECISION_SLIDER_CLASSES,
-  FileSheetControlRow,
-  FileSheetSection,
-  FileSheetSectionBody,
   FileSheetSliderField,
-  FileSheetSubsection,
-  FileSheetToggleRow,
+  FileSheetStatusText,
   parseFileSheetNumberInput
 } from "./FileSheet";
+import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
 import AssemblyContextMenuItems from "./AssemblyContextMenuItems";
-import FileMetadataSection from "./FileMetadataSection";
-import FileStatusSection from "./FileStatusSection";
-
-const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
-const compactInputClasses = FILE_SHEET_COMPACT_INPUT_CLASSES;
+import { buildFileStatusTab } from "./FileStatusSection";
+import { buildParameterControlsTab } from "./ParameterControlsSection";
+import { buildStepReferenceTab } from "./StepReferenceSection";
 const treeChevronButtonClasses = "grid h-5 w-5 shrink-0 place-items-center rounded-sm px-0 text-current/60 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45";
 const treeRowActionButtonClasses = "h-5 w-5 rounded-sm px-0 text-current/60 shadow-none hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45 focus-visible:text-sidebar-accent-foreground";
 const treeRowContentClasses = "h-7 min-w-0 text-xs font-normal";
-const treeGroupLabelClasses = "px-1.5 pb-1 pt-2 text-[10px] font-medium text-sidebar-foreground/45";
+const treeGroupLabelClasses = "px-2 pb-1 pt-2 text-[10px] font-medium text-sidebar-foreground/45";
 const treeGlyphIconClasses = "size-3.5 shrink-0 text-current/60";
 const treeMateIconSlotClasses = "grid h-5 w-5 shrink-0 place-items-center text-current/60";
-const treeDepthIndentPx = 22;
+// One indent level equals the expand-chevron's footprint (w-5 button + gap-1.5),
+// so a leaf row's glyph (which has no chevron) lines up exactly under its
+// expandable parent's glyph instead of sitting a few pixels to the left.
+const treeDepthIndentPx = 26;
 const treeDepthGuideOffsetPx = 14;
-const treeDepthMaxPx = 128;
+const treeDepthMaxPx = 156;
 const treeSectionId = "tree";
 const treeRevealScrollPaddingTopPx = 120;
-const treeRootRowLimit = 10;
-const treeShowMoreButtonClasses = "h-5 w-full justify-start rounded-sm px-1.5 text-[10px] font-medium text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground";
-const STEP_MODULE_ANIMATION_SPEED_MIN = 0.1;
-const STEP_MODULE_ANIMATION_SPEED_MAX = 3;
-
-function formatControlNumber(value) {
-  const numericValue = Number(value);
-  if (!Number.isFinite(numericValue)) {
-    return "0";
-  }
-  if (Math.abs(numericValue) >= 100) {
-    return numericValue.toFixed(0);
-  }
-  if (Math.abs(numericValue) >= 10) {
-    return numericValue.toFixed(1);
-  }
-  return numericValue.toFixed(2);
-}
-
 function formatSeconds(value) {
   const numericValue = Math.max(Number(value) || 0, 0);
   return `${numericValue.toFixed(numericValue >= 10 ? 1 : 2)}s`;
-}
-
-function parseAnimationSpeedInput(value, fallbackValue = 1) {
-  return parseFileSheetNumberInput(value, {
-    fallback: fallbackValue,
-    min: STEP_MODULE_ANIMATION_SPEED_MIN,
-    max: STEP_MODULE_ANIMATION_SPEED_MAX
-  });
 }
 
 function leafIdsHidden(leafPartIds, hiddenPartIds) {
@@ -435,10 +391,15 @@ function TopologyTreeGlyph({ row, type }) {
 
 function StepTreeRowGlyph({ row }) {
   const topologyType = topologyTreeRowType(row);
-  if (topologyType) {
+  // Topology leaves (faces/edges/shapes) keep their geometric glyph; everything
+  // else — assemblies, components, and part occurrences — gets a box icon so
+  // every tree row carries an icon, not only the leaf topology nodes.
+  if (topologyType && topologyType !== "occurrence") {
     return <TopologyTreeGlyph row={row} type={topologyType} />;
   }
-  return null;
+  const nodeType = String(row?.nodeType || row?.node?.nodeType || "").trim();
+  const Icon = nodeType === "assembly" ? Boxes : Box;
+  return <Icon className={treeGlyphIconClasses} strokeWidth={1.6} aria-hidden="true" />;
 }
 
 function normalizeAssemblyMateRows(assemblyMates) {
@@ -466,11 +427,15 @@ function normalizeAssemblyMateRows(assemblyMates) {
     });
 }
 
+// The shared TimeControl contract, with STEP's live elapsed time: while the
+// animation plays the value comes from the frame store rather than the runtime
+// snapshot, so the slider tracks playback instead of sitting still.
 function StepModuleAnimationTimeControl({
   animationState,
   duration,
   enabled,
-  onScrub
+  onScrub,
+  label = "STEP"
 }) {
   const liveElapsedSec = useStepAnimationElapsed();
   const rawElapsedSec = animationState?.playing
@@ -491,7 +456,7 @@ function StepModuleAnimationTimeControl({
       }}
       valueInputProps={{
         disabled: !enabled,
-        ariaLabel: "STEP animation time value"
+        ariaLabel: `${label} animation time value`
       }}
     >
       <Slider
@@ -502,7 +467,7 @@ function StepModuleAnimationTimeControl({
         step={0.01}
         onValueChange={(nextValue) => onScrub?.(nextValue?.[0] ?? 0)}
         disabled={!enabled}
-        aria-label="STEP animation time"
+        aria-label={`${label} animation time`}
       />
     </FileSheetSliderField>
   );
@@ -520,11 +485,10 @@ export default function StepFileSheet({
   stepTreeRoot,
   assemblyMates = [],
   expandedTreeNodeIds,
-  stepTreeRootShowMore = false,
-  onStepTreeRootShowMoreChange,
   loadableTreeNodeIds = [],
   selectedPartIds,
   selectedReferenceIds = [],
+  selectedReferences = [],
   selectedMateIds = [],
   selectableNodeIds = null,
   activeTreeNodeId: activeTreeNodeIdProp = "",
@@ -561,7 +525,7 @@ export default function StepFileSheet({
   onOpenFileAsset,
   suppressDynamicMetadataStatus = false,
   statusItems = [],
-  themeSections = null,
+  themeTabs = [],
   openSectionIds = [],
   onOpenSectionIdsChange
 }) {
@@ -602,82 +566,13 @@ export default function StepFileSheet({
     () => normalizeAssemblyMateRows(assemblyMates),
     [assemblyMates]
   );
-  const rootItemCount = treeRootChildren.length + assemblyMateRows.length;
-  const rootItemsOverflow = rootItemCount > treeRootRowLimit;
-  const collapsedVisibleRootChildCount = rootItemsOverflow
-    ? Math.min(treeRootChildren.length, treeRootRowLimit)
-    : treeRootChildren.length;
-  const collapsedVisibleMateCount = rootItemsOverflow
-    ? Math.max(treeRootRowLimit - collapsedVisibleRootChildCount, 0)
-    : assemblyMateRows.length;
-  const allVisibleRows = useMemo(
+  const visibleRows = useMemo(
     () => flattenVisibleStepTreeRows(treeRoot, expandedTreeNodeIds, {
       omitRoot: elideRootTreeRow,
       showAllRootChildren: true
     }),
     [elideRootTreeRow, expandedTreeNodeIds, treeRoot]
   );
-  const activeReferenceTreeRowForRootLimit = useMemo(
-    () => activeSelectedReferenceId
-      ? allVisibleRows.find((row) => String(row?.topologyReferenceId || "").trim() === activeSelectedReferenceId) || null
-      : null,
-    [activeSelectedReferenceId, allVisibleRows]
-  );
-  const rootChildSelectionPastLimit = useMemo(() => {
-    if (!rootItemsOverflow) {
-      return false;
-    }
-    const candidateNodeIds = [
-      ...selectedIds,
-      activeTreeNodeIdProp,
-      activeReferenceTreeRowForRootLimit?.id
-    ]
-      .map((id) => String(id || "").trim())
-      .filter(Boolean);
-    return candidateNodeIds.some((nodeId) => (
-      stepTreeRootChildIndexForNode(treeRoot, nodeId) >= collapsedVisibleRootChildCount
-    ));
-  }, [
-    activeReferenceTreeRowForRootLimit,
-    activeTreeNodeIdProp,
-    collapsedVisibleRootChildCount,
-    rootItemsOverflow,
-    selectedIds,
-    treeRoot
-  ]);
-  const mateSelectionPastLimit = useMemo(() => {
-    if (!rootItemsOverflow || selectedMateIdSet.size < 1 || collapsedVisibleMateCount >= assemblyMateRows.length) {
-      return false;
-    }
-    return assemblyMateRows.some((mate, index) => (
-      index >= collapsedVisibleMateCount &&
-      selectedMateIdSet.has(String(mate?.id || "").trim())
-    ));
-  }, [
-    assemblyMateRows,
-    collapsedVisibleMateCount,
-    rootItemsOverflow,
-    selectedMateIdSet
-  ]);
-  const rootLimitAutoExpanded = rootItemsOverflow && (
-    rootChildSelectionPastLimit ||
-    mateSelectionPastLimit
-  );
-  const rootLimitExpanded = rootItemsOverflow && (
-    stepTreeRootShowMore ||
-    rootLimitAutoExpanded
-  );
-  const visibleRows = useMemo(
-    () => flattenVisibleStepTreeRows(treeRoot, expandedTreeNodeIds, {
-      omitRoot: elideRootTreeRow,
-      rootChildLimit: treeRootRowLimit,
-      showAllRootChildren: !rootItemsOverflow || rootLimitExpanded
-    }),
-    [elideRootTreeRow, expandedTreeNodeIds, rootItemsOverflow, rootLimitExpanded, treeRoot]
-  );
-  const hiddenRootChildCount = rootItemsOverflow
-    ? Math.max(treeRootChildren.length - collapsedVisibleRootChildCount, 0)
-    : 0;
   const visibleRowIdsSignature = useMemo(
     () => visibleRows.map((row) => String(row?.id || "")).join("\n"),
     [visibleRows]
@@ -693,43 +588,9 @@ export default function StepFileSheet({
   const hasAssemblyTree = isAssemblyView || elideRootTreeRow
     ? visibleRows.length > 0
     : visibleRows.some((row) => row?.hasChildren);
-  const visibleMateRows = rootItemsOverflow && !rootLimitExpanded
-    ? assemblyMateRows.slice(0, collapsedVisibleMateCount)
-    : assemblyMateRows;
   const hasMateRows = assemblyMateRows.length > 0;
   const showInstancesLabel = hasMateRows;
-  const showMateSections = visibleMateRows.length > 0;
-  const hiddenMateCount = rootItemsOverflow && !rootLimitExpanded
-    ? Math.max(assemblyMateRows.length - visibleMateRows.length, 0)
-    : 0;
-  const hiddenTreeRowCount = hiddenRootChildCount + hiddenMateCount;
-  const showRootLimitControl = rootItemsOverflow && (
-    !rootLimitAutoExpanded ||
-    stepTreeRootShowMore
-  );
-  const rootLimitControlLabel = rootLimitExpanded
-    ? "Show less"
-    : `Show ${hiddenTreeRowCount} more`;
-  const rootLimitControlTitle = rootLimitExpanded
-    ? "Show less"
-    : "Show more";
-  const rootLimitControl = showRootLimitControl ? (
-    <div className="py-0.5" role="presentation">
-      <Button
-        type="button"
-        variant="ghost"
-        size="xs"
-        className={treeShowMoreButtonClasses}
-        title={rootLimitControlTitle}
-        onClick={(event) => {
-          event.stopPropagation();
-          onStepTreeRootShowMoreChange?.(!rootLimitExpanded);
-        }}
-      >
-        {rootLimitControlLabel}
-      </Button>
-    </div>
-  ) : null;
+  const showMateSections = hasMateRows;
   const activeReferenceTreeRow = useMemo(
     () => activeSelectedReferenceId
       ? visibleRows.find((row) => String(row?.topologyReferenceId || "").trim() === activeSelectedReferenceId) || null
@@ -824,16 +685,6 @@ export default function StepFileSheet({
     }
   };
 
-  const stepModuleDefinition = stepModule?.definition || null;
-  const stepModuleParameters = Array.isArray(stepModuleDefinition?.parameters) ? stepModuleDefinition.parameters : [];
-  const stepModuleAnimations = Array.isArray(stepModuleDefinition?.animations) ? stepModuleDefinition.animations : [];
-  const stepModuleStatus = String(stepModule?.status || "").trim();
-  const stepModuleError = String(stepModule?.error || "").trim();
-  const stepModuleValues = stepModule?.parameterValues || {};
-  const stepModuleAnimationState = stepModule?.animationState || {};
-  const stepModuleAnimationDuration = Math.max(Number(stepModuleAnimationState.duration) || 1, 0.001);
-  const stepModuleEnabled = stepModule?.enabled !== false;
-
   useEffect(() => {
     const scrollKey = String(activeTreeNodeScrollKey || "").trim();
     if (!scrollKey || scrollKey === lastActiveTreeNodeScrollKeyRef.current || !activeTreeNodeId || !treeSectionOpen) {
@@ -863,28 +714,13 @@ export default function StepFileSheet({
     return null;
   }
 
-  return (
-    <FileSheet
-      open={open}
-      title="STEP"
-      isDesktop={isDesktop}
-      width={width}
-      onOpenChange={onOpenChange}
-      onStartResize={onStartResize}
-    >
-      <Accordion
-        type="multiple"
-        value={openSectionIds}
-        onValueChange={onOpenSectionIdsChange}
-      >
-        <FileStatusSection items={statusItems} />
-
-        <FileSheetSection
-          value={treeSectionId}
-          title="Tree"
-          triggerProps={{ title: treeSelectionTitle || undefined }}
-        >
-            <div className="max-w-full overflow-hidden px-1.5 pb-2">
+  const sections = [
+    {
+      id: treeSectionId,
+      title: "Tree",
+      titleAttr: treeSelectionTitle || undefined,
+      content: (
+            <div className="max-w-full overflow-hidden pb-2">
               <div
                 className="select-none space-y-px"
                 role="tree"
@@ -907,9 +743,9 @@ export default function StepFileSheet({
               ) : null}
 
               {viewerLoading && !visibleRows.length ? (
-                <p className="px-1.5 py-2 text-xs text-[var(--ui-text-muted)]">
+                <FileSheetStatusText className="py-1">
                   Loading STEP tree...
-                </p>
+                </FileSheetStatusText>
               ) : null}
 
               {hasAssemblyTree
@@ -1147,7 +983,7 @@ export default function StepFileSheet({
                               aria-disabled={rowAriaDisabled}
                               tabIndex={rowSelectionDisabled ? -1 : 0}
                               className={cn(
-                                "group/tree-row flex h-7 min-w-0 w-full max-w-full items-center gap-1 rounded-md px-1 outline-none transition-colors",
+                                "group/tree-row flex h-7 min-w-0 w-full max-w-full items-center gap-2 rounded-md px-2 outline-none transition-colors",
                                 rowSelectionDisabled
                                   ? "cursor-default text-sidebar-foreground/55"
                                   : "cursor-pointer text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground",
@@ -1336,12 +1172,10 @@ export default function StepFileSheet({
                 })
                 : null}
 
-              {!showMateSections ? rootLimitControl : null}
-
               {!hasAssemblyTree && !viewerLoading ? (
-                <p className="px-1.5 py-2 text-xs text-[var(--ui-text-muted)]">
+                <FileSheetStatusText className="py-1">
                   No assembly tree
-                </p>
+                </FileSheetStatusText>
               ) : null}
 
               {showMateSections ? (
@@ -1349,7 +1183,7 @@ export default function StepFileSheet({
                   <div className={treeGroupLabelClasses} role="presentation">
                     Mates
                   </div>
-                  {visibleMateRows.map((mate) => {
+                  {assemblyMateRows.map((mate) => {
                     const mateSelected = selectedMateIdSet.has(mate.id);
                     const mateHovered = normalizedHoveredMateId === mate.id;
                     const mateSelectionDisabled = treeSelectionDisabled || typeof onSelectMateNode !== "function";
@@ -1367,7 +1201,7 @@ export default function StepFileSheet({
                             aria-disabled={mateSelectionDisabled}
                             tabIndex={mateSelectionDisabled ? -1 : 0}
                             className={cn(
-                              "flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-md px-1 text-xs outline-none transition-colors",
+                              "flex h-7 min-w-0 max-w-full items-center gap-2 rounded-md px-2 text-xs outline-none transition-colors",
                               mateSelectionDisabled
                                 ? "cursor-default text-sidebar-foreground/55"
                                 : "cursor-pointer text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground",
@@ -1432,271 +1266,49 @@ export default function StepFileSheet({
                       </ContextMenu>
                     );
                   })}
-                  {rootLimitControl}
                 </>
               ) : null}
               </div>
             </div>
-        </FileSheetSection>
+      )
+    },
+    buildStepReferenceTab({ references: selectedReferences }),
+    // The parameters tab is the shared ParameterControlsSection; the only
+    // STEP-specific part is the time control, which tracks live playback.
+    buildParameterControlsTab({
+      runtime: stepModule,
+      label: "STEP",
+      loadingLabel: "Loading STEP module...",
+      noParametersLabel: "No module parameters.",
+      showEnableToggle: true,
+      enableAriaLabel: "Enable STEP module",
+      animationAriaLabel: "STEP animation",
+      resetTitle: "Reset STEP parameters",
+      TimeControl: StepModuleAnimationTimeControl
+    }),
+    ...themeTabs,
+    // "Issues" is a diagnostic shown only when there are warnings/errors, so it trails the
+    // content + display tabs as the last item in the top section (null when there are none;
+    // the surface filters falsy tabs).
+    buildFileStatusTab(statusItems)
+  ];
 
-        {stepModuleDefinition || stepModuleStatus === "loading" || stepModuleError ? (
-          <FileSheetSection value="parameters" title="Parameters">
-              <FileSheetSectionBody>
-                {stepModuleDefinition ? (
-                  <FileSheetToggleRow
-                    label="Enable"
-                    checked={stepModuleEnabled}
-                    onCheckedChange={(checked) => stepModule?.onEnabledChange?.(checked)}
-                    ariaLabel="Enable STEP module"
-                  />
-                ) : null}
-
-                {stepModuleStatus === "loading" ? (
-                  <p className="px-3 py-2 text-xs text-[var(--ui-text-muted)]">Loading STEP module...</p>
-                ) : null}
-                {stepModuleError ? (
-                  <p className="whitespace-pre-line px-3 py-2 text-xs text-destructive">{stepModuleError}</p>
-                ) : null}
-
-                {stepModuleDefinition && stepModuleAnimations.length ? (
-                  <>
-                    {stepModuleAnimations.length > 1 ? (
-                      <FileSheetControlRow label="Animation">
-                        <Select
-                          value={String(stepModuleAnimationState.activeId || stepModuleAnimations[0]?.id || "")}
-                          onValueChange={(nextValue) => stepModule?.onAnimationSelect?.(nextValue)}
-                          disabled={!stepModuleEnabled}
-                        >
-                          <SelectTrigger size="sm" className="h-7 !text-[11px]" aria-label="STEP animation">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {stepModuleAnimations.map((animation) => (
-                              <SelectItem key={animation.id} value={animation.id}>
-                                {animation.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FileSheetControlRow>
-                    ) : null}
-                    <FileSheetControlRow>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className={cn(compactButtonClasses, "justify-center")}
-                          onClick={() => stepModule?.onAnimationPlayToggle?.()}
-                          disabled={!stepModuleEnabled}
-                        >
-                          {stepModuleAnimationState.playing ? (
-                            <Pause className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                          ) : (
-                            <Play className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                          )}
-                          <span>{stepModuleAnimationState.playing ? "Pause" : "Play"}</span>
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className={cn(compactButtonClasses, "justify-center")}
-                          onClick={() => stepModule?.onAnimationReset?.()}
-                          disabled={!stepModuleEnabled}
-                          aria-label="Restart STEP animation"
-                          title="Restart"
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                          <span>Reset</span>
-                        </Button>
-                      </div>
-                    </FileSheetControlRow>
-                    <StepModuleAnimationTimeControl
-                      animationState={stepModuleAnimationState}
-                      duration={stepModuleAnimationDuration}
-                      enabled={stepModuleEnabled}
-                      onScrub={stepModule?.onAnimationScrub}
-                    />
-                    <FileSheetSliderField
-                      label="Speed"
-                      value={`${formatControlNumber(stepModuleAnimationState.speed || 1)}x`}
-                      onValueCommit={(nextValue) => {
-                        stepModule?.onAnimationSpeedChange?.(
-                          parseAnimationSpeedInput(nextValue, stepModuleAnimationState.speed || 1)
-                        );
-                      }}
-                      valueInputProps={{
-                        disabled: !stepModuleEnabled,
-                        ariaLabel: "STEP animation speed value"
-                      }}
-                    >
-                      <Slider
-                        className={FILE_SHEET_PRECISION_SLIDER_CLASSES}
-                        value={[Number(stepModuleAnimationState.speed) || 1]}
-                        min={STEP_MODULE_ANIMATION_SPEED_MIN}
-                        max={STEP_MODULE_ANIMATION_SPEED_MAX}
-                        step={0.1}
-                        onValueChange={(nextValue) => stepModule?.onAnimationSpeedChange?.(nextValue?.[0] ?? 1)}
-                        disabled={!stepModuleEnabled}
-                        aria-label="STEP animation speed"
-                      />
-                    </FileSheetSliderField>
-                  </>
-                ) : null}
-
-                {stepModuleDefinition && !stepModuleParameters.length ? (
-                  <p className="px-3 py-2 text-xs text-[var(--ui-text-muted)]">No module parameters.</p>
-                ) : null}
-                {stepModuleParameters.map((parameter) => {
-                  const value = stepModuleValues?.[parameter.id] ?? parameter.defaultValue;
-                  const controlStep = resolveStepModuleNumberControlStep(parameter);
-                  if (parameter.type === "boolean") {
-                    return (
-                      <FileSheetToggleRow
-                        key={parameter.id}
-                        label={parameter.label}
-                        checked={value === true}
-                        onCheckedChange={(checked) => stepModule?.onParameterChange?.(parameter.id, checked)}
-                        disabled={!stepModuleEnabled}
-                        ariaLabel={parameter.label}
-                      />
-                    );
-                  }
-                  if (parameter.type === "enum") {
-                    return (
-                      <FileSheetControlRow key={parameter.id} label={parameter.label}>
-                        <Select
-                          value={String(value ?? "")}
-                          onValueChange={(nextValue) => stepModule?.onParameterChange?.(parameter.id, nextValue)}
-                          disabled={!stepModuleEnabled}
-                        >
-                          <SelectTrigger size="sm" className="h-7 !text-[11px]" aria-label={parameter.label}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {parameter.options.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FileSheetControlRow>
-                    );
-                  }
-                  if (parameter.type === "color") {
-                    return (
-                      <FileSheetControlRow
-                        key={parameter.id}
-                        label={parameter.label}
-                        trailing={(
-                          <ColorPicker
-                            value={String(value || "#ffffff")}
-                            onChange={(nextValue) => stepModule?.onParameterChange?.(parameter.id, nextValue)}
-                            disabled={!stepModuleEnabled}
-                            className={cn(compactInputClasses, "w-fit justify-start gap-1.5 px-1.5")}
-                            swatchClassName="size-3.5"
-                            popoverAlign="end"
-                            aria-label={parameter.label}
-                          />
-                        )}
-                      />
-                    );
-                  }
-                  if (parameter.type === "button") {
-                    return (
-                      <FileSheetControlRow key={parameter.id}>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className={cn(compactButtonClasses, "w-full justify-center")}
-                          onClick={() => stepModule?.onParameterChange?.(parameter.id, Number(value || 0) + 1)}
-                          disabled={!stepModuleEnabled}
-                        >
-                          {parameter.label}
-                        </Button>
-                      </FileSheetControlRow>
-                    );
-                  }
-                  return (
-                    <FileSheetSliderField
-                      key={parameter.id}
-                      label={parameter.label}
-                      value={`${formatControlNumber(value)}${parameter.unit ? ` ${parameter.unit}` : ""}`}
-                      onValueCommit={(nextValue) => {
-                        stepModule?.onParameterChange?.(parameter.id, parseFileSheetNumberInput(nextValue, {
-                          fallback: value,
-                          min: parameter.min,
-                          max: parameter.max
-                        }));
-                      }}
-                      valueInputProps={{
-                        disabled: !stepModuleEnabled,
-                        ariaLabel: `${parameter.label} slider value`
-                      }}
-                    >
-                      <Slider
-                        className={FILE_SHEET_PRECISION_SLIDER_CLASSES}
-                        value={[Number(value) || 0]}
-                        min={parameter.min}
-                        max={parameter.max}
-                        step={controlStep}
-                        onValueChange={(nextValue) => stepModule?.onParameterChange?.(parameter.id, nextValue?.[0] ?? value)}
-                        disabled={!stepModuleEnabled}
-                        aria-label={parameter.label}
-                      />
-                    </FileSheetSliderField>
-                  );
-                })}
-                {stepModuleDefinition && stepModuleParameters.length ? (
-                  <FileSheetControlRow className="pt-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className={cn(compactButtonClasses, "justify-center")}
-                        onClick={() => {
-                          void stepModule?.onCopyParams?.();
-                        }}
-                        title="Copy STEP parameter JSON"
-                      >
-                        <Copy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                        <span>Copy parameters</span>
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className={cn(compactButtonClasses, "justify-center")}
-                        onClick={() => {
-                          void stepModule?.onPasteParams?.();
-                        }}
-                        title="Paste STEP parameter JSON"
-                      >
-                        <ClipboardPaste className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                        <span>Paste parameters</span>
-                      </Button>
-                    </div>
-                  </FileSheetControlRow>
-                ) : null}
-              </FileSheetSectionBody>
-          </FileSheetSection>
-        ) : null}
-
-        {themeSections}
-        <FileMetadataSection
-          entry={selectedEntry}
-          fileDownloadAvailable={fileDownloadAvailable}
-          viewerServerInfo={viewerServerInfo}
-          localFileOpenAvailable={localFileOpenAvailable}
-          fileAccessBusyKey={fileAccessBusyKey}
-          onOpenFileAsset={onOpenFileAsset}
-          suppressDynamicStatus={suppressDynamicMetadataStatus}
-        />
-      </Accordion>
+  return (
+    <FileSheet
+      open={open}
+      title="STEP"
+      isDesktop={isDesktop}
+      width={width}
+      onOpenChange={onOpenChange}
+      onStartResize={onStartResize}
+      scrollBody={false}
+    >
+      <FileSheetTabbedSurface
+        kind="step"
+        sections={sections}
+        openSectionIds={openSectionIds}
+        onOpenSectionIdsChange={onOpenSectionIdsChange}
+      />
     </FileSheet>
   );
 }

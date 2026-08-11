@@ -14,7 +14,11 @@ def _compound_from_shapes(
 
 
 def import_as_shape(step_path: Path) -> build123d.Shape:
-    imported = build123d.import_step(step_path)
+    # Cache-backed import: reuses the inline __cadgen__ binary BREP so repeated
+    # servo/part imports across rebuilds are ~tens of ms instead of a full re-parse.
+    from cadgen.step_scene import import_step
+
+    imported = import_step(step_path)
     solids = imported.solids()
     if solids:
         return _compound_from_shapes(solids)

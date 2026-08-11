@@ -1,253 +1,92 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-// Extracted from the published Claude spinner verb list the user linked.
-const CLAUDE_CODE_LOADING_VERBS = Object.freeze([
-  "Accomplishing",
-  "Actioning",
-  "Actualizing",
-  "Architecting",
-  "Baking",
-  "Beaming",
-  "Beboppin'",
-  "Befuddling",
-  "Billowing",
-  "Blanching",
-  "Bloviating",
-  "Boogieing",
-  "Boondoggling",
-  "Booping",
-  "Bootstrapping",
-  "Brewing",
-  "Bunning",
-  "Burrowing",
-  "Calculating",
-  "Canoodling",
-  "Caramelizing",
-  "Cascading",
-  "Catapulting",
-  "Cerebrating",
-  "Channeling",
-  "Channelling",
-  "Choreographing",
-  "Churning",
-  "Coalescing",
-  "Cogitating",
-  "Combobulating",
-  "Composing",
-  "Computing",
-  "Concocting",
-  "Considering",
-  "Contemplating",
-  "Cooking",
-  "Crafting",
-  "Creating",
-  "Crunching",
-  "Crystallizing",
-  "Cultivating",
-  "Deciphering",
-  "Deliberating",
-  "Determining",
-  "Dilly-dallying",
-  "Discombobulating",
-  "Doing",
-  "Doodling",
-  "Drizzling",
-  "Ebbing",
-  "Effecting",
-  "Elucidating",
-  "Embellishing",
-  "Enchanting",
-  "Envisioning",
-  "Evaporating",
-  "Fermenting",
-  "Fiddle-faddling",
-  "Finagling",
-  "Flambéing",
-  "Flibbertigibbeting",
-  "Flowing",
-  "Flummoxing",
-  "Fluttering",
-  "Forging",
-  "Forming",
-  "Frolicking",
-  "Frosting",
-  "Gallivanting",
-  "Galloping",
-  "Garnishing",
-  "Generating",
-  "Gesticulating",
-  "Germinating",
-  "Gitifying",
-  "Grooving",
-  "Gusting",
-  "Harmonizing",
-  "Hashing",
-  "Hatching",
-  "Herding",
-  "Honking",
-  "Hullaballooing",
-  "Hyperspacing",
-  "Ideating",
-  "Imagining",
-  "Improvising",
-  "Incubating",
-  "Inferring",
-  "Infusing",
-  "Ionizing",
-  "Jitterbugging",
-  "Julienning",
-  "Kneading",
-  "Leavening",
-  "Levitating",
-  "Lollygagging",
-  "Manifesting",
-  "Marinating",
-  "Meandering",
-  "Metamorphosing",
-  "Misting",
-  "Moonwalking",
-  "Moseying",
-  "Mulling",
-  "Mustering",
-  "Musing",
-  "Nebulizing",
-  "Nesting",
-  "Newspapering",
-  "Noodling",
-  "Nucleating",
-  "Orbiting",
-  "Orchestrating",
-  "Osmosing",
-  "Perambulating",
-  "Percolating",
-  "Perusing",
-  "Philosophising",
-  "Photosynthesizing",
-  "Pollinating",
-  "Pondering",
-  "Pontificating",
-  "Pouncing",
-  "Precipitating",
-  "Prestidigitating",
-  "Processing",
-  "Proofing",
-  "Propagating",
-  "Puttering",
-  "Puzzling",
-  "Quantumizing",
-  "Razzle-dazzling",
-  "Razzmatazzing",
-  "Recombobulating",
-  "Reticulating",
-  "Roosting",
-  "Ruminating",
-  "Sautéing",
-  "Scampering",
-  "Schlepping",
-  "Scurrying",
-  "Seasoning",
-  "Shenaniganing",
-  "Shimmying",
-  "Simmering",
-  "Skedaddling",
-  "Sketching",
-  "Slithering",
-  "Smooshing",
-  "Sock-hopping",
-  "Spelunking",
-  "Spinning",
-  "Sprouting",
-  "Stewing",
-  "Sublimating",
-  "Swirling",
-  "Swooping",
-  "Symbioting",
-  "Synthesizing",
-  "Tempering",
-  "Thinking",
-  "Thundering",
-  "Tinkering",
-  "Tomfoolering",
-  "Topsy-turvying",
-  "Transfiguring",
-  "Transmuting",
-  "Twisting",
-  "Undulating",
-  "Unfurling",
-  "Unravelling",
-  "Vibing",
-  "Waddling",
-  "Wandering",
-  "Warping",
-  "Whatchamacalliting",
-  "Whirlpooling",
-  "Whirring",
-  "Whisking",
-  "Wibbling",
-  "Working",
-  "Wrangling",
-  "Zesting",
-  "Zigzagging"
-]);
+import { Progress } from "@/components/ui/progress";
+import {
+  ARTIFACT_PROGRESS_POLL_MS,
+  MAX_DISPLAY_PERCENT,
+  continuedLoadingRatio,
+  estimatedLoadingRatio,
+  formatArtifactProgress
+} from "@/workbench/artifactProgress.js";
 
-function shuffledLoadingVerbs() {
-  const verbs = [...CLAUDE_CODE_LOADING_VERBS];
-  for (let index = verbs.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [verbs[index], verbs[swapIndex]] = [verbs[swapIndex], verbs[index]];
-  }
-  return verbs;
-}
+// Two words, max. The status line names the stage; the number says how far along. Anything
+// longer starts wrapping over the 3D scene and stops being scannable at a glance.
+const DEFAULT_STATUS = "Loading";
 
+/**
+ * The one loading indicator: a status word top-left, a percent top-right, and a bar.
+ *
+ * The bar is ALWAYS shown while loading. When the build reports real progress we use it;
+ * when it does not — a plain asset read, a decode, the window before a build's first
+ * event — we estimate against the clock (see `estimatedLoadingRatio`). A bar that only
+ * appears for the subset of loads that happen to be instrumented is worse than one that is
+ * always there, because its absence reads as "stuck" rather than "unmeasured".
+ *
+ * A load can cross from measured to unmeasured HALFWAY THROUGH: an artifact build reports
+ * real phases and then stops the moment it finishes, while the package GLB still has to be
+ * fetched and decoded. The measured high-water mark is therefore kept as a floor and the
+ * remainder eased from there (`continuedLoadingRatio`), so the bar neither jumps backwards
+ * nor freezes at the from-scratch estimate's ceiling.
+ */
 export default function ViewerLoadingOverlay({
   viewerLoading,
-  previewMode
+  previewMode,
+  progress = null
 }) {
-  const [loadingVerbs, setLoadingVerbs] = useState(() => shuffledLoadingVerbs());
-  const [activeWordIndex, setActiveWordIndex] = useState(0);
-  const [spinnerFrameIndex, setSpinnerFrameIndex] = useState(0);
-  const [ellipsisFrameIndex, setEllipsisFrameIndex] = useState(0);
-
-  const ASCII_SPINNER_FRAMES = ["|", "/", "-", "\\"];
-  const ASCII_ELLIPSIS_FRAMES = ["", ".", "..", "..."];
+  const active = viewerLoading && !previewMode;
+  const startedAtRef = useRef(0);
+  // The highest ratio this load actually MEASURED, and when the measurement stopped. The
+  // bar is monotonic within a load, so a floor is the whole mechanism: once something real
+  // is known, no later estimate may walk it back.
+  const measuredFloorRef = useRef(0);
+  const tailStartedAtRef = useRef(0);
+  const [, setTick] = useState(0);
 
   useEffect(() => {
-    if (!viewerLoading || previewMode) {
+    if (!active) {
+      startedAtRef.current = 0;
+      measuredFloorRef.current = 0;
+      tailStartedAtRef.current = 0;
       return undefined;
     }
+    startedAtRef.current = Date.now();
+    measuredFloorRef.current = 0;
+    tailStartedAtRef.current = 0;
+    // Repaint on the same cadence the artifact status is polled, so the estimated bar and
+    // a reported one advance at one rate rather than two.
+    const intervalId = window.setInterval(() => {
+      setTick((current) => current + 1);
+    }, ARTIFACT_PROGRESS_POLL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [active]);
 
-    const nextLoadingVerbs = shuffledLoadingVerbs();
-    setLoadingVerbs(nextLoadingVerbs);
-    setActiveWordIndex(0);
-    setSpinnerFrameIndex(0);
-    setEllipsisFrameIndex(0);
-
-    const verbIntervalId = window.setInterval(() => {
-      setActiveWordIndex((current) => (current + 1) % nextLoadingVerbs.length);
-    }, 900);
-
-    const spinnerIntervalId = window.setInterval(() => {
-      setSpinnerFrameIndex((current) => (current + 1) % ASCII_SPINNER_FRAMES.length);
-    }, 90);
-
-    const ellipsisIntervalId = window.setInterval(() => {
-      setEllipsisFrameIndex((current) => (current + 1) % ASCII_ELLIPSIS_FRAMES.length);
-    }, 360);
-
-    return () => {
-      window.clearInterval(verbIntervalId);
-      window.clearInterval(spinnerIntervalId);
-      window.clearInterval(ellipsisIntervalId);
-    };
-  }, [previewMode, viewerLoading]);
-
-  if (!viewerLoading || previewMode) {
+  if (!active) {
     return null;
   }
 
-  const activeVerb = loadingVerbs[activeWordIndex] || CLAUDE_CODE_LOADING_VERBS[0];
-  const spinnerFrame = ASCII_SPINNER_FRAMES[spinnerFrameIndex];
-  const ellipsis = ASCII_ELLIPSIS_FRAMES[ellipsisFrameIndex];
+  const frame = progress ? formatArtifactProgress(progress) : null;
+  let ratio;
+  if (frame) {
+    // Measured: record the high-water mark and clear any tail clock, so a build that
+    // resumes reporting (a handoff to another run) goes back to real positions.
+    measuredFloorRef.current = Math.max(measuredFloorRef.current, frame.ratio);
+    tailStartedAtRef.current = 0;
+    ratio = measuredFloorRef.current;
+  } else if (measuredFloorRef.current > 0) {
+    // The measured phase ended but the load did not — start the tail clock at the handover
+    // (once; a re-render must not keep resetting it) and ease on from the floor.
+    if (!tailStartedAtRef.current) {
+      tailStartedAtRef.current = Date.now();
+    }
+    ratio = continuedLoadingRatio(measuredFloorRef.current, tailStartedAtRef.current);
+  } else {
+    ratio = estimatedLoadingRatio(startedAtRef.current);
+  }
+  // Derived from the ratio the bar is drawing, never from the raw frame: on a run handoff
+  // the floor can sit above what the new run reports, and a number disagreeing with the bar
+  // beside it is worse than either being slightly stale.
+  const percent = Math.min(MAX_DISPLAY_PERCENT, Math.round(ratio * 100));
+  const status = frame?.label || DEFAULT_STATUS;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
@@ -256,15 +95,21 @@ export default function ViewerLoadingOverlay({
         <div
           role="status"
           aria-live="polite"
-          className="cad-loading-ascii relative z-10 max-w-[min(90vw,38rem)] text-center font-mono text-sm text-popover-foreground"
+          className="relative z-10 flex w-[22rem] max-w-[min(90vw,28rem)] flex-col gap-2 text-popover-foreground"
         >
-          <span className="sr-only">{activeVerb}</span>
-          <span className="inline-flex w-[24ch] items-start justify-start text-left sm:w-[26ch]">
-            <span className="inline-block w-[2ch]">{spinnerFrame}</span>
-            <span className="inline-block w-[1ch]"> </span>
-            <span>{activeVerb}</span>
-            <span className="inline-block w-[3ch]">{ellipsis}</span>
-          </span>
+          <div className="flex items-baseline justify-between gap-4">
+            {/* smui: status text is uppercase with wide tracking. 11px is the skill's
+                `text-label` size; this app has not registered that token, so it is
+                written literally rather than adding a theme entry plus its
+                tailwind-merge classGroup for one call site. */}
+            <span className="truncate text-[11px] uppercase tracking-wider text-muted-foreground">
+              {status}
+            </span>
+            <span className="text-[11px] tabular-nums text-muted-foreground">
+              {percent}%
+            </span>
+          </div>
+          <Progress value={percent} aria-label={status} />
         </div>
       </div>
     </div>

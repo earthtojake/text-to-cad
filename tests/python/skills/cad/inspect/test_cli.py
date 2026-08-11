@@ -20,7 +20,7 @@ class InspectCliWrapperTests(unittest.TestCase):
         )
         self.assertEqual("", result.stderr)
         self.assertEqual(0, result.returncode)
-        self.assertIn("usage: inspect", result.stdout)
+        self.assertIn("usage: scripts/inspect", result.stdout)
 
     def test_inspect_help_does_not_import_heavy_cad_modules(self) -> None:
         skill_root = repo_path("skills/cad")
@@ -29,7 +29,7 @@ class InspectCliWrapperTests(unittest.TestCase):
             "sys.path.insert(0, 'scripts/inspect'); "
             "import inspect_refs.cli; "
             "print('OCP.OCP' in sys.modules); "
-            "print('cadpy.step_scene' in sys.modules)"
+            "print('cadgen._internal.step_scene' in sys.modules)"
         )
         result = subprocess.run(
             [sys.executable, "-c", code],

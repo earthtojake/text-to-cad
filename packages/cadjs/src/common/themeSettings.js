@@ -1,12 +1,17 @@
 import {
+  CAMERA_PROJECTION,
   DEFAULT_DISPLAY_EDGE_SETTINGS,
-  DISABLED_DISPLAY_EDGE_SETTINGS
+  DISABLED_DISPLAY_EDGE_SETTINGS,
+  normalizeCameraProjection,
+  normalizeDisplayEdgeSettings
 } from "./displaySettings.js";
 
 export {
   CAD_EDGE_CLASS_IDS,
   CAD_EDGE_COLOR,
-  CAD_EDGE_HIGHLIGHT_COLOR
+  CAD_EDGE_HIGHLIGHT_COLOR,
+  CAMERA_PROJECTION,
+  normalizeCameraProjection
 } from "./displaySettings.js";
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
@@ -135,6 +140,7 @@ const THEME_MODE_COLOR_PATHS = Object.freeze([
   Object.freeze(["floor", "gridCellColor"]),
   Object.freeze(["floor", "grid", "centerColor"]),
   Object.freeze(["floor", "grid", "cellColor"]),
+  Object.freeze(["floor", "axis", "color"]),
   Object.freeze(["lighting", "directional", "color"]),
   Object.freeze(["lighting", "spot", "color"]),
   Object.freeze(["lighting", "point", "color"]),
@@ -214,6 +220,22 @@ function applyThemeModeColorOverrides(target, overrides = {}) {
 
 export const MIN_FLOOR_GRID_DENSITY = 0.25;
 export const MAX_FLOOR_GRID_DENSITY = 4;
+// The vertical line through the world origin, running the full height of the
+// scene in both directions -- up from the floor and down through it. A ground
+// grid says where the floor is; this says where 0,0 is on it, which is what you
+// actually align parts against. It has no length setting: it is meant to read as
+// an infinite construction line, so it is sized off the scene radius to always
+// leave frame.
+export const DEFAULT_FLOOR_AXIS_SETTINGS = Object.freeze({
+  enabled: false,
+  color: "#6b7280",
+  opacity: 0.5
+});
+// Half-length as a multiple of scene radius. Large enough to exit any sane
+// framing; the camera's far plane trims the rest, which is what makes it read as
+// unbounded rather than as a very tall stick.
+export const FLOOR_AXIS_RADIUS_MULTIPLE = 1000;
+
 export const DEFAULT_FLOOR_GRID_SETTINGS = Object.freeze({
   enabled: true,
   gridCenterColor: "#6b7280",
@@ -224,6 +246,22 @@ export const DEFAULT_FLOOR_GRID_SETTINGS = Object.freeze({
   cellColor: "#cbd5e1",
   opacity: 0.18,
   density: 1
+});
+
+// The interactive viewer has always rendered soft fill and rim directionals
+// from its structural defaults. Themes that predate the fill/rim settings
+// must normalize to these exact values so their lighting stays identical.
+export const DEFAULT_FILL_LIGHT_SETTINGS = Object.freeze({
+  enabled: true,
+  color: "#6b7f95",
+  intensity: 0.46,
+  position: Object.freeze({ x: 120, y: 80, z: 210 })
+});
+export const DEFAULT_RIM_LIGHT_SETTINGS = Object.freeze({
+  enabled: true,
+  color: "#6db6e8",
+  intensity: 0.04,
+  position: Object.freeze({ x: -260, y: 240, z: 180 })
 });
 
 function normalizeFloorMode(value, fallback = THEME_FLOOR_MODES.STAGE) {
@@ -293,20 +331,20 @@ const MAGENTA_FILL_COLORS = Object.freeze(["#ff4faf"]);
 
 const CLAY_FILL_COLORS = Object.freeze(["#b9856e"]);
 
-const BEACH_FILL_COLORS = Object.freeze(["#178f9f", "#ef7459"]);
-
-const TERMINAL_FILL_COLORS = Object.freeze(["#0b7a3f"]);
+// Deep phosphor green so the neon-green edge outline reads as bright linework
+// against the fill — the classic dark-surface / bright-wireframe terminal look.
+const TERMINAL_FILL_COLORS = Object.freeze(["#073a20"]);
 
 const TERMINAL_EDGE_COLOR = "#66ff99";
 const TERMINAL_EDGE_HIGHLIGHT_COLOR = "#b7ffc9";
 const TERMINAL_EDGE_CLASS_SETTINGS = Object.freeze({
   feature: Object.freeze({
     opacity: 1,
-    thickness: 1.15
+    thickness: 1.6
   }),
   tangent: Object.freeze({
-    opacity: 0.84,
-    thickness: 0.95
+    opacity: 0.9,
+    thickness: 1.15
   }),
   seam: Object.freeze({
     opacity: 0.92,
@@ -364,6 +402,23 @@ function midpointPalette(primaryColors, secondaryColors) {
   }));
 }
 
+function createFloorAxisSettings(floorColor, options = {}) {
+  const normalizedFloorColor = normalizeColor(floorColor, "#f1f5f9");
+  const lightFloor = relativeLuminance(normalizedFloorColor) >= 0.36;
+  return {
+    axis: {
+      enabled: normalizeBoolean(options.enabled, false),
+      color: normalizeColor(
+        options.color,
+        lightFloor
+          ? mixHexColors(normalizedFloorColor, "#0f172a", 0.62)
+          : mixHexColors(normalizedFloorColor, "#f8fafc", 0.58)
+      ),
+      opacity: normalizeNumber(options.opacity, DEFAULT_FLOOR_AXIS_SETTINGS.opacity, 0, 1)
+    }
+  };
+}
+
 function createFloorGridSettings(floorColor, options = {}) {
   const normalizedFloorColor = normalizeColor(floorColor, "#f1f5f9");
   const enabled = normalizeBoolean(options.enabled, false);
@@ -406,6 +461,25 @@ function createFloorGridSettings(floorColor, options = {}) {
   };
 }
 
+// Shared photoreal PBR treatment for the presentation-stage themes; each
+// theme layers its own palette and grade on top.
+const STUDIO_STAGE_MATERIALS = Object.freeze({
+  cycleColors: false,
+  overrideSourceColors: false,
+  tintMode: "blend",
+  tintStrength: 0,
+  saturation: 1.05,
+  contrast: 1.1,
+  brightness: 1.02,
+  roughness: 0.32,
+  metalness: 0.32,
+  clearcoat: 0.5,
+  clearcoatRoughness: 0.24,
+  opacity: 1,
+  envMapIntensity: 1.5,
+  emissiveIntensity: 0.02
+});
+
 const CINEMATIC_THEME_SETTINGS = Object.freeze({
   materials: {
     defaultColor: WORKBENCH_FILL_COLORS[0],
@@ -424,9 +498,6 @@ const CINEMATIC_THEME_SETTINGS = Object.freeze({
     opacity: 1,
     envMapIntensity: 0.42,
     emissiveIntensity: 0.02
-  },
-  edges: {
-    ...CAD_THEME_EDGE_SETTINGS
   },
   background: {
     type: "linear",
@@ -521,9 +592,6 @@ const DARK_STUDIO_THEME_SETTINGS = Object.freeze({
     opacity: 1,
     envMapIntensity: 0.5,
     emissiveIntensity: 0.03
-  },
-  edges: {
-    ...DISABLED_THEME_EDGE_SETTINGS
   },
   background: {
     type: "linear",
@@ -634,9 +702,6 @@ const DARKOAL_THEME_SETTINGS = Object.freeze({
     defaultColor: DARKOAL_FILL_COLORS[0],
     fillColors: DARKOAL_FILL_COLORS
   },
-  edges: {
-    ...CAD_THEME_EDGE_SETTINGS
-  },
   background: {
     ...DARK_STUDIO_THEME_SETTINGS.background,
     solidColor: mixHexColors(DARK_STUDIO_THEME_SETTINGS.background.solidColor, CODEX_DARK_STUDIO_THEME_SETTINGS.background.solidColor),
@@ -655,81 +720,194 @@ const DARKOAL_THEME_SETTINGS = Object.freeze({
   }
 });
 
+const BLUE_STAGE_FLOOR_COLOR = "#062a42";
+
+// Blue keeps its goal — a single cyan fill on a deep-navy canvas — restaged
+// as a glossy presentation floor with cyan rim/spot accents.
 const BLUE_THEME_SETTINGS = Object.freeze({
+  projection: CAMERA_PROJECTION.PERSPECTIVE,
   materials: {
-    ...DARK_STUDIO_THEME_SETTINGS.materials,
+    ...STUDIO_STAGE_MATERIALS,
     defaultColor: BLUE_FILL_COLORS[0],
     fillColors: BLUE_FILL_COLORS,
-    cycleColors: false
-  },
-  edges: {
-    ...DISABLED_THEME_EDGE_SETTINGS
+    saturation: 1.15
   },
   background: {
     type: "radial",
     solidColor: "#04131f",
     linearStart: "#07253a",
-    linearEnd: "#0b8edc",
+    linearEnd: "#020a12",
     linearAngle: 128,
-    radialInner: "#0b8edc",
-    radialOuter: "#02070c"
+    radialInner: "#0a5e8f",
+    radialOuter: "#020a12"
   },
   floor: {
     mode: THEME_FLOOR_MODES.STAGE,
-    color: "#06324f",
-    roughness: 0.58,
-    reflectivity: 0.2,
-    shadowOpacity: 0.3,
-    horizonBlend: 0.18,
-    ...createFloorGridSettings("#06324f", { opacity: 0.24 }),
-    enabled: false
+    color: BLUE_STAGE_FLOOR_COLOR,
+    roughness: 0.42,
+    reflectivity: 0.28,
+    shadowOpacity: 0.5,
+    horizonBlend: 0.32,
+    ...createFloorGridSettings(BLUE_STAGE_FLOOR_COLOR, { enabled: false, opacity: 0.18 }),
+    enabled: true
   },
-  environment: DARK_STUDIO_THEME_SETTINGS.environment,
-  lighting: DARK_STUDIO_THEME_SETTINGS.lighting
+  environment: {
+    enabled: true,
+    presetId: "studio-hdri-43",
+    intensity: 0.6,
+    rotationY: -0.35,
+    useAsBackground: false
+  },
+  lighting: {
+    toneMappingExposure: 1.22,
+    directional: {
+      enabled: true,
+      color: "#eaf4ff",
+      intensity: 2.2,
+      position: { x: -190, y: 240, z: 300 }
+    },
+    fill: {
+      enabled: true,
+      color: "#9db8cc",
+      intensity: 0.38,
+      position: { x: 120, y: 80, z: 210 }
+    },
+    rim: {
+      enabled: true,
+      color: "#7fd4ff",
+      intensity: 1.4,
+      position: { x: -320, y: 260, z: 160 }
+    },
+    spot: {
+      enabled: true,
+      color: "#59c4ff",
+      intensity: 0.5,
+      angle: 0.7,
+      distance: 0,
+      position: { x: 190, y: 210, z: 170 }
+    },
+    point: {
+      enabled: true,
+      color: "#9bd0ff",
+      intensity: 0.3,
+      distance: 0,
+      position: { x: -240, y: 110, z: -210 }
+    },
+    ambient: {
+      enabled: true,
+      color: "#cfe2f2",
+      intensity: 0.2
+    },
+    hemisphere: {
+      enabled: true,
+      skyColor: "#dcedfa",
+      groundColor: "#03121d",
+      intensity: 0.8
+    }
+  }
 });
 
+const PINK_STAGE_FLOOR_COLOR = "#2b0e20";
+
+// Magenta keeps its goal — a saturated magenta fill on a near-black studio —
+// with a deep wine stage floor and magenta rim glow.
 const PINK_THEME_SETTINGS = Object.freeze({
+  projection: CAMERA_PROJECTION.PERSPECTIVE,
   materials: {
-    ...DARK_STUDIO_THEME_SETTINGS.materials,
+    ...STUDIO_STAGE_MATERIALS,
     defaultColor: MAGENTA_FILL_COLORS[0],
     fillColors: MAGENTA_FILL_COLORS,
-    cycleColors: false
-  },
-  edges: {
-    ...DISABLED_THEME_EDGE_SETTINGS
+    saturation: 1.2
   },
   background: {
     type: "radial",
-    solidColor: "#281323",
+    solidColor: "#1d0a16",
     linearStart: "#7a1a52",
-    linearEnd: "#301426",
+    linearEnd: "#170812",
     linearAngle: 140,
-    radialInner: "#7f1a55",
-    radialOuter: "#25101f"
+    radialInner: "#6e1348",
+    radialOuter: "#12060e"
   },
   floor: {
     mode: THEME_FLOOR_MODES.STAGE,
-    color: "#4a1833",
-    roughness: 0.56,
-    reflectivity: 0.2,
-    shadowOpacity: 0.26,
-    horizonBlend: 0.22,
-    ...createFloorGridSettings("#4a1833", { opacity: 0.24 }),
-    enabled: false
+    color: PINK_STAGE_FLOOR_COLOR,
+    roughness: 0.4,
+    reflectivity: 0.3,
+    shadowOpacity: 0.52,
+    horizonBlend: 0.3,
+    ...createFloorGridSettings(PINK_STAGE_FLOOR_COLOR, { enabled: false, opacity: 0.18 }),
+    enabled: true
   },
-  environment: DARK_STUDIO_THEME_SETTINGS.environment,
-  lighting: DARK_STUDIO_THEME_SETTINGS.lighting
+  environment: {
+    enabled: true,
+    presetId: "studio-hdri-43",
+    intensity: 0.6,
+    rotationY: -0.35,
+    useAsBackground: false
+  },
+  lighting: {
+    toneMappingExposure: 1.22,
+    directional: {
+      enabled: true,
+      color: "#fff0f6",
+      intensity: 2.2,
+      position: { x: -190, y: 240, z: 300 }
+    },
+    fill: {
+      enabled: true,
+      color: "#b295a6",
+      intensity: 0.36,
+      position: { x: 120, y: 80, z: 210 }
+    },
+    rim: {
+      enabled: true,
+      color: "#ff8fd0",
+      intensity: 1.4,
+      position: { x: -320, y: 260, z: 160 }
+    },
+    spot: {
+      enabled: true,
+      color: "#ff5fb0",
+      intensity: 0.5,
+      angle: 0.7,
+      distance: 0,
+      position: { x: 190, y: 210, z: 170 }
+    },
+    point: {
+      enabled: true,
+      color: "#d998ff",
+      intensity: 0.28,
+      distance: 0,
+      position: { x: -240, y: 110, z: -210 }
+    },
+    ambient: {
+      enabled: true,
+      color: "#e8d3de",
+      intensity: 0.2
+    },
+    hemisphere: {
+      enabled: true,
+      skyColor: "#f4dcea",
+      groundColor: "#170812",
+      intensity: 0.78
+    }
+  }
 });
 
+const CLAY_STAGE_FLOOR_COLOR = "#d9a97c";
+
+// Clay keeps its goal — a warm terracotta presentation — with a satin clay
+// stage, golden-hour key light, and soft warm bounce.
 const CLAY_SUNRISE_THEME_SETTINGS = Object.freeze({
+  projection: CAMERA_PROJECTION.PERSPECTIVE,
   materials: {
-    ...DARK_STUDIO_THEME_SETTINGS.materials,
+    ...STUDIO_STAGE_MATERIALS,
     defaultColor: CLAY_FILL_COLORS[0],
     fillColors: CLAY_FILL_COLORS,
-    cycleColors: false
-  },
-  edges: {
-    ...DISABLED_THEME_EDGE_SETTINGS
+    saturation: 1.1,
+    roughness: 0.38,
+    metalness: 0.22,
+    envMapIntensity: 1.2
   },
   background: {
     type: "linear",
@@ -742,109 +920,85 @@ const CLAY_SUNRISE_THEME_SETTINGS = Object.freeze({
   },
   floor: {
     mode: THEME_FLOOR_MODES.STAGE,
-    color: "#d4a070",
-    roughness: 0.72,
-    reflectivity: 0.14,
-    shadowOpacity: 0.34,
-    horizonBlend: 0.12,
-    ...createFloorGridSettings("#d4a070", { opacity: 0.18 }),
-    enabled: false
-  },
-  environment: DARK_STUDIO_THEME_SETTINGS.environment,
-  lighting: DARK_STUDIO_THEME_SETTINGS.lighting
-});
-
-const BEACH_THEME_SETTINGS = Object.freeze({
-  materials: {
-    ...CINEMATIC_THEME_SETTINGS.materials,
-    defaultColor: BEACH_FILL_COLORS[0],
-    fillColors: BEACH_FILL_COLORS,
-    cycleColors: true
-  },
-  edges: {
-    ...DISABLED_THEME_EDGE_SETTINGS
-  },
-  background: {
-    type: "linear",
-    solidColor: "#dff7f7",
-    linearStart: "#fff4d6",
-    linearEnd: "#47c5d6",
-    linearAngle: 152,
-    radialInner: "#fff8e8",
-    radialOuter: "#1a8fb5"
-  },
-  floor: {
-    mode: THEME_FLOOR_MODES.STAGE,
-    color: "#f2d59b",
-    roughness: 0.74,
-    reflectivity: 0.18,
-    shadowOpacity: 0.2,
-    horizonBlend: 0.2,
-    ...createFloorGridSettings("#f2d59b", { opacity: 0.18 }),
-    enabled: false
+    color: CLAY_STAGE_FLOOR_COLOR,
+    roughness: 0.5,
+    reflectivity: 0.22,
+    shadowOpacity: 0.42,
+    horizonBlend: 0.26,
+    ...createFloorGridSettings(CLAY_STAGE_FLOOR_COLOR, { enabled: false, opacity: 0.18 }),
+    enabled: true
   },
   environment: {
     enabled: true,
-    presetId: "studio-hdri-12",
-    intensity: 0.36,
-    rotationY: -0.18,
+    presetId: "studio-hdri-43",
+    intensity: 0.55,
+    rotationY: -0.25,
     useAsBackground: false
   },
   lighting: {
-    toneMappingExposure: 1.18,
+    toneMappingExposure: 1.16,
     directional: {
       enabled: true,
-      color: "#fff7df",
-      intensity: 1.3,
-      position: {
-        x: -220,
-        y: 280,
-        z: 250
-      }
+      color: "#fff0dc",
+      intensity: 2.1,
+      position: { x: -190, y: 240, z: 300 }
+    },
+    fill: {
+      enabled: true,
+      color: "#d8b795",
+      intensity: 0.45,
+      position: { x: 120, y: 80, z: 210 }
+    },
+    rim: {
+      enabled: true,
+      color: "#ffd7ad",
+      intensity: 0.85,
+      position: { x: -320, y: 260, z: 160 }
     },
     spot: {
       enabled: true,
-      color: "#e4fbff",
-      intensity: 0.36,
-      angle: 0.72,
+      color: "#ffe3c4",
+      intensity: 0.4,
+      angle: 0.7,
       distance: 0,
-      position: {
-        x: 190,
-        y: 210,
-        z: 170
-      }
+      position: { x: 190, y: 210, z: 170 }
     },
     point: {
       enabled: true,
-      color: "#ffd08a",
-      intensity: 0.24,
+      color: "#ff9e63",
+      intensity: 0.25,
       distance: 0,
-      position: {
-        x: -240,
-        y: 110,
-        z: -210
-      }
+      position: { x: -240, y: 110, z: -210 }
     },
     ambient: {
       enabled: true,
-      color: "#fff8e6",
-      intensity: 0.34
+      color: "#f5e7d5",
+      intensity: 0.28
     },
     hemisphere: {
       enabled: true,
-      skyColor: "#bff8ff",
-      groundColor: "#f2d59b",
-      intensity: 1.04
+      skyColor: "#fff4e4",
+      groundColor: "#a86b40",
+      intensity: 0.9
     }
   }
 });
 
+const TERMINAL_STAGE_FLOOR_COLOR = "#02120a";
+
+// Terminal keeps its goal — phosphor-green CRT linework — restaged on a
+// glossy black floor whose grid keeps the green scanline identity.
 const TERMINAL_THEME_SETTINGS = Object.freeze({
+  projection: CAMERA_PROJECTION.PERSPECTIVE,
   materials: {
-    ...DARK_STUDIO_THEME_SETTINGS.materials,
+    ...STUDIO_STAGE_MATERIALS,
     defaultColor: TERMINAL_FILL_COLORS[0],
     fillColors: TERMINAL_FILL_COLORS,
-    cycleColors: false
+    saturation: 1.15,
+    roughness: 0.4,
+    metalness: 0.25,
+    envMapIntensity: 0.9,
+    emissiveIntensity: 0.04
   },
   edges: {
     ...TERMINAL_THEME_EDGE_SETTINGS
@@ -855,23 +1009,81 @@ const TERMINAL_THEME_SETTINGS = Object.freeze({
     linearStart: "#031109",
     linearEnd: "#000000",
     linearAngle: 180,
-    radialInner: "#062414",
+    radialInner: "#06301b",
     radialOuter: "#000201"
   },
+  // Transparent floor: no solid stage plane or shadow catcher, just a neon
+  // green grid floating over the dark backdrop — the classic terminal look.
   floor: {
     mode: THEME_FLOOR_MODES.GRID,
-    color: "#020403",
-    roughness: 0.58,
-    reflectivity: 0.12,
-    shadowOpacity: 0.35,
-    horizonBlend: 0,
-    gridCenterColor: TERMINAL_EDGE_COLOR,
-    gridCellColor: "#0c3d22",
-    gridOpacity: 0.34,
-    gridDensity: 1.15
+    color: TERMINAL_STAGE_FLOOR_COLOR,
+    roughness: 0.35,
+    reflectivity: 0.32,
+    shadowOpacity: 0.55,
+    horizonBlend: 0.24,
+    ...createFloorGridSettings(TERMINAL_STAGE_FLOOR_COLOR, {
+      enabled: true,
+      centerColor: TERMINAL_EDGE_COLOR,
+      cellColor: "#0f5230",
+      opacity: 0.42,
+      density: 1.15
+    }),
+    enabled: false
   },
-  environment: DARK_STUDIO_THEME_SETTINGS.environment,
-  lighting: DARK_STUDIO_THEME_SETTINGS.lighting
+  environment: {
+    enabled: true,
+    presetId: "studio-hdri-43",
+    intensity: 0.35,
+    rotationY: -0.35,
+    useAsBackground: false
+  },
+  lighting: {
+    toneMappingExposure: 1.2,
+    directional: {
+      enabled: true,
+      color: "#eafff2",
+      intensity: 2,
+      position: { x: -190, y: 240, z: 300 }
+    },
+    fill: {
+      enabled: true,
+      color: "#7da98d",
+      intensity: 0.35,
+      position: { x: 120, y: 80, z: 210 }
+    },
+    rim: {
+      enabled: true,
+      color: "#66ff99",
+      intensity: 1.2,
+      position: { x: -320, y: 260, z: 160 }
+    },
+    spot: {
+      enabled: true,
+      color: "#4dff8a",
+      intensity: 0.45,
+      angle: 0.7,
+      distance: 0,
+      position: { x: 190, y: 210, z: 170 }
+    },
+    point: {
+      enabled: true,
+      color: "#9dffc0",
+      intensity: 0.25,
+      distance: 0,
+      position: { x: -240, y: 110, z: -210 }
+    },
+    ambient: {
+      enabled: true,
+      color: "#cfe8d8",
+      intensity: 0.2
+    },
+    hemisphere: {
+      enabled: true,
+      skyColor: "#d8ffe8",
+      groundColor: "#01130a",
+      intensity: 0.75
+    }
+  }
 });
 
 // Workbench light mode counterpart to the dark treatment below: the canvas
@@ -884,6 +1096,7 @@ const WORKBENCH_LIGHT_FLOOR_COLOR = "#e2e9f0";
 
 const WORKBENCH_BASE_THEME_SETTINGS = Object.freeze({
   ...CINEMATIC_THEME_SETTINGS,
+  projection: CAMERA_PROJECTION.ORTHOGRAPHIC,
   background: {
     ...CINEMATIC_THEME_SETTINGS.background,
     type: "solid",
@@ -893,14 +1106,16 @@ const WORKBENCH_BASE_THEME_SETTINGS = Object.freeze({
     radialInner: WORKBENCH_LIGHT_CANVAS_COLOR,
     radialOuter: WORKBENCH_LIGHT_CANVAS_COLOR
   },
-  edges: {
-    ...CAD_THEME_EDGE_SETTINGS
-  },
+  // Workbench is a clean engineering canvas: no stage floor plane, but a faint
+  // ground grid and a line up the origin give parts something to read position
+  // against. Both are deliberately low-contrast so they sit under the model
+  // rather than competing with it.
   floor: {
     ...CINEMATIC_THEME_SETTINGS.floor,
     color: WORKBENCH_LIGHT_FLOOR_COLOR,
-    enabled: true,
-    ...createFloorGridSettings(WORKBENCH_LIGHT_FLOOR_COLOR, { enabled: true, opacity: 0.2 })
+    enabled: false,
+    ...createFloorGridSettings(WORKBENCH_LIGHT_FLOOR_COLOR, { enabled: true, opacity: 0.16 }),
+    ...createFloorAxisSettings(WORKBENCH_LIGHT_FLOOR_COLOR, { enabled: true, opacity: 0.28 })
   },
   environment: {
     ...CINEMATIC_THEME_SETTINGS.environment,
@@ -926,10 +1141,6 @@ const WORKBENCH_DARK_FLOOR_COLOR = "#202832";
 
 const WORKBENCH_DARK_THEME_SETTINGS = Object.freeze({
   ...DARKOAL_THEME_SETTINGS,
-  edges: {
-    ...CAD_THEME_EDGE_SETTINGS,
-    color: "#1c2836"
-  },
   background: {
     ...DARKOAL_THEME_SETTINGS.background,
     solidColor: "#181f28",
@@ -941,8 +1152,12 @@ const WORKBENCH_DARK_THEME_SETTINGS = Object.freeze({
   floor: {
     ...DARKOAL_THEME_SETTINGS.floor,
     color: WORKBENCH_DARK_FLOOR_COLOR,
-    enabled: true,
-    ...createFloorGridSettings(WORKBENCH_DARK_FLOOR_COLOR, { enabled: true, opacity: 0.22 })
+    enabled: false,
+    // Only the colors here reach the dark preset: mode overrides swap colors,
+    // not booleans or opacities, so enablement and opacity come from the light
+    // base above and are deliberately not restated.
+    ...createFloorGridSettings(WORKBENCH_DARK_FLOOR_COLOR, { enabled: true, opacity: 0.16 }),
+    ...createFloorAxisSettings(WORKBENCH_DARK_FLOOR_COLOR, { enabled: true, opacity: 0.28 })
   },
   lighting: {
     ...DARKOAL_THEME_SETTINGS.lighting,
@@ -965,34 +1180,318 @@ const WORKBENCH_DARK_THEME_SETTINGS = Object.freeze({
   }
 });
 
-const WORKBENCH_THEME_SETTINGS = withThemeColorMode(
+// Workbench ships as two distinct, single-palette themes (light + dark) rather
+// than one system-adaptive theme. App light/dark is inferred from the active
+// theme's background, so each Workbench variant is pinned to its own palette.
+const WORKBENCH_LIGHT_THEME_PRESET_SETTINGS = withThemeColorMode(
   WORKBENCH_BASE_THEME_SETTINGS,
-  THEME_COLOR_MODES.SYSTEM,
-  createThemeModeColors(WORKBENCH_BASE_THEME_SETTINGS, WORKBENCH_DARK_THEME_SETTINGS)
+  THEME_COLOR_MODES.LIGHT
+);
+// Workbench Dark keeps the shared Workbench materials and lighting intensities,
+// swapping in the dark canvas/floor/light colors (the same color set the old
+// system theme applied for its dark mode) so the two variants read as one theme
+// on two canvases.
+const WORKBENCH_DARK_BAKED_SETTINGS = deepClone(WORKBENCH_BASE_THEME_SETTINGS);
+applyThemeModeColorOverrides(
+  WORKBENCH_DARK_BAKED_SETTINGS,
+  createThemeModeColors(WORKBENCH_BASE_THEME_SETTINGS, WORKBENCH_DARK_THEME_SETTINGS).dark
+);
+const WORKBENCH_DARK_THEME_PRESET_SETTINGS = withThemeColorMode(
+  WORKBENCH_DARK_BAKED_SETTINGS,
+  THEME_COLOR_MODES.DARK
+);
+// Back-compat: the migration fallback and any "workbench" id resolve to light.
+const WORKBENCH_THEME_SETTINGS = WORKBENCH_LIGHT_THEME_PRESET_SETTINGS;
+
+// Cinematic: a filmic product-shot stage. Warm charcoal backdrop with a soft
+// radial falloff, satin PBR finish with studio-HDRI reflections, a warm key
+// with cool rim separation, an amber spot glow pooling on a faintly gridded
+// glossy floor. Colors follow a warm silver / copper grade; source part
+// colors pass through with a gentle contrast lift. Distinct from the legacy
+// CINEMATIC_THEME_SETTINGS above, which survives only to seed the Workbench
+// presets and the stored-settings migration matchers.
+const CINEMATIC_FILL_COLORS = Object.freeze([
+  "#c9c2bb",
+  "#c98d55",
+  "#8e969e",
+  "#a9784e"
+]);
+
+const CINEMATIC_STUDIO_FLOOR_COLOR = "#131418";
+
+const CINEMATIC_STUDIO_THEME_SETTINGS = Object.freeze({
+  projection: CAMERA_PROJECTION.PERSPECTIVE,
+  materials: {
+    ...STUDIO_STAGE_MATERIALS,
+    defaultColor: CINEMATIC_FILL_COLORS[0],
+    fillColors: CINEMATIC_FILL_COLORS
+  },
+  background: {
+    type: "radial",
+    solidColor: "#121317",
+    linearStart: "#1c1d22",
+    linearEnd: "#0a0a0d",
+    linearAngle: 135,
+    radialInner: "#191a1f",
+    radialOuter: "#0a0a0d"
+  },
+  floor: {
+    mode: THEME_FLOOR_MODES.STAGE,
+    color: CINEMATIC_STUDIO_FLOOR_COLOR,
+    roughness: 0.55,
+    reflectivity: 0.16,
+    shadowOpacity: 0.58,
+    horizonBlend: 0.34,
+    ...createFloorGridSettings(CINEMATIC_STUDIO_FLOOR_COLOR, { enabled: true, opacity: 0.09 }),
+    enabled: true
+  },
+  environment: {
+    enabled: true,
+    presetId: "studio-hdri-43",
+    intensity: 0.65,
+    rotationY: -0.35,
+    useAsBackground: false
+  },
+  lighting: {
+    toneMappingExposure: 1.24,
+    directional: {
+      enabled: true,
+      color: "#fff3e4",
+      intensity: 2.5,
+      position: {
+        x: -190,
+        y: 240,
+        z: 300
+      }
+    },
+    fill: {
+      enabled: true,
+      color: "#a6a9ad",
+      intensity: 0.42,
+      position: {
+        x: 120,
+        y: 80,
+        z: 210
+      }
+    },
+    rim: {
+      enabled: true,
+      color: "#d9e6f5",
+      intensity: 1.3,
+      position: {
+        x: -320,
+        y: 260,
+        z: 160
+      }
+    },
+    spot: {
+      enabled: true,
+      color: "#e8e5df",
+      intensity: 0.35,
+      angle: 0.7,
+      distance: 0,
+      position: {
+        x: 190,
+        y: 210,
+        z: 170
+      }
+    },
+    point: {
+      enabled: true,
+      color: "#9fc4e8",
+      intensity: 0.3,
+      distance: 0,
+      position: {
+        x: -240,
+        y: 110,
+        z: -210
+      }
+    },
+    ambient: {
+      enabled: true,
+      color: "#d5d7da",
+      intensity: 0.24
+    },
+    hemisphere: {
+      enabled: true,
+      skyColor: "#e5e7ea",
+      groundColor: "#1b1c1f",
+      intensity: 0.85
+    }
+  }
+});
+
+const CINEMATIC_STUDIO_THEME_PRESET_SETTINGS = withThemeColorMode(
+  CINEMATIC_STUDIO_THEME_SETTINGS,
+  THEME_COLOR_MODES.DARK
+);
+
+// Vibrant: the cinematic stage flipped to a bright infinity cove. Crisp
+// white key and rim, strong studio reflections, and a saturation lift so
+// source colors read punchy; uncolored parts cycle a vivid palette.
+const VIBRANT_FILL_COLORS = Object.freeze([
+  "#3b82f6",
+  "#f97352",
+  "#fbbf24",
+  "#34d399",
+  "#a78bfa",
+  "#f472b6"
+]);
+
+const VIBRANT_STUDIO_FLOOR_COLOR = "#eef1f5";
+
+const VIBRANT_STUDIO_THEME_SETTINGS = Object.freeze({
+  projection: CAMERA_PROJECTION.PERSPECTIVE,
+  materials: {
+    ...STUDIO_STAGE_MATERIALS,
+    defaultColor: VIBRANT_FILL_COLORS[0],
+    // Palette kept for the picker/custom edits but not cycled: Vibrant shows
+    // off each model's own colors, just with a punchier photoreal grade.
+    fillColors: VIBRANT_FILL_COLORS,
+    cycleColors: false,
+    saturation: 1.32,
+    contrast: 1.12,
+    brightness: 1.04,
+    roughness: 0.3,
+    metalness: 0.26,
+    clearcoat: 0.55,
+    clearcoatRoughness: 0.2,
+    envMapIntensity: 1.2
+  },
+  background: {
+    type: "radial",
+    solidColor: "#f2f4f7",
+    linearStart: "#ffffff",
+    linearEnd: "#dde2e9",
+    linearAngle: 135,
+    radialInner: "#ffffff",
+    radialOuter: "#dbe0e7"
+  },
+  floor: {
+    mode: THEME_FLOOR_MODES.STAGE,
+    color: VIBRANT_STUDIO_FLOOR_COLOR,
+    roughness: 0.3,
+    reflectivity: 0.34,
+    shadowOpacity: 0.3,
+    horizonBlend: 0.42,
+    ...createFloorGridSettings(VIBRANT_STUDIO_FLOOR_COLOR, { enabled: false, opacity: 0.12 }),
+    enabled: true
+  },
+  environment: {
+    enabled: true,
+    presetId: "studio-hdri-43",
+    intensity: 0.9,
+    rotationY: -0.35,
+    useAsBackground: false
+  },
+  lighting: {
+    toneMappingExposure: 1.12,
+    directional: {
+      enabled: true,
+      color: "#ffffff",
+      intensity: 2.2,
+      position: { x: -190, y: 240, z: 300 }
+    },
+    fill: {
+      enabled: true,
+      color: "#dfe6ee",
+      intensity: 0.5,
+      position: { x: 120, y: 80, z: 210 }
+    },
+    rim: {
+      enabled: true,
+      color: "#ffffff",
+      intensity: 0.9,
+      position: { x: -320, y: 260, z: 160 }
+    },
+    spot: {
+      enabled: true,
+      color: "#ffffff",
+      intensity: 0.3,
+      angle: 0.7,
+      distance: 0,
+      position: { x: 190, y: 210, z: 170 }
+    },
+    point: {
+      enabled: true,
+      color: "#ffd9a8",
+      intensity: 0.25,
+      distance: 0,
+      position: { x: -240, y: 110, z: -210 }
+    },
+    ambient: {
+      enabled: true,
+      color: "#ffffff",
+      intensity: 0.3
+    },
+    hemisphere: {
+      enabled: true,
+      skyColor: "#ffffff",
+      groundColor: "#c9d2dc",
+      intensity: 0.9
+    }
+  }
+});
+
+const VIBRANT_STUDIO_THEME_PRESET_SETTINGS = withThemeColorMode(
+  VIBRANT_STUDIO_THEME_SETTINGS,
+  THEME_COLOR_MODES.LIGHT
 );
 
 const BLUE_THEME_PRESET_SETTINGS = withThemeColorMode(BLUE_THEME_SETTINGS, THEME_COLOR_MODES.DARK);
 const PINK_THEME_PRESET_SETTINGS = withThemeColorMode(PINK_THEME_SETTINGS, THEME_COLOR_MODES.DARK);
 const CLAY_SUNRISE_THEME_PRESET_SETTINGS = withThemeColorMode(CLAY_SUNRISE_THEME_SETTINGS, THEME_COLOR_MODES.LIGHT);
-const BEACH_THEME_PRESET_SETTINGS = withThemeColorMode(BEACH_THEME_SETTINGS, THEME_COLOR_MODES.LIGHT);
 const TERMINAL_THEME_PRESET_SETTINGS = withThemeColorMode(TERMINAL_THEME_SETTINGS, THEME_COLOR_MODES.DARK);
 
 export const THEME_PRESETS = Object.freeze([
   {
-    id: "workbench",
-    label: "Workbench",
-    description: "Balanced CAD workbench lighting with system-aware light and dark canvas colors.",
+    id: "workbench-light",
+    label: "Light",
+    description: "Balanced CAD workbench lighting on a light canvas.",
     preview: {
       background: "#f0f4f9",
       modelColor: "#b6c4ce",
       accentColor: "#4ea7d8"
     },
-    settings: WORKBENCH_THEME_SETTINGS
+    settings: WORKBENCH_LIGHT_THEME_PRESET_SETTINGS
+  },
+  {
+    id: "workbench-dark",
+    label: "Dark",
+    description: "Balanced CAD workbench lighting on a deep blue-slate canvas.",
+    preview: {
+      background: "#181f28",
+      modelColor: "#b6c4ce",
+      accentColor: "#4ea7d8"
+    },
+    settings: WORKBENCH_DARK_THEME_PRESET_SETTINGS
+  },
+  {
+    id: "cinematic",
+    label: "Cinematic",
+    description: "Filmic studio stage with warm key lighting, copper accents, and a glossy charcoal floor.",
+    preview: {
+      background: "radial-gradient(circle at 42% 32%, #23242a 0%, #0a0a0d 78%)",
+      modelColor: "#c9c2bb",
+      accentColor: "#c98d55"
+    },
+    settings: CINEMATIC_STUDIO_THEME_PRESET_SETTINGS
+  },
+  {
+    id: "vibrant",
+    label: "Vibrant",
+    description: "Bright studio cove with punchy color and photoreal reflections.",
+    preview: {
+      background: "radial-gradient(circle at 42% 32%, #ffffff 0%, #dbe0e7 78%)",
+      modelColor: "#3b82f6",
+      accentColor: "#f97352"
+    },
+    settings: VIBRANT_STUDIO_THEME_PRESET_SETTINGS
   },
   {
     id: "blue",
     label: "Blue",
-    description: "Single cyan fill against deep-navy CAD lighting.",
+    description: "Single cyan fill on a deep-navy stage with cyan rim lighting.",
     preview: {
       background: BLUE_FILL_COLORS[0],
       modelColor: BLUE_FILL_COLORS[0],
@@ -1003,7 +1502,7 @@ export const THEME_PRESETS = Object.freeze([
   {
     id: "pink",
     label: "Magenta",
-    description: "Single saturated magenta fill against a near-black studio backdrop.",
+    description: "Saturated magenta fill on a near-black stage with magenta rim glow.",
     preview: {
       background: MAGENTA_FILL_COLORS[0],
       modelColor: MAGENTA_FILL_COLORS[0],
@@ -1014,7 +1513,7 @@ export const THEME_PRESETS = Object.freeze([
   {
     id: "clay-sunrise",
     label: "Clay",
-    description: "Single warm clay fill with a soft presentation stage.",
+    description: "Warm clay fill on a satin terracotta stage with golden-hour light.",
     preview: {
       background: CLAY_FILL_COLORS[0],
       modelColor: CLAY_FILL_COLORS[0],
@@ -1023,20 +1522,9 @@ export const THEME_PRESETS = Object.freeze([
     settings: CLAY_SUNRISE_THEME_PRESET_SETTINGS
   },
   {
-    id: "beach",
-    label: "Beach",
-    description: "Two-color aqua-and-coral fill with warm beach presentation lighting.",
-    preview: {
-      background: `linear-gradient(135deg, ${BEACH_FILL_COLORS[0]} 0%, ${BEACH_FILL_COLORS[0]} 50%, ${BEACH_FILL_COLORS[1]} 50%, ${BEACH_FILL_COLORS[1]} 100%)`,
-      modelColor: BEACH_FILL_COLORS[0],
-      accentColor: BEACH_FILL_COLORS[1]
-    },
-    settings: BEACH_THEME_PRESET_SETTINGS
-  },
-  {
     id: "terminal",
     label: "Terminal",
-    description: "Single terminal-green fill with green CAD edge linework and a dark grid floor.",
+    description: "Phosphor-green linework on a glossy black stage with a green grid floor.",
     preview: {
       background: TERMINAL_FILL_COLORS[0],
       modelColor: TERMINAL_FILL_COLORS[0],
@@ -1047,287 +1535,98 @@ export const THEME_PRESETS = Object.freeze([
 ]);
 
 const THEME_PRESET_ID_ALIASES = Object.freeze({
-  cinematic: "workbench",
-  light: "workbench",
-  dark: "workbench",
-  charcoal: "workbench",
-  darkoal: "workbench",
-  "dark-2": "workbench"
+  workbench: "workbench-light",
+  light: "workbench-light",
+  dark: "workbench-dark"
 });
 
-export const DEFAULT_THEME_PRESET_ID = "workbench";
+// --- render-only themes -------------------------------------------------------------
+// Themes that exist for HEADLESS SNAPSHOTS and are deliberately absent from THEME_PRESETS,
+// which is what the viewer's theme picker lists. A snapshot is usually read by an agent
+// rather than looked at by a person, and the two want different things from a scene.
+//
+// Workbench gives a part "something to read position against": a faint ground grid and a
+// line up the origin. In the viewport that is orientation you can ignore. In a still image
+// it is geometry-shaped contrast that is not geometry -- straight lines crossing the model
+// and the background, at the same low contrast as a real silhouette edge, with nothing
+// (motion, interaction, the rest of the UI) to say otherwise. Everything else is inherited
+// from Workbench Light unchanged, so a part's colour, material and lighting read exactly as
+// they do in the viewer; only the furniture that is not the model is removed.
+export const SNAPSHOT_THEME_ID = "snapshot";
+
+const SNAPSHOT_THEME_SETTINGS = Object.freeze({
+  ...WORKBENCH_LIGHT_THEME_PRESET_SETTINGS,
+  floor: {
+    ...WORKBENCH_LIGHT_THEME_PRESET_SETTINGS.floor,
+    // Stated, not inherited. Workbench already disables the floor plane, so nothing
+    // catches a shadow and this is inert today -- but "a snapshot casts no shadow" is a
+    // property of THIS theme, and a theme that holds it only by accident of another
+    // setting loses it silently the moment that setting changes.
+    shadowOpacity: 0,
+    ...createFloorGridSettings(WORKBENCH_LIGHT_FLOOR_COLOR, { enabled: false, opacity: 0 }),
+    ...createFloorAxisSettings(WORKBENCH_LIGHT_FLOOR_COLOR, { enabled: false, opacity: 0 })
+  }
+});
+
+const SNAPSHOT_THEME_PRESET = Object.freeze({
+  id: SNAPSHOT_THEME_ID,
+  label: "Snapshot",
+  description: "Workbench Light with the grid and origin axis removed, for headless renders.",
+  preview: {
+    background: "#f0f4f9",
+    modelColor: "#b6c4ce",
+    accentColor: "#4ea7d8"
+  },
+  settings: SNAPSHOT_THEME_SETTINGS
+});
+
+// Resolvable by id, never offered in the picker. getThemePresetById consults this AFTER
+// THEME_PRESETS, so a render can name it and the viewer cannot land on it by accident.
+export const RENDER_ONLY_THEME_PRESETS = Object.freeze([SNAPSHOT_THEME_PRESET]);
+
+export const DEFAULT_THEME_PRESET_ID = "workbench-light";
+
+// The two ids that are not presets. "system" follows prefers-color-scheme;
+// "custom" is the single slot holding whatever the user has edited. Everything
+// else is a built-in preset, and presets are read-only.
+export const SYSTEM_THEME_ID = "system";
+export const CUSTOM_THEME_ID = "custom";
+export const DEFAULT_THEME_ID = SYSTEM_THEME_ID;
 
 export const DEFAULT_THEME_PRESET = Object.freeze(
   THEME_PRESETS.find((preset) => preset.id === DEFAULT_THEME_PRESET_ID) || THEME_PRESETS[0]
 );
 
 export const DEFAULT_THEME_SETTINGS = Object.freeze(DEFAULT_THEME_PRESET.settings);
-export const THEMES = THEME_PRESETS;
-export const DEFAULT_THEME_ID = DEFAULT_THEME_PRESET_ID;
-export const DEFAULT_THEME = DEFAULT_THEME_PRESET;
 
 export function resolveSystemThemePresetId({ prefersDark = false } = {}) {
-  return DEFAULT_THEME_PRESET_ID;
+  return prefersDark === true ? "workbench-dark" : "workbench-light";
+}
+
+// The id the UI shows as selected, and the only ids that may be stored.
+export function normalizeThemeId(themeId) {
+  const normalized = String(themeId || "").trim();
+  if (normalized === SYSTEM_THEME_ID || normalized === CUSTOM_THEME_ID) {
+    return normalized;
+  }
+  return normalizeThemePresetId(normalized);
+}
+
+// Resolve an active theme id to the settings it renders with. "custom" uses the
+// stored custom settings; "system" and presets resolve to preset settings, which
+// is why selecting a preset is all it takes to reset a customized theme.
+export function resolveThemeSettingsForId(themeId, { custom = null, prefersDark = false } = {}) {
+  const normalizedThemeId = normalizeThemeId(themeId) || DEFAULT_THEME_ID;
+  if (normalizedThemeId === CUSTOM_THEME_ID && custom) {
+    return normalizeThemeSettings(custom);
+  }
+  const presetId = normalizedThemeId === CUSTOM_THEME_ID || normalizedThemeId === SYSTEM_THEME_ID
+    ? resolveSystemThemePresetId({ prefersDark })
+    : normalizedThemeId;
+  return cloneThemePresetSettings(presetId);
 }
 
 const PRESET_ID_SET = new Set(ENVIRONMENT_PRESETS.map((preset) => preset.id));
-const LEGACY_CINEMATIC_MATERIALS = Object.freeze({
-  defaultColor: "#aeb9c3",
-  tintStrength: 0.28,
-  saturation: 0.42,
-  contrast: 1.02,
-  brightness: 0.94,
-  roughness: 0.46,
-  metalness: 0.02,
-  clearcoat: 0.18,
-  clearcoatRoughness: 0.34,
-  opacity: 1,
-  envMapIntensity: 0.58
-});
-const PREVIOUS_CINEMATIC_MATERIALS = Object.freeze({
-  defaultColor: "#aeb9c3",
-  tintMode: "blend",
-  tintStrength: 0.08,
-  saturation: 1,
-  contrast: 1.04,
-  brightness: 1.02,
-  roughness: 0.46,
-  metalness: 0.02,
-  clearcoat: 0.18,
-  clearcoatRoughness: 0.34,
-  opacity: 1,
-  envMapIntensity: 0.58,
-  emissiveIntensity: 0.06
-});
-const DIM_CINEMATIC_MATERIALS = Object.freeze({
-  defaultColor: "#aeb9c3",
-  tintMode: "blend",
-  tintStrength: 0,
-  saturation: 1.34,
-  contrast: 1.02,
-  brightness: 0.82,
-  roughness: 0.76,
-  metalness: 0,
-  clearcoat: 0,
-  clearcoatRoughness: 0.72,
-  opacity: 1,
-  envMapIntensity: 0.08,
-  emissiveIntensity: 0.01
-});
-const LOW_CONTRAST_CINEMATIC_MATERIALS = Object.freeze({
-  defaultColor: "#bcc8d4",
-  tintMode: "blend",
-  tintStrength: 0,
-  saturation: 1.18,
-  contrast: 1.07,
-  brightness: 1.04,
-  roughness: 0.58,
-  metalness: 0.02,
-  clearcoat: 0.12,
-  clearcoatRoughness: 0.42,
-  opacity: 1,
-  envMapIntensity: 0.42,
-  emissiveIntensity: 0.02
-});
-const SOFT_CONTRAST_CINEMATIC_MATERIALS = Object.freeze({
-  defaultColor: "#748899",
-  tintMode: "blend",
-  tintStrength: 0,
-  saturation: 1.18,
-  contrast: 1.07,
-  brightness: 1.04,
-  roughness: 0.58,
-  metalness: 0.02,
-  clearcoat: 0.12,
-  clearcoatRoughness: 0.42,
-  opacity: 1,
-  envMapIntensity: 0.42,
-  emissiveIntensity: 0.02
-});
-const FEATURE_CONTRAST_CINEMATIC_MATERIALS = Object.freeze({
-  defaultColor: "#556c7f",
-  tintMode: "blend",
-  tintStrength: 0,
-  saturation: 1.18,
-  contrast: 1.12,
-  brightness: 1.02,
-  roughness: 0.58,
-  metalness: 0.02,
-  clearcoat: 0.12,
-  clearcoatRoughness: 0.42,
-  opacity: 1,
-  envMapIntensity: 0.42,
-  emissiveIntensity: 0.02
-});
-const LEGACY_CINEMATIC_EDGES = Object.freeze({
-  enabled: false,
-  color: "#8fa1b5",
-  thickness: 1
-});
-const PREVIOUS_CINEMATIC_EDGES = Object.freeze({
-  enabled: true,
-  color: "#8fa1b5",
-  thickness: 1.65
-});
-const DIM_CINEMATIC_EDGES = Object.freeze({
-  enabled: false,
-  color: "#8fa1b5",
-  thickness: 1
-});
-const LOW_CONTRAST_CINEMATIC_EDGES = Object.freeze({
-  enabled: false,
-  color: "#8fa1b5",
-  thickness: 1
-});
-const LEGACY_CINEMATIC_BACKGROUND = Object.freeze({
-  solidColor: "#050711",
-  linearStart: "#02040b",
-  linearEnd: "#252f47",
-  linearAngle: 90,
-  radialInner: "#171d30",
-  radialOuter: "#02040b"
-});
-const PREVIOUS_CINEMATIC_BACKGROUND = LEGACY_CINEMATIC_BACKGROUND;
-const DIM_CINEMATIC_BACKGROUND = Object.freeze({
-  solidColor: "#0a0f18",
-  linearStart: "#08111c",
-  linearEnd: "#1f2c3d",
-  linearAngle: 90,
-  radialInner: "#182337",
-  radialOuter: "#08111c"
-});
-const LEGACY_CINEMATIC_FLOOR = Object.freeze({
-  mode: THEME_FLOOR_MODES.STAGE,
-  color: "#141a29",
-  roughness: 0.62,
-  reflectivity: 0.22,
-  shadowOpacity: 0.24,
-  horizonBlend: 0.28
-});
-const PREVIOUS_CINEMATIC_FLOOR = Object.freeze({
-  mode: THEME_FLOOR_MODES.STAGE,
-  color: "#141a29",
-  roughness: 0.62,
-  reflectivity: 0.06,
-  shadowOpacity: 0.24,
-  horizonBlend: 0.12
-});
-const DIM_CINEMATIC_FLOOR = Object.freeze({
-  mode: THEME_FLOOR_MODES.STAGE,
-  color: "#121a24",
-  roughness: 0.86,
-  reflectivity: 0.06,
-  shadowOpacity: 0.24,
-  horizonBlend: 0.28
-});
-const LEGACY_CINEMATIC_ENVIRONMENT = Object.freeze({
-  enabled: true,
-  presetId: "studio-hdri-43",
-  intensity: 0.46,
-  rotationY: -0.35,
-  useAsBackground: false
-});
-const DIM_CINEMATIC_ENVIRONMENT = Object.freeze({
-  enabled: false,
-  presetId: "studio-hdri-43",
-  intensity: 0,
-  rotationY: -0.35,
-  useAsBackground: false
-});
-const PREVIOUS_CINEMATIC_LIGHTING = Object.freeze({
-  toneMappingExposure: 1.2,
-  directional: {
-    enabled: true,
-    color: "#f1f6fb",
-    intensity: 2.45,
-    position: {
-      x: -190,
-      y: 300,
-      z: 210
-    }
-  },
-  spot: {
-    enabled: true,
-    color: "#dbeafe",
-    intensity: 1.34,
-    angle: 0.72,
-    distance: 0,
-    position: {
-      x: 160,
-      y: 245,
-      z: 126
-    }
-  },
-  point: {
-    enabled: true,
-    color: "#8fb6d8",
-    intensity: 0.34,
-    distance: 0,
-    position: {
-      x: -260,
-      y: 95,
-      z: -220
-    }
-  },
-  ambient: {
-    enabled: true,
-    color: "#1e293b",
-    intensity: 0.2
-  },
-  hemisphere: {
-    enabled: true,
-    skyColor: "#dbe7f3",
-    groundColor: "#070a14",
-    intensity: 0.68
-  }
-});
-const DIM_CINEMATIC_LIGHTING = Object.freeze({
-  toneMappingExposure: 1.03,
-  directional: {
-    enabled: true,
-    color: "#f1f6fb",
-    intensity: 1.28,
-    position: {
-      x: -190,
-      y: 300,
-      z: 210
-    }
-  },
-  spot: {
-    enabled: true,
-    color: "#dbeafe",
-    intensity: 0.18,
-    angle: 0.72,
-    distance: 0,
-    position: {
-      x: 160,
-      y: 245,
-      z: 126
-    }
-  },
-  point: {
-    enabled: true,
-    color: "#8fb6d8",
-    intensity: 0.08,
-    distance: 0,
-    position: {
-      x: -260,
-      y: 95,
-      z: -220
-    }
-  },
-  ambient: {
-    enabled: true,
-    color: "#1e293b",
-    intensity: 0.42
-  },
-  hemisphere: {
-    enabled: true,
-    skyColor: "#dbe7f3",
-    groundColor: "#070a14",
-    intensity: 0.92
-  }
-});
 
 function normalizeEnvironmentPresetId(value) {
   const normalized = String(value || "").trim();
@@ -1348,74 +1647,15 @@ function normalizePosition(value, fallback) {
 function createThemeSettingsSignature(value = {}) {
   return JSON.stringify({
     colorMode: value?.colorMode || THEME_COLOR_MODES.SYSTEM,
+    projection: value?.projection || "",
     modeColors: value?.modeColors || {},
     materials: value?.materials || {},
     background: value?.background || {},
     floor: value?.floor || {},
     environment: value?.environment || {},
-    lighting: value?.lighting || {}
+    lighting: value?.lighting || {},
+    edges: value?.edges || null
   });
-}
-
-function valuesMatch(value, expected) {
-  if (typeof expected === "number") {
-    return Math.abs((Number(value) || 0) - expected) < 1e-6;
-  }
-  if (expected && typeof expected === "object") {
-    if (!value || typeof value !== "object") {
-      return false;
-    }
-    return Object.entries(expected).every(([key, nestedExpected]) => (
-      valuesMatch(value[key], nestedExpected)
-    ));
-  }
-  return value === expected;
-}
-
-function valuesMatchAny(value, expectedValues) {
-  return expectedValues.some((expected) => valuesMatch(value, expected));
-}
-
-function isMigratableCinematicThemeSettings(settings) {
-  const materialMatches = valuesMatchAny(settings?.materials, [
-    LEGACY_CINEMATIC_MATERIALS,
-    PREVIOUS_CINEMATIC_MATERIALS,
-    DIM_CINEMATIC_MATERIALS,
-    LOW_CONTRAST_CINEMATIC_MATERIALS,
-    SOFT_CONTRAST_CINEMATIC_MATERIALS,
-    FEATURE_CONTRAST_CINEMATIC_MATERIALS,
-    CINEMATIC_THEME_SETTINGS.materials
-  ]);
-  const floorMatches = valuesMatchAny(settings?.floor, [
-    LEGACY_CINEMATIC_FLOOR,
-    PREVIOUS_CINEMATIC_FLOOR,
-    DIM_CINEMATIC_FLOOR,
-    CINEMATIC_THEME_SETTINGS.floor
-  ]);
-  const environmentMatches = valuesMatchAny(settings?.environment, [
-    LEGACY_CINEMATIC_ENVIRONMENT,
-    DIM_CINEMATIC_ENVIRONMENT,
-    CINEMATIC_THEME_SETTINGS.environment,
-    WORKBENCH_THEME_SETTINGS.environment
-  ]);
-  const backgroundMatches = valuesMatchAny(settings?.background, [
-    LEGACY_CINEMATIC_BACKGROUND,
-    PREVIOUS_CINEMATIC_BACKGROUND,
-    DIM_CINEMATIC_BACKGROUND,
-    CINEMATIC_THEME_SETTINGS.background
-  ]);
-  const lightingMatches = valuesMatchAny(settings?.lighting, [
-    PREVIOUS_CINEMATIC_LIGHTING,
-    DIM_CINEMATIC_LIGHTING,
-    CINEMATIC_THEME_SETTINGS.lighting
-  ]);
-  return (
-    materialMatches &&
-    backgroundMatches &&
-    floorMatches &&
-    environmentMatches &&
-    lightingMatches
-  );
 }
 
 export function normalizeThemeSettings(value = {}) {
@@ -1435,9 +1675,6 @@ export function normalizeThemeSettings(value = {}) {
   const lighting = source.lighting && typeof source.lighting === "object"
     ? source.lighting
     : {};
-  const hasMaterialSettings = !!(source.materials && typeof source.materials === "object");
-  const missingLegacyTintMode = hasMaterialSettings && !Object.hasOwn(materials, "tintMode");
-  const missingLegacyEmissiveIntensity = hasMaterialSettings && !Object.hasOwn(materials, "emissiveIntensity");
   const normalizedDefaultColor = normalizeColor(
     materials.defaultColor || materials.tintColor,
     DEFAULT_THEME_SETTINGS.materials.defaultColor
@@ -1447,6 +1684,9 @@ export function normalizeThemeSettings(value = {}) {
   const normalizedFloorMode = normalizeFloorMode(floor.mode, DEFAULT_THEME_SETTINGS.floor?.mode || THEME_FLOOR_MODES.STAGE);
   const grid = floor.grid && typeof floor.grid === "object" && !Array.isArray(floor.grid)
     ? floor.grid
+    : {};
+  const axis = floor.axis && typeof floor.axis === "object" && !Array.isArray(floor.axis)
+    ? floor.axis
     : {};
   const fallbackGridSettings = createFloorGridSettings(normalizedFloorColor);
   const normalizedGridCenterColor = normalizeColor(
@@ -1476,6 +1716,13 @@ export function normalizeThemeSettings(value = {}) {
 
   const normalized = {
     colorMode,
+    // The camera projection is a theme trait: presentation stages read best in
+    // perspective, engineering canvases in orthographic. Themes that predate
+    // the setting normalize to the historical orthographic default.
+    projection: normalizeCameraProjection(
+      source.projection,
+      DEFAULT_THEME_SETTINGS?.projection || CAMERA_PROJECTION.ORTHOGRAPHIC
+    ),
     materials: {
       defaultColor: fillColors[0] || normalizedDefaultColor,
       fillColors,
@@ -1489,7 +1736,7 @@ export function normalizeThemeSettings(value = {}) {
       ),
       tintMode: normalizeMaterialTintMode(
         materials.tintMode,
-        missingLegacyTintMode ? "multiply" : DEFAULT_THEME_SETTINGS.materials.tintMode
+        DEFAULT_THEME_SETTINGS.materials.tintMode
       ),
       tintStrength: normalizeNumber(materials.tintStrength, DEFAULT_THEME_SETTINGS.materials.tintStrength, 0, 1),
       saturation: normalizeNumber(materials.saturation, DEFAULT_THEME_SETTINGS.materials.saturation, 0, 2.5),
@@ -1508,7 +1755,7 @@ export function normalizeThemeSettings(value = {}) {
       envMapIntensity: normalizeNumber(materials.envMapIntensity, DEFAULT_THEME_SETTINGS.materials.envMapIntensity, 0, 4),
       emissiveIntensity: normalizeNumber(
         materials.emissiveIntensity,
-        missingLegacyEmissiveIntensity ? 0 : DEFAULT_THEME_SETTINGS.materials.emissiveIntensity,
+        DEFAULT_THEME_SETTINGS.materials.emissiveIntensity,
         0,
         2
       )
@@ -1525,6 +1772,7 @@ export function normalizeThemeSettings(value = {}) {
     floor: {
       mode: normalizedFloorMode,
       enabled: normalizeBoolean(floor.enabled, normalizedFloorMode !== THEME_FLOOR_MODES.NONE),
+      followModel: normalizeBoolean(floor.followModel, DEFAULT_THEME_SETTINGS.floor?.followModel ?? true),
       color: normalizedFloorColor,
       roughness: normalizeNumber(floor.roughness, DEFAULT_THEME_SETTINGS.floor?.roughness ?? 0.72, 0, 1),
       reflectivity: normalizeNumber(floor.reflectivity, DEFAULT_THEME_SETTINGS.floor?.reflectivity ?? 0.12, 0, 1),
@@ -1540,6 +1788,11 @@ export function normalizeThemeSettings(value = {}) {
         cellColor: normalizedGridCellColor,
         opacity: normalizedGridOpacity,
         density: normalizedGridDensity
+      },
+      axis: {
+        enabled: normalizeBoolean(axis.enabled, DEFAULT_FLOOR_AXIS_SETTINGS.enabled),
+        color: normalizeColor(axis.color, normalizedGridCenterColor),
+        opacity: normalizeNumber(axis.opacity, DEFAULT_FLOOR_AXIS_SETTINGS.opacity, 0, 1)
       }
     },
     environment: {
@@ -1561,6 +1814,46 @@ export function normalizeThemeSettings(value = {}) {
         color: normalizeColor(lighting.directional?.color, DEFAULT_THEME_SETTINGS.lighting.directional.color),
         intensity: normalizeNumber(lighting.directional?.intensity, DEFAULT_THEME_SETTINGS.lighting.directional.intensity, 0, 20),
         position: normalizePosition(lighting.directional?.position, DEFAULT_THEME_SETTINGS.lighting.directional.position)
+      },
+      fill: {
+        enabled: normalizeBoolean(
+          lighting.fill?.enabled,
+          DEFAULT_THEME_SETTINGS.lighting.fill?.enabled ?? DEFAULT_FILL_LIGHT_SETTINGS.enabled
+        ),
+        color: normalizeColor(
+          lighting.fill?.color,
+          DEFAULT_THEME_SETTINGS.lighting.fill?.color || DEFAULT_FILL_LIGHT_SETTINGS.color
+        ),
+        intensity: normalizeNumber(
+          lighting.fill?.intensity,
+          DEFAULT_THEME_SETTINGS.lighting.fill?.intensity ?? DEFAULT_FILL_LIGHT_SETTINGS.intensity,
+          0,
+          20
+        ),
+        position: normalizePosition(
+          lighting.fill?.position,
+          DEFAULT_THEME_SETTINGS.lighting.fill?.position || DEFAULT_FILL_LIGHT_SETTINGS.position
+        )
+      },
+      rim: {
+        enabled: normalizeBoolean(
+          lighting.rim?.enabled,
+          DEFAULT_THEME_SETTINGS.lighting.rim?.enabled ?? DEFAULT_RIM_LIGHT_SETTINGS.enabled
+        ),
+        color: normalizeColor(
+          lighting.rim?.color,
+          DEFAULT_THEME_SETTINGS.lighting.rim?.color || DEFAULT_RIM_LIGHT_SETTINGS.color
+        ),
+        intensity: normalizeNumber(
+          lighting.rim?.intensity,
+          DEFAULT_THEME_SETTINGS.lighting.rim?.intensity ?? DEFAULT_RIM_LIGHT_SETTINGS.intensity,
+          0,
+          20
+        ),
+        position: normalizePosition(
+          lighting.rim?.position,
+          DEFAULT_THEME_SETTINGS.lighting.rim?.position || DEFAULT_RIM_LIGHT_SETTINGS.position
+        )
       },
       spot: {
         enabled: normalizeBoolean(lighting.spot?.enabled, DEFAULT_THEME_SETTINGS.lighting.spot.enabled),
@@ -1590,15 +1883,14 @@ export function normalizeThemeSettings(value = {}) {
       }
     }
   };
-  normalized.modeColors = normalizeThemeModeColors(source.modeColors, normalized);
-
-  if (
-    !Object.hasOwn(source, "colorMode") &&
-    !Object.hasOwn(source, "modeColors") &&
-    isMigratableCinematicThemeSettings(normalized)
-  ) {
-    return normalizeThemeSettings(deepClone(WORKBENCH_THEME_SETTINGS));
+  // Edge styling normally lives in per-file display settings, so themes stay
+  // edge-agnostic by default. A theme MAY opt in to its own outline (e.g.
+  // Terminal's neon-green linework); when it does, the viewer/snapshot use it
+  // as the base edge appearance. Only carry it when explicitly declared.
+  if (source.edges && typeof source.edges === "object" && !Array.isArray(source.edges)) {
+    normalized.edges = normalizeDisplayEdgeSettings(source.edges);
   }
+  normalized.modeColors = normalizeThemeModeColors(source.modeColors, normalized);
 
   return normalized;
 }
@@ -1610,12 +1902,19 @@ function cloneNormalizedThemeSettings(value = DEFAULT_THEME_SETTINGS) {
 export function normalizeThemePresetId(presetId) {
   const normalized = String(presetId || "").trim();
   const canonical = THEME_PRESET_ID_ALIASES[normalized] || normalized;
-  return THEME_PRESETS.some((preset) => preset.id === canonical) ? canonical : "";
+  if (THEME_PRESETS.some((preset) => preset.id === canonical)) {
+    return canonical;
+  }
+  // Render-only ids normalize too, so a snapshot can name one. They are excluded from the
+  // picker by not being in THEME_PRESETS, not by failing to resolve.
+  return RENDER_ONLY_THEME_PRESETS.some((preset) => preset.id === canonical) ? canonical : "";
 }
 
 export function getThemePresetById(presetId) {
   const normalizedPresetId = normalizeThemePresetId(presetId);
-  return THEME_PRESETS.find((preset) => preset.id === normalizedPresetId) || DEFAULT_THEME_PRESET;
+  return THEME_PRESETS.find((preset) => preset.id === normalizedPresetId)
+    || RENDER_ONLY_THEME_PRESETS.find((preset) => preset.id === normalizedPresetId)
+    || DEFAULT_THEME_PRESET;
 }
 
 export function cloneThemePresetSettings(presetId) {
@@ -1627,6 +1926,10 @@ export function cloneThemeSettings(themeId) {
 }
 
 export function getThemePresetIdForSettings(themeSettings) {
+  return getMatchingThemePresetId(themeSettings);
+}
+
+function getMatchingThemePresetId(themeSettings) {
   const currentSignature = createThemeSettingsSignature(normalizeThemeSettings(themeSettings));
   for (const preset of THEME_PRESETS) {
     const presetSignature = createThemeSettingsSignature(normalizeThemeSettings(preset.settings));
@@ -1635,10 +1938,6 @@ export function getThemePresetIdForSettings(themeSettings) {
     }
   }
   return null;
-}
-
-export function getThemeIdForSettings(themeSettings) {
-  return getThemePresetIdForSettings(themeSettings);
 }
 
 export function resolveThemeSettingsColorMode(themeSettings = {}, { prefersDark = false, systemFallback = THEME_COLOR_MODES.LIGHT } = {}) {
@@ -1670,17 +1969,54 @@ export function themeSettingsSupportsSystemColorMode(themeSettings = {}) {
   return normalized.colorMode === THEME_COLOR_MODES.SYSTEM;
 }
 
+// The dominant background color drives the app's light/dark chrome, because the
+// nav/sidebars float over the (transparent) viewport: their contrast depends on
+// what is behind them, not on the floor or fills.
+function dominantBackgroundLuminance(themeSettings = {}) {
+  const background = themeSettings.background || {};
+  const type = background.type || "solid";
+  const fallback =
+    DEFAULT_THEME_SETTINGS?.background?.solidColor || "#ffffff";
+  if (type === "linear") {
+    return (
+      relativeLuminance(background.linearStart, fallback) +
+      relativeLuminance(background.linearEnd, fallback)
+    ) / 2;
+  }
+  if (type === "radial") {
+    return (
+      relativeLuminance(background.radialInner, fallback) +
+      relativeLuminance(background.radialOuter, fallback)
+    ) / 2;
+  }
+  return relativeLuminance(background.solidColor, fallback);
+}
+
 export function inferThemeSettingsSceneTone(themeSettings, options = {}) {
   const normalized = resolveThemeSettingsForColorMode(themeSettings, options);
-  const luminance = relativeLuminance(
-    normalized.floor?.color,
-    DEFAULT_THEME_SETTINGS.floor?.color || DEFAULT_THEME_SETTINGS.background.solidColor
-  );
-  return luminance >= 0.36 ? "light" : "dark";
+  return dominantBackgroundLuminance(normalized) >= 0.3 ? "light" : "dark";
 }
 
 export function inferThemeSceneTone(themeSettings) {
   return inferThemeSettingsSceneTone(themeSettings);
+}
+
+// The dominant backdrop color as a hex value, for UI chrome that tints toward
+// the active scene (glass surfaces). Mirrors the gradient handling of
+// dominantBackgroundLuminance.
+export function resolveThemeSettingsBackdropColor(themeSettings = {}, options = {}) {
+  const normalized = resolveThemeSettingsForColorMode(themeSettings, options);
+  const background = normalized.background || {};
+  if (background.type === "linear") {
+    return mixHexColors(background.linearStart, background.linearEnd);
+  }
+  if (background.type === "radial") {
+    return mixHexColors(background.radialInner, background.radialOuter);
+  }
+  return normalizeColor(
+    background.solidColor,
+    DEFAULT_THEME_SETTINGS?.background?.solidColor || "#ffffff"
+  );
 }
 
 export function getEnvironmentPresetById(presetId) {

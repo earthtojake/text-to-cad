@@ -6,7 +6,11 @@ import {
   ContextMenuTrigger
 } from "@/components/ui/context-menu";
 import { fileAccessAssetsForEntry } from "@/workbench/fileAccessAssets";
-import { IMPLICIT_EXPORT_FORMATS } from "@/workbench/implicitExport";
+import {
+  exportFormatsForEntry,
+  isImportedStepEntry,
+  exportItemLabel
+} from "@/workbench/modelExport";
 
 function ExplorerViewSection({
   entry,
@@ -35,7 +39,6 @@ function FileAccessSection({
   canCopyFileAssetLinks,
   canCopyFileAssetPaths,
   busyKey = "",
-  onDownloadFileAsset,
   onRevealFileAsset,
   onRevealInExplorerView,
   onCopyFileAssetReference
@@ -70,6 +73,14 @@ function FileAccessSection({
           <ContextMenuItem
             className="text-xs"
             onSelect={() => {
+              onCopyFileAssetReference(entry, asset.asset, asset, "filename");
+            }}
+          >
+            <span className="min-w-0 truncate">Copy Filename</span>
+          </ContextMenuItem>
+          <ContextMenuItem
+            className="text-xs"
+            onSelect={() => {
               onCopyFileAssetReference(entry, asset.asset, asset, "path");
             }}
           >
@@ -95,35 +106,25 @@ function FileAccessSection({
           <span className="min-w-0 truncate">Copy Link</span>
         </ContextMenuItem>
       ) : null}
-      <ContextMenuItem
-        className="text-xs"
-        onSelect={() => {
-          onDownloadFileAsset(entry, asset.asset, asset);
-        }}
-      >
-        <span className="min-w-0 truncate">Download</span>
-      </ContextMenuItem>
     </>
   );
 }
 
-function ImplicitExportSection({
+function ModelExportSection({
   entry,
   busyKey = "",
-  onExportImplicitFile
+  onExportModelFile
 }) {
-  if (
-    String(entry?.kind || "").trim().toLowerCase() !== "implicit" ||
-    typeof onExportImplicitFile !== "function"
-  ) {
+  const exportFormats = exportFormatsForEntry(entry);
+  if (typeof onExportModelFile !== "function" || !exportFormats.length) {
     return null;
   }
   const fileRef = String(entry?.file || entry?.id || "").trim();
+  const imported = isImportedStepEntry(entry);
   return (
     <>
       <ContextMenuSeparator />
-      {IMPLICIT_EXPORT_FORMATS.map((format) => {
-        const upperFormat = format.toUpperCase();
+      {exportFormats.map((format) => {
         const key = `${fileRef}:export:${format}`;
         return (
           <ContextMenuItem
@@ -131,10 +132,10 @@ function ImplicitExportSection({
             className="text-xs"
             disabled={busyKey === key}
             onSelect={() => {
-              onExportImplicitFile(entry, format);
+              onExportModelFile(entry, format);
             }}
           >
-            <span className="min-w-0 truncate">Export to {upperFormat}</span>
+            <span className="min-w-0 truncate">{exportItemLabel(format, { imported })}</span>
           </ContextMenuItem>
         );
       })}
@@ -149,7 +150,7 @@ export default function FileAccessContextMenu({
   canCopyFileAssetPaths = false,
   busyKey = "",
   onDownloadFileAsset,
-  onExportImplicitFile,
+  onExportModelFile,
   onRevealFileAsset,
   onRevealInExplorerView,
   onCopyFileAssetReference,
@@ -157,14 +158,15 @@ export default function FileAccessContextMenu({
 }) {
   const revealInExplorerViewAvailable = entry && typeof onRevealInExplorerView === "function";
   const assetActionsAvailable = entry && typeof onDownloadFileAsset === "function";
-  const implicitExportAvailable = entry && typeof onExportImplicitFile === "function" &&
-    String(entry?.kind || "").trim().toLowerCase() === "implicit";
-  if (!revealInExplorerViewAvailable && !assetActionsAvailable && !implicitExportAvailable) {
+  const modelExportAvailable = entry &&
+    typeof onExportModelFile === "function" &&
+    exportFormatsForEntry(entry).length > 0;
+  if (!revealInExplorerViewAvailable && !assetActionsAvailable && !modelExportAvailable) {
     return children;
   }
 
   const assets = fileAccessAssetsForEntry(entry);
-  if (!revealInExplorerViewAvailable && !assets.output && !implicitExportAvailable) {
+  if (!revealInExplorerViewAvailable && !assets.output && !modelExportAvailable) {
     return children;
   }
 
@@ -188,16 +190,15 @@ export default function FileAccessContextMenu({
             canCopyFileAssetLinks={canCopyFileAssetLinks}
             canCopyFileAssetPaths={canCopyFileAssetPaths}
             busyKey={busyKey}
-            onDownloadFileAsset={onDownloadFileAsset}
             onRevealFileAsset={onRevealFileAsset}
             onRevealInExplorerView={onRevealInExplorerView}
             onCopyFileAssetReference={onCopyFileAssetReference}
           />
         ) : null}
-        <ImplicitExportSection
+        <ModelExportSection
           entry={entry}
           busyKey={busyKey}
-          onExportImplicitFile={onExportImplicitFile}
+          onExportModelFile={onExportModelFile}
         />
       </ContextMenuContent>
     </ContextMenu>

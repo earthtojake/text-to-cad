@@ -1,13 +1,12 @@
 # Backend Storage
 
-CAD Viewer uses a small backend interface so the same React app can run against
-local files during development and hosted object storage in deployment. Client
-code talks to HTTP routes and catalog URLs; it does not read filesystem paths
-directly.
+CAD Viewer uses a small backend interface so the React app talks to HTTP routes
+and catalog URLs instead of reading filesystem paths directly. The viewer is a
+local-filesystem app; the only backend is the local one.
 
 ## Interface
 
-Backend implementations expose this core shape:
+The backend exposes this core shape:
 
 ```js
 {
@@ -18,10 +17,9 @@ Backend implementations expose this core shape:
 }
 ```
 
-Trusted upload tooling for hosted storage serializes catalog JSON and uploads it
-as `catalog.json`. Writable backends may expose
-`writeAsset({ fileRef, body, contentType })` and
-`generateStepArtifact({ fileRef, force, catalog })`.
+The local backend may also expose
+`generateStepArtifact({ fileRef, force, catalog })` to run CAD generation on
+demand.
 
 Local filesystem backends also expose helpers used by Vite and the local
 production server:
@@ -37,7 +35,7 @@ production server:
 ```
 
 `readCatalog()` returns catalog JSON from the backend's source of truth.
-`refreshCatalog()` lets an adapter update or regenerate that in-memory view.
+`refreshCatalog()` lets the adapter update or regenerate that in-memory view.
 Writable helpers may write servable CAD assets such as hidden STEP GLBs or run
 local CAD generation.
 
@@ -62,12 +60,17 @@ The local backend serves asset bytes from the active root and writes regenerated
 artifacts back into it. It rejects path traversal and only serves or writes
 supported CAD Viewer asset types.
 
-Local STEP GLB/topology regeneration calls the Python `cadpy` package. The root
-viewer carries a generated, installable copy under `viewer/packages/cadpy`; run
-`scripts/bundle/bundle-skill.sh cad-viewer` after changing `packages/cadpy`, then
+Local STEP GLB/topology regeneration calls the Python `cadgen` package. The root
+viewer carries a generated, installable copy under `viewer/packages/cadgen`; run
+`scripts/bundle/bundle-skill.sh cad-viewer` after changing `packages/cadgen`, then
 install `viewer/requirements.txt` into the Python runtime used by the viewer.
 The generated cad-viewer skill runtime bundles that same installable package
-under `scripts/viewer/packages/cadpy` and does not need the repository root.
+under `scripts/viewer/packages/cadgen` and does not need the repository root.
+Before binding its HTTP port, the Viewer validates that its selected Python can
+import `OCP`, `build123d`, and `cadgen.step_artifact`. Startup fails instead of
+serving a Viewer that cannot build missing artifacts. Set
+`VIEWER_CAD_PYTHON=/absolute/path/to/python` when the CAD environment is not in
+the checkout's `.venv`.
 
 Vite dev mounts this backend for:
 
@@ -78,11 +81,10 @@ Vite dev mounts this backend for:
 - `POST /__cad/reveal?file=...&asset=output|source`
 - `POST /__cad/step-artifact`
 
-`download` streams the requested asset bytes and works for both local and hosted
-deployments. `reveal` opens the asset in Finder or the platform file manager and
-is only available for the local filesystem backend. `asset=output` resolves the
-catalog entry file itself; `asset=source` resolves optional source code, such as
-a same-stem Python generator for Python-backed STEP files.
+`download` streams the requested asset bytes from the local backend. `reveal`
+opens the asset in Finder or the platform file manager. `asset=output` resolves
+the catalog entry file itself; `asset=source` resolves optional source code, such
+as a same-stem Python generator for Python-backed STEP files.
 
 The local production server uses the same backend:
 
@@ -94,93 +96,3 @@ npm run serve
 Then open the printed server URL with
 `?dir=/absolute/root&file=model.step`. Pass `--port <number>` to
 `npm run serve --` only when the default production port is already in use.
-
-## Vercel Blob
-
-`src/server/vercelBlobAssetBackend.mjs` is the hosted storage adapter. Vercel
-deployments construct it in read-only mode: the hosted API reads the catalog and
-serves public Blob assets, but it does not write Blob objects or regenerate STEP
-artifacts.
-
-Hosted catalog reads are deliberately conservative about Blob traffic.
-Sustained per-request fetches of the public catalog URL from shared serverless
-egress IPs trip Vercel's abuse mitigation with intermittent `403 Forbidden`
-responses, so the hosted backend caches the parsed catalog in-function for 60
-seconds (serving the last good catalog if a refresh fails), hosted
-`/__cad/catalog` responses carry `s-maxage`/`stale-while-revalidate`
-cache-control so the Vercel CDN absorbs client polling, and hosted viewer
-builds poll the catalog every 60 seconds instead of the local 2-second
-development cadence.
-
-Expected deployment shape:
-
-- Build the frontend normally.
-- Run a trusted local upload/maintenance script to publish supported assets and a
-  schema v4 `catalog.json` containing public Blob URLs.
-- Deploy the viewer with `VIEWER_ASSET_BACKEND=vercel-blob` and a read-only
-  catalog configuration. Catalog warnings such as stale STEP artifacts are shown
-  in the UI instead of being fixed by the hosted app.
-- Hosted Vercel routes ignore local filesystem `?dir=` query values and read the
-  configured hosted `catalog.json` instead.
-
-The Vercel deployment entrypoints are intentionally thin:
-
-```text
-api/cad/server.js
-api/cad/catalog.js
-api/cad/download.js
-api/cad/reveal.js
-vercel.json
-```
-
-`vercel.json` rewrites the client-facing routes below to those API functions:
-
-```text
-/__cad/server
-/__cad/catalog
-/__cad/download
-/__cad/reveal
-```
-
-The local production server can mount the Blob catalog path by environment:
-
-```bash
-VIEWER_ASSET_BACKEND=vercel-blob \
-VIEWER_VERCEL_BLOB_PREFIX=https://<store-id>.public.blob.vercel-storage.com/models2 \
-npm run serve
-```
-
-Upload a local directory catalog and supported viewer assets with:
-
-```bash
-VIEWER_VERCEL_BLOB_READ_WRITE_TOKEN=... \
-VIEWER_VERCEL_BLOB_PREFIX=models2 \
-npm --prefix viewer run upload:blob -- models
-```
-
-`BLOB_READ_WRITE_TOKEN` may be used instead of
-`VIEWER_VERCEL_BLOB_READ_WRITE_TOKEN`, matching the environment variable Vercel
-Blob integrations create.
-
-The uploader also reads `.vieweruploadignore` from the uploaded directory and
-accepts repeated `--ignore-file` options for gitignore-style exclude patterns.
-It excludes `mechbench/`, `mechbench2/`, `7dof_arm/`, and Python source files
-by default, and public Blob catalogs omit Python source paths and URLs. Add
-`--skip-existing --fetch-missing-lfs` for publish-style runs that compare
-against the remote catalog, skip matching assets, and fetch only the Git LFS
-objects needed for new or changed uploads. The repository publish wrapper,
-`scripts/viewer/upload-viewer-models-catalog.sh`, owns the branch-defined Blob
-path prefix for model catalog uploads. Catalog uploads use Vercel Blob's
-minimum supported cache TTL so in-place `catalog.json` overwrites are visible
-quickly, while large immutable model assets keep the default Blob cache policy.
-Hosted catalog reads also append a catalog cache-busting query parameter so the
-viewer does not inherit stale edge entries from earlier catalog overwrites.
-
-For token-free read-only deployments, `VIEWER_VERCEL_BLOB_PREFIX` should be the
-public Blob URL for the prefix directory. The hosted backend always reads
-`catalog.json` at the root of that prefix. Trusted local upload or maintenance
-scripts may use the path prefix, such as `models2`, with a read/write token.
-
-The writable Blob helper methods remain available to local scripts that import
-the backend directly and pass a Blob read/write token. They are not exposed by
-the hosted Vercel API.

@@ -16,6 +16,7 @@ import {
   orderedStringListEqual,
   parseAssemblyPartReferenceSelectionId,
   resolveTopologyRelativeFile,
+  selectRequestedAssemblyComponents,
   uniqueStringList
 } from "./referenceSelection.js";
 
@@ -196,4 +197,40 @@ test("selection utility helpers preserve list and topology path behavior", () =>
     resolveTopologyRelativeFile({ file: "models/assy.step" }, "../parts/part.step"),
     "models/parts/part.step"
   );
+});
+
+test("selectRequestedAssemblyComponents loads only the expanded occurrences' components", () => {
+  const descriptor = {
+    kind: "assembly-package",
+    components: { cidA: { glb: "a.glb" }, cidB: { glb: "b.glb" }, cidC: { glb: "c.glb" } },
+    occurrences: [
+      { id: "o1", name: "root" }, // subassembly: no component
+      { id: "o1.1", component: "cidA" },
+      { id: "o1.2", component: "cidB" },
+      { id: "o1.3", component: "cidA" } // shares cidA with o1.1
+    ]
+  };
+
+  // Expanding ONE leaf node loads only that occurrence's component — not the whole assembly.
+  const one = selectRequestedAssemblyComponents(descriptor, ["o1.2"]);
+  assert.deepEqual(one.occurrencesToLoad.map((occ) => occ.id), ["o1.2"]);
+  assert.deepEqual(one.neededCids, ["cidB"]);
+  assert.equal(one.loadedTopologyKey, "o1.2");
+
+  // Expanding more re-uses a shared component cid → deduped to a single fetch; key is order-stable.
+  const two = selectRequestedAssemblyComponents(descriptor, ["o1.3", "o1.1"]);
+  assert.deepEqual(two.occurrencesToLoad.map((occ) => occ.id), ["o1.1", "o1.3"]);
+  assert.deepEqual(two.neededCids, ["cidA"]);
+  assert.equal(two.loadedTopologyKey, "o1.1|o1.3");
+
+  // An empty requested set (nothing expanded) loads nothing.
+  const none = selectRequestedAssemblyComponents(descriptor, []);
+  assert.equal(none.occurrencesToLoad.length, 0);
+  assert.equal(none.neededCids.length, 0);
+  assert.equal(none.loadedTopologyKey, "");
+
+  // A single-component part has no tree, so it loads every referenced component regardless.
+  const part = selectRequestedAssemblyComponents(descriptor, [], { singleComponentPart: true });
+  assert.deepEqual(part.neededCids, ["cidA", "cidB"]);
+  assert.equal(part.loadedTopologyKey, "*");
 });

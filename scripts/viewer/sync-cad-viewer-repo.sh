@@ -22,7 +22,7 @@ Default target:
 What gets copied:
   viewer/*              -> target root
   packages/cadjs/*      -> target/packages/cadjs
-  packages/cadpy/*      -> target/packages/cadpy
+  packages/cadgen/*      -> target/packages/cadgen
 
 The target checkout must already exist and must be the root of a separate git
 repo. Everything in the target root is deleted before copying, except .git.
@@ -113,12 +113,12 @@ require_command rsync
 
 VIEWER_DIR="$SOURCE_REPO_ROOT/viewer"
 CADJS_DIR="$SOURCE_REPO_ROOT/packages/cadjs"
-CADPY_DIR="$SOURCE_REPO_ROOT/packages/cadpy"
+CADPY_DIR="$SOURCE_REPO_ROOT/packages/cadgen"
 TARGET_INPUT="$SOURCE_REPO_ROOT/$TARGET_ARG"
 
 require_path "$VIEWER_DIR/package.json" "viewer package"
 require_path "$CADJS_DIR/package.json" "cadjs package"
-require_path "$CADPY_DIR/pyproject.toml" "cadpy package"
+require_path "$CADPY_DIR/pyproject.toml" "cadgen package"
 
 if [ ! -d "$TARGET_INPUT" ]; then
   echo "Target directory does not exist: $TARGET_INPUT" >&2
@@ -180,7 +180,7 @@ RSYNC_EXCLUDES=(
 echo "Source: $SOURCE_REPO_ROOT"
 echo "Target: $TARGET_DIR"
 echo ""
-echo "This will delete everything in the target root except .git, then copy viewer/, packages/cadjs, and packages/cadpy."
+echo "This will delete everything in the target root except .git, then copy viewer/, packages/cadjs, and packages/cadgen."
 
 if [ "$DRY_RUN" -eq 1 ]; then
   echo ""
@@ -190,7 +190,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "Dry run only. Copy plan:"
   echo "  $VIEWER_DIR/ -> $TARGET_DIR/"
   echo "  $CADJS_DIR/ -> $TARGET_DIR/packages/cadjs/"
-  echo "  $CADPY_DIR/ -> $TARGET_DIR/packages/cadpy/"
+  echo "  $CADPY_DIR/ -> $TARGET_DIR/packages/cadgen/"
   exit 0
 fi
 
@@ -199,7 +199,7 @@ find "$TARGET_DIR" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 rsync -a "${RSYNC_EXCLUDES[@]}" "$VIEWER_DIR/" "$TARGET_DIR/"
 mkdir -p "$TARGET_DIR/packages"
 rsync -a "${RSYNC_EXCLUDES[@]}" "$CADJS_DIR/" "$TARGET_DIR/packages/cadjs/"
-rsync -a "${RSYNC_EXCLUDES[@]}" "$CADPY_DIR/" "$TARGET_DIR/packages/cadpy/"
+rsync -a "${RSYNC_EXCLUDES[@]}" "$CADPY_DIR/" "$TARGET_DIR/packages/cadgen/"
 
 node --input-type=module - "$TARGET_DIR" <<'NODE'
 import fs from "node:fs";
@@ -258,17 +258,16 @@ if (fs.existsSync(lockPath)) {
 const pathReplacements = [
   ["file:../packages/cadjs", "file:./packages/cadjs"],
   ["../packages/cadjs", "packages/cadjs"],
-  ["../packages/cadpy", "packages/cadpy"],
-  ["../.venv/bin/python -m pip install -e packages/cadpy", "python -m pip install -e packages/cadpy"],
-  ["npm --prefix viewer run upload:blob", "npm run upload:blob"],
+  ["../packages/cadgen", "packages/cadgen"],
+  ["../.venv/bin/python -m pip install -e packages/cadgen", "python -m pip install -e packages/cadgen"],
   ["npm run build\nnpm run runtime:check", "npm run build"],
   [
     "\nWhen changing Viewer source that feeds the cad-viewer skill runtime, refresh the\ngenerated runtime from the repository root:\n\n```bash\nscripts/bundle/bundle-skill.sh cad-viewer\nscripts/bundle/bundle-skill.sh cad-viewer --check\n```\n",
     "\n",
   ],
   [
-    "The generated cad-viewer skill runtime\nbundles `cadpy` under `packages/cadpy` and does not need the repository\nroot.",
-    "The standalone checkout keeps `cadpy` under `packages/cadpy` so local\nregeneration can discover it without the source workbench.",
+    "The generated cad-viewer skill runtime\nbundles `cadgen` under `packages/cadgen` and does not need the repository\nroot.",
+    "The standalone checkout keeps `cadgen` under `packages/cadgen` so local\nregeneration can discover it without the source workbench.",
   ],
 ];
 replaceText("README.md", pathReplacements);

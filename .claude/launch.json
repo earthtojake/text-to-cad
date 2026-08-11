@@ -1,0 +1,44 @@
+{
+  // CAD Viewer DEV preview for Claude Code — repo developer workflow ONLY.
+  //
+  // Runs the Vite dev server (HMR) for iteration. None of this is part of the
+  // cad-viewer skill; a skill consumer just runs `npm run start` (the built
+  // bundle). For a production/e2e check, run `npm run build` then
+  // `npm run start` (see AGENTS.md) instead of this preview.
+  //
+  // Fixed port 3245: dev and start both listen where you tell them and fail on
+  // a taken port rather than rolling to another. To run a second Viewer, start
+  // it yourself with `npm --prefix viewer run dev -- --port <n>`.
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cad-viewer-worktree",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "viewer", "run", "dev", "--", "--host", "127.0.0.1", "--port", "3247"],
+      "port": 3247
+    },
+    {
+      "name": "cad-viewer",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "viewer", "run", "dev", "--", "--host", "127.0.0.1"],
+      "port": 3245
+    },
+    {
+      // Second Viewer for this worktree. A CAD Viewer from another checkout is
+      // often already holding 3245, and it resolves paths against ITS OWN root,
+      // so an absolute path into this worktree comes back "file does not exist".
+      // Port 3246 gets a Viewer that serves THIS worktree's sources.
+      "name": "cad-viewer-f1",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "viewer", "run", "dev", "--", "--host", "127.0.0.1", "--port", "3246"],
+      "port": 3246
+    },
+    {
+      // Docs site (Next.js). `npm run check` builds it; this serves it with HMR.
+      "name": "docs",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "docs", "run", "dev", "--", "--port", "3000"],
+      "port": 3000
+    }
+  ]
+}

@@ -42,4 +42,4 @@ done
 source "$UTILS_SCRIPT"
 
 cd "$REPO_ROOT"
-setup_link "$MODE" "skills/dxf/scripts/packages/cadpy" "../../../../packages/cadpy"
+setup_link "$MODE" "skills/dxf/scripts/packages/cadgen" "../../../../packages/cadgen"

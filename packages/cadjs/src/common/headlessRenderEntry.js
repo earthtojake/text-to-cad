@@ -23,6 +23,17 @@ import {
 import {
   orbitFrameOutputs
 } from "./headlessOrbitFrames.js";
+import {
+  resolveHeadlessJobKind
+} from "./headlessJobKind.js";
+// The unified snapshot runtime carries both backends: the mesh path below and
+// the implicit raymarch path from implicitjs. cadjs -> implicitjs is the
+// sanctioned dependency direction, and this is a cadjs-internal import (not a
+// public cadjs/implicit/* subpath), so the whole snapshot bundle exposes a
+// single window.__snapshotRender entry that dispatches by job kind.
+import {
+  runImplicitCadHeadlessRenderJob
+} from "implicitjs/headlessRenderEntry";
 
 const GIFEncoder = exportedGifEncoder || gifencDefault?.GIFEncoder || gifencDefault;
 const quantize = exportedQuantize || gifencDefault?.quantize;
@@ -47,7 +58,7 @@ async function dataUrlToImageData(dataUrl, width, height) {
 
 function shouldEncodeTransparentGif(job = {}) {
   const backgroundType = String(
-    job.appearance?.background?.type || ""
+    job.theme?.background?.type || ""
   ).toLowerCase();
   return Boolean(job.render?.transparent) || backgroundType === "transparent";
 }
@@ -201,6 +212,9 @@ async function renderParamAnimation(source, job, stepParameterSource) {
 }
 
 export async function runHeadlessRenderJob(job) {
+  if (resolveHeadlessJobKind(job) === "implicit") {
+    return runImplicitCadHeadlessRenderJob(job);
+  }
   const source = await loadSource(job);
   const stepParameterSource = source.stepParameterSource;
   const explicitParams = hasStepParameterRenderValues(job.stepParameters);

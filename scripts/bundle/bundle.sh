@@ -6,14 +6,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 MODE="write"
 SKILL_ARGS=()
-PLUGIN_ARGS=()
 
 usage() {
   cat <<'EOF'
 Usage:
   scripts/bundle/bundle.sh [--check] [--clean]
 
-Universal generated-runtime and plugin package bundle wrapper.
+Universal generated-runtime bundle wrapper.
 
 Options:
   --check     Bundle into tmp/ and fail if checked-in outputs are stale.
@@ -27,11 +26,9 @@ while [ "$#" -gt 0 ]; do
     --check)
       MODE="check"
       SKILL_ARGS+=("--check")
-      PLUGIN_ARGS+=("--check")
       ;;
     --clean)
       SKILL_ARGS+=("--clean")
-      PLUGIN_ARGS+=("--clean")
       ;;
     -h|--help)
       usage
@@ -65,17 +62,6 @@ if [ "${#SKILL_ARGS[@]}" -gt 0 ]; then
   "$SCRIPT_DIR/bundle-skill.sh" --all "${SKILL_ARGS[@]}"
 else
   "$SCRIPT_DIR/bundle-skill.sh" --all
-fi
-
-if [ "$MODE" = "check" ]; then
-  echo "Checking plugin package skill copy..."
-else
-  echo "Bundling plugin package skill copy..."
-fi
-if [ "${#PLUGIN_ARGS[@]}" -gt 0 ]; then
-  "$SCRIPT_DIR/bundle-plugin.sh" "${PLUGIN_ARGS[@]}"
-else
-  "$SCRIPT_DIR/bundle-plugin.sh"
 fi
 
 if [ "$MODE" = "check" ]; then

@@ -11,9 +11,7 @@ import {
   fileStatusWarningOrErrorItems,
   mostIntenseFileStatusLevel
 } from "@/workbench/fileStatusItems";
-import {
-  FileSheetSection
-} from "./FileSheet";
+import { FILE_SHEET_SECTION_IDS } from "@/workbench/fileSheetSections";
 
 const LEVEL_RENDER_META = Object.freeze({
   [FILE_STATUS_LEVELS.ERROR]: {
@@ -37,10 +35,7 @@ function renderMetaForLevel(level) {
   return LEVEL_RENDER_META[level] || LEVEL_RENDER_META[FILE_STATUS_LEVELS.INFO];
 }
 
-export default function FileStatusSection({
-  items = [],
-  value = "status"
-}) {
+function FileStatusTabContent({ items = [] }) {
   const [expandedItemIds, setExpandedItemIds] = useState(() => new Set());
   const [copiedItemId, setCopiedItemId] = useState("");
   const statusItems = fileStatusWarningOrErrorItems(items);
@@ -99,20 +94,8 @@ export default function FileStatusSection({
     }
   };
 
-  const highestLevel = mostIntenseFileStatusLevel(statusItems);
-  const headerMeta = renderMetaForLevel(highestLevel);
-
   return (
-    <FileSheetSection
-      value={value}
-      title={(
-        <span className="flex min-w-0 items-center gap-2">
-          <span>Issues</span>
-          <Badge variant={headerMeta.badgeVariant} className={STATUS_COUNT_BADGE_CLASSES}>{statusItems.length}</Badge>
-        </span>
-      )}
-    >
-      <ul className="space-y-3 px-3 py-3 text-xs leading-5">
+    <ul className="space-y-2 py-2 text-xs leading-5">
         {statusItems.map((item) => {
           const itemMeta = renderMetaForLevel(item.level);
           const details = Array.isArray(item.details) ? item.details : [];
@@ -127,7 +110,7 @@ export default function FileStatusSection({
                 role={hasDetails ? "button" : undefined}
                 tabIndex={hasDetails ? 0 : undefined}
                 className={cn(
-                  "block min-w-0 rounded-md py-1 pl-2.5 pr-1 text-left",
+                  "block min-w-0 rounded-md px-2 py-1 text-left",
                   hasDetails && "w-full cursor-pointer hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
                   !hasDetails && "w-full"
                 )}
@@ -169,7 +152,7 @@ export default function FileStatusSection({
                 ) : null}
               </div>
               {hasDetails && expanded ? (
-                <div className="mt-2 space-y-2 pl-2.5">
+                <div className="mt-2 space-y-2 pl-2">
                   <dl className="space-y-1 text-[11px] leading-4">
                     {details.map((detailItem, index) => (
                       <div key={`${item.id}:${detailItem.label}:${index}`} className="min-w-0">
@@ -202,6 +185,24 @@ export default function FileStatusSection({
           );
         })}
       </ul>
-    </FileSheetSection>
   );
+}
+
+// Build the "Issues" tab descriptor, or null when there are no warnings/errors.
+export function buildFileStatusTab(items = []) {
+  const statusItems = fileStatusWarningOrErrorItems(items);
+  if (!statusItems.length) {
+    return null;
+  }
+  const headerMeta = renderMetaForLevel(mostIntenseFileStatusLevel(statusItems));
+  return {
+    id: FILE_SHEET_SECTION_IDS.FILE_STATUS,
+    title: (
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span>Issues</span>
+        <Badge variant={headerMeta.badgeVariant} className={STATUS_COUNT_BADGE_CLASSES}>{statusItems.length}</Badge>
+      </span>
+    ),
+    content: <FileStatusTabContent items={items} />
+  };
 }

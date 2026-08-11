@@ -4,15 +4,19 @@ import type { CSSProperties } from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { HeroStepRender } from "@/components/hero-step-render";
 
-const cadSkillsAscii = String.raw` ██████╗ █████╗ ██████╗   ███████╗██╗  ██╗██╗██╗     ██╗     ███████╗
-██╔════╝██╔══██╗██╔══██╗  ██╔════╝██║ ██╔╝██║██║     ██║     ██╔════╝
-██║     ███████║██║  ██║  ███████╗█████╔╝ ██║██║     ██║     ███████╗
-██║     ██╔══██║██║  ██║  ╚════██║██╔═██╗ ██║██║     ██║     ╚════██║
-╚██████╗██║  ██║██████╔╝  ███████║██║  ██╗██║███████╗███████╗███████║
- ╚═════╝╚═╝  ╚═╝╚═════╝   ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝╚══════╝╚══════╝`;
+const textToCadAscii = String.raw`████████╗███████╗██╗  ██╗████████╗   ████████╗ ██████╗     ██████╗ █████╗ ██████╗ 
+╚══██╔══╝██╔════╝╚██╗██╔╝╚══██╔══╝   ╚══██╔══╝██╔═══██╗   ██╔════╝██╔══██╗██╔══██╗
+   ██║   █████╗   ╚███╔╝    ██║         ██║   ██║   ██║   ██║     ███████║██║  ██║
+   ██║   ██╔══╝   ██╔██╗    ██║         ██║   ██║   ██║   ██║     ██╔══██║██║  ██║
+   ██║   ███████╗██╔╝ ██╗   ██║   ██╗   ██║   ╚██████╔╝██╗╚██████╗██║  ██║██████╔╝
+   ╚═╝   ╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝   ╚═╝    ╚═════╝ ╚═╝ ╚═════╝╚═╝  ╚═╝╚═════╝ `;
 
 const ASCII_MEASURE_FONT_SIZE = 10;
-const ASCII_MIN_FONT_SIZE = 7;
+// Floor low enough that the widest wordmark still FITS on the narrowest phones
+// rather than being clipped by the frame's overflow-hidden. TEXT.TO.CAD is 82
+// columns, which needs ~7px at 375px and ~6px at 320px — a higher floor silently
+// cut the trailing glyphs off.
+const ASCII_MIN_FONT_SIZE = 5;
 const ASCII_MAX_FONT_SIZE = 18;
 const ASCII_MAX_HEIGHT = 132;
 const ASCII_WIDTH_FILL = 0.995;
@@ -101,7 +105,7 @@ function AsciiWord({ ascii }: { ascii: string }) {
 function HeroAsciiHeading() {
   return (
     <div aria-hidden="true" className="w-full max-w-full overflow-hidden">
-      <AsciiWord ascii={cadSkillsAscii} />
+      <AsciiWord ascii={textToCadAscii} />
     </div>
   );
 }
@@ -109,11 +113,11 @@ function HeroAsciiHeading() {
 function HeroSubtitle({ className = "" }: { className?: string }) {
   return (
     <p
-      className={`text-[17px] font-medium leading-7 text-foreground sm:text-[20px] sm:leading-8 lg:text-[22px] lg:leading-9 ${className}`}
+      className={`text-[15px] font-medium leading-6 text-foreground sm:text-[17px] sm:leading-7 lg:text-[19px] lg:leading-8 ${className}`}
     >
-      Generate CAD in AI agents like Codex and Claude Code.{" "}
+      A library of agent skills for CAD, CAE and CAM.{" "}
       <span className="text-primary">
-        100% open source, runs locally, free forever.
+        100% open source + free, runs locally
       </span>
     </p>
   );
@@ -122,14 +126,16 @@ function HeroSubtitle({ className = "" }: { className?: string }) {
 export function HeroSection() {
   return (
     <section className="border border-border bg-card">
-      <div className="grid min-w-0 lg:grid-cols-2">
-        <div className="flex min-w-0 items-center px-4 py-4 sm:px-5 lg:min-h-[156px] lg:px-6 lg:py-5">
-          <h1 className="sr-only">CAD Skills</h1>
+      {/* Wordmark takes 2/3 so the ASCII can scale up; byline takes the
+          remaining 1/3. Below lg they stack full-width, as before. */}
+      <div className="grid min-w-0 lg:grid-cols-3">
+        <div className="flex min-w-0 items-center px-4 py-4 sm:px-5 lg:col-span-2 lg:min-h-[156px] lg:px-6 lg:py-5">
+          <h1 className="sr-only">text.to.cad</h1>
           <HeroAsciiHeading />
         </div>
 
-        <div className="flex min-w-0 items-center border-t border-border px-4 py-4 sm:px-5 lg:min-h-[156px] lg:border-l lg:border-t-0 lg:px-6 lg:py-5">
-          <HeroSubtitle className="w-full lg:max-w-[34rem]" />
+        <div className="flex min-w-0 items-center border-t border-border px-4 py-4 sm:px-5 lg:col-span-1 lg:min-h-[156px] lg:border-l lg:border-t-0 lg:px-6 lg:py-5">
+          <HeroSubtitle className="w-full" />
         </div>
       </div>
 

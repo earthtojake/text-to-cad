@@ -20,7 +20,7 @@ Use the configured ROS 2 / MoveIt2 environment. Do not install ROS 2 or MoveIt2 
 
 Open an `.srdf` file, expand the right-side `MoveIt2` sheet, and use:
 
-- Status: linked SRDF and MoveIt2 server status.
+- Status: paired SRDF and MoveIt2 server status.
 - Target: planning group, end effector, target frame, and X/Y/Z target coordinates.
 - Solver: IK timeout, attempts, and tolerance.
 - Planning: pipeline, planner ID, plan time, velocity scale, and acceleration scale.

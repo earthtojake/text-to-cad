@@ -1,15 +1,11 @@
 # Keep CAD exchange files and generated render/topology assets out of normal git object history.
 assets/** filter=lfs diff=lfs merge=lfs -text
-benchmarks/** filter=lfs diff=lfs merge=lfs -text
-# Keep benchmark/spec markdown in normal git so reviews and diffs stay readable.
+# Keep spec markdown in normal git so reviews and diffs stay readable.
 assets/**/*.md !filter !diff !merge text
-benchmarks/**/*.md !filter !diff !merge text
 *.step filter=lfs diff=lfs merge=lfs -text
 *.stp filter=lfs diff=lfs merge=lfs -text
 *.stl filter=lfs diff=lfs merge=lfs -text
 *.3mf filter=lfs diff=lfs merge=lfs -text
-*.gcode filter=lfs diff=lfs merge=lfs -text
-*.gcode.3mf filter=lfs diff=lfs merge=lfs -text
 *.dxf filter=lfs diff=lfs merge=lfs -text
 *.glb filter=lfs diff=lfs merge=lfs -text
 *.gltf filter=lfs diff=lfs merge=lfs -text

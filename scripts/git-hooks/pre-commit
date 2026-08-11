@@ -4,6 +4,6 @@ set -eu
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-if ! git diff --cached --quiet -- packages viewer skills plugins/cad/skills scripts/bundle; then
+if ! git diff --cached --quiet -- packages viewer skills scripts/bundle; then
   scripts/bundle/bundle.sh --check
 fi

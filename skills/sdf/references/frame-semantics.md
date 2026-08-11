@@ -21,9 +21,9 @@ Rules to keep in mind:
 - The first three values are position.
 - With the default `rotation_format="euler_rpy"`, the pose has six values: `x y z roll pitch yaw`.
 - With `rotation_format="quat_xyzw"`, the pose has seven values: `x y z qx qy qz qw`.
-- Euler angles are radians by default. `degrees="true"` is valid SDF but should be avoided in generated sources unless the target explicitly requires it.
+- Euler angles are radians by default. `degrees="true"` is valid SDF but should be avoided unless the target explicitly requires it.
 - `relative_to` names the frame in which the pose is expressed.
-- If `relative_to` is omitted, SDF applies element-specific defaults, commonly the frame of the parent XML element. This may be valid but is easy to misread. Prefer explicit `relative_to` for nontrivial generated poses.
+- If `relative_to` is omitted, SDF applies element-specific defaults, commonly the frame of the parent XML element. This may be valid but is easy to misread. Prefer explicit `relative_to` for every nontrivial pose.
 - Nested scopes may use `::`, for example `outer_model::inner_model::sensor_frame`.
 
 ## Joint pose and axes
@@ -56,7 +56,7 @@ Use `<frame>` when a reusable transform is meaningful:
 </frame>
 ```
 
-Frames are useful for sensors, plugins, tool frames, nested models, and repeated placement logic. They also make generated SDF more auditable.
+Frames are useful for sensors, plugins, tool frames, nested models, and repeated placement logic. They also make SDF more auditable.
 
 `attached_to` and `relative_to` are different:
 

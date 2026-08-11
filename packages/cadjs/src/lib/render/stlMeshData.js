@@ -16,10 +16,39 @@ function buildBoundsFromGeometry(geometry) {
 
 const STL_NORMAL_CREASE_ANGLE = Math.PI / 4;
 
+// Above this triangle count, smooth the mesh with computeVertexNormals instead of
+// three's toCreasedNormals.
+//
+// toCreasedNormals welds vertices to average normals across shallow edges, which is what
+// makes a coarse cylinder read as round instead of faceted. It is also superlinear, and
+// dominates STL loading completely. Measured on so101's 13 link meshes (322,564 triangles
+// total, binary STL, on this machine):
+//
+//   STL parse .............     14 ms
+//   toCreasedNormals ......  14,090 ms   <- 99.9% of the load
+//   computeVertexNormals ..     31 ms
+//
+// Per mesh the cost climbs far faster than size: 9,430 triangles took 49 ms, 53,994 took
+// 3,552 ms — 5.7x the triangles for 72x the time. The whole robot went from 16.7 s to
+// 0.47 s with it skipped, and the two renders are visually indistinguishable, because a
+// mesh this dense has sub-pixel facets and nothing left to smooth.
+//
+// So the threshold keeps creasing exactly where it earns its cost: coarse meshes, where
+// facets are visible AND the function is still cheap (9,430 triangles = 49 ms). Faceting
+// shows on a cylinder built from hundreds or a few thousand triangles, which is an order of
+// magnitude below this line. Do not raise it without re-measuring — the cost is not linear
+// in the count, and 20,000 already put a robot back at 2-5 s.
+const STL_CREASED_NORMAL_MAX_TRIANGLES = 10000;
+
+function shouldCreaseStlNormals(geometry) {
+  const positionCount = geometry.getAttribute?.("position")?.count || 0;
+  return positionCount / 3 <= STL_CREASED_NORMAL_MAX_TRIANGLES;
+}
+
 function buildDisplayGeometryFromStlGeometry(geometry, toCreasedNormals) {
   const displayGeometry = geometry.clone();
   displayGeometry.deleteAttribute?.("normal");
-  const normalGeometry = typeof toCreasedNormals === "function"
+  const normalGeometry = typeof toCreasedNormals === "function" && shouldCreaseStlNormals(displayGeometry)
     ? toCreasedNormals(displayGeometry, STL_NORMAL_CREASE_ANGLE)
     : displayGeometry;
   if (normalGeometry !== displayGeometry) {

@@ -4,17 +4,17 @@ import {
   resolveThemeSettingsForColorMode
 } from "./themeSettings.js";
 
-export function resolveAppearanceJobConfig(job = {}, { defaultThemeId = "workbench" } = {}) {
-  if (typeof job.appearance === "string") {
+export function resolveThemeJobConfig(job = {}, { defaultThemeId = "workbench" } = {}) {
+  if (typeof job.theme === "string") {
     return {
-      themeId: job.appearance,
+      themeId: job.theme,
       settings: null
     };
   }
-  if (job.appearance && typeof job.appearance === "object" && !Array.isArray(job.appearance)) {
+  if (job.theme && typeof job.theme === "object" && !Array.isArray(job.theme)) {
     return {
       themeId: defaultThemeId,
-      settings: job.appearance
+      settings: job.theme
     };
   }
   return {
@@ -23,11 +23,11 @@ export function resolveAppearanceJobConfig(job = {}, { defaultThemeId = "workben
   };
 }
 
-export function resolveAppearanceSettings(job = {}, { defaultThemeId = "workbench" } = {}) {
-  const appearance = resolveAppearanceJobConfig(job, { defaultThemeId });
-  const themeSettings = cloneThemeSettings(appearance.themeId || defaultThemeId);
-  const normalized = normalizeThemeSettings(appearance.settings || themeSettings);
-  return typeof job.appearance === "string"
+export function resolveThemeSettings(job = {}, { defaultThemeId = "workbench" } = {}) {
+  const theme = resolveThemeJobConfig(job, { defaultThemeId });
+  const themeSettings = cloneThemeSettings(theme.themeId || defaultThemeId);
+  const normalized = normalizeThemeSettings(theme.settings || themeSettings);
+  return typeof job.theme === "string"
     ? resolveThemeSettingsForColorMode(normalized, { prefersDark: false })
     : normalized;
 }

@@ -1,26 +1,48 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Vendors packages/cadgen into skills/dxf/scripts/packages/cadgen, and esbuilds the Node
+# drawing-preview builder into skills/dxf/scripts/packages/cadjs/bin. The builder is what
+# `cadgen._internal.drawing_package` spawns to bake preview.glb; it lives in
+# packages/cadjs/bin and imports three, meshoptimizer and implicitjs, none of which a
+# published skill ships as node_modules -- so it is bundled self-contained (design §4.5).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+export BUNDLE_REPO_ROOT="$REPO_ROOT"
+# shellcheck source=../lib/vendor.sh
+source "$SCRIPT_DIR/../lib/vendor.sh"
+# shellcheck source=../lib/node_builders.sh
+source "$SCRIPT_DIR/../lib/node_builders.sh"
+# shellcheck source=../lib/snapshot_runtime.sh
+source "$SCRIPT_DIR/../lib/snapshot_runtime.sh"
 
 MODE="write"
 CLEAN=0
+PRINT_OUTPUTS=0
 
-CHECK_DIR="${DXF_SKILL_CHECK_DIR:-$REPO_ROOT/tmp/dxf-skill-runtime-check}"
-CADPY_PACKAGE_DIR="$REPO_ROOT/packages/cadpy"
-CADPY_RUNTIME_DIR="$REPO_ROOT/skills/dxf/scripts/packages/cadpy"
+CADGEN_PACKAGE_DIR="$REPO_ROOT/packages/cadgen"
+CADGEN_RUNTIME_DIR="$REPO_ROOT/skills/dxf/scripts/packages/cadgen"
+BUILDERS_RUNTIME_DIR="$REPO_ROOT/skills/dxf/scripts/packages/cadjs/bin"
+BUILDER_ENTRIES=("$REPO_ROOT/packages/cadjs/bin/dxf-artifact.mjs")
+SNAPSHOT_RUNTIME_DIR="$REPO_ROOT/skills/dxf/scripts/snapshot/runtime"
+CHECK_DIR="${DXF_SKILL_BUNDLE_CHECK_DIR:-$REPO_ROOT/tmp/dxf-skill-runtime-check}"
+# Shared with the CAD skill so both build the identical browser bundle; separate
+# npm scratch dir only so the two skills can bundle concurrently.
+SNAPSHOT_BUILD_DEPS_DIR="${DXF_SNAPSHOT_BUILD_DEPS_DIR:-$REPO_ROOT/tmp/dxf-snapshot-build}"
 
 usage() {
   cat <<'EOF'
 Usage:
   scripts/bundle/bundle-skill.sh dxf [--check] [--clean]
 
-Vendors packages/cadpy into skills/dxf/scripts/packages/cadpy.
+Bundles the DXF skill runtime: the vendored cadgen Python package and the
+self-contained Node drawing-preview builder.
 
 Options:
-  --check  Fail if the generated DXF skill runtime copy is stale.
-  --clean  Remove the temporary check directory first.
+  --check  Bundle into tmp/ and fail if checked-in production outputs are stale.
+  --clean  Remove temporary check directories first.
+  --print-outputs
+           Print the repo-relative generated output paths, then exit.
   -h, --help
            Show this help.
 EOF
@@ -28,92 +50,64 @@ EOF
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --check)
-      MODE="check"
-      ;;
-    --clean)
-      CLEAN=1
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      echo "Unknown argument: $1" >&2
-      usage >&2
-      exit 2
-      ;;
+    --check) MODE="check" ;;
+    --clean) CLEAN=1 ;;
+    --print-outputs) PRINT_OUTPUTS=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
   shift
 done
 
-if [ ! -f "$CADPY_PACKAGE_DIR/pyproject.toml" ] || [ ! -d "$CADPY_PACKAGE_DIR/src/cadpy" ]; then
-  echo "Missing cadpy package source: $CADPY_PACKAGE_DIR" >&2
-  echo "The DXF skill Python runtime is bundled from packages/cadpy." >&2
-  exit 1
+if [ "$PRINT_OUTPUTS" -eq 1 ]; then
+  printf '%s\n' "${CADGEN_RUNTIME_DIR#"$REPO_ROOT"/}"
+  printf '%s\n' "${BUILDERS_RUNTIME_DIR#"$REPO_ROOT"/}"
+  printf '%s\n' "${SNAPSHOT_RUNTIME_DIR#"$REPO_ROOT"/}"
+  exit 0
 fi
 
-if ! command -v rsync >/dev/null 2>&1; then
-  echo "rsync is required to vendor cadpy into the DXF skill runtime." >&2
-  exit 1
-fi
-
+require_python_package "$CADGEN_PACKAGE_DIR" cadgen
+ensure_node_builder_deps
+# --clean BEFORE the install, not after. Reversed, this deleted the very directory it had
+# just installed esbuild into, and the build below then died with exit 127 looking for it --
+# which is what `scripts/bundle/bundle.sh --clean` does in CI. bundle-cad.sh has always had
+# this order; dxf did not.
 if [ "$CLEAN" -eq 1 ]; then
-  rm -rf "$CHECK_DIR"
+  rm -rf "$CHECK_DIR" "$SNAPSHOT_BUILD_DEPS_DIR"
 fi
 
-sync_cadpy_runtime() {
-  local target_dir="$1"
-  rm -rf "$target_dir"
-  mkdir -p "$target_dir"
-  rsync -a --delete \
-    --delete-excluded \
-    --exclude __pycache__ \
-    --exclude .pytest_cache \
-    --exclude '*.pyc' \
-    --exclude '*.md' \
-    --exclude build \
-    --exclude dist \
-    --exclude '*.egg-info' \
-    --exclude tests \
-    --exclude __tests__ \
-    --exclude 'test_*.py' \
-    --exclude '*_test.py' \
-    "$CADPY_PACKAGE_DIR/" "$target_dir/"
-}
-
-check_cadpy_runtime() {
-  local check_dir="$CHECK_DIR/packages/cadpy"
-  if [ ! -d "$CADPY_RUNTIME_DIR" ]; then
-    echo "Missing generated cadpy runtime: skills/dxf/scripts/packages/cadpy" >&2
-    echo "" >&2
-    echo "Run scripts/bundle/bundle-skill.sh dxf and commit the updated runtime files." >&2
-    exit 1
-  fi
-  if ! diff -qr \
-    -x __pycache__ \
-    -x .pytest_cache \
-    -x '*.pyc' \
-    -x '*.egg-info' \
-    -x '*.md' \
-    -x tests \
-    -x __tests__ \
-    -x 'test_*.py' \
-    -x '*_test.py' \
-    "$check_dir" "$CADPY_RUNTIME_DIR" >/tmp/dxf-skill-cadpy-runtime-diff.txt; then
-    cat /tmp/dxf-skill-cadpy-runtime-diff.txt >&2
-    echo "" >&2
-    echo "DXF skill cadpy runtime is stale." >&2
-    echo "Run scripts/bundle/bundle-skill.sh dxf and commit skills/dxf/scripts/packages/cadpy." >&2
-    exit 1
-  fi
-  echo "DXF skill cadpy runtime is up to date."
-}
+ensure_snapshot_runtime_deps "$SNAPSHOT_BUILD_DEPS_DIR" 1
 
 if [ "$MODE" = "check" ]; then
-  sync_cadpy_runtime "$CHECK_DIR/packages/cadpy"
-  check_cadpy_runtime
+  rm -rf "$CHECK_DIR"
+  stale=0
+  check_python_runtime \
+    "$CADGEN_PACKAGE_DIR" "$CADGEN_RUNTIME_DIR" "$CHECK_DIR/packages/cadgen" \
+    "skills/dxf/scripts/packages/cadgen" \
+    "Run scripts/bundle/bundle-skill.sh dxf and commit skills/dxf/scripts/packages/cadgen." \
+    || stale=1
+  check_node_builders \
+    "$BUILDERS_RUNTIME_DIR" "$CHECK_DIR/packages/cadjs/bin" \
+    "skills/dxf/scripts/packages/cadjs/bin" \
+    "Run scripts/bundle/bundle-skill.sh dxf and commit skills/dxf/scripts/packages/cadjs." \
+    "${BUILDER_ENTRIES[@]}" \
+    || stale=1
+  build_snapshot_runtime "$CHECK_DIR/snapshot-runtime" "$SNAPSHOT_BUILD_DEPS_DIR"
+  check_snapshot_runtime "$SNAPSHOT_RUNTIME_DIR" "$CHECK_DIR/snapshot-runtime" \
+    "skills/dxf/scripts/snapshot/runtime" \
+    "Run scripts/bundle/bundle-skill.sh dxf and commit skills/dxf/scripts/snapshot/runtime." \
+    || stale=1
+  if [ "$stale" -ne 0 ]; then
+    echo "" >&2
+    echo "Run scripts/bundle/bundle-skill.sh dxf and commit the updated production outputs." >&2
+    exit 1
+  fi
+  echo "DXF skill production outputs are up to date."
 else
-  sync_cadpy_runtime "$CADPY_RUNTIME_DIR"
-  echo "Bundled skills/dxf/scripts/packages/cadpy"
+  vendor_python_package "$CADGEN_PACKAGE_DIR" "$CADGEN_RUNTIME_DIR"
+  echo "Bundled skills/dxf/scripts/packages/cadgen"
+  bundle_node_builders "$BUILDERS_RUNTIME_DIR" "${BUILDER_ENTRIES[@]}"
+  echo "Bundled skills/dxf/scripts/packages/cadjs/bin"
+  build_snapshot_runtime "$SNAPSHOT_RUNTIME_DIR" "$SNAPSHOT_BUILD_DEPS_DIR"
+  echo "Bundled skills/dxf/scripts/snapshot/runtime"
 fi

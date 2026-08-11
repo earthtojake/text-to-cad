@@ -1,8 +1,5 @@
-import { Children, isValidElement, useEffect, useId, useMemo, useRef, useState } from "react";
-import { Contrast, FlipHorizontal2, Moon, MoreHorizontal, Pencil, Plus, RotateCcw, Sun, Trash2, X } from "lucide-react";
-import {
-  Accordion
-} from "../ui/accordion";
+import { Children, isValidElement, useEffect, useMemo, useRef, useState } from "react";
+import { Contrast, Moon, MoreHorizontal, Pencil, Plus, Save, Sun, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,7 +11,6 @@ import {
   AlertDialogTitle
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
-import { ColorPicker } from "../ui/color-picker";
 import {
   Dialog,
   DialogClose,
@@ -36,44 +32,29 @@ import {
   DropdownMenuTrigger
 } from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "../ui/select";
 import { Slider } from "../ui/slider";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger
-} from "../ui/tabs";
-import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import { cn } from "@/ui/utils";
 import {
-  cloneThemePresetSettings,
-  DEFAULT_THEME_PRESET_ID,
-  THEME_PRESETS,
-  THEME_COLOR_MODES,
+  CUSTOM_THEME_ID,
+  DEFAULT_FILL_LIGHT_SETTINGS,
+  DEFAULT_RIM_LIGHT_SETTINGS,
+  DEFAULT_THEME_ID,
+  ENVIRONMENT_PRESETS,
+  getThemePresetById,
   MAX_THEME_FILL_COLORS,
-  normalizeThemePresetId,
   normalizeThemeSettings,
-  resolveSystemThemePresetId
+  resolveSystemThemePresetId,
+  SYSTEM_THEME_ID,
+  THEME_COLOR_MODES,
+  THEME_PRESETS
 } from "cadjs/lib/themeSettings";
 import {
-  CAD_EDGE_COLOR,
-  CAD_EDGE_HIGHLIGHT_COLOR,
-  DEFAULT_EXPLODED_VIEW_SETTINGS,
   CAMERA_PROJECTION,
-  normalizeDisplayEdgeSettings,
   normalizeDisplaySettings,
   normalizeExplodedViewSettings
 } from "cadjs/lib/displaySettings";
 import {
-  DISPLAY_MODE_OPTIONS,
-  displayModeOptionForValue
+  DISPLAY_MODE_OPTIONS
 } from "../viewer/DisplayModeOptions";
 import {
   OrthographicProjectionIcon,
@@ -86,21 +67,18 @@ import {
   DEFAULT_STEP_CLIP_SETTINGS,
   normalizeStepClipSettings
 } from "cadjs/lib/viewer/clipPlane";
+import { FILE_SHEET_SECTION_IDS } from "@/workbench/fileSheetSections";
+import { ScrollArea } from "../ui/scroll-area";
 import FileSheet, {
-  FILE_SHEET_COMPACT_BUTTON_CLASSES,
-  FILE_SHEET_COMPACT_INPUT_CLASSES,
-  FILE_SHEET_FIELD_LABEL_CLASSES,
   FILE_SHEET_PRECISION_SLIDER_CLASSES,
-  FILE_SHEET_ROW_STACK_CLASSES,
-  FILE_SHEET_SEGMENTED_ITEM_CLASSES,
   FileSheetBooleanToggle,
+  FileSheetColorPicker,
+  FileSheetColorRow,
   FileSheetControlRow,
-  FileSheetSection,
+  FileSheetSelectRow,
   FileSheetSliderField,
   FileSheetSubsection,
-  FileSheetSubsubsection,
   FileSheetToggleRow,
-  FileSheetValueInput,
   parseFileSheetNumberInput
 } from "./FileSheet";
 
@@ -116,38 +94,27 @@ const PROJECTION_MODE_OPTIONS = [
   { value: CAMERA_PROJECTION.PERSPECTIVE, label: "Perspective", title: "Depth projection with vanishing lines", Icon: PerspectiveProjectionIcon }
 ];
 
-const COLOR_MODE_OPTIONS = [
-  { value: THEME_COLOR_MODES.SYSTEM, label: "System" },
-  { value: THEME_COLOR_MODES.LIGHT, label: "Light" },
-  { value: THEME_COLOR_MODES.DARK, label: "Dark" }
-];
-
-const EXPLODED_AXIS_OPTIONS = [
-  { value: "x", label: "X" },
-  { value: "y", label: "Y" },
-  { value: "z", label: "Z" },
-  { value: "radial", label: "Radial" }
-];
 
 const PRIMARY_LIGHT_OPTIONS = [
-  { value: "directional", label: "Directional" },
+  { value: "directional", label: "Key" },
+  { value: "fill", label: "Fill" },
+  { value: "rim", label: "Rim" },
   { value: "spot", label: "Spot" },
   { value: "point", label: "Point" }
 ];
 
-const fieldLabelClasses = FILE_SHEET_FIELD_LABEL_CLASSES;
-const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
-const compactInputClasses = FILE_SHEET_COMPACT_INPUT_CLASSES;
+// Drafts saved before fill/rim joined the theme schema lack these lights.
+const PRIMARY_LIGHT_FALLBACKS = Object.freeze({
+  fill: DEFAULT_FILL_LIGHT_SETTINGS,
+  rim: DEFAULT_RIM_LIGHT_SETTINGS
+});
+
+// Fill and rim colors are not mode-color paths, so they use a plain color field.
+const MODE_COLOR_LIGHT_KEYS = Object.freeze(["directional", "spot", "point"]);
+
 const precisionSliderClasses = FILE_SHEET_PRECISION_SLIDER_CLASSES;
 const SLIDER_COMMIT_DELAY_MS = 120;
 const AXIS_OPTIONS = Object.freeze(["x", "y", "z"]);
-const EDGE_CLASS_CONTROLS = Object.freeze([
-  Object.freeze({ id: "feature", label: "Feature", defaultColor: CAD_EDGE_COLOR, defaultOpacity: 1, defaultThickness: 1.15 }),
-  Object.freeze({ id: "tangent", label: "Tangent", defaultColor: CAD_EDGE_COLOR, defaultOpacity: 0.5, defaultThickness: 1.15 }),
-  Object.freeze({ id: "seam", label: "Seam", defaultColor: CAD_EDGE_COLOR, defaultOpacity: 0.85, defaultThickness: 1.15 }),
-  Object.freeze({ id: "degenerate", label: "Degenerate", defaultColor: CAD_EDGE_COLOR, defaultOpacity: 1, defaultThickness: 0 })
-]);
-
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
@@ -188,19 +155,23 @@ function Field({ label, value, trailing, children, className, contentClassName }
   );
 }
 
-function Section({ title, value, children, ...props }) {
-  return (
-    <FileSheetSection value={value} title={title} {...props}>
-      {children}
-    </FileSheetSection>
-  );
-}
-
-function ControlSubsection({ title, trailing = null, children, className, hideFirstSeparator = true }) {
+// A section whose contents are gated by an on/off switch renders that switch
+// in the header's trailing slot, on the same right-edge control axis as every
+// row switch below it — one vertical line of switches per panel (see
+// viewer/docs/settings-ui.md). `toggle` is the on/off for this section;
+// `trailing` stays for anything else that belongs at that edge.
+function ControlSubsection({
+  title,
+  toggle = null,
+  trailing = null,
+  children,
+  className,
+  hideFirstSeparator = true
+}) {
   return (
     <FileSheetSubsection
       title={title}
-      trailing={trailing}
+      trailing={toggle || trailing}
       className={className}
       hideFirstSeparator={hideFirstSeparator}
     >
@@ -209,15 +180,15 @@ function ControlSubsection({ title, trailing = null, children, className, hideFi
   );
 }
 
-function NestedControlGroup({ title, children, className, contentClassName }) {
+// The switch that gates a ControlSubsection's contents.
+function SubsectionToggle({ label, checked, onCheckedChange, disabled = false }) {
   return (
-    <FileSheetSubsubsection
-      title={title}
-      className={className}
-      contentClassName={contentClassName}
-    >
-      {children}
-    </FileSheetSubsubsection>
+    <FileSheetBooleanToggle
+      checked={checked}
+      onCheckedChange={onCheckedChange}
+      disabled={disabled}
+      ariaLabel={label}
+    />
   );
 }
 
@@ -323,159 +294,8 @@ function SliderInput({ value, min, max, step = 0.01, onChange }) {
   );
 }
 
-function CompactNumberInput({
-  value,
-  min = 0,
-  max = 6,
-  digits = 2,
-  disabled = false,
-  ariaLabel,
-  onChange
-}) {
-  const numericValue = Number.isFinite(Number(value)) ? Number(value) : min;
-  const formattedValue = formatNumber(numericValue, digits);
-  const commitValue = (nextValue) => {
-    const resolvedValue = parseFileSheetNumberInput(nextValue, {
-      fallback: numericValue,
-      min,
-      max
-    });
-    if (Math.abs(resolvedValue - numericValue) > 1e-9) {
-      onChange?.(resolvedValue);
-    }
-  };
-
-  return (
-    <FileSheetValueInput
-      value={formattedValue}
-      onValueCommit={commitValue}
-      disabled={disabled}
-      ariaLabel={ariaLabel}
-      inputMode="decimal"
-      className="h-full w-16 shrink-0 rounded-none border-0 bg-transparent px-1.5 py-0 text-right !text-[11px] font-medium tabular-nums shadow-none focus-visible:ring-0 dark:bg-transparent"
-    />
-  );
-}
-
-function EdgeMetricInput({
-  label,
-  color,
-  opacity,
-  thickness,
-  min = 0,
-  max = 6,
-  digits = 2,
-  disabled = false,
-  onColorChange,
-  onOpacityChange,
-  onThicknessChange
-}) {
-  return (
-    <div
-      className={cn(
-        "inline-flex h-7 shrink-0 items-center overflow-hidden rounded-md border border-input bg-transparent shadow-xs dark:bg-input/30",
-        disabled && "opacity-50"
-      )}
-    >
-      <ColorInput
-        value={color}
-        opacity={opacity}
-        showOpacity
-        showValue={false}
-        disabled={disabled}
-        onChange={onColorChange}
-        onOpacityChange={onOpacityChange}
-        className="h-7 w-7 rounded-none border-0 border-r border-input bg-transparent px-1.5 shadow-none"
-        swatchClassName="size-3.5"
-        title={`${label} edge color`}
-        aria-label={`${label} edge color`}
-      />
-      <CompactNumberInput
-        value={thickness}
-        min={min}
-        max={max}
-        digits={digits}
-        disabled={disabled}
-        ariaLabel={`${label} edge thickness`}
-        onChange={onThicknessChange}
-      />
-      <span className="pr-1.5 text-[10px] font-medium text-muted-foreground">px</span>
-    </div>
-  );
-}
-
-function EdgeClassControlRow({
-  label,
-  color,
-  thickness,
-  opacity,
-  onColorChange,
-  onThicknessChange,
-  onOpacityChange
-}) {
-  return (
-    <FileSheetControlRow
-      label={label}
-      trailing={(
-        <EdgeMetricInput
-          label={label}
-          color={color}
-          opacity={opacity}
-          thickness={thickness}
-          onColorChange={onColorChange}
-          onOpacityChange={onOpacityChange}
-          onThicknessChange={onThicknessChange}
-        />
-      )}
-      contentClassName="hidden"
-    />
-  );
-}
-
-function ColorInput({
-  value,
-  onChange,
-  className,
-  swatchClassName,
-  valueClassName,
-  showValue = true,
-  disabled = false,
-  ...props
-}) {
-  return (
-    <ColorPicker
-      value={value}
-      onChange={onChange}
-      className={cn(
-        compactInputClasses,
-        "w-fit justify-start gap-1.5 px-1.5",
-        className
-      )}
-      swatchClassName={cn("size-3.5", swatchClassName)}
-      valueClassName={valueClassName}
-      popoverAlign="end"
-      showValue={showValue}
-      disabled={disabled}
-      {...props}
-    />
-  );
-}
-
-function ColorField({ label, value, onChange, className, labelClassName }) {
-  return (
-    <FileSheetControlRow
-      label={label}
-      trailing={(
-        <ColorInput
-          value={value}
-          onChange={onChange}
-        />
-      )}
-      className={className}
-      labelClassName={labelClassName}
-    />
-  );
-}
+const ColorInput = FileSheetColorPicker;
+const ColorField = FileSheetColorRow;
 
 function getPathValue(source, path) {
   return path.reduce((value, key) => (
@@ -568,11 +388,7 @@ function resolveFillColors(materials = {}) {
   return colors.slice(0, MAX_THEME_FILL_COLORS);
 }
 
-function settingsSignature(settings) {
-  return JSON.stringify(normalizeThemeSettings(settings));
-}
-
-function FillColorEditor({ colors, onChange, cycleColors = false }) {
+function FillColorEditor({ colors, onChange }) {
   const resolvedColors = colors.length ? colors : ["#ffffff"];
   const commitColors = (nextColors) => {
     const compactColors = nextColors.filter(Boolean).slice(0, MAX_THEME_FILL_COLORS);
@@ -587,10 +403,7 @@ function FillColorEditor({ colors, onChange, cycleColors = false }) {
       {resolvedColors.map((color, index) => (
         <div
           key={index}
-          className={cn(
-            "group relative transition-opacity",
-            !cycleColors && index > 0 && "opacity-45 grayscale"
-          )}
+          className="group relative transition-opacity"
         >
           <ColorInput
             value={color}
@@ -635,738 +448,119 @@ function FillColorEditor({ colors, onChange, cycleColors = false }) {
   );
 }
 
-function SegmentedControl({ value, onChange, options }) {
-  const columnCount = Math.max(1, Math.min(options.length, options.length > 4 ? 3 : 4));
-  const templateColumns = `repeat(${columnCount}, minmax(0, 1fr))`;
-  return (
-    <ToggleGroup
-      type="single"
-      variant="outline"
-      size="sm"
-      value={value}
-      onValueChange={(nextValue) => {
-        if (!nextValue) {
-          return;
-        }
-        onChange(nextValue);
-      }}
-      className="grid min-h-7 w-full min-w-0 auto-rows-[1.75rem]"
-      style={{ gridTemplateColumns: templateColumns }}
-    >
-      {options.map((option) => {
-        const Icon = option.Icon;
-        const disabled = option.disabled === true;
-        return (
-          <ToggleGroupItem
-            key={option.value}
-            value={option.value}
-            disabled={disabled}
-            className={cn("min-w-0 gap-1.5 !h-7 px-1.5 text-[11px]", FILE_SHEET_SEGMENTED_ITEM_CLASSES)}
-            title={option.title || option.label}
-            aria-label={option.label}
-          >
-            {Icon ? <Icon className="size-3" strokeWidth={2} aria-hidden="true" /> : null}
-            <span className="truncate">{option.label}</span>
-          </ToggleGroupItem>
-        );
-      })}
-    </ToggleGroup>
-  );
-}
 
-export function PresetSwatch({ preset = null }) {
-  if (!preset) {
-    return (
+// Two boxes: the canvas the theme paints behind the model, and the colour parts
+// are filled with by default. One box alone can't tell a light theme with dark
+// parts from a dark theme with light parts.
+function PresetSwatch({ preview = null }) {
+  return (
+    <span className="inline-flex shrink-0 overflow-hidden rounded-[3px] border border-border/70" aria-hidden="true">
       <span
-        className="h-4 w-8 shrink-0 rounded-md border border-dashed bg-muted"
-        aria-hidden="true"
+        className="block size-3.5"
+        style={{ background: preview?.background || "var(--muted)" }}
       />
-    );
-  }
-
-  return (
-    <span
-      className="relative h-4 w-8 shrink-0 overflow-hidden rounded-md border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)]"
-      style={{ background: preset.preview.background }}
-      aria-hidden="true"
-    >
       <span
-        className="absolute inset-y-0 right-0 w-3"
-        style={{ backgroundColor: preset.preview.accentColor, opacity: 0.9 }}
+        className="block size-3.5 border-l border-border/70"
+        style={{ background: preview?.modelColor || "var(--muted)" }}
       />
     </span>
   );
 }
 
-export function useSystemDefaultThemePresetId() {
-  const [systemDefaultPresetId, setSystemDefaultPresetId] = useState(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return DEFAULT_THEME_PRESET_ID;
-    }
-    return resolveSystemThemePresetId({
-      prefersDark: window.matchMedia("(prefers-color-scheme: dark)").matches === true
-    });
-  });
+// The custom slot has no authored preview, so read the same two colours out of
+// the settings the user has actually edited.
+function customThemePreview(themeSettings) {
+  const background = themeSettings?.background || {};
+  const fillColors = themeSettings?.materials?.fillColors;
+  const backgroundCss = background.type === "radial"
+    ? `radial-gradient(circle at 42% 32%, ${background.radialInner} 0%, ${background.radialOuter} 78%)`
+    : background.type === "linear"
+    ? `linear-gradient(${Number(background.linearAngle) || 135}deg, ${background.linearStart} 0%, ${background.linearEnd} 100%)`
+    : background.solidColor;
+  return {
+    background: backgroundCss || "",
+    modelColor: (Array.isArray(fillColors) ? fillColors[0] : "") || ""
+  };
+}
 
+// Tracks the OS light/dark preference so the System entry can name the preset it
+// currently resolves to.
+export function useSystemDefaultThemePresetId() {
+  const [prefersDark, setPrefersDark] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return undefined;
     }
-
-    const colorSchemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const updateSystemDefaultPreset = () => {
-      setSystemDefaultPresetId(resolveSystemThemePresetId({
-        prefersDark: colorSchemeQuery.matches === true
-      }));
-    };
-
-    updateSystemDefaultPreset();
-    colorSchemeQuery.addEventListener?.("change", updateSystemDefaultPreset);
-    return () => {
-      colorSchemeQuery.removeEventListener?.("change", updateSystemDefaultPreset);
-    };
+    let query;
+    try {
+      query = window.matchMedia("(prefers-color-scheme: dark)");
+    } catch {
+      return undefined;
+    }
+    const sync = () => setPrefersDark(query.matches === true);
+    sync();
+    query.addEventListener?.("change", sync);
+    return () => query.removeEventListener?.("change", sync);
   }, []);
-
-  return systemDefaultPresetId;
+  return resolveSystemThemePresetId({ prefersDark });
 }
 
-function orderedThemePresets(presets, systemDefaultPresetId) {
-  const defaultPresetIndex = presets.findIndex((preset) => preset.id === systemDefaultPresetId);
-  if (defaultPresetIndex <= 0) {
-    return presets;
-  }
-  return [
-    presets[defaultPresetIndex],
-    ...presets.slice(0, defaultPresetIndex),
-    ...presets.slice(defaultPresetIndex + 1)
-  ];
-}
-
-function resolveActiveThemePreset(themePresets, themePresetId, themeSettings) {
-  const directPreset = themePresets.find((preset) => preset.id === themePresetId) || null;
-  if (directPreset) {
-    return directPreset;
-  }
-  const currentThemeSettingsSignature = settingsSignature(themeSettings);
-  return themePresets.find((preset) => settingsSignature(preset.settings) === currentThemeSettingsSignature) || null;
-}
-
-function themeSettingsChangedFromPreset(preset, themeSettings) {
-  return !preset || settingsSignature(preset.settings) !== settingsSignature(themeSettings);
-}
-
-function themePresetIsCustom(preset) {
-  return String(preset?.id || "").startsWith("custom:");
-}
-
-function themePresetCanResetToDefault(preset) {
-  const presetId = normalizeThemePresetId(preset?.presetId || preset?.id);
-  return Boolean(
-    themePresetIsCustom(preset) &&
-    presetId &&
-    settingsSignature(preset.settings) !== settingsSignature(cloneThemePresetSettings(presetId))
-  );
-}
-
-function themePresetCanUpdate(preset) {
-  return themePresetIsCustom(preset);
-}
-
-function themePresetCanDelete(preset) {
-  return themePresetIsCustom(preset);
-}
-
-function themeLibraryChangedFromDefaults(themePresets = []) {
-  if (!Array.isArray(themePresets) || !themePresets.length) {
-    return false;
-  }
-  if (themePresets.length !== THEME_PRESETS.length) {
-    return true;
-  }
-  for (let index = 0; index < THEME_PRESETS.length; index += 1) {
-    const defaultPreset = THEME_PRESETS[index];
-    const theme = themePresets[index];
-    if (!theme || theme.id !== defaultPreset.id || theme.label !== defaultPreset.label) {
-      return true;
-    }
-    if (normalizeThemePresetId(theme.presetId || theme.id) !== defaultPreset.id) {
-      return true;
-    }
-    if (settingsSignature(theme.settings) !== settingsSignature(defaultPreset.settings)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function ThemeDirtyIndicator({ className }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn("h-2 w-2 shrink-0 rounded-full bg-blue-500", className)}
-    />
-  );
-}
-
-function ThemePresetOverflowMenu({
-  preset,
-  canDeleteTheme,
-  canResetToDefault,
-  onActionActiveChange,
-  onDelete,
-  onEdit,
-  onReset
+// The theme picker: System, then the built-in presets. Presets are read-only, so
+// picking one is both "apply" and "reset" — there is no save, restore, rename, or
+// delete. Editing any setting moves the theme into the custom slot, which is not
+// a list item: it is only ever the trigger's label, because "Custom" is a state
+// you leave by picking a preset, not something you can pick.
+function ThemePresetSection({
+  themeSettings,
+  themeId = DEFAULT_THEME_ID,
+  onSelectTheme
 }) {
-  const [open, setOpen] = useState(false);
-  const label = String(preset?.label || "theme").trim() || "theme";
-  const actionsLabel = `Theme actions for ${label}`;
+  const systemPresetId = useSystemDefaultThemePresetId();
+  const systemPreset = getThemePresetById(systemPresetId);
+  const options = useMemo(() => [
+    {
+      value: SYSTEM_THEME_ID,
+      label: "System",
+      preview: systemPreset?.preview || null
+    },
+    ...THEME_PRESETS.map((preset) => ({
+      value: preset.id,
+      label: preset.label,
+      preview: preset.preview || null
+    }))
+  ], [systemPreset]);
 
-  const setActionActive = (nextActive) => {
-    onActionActiveChange?.(nextActive);
-  };
-
-  const handleOpenChange = (nextOpen) => {
-    setOpen(nextOpen);
-    setActionActive(nextOpen);
-  };
-
-  const stopMenuPropagation = (event) => {
-    event.stopPropagation();
-  };
-  const handleActionSelect = (event, action) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setActionActive(false);
-    action?.();
-  };
-
-  const handleTriggerBlur = (event) => {
-    if (!open && !event.currentTarget.contains(event.relatedTarget)) {
-      setActionActive(false);
-    }
-  };
+  const isCustom = themeId === CUSTOM_THEME_ID;
+  const activeOption = options.find((option) => option.value === themeId) || null;
+  const triggerLabel = isCustom ? "Custom" : (activeOption?.label || options[0].label);
+  const triggerPreview = isCustom
+    ? customThemePreview(themeSettings)
+    : (activeOption?.preview || options[0].preview);
 
   return (
-    <DropdownMenuSub open={open} onOpenChange={handleOpenChange}>
-      <DropdownMenuSubTrigger
-        showChevron={false}
-        data-theme-menu-action=""
-        aria-label={actionsLabel}
-        title={actionsLabel}
-        className={cn(
-          "theme-preset-overflow-trigger flex size-7 shrink-0 items-center justify-center rounded-md p-0",
-          "text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-          "focus:bg-accent focus:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    <ControlSubsection title="Theme">
+      {/* The panel's primary control: picking a preset rewrites every setting
+          below it, so this is one of the few selects that gets the full-width
+          stacked treatment. */}
+      <FileSheetSelectRow
+        stacked
+        label="Preset"
+        value={isCustom ? "" : (activeOption?.value || options[0].value)}
+        onValueChange={(nextValue) => onSelectTheme?.(nextValue)}
+        ariaLabel="Theme preset"
+        triggerContent={(
+          <span className="flex min-w-0 items-center gap-2">
+            <PresetSwatch preview={triggerPreview} />
+            <span className="truncate">{triggerLabel}</span>
+          </span>
         )}
-        onPointerEnter={() => setActionActive(true)}
-        onPointerLeave={() => {
-          if (!open) {
-            setActionActive(false);
-          }
-        }}
-        onFocus={() => setActionActive(true)}
-        onBlur={handleTriggerBlur}
-        onMouseDown={stopMenuPropagation}
-        onPointerDown={stopMenuPropagation}
-        onKeyDown={stopMenuPropagation}
-      >
-        <MoreHorizontal className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent sideOffset={6} className="w-40">
-        <DropdownMenuItem
-          className="gap-2 text-xs"
-          onSelect={(event) => handleActionSelect(event, onEdit)}
-        >
-          <Pencil className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-          <span>Edit</span>
-        </DropdownMenuItem>
-        {canResetToDefault ? (
-          <DropdownMenuItem
-            className="gap-2 text-xs"
-            onSelect={(event) => handleActionSelect(event, onReset)}
-          >
-            <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-            <span>Reset to preset</span>
-          </DropdownMenuItem>
-        ) : null}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          variant="destructive"
-          disabled={!canDeleteTheme}
-          className="gap-2 text-xs"
-          onSelect={(event) => handleActionSelect(event, canDeleteTheme ? onDelete : null)}
-        >
-          <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-          <span>Delete</span>
-        </DropdownMenuItem>
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
-  );
-}
-
-function ThemeWarningDialog({
-  open,
-  onOpenChange,
-  title,
-  description,
-  actionLabel,
-  onConfirm
-}) {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="sm:max-w-sm">
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive text-white hover:bg-destructive/90"
-            onClick={onConfirm}
-          >
-            {actionLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-function SaveThemeDialog({
-  defaultName,
-  onOpenChange,
-  onSave,
-  open
-}) {
-  const inputId = useId();
-  const [draftName, setDraftName] = useState(defaultName);
-  const normalizedDraftName = draftName.trim();
-
-  useEffect(() => {
-    if (open) {
-      setDraftName(defaultName);
-    }
-  }, [defaultName, open]);
-
-  const handleSubmit = (event) => {
-    event.preventDefault();
-    if (!normalizedDraftName || typeof onSave !== "function") {
-      return;
-    }
-    const savedPreset = onSave(normalizedDraftName);
-    if (savedPreset) {
-      onOpenChange?.(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="p-5 sm:max-w-sm">
-        <form className="grid gap-4" onSubmit={handleSubmit}>
-          <DialogHeader className="gap-1.5">
-            <DialogTitle className="text-base">Save Theme</DialogTitle>
-            <DialogDescription className="sr-only">
-              Enter a name for this theme.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-1.5">
-            <label className={fieldLabelClasses} htmlFor={inputId}>
-              Theme name
-            </label>
-            <Input
-              id={inputId}
-              value={draftName}
-              autoFocus
-              onChange={(event) => setDraftName(event.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline" size="sm">
-                Cancel
-              </Button>
-            </DialogClose>
-            <Button type="submit" size="sm" disabled={!normalizedDraftName}>
-              Save theme
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-export function ThemePresetDropdown({
-  themePresets = [],
-  themeSettings,
-  themePresetId = "",
-  updateThemeSettings,
-  handleDeleteCustomThemePreset,
-  handleEditThemePreset,
-  handleResetThemePresetToDefault,
-  handleRestoreDefaultThemePresets,
-  triggerClassName,
-  iconClassName
-}) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [deleteThemeId, setDeleteThemeId] = useState("");
-  const [resetThemeId, setResetThemeId] = useState("");
-  const [restoreThemesDialogOpen, setRestoreThemesDialogOpen] = useState(false);
-  const [activeActionThemeId, setActiveActionThemeId] = useState("");
-  const systemDefaultPresetId = useSystemDefaultThemePresetId();
-  const orderedPresets = useMemo(
-    () => orderedThemePresets(themePresets, systemDefaultPresetId),
-    [themePresets, systemDefaultPresetId]
-  );
-  const activeThemePreset = useMemo(
-    () => resolveActiveThemePreset(themePresets, themePresetId, themeSettings),
-    [themePresets, themePresetId, themeSettings]
-  );
-  const activeThemePresetId = activeThemePreset?.id || "";
-  const activeThemeLabel = activeThemePreset?.label || "Theme";
-  const deleteThemePreset = themePresets.find((preset) => preset.id === deleteThemeId) || null;
-  const resetThemePreset = themePresets.find((preset) => preset.id === resetThemeId) || null;
-  const themeLibraryHasChanged = useMemo(
-    () => themeLibraryChangedFromDefaults(themePresets),
-    [themePresets]
-  );
-
-  const handleMenuOpenChange = (nextOpen) => {
-    setMenuOpen(nextOpen);
-    if (!nextOpen) {
-      setActiveActionThemeId("");
-    }
-  };
-
-  const clearThemeMenuActionState = (presetId) => {
-    setActiveActionThemeId((currentThemeId) => (
-      currentThemeId === presetId ? "" : currentThemeId
-    ));
-  };
-
-  const applyThemePreset = (presetId) => {
-    const preset = themePresets.find((candidate) => candidate.id === presetId);
-    if (!preset) {
-      return;
-    }
-    updateThemeSettings?.(preset.settings, {
-      persistGlobal: true,
-      presetId: preset.id
-    });
-  };
-
-  const handleDeleteThemePreset = (presetId) => {
-    const preset = themePresets.find((candidate) => candidate.id === presetId);
-    if (themePresetCanDelete(preset) && typeof handleDeleteCustomThemePreset === "function") {
-      setDeleteThemeId(presetId);
-      setMenuOpen(false);
-    }
-  };
-
-  const handleConfirmDeleteTheme = () => {
-    if (deleteThemePreset && typeof handleDeleteCustomThemePreset === "function") {
-      handleDeleteCustomThemePreset(deleteThemePreset.id);
-    }
-    setDeleteThemeId("");
-  };
-
-  const handleEditTheme = (presetId) => {
-    const didEdit = typeof handleEditThemePreset === "function"
-      ? handleEditThemePreset(presetId)
-      : false;
-    if (!didEdit) {
-      applyThemePreset(presetId);
-    }
-    setMenuOpen(false);
-  };
-
-  const handleResetThemePreset = (presetId) => {
-    setResetThemeId(presetId);
-    setMenuOpen(false);
-  };
-
-  const handleConfirmResetTheme = () => {
-    if (resetThemePreset && typeof handleResetThemePresetToDefault === "function") {
-      handleResetThemePresetToDefault(resetThemePreset.id);
-    }
-    setResetThemeId("");
-  };
-
-  const handleConfirmRestoreThemes = () => {
-    if (typeof handleRestoreDefaultThemePresets === "function") {
-      handleRestoreDefaultThemePresets();
-    }
-    setRestoreThemesDialogOpen(false);
-  };
-
-  return (
-    <>
-      <DropdownMenu open={menuOpen} onOpenChange={handleMenuOpenChange}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Theme: ${activeThemeLabel}`}
-            title={`Theme: ${activeThemeLabel}`}
-            className={triggerClassName}
-          >
-            <Contrast className={iconClassName} strokeWidth={2} aria-hidden="true" />
-            <span className="sr-only">Theme</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" sideOffset={6} className="w-64">
-          <DropdownMenuLabel className="px-2 py-1.5 text-xs text-muted-foreground">
-            Theme
-          </DropdownMenuLabel>
-          {orderedPresets.map((preset) => {
-            const active = preset.id === activeThemePresetId;
-            const canResetToDefault = themePresetCanResetToDefault(preset);
-            const canDeleteTheme = themePresetCanDelete(preset);
-            const actionActive = activeActionThemeId === preset.id;
-            return (
-              <div
-                key={preset.id}
-                data-active={active ? "true" : undefined}
-                data-action-hover={actionActive ? "true" : undefined}
-                aria-current={active ? "true" : undefined}
-                className={cn(
-                  "theme-preset-menu-item flex min-w-0 items-center gap-1 rounded-sm text-xs"
-                )}
-              >
-                <DropdownMenuItem
-                  className={cn(
-                    "theme-preset-menu-row min-w-0 flex-1 gap-2 px-2 py-1.5 text-xs",
-                    active && "font-semibold"
-                  )}
-                  data-theme-menu-row-surface=""
-                  onSelect={() => applyThemePreset(preset.id)}
-                >
-                  <PresetSwatch preset={preset} />
-                  <span className="min-w-0 flex-1 truncate">{preset.label}</span>
-                  {preset.id === systemDefaultPresetId ? (
-                    <span
-                      className="rounded-full border px-1.5 py-0.5 text-[9px] uppercase text-muted-foreground"
-                      data-theme-menu-default-badge=""
-                    >
-                      Default
-                    </span>
-                  ) : null}
-                </DropdownMenuItem>
-                <span
-                  className="theme-preset-menu-actions ml-auto flex shrink-0 items-center gap-0.5 rounded-sm px-0.5 py-0.5"
-                >
-                  <ThemePresetOverflowMenu
-                    preset={preset}
-                    canDeleteTheme={canDeleteTheme}
-                    canResetToDefault={canResetToDefault}
-                    onActionActiveChange={(nextActive) => {
-                      if (nextActive) {
-                        setActiveActionThemeId(preset.id);
-                      } else {
-                        clearThemeMenuActionState(preset.id);
-                      }
-                    }}
-                    onEdit={() => handleEditTheme(preset.id)}
-                    onReset={() => handleResetThemePreset(preset.id)}
-                    onDelete={() => handleDeleteThemePreset(preset.id)}
-                  />
-                </span>
-              </div>
-            );
-          })}
-          {themeLibraryHasChanged ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-xs"
-                onSelect={(event) => {
-                  event.preventDefault();
-                  setRestoreThemesDialogOpen(true);
-                  setMenuOpen(false);
-                }}
-              >
-                <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                <span>Restore defaults</span>
-              </DropdownMenuItem>
-            </>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <ThemeWarningDialog
-        open={Boolean(deleteThemePreset)}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) {
-            setDeleteThemeId("");
-          }
-        }}
-        title="Delete Theme"
-        description={`Delete ${deleteThemePreset?.label || "this theme"}? This removes it from your theme list.`}
-        actionLabel="Delete theme"
-        onConfirm={handleConfirmDeleteTheme}
+        options={options.map((option) => ({
+          value: option.value,
+          label: option.label,
+          icon: <PresetSwatch preview={option.preview} />
+        }))}
       />
-      <ThemeWarningDialog
-        open={Boolean(resetThemePreset)}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) {
-            setResetThemeId("");
-          }
-        }}
-        title="Reset Theme"
-        description={`Reset ${resetThemePreset?.label || "this theme"} to its built-in preset settings?`}
-        actionLabel="Reset theme"
-        onConfirm={handleConfirmResetTheme}
-      />
-      <ThemeWarningDialog
-        open={restoreThemesDialogOpen}
-        onOpenChange={setRestoreThemesDialogOpen}
-        title="Restore Defaults"
-        description="This clears saved theme changes, removes saved themes, and restores deleted presets."
-        actionLabel="Restore defaults"
-        onConfirm={handleConfirmRestoreThemes}
-      />
-    </>
-  );
-}
-
-function ThemeAppearanceSection({
-  themePresets = [],
-  themeSettings,
-  themePresetId = "",
-  updateThemeSettings,
-  handleResetThemeSettings,
-  handleSaveCustomThemePreset,
-  handleUpdateThemePresetSettings
-}) {
-  const [saveThemeDialogOpen, setSaveThemeDialogOpen] = useState(false);
-  const activeThemePreset = useMemo(
-    () => resolveActiveThemePreset(themePresets, themePresetId, themeSettings),
-    [themePresets, themePresetId, themeSettings]
-  );
-  const activeThemeId = activeThemePreset?.id || "";
-  const canUpdateActiveTheme = themePresetCanUpdate(activeThemePreset);
-  const themeHasChanged = themeSettingsChangedFromPreset(activeThemePreset, themeSettings);
-  const fallbackThemeName = activeThemePreset?.label
-    ? `${activeThemePreset.label} copy`
-    : "Theme copy";
-  const colorMode = themeSettings.colorMode || THEME_COLOR_MODES.SYSTEM;
-
-  const applyThemePreset = (presetId) => {
-    const preset = themePresets.find((candidate) => candidate.id === presetId);
-    if (!preset) {
-      return;
-    }
-    updateThemeSettings?.(preset.settings, {
-      persistGlobal: true,
-      presetId: preset.id
-    });
-  };
-
-  const handleSaveTheme = (themeName) => {
-    if (!themeHasChanged || typeof handleSaveCustomThemePreset !== "function") {
-      return null;
-    }
-    return handleSaveCustomThemePreset(themeName);
-  };
-
-  const handleUpdateTheme = () => {
-    if (!themeHasChanged || !activeThemeId || !canUpdateActiveTheme || typeof handleUpdateThemePresetSettings !== "function") {
-      return;
-    }
-    handleUpdateThemePresetSettings(activeThemeId);
-  };
-
-  const handleColorModeChange = (nextColorMode) => {
-    updateThemeSettings?.((current) => ({
-      ...normalizeThemeSettings(current),
-      colorMode: nextColorMode
-    }));
-  };
-
-  return (
-    <>
-      <ControlSubsection title="Theme">
-        <Field
-          label="Current"
-          value={themeHasChanged ? "Changed" : "Saved"}
-        >
-          <Select value={activeThemeId} onValueChange={applyThemePreset}>
-            <SelectTrigger
-              size="sm"
-              className={cn(compactInputClasses, "w-full justify-between")}
-              aria-label="Theme"
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <PresetSwatch preset={activeThemePreset} />
-                <span className="min-w-0 truncate">{activeThemePreset?.label || "Theme"}</span>
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {themePresets.map((preset) => (
-                <SelectItem key={preset.id} value={preset.id} className="text-xs">
-                  <PresetSwatch preset={preset} />
-                  <span className="min-w-0 truncate">{preset.label}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-
-        <Field label="Color mode">
-          <SegmentedControl
-            value={colorMode}
-            options={COLOR_MODE_OPTIONS}
-            onChange={handleColorModeChange}
-          />
-        </Field>
-
-        <FileSheetControlRow>
-          <div className="flex flex-wrap gap-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className={cn(compactButtonClasses, "relative", themeHasChanged ? "pr-5" : null)}
-              disabled={!themeHasChanged || typeof handleSaveCustomThemePreset !== "function"}
-              onClick={() => setSaveThemeDialogOpen(true)}
-            >
-              <span>Save as</span>
-              {themeHasChanged ? (
-                <ThemeDirtyIndicator className="absolute right-1.5 top-1.5 h-1.5 w-1.5" />
-              ) : null}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className={compactButtonClasses}
-              disabled={!themeHasChanged || !activeThemeId || !canUpdateActiveTheme || typeof handleUpdateThemePresetSettings !== "function"}
-              onClick={handleUpdateTheme}
-            >
-              <span>Update</span>
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className={compactButtonClasses}
-              disabled={!themeHasChanged || !activeThemeId || typeof handleResetThemeSettings !== "function"}
-              onClick={() => handleResetThemeSettings?.()}
-            >
-              <RotateCcw className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-              <span>Restore to default</span>
-            </Button>
-          </div>
-        </FileSheetControlRow>
-      </ControlSubsection>
-      <SaveThemeDialog
-        defaultName={fallbackThemeName}
-        onOpenChange={setSaveThemeDialogOpen}
-        onSave={handleSaveTheme}
-        open={saveThemeDialogOpen}
-      />
-    </>
+    </ControlSubsection>
   );
 }
 
@@ -1475,93 +669,42 @@ function PositionPad({ value, onChange }) {
       <div className="flex items-center justify-between text-[10px] text-muted-foreground">
         <span>X {Math.round(x)}</span>
         <span>Z {Math.round(z)}</span>
-        <span>range +/-{extent}</span>
+        <span>range ±{extent}</span>
       </div>
     </div>
   );
 }
 
-export function DisplaySettingsSection({
+// How many parts the exploded view could move, from the mesh-data part list
+// (parts with bounds and a real id — the same gate the layout applies).
+function explodablePartCount(meshData) {
+  const parts = Array.isArray(meshData?.parts) ? meshData.parts : [];
+  return parts.filter((part) => (
+    part &&
+    (part.bounds || part.sourceBounds) &&
+    String(part.id || part.occurrenceId || "").trim()
+  )).length;
+}
+
+// Clip: slice the STEP model with an axis-aligned section plane. The X/Y/Z
+// sliders move the cut; Flip swaps the kept side. Sliders are disabled until
+// model bounds are known. Always visible — there is no separate on/off, because
+// an offset of 0 already means "no cut".
+function ClipSubsection({
   displaySettings,
   updateDisplaySettings,
-  clipBounds = null,
-  showClip = false
+  clipBounds = null
 }) {
-  const normalizedDisplaySettings = useMemo(
-    () => normalizeDisplaySettings(displaySettings),
+  const clip = useMemo(
+    () => normalizeStepClipSettings(displaySettings.clip),
     [displaySettings]
   );
-  const normalizedClipSettings = useMemo(
-    () => normalizeStepClipSettings(normalizedDisplaySettings.clip),
-    [normalizedDisplaySettings.clip]
-  );
-  const normalizedExplodedSettings = useMemo(
-    () => normalizeExplodedViewSettings(normalizedDisplaySettings.exploded),
-    [normalizedDisplaySettings.exploded]
-  );
-  const normalizedEdgeSettings = useMemo(
-    () => normalizeDisplayEdgeSettings(normalizedDisplaySettings.edges),
-    [normalizedDisplaySettings.edges]
-  );
-  const setDisplay = (patch) => {
-    updateDisplaySettings?.((current) => ({
-      ...normalizeDisplaySettings(current),
-      ...patch
-    }));
-  };
   const setClip = (patch) => {
     updateDisplaySettings?.((current) => {
       const currentSettings = normalizeDisplaySettings(current);
-      return {
-        ...currentSettings,
-        clip: buildStepClipPatch(currentSettings.clip, patch)
-      };
+      return { ...currentSettings, clip: buildStepClipPatch(currentSettings.clip, patch) };
     });
   };
-  const setExploded = (patch) => {
-    updateDisplaySettings?.((current) => {
-      const currentSettings = normalizeDisplaySettings(current);
-      return {
-        ...currentSettings,
-        exploded: normalizeExplodedViewSettings({ ...currentSettings.exploded, ...patch })
-      };
-    });
-  };
-  const setEdges = (patch) => {
-    updateDisplaySettings?.((current) => {
-      const currentSettings = normalizeDisplaySettings(current);
-      return {
-        ...currentSettings,
-        edges: normalizeDisplayEdgeSettings({
-          ...currentSettings.edges,
-          ...patch
-        })
-      };
-    });
-  };
-  const setEdgeClass = (classId, patch) => {
-    updateDisplaySettings?.((current) => {
-      const currentSettings = normalizeDisplaySettings(current);
-      return {
-        ...currentSettings,
-        edges: normalizeDisplayEdgeSettings({
-          ...currentSettings.edges,
-          classes: {
-            ...(currentSettings.edges?.classes || {}),
-            [classId]: {
-              ...(currentSettings.edges?.classes?.[classId] || {}),
-              ...patch
-            }
-          }
-        })
-      };
-    });
-  };
-  const resetEdges = () => {
-    setDisplay({ edges: normalizeDisplayEdgeSettings() });
-  };
-  const selectedDisplayModeOption = displayModeOptionForValue(normalizedDisplaySettings.mode);
-  const SelectedDisplayModeIcon = selectedDisplayModeOption?.Icon || null;
   const updateClipAxisOffset = (axis, nextOffset) => {
     const numericOffset = Number(nextOffset);
     const resolvedOffset = Number.isFinite(numericOffset) ? numericOffset : 0;
@@ -1574,315 +717,178 @@ export function DisplaySettingsSection({
   };
 
   return (
-    <Section title="Display" value="display">
-      <ControlSubsection title="Mode">
-        <Field label="Projection">
-          <SegmentedControl
-            value={normalizedDisplaySettings.projection}
-            onChange={(nextValue) => setDisplay({ projection: nextValue })}
-            options={PROJECTION_MODE_OPTIONS}
-          />
-        </Field>
-
-        <Field label="Style">
-          <Select
-            value={normalizedDisplaySettings.mode}
-            onValueChange={(nextValue) => setDisplay({ mode: nextValue })}
+    <ControlSubsection title="Clip">
+      {AXIS_OPTIONS.map((axis) => {
+        const axisOffset = clip.offsets?.[axis] ?? DEFAULT_STEP_CLIP_SETTINGS.offsets[axis];
+        const axisSettings = {
+          ...clip,
+          axis,
+          offset: axisOffset,
+          offsets: { ...clip.offsets, [axis]: axisOffset }
+        };
+        const boundsForAxis = clipAxisBounds(clipBounds, axis);
+        const axisRange = Math.max(boundsForAxis.max - boundsForAxis.min, 0);
+        const clipPosition = clipAxisPosition(clipBounds, axisSettings);
+        return (
+          <FileSheetSliderField
+            key={axis}
+            label={axis.toUpperCase()}
+            value={`${formatMm(clipPosition)} mm`}
+            onValueCommit={(nextValue) => {
+              const nextPosition = parseFileSheetNumberInput(nextValue, {
+                fallback: clipPosition,
+                min: boundsForAxis.min,
+                max: boundsForAxis.max
+              });
+              updateClipAxisOffset(
+                axis,
+                axisRange > 0 ? (nextPosition - boundsForAxis.min) / axisRange : axisOffset
+              );
+            }}
+            valueInputProps={{
+              disabled: !axisRange,
+              ariaLabel: `Clip ${axis.toUpperCase()} position`
+            }}
           >
-            <SelectTrigger size="sm" className="h-7 !text-[11px]" aria-label="Display mode">
-              <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                {SelectedDisplayModeIcon ? (
-                  <SelectedDisplayModeIcon className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={2} aria-hidden="true" />
-                ) : null}
-                <SelectValue />
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {DISPLAY_MODE_OPTIONS.map((option) => {
-                const Icon = option.Icon;
-                return (
-                  <SelectItem
-                    key={option.value}
-                    value={option.value}
-                    className="text-xs"
-                    title={option.title}
-                    icon={Icon ? <Icon className="size-3.5" strokeWidth={2} /> : null}
-                  >
-                    {option.label}
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </Field>
-      </ControlSubsection>
-
-      <ControlSubsection title="Edges">
-        {EDGE_CLASS_CONTROLS.map((edgeClass) => {
-          const settings = normalizedEdgeSettings.classes?.[edgeClass.id] || {};
-          const color = settings.color || edgeClass.defaultColor;
-          const thickness = settings.thickness ?? edgeClass.defaultThickness;
-          const opacity = settings.opacity ?? edgeClass.defaultOpacity;
-          return (
-            <EdgeClassControlRow
-              key={edgeClass.id}
-              label={edgeClass.label}
-              color={color}
-              thickness={thickness}
-              opacity={opacity}
-              onColorChange={(nextValue) => setEdgeClass(edgeClass.id, { color: nextValue })}
-              onThicknessChange={(nextValue) => setEdgeClass(edgeClass.id, { thickness: nextValue })}
-              onOpacityChange={(nextValue) => setEdgeClass(edgeClass.id, { opacity: nextValue })}
-            />
-          );
-        })}
-
-        <FileSheetControlRow
-          label="Highlight"
-          trailing={(
-            <EdgeMetricInput
-              label="Highlight"
-              color={normalizedEdgeSettings.highlightColor || CAD_EDGE_HIGHLIGHT_COLOR}
-              opacity={normalizedEdgeSettings.highlightOpacity ?? 1}
-              thickness={normalizedEdgeSettings.highlightThickness ?? 3}
-              min={0.5}
-              max={6}
-              digits={1}
-              onColorChange={(nextValue) => setEdges({ highlightColor: nextValue })}
-              onOpacityChange={(nextValue) => setEdges({ highlightOpacity: nextValue })}
-              onThicknessChange={(nextValue) => setEdges({ highlightThickness: nextValue })}
-            />
-          )}
-          contentClassName="hidden"
-        />
-
-        <FileSheetControlRow>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={compactButtonClasses}
-            onClick={resetEdges}
-            title="Reset edge display"
-          >
-            <RotateCcw className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-            <span>Reset</span>
-          </Button>
-        </FileSheetControlRow>
-      </ControlSubsection>
-
-      <ControlSubsection title="Exploded View">
-        <FileSheetToggleRow
-          label="Enabled"
-          checked={normalizedExplodedSettings.enabled}
-          onCheckedChange={(checked) => setExploded({ enabled: checked })}
-        />
-
-        {normalizedExplodedSettings.enabled ? (
-          <>
-            <Field label="Axis">
-              <SegmentedControl
-                value={normalizedExplodedSettings.axis}
-                options={EXPLODED_AXIS_OPTIONS}
-                onChange={(nextValue) => setExploded({ axis: nextValue })}
-              />
-            </Field>
-
-            <FileSheetSliderField
-              label="Spacing"
-              value={`${normalizedExplodedSettings.spacing.toFixed(2)}x`}
-              onValueCommit={(nextValue) => {
-                setExploded({
-                  spacing: parseFileSheetNumberInput(nextValue, {
-                    fallback: normalizedExplodedSettings.spacing,
-                    min: 0.25,
-                    max: 4
-                  })
-                });
+            <Slider
+              className={precisionSliderClasses}
+              value={[axisOffset]}
+              min={0}
+              max={1}
+              step={0.001}
+              disabled={!axisRange}
+              onValueChange={(value) => {
+                const nextOffset = Array.isArray(value) ? value[0] : value;
+                updateClipAxisOffset(axis, nextOffset);
               }}
-            >
-              <Slider
-                className={precisionSliderClasses}
-                value={[normalizedExplodedSettings.spacing]}
-                min={0.25}
-                max={4}
-                step={0.05}
-                onValueChange={(value) => {
-                  setExploded({ spacing: Array.isArray(value) ? value[0] : value });
-                }}
-                aria-label="Exploded spacing"
-              />
-            </FileSheetSliderField>
-
-            <FileSheetSliderField
-              label="Depth"
-              value={`${normalizedExplodedSettings.depth}`}
-              onValueCommit={(nextValue) => {
-                setExploded({
-                  depth: parseFileSheetNumberInput(nextValue, {
-                    fallback: normalizedExplodedSettings.depth,
-                    min: 1,
-                    max: 8,
-                    integer: true
-                  })
-                });
-              }}
-            >
-              <Slider
-                className={precisionSliderClasses}
-                value={[normalizedExplodedSettings.depth]}
-                min={1}
-                max={8}
-                step={1}
-                onValueChange={(value) => {
-                  setExploded({ depth: Array.isArray(value) ? value[0] : value });
-                }}
-                aria-label="Exploded depth"
-              />
-            </FileSheetSliderField>
-
-            <FileSheetToggleRow
-              label="Merge levels"
-              checked={normalizedExplodedSettings.mergeCoplanar}
-              onCheckedChange={(checked) => setExploded({ mergeCoplanar: checked })}
+              aria-label={`Clip ${axis.toUpperCase()} axis`}
             />
-
-            <FileSheetToggleRow
-              label="Ground base"
-              checked={normalizedExplodedSettings.keepBaseGrounded}
-              onCheckedChange={(checked) => setExploded({ keepBaseGrounded: checked })}
-            />
-
-            <FileSheetControlRow>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={compactButtonClasses}
-                onClick={() => setExploded(DEFAULT_EXPLODED_VIEW_SETTINGS)}
-                title="Reset exploded view"
-              >
-                <RotateCcw className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-                <span>Reset</span>
-              </Button>
-            </FileSheetControlRow>
-          </>
-        ) : null}
-      </ControlSubsection>
-
-      {showClip ? (
-        <ControlSubsection title="Clip" hideFirstSeparator={false}>
-          {AXIS_OPTIONS.map((axis) => {
-            const axisOffset = normalizedClipSettings.offsets?.[axis] ?? DEFAULT_STEP_CLIP_SETTINGS.offsets[axis];
-            const axisSettings = {
-              ...normalizedClipSettings,
-              axis,
-              offset: axisOffset,
-              offsets: {
-                ...normalizedClipSettings.offsets,
-                [axis]: axisOffset
-              }
-            };
-            const boundsForAxis = clipAxisBounds(clipBounds, axis);
-            const axisRange = Math.max(boundsForAxis.max - boundsForAxis.min, 0);
-            const clipPosition = clipAxisPosition(clipBounds, axisSettings);
-            return (
-              <FileSheetSliderField
-                key={axis}
-                label={axis}
-                value={`${formatMm(clipPosition)} mm`}
-                onValueCommit={(nextValue) => {
-                  const nextPosition = parseFileSheetNumberInput(nextValue, {
-                    fallback: clipPosition,
-                    min: boundsForAxis.min,
-                    max: boundsForAxis.max
-                  });
-                  updateClipAxisOffset(
-                    axis,
-                    axisRange > 0 ? (nextPosition - boundsForAxis.min) / axisRange : axisOffset
-                  );
-                }}
-                valueInputProps={{
-                  disabled: !axisRange,
-                  ariaLabel: `Clip ${axis.toUpperCase()} position`
-                }}
-              >
-                <Slider
-                  className={precisionSliderClasses}
-                  value={[axisOffset]}
-                  min={0}
-                  max={1}
-                  step={0.001}
-                  disabled={!axisRange}
-                  onValueChange={(value) => {
-                    const nextOffset = Array.isArray(value) ? value[0] : value;
-                    updateClipAxisOffset(axis, nextOffset);
-                  }}
-                  aria-label={`Clip ${axis.toUpperCase()} axis`}
-                />
-                <div className="mt-1 flex justify-between text-[10px] text-[var(--ui-text-muted)]">
-                  <span>{formatMm(boundsForAxis.min)}</span>
-                  <span>{formatMm(boundsForAxis.max)}</span>
-                </div>
-              </FileSheetSliderField>
-            );
-          })}
-
-          <FileSheetControlRow>
-            <div className="flex flex-wrap gap-1.5">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={compactButtonClasses}
-                onClick={() => setClip({ invert: !normalizedClipSettings.invert })}
-                aria-pressed={normalizedClipSettings.invert}
-                title="Flip clip side"
-              >
-                <FlipHorizontal2 className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-                <span>Flip</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={compactButtonClasses}
-                onClick={() => setDisplay({ clip: normalizeStepClipSettings(DEFAULT_STEP_CLIP_SETTINGS) })}
-                title="Reset clip plane"
-              >
-                <RotateCcw className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-                <span>Reset</span>
-              </Button>
-            </div>
-          </FileSheetControlRow>
-        </ControlSubsection>
-      ) : null}
-    </Section>
+          </FileSheetSliderField>
+        );
+      })}
+    </ControlSubsection>
   );
 }
 
-export function ThemeSettingsSections({
-  themePresets = [],
+// Exploded view: one slider, 0% = assembled. The radial layout is fully
+// automatic (lib/viewer/explodedView.js), so how far apart the assembly sits
+// is the only state; there is no separate on/off.
+function ExplodedSliderRow({ displaySettings, updateDisplaySettings, explodeMeshData = null }) {
+  const exploded = useMemo(
+    () => normalizeExplodedViewSettings(displaySettings.exploded),
+    [displaySettings]
+  );
+  const partCount = useMemo(() => explodablePartCount(explodeMeshData), [explodeMeshData]);
+  const singlePart = Boolean(explodeMeshData) && partCount <= 1;
+  const amount = exploded.enabled ? exploded.amount : 0;
+  const amountPercent = Math.round(amount * 100);
+  const setAmount = (nextAmount) => {
+    const clamped = clamp(nextAmount, 0, 1);
+    updateDisplaySettings?.((current) => ({
+      ...normalizeDisplaySettings(current),
+      exploded: { amount: clamped, enabled: clamped > 0 }
+    }));
+  };
+  return (
+    <FileSheetSliderField
+      label="Exploded"
+      value={`${amountPercent}%`}
+      onValueCommit={(nextValue) => {
+        setAmount(parseFileSheetNumberInput(nextValue, {
+          fallback: amountPercent,
+          min: 0,
+          max: 100
+        }) / 100);
+      }}
+      valueInputProps={{ disabled: singlePart, ariaLabel: "Exploded amount" }}
+    >
+      <Slider
+        className={precisionSliderClasses}
+        value={[amount]}
+        min={0}
+        max={1}
+        step={0.01}
+        disabled={singlePart}
+        onValueChange={(value) => setAmount(Array.isArray(value) ? value[0] : value)}
+        aria-label="Exploded amount"
+      />
+    </FileSheetSliderField>
+  );
+}
+
+// The single "Display" tab: the View section (how the model is drawn, and how
+// far apart the exploded view sits), then the section-plane transform. The
+// exploded slider lives beside Mode because both are always-available view
+// state; 0% simply means assembled.
+export function DisplaySettingsSection({
+  displaySettings,
+  updateDisplaySettings,
+  clipBounds = null,
+  explodeMeshData = null
+}) {
+  const normalizedDisplaySettings = useMemo(
+    () => normalizeDisplaySettings(displaySettings),
+    [displaySettings]
+  );
+  const setDisplay = (patch) => {
+    updateDisplaySettings?.((current) => ({
+      ...normalizeDisplaySettings(current),
+      ...patch
+    }));
+  };
+  return (
+    <div className="py-2" data-cad-display-settings-section="true">
+      <ControlSubsection title="View">
+        <FileSheetSelectRow
+          label="Mode"
+          value={normalizedDisplaySettings.mode}
+          onValueChange={(nextValue) => setDisplay({ mode: nextValue })}
+          ariaLabel="Display mode"
+          options={DISPLAY_MODE_OPTIONS}
+        />
+        <ExplodedSliderRow
+          displaySettings={normalizedDisplaySettings}
+          updateDisplaySettings={updateDisplaySettings}
+          explodeMeshData={explodeMeshData}
+        />
+      </ControlSubsection>
+
+      <ClipSubsection
+        displaySettings={normalizedDisplaySettings}
+        updateDisplaySettings={updateDisplaySettings}
+        clipBounds={clipBounds}
+      />
+    </div>
+  );
+}
+
+// Build the "Display" tab descriptor: display mode plus the section-plane and
+// exploded-view transforms, all of which are per-file state (unlike theme settings,
+// which is persistent theme config and lives in the navbar editor).
+export function buildDisplaySettingsTab(props) {
+  return {
+    id: FILE_SHEET_SECTION_IDS.THEME_DISPLAY,
+    title: "Display",
+    content: <DisplaySettingsSection {...props} />
+  };
+}
+
+function ThemeSettingsContent({
   themeSettings,
-  themePresetId = "",
+  themeId = DEFAULT_THEME_ID,
   resolvedColorSchemeMode = THEME_COLOR_MODES.LIGHT,
-  updateThemeSettings,
-  handleResetThemeSettings,
-  handleSaveCustomThemePreset,
-  handleUpdateThemePresetSettings
+  onSelectTheme,
+  updateThemeSettings
 }) {
   const [activePrimaryLight, setActivePrimaryLight] = useState("directional");
-  const activeThemePreset = useMemo(
-    () => resolveActiveThemePreset(themePresets, themePresetId, themeSettings),
-    [themePresets, themePresetId, themeSettings]
-  );
-  const themeHasChanged = themeSettingsChangedFromPreset(activeThemePreset, themeSettings);
-  const appearanceTitle = (
-    <span className="flex min-w-0 items-center gap-2">
-      <span>Appearance</span>
-      {themeHasChanged ? <ThemeDirtyIndicator className="h-1.5 w-1.5" /> : null}
-    </span>
-  );
+  // The Lights heading switch acts on whichever light the tab strip below it has
+  // selected, so it needs that light's option record and current settings.
+  const activePrimaryLightOption = PRIMARY_LIGHT_OPTIONS.find(
+    (option) => option.value === activePrimaryLight
+  ) || PRIMARY_LIGHT_OPTIONS[0];
+  const activePrimaryLightSettings = themeSettings.lighting[activePrimaryLight] ||
+    PRIMARY_LIGHT_FALLBACKS[activePrimaryLight] ||
+    { enabled: false };
 
   const setMaterials = (patch) => {
     updateThemeSettings((current) => ({
@@ -1913,6 +919,22 @@ export function ThemeSettingsSections({
       }
     }));
   };
+  const setFloorAxis = (patch) => {
+    updateThemeSettings((current) => {
+      const currentFloor = current.floor || {};
+      return {
+        ...current,
+        floor: {
+          ...currentFloor,
+          axis: {
+            ...(currentFloor.axis || {}),
+            ...patch
+          }
+        }
+      };
+    });
+  };
+
   const setFloorGrid = (patch) => {
     updateThemeSettings((current) => {
       const currentFloor = current.floor || {};
@@ -1979,7 +1001,7 @@ export function ThemeSettingsSections({
       lighting: {
         ...current.lighting,
         [lightKey]: {
-          ...current.lighting[lightKey],
+          ...(current.lighting[lightKey] || PRIMARY_LIGHT_FALLBACKS[lightKey]),
           ...patch
         }
       }
@@ -1987,48 +1009,84 @@ export function ThemeSettingsSections({
   };
 
   const setLightPosition = (lightKey, axis, nextValue) => {
-    updateThemeSettings((current) => ({
-      ...current,
-      lighting: {
-        ...current.lighting,
-        [lightKey]: {
-          ...current.lighting[lightKey],
-          position: {
-            ...current.lighting[lightKey].position,
-            [axis]: nextValue
+    updateThemeSettings((current) => {
+      const currentLight = current.lighting[lightKey] || PRIMARY_LIGHT_FALLBACKS[lightKey] || {};
+      return {
+        ...current,
+        lighting: {
+          ...current.lighting,
+          [lightKey]: {
+            ...currentLight,
+            position: {
+              ...currentLight.position,
+              [axis]: nextValue
+            }
           }
         }
-      }
-    }));
+      };
+    });
   };
 
   return (
-    <Section
-      title={appearanceTitle}
-      value="appearance"
-      data-cad-theme-appearance-section="true"
-    >
-      <ThemeAppearanceSection
-        themePresets={themePresets}
+    <div className="py-2" data-cad-theme-settings-section="true">
+      <ThemePresetSection
         themeSettings={themeSettings}
-        themePresetId={themePresetId}
-        updateThemeSettings={updateThemeSettings}
-        handleResetThemeSettings={handleResetThemeSettings}
-        handleSaveCustomThemePreset={handleSaveCustomThemePreset}
-        handleUpdateThemePresetSettings={handleUpdateThemePresetSettings}
+        themeId={themeId}
+        onSelectTheme={onSelectTheme}
       />
 
-      <ControlSubsection title="Surface">
-        <Field label="Colors" value={`${resolveFillColors(themeSettings.materials).length}/${MAX_THEME_FILL_COLORS}`}>
-          <FillColorEditor
-            colors={resolveFillColors(themeSettings.materials)}
-            cycleColors={themeSettings.materials.cycleColors === true}
-            onChange={(nextColors) => setMaterials({
-              defaultColor: nextColors[0],
-              fillColors: nextColors
-            })}
+      {/* Scene-wide output: how the camera projects and how bright the result
+          is graded, as opposed to the per-material settings below. */}
+      <ControlSubsection title="Render">
+        <FileSheetSelectRow
+          label="Projection"
+          value={themeSettings.projection}
+          onValueChange={(nextValue) => updateThemeSettings((current) => ({
+            ...current,
+            projection: nextValue
+          }))}
+          options={PROJECTION_MODE_OPTIONS.map((option) => ({
+            value: option.value,
+            label: option.label,
+            title: option.title,
+            icon: <option.Icon className="size-3.5" strokeWidth={2} aria-hidden="true" />
+          }))}
+        />
+        <SliderField label="Tone mapping" value={formatNumber(themeSettings.lighting.toneMappingExposure)}>
+          <SliderInput
+            value={themeSettings.lighting.toneMappingExposure}
+            min={0.05}
+            max={6}
+            step={0.01}
+            onChange={(nextValue) => setLighting({ toneMappingExposure: nextValue })}
           />
-        </Field>
+        </SliderField>
+      </ControlSubsection>
+
+      <ControlSubsection title="Surface">
+        {themeSettings.materials.cycleColors === true ? (
+          <Field label="Colors" value={`${resolveFillColors(themeSettings.materials).length}/${MAX_THEME_FILL_COLORS}`}>
+            <FillColorEditor
+              colors={resolveFillColors(themeSettings.materials)}
+              onChange={(nextColors) => setMaterials({
+                defaultColor: nextColors[0],
+                fillColors: nextColors
+              })}
+            />
+          </Field>
+        ) : (
+          <ColorField
+            label="Color"
+            value={resolveFillColors(themeSettings.materials)[0]}
+            onChange={(nextColor) => {
+              const current = resolveFillColors(themeSettings.materials);
+              setMaterials({
+                defaultColor: nextColor,
+                fillColors: [nextColor, ...current.slice(1)]
+              });
+            }}
+          />
+        )}
 
         <ThemeToggleRow
           label="Cycle colors"
@@ -2042,6 +1100,47 @@ export function ThemeSettingsSections({
           onChange={(nextValue) => setMaterials({ overrideSourceColors: nextValue })}
         />
 
+        <SliderField label="Roughness" value={formatNumber(themeSettings.materials.roughness)}>
+          <SliderInput
+            value={themeSettings.materials.roughness}
+            min={0}
+            max={1}
+            step={0.01}
+            onChange={(nextValue) => setMaterials({ roughness: nextValue })}
+          />
+        </SliderField>
+        <SliderField label="Metalness" value={formatNumber(themeSettings.materials.metalness)}>
+          <SliderInput
+            value={themeSettings.materials.metalness}
+            min={0}
+            max={1}
+            step={0.01}
+            onChange={(nextValue) => setMaterials({ metalness: nextValue })}
+          />
+        </SliderField>
+        <SliderField label="Clearcoat" value={formatNumber(themeSettings.materials.clearcoat)}>
+          <SliderInput
+            value={themeSettings.materials.clearcoat}
+            min={0}
+            max={1}
+            step={0.01}
+            onChange={(nextValue) => setMaterials({ clearcoat: nextValue })}
+          />
+        </SliderField>
+        <SliderField label="Reflections" value={formatNumber(themeSettings.materials.envMapIntensity)}>
+          <SliderInput
+            value={themeSettings.materials.envMapIntensity}
+            min={0}
+            max={4}
+            step={0.01}
+            onChange={(nextValue) => setMaterials({ envMapIntensity: nextValue })}
+          />
+        </SliderField>
+      </ControlSubsection>
+
+      {/* Post-adjustments to whatever colour the surface resolved to, as opposed
+          to the material's own physical properties above. */}
+      <ControlSubsection title="Color grading">
         <SliderField label="Saturation" value={formatNumber(themeSettings.materials.saturation)}>
           <SliderInput
             value={themeSettings.materials.saturation}
@@ -2051,7 +1150,6 @@ export function ThemeSettingsSections({
             onChange={(nextValue) => setMaterials({ saturation: nextValue })}
           />
         </SliderField>
-
         <SliderField label="Contrast" value={formatNumber(themeSettings.materials.contrast)}>
           <SliderInput
             value={themeSettings.materials.contrast}
@@ -2061,7 +1159,6 @@ export function ThemeSettingsSections({
             onChange={(nextValue) => setMaterials({ contrast: nextValue })}
           />
         </SliderField>
-
         <SliderField label="Brightness" value={formatNumber(themeSettings.materials.brightness)}>
           <SliderInput
             value={themeSettings.materials.brightness}
@@ -2074,13 +1171,12 @@ export function ThemeSettingsSections({
       </ControlSubsection>
 
       <ControlSubsection title="Backdrop">
-        <Field label="Style">
-          <SegmentedControl
-            value={themeSettings.background.type}
-            onChange={(nextValue) => setBackground({ type: nextValue })}
-            options={BACKGROUND_MODE_OPTIONS}
-          />
-        </Field>
+        <FileSheetSelectRow
+          label="Type"
+          value={themeSettings.background.type}
+          onValueChange={(nextValue) => setBackground({ type: nextValue })}
+          options={BACKGROUND_MODE_OPTIONS}
+        />
 
         {themeSettings.background.type === "solid" ? (
           <ColorModeField
@@ -2102,7 +1198,7 @@ export function ThemeSettingsSections({
               path={["background", "linearEnd"]}
               {...themeColorFieldProps}
             />
-            <SliderField label="Angle" value={`${formatNumber(themeSettings.background.linearAngle, 0)} deg`}>
+            <SliderField label="Angle" value={`${formatNumber(themeSettings.background.linearAngle, 0)}°`}>
               <SliderInput
                 value={themeSettings.background.linearAngle}
                 min={-360}
@@ -2132,16 +1228,21 @@ export function ThemeSettingsSections({
 
       <ControlSubsection
         title="Floor"
-        trailing={(
-          <FileSheetBooleanToggle
+        toggle={(
+          <SubsectionToggle
+            label="Enable floor"
             checked={themeSettings.floor?.enabled === true}
             onCheckedChange={(nextValue) => setFloor({ enabled: nextValue })}
-            ariaLabel="Enable floor"
           />
         )}
       >
         {themeSettings.floor?.enabled === true ? (
           <>
+            <ThemeToggleRow
+              label="Follow model"
+              checked={themeSettings.floor?.followModel !== false}
+              onChange={(nextValue) => setFloor({ followModel: nextValue })}
+            />
             <ColorModeField
               label="Color"
               path={["floor", "color"]}
@@ -2189,21 +1290,20 @@ export function ThemeSettingsSections({
 
       <ControlSubsection
         title="Grid"
-        trailing={(
-          <FileSheetBooleanToggle
+        toggle={(
+          <SubsectionToggle
+            label="Enable grid"
             checked={themeSettings.floor?.grid?.enabled === true}
             onCheckedChange={(nextValue) => setFloorGrid({ enabled: nextValue })}
-            ariaLabel="Enable grid"
           />
         )}
       >
         {themeSettings.floor?.grid?.enabled === true ? (
           <>
-            <ColorModeField
-              label="Floor color"
-              path={["floor", "color"]}
-              {...themeColorFieldProps}
-            />
+            {/* No floor colour here: it is the same ["floor","color"] the Floor
+                section owns, and the grid only falls back to it when the line
+                colours below are unset (see renderOptions applyFloor). Two
+                controls writing one value silently moved each other. */}
             <ColorModeField
               label="Center line"
               path={["floor", "grid", "centerColor"]}
@@ -2234,184 +1334,285 @@ export function ThemeSettingsSections({
             </SliderField>
           </>
         ) : null}
-      </ControlSubsection>
 
-      <ControlSubsection title="Lighting">
+        {/* The origin axis lives here because it is the other ground reference,
+            but it is deliberately outside the grid-enabled branch above: gating
+            it on the grid would hide its switch whenever the grid is off and
+            leave a rendering axis with no way to turn it off. */}
         <ThemeToggleRow
-          label="Environment light"
-          checked={themeSettings.environment.enabled}
-          onChange={(nextValue) => setEnvironment({ enabled: nextValue })}
+          label="Origin axis"
+          checked={themeSettings.floor?.axis?.enabled === true}
+          onChange={(nextValue) => setFloorAxis({ enabled: nextValue })}
         />
-        <SliderField label="Environment intensity" value={formatNumber(themeSettings.environment.intensity)}>
-          <SliderInput
-            value={themeSettings.environment.intensity}
-            min={0}
-            max={4}
-            step={0.01}
-            onChange={(nextValue) => setEnvironment({ intensity: nextValue })}
-          />
-        </SliderField>
-
-        <SliderField label="Tone mapping" value={formatNumber(themeSettings.lighting.toneMappingExposure)}>
-          <SliderInput
-            value={themeSettings.lighting.toneMappingExposure}
-            min={0.05}
-            max={6}
-            step={0.01}
-            onChange={(nextValue) => setLighting({ toneMappingExposure: nextValue })}
-          />
-        </SliderField>
-
-        <NestedControlGroup title="Primary">
-          <Tabs value={activePrimaryLight} onValueChange={setActivePrimaryLight} className="gap-0">
-            <div className="px-3 py-1">
-              <TabsList className="grid h-7 w-full grid-cols-3 rounded-md p-0.5">
-                {PRIMARY_LIGHT_OPTIONS.map((option) => (
-                  <TabsTrigger key={option.value} value={option.value} className="text-[11px]">
-                    {option.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
-
-            {PRIMARY_LIGHT_OPTIONS.map((option) => {
-              const light = themeSettings.lighting[option.value];
-              const supportsDistance = option.value !== "directional";
-              return (
-                <TabsContent
-                  key={option.value}
-                  value={option.value}
-                  className={cn("mt-2", FILE_SHEET_ROW_STACK_CLASSES)}
-                  data-file-sheet-row-stack=""
-                >
-                  <ThemeToggleRow
-                    label={`${option.label} light`}
-                    checked={light.enabled}
-                    onChange={(nextValue) => setLightConfig(option.value, { enabled: nextValue })}
-                  />
-                  <ColorModeField
-                    label="Color"
-                    path={["lighting", option.value, "color"]}
-                    {...themeColorFieldProps}
-                  />
-                  <SliderField label="Intensity" value={formatNumber(light.intensity)}>
-                    <SliderInput
-                      value={light.intensity}
-                      min={0}
-                      max={20}
-                      step={0.01}
-                      onChange={(nextValue) => setLightConfig(option.value, { intensity: nextValue })}
-                    />
-                  </SliderField>
-                  {option.value === "spot" ? (
-                    <SliderField label="Angle" value={formatNumber(light.angle)}>
-                      <SliderInput
-                        value={light.angle}
-                        min={0.01}
-                        max={1.57}
-                        step={0.01}
-                        onChange={(nextValue) => setLightConfig(option.value, { angle: nextValue })}
-                      />
-                    </SliderField>
-                  ) : null}
-                  {supportsDistance ? (
-                    <SliderField label="Distance" value={formatNumber(light.distance, 0)}>
-                      <SliderInput
-                        value={light.distance}
-                        min={0}
-                        max={5000}
-                        step={1}
-                        onChange={(nextValue) => setLightConfig(option.value, { distance: nextValue })}
-                      />
-                    </SliderField>
-                  ) : null}
-                  <Field label="Position (X/Z)">
-                    <PositionPad
-                      value={light.position}
-                      onChange={(axis, nextValue) => setLightPosition(option.value, axis, nextValue)}
-                    />
-                  </Field>
-                  <SliderField label="Height (Y)" value={formatNumber(light.position.y, 0)}>
-                    <SliderInput
-                      value={light.position.y}
-                      min={-5000}
-                      max={5000}
-                      step={1}
-                      onChange={(nextValue) => setLightPosition(option.value, "y", nextValue)}
-                    />
-                  </SliderField>
-                </TabsContent>
-              );
-            })}
-          </Tabs>
-        </NestedControlGroup>
-
-        <NestedControlGroup title="Ambient">
-          <ThemeToggleRow
-            label="Ambient light"
-            checked={themeSettings.lighting.ambient.enabled}
-            onChange={(nextValue) => setLightConfig("ambient", { enabled: nextValue })}
-          />
-          <ColorModeField
-            label="Ambient color"
-            path={["lighting", "ambient", "color"]}
-            {...themeColorFieldProps}
-          />
-          <SliderField label="Ambient intensity" value={formatNumber(themeSettings.lighting.ambient.intensity)}>
-            <SliderInput
-              value={themeSettings.lighting.ambient.intensity}
-              min={0}
-              max={20}
-              step={0.01}
-              onChange={(nextValue) => setLightConfig("ambient", { intensity: nextValue })}
+        {themeSettings.floor?.axis?.enabled === true ? (
+          <>
+            <ColorModeField
+              label="Axis color"
+              path={["floor", "axis", "color"]}
+              {...themeColorFieldProps}
             />
-          </SliderField>
-        </NestedControlGroup>
-
-        <NestedControlGroup title="Hemisphere">
-          <ThemeToggleRow
-            label="Hemisphere light"
-            checked={themeSettings.lighting.hemisphere.enabled}
-            onChange={(nextValue) => setLightConfig("hemisphere", { enabled: nextValue })}
-          />
-          <ColorModeField
-            label="Sky color"
-            path={["lighting", "hemisphere", "skyColor"]}
-            {...themeColorFieldProps}
-          />
-          <ColorModeField
-            label="Ground color"
-            path={["lighting", "hemisphere", "groundColor"]}
-            {...themeColorFieldProps}
-          />
-          <SliderField label="Hemisphere intensity" value={formatNumber(themeSettings.lighting.hemisphere.intensity)}>
-            <SliderInput
-              value={themeSettings.lighting.hemisphere.intensity}
-              min={0}
-              max={20}
-              step={0.01}
-              onChange={(nextValue) => setLightConfig("hemisphere", { intensity: nextValue })}
-            />
-          </SliderField>
-        </NestedControlGroup>
+            <SliderField label="Axis opacity" value={formatNumber(themeSettings.floor?.axis?.opacity ?? 0.5)}>
+              <SliderInput
+                value={themeSettings.floor?.axis?.opacity ?? 0.5}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(nextValue) => setFloorAxis({ opacity: nextValue })}
+              />
+            </SliderField>
+          </>
+        ) : null}
       </ControlSubsection>
-    </Section>
+
+
+      {/* Lighting used to be one section holding all of this — 18 rows and every
+          nested sub-subsection in the file, four levels deep at the light tabs.
+          It is now four flat siblings, each with its enable switch in the header
+          like Floor and Grid, so a light you are not using costs one row. */}
+      <ControlSubsection
+        title="Environment"
+        toggle={(
+          <SubsectionToggle
+            label="Enable environment light"
+            checked={themeSettings.environment.enabled}
+            onCheckedChange={(nextValue) => setEnvironment({ enabled: nextValue })}
+          />
+        )}
+      >
+        {themeSettings.environment.enabled ? (
+          <>
+            <FileSheetSelectRow
+              label="Map"
+              value={themeSettings.environment.presetId}
+              onValueChange={(nextValue) => setEnvironment({ presetId: nextValue })}
+              ariaLabel="Environment map"
+              options={ENVIRONMENT_PRESETS.map((option) => ({
+                value: option.id,
+                label: option.label
+              }))}
+            />
+            <SliderField label="Intensity" value={formatNumber(themeSettings.environment.intensity)}>
+              <SliderInput
+                value={themeSettings.environment.intensity}
+                min={0}
+                max={4}
+                step={0.01}
+                onChange={(nextValue) => setEnvironment({ intensity: nextValue })}
+              />
+            </SliderField>
+            {/* Stored in radians; shown and typed in degrees like every other
+                angle, so the commit path converts explicitly. */}
+            <SliderField
+              label="Rotation"
+              value={`${formatNumber((themeSettings.environment.rotationY * 180) / Math.PI, 0)}°`}
+              onValueCommit={(nextValue) => {
+                const nextDegrees = parseFileSheetNumberInput(nextValue, {
+                  fallback: (themeSettings.environment.rotationY * 180) / Math.PI,
+                  min: -180,
+                  max: 180
+                });
+                setEnvironment({ rotationY: (nextDegrees * Math.PI) / 180 });
+              }}
+            >
+              <SliderInput
+                value={themeSettings.environment.rotationY}
+                min={-Math.PI}
+                max={Math.PI}
+                step={0.01}
+                onChange={(nextValue) => setEnvironment({ rotationY: nextValue })}
+              />
+            </SliderField>
+            <ThemeToggleRow
+              label="Use as backdrop"
+              checked={themeSettings.environment.useAsBackground}
+              onChange={(nextValue) => setEnvironment({ useAsBackground: nextValue })}
+            />
+          </>
+        ) : null}
+      </ControlSubsection>
+
+      <ControlSubsection
+        title="Lights"
+        toggle={(
+          <SubsectionToggle
+            label={`Enable ${activePrimaryLightOption.label.toLowerCase()} light`}
+            checked={activePrimaryLightSettings.enabled}
+            onCheckedChange={(nextValue) => setLightConfig(activePrimaryLight, { enabled: nextValue })}
+          />
+        )}
+      >
+        {/* Five lights share one set of controls, so the target is a select on
+            the control axis and the rows below belong to whichever light it
+            names — not five tab panels of identical fields. */}
+        <FileSheetSelectRow
+          label="Light"
+          value={activePrimaryLight}
+          onValueChange={setActivePrimaryLight}
+          options={PRIMARY_LIGHT_OPTIONS.map((option) => ({
+            value: option.value,
+            label: option.label
+          }))}
+        />
+        {activePrimaryLightSettings.enabled ? (
+          <>
+            {MODE_COLOR_LIGHT_KEYS.includes(activePrimaryLight) ? (
+              <ColorModeField
+                label="Color"
+                path={["lighting", activePrimaryLight, "color"]}
+                {...themeColorFieldProps}
+              />
+            ) : (
+              <ColorField
+                label="Color"
+                value={activePrimaryLightSettings.color}
+                onChange={(nextValue) => setLightConfig(activePrimaryLight, { color: nextValue })}
+              />
+            )}
+            <SliderField label="Intensity" value={formatNumber(activePrimaryLightSettings.intensity)}>
+              <SliderInput
+                value={activePrimaryLightSettings.intensity}
+                min={0}
+                max={20}
+                step={0.01}
+                onChange={(nextValue) => setLightConfig(activePrimaryLight, { intensity: nextValue })}
+              />
+            </SliderField>
+            {activePrimaryLight === "spot" ? (
+              // Stored in radians; shown and typed in degrees.
+              <SliderField
+                label="Angle"
+                value={`${formatNumber((activePrimaryLightSettings.angle * 180) / Math.PI, 0)}°`}
+                onValueCommit={(nextValue) => {
+                  const nextDegrees = parseFileSheetNumberInput(nextValue, {
+                    fallback: (activePrimaryLightSettings.angle * 180) / Math.PI
+                  });
+                  setLightConfig(activePrimaryLight, {
+                    angle: clamp((nextDegrees * Math.PI) / 180, 0.01, 1.57)
+                  });
+                }}
+              >
+                <SliderInput
+                  value={activePrimaryLightSettings.angle}
+                  min={0.01}
+                  max={1.57}
+                  step={0.01}
+                  onChange={(nextValue) => setLightConfig(activePrimaryLight, { angle: nextValue })}
+                />
+              </SliderField>
+            ) : null}
+            {activePrimaryLight === "spot" || activePrimaryLight === "point" ? (
+              <SliderField label="Distance" value={formatNumber(activePrimaryLightSettings.distance, 0)}>
+                <SliderInput
+                  value={activePrimaryLightSettings.distance}
+                  min={0}
+                  max={5000}
+                  step={1}
+                  onChange={(nextValue) => setLightConfig(activePrimaryLight, { distance: nextValue })}
+                />
+              </SliderField>
+            ) : null}
+            <Field label="Position (X/Z)">
+              <PositionPad
+                value={activePrimaryLightSettings.position}
+                onChange={(axis, nextValue) => setLightPosition(activePrimaryLight, axis, nextValue)}
+              />
+            </Field>
+            <SliderField label="Height (Y)" value={formatNumber(activePrimaryLightSettings.position.y, 0)}>
+              <SliderInput
+                value={activePrimaryLightSettings.position.y}
+                min={-5000}
+                max={5000}
+                step={1}
+                onChange={(nextValue) => setLightPosition(activePrimaryLight, "y", nextValue)}
+              />
+            </SliderField>
+          </>
+        ) : null}
+      </ControlSubsection>
+
+      <ControlSubsection
+        title="Ambient"
+        toggle={(
+          <SubsectionToggle
+            label="Enable ambient light"
+            checked={themeSettings.lighting.ambient.enabled}
+            onCheckedChange={(nextValue) => setLightConfig("ambient", { enabled: nextValue })}
+          />
+        )}
+      >
+        {themeSettings.lighting.ambient.enabled ? (
+          <>
+            <ColorModeField
+              label="Color"
+              path={["lighting", "ambient", "color"]}
+              {...themeColorFieldProps}
+            />
+            <SliderField label="Intensity" value={formatNumber(themeSettings.lighting.ambient.intensity)}>
+              <SliderInput
+                value={themeSettings.lighting.ambient.intensity}
+                min={0}
+                max={20}
+                step={0.01}
+                onChange={(nextValue) => setLightConfig("ambient", { intensity: nextValue })}
+              />
+            </SliderField>
+          </>
+        ) : null}
+      </ControlSubsection>
+
+      <ControlSubsection
+        title="Hemisphere"
+        toggle={(
+          <SubsectionToggle
+            label="Enable hemisphere light"
+            checked={themeSettings.lighting.hemisphere.enabled}
+            onCheckedChange={(nextValue) => setLightConfig("hemisphere", { enabled: nextValue })}
+          />
+        )}
+      >
+        {themeSettings.lighting.hemisphere.enabled ? (
+          <>
+            <ColorModeField
+              label="Sky color"
+              path={["lighting", "hemisphere", "skyColor"]}
+              {...themeColorFieldProps}
+            />
+            <ColorModeField
+              label="Ground color"
+              path={["lighting", "hemisphere", "groundColor"]}
+              {...themeColorFieldProps}
+            />
+            <SliderField label="Intensity" value={formatNumber(themeSettings.lighting.hemisphere.intensity)}>
+              <SliderInput
+                value={themeSettings.lighting.hemisphere.intensity}
+                min={0}
+                max={20}
+                step={0.01}
+                onChange={(nextValue) => setLightConfig("hemisphere", { intensity: nextValue })}
+              />
+            </SliderField>
+          </>
+        ) : null}
+      </ControlSubsection>
+    </div>
   );
 }
 
-export default function ThemeSettingsPopover({
+// Full-sidebar theme editor (global theme settings). Mutually exclusive with the
+// per-file sheet; opened from the navbar theme button. Reuses the FileSheet
+// aside frame (width + resize) and the ThemeSettingsContent editor body, which
+// already holds the preset select.
+export function ThemeEditorPanel({
   open,
   isDesktop,
   width,
+  onClose,
   onStartResize,
-  themePresets = [],
   themeSettings,
-  themePresetId = "",
+  themeId = DEFAULT_THEME_ID,
   resolvedColorSchemeMode = THEME_COLOR_MODES.LIGHT,
-  updateThemeSettings,
-  handleResetThemeSettings,
-  handleSaveCustomThemePreset,
-  handleUpdateThemePresetSettings
+  onSelectTheme,
+  updateThemeSettings
 }) {
   return (
     <FileSheet
@@ -2419,20 +1620,23 @@ export default function ThemeSettingsPopover({
       title="Theme"
       isDesktop={isDesktop}
       width={width}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          onClose?.();
+        }
+      }}
       onStartResize={onStartResize}
+      scrollBody={false}
     >
-      <Accordion type="multiple" className="text-sm">
-        <ThemeSettingsSections
-          themePresets={themePresets}
+      <ScrollArea className="min-h-0 flex-1" viewportClassName="h-full">
+        <ThemeSettingsContent
           themeSettings={themeSettings}
-          themePresetId={themePresetId}
+          themeId={themeId}
           resolvedColorSchemeMode={resolvedColorSchemeMode}
+          onSelectTheme={onSelectTheme}
           updateThemeSettings={updateThemeSettings}
-          handleResetThemeSettings={handleResetThemeSettings}
-          handleSaveCustomThemePreset={handleSaveCustomThemePreset}
-          handleUpdateThemePresetSettings={handleUpdateThemePresetSettings}
         />
-      </Accordion>
+      </ScrollArea>
     </FileSheet>
   );
 }

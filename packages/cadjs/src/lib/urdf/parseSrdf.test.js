@@ -3,8 +3,6 @@ import test from "node:test";
 
 import { motionFromSrdf, parseSrdf } from "./parseSrdf.js";
 
-const SRDF_METADATA_NAMESPACE = "https://text-to-cad.dev/srdf";
-const LEGACY_EXPLORER_NAMESPACE = "https://text-to-cad.dev/explorer";
 
 class FakeElement {
   constructor(tagName, attributes = {}, children = [], namespaceURI = null) {
@@ -63,9 +61,8 @@ function sampleUrdfData() {
   };
 }
 
-test("parseSrdf reads MoveIt2 semantics and linked URDF metadata directly from SRDF XML", () => {
+test("parseSrdf reads MoveIt2 semantics directly from SRDF XML", () => {
   const robot = new FakeElement("robot", { name: "sample_robot" }, [
-    new FakeElement("tcad:urdf", { path: "sample_robot.urdf" }, [], SRDF_METADATA_NAMESPACE),
     new FakeElement("group", { name: "manipulator" }, [
       new FakeElement("chain", { base_link: "base_link", tip_link: "wrist_link" })
     ]),
@@ -95,7 +92,6 @@ test("parseSrdf reads MoveIt2 semantics and linked URDF metadata directly from S
   }));
 
   assert.equal(srdfData.kind, "texttocad-srdf");
-  assert.equal(srdfData.urdf, "sample_robot.urdf");
   assert.equal(srdfData.srdf, "/workspace/sample_robot.srdf");
   assert.equal(srdfData.planningGroups[0].name, "manipulator");
   assert.equal(srdfData.planningGroups[0].chains[0].tipLink, "wrist_link");
@@ -104,23 +100,6 @@ test("parseSrdf reads MoveIt2 semantics and linked URDF metadata directly from S
   assert.equal(srdfData.groupStates[0].jointValuesByNameRad.arm_to_wrist, 0.25);
   assert.equal(srdfData.disabledCollisionPairs[0].reason, "Adjacent");
   assert.equal(srdfData.disabledCollisionPairs[0].source, "adjacent");
-});
-
-test("parseSrdf accepts legacy explorer URDF metadata", () => {
-  const robot = new FakeElement("robot", { name: "sample_robot" }, [
-    new FakeElement("explorer:urdf", { path: "sample_robot.urdf" }, [], LEGACY_EXPLORER_NAMESPACE),
-    new FakeElement("group", { name: "manipulator" }, [
-      new FakeElement("joint", { name: "base_to_arm" })
-    ])
-  ]);
-
-  const srdfData = withFakeDomParser(new FakeDocument(robot), () => parseSrdf("<robot />", {
-    sourceUrl: "/workspace/sample_robot.srdf",
-    urdfData: sampleUrdfData()
-  }));
-
-  assert.equal(srdfData.urdf, "sample_robot.urdf");
-  assert.equal(srdfData.planningGroups[0].jointNames[0], "base_to_arm");
 });
 
 test("motionFromSrdf converts direct SRDF data into MoveIt2 CAD Viewer controls", () => {
@@ -139,25 +118,8 @@ test("motionFromSrdf converts direct SRDF data into MoveIt2 CAD Viewer controls"
   assert.deepEqual(motion.groupStates, srdfData.groupStates);
 });
 
-test("parseSrdf rejects missing linked URDF metadata", () => {
-  const robot = new FakeElement("robot", { name: "sample_robot" }, [
-    new FakeElement("group", { name: "manipulator" }, [
-      new FakeElement("joint", { name: "base_to_arm" })
-    ])
-  ]);
-
-  assert.throws(
-    () => withFakeDomParser(new FakeDocument(robot), () => parseSrdf("<robot />", {
-      sourceUrl: "/workspace/sample_robot.srdf",
-      urdfData: sampleUrdfData()
-    })),
-    /tcad:urdf/
-  );
-});
-
-test("parseSrdf rejects robot names that do not match the linked URDF", () => {
+test("parseSrdf rejects robot names that do not match the paired URDF", () => {
   const robot = new FakeElement("robot", { name: "other_robot" }, [
-    new FakeElement("tcad:urdf", { path: "sample_robot.urdf" }, [], SRDF_METADATA_NAMESPACE),
     new FakeElement("group", { name: "manipulator" }, [
       new FakeElement("joint", { name: "base_to_arm" })
     ])
@@ -168,6 +130,6 @@ test("parseSrdf rejects robot names that do not match the linked URDF", () => {
       sourceUrl: "/workspace/sample_robot.srdf",
       urdfData: sampleUrdfData()
     })),
-    /must match the linked URDF robot name/
+    /must match the paired URDF robot name/
   );
 });

@@ -3,21 +3,24 @@
   "owner": {
     "name": "earthtojake"
   },
+  "interface": {
+    "displayName": "text-to-cad"
+  },
   "metadata": {
     "description": "CAD, robotics, fabrication, and local review plugins."
   },
   "description": "CAD, robotics, fabrication, and local review plugins.",
-  "version": "0.3.9",
+  "version": "0.4.2",
   "plugins": [
     {
       "name": "cad",
-      "source": "./plugins/cad",
+      "source": "./",
       "description": "CAD, robotics, fabrication, and local review skills.",
-      "version": "0.3.9",
+      "version": "0.4.2",
       "author": {
         "name": "earthtojake"
       },
-      "homepage": "https://www.cadskills.xyz",
+      "homepage": "https://www.texttocad.dev",
       "repository": "https://github.com/earthtojake/text-to-cad",
       "license": "MIT",
       "category": "productivity",

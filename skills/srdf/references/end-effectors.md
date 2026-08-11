@@ -34,7 +34,7 @@ Record:
 
 ## Checks
 
-Before generation:
+Before authoring:
 
 - The end-effector group exists.
 - The parent group exists when specified.

@@ -257,7 +257,6 @@
     </collision>
   </link>
   <link name="gripper_frame_link">
-    <origin xyz="0 0 0" rpy="0 -0 0" />
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0" />
       <mass value="1e-9" />

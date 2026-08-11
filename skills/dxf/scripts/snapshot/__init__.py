@@ -1,0 +1,1 @@
+"""DXF drawing snapshot CLI."""

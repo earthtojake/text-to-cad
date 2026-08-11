@@ -112,27 +112,6 @@ function normalizeParameters(value) {
     .filter((definition) => definition.id);
 }
 
-function inferCadPathFromStepModuleUrl(url) {
-  let pathname = String(url || "").split("?")[0].split("#")[0].replace(/\\/g, "/").trim();
-  if (!pathname) {
-    return "";
-  }
-  try {
-    pathname = new URL(pathname, "http://localhost").pathname;
-  } catch {
-    // Keep the raw path for relative module URLs.
-  }
-  const normalizedPath = pathname.replace(/^\/+|\/+$/g, "");
-  const slashIndex = normalizedPath.lastIndexOf("/");
-  const directory = slashIndex >= 0 ? normalizedPath.slice(0, slashIndex) : "";
-  const fileName = slashIndex >= 0 ? normalizedPath.slice(slashIndex + 1) : normalizedPath;
-  const match = fileName.match(/^\.?(.+)\.step\.js$/);
-  if (!match?.[1]) {
-    return "";
-  }
-  return normalizeCadPath([directory, match[1]].filter(Boolean).join("/"));
-}
-
 function normalizeRelativeStepPath(value) {
   const rawPath = normalizeString(value).replace(/\\/g, "/");
   if (!rawPath || rawPath.startsWith("/") || /^[A-Za-z]:\//.test(rawPath) || /^[a-z][a-z0-9+.-]*:/i.test(rawPath)) {
@@ -204,6 +183,18 @@ function normalizeFeatures(value, { cadPath = "" } = {}) {
         label: normalizeString(raw.label, featureId),
         description: normalizeString(raw.description),
         ref: normalizeFeatureRef(raw, cadPath),
+        // Occurrence NAMES to match, as an alternative (or addition) to `ref`.
+        // Occurrence ids are positional — they shift whenever a part module's
+        // child count changes — so a sidecar pinned to `#o1.13.36` can silently
+        // start driving a completely different part after a rebuild, with no
+        // error, because a ref that matches the WRONG occurrence is
+        // indistinguishable from one that matches the right one. Matching the
+        // label the generator authored survives renumbering.
+        // Note this is deliberately NOT `label`: that is the human-readable
+        // display string and already defaults to the feature id.
+        names: uniqueStrings(
+          Array.isArray(raw.names) ? raw.names : (raw.names ? [raw.names] : [])
+        ),
         partIds: Array.isArray(raw.partIds)
           ? raw.partIds.map((partId) => normalizeString(partId)).filter(Boolean)
           : [],
@@ -259,7 +250,9 @@ export function normalizeStepModuleDefinition(rawModule, { url = "", cadPath = "
   }
   const step = normalizeStepLink(manifest.step);
   const stepCadPath = cadPathFromStepPath(step.path);
-  const normalizedCadPath = stepCadPath || normalizeCadPath(cadPath) || inferCadPathFromStepModuleUrl(url);
+  // The cadPath comes from the manifest's `step` link or the caller (the catalog entry) —
+  // not from the module filename (no `.step.js` naming convention to back it out of).
+  const normalizedCadPath = stepCadPath || normalizeCadPath(cadPath) || "";
   const parameters = normalizeParameters(manifest.parameters);
   const parameterMap = Object.fromEntries(parameters.map((definition) => [definition.id, definition]));
   const defaultParameterValues = Object.fromEntries(
@@ -398,6 +391,22 @@ function partIdsForSelector(selector, meshData) {
     .filter(Boolean);
 }
 
+function partIdsForName(name, meshData) {
+  const normalizedName = normalizeString(name);
+  const parts = Array.isArray(meshData?.parts) ? meshData.parts : [];
+  if (!normalizedName || !parts.length) {
+    return [];
+  }
+  // Exact match on the occurrence name the generator authored. Names are not
+  // unique — a group emits many leaves sharing a role name — so every match is
+  // returned, which makes `names: "spoke:front_left_0"` behave like the group
+  // selector a designer expects.
+  return parts
+    .filter((part) => normalizeString(part?.name) === normalizedName)
+    .map((part) => normalizeString(part.id || part.occurrenceId))
+    .filter(Boolean);
+}
+
 function referenceForSelector(selector, selectorRuntime) {
   const normalizedSelector = normalizeString(selector);
   if (!normalizedSelector || !selectorRuntime) {
@@ -449,9 +458,12 @@ export function resolveStepModuleFeatures(definition, {
         const reference = referenceForSelector(selector, selectorRuntime);
         return partIdsForSelector(reference?.partId || reference?.occurrenceId || selector, meshData);
       });
+      const names = Array.isArray(feature.names) ? feature.names : [];
+      const namePartIds = names.flatMap((name) => partIdsForName(name, meshData));
       const partIds = uniqueStrings([
         ...feature.partIds,
-        ...selectorPartIds
+        ...selectorPartIds,
+        ...namePartIds
       ]);
       const partsForFeature = partIds.map((partId) => partMap.get(partId)).filter(Boolean);
       const bounds = mergeBounds(partsForFeature.map((part) => part.bounds)) || meshData?.bounds || null;
@@ -465,7 +477,13 @@ export function resolveStepModuleFeatures(definition, {
         center: feature.origin || boundsCenter(bounds),
         transform: partsForFeature.length === 1 ? partsForFeature[0]?.transform || null : null,
         transforms: partsForFeature.map((part) => part?.transform || null),
-        missing: selectors.length > 0 && partIds.length === 0 && selectors[0] !== "__model__"
+        // A feature that declared a target and matched nothing is missing —
+        // whether it targeted by selector or by name. Without the `names` arm a
+        // name-only feature that matched nothing would silently report present.
+        missing: partIds.length === 0 && (
+          names.length > 0 ||
+          (selectors.length > 0 && selectors[0] !== "__model__")
+        )
       }];
     })
   );

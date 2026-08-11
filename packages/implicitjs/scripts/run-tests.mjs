@@ -41,8 +41,8 @@ const result = spawnSync(process.execPath, [
     ...(fs.existsSync(path.join(repoRoot, ".venv", "bin", "python"))
       ? { CAD_PYTHON: path.join(repoRoot, ".venv", "bin", "python") }
       : {}),
-    ...(fs.existsSync(path.join(repoRoot, "packages", "cadpy", "src"))
-      ? { CAD_PYTHONPATH: path.join(repoRoot, "packages", "cadpy", "src") }
+    ...(fs.existsSync(path.join(repoRoot, "packages", "cadgen", "src"))
+      ? { CAD_PYTHONPATH: path.join(repoRoot, "packages", "cadgen", "src") }
       : {}),
   },
   stdio: "inherit",

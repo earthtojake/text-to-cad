@@ -1,0 +1,122 @@
+{
+  "_comment": "F1 concept car presentation stage. A near-black carbon car cannot be lit like an engineering part: without a hard rim and a reflective floor it collapses into a silhouette blob. Three ideas: a cool key from high front-left, a hot rim from behind-right that traces every trailing edge, and a dark specular floor that returns light into the undersides. MATERIALS ARE DELIBERATELY SATIN, NOT PIANO-BLACK. An early version ran clearcoat 0.55 / roughness 0.42 / metalness 0.24 and every blind critic independently described the car as a 'soft glossy blob' \u2014 the specular sheet was swallowing the front-wing cascade, the sidepod undercut and the suspension blade sections. Real carbon is satin: broad diffuse falloff is what makes a crease read. Keep roughness high and clearcoat low. Edge linework stays OFF \u2014 this is a presentation stage, not a QA screenshot, and display.mode solid then reads as clean shaded material. RED PAINT NOTE: with a red skin the stage runs saturation 0.90 / contrast 1.36 / clearcoat 0.42 / exposure 1.20. Higher clearcoat is what makes red read as automotive LACQUER rather than plastic \u2014 the red is baked into vertex colour, so depth has to come from the specular layer, not from pushing saturation (which only makes it more orange in the key). EDGES LIVE IN DISPLAY JSON, not here: edge linework is a per-render display choice rather than a saved theme trait, and the snapshot CLI enforces that split. Pass {\"mode\":\"solid\",\"edges\":{\"enabled\":false}} as the job's `display` to get clean shaded material with no linework.",
+  "colorMode": "dark",
+  "projection": "perspective",
+  "materials": {
+    "defaultColor": "#1a1d22",
+    "fillColors": [
+      "#1a1d22"
+    ],
+    "cycleColors": false,
+    "overrideSourceColors": false,
+    "tintMode": "blend",
+    "tintStrength": 0,
+    "saturation": 0.9,
+    "contrast": 1.36,
+    "brightness": 1.02,
+    "roughness": 0.56,
+    "metalness": 0.08,
+    "clearcoat": 0.42,
+    "clearcoatRoughness": 0.3,
+    "opacity": 1,
+    "envMapIntensity": 0.7,
+    "emissiveIntensity": 0.015
+  },
+  "background": {
+    "type": "radial",
+    "solidColor": "#0b0d10",
+    "linearStart": "#2a323c",
+    "linearEnd": "#080a0d",
+    "linearAngle": 160,
+    "radialInner": "#39434f",
+    "radialOuter": "#0a0c0f"
+  },
+  "floor": {
+    "mode": "stage",
+    "enabled": true,
+    "color": "#1b2027",
+    "roughness": 0.26,
+    "reflectivity": 0.58,
+    "shadowOpacity": 0.55,
+    "horizonBlend": 0.4,
+    "grid": {
+      "enabled": false,
+      "opacity": 0.0,
+      "density": 1.0
+    }
+  },
+  "environment": {
+    "enabled": true,
+    "presetId": "studio-hdri-43",
+    "intensity": 0.72,
+    "rotationY": -0.55,
+    "useAsBackground": false
+  },
+  "lighting": {
+    "toneMappingExposure": 1.2,
+    "directional": {
+      "enabled": true,
+      "color": "#eaf2ff",
+      "intensity": 3.05,
+      "position": {
+        "x": -230,
+        "y": 330,
+        "z": 250
+      }
+    },
+    "fill": {
+      "enabled": true,
+      "color": "#8fa6bd",
+      "intensity": 0.75,
+      "position": {
+        "x": 260,
+        "y": 120,
+        "z": 190
+      }
+    },
+    "rim": {
+      "enabled": true,
+      "color": "#ffd9b8",
+      "intensity": 3.0,
+      "position": {
+        "x": 300,
+        "y": 210,
+        "z": -320
+      }
+    },
+    "spot": {
+      "enabled": true,
+      "color": "#ffffff",
+      "intensity": 1.0,
+      "angle": 0.82,
+      "distance": 0,
+      "position": {
+        "x": -60,
+        "y": 420,
+        "z": 40
+      }
+    },
+    "point": {
+      "enabled": true,
+      "color": "#ffb27a",
+      "intensity": 0.34,
+      "distance": 0,
+      "position": {
+        "x": -320,
+        "y": 60,
+        "z": -260
+      }
+    },
+    "ambient": {
+      "enabled": true,
+      "color": "#c3d2e4",
+      "intensity": 0.34
+    },
+    "hemisphere": {
+      "enabled": true,
+      "skyColor": "#b9cbe2",
+      "groundColor": "#222831",
+      "intensity": 0.78
+    }
+  }
+}

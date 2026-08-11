@@ -1,54 +1,32 @@
 import { entrySourceFormat } from "cadjs/lib/fileFormats.js";
-import { RENDER_FORMAT } from "./constants.js";
+import {
+  isArtifactManagedFormat,
+  rebuildCommandForEntry,
+  renderFormatLabel
+} from "cadjs/lib/renderCapabilities.js";
 import {
   stepArtifactHasRenderableGlb,
   stepArtifactStatusMessage
 } from "./fileStatusItems.js";
+import { failedStepArtifact } from "./stepArtifactStatus.js";
 import { entryStepSourceKind } from "./entryIconStatus.js";
 import { fileKey } from "./sidebar.js";
 
-export const CAD_BUILD_COMMANDS = Object.freeze({
-  dxf: "",
-  step: "python -m cadpy.step_artifact --repo-root . --step",
-  urdf: "",
-  sdf: ""
-});
-
-function commandForFile(command, fileRef) {
-  const normalizedCommand = String(command || "").trim();
-  return normalizedCommand ? `${normalizedCommand} ${fileRef}` : "";
-}
-
+// The command to rebuild an entry by hand, shown on build-failure cards.
+//
+// This was eight format checks that all returned "" except one — every branch but imported
+// STEP existed only to say "nothing to run here". The command now lives on the registry row
+// and the only rule left is the one that is genuinely about the ENTRY rather than the
+// format: a generator-backed STEP is rebuilt by the viewer, so telling the user to run the
+// importer against it would be wrong.
 export function buildCadCommand(fileRef, entry = null) {
-  const sourceFormat = entrySourceFormat(entry);
-  if (sourceFormat === RENDER_FORMAT.STEP && entryStepSourceKind(entry) === "python") {
+  if (entryStepSourceKind(entry) === "python") {
     return "";
   }
-  if (sourceFormat === RENDER_FORMAT.DXF) {
-    return commandForFile(CAD_BUILD_COMMANDS.dxf, fileRef);
-  }
-  if (sourceFormat === RENDER_FORMAT.URDF || sourceFormat === RENDER_FORMAT.SRDF) {
-    return String(entry?.kind || "").trim().toLowerCase() === "srdf" ? "" : commandForFile(CAD_BUILD_COMMANDS.urdf, fileRef);
-  }
-  if (sourceFormat === RENDER_FORMAT.SDF) {
-    return commandForFile(CAD_BUILD_COMMANDS.sdf, fileRef);
-  }
-  if (sourceFormat === RENDER_FORMAT.STL) {
-    return "";
-  }
-  if (sourceFormat === RENDER_FORMAT.THREE_MF) {
-    return "";
-  }
-  if (sourceFormat === RENDER_FORMAT.GLB) {
-    return "";
-  }
-  if (sourceFormat === RENDER_FORMAT.GCODE) {
-    return "";
-  }
-  return commandForFile(CAD_BUILD_COMMANDS.step, fileRef);
+  return rebuildCommandForEntry(entrySourceFormat(entry), fileRef);
 }
 
-export function buildViewerMeshAlert(entry, hasMeshData, loadError) {
+export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = null) {
   const fileRef = fileKey(entry);
   if (!fileRef) {
     return null;
@@ -56,27 +34,35 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError) {
 
   const sourceFormat = entrySourceFormat(entry);
   const command = buildCadCommand(fileRef, entry);
-  const meshSidecarFormat = sourceFormat === RENDER_FORMAT.STL ||
-    sourceFormat === RENDER_FORMAT.THREE_MF ||
-    sourceFormat === RENDER_FORMAT.GLB ||
-    sourceFormat === RENDER_FORMAT.GCODE;
-  const meshSidecarLabel = sourceFormat === RENDER_FORMAT.THREE_MF
-    ? "3MF"
-    : sourceFormat === RENDER_FORMAT.GLB
-      ? "GLB"
-      : sourceFormat === RENDER_FORMAT.GCODE
-        ? "G-code"
-        : "STL";
-  const reloadResolution = meshSidecarFormat
-    ? `Confirm the ${meshSidecarLabel} exists in the repo and reload the page.`
+  // A format the viewer does not build is its own asset: there is nothing to rebuild, so
+  // the only useful advice is "is the file there?". That is `artifactManaged`, not a list
+  // of the three mesh formats — a fourth would have inherited the wrong advice.
+  const ownAsset = !isArtifactManagedFormat(sourceFormat);
+  const ownAssetResolution = `Confirm the ${renderFormatLabel(sourceFormat) || "source file"} exists in the repo and reload the page.`;
+  const reloadResolution = ownAsset
+    ? ownAssetResolution
     : "Try reloading the page. If the problem persists, rebuild the render assets for this entry.";
-  const missingResolution = meshSidecarFormat
-    ? `Confirm the ${meshSidecarLabel} exists in the repo and reload the page.`
+  const missingResolution = ownAsset
+    ? ownAssetResolution
     : "Rebuild the CAD assets for this entry, then reload the page.";
 
-  const stepArtifactError = sourceFormat === RENDER_FORMAT.STEP && entry?.artifact?.ok === false
-    ? entry?.artifact
-    : null;
+  // A failed render-artifact build is the REASON there is no mesh, so it outranks the
+  // generic "no mesh data" card — and it applies to every artifact-managed kind, not just
+  // STEP. A DXF whose build rejected an entity used to report only that nothing loaded,
+  // which told the user neither what was wrong nor that a rebuild would not help.
+  if (artifact?.status === "error" && !hasMeshData) {
+    const detail = String(artifact.error || "").trim();
+    return {
+      severity: "error",
+      summary: "Build failed",
+      title: "Render artifact build failed",
+      message: detail || "The render artifact for this entry could not be built.",
+      resolution: missingResolution,
+      command
+    };
+  }
+
+  const stepArtifactError = failedStepArtifact(entry, sourceFormat);
   if (stepArtifactError && !hasMeshData) {
     const code = String(stepArtifactError.error || "").trim();
     const stale = stepArtifactError.stale === true || code === "stale_step_artifact";
@@ -118,54 +104,6 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError) {
       title: "No mesh data is available",
       message: "The selected entry is listed in the CAD catalog but no renderable mesh data could be loaded for it.",
       resolution: missingResolution,
-      command
-    };
-  }
-
-  return null;
-}
-
-export function buildViewerDxfAlert(fileRef, hasDxfData, loadError, previewError) {
-  if (!fileRef) {
-    return null;
-  }
-
-  const command = commandForFile(CAD_BUILD_COMMANDS.dxf, fileRef);
-  const normalizedPreviewError = String(previewError || "").trim();
-
-  if (loadError) {
-    return {
-      severity: "error",
-      summary: "DXF load failed",
-      title: "Failed to load DXF flat pattern",
-      message: loadError,
-      resolution: "Try reloading the page. If the problem persists, rebuild the CAD assets for this entry.",
-      command
-    };
-  }
-
-  if (/DXF 3D bend preview currently requires vertical bend lines/i.test(normalizedPreviewError)) {
-    return null;
-  }
-
-  if (normalizedPreviewError) {
-    return {
-      severity: "warning",
-      summary: "DXF 3D preview unavailable",
-      title: "Failed to build the DXF 3D preview",
-      message: normalizedPreviewError,
-      resolution: "The flat pattern can still be shown, but the 3D extrusion preview could not be built from the current DXF geometry.",
-      command
-    };
-  }
-
-  if (!hasDxfData) {
-    return {
-      severity: "error",
-      summary: "DXF unavailable",
-      title: "No DXF flat pattern is available",
-      message: "The selected entry does not have a ready DXF companion asset for the flat-pattern viewer.",
-      resolution: "Rebuild the CAD assets for this entry, then reload the page.",
       command
     };
   }

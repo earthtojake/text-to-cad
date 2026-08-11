@@ -1,0 +1,134 @@
+{
+  "projection": "perspective",
+  "materials": {
+    "cycleColors": false,
+    "overrideSourceColors": false,
+    "tintMode": "blend",
+    "tintStrength": 0,
+    "saturation": 1.1,
+    "contrast": 1.12,
+    "brightness": 0.99,
+    "roughness": 0.26,
+    "metalness": 0.62,
+    "clearcoat": 0.35,
+    "clearcoatRoughness": 0.13,
+    "opacity": 1,
+    "envMapIntensity": 1.7,
+    "emissiveIntensity": 0.02,
+    "defaultColor": "#c9c2bb",
+    "fillColors": [
+      "#c9c2bb",
+      "#c98d55",
+      "#8e969e",
+      "#a9784e"
+    ]
+  },
+  "background": {
+    "type": "radial",
+    "solidColor": "#101114",
+    "linearStart": "#1a1b20",
+    "linearEnd": "#08080b",
+    "linearAngle": 135,
+    "radialInner": "#17181d",
+    "radialOuter": "#08080b"
+  },
+  "floor": {
+    "mode": "none",
+    "color": "#101114",
+    "roughness": 0.42,
+    "reflectivity": 0.26,
+    "shadowOpacity": 0,
+    "horizonBlend": 0.36,
+    "gridCenterColor": "#7c7e81",
+    "gridCellColor": "#3b3e44",
+    "gridOpacity": 0,
+    "gridDensity": 1,
+    "grid": {
+      "enabled": false,
+      "centerColor": "#7c7e81",
+      "cellColor": "#3b3e44",
+      "opacity": 0,
+      "density": 1
+    },
+    "centerColor": "#7c7e81",
+    "cellColor": "#3b3e44",
+    "opacity": 0,
+    "density": 1,
+    "enabled": false
+  },
+  "environment": {
+    "enabled": true,
+    "presetId": "studio-hdri-17",
+    "intensity": 1.0,
+    "rotationY": 1.2,
+    "useAsBackground": false
+  },
+  "lighting": {
+    "toneMappingExposure": 0.92,
+    "directional": {
+      "enabled": true,
+      "color": "#fff3e4",
+      "intensity": 1.6,
+      "position": {
+        "x": -270,
+        "y": 160,
+        "z": 130
+      }
+    },
+    "fill": {
+      "enabled": true,
+      "color": "#a6a9ad",
+      "intensity": 0.35,
+      "position": {
+        "x": 120,
+        "y": 80,
+        "z": 210
+      }
+    },
+    "rim": {
+      "enabled": true,
+      "color": "#eef1f5",
+      "intensity": 1.45,
+      "position": {
+        "x": -320,
+        "y": 260,
+        "z": 160
+      }
+    },
+    "spot": {
+      "enabled": true,
+      "color": "#e8e5df",
+      "intensity": 0.3,
+      "angle": 0.7,
+      "distance": 0,
+      "position": {
+        "x": 190,
+        "y": 210,
+        "z": 170
+      }
+    },
+    "point": {
+      "enabled": true,
+      "color": "#d8dde4",
+      "intensity": 0.18,
+      "distance": 0,
+      "position": {
+        "x": -240,
+        "y": 110,
+        "z": -210
+      }
+    },
+    "ambient": {
+      "enabled": true,
+      "color": "#d5d7da",
+      "intensity": 0.22
+    },
+    "hemisphere": {
+      "enabled": true,
+      "skyColor": "#e5e7ea",
+      "groundColor": "#1b1c1f",
+      "intensity": 0.35
+    }
+  },
+  "colorMode": "dark"
+}

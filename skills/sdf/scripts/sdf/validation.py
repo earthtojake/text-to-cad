@@ -27,6 +27,35 @@ TRUE_VALUES = {"1", "true", "yes", "on"}
 POSE_TOLERANCE = 1e-12
 UNIT_TOLERANCE = 1e-6
 PSD_TOLERANCE = 1e-9
+KNOWN_SDF_VERSIONS = {"1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12"}
+LIGHT_TYPES = {"point", "directional", "spot"}
+KNOWN_SENSOR_TYPES = {
+    "air_pressure", "air_speed", "altimeter", "boundingbox_camera", "camera",
+    "contact", "custom", "depth_camera", "force_torque", "gps", "gpu_lidar",
+    "gpu_ray", "imu", "lidar", "logical_camera", "magnetometer", "multicamera",
+    "navsat", "ray", "rfid", "rfidtag", "rgbd_camera", "segmentation_camera",
+    "sonar", "thermal_camera", "wide_angle_camera", "wireless_receiver",
+    "wireless_transmitter",
+}
+KNOWN_MODEL_CHILDREN = {
+    "pose", "static", "self_collide", "allow_auto_disable", "enable_wind",
+    "frame", "link", "joint", "plugin", "gripper", "include", "model",
+}
+KNOWN_LINK_CHILDREN = {
+    "pose", "inertial", "visual", "collision", "sensor", "light", "projector",
+    "audio_sink", "audio_source", "battery", "particle_emitter", "enable_wind",
+    "kinematic", "gravity", "self_collide", "velocity_decay", "must_be_base_link",
+}
+KNOWN_JOINT_CHILDREN = {
+    "pose", "parent", "child", "axis", "axis2", "physics", "sensor",
+    "gearbox_ratio", "gearbox_reference_body", "thread_pitch", "screw_thread_pitch",
+}
+KNOWN_GEOMETRY_OWNER_CHILDREN = {
+    "pose", "geometry", "material", "transparency", "cast_shadows", "laser_retro",
+    "surface", "plugin", "meta", "visibility_flags", "max_contacts",
+}
+KNOWN_INERTIAL_CHILDREN = {"pose", "mass", "inertia", "density", "auto", "fluid_added_mass"}
+_UNKNOWN_ELEMENT_HINT = "Unknown elements are silently ignored by consumers; check for typos."
 
 
 def validate_sdf_xml(
@@ -87,6 +116,13 @@ def validate_sdf_root(
             f"SDF version {version!r} does not look like major.minor",
             path="/sdf",
         )
+    elif version not in KNOWN_SDF_VERSIONS:
+        result.add(
+            "warning",
+            "unknown_sdf_version",
+            f"SDF version {version!r} is not a known SDFormat release ({', '.join(sorted(KNOWN_SDF_VERSIONS))})",
+            path="/sdf",
+        )
 
     meaningful_tags = {"model", "world", "actor", "light", "include", "plugin"}
     if not any(_local_name(child.tag) in meaningful_tags for child in list(root)):
@@ -139,6 +175,9 @@ def _validate_world(world_element: ET.Element, result: ValidationResult, base_di
 
     for pose_element in _children(world_element, "pose"):
         _validate_pose(pose_element, result, f"{world_path}/pose", targets)
+    _check_unique_named(_children(world_element, "light"), result, world_path, "light")
+    for light_element in _children(world_element, "light"):
+        _validate_light(light_element, result, targets, world_path)
     for include_element in _children(world_element, "include"):
         _validate_include(include_element, result, f"{world_path}/include")
     for plugin_element in _children(world_element, "plugin"):
@@ -159,26 +198,48 @@ def _validate_model(
     if not model_name:
         model_name = "model"
 
+    _warn_unknown_children(model_element, KNOWN_MODEL_CHILDREN, result, model_path)
+
     link_elements = _children(model_element, "link")
     joint_elements = _children(model_element, "joint")
     frame_elements = _children(model_element, "frame")
     nested_model_elements = _children(model_element, "model")
+    include_elements = _children(model_element, "include")
     plugin_elements = _children(model_element, "plugin")
 
     _check_unique_named(link_elements, result, model_path, "link")
     _check_unique_named(joint_elements, result, model_path, "joint")
     _check_unique_named(frame_elements, result, model_path, "frame")
     _check_unique_named(nested_model_elements, result, model_path, "model")
+    _check_cross_type_scope_names(
+        result,
+        model_path,
+        link=set(_names(link_elements)),
+        joint=set(_names(joint_elements)),
+        frame=set(_names(frame_elements)),
+        model=set(_names(nested_model_elements)),
+    )
+    if not link_elements and not include_elements and not nested_model_elements:
+        result.add(
+            "error",
+            "empty_model",
+            f"model {model_name!r} must contain at least one link, include, or nested model",
+            path=model_path,
+        )
 
     link_names = set(_names(link_elements))
+    joint_names = set(_names(joint_elements))
     frame_names = set(_names(frame_elements))
     nested_model_names = set(_names(nested_model_elements))
+    # SDFormat >= 1.7 frame graph: links, joints, and explicit frames are all
+    # valid relative_to / attached_to / expressed_in targets.
     local_targets = {
         "world",
         "__model__",
         model_name,
         *parent_targets,
         *link_names,
+        *joint_names,
         *frame_names,
         *nested_model_names,
     }
@@ -236,12 +297,16 @@ def _validate_link(
     link_name = _required_name(link_element, result, f"{model_path}/link", "link")
     link_path = f"{model_path}/link[@name='{link_name}']" if link_name else f"{model_path}/link"
 
+    _warn_unknown_children(link_element, KNOWN_LINK_CHILDREN, result, link_path)
     for pose_element in _children(link_element, "pose"):
         _validate_pose(pose_element, result, f"{link_path}/pose", targets)
 
     _check_unique_named(_children(link_element, "visual"), result, link_path, "visual")
     _check_unique_named(_children(link_element, "collision"), result, link_path, "collision")
     _check_unique_named(_children(link_element, "sensor"), result, link_path, "sensor")
+    _check_unique_named(_children(link_element, "light"), result, link_path, "light")
+    for light_element in _children(link_element, "light"):
+        _validate_light(light_element, result, targets, link_path)
 
     visual_meshes: set[str] = set()
     for visual_element in _children(link_element, "visual"):
@@ -288,6 +353,7 @@ def _validate_joint(
 ) -> None:
     joint_name = _required_name(joint_element, result, f"{model_path}/joint", "joint")
     joint_path = f"{model_path}/joint[@name='{joint_name}']" if joint_name else f"{model_path}/joint"
+    _warn_unknown_children(joint_element, KNOWN_JOINT_CHILDREN, result, joint_path)
     joint_type = str(joint_element.attrib.get("type") or "").strip()
     if not joint_type:
         result.add("error", "missing_joint_type", f"{joint_path} type is required", path=joint_path)
@@ -362,7 +428,15 @@ def _validate_axis(
         if lower is not None and upper is not None and lower > upper:
             result.add("error", "invalid_joint_limit", "joint lower limit exceeds upper limit", path=f"{axis_path}/limit")
         for tag in ("effort", "velocity", "stiffness", "dissipation"):
-            _optional_number_child(limit_element, tag, result, f"{axis_path}/limit/{tag}", allow_infinite=True)
+            value = _optional_number_child(limit_element, tag, result, f"{axis_path}/limit/{tag}", allow_infinite=True)
+            # -1 is the SDFormat sentinel for "unlimited" effort/velocity.
+            if value is not None and math.isfinite(value) and value < 0 and not (tag in {"effort", "velocity"} and value == -1):
+                result.add(
+                    "error",
+                    f"negative_{tag}",
+                    f"joint limit {tag} must be non-negative (or -1 for unlimited effort/velocity)",
+                    path=f"{axis_path}/limit/{tag}",
+                )
         if joint_type == "continuous" and (lower is not None or upper is not None):
             result.add(
                 "warning",
@@ -370,6 +444,17 @@ def _validate_axis(
                 "continuous joints usually should not use finite position limits",
                 path=f"{axis_path}/limit",
             )
+    for dynamics_element in _children(axis_element, "dynamics"):
+        for tag in ("damping", "friction", "spring_stiffness"):
+            value = _optional_number_child(dynamics_element, tag, result, f"{axis_path}/dynamics/{tag}")
+            if value is not None and value < 0 and tag != "spring_stiffness":
+                result.add(
+                    "error",
+                    f"negative_{tag}",
+                    f"joint dynamics {tag} must be non-negative",
+                    path=f"{axis_path}/dynamics/{tag}",
+                )
+        _optional_number_child(dynamics_element, "spring_reference", result, f"{axis_path}/dynamics/spring_reference")
 
 
 def _validate_geometry_owner(
@@ -381,8 +466,11 @@ def _validate_geometry_owner(
 ) -> set[str]:
     owner_name = _required_name(owner, result, owner_path, _local_name(owner.tag))
     path = f"{owner_path}[@name='{owner_name}']" if owner_name else owner_path
+    _warn_unknown_children(owner, KNOWN_GEOMETRY_OWNER_CHILDREN, result, path)
     for pose_element in _children(owner, "pose"):
-        _validate_pose(pose_element, result, f"{path}/pose", targets)
+        # Visual/collision pose defaults to the owning link frame, which is
+        # unambiguous; only flag explicit-but-unresolvable relative_to.
+        _validate_pose(pose_element, result, f"{path}/pose", targets, warn_missing_relative_to=False)
 
     geometry_elements = _children(owner, "geometry")
     if len(geometry_elements) != 1:
@@ -423,7 +511,7 @@ def _validate_geometry_owner(
         _validate_positive_vector_child(shape, "size", 2, result, f"{path}/geometry/plane/size")
     elif shape_name == "mesh":
         uri = _required_child_text(shape, "uri", result, f"{path}/geometry/mesh/uri", "mesh uri")
-        _validate_positive_vector_child(shape, "scale", 3, result, f"{path}/geometry/mesh/scale", required=False)
+        _validate_mesh_scale_child(shape, result, f"{path}/geometry/mesh/scale")
         if uri:
             _validate_mesh_uri(uri, result, base_dir, f"{path}/geometry/mesh/uri")
             return {uri}
@@ -431,8 +519,10 @@ def _validate_geometry_owner(
 
 
 def _validate_inertial(inertial_element: ET.Element, result: ValidationResult, targets: set[str], inertial_path: str) -> None:
+    _warn_unknown_children(inertial_element, KNOWN_INERTIAL_CHILDREN, result, inertial_path)
     for pose_element in _children(inertial_element, "pose"):
-        _validate_pose(pose_element, result, f"{inertial_path}/pose", targets)
+        # Inertial pose defaults to the owning link frame (unambiguous).
+        _validate_pose(pose_element, result, f"{inertial_path}/pose", targets, warn_missing_relative_to=False)
     mass = _optional_number_child(inertial_element, "mass", result, f"{inertial_path}/mass", required=True)
     if mass is not None and mass <= 0:
         result.add("error", "invalid_mass", "inertial mass must be positive", path=f"{inertial_path}/mass")
@@ -455,6 +545,17 @@ def _validate_inertial(inertial_element: ET.Element, result: ValidationResult, t
             "inertia matrix must be positive semidefinite within tolerance",
             path=f"{inertial_path}/inertia",
         )
+        return
+    low, mid, high = sorted(_symmetric_inertia_eigenvalues(components))
+    scale = max(abs(value) for value in components.values())
+    if low + mid + (scale * 1e-6 + 1e-12) < high:
+        result.add(
+            "warning",
+            "inertia_triangle_inequality",
+            "inertia principal moments violate the triangle inequality (l1 + l2 >= l3)",
+            path=f"{inertial_path}/inertia",
+            hint="Physical rigid bodies require it; recompute the tensor from the geometry.",
+        )
 
 
 def _validate_sensor(sensor_element: ET.Element, result: ValidationResult, targets: set[str], sensor_path: str) -> None:
@@ -463,6 +564,14 @@ def _validate_sensor(sensor_element: ET.Element, result: ValidationResult, targe
     sensor_type = str(sensor_element.attrib.get("type") or "").strip()
     if not sensor_type:
         result.add("error", "missing_sensor_type", "sensor type is required", path=path)
+    elif sensor_type not in KNOWN_SENSOR_TYPES:
+        result.add(
+            "warning",
+            "unknown_sensor_type",
+            f"sensor type {sensor_type!r} is not a known SDFormat sensor type",
+            path=path,
+            hint="Check for typos (e.g. 'gpu_lidar' vs 'lidar'); custom types need type=\"custom\".",
+        )
     for pose_element in _children(sensor_element, "pose"):
         _validate_pose(pose_element, result, f"{path}/pose", targets)
     update_rate = _optional_number_child(sensor_element, "update_rate", result, f"{path}/update_rate")
@@ -484,7 +593,14 @@ def _validate_include(include_element: ET.Element, result: ValidationResult, inc
     _required_child_text(include_element, "uri", result, f"{include_path}/uri", "include uri")
 
 
-def _validate_pose(pose_element: ET.Element, result: ValidationResult, pose_path: str, targets: set[str]) -> None:
+def _validate_pose(
+    pose_element: ET.Element,
+    result: ValidationResult,
+    pose_path: str,
+    targets: set[str],
+    *,
+    warn_missing_relative_to: bool = True,
+) -> None:
     rotation_format = str(pose_element.attrib.get("rotation_format") or "euler_rpy").strip()
     if rotation_format == "euler_rpy":
         values = _parse_number_text(str(pose_element.text or ""), 6, result, pose_path, "pose")
@@ -508,7 +624,7 @@ def _validate_pose(pose_element: ET.Element, result: ValidationResult, pose_path
         result.add("warning", "pose_uses_degrees", "pose uses degrees=true; SDF defaults to radians", path=pose_path)
 
     relative_to = str(pose_element.attrib.get("relative_to") or "").strip()
-    if values is not None and _nontrivial_pose(values) and not relative_to:
+    if warn_missing_relative_to and values is not None and _nontrivial_pose(values) and not relative_to:
         result.add(
             "warning",
             "pose_missing_relative_to",
@@ -844,3 +960,108 @@ def _display_path(path: Path) -> str:
         return resolved.relative_to(Path.cwd().resolve()).as_posix()
     except ValueError:
         return resolved.as_posix()
+
+
+def _validate_light(light_element: ET.Element, result: ValidationResult, targets: set[str], owner_path: str) -> None:
+    light_name = _required_name(light_element, result, f"{owner_path}/light", "light")
+    light_path = f"{owner_path}/light[@name='{light_name}']" if light_name else f"{owner_path}/light"
+    light_type = str(light_element.attrib.get("type") or "").strip()
+    if not light_type:
+        result.add("error", "missing_light_type", "light type is required", path=light_path)
+    elif light_type not in LIGHT_TYPES:
+        result.add(
+            "error",
+            "unknown_light_type",
+            f"light type {light_type!r} must be one of: " + ", ".join(sorted(LIGHT_TYPES)),
+            path=light_path,
+        )
+    for pose_element in _children(light_element, "pose"):
+        _validate_pose(pose_element, result, f"{light_path}/pose", targets)
+
+
+def _validate_mesh_scale_child(shape: ET.Element, result: ValidationResult, scale_path: str) -> None:
+    scale_element = _first_child(shape, "scale")
+    if scale_element is None:
+        return
+    values = _parse_number_text(str(scale_element.text or ""), 3, result, scale_path, "mesh scale")
+    if values is None:
+        return
+    if any(value == 0.0 for value in values):
+        result.add("error", "zero_mesh_scale", "mesh scale values must be nonzero", path=scale_path)
+        return
+    if any(value < 0.0 for value in values):
+        result.add(
+            "warning",
+            "negative_mesh_scale",
+            "mesh uses negative scale (mirroring); consumer support varies and triangle winding flips",
+            path=scale_path,
+        )
+
+
+def _check_cross_type_scope_names(
+    result: ValidationResult,
+    scope_path: str,
+    **names_by_kind: set[str],
+) -> None:
+    # SDFormat frame-graph names (links, joints, frames, nested models) share
+    # one namespace per scope; libsdformat rejects cross-type collisions.
+    kinds = sorted(names_by_kind)
+    for index, first_kind in enumerate(kinds):
+        for second_kind in kinds[index + 1:]:
+            shared = sorted(names_by_kind[first_kind] & names_by_kind[second_kind])
+            if shared:
+                result.add(
+                    "error",
+                    "cross_type_name_collision",
+                    f"{first_kind} and {second_kind} names collide in the same scope: {shared!r}",
+                    path=scope_path,
+                )
+
+
+def _warn_unknown_children(
+    element: ET.Element,
+    known_children: set[str],
+    result: ValidationResult,
+    path: str,
+) -> None:
+    for child in list(element):
+        if not isinstance(child.tag, str):
+            continue  # comments / processing instructions
+        tag = _local_name(child.tag)
+        if tag != child.tag:
+            continue  # namespaced extensions pass through
+        if tag not in known_children:
+            result.add(
+                "warning",
+                "unknown_element",
+                f"unknown element <{tag}> under {path}",
+                path=f"{path}/{tag}",
+                hint=_UNKNOWN_ELEMENT_HINT,
+            )
+
+
+def _symmetric_inertia_eigenvalues(values: dict[str, float]) -> tuple[float, float, float]:
+    """Closed-form eigenvalues of the symmetric 3x3 inertia tensor."""
+    ixx, iyy, izz = values["ixx"], values["iyy"], values["izz"]
+    ixy, ixz, iyz = values["ixy"], values["ixz"], values["iyz"]
+    p1 = ixy * ixy + ixz * ixz + iyz * iyz
+    if p1 == 0.0:
+        return ixx, iyy, izz
+    q = (ixx + iyy + izz) / 3.0
+    p2 = (ixx - q) ** 2 + (iyy - q) ** 2 + (izz - q) ** 2 + 2.0 * p1
+    p = math.sqrt(p2 / 6.0)
+    if p == 0.0:
+        return q, q, q
+    b_xx, b_yy, b_zz = (ixx - q) / p, (iyy - q) / p, (izz - q) / p
+    b_xy, b_xz, b_yz = ixy / p, ixz / p, iyz / p
+    det_b = (
+        b_xx * (b_yy * b_zz - b_yz * b_yz)
+        - b_xy * (b_xy * b_zz - b_yz * b_xz)
+        + b_xz * (b_xy * b_yz - b_yy * b_xz)
+    )
+    r = max(-1.0, min(1.0, det_b / 2.0))
+    phi = math.acos(r) / 3.0
+    eig1 = q + 2.0 * p * math.cos(phi)
+    eig3 = q + 2.0 * p * math.cos(phi + (2.0 * math.pi / 3.0))
+    eig2 = 3.0 * q - eig1 - eig3
+    return eig1, eig2, eig3

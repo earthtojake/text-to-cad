@@ -229,7 +229,7 @@ function stepSourceStatusLevel(stepStatus) {
 function stepSourceStatusMessage(stepStatus, stepSourceStatus) {
   if (stepStatus?.missing) {
     return sourceKindLabel(stepSourceStatus?.sourceKind) === "python"
-      ? "STEP file was not generated for this Python script; only a GLB artifact is available."
+      ? "STEP file was not generated for this Python script; only the render package is available."
       : "STEP file is missing from the directory.";
   }
   return cleanText(stepStatus?.message) || "STEP file is missing from the directory.";
@@ -304,7 +304,7 @@ export function stepFileStatusItems({
       details: [
         detail("Code", artifact.error),
         pathDetail("STEP file", artifact.stepPath || artifact.sourcePath || entry?.file, viewerServerInfo, entry?.file),
-        pathDetail("GLB artifact", artifact.glbPath, viewerServerInfo, entry?.file),
+        pathDetail("Render package", artifact.packagePath, viewerServerInfo, entry?.file),
         pathDetail("CAD path", artifact.cadPath, viewerServerInfo, entry?.file),
         detail("Source kind", artifact.sourceKind),
         detail("Artifact hash", artifact.artifactHash, { mono: true }),
@@ -363,18 +363,6 @@ export function formatFileStatusItemForAgent(item) {
   return lines.join("\n");
 }
 
-export function gcodeFileStatusItems(gcodeData = null) {
-  const warnings = Array.isArray(gcodeData?.warnings) ? gcodeData.warnings : [];
-  return normalizeFileStatusItems(warnings.map((warning, index) => ({
-    id: `gcode-warning:${index}`,
-    level: FILE_STATUS_LEVELS.WARNING,
-    source: "gcode-parser",
-    code: "gcode_warning",
-    title: "G-code warning",
-    message: warning
-  })));
-}
-
 export function sdfFileStatusItems(sdfInfo = null) {
   const staticMetadata = sdfInfo?.staticMetadata && typeof sdfInfo.staticMetadata === "object"
     ? sdfInfo.staticMetadata
@@ -417,7 +405,6 @@ export function buildFileStatusItems({
   stepArtifactGenerationAvailable = true,
   stepArtifactGenerationState = null,
   activeGenerationFiles = [],
-  gcodeData = null,
   urdfData = null,
   viewerAlert = null,
   viewerServerInfo = null,
@@ -438,9 +425,6 @@ export function buildFileStatusItems({
       activeGenerationFiles,
       viewerServerInfo
     }));
-  }
-  if (kind === "gcode") {
-    items.push(...gcodeFileStatusItems(gcodeData));
   }
   if (kind === "sdf") {
     items.push(...sdfFileStatusItems(urdfData?.sdf || urdfData));

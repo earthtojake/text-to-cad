@@ -25,7 +25,7 @@ export function orbitFrameOutputs(job) {
     fps,
     durationSeconds,
     frameCount,
-    appearance: output.appearance || job.appearance || "workbench",
+    theme: output.theme || job.theme || "workbench",
     graphics: {
       ...(isObject(job.graphics) ? job.graphics : {}),
       ...(isObject(output.graphics) ? output.graphics : {}),

@@ -6,6 +6,11 @@ import {
   isCurrentStepTopologySchemaVersion
 } from "../common/stepTopology.mjs";
 import { buildMeshDataFromGlbBuffer } from "./render/glbMeshData.js";
+import {
+  assertAssetSourceScope,
+  assetSourceScopeMatches,
+  releaseAssetSourceScope
+} from "./renderAssetSourceScope.js";
 
 function isObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -36,6 +41,7 @@ async function loadCached(cache, key, loader, { cachePending = true } = {}) {
   if (!key) {
     throw new Error("Missing asset cache key");
   }
+  assertAssetSourceScope(cache, key);
   if (cache.has(key)) {
     const cached = cache.get(key);
     if (cachePending || typeof cached?.then !== "function") {
@@ -51,6 +57,7 @@ async function loadCached(cache, key, loader, { cachePending = true } = {}) {
   pending = loader().catch((error) => {
     if (cache.get(key) === pending) {
       cache.delete(key);
+      releaseAssetSourceScope(cache, key);
     }
     throw error;
   });
@@ -59,6 +66,9 @@ async function loadCached(cache, key, loader, { cachePending = true } = {}) {
 }
 
 function peekCached(cache, key) {
+  if (!assetSourceScopeMatches(cache, key)) {
+    return null;
+  }
   const value = cache.get(key);
   return value && typeof value.then !== "function" ? value : null;
 }
@@ -161,6 +171,10 @@ export async function loadRenderArrayBuffer(url, { signal } = {}) {
   if (signal?.aborted) {
     throw makeAbortError();
   }
+  // After the abort check: a consumer that fetches nothing must not claim the URL for its source.
+  assertAssetSourceScope(arrayBufferCache, url, {
+    occupied: arrayBufferCache.has(url) || arrayBufferPendingCache.has(url)
+  });
   const cached = peekCached(arrayBufferCache, url);
   if (cached) {
     return cached;
@@ -169,6 +183,10 @@ export async function loadRenderArrayBuffer(url, { signal } = {}) {
   if (!pending) {
     pending = fetchArrayBuffer(url)
       .then((payload) => finalizeCached(arrayBufferCache, url, payload))
+      .catch((error) => {
+        releaseAssetSourceScope(arrayBufferCache, url);
+        throw error;
+      })
       .finally(() => {
         if (arrayBufferPendingCache.get(url) === pending) {
           arrayBufferPendingCache.delete(url);

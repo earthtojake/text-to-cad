@@ -33,21 +33,6 @@ class UrdfSourceTests(unittest.TestCase):
     def _write_urdf(self, name: str, body: str) -> Path:
         urdf_path = self.temp_root / f"{name}.urdf"
         urdf_path.write_text(body.strip() + "\n", encoding="utf-8")
-        script_path = self.temp_root / f"{name}.py"
-        if not script_path.exists():
-            script_path.write_text(
-                "\n".join(
-                    [
-                        "def gen_step():",
-                        "    return {'instances': []}",
-                        "",
-                        "def gen_urdf():",
-                        "    return {'xml': ''}",
-                        "",
-                    ]
-                ),
-                encoding="utf-8",
-            )
         return urdf_path
 
     def test_read_urdf_source_accepts_valid_mesh_robot(self) -> None:
@@ -320,7 +305,7 @@ class UrdfSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(UrdfSourceError, "mass must be positive"):
             read_urdf_source(source_path)
 
-    def test_read_urdf_source_rejects_invalid_inertia_triangle(self) -> None:
+    def test_read_urdf_source_warns_on_invalid_inertia_triangle(self) -> None:
         source_path = self._write_urdf(
             "robot",
             """
@@ -335,8 +320,10 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "triangle"):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", UrdfSourceWarning)
             read_urdf_source(source_path)
+        self.assertTrue(any("triangle" in str(warning.message) for warning in caught))
 
     def test_read_urdf_source_rejects_invalid_origin_vector(self) -> None:
         source_path = self._write_urdf(
@@ -394,7 +381,7 @@ class UrdfSourceTests(unittest.TestCase):
             """,
         )
 
-        with self.assertRaisesRegex(UrdfSourceError, "scale values must be positive"):
+        with self.assertRaisesRegex(UrdfSourceError, "scale values must be nonzero"):
             read_urdf_source(source_path)
 
     def test_read_urdf_source_rejects_invalid_primitive_dimensions(self) -> None:
@@ -516,8 +503,8 @@ class UrdfSourceTests(unittest.TestCase):
         source = read_urdf_source(source_path)
 
         self.assertEqual("prismatic", source.joints[0].joint_type)
-        self.assertEqual(0.0, source.joints[0].min_value_deg)
-        self.assertEqual(0.05, source.joints[0].max_value_deg)
+        self.assertEqual(0.0, source.joints[0].lower)
+        self.assertEqual(0.05, source.joints[0].upper)
 
     def test_read_urdf_source_rejects_reversed_joint_limits(self) -> None:
         source_path = self._write_urdf(

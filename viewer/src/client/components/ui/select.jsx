@@ -119,7 +119,7 @@ function SelectItem({
         </SelectPrimitive.ItemIndicator>
       </span>
       {icon ? (
-        <span className="flex size-3.5 shrink-0 items-center justify-center text-muted-foreground" aria-hidden="true">
+        <span className="flex h-3.5 shrink-0 items-center justify-center text-muted-foreground" aria-hidden="true">
           {icon}
         </span>
       ) : null}

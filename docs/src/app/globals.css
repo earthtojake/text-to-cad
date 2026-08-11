@@ -292,16 +292,6 @@
     }
   }
 
-  @keyframes agent-carousel {
-    0% {
-      transform: translateX(0);
-    }
-
-    100% {
-      transform: translateX(calc(-50% - 0.25rem));
-    }
-  }
-
   .ascii-terminal-reveal {
     animation: ascii-terminal-reveal 1.05s steps(16, end) both;
     overflow: hidden;
@@ -323,23 +313,10 @@
     position: absolute;
   }
 
-  .agent-carousel-track {
-    animation: agent-carousel 72s linear infinite;
-  }
-
-  .agent-carousel:hover .agent-carousel-track {
-    animation-play-state: paused;
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .ascii-terminal-reveal,
-    .ascii-terminal-reveal::after,
-    .agent-carousel-track {
+    .ascii-terminal-reveal::after {
       animation: none;
-    }
-
-    .agent-carousel {
-      overflow-x: auto;
     }
   }
 

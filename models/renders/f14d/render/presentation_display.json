@@ -1,0 +1,37 @@
+{
+  "_comment": "Display settings for critic comparisons. Edges live HERE, not in the theme JSON. Feature edges are the panel lines: at 19 m rendered to 1920 px a scribed groove is ~0.5 px and cannot read by shading alone, so the edge overlay is what actually draws them. Tangent and seam classes are off -- tangent edges would outline every smooth surface patch and seams would draw a line down each revolved body, and neither is a panel line.",
+  "mode": "solid",
+  "edges": {
+    "enabled": true,
+    "color": "#3c434a",
+    "thickness": 0.85,
+    "classes": {
+      "feature": {
+        "color": "#3c434a",
+        "opacity": 0.72,
+        "thickness": 0.9
+      },
+      "tangent": {
+        "color": "#3c434a",
+        "opacity": 0.0,
+        "thickness": 0.5
+      },
+      "seam": {
+        "color": "#3c434a",
+        "opacity": 0.0,
+        "thickness": 0.5
+      },
+      "degenerate": {
+        "color": "#3c434a",
+        "opacity": 0.0,
+        "thickness": 0
+      }
+    },
+    "highlightColor": "#c9a227",
+    "highlightOpacity": 1,
+    "highlightThickness": 2,
+    "silhouette": false,
+    "silhouetteScale": 0,
+    "depthTest": true
+  }
+}

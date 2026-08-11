@@ -71,7 +71,10 @@ Always run a dry-run first and inspect the emitted command before `--execute`.
 - `.stl`, `.obj`, and unsliced `.3mf` are passed directly to the selected slicer.
 - `.ply`, `.glb`, and `.gltf` are converted to temporary STL with `trimesh` during `--execute`.
 - Sliced Bambu 3MF files containing `Metadata/plate_N.gcode` are already print jobs; do not re-slice them.
-- `.step`, `.stp`, `.dxf`, `.svg`, `.urdf`, and `.sdf` are out of scope for this skill. Convert them to a supported mesh first.
+- `.step`, `.stp`, `.dxf`, `.svg`, `.urdf`, and `.sdf` are out of scope for this skill. `inspect_input` rejects them with a `remediation` object (`skill`, `reason`, `next_step`) that names the owning skill and the exact conversion command; both `inspect` and `slice` surface it in their JSON error payload.
+  - `.step`, `.stp`: export an STL sidecar with `$cad` (`python scripts/step --kind part <input> --stl <output>.stl`).
+  - `.dxf`, `.svg`: no 2D-to-mesh path exists; model the solid in `$cad`, or use `$sendcutsend` when the part is a flat cut rather than a print.
+  - `.urdf`, `.sdf`: slice the per-link meshes the description references, regenerating them from CAD with `$cad` when stale.
 
 ## Source Links
 

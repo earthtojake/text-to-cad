@@ -1,38 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  cadCatalogRefreshIntervalMs,
-  cadViewerUsesHostedCatalog,
-  readActiveCadDir
-} from "./cadManifestStore.js";
-
-function createMemorySessionStorage() {
-  const store = new Map();
-  return {
-    getItem: (key) => store.get(key) ?? null,
-    setItem: (key, value) => {
-      store.set(key, String(value));
-    },
-    removeItem: (key) => {
-      store.delete(key);
-    },
-  };
-}
+import { readActiveCadDir } from "./cadManifestStore.js";
 
 function withWindow(url, callback) {
   const previousWindow = globalThis.window;
-  const sessionStorage = createMemorySessionStorage();
-  globalThis.window = {
-    location: { href: url },
-    sessionStorage,
-  };
+  globalThis.window = { location: { href: url } };
   try {
     return callback({
       setHref(nextUrl) {
         globalThis.window.location.href = nextUrl;
       },
-      sessionStorage,
     });
   } finally {
     if (previousWindow === undefined) {
@@ -43,49 +21,59 @@ function withWindow(url, callback) {
   }
 }
 
-test("readActiveCadDir keeps directory mode for file params that look absolute", () => {
-  withWindow("http://viewer.test/?dir=%2Ftmp%2Fmodels&file=%2Ftmp%2Fmodels%2Frobot.step", () => {
+test("readActiveCadDir returns the URL path as the directory", () => {
+  withWindow("http://viewer.test/tmp/models", () => {
     assert.equal(readActiveCadDir(), "/tmp/models");
   });
 });
 
-test("readActiveCadDir keeps directory mode for relative dir and file params", () => {
-  withWindow("http://viewer.test/?dir=models&file=robots%2Fnext.step", () => {
-    assert.equal(readActiveCadDir(), "models");
+test("readActiveCadDir ignores the file query param", () => {
+  withWindow("http://viewer.test/tmp/models?file=robots/next.step", () => {
+    assert.equal(readActiveCadDir(), "/tmp/models");
   });
 });
 
-test("readActiveCadDir reuses stored directories when dir is absent", () => {
-  withWindow("http://viewer.test/?dir=%2Ftmp%2Fmodels", ({ setHref }) => {
+test("readActiveCadDir decodes percent-escaped path segments", () => {
+  withWindow("http://viewer.test/tmp/my%20models", () => {
+    assert.equal(readActiveCadDir(), "/tmp/my models");
+  });
+});
+
+test("readActiveCadDir keeps a path containing dots intact", () => {
+  // A dotted directory must not be mistaken for a file extension.
+  withWindow("http://viewer.test/Users/me/v0.4/models", () => {
+    assert.equal(readActiveCadDir(), "/Users/me/v0.4/models");
+  });
+});
+
+test("readActiveCadDir strips a trailing slash", () => {
+  withWindow("http://viewer.test/tmp/models/", () => {
+    assert.equal(readActiveCadDir(), "/tmp/models");
+  });
+});
+
+test("readActiveCadDir treats the bare origin as no directory", () => {
+  // "" makes the backend fall back to its cwd.
+  withWindow("http://viewer.test/", () => {
+    assert.equal(readActiveCadDir(), "");
+  });
+});
+
+test("readActiveCadDir has no stored fallback — the URL is the only source", () => {
+  withWindow("http://viewer.test/tmp/models", ({ setHref }) => {
     assert.equal(readActiveCadDir(), "/tmp/models");
 
+    // Navigating to the bare origin must NOT resurrect the previous directory.
     setHref("http://viewer.test/?file=robot.step");
-    assert.equal(readActiveCadDir(), "/tmp/models");
+    assert.equal(readActiveCadDir(), "");
   });
 });
 
-test("readActiveCadDir reuses stored directories for all file params", () => {
-  withWindow("http://viewer.test/?dir=%2Ftmp%2Fmodels", ({ setHref }) => {
+test("readActiveCadDir follows the path when it changes", () => {
+  withWindow("http://viewer.test/tmp/models", ({ setHref }) => {
     assert.equal(readActiveCadDir(), "/tmp/models");
 
-    setHref("http://viewer.test/?file=%2Ftmp%2Fother%2Frobot.step");
-    assert.equal(readActiveCadDir(), "/tmp/models");
+    setHref("http://viewer.test/tmp/other");
+    assert.equal(readActiveCadDir(), "/tmp/other");
   });
-});
-
-test("hosted catalog mode ignores local directory query state", () => {
-  assert.equal(cadViewerUsesHostedCatalog("vercel-blob"), true);
-
-  withWindow("http://viewer.test/?dir=%2Ftmp%2Fmodels&file=robots%2Fnext.step", ({ setHref }) => {
-    assert.equal(readActiveCadDir({ assetBackend: "vercel-blob" }), "");
-
-    setHref("http://viewer.test/?file=robots%2Fnext.step");
-    assert.equal(readActiveCadDir({ assetBackend: "vercel-blob" }), "");
-  });
-});
-
-test("cadCatalogRefreshIntervalMs slows polling for hosted catalog backends", () => {
-  assert.equal(cadCatalogRefreshIntervalMs("vercel-blob"), 60_000);
-  assert.equal(cadCatalogRefreshIntervalMs("local-fs"), 2_000);
-  assert.equal(cadCatalogRefreshIntervalMs(""), 2_000);
 });

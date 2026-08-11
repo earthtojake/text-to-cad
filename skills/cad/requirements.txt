@@ -1,2 +1,2 @@
---editable ./scripts/packages/cadpy
+--editable ./scripts/packages/cadgen
 playwright

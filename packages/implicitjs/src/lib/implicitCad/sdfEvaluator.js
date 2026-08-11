@@ -1,3 +1,5 @@
+import { compileImplicitProgramRuntime } from "./sdfCompiler.js";
+
 function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -290,6 +292,37 @@ const BUILTINS = {
   fract: (value) => mapUnary(value, (component) => component - Math.floor(component)),
   sign: (value) => mapUnary(value, Math.sign),
 
+  // The rest of GLSL's common/trigonometric/geometric set. These are not new capability --
+  // every one of them is already legal in a model's shader, so a model using one rendered
+  // fine and then failed the moment it was MESHED ("Unknown GLSL function: cosh", which is
+  // exactly how `catenoid-ring-bridge` behaved). The baked render package makes the CPU
+  // evaluator the thing users see, so a builtin the shader has and this does not is a
+  // divergence, not a missing feature (design/unified-glb-render-artifacts.md §7.2).
+  radians: (value) => mapUnary(value, (component) => (component * Math.PI) / 180),
+  degrees: (value) => mapUnary(value, (component) => (component * 180) / Math.PI),
+  asin: (value) => mapUnary(value, Math.asin),
+  acos: (value) => mapUnary(value, Math.acos),
+  sinh: (value) => mapUnary(value, Math.sinh),
+  cosh: (value) => mapUnary(value, Math.cosh),
+  tanh: (value) => mapUnary(value, Math.tanh),
+  asinh: (value) => mapUnary(value, Math.asinh),
+  acosh: (value) => mapUnary(value, Math.acosh),
+  atanh: (value) => mapUnary(value, Math.atanh),
+  exp2: (value) => mapUnary(value, (component) => 2 ** component),
+  log2: (value) => mapUnary(value, Math.log2),
+  inversesqrt: (value) => mapUnary(value, (component) => 1 / Math.sqrt(component)),
+  trunc: (value) => mapUnary(value, Math.trunc),
+  // GLSL rounds halves to the nearest EVEN value only in roundEven(); round() is
+  // implementation-defined at .5 and JS's Math.round (half up) is a legal choice.
+  round: (value) => mapUnary(value, Math.round),
+  roundEven: (value) => mapUnary(value, (component) => {
+    const rounded = Math.round(component);
+    return Math.abs(component % 1) === 0.5 && rounded % 2 !== 0 ? rounded - Math.sign(component) : rounded;
+  }),
+  step: (edge, value) => mapBinary(edge, value, (e, x) => (x < e ? 0 : 1)),
+  distance: (a, b) => length(sub(a, b)),
+  reflect: (incident, normal) => sub(incident, mul(normal, 2 * dot(normal, incident))),
+
   implicit_clamp01: (value) => clamp(value, 0, 1),
   implicit_linear_map,
   implicit_ramp,
@@ -565,7 +598,12 @@ BUILTINS.implicit_triangular_honeycomb = (p, size) => {
 };
 
 const TYPE_KEYWORDS = new Set(["float", "int", "bool", "vec2", "vec3", "vec4"]);
-const QUALIFIERS = new Set(["const", "highp", "mediump", "lowp", "in", "out", "uniform", "varying"]);
+// `inout` is included so a program using it PARSES rather than dying with a confusing
+// "Expected ), got <name>". It is then rejected explicitly at runtime creation: honouring it
+// needs write-back to the caller's variable, which this evaluator does not implement, and
+// silently passing by value would return wrong geometry instead of an error. Such models
+// still RENDER -- the GPU shader handles inout natively -- only CPU evaluation is refused.
+const QUALIFIERS = new Set(["const", "highp", "mediump", "lowp", "in", "out", "inout", "uniform", "varying"]);
 const OPERATORS = ["<=", ">=", "==", "!=", "&&", "||", "+=", "-=", "*=", "/=", "++", "--"];
 
 function stripComments(source) {
@@ -639,9 +677,11 @@ class Parser {
   }
 
   skipQualifiers() {
+    const seen = [];
     while (QUALIFIERS.has(this.peek()?.value)) {
-      this.consume();
+      seen.push(this.consume().value);
     }
+    return seen;
   }
 
   parseProgram() {
@@ -660,10 +700,10 @@ class Parser {
         const params = [];
         if (!this.match(")")) {
           do {
-            this.skipQualifiers();
+            const qualifiers = this.skipQualifiers();
             const paramType = this.consume().value;
             const paramName = this.consume().value;
-            params.push({ type: paramType, name: paramName });
+            params.push({ type: paramType, name: paramName, qualifiers });
           } while (this.match(","));
           this.consume(")");
         }
@@ -706,6 +746,18 @@ class Parser {
       const expression = this.parseExpression();
       this.consume(";");
       return { type: "return", expression };
+    }
+    // Loop control. GLSL has had both since ES 1.0 and iterative models lean on them (a
+    // fractal distance estimator bails out the moment its orbit escapes), so without them a
+    // model that renders fine cannot be MESHED -- `mandelbulb-distance-estimate` failed with
+    // "Unknown GLSL identifier: break", because `break` parsed as an expression.
+    if (this.match("break")) {
+      this.consume(";");
+      return { type: "break" };
+    }
+    if (this.match("continue")) {
+      this.consume(";");
+      return { type: "continue" };
     }
     if (this.match("if")) {
       this.consume("(");
@@ -918,12 +970,36 @@ function defaultValueForType(type) {
   return 0;
 }
 
-class ReturnValue extends Error {
+// Control flow inside an evaluated GLSL program is signalled by throwing. These signals are
+// deliberately NOT Error subclasses.
+//
+// `new Error()` makes V8 capture a stack trace at construction, and that cost is paid on
+// EVERY GLSL function return -- gosper-curve-tube's sdf() returns ~120 times per single
+// evaluation, once per gosperPoint() call inside its 60-iteration loop. Stack capture
+// dominated interpreter self time; it bought nothing, because these objects are never shown
+// to anyone. They travel a few frames up the stack and are matched by `instanceof`.
+//
+// The only two catch sites (the loop body and the function-call boundary) discriminate with
+// `instanceof` and rethrow anything else, so nothing observes their Error-ness. Do not add a
+// consumer of `.message`/`.stack` without reinstating a real Error and re-measuring.
+class ReturnValue {
   constructor(value) {
-    super("return");
     this.value = value;
   }
 }
+
+/** `break` / `continue`, thrown like `return` because the executor is recursive: a jump out
+ * of a nested block cannot be expressed as a return value from one statement.
+ *
+ * Both are payload-free, so one frozen instance is thrown instead of a fresh one -- removing
+ * the allocation as well as the stack capture. That is safe precisely BECAUSE they carry no
+ * state: two nested loops unwinding at once cannot confuse one signal for another. ReturnValue
+ * does carry state, so it is still allocated per throw. */
+class BreakSignal {}
+class ContinueSignal {}
+
+const BREAK_SIGNAL = Object.freeze(new BreakSignal());
+const CONTINUE_SIGNAL = Object.freeze(new ContinueSignal());
 
 class Scope {
   constructor(parent = null) {
@@ -1121,13 +1197,28 @@ function executeStatement(statement, scope, runtime) {
         executeStatement(statement.alternate, scope, runtime);
       }
       return;
+    case "break":
+      throw BREAK_SIGNAL;
+    case "continue":
+      throw CONTINUE_SIGNAL;
     case "for": {
       executeStatement(statement.init, scope, runtime);
       for (let guard = 0; guard < 10000; guard += 1) {
         if (statement.condition && !truthy(evalExpression(statement.condition, scope, runtime))) {
           return;
         }
-        executeStatement(statement.body, scope, runtime);
+        try {
+          executeStatement(statement.body, scope, runtime);
+        } catch (error) {
+          if (error instanceof BreakSignal) {
+            return;
+          }
+          // `continue` still runs the update expression, as C-family loops do; anything else
+          // (including a `return` from inside the loop) keeps unwinding.
+          if (!(error instanceof ContinueSignal)) {
+            throw error;
+          }
+        }
         if (statement.update) {
           evalExpression(statement.update, scope, runtime);
         }
@@ -1168,6 +1259,17 @@ vec3 implicit_color(vec3 p, vec3 normal) {
 
 function createImplicitCadProgramRuntime(model, source, functionName) {
   const program = new Parser(tokenize(source)).parseProgram();
+  // `inout` would need write-back into the caller's variable. Passing by value instead would
+  // silently return WRONG geometry, so refuse -- the GPU shader still renders these models.
+  for (const [name, fn] of program.functions) {
+    const bad = fn.params?.find((param) => param.qualifiers?.includes("inout"));
+    if (bad) {
+      throw new Error(
+        `Unsupported GLSL: '${name}' uses an inout parameter ('${bad.name}'). `
+        + "CPU evaluation (baking, export, field checks) cannot honour inout; GPU rendering is unaffected."
+      );
+    }
+  }
   if (!program.functions.has(functionName)) {
     throw new Error(`Implicit CAD GLSL source did not define ${functionName}`);
   }
@@ -1208,23 +1310,75 @@ function createImplicitCadProgramRuntime(model, source, functionName) {
   return runtime;
 }
 
+/**
+ * Compile first, interpret as the fallback.
+ *
+ * The compiler (`sdfCompiler.js`) emits a JS function from the same AST this module
+ * interprets, bit-identical by construction (it calls this module's own helper objects, in
+ * the interpreter's order) and verified differentially by the corpus equality harness. It
+ * returns null on ANY problem, so the worst outcome of this path is interpreter speed --
+ * never wrong geometry.
+ *
+ * `IMPLICIT_SDF_FORCE_INTERPRET=1` skips compilation: the A/B benchmark baseline, the
+ * differential harness's second leg, and the emergency exit. Guarded for browser bundles,
+ * where `process` may not exist (the render path builds this evaluator for camera framing).
+ */
+function createProgramRuntime(model, source, functionName) {
+  const forceInterpret = typeof process !== "undefined"
+    && process?.env?.IMPLICIT_SDF_FORCE_INTERPRET === "1";
+  if (!forceInterpret) {
+    const compiled = compileImplicitProgramRuntime(model, source, functionName, implicitSdfEvaluatorInternals);
+    if (compiled) {
+      return compiled;
+    }
+  }
+  return createImplicitCadProgramRuntime(model, source, functionName);
+}
+
 export function createImplicitCadSdfEvaluator(model) {
   const source = normalizedDistanceSource(model?.glslSource || model?.distanceSource);
-  const runtime = createImplicitCadProgramRuntime(model, source, "implicit_distance");
-  return (x, y, z) => finiteNumber(runtime.call("implicit_distance", [vec3(x, y, z)]), 1e6);
+  const runtime = createProgramRuntime(model, source, "implicit_distance");
+  const evaluator = (x, y, z) => finiteNumber(runtime.call("implicit_distance", [vec3(x, y, z)]), 1e6);
+  // Read by the harness's coverage gate: silent fallback must be a loud test failure, not
+  // quietly vanished performance.
+  evaluator.compiled = runtime.compiled === true;
+  return evaluator;
 }
 
 export function createImplicitCadColorEvaluator(model) {
   const source = normalizedColorSource(model?.colorSource || model?.glslSource || model?.distanceSource);
-  const runtime = createImplicitCadProgramRuntime(model, source, "implicit_color");
-  return (point, normal = [0, 0, 1]) => {
+  const runtime = createProgramRuntime(model, source, "implicit_color");
+  const evaluator = (point, normal = [0, 0, 1]) => {
     const value = runtime.call("implicit_color", [vec3(point), vec3(normal)]);
     return vec3(value).map((component) => Math.min(Math.max(finiteNumber(component, 0), 0), 1));
   };
+  evaluator.compiled = runtime.compiled === true;
+  return evaluator;
 }
 
 export const implicitSdfEvaluatorInternals = {
   BUILTINS,
   tokenize,
   Parser,
+  // The compiler's runtime environment (sdfCompiler.js). Generated code calls these EXACT
+  // function objects -- not copies -- which is what makes compiled output bit-identical to
+  // the interpreter by construction: same operations, same order, same IEEE 754 results.
+  // Adding a helper here is fine; re-implementing one inside the compiler is not.
+  helpers: {
+    add,
+    sub,
+    mul,
+    div,
+    neg,
+    truthy,
+    castValue,
+    cloneValue,
+    defaultValueForType,
+    finiteNumber,
+    getSwizzle,
+    setSwizzle,
+  },
+  normalizedDistanceSource,
+  normalizedColorSource,
+  createImplicitCadProgramRuntime,
 };

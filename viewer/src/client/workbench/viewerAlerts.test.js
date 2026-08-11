@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildCadCommand,
-  buildViewerDxfAlert,
-  buildViewerMeshAlert,
-  CAD_BUILD_COMMANDS
+  buildViewerMeshAlert
 } from "./viewerAlerts.js";
+import { RENDER_FORMAT } from "cadjs/lib/fileFormats.js";
+import { rebuildCommandForEntry } from "cadjs/lib/renderCapabilities.js";
 
 test("buildCadCommand returns portable rebuild commands for generated CAD assets", () => {
   assert.equal(
     buildCadCommand("fun/part.step", { file: "fun/part.step", kind: "step" }),
-    `${CAD_BUILD_COMMANDS.step} fun/part.step`
+    rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/part.step")
   );
   assert.equal(
     buildCadCommand("fun/generated.step", {
@@ -29,10 +29,6 @@ test("buildCadCommand returns portable rebuild commands for generated CAD assets
   );
   assert.equal(
     buildCadCommand("meshes/part.glb", { file: "meshes/part.glb", kind: "glb" }),
-    ""
-  );
-  assert.equal(
-    buildCadCommand("toolpaths/part.gcode", { file: "toolpaths/part.gcode", kind: "gcode" }),
     ""
   );
 });
@@ -68,7 +64,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       summary: "STEP artifact unavailable",
       title: "STEP artifact unavailable",
       message: "Generated GLB metadata is missing its source path.",
-      command: `${CAD_BUILD_COMMANDS.step} fun/part.step`
+      command: rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/part.step")
     }
   );
 
@@ -102,7 +98,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       summary: "STEP artifact stale",
       title: "STEP artifact stale",
       message: "Generated GLB doesn't match the hash of the STEP file.",
-      command: `${CAD_BUILD_COMMANDS.step} fun/stale.step`
+      command: rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/stale.step")
     }
   );
 
@@ -110,7 +106,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
     buildViewerMeshAlert({
       file: "fun/renderable-stale.step",
       kind: "part",
-      url: "/models/fun/.renderable-stale.step.glb?v=hash",
+      url: "/models/step/parts/.renderable-stale.step.glb?v=hash",
       hash: "glb-hash",
       artifact: {
         ok: false,
@@ -126,7 +122,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       summary: "STEP artifact stale",
       title: "STEP artifact stale",
       message: "Generated GLB doesn't match the hash of the STEP file.",
-      command: `${CAD_BUILD_COMMANDS.step} fun/renderable-stale.step`
+      command: rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/renderable-stale.step")
     }
   );
 
@@ -134,7 +130,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
     buildViewerMeshAlert({
       file: "fun/renderable-stale.step",
       kind: "part",
-      url: "/models/fun/.renderable-stale.step.glb?v=hash",
+      url: "/models/step/parts/.renderable-stale.step.glb?v=hash",
       hash: "glb-hash",
       artifact: {
         ok: false,
@@ -149,7 +145,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       title: "Failed to load render mesh",
       message: "GLB parser failed",
       resolution: "Try reloading the page. If the problem persists, rebuild the render assets for this entry.",
-      command: `${CAD_BUILD_COMMANDS.step} fun/renderable-stale.step`
+      command: rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/renderable-stale.step")
     }
   );
 
@@ -192,7 +188,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       summary: "STEP artifact missing",
       title: "STEP artifact missing",
       message: "Generated GLB is missing.",
-      command: `${CAD_BUILD_COMMANDS.step} fun/missing.step`
+      command: rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/missing.step")
     }
   );
 
@@ -212,47 +208,58 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       summary: "STEP artifact missing",
       title: "STEP artifact missing",
       message: "Generated GLB is missing.",
-      command: `${CAD_BUILD_COMMANDS.step} fun/missing.step`
+      command: rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/missing.step")
     }
   );
 });
 
-test("buildViewerDxfAlert distinguishes DXF load, preview, and missing data states", () => {
-  assert.equal(buildViewerDxfAlert("", false, "", ""), null);
-
+test("a DXF entry reports through the ordinary mesh alert", () => {
+  // DXF has no alert builder of its own any more. Its geometry is a baked package GLB, so a
+  // missing or failed one is exactly a missing mesh, and buildViewerMeshAlert already names
+  // the DXF rebuild command for it.
+  const entry = { file: "flat/panel.dxf", kind: "dxf" };
+  assert.equal(buildViewerMeshAlert(entry, true, ""), null);
   assert.deepEqual(
-    buildViewerDxfAlert("flat/panel.dxf", false, "network failed", ""),
+    buildViewerMeshAlert(entry, false, "network failed"),
     {
       severity: "error",
-      summary: "DXF load failed",
-      title: "Failed to load DXF flat pattern",
+      summary: "Mesh load failed",
+      title: "Failed to load render mesh",
       message: "network failed",
-      resolution: "Try reloading the page. If the problem persists, rebuild the CAD assets for this entry.",
+      resolution: "Try reloading the page. If the problem persists, rebuild the render assets for this entry.",
       command: ""
     }
   );
+});
 
-  assert.deepEqual(
-    buildViewerDxfAlert("flat/panel.dxf", true, "", "bad bend"),
-    {
-      severity: "warning",
-      summary: "DXF 3D preview unavailable",
-      title: "Failed to build the DXF 3D preview",
-      message: "bad bend",
-      resolution: "The flat pattern can still be shown, but the 3D extrusion preview could not be built from the current DXF geometry.",
-      command: ""
-    }
-  );
 
-  assert.equal(
-    buildViewerDxfAlert(
-      "flat/panel.dxf",
-      true,
-      "",
-      "DXF 3D bend preview currently requires vertical bend lines"
-    ),
-    null
-  );
+test("a failed artifact build reports its own reason, not \"no mesh data\"", () => {
+  // The generic card told the user only that nothing loaded. The reason -- which entity the
+  // DXF builder rejected -- was already on the artifact record and simply never shown, so a
+  // drawing that can never render looked identical to one needing a rebuild.
+  const entry = { file: "drawings/plate.dxf", kind: "dxf" };
+  const artifact = { status: "error", error: "dxf-artifact.mjs failed (exit 1): Unsupported DXF entity HATCH" };
 
-  assert.equal(buildViewerDxfAlert("flat/panel.dxf", true, "", ""), null);
+  const alert = buildViewerMeshAlert(entry, false, "", artifact);
+
+  assert.equal(alert.severity, "error");
+  assert.equal(alert.title, "Render artifact build failed");
+  assert.match(alert.message, /Unsupported DXF entity HATCH/);
+});
+
+test("an artifact error is not raised once a mesh is in hand", () => {
+  // A stale error alongside a rendered mesh would be noise: the entry is on screen.
+  const entry = { file: "drawings/plate.dxf", kind: "dxf" };
+  const artifact = { status: "error", error: "boom" };
+
+  assert.equal(buildViewerMeshAlert(entry, true, "", artifact), null);
+});
+
+test("an artifact error falls back to a message when the record carries none", () => {
+  const entry = { file: "drawings/plate.dxf", kind: "dxf" };
+
+  const alert = buildViewerMeshAlert(entry, false, "", { status: "error", error: "" });
+
+  assert.equal(alert.title, "Render artifact build failed");
+  assert.ok(alert.message.length > 0);
 });

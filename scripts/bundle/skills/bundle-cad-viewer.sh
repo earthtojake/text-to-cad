@@ -3,23 +3,26 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+# shellcheck source=../lib/vendor.sh
+source "$SCRIPT_DIR/../lib/vendor.sh"
 
 MODE="write"
 BUILD=1
 CLEAN=0
+PRINT_OUTPUTS=0
 
 CADJS_PACKAGE_DIR="$REPO_ROOT/packages/cadjs"
-CADPY_PACKAGE_DIR="$REPO_ROOT/packages/cadpy"
+CADPY_PACKAGE_DIR="$REPO_ROOT/packages/cadgen"
 IMPLICITJS_PACKAGE_DIR="$REPO_ROOT/packages/implicitjs"
 VIEWER_DIR="$REPO_ROOT/viewer"
 VIEWER_CADJS_DIR="$VIEWER_DIR/packages/cadjs"
-VIEWER_CADPY_DIR="$VIEWER_DIR/packages/cadpy"
+VIEWER_CADPY_DIR="$VIEWER_DIR/packages/cadgen"
 VIEWER_IMPLICITJS_DIR="$VIEWER_DIR/packages/implicitjs"
 RUNTIME_DIR="$REPO_ROOT/skills/cad-viewer/scripts/viewer"
 CHECK_DIR="${CAD_VIEWER_RUNTIME_CHECK_DIR:-${RENDER_VIEWER_RUNTIME_CHECK_DIR:-$REPO_ROOT/tmp/cad-viewer-runtime-check}}"
 VIEWER_PACKAGE_MANAGER="${CAD_VIEWER_PACKAGE_MANAGER:-}"
 ESBUILD_BIN="${CAD_VIEWER_ESBUILD_BIN:-}"
-RELEASE_VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/plugins/cad/VERSION")"
+RELEASE_VERSION="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
 
 usage() {
   cat <<'EOF'
@@ -36,6 +39,8 @@ Options:
   --clean     Remove generated package copies and temporary check directories first.
   --no-build  Reuse the current viewer/dist instead of rebuilding the viewer.
               The existing dist must already include client sourcemaps.
+  --print-outputs
+              Print the repo-relative generated output paths, then exit.
   -h, --help  Show this help.
 EOF
 }
@@ -51,6 +56,9 @@ while [ "$#" -gt 0 ]; do
     --no-build)
       BUILD=0
       ;;
+    --print-outputs)
+      PRINT_OUTPUTS=1
+      ;;
     -h|--help)
       usage
       exit 0
@@ -63,6 +71,15 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+if [ "$PRINT_OUTPUTS" -eq 1 ]; then
+  printf '%s\n' \
+    "${VIEWER_CADJS_DIR#"$REPO_ROOT"/}" \
+    "${VIEWER_CADPY_DIR#"$REPO_ROOT"/}" \
+    "${VIEWER_IMPLICITJS_DIR#"$REPO_ROOT"/}" \
+    "${RUNTIME_DIR#"$REPO_ROOT"/}"
+  exit 0
+fi
 
 require_path() {
   local path_to_check="$1"
@@ -188,26 +205,9 @@ sync_implicitjs_package() {
     "$IMPLICITJS_PACKAGE_DIR/" "$target_dir/"
 }
 
-sync_cadpy_package() {
-  local source_dir="$1"
-  local target_dir="$2"
-  rm -rf "$target_dir"
-  mkdir -p "$target_dir"
-  rsync -a --delete \
-    --prune-empty-dirs \
-    --delete-excluded \
-    --exclude __pycache__ \
-    --exclude .pytest_cache \
-    --exclude '*.pyc' \
-    --exclude '*.egg-info' \
-    --exclude '*.md' \
-    --exclude build \
-    --exclude dist \
-    --exclude tests \
-    --exclude __tests__ \
-    --exclude 'test_*.py' \
-    --exclude '*_test.py' \
-    "$source_dir/" "$target_dir/"
+sync_cadgen_package() {
+  # Canonical Python vendoring lives in scripts/bundle/lib/vendor.sh.
+  vendor_python_package "$1" "$2"
 }
 
 check_cadjs_package() {
@@ -276,37 +276,10 @@ check_implicitjs_package() {
   echo "$label is up to date."
 }
 
-check_cadpy_package() {
-  local label="${VIEWER_CADPY_DIR#$REPO_ROOT/}"
-  local diff_path="${TMPDIR:-/tmp}/viewer-cadpy-package-diff.txt"
-  local expected_dir="${TMPDIR:-/tmp}/viewer-cadpy-package-check"
-  if [ ! -d "$VIEWER_CADPY_DIR" ]; then
-    echo "Missing generated viewer cadpy package: $label" >&2
-    echo "Run scripts/bundle/bundle-skill.sh cad-viewer and commit the generated copy." >&2
-    exit 1
-  fi
-  rm -rf "$expected_dir"
-  sync_cadpy_package "$CADPY_PACKAGE_DIR" "$expected_dir"
-  if ! diff -qr \
-    -x __pycache__ \
-    -x .pytest_cache \
-    -x '*.pyc' \
-    -x '*.egg-info' \
-    -x '*.md' \
-    -x build \
-    -x dist \
-    -x tests \
-    -x __tests__ \
-    -x 'test_*.py' \
-    -x '*_test.py' \
-    "$expected_dir" "$VIEWER_CADPY_DIR" >"$diff_path"; then
-    cat "$diff_path" >&2
-    echo "" >&2
-    echo "Viewer cadpy package is stale." >&2
-    echo "Run scripts/bundle/bundle-skill.sh cad-viewer and commit viewer/packages/cadpy." >&2
-    exit 1
-  fi
-  echo "$label is up to date."
+check_cadgen_package() {
+  check_python_runtime "$CADPY_PACKAGE_DIR" "$VIEWER_CADPY_DIR" \
+    "${TMPDIR:-/tmp}/viewer-cadgen-package-check" "${VIEWER_CADPY_DIR#$REPO_ROOT/}" \
+    "Run scripts/bundle/bundle-skill.sh cad-viewer and commit viewer/packages/cadgen."
 }
 
 build_viewer_packages() {
@@ -316,7 +289,7 @@ build_viewer_packages() {
     rm -rf "$VIEWER_IMPLICITJS_DIR"
   fi
   sync_cadjs_package
-  sync_cadpy_package "$CADPY_PACKAGE_DIR" "$VIEWER_CADPY_DIR"
+  sync_cadgen_package "$CADPY_PACKAGE_DIR" "$VIEWER_CADPY_DIR"
   sync_implicitjs_package
   echo "Bundled ${VIEWER_CADJS_DIR#$REPO_ROOT/}"
   echo "Bundled ${VIEWER_CADPY_DIR#$REPO_ROOT/}"
@@ -333,7 +306,7 @@ ensure_viewer_cadjs_node_module_subpaths() {
   fi
   local subpath
   for subpath in common lib; do
-    if [ -d "$VIEWER_CADJS_DIR/src/$subpath" ] && [ ! -e "$cadjs_node_module/$subpath/stepSidecars.mjs" ] && [ ! -e "$cadjs_node_module/$subpath/pathUtils.mjs" ]; then
+    if [ -d "$VIEWER_CADJS_DIR/src/$subpath" ] && [ ! -e "$cadjs_node_module/$subpath/cadScene.js" ] && [ ! -e "$cadjs_node_module/$subpath/pathUtils.mjs" ]; then
       rm -rf "$cadjs_node_module/$subpath"
       ln -s "$VIEWER_CADJS_DIR/src/$subpath" "$cadjs_node_module/$subpath"
     fi
@@ -342,7 +315,7 @@ ensure_viewer_cadjs_node_module_subpaths() {
 
 check_viewer_packages() {
   check_cadjs_package
-  check_cadpy_package
+  check_cadgen_package
   check_implicitjs_package
 }
 
@@ -355,8 +328,8 @@ write_runtime_package_json() {
   "type": "module",
   "version": "$RELEASE_VERSION",
   "scripts": {
-    "serve": "node backend/server.mjs",
-    "start": "node backend/server.mjs",
+    "start": "node scripts/start-viewer.mjs",
+    "serve": "python3 -m server_py.server",
     "moveit2:setup": "moveit2_server/setup.sh",
     "moveit2:check": "moveit2_server/check-moveit2-server.sh",
     "moveit2:serve": "moveit2_server/run-moveit2-server.sh"
@@ -386,7 +359,7 @@ EOF
 write_runtime_requirements() {
   local target_dir="$1"
   cat > "$target_dir/requirements.txt" <<'EOF'
---editable ./packages/cadpy
+--editable ./packages/cadgen
 EOF
 }
 
@@ -424,7 +397,7 @@ sync_dir() {
 build_runtime() {
   local target_dir="$1"
   rm -rf "$target_dir"
-  mkdir -p "$target_dir/backend"
+  mkdir -p "$target_dir"
 
   sync_dir "$VIEWER_DIR/dist" "$target_dir/dist"
 
@@ -434,18 +407,13 @@ build_runtime() {
 
   sync_dir "$VIEWER_DIR/packages" "$target_dir/packages"
 
-  (
-    cd "$REPO_ROOT"
-    "$(resolve_esbuild_bin)" "$VIEWER_DIR/src/server/server.mjs" \
-      --bundle \
-      --format=esm \
-      --platform=node \
-      --target=node22 \
-      --main-fields=module,main \
-      --legal-comments=none \
-      --outfile="$target_dir/backend/server.mjs"
-
-  )
+  # Python backend (server_py): the runtime serves the built dist + /__cad. STEP
+  # build/export run through the persistent warm-OCCT worker (server_py/worker.py +
+  # worker_client.py), falling back to a cold `python -m cadgen.<module>` subprocess;
+  # both use the editable-installed cadgen (requirements.txt). sync_dir excludes
+  # tests/__pycache__/golden so only runtime modules ship (worker.py included,
+  # tests/test_worker.py not).
+  sync_dir "$VIEWER_DIR/server_py" "$target_dir/server_py"
 
   write_runtime_package_json "$target_dir"
   write_runtime_gitignore "$target_dir"
@@ -475,20 +443,20 @@ check_runtime() {
 require_command rsync
 require_path "$CADJS_PACKAGE_DIR/package.json" "cadjs package"
 require_path "$CADJS_PACKAGE_DIR/src" "cadjs source"
-require_path "$CADPY_PACKAGE_DIR/pyproject.toml" "cadpy package"
-require_path "$CADPY_PACKAGE_DIR/src/cadpy" "cadpy source"
+require_path "$CADPY_PACKAGE_DIR/pyproject.toml" "cadgen package"
+require_path "$CADPY_PACKAGE_DIR/src/cadgen" "cadgen source"
 require_path "$IMPLICITJS_PACKAGE_DIR/package.json" "implicitjs package"
 require_path "$IMPLICITJS_PACKAGE_DIR/src" "implicitjs source"
 require_path "$VIEWER_DIR/package.json" "viewer package"
-require_path "$(resolve_esbuild_bin)" "viewer esbuild binary; install viewer dependencies"
+require_path "$VIEWER_DIR/server_py/server.py" "viewer Python backend"
 
 if [ "$MODE" = "check" ]; then
   check_viewer_packages
 else
   build_viewer_packages
 fi
-require_path "$VIEWER_CADPY_DIR/pyproject.toml" "viewer cadpy package"
-require_path "$VIEWER_CADPY_DIR/src/cadpy" "viewer cadpy source"
+require_path "$VIEWER_CADPY_DIR/pyproject.toml" "viewer cadgen package"
+require_path "$VIEWER_CADPY_DIR/src/cadgen" "viewer cadgen source"
 require_path "$VIEWER_IMPLICITJS_DIR/package.json" "viewer implicitjs package"
 require_path "$VIEWER_IMPLICITJS_DIR/src" "viewer implicitjs source"
 

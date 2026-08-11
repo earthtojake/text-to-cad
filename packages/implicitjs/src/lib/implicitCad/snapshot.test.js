@@ -9,7 +9,7 @@ test("snapshot output options merge job and output settings", () => {
     width: 800,
     height: 600,
     camera: "front",
-    appearance: "workbench",
+    theme: "workbench",
     graphics: { detail: 0.5, shadows: false },
     render: { transparent: false }
   }, {
@@ -25,7 +25,7 @@ test("snapshot output options merge job and output settings", () => {
     width: 1200,
     height: 600,
     camera: "top",
-    appearance: "workbench",
+    theme: "workbench",
     graphics: { detail: 0.5, shadows: true },
     render: { transparent: true }
   });

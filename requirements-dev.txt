@@ -10,11 +10,7 @@
 # - viewer/requirements.txt
 # - skills/cad/requirements.txt
 # - skills/cad-viewer/requirements.txt
-# - skills/urdf/requirements.txt
-# - skills/srdf/requirements.txt
-# - skills/sdf/requirements.txt
---editable ./packages/cadpy
---editable ./packages/cadpy_metadata
+--editable ./packages/cadgen
 --editable ./viewer/moveit2_server
 
 # Extra third-party requirements mirrored from skill-local runtime files.
@@ -27,3 +23,6 @@ networkx
 lxml
 pytest
 trimesh
+
+# cadgen runtime dependencies are pulled by the editable install above
+# (build123d, cadquery-ocp, ezdxf, shapely).

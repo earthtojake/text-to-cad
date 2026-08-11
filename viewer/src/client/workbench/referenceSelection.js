@@ -36,9 +36,13 @@ export function buildNormalizedReferenceState(entry, referencePayload = null, {
   partId = "",
   transform = null,
   remapOccurrenceId = "",
-  remapOccurrencePrefix = null
+  remapOccurrencePrefix = null,
+  selectorRuntime: prebuiltSelectorRuntime = null,
+  loadedTopologyKey = ""
 } = {}) {
-  const selectorRuntime = buildSelectorRuntime(referencePayload, {
+  // A component-GLB package has no whole-assembly selector bundle; the caller composes the
+  // per-component runtimes and passes the result here instead of a single bundle to parse.
+  const selectorRuntime = prebuiltSelectorRuntime || buildSelectorRuntime(referencePayload, {
     copyCadPath: copyCadPath || cadPathForEntry(entry),
     partId,
     transform,
@@ -59,8 +63,41 @@ export function buildNormalizedReferenceState(entry, referencePayload = null, {
     parts: [],
     selectorRuntime,
     references,
+    loadedTopologyKey,
     disabledReason: ""
   };
+}
+
+// Lazy assembly topology: from a component-GLB package descriptor, pick only the occurrences whose
+// ids are in `requestedOccurrenceIds` (the tree nodes the user expanded) and the de-duplicated set
+// of component cids they need. A single-component part has no assembly tree, so it loads every
+// occurrence. `loadedTopologyKey` is a stable key over the requested set so callers can detect when
+// the expanded set grows and re-load only the newly-needed components.
+export function selectRequestedAssemblyComponents(
+  packageDescriptor,
+  requestedOccurrenceIds,
+  { singleComponentPart = false } = {}
+) {
+  const occurrences = Array.isArray(packageDescriptor?.occurrences) ? packageDescriptor.occurrences : [];
+  const requestedSet = new Set(
+    (Array.isArray(requestedOccurrenceIds) ? requestedOccurrenceIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean)
+  );
+  const occurrencesToLoad = singleComponentPart
+    ? occurrences
+    : occurrences.filter((occurrence) => requestedSet.has(String(occurrence?.id || "").trim()));
+  const neededCids = [];
+  const seenCids = new Set();
+  for (const occurrence of occurrencesToLoad) {
+    const cid = String(occurrence?.component || "").trim();
+    if (cid && !seenCids.has(cid)) {
+      seenCids.add(cid);
+      neededCids.push(cid);
+    }
+  }
+  const loadedTopologyKey = singleComponentPart ? "*" : [...requestedSet].sort().join("|");
+  return { occurrencesToLoad, neededCids, loadedTopologyKey };
 }
 
 export function parseAssemblyPartReferenceSelectionId(referenceId) {

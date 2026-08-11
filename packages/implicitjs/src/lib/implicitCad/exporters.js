@@ -1,3 +1,9 @@
+import { writeGlb } from "../glb/writeGlb.js";
+
+// One spelling. Emitted as `extras.cadSourceKind` on every implicit GLB node so a
+// downstream reader can tell an implicit mesh from a STEP occurrence.
+export const IMPLICIT_CAD_SOURCE_KIND = "implicit-cad";
+
 const NativeBuffer = globalThis.Buffer;
 const textEncoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
 
@@ -104,7 +110,7 @@ function hexTo3mfDisplayColor(hex, fallback = "#d4d4d8") {
   return `#${toChannel(rgb[0])}${toChannel(rgb[1])}${toChannel(rgb[2])}FF`;
 }
 
-function triangleNormal(positions, offset) {
+export function triangleNormal(positions, offset) {
   const ax = positions[offset];
   const ay = positions[offset + 1];
   const az = positions[offset + 2];
@@ -190,72 +196,6 @@ export function meshToBinaryStl(mesh, { name = "implicit-cad" } = {}) {
   return buffer;
 }
 
-export function meshToGlb(mesh, { name = "Implicit CAD", color = "#d4d4d8" } = {}) {
-  const positions = mesh.positions || new Float32Array();
-  const normals = mesh.normals && mesh.normals.length === positions.length
-    ? mesh.normals
-    : new Float32Array(positions.length);
-  const vertexCount = Math.floor(positions.length / 3);
-  const positionBuffer = typedArrayBytes(positions);
-  const normalBuffer = typedArrayBytes(normals);
-  const positionBounds = boundsForPositions(positions);
-  const baseColor = hexToRgb01(color);
-  const gltf = {
-    asset: { version: "2.0", generator: "implicitjs exporter" },
-    scene: 0,
-    scenes: [{ nodes: [0] }],
-    nodes: [{
-      mesh: 0,
-      name: sanitizeName(name, "Implicit CAD"),
-      extras: {
-        cadOccurrenceId: "implicit-cad:0",
-        cadSourceKind: "implicit-cad",
-        cadUnits: "mm",
-      },
-    }],
-    meshes: [{
-      primitives: [{
-        attributes: { POSITION: 0, NORMAL: 1 },
-        material: 0,
-        mode: 4,
-      }],
-    }],
-    materials: [{
-      name: "Implicit material",
-      doubleSided: true,
-      extras: { cadSourceColor: true },
-      pbrMetallicRoughness: {
-        baseColorFactor: [...baseColor.map(clamp01), 1],
-        roughnessFactor: 0.72,
-        metallicFactor: 0.02,
-      },
-    }],
-    bufferViews: [
-      { buffer: 0, byteOffset: 0, byteLength: positionBuffer.length, target: 34962 },
-      { buffer: 0, byteOffset: positionBuffer.length, byteLength: normalBuffer.length, target: 34962 },
-    ],
-    accessors: [
-      {
-        bufferView: 0,
-        byteOffset: 0,
-        componentType: 5126,
-        count: vertexCount,
-        type: "VEC3",
-        min: positionBounds.min,
-        max: positionBounds.max,
-      },
-      {
-        bufferView: 1,
-        byteOffset: 0,
-        componentType: 5126,
-        count: vertexCount,
-        type: "VEC3",
-      },
-    ],
-  };
-  return buildGlb(gltf, [positionBuffer, normalBuffer]);
-}
-
 export function meshToAnimatedGlb(mesh, {
   name = "Implicit CAD",
   color = "#d4d4d8",
@@ -319,7 +259,7 @@ export function meshToAnimatedGlb(mesh, {
       weights: Array.from({ length: targetCount }, () => 0),
       extras: {
         cadOccurrenceId: "implicit-cad:0",
-        cadSourceKind: "implicit-cad",
+        cadSourceKind: IMPLICIT_CAD_SOURCE_KIND,
         cadUnits: "mm",
         implicitjsAnimated: true,
       },
@@ -569,7 +509,16 @@ export function meshToFormat(mesh, format, options = {}) {
   }
   if (normalized === "glb" || normalized === "gltf") {
     return {
-      body: meshToGlb(mesh, options),
+      // ONE GLB writer. The export preset is welded + indexed but unquantized and
+      // uncompressed, and declares no required extensions, so a stock GLTFLoader with no
+      // meshopt decoder can open it -- an export nothing can open is worse than a large one.
+      // sourceKind/occurrenceId keep the CAD-native metadata the previous writer emitted:
+      // downstream readers use cadUnits to know these are millimetres, not arbitrary units.
+      body: writeGlb(mesh, {
+        ...options,
+        preset: "export",
+        sourceKind: IMPLICIT_CAD_SOURCE_KIND,
+      }),
       contentType: "model/gltf-binary",
       extension: ".glb",
     };

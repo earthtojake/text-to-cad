@@ -41,27 +41,8 @@ done
 # shellcheck source=scripts/dev/symlink-utils.sh
 source "$UTILS_SCRIPT"
 
-check_no_generated_runtimes() {
-  local tracked_runtime
-  tracked_runtime="$(
-    git ls-files \
-      "skills/implicit-cad/scripts/export/runtime" \
-      "skills/implicit-cad/scripts/export/runtime/**" \
-      "skills/implicit-cad/scripts/snapshot/runtime" \
-      "skills/implicit-cad/scripts/snapshot/runtime/**" \
-      2>/dev/null || true
-  )"
-
-  if [ -n "$tracked_runtime" ]; then
-    echo "Implicit CAD generated runtimes must not be tracked on develop." >&2
-    echo "Run scripts/dev/setup-symlinks.sh to restore the implicit-cad development layout." >&2
-    echo "$tracked_runtime" | sed 's/^/- /' >&2
-    return 1
-  fi
-}
-
 cd "$REPO_ROOT"
 setup_link "$MODE" "skills/implicit-cad/scripts/packages/implicitjs" "../../../../packages/implicitjs"
-if [ "$MODE" = "check" ]; then
-  check_no_generated_runtimes
-fi
+# scripts/gen runs cadgen.implicit_artifact, so the skill vendors cadgen exactly as `cad` and
+# `dxf` do; in the development layout that vendored copy is a link to the package source.
+setup_link "$MODE" "skills/implicit-cad/scripts/packages/cadgen" "../../../../packages/cadgen"

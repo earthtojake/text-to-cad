@@ -3,7 +3,6 @@ export const RENDER_FORMAT = Object.freeze({
   STL: "stl",
   THREE_MF: "3mf",
   GLB: "glb",
-  GCODE: "gcode",
   DXF: "dxf",
   IMPLICIT: "implicit",
   URDF: "urdf",
@@ -40,7 +39,6 @@ export function normalizeRenderFormat(value, { defaultFormat = RENDER_FORMAT.STE
     normalized === RENDER_FORMAT.STL ||
     normalized === RENDER_FORMAT.THREE_MF ||
     normalized === RENDER_FORMAT.GLB ||
-    normalized === RENDER_FORMAT.GCODE ||
     normalized === RENDER_FORMAT.DXF ||
     normalized === RENDER_FORMAT.IMPLICIT ||
     normalized === RENDER_FORMAT.URDF ||
@@ -70,9 +68,6 @@ export function entrySourceFormat(entry) {
   if (kind === RENDER_FORMAT.GLB || kind === "gltf") {
     return RENDER_FORMAT.GLB;
   }
-  if (kind === RENDER_FORMAT.GCODE) {
-    return RENDER_FORMAT.GCODE;
-  }
   if (kind === RENDER_FORMAT.IMPLICIT) {
     return RENDER_FORMAT.IMPLICIT;
   }
@@ -86,6 +81,28 @@ export function entrySourceFormat(entry) {
     return RENDER_FORMAT.SDF;
   }
   return RENDER_FORMAT.STEP;
+}
+
+// The kinds whose renderable geometry is BAKED into a __cadgen__ render package rather
+// than parsed in the browser: a DXF is 2D entities and an implicit model is GLSL, so
+// neither has a mesh of its own. The producer writes one, the scanner publishes it as the
+// entry's `glb` asset, and the viewport loads it through the same path a native .glb takes.
+const PACKAGE_BAKED_RENDER_KINDS = Object.freeze([RENDER_FORMAT.DXF, RENDER_FORMAT.IMPLICIT]);
+
+/**
+ * The format of the asset the viewport actually LOADS for an entry, as opposed to the
+ * format of the file the user opened (`entrySourceFormat`).
+ *
+ * For a baked kind this is GLB unconditionally — it does not consult whether a package has
+ * been built. A missing package is not a reason to fall back to an in-browser parse; it is
+ * `needs-build`, reported by the artifact state machine and fixed by building. The
+ * per-entry "GLB only when a package exists" form this replaced was a phasing device that
+ * let the bake ship before the client deletions, and it died with them.
+ */
+export function entryRenderAssetFormat(entry) {
+  return PACKAGE_BAKED_RENDER_KINDS.includes(entryKind(entry))
+    ? RENDER_FORMAT.GLB
+    : entrySourceFormat(entry);
 }
 
 export function isMeshRenderFormat(format) {
@@ -102,7 +119,7 @@ export function meshAssetKeyForFormat(format) {
 }
 
 export function meshAssetKeyForEntry(entry) {
-  return meshAssetKeyForFormat(entrySourceFormat(entry));
+  return meshAssetKeyForFormat(entryRenderAssetFormat(entry));
 }
 
 export function fileSheetKindForEntry(entry) {
@@ -121,9 +138,6 @@ export function fileSheetKindForEntry(entry) {
   }
   if (kind === RENDER_FORMAT.SDF) {
     return RENDER_FORMAT.SDF;
-  }
-  if (kind === RENDER_FORMAT.GCODE) {
-    return RENDER_FORMAT.GCODE;
   }
   if (kind === RENDER_FORMAT.IMPLICIT) {
     return RENDER_FORMAT.IMPLICIT;
@@ -169,9 +183,6 @@ export function renderFormatFromExtension(extension) {
   }
   if (normalized === "glb" || normalized === "gltf") {
     return RENDER_FORMAT.GLB;
-  }
-  if (normalized === "gcode") {
-    return RENDER_FORMAT.GCODE;
   }
   if (normalized === "implicit" || normalized === "implicit.js" || normalized === "implicit.mjs") {
     return RENDER_FORMAT.IMPLICIT;

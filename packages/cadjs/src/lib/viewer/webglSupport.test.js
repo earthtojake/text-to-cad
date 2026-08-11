@@ -3,9 +3,27 @@ import test from "node:test";
 
 import {
   buildRuntimeInitializationAlert,
+  isSoftwareWebGlRenderer,
   isWebGlContextCreationError,
   runtimeErrorMessage
 } from "./webglSupport.js";
+
+function rendererWithName(name, exposeDebugInfo = true) {
+  const debugInfo = exposeDebugInfo ? { UNMASKED_RENDERER_WEBGL: 1 } : null;
+  return {
+    getContext() {
+      return {
+        RENDERER: 2,
+        getExtension() {
+          return debugInfo;
+        },
+        getParameter() {
+          return name;
+        }
+      };
+    }
+  };
+}
 
 test("isWebGlContextCreationError recognizes Three.js context creation failures", () => {
   assert.equal(isWebGlContextCreationError(new Error("Error creating WebGL context.")), true);
@@ -14,6 +32,13 @@ test("isWebGlContextCreationError recognizes Three.js context creation failures"
     true
   );
   assert.equal(isWebGlContextCreationError(new Error("Failed to load render mesh")), false);
+});
+
+test("isSoftwareWebGlRenderer recognizes common software rasterizers", () => {
+  assert.equal(isSoftwareWebGlRenderer(rendererWithName("ANGLE (Google, SwiftShader Device)")), true);
+  assert.equal(isSoftwareWebGlRenderer(rendererWithName("llvmpipe (LLVM 18.1.3)", false)), true);
+  assert.equal(isSoftwareWebGlRenderer(rendererWithName("AMD Radeon Graphics (radeonsi)")), false);
+  assert.equal(isSoftwareWebGlRenderer(null), false);
 });
 
 test("buildRuntimeInitializationAlert reports WebGL as a blocking browser capability issue", () => {

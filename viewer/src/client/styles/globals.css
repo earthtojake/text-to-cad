@@ -1,5 +1,6 @@
 @import "tailwindcss" source(none);
 @import "tw-animate-css";
+/* SMUI "spacemolt" design system: Nord palette, sharp edges (font unchanged). */
 @source "../components";
 @source "../hooks";
 @source "../ui";
@@ -11,10 +12,10 @@
 
 @theme inline {
   --font-sans: "IBM Plex Sans", "Aptos", "Segoe UI", sans-serif;
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -49,38 +50,40 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.21 0.006 285.885);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.705 0.015 286.067);
+  /* SMUI spacemolt — light "Snow Storm" (Nord) */
+  --radius: 0rem;
+  --background: #eceff4;
+  --foreground: #2f3541;
+  --card: #dbe1eb;
+  --card-foreground: #2f3541;
+  --popover: #dbe1eb;
+  --popover-foreground: #2f3541;
+  --primary: #456387;
+  --primary-foreground: #ffffff;
+  --secondary: #cbd3e2;
+  --secondary-foreground: #2f3541;
+  --muted: #cbd3e2;
+  --muted-foreground: #3b4354;
+  --accent: #d4dbe2;
+  --accent-foreground: #456387;
+  --destructive: #b82e39;
+  --destructive-foreground: #ffffff;
+  --border: #abb4c4;
+  --input: #abb4c4;
+  --ring: #456387;
+  --chart-1: #4c6d94;
+  --chart-2: #476b90;
+  --chart-3: #5a7740;
+  --chart-4: #986e1b;
+  --chart-5: #894d7e;
+  --sidebar: #dbe1eb;
+  --sidebar-foreground: #2f3541;
+  --sidebar-primary: #456387;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #d4dbe2;
+  --sidebar-accent-foreground: #456387;
+  --sidebar-border: #abb4c4;
+  --sidebar-ring: #456387;
 
   --ui-app-bg: var(--background);
   --ui-app-gradient: none;
@@ -106,11 +109,20 @@
   --ui-shadow-soft: 0 10px 24px -18px rgb(0 0 0 / 0.32);
   --ui-shadow-panel: 0 24px 48px -36px rgb(0 0 0 / 0.28);
   --ui-shadow-dialog: 0 28px 62px -36px rgb(0 0 0 / 0.36);
-  --ui-glass-blur: 26px;
-  --ui-glass-saturation: 1.4;
-  --ui-glass-surface: color-mix(in srgb, var(--sidebar) 58%, transparent);
-  --ui-glass-popover: color-mix(in srgb, var(--popover) 66%, transparent);
-  --ui-glass-control: color-mix(in srgb, var(--background) 42%, transparent);
+  /* Frosted glass over the 3D scene. The tint leans on the active theme's
+   * dominant backdrop color (--cad-scene-backdrop, set by CadWorkspace from
+   * the scene theme; falls back to the chrome background before hydration)
+   * mixed with the SMUI (Nord) tokens, and stays translucent so the scene
+   * reads through the chrome. The heavier blur preserves text contrast. */
+  --cad-scene-backdrop: var(--background);
+  --ui-glass-blur: 32px;
+  --ui-glass-saturation: 1.45;
+  --ui-glass-surface-tint: color-mix(in srgb, var(--cad-scene-backdrop) 60%, var(--sidebar));
+  --ui-glass-popover-tint: color-mix(in srgb, var(--cad-scene-backdrop) 45%, var(--popover));
+  --ui-glass-control-tint: color-mix(in srgb, var(--cad-scene-backdrop) 55%, var(--background));
+  --ui-glass-surface: color-mix(in srgb, var(--ui-glass-surface-tint) 42%, transparent);
+  --ui-glass-popover: color-mix(in srgb, var(--ui-glass-popover-tint) 56%, transparent);
+  --ui-glass-control: color-mix(in srgb, var(--ui-glass-control-tint) 34%, transparent);
   --ui-warning-bg: oklch(0.962 0.059 95.617);
   --ui-warning-text: oklch(0.473 0.137 46.201);
   --ui-error-bg: oklch(0.936 0.032 17.717);
@@ -129,37 +141,39 @@
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.552 0.016 285.938);
+  /* SMUI spacemolt — dark "Polar Night" (Nord) */
+  --background: #1a1e23;
+  --foreground: #d8e0e9;
+  --card: #21262e;
+  --card-foreground: #d8e0e9;
+  --popover: #21262e;
+  --popover-foreground: #d8e0e9;
+  --primary: #86c0d0;
+  --primary-foreground: #1a1e23;
+  --secondary: #292f38;
+  --secondary-foreground: #d8e0e9;
+  --muted: #292f38;
+  --muted-foreground: #99a5b2;
+  --accent: #252b2d;
+  --accent-foreground: #86c0d0;
+  --destructive: #d4777f;
+  --destructive-foreground: #ebeef4;
+  --border: #3b4554;
+  --input: #3b4554;
+  --ring: #86c0d0;
+  --chart-1: #86c0d0;
+  --chart-2: #5d81ac;
+  --chart-3: #a4bf8d;
+  --chart-4: #ebca89;
+  --chart-5: #b78aaf;
+  --sidebar: #21262e;
+  --sidebar-foreground: #d8e0e9;
+  --sidebar-primary: #86c0d0;
+  --sidebar-primary-foreground: #1a1e23;
+  --sidebar-accent: #252b2d;
+  --sidebar-accent-foreground: #86c0d0;
+  --sidebar-border: #3b4554;
+  --sidebar-ring: #86c0d0;
 
   --ui-warning-bg: oklch(0.269 0.077 45.635);
   --ui-warning-text: oklch(0.879 0.169 91.605);
@@ -168,102 +182,19 @@
   --ui-success-bg: oklch(0.262 0.051 172.552);
   --ui-success-text: oklch(0.871 0.15 154.449);
 
-  --ui-glass-surface: rgb(22 22 25 / 82%);
-  --ui-glass-popover: rgb(24 24 27 / 86%);
-  --ui-glass-control: rgb(13 13 16 / 64%);
-  --ui-loading-overlay: rgb(5 6 10 / 34%);
-  --ui-loading-overlay-strong: rgb(5 6 10 / 72%);
+  /* Glass tints inherit the scene-backdrop mix from :root; the swapped Nord
+   * tokens above carry the dark flavor. */
+  --ui-loading-overlay: rgb(26 30 35 / 40%);
+  --ui-loading-overlay-strong: rgb(26 30 35 / 78%);
 }
 
-:root:not(.dark)[data-glass-tone="light"],
-:root:not(.dark) [data-glass-tone="light"] {
-  --background: rgb(255 255 255 / 62%);
-  --card: rgb(255 255 255 / 58%);
-  --popover: rgb(255 255 255 / 72%);
-  --primary: rgb(24 24 27 / 84%);
-  --secondary: rgb(255 255 255 / 36%);
-  --muted: rgb(47 84 115 / 8%);
-  --accent: rgb(47 84 115 / 12%);
-  --border: rgb(24 24 27 / 12%);
-  --input: rgb(24 24 27 / 16%);
-  --ring: rgb(24 24 27 / 30%);
-  --sidebar: rgb(255 255 255 / 56%);
-  --sidebar-primary: rgb(24 24 27 / 84%);
-  --sidebar-accent: rgb(47 84 115 / 13%);
-  --sidebar-border: rgb(24 24 27 / 10%);
-  --sidebar-ring: rgb(24 24 27 / 28%);
-
-  --ui-glass-surface: rgb(255 255 255 / 42%);
-  --ui-glass-popover: rgb(255 255 255 / 58%);
-  --ui-glass-control: rgb(255 255 255 / 34%);
-  --ui-loading-overlay: rgb(255 255 255 / 28%);
-  --ui-loading-overlay-strong: rgb(255 255 255 / 62%);
-}
-
-:root:not(.dark)[data-glass-tone="dark"],
-:root:not(.dark) [data-glass-tone="dark"] {
-  --background: rgb(255 255 255 / 70%);
-  --card: rgb(255 255 255 / 64%);
-  --popover: rgb(255 255 255 / 78%);
-  --primary: rgb(24 24 27 / 88%);
-  --secondary: rgb(255 255 255 / 44%);
-  --muted: rgb(255 255 255 / 38%);
-  --accent: rgb(255 255 255 / 52%);
-  --border: rgb(24 24 27 / 14%);
-  --input: rgb(24 24 27 / 18%);
-  --ring: rgb(255 255 255 / 36%);
-  --sidebar: rgb(255 255 255 / 62%);
-  --sidebar-primary: rgb(24 24 27 / 88%);
-  --sidebar-accent: rgb(255 255 255 / 54%);
-  --sidebar-border: rgb(24 24 27 / 12%);
-  --sidebar-ring: rgb(255 255 255 / 34%);
-
-  --ui-glass-surface: rgb(255 255 255 / 48%);
-  --ui-glass-popover: rgb(255 255 255 / 64%);
-  --ui-glass-control: rgb(255 255 255 / 40%);
-  --ui-loading-overlay: rgb(255 255 255 / 34%);
-  --ui-loading-overlay-strong: rgb(255 255 255 / 68%);
-}
-
-.dark[data-glass-tone="light"],
-.dark [data-glass-tone="light"] {
-  --background: rgb(4 4 7 / 72%);
-  --card: rgb(6 6 9 / 74%);
-  --popover: rgb(6 6 9 / 78%);
-  --primary: rgb(255 255 255 / 86%);
-  --secondary: rgb(255 255 255 / 10%);
-  --muted: rgb(255 255 255 / 8%);
-  --accent: rgb(255 255 255 / 11%);
-  --input: rgb(255 255 255 / 16%);
-  --sidebar: rgb(4 4 7 / 72%);
-  --sidebar-primary: rgb(255 255 255 / 86%);
-  --sidebar-accent: rgb(255 255 255 / 11%);
-  --sidebar-border: rgb(255 255 255 / 12%);
-  --ui-glass-surface: rgb(4 4 7 / 94%);
-  --ui-glass-popover: rgb(6 6 9 / 95%);
-  --ui-glass-control: rgb(2 2 5 / 84%);
-  --ui-glass-saturation: 1.16;
-}
-
-.dark[data-glass-tone="dark"],
-.dark [data-glass-tone="dark"] {
-  --background: rgb(13 13 16 / 48%);
-  --card: rgb(22 22 25 / 58%);
-  --popover: rgb(24 24 27 / 64%);
-  --primary: rgb(255 255 255 / 84%);
-  --secondary: rgb(255 255 255 / 8%);
-  --muted: rgb(255 255 255 / 7%);
-  --accent: rgb(255 255 255 / 10%);
-  --input: rgb(255 255 255 / 14%);
-  --sidebar: rgb(22 22 25 / 58%);
-  --sidebar-primary: rgb(255 255 255 / 84%);
-  --sidebar-accent: rgb(255 255 255 / 10%);
-  --sidebar-border: rgb(255 255 255 / 10%);
-  --ui-glass-surface: rgb(22 22 25 / 49%);
-  --ui-glass-popover: rgb(24 24 27 / 56%);
-  --ui-glass-control: rgb(13 13 16 / 39%);
-  --ui-glass-saturation: 1.44;
-}
+/*
+ * The frosted-glass translucency is kept but tinted by the SMUI (Nord)
+ * tokens above (see --ui-glass-* in :root/.dark). The old per-scene-tone
+ * overrides used monochrome white/black translucency, which washed out the
+ * Nord palette, so they are intentionally dropped — the base Snow Storm /
+ * Polar Night tokens apply regardless of scene tone.
+ */
 
 @layer base {
   * {
@@ -306,12 +237,6 @@
       linear-gradient(180deg, color-mix(in srgb, var(--ui-loading-overlay) 72%, transparent) 0%, var(--ui-loading-overlay-strong) 100%);
     -webkit-backdrop-filter: blur(14px) saturate(1.12);
     backdrop-filter: blur(14px) saturate(1.12);
-  }
-
-  .cad-loading-ascii {
-    text-shadow:
-      0 0 18px color-mix(in srgb, var(--ui-accent) 18%, transparent),
-      0 1px 0 rgb(0 0 0 / 0.45);
   }
 
   .theme-preset-menu-item:not([data-action-hover="true"]) > .theme-preset-menu-row:hover,

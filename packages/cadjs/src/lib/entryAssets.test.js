@@ -6,7 +6,6 @@ import {
   entryAssetBytes,
   entryAssetUrl,
   entryHasDxf,
-  entryHasGcode,
   entryHasDisplayEdges,
   entryHasMesh,
   entryHasReferences,
@@ -14,6 +13,7 @@ import {
   entryMeshAssetBytes,
   entryMeshAssetHash,
   entryMeshAssetSignature,
+  entryMeshAssetUrl,
   entryReferenceAssetSignature,
   entryDisplayEdgeTopologyAssetUrl,
   entrySelectorTopologyAssetUrl,
@@ -81,9 +81,46 @@ test("entry availability helpers preserve existing viewer gates", () => {
   assert.equal(entryHasDisplayEdges(stepEntry({ hash: "" })), false);
   assert.equal(entryHasReferences(stepEntry({ hash: "" })), false);
   assert.equal(entryHasDxf({ kind: "dxf", url: "/plate.dxf", hash: "dxf-hash" }), true);
-  assert.equal(entryHasGcode({ kind: "gcode", url: "/part.gcode", hash: "gcode-hash" }), true);
   assert.equal(entryHasUrdf({ kind: "urdf", url: "/robot.urdf", hash: "urdf-hash" }), true);
   assert.equal(entryHasUrdf({ kind: "sdf", url: "/robot.sdf", hash: "sdf-hash" }), true);
+});
+
+function packagedEntry(kind, file, glbFile) {
+  // What the scanner publishes for a kind whose geometry is baked into a __cadgen__ render
+  // package: the entry keeps its own source/exchange file as `url`, and the package's mesh
+  // arrives as a `glb` relation.
+  return {
+    file,
+    kind,
+    url: `/assets/${file}`,
+    hash: "source-hash",
+    relations: {
+      glb: { file: glbFile, url: `/assets/${glbFile}`, hash: "baked-hash", bytes: 2048 }
+    }
+  };
+}
+
+test("a DXF or implicit entry resolves its mesh from the render package", () => {
+  const dxf = packagedEntry("dxf", "plate.dxf", "__cadgen__/models/plate.dxf/preview.glb");
+  const implicit = packagedEntry("implicit", "orb.implicit.js", "__cadgen__/models/orb.implicit.js/model.glb");
+  for (const entry of [dxf, implicit]) {
+    assert.equal(entryMeshAssetUrl(entry), `/assets/${entry.relations.glb.file}`);
+    assert.equal(entryMeshAssetHash(entry), "baked-hash");
+    assert.equal(entryMeshAssetBytes(entry), 2048);
+    assert.equal(entryHasMesh(entry), true);
+  }
+  // The entry's own file stays reachable under its native key — Export and the file
+  // metadata are about the DXF, not about the mesh baked from it.
+  assert.equal(entryAssetUrl(dxf, "dxf"), "/assets/plate.dxf");
+  assert.equal(entryHasDxf(dxf), true);
+});
+
+test("an unbuilt package leaves the entry with no mesh at all", () => {
+  // No silent fall back to parsing the source in the browser: with no package the entry has
+  // no mesh, and the artifact state machine reports needs-build.
+  const dxf = { file: "plate.dxf", kind: "dxf", url: "/assets/plate.dxf", hash: "source-hash" };
+  assert.equal(entryMeshAssetUrl(dxf), "");
+  assert.equal(entryHasMesh(dxf), false);
 });
 
 test("robot and reference signatures match persisted session expectations", () => {

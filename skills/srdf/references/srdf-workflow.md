@@ -1,76 +1,38 @@
-# SRDF workflow
+# SRDF Workflow
 
-SRDF is the MoveIt semantic companion to a URDF. Keep physical robot structure, links, joints, geometry, inertials, mesh references, and limits in URDF. Keep planning semantics in SRDF.
+Use this reference when creating or editing MoveIt planning semantics for an existing URDF.
 
-## Edit loop
+## Step 0: Extract the URDF Table
 
-1. Start from a valid URDF. SRDF cannot repair wrong link frames, joint origins, limits, or geometry.
-2. Find the Python source that defines `gen_srdf()`.
-3. Treat that source as authoritative. Do not hand-edit generated `.srdf` output.
-4. Fill or update the planning ledger.
-5. Define virtual joints when the robot root needs a planning/world attachment.
-6. Define passive joints for unactuated joints.
-7. Define planning groups from URDF topology.
-8. Define end effectors only after group membership is known.
-9. Define group states in URDF-native units and check them against URDF limits.
-10. Define disabled collisions only from adjacency, sampling, Setup Assistant output, or explicit user evidence.
-11. Regenerate only the explicit SRDF target with `scripts/srdf`.
-12. Hand generated or modified `.srdf` files to `$cad-viewer` for live viewer links when available.
-13. Run MoveIt smoke tests when available. Use `$cad-viewer` for local Viewer-based IK or path-planning controls.
-14. Report assumptions and skipped checks.
+Do this before writing any SRDF XML. Parse the paired URDF (read it, or run a three-line ElementTree script for large robots) and write down:
 
-## Typical SRDF content
+- robot `name` (the SRDF must match it exactly);
+- every link name;
+- every joint: name, type, parent link, child link, lower/upper limits, and whether it has `<mimic>`;
+- the root link and the main serial chains (walk parent→child).
 
-- `<virtual_joint>` entries for root/world attachment.
-- `<passive_joint>` entries for unactuated joints.
-- `<group>` planning groups, usually by joint list or chain.
-- `<end_effector>` entries that connect a tool group to a parent planning group.
-- `<group_state>` named joint states such as `home`.
-- `<disable_collisions>` pairs for adjacent, sampled-safe, or intentionally ignored collisions.
+Every name that appears in the SRDF is **copied from this table**. If a name you want is not in the table, the URDF is wrong or your assumption is — resolve that first with `$urdf`. This single habit eliminates the most common SRDF failure class: plausible near-miss names and chains that do not exist in the tree.
 
-## Planning groups
+## Edit Loop
 
-MoveIt acts on a selected planning group. Other joints are left stationary unless they belong to the selected group or are otherwise managed by the planning pipeline.
+1. Confirm the URDF is valid (`$urdf` validator) and extract the URDF table.
+2. Read or create the planning ledger (`references/planning-ledger.md`); keep the compact form as a comment block in the `.srdf`.
+3. Author or edit the SRDF XML directly per `references/authoring-contract.md`, in element order: virtual joints, groups, group states, end effectors, passive joints, disabled collisions. Save it next to the URDF with the same robot name — colocation plus name match is how every consumer pairs the files.
+4. Derive — do not invent — disabled collisions (`references/disabled-collisions.md`) and group-state values (URDF-native units, within limits).
+5. Validate with `python scripts/validate <file.srdf>`; fix findings until clean.
+6. Hand the file to `$cad-viewer`; include MoveIt2 controls when interactive IK/planning review is needed.
+7. Run MoveIt smoke tests when a MoveIt environment is available; otherwise report them skipped.
+8. Report assumptions: inferred TCP links, manual collision pairs, unverified planner behavior.
 
-A group may be represented as:
+## Group Design
 
-- a collection of joints;
-- a collection of links;
-- a serial chain from base link to tip link;
-- a collection of subgroups.
+- **Serial manipulator** → one chain group, `base_link` at the mount, `tip_link` at the flange/TCP link. The validator rejects chains that are not a real parent→child path.
+- **Gripper / hand** → joint-member group listing its actuated joints; it becomes the end-effector group.
+- **Dual-arm / whole-body** → subgroup unions. Check for duplicate semantics (a joint reachable through two subgroups) and cycles.
+- **Mobile base** → typically a planar/floating virtual joint plus a group for the base; do not model wheel joints as planning DOF unless the planner consumes them.
 
-For serial chains, the base link is the parent link of the first joint in the chain, and the tip link is the child link of the last joint. Verify that the URDF graph actually contains that path.
+Fixed and mimic joints are never planning variables: they do not belong in group states, and chain-derived groups exclude them automatically.
 
-## Group states
+## When the URDF Changes
 
-`<group_state>` values are stored in URDF-native units:
-
-- revolute and continuous joints: radians;
-- prismatic joints: meters.
-
-The current runtime validates group-state values against group membership, fixed/mimic status, finite numeric values, and URDF limits when limits are available.
-
-## End effectors
-
-An end-effector is usually a separate tool or gripper group attached to a parent planning group. Avoid overlap between the end-effector group and the parent group. Record the target/TCP link in the planning ledger and in MoveIt2 request settings when it differs from the inferred group tip.
-
-## Disabled collisions
-
-`<disable_collisions>` pairs affect planning safety. Use truthful reasons:
-
-- `Adjacent`;
-- `Never`;
-- `Always`;
-- `Default`;
-- `Setup Assistant sampled`;
-- explicit manual rationale.
-
-Do not generate broad disabled-collision lists from prose or visual appearance.
-
-## CAD Viewer handoff and MoveIt2 controls
-
-After creating or modifying generated `.srdf` files, hand the explicit output path to `$cad-viewer` for a live viewer link when that skill is available. SRDF does not own Viewer startup.
-
-When the user needs local IK or path-planning controls, include that in the `$cad-viewer` handoff. CAD Viewer owns the local `moveit2_server`, including setup, environment checks, WebSocket URL wiring, and protocol details. Provide the SRDF path plus any known planning group, target/TCP link, target frame, pose, start state, and skipped assumptions.
-
-The local server is a smoke-test helper, not a replacement for a full MoveIt configuration package.
+Renamed links or joints, changed limits, or restructured chains invalidate the SRDF silently. After any URDF edit, re-run the SRDF validator on the paired `.srdf`, and re-check group states against the new limits. Treat URDF+SRDF as a pair in every task that touches either.

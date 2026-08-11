@@ -78,14 +78,16 @@ test("model runtime helpers update bounds and shadow settings", () => {
   assert.equal(runtime.keyLight.shadow.camera.right, 60);
 });
 
-test("model runtime helpers resolve fixed floor planes by scene scale", () => {
+test("model runtime resolves a world-z=0 floor in every scene scale", () => {
   const bounds = {
     min: [0, 0, -4],
     max: [1, 1, 10]
   };
   const modelPosition = new THREE.Vector3(0, 0, -6);
 
-  assert.equal(resolveRuntimeModelFloorZ(bounds, modelPosition, VIEWER_SCENE_SCALE.CAD), -10);
+  // Both CAD and URDF scales place the floor at world z=0 (the model position's z), so the
+  // model's absolute Z is honored rather than glued to its bbox bottom.
+  assert.equal(resolveRuntimeModelFloorZ(bounds, modelPosition, VIEWER_SCENE_SCALE.CAD), -6);
   assert.equal(resolveRuntimeModelFloorZ(bounds, modelPosition, VIEWER_SCENE_SCALE.URDF), -6);
 });
 

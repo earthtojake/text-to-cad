@@ -15,7 +15,7 @@ if __package__ in {None, ""}:
     if str(tool_dir) not in sys.path:
         sys.path.insert(0, str(tool_dir))
 
-from cadpy.cli_logging import CliLogger
+from cadgen.cli_logging import CliLogger
 
 
 def _inspect_api():
@@ -29,14 +29,14 @@ def _inspect_api():
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="inspect",
+        prog="scripts/inspect",
         description="Inspect selector refs, geometry facts, and measurements.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "examples:\n"
-            "  inspect refs STEP/foo.step '#f9' --detail --facts\n"
-            "  inspect measure STEP/foo.step --from '#f1' --to '#f2' --axis z\n"
-            "  inspect align STEP/foo.step --moving '#f1' --target '#f2' --mode flush --axis z\n"
+            "  scripts/inspect refs STEP/foo.step '#f9' --detail --facts\n"
+            "  scripts/inspect measure STEP/foo.step --from '#f1' --to '#f2' --axis z\n"
+            "  scripts/inspect align STEP/foo.step --moving '#f1' --target '#f2' --mode flush --axis z\n"
         ),
     )
     parser.add_argument(
@@ -53,9 +53,9 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "examples:\n"
-            "  inspect refs STEP/foo.step '#f9' --detail --facts\n"
-            "  inspect refs STEP/foo.step '#f1' '#e2' --positioning\n"
-            "  inspect refs STEP/foo.step --input-file /tmp/refs.txt --planes\n"
+            "  scripts/inspect refs STEP/foo.step '#f9' --detail --facts\n"
+            "  scripts/inspect refs STEP/foo.step '#f1' '#e2' --positioning\n"
+            "  scripts/inspect refs STEP/foo.step --input-file /tmp/refs.txt --planes\n"
         ),
     )
     refs_parser.add_argument(
@@ -144,6 +144,70 @@ def build_parser() -> argparse.ArgumentParser:
     align_parser.add_argument("--axis", choices=("x", "y", "z"), help="Axis to use for flush or one-axis center alignment.")
     _add_output_arguments(align_parser)
     align_parser.set_defaults(handler=run_align)
+
+    interfere_parser = subparsers.add_parser(
+        "interfere",
+        help="Report part-vs-part interpenetration as boolean intersection volume.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  scripts/inspect interfere models/car/car.step.py\n"
+            "  scripts/inspect interfere models/car/car.step.py --refs o1.1,o1.7\n"
+            "  scripts/inspect interfere models/car/car.step --tolerance 25\n"
+        ),
+    )
+    interfere_parser.add_argument("entry", help="CAD STEP path or CAD entry target.")
+    interfere_parser.add_argument(
+        "--refs",
+        default="",
+        help="Comma-separated occurrence refs to restrict the check to. A ref matches its whole subtree.",
+    )
+    interfere_parser.add_argument(
+        "--tolerance",
+        type=float,
+        default=None,
+        help="Intersection volume (mm^3) below which an overlap counts as contact, not a clash.",
+    )
+    interfere_parser.add_argument(
+        "--max-pairs",
+        type=int,
+        default=None,
+        help="Cap the number of boolean tests. Truncated pairs are reported in stats.",
+    )
+    _add_output_arguments(interfere_parser)
+    interfere_parser.set_defaults(handler=run_interfere)
+
+    validate_parser = subparsers.add_parser(
+        "validate",
+        help="Report per-solid geometric validity: topology, closure, and orientation.",
+        description=(
+            "Check each leaf occurrence for topological validity, watertightness, "
+            "self-intersection, and positive volume. This is the geometry-soundness "
+            "check; `refs --facts` reports counts and bounds and its \"ok\" field "
+            "covers ref resolution only.\n"
+            "  scripts/inspect validate models/car/car.step.py\n"
+            "  scripts/inspect validate models/car/car.step.py --refs o1.1,o1.7\n"
+            "  scripts/inspect validate models/panel/panel.step.py --allow-open\n"
+        ),
+    )
+    validate_parser.add_argument("entry", help="CAD STEP path or CAD entry target.")
+    validate_parser.add_argument(
+        "--refs",
+        default="",
+        help="Comma-separated occurrence refs to restrict the check to. A ref matches its whole subtree.",
+    )
+    validate_parser.add_argument(
+        "--allow-open",
+        action="store_true",
+        help="Treat surface/shell geometry as intended, suppressing openShell and noSolid findings.",
+    )
+    validate_parser.add_argument(
+        "--skip-self-intersection",
+        action="store_true",
+        help="Skip the boolean self-intersection test, which dominates runtime on large assemblies.",
+    )
+    _add_output_arguments(validate_parser)
+    validate_parser.set_defaults(handler=run_validate)
 
     worker_parser = subparsers.add_parser(
         "worker",
@@ -269,6 +333,66 @@ def run_frame(args: argparse.Namespace) -> int:
         }
 
     _emit_result(args, result, _format_frame_text)
+    return 0 if bool(result.get("ok")) else 2
+
+
+def run_interfere(args: argparse.Namespace) -> int:
+    inspect = _inspect_api()
+    from cadgen import interference
+
+    refs = [ref for ref in str(getattr(args, "refs", "") or "").split(",") if ref.strip()]
+    tolerance = args.tolerance if args.tolerance is not None else interference.DEFAULT_TOLERANCE_MM3
+    try:
+        result = interference.inspect_interference(
+            args.entry,
+            refs=refs,
+            tolerance=tolerance,
+            max_pairs=args.max_pairs,
+        )
+    except inspect.CadRefError as exc:
+        result = {
+            "ok": False,
+            "entry": args.entry,
+            "errors": [inspect.cad_ref_error_payload(exc)],
+        }
+    except (OSError, RuntimeError, ValueError) as exc:
+        result = {
+            "ok": False,
+            "entry": args.entry,
+            "errors": [{"message": str(exc)}],
+        }
+
+    _emit_result(args, result, _format_interfere_text)
+    return 0 if bool(result.get("ok")) else 2
+
+
+def run_validate(args: argparse.Namespace) -> int:
+    inspect = _inspect_api()
+    # Imported here, not at module scope: `inspect --help` must not pull OCP in.
+    from cadgen import validity
+
+    refs = [ref for ref in str(getattr(args, "refs", "") or "").split(",") if ref.strip()]
+    try:
+        result = validity.inspect_validity(
+            args.entry,
+            refs=refs,
+            allow_open=bool(getattr(args, "allow_open", False)),
+            check_self_intersection=not bool(getattr(args, "skip_self_intersection", False)),
+        )
+    except inspect.CadRefError as exc:
+        result = {
+            "ok": False,
+            "entry": args.entry,
+            "errors": [inspect.cad_ref_error_payload(exc)],
+        }
+    except (OSError, RuntimeError, ValueError) as exc:
+        result = {
+            "ok": False,
+            "entry": args.entry,
+            "errors": [{"message": str(exc)}],
+        }
+
+    _emit_result(args, result, _format_validate_text)
     return 0 if bool(result.get("ok")) else 2
 
 
@@ -454,8 +578,10 @@ def _emit_result(args: argparse.Namespace, result: dict[str, object], text_forma
         if text:
             print(text)
         return
-    indent = None if bool(getattr(args, "quiet", False)) else 2
-    print(json.dumps(result, indent=indent, sort_keys=False))
+    # Compact, always. JSON here is read by an agent; indentation was 38% of the payload on
+    # a large model and a person who wants it laid out can pipe through `jq .`. --quiet
+    # still shapes the TEXT format (--format text), which is where it means something.
+    print(json.dumps(result, separators=(",", ":"), sort_keys=False))
 
 
 def _format_refs_text(result: dict[str, object], *, quiet: bool, verbose: bool) -> str:
@@ -542,6 +668,61 @@ def _format_diff_text(result: dict[str, object], *, quiet: bool, verbose: bool) 
         lines.append(f"faceDelta={diff.get('faceCountDelta')} edgeDelta={diff.get('edgeCountDelta')}")
     if verbose:
         lines.append(f"sizeDelta={diff.get('sizeDelta')} centerDelta={diff.get('centerDelta')}")
+    return "\n".join(lines)
+
+
+def _format_interfere_text(result: dict, *, quiet: bool = False, verbose: bool = False) -> str:
+    errors = result.get("errors") or []
+    if errors:
+        return "\n".join(str(error.get("message") or error) for error in errors)
+    stats = result.get("stats") or {}
+    clashes = result.get("clashes") or []
+    lines = [
+        f"entry     : {result.get('entry', '')}",
+        f"tolerance : {result.get('tolerance')} mm^3",
+        (
+            f"pairs     : {stats.get('pairs_tested', 0)} tested, "
+            f"{stats.get('pairs_skipped_bbox', 0)} rejected by bbox, "
+            f"{stats.get('pairs_total', 0)} total "
+            f"({stats.get('occurrences', 0)} occurrences)"
+        ),
+    ]
+    truncated = int(stats.get("pairs_truncated", 0) or 0)
+    if truncated:
+        lines.append(f"TRUNCATED : {truncated} pairs were not tested (--max-pairs)")
+    if not clashes:
+        lines.append("result    : PASS - no interpenetration above tolerance")
+        return "\n".join(lines)
+    lines.append(f"result    : FAIL - {len(clashes)} clash(es)")
+    for clash in clashes:
+        a = clash.get("a") or {}
+        b = clash.get("b") or {}
+        lines.append(
+            f"  {clash.get('volume', 0.0):12.1f} mm^3  "
+            f"{a.get('name', '')} [{a.get('ref', '')}]  x  {b.get('name', '')} [{b.get('ref', '')}]"
+        )
+    return "\n".join(lines)
+
+
+def _format_validate_text(result: dict, *, quiet: bool = False, verbose: bool = False) -> str:
+    errors = result.get("errors") or []
+    if errors:
+        return "\n".join(str(error.get("message") or error) for error in errors)
+    parts = result.get("parts") or []
+    lines = [
+        f"entry       : {result.get('entry', '')}",
+        f"occurrences : {result.get('occurrenceCount', 0)}",
+    ]
+    if not parts:
+        lines.append("result      : PASS - all solids valid, closed, and positive volume")
+        return "\n".join(lines)
+    lines.append(f"result      : FAIL - {len(parts)} occurrence(s)")
+    for part in parts:
+        reasons = ", ".join(part.get("reasons") or [])
+        lines.append(f"  {reasons:44s} {part.get('name', '')} [{part.get('ref', '')}]")
+        if verbose:
+            volumes = part.get("volumes") or []
+            lines.append(f"      solids={part.get('solidCount', 0)} volumes={volumes}")
     return "\n".join(lines)
 
 

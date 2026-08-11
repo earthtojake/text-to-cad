@@ -1,3 +1,5 @@
+import { ensureFacePickBvh } from "./raycastBvh.js";
+
 export const TOPOLOGY_FACE_ID_NONE = 0xffffffff;
 
 export function buildFacePickMesh(THREE, selectorRuntime) {
@@ -266,4 +268,5 @@ export function syncSelectorPickGroups(runtime, selectorRuntime, modelOffset = n
   runtime.facePickGroup.updateMatrixWorld(true);
   runtime.edgePickGroup.updateMatrixWorld(true);
   runtime.vertexPickGroup.updateMatrixWorld(true);
+  ensureFacePickBvh(runtime, selectorRuntime);
 }

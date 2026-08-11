@@ -194,7 +194,7 @@ test("moveit2ServerUrl uses the generic query override", () => {
   const originalWindow = globalThis.window;
   globalThis.window = {
     location: {
-      href: "http://127.0.0.1:4178/?moveit2Ws=ws%3A%2F%2Fmoveit2.test%2Fws",
+      href: "http://127.0.0.1:3245/?moveit2Ws=ws%3A%2F%2Fmoveit2.test%2Fws",
     },
   };
   try {
@@ -212,7 +212,7 @@ test("moveit2ServerUrl ignores query overrides when disabled", () => {
   const originalWindow = globalThis.window;
   globalThis.window = {
     location: {
-      href: "http://127.0.0.1:4178/?moveit2Ws=ws%3A%2F%2Fmoveit2.test%2Fws",
+      href: "http://127.0.0.1:3245/?moveit2Ws=ws%3A%2F%2Fmoveit2.test%2Fws",
     },
   };
   try {

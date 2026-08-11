@@ -7,9 +7,6 @@ and CAD Viewer workflows.
 
 - `elrobot/`: ELRobot follower URDF/SRDF plus STL meshes.
 - `lekiwi/`: LeKiwi URDF/SRDF plus STL meshes for mobile-base and arm parts.
-- `lyra/`: authored dexterous humanoid-hand source (16 DOF), generated
-  STEP/URDF/SRDF outputs, per-link 3MF meshes, and a CAD Viewer pose
-  animation sidecar.
 - `openarm/`: OpenArm bimanual URDF/SRDF fixture.
 - `so101/`: SO-101 URDF/SRDF plus STL meshes.
 - `tom/`: authored text-to-cad robot arm source, generated STEP/URDF outputs,

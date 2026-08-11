@@ -1,11 +1,8 @@
-import {
-  Accordion
-} from "../ui/accordion";
 import FileSheet from "./FileSheet";
-import FileMetadataSection from "./FileMetadataSection";
-import FileStatusSection from "./FileStatusSection";
+import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
+import { buildFileStatusTab } from "./FileStatusSection";
 import ImplicitGraphicsSection from "./ImplicitGraphicsSection";
-import ParameterControlsSection from "./ParameterControlsSection";
+import { buildParameterControlsTab } from "./ParameterControlsSection";
 
 export default function ImplicitFileSheet({
   open,
@@ -24,10 +21,28 @@ export default function ImplicitFileSheet({
   onOpenFileAsset,
   suppressDynamicMetadataStatus = false,
   statusItems = [],
-  themeSections = null,
+  themeTabs = [],
   openSectionIds = [],
   onOpenSectionIdsChange
 }) {
+  const sections = [
+    buildFileStatusTab(statusItems),
+    buildParameterControlsTab({
+      runtime: parameterRuntime,
+      label: "implicit parameter",
+      loadingLabel: "Loading implicit parameters...",
+      noParametersLabel: "No implicit parameters.",
+      hideWhenEmpty: true,
+      animationAriaLabel: "Implicit animation"
+    }),
+    {
+      id: "graphics",
+      title: "Graphics",
+      content: <ImplicitGraphicsSection runtime={graphicsRuntime} />
+    },
+    ...themeTabs
+  ];
+
   return (
     <FileSheet
       open={open}
@@ -36,36 +51,14 @@ export default function ImplicitFileSheet({
       width={width}
       onOpenChange={onOpenChange}
       onStartResize={onStartResize}
+      scrollBody={false}
     >
-      <Accordion
-        type="multiple"
-        value={openSectionIds}
-        onValueChange={onOpenSectionIdsChange}
-        className="text-sm"
-      >
-        <FileStatusSection items={statusItems} />
-        <ParameterControlsSection
-          runtime={parameterRuntime}
-          label="implicit parameter"
-          loadingLabel="Loading implicit parameters..."
-          noParametersLabel="No implicit parameters."
-          hideWhenEmpty
-          animationAriaLabel="Implicit animation"
-          copyTitle="Copy implicit parameter JSON"
-          pasteTitle="Paste implicit parameter JSON"
-        />
-        <ImplicitGraphicsSection runtime={graphicsRuntime} />
-        {themeSections}
-        <FileMetadataSection
-          entry={selectedEntry}
-          fileDownloadAvailable={fileDownloadAvailable}
-          viewerServerInfo={viewerServerInfo}
-          localFileOpenAvailable={localFileOpenAvailable}
-          fileAccessBusyKey={fileAccessBusyKey}
-          onOpenFileAsset={onOpenFileAsset}
-          suppressDynamicStatus={suppressDynamicMetadataStatus}
-        />
-      </Accordion>
+      <FileSheetTabbedSurface
+        kind="implicit"
+        sections={sections}
+        openSectionIds={openSectionIds}
+        onOpenSectionIdsChange={onOpenSectionIdsChange}
+      />
     </FileSheet>
   );
 }

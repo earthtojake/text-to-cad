@@ -118,7 +118,7 @@ export function SiteHeaderClient({
             className="card-glow h-8 border-border bg-card px-2 text-ui text-foreground hover:bg-secondary hover:text-primary"
           >
             <a
-              href="https://demo.cadskills.xyz"
+              href="https://cad.fun"
               target="_blank"
               rel="noreferrer"
               aria-label="Open demo in a new tab"

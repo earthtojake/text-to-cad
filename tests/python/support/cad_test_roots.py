@@ -1,15 +1,14 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
 add_repo_path("skills/cad/scripts")
 
-from cadpy import assembly_spec, catalog, generation, glb_topology, metadata, render, step_scene, step_targets
 from tests.python.support.tmp_root import CAD_TEST_TMP_ROOT, temporary_directory
 
 
@@ -25,24 +24,12 @@ class IsolatedCadRoots:
         self.cad_root = self.root / "workspace"
         self.cad_root.mkdir(parents=True, exist_ok=True)
 
-        patches = []
-        for module in (
-            assembly_spec,
-            catalog,
-            render,
-            generation,
-            glb_topology,
-            metadata,
-            step_scene,
-            step_targets,
-        ):
-            if hasattr(module, "CAD_ROOT"):
-                patches.append(mock.patch.object(module, "CAD_ROOT", self.cad_root))
-            if hasattr(module, "REPO_ROOT"):
-                patches.append(mock.patch.object(module, "REPO_ROOT", self.cad_root))
-        for patcher in patches:
-            patcher.start()
-            testcase.addCleanup(patcher.stop)
+        # cadgen resolves its discovery / identity / display roots from the live process working
+        # directory (the module-level REPO_ROOT/CAD_ROOT globals were removed), so isolate the
+        # test by switching cwd into the temp workspace and restoring it on cleanup.
+        previous_cwd = Path.cwd()
+        os.chdir(self.cad_root)
+        testcase.addCleanup(lambda: os.chdir(previous_cwd))
 
     def temporary_cad_directory(self, *, prefix: str) -> tempfile.TemporaryDirectory[str]:
         return tempfile.TemporaryDirectory(prefix=prefix, dir=self.cad_root)

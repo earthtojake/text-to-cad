@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { ExternalLink } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import { HeroSection } from "@/components/hero-section";
@@ -20,11 +19,6 @@ const pluginInstallCommands = [
   },
 ];
 
-const supportedAgents = [
-  { name: "Claude Code", slug: "claude-code", icon: "claude-code.svg" },
-  { name: "Codex", slug: "codex", icon: "codex.svg" },
-];
-
 const skillGroups = [
   {
     name: "CAD",
@@ -35,7 +29,7 @@ const skillGroups = [
   {
     name: "CAD Viewer",
     path: "skills/cad-viewer",
-    summary: "Shows local browser previews for CAD, G-code, and robot files.",
+    summary: "Shows local browser previews for CAD and robot files.",
   },
   {
     name: "step.parts",
@@ -143,57 +137,6 @@ function SkillsInstallCommand() {
   );
 }
 
-function AgentTile({
-  agent,
-  hidden = false,
-}: {
-  agent: (typeof supportedAgents)[number];
-  hidden?: boolean;
-}) {
-  return (
-    <a
-      aria-hidden={hidden ? "true" : undefined}
-      aria-label={`Skills for ${agent.name}`}
-      className="group flex h-[54px] w-[150px] shrink-0 items-center gap-2.5 border border-border bg-card px-2.5 text-muted-foreground transition hover:bg-secondary hover:text-foreground sm:w-[168px]"
-      href={`https://www.skills.sh/agent/${agent.slug}`}
-      rel="noreferrer"
-      tabIndex={hidden ? -1 : undefined}
-      target="_blank"
-    >
-      <span className="flex size-7 shrink-0 items-center justify-center">
-        <Image
-          alt=""
-          src={`https://www.skills.sh/agents/${agent.icon}`}
-          width={44}
-          height={44}
-          unoptimized
-          className="size-5 object-contain opacity-70 grayscale transition group-hover:opacity-100 group-hover:grayscale-0 dark:invert"
-        />
-      </span>
-      <span className="min-w-0 truncate text-label uppercase tracking-[1.3px]">
-        {agent.name}
-      </span>
-    </a>
-  );
-}
-
-function AgentCarousel() {
-  return (
-    <div className="agent-carousel relative min-h-[54px] min-w-0 overflow-hidden">
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-background to-transparent sm:w-20" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-background to-transparent sm:w-20" />
-      <div className="agent-carousel-track flex w-max gap-2">
-        {supportedAgents.map((agent) => (
-          <AgentTile key={agent.slug} agent={agent} />
-        ))}
-        {supportedAgents.map((agent) => (
-          <AgentTile key={`${agent.slug}-duplicate`} agent={agent} hidden />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function SectionIntro({
   id,
   title,
@@ -241,22 +184,12 @@ export default function Home() {
         <div className="min-w-0 space-y-2">
           <HeroSection />
 
-          <section
-            aria-label="Install CAD Skills with supported agents"
-            className="grid gap-5 py-6 lg:grid-cols-2 lg:items-center lg:gap-12"
-          >
-            <div className="min-w-0 space-y-3">
+          <section aria-label="Install text-to-cad" className="py-6">
+            <div className="max-w-3xl space-y-3">
               <h2 className="text-sm font-medium uppercase tracking-[1.5px] text-foreground">
                 Try It Now
               </h2>
               <SkillsInstallCommand />
-            </div>
-
-            <div className="min-w-0 space-y-3">
-              <h2 className="text-sm font-medium uppercase tracking-[1.5px] text-foreground">
-                Supported Agents
-              </h2>
-              <AgentCarousel />
             </div>
           </section>
 
@@ -326,7 +259,9 @@ export default function Home() {
               </div>
               <p className="text-sm leading-6 text-muted-foreground">
                 Skills CLI installation is preferred for regular use. Restart
-                your agent if newly installed skills do not appear.
+                your agent if newly installed skills do not appear. The Codex
+                plugin install requires Codex 0.142.0 or newer; older versions
+                skip the plugin silently.
               </p>
               <p className="text-sm leading-6 text-muted-foreground">
                 Local development symlink guidance lives in{" "}

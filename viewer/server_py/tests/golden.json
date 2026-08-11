@@ -1,0 +1,169 @@
+{
+  "encodeUriComponent": {
+    "a b(c)*d~e._-": "a%20b(c)*d~e._-",
+    "résumé (1).glb": "r%C3%A9sum%C3%A9%20(1).glb",
+    "plain.glb": "plain.glb",
+    "with space.stl": "with%20space.stl",
+    "weird'name\".step": "weird'name%22.step",
+    "100% done.3mf": "100%25%20done.3mf",
+    "ünïcödé/path seg.glb": "%C3%BCn%C3%AFc%C3%B6d%C3%A9%2Fpath%20seg.glb",
+    "a+b=c&d.glb": "a%2Bb%3Dc%26d.glb",
+    "tilde~name.glb": "tilde~name.glb",
+    "()*!'safe.glb": "()*!'safe.glb"
+  },
+  "contentDisposition": {
+    "model.glb": "attachment; filename=\"model.glb\"; filename*=UTF-8''model.glb",
+    "résumé (1).glb": "attachment; filename=\"r_sum_ (1).glb\"; filename*=UTF-8''r%C3%A9sum%C3%A9%20%281%29.glb",
+    "bad\\name\"x.stl": "attachment; filename=\"name_x.stl\"; filename*=UTF-8''name_x.stl",
+    "../escape.glb": "attachment; filename=\"escape.glb\"; filename*=UTF-8''escape.glb",
+    "with\ttab.3mf": "attachment; filename=\"with_tab.3mf\"; filename*=UTF-8''with_tab.3mf",
+    "ünïcödé.step": "attachment; filename=\"_n_c_d_.step\"; filename*=UTF-8''%C3%BCn%C3%AFc%C3%B6d%C3%A9.step",
+    "": "attachment; filename=\"download\"; filename*=UTF-8''download",
+    "no-ext": "attachment; filename=\"no-ext\"; filename*=UTF-8''no-ext"
+  },
+  "base36": {
+    "0": "0",
+    "1": "1",
+    "35": "z",
+    "36": "10",
+    "2158": "1ny",
+    "1719440100123": "lxwe8obf",
+    "1719440100123456789": "d2aan9axpm39"
+  },
+  "assetUrls": [
+    {
+      "file": "/abs/p a th/x(1).glb",
+      "dir": "/root dir",
+      "v": "zz-1a",
+      "url": "/__cad/asset?file=%2Fabs%2Fp+a+th%2Fx%281%29.glb&dir=%2Froot+dir&v=zz-1a"
+    },
+    {
+      "file": "/abs/plain.glb",
+      "dir": "",
+      "v": "",
+      "url": "/__cad/asset?file=%2Fabs%2Fplain.glb"
+    },
+    {
+      "file": "/abs/ünï.glb",
+      "dir": "/r",
+      "v": "1-2",
+      "url": "/__cad/asset?file=%2Fabs%2F%C3%BCn%C3%AF.glb&dir=%2Fr&v=1-2"
+    },
+    {
+      "file": "/abs/tilde~.glb",
+      "dir": "",
+      "v": "abc",
+      "url": "/__cad/asset?file=%2Fabs%2Ftilde%7E.glb&v=abc"
+    }
+  ],
+  "sort": [
+    {
+      "input": [
+        "file10.step",
+        "file2.step",
+        "File1.step",
+        "alpha.STL",
+        "alpha.stl"
+      ],
+      "sorted": [
+        "alpha.STL",
+        "alpha.stl",
+        "File1.step",
+        "file2.step",
+        "file10.step"
+      ]
+    },
+    {
+      "input": [
+        "b/10.glb",
+        "b/9.glb",
+        "b/1.glb",
+        "a/2.glb"
+      ],
+      "sorted": [
+        "a/2.glb",
+        "b/1.glb",
+        "b/9.glb",
+        "b/10.glb"
+      ]
+    },
+    {
+      "input": [
+        "Item-2",
+        "item-10",
+        "ITEM-1",
+        "item-2"
+      ],
+      "sorted": [
+        "ITEM-1",
+        "Item-2",
+        "item-2",
+        "item-10"
+      ]
+    },
+    {
+      "input": [
+        "servo_end_mount.3mf",
+        "servo_end_mount_double.3mf",
+        "servo_horn_yoke.3mf",
+        "servo_horn_yoke_double_horn.3mf"
+      ],
+      "sorted": [
+        "servo_end_mount_double.3mf",
+        "servo_end_mount.3mf",
+        "servo_horn_yoke_double_horn.3mf",
+        "servo_horn_yoke.3mf"
+      ]
+    },
+    {
+      "input": [
+        "mount.x",
+        "mount_d.x",
+        "mountd.x",
+        "mount2.x"
+      ],
+      "sorted": [
+        "mount_d.x",
+        "mount.x",
+        "mount2.x",
+        "mountd.x"
+      ]
+    },
+    {
+      "input": [
+        "a b",
+        "a_b",
+        "a-b",
+        "a.b",
+        "a+b",
+        "a~b",
+        "ab",
+        "a1"
+      ],
+      "sorted": [
+        "a b",
+        "a_b",
+        "a-b",
+        "a.b",
+        "a+b",
+        "a~b",
+        "a1",
+        "ab"
+      ]
+    },
+    {
+      "input": [
+        "v2.10",
+        "v2.9",
+        "v10.1",
+        "v2.1"
+      ],
+      "sorted": [
+        "v2.1",
+        "v2.9",
+        "v2.10",
+        "v10.1"
+      ]
+    }
+  ]
+}

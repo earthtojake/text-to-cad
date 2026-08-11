@@ -19,12 +19,13 @@ import {
   resolveDisplayMode
 } from "./displaySettings.js";
 
-test("display settings normalize mode and clip independently from appearance settings", () => {
+test("display settings normalize mode and clip independently from theme settings", () => {
   assert.deepEqual(normalizeDisplaySettings(), DEFAULT_DISPLAY_SETTINGS);
   assert.equal(resolveDisplayMode({ mode: "wireframe" }), CAD_DISPLAY_MODE.WIREFRAME);
-  assert.equal(normalizeDisplaySettings().projection, CAMERA_PROJECTION.ORTHOGRAPHIC);
-  assert.equal(normalizeDisplaySettings({ projection: "perspective" }).projection, CAMERA_PROJECTION.PERSPECTIVE);
-  assert.equal(normalizeDisplaySettings({ projection: "fisheye" }).projection, CAMERA_PROJECTION.ORTHOGRAPHIC);
+  // Projection is a theme trait now, not a display setting: it is dropped on
+  // normalization even when a stale caller still passes it.
+  assert.equal(Object.hasOwn(normalizeDisplaySettings(), "projection"), false);
+  assert.equal(Object.hasOwn(normalizeDisplaySettings({ projection: "perspective" }), "projection"), false);
   assert.deepEqual(normalizeDisplaySettings({
     projection: "perspective",
     mode: "wireframe",
@@ -35,7 +36,6 @@ test("display settings normalize mode and clip independently from appearance set
       invert: true
     }
   }), {
-    projection: CAMERA_PROJECTION.PERSPECTIVE,
     mode: CAD_DISPLAY_MODE.WIREFRAME,
     clip: {
       enabled: true,
@@ -53,15 +53,13 @@ test("display settings normalize mode and clip independently from appearance set
   });
 });
 
-test("display settings normalize edge styling independently from appearance settings", () => {
+test("display settings normalize edge styling independently from theme settings", () => {
   assert.deepEqual(normalizeDisplayEdgeSettings({
     enabled: false,
-    contrastMode: "auto",
     color: "#ABC",
     thickness: 2,
     classes: {
       tangent: {
-        enabled: false,
         color: "#456",
         opacity: 0.25,
         thickness: 4
@@ -74,12 +72,11 @@ test("display settings normalize edge styling independently from appearance sett
     silhouetteScale: 0.01
   }), {
     enabled: false,
-    contrastMode: "auto",
     color: "#aabbcc",
     thickness: 2,
     classes: {
       feature: { color: "#aabbcc", opacity: 1, thickness: 1.15 },
-      tangent: { color: "#445566", opacity: 0.25, thickness: 0 },
+      tangent: { color: "#445566", opacity: 0.25, thickness: 4 },
       seam: { color: "#aabbcc", opacity: 0.85, thickness: 1.15 },
       degenerate: { color: "#aabbcc", opacity: 1, thickness: 0 }
     },
@@ -108,27 +105,21 @@ test("display settings normalize edge styling independently from appearance sett
   });
 });
 
-test("display settings normalize exploded-view controls independently from mode", () => {
-  assert.deepEqual(normalizeExplodedViewSettings({
-    enabled: true,
-    axis: "-x",
-    spacing: 2,
-    levels: "all",
-    groundBase: false,
-    mergeLayers: true,
-    autoFrame: false
-  }), {
-    enabled: true,
-    axis: "x",
-    direction: "negative",
-    spacing: 2,
-    depth: 8,
-    keepBaseGrounded: false,
-    mergeCoplanar: true,
-    autoFrame: false
-  });
-  assert.equal(normalizeExplodedViewSettings({ axis: "diagonal" }).axis, "z");
-  assert.equal(normalizeExplodedViewSettings({ axis: "radial" }).axis, "radial");
+test("display settings normalize the exploded view to enabled + amount", () => {
+  assert.deepEqual(
+    normalizeExplodedViewSettings({ enabled: true, amount: 0.5 }),
+    { enabled: true, amount: 0.5 }
+  );
+  // Amount clamps; missing amount defaults to 0 (assembled).
+  assert.equal(normalizeExplodedViewSettings({ amount: 9 }).amount, 1);
+  assert.equal(normalizeExplodedViewSettings({ amount: -1 }).amount, 0);
+  assert.deepEqual(normalizeExplodedViewSettings({ enabled: 1 }), { enabled: true, amount: 0 });
+  // Legacy step-document fields are simply dropped.
+  assert.deepEqual(
+    normalizeExplodedViewSettings({ enabled: true, steps: [{}], auto: { mode: "x" }, order: "sequential" }),
+    { enabled: true, amount: 0 }
+  );
+
   assert.equal(normalizeDisplaySettings({ exploded: true }).exploded.enabled, false);
   assert.equal(normalizeDisplaySettings({ mode: "exploded", exploded: { enabled: true } }).exploded.enabled, true);
   assert.deepEqual(normalizeDisplaySettings({ mode: "exploded view" }), DEFAULT_DISPLAY_SETTINGS);
@@ -142,7 +133,7 @@ test("display modes normalize common CAD aliases", () => {
   assert.equal(resolveDisplayMode({ mode: "hidden edges visible" }), CAD_DISPLAY_MODE.HIDDEN_EDGES);
   assert.equal(resolveDisplayMode({ mode: "hidden-lines-removed" }), CAD_DISPLAY_MODE.HIDDEN_LINES_REMOVED);
   assert.equal(resolveDisplayMode({ mode: "flat" }), CAD_DISPLAY_MODE.UNSHADED);
-  assert.equal(resolveDisplayMode({ mode: "appearance" }), CAD_DISPLAY_MODE.RENDERED);
+  assert.equal(resolveDisplayMode({ mode: "theme" }), CAD_DISPLAY_MODE.RENDERED);
   assert.equal(resolveDisplayMode({ mode: "wire" }), CAD_DISPLAY_MODE.WIREFRAME);
 });
 
@@ -174,8 +165,10 @@ test("display settings compare after normalization", () => {
     { mode: "solid", edges: { color: "#111111" } },
     { mode: "solid", edges: { color: "#222222" } }
   ), false);
+  // Projection no longer belongs to display settings, so differing projection
+  // values do not make two otherwise-equal display settings unequal.
   assert.equal(displaySettingsEqual(
     { mode: "solid", projection: "orthographic" },
     { mode: "solid", projection: "perspective" }
-  ), false);
+  ), true);
 });

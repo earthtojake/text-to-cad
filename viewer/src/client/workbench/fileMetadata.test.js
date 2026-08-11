@@ -22,11 +22,6 @@ const viewerServerInfo = {
   rootPath: "/project/text-to-cad/models",
 };
 
-const hostedViewerServerInfo = {
-  backend: "vercel-blob",
-  rootDir: "",
-  url: "https://demo.example.test",
-};
 
 test("file metadata groups summarize catalog entry fields", () => {
   const hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -104,26 +99,6 @@ test("file metadata downloads path and artifact rows when hosted file downloads 
   assert.equal(rowByLabel(groups, "Source hash"), null);
 });
 
-test("file metadata uses direct Blob download URLs for hosted catalogs", () => {
-  const groups = fileMetadataGroupsForEntry({
-    file: "parts/example.step",
-    kind: "part",
-    url: "https://blob.example.test/models2/parts/.example.step.glb",
-    sourceKind: "step",
-    step: {
-      url: "https://blob.example.test/models2/parts/example.step",
-    },
-  }, {
-    includeFileDownloadActions: true,
-    viewerServerInfo: hostedViewerServerInfo
-  });
-
-  const pathRow = rowByLabel(groups, "Path");
-  const assetRow = rowByLabel(groups, "Asset");
-  assert.equal(pathRow.href, "https://blob.example.test/models2/parts/example.step");
-  assert.equal(assetRow.href, "https://blob.example.test/models2/parts/.example.step.glb");
-});
-
 test("file metadata opens path and artifact rows when local opening is available", () => {
   const groups = fileMetadataGroupsForEntry({
     file: "parts/example.step",
@@ -181,7 +156,7 @@ test("file metadata lists module and relation catalog data", () => {
     url: "/models/robots/example.srdf?v=1",
     hash: "srdfhash",
     bytes: 1933,
-    moduleUrl: "/models/robots/.example.step.js?v=1",
+    moduleUrl: "/models/robots/example_params.js?v=1",
     relations: {
       urdf: {
         file: "robots/example.urdf",
@@ -193,8 +168,8 @@ test("file metadata lists module and relation catalog data", () => {
     viewerServerInfo,
   });
 
-  assert.equal(rowByLabel(groups, "Module").value, "robots/.example.step.js");
-  assert.equal(rowByLabel(groups, "Module").href, "/models/robots/.example.step.js?v=1");
+  assert.equal(rowByLabel(groups, "Module").value, "robots/example_params.js");
+  assert.equal(rowByLabel(groups, "Module").href, "/models/robots/example_params.js?v=1");
   assert.equal(rowByLabel(groups, "URDF file").value, "robots/example.urdf");
   assert.equal(rowByLabel(groups, "URDF size").value, "9.19 KB (9,414 B)");
   assert.equal(rowByLabel(groups, "URDF hash").displayValue, "89d28a294dc5...ae8c14a3");

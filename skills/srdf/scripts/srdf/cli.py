@@ -1,275 +1,221 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
-import inspect
-from math import isfinite
-import os
+import json
 import sys
-import warnings
 from collections.abc import Sequence
-from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from math import isfinite
+from pathlib import Path
 import xml.etree.ElementTree as ET
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 if __package__ in {None, ""}:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-PACKAGES_DIR = SCRIPTS_DIR / "packages"
-CADPY_METADATA_SRC_DIR = PACKAGES_DIR / "cadpy_metadata" / "src"
-if str(PACKAGES_DIR) not in sys.path:
-    sys.path.insert(0, str(PACKAGES_DIR))
-if str(CADPY_METADATA_SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(CADPY_METADATA_SRC_DIR))
+from srdf.findings import ValidationResult
+from srdf.source import SrdfPlanningGroup, SrdfSource, parse_srdf_file
 
-from cadpy_metadata import (
-    GenerationOutput,
-    python_source_identity,
-    track_generation_run,
-    xml_with_text_to_cad_metadata,
-)
-from srdf.source import LEGACY_EXPLORER_NAMESPACE, SRDF_METADATA_NAMESPACE, SrdfSource, SrdfSourceError, parse_srdf_xml
+SRDF_SUFFIX = ".srdf"
+URDF_SUFFIX = ".urdf"
+MANUAL_PAIR_WARNING_THRESHOLD = 25
 
 
-@dataclass(frozen=True)
-class _TargetSpec:
-    source_path: Path
-    output_path: Path
-
-
-def generate_srdf_targets(targets: Sequence[str], *, output: str | Path | None = None) -> int:
-    target_specs = _resolve_target_specs(targets, output=output)
-    _validate_unique_outputs(target_specs)
-    for target_spec in target_specs:
-        _generate_target(target_spec.source_path, output_path=target_spec.output_path)
-    return 0
+def validate_srdf_targets(
+    targets: Sequence[str],
+    *,
+    strict: bool = False,
+    output_format: str = "text",
+) -> int:
+    target_paths = [_resolve_target_path(target) for target in targets]
+    reports: list[dict[str, object]] = []
+    failed = False
+    for target_path in target_paths:
+        report = _validate_target(target_path, strict=strict, output_format=output_format)
+        reports.append(report)
+        if not report["ok"]:
+            failed = True
+    if output_format == "json":
+        print(json.dumps({"files": reports}, indent=2))
+    return 1 if failed else 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="srdf",
-        description="Generate explicit MoveIt2 SRDF targets from Python sources.",
+        prog="scripts/validate",
+        description="Validate explicit MoveIt2 SRDF targets against their paired URDF.",
     )
     parser.add_argument(
         "targets",
         nargs="+",
-        help="Explicit Python source file or SOURCE.py=OUTPUT.srdf pair defining gen_srdf() to generate.",
+        help="Explicit .srdf file to validate.",
     )
     parser.add_argument(
-        "-o",
-        "--output",
-        metavar="PATH",
-        help="Write the generated SRDF file to this path. Valid only with one plain Python target.",
+        "--strict",
+        action="store_true",
+        help="Treat validation warnings as failures.",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        dest="output_format",
+        help="Output format: human-readable text (default) or a JSON findings document.",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Narrate each target and its timing on stderr.",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
-    if args.output is not None:
-        if _targets_include_output_pairs(args.targets):
-            parser.error("--output cannot be combined with SOURCE=OUTPUT targets")
-        if len(args.targets) != 1:
-            parser.error("--output can only be used with exactly one target")
-    return generate_srdf_targets(args.targets, output=args.output)
+    if args.verbose:
+        # Narration goes to stderr; the findings document on stdout stays exactly the same
+        # so `--verbose` never changes what a caller parses.
+        for target in args.targets:
+            print(f"[srdf] validating {target}", file=sys.stderr)
+    return validate_srdf_targets(args.targets, strict=args.strict, output_format=args.output_format)
 
 
-def _resolve_target_specs(targets: Sequence[str], *, output: str | Path | None = None) -> list[_TargetSpec]:
-    if output is not None and _targets_include_output_pairs(targets):
-        raise ValueError("srdf --output cannot be combined with SOURCE=OUTPUT targets")
-    if output is not None and len(targets) != 1:
-        raise ValueError("srdf --output can only be used with exactly one target")
-
-    specs: list[_TargetSpec] = []
-    for raw_target in targets:
-        target_text = str(raw_target or "").strip()
-        if "=" in target_text:
-            raw_source, raw_output = target_text.split("=", 1)
-            source_path = _resolve_source_path(raw_source)
-            output_path = _resolve_cli_output_path(raw_output)
-        else:
-            source_path = _resolve_source_path(target_text)
-            output_path = _resolve_cli_output_path(output) if output is not None else source_path.with_suffix(".srdf")
-        specs.append(_TargetSpec(source_path=source_path, output_path=output_path))
-    return specs
-
-
-def _resolve_source_path(raw_source: object) -> Path:
-    value = str(raw_source or "").strip()
+def _resolve_target_path(raw_target: object) -> Path:
+    value = str(raw_target or "").strip()
     if not value:
-        raise ValueError("srdf target source must be a non-empty path")
-    source_path = Path(value).expanduser()
-    return source_path.resolve() if source_path.is_absolute() else (Path.cwd() / source_path).resolve()
+        raise ValueError("srdf target must be a non-empty path")
+    target_path = Path(value).expanduser()
+    return target_path.resolve() if target_path.is_absolute() else (Path.cwd() / target_path).resolve()
 
 
-def _resolve_cli_output_path(raw_output: object) -> Path:
-    value = str(raw_output or "").strip()
-    if not value:
-        raise ValueError("srdf output must be a non-empty path")
-    if "\\" in value:
-        raise ValueError("srdf output must use POSIX '/' separators")
-    output_path = Path(value).expanduser()
-    resolved = output_path.resolve() if output_path.is_absolute() else (Path.cwd() / output_path).resolve()
-    if resolved.suffix.lower() != ".srdf":
-        raise ValueError("srdf output must end in .srdf")
-    return resolved
+def _validate_target(target_path: Path, *, strict: bool, output_format: str) -> dict[str, object]:
+    display = _display_path(target_path)
+    text_mode = output_format == "text"
+    if target_path.suffix.lower() != SRDF_SUFFIX:
+        return _report_precheck_failure(display, "target must be a .srdf file", text_mode)
+    if not target_path.is_file():
+        return _report_precheck_failure(display, "file not found", text_mode)
 
+    srdf_source, result = parse_srdf_file(target_path)
+    urdf_path: Path | None = None
+    if srdf_source is not None:
+        urdf_path = _resolve_paired_urdf(srdf_source.robot_name, srdf_dir=target_path.parent, result=result)
+        if urdf_path is not None:
+            urdf_robot = _read_urdf_robot(urdf_path, result)
+            if urdf_robot is not None:
+                _validate_srdf_against_urdf(srdf_source, urdf_robot=urdf_robot, result=result)
 
-def _targets_include_output_pairs(targets: Sequence[str]) -> bool:
-    return any("=" in str(target or "") for target in targets)
-
-
-def _validate_unique_outputs(target_specs: Sequence[_TargetSpec]) -> None:
-    seen: dict[Path, Path] = {}
-    for target_spec in target_specs:
-        output_path = target_spec.output_path.resolve()
-        previous = seen.get(output_path)
-        if previous is not None:
-            raise ValueError(f"srdf output path is used more than once: {_display_path(target_spec.output_path)}")
-        seen[output_path] = target_spec.output_path
-
-
-def _generate_target(script_path: Path, *, output_path: Path) -> Path:
-    script_path = script_path.resolve()
-    if script_path.suffix.lower() != ".py":
-        raise ValueError(f"{_display_path(script_path)} must be a Python source file")
-    if not script_path.is_file():
-        raise FileNotFoundError(f"Python source not found: {_display_path(script_path)}")
-
-    with track_generation_run(
-        source_path=script_path,
-        generator="gen_srdf",
-        outputs=[GenerationOutput(output_path, "srdf")],
-    ):
-        return _generate_target_inner(script_path, output_path=output_path)
-
-
-def _generate_target_inner(script_path: Path, *, output_path: Path) -> Path:
-
-    module = _load_generator_module(script_path)
-    generator = getattr(module, "gen_srdf", None)
-    if not callable(generator):
-        raise RuntimeError(f"{_display_path(script_path)} does not define callable gen_srdf()")
-    if inspect.signature(generator).parameters:
-        raise ValueError(f"{_display_path(script_path)} gen_srdf() must not accept arguments")
-
-    payload = _normalize_srdf_payload(generator(), script_path=script_path)
-    xml = str(payload["xml"])
-    urdf_path = _resolve_relative_file(payload["urdf"], source_path=script_path, suffix=".urdf", label="urdf")
-    urdf_robot = _read_urdf_robot(urdf_path)
-    xml = _xml_with_linked_urdf_metadata(xml, output_path=output_path, urdf_path=urdf_path)
-    srdf_source = parse_srdf_xml(xml, source_path=output_path)
-    _validate_linked_urdf_ref(
-        srdf_source,
-        expected_urdf_ref=_relative_posix_path(urdf_path, output_path.parent),
-    )
-    _validate_srdf_against_urdf(srdf_source, urdf_robot=urdf_robot)
-    _write_srdf_payload(xml, output_path=output_path, script_path=script_path)
-    if not output_path.exists():
-        raise RuntimeError(f"{_display_path(script_path)} did not write {_display_path(output_path)}")
-    return output_path
-
-
-def _load_generator_module(script_path: Path) -> object:
-    module_name = (
-        "_srdf_tool_"
-        + _display_path(script_path).replace("/", "_").replace("\\", "_").replace("-", "_").replace(".", "_")
-    )
-    module_spec = importlib.util.spec_from_file_location(module_name, script_path)
-    if module_spec is None or module_spec.loader is None:
-        raise RuntimeError(f"Failed to load generator module from {_display_path(script_path)}")
-
-    module = importlib.util.module_from_spec(module_spec)
-    original_sys_path = list(sys.path)
-    search_paths = [
-        str(Path.cwd().resolve()),
-        str(script_path.parent),
-    ]
-    for candidate in reversed(search_paths):
-        if candidate not in sys.path:
-            sys.path.insert(0, candidate)
-
-    try:
-        sys.modules[module_name] = module
-        module_spec.loader.exec_module(module)
-    finally:
-        sys.path[:] = original_sys_path
-
-    return module
-
-
-def _normalize_srdf_payload(raw_payload: object, *, script_path: Path) -> dict[str, object]:
-    if not isinstance(raw_payload, dict):
-        raise TypeError(f"{_display_path(script_path)} gen_srdf() must return an envelope dict")
-    allowed_fields = {"xml", "urdf"}
-    extra_fields = sorted(str(key) for key in raw_payload if key not in allowed_fields)
-    if extra_fields:
-        joined = ", ".join(extra_fields)
-        raise TypeError(f"{_display_path(script_path)} gen_srdf() envelope has unsupported field(s): {joined}")
-    if "xml" not in raw_payload:
-        raise TypeError(f"{_display_path(script_path)} gen_srdf() envelope must define 'xml'")
-    if "urdf" not in raw_payload:
-        raise TypeError(f"{_display_path(script_path)} gen_srdf() envelope must define 'urdf'")
-    xml = _normalize_xml_value(raw_payload.get("xml"), script_path=script_path, label="gen_srdf() envelope field 'xml'")
-    if not xml.strip():
-        raise TypeError(f"{_display_path(script_path)} gen_srdf() envelope field 'xml' must be non-empty")
-    if not isinstance(raw_payload.get("urdf"), str) or not str(raw_payload.get("urdf")).strip():
-        raise TypeError(f"{_display_path(script_path)} gen_srdf() envelope field 'urdf' must be a non-empty string")
+    result = result.deduplicated()
+    ok = _report_findings(display, result, strict=strict, text_mode=text_mode)
+    summary = ""
+    if srdf_source is not None and urdf_path is not None:
+        summary = _summary_line(display, srdf_source, urdf_path)
+    if text_mode and ok and summary:
+        print(summary)
     return {
-        "xml": xml,
-        "urdf": str(raw_payload["urdf"]).strip(),
+        "path": display,
+        "ok": ok,
+        "summary": summary,
+        "findings": [finding.to_dict() for finding in result.all_findings()],
     }
 
 
-def _normalize_xml_value(raw_xml: object, *, script_path: Path, label: str) -> str:
-    if _is_xml_element(raw_xml):
-        return _serialize_xml_element(raw_xml)
-    if isinstance(raw_xml, str):
-        return raw_xml
-    raise TypeError(
-        f"{_display_path(script_path)} {label} must be an xml.etree.ElementTree.Element or string, "
-        f"got {type(raw_xml).__name__}"
+def _report_precheck_failure(display: str, message: str, text_mode: bool) -> dict[str, object]:
+    if text_mode:
+        print(f"FAIL {display}: {message}", file=sys.stderr)
+    return {
+        "path": display,
+        "ok": False,
+        "summary": "",
+        "findings": [{"severity": "error", "code": "invalid_target", "message": message}],
+    }
+
+
+def _report_findings(display: str, result: ValidationResult, *, strict: bool, text_mode: bool) -> bool:
+    if text_mode:
+        for finding in result.all_findings():
+            print(finding.format(), file=sys.stderr)
+    blocking = len(result.errors) + (len(result.warnings) if strict else 0)
+    if blocking:
+        if text_mode:
+            print(f"FAIL {display}: {blocking} blocking finding(s)", file=sys.stderr)
+        return False
+    return True
+
+
+def _summary_line(display: str, srdf_source: SrdfSource, urdf_path: Path) -> str:
+    return (
+        f"OK {display}: robot {srdf_source.robot_name!r}, urdf {_display_path(urdf_path)}, "
+        f"{len(srdf_source.planning_groups)} groups, {len(srdf_source.end_effectors)} end effectors, "
+        f"{len(srdf_source.group_states)} group states, "
+        f"{len(srdf_source.disabled_collision_pairs)} disabled collision pairs, "
+        f"{len(srdf_source.virtual_joints)} virtual joints"
     )
 
 
-def _is_xml_element(value: object) -> bool:
-    return isinstance(value, ET.Element)
+def find_paired_urdf(robot_name: str, srdf_dir: Path) -> tuple[Path | None, list[Path]]:
+    """Resolve the URDF paired with an SRDF: the same-directory URDF whose
+    root <robot name> matches. Returns (paired path or None, all matches)."""
+    matches: list[Path] = []
+    for candidate in sorted(srdf_dir.glob("*" + URDF_SUFFIX)):
+        if _urdf_root_name(candidate) == robot_name:
+            matches.append(candidate)
+    return (matches[0] if len(matches) == 1 else None), matches
 
 
-def _serialize_xml_element(root: ET.Element) -> str:
-    ET.indent(root, space="  ")
-    body = ET.tostring(root, encoding="unicode", short_empty_elements=True)
-    return f'<?xml version="1.0"?>\n{body}'
+def _urdf_root_name(urdf_path: Path) -> str | None:
+    try:
+        for _event, element in ET.iterparse(str(urdf_path), events=("start",)):
+            if element.tag != "robot":
+                return None
+            return str(element.attrib.get("name") or "").strip()
+    except (OSError, ET.ParseError):
+        return None
+    return None
 
 
-def _resolve_relative_file(raw_value: object, *, source_path: Path, suffix: str, label: str) -> Path:
-    if not isinstance(raw_value, str) or not raw_value.strip():
-        raise ValueError(f"{label} must be a non-empty relative path")
-    value = raw_value.strip()
-    if "\\" in value:
-        raise ValueError(f"{label} must use POSIX '/' separators")
-    pure = PurePosixPath(value)
-    if pure.is_absolute() or any(part in {"", "."} for part in pure.parts):
-        raise ValueError(f"{label} must be a relative path")
-    path = (source_path.parent / Path(*pure.parts)).resolve()
-    if path.suffix.lower() != suffix:
-        raise ValueError(f"{label} must end in {suffix}")
-    if not path.is_file():
-        raise FileNotFoundError(f"{label} file does not exist: {_display_path(path)}")
-    return path
+def _resolve_paired_urdf(robot_name: str, *, srdf_dir: Path, result: ValidationResult) -> Path | None:
+    if not robot_name:
+        return None
+    urdf_path, matches = find_paired_urdf(robot_name, srdf_dir)
+    if urdf_path is not None:
+        return urdf_path
+    if not matches:
+        result.add(
+            "error",
+            "no_paired_urdf",
+            f"no .urdf in {_display_path(srdf_dir)} declares robot name {robot_name!r}",
+            path="/robot",
+            hint="An SRDF pairs with the same-folder URDF whose <robot name> matches; "
+            "colocate the URDF and make the names identical.",
+        )
+        return None
+    result.add(
+        "error",
+        "ambiguous_paired_urdf",
+        f"multiple .urdf files in {_display_path(srdf_dir)} declare robot name {robot_name!r}: "
+        f"{[_display_path(match) for match in matches]!r}",
+        path="/robot",
+        hint="Exactly one URDF per robot name per folder; rename or move the extras.",
+    )
+    return None
 
 
-def _read_urdf_robot(urdf_path: Path) -> dict[str, object]:
+def _read_urdf_robot(urdf_path: Path, result: ValidationResult) -> dict[str, object] | None:
     try:
         root = ET.parse(urdf_path).getroot()
-    except ET.ParseError as exc:
-        raise ValueError(f"URDF is invalid XML: {_display_path(urdf_path)}") from exc
+    except (OSError, ET.ParseError):
+        result.add("error", "invalid_paired_urdf", f"URDF is invalid XML: {_display_path(urdf_path)}", path="/robot")
+        return None
     if root.tag != "robot":
-        raise ValueError("URDF root must be <robot>")
+        result.add("error", "invalid_paired_urdf", "URDF root must be <robot>", path="/robot")
+        return None
     robot_name = str(root.get("name") or "").strip()
+    if not robot_name:
+        result.add("error", "invalid_paired_urdf", "URDF robot name is required", path="/robot")
+        return None
     links = {
         str(link.get("name") or "").strip()
         for link in root.findall("link")
         if str(link.get("name") or "").strip()
     }
     joints: dict[str, dict[str, object]] = {}
+    child_links: list[str] = []
     for joint in root.findall("joint"):
         name = str(joint.get("name") or "").strip()
         if not name:
@@ -283,75 +229,263 @@ def _read_urdf_robot(urdf_path: Path) -> dict[str, object]:
         if limit_element is not None and joint_type in {"revolute", "prismatic"}:
             lower = _optional_finite_float(limit_element.get("lower"))
             upper = _optional_finite_float(limit_element.get("upper"))
+        child_link = str(child_element.get("link") if child_element is not None else "").strip()
+        child_links.append(child_link)
         joints[name] = {
             "type": joint_type,
             "parent": str(parent_element.get("link") if parent_element is not None else "").strip(),
-            "child": str(child_element.get("link") if child_element is not None else "").strip(),
+            "child": child_link,
             "lower": lower,
             "upper": upper,
             "mimic": joint.find("mimic") is not None,
         }
-    if not robot_name:
-        raise ValueError("URDF robot name is required")
+    # Chain-path and adjacency checks assume a well-formed tree; surface it if not.
+    roots = [link for link in links if link not in set(child_links)]
+    if len(roots) != 1 or len(set(child_links)) != len([c for c in child_links if c]):
+        result.add(
+            "warning",
+            "paired_urdf_not_a_tree",
+            f"paired URDF {_display_path(urdf_path)} is not a single-rooted tree; "
+            "chain and adjacency checks may be unreliable",
+            path="/robot",
+            hint="Validate the URDF with the URDF skill validator first.",
+        )
     return {"name": robot_name, "links": links, "joints": joints}
 
 
-def _validate_srdf_against_urdf(srdf_source: SrdfSource, *, urdf_robot: dict[str, object]) -> None:
-    urdf_name = str(urdf_robot["name"])
-    if srdf_source.robot_name != urdf_name:
-        raise SrdfSourceError(f"SRDF robot name {srdf_source.robot_name!r} must match URDF robot name {urdf_name!r}")
+def _validate_srdf_against_urdf(
+    srdf_source: SrdfSource,
+    *,
+    urdf_robot: dict[str, object],
+    result: ValidationResult,
+) -> None:
     links = urdf_robot["links"]
     joints = urdf_robot["joints"]
     assert isinstance(links, set)
     assert isinstance(joints, dict)
     group_names = {group.name for group in srdf_source.planning_groups}
-    groups_by_name = {group.name: group for group in srdf_source.planning_groups}
+    groups_by_name: dict[str, SrdfPlanningGroup] = {group.name: group for group in srdf_source.planning_groups}
     if not group_names:
-        raise SrdfSourceError("SRDF must define at least one planning group")
+        result.add("error", "no_planning_groups", "SRDF must define at least one planning group", path="/robot")
 
     for group in srdf_source.planning_groups:
+        group_path = f"/robot/group[@name='{group.name}']"
         if not group.joint_names and not group.link_names and not group.chains and not group.subgroups:
-            raise SrdfSourceError(f"SRDF planning group {group.name!r} must define joints, links, chains, or subgroups")
-        _validate_names_exist(group.joint_names, set(joints), label=f"planning group {group.name!r} joint")
-        _validate_names_exist(group.link_names, links, label=f"planning group {group.name!r} link")
-        _validate_names_exist(group.subgroups, group_names, label=f"planning group {group.name!r} subgroup")
+            result.add(
+                "error",
+                "empty_group",
+                f"SRDF planning group {group.name!r} must define joints, links, chains, or subgroups",
+                path=group_path,
+            )
+        _check_names_exist(group.joint_names, set(joints), result, label=f"planning group {group.name!r} joint", path=group_path)
+        _check_names_exist(group.link_names, links, result, label=f"planning group {group.name!r} link", path=group_path)
+        _check_names_exist(group.subgroups, group_names, result, label=f"planning group {group.name!r} subgroup", path=group_path)
         for chain in group.chains:
+            chain_ok = True
             if chain.base_link not in links:
-                raise SrdfSourceError(f"planning group {group.name!r} chain references missing base_link {chain.base_link!r}")
+                result.add(
+                    "error",
+                    "missing_chain_link",
+                    f"planning group {group.name!r} chain references missing base_link {chain.base_link!r}",
+                    path=f"{group_path}/chain",
+                )
+                chain_ok = False
             if chain.tip_link not in links:
-                raise SrdfSourceError(f"planning group {group.name!r} chain references missing tip_link {chain.tip_link!r}")
+                result.add(
+                    "error",
+                    "missing_chain_link",
+                    f"planning group {group.name!r} chain references missing tip_link {chain.tip_link!r}",
+                    path=f"{group_path}/chain",
+                )
+                chain_ok = False
+            if chain_ok and not _joint_path_for_chain(urdf_robot, base_link=chain.base_link, tip_link=chain.tip_link):
+                result.add(
+                    "error",
+                    "chain_not_a_path",
+                    f"planning group {group.name!r} chain {chain.base_link!r} -> {chain.tip_link!r} "
+                    "is not a parent-to-child path in the URDF tree",
+                    path=f"{group_path}/chain",
+                )
+    _check_subgroup_cycles(groups_by_name, result)
+
+    for virtual_joint in srdf_source.virtual_joints:
+        vj_path = f"/robot/virtual_joint[@name='{virtual_joint.name}']"
+        if virtual_joint.child_link and virtual_joint.child_link not in links:
+            result.add(
+                "error",
+                "missing_virtual_joint_child",
+                f"virtual_joint {virtual_joint.name!r} references missing child_link {virtual_joint.child_link!r}",
+                path=vj_path,
+            )
+        if virtual_joint.name in joints:
+            result.add(
+                "warning",
+                "virtual_joint_name_collision",
+                f"virtual_joint {virtual_joint.name!r} shares a name with a URDF joint",
+                path=vj_path,
+            )
+
+    passive_joint_set = set(srdf_source.passive_joints)
+    for passive_joint in srdf_source.passive_joints:
+        if passive_joint not in joints:
+            result.add(
+                "error",
+                "missing_passive_joint",
+                f"passive_joint references missing URDF joint {passive_joint!r}",
+                path="/robot/passive_joint",
+            )
 
     for end_effector in srdf_source.end_effectors:
+        ee_path = f"/robot/end_effector[@name='{end_effector.name}']"
         if end_effector.parent_link not in links:
-            raise SrdfSourceError(f"end_effector {end_effector.name!r} references missing parent_link {end_effector.parent_link!r}")
+            result.add(
+                "error",
+                "missing_end_effector_parent_link",
+                f"end_effector {end_effector.name!r} references missing parent_link {end_effector.parent_link!r}",
+                path=ee_path,
+            )
         if end_effector.group not in group_names:
-            raise SrdfSourceError(f"end_effector {end_effector.name!r} references missing group {end_effector.group!r}")
+            result.add(
+                "error",
+                "missing_end_effector_group",
+                f"end_effector {end_effector.name!r} references missing group {end_effector.group!r}",
+                path=ee_path,
+            )
         if end_effector.parent_group and end_effector.parent_group not in group_names:
-            raise SrdfSourceError(
-                f"end_effector {end_effector.name!r} references missing parent_group {end_effector.parent_group!r}"
+            result.add(
+                "error",
+                "missing_end_effector_parent_group",
+                f"end_effector {end_effector.name!r} references missing parent_group {end_effector.parent_group!r}",
+                path=ee_path,
             )
         _validate_end_effector_topology(
             end_effector,
             groups_by_name=groups_by_name,
             urdf_robot=urdf_robot,
+            result=result,
+            path=ee_path,
         )
 
     for group_state in srdf_source.group_states:
+        state_path = f"/robot/group_state[@name='{group_state.name}']"
         if group_state.group not in group_names:
-            raise SrdfSourceError(f"group_state {group_state.name!r} references missing group {group_state.group!r}")
-        group_joint_names = set(_joint_names_for_group(groups_by_name[group_state.group], urdf_robot=urdf_robot, groups_by_name=groups_by_name))
+            result.add(
+                "error",
+                "missing_group_state_group",
+                f"group_state {group_state.name!r} references missing group {group_state.group!r}",
+                path=state_path,
+            )
+            continue
+        group_joint_names = _joint_names_for_group(
+            groups_by_name[group_state.group],
+            urdf_robot=urdf_robot,
+            groups_by_name=groups_by_name,
+        )
+        group_joint_set = set(group_joint_names)
         for joint_name, value in group_state.joint_values_by_name.items():
             if joint_name not in joints:
-                raise SrdfSourceError(f"group_state {group_state.name!r} joint references missing name {joint_name!r}")
-            if joint_name not in group_joint_names:
-                raise SrdfSourceError(
-                    f"group_state {group_state.name!r} joint {joint_name!r} is not in group {group_state.group!r}"
+                result.add(
+                    "error",
+                    "missing_group_state_joint",
+                    f"group_state {group_state.name!r} joint references missing name {joint_name!r}",
+                    path=state_path,
                 )
-            _validate_group_state_joint_value(group_state.name, joint_name, value, joints[joint_name])
+                continue
+            if joint_name in passive_joint_set:
+                result.add(
+                    "error",
+                    "group_state_sets_passive_joint",
+                    f"group_state {group_state.name!r} cannot set passive joint {joint_name!r}",
+                    path=state_path,
+                )
+                continue
+            # Fixed/mimic joints are never planning variables; report that
+            # specifically before the (derived) group-membership check.
+            if not _validate_group_state_joint_kind(group_state.name, joint_name, joints[joint_name], result, state_path):
+                continue
+            if joint_name not in group_joint_set:
+                result.add(
+                    "error",
+                    "group_state_joint_not_in_group",
+                    f"group_state {group_state.name!r} joint {joint_name!r} is not in group {group_state.group!r}",
+                    path=state_path,
+                )
+                continue
+            _validate_group_state_joint_value(group_state.name, joint_name, value, joints[joint_name], result, state_path)
+        missing_joints = [name for name in group_joint_names if name not in group_state.joint_values_by_name]
+        if missing_joints and group_state.joint_values_by_name:
+            result.add(
+                "warning",
+                "incomplete_group_state",
+                f"group_state {group_state.name!r} omits group joint(s): {missing_joints!r}",
+                path=state_path,
+                hint="MoveIt fills omitted joints from the current state, which is rarely intended for a named pose.",
+            )
 
+    manual_count = 0
     for pair in srdf_source.disabled_collision_pairs:
-        _validate_names_exist((pair.link1, pair.link2), links, label="disable_collisions link")
-    _warn_on_many_manual_disabled_pairs(srdf_source.disabled_collision_pairs)
+        pair_path = "/robot/disable_collisions"
+        _check_names_exist((pair.link1, pair.link2), links, result, label="disable_collisions link", path=pair_path)
+        if pair.source == "manual":
+            manual_count += 1
+        if pair.source == "adjacent" and pair.link1 in links and pair.link2 in links:
+            if not _links_are_adjacent(urdf_robot, pair.link1, pair.link2):
+                result.add(
+                    "warning",
+                    "adjacent_reason_mismatch",
+                    f"disable_collisions {pair.link1!r}/{pair.link2!r} claims reason {pair.reason!r} "
+                    "but the links are not joined by any URDF joint",
+                    path=pair_path,
+                    hint="Use a truthful reason (Never/Default/Manual: ...) or fix the pair.",
+                )
+    if manual_count >= MANUAL_PAIR_WARNING_THRESHOLD:
+        result.add(
+            "warning",
+            "many_manual_disabled_pairs",
+            f"SRDF contains {manual_count} manually reasoned disabled collision pairs; "
+            "prefer sampled/setup-assistant provenance.",
+            path="/robot",
+        )
+
+
+def _check_subgroup_cycles(groups_by_name: dict[str, SrdfPlanningGroup], result: ValidationResult) -> None:
+    visited: set[str] = set()
+
+    def visit(name: str, stack: tuple[str, ...]) -> None:
+        if name in stack:
+            cycle = [*stack[stack.index(name):], name]
+            result.add(
+                "error",
+                "subgroup_cycle",
+                f"planning subgroups form a cycle: {' -> '.join(cycle)}",
+                path=f"/robot/group[@name='{name}']",
+            )
+            return
+        if name in visited:
+            return
+        visited.add(name)
+        group = groups_by_name.get(name)
+        if group is None:
+            return
+        for subgroup in group.subgroups:
+            visit(subgroup, (*stack, name))
+
+    for name in groups_by_name:
+        visit(name, ())
+
+
+def _links_are_adjacent(urdf_robot: dict[str, object], link1: str, link2: str) -> bool:
+    joints = urdf_robot.get("joints")
+    if not isinstance(joints, dict):
+        return False
+    for joint in joints.values():
+        if not isinstance(joint, dict):
+            continue
+        parent = str(joint.get("parent") or "").strip()
+        child = str(joint.get("child") or "").strip()
+        if {parent, child} == {link1, link2}:
+            return True
+    return False
 
 
 def _optional_finite_float(value: object) -> float | None:
@@ -396,10 +530,10 @@ def _joint_path_for_chain(urdf_robot: dict[str, object], *, base_link: str, tip_
 
 
 def _joint_names_for_group(
-    group: object,
+    group: SrdfPlanningGroup,
     *,
     urdf_robot: dict[str, object],
-    groups_by_name: dict[str, object],
+    groups_by_name: dict[str, SrdfPlanningGroup],
     visited: set[str] | None = None,
 ) -> list[str]:
     names: list[str] = []
@@ -407,18 +541,14 @@ def _joint_names_for_group(
     if not isinstance(joints, dict):
         return names
 
-    for joint_name in getattr(group, "joint_names", ()):
+    for joint_name in group.joint_names:
         joint = joints.get(joint_name)
         if isinstance(joint, dict) and str(joint.get("type") or "") != "fixed" and not bool(joint.get("mimic")):
             _append_unique(names, [joint_name])
 
-    for chain in getattr(group, "chains", ()):
+    for chain in group.chains:
         chain_joint_names = []
-        for joint_name in _joint_path_for_chain(
-            urdf_robot,
-            base_link=str(getattr(chain, "base_link", "") or ""),
-            tip_link=str(getattr(chain, "tip_link", "") or ""),
-        ):
+        for joint_name in _joint_path_for_chain(urdf_robot, base_link=chain.base_link, tip_link=chain.tip_link):
             joint = joints.get(joint_name)
             if isinstance(joint, dict) and str(joint.get("type") or "") != "fixed" and not bool(joint.get("mimic")):
                 chain_joint_names.append(joint_name)
@@ -426,10 +556,9 @@ def _joint_names_for_group(
 
     if visited is None:
         visited = set()
-    group_name = str(getattr(group, "name", "") or "")
-    if group_name:
-        visited.add(group_name)
-    for subgroup_name in getattr(group, "subgroups", ()):
+    if group.name:
+        visited.add(group.name)
+    for subgroup_name in group.subgroups:
         subgroup_key = str(subgroup_name or "").strip()
         if not subgroup_key or subgroup_key in visited:
             continue
@@ -437,24 +566,19 @@ def _joint_names_for_group(
         if subgroup is not None:
             _append_unique(
                 names,
-                _joint_names_for_group(
-                    subgroup,
-                    urdf_robot=urdf_robot,
-                    groups_by_name=groups_by_name,
-                    visited=visited,
-                ),
+                _joint_names_for_group(subgroup, urdf_robot=urdf_robot, groups_by_name=groups_by_name, visited=visited),
             )
     return names
 
 
 def _link_names_for_group(
-    group: object,
+    group: SrdfPlanningGroup,
     *,
     urdf_robot: dict[str, object],
-    groups_by_name: dict[str, object],
+    groups_by_name: dict[str, SrdfPlanningGroup],
     visited: set[str] | None = None,
 ) -> set[str]:
-    links = set(str(link_name) for link_name in getattr(group, "link_names", ()))
+    links = set(group.link_names)
     joints = urdf_robot.get("joints")
     if not isinstance(joints, dict):
         return links
@@ -467,35 +591,25 @@ def _link_names_for_group(
         if child:
             links.add(child)
 
-    for joint_name in getattr(group, "joint_names", ()):
+    for joint_name in group.joint_names:
         add_joint_links(str(joint_name))
-    for chain in getattr(group, "chains", ()):
-        links.add(str(getattr(chain, "tip_link", "") or ""))
-        for joint_name in _joint_path_for_chain(
-            urdf_robot,
-            base_link=str(getattr(chain, "base_link", "") or ""),
-            tip_link=str(getattr(chain, "tip_link", "") or ""),
-        ):
+    for chain in group.chains:
+        links.add(chain.tip_link)
+        for joint_name in _joint_path_for_chain(urdf_robot, base_link=chain.base_link, tip_link=chain.tip_link):
             add_joint_links(joint_name)
 
     if visited is None:
         visited = set()
-    group_name = str(getattr(group, "name", "") or "")
-    if group_name:
-        visited.add(group_name)
-    for subgroup_name in getattr(group, "subgroups", ()):
+    if group.name:
+        visited.add(group.name)
+    for subgroup_name in group.subgroups:
         subgroup_key = str(subgroup_name or "").strip()
         if not subgroup_key or subgroup_key in visited:
             continue
         subgroup = groups_by_name.get(subgroup_key)
         if subgroup is not None:
             links.update(
-                _link_names_for_group(
-                    subgroup,
-                    urdf_robot=urdf_robot,
-                    groups_by_name=groups_by_name,
-                    visited=visited,
-                )
+                _link_names_for_group(subgroup, urdf_robot=urdf_robot, groups_by_name=groups_by_name, visited=visited)
             )
     links.discard("")
     return links
@@ -518,8 +632,10 @@ def _joint_adjacent_to_any_link(urdf_robot: dict[str, object], parent_link: str,
 def _validate_end_effector_topology(
     end_effector: object,
     *,
-    groups_by_name: dict[str, object],
+    groups_by_name: dict[str, SrdfPlanningGroup],
     urdf_robot: dict[str, object],
+    result: ValidationResult,
+    path: str,
 ) -> None:
     group_name = str(getattr(end_effector, "group", "") or "")
     parent_group_name = str(getattr(end_effector, "parent_group", "") or "")
@@ -540,21 +656,59 @@ def _validate_end_effector_topology(
         )
         overlap = sorted(end_effector_links & parent_group_links)
         if overlap:
-            raise SrdfSourceError(
-                f"end_effector {getattr(end_effector, 'name', '')!r} group shares link(s) with parent_group: {overlap!r}"
+            result.add(
+                "error",
+                "end_effector_group_overlap",
+                f"end_effector {getattr(end_effector, 'name', '')!r} group shares link(s) with parent_group: {overlap!r}",
+                path=path,
             )
         if parent_link and parent_link not in parent_group_links:
-            raise SrdfSourceError(
-                f"end_effector {getattr(end_effector, 'name', '')!r} parent_link {parent_link!r} is not in parent_group {parent_group_name!r}"
+            result.add(
+                "error",
+                "end_effector_parent_link_outside_parent_group",
+                f"end_effector {getattr(end_effector, 'name', '')!r} parent_link {parent_link!r} "
+                f"is not in parent_group {parent_group_name!r}",
+                path=path,
             )
     if end_effector_links and parent_link not in end_effector_links and not _joint_adjacent_to_any_link(
         urdf_robot,
         parent_link,
         end_effector_links,
     ):
-        raise SrdfSourceError(
-            f"end_effector {getattr(end_effector, 'name', '')!r} parent_link {parent_link!r} is not adjacent to its group"
+        result.add(
+            "error",
+            "end_effector_parent_link_not_adjacent",
+            f"end_effector {getattr(end_effector, 'name', '')!r} parent_link {parent_link!r} is not adjacent to its group",
+            path=path,
         )
+
+
+def _validate_group_state_joint_kind(
+    state_name: str,
+    joint_name: str,
+    joint: object,
+    result: ValidationResult,
+    state_path: str,
+) -> bool:
+    if not isinstance(joint, dict):
+        return True
+    if str(joint.get("type") or "").strip() == "fixed":
+        result.add(
+            "error",
+            "group_state_sets_fixed_joint",
+            f"group_state {state_name!r} cannot set fixed joint {joint_name!r}",
+            path=state_path,
+        )
+        return False
+    if bool(joint.get("mimic")):
+        result.add(
+            "error",
+            "group_state_sets_mimic_joint",
+            f"group_state {state_name!r} cannot set mimic joint {joint_name!r}",
+            path=state_path,
+        )
+        return False
+    return True
 
 
 def _validate_group_state_joint_value(
@@ -562,22 +716,30 @@ def _validate_group_state_joint_value(
     joint_name: str,
     value: float,
     joint: object,
+    result: ValidationResult,
+    state_path: str,
 ) -> None:
     if not isinstance(joint, dict):
         return
     joint_type = str(joint.get("type") or "").strip()
-    if joint_type == "fixed":
-        raise SrdfSourceError(f"group_state {state_name!r} cannot set fixed joint {joint_name!r}")
-    if bool(joint.get("mimic")):
-        raise SrdfSourceError(f"group_state {state_name!r} cannot set mimic joint {joint_name!r}")
     if joint_type == "continuous":
         return
     lower = joint.get("lower")
     upper = joint.get("upper")
     if isinstance(lower, float) and value < lower:
-        raise SrdfSourceError(f"group_state {state_name!r} joint {joint_name!r} is below its URDF lower limit")
+        result.add(
+            "error",
+            "group_state_below_limit",
+            f"group_state {state_name!r} joint {joint_name!r} is below its URDF lower limit",
+            path=state_path,
+        )
     if isinstance(upper, float) and value > upper:
-        raise SrdfSourceError(f"group_state {state_name!r} joint {joint_name!r} is above its URDF upper limit")
+        result.add(
+            "error",
+            "group_state_above_limit",
+            f"group_state {state_name!r} joint {joint_name!r} is above its URDF upper limit",
+            path=state_path,
+        )
 
 
 def _append_unique(target: list[str], values: list[str]) -> None:
@@ -588,75 +750,22 @@ def _append_unique(target: list[str], values: list[str]) -> None:
             seen.add(value)
 
 
-def _warn_on_many_manual_disabled_pairs(pairs: object) -> None:
-    manual_count = sum(1 for pair in pairs if getattr(pair, "source", "") == "manual")
-    if manual_count >= 25:
-        warnings.warn(
-            f"SRDF contains {manual_count} manually reasoned disabled collision pairs; prefer sampled/setup-assistant provenance.",
-            stacklevel=3,
-        )
-
-
-def _validate_linked_urdf_ref(srdf_source: SrdfSource, *, expected_urdf_ref: str) -> None:
-    urdf_ref = str(srdf_source.urdf_ref or "").strip()
-    if not urdf_ref:
-        raise SrdfSourceError("SRDF must include <tcad:urdf path=\"...\"/> metadata")
-    if PurePosixPath(urdf_ref) != PurePosixPath(expected_urdf_ref):
-        raise SrdfSourceError(
-            f"SRDF tcad:urdf path {urdf_ref!r} must match gen_srdf() envelope urdf {expected_urdf_ref!r}"
-        )
-
-
-def _relative_posix_path(target_path: Path, start_dir: Path) -> str:
-    return Path(os.path.relpath(Path(target_path).resolve(), Path(start_dir).resolve())).as_posix()
-
-
-def _xml_with_linked_urdf_metadata(xml: str, *, output_path: Path, urdf_path: Path) -> str:
-    try:
-        root = ET.fromstring(xml)
-    except ET.ParseError as exc:
-        raise SrdfSourceError(f"{_display_path(output_path)} could not be parsed as SRDF XML") from exc
-    if root.tag != "robot":
-        raise SrdfSourceError(f"{_display_path(output_path)} root element must be <robot>")
-    ET.register_namespace("tcad", SRDF_METADATA_NAMESPACE)
-    ET.register_namespace("explorer", LEGACY_EXPLORER_NAMESPACE)
-    metadata_tag = f"{{{SRDF_METADATA_NAMESPACE}}}urdf"
-    legacy_metadata_tag = f"{{{LEGACY_EXPLORER_NAMESPACE}}}urdf"
-    metadata_element = None
-    for child in list(root):
-        if child.tag in {metadata_tag, legacy_metadata_tag} or str(child.tag or "") in {"tcad:urdf", "explorer:urdf"}:
-            metadata_element = child
-            break
-    if metadata_element is None:
-        metadata_element = ET.Element(metadata_tag)
-        root.insert(0, metadata_element)
-    else:
-        metadata_element.tag = metadata_tag
-    metadata_element.set("path", _relative_posix_path(urdf_path, output_path.parent))
-    if root.text is None:
-        root.text = "\n  "
-    if metadata_element.tail is None:
-        metadata_element.tail = "\n  "
-    return _serialize_xml_element(root)
-
-
-def _validate_names_exist(names: object, allowed: set[str], *, label: str) -> None:
+def _check_names_exist(
+    names: object,
+    allowed: set[str],
+    result: ValidationResult,
+    *,
+    label: str,
+    path: str,
+) -> None:
     for name in names:
         if name not in allowed:
-            raise SrdfSourceError(f"{label} references missing name {name!r}")
-
-
-def _write_srdf_payload(xml: str, *, output_path: Path, script_path: Path) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    xml = xml_with_text_to_cad_metadata(
-        xml,
-        python_source_identity(script_path),
-        output_path=output_path,
-        source_path=script_path,
-    )
-    text = xml if xml.endswith("\n") else xml + "\n"
-    output_path.write_text(text, encoding="utf-8")
-    print(f"Wrote SRDF: {output_path}")
+            result.add(
+                "error",
+                "missing_name_reference",
+                f"{label} references missing name {name!r}",
+                path=path,
+            )
 
 
 def _display_path(path: Path) -> str:

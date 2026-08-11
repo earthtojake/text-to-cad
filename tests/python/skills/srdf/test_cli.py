@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 from pathlib import Path
 import tempfile
 import unittest
@@ -36,11 +38,9 @@ SAMPLE_URDF = """\
 
 
 SAMPLE_SRDF = """\
-<robot name="sample" xmlns:tcad="https://text-to-cad.dev/srdf">
-  <tcad:urdf path="robot.urdf"/>
+<robot name="sample">
   <group name="arm">
-    <joint name="shoulder"/>
-    <joint name="elbow"/>
+    <chain base_link="base" tip_link="wrist"/>
   </group>
   <group name="gripper">
     <link name="tool"/>
@@ -50,219 +50,127 @@ SAMPLE_SRDF = """\
     <joint name="shoulder" value="0"/>
     <joint name="elbow" value="0"/>
   </group_state>
-  <disable_collisions link1="wrist" link2="tool" reason="Adjacent"/>
+  <disable_collisions link1="base" link2="shoulder_link" reason="Adjacent"/>
 </robot>
 """
 
 
-def write_source(path: Path, payload: object | None = None, *, function_name: str = "gen_srdf") -> None:
-    if payload is None:
-        payload = {"xml": SAMPLE_SRDF, "urdf": "robot.urdf"}
-    path.write_text(
-        f"def {function_name}():\n"
-        f"    return {payload!r}\n",
-        encoding="utf-8",
-    )
+class SrdfValidateCliTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tempdir = tempfile.TemporaryDirectory(prefix="tmp-srdf-cli-")
+        self.temp_root = Path(self._tempdir.name)
 
+    def tearDown(self) -> None:
+        self._tempdir.cleanup()
 
-class SrdfCliTests(unittest.TestCase):
-    def test_writes_sibling_srdf_without_hidden_artifact(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-gen-srdf-") as tempdir:
-            root = Path(tempdir)
-            (root / "robot.urdf").write_text(SAMPLE_URDF, encoding="utf-8")
-            source_path = root / "robot_srdf.py"
-            write_source(source_path)
+    def _write(self, name: str, body: str) -> Path:
+        path = self.temp_root / name
+        path.write_text(body, encoding="utf-8")
+        return path
 
-            self.assertEqual(0, cli.generate_srdf_targets([str(source_path)]))
+    def _write_pair(self, srdf_body: str = SAMPLE_SRDF, urdf_body: str = SAMPLE_URDF) -> Path:
+        self._write("robot.urdf", urdf_body)
+        return self._write("robot.srdf", srdf_body)
 
-            output_path = root / "robot_srdf.srdf"
-            self.assertTrue(output_path.is_file())
-            output_text = output_path.read_text(encoding="utf-8")
-            self.assertIn("tcad:urdf", output_text)
-            self.assertIn("path=\"robot.urdf\"", output_text)
-            self.assertIn("<group name=\"arm\">", output_text)
-            self.assertFalse((root / ".robot.urdf").exists())
+    def _run(self, *argv: str) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            exit_code = cli.main(list(argv))
+        return exit_code, stdout.getvalue(), stderr.getvalue()
 
-    def test_injects_tcad_urdf_link(self) -> None:
-        srdf = """\
-        <robot name="sample">
-          <group name="arm">
-            <chain base_link="base" tip_link="tool"/>
-          </group>
-        </robot>
-        """
-        with tempfile.TemporaryDirectory(prefix="tmp-gen-srdf-") as tempdir:
-            root = Path(tempdir)
-            (root / "robot.urdf").write_text(SAMPLE_URDF, encoding="utf-8")
-            source_path = root / "robot_srdf.py"
-            write_source(source_path, {"xml": srdf, "urdf": "robot.urdf"})
+    def test_valid_pair_passes_with_summary(self) -> None:
+        srdf_path = self._write_pair()
+        exit_code, stdout, stderr = self._run(str(srdf_path))
+        self.assertEqual(exit_code, 0)
+        self.assertIn("OK", stdout)
+        self.assertIn("robot 'sample'", stdout)
+        self.assertIn("2 groups", stdout)
+        self.assertIn("1 end effectors", stdout)
+        self.assertEqual(stderr, "")
 
-            self.assertEqual(0, cli.generate_srdf_targets([str(source_path)]))
-
-            output_text = (root / "robot_srdf.srdf").read_text(encoding="utf-8")
-            self.assertIn("tcad:urdf", output_text)
-            self.assertIn("path=\"robot.urdf\"", output_text)
-
-    def test_updates_legacy_explorer_urdf_link(self) -> None:
-        legacy_srdf = SAMPLE_SRDF.replace(
-            'xmlns:tcad="https://text-to-cad.dev/srdf"',
-            'xmlns:explorer="https://text-to-cad.dev/explorer"',
-        ).replace("tcad:urdf", "explorer:urdf")
-        with tempfile.TemporaryDirectory(prefix="tmp-gen-srdf-") as tempdir:
-            root = Path(tempdir)
-            (root / "robot.urdf").write_text(SAMPLE_URDF, encoding="utf-8")
-            source_path = root / "robot_srdf.py"
-            write_source(source_path, {"xml": legacy_srdf, "urdf": "robot.urdf"})
-
-            self.assertEqual(0, cli.generate_srdf_targets([str(source_path)]))
-
-            output_text = (root / "robot_srdf.srdf").read_text(encoding="utf-8")
-            self.assertIn("tcad:urdf", output_text)
-            self.assertNotIn("explorer:urdf", output_text)
-            self.assertIn("path=\"robot.urdf\"", output_text)
-
-    def test_writes_srdf_from_element_root(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-gen-srdf-") as tempdir:
-            root = Path(tempdir)
-            (root / "robot.urdf").write_text(SAMPLE_URDF, encoding="utf-8")
-            source_path = root / "robot_srdf.py"
-            source_path.write_text(
-                "\n".join(
-                    [
-                        "import xml.etree.ElementTree as ET",
-                        "",
-                        "def gen_srdf():",
-                        "    robot = ET.Element('robot', {'name': 'sample'})",
-                        "    group = ET.SubElement(robot, 'group', {'name': 'arm'})",
-                        "    ET.SubElement(group, 'joint', {'name': 'shoulder'})",
-                        "    ET.SubElement(group, 'joint', {'name': 'elbow'})",
-                        "    return {'xml': robot, 'urdf': 'robot.urdf'}",
-                        "",
-                    ]
-                ),
-                encoding="utf-8",
+    def test_retired_urdf_link_element_warns_but_passes(self) -> None:
+        srdf_path = self._write_pair(
+            SAMPLE_SRDF.replace(
+                '<robot name="sample">',
+                '<robot name="sample" xmlns:tcad="https://text-to-cad.dev/srdf">\n  <tcad:urdf path="robot.urdf"/>',
             )
+        )
+        exit_code, stdout, stderr = self._run(str(srdf_path))
+        self.assertEqual(exit_code, 0)
+        self.assertIn("OK", stdout)
+        self.assertIn("deprecated_urdf_link", stderr)
 
-            self.assertEqual(0, cli.generate_srdf_targets([str(source_path)]))
+    def test_missing_paired_urdf_fails(self) -> None:
+        srdf_path = self._write("robot.srdf", SAMPLE_SRDF)
+        exit_code, _, stderr = self._run(str(srdf_path))
+        self.assertEqual(exit_code, 1)
+        self.assertIn("declares robot name", stderr)
 
-            output_text = (root / "robot_srdf.srdf").read_text(encoding="utf-8")
-            self.assertTrue(output_text.startswith('<?xml version="1.0"?>\n'))
-            self.assertIn("tcad:urdf", output_text)
-            self.assertIn("<group name=\"arm\">", output_text)
-            self.assertIn("<joint name=\"shoulder\" />", output_text)
+    def test_robot_name_without_matching_urdf_fails(self) -> None:
+        srdf_path = self._write_pair(SAMPLE_SRDF.replace('name="sample"', 'name="other"', 1))
+        exit_code, _, stderr = self._run(str(srdf_path))
+        self.assertEqual(exit_code, 1)
+        self.assertIn("no_paired_urdf", stderr)
 
-    def test_supports_output_option(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-gen-srdf-") as tempdir:
-            root = Path(tempdir)
-            (root / "robot.urdf").write_text(SAMPLE_URDF, encoding="utf-8")
-            source_path = root / "source.py"
-            output_path = root / "out" / "robot.srdf"
-            write_source(source_path)
+    def test_ambiguous_paired_urdf_fails(self) -> None:
+        srdf_path = self._write_pair()
+        self._write("robot_copy.urdf", SAMPLE_URDF)
+        exit_code, _, stderr = self._run(str(srdf_path))
+        self.assertEqual(exit_code, 1)
+        self.assertIn("ambiguous_paired_urdf", stderr)
 
-            self.assertEqual(0, cli.generate_srdf_targets([str(source_path)], output=str(output_path)))
-
-            self.assertTrue(output_path.is_file())
-
-    def test_supports_source_output_pairs(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-gen-srdf-") as tempdir:
-            root = Path(tempdir)
-            (root / "robot.urdf").write_text(SAMPLE_URDF, encoding="utf-8")
-            source_path = root / "source.py"
-            output_path = root / "out" / "robot.srdf"
-            write_source(source_path)
-
-            self.assertEqual(0, cli.generate_srdf_targets([f"{source_path}={output_path}"]))
-
-            self.assertTrue(output_path.is_file())
-
-    def test_rejects_missing_gen_srdf(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-gen-srdf-") as tempdir:
-            root = Path(tempdir)
-            (root / "robot.urdf").write_text(SAMPLE_URDF, encoding="utf-8")
-            source_path = root / "source.py"
-            write_source(source_path, function_name="gen_urdf")
-
-            with self.assertRaisesRegex(RuntimeError, "gen_srdf"):
-                cli.generate_srdf_targets([str(source_path)])
-
-    def test_rejects_missing_xml_or_urdf(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-gen-srdf-") as tempdir:
-            root = Path(tempdir)
-            source_path = root / "source.py"
-            write_source(source_path, {"xml": SAMPLE_SRDF})
-
-            with self.assertRaisesRegex(TypeError, "urdf"):
-                cli.generate_srdf_targets([str(source_path)])
-
-            write_source(source_path, {"urdf": "robot.urdf"})
-            with self.assertRaisesRegex(TypeError, "xml"):
-                cli.generate_srdf_targets([str(source_path)])
-
-    def test_rejects_invalid_xml_or_urdf_reference(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-gen-srdf-") as tempdir:
-            root = Path(tempdir)
-            (root / "robot.urdf").write_text(SAMPLE_URDF, encoding="utf-8")
-            source_path = root / "source.py"
-            write_source(source_path, {"xml": "<sdf/>", "urdf": "robot.urdf"})
-
-            with self.assertRaisesRegex(Exception, "root element must be <robot>"):
-                cli.generate_srdf_targets([str(source_path)])
-
-            write_source(source_path, {"xml": SAMPLE_SRDF, "urdf": "missing.urdf"})
-            with self.assertRaisesRegex(FileNotFoundError, "urdf file does not exist"):
-                cli.generate_srdf_targets([str(source_path)])
-
-    def test_rejects_group_state_values_outside_group_or_limits(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="tmp-gen-srdf-") as tempdir:
-            root = Path(tempdir)
-            (root / "robot.urdf").write_text(SAMPLE_URDF, encoding="utf-8")
-            source_path = root / "source.py"
-            write_source(
-                source_path,
-                {
-                    "xml": SAMPLE_SRDF.replace('<joint name="shoulder" value="0"/>', '<joint name="shoulder" value="2"/>'),
-                    "urdf": "robot.urdf",
-                },
+    def test_unknown_group_joint_fails(self) -> None:
+        srdf_path = self._write_pair(
+            SAMPLE_SRDF.replace(
+                '<chain base_link="base" tip_link="wrist"/>',
+                '<joint name="not_a_joint"/>',
             )
+        )
+        exit_code, _, stderr = self._run(str(srdf_path))
+        self.assertEqual(exit_code, 1)
+        self.assertIn("not_a_joint", stderr)
 
-            with self.assertRaisesRegex(Exception, "above its URDF upper limit"):
-                cli.generate_srdf_targets([str(source_path)])
-
-            write_source(
-                source_path,
-                {
-                    "xml": SAMPLE_SRDF.replace('<joint name="shoulder" value="0"/>', '<joint name="wrist_tool" value="0"/>'),
-                    "urdf": "robot.urdf",
-                },
+    def test_chain_that_is_not_a_tree_path_fails(self) -> None:
+        srdf_path = self._write_pair(
+            SAMPLE_SRDF.replace(
+                '<chain base_link="base" tip_link="wrist"/>',
+                '<chain base_link="wrist" tip_link="base"/>',
             )
-            with self.assertRaisesRegex(Exception, "not in group"):
-                cli.generate_srdf_targets([str(source_path)])
+        )
+        exit_code, _, stderr = self._run(str(srdf_path))
+        self.assertEqual(exit_code, 1)
+        self.assertIn("not a parent-to-child path", stderr)
 
-    def test_rejects_overlapping_end_effector_group(self) -> None:
-        srdf = SAMPLE_SRDF.replace('<link name="tool"/>', '<link name="wrist"/>')
-        with tempfile.TemporaryDirectory(prefix="tmp-gen-srdf-") as tempdir:
-            root = Path(tempdir)
-            (root / "robot.urdf").write_text(SAMPLE_URDF, encoding="utf-8")
-            source_path = root / "source.py"
-            write_source(source_path, {"xml": srdf, "urdf": "robot.urdf"})
+    def test_group_state_beyond_urdf_limits_fails(self) -> None:
+        srdf_path = self._write_pair(
+            SAMPLE_SRDF.replace('<joint name="shoulder" value="0"/>', '<joint name="shoulder" value="2.5"/>')
+        )
+        exit_code, _, stderr = self._run(str(srdf_path))
+        self.assertEqual(exit_code, 1)
+        self.assertIn("above its URDF upper limit", stderr)
 
-            with self.assertRaisesRegex(Exception, "shares link"):
-                cli.generate_srdf_targets([str(source_path)])
+    def test_disable_collisions_unknown_link_fails(self) -> None:
+        srdf_path = self._write_pair(
+            SAMPLE_SRDF.replace(
+                '<disable_collisions link1="base" link2="shoulder_link" reason="Adjacent"/>',
+                '<disable_collisions link1="base" link2="phantom" reason="Adjacent"/>',
+            )
+        )
+        exit_code, _, stderr = self._run(str(srdf_path))
+        self.assertEqual(exit_code, 1)
+        self.assertIn("phantom", stderr)
 
-    def test_rejects_disabled_collision_without_reason(self) -> None:
-        srdf = SAMPLE_SRDF.replace(' reason="Adjacent"', "")
-        with tempfile.TemporaryDirectory(prefix="tmp-gen-srdf-") as tempdir:
-            root = Path(tempdir)
-            (root / "robot.urdf").write_text(SAMPLE_URDF, encoding="utf-8")
-            source_path = root / "source.py"
-            write_source(source_path, {"xml": srdf, "urdf": "robot.urdf"})
+    def test_non_srdf_suffix_fails(self) -> None:
+        path = self._write("robot.xml", SAMPLE_SRDF)
+        exit_code, _, stderr = self._run(str(path))
+        self.assertEqual(exit_code, 1)
+        self.assertIn("must be a .srdf file", stderr)
 
-            with self.assertRaisesRegex(Exception, "requires a reason"):
-                cli.generate_srdf_targets([str(source_path)])
-
-    def test_output_must_be_srdf(self) -> None:
-        with self.assertRaisesRegex(ValueError, "must end in .srdf"):
-            cli.generate_srdf_targets(["source.py=out.xml"])
+    def test_missing_file_fails(self) -> None:
+        exit_code, _, stderr = self._run(str(self.temp_root / "absent.srdf"))
+        self.assertEqual(exit_code, 1)
+        self.assertIn("file not found", stderr)
 
 
 if __name__ == "__main__":

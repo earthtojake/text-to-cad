@@ -170,10 +170,6 @@ function entryUrdfSignature(entry) {
   return entryUrdfAssetHash(entry);
 }
 
-function entryDxfSignature(entry) {
-  return entryAssetHash(entry, "dxf");
-}
-
 function entryStepModuleSignature(entry) {
   return [
     entryAssetHash(entry, "stepModule"),
@@ -216,9 +212,7 @@ function entryTabSignature(entry) {
 export function fileSessionSignaturesForEntry(entry) {
   return {
     tab: entryTabSignature(entry),
-    dxf: entryDxfSignature(entry),
     stepModule: entryStepModuleSignature(entry),
-    implicit: entryImplicitSignature(entry),
     urdf: entryUrdfSignature(entry),
     largeFile: entryLargeFileSignature(entry)
   };
@@ -231,49 +225,22 @@ function normalizeDisplaySlice(value) {
   return normalizeDisplaySettings(value);
 }
 
-function normalizeDxfBendSettings(value) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .map((setting) => {
-      if (!isPlainObject(setting)) {
-        return null;
-      }
-      const direction = normalizeString(setting.direction).toLowerCase() === "down" ? "down" : "up";
-      return {
-        id: normalizeString(setting.id),
-        direction,
-        angleDeg: Math.min(Math.max(normalizeNumber(setting.angleDeg, 0), 0), 180)
-      };
-    })
-    .filter(Boolean);
-}
-
-function normalizeDxfSlice(value) {
-  if (!isPlainObject(value)) {
-    return null;
-  }
-  return {
-    thicknessMm: normalizePositiveNumber(value.thicknessMm, 0),
-    bendSettings: normalizeDxfBendSettings(value.bendSettings)
-  };
-}
-
 function normalizeStepModuleAnimationState(value) {
   if (!isPlainObject(value)) {
     return {
       activeId: "",
       playing: false,
       elapsedSec: 0,
-      speed: 1
+      speed: 1,
+      loopEnabled: true
     };
   }
   return {
     activeId: normalizeString(value.activeId),
     playing: false,
     elapsedSec: Math.max(normalizeNumber(value.elapsedSec, 0), 0),
-    speed: Math.min(Math.max(normalizeNumber(value.speed, 1), 0.1), 5)
+    speed: Math.min(Math.max(normalizeNumber(value.speed, 1), 0.1), 5),
+    loopEnabled: normalizeBoolean(value.loopEnabled, true)
   };
 }
 
@@ -394,20 +361,10 @@ const FILE_SESSION_SLICE_SCHEMA = Object.freeze({
     equals: tabSnapshotEqual,
     signatureKey: "tab"
   },
-  dxf: {
-    normalize: normalizeDxfSlice,
-    equals: storageValuesEqual,
-    signatureKey: "dxf"
-  },
   stepModule: {
     normalize: normalizeStepModuleSlice,
     equals: storageValuesEqual,
     signatureKey: "stepModule"
-  },
-  implicit: {
-    normalize: normalizeImplicitSlice,
-    equals: storageValuesEqual,
-    signatureKey: "implicit"
   },
   urdf: {
     normalize: normalizeUrdfSlice,

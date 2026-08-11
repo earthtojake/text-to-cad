@@ -1,0 +1,37 @@
+{
+  "_comment": "Display settings for the hypercar presentation renders. Edge styling lives HERE, not in the theme JSON: `--theme` rejects an `edges` key outright. Merge into a render job's `display` object.",
+  "mode": "solid",
+  "edges": {
+    "enabled": true,
+    "color": "#080a0c",
+    "thickness": 0.9,
+    "classes": {
+      "feature": {
+        "color": "#080a0c",
+        "opacity": 0.82,
+        "thickness": 1.0
+      },
+      "tangent": {
+        "color": "#080a0c",
+        "opacity": 0.0,
+        "thickness": 0.5
+      },
+      "seam": {
+        "color": "#080a0c",
+        "opacity": 0.0,
+        "thickness": 0.5
+      },
+      "degenerate": {
+        "color": "#080a0c",
+        "opacity": 0.0,
+        "thickness": 0
+      }
+    },
+    "highlightColor": "#b08d57",
+    "highlightOpacity": 1,
+    "highlightThickness": 2,
+    "silhouette": false,
+    "silhouetteScale": 0,
+    "depthTest": true
+  }
+}

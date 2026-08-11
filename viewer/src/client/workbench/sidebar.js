@@ -1,10 +1,5 @@
-import {
-  readStoredActiveCadDir,
-  rememberActiveCadDir
-} from "./cadViewerDirectorySession.mjs";
 import { normalizeViewerDefaultFile } from "../../shared/viewerConfig.mjs";
 
-const CAD_DIR_QUERY_PARAM = "dir";
 const CAD_QUERY_PARAM = "file";
 
 export function fileKey(entry) {
@@ -19,7 +14,7 @@ export function cadFileParamForEntry(entry) {
 
 export function cadPathForEntry(entry) {
   const file = cadFileParamForEntry(entry);
-  return file.replace(/\.(step|stp|stl|3mf|glb|gcode|dxf|urdf|srdf|sdf)$/i, "");
+  return file.replace(/\.(step|stp|stl|3mf|glb|dxf|urdf|srdf|sdf)$/i, "");
 }
 
 function writeUrl(url, { history = "replace" } = {}) {
@@ -97,17 +92,6 @@ export function readCadParam() {
   return normalizedValue || null;
 }
 
-export function readCadDirParam() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const params = new URLSearchParams(window.location.search);
-  const value = params.get(CAD_DIR_QUERY_PARAM);
-  const normalizedValue = typeof value === "string"
-    ? String(value).trim()
-    : "";
-  return normalizedValue || null;
-}
 
 export function findEntryByUrlPath(entries, urlPath) {
   const normalizedUrlPath = normalizeCadFileQueryParam(urlPath);
@@ -172,39 +156,14 @@ export function writeCadParam(urlPath, { history = "replace" } = {}) {
   const normalizedUrlPath = normalizeCadFileQueryParam(urlPath);
   const url = new URL(window.location.href);
   url.searchParams.delete("refs");
+  // Only the file changes here. The directory lives in the URL's path and is never
+  // rewritten from the client — switching directories means navigating to a new URL.
   if (normalizedUrlPath) {
     url.searchParams.set(CAD_QUERY_PARAM, normalizedUrlPath);
-    if (url.searchParams.has(CAD_DIR_QUERY_PARAM)) {
-      const activeDir = rememberActiveCadDir(url.searchParams.get(CAD_DIR_QUERY_PARAM));
-      if (activeDir && readStoredActiveCadDir() !== activeDir) {
-        writeUrl(url, { history });
-        return;
-      }
-      url.searchParams.delete(CAD_DIR_QUERY_PARAM);
-    }
   } else {
     url.searchParams.delete(CAD_QUERY_PARAM);
   }
   writeUrl(url, { history });
-}
-
-export function writeCadDirParam(dirPath, { history = "replace", preserveFile = false } = {}) {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  const normalizedDirPath = String(dirPath || "").trim();
-  const url = new URL(window.location.href);
-  url.searchParams.delete("refs");
-  if (!preserveFile) {
-    url.searchParams.delete(CAD_QUERY_PARAM);
-  }
-  if (normalizedDirPath) {
-    url.searchParams.set(CAD_DIR_QUERY_PARAM, normalizedDirPath);
-    rememberActiveCadDir(normalizedDirPath);
-  } else {
-    url.searchParams.delete(CAD_DIR_QUERY_PARAM);
-  }
-  return writeUrl(url, { history });
 }
 
 function compareSidebarLabels(a, b) {
@@ -223,11 +182,29 @@ function entryLeafName(entry) {
   return parts[parts.length - 1] || file;
 }
 
+function sourceLeafName(entry) {
+  const source = entry?.source;
+  const candidate = String(
+    entry?.sourcePath
+    || (source && typeof source === "object" ? (source.sourcePath || source.path || source.file) : "")
+    || ""
+  ).trim();
+  if (!candidate) {
+    return "";
+  }
+  const parts = candidate.split("/");
+  return parts[parts.length - 1] || "";
+}
+
 function normalizedEntryStem(entry) {
   return entryLeafName(entry)
     .replace(/\.step\.json$/i, "")
     .replace(/\.urdf\.json$/i, "")
-    .replace(/\.(step|stp|stl|3mf|glb|gcode|dxf|urdf|srdf|sdf|py)$/i, "");
+    // A generator entry's filename is `<name>.step.py` / `<name>.dxf.py` — strip the whole
+    // generator suffix to `<name>` so the label reconstructs as `<name>.step` / `<name>.dxf`
+    // (not `<name>.step.step` or `<name>.dxf.dxf`).
+    .replace(/\.(step|stp|dxf)\.py$/i, "")
+    .replace(/\.(step|stp|stl|3mf|glb|dxf|urdf|srdf|sdf|py)$/i, "");
 }
 
 export function sidebarDirectoryIdForEntry(entry) {
@@ -244,44 +221,20 @@ function sourceExtensionForEntry(entry) {
 }
 
 export function filenameLabelForEntry(entry) {
-  const stem = normalizedEntryStem(entry);
-  if (!stem) {
-    return "";
-  }
-  const kind = String(entry?.kind || "").trim().toLowerCase();
-  const directSourceFormats = new Set(["dxf", "urdf", "srdf", "sdf", "stl", "3mf", "glb", "gcode", "implicit"]);
-  const sourceFormat = directSourceFormats.has(kind)
-    ? kind
-    : String(sourceExtensionForEntry(entry) || "step").trim().toLowerCase();
-
-  if (sourceFormat === "dxf") {
-    return `${stem}.dxf`;
-  }
-  if (sourceFormat === "urdf" || entry?.kind === "urdf") {
-    return `${stem}.urdf`;
-  }
-  if (sourceFormat === "srdf" || entry?.kind === "srdf") {
-    return `${stem}.srdf`;
-  }
-  if (sourceFormat === "sdf" || entry?.kind === "sdf") {
-    return `${stem}.sdf`;
-  }
-  if (sourceFormat === "stl" || entry?.kind === "stl") {
-    return `${stem}.stl`;
-  }
-  if (sourceFormat === "3mf" || entry?.kind === "3mf") {
-    return `${stem}.3mf`;
-  }
-  if (sourceFormat === "glb" || entry?.kind === "glb") {
-    return `${stem}.glb`;
-  }
-  if (sourceFormat === "gcode" || entry?.kind === "gcode") {
-    return `${stem}.gcode`;
-  }
-  if (sourceFormat === "implicit" || entry?.kind === "implicit") {
-    return entryLeafName(entry);
-  }
-  return `${stem}.${sourceFormat === "stp" ? "stp" : "step"}`;
+  // The entry's REAL filename, never a reconstruction.
+  //
+  // This used to rebuild a label from a stem plus a canonical extension, which erased what
+  // the file is actually called: `gasket_plate.dxf.py` displayed as `gasket_plate.dxf`, so a
+  // generated drawing and an imported one beside it were indistinguishable in the explorer,
+  // the breadcrumb and the tab. Two different files, one label — and the one you clicked was
+  // whichever the list happened to hold.
+  //
+  // Showing the filename verbatim also means new source kinds need no case here.
+  //
+  // Prefer the recorded SOURCE path over `file`: a generated model can carry its logical
+  // output there (`<stem>.step`) while the file a user edits is the generator beside it.
+  // The source path is what they opened, so it is what the label should say.
+  return sourceLeafName(entry) || entryLeafName(entry);
 }
 
 export function sidebarLabelForEntry(entry) {

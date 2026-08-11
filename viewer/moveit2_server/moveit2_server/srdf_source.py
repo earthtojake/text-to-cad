@@ -8,8 +8,6 @@ import xml.etree.ElementTree as ET
 
 
 SRDF_SUFFIX = ".srdf"
-SRDF_METADATA_NAMESPACE = "https://text-to-cad.dev/srdf"
-LEGACY_EXPLORER_NAMESPACE = "https://text-to-cad.dev/explorer"
 
 
 class SrdfSourceError(ValueError):
@@ -45,10 +43,6 @@ class SrdfGroupState:
     group: str
     joint_values_by_name: dict[str, float]
 
-    @property
-    def joint_values_by_name_rad(self) -> dict[str, float]:
-        return self.joint_values_by_name
-
 
 @dataclass(frozen=True)
 class SrdfDisabledCollisionPair:
@@ -63,7 +57,6 @@ class SrdfSource:
     file_ref: str
     source_path: Path
     robot_name: str
-    urdf_ref: str
     planning_groups: tuple[SrdfPlanningGroup, ...]
     end_effectors: tuple[SrdfEndEffector, ...]
     group_states: tuple[SrdfGroupState, ...]
@@ -189,7 +182,6 @@ def parse_srdf_root(root: ET.Element, *, source_path: Path) -> SrdfSource:
         file_ref=_relative_to_repo(source_path.resolve()),
         source_path=source_path.resolve(),
         robot_name=robot_name,
-        urdf_ref=_linked_urdf_ref(root),
         planning_groups=tuple(planning_groups),
         end_effectors=tuple(end_effectors),
         group_states=tuple(group_states),
@@ -197,23 +189,6 @@ def parse_srdf_root(root: ET.Element, *, source_path: Path) -> SrdfSource:
     )
 
 
-def _local_name(tag: str) -> str:
-    return str(tag or "").rsplit("}", 1)[-1].split(":", 1)[-1]
-
-
-def _linked_urdf_ref(root: ET.Element) -> str:
-    for child in list(root):
-        if _local_name(child.tag) != "urdf":
-            continue
-        tag = str(child.tag or "")
-        if (
-            tag.startswith(f"{{{SRDF_METADATA_NAMESPACE}}}")
-            or tag.startswith(f"{{{LEGACY_EXPLORER_NAMESPACE}}}")
-            or tag.startswith("tcad:")
-            or tag.startswith("explorer:")
-        ):
-            return str(child.attrib.get("path") or "").strip()
-    return ""
 
 
 def _child_names(element: ET.Element, tag: str) -> tuple[str, ...]:

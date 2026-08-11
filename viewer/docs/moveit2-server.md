@@ -106,9 +106,9 @@ If no orientation is provided, `moveit2.ik.positionOnly` defaults to true. If
 
 - The server has no Python import dependency on the SRDF skill. It includes the
   SRDF metadata parser it needs under `moveit2_server/moveit2_server`.
-- Success depends on the linked URDF, SRDF, collision geometry, solver
+- Success depends on the paired URDF, SRDF, collision geometry, solver
   availability, and MoveIt environment.
 - The generated MoveIt config defaults are suitable for viewer smoke tests but
   are not universal production planning settings.
-- Cache invalidation is based on linked URDF/SRDF file size and modification
+- Cache invalidation is based on paired URDF/SRDF file size and modification
   time.

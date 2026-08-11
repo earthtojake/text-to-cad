@@ -1,0 +1,1 @@
+"""URDF robot snapshot CLI."""

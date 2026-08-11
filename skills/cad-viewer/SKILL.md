@@ -1,95 +1,86 @@
 ---
 name: cad-viewer
-description: Start or reuse CAD Viewer and return review links for explicit CAD, implicit CAD, robot-description, and G-code files. Use when visually reviewing `.step`, `.stp`, `.implicit.js`, `.implicit.mjs`, `.glb`, `.stl`, `.3mf`, `.gcode`, `.dxf`, `.urdf`, `.srdf`, or `.sdf` files, especially when handed off from CAD, implicit-cad, G-code, URDF, SRDF, or SDF generation skills.
+description: Start CAD Viewer and return review links for explicit CAD, implicit CAD, and robot-description files. Use when visually reviewing `.step`, `.stp`, `.implicit.js`, `.implicit.mjs`, `.glb`, `.stl`, `.3mf`, `.dxf`, `.urdf`, `.srdf`, or `.sdf` files, especially when handed off from CAD, implicit-cad, URDF, SRDF, or SDF generation skills.
 ---
 
 # CAD Viewer
 
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 Use the installed local skill files as the runtime source of truth; the
-repository link is only for provenance and release review.
+repository link is only for provenance and release review. If the user asks to
+modify, debug, or iterate on CAD Viewer source itself, clone that repository and
+work there — this installed skill runtime runs the Viewer, it is not where you
+edit it.
 
 Use this skill to open existing or newly generated CAD, implicit CAD,
-robot-description, DXF, or plain FDM G-code files in CAD Viewer and hand back
-live review links. The expected input is one or more explicit file paths.
+robot-description, or DXF files in CAD Viewer and hand back live review links. The expected input is one or more explicit file paths.
 
 ## Start Viewer
 
-Start or reuse one local CAD Viewer with `npm run agent:start`, passing the
-absolute artifact directory as `--dir`. The `agent:start` launcher owns port
-selection, compatible-server reuse, directory activation, and the `?dir=` query
-parameter. Dev-mode viewers are reused only for matching git identities; dist
-bundle viewers can be reused across git branches when their viewer versions
-match. It activates reused servers through the Viewer's lightweight directory
-activation API, without requiring agents to probe ports or trigger catalog
-scans manually. Use the Viewer URL printed by `agent:start` as-is, then add only
-a `file=` query value for the artifact you want to review.
+Start one local CAD Viewer with `npm run start`. It serves the prebuilt Viewer
+bundle plus the CAD API on a single fixed port (`3245`). It is NOT started
+against a directory — a URL names the directory, so one Viewer serves any folder.
 
-Choose `--dir` as the absolute directory that contains the model
-artifacts and sidecars, commonly `<repo>/models` or the consuming project's
-equivalent model directory. The `file=` value must be relative to that `--dir`.
-Do not manually choose ports, probe servers, rewrite `?dir=`, or start a
-separate Viewer just to change directories.
+> The default port `3245` is `0xCAD` — "CAD" in hexadecimal.
 
 Run from this skill directory:
 
 ```bash
-npm --prefix scripts/viewer run agent:start -- --host 127.0.0.1 --dir <absolute-model-root>
+npm --prefix scripts/viewer run start -- --host 127.0.0.1
 ```
 
-Use the printed Viewer URL and append `file=`:
+## URL shape
 
-```bash
-http://127.0.0.1:<printed-port>/?dir=/absolute/project/models&file=path/to/model.step
+A Viewer URL's **path is the absolute directory**, exactly as in a `file://` URL,
+and `file=` selects one artifact inside it:
+
+```text
+http://127.0.0.1:3245/absolute/project/models?file=mechanisms/lift_table.step.py
 ```
 
-If a non-Viewer process or another worktree's Viewer occupies the candidate
-port, the launcher will continue automatically. In sandboxed agent environments,
-local binding or probe failures such as `EPERM` or `EACCES` can be expected;
-rerun the same command with the needed permission/escalation.
+**Always build the path from an absolute directory.** The Viewer runs from an
+arbitrary working directory — usually wherever the skill happens to be installed,
+not the model directory — so a relative path resolves against the wrong place.
+The `file=` value is relative to that directory.
+
+**The path is the workspace, not the file's folder.** The Viewer scans it
+recursively, so the file browser lists every model beneath it and the user can
+switch files without a new link. Pick the directory the user thinks of as their
+model workspace — typically the project's `models/` directory, or the nearest
+common parent of the files you were asked to review — and put the rest of the
+path in `file=`. Naming the artifact's own deep folder
+(`.../models/step/mechanisms?file=lift_table.step.py`) opens the same model but hides
+the rest of the project, which is almost never what the user wants.
+
+If port `3245` is already in use, the launcher exits with an error rather than
+rolling to another port; rerun with an explicit free port, `--port <n>`, and use
+the URL it prints. In sandboxed agent environments, local binding failures such
+as `EPERM`/`EACCES` can be expected; rerun with the needed permission/escalation.
+
+Add `--json` to also print a machine-readable result as the last stdout line
+beginning with `{` (`{"url": ..., "port": ..., "action": "start"}`). The printed
+URL points at the launch directory; replace its path to review any other folder.
 
 ## Links
 
-- Before returning any `file=` link, resolve `<dir>/<file>` and confirm the
-  artifact exists. Pass the generated artifact (e.g. `.step`), not its
-  generator source (e.g. `.py`). If the resolved path is missing, do not
-  return the link, and instead report the problem and point to the correct
-  generated artifact path.
+- Before returning any link, resolve `<directory>/<file>` and confirm it
+  exists. For a **generated** model pass the generator source (`<name>.step.py`)
+  — that is what the catalog itself lists, the backend resolves it directly and
+  builds the render artifacts on demand, and no `.step` file needs to exist. It
+  is also the only form that carries a `params` sidecar, because a same-stem
+  `<name>.step.py` shadows `<name>.step` anyway. For an **imported** STEP with no
+  generator, pass the `.step`/`.stp` itself. If the resolved path is missing, do
+  not return the link; report the problem and point to the correct path.
 - Return one Viewer URL per requested file.
-- Start/reuse the Viewer once per absolute directory `--dir`, then append
-  `file=<path>` for each requested file. The file path must be relative to
-  `--dir`.
-- For directory-only review links, return the URL printed by `agent:start`
-  without adding `file=`.
+- Start the Viewer once and pick one workspace root for the session. Every link
+  is that same absolute root plus `?file=<path relative to it>`, so all of them
+  share one browsable catalog. Only use a second root for an artifact that lives
+  outside the first.
+- For directory-only review links, return the directory URL without `?file=`.
 - Do not stop an existing Viewer server unless the user asks.
 - If Viewer startup fails, report the failure and continue with the owning skill's non-GUI validation or artifacts.
 
-## Claude Preview
-
-The viewer port is dynamic — it is chosen at startup and may differ across
-worktrees. To integrate with the Claude Preview tool, add `--json` to the
-`agent:start` command:
-
-```bash
-npm --prefix scripts/viewer run agent:start -- --host 127.0.0.1 --dir <absolute-model-root> --json
-```
-
-The launcher writes a JSON result line to stdout after the human-readable lines.
-Parse it by taking the last line of stdout that begins with `{`:
-
-```json
-{"url":"http://127.0.0.1:<port>/?dir=<absolute-model-root>","port":<port>,"action":"reuse"}
-```
-
-`action` is `"reuse"` when an existing server was reused and is immediately
-ready, or `"start"` when a new server process was spawned and may still be
-initializing. For a `"start"` result, probe `GET /__cad/server` on the base
-URL (e.g. `http://127.0.0.1:<port>/__cad/server`) until it returns HTTP 200
-before passing the `url` value to the Claude Preview tool.
-
 ## References
 
-- Read `references/development.md` when the user asks to modify, debug, or
-  iterate on CAD Viewer source.
 - Read `references/viewer-features.md` when you need supported file types, Viewer controls, or file-specific feature details.
 - Read `references/moveit2-server.md` only when the user specifically needs optional SRDF MoveIt2 IK or path-planning controls.

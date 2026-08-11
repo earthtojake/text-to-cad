@@ -328,6 +328,14 @@ function writeGlbPrimitive(THREE, descriptor, output, offsets) {
       includeBoundsPoint(partBounds, x, y, z);
       includeBoundsPoint(output.bounds, x, y, z);
 
+      if (output.colors && descriptor.colorsAttribute && sourceIndex < descriptor.colorsAttribute.count) {
+        // getX/Y/Z denormalize USHORT-normalized attributes; values stay LINEAR, which is
+        // what the viewer's vertex-colour material path expects.
+        output.colors[outputComponentIndex] = descriptor.colorsAttribute.getX(sourceIndex);
+        output.colors[outputComponentIndex + 1] = descriptor.colorsAttribute.getY(sourceIndex);
+        output.colors[outputComponentIndex + 2] = descriptor.colorsAttribute.getZ(sourceIndex);
+      }
+
       if (descriptor.normals?.itemSize === 3 && sourceIndex < descriptor.normals.count) {
         normalVector.set(
           descriptor.normals.getX(sourceIndex),
@@ -424,6 +432,7 @@ function buildMeshDataFromGltf(THREE, gltf) {
       if (!descriptor) {
         return;
       }
+      descriptor.colorsAttribute = object.geometry.getAttribute?.("color") || null;
       descriptors.push(descriptor);
       totalVertexCount += descriptor.vertexCount;
       totalIndexCount += descriptor.triangleCount * 3;
@@ -452,6 +461,12 @@ function buildMeshDataFromGltf(THREE, gltf) {
     surfaceEdgeClass,
     bounds: createBoundsAccumulator(),
   };
+  // Vertex colours ride the same de-index walk as positions/normals; absent everywhere,
+  // the empty array keeps the old shape.
+  const colorsOut = descriptors.some((d) => d.colorsAttribute)
+    ? new Float32Array(totalVertexCount * 3)
+    : null;
+  output.colors = colorsOut;
   const offsets = {
     vertexOffset: 0,
     indexOffset: 0,
@@ -459,7 +474,7 @@ function buildMeshDataFromGltf(THREE, gltf) {
   for (const descriptor of descriptors) {
     parts.push(writeGlbPrimitive(THREE, descriptor, output, offsets));
   }
-  const colors = new Float32Array(0);
+  const colors = colorsOut || new Float32Array(0);
   return {
     vertices,
     indices,
@@ -475,18 +490,44 @@ function buildMeshDataFromGltf(THREE, gltf) {
   };
 }
 
-function parseGlb(GLTFLoader, buffer) {
+function parseGlb(GLTFLoader, decoder, buffer) {
   const loader = new GLTFLoader();
+  // Render-artifact packages are written with EXT_meshopt_compression, which is what makes a
+  // 66 MB implicit mesh ship at a few MB. It is a REQUIRED extension, so without the decoder
+  // registered GLTFLoader rejects the file outright -- registering it here rather than at each
+  // call site is why the worker needs no separate wiring: it loads through this same function.
+  // KHR_mesh_quantization needs nothing; three's loader supports it natively.
+  if (decoder) {
+    loader.setMeshoptDecoder(decoder);
+  }
   return new Promise((resolve, reject) => {
     loader.parse(buffer, "", resolve, reject);
   });
 }
 
+/** meshoptimizer's decoder, ready to hand to GLTFLoader. Loaded once per realm. */
+let meshoptDecoderPromise = null;
+
+function loadMeshoptDecoder() {
+  if (!meshoptDecoderPromise) {
+    meshoptDecoderPromise = import("meshoptimizer")
+      .then(async ({ MeshoptDecoder }) => {
+        await MeshoptDecoder.ready;
+        return MeshoptDecoder;
+      })
+      // An uncompressed GLB must still load if the decoder is unavailable for any reason;
+      // only a meshopt-compressed one fails, and it fails loudly in GLTFLoader.
+      .catch(() => null);
+  }
+  return meshoptDecoderPromise;
+}
+
 export async function buildMeshDataFromGlbBuffer(buffer) {
-  const [THREE, { GLTFLoader }] = await Promise.all([
+  const [THREE, { GLTFLoader }, decoder] = await Promise.all([
     import("three"),
     import("three/examples/jsm/loaders/GLTFLoader.js"),
+    loadMeshoptDecoder(),
   ]);
-  const gltf = await parseGlb(GLTFLoader, buffer);
+  const gltf = await parseGlb(GLTFLoader, decoder, buffer);
   return buildMeshDataFromGltf(THREE, gltf);
 }

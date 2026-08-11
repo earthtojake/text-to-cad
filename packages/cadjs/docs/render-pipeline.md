@@ -56,6 +56,11 @@ Accepted input fields:
 - `url`: source URL for non-STEP GLB loading.
 - `glbUrl` or `resolved.glbUrl`: STEP/STP hidden GLB sidecar URL.
 - `cadPath` or `resolved.inputPath`: CAD path used by STEP selectors.
+- A caller that passes a `resolved` packet together with any source URL must also pass
+  `resolved.inputPath`. Render asset caches are page-lifetime, so a resolved job has to name the
+  source its cache entries belong to; a resolved job without `inputPath` is rejected rather than
+  cached under an unidentified source. Callers with no `resolved` packet (the interactive viewer and
+  the docs hero renderer) render one source per page and need nothing.
 - `selectorRuntime` and `displayEdgeRuntime`: preloaded runtimes when a caller
   already owns sidecar loading.
 - `stepParameters`: raw STEP render values or animation envelope.
@@ -208,7 +213,7 @@ import {
 ```
 
 `renderJobContext(meshData, job)` normalizes snapshot-owned render policy:
-appearance, display, scene scale, outputs, STEP topology edge visibility, and
+theme, display, scene scale, outputs, STEP topology edge visibility, and
 warnings.
 
 `modelOptionsForRenderJob(context, job)` converts that policy into

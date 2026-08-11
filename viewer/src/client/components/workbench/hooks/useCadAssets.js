@@ -2,17 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   isAbortError,
   loadRenderDisplayEdgeBundle,
-  loadRenderDxf,
-  loadRenderGcode,
   loadRenderGlb,
+  loadRenderJson,
   loadRenderSelectorBundle,
   loadRenderSdf,
   loadRenderSrdf,
-  loadRenderTopologyIndex,
   loadRenderUrdf,
-  peekRenderDxf,
   peekRenderDisplayEdgeBundle,
-  peekRenderGcode,
   peekRenderGlb,
   peekRenderSelectorBundle,
   peekRenderSdf,
@@ -23,13 +19,13 @@ import {
 import {
   loadImplicitCadModule,
   peekImplicitCadModule
-} from "implicitjs/loader";
+} from "cadjs/implicit/loader";
 import {
   assemblyRootFromTopology,
-  assemblyUsesSelfContainedMesh,
-  buildSelfContainedAssemblyMeshData
+  buildComposedPackageMeshData
 } from "cadjs/lib/assembly/meshData";
 import { mapWithConcurrency } from "cadjs/lib/async/concurrency";
+import { resolvePackageAssetUrl } from "./packageAssetUrl.js";
 import { ASSET_STATUS, REFERENCE_STATUS } from "../../../workbench/constants";
 import {
   entryAssetHash,
@@ -48,10 +44,15 @@ import {
   peekRenderMeshByUrl
 } from "cadjs/lib/render/meshLoaders";
 import { shouldUseGlbMeshWorkerForEntry } from "cadjs/lib/render/meshCost";
-import { RENDER_FORMAT } from "cadjs/lib/fileFormats";
-import { buildDisplayEdgeRuntime } from "cadjs/lib/selectors/runtime";
+import { RENDER_FORMAT, entrySourceFormat } from "cadjs/lib/fileFormats";
+import { buildDisplayEdgeRuntime, buildSelectorRuntime, composeSelectorRuntimes } from "cadjs/lib/selectors/runtime";
+import { selectRequestedAssemblyComponents } from "../../../workbench/referenceSelection";
 
-const ROBOT_MESH_LOAD_CONCURRENCY = 3;
+// Robot link meshes are STLs, and `loadRenderStl` parses them in the STL worker — the
+// fetch and the parse both happen off the main thread. The cap used to be 3 with a
+// main-thread yield either side of every mesh, which was right when parsing blocked the
+// UI and is pure latency now: it serialised 13 fetches three at a time for no benefit.
+const ROBOT_MESH_LOAD_CONCURRENCY = 8;
 
 function toVectorArray(value) {
   if (!Array.isArray(value) || value.length < 3) {
@@ -122,15 +123,6 @@ function abortLoad(controllerRef) {
   controllerRef.current = null;
 }
 
-function browserYield() {
-  if (typeof window === "undefined" || typeof window.setTimeout !== "function") {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, 0);
-  });
-}
-
 function abortError() {
   if (typeof DOMException === "function") {
     return new DOMException("The operation was aborted.", "AbortError");
@@ -147,7 +139,25 @@ function robotMeshLoadConcurrency() {
   if (!Number.isFinite(hardwareConcurrency) || hardwareConcurrency <= 0) {
     return ROBOT_MESH_LOAD_CONCURRENCY;
   }
-  return Math.max(2, Math.min(ROBOT_MESH_LOAD_CONCURRENCY, Math.floor(hardwareConcurrency / 2)));
+  // Bounded by cores because the worker still parses serially; going wider only queues.
+  return Math.max(2, Math.min(ROBOT_MESH_LOAD_CONCURRENCY, hardwareConcurrency));
+}
+
+// Component-GLB packages fan out to many small content-addressed GLBs (141 for
+// falcon_heavy). They parse in the GLB worker (off the main thread), so — unlike
+// the large robot-mesh STL path above — a higher fetch concurrency just overlaps
+// I/O without stalling the UI. Cap generously but bounded so we do not flood the
+// single worker's queue or open an unreasonable number of sockets.
+const PACKAGE_COMPONENT_LOAD_CONCURRENCY = 8;
+
+function packageComponentLoadConcurrency() {
+  const hardwareConcurrency = typeof navigator !== "undefined"
+    ? Number(navigator.hardwareConcurrency)
+    : 0;
+  if (!Number.isFinite(hardwareConcurrency) || hardwareConcurrency <= 0) {
+    return PACKAGE_COMPONENT_LOAD_CONCURRENCY;
+  }
+  return Math.max(4, Math.min(PACKAGE_COMPONENT_LOAD_CONCURRENCY, Math.floor(hardwareConcurrency)));
 }
 
 function urdfMeshUrls(urdfData) {
@@ -167,11 +177,9 @@ async function loadRenderRobotMeshes(meshUrls, { signal, onProgress } = {}) {
     if (signal?.aborted) {
       throw abortError();
     }
-    await browserYield();
     const mesh = await loadRenderMeshByUrl(meshUrl, { signal, fallback: RENDER_FORMAT.STL });
     completed += 1;
     onProgress?.(completed, total);
-    await browserYield();
     return mesh;
   });
 }
@@ -203,8 +211,6 @@ export function useCadAssets({
   entryHasMesh,
   entryHasReferences,
   entryHasDisplayEdges = () => false,
-  entryHasDxf,
-  entryHasGcode,
   buildNormalizedReferenceState,
 }) {
   const [meshState, setMeshState] = useState(null);
@@ -213,14 +219,6 @@ export function useCadAssets({
   const [meshLoadStage, setMeshLoadStage] = useState("");
   const [status, setStatus] = useState(ASSET_STATUS.READY);
   const [error, setError] = useState("");
-  const [dxfState, setDxfState] = useState(null);
-  const [dxfStatus, setDxfStatus] = useState(ASSET_STATUS.PENDING);
-  const [dxfError, setDxfError] = useState("");
-  const [dxfLoadStage, setDxfLoadStage] = useState("");
-  const [gcodeState, setGcodeState] = useState(null);
-  const [gcodeStatus, setGcodeStatus] = useState(ASSET_STATUS.PENDING);
-  const [gcodeError, setGcodeError] = useState("");
-  const [gcodeLoadStage, setGcodeLoadStage] = useState("");
   const [implicitState, setImplicitState] = useState(null);
   const [implicitStatus, setImplicitStatus] = useState(ASSET_STATUS.PENDING);
   const [implicitError, setImplicitError] = useState("");
@@ -239,15 +237,11 @@ export function useCadAssets({
   const [displayEdgeLoadStage, setDisplayEdgeLoadStage] = useState("");
 
   const requestIdRef = useRef(0);
-  const dxfRequestIdRef = useRef(0);
-  const gcodeRequestIdRef = useRef(0);
   const implicitRequestIdRef = useRef(0);
   const urdfRequestIdRef = useRef(0);
   const referenceRequestIdRef = useRef(0);
   const displayEdgeRequestIdRef = useRef(0);
   const meshAbortControllerRef = useRef(null);
-  const dxfAbortControllerRef = useRef(null);
-  const gcodeAbortControllerRef = useRef(null);
   const implicitAbortControllerRef = useRef(null);
   const urdfAbortControllerRef = useRef(null);
   const referenceAbortControllerRef = useRef(null);
@@ -257,15 +251,14 @@ export function useCadAssets({
     return entryMeshAssetSignature(entry);
   }, []);
 
-  const buildSelfContainedAssemblyMeshState = useCallback((entry, topologyManifest, meshData) => {
-    const assemblyMeshData = buildSelfContainedAssemblyMeshData(topologyManifest, meshData);
+  const buildComposedPackageMeshState = useCallback((entry, descriptor, meshData) => {
     return {
       file: entry.file,
       kind: entry.kind,
       meshHash: getAssemblyMeshHash(entry),
       meshData: {
-        ...assemblyMeshData,
-        assemblyMates: assemblyMatesFromTopology(topologyManifest)
+        ...meshData,
+        assemblyMates: assemblyMatesFromTopology(descriptor)
       },
       assemblyStructureReady: true,
       assemblyInteractionReady: true,
@@ -290,7 +283,11 @@ export function useCadAssets({
     if (!entryHasMesh(entry)) {
       return null;
     }
-    if (entry?.kind === "assembly") {
+    // Every STEP entry — single-component part OR multi-occurrence assembly — is a
+    // component-GLB package (a directory of content-addressed component GLBs + an
+    // assembly.json descriptor), composed asynchronously in the browser. The synchronous
+    // cache only yields the lightweight preview; the full mesh is built in loadMeshForEntry.
+    if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
       const glbUrl = entryAssetUrl(entry, "glb");
       const topologyUrl = entryTopologyAssetUrl(entry);
       const previewMeshData = peekRenderGlb(glbUrl);
@@ -300,9 +297,6 @@ export function useCadAssets({
       const topologyManifest = peekRenderTopologyIndex(topologyUrl);
       if (!topologyManifest) {
         return buildAssemblyPreviewMeshState(entry, previewMeshData);
-      }
-      if (assemblyUsesSelfContainedMesh(topologyManifest)) {
-        return buildSelfContainedAssemblyMeshState(entry, topologyManifest, previewMeshData);
       }
       return null;
     }
@@ -316,7 +310,7 @@ export function useCadAssets({
       meshHash: entryMeshAssetHash(entry),
       meshData
     };
-  }, [buildAssemblyPreviewMeshState, buildSelfContainedAssemblyMeshState, entryHasMesh]);
+  }, [buildAssemblyPreviewMeshState, entryHasMesh]);
 
   const getCachedReferenceState = useCallback((entry) => {
     if (!entryHasReferences(entry)) {
@@ -343,38 +337,6 @@ export function useCadAssets({
     const bundle = peekRenderDisplayEdgeBundle(entryDisplayEdgeTopologyAssetUrl(entry));
     return bundle ? buildDisplayEdgeState(entry, bundle) : null;
   }, [buildDisplayEdgeState, entryHasDisplayEdges]);
-
-  const getCachedDxfState = useCallback((entry) => {
-    if (!entryHasDxf(entry)) {
-      return null;
-    }
-    const dxfData = peekRenderDxf(entryAssetUrl(entry, "dxf"));
-    if (!dxfData) {
-      return null;
-    }
-    return {
-      file: entry.file,
-      kind: entry.kind,
-      dxfHash: entryAssetHash(entry, "dxf"),
-      dxfData
-    };
-  }, [entryHasDxf]);
-
-  const getCachedGcodeState = useCallback((entry) => {
-    if (!entryHasGcode(entry)) {
-      return null;
-    }
-    const gcodeData = peekRenderGcode(entryAssetUrl(entry, "gcode"));
-    if (!gcodeData) {
-      return null;
-    }
-    return {
-      file: entry.file,
-      kind: entry.kind,
-      gcodeHash: entryAssetHash(entry, "gcode"),
-      gcodeData
-    };
-  }, [entryHasGcode]);
 
   const getCachedImplicitState = useCallback((entry) => {
     if (String(entry?.kind || "").trim().toLowerCase() !== RENDER_FORMAT.IMPLICIT) {
@@ -435,18 +397,6 @@ export function useCadAssets({
     setMeshLoadStage("");
   }, []);
 
-  const cancelDxfLoad = useCallback(() => {
-    dxfRequestIdRef.current += 1;
-    abortLoad(dxfAbortControllerRef);
-    setDxfLoadStage("");
-  }, []);
-
-  const cancelGcodeLoad = useCallback(() => {
-    gcodeRequestIdRef.current += 1;
-    abortLoad(gcodeAbortControllerRef);
-    setGcodeLoadStage("");
-  }, []);
-
   const cancelImplicitLoad = useCallback(() => {
     implicitRequestIdRef.current += 1;
     abortLoad(implicitAbortControllerRef);
@@ -505,41 +455,47 @@ export function useCadAssets({
     }
 
     try {
-      if (entry?.kind === "assembly") {
+      // Every STEP entry is a component-GLB package (a single-component part is just a
+      // package with one occurrence); compose it the same way. Only non-STEP meshes
+      // (STL/3MF/OBJ) fall through to the monolithic single-file loader below.
+      if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
         const meshUrl = entryAssetUrl(entry, "glb");
-        const topologyUrl = entryTopologyAssetUrl(entry);
         if (!meshUrl) {
-          throw new Error(`STEP assembly is missing GLB asset: ${entry.file || "(unknown)"}`);
+          throw new Error(`STEP file is missing GLB asset: ${entry.file || "(unknown)"}`);
         }
-        const previewMeshData = cachedMeshState?.meshData || await loadRenderGlb(meshUrl, {
-          signal: controller.signal,
-          preferWorker: shouldUseGlbMeshWorkerForEntry(entry)
-        });
-        if (requestId !== requestIdRef.current) {
-          return;
-        }
-        if (!cachedMeshState) {
-          setMeshState(buildAssemblyPreviewMeshState(entry, previewMeshData));
-          setStatus(ASSET_STATUS.READY);
-          setError("");
-          assemblyPreviewVisible = true;
-        }
-        setMeshLoadStage("loading topology");
-        const topologyManifest = await loadRenderTopologyIndex(topologyUrl, { signal: controller.signal });
-        if (requestId !== requestIdRef.current) {
-          return;
-        }
-        if (!cachedMeshState?.assemblyStructureReady) {
-          setMeshState(buildAssemblyPreviewMeshState(entry, previewMeshData, topologyManifest));
-        }
-        if (assemblyUsesSelfContainedMesh(topologyManifest)) {
+        // Component-GLB package: the canonical STEP artifact is a directory. Probe for
+        // its assembly.json, fetch each unique component GLB once, and compose them in
+        // world space. A non-package descriptor is a stale/unbuilt artifact (throws below).
+        const packageDescriptor = await loadRenderJson(resolvePackageAssetUrl(meshUrl, "assembly.json"), {
+          signal: controller.signal
+        }).catch(() => null);
+        if (packageDescriptor && packageDescriptor.kind === "assembly-package") {
+          setMeshLoadStage("loading components");
+          const componentEntries = Object.entries(packageDescriptor.components || {});
+          const componentMeshDataByCid = {};
+          await mapWithConcurrency(componentEntries, packageComponentLoadConcurrency(), async ([cid, component]) => {
+            componentMeshDataByCid[cid] = await loadRenderGlb(resolvePackageAssetUrl(meshUrl, component.glb), {
+              // Parse component GLBs in the worker so the main thread stays free to
+              // paint the loading UI while 100+ components fetch+parse in parallel.
+              signal: controller.signal,
+              preferWorker: true
+            });
+          });
+          if (requestId !== requestIdRef.current) {
+            return;
+          }
           setMeshLoadStage("building assembly");
-          setMeshState(buildSelfContainedAssemblyMeshState(entry, topologyManifest, previewMeshData));
+          const composed = buildComposedPackageMeshData(packageDescriptor, componentMeshDataByCid);
+          setMeshState(buildComposedPackageMeshState(entry, packageDescriptor, composed));
           setStatus(ASSET_STATUS.READY);
           setError("");
           return;
         }
-        throw new Error("STEP assembly topology is not self-contained.");
+        // Every STEP model is a component-GLB package (handled above). A missing/non-package
+        // descriptor means the artifact is stale or was never built as a package.
+        throw new Error(
+          `STEP file ${entry.file || "(unknown)"} is not a component-GLB package; regenerate it to produce an assembly.json package.`
+        );
       }
       const meshUrl = entryMeshAssetUrl(entry);
       if (!meshUrl) {
@@ -587,9 +543,9 @@ export function useCadAssets({
         meshAbortControllerRef.current = null;
       }
     }
-  }, [buildAssemblyPreviewMeshState, buildSelfContainedAssemblyMeshState, cancelMeshLoad, entryHasMesh, getAssemblyMeshHash, getCachedMeshState]);
+  }, [buildAssemblyPreviewMeshState, cancelMeshLoad, entryHasMesh, getAssemblyMeshHash, getCachedMeshState]);
 
-  const loadReferencesForEntry = useCallback(async (entry) => {
+  const loadReferencesForEntry = useCallback(async (entry, requestedOccurrenceIds = []) => {
     cancelReferenceLoad();
     const requestId = referenceRequestIdRef.current;
 
@@ -615,6 +571,75 @@ export function useCadAssets({
     setReferenceLoadStage("loading topology");
 
     try {
+      // Component-GLB package: there is no whole-assembly selector bundle. Compose the
+      // per-component selector runtimes (each placed by its occurrence transform and namespaced
+      // by occurrence id) so nested faces/edges become pickable.
+      const glbUrl = entryAssetUrl(entry, "glb");
+      const packageDescriptor = glbUrl
+        ? await loadRenderJson(resolvePackageAssetUrl(glbUrl, "assembly.json"), { signal: controller.signal }).catch(() => null)
+        : null;
+      if (packageDescriptor && packageDescriptor.kind === "assembly-package") {
+        // Lazy topology: an assembly loads selector topology only for the occurrences the user has
+        // expanded in the tree (requestedOccurrenceIds), not every component. Loading all of them up
+        // front made expanding one nested node fetch + compose the whole model's topology (regressed
+        // in 8b12837d). A single-component part has no tree, so it loads its one component.
+        // loadRenderSelectorBundle is cache-backed, so each new expansion only fetches the
+        // newly-needed component; previously loaded ones are free.
+        const isSingleComponentPart = String(entry?.kind || "").trim() === "part";
+        const { occurrencesToLoad, neededCids, loadedTopologyKey } = selectRequestedAssemblyComponents(
+          packageDescriptor,
+          requestedOccurrenceIds,
+          { singleComponentPart: isSingleComponentPart }
+        );
+        const componentBundleByCid = {};
+        await mapWithConcurrency(
+          neededCids,
+          robotMeshLoadConcurrency(),
+          async (cid) => {
+            const component = (packageDescriptor.components || {})[cid];
+            if (!component) {
+              return;
+            }
+            componentBundleByCid[cid] = await loadRenderSelectorBundle(
+              resolvePackageAssetUrl(glbUrl, component.glb),
+              { signal: controller.signal }
+            ).catch(() => null);
+          }
+        );
+        if (requestId !== referenceRequestIdRef.current) {
+          return;
+        }
+        // A single-component part renders as a topology tree (not an assembly structure), so its
+        // topology must graft onto the synthetic part root via fallbackPartId — i.e. carry NO
+        // partId (an occurrence-namespaced partId would orphan it). Multi-occurrence assemblies
+        // DO namespace by occurrence so each leaf part owns its faces/edges. Both keep
+        // remapOccurrenceId so picks align with the composed mesh's sourcePartRanges occurrence.
+        const occurrenceRuntimes = occurrencesToLoad
+          .map((occurrence) => {
+            const bundle = componentBundleByCid[String(occurrence?.component || "").trim()];
+            if (!bundle) {
+              return null;
+            }
+            const occurrenceId = String(occurrence?.id || "").trim();
+            return buildSelectorRuntime(bundle, {
+              copyCadPath: String(entry?.file || ""),
+              partId: isSingleComponentPart ? "" : occurrenceId,
+              transform: occurrence?.transform || null,
+              remapOccurrenceId: occurrenceId
+            });
+          })
+          .filter(Boolean);
+        const composedRuntime = composeSelectorRuntimes(occurrenceRuntimes);
+        const nextReferenceState = buildNormalizedReferenceState(entry, null, {
+          selectorRuntime: composedRuntime,
+          loadedTopologyKey
+        });
+        setReferenceState(nextReferenceState);
+        setReferenceStatus(nextReferenceState.disabledReason ? REFERENCE_STATUS.DISABLED : REFERENCE_STATUS.READY);
+        setReferenceError(nextReferenceState.disabledReason || "");
+        return;
+      }
+
       const bundle = await loadRenderSelectorBundle(
         entrySelectorTopologyAssetUrl(entry),
         { signal: controller.signal }
@@ -647,6 +672,17 @@ export function useCadAssets({
     const requestId = displayEdgeRequestIdRef.current;
 
     if (!entryHasDisplayEdges(entry)) {
+      setDisplayEdgeState(null);
+      setDisplayEdgeStatus(REFERENCE_STATUS.DISABLED);
+      setDisplayEdgeError("");
+      return;
+    }
+
+    // A STEP model is a component-GLB package: there is no separate display-edge bundle to
+    // fetch (the package "glb" asset is a directory, so a fetch would 404). The per-component
+    // edges live in the composed selector runtime, which CadViewer already uses as the display-
+    // edge source via `displayEdgeRuntime || selectorRuntime`. Disable the dedicated load.
+    if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
       setDisplayEdgeState(null);
       setDisplayEdgeStatus(REFERENCE_STATUS.DISABLED);
       setDisplayEdgeError("");
@@ -694,114 +730,6 @@ export function useCadAssets({
       }
     }
   }, [buildDisplayEdgeState, cancelDisplayEdgeLoad, entryHasDisplayEdges, getCachedDisplayEdgeState]);
-
-  const loadDxfForEntry = useCallback(async (entry) => {
-    cancelDxfLoad();
-    const requestId = dxfRequestIdRef.current;
-
-    if (!entryHasDxf(entry)) {
-      setDxfState(null);
-      setDxfStatus(ASSET_STATUS.PENDING);
-      setDxfError("");
-      return;
-    }
-
-    const cachedDxfState = getCachedDxfState(entry);
-    if (cachedDxfState) {
-      setDxfState(cachedDxfState);
-      setDxfStatus(ASSET_STATUS.READY);
-      setDxfError("");
-      return;
-    }
-
-    const controller = new AbortController();
-    dxfAbortControllerRef.current = controller;
-    setDxfStatus(ASSET_STATUS.LOADING);
-    setDxfError("");
-    setDxfLoadStage("loading DXF");
-
-    try {
-      const dxfData = await loadRenderDxf(entryAssetUrl(entry, "dxf"), { signal: controller.signal });
-      if (requestId !== dxfRequestIdRef.current) {
-        return;
-      }
-      setDxfLoadStage("building preview");
-      setDxfState({
-        file: entry.file,
-        kind: entry.kind,
-        dxfHash: entryAssetHash(entry, "dxf"),
-        dxfData
-      });
-      setDxfStatus(ASSET_STATUS.READY);
-    } catch (err) {
-      if (requestId !== dxfRequestIdRef.current || isAbortError(err) || controller.signal.aborted) {
-        return;
-      }
-      setDxfStatus(ASSET_STATUS.ERROR);
-      setDxfError(err instanceof Error ? err.message : String(err));
-    } finally {
-      if (dxfAbortControllerRef.current === controller) {
-        dxfAbortControllerRef.current = null;
-      }
-      if (requestId === dxfRequestIdRef.current) {
-        setDxfLoadStage("");
-      }
-    }
-  }, [cancelDxfLoad, entryHasDxf, getCachedDxfState]);
-
-  const loadGcodeForEntry = useCallback(async (entry) => {
-    cancelGcodeLoad();
-    const requestId = gcodeRequestIdRef.current;
-
-    if (!entryHasGcode(entry)) {
-      setGcodeState(null);
-      setGcodeStatus(ASSET_STATUS.PENDING);
-      setGcodeError("");
-      return;
-    }
-
-    const cachedGcodeState = getCachedGcodeState(entry);
-    if (cachedGcodeState) {
-      setGcodeState(cachedGcodeState);
-      setGcodeStatus(ASSET_STATUS.READY);
-      setGcodeError("");
-      return;
-    }
-
-    const controller = new AbortController();
-    gcodeAbortControllerRef.current = controller;
-    setGcodeStatus(ASSET_STATUS.LOADING);
-    setGcodeError("");
-    setGcodeLoadStage("loading G-code");
-
-    try {
-      const gcodeData = await loadRenderGcode(entryAssetUrl(entry, "gcode"), { signal: controller.signal });
-      if (requestId !== gcodeRequestIdRef.current) {
-        return;
-      }
-      setGcodeLoadStage("building preview");
-      setGcodeState({
-        file: entry.file,
-        kind: entry.kind,
-        gcodeHash: entryAssetHash(entry, "gcode"),
-        gcodeData
-      });
-      setGcodeStatus(ASSET_STATUS.READY);
-    } catch (err) {
-      if (requestId !== gcodeRequestIdRef.current || isAbortError(err) || controller.signal.aborted) {
-        return;
-      }
-      setGcodeStatus(ASSET_STATUS.ERROR);
-      setGcodeError(err instanceof Error ? err.message : String(err));
-    } finally {
-      if (gcodeAbortControllerRef.current === controller) {
-        gcodeAbortControllerRef.current = null;
-      }
-      if (requestId === gcodeRequestIdRef.current) {
-        setGcodeLoadStage("");
-      }
-    }
-  }, [cancelGcodeLoad, entryHasGcode, getCachedGcodeState]);
 
   const loadImplicitForEntry = useCallback(async (entry) => {
     cancelImplicitLoad();
@@ -901,6 +829,10 @@ export function useCadAssets({
       const urdfData = payload.urdfData;
       const meshUrls = urdfMeshUrls(urdfData);
       setUrdfLoadStage(meshUrls.length ? "loading meshes" : "building robot");
+      // The robot is published ONCE, complete. Drawing links as they arrive was tried and
+      // rejected: a half-built robot on screen with the loading card already gone gives no
+      // sign whether more is coming, so it reads as a broken model rather than a loading
+      // one. The counted stage below is the progress signal instead.
       const meshes = await loadRenderRobotMeshes(meshUrls, {
         signal: controller.signal,
         onProgress: (completed, total) => {
@@ -919,7 +851,8 @@ export function useCadAssets({
         kind: entry.kind,
         urdfHash: entryUrdfAssetHash(entry),
         urdfData,
-        meshesByUrl
+        meshesByUrl,
+        complete: true
       });
       setUrdfStatus(ASSET_STATUS.READY);
     } catch (err) {
@@ -940,8 +873,6 @@ export function useCadAssets({
 
   useEffect(() => () => {
     abortLoad(meshAbortControllerRef);
-    abortLoad(dxfAbortControllerRef);
-    abortLoad(gcodeAbortControllerRef);
     abortLoad(implicitAbortControllerRef);
     abortLoad(urdfAbortControllerRef);
     abortLoad(referenceAbortControllerRef);
@@ -958,20 +889,6 @@ export function useCadAssets({
     setStatus,
     error,
     setError,
-    dxfState,
-    setDxfState,
-    dxfStatus,
-    setDxfStatus,
-    dxfError,
-    setDxfError,
-    dxfLoadStage,
-    gcodeState,
-    setGcodeState,
-    gcodeStatus,
-    setGcodeStatus,
-    gcodeError,
-    setGcodeError,
-    gcodeLoadStage,
     implicitState,
     setImplicitState,
     implicitStatus,
@@ -1003,20 +920,14 @@ export function useCadAssets({
     getCachedMeshState,
     getCachedReferenceState,
     getCachedDisplayEdgeState,
-    getCachedDxfState,
-    getCachedGcodeState,
     getCachedImplicitState,
     getCachedUrdfState,
     cancelMeshLoad,
-    cancelDxfLoad,
-    cancelGcodeLoad,
     cancelImplicitLoad,
     cancelUrdfLoad,
     cancelReferenceLoad,
     cancelDisplayEdgeLoad,
     loadMeshForEntry,
-    loadDxfForEntry,
-    loadGcodeForEntry,
     loadImplicitForEntry,
     loadUrdfForEntry,
     loadReferencesForEntry,

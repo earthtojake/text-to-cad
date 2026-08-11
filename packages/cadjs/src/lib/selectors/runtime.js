@@ -1,4 +1,5 @@
 import { buildCadRefToken } from "../cadRefs.js";
+import { mergeBounds } from "../urdf/kinematics.js";
 
 function isObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -858,6 +859,188 @@ export function buildTransformedSelectorRuntime(selectorRuntime, transformByPart
       edgePositions: edgeProxy.positions,
       edgeIndices: edgeProxy.indices,
       edgeIds: edgeProxy.ids,
+    },
+  };
+}
+
+// Merge per-component selector runtimes (each already world-placed via its occurrence transform
+// and namespaced via remapOccurrenceId) into one assembly runtime. A component-GLB package has no
+// whole-assembly selector topology, so this composes the leaf runtimes: it concatenates the
+// occurrence/shape/face/edge tables and references — offsetting every rowIndex so each component
+// occupies a disjoint range — rebuilds the lookup maps the viewer reads, and concatenates the face
+// and edge pick proxies (positions/indices/ids) with matching vertex- and row-offsets so a pick on
+// the proxy resolves through faceIds -> faceReferenceByRowIndex to the right namespaced selector.
+export function composeSelectorRuntimes(runtimes) {
+  const valid = (Array.isArray(runtimes) ? runtimes : []).filter(Boolean);
+  if (!valid.length) {
+    return null;
+  }
+  if (valid.length === 1) {
+    return valid[0];
+  }
+
+  let totalFacePos = 0, totalFaceIdx = 0, totalFaceIds = 0, totalFaceRuns = 0;
+  let totalEdgePos = 0, totalEdgeIdx = 0, totalEdgeIds = 0;
+  for (const runtime of valid) {
+    const proxy = runtime.proxy || {};
+    totalFacePos += proxy.facePositions?.length || 0;
+    totalFaceIdx += proxy.faceIndices?.length || 0;
+    totalFaceIds += proxy.faceIds?.length || 0;
+    totalFaceRuns += proxy.faceRuns?.length || 0;
+    totalEdgePos += proxy.edgePositions?.length || 0;
+    totalEdgeIdx += proxy.edgeIndices?.length || 0;
+    totalEdgeIds += proxy.edgeIds?.length || 0;
+  }
+  const facePositions = new Float32Array(totalFacePos);
+  const faceIndices = new Uint32Array(totalFaceIdx);
+  const faceIds = new Uint32Array(totalFaceIds);
+  const edgePositions = new Float32Array(totalEdgePos);
+  const edgeIndices = new Uint32Array(totalEdgeIdx);
+  const edgeIds = new Uint32Array(totalEdgeIds);
+  // faceRuns map (occurrenceRow, primitiveIndex, triangleStart, triangleCount, faceRow) and are
+  // what buildGlbFaceIdsForPart uses to resolve a render-mesh triangle to a face. Concatenate
+  // them, offsetting the occurrenceRow and faceRow columns into the merged tables.
+  const faceRunColumns = (Array.isArray(valid[0]?.proxy?.faceRunColumns) && valid[0].proxy.faceRunColumns.length)
+    ? valid[0].proxy.faceRunColumns
+    : ["occurrenceRow", "primitiveIndex", "triangleStart", "triangleCount", "faceRow"];
+  const faceRunStride = faceRunColumns.length;
+  const faceRunOccCol = Math.max(0, faceRunColumns.indexOf("occurrenceRow"));
+  const faceRunFaceCol = Math.max(0, faceRunColumns.indexOf("faceRow"));
+  const faceRuns = new Uint32Array(totalFaceRuns);
+  let faceRunCursor = 0;
+
+  const occurrences = [], shapes = [], faces = [], edges = [], references = [];
+  const occurrenceIdByRowIndex = new Map();
+  let faceRowOffset = 0, edgeRowOffset = 0, occRowOffset = 0, shapeRowOffset = 0;
+  let facePosCursor = 0, faceIdxCursor = 0, faceIdCursor = 0, faceVtxOffset = 0;
+  let edgePosCursor = 0, edgeIdxCursor = 0, edgeIdCursor = 0, edgeVtxOffset = 0;
+  // A reference's pickData.{triangleStart,segmentStart} indexes into the per-component face/edge
+  // proxy. Once the proxies are concatenated, those starts must shift by the cumulative triangle/
+  // segment count of prior components — else a non-first occurrence's edge/face highlight points
+  // into the first component (the bug where selecting o1.6's edge highlighted base_plate).
+  let faceTriOffset = 0, edgeSegOffset = 0;
+
+  for (const runtime of valid) {
+    const fOff = faceRowOffset, eOff = edgeRowOffset, oOff = occRowOffset, sOff = shapeRowOffset;
+    const faceTriOff = faceTriOffset, edgeSegOff = edgeSegOffset;
+    for (const row of (runtime.occurrences || [])) occurrences.push(row);
+    for (const row of (runtime.shapes || [])) shapes.push(row);
+    for (const row of (runtime.faces || [])) faces.push(row);
+    for (const row of (runtime.edges || [])) edges.push(row);
+    for (const reference of (runtime.references || [])) {
+      const type = reference?.selectorType;
+      const offset = type === "face" ? fOff
+        : type === "edge" ? eOff
+          : type === "occurrence" ? oOff
+            : type === "shape" ? sOff : 0;
+      const rowIndex = Number(reference?.rowIndex);
+      let next = Number.isFinite(rowIndex) ? { ...reference, rowIndex: rowIndex + offset } : { ...reference };
+      const pickData = reference?.pickData;
+      if (pickData && typeof pickData === "object") {
+        if (type === "edge" && Number.isFinite(Number(pickData.segmentStart))) {
+          next = { ...next, pickData: { ...pickData, segmentStart: Number(pickData.segmentStart) + edgeSegOff } };
+        } else if (type === "face" && Number.isFinite(Number(pickData.triangleStart))) {
+          next = { ...next, pickData: { ...pickData, triangleStart: Number(pickData.triangleStart) + faceTriOff } };
+        }
+      }
+      references.push(next);
+    }
+    for (const [key, value] of (runtime.occurrenceIdByRowIndex || new Map())) {
+      occurrenceIdByRowIndex.set(Number(key) + oOff, value);
+    }
+
+    const proxy = runtime.proxy || {};
+    if (proxy.facePositions instanceof Float32Array) {
+      facePositions.set(proxy.facePositions, facePosCursor);
+      facePosCursor += proxy.facePositions.length;
+    }
+    if (proxy.faceIndices instanceof Uint32Array) {
+      for (let i = 0; i < proxy.faceIndices.length; i += 1) {
+        faceIndices[faceIdxCursor + i] = proxy.faceIndices[i] + faceVtxOffset;
+      }
+      faceIdxCursor += proxy.faceIndices.length;
+    }
+    if (proxy.faceIds instanceof Uint32Array) {
+      for (let i = 0; i < proxy.faceIds.length; i += 1) {
+        faceIds[faceIdCursor + i] = proxy.faceIds[i] + fOff;
+      }
+      faceIdCursor += proxy.faceIds.length;
+    }
+    faceVtxOffset += Math.floor((proxy.facePositions?.length || 0) / 3);
+    faceTriOffset += Math.floor((proxy.faceIndices?.length || 0) / 3);
+    if (proxy.faceRuns instanceof Uint32Array && proxy.faceRuns.length) {
+      for (let i = 0; i + faceRunStride <= proxy.faceRuns.length; i += faceRunStride) {
+        for (let c = 0; c < faceRunStride; c += 1) {
+          faceRuns[faceRunCursor + i + c] = proxy.faceRuns[i + c];
+        }
+        faceRuns[faceRunCursor + i + faceRunOccCol] = proxy.faceRuns[i + faceRunOccCol] + oOff;
+        faceRuns[faceRunCursor + i + faceRunFaceCol] = proxy.faceRuns[i + faceRunFaceCol] + fOff;
+      }
+      faceRunCursor += proxy.faceRuns.length;
+    }
+    if (proxy.edgePositions instanceof Float32Array) {
+      edgePositions.set(proxy.edgePositions, edgePosCursor);
+      edgePosCursor += proxy.edgePositions.length;
+    }
+    if (proxy.edgeIndices instanceof Uint32Array) {
+      for (let i = 0; i < proxy.edgeIndices.length; i += 1) {
+        edgeIndices[edgeIdxCursor + i] = proxy.edgeIndices[i] + edgeVtxOffset;
+      }
+      edgeIdxCursor += proxy.edgeIndices.length;
+    }
+    if (proxy.edgeIds instanceof Uint32Array) {
+      for (let i = 0; i < proxy.edgeIds.length; i += 1) {
+        edgeIds[edgeIdCursor + i] = proxy.edgeIds[i] + eOff;
+      }
+      edgeIdCursor += proxy.edgeIds.length;
+    }
+    edgeVtxOffset += Math.floor((proxy.edgePositions?.length || 0) / 3);
+    edgeSegOffset += Math.floor((proxy.edgeIndices?.length || 0) / 2);
+
+    faceRowOffset += (runtime.faces || []).length;
+    edgeRowOffset += (runtime.edges || []).length;
+    occRowOffset += (runtime.occurrences || []).length;
+    shapeRowOffset += (runtime.shapes || []).length;
+  }
+
+  const visibleReferences = references.filter((reference) => String(reference?.normalizedSelector || "").trim());
+  const base = valid[0];
+  return {
+    ...base,
+    bbox: mergeBounds(valid.map((runtime) => runtime.bbox)) || base.bbox,
+    occurrences,
+    shapes,
+    faces,
+    edges,
+    vertices: [],
+    references: visibleReferences,
+    referenceMap: new Map(visibleReferences.map((reference) => [reference.id, reference])),
+    referenceByNormalizedSelector: new Map(visibleReferences.map((reference) => [reference.normalizedSelector, reference])),
+    referenceByDisplaySelector: new Map(visibleReferences.map((reference) => [reference.displaySelector, reference])),
+    faceReferenceByRowIndex: new Map(
+      visibleReferences.filter((reference) => reference.selectorType === "face").map((reference) => [reference.rowIndex, reference])
+    ),
+    edgeReferenceByRowIndex: new Map(
+      visibleReferences.filter((reference) => reference.selectorType === "edge").map((reference) => [reference.rowIndex, reference])
+    ),
+    faceReferenceMap: new Map(
+      visibleReferences.filter((reference) => reference.selectorType === "face").map((reference) => [reference.id, reference])
+    ),
+    edgeReferenceMap: new Map(
+      visibleReferences.filter((reference) => reference.selectorType === "edge").map((reference) => [reference.id, reference])
+    ),
+    occurrenceIdByRowIndex,
+    singleOccurrenceId: "",
+    proxy: {
+      ...(base.proxy || {}),
+      facePositions,
+      faceIndices,
+      faceIds,
+      faceRuns,
+      faceRunColumns,
+      edgePositions,
+      edgeIndices,
+      edgeIds,
     },
   };
 }

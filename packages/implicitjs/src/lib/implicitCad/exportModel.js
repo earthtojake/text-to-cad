@@ -2,7 +2,7 @@ import { buildImplicitAnimatedModel, findImplicitAnimation } from "./animation.j
 import { meshImplicitCadModel } from "./mesh.js";
 import { normalizeImplicitCadModel } from "./model.js";
 import { createImplicitCadColorEvaluator, createImplicitCadSdfEvaluator } from "./sdfEvaluator.js";
-import { meshToAnimatedGlb, meshToFormat } from "./exporters.js";
+import { meshToAnimatedGlb, meshToFormat, triangleNormal } from "./exporters.js";
 
 export const IMPLICIT_CAD_EXPORT_FORMATS = Object.freeze(["glb", "stl", "3mf"]);
 export const IMPLICIT_EXPORT_FORMATS = IMPLICIT_CAD_EXPORT_FORMATS;
@@ -37,6 +37,11 @@ function rgb01ToHex(rgb) {
   return `#${channel(rgb?.[0])}${channel(rgb?.[1])}${channel(rgb?.[2])}`;
 }
 
+/** Average the model's color function over the mesh to get one material display color.
+ * The normal handed to `color(p, normal)` is the TRIANGLE's geometric normal, recomputed
+ * from positions rather than read from `mesh.normals`: the display color is a property of
+ * the surface, so it must not shift when one mesh pass serves several formats and
+ * `smoothNormals` is chosen for the GLB. */
 function sampleImplicitCadMeshColor(model, mesh, { sampleLimit = 768 } = {}) {
   if (!model?.colorSource) {
     return model?.material?.color;
@@ -44,9 +49,6 @@ function sampleImplicitCadMeshColor(model, mesh, { sampleLimit = 768 } = {}) {
   try {
     const colorAt = createImplicitCadColorEvaluator(model);
     const positions = mesh.positions || new Float32Array();
-    const normals = mesh.normals && mesh.normals.length === positions.length
-      ? mesh.normals
-      : null;
     const vertexCount = Math.floor(positions.length / 3);
     const stride = Math.max(1, Math.floor(vertexCount / Math.max(sampleLimit, 1)));
     const sum = [0, 0, 0];
@@ -55,7 +57,7 @@ function sampleImplicitCadMeshColor(model, mesh, { sampleLimit = 768 } = {}) {
       const offset = vertex * 3;
       const color = colorAt(
         [positions[offset], positions[offset + 1], positions[offset + 2]],
-        normals ? [normals[offset], normals[offset + 1], normals[offset + 2]] : [0, 0, 1]
+        triangleNormal(positions, Math.floor(vertex / 3) * 9)
       );
       if (!color.every((component) => Number.isFinite(component))) {
         continue;
@@ -151,6 +153,60 @@ function runtimeModelForExport(modelValue, {
     : model;
 }
 
+/** Export one implicit model to SEVERAL formats from ONE mesh pass. Meshing is the
+ * expensive step, so every requested format is serialized from the same triangles —
+ * `--stl --3mf --glb` samples the SDF once, not three times. */
+export function exportImplicitCadModelFormats(modelValue, {
+  formats = ["glb"],
+  params = null,
+  parameterValues = null,
+  animationState = null,
+  resolution = 96,
+  maxCells = undefined,
+  normalEpsilon = undefined,
+  // One mesh serves every format, so this is a single shared choice rather than a
+  // per-format one. It only changes the GLB: the STL writer recomputes facet normals
+  // from positions and the 3MF writer reads positions only.
+  smoothNormals = true,
+} = {}) {
+  const requested = [];
+  for (const value of Array.isArray(formats) ? formats : [formats]) {
+    const normalized = normalizeImplicitExportFormat(value);
+    if (!normalized) {
+      throw new Error(`Unsupported implicit CAD export format: ${value || "(missing)"}`);
+    }
+    if (!requested.includes(normalized)) {
+      requested.push(normalized);
+    }
+  }
+  if (!requested.length) {
+    throw new Error("Implicit CAD export requires at least one format.");
+  }
+  const model = runtimeModelForExport(modelValue, {
+    params,
+    parameterValues,
+    animationState,
+  });
+  const mesh = meshImplicitCadModel(model, {
+    resolution,
+    maxCells,
+    normalEpsilon,
+    smoothNormals,
+  });
+  if (!mesh.triangleCount) {
+    throw new Error("Implicit CAD export produced an empty mesh. Check bounds, parameters, and resolution.");
+  }
+  const options = {
+    name: model.name,
+    color: sampleImplicitCadMeshColor(model, mesh),
+  };
+  const outputs = requested.map((format) => ({
+    ...meshToFormat(mesh, format, options),
+    format,
+  }));
+  return { mesh, model, outputs };
+}
+
 export function exportImplicitCadModel(modelValue, {
   format = "glb",
   params = null,
@@ -161,27 +217,19 @@ export function exportImplicitCadModel(modelValue, {
   normalEpsilon = undefined,
   smoothNormals = undefined,
 } = {}) {
-  const model = runtimeModelForExport(modelValue, {
+  const outputFormat = normalizeImplicitExportFormat(format);
+  const { mesh, model, outputs } = exportImplicitCadModelFormats(modelValue, {
+    formats: [format],
     params,
     parameterValues,
     animationState,
-  });
-  const outputFormat = normalizeImplicitExportFormat(format);
-  const mesh = meshImplicitCadModel(model, {
     resolution,
     maxCells,
     normalEpsilon,
     smoothNormals: smoothNormals ?? outputFormat === "glb",
   });
-  if (!mesh.triangleCount) {
-    throw new Error("Implicit CAD export produced an empty mesh. Check bounds, parameters, and resolution.");
-  }
-  const exported = meshToFormat(mesh, format, {
-    name: model.name,
-    color: sampleImplicitCadMeshColor(model, mesh),
-  });
   return {
-    ...exported,
+    ...outputs[0],
     mesh,
     model,
     format: outputFormat,

@@ -20,15 +20,24 @@ import {
 import { resolveStepModuleFeatures } from "./stepModule.js";
 import {
   applyStepModuleEffectsToRecords,
-  buildPartTransformMatrix,
   buildStepModuleContext,
   createStepModuleEffectsApi,
   displayTransformForPart
 } from "./stepModuleEffects.js";
 import {
-  applyDisplayRecordTransform
+  applyDisplayRecordTransform,
+  composeDisplayRecordEffectMatrix
 } from "./displayRecordTransform.js";
 import { axisIndex, normalizeStepClipSettings } from "../lib/viewer/clipPlane.js";
+import {
+  PART_HOVER_EDGE_EMPHASIS,
+  PART_HOVER_EMISSIVE_INTENSITY,
+  PART_HOVER_HIGHLIGHT_BLEND,
+  PART_SELECTED_EMISSIVE_INTENSITY,
+  PART_SELECTED_HIGHLIGHT_BLEND,
+  partHighlightSurfaceColor,
+  syncPartOcclusionGhost
+} from "../lib/viewer/partHighlight.js";
 import {
   clampSceneModelRadius,
   getSceneScaleSettings,
@@ -732,7 +741,11 @@ function buildPartGeometryEntry(THREE, meshData, part, recomputeNormals = false)
         new THREE.BufferAttribute(new Float32Array(rawColors), 3)
       );
     }
-    if (!sourceMesh) {
+    if (sourceMesh) {
+      // Shared component geometry: source the (triangle-local) surface-edge attributes from
+      // the component itself so packages still render CAD edges on the shared-geometry path.
+      setSurfaceEdgeAttributes(THREE, geometry, sourceMesh, 0, vertexCount);
+    } else {
       setSurfaceEdgeAttributes(THREE, geometry, meshData, vertexOffset, vertexCount);
     }
     applyGeometryNormals(THREE, geometry, localNormals, recomputeNormals);
@@ -999,6 +1012,12 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
   baseTheme = DEFAULT_THEME,
   displayMode = CAD_DISPLAY_MODE.SOLID
 } = {}) {
+  if (record?.instanced) {
+    // Instanced buckets carry per-instance color (occurrence override) on the
+    // shared material; per-record color mutation does not apply. Source-color /
+    // override handling for the instanced path is a later increment.
+    return;
+  }
   if (!record?.material || !materialSettings) {
     return;
   }
@@ -1027,10 +1046,22 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
     return;
   }
   syncRecordVertexColors(THREE, record, materialSettings);
-  record.material.roughness = clamp(Number(materialSettings.roughness) || 0, 0, 1);
-  record.material.metalness = clamp(Number(materialSettings.metalness) || 0, 0, 1);
-  record.material.clearcoat = clamp(Number(materialSettings.clearcoat) || 0, 0, 1);
-  record.material.clearcoatRoughness = clamp(Number(materialSettings.clearcoatRoughness) || 0, 0, 1);
+  // Per-part PBR overrides: descriptor occurrences may carry a "material"
+  // object (cadgen component_package._occurrence_material) so brushed,
+  // polished, lacquered, and transparent parts differ in material RESPONSE,
+  // not just albedo. Theme values remain the per-channel fallback.
+  const partMaterial =
+    record.sourcePart?.material && typeof record.sourcePart.material === "object"
+      ? record.sourcePart.material
+      : null;
+  const materialChannel = (key) => {
+    const override = partMaterial ? Number(partMaterial[key]) : NaN;
+    return clamp(Number.isFinite(override) ? override : Number(materialSettings[key]) || 0, 0, 1);
+  };
+  record.material.roughness = materialChannel("roughness");
+  record.material.metalness = materialChannel("metalness");
+  record.material.clearcoat = materialChannel("clearcoat");
+  record.material.clearcoatRoughness = materialChannel("clearcoatRoughness");
   const sourceOpacity = Number.isFinite(Number(record.sourceOpacity))
     ? clamp(Number(record.sourceOpacity), 0, 1)
     : 1;
@@ -1217,10 +1248,14 @@ export function applyPartVisualState(THREE, records, {
   const highlightEdgeOpacity = Number.isFinite(Number(edgeSettings?.highlightOpacity))
     ? clamp(Number(edgeSettings.highlightOpacity), 0, 1)
     : 1;
+  // Same two-color split the viewer uses: hover and selection are separate
+  // colors, not two strengths of one, so they stay distinguishable on screen
+  // together.
   const edgeHighlightColor = String(edgeSettings?.highlightColor || REFERENCE_SELECTED_COLOR).trim() || REFERENCE_SELECTED_COLOR;
-  const hoveredSurfaceColor = new THREE.Color(REFERENCE_HOVER_COLOR);
-  const hoveredEdgeColor = new THREE.Color(edgeHighlightColor);
-  const selectedSurfaceColor = new THREE.Color(REFERENCE_SELECTED_COLOR);
+  const hoverHighlightColor = String(edgeSettings?.hoverColor || REFERENCE_HOVER_COLOR).trim() || REFERENCE_HOVER_COLOR;
+  const hoveredSurfaceColor = new THREE.Color(hoverHighlightColor);
+  const hoveredEdgeColor = new THREE.Color(hoverHighlightColor);
+  const selectedSurfaceColor = new THREE.Color(edgeHighlightColor);
   const selectedEdgeColor = new THREE.Color(edgeHighlightColor);
 
   for (const record of Array.isArray(records) ? records : []) {
@@ -1234,7 +1269,9 @@ export function applyPartVisualState(THREE, records, {
     const effectEmissive = readSourceColor(THREE, effectStyle.emissive);
     const isHidden = partIdMatchesSet(record.partId, hidden);
     const isSelected = !isHidden && (partIdMatchesSet(record.partId, selected) || record.effectHighlighted === true);
-    const isHovered = !isHidden && !effectHidden && partIdMatchesSet(record.partId, hovered);
+    // Selection outranks hover: hovering an already-selected part must not
+    // downgrade it to the weaker hover treatment.
+    const isHovered = !isHidden && !effectHidden && !isSelected && partIdMatchesSet(record.partId, hovered);
     const isFocused = !isHidden && !effectHidden && hasFocus && partIdMatchesSet(record.partId, focusIds);
     const isDimmed = !isHidden && !effectHidden && hasFocus && !isFocused;
     const isHighlighted = isSelected || isHovered;
@@ -1258,7 +1295,12 @@ export function applyPartVisualState(THREE, records, {
     const effectEdgeOpacity = Number.isFinite(Number(effectStyle.edgeOpacity))
       ? clamp(Number(effectStyle.edgeOpacity), 0, 1)
       : effectOpacity;
-    const highlightedEdgeOpacity = (isSelected || isHovered) ? highlightEdgeOpacity * effectEdgeOpacity : null;
+    // Only selection gets the full-strength outline; hover keeps a lighter one.
+    const highlightedEdgeOpacity = isSelected
+      ? highlightEdgeOpacity * effectEdgeOpacity
+      : isHovered
+        ? highlightEdgeOpacity * PART_HOVER_EDGE_EMPHASIS * effectEdgeOpacity
+        : null;
     const dimmedSurfaceOpacity = Math.min(baseSurfaceOpacity * effectOpacity, FOCUSED_DIMMED_SURFACE_OPACITY);
     const highlightedSurfaceOpacity = isSelected
       ? clamp((baseSurfaceOpacity * effectOpacity) + PART_SELECTED_OPACITY_BOOST, 0, 1)
@@ -1271,30 +1313,34 @@ export function applyPartVisualState(THREE, records, {
     });
     record.material.opacity = nextSurfaceOpacity;
 
+    // Blend the surface toward the highlight color instead of replacing it, so
+    // the part stays recognizable while still reading as selected. Edges and
+    // emissive keep the full highlight color below — those are the cues that
+    // must not depend on the part's own hue.
+    const highlightSurface = isSelected
+      ? partHighlightSurfaceColor(THREE, record.baseColor, selectedSurfaceColor, PART_SELECTED_HIGHLIGHT_BLEND)
+      : isHovered
+        ? partHighlightSurfaceColor(THREE, record.baseColor, hoveredSurfaceColor, PART_HOVER_HIGHLIGHT_BLEND)
+        : null;
+
     if (record.baseColor && record.material.color) {
-      record.material.color.copy(
-        isSelected
-          ? selectedSurfaceColor
-          : isHovered
-            ? hoveredSurfaceColor
-            : effectColor || record.baseColor
-      );
+      record.material.color.copy(highlightSurface || effectColor || record.baseColor);
     }
 
     if ("emissive" in record.material && record.material.emissive) {
       if (isSelected) {
-        record.material.emissive.set(REFERENCE_SELECTED_COLOR);
+        record.material.emissive.copy(selectedSurfaceColor);
       } else if (isHovered) {
-        record.material.emissive.set(REFERENCE_HOVER_COLOR);
+        record.material.emissive.copy(hoveredSurfaceColor);
       } else if (record.baseEmissiveColor && record.baseEmissiveIntensity > 0) {
         record.material.emissive.copy(record.baseEmissiveColor);
       } else {
         record.material.emissive.set(0x000000);
       }
       record.material.emissiveIntensity = isSelected
-        ? 0.08
+        ? PART_SELECTED_EMISSIVE_INTENSITY
         : isHovered
-          ? 0.12
+          ? PART_HOVER_EMISSIVE_INTENSITY
           : effectEmissive
             ? clamp(Number(effectStyle.emissiveIntensity) || 0.22, 0, 2)
             : clamp(Number(record.baseEmissiveIntensity) || 0, 0, 2);
@@ -1312,14 +1358,17 @@ export function applyPartVisualState(THREE, records, {
 
     if (record.edgeMaterial) {
       record.edgeMaterial.color?.set?.(nextEdgeColor);
-      syncLineMaterialOpacity(record.edgeMaterial, isSelected
-        ? highlightEdgeOpacity * effectEdgeOpacity
-        : isHovered
-          ? highlightEdgeOpacity * effectEdgeOpacity
-          : isHidden || isDimmed
-            ? nextSurfaceOpacity
-            : baseEdgeOpacity * effectEdgeOpacity);
+      syncLineMaterialOpacity(record.edgeMaterial, isSelected || isHovered
+        ? highlightedEdgeOpacity
+        : isHidden || isDimmed
+          ? nextSurfaceOpacity
+          : baseEdgeOpacity * effectEdgeOpacity);
     }
+
+    syncPartOcclusionGhost(THREE, record, {
+      visible: isSelected && !isHidden && !effectHidden,
+      color: selectedSurfaceColor
+    });
   }
 }
 
@@ -1392,16 +1441,24 @@ function mergeBoundsList(boundsList) {
   return count > 0 && min.every(Number.isFinite) && max.every(Number.isFinite) ? { min, max } : null;
 }
 
-function effectiveBoundsFromRecords(THREE, records, fallbackBounds) {
+// Bounds of the model in its current parameter pose: the at-rest part bounds
+// moved by the module-effect delta. This is what the loader frames the camera
+// on, so callers that re-frame later (reset, fit) use it to land back on the
+// same view. Exploded-view offsets are deliberately excluded -- exploding is a
+// temporary inspection state, not a change to how big the model is.
+export function effectiveBoundsFromRecords(THREE, records, fallbackBounds = null) {
   const boundsList = [];
   for (const record of Array.isArray(records) ? records : []) {
-    if (record.effectVisible === false) {
+    if (!record || record.effectVisible === false) {
       continue;
     }
-    const baseMatrix = buildPartTransformMatrix(THREE, record.baseTransform);
-    const effectMatrix = record.effectMatrix instanceof THREE.Matrix4 ? record.effectMatrix.clone() : null;
-    const combinedMatrix = effectMatrix ? effectMatrix.multiply(baseMatrix) : baseMatrix;
-    boundsList.push(transformedBounds(THREE, record.partBounds, combinedMatrix));
+    // record.partBounds is world-space at rest pose: composed packages fold the
+    // occurrence transform into part.bounds and legacy meshDatas bake vertices,
+    // so re-applying baseTransform here would double it. Only the world-space
+    // post-transforms — the module-effect delta and the exploded-view offset —
+    // move the bounds, composed in render order.
+    const effectMatrix = composeDisplayRecordEffectMatrix(THREE, record);
+    boundsList.push(transformedBounds(THREE, record.partBounds, effectMatrix));
   }
   return mergeBoundsList(boundsList) || fallbackBounds;
 }
@@ -1599,6 +1656,7 @@ function syncClip(runtime, clip, bounds, modelOffset = null) {
     syncMaterialClipPlanes(record.material, clipPlanes);
     syncMaterialClipPlanes(record.edgeMaterial, clipPlanes);
     syncMaterialClipPlanes(record.silhouette?.material, clipPlanes);
+    syncMaterialClipPlanes(record.ghostMaterial, clipPlanes);
   }
 }
 
@@ -1625,7 +1683,7 @@ function selectorValuesFromEntry(value) {
     .filter(Boolean);
 }
 
-function normalizedSelectorValues(value) {
+export function normalizedSelectorValues(value) {
   return selectorEntries(value).flatMap(selectorValuesFromEntry);
 }
 
@@ -1711,7 +1769,7 @@ function resolveMaterialSettings(theme, settings = {}) {
   return theme.materials || {};
 }
 
-function resolvePartsToRender(meshData, theme, settings) {
+export function resolvePartsToRender(meshData, theme, settings) {
   if (Array.isArray(settings.parts)) {
     return settings.parts.filter((part) => toNumber(part?.vertexCount) > 0 && toNumber(part?.triangleCount) > 0);
   }
@@ -1726,6 +1784,16 @@ function resolvePartsToRender(meshData, theme, settings) {
     const pickableParts = toArray(settings.pickableParts).filter((part) => toNumber(part?.vertexCount) > 0 && toNumber(part?.triangleCount) > 0);
     if (pickableParts.length) {
       return pickableParts;
+    }
+    // A composed package's top-level arrays hold each unique COMPONENT's geometry in its
+    // own local frame — placement lives solely in the per-occurrence transform. Returning
+    // [] here drops to the whole-mesh fallback, which draws each shared component once at
+    // the origin: parts authored in world space still look right (their local frame IS
+    // world), but anything genuinely placed by its transform lands in the wrong spot. That
+    // is how a car loses all four wheels and grows one under its middle when the STEP
+    // parameter module is switched off. Per-part rendering is the only correct mode here.
+    if (meshData?.partTransformsBaked === false) {
+      return parts;
     }
     if (meshUsesPartSourceColors(meshData, parts) || meshUsesPartSourceOpacity(parts)) {
       return parts;
@@ -1836,6 +1904,12 @@ function buildDisplayRecords(THREE, runtime, meshData, settings) {
       partId,
       sourcePart: part || null,
       mesh,
+      // Occlusion ghost: a dithered copy of this part that renders ONLY where
+      // the part is hidden behind other geometry, so a selected feature can be
+      // seen through whatever blocks it. Attached lazily on first selection by
+      // syncPartOcclusionGhost (see lib/viewer/partHighlight.js).
+      ghostMesh: null,
+      ghostMaterial: null,
       edges: null,
       silhouette: null,
       material,
@@ -2181,7 +2255,12 @@ export function fitCameraToModel(THREE, camera, bounds, {
   const minSpan = settings.minModelRadius;
   const spanX = Math.max(Math.max(...xs) - Math.min(...xs), minSpan);
   const spanY = Math.max(Math.max(...ys) - Math.min(...ys), minSpan);
-  const safeContentScale = Math.max(1 - (clamp(Number(padding) || 0, 0.1, 0.4) * 2), 0.1);
+  // Padding bounds must match framePadding() in renderOptions.js (0 .. 0.15).
+  // They used to disagree -- this path forced a 0.1 MINIMUM while the render-job
+  // path honoured smaller values -- so the same `padding` framed differently in
+  // the viewport than in a snapshot, and a job asking for tighter framing than
+  // 0.1 was silently ignored here with no warning.
+  const safeContentScale = Math.max(1 - (clamp(Number(padding) || 0, 0, 0.15) * 2), 0.1);
   const halfHeight = lockedHalfHeight || Math.max(
     spanY / (2 * safeContentScale),
     spanX / (2 * aspect * safeContentScale),

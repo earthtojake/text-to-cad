@@ -1,34 +1,37 @@
 # Supported exports
 
-Read this file when the user requests STL, 3MF, or native GLB output from CAD geometry. For 2D DXF output, use the `$dxf` skill; DXF uses a separate `gen_dxf()` source contract.
+Read this file when the user requests STL, 3MF, or native GLB output files from CAD geometry. For a `.step` file, use `scripts/gen --write` (see `step-generation.md`) — `scripts/export` writes mesh formats only. For 2D DXF output, use the `$dxf` skill; DXF uses a separate `gen_dxf()` contract in a dedicated `<name>.dxf.py` drawing generator (never inside a `.step.py`).
 
 ## Policy
 
-STL, 3MF, and native GLB are mesh sidecars, not substitutes for STEP. Generate and validate STEP first, then export requested sidecars from the same `scripts/step` run. Do not treat sidecar renders as CAD validation; inspect and snapshot the primary STEP per the standard workflow.
+STL, 3MF, and native GLB are mesh exports, not substitutes for STEP. Validate the primary CAD geometry first, then export the requested formats. Do not treat exported mesh renders as CAD validation; inspect and snapshot the primary model per the standard workflow.
 
-Native GLB sidecars are ordinary glTF 2.0 binary files for external tools: Y-up, meter-scaled, and free of the CAD Viewer `STEP_topology` extension. Do not confuse them with the hidden `.<name>.step.glb` CAD Viewer topology artifact.
+Native GLB exports are ordinary glTF 2.0 binary files for external tools: Y-up, meter-scaled, and free of the CAD Viewer `STEP_topology` extension. Do not confuse them with the CAD Viewer render artifact — the component-GLB package directory at `<folder>/__cadgen__/models/<name>.step/` (an `assembly.json` descriptor plus a `components/` dir of content-addressed GLBs) — which `scripts/gen` builds and `scripts/export` never writes.
 
 ## Tool
 
-Use `scripts/step` with a generated Python source:
+`scripts/export` takes one model target — a `gen_step()` Python source or an imported STEP/STP file — and one or more mesh format flags (`--stl`, `--3mf`, `--glb`). The model is built once per run (the generator runs once), so every requested format comes from identical geometry; exports can never be stale.
 
 ```bash
-python scripts/step path/to/model.py \
+python scripts/export path/to/model.step.py --stl --3mf --glb
+```
+
+Each format flag takes an optional output path. Without a path, the file is written beside the model as `<name>.<ext>`. A relative path resolves beside the model; an absolute path is used as-is:
+
+```bash
+python scripts/export path/to/model.step.py \
   --stl meshes/model.stl \
   --3mf meshes/model.3mf \
   --glb meshes/model.glb
 ```
 
-When a generator exists, use the generator form. Use direct STEP/STP targets only when the generator is unavailable or the user explicitly identifies that file as the target:
+When a generator exists, export from the generator. Pass an imported STEP/STP file directly only when no generator exists or the user explicitly identifies that file as the target; its part/assembly kind is inferred automatically:
 
 ```bash
-python scripts/step --kind part path/to/model.step \
-  --stl meshes/model.stl \
-  --3mf meshes/model.3mf \
-  --glb meshes/model.glb
+python scripts/export path/to/imported.step --stl --3mf
 ```
 
-Sidecar paths must be relative `.stl`, `.3mf`, or `.glb` paths and are resolved beside the STEP output.
+`scripts/export` never writes a `.step` file. A generated model's STEP comes from `scripts/gen <name>.step.py --write` in the generation run; an imported model's STEP is already the file on disk.
 
 ## Mesh tolerance
 
@@ -45,14 +48,16 @@ Use tighter tolerances for small curved parts or visual fidelity. Use looser tol
 
 ## Workflow
 
-1. Generate STEP from `gen_step()` with the requested sidecar flag(s).
-2. Run facts/planes/positioning inspection on the STEP.
-3. Report the STEP and the requested sidecar files.
+1. Validate the model per the standard workflow (generate, inspect, snapshot).
+2. Run `scripts/export` with the requested format flag(s).
+3. Report the exported files.
 
-Example:
+Example — write the STEP during generation, then mesh exports from the same generator:
 
 ```bash
-python scripts/step models/bracket.py \
+python scripts/gen models/bracket.step.py --write
+
+python scripts/export models/bracket.step.py \
   --stl meshes/bracket.stl \
   --glb meshes/bracket.glb \
   --mesh-tolerance 0.2 \
@@ -70,6 +75,6 @@ Files:
 - GLB: /absolute/project/models/meshes/bracket.glb
 
 Validation:
-- STEP geometry validated; STL/3MF/native GLB generated as requested sidecars.
+- CAD geometry validated; STL/3MF/native GLB written as requested exports.
 - Primary STEP/STP snapshot packet run/skipped and why.
 ```

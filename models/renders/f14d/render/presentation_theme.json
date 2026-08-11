@@ -1,0 +1,129 @@
+{
+  "_comment": "Presentation theme for the F-14D. The default snapshot/workbench theme is a flat diagnostic look: a grey aircraft rendered in it has no form-defining light at all, so it loses to real photography on lighting alone in every A/B, forever. This theme is a hard-light carrier deck at mid-morning -- one strong warm key high and forward of the port bow, a cool sky fill, and a bright rim from behind to separate the tail from the background. Environment HDRIs are remote URLs and unavailable offline, so the whole look is explicit lights. Feature edges are kept ON but dark-grey and thin: on a grey airframe that is exactly what a panel line looks like, and it is how panel lines read at aircraft scale where the physical groove is sub-pixel.",
+  "colorMode": "dark",
+  "projection": "perspective",
+  "materials": {
+    "defaultColor": "#9aa1a8",
+    "fillColors": [
+      "#9aa1a8"
+    ],
+    "cycleColors": false,
+    "overrideSourceColors": false,
+    "tintMode": "blend",
+    "tintStrength": 0,
+    "saturation": 0.94,
+    "contrast": 1.12,
+    "brightness": 1.1,
+    "roughness": 0.56,
+    "metalness": 0.06,
+    "clearcoat": 0.18,
+    "clearcoatRoughness": 0.42,
+    "opacity": 1,
+    "envMapIntensity": 0.0,
+    "emissiveIntensity": 0.03
+  },
+  "background": {
+    "type": "radial",
+    "solidColor": "#0e1216",
+    "linearStart": "#1a2029",
+    "linearEnd": "#070a0d",
+    "linearAngle": 135,
+    "radialInner": "#2b3541",
+    "radialOuter": "#080b0f"
+  },
+  "floor": {
+    "mode": "stage",
+    "enabled": true,
+    "followModel": true,
+    "color": "#14181d",
+    "roughness": 0.62,
+    "reflectivity": 0.22,
+    "shadowOpacity": 0.78,
+    "horizonBlend": 0.46,
+    "gridCenterColor": "#4a5058",
+    "gridCellColor": "#242a31",
+    "gridOpacity": 0.0,
+    "gridDensity": 1,
+    "grid": {
+      "enabled": false,
+      "centerColor": "#4a5058",
+      "cellColor": "#242a31",
+      "opacity": 0.0,
+      "density": 1
+    }
+  },
+  "environment": {
+    "enabled": false,
+    "presetId": "studio-hdri-43",
+    "intensity": 0.6,
+    "rotationY": -0.35,
+    "useAsBackground": false
+  },
+  "lighting": {
+    "toneMappingExposure": 1.22,
+    "directional": {
+      "enabled": true,
+      "color": "#fff4e4",
+      "intensity": 3.1,
+      "position": {
+        "x": -9000,
+        "y": 11000,
+        "z": 14000
+      }
+    },
+    "fill": {
+      "enabled": true,
+      "color": "#93a9c2",
+      "intensity": 1.5,
+      "position": {
+        "x": 6000,
+        "y": -13000,
+        "z": 4200
+      }
+    },
+    "rim": {
+      "enabled": true,
+      "color": "#dce9f8",
+      "intensity": 2.6,
+      "position": {
+        "x": 21000,
+        "y": 9000,
+        "z": 5200
+      }
+    },
+    "spot": {
+      "enabled": true,
+      "color": "#ffffff",
+      "intensity": 0.9,
+      "angle": 0.9,
+      "distance": 0,
+      "position": {
+        "x": 4000,
+        "y": 1200,
+        "z": 17000
+      }
+    },
+    "point": {
+      "enabled": true,
+      "color": "#a8c6e6",
+      "intensity": 0.42,
+      "distance": 0,
+      "position": {
+        "x": 15000,
+        "y": -5000,
+        "z": -2600
+      }
+    },
+    "ambient": {
+      "enabled": true,
+      "color": "#aebdcc",
+      "intensity": 0.5
+    },
+    "hemisphere": {
+      "enabled": true,
+      "skyColor": "#c8d8e8",
+      "groundColor": "#0f1216",
+      "intensity": 1.05
+    }
+  }
+}
