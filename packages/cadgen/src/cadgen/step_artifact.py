@@ -52,15 +52,15 @@ def _cad_ref_for_step(repo_root: Path, step_path: Path) -> str:
 
 
 def _scene_has_assembly_structure(scene: LoadedStepScene) -> bool:
-    stack = list(scene.roots)
-    if len(stack) > 1:
+    """True if the scene's product hierarchy has child relationships.
+
+    Multiple roots OR any root with children indicates assembly structure.
+    The check is deliberately shallow: any descendant implies a child of the
+    root, so a root with children already makes the model an assembly.
+    """
+    if len(scene.roots) > 1:
         return True
-    while stack:
-        node = stack.pop()
-        if node.children:
-            return True
-        stack.extend(node.children)
-    return False
+    return any(node.children for node in scene.roots)
 
 
 def infer_entry_kind(step_path: Path, scene: LoadedStepScene) -> str:
