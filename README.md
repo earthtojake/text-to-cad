@@ -69,6 +69,7 @@ robot description files, simulation, and local review.
 | Skill        | Summary                                                                                                                                            | Source                                              |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | CAD          | Creates and edits CAD models from plain-language or image requests, with STEP as the main output along with options to export to STL, 3MF and GLB. | [skills/cad](skills/cad/SKILL.md)                   |
+| Burr         | Runs a Burr design-rule check and repair loop around CAD generation.                                                                                | [skills/burr](skills/burr/SKILL.md)                 |
 | CAD Viewer   | Shows local browser previews for CAD and robot files.                                                                                     | [skills/cad-viewer](skills/cad-viewer/SKILL.md)     |
 | step.parts   | Finds off-the-shelf STEP parts like screws, bearings, motors, and connectors.                                                                      | [skills/step-parts](skills/step-parts/SKILL.md)     |
 | DXF          | Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.                                    | [skills/dxf](skills/dxf/SKILL.md)                   |
@@ -79,15 +80,6 @@ robot description files, simulation, and local review.
 | G-code       | Slices supported mesh files into validated, printer-profiled FDM `.gcode` with real slicer CLIs.                                                   | [skills/gcode](skills/gcode/SKILL.md)               |
 | Bambu Labs   | Dry-runs, uploads, and cautiously starts local Bambu Lab print jobs from validated `.gcode`.                                                       | [skills/bambu-labs](skills/bambu-labs/SKILL.md)     |
 | Implicit CAD | Creates browser-native implicit CAD models using GLSL signed-distance fields and CAD Viewer raymarch rendering. Experimental.                      | [skills/implicit-cad](skills/implicit-cad/SKILL.md) |
-
-### Experimental
-
-These early-stage skills are kept outside the supported `skills/` collection
-and CAD plugin bundle.
-
-| Skill    | Summary                                                              | Source                                                  |
-| -------- | -------------------------------------------------------------------- | ------------------------------------------------------- |
-| Burr     | Runs a Burr design-rule check and repair loop around CAD generation. | [experimental/burr](experimental/burr/SKILL.md)         |
 
 ## 💻 Installation
 

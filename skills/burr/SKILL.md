@@ -1,6 +1,6 @@
 ---
 name: burr
-description: Experimental Burr-verified CAD generation loop. Use when the user wants STEP-first parametric CAD that emits Burr design metadata, runs explicit design-rule checks, repairs source from Burr receipts, and only claims confidence from checks that actually passed.
+description: Burr-verified CAD generation loop. Use when the user wants STEP-first parametric CAD that emits Burr design metadata, runs explicit design-rule checks, repairs source from Burr receipts, and only claims confidence from checks that actually passed.
 ---
 
 # Burr generation and repair loop

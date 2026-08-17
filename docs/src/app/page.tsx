@@ -27,6 +27,12 @@ const skillGroups = [
       "Creates and edits CAD models from plain-language or image requests, with STEP as the main output along with options to export to STL, 3MF and GLB.",
   },
   {
+    name: "Burr",
+    path: "skills/burr",
+    summary:
+      "Runs a Burr design-rule check and repair loop around CAD generation.",
+  },
+  {
     name: "CAD Viewer",
     path: "skills/cad-viewer",
     summary: "Shows local browser previews for CAD and robot files.",
@@ -83,15 +89,6 @@ const skillGroups = [
     path: "skills/implicit-cad",
     summary:
       "Creates browser-native implicit CAD models using GLSL signed-distance fields and CAD Viewer raymarch rendering. Experimental.",
-  },
-];
-
-const experimentalSkillGroups = [
-  {
-    name: "Burr",
-    path: "experimental/burr",
-    summary:
-      "Runs a Burr design-rule check and repair loop around CAD generation.",
   },
 ];
 
@@ -251,20 +248,6 @@ export default function Home() {
             />
 
             <SkillsTable skills={skillGroups} />
-          </section>
-
-          <section
-            id="experimental-skills"
-            aria-labelledby="experimental-skills-title"
-            className="scroll-mt-20 space-y-3 py-6"
-          >
-            <SectionIntro
-              id="experimental-skills-title"
-              title="EXPERIMENTAL"
-              description="Early-stage skills kept outside the supported skills collection and CAD plugin bundle."
-            />
-
-            <SkillsTable skills={experimentalSkillGroups} />
           </section>
 
           <section
