@@ -1,6 +1,6 @@
 # Burr design-rule loop
 
-Use this reference when `$cad-burr` is active. The goal is not to make CAD
+Use this reference when `$burr` is active. The goal is not to make CAD
 generation more complicated; the goal is to make agent claims traceable to
 machine-readable checks.
 

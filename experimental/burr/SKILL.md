@@ -1,9 +1,9 @@
 ---
-name: cad-burr
+name: burr
 description: Experimental Burr-verified CAD generation loop. Use when the user wants STEP-first parametric CAD that emits Burr design metadata, runs explicit design-rule checks, repairs source from Burr receipts, and only claims confidence from checks that actually passed.
 ---
 
-# CAD Burr generation and repair loop
+# Burr generation and repair loop
 
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 Use the installed local skill files as the runtime source of truth; the

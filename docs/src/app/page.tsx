@@ -88,8 +88,8 @@ const skillGroups = [
 
 const experimentalSkillGroups = [
   {
-    name: "CAD Burr",
-    path: "experimental/cad-burr",
+    name: "Burr",
+    path: "experimental/burr",
     summary:
       "Runs a Burr design-rule check and repair loop around CAD generation.",
   },

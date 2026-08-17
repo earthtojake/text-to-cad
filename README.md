@@ -87,7 +87,7 @@ and CAD plugin bundle.
 
 | Skill    | Summary                                                              | Source                                                  |
 | -------- | -------------------------------------------------------------------- | ------------------------------------------------------- |
-| CAD Burr | Runs a Burr design-rule check and repair loop around CAD generation. | [experimental/cad-burr](experimental/cad-burr/SKILL.md) |
+| Burr     | Runs a Burr design-rule check and repair loop around CAD generation. | [experimental/burr](experimental/burr/SKILL.md)         |
 
 ## 💻 Installation
 
