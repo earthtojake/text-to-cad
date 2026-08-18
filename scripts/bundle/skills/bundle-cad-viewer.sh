@@ -432,6 +432,13 @@ build_runtime() {
   # tests/test_worker.py not).
   sync_dir "$VIEWER_DIR/server_py" "$target_dir/server_py"
 
+  # Node launcher (scripts/start-viewer.mjs) powers `npm start`; it is
+  # dependency-free so it works inside the bundled runtime without the dev-only
+  # helper modules (cad-python.mjs, directoryRoot.mjs).
+  if [ -d "$VIEWER_DIR/scripts" ]; then
+    sync_dir "$VIEWER_DIR/scripts" "$target_dir/scripts"
+  fi
+
   write_runtime_package_json "$target_dir"
   write_runtime_gitignore "$target_dir"
   write_runtime_requirements "$target_dir"

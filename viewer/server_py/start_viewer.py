@@ -37,7 +37,6 @@ else:
     from .paths import url_path_from_filesystem_path
     from .server_info import DEFAULT_VIEWER_PORT, DEFAULT_VIEWER_HOST
 
-_PROBE_TIMEOUT_S = 0.35
 _VIEWER_APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -53,16 +52,19 @@ def viewer_url(host: str, port: int, directory: str = "") -> str:
 
 
 def port_is_free(host: str, port: int) -> bool:
-    """True only when nothing is listening on host:port (connection refused). A
-    live listener — or an ambiguous/unreachable socket — counts as occupied, so
-    we never race a bind against another process."""
-    try:
-        with socket.create_connection((host, port), timeout=_PROBE_TIMEOUT_S):
+    """True only when nothing is listening on host:port.
+
+    Uses a bind probe rather than a connect probe: `connect` expects connection
+    refused, but on some platforms (Windows) trying to connect to a CLOSED port
+    times out instead, which made every port look occupied. Binding is the
+    ground truth here -- if we can claim the port, nothing is using it and we
+    can hand it straight to the backend."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind((host, port))
+        except OSError:
             return False
-    except ConnectionRefusedError:
-        return True
-    except OSError:
-        return False
+    return True
 
 
 def spawn_backend(host: str, port: int):
