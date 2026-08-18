@@ -225,12 +225,16 @@ const IDLE_PIXEL_RATIO_CAP = 2;
 const INTERACTION_PIXEL_RATIO_CAP = 1.25;
 const INTERACTION_IDLE_DELAY_MS = 140;
 const DEFAULT_DAMPING_FACTOR = 0.14;
-const DEFAULT_ZOOM_SPEED = 4.5;
-const COARSE_POINTER_ZOOM_SPEED = 1.6;
+// OrbitControls multiplies distance by 0.95^(zoomSpeed * (abs(delta)/100*devicePixelRatio))
+// per wheel event. 4.5 made a single mouse notch move the camera ~3x farther in / out;
+// 1.0 keeps a typical wheel delta to roughly a 10% step, which is the range a viewer
+// zoom control should cover across many notches, not two.
+const DEFAULT_ZOOM_SPEED = 1.0;
+const COARSE_POINTER_ZOOM_SPEED = 1.0;
 const EXPLODED_VIEW_ANIMATION_DURATION_MS = 1000;
-const ACCELERATED_WHEEL_ZOOM_SPEED = 10;
-const TRACKPAD_PINCH_ZOOM_SPEED = 14;
-const COARSE_POINTER_PINCH_ZOOM_SPEED = 2.4;
+const ACCELERATED_WHEEL_ZOOM_SPEED = 1.0;
+const TRACKPAD_PINCH_ZOOM_SPEED = 2.0;
+const COARSE_POINTER_PINCH_ZOOM_SPEED = 1.6;
 const CAMERA_TRANSITION_EASING = Object.freeze({
   EASE_IN_OUT_CUBIC: "ease-in-out-cubic",
   EASE_IN_OUT_SINE: "ease-in-out-sine"
