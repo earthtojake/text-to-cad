@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cadgen"
-version = "0.4.2"
+version = "0.4.20"
 description = "STEP-first CAD artifact generation runtime: build123d STEP/GLB/topology generation, validation, and inspection for CAD agent skills."
 readme = "README.md"
 license = "MIT"
@@ -35,7 +35,7 @@ Repository = "https://github.com/earthtojake/text-to-cad"
 Issues = "https://github.com/earthtojake/text-to-cad/issues"
 
 [project.scripts]
-cadgen-step-artifact = "cadgen.step_artifact:main"
+cadgen-step-artifact = "cadgen.step_artifact_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

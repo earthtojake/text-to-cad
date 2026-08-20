@@ -141,7 +141,13 @@ def _cwd_relative_target(raw_target: str) -> str:
     if not raw_target:
         return raw_target
     path = Path(raw_target).expanduser()
-    if not path.is_absolute():
+    # ROOTED, not is_absolute(). On Windows a path with a root and no drive ("/models/x") is
+    # drive-RELATIVE, so is_absolute() is False and the guard below never ran -- the target
+    # fell through and became the bogus cwd-relative cad path this function exists to prevent,
+    # which is the POSIX bug it was written for, still live on the other platform. resolve()
+    # anchors such a path to the current drive, which is what it means there, and the
+    # relative_to() check then answers correctly for it.
+    if not (path.is_absolute() or path.root):
         return raw_target
     try:
         return path.resolve().relative_to(Path.cwd().resolve()).as_posix()

@@ -227,6 +227,11 @@ export function useCadAssets({
   const [urdfStatus, setUrdfStatus] = useState(ASSET_STATUS.PENDING);
   const [urdfError, setUrdfError] = useState("");
   const [urdfLoadStage, setUrdfLoadStage] = useState("");
+  // The same stage, as data rather than a sentence. The loader has always COUNTED the
+  // meshes it fetches; flattening that count into a string meant the one indicator the
+  // user actually watches — the overlay — could only show a generic "Loading". Both are
+  // set from the same call sites so they cannot disagree.
+  const [urdfLoadProgress, setUrdfLoadProgress] = useState(null);
   const [referenceState, setReferenceState] = useState(null);
   const [referenceStatus, setReferenceStatus] = useState(REFERENCE_STATUS.IDLE);
   const [referenceError, setReferenceError] = useState("");
@@ -407,6 +412,7 @@ export function useCadAssets({
     urdfRequestIdRef.current += 1;
     abortLoad(urdfAbortControllerRef);
     setUrdfLoadStage("");
+    setUrdfLoadProgress(null);
   }, []);
 
   const cancelReferenceLoad = useCallback(() => {
@@ -622,7 +628,8 @@ export function useCadAssets({
             }
             const occurrenceId = String(occurrence?.id || "").trim();
             return buildSelectorRuntime(bundle, {
-              copyCadPath: String(entry?.file || ""),
+              // The SUFP, not the full path: a copied ref should be compact.
+              copyCadPath: String(entry?.fileRefPrefix || ""),
               partId: isSingleComponentPart ? "" : occurrenceId,
               transform: occurrence?.transform || null,
               remapOccurrenceId: occurrenceId
@@ -815,7 +822,9 @@ export function useCadAssets({
     urdfAbortControllerRef.current = controller;
     setUrdfStatus(ASSET_STATUS.LOADING);
     setUrdfError("");
+    const robotLabel = kind === "sdf" ? "Loading SDF" : kind === "srdf" ? "Loading SRDF" : "Loading URDF";
     setUrdfLoadStage(kind === "sdf" ? "loading SDF" : kind === "srdf" ? "loading SRDF" : "loading URDF");
+    setUrdfLoadProgress({ phase: "robot", label: robotLabel, determinate: false });
 
     try {
       const payload = kind === "srdf"
@@ -829,6 +838,13 @@ export function useCadAssets({
       const urdfData = payload.urdfData;
       const meshUrls = urdfMeshUrls(urdfData);
       setUrdfLoadStage(meshUrls.length ? "loading meshes" : "building robot");
+      setUrdfLoadProgress({
+        phase: meshUrls.length ? "meshes" : "robot",
+        label: meshUrls.length ? "Loading meshes" : "Building robot",
+        done: 0,
+        total: meshUrls.length || null,
+        determinate: meshUrls.length > 0
+      });
       // The robot is published ONCE, complete. Drawing links as they arrive was tried and
       // rejected: a half-built robot on screen with the loading card already gone gives no
       // sign whether more is coming, so it reads as a broken model rather than a loading
@@ -838,6 +854,13 @@ export function useCadAssets({
         onProgress: (completed, total) => {
           if (requestId === urdfRequestIdRef.current && total > 0) {
             setUrdfLoadStage(`loading meshes ${completed}/${total}`);
+            setUrdfLoadProgress({
+              phase: "meshes",
+              label: "Loading meshes",
+              done: completed,
+              total,
+              determinate: true
+            });
           }
         }
       });
@@ -845,6 +868,7 @@ export function useCadAssets({
         return;
       }
       setUrdfLoadStage("building robot");
+      setUrdfLoadProgress({ phase: "robot", label: "Building robot", determinate: false });
       const meshesByUrl = new Map(meshUrls.map((meshUrl, index) => [meshUrl, meshes[index]]));
       setUrdfState({
         file: entry.file,
@@ -867,6 +891,7 @@ export function useCadAssets({
       }
       if (requestId === urdfRequestIdRef.current) {
         setUrdfLoadStage("");
+        setUrdfLoadProgress(null);
       }
     }
   }, [cancelUrdfLoad, getCachedUrdfState]);
@@ -903,6 +928,7 @@ export function useCadAssets({
     urdfError,
     setUrdfError,
     urdfLoadStage,
+    urdfLoadProgress,
     referenceState,
     setReferenceState,
     referenceStatus,

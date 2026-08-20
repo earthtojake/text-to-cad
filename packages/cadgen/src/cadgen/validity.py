@@ -176,7 +176,7 @@ def inspect_validity(
 ) -> dict[str, object]:
     """Public entry point used by ``inspect validate``."""
     from cadgen.cli_logging import CliLogger
-    from cadgen.interference import _selected, occurrences_from_scene
+    from cadgen.interference import _selected, occurrences_from_scene, scene_label_rows
     from cadgen.step_export_target import _resolve_spec_and_scene
     from cadgen.step_targets import resolve_step_target
 
@@ -193,7 +193,9 @@ def inspect_validity(
         logger=logger,
     )
 
-    occurrences = _selected(occurrences_from_scene(scene), refs)
+    occurrences = _selected(
+        occurrences_from_scene(scene), refs, label_rows=scene_label_rows(scene), entry_target=str(entry)
+    )
 
     parts: list[dict[str, object]] = []
     failures = 0

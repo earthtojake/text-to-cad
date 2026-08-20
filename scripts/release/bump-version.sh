@@ -338,7 +338,15 @@ else
 fi
 
 if [ "$next_version" = "$current_version" ]; then
-  die "next version matches current version: $current_version"
+  # Naming the version you are already on is a pin, not a mistake: it is how a
+  # caller says "leave this alone" without having to know what the version is.
+  # Resolving a major/minor/patch bump to no change IS a mistake -- that one
+  # still fails.
+  if [ -z "$SET_VERSION" ]; then
+    die "next version matches current version: $current_version"
+  fi
+  echo "Requested version matches current version: $current_version; nothing to change."
+  exit 0
 fi
 
 echo "Version bump: $current_version -> $next_version"

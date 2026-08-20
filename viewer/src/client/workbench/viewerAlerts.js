@@ -1,3 +1,4 @@
+import { entryIsDrawingDocument } from "cadjs/lib/entryAssets.js";
 import { entrySourceFormat } from "cadjs/lib/fileFormats.js";
 import {
   isArtifactManagedFormat,
@@ -95,6 +96,13 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
       resolution: reloadResolution,
       command
     };
+  }
+
+  // A dimensioned DRAWING has no mesh BY DESIGN -- it encloses nothing to extrude, bakes no
+  // preview and renders as lines (issue #246). Reporting that as an error told the user to
+  // rebuild assets that were already complete. A genuine build failure still reports above.
+  if (!hasMeshData && entryIsDrawingDocument(entry)) {
+    return null;
   }
 
   if (!hasMeshData) {

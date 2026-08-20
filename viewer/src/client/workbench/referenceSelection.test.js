@@ -4,9 +4,11 @@ import { test } from "node:test";
 import {
   buildAssemblyPartCopyText,
   buildAssemblyMateCopyText,
+  fileRefPrefixForEntry,
   buildNormalizedReferenceState,
   buildReferenceCacheKey,
   buildSelectionCopyButtonLabel,
+  buildSelectionCopyCountLabel,
   buildSelectionCopyPayload,
   buildWholeStepEntryCopyReference,
   canonicalCadRefCopyText,
@@ -17,7 +19,8 @@ import {
   parseAssemblyPartReferenceSelectionId,
   resolveTopologyRelativeFile,
   selectRequestedAssemblyComponents,
-  uniqueStringList
+  uniqueStringList,
+  withFileRefPrefix
 } from "./referenceSelection.js";
 
 const STEP_ENTRY = {
@@ -233,4 +236,58 @@ test("selectRequestedAssemblyComponents loads only the expanded occurrences' com
   const part = selectRequestedAssemblyComponents(descriptor, [], { singleComponentPart: true });
   assert.deepEqual(part.neededCids, ["cidA", "cidB"]);
   assert.equal(part.loadedTopologyKey, "*");
+});
+
+test("copy text carries the entry's shortest unique path suffix", () => {
+  const entry = { ...STEP_ENTRY, fileRefPrefix: "assy.step" };
+  assert.equal(
+    buildAssemblyPartCopyText({ occurrenceId: "o1.6", name: "prism" }, entry),
+    "assy.step#o1.6"
+  );
+  assert.equal(buildAssemblyMateCopyText({ id: "m1" }, entry), "assy.step#m1");
+  assert.equal(buildWholeStepEntryCopyReference(entry).copyText, "assy.step#");
+  assert.equal(fileRefPrefixForEntry(entry), "assy.step");
+});
+
+test("an entry with no prefix emits the bare refs it always did", () => {
+  // The prefix is opt-in per call site: every existing caller that builds a minimal entry keeps
+  // producing exactly the copy text it produced before.
+  assert.equal(
+    buildAssemblyPartCopyText({ occurrenceId: "o1.6", name: "prism" }, STEP_ENTRY),
+    "#o1.6"
+  );
+  assert.equal(buildAssemblyMateCopyText({ id: "m1" }, STEP_ENTRY), "#m1");
+  assert.equal(buildWholeStepEntryCopyReference(STEP_ENTRY).copyText, "#");
+  assert.equal(fileRefPrefixForEntry(STEP_ENTRY), "");
+});
+
+test("canonical copy text keeps a file prefix instead of dropping the line", () => {
+  assert.equal(canonicalCadRefCopyText("assy.step#o1.7.1.f4 plane area=35"), "assy.step#o1.7.1.f4");
+  assert.equal(canonicalCadRefCopyText("#o1.7.1.f4 plane area=35"), "#o1.7.1.f4");
+});
+
+test("withFileRefPrefix is idempotent, which is what lets it run at one funnel", () => {
+  // Copy text arrives at the funnel from several builders: some already carry a prefix (parts
+  // and mates, built from the entry), some do not (tree-node selections). Applying this once at
+  // the end is only safe because a second application is a no-op.
+  assert.equal(withFileRefPrefix("#o1.2", "plate.stl"), "plate.stl#o1.2");
+  assert.equal(withFileRefPrefix("plate.stl#o1.2", "plate.stl"), "plate.stl#o1.2");
+  assert.equal(withFileRefPrefix("other.stl#o1.2", "plate.stl"), "other.stl#o1.2");
+  assert.equal(withFileRefPrefix("#", "plate.stl"), "plate.stl#");
+  // No prefix available, or nothing ref-like: leave it exactly as it was.
+  assert.equal(withFileRefPrefix("#o1.2", ""), "#o1.2");
+  assert.equal(withFileRefPrefix("plain text", "plate.stl"), "plain text");
+  assert.equal(withFileRefPrefix("", "plate.stl"), "");
+});
+
+test("the count label stands in for a ref that will not fit", () => {
+  // Singular vs plural matters: this is the primary label whenever the viewport is narrow.
+  assert.equal(buildSelectionCopyCountLabel(1), "Copy 1 ref");
+  assert.equal(buildSelectionCopyCountLabel(3), "Copy 3 refs");
+  assert.equal(buildSelectionCopyCountLabel(12), "Copy 12 refs");
+  // Nothing selected falls back to the same wording the ref label uses.
+  assert.equal(buildSelectionCopyCountLabel(0), "Copy refs");
+  assert.equal(buildSelectionCopyCountLabel(null), "Copy refs");
+  assert.equal(buildSelectionCopyCountLabel(-2), "Copy refs");
+  assert.equal(buildSelectionCopyCountLabel(2.7), "Copy 2 refs");
 });

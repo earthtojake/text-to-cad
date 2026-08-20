@@ -1,6 +1,15 @@
 export const DEFAULT_VIEWER_GITHUB_URL = "https://github.com/earthtojake/text-to-cad";
 export const DEFAULT_VIEWER_DISCORD_URL = "https://discord.gg/5FGB9DwJYU";
-export const DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND = "npx skills install earthtojake/text-to-cad";
+// `add` rather than `update`: both refresh what is installed, but only `add` picks up a skill
+// that is NEW in a release, because `update` walks the lockfile. Releases here do add skills,
+// so `update` would quietly leave them out. (`install` is an undocumented alias for `add`.)
+export const DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND = "npx skills add earthtojake/text-to-cad";
+
+// The other way to take an update: hand this to your agent instead of running the command
+// yourself. One short line -- it is read at a glance in a popover, and it is pasted into a chat
+// where the agent already knows the rest of the job.
+export const DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT =
+  "Update the text-to-cad skills with `npx skills add earthtojake/text-to-cad`.";
 
 export function normalizeViewerDefaultFile(value = "") {
   const rawValue = String(value ?? "").trim();
@@ -90,13 +99,45 @@ export function isViewerReleaseMajorMinorNewer(currentVersion = "", candidateVer
   return candidate.parts[0] > current.parts[0] || candidate.parts[1] > current.parts[1];
 }
 
+/** Whether a newer release is worth PROMPTING about, rather than merely noting.
+ *
+ * Two thresholds exist because the top bar has two registers: any newer release reveals the
+ * latest version quietly, while this one turns the version chip into an "Update" button.
+ *
+ * That prompt used to require a MAJOR or MINOR release, on the reasoning that a patch is not
+ * worth interrupting anyone for. It is, at the current cadence: 0.4.7 through 0.4.10 shipped
+ * inside three days and carried the Windows path fix, the SMB rename retry, the drawing rules
+ * and the multi-bend fold -- fixes a user hitting those bugs has no way to learn about from a
+ * quiet version number. So patches prompt too, for now.
+ *
+ * This is the one place that policy lives: restoring the old behaviour means calling
+ * `isViewerReleaseMajorMinorNewer` here instead, and nothing else changes.
+ */
+export function isViewerReleaseUpdateSuggested(currentVersion = "", candidateVersion = "") {
+  return isViewerReleaseNewer(currentVersion, candidateVersion);
+}
+
 export function normalizeViewerSkillsInstallCommand(
   value = "",
   fallback = DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
 ) {
   const command = cleanInstallCommandCandidate(value);
-  if (/^npx\s+skills\s+install(?:\s+\S+)+$/iu.test(command)) {
+  // Both spellings: `install` is an alias for `add`, and release bodies may use either.
+  if (/^npx\s+skills\s+(?:install|add)(?:\s+\S+)+$/iu.test(command)) {
     return command;
+  }
+  return String(fallback || "").trim();
+}
+
+export function normalizeViewerSkillsUpdatePrompt(
+  value = "",
+  fallback = DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT
+) {
+  const prompt = String(value ?? "").replace(/\r\n/gu, "\n").trim();
+  // The prompt is pasted into an agent chat, so it has to actually name the command to run --
+  // prose alone ("please update the skills") would leave the agent guessing at a channel.
+  if (prompt && /\bnpx\s+skills\s+(?:install|add)\b/iu.test(prompt)) {
+    return prompt;
   }
   return String(fallback || "").trim();
 }
@@ -107,8 +148,8 @@ export function viewerSkillsInstallCommandFromText(
 ) {
   const source = String(value || "");
   const candidates = [
-    ...Array.from(source.matchAll(/`([^`\r\n]*\bnpx\s+skills\s+install\b[^`\r\n]*)`/giu), (match) => match[1]),
-    ...Array.from(source.matchAll(/(?:^|\n)\s*([^\r\n]*\bnpx\s+skills\s+install\b[^\r\n]*)/giu), (match) => match[1])
+    ...Array.from(source.matchAll(/`([^`\r\n]*\bnpx\s+skills\s+(?:install|add)\b[^`\r\n]*)`/giu), (match) => match[1]),
+    ...Array.from(source.matchAll(/(?:^|\n)\s*([^\r\n]*\bnpx\s+skills\s+(?:install|add)\b[^\r\n]*)/giu), (match) => match[1])
   ];
 
   for (const candidate of candidates) {

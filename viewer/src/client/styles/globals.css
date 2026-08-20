@@ -281,3 +281,26 @@
     color: var(--accent-foreground);
   }
 }
+
+/* The indeterminate progress indicator: a third-width block sliding the track, used when a
+   phase has no denominator to report. Motion here means "still working" and nothing more —
+   it deliberately carries no position, unlike a filled bar. */
+@keyframes cad-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.cad-progress-indeterminate {
+  animation: cad-progress-slide 1.15s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cad-progress-indeterminate {
+    animation-duration: 2.4s;
+    animation-timing-function: linear;
+  }
+}

@@ -2,7 +2,7 @@
   "name": "cad-viewer",
   "private": true,
   "type": "module",
-  "version": "0.4.2",
+  "version": "0.4.20",
   "scripts": {
     "dev": "vite dev",
     "start": "node scripts/start-viewer.mjs",
@@ -11,8 +11,6 @@
     "moveit2:check": "moveit2_server/check-moveit2-server.sh",
     "moveit2:serve": "moveit2_server/run-moveit2-server.sh",
     "build": "vite build",
-    "runtime:bundle": "../scripts/bundle/bundle-skill.sh cad-viewer",
-    "runtime:check": "../scripts/bundle/bundle-skill.sh cad-viewer --check",
     "test": "node scripts/run-tests.mjs"
   },
   "dependencies": {
@@ -25,7 +23,7 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "tailwind-merge": "^3.5.0",
-    "three": "0.160.0"
+    "three": "0.161.0"
   },
   "devDependencies": {
     "@babel/parser": "^7.29.7",

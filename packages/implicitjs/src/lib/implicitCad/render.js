@@ -797,9 +797,8 @@ export function implicitCadCameraState(model, camera = "iso", {
 //
 // Every function here also exists, hand-written a second time, as a JS entry in the BUILTINS
 // table of `sdfEvaluator.js`: the GPU runs these bodies, the baked render artifact runs those.
-// Two implementations of one contract is the divergence design/unified-glb-render-artifacts.md
-// section 7.2 flags, so `sdfField.test.js` parses THIS text and differentially evaluates it
-// against the JS table. It is interpolated verbatim into the shader below.
+// Two implementations of one contract is a standing divergence risk, so `sdfField.test.js`
+// parses THIS text and differentially evaluates it against the JS table. It is interpolated verbatim into the shader below.
 export const IMPLICIT_CAD_GLSL_LIBRARY = `float implicit_clamp01(float value) {
   return clamp(value, 0.0, 1.0);
 }

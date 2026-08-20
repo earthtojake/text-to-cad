@@ -1,9 +1,9 @@
 """resolve_step_source precedence: a same-stem generator owns its entry.
 
 A `<name>.step.py` generator beside an exported `<name>.step` is the documented
-way to attach a `params` sidecar to an imported STEP
-(skills/cad/references/parameters.md). The export is the generator's output, so
-the generator -- not the export -- is the source the render package is keyed by.
+way to attach a `params` sidecar to an imported STEP. The export is the
+generator's output, so the generator -- not the export -- is the source the
+render package is keyed by.
 """
 
 import os

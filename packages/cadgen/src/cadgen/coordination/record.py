@@ -5,19 +5,27 @@ and nothing here. That separation is deliberate: a status file is written data w
 liveness guarantee, and inferring "a build is running" from one reintroduces exactly the
 stale-heartbeat failure the flock replaced.
 
-The record is never unlinked. Its terminal payload carries ``stageMs`` -- the run's measured
-per-phase durations -- which the NEXT build of the same artifact reads to weight its
-progress bar. Unlinking would also race: a reader mid-read would see the file vanish.
+The record is never unlinked. Unlinking would race: a reader mid-read would see the file
+vanish. Its terminal payload carries ``stageMs``, the run's measured per-phase durations --
+kept as a record of what the run cost (the CLI prints it), NOT as an input to anything.
+Nothing predicts the next build from the last one any more; each phase reports itself.
 
-**Run attribution is the point of schema v2.** v1 carried no identity, so a record left
-behind by a SIGKILLed run was indistinguishable from the live one, and any later lock holder
-that never reported progress (an export, say) made the viewer render the corpse's position --
-"Meshing components 31/50" for a run that had meshed nothing -- and then jump backwards when
-a real build finally started. A reader now accepts a record only when its ``runId`` matches
-the run id stamped in the sentinel by the current holder.
+**Run attribution.** A record carries the id of the run that wrote it, because a record left
+behind by a SIGKILLed run is otherwise indistinguishable from the live one: any later lock
+holder that never reported progress (an export, say) made the viewer render the corpse's
+position -- "Meshing components 31/50" for a run that had meshed nothing. A reader accepts a
+record only when its ``runId`` matches the run id stamped in the sentinel by the current
+holder.
 
-``stageMs`` is written ONLY on ``outcome == "done"``, so a failed or killed run cannot teach
-the next build's bar from partial stage times.
+**Schema v3 reports each phase on its own.** v2 carried a global ``ratio`` plus the band
+(``ratioFloor``/``ratioCeiling``) and expectation (``phaseExpectedMs``) a reader needed to
+interpolate one overall bar across every phase. Those are gone: a phase now reports its
+position in the run (``index``/``count``) and either a real fraction (``done``/``total``) or
+a ``detail`` label naming the sub-unit in flight. A reader that does not understand this
+version renders no bar, which is the same safe degradation as an unreadable file.
+
+``stageMs`` is written ONLY on ``outcome == "done"``: partial times from a killed run are
+not durations anyone should print.
 """
 
 from __future__ import annotations
@@ -30,7 +38,10 @@ import time
 from pathlib import Path
 from typing import Any, Mapping
 
-SCHEMA_VERSION = 2
+# Stdlib-only, like everything this module touches: the viewer's server imports it.
+from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
+
+SCHEMA_VERSION = 3
 
 OUTCOME_RUNNING = None
 OUTCOME_DONE = "done"
@@ -88,11 +99,11 @@ def write_record(path: Path | str, record: Mapping[str, Any]) -> bool:
     reported", never to a failed build.
     """
     target = Path(path)
-    temp_path = target.with_name(f"{target.name}.tmp{os.getpid()}")
+    temp_path = target.with_name(f"{target.name}{temp_suffix()}")
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         temp_path.write_text(json.dumps(record, separators=(",", ":")), encoding="utf-8")
-        os.replace(temp_path, target)
+        replace_atomic(temp_path, target)
         return True
     except OSError:
         with contextlib.suppress(OSError):
@@ -108,27 +119,6 @@ def read_record(path: Path | str) -> dict[str, Any] | None:
     except (OSError, ValueError):
         return None
     return payload if isinstance(payload, dict) else None
-
-
-def read_stage_ms(path: Path | str) -> dict[str, float] | None:
-    """The measured stage times left behind by this artifact's last SUCCESSFUL run.
-
-    A record whose outcome is not ``done`` carries no ``stageMs`` by construction, so a
-    killed run cannot poison the next build's phase weighting.
-    """
-    payload = read_record(path)
-    if payload is None:
-        return None
-    stage_ms = payload.get("stageMs")
-    if not isinstance(stage_ms, dict):
-        return None
-    recorded: dict[str, float] = {}
-    for phase, value in stage_ms.items():
-        try:
-            recorded[str(phase)] = float(value)
-        except (TypeError, ValueError):
-            continue
-    return recorded or None
 
 
 def _as_int(value: Any) -> int:
@@ -181,14 +171,12 @@ def progress_for_run(path: Path | str, run_id: str | None) -> dict[str, Any] | N
         "phase": phase,
         "label": str(payload.get("label") or ""),
         "detail": str(payload.get("detail") or ""),
+        "index": _as_int(payload.get("index")),
+        "count": _as_int(payload.get("count")),
         "done": _as_int(payload.get("done")),
         "total": _as_int(total) if total is not None else None,
         "determinate": bool(payload.get("determinate")),
-        "ratio": _as_float(payload.get("ratio")),
-        "ratioFloor": _as_float(payload.get("ratioFloor")),
-        "ratioCeiling": _as_float(payload.get("ratioCeiling")),
         "phaseStartedAt": _as_float(payload.get("phaseStartedAt")),
-        "phaseExpectedMs": _as_float(payload.get("phaseExpectedMs")) or None,
         "updatedAt": _as_float(payload.get("updatedAt")),
         "runId": str(payload.get("runId") or "") or None,
     }

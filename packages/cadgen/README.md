@@ -34,7 +34,7 @@ The supported import surface is the root `cadgen` exports plus the top-level
   `cadgen.render`, `cadgen.step_artifacts`, `cadgen.step_targets`,
   `cadgen.step_export`, `cadgen.drawing_checks` (DXF drawing validation), and
   `cadgen.drawing_render` (DXF render payload + SVG snapshots).
-- Process entry points: `cadgen-step-artifact`, `python -m cadgen.step_artifact`,
+- Process entry points: `cadgen-step-artifact`, `python -m cadgen.step_artifact_cli`,
   `python -m cadgen.step_export_target`, and `python -m cadgen.dxf_artifact`.
 
 Everything under `cadgen._internal` is private implementation (the STEP scene,

@@ -34,12 +34,14 @@ if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from server_py import backend as backend_mod
     from server_py import cadgen_bridge
+    from server_py import paths
     from server_py import server_info as server_info_mod
     from server_py import encoding as enc
     from server_py.content_types import content_type_for_static_asset
 else:
     from . import backend as backend_mod
     from . import cadgen_bridge
+    from . import paths
     from . import server_info as server_info_mod
     from . import encoding as enc
     from .content_types import content_type_for_static_asset
@@ -233,6 +235,14 @@ class Handler(BaseHTTPRequestHandler):
         # index.html. That includes directory paths containing dots — `/Users/j/v0.4/models`
         # is a directory, not a missing file — which is why "has an extension" cannot be
         # the static-asset test here; only the bundle's own /assets/ prefix can be.
+        #
+        # The join must be given a RELATIVE path: a Windows directory request arrives as
+        # `/D:/models`, and os.path.join drops its base when a later component is
+        # drive-absolute, so joining that raw escaped dist_root and the containment check
+        # below rejected an ordinary directory as traversal (issue #211). Stripping the
+        # drive keeps the join inside dist_root, where no such file exists, so the request
+        # falls through to index.html like any other directory. Traversal segments survive
+        # the strip and are still caught by the check.
         dist_root = _Ctx.dist_root
         request_path = "/index.html" if path == "/" else path
         try:
@@ -240,7 +250,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             self._plain(400, "Bad request")
             return
-        file_path = os.path.abspath(os.path.join(dist_root, decoded.lstrip("/")))
+        file_path = os.path.abspath(os.path.join(dist_root, paths.url_path_as_relative(decoded)))
         if not (file_path == dist_root or file_path.startswith(dist_root + os.sep)):
             self._plain(403, "Forbidden")
             return

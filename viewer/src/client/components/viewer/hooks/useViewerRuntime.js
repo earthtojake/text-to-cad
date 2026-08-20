@@ -44,6 +44,8 @@ export function useViewerRuntime({
   cancelCameraTransition,
   clearKeyboardOrbitState,
   isTrackpadLikeWheelEvent,
+  isPinchWheelEvent,
+  WHEEL_PINCH_DELTA_BOOST,
   getKeyboardOrbitCommand,
   getKeyboardOrbitAxes,
   applyOrbitDelta,
@@ -119,15 +121,8 @@ export function useViewerRuntime({
         ? window.matchMedia("(pointer: coarse)")
         : null;
       const prefersCoarsePointer = coarsePointerQuery?.matches ?? false;
-      const getOrbitControlsPixelRatioBucket = () => Math.max((window.devicePixelRatio || 1) | 0, 1);
-      const initialWheelPixelRatioBucket = getOrbitControlsPixelRatioBucket();
       const getDefaultZoomSpeed = () => (prefersCoarsePointer ? COARSE_POINTER_ZOOM_SPEED : DEFAULT_ZOOM_SPEED);
       const getPinchZoomSpeed = () => (prefersCoarsePointer ? COARSE_POINTER_PINCH_ZOOM_SPEED : TRACKPAD_PINCH_ZOOM_SPEED);
-      const getWheelZoomSpeed = (baseZoomSpeed) => {
-        // OrbitControls divides wheel deltas by a floored devicePixelRatio internally.
-        // Browser zoom changes that bucket, so scale our speed back to the initial bucket.
-        return baseZoomSpeed * (getOrbitControlsPixelRatioBucket() / initialWheelPixelRatioBucket);
-      };
       const width = container.clientWidth || 800;
       const height = container.clientHeight || 640;
 
@@ -635,9 +630,15 @@ export function useViewerRuntime({
         runtimeRef.current?.onManualCameraInteraction?.("wheel");
         cancelCameraTransition(runtimeRef.current);
         controls.enableDamping = false;
-        controls.zoomSpeed = getWheelZoomSpeed(isTrackpadLikeWheelEvent(event)
-          ? getPinchZoomSpeed()
-          : ACCELERATED_WHEEL_ZOOM_SPEED);
+        // Three input classes, three speeds. OrbitControls (r161+) normalizes the delta
+        // itself -- deltaMode to pixels, and ctrl+wheel multiplied by 10 because browsers
+        // report a trackpad PINCH as a tiny ctrl+wheel. That last boost is already applied
+        // by the time zoomSpeed is used, so the pinch speed here is divided by it rather
+        // than stacked on top; otherwise a pinch lands ten times hotter than a two-finger
+        // scroll of the same size.
+        controls.zoomSpeed = isPinchWheelEvent(event)
+          ? getPinchZoomSpeed() / WHEEL_PINCH_DELTA_BOOST
+          : (isTrackpadLikeWheelEvent(event) ? getPinchZoomSpeed() : ACCELERATED_WHEEL_ZOOM_SPEED);
         // Capture the cursor (NDC) so the post-zoom pivot re-anchor can raycast under it.
         const rect = renderer.domElement.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {

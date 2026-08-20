@@ -14,6 +14,7 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cadgen/src")
 
 from cadgen._internal import generation
+from cadgen._internal import generation_runner
 from cadgen.metadata import parse_generator_metadata
 from cadgen.step_export import _create_bin_xcaf_doc, export_build123d_step_scene
 from cadgen._internal.step_scene import LoadedStepScene, _bbox_from_shape, scene_leaf_occurrences, scene_occurrence_shape
@@ -340,7 +341,7 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
                         source_hash="hash-123",
                     ),
                 ),
-                mock.patch.object(generation, "build_build123d_step_scene", return_value=scene) as build_scene,
+                mock.patch.object(generation_runner, "build_build123d_step_scene", return_value=scene) as build_scene,
             ):
                 result = generation._write_shape_step_payload(
                     {"shape": shape},

@@ -85,9 +85,8 @@ fi
 if [ "$MODE" = "check" ]; then
   rm -rf "$CHECK_DIR"
   stale=0
-  vendor_python_package "$CADGEN_PACKAGE_DIR" "$CHECK_DIR/packages/cadgen"
-  check_vendored_python_package "$CADGEN_RUNTIME_DIR" "$CHECK_DIR/packages/cadgen" \
-    "skills/srdf/scripts/packages/cadgen" \
+  check_python_runtime "$CADGEN_PACKAGE_DIR" "$CADGEN_RUNTIME_DIR" \
+    "$CHECK_DIR/packages/cadgen" "skills/srdf/scripts/packages/cadgen" \
     "Run scripts/bundle/bundle-skill.sh srdf and commit the updated production package copy." \
     || stale=1
   check_snapshot || stale=1

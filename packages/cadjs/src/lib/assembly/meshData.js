@@ -355,7 +355,7 @@ function meshPartNumericValue(part, key) {
   return Math.max(0, Math.floor(Number(part?.[key]) || 0));
 }
 
-// --- Component-GLB package composition (design/component-glb-artifacts.md) -------
+// --- Component-GLB package composition ------------------------------------------
 //
 // A package's component GLBs are meshed once in their LOCAL frame and instanced N
 // times by the assembly descriptor. Composition keeps one component-local copy of

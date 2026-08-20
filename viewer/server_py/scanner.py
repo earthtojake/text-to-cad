@@ -367,9 +367,24 @@ def _apply_drawing_preview_stats(entry, package_dir):
         entry["bendAxisX"] = [float(v) for v in axes]
 
 
+def _apply_drawing_profile(entry, package_dir):
+    """Say whether this DXF is a dimensioned DRAWING or a cut layout.
+
+    The client needs the difference to tell "a document, with nothing to bake" from "a cut
+    layout whose flat pattern has not been built yet" -- they look identical from the outside,
+    since both arrive with no `glb` relation. Without it a drawing waits forever for a mesh
+    that is never coming (issue #246), which is what the viewer used to do.
+    """
+    descriptor = read_drawing_catalog_metadata(package_dir)
+    profile = str(descriptor.get("profile") or "").strip()
+    if profile:
+        entry["drawingProfile"] = profile
+
+
 def _apply_drawing_geometry_relation(entry, repo_root, package_dir):
     """The package's parsed-contours payload as a relation, for the viewer's curved-bend
-    remesh. Same versioning scheme as the GLB relation, same reason."""
+    remesh -- and, for a drawing, for the 2D render itself. Same versioning scheme as the GLB
+    relation, same reason."""
     descriptor = read_drawing_catalog_metadata(package_dir)
     geometry_ref = str(descriptor.get("geometry") or "").strip()
     geometry_path = os.path.join(package_dir, geometry_ref) if geometry_ref else ""
@@ -403,6 +418,7 @@ def create_single_asset_entry(repo_root, root_path, source_path, extension):
     if kind == "dxf":
         package_dir = render_package_asset_dir(source_path)
         _apply_drawing_preview_stats(entry, package_dir)
+        _apply_drawing_profile(entry, package_dir)
         _apply_drawing_geometry_relation(entry, repo_root, package_dir)
     if kind == "srdf":
         paired_urdf = _paired_urdf_path_for_srdf(source_path, repo_root)
@@ -444,6 +460,7 @@ def create_generated_dxf_entry(repo_root, root_path, source_path):
         "sourceKind": "python",
     }
     _apply_drawing_preview_stats(entry, package_dir)
+    _apply_drawing_profile(entry, package_dir)
     _apply_drawing_geometry_relation(entry, repo_root, package_dir)
     glb_relation = render_package_glb_relation(repo_root, root_path, source_path, "dxf")
     if glb_relation:

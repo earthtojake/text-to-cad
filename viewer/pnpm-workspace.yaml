@@ -1,0 +1,15 @@
+# Which dependencies may run install scripts, for contributors who install with pnpm.
+# pnpm 10 blocks them by default and prints "Ignored build scripts: esbuild@0.27.7".
+#
+# `allowBuilds` IS the key pnpm reads -- verified against a bogus-key control on pnpm
+# 10.30.0: with a nonsense top-level key the warning stays and the postinstall is skipped;
+# with this file, `.../esbuild/postinstall: Done`. Do not delete it as cargo cult, which is
+# easy to assume because pnpm also documents `onlyBuiltDependencies`.
+#
+# Not load-bearing for the build itself: esbuild 0.27 ships its platform binary as an
+# optional dependency, so `esbuild --version` works even with the postinstall skipped. This
+# is here so a pnpm install is quiet and its script policy is stated rather than implied.
+# The bundler builds with npm anyway, following the committed package-lock.json.
+allowBuilds:
+  esbuild: true
+  fsevents: false

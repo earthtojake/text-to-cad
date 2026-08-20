@@ -46,6 +46,19 @@ class EntryTargetAbsolutePathTests(unittest.TestCase):
             entry_target_from_target("/definitely/not/under/cwd/foo.step.py")
         self.assertIn("outside the command cwd", str(caught.exception))
 
+    def test_a_rooted_target_is_guarded_even_where_it_is_not_absolute(self) -> None:
+        """The guard keys on ROOTED, not on is_absolute(), because of Windows.
+
+        There, "/definitely/not/under/cwd" has a root and no drive, which makes it
+        drive-RELATIVE and is_absolute() False -- so this guard used to fall through and hand
+        back a cwd-relative cad path that could never resolve, which is the exact failure it
+        was written to stop. The assertion is the same on both platforms; only on Windows did
+        it ever have anything to catch.
+        """
+        with self.assertRaises(CadRefError) as caught:
+            entry_target_from_target("/definitely/not/under/cwd/foo.step.py")
+        self.assertIn("outside the command cwd", str(caught.exception))
+
     def test_relative_generator_target_normalizes(self) -> None:
         entry = entry_target_from_target("foo.step.py")
         self.assertEqual(entry.cad_path, "foo")

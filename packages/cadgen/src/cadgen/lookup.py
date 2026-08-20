@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from cadgen import cad_ref_syntax as syntax
@@ -70,6 +70,11 @@ class SelectorIndex:
     vertex_by_id: dict[str, dict[str, Any]]
     single_occurrence_id: str
     leaf_occurrence_ids: tuple[str, ...]
+    # Label aliases for this index's occurrences, filled in by
+    # cadgen.label_refs.attach_label_aliases once the row set is final. Empty until then, and
+    # empty forever for inputs whose parts carry no usable labels -- those stay reachable by
+    # their numeric ids, exactly as before labels existed.
+    label_aliases: dict[str, Any] = field(default_factory=dict)
 
 
 def build_selector_index(manifest: dict[str, Any], *, buffers: Mapping[str, Any] | None = None) -> SelectorIndex:
@@ -134,6 +139,18 @@ def canonicalize_selector(raw_selector: str, index: SelectorIndex) -> str | None
     parsed = syntax.parse_selector(raw_selector)
     if parsed is None:
         return None
+    if parsed.label:
+        # A label names an occurrence; turn it into one before the numeric logic below runs, so
+        # every caller downstream sees the same canonical form it always has.
+        from cadgen.label_refs import LabelResolutionError, resolve_label_selectors
+
+        try:
+            resolved = resolve_label_selectors([raw_selector], getattr(index, "label_aliases", None))
+        except LabelResolutionError:
+            return None
+        parsed = syntax.parse_selector(resolved[0]) if resolved else None
+        if parsed is None:
+            return None
     if parsed.selector_type == "opaque":
         return parsed.canonical
     if parsed.occurrence_id:

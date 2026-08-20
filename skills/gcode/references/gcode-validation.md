@@ -12,6 +12,12 @@ Validation fails when:
 - No nozzle or bed temperature commands are present.
 - Parsed absolute `X`, `Y`, or `Z` moves exceed the wrapper profile motion bounds.
 
+An extrusion move is a `G0`, `G1`, `G2`, or `G3` motion whose interpreted `E`
+position advances. The validator tracks exact `G90`/`G91` commands and
+`M82`/`M83` extruder overrides; a later `G90`/`G91` clears the override. It also
+tracks `G92 E` position resets. Retractions and zero-distance `E` moves do not
+satisfy the extrusion check.
+
 Validation warns when:
 
 - Unknown or unsupported G-code commands are encountered.

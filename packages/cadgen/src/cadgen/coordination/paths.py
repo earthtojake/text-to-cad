@@ -16,6 +16,13 @@ the gitignored ``__cadgen__`` tree next to the package they describe. For an out
 
 The names are fixed per output dir, which is what lets an arbitrary reader find them
 without being told anything but the directory.
+
+A fourth file exists on WINDOWS ONLY: ``<sentinel>.mutex``, the file the lock is actually
+taken on there, because Windows byte-range locks are mandatory and would otherwise make the
+sentinel unreadable to the Node builders that must read it. It is derived in
+``coordination.lock.mutex_path`` rather than here: nothing outside that module may open it,
+and a reader asking "is a build in flight?" calls ``probe()`` with the SENTINEL path either
+way. It carries no data at all -- one padding byte, never parsed.
 """
 
 from __future__ import annotations
@@ -25,6 +32,14 @@ from pathlib import Path
 # The writer sentinel's name is FROZEN. A bundled skill carrying an older cadgen and a
 # newer viewer (or the reverse) must still mutually exclude during a rollout, and that
 # only works while both derive the same path.
+#
+# One rollout gap is known and accepted, on Windows only: cadgen <= 0.4.11 locked this file
+# directly, and newer versions lock `<this>.mutex` (see coordination.lock.mutex_path), so an
+# old and a new producer building the same model concurrently do not exclude each other
+# there. Narrow enough to accept -- it needs two different cadgen installs writing one
+# directory at once, on Windows, where the old version's DXF builds could not complete at all
+# (#269) -- and unfixable without keeping the bug, since excluding an old peer means locking
+# the file it is trying to read. POSIX is unaffected: both lock the sentinel.
 WRITE_LOCK_SUFFIX = ".generation.lock"
 
 # Held by a run that occupies the model's generator but writes no package (an export, an

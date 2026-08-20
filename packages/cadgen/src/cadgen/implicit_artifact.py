@@ -4,7 +4,7 @@ The implicit analogue of :mod:`cadgen.dxf_artifact`, and the SINGLE producer beh
 entrypoints that build an implicit package -- ``skills/implicit-cad/scripts/gen`` and the
 viewer's ``POST /__cad/artifact``. A second producer that assembled the lock, the status
 record and the currency gate by hand is exactly how the defects the coordination refactor
-fixed came to exist (design/unified-glb-render-artifacts.md §4.7).
+fixed came to exist.
 
 The whole body runs inside ``artifact_build``: the lock is held across the freshness
 re-check, the Node mesher, and the descriptor write. The mesher is a CHILD of this process
@@ -82,7 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--repo-root",
         default=".",
-        help="Repository/workspace root (accepted for CLI parity with step_artifact).",
+        help="Repository/workspace root (accepted for CLI parity with step_artifact_cli).",
     )
     parser.add_argument("--source-path", required=True, help="Implicit CAD source path (<name>.implicit.js).")
     parser.add_argument(
@@ -126,7 +126,7 @@ def build_implicit_artifact(
     unlike a cached DXF the package's compressed render GLB cannot be turned back into an
     export one -- so asking for a missing sibling re-bakes, and asking for one that is
     already there costs nothing."""
-    del repo_root  # payload paths are cwd-relative; kept for CLI parity with step_artifact
+    del repo_root  # payload paths are cwd-relative; kept for CLI parity with step_artifact_cli
     resolved_source = Path(source_path).expanduser().resolve()
     if not resolved_source.is_file():
         raise FileNotFoundError(f"Implicit CAD source does not exist: {resolved_source}")

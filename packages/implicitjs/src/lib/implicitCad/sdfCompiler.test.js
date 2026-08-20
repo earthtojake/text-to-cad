@@ -1,6 +1,6 @@
 // Focused tests for the GLSL->JS compiler's mirrored semantics -- each one targets a spot
-// where idiomatic JS codegen would silently diverge from the interpreter
-// (design/implicit-glsl-compiler.md §2.3). The corpus harness (sdfEquality.test.js) is the
+// where idiomatic JS codegen would silently diverge from the interpreter. The corpus
+// harness (sdfEquality.test.js) is the
 // broad gate; these pin the individual traps with hand-built programs so a regression names
 // the exact semantic it broke.
 

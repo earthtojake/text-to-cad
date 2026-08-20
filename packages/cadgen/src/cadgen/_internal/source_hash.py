@@ -18,47 +18,23 @@ _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 @dataclass(frozen=True)
 class PythonSourceHash:
-    source_path: str
+    """A generator's content identity. DELIBERATELY carries no path.
+
+    It used to also carry a ``source_path``, rendered relative to the live cwd and falling
+    back to an absolute path when the model was not underneath it. Nothing ever read it, and
+    a cwd-dependent-or-absolute path sitting one attribute away from a value that IS written
+    into descriptors is a trap: the next writer to want "the source path" would have reached
+    for it and quietly made the cache depend on the directory the build ran from. Descriptor
+    paths come from :func:`cadgen.render.relative_to_file`, anchored on the model folder --
+    see ``tests/python/packages/cadgen/test_package_portability.py``.
+    """
+
     source_hash: str
 
 
 def python_source_hash(script_path: Path) -> PythonSourceHash:
-    """Hash the generator script content and record its metadata path."""
-    resolved_script = script_path.expanduser().resolve()
-    return PythonSourceHash(
-        source_path=_manifest_path(resolved_script),
-        source_hash=_sha256_file(resolved_script),
-    )
-
-
-def _manifest_roots() -> tuple[Path, ...]:
-    # Roots for displaying a generator's source_path manifest-relative: the live cwd (the repo
-    # root under normal invocation) plus the cadgen package root. No frozen import-time global.
-    return tuple(_dedupe_paths([
-        Path.cwd().resolve(),
-        _PACKAGE_ROOT.resolve(),
-    ]))
-
-
-def _dedupe_paths(paths: list[Path]) -> list[Path]:
-    result: list[Path] = []
-    seen: set[Path] = set()
-    for path in paths:
-        resolved = path.resolve()
-        if resolved not in seen:
-            seen.add(resolved)
-            result.append(resolved)
-    return result
-
-
-def _manifest_path(path: Path) -> str:
-    resolved = path.resolve()
-    for root in _manifest_roots():
-        try:
-            return resolved.relative_to(root).as_posix()
-        except ValueError:
-            continue
-    return resolved.as_posix()
+    """Hash the generator script's contents."""
+    return PythonSourceHash(source_hash=_sha256_file(script_path.expanduser().resolve()))
 
 
 def _sha256_file(path: Path) -> str:
@@ -190,14 +166,44 @@ def _interpreter_roots() -> tuple[Path, ...]:
     records is identical regardless of which directory the build was launched from.
     """
     roots: set[Path] = set()
-    paths = sysconfig.get_paths()
+
+    def add(value: object) -> None:
+        if not value:
+            return
+        with contextlib.suppress(OSError, TypeError, ValueError):
+            roots.add(Path(str(value)).resolve())
+
+    # sysconfig.get_paths() answers for the DEFAULT scheme only, which is prefix-based
+    # ("posix_prefix"/"nt"). It therefore never names the per-user scheme, so a
+    # ``pip install --user`` tree — the normal layout on a machine whose system
+    # site-packages needs admin rights — was absent from these roots. build123d, OCP and
+    # numpy installed that way were classified as MODEL code and evicted from sys.modules
+    # before every build; numpy cannot survive re-import while its C extension is loaded,
+    # so every build died with "module 'numpy.dtypes' has no attribute 'BoolDType'".
     for key in ("stdlib", "platstdlib", "purelib", "platlib"):
-        value = paths.get(key)
-        if value:
-            roots.add(Path(value).resolve())
+        add(sysconfig.get_paths().get(key))
+    #
+    # Only the package-installation directories, never a whole user tree: the user BASE
+    # (``site.getuserbase()``, ``~/.local`` on posix) holds bin/ and share/ as well, and
+    # excluding it would classify a model kept anywhere beneath it as third-party — which
+    # drops it from the recorded closure and silently disables staleness detection for that
+    # model. Nothing importable lives in the user tree outside its site-packages anyway.
+    with contextlib.suppress(Exception):
+        user_paths = sysconfig.get_paths(sysconfig.get_preferred_scheme("user"))
+        for key in ("purelib", "platlib"):
+            add(user_paths.get(key))
+    # site's answers rather than only sysconfig's: they cover layouts sysconfig does not
+    # describe (Debian's dist-packages, some relocated venvs) and are the canonical source
+    # for the user tree. Guarded because site's helpers raise when Python runs with a
+    # trimmed or embedded site module.
+    with contextlib.suppress(Exception):
+        import site
+
+        add(site.getusersitepackages())
+        for entry in site.getsitepackages():
+            add(entry)
     for prefix in (sys.prefix, sys.base_prefix, sys.exec_prefix, sys.base_exec_prefix):
-        if prefix:
-            roots.add(Path(prefix).resolve())
+        add(prefix)
     return tuple(roots)
 
 
@@ -298,10 +304,41 @@ def evict_first_party_modules() -> tuple[str, ...]:
     previous build failed partway, or what the generator unloads mid-run. Runtime
     and third-party modules (cadgen, build123d, OCP, ...) are never touched: they
     cannot reload safely and are not freshness inputs."""
-    evicted = tuple(repo_local_loaded_modules(set(sys.modules)))
+    protected = _packages_owning_loaded_extensions()
+    evicted = tuple(
+        name
+        for name in repo_local_loaded_modules(set(sys.modules))
+        if name.partition(".")[0] not in protected
+    )
     for name in evicted:
         sys.modules.pop(name, None)
     return evicted
+
+
+def _packages_owning_loaded_extensions() -> frozenset[str]:
+    """Top-level package names that already have a compiled extension module loaded.
+
+    A backstop for the root lists above, which are a denylist and will keep missing
+    layouts (``pip install --target``, conda, PYTHONPATH trees, relocated installs). A
+    package whose C extension is already initialised cannot be re-imported: dropping the
+    Python half from ``sys.modules`` leaves the extension registered, and re-executing the
+    Python half then fails on half-initialised state — which is how a numpy misclassified
+    as model code took down every build with "module 'numpy.dtypes' has no attribute
+    'BoolDType'" rather than merely recording a wrong closure.
+
+    Model code does not ship C extensions, so refusing to evict these costs nothing real:
+    the worst case is that a genuinely first-party package with a compiled sibling is not
+    re-executed, and that package could not have been re-imported safely anyway.
+    """
+    protected: set[str] = set()
+    for name, module in list(sys.modules.items()):
+        file_name = getattr(module, "__file__", None)
+        if not file_name or file_name.endswith(".py"):
+            continue
+        # .so / .pyd / .dylib — anything the import system loaded that is not Python source.
+        if os.path.splitext(file_name)[1]:
+            protected.add(name.partition(".")[0])
+    return frozenset(protected)
 
 
 _ACTIVE_EXECUTION_CAPTURE: set[Path] | None = None
@@ -355,8 +392,18 @@ def _relative_to_base(path: Path, base: Path) -> str:
     generator source / logical STEP). Uses ``os.path.relpath`` so a sibling or parent file gets a
     clean ``../`` ref instead of an absolute or repo-root-anchored path — this keeps the closure
     (and the descriptor that records it) location-independent: the same model produces the same
-    closure regardless of where the repository lives on disk."""
-    return Path(os.path.relpath(path.resolve(), base.resolve())).as_posix()
+    closure regardless of where the repository lives on disk.
+
+    On Windows, ``relpath`` RAISES for paths on different drives (a model on ``D:`` importing a
+    helper from ``C:``), where no relative path exists at all. Recording the absolute path is
+    the only representation left, and it is honest: a dependency on another volume does not
+    travel with the model folder either. Better than the alternative, which was the ValueError
+    escaping into the build as a failure to generate.
+    :func:`_resolve_against_base` already reads absolute recorded paths back."""
+    try:
+        return Path(os.path.relpath(path.resolve(), base.resolve())).as_posix()
+    except ValueError:
+        return path.resolve().as_posix()
 
 
 def _resolve_against_base(relative: str, base: Path) -> Path | None:

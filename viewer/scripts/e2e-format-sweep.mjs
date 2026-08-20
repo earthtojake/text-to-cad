@@ -19,7 +19,7 @@
 // cluster is present and usable, and the right-click viewport menu offers the camera
 // actions (with assembly-tree entries only where the `parts` capability is declared).
 //
-// Requires a viewer already serving <models-root> (npm --prefix viewer run start) and
+// Requires a viewer already serving <models-root> (npm run start) and
 // playwright available. Exits non-zero on the first failing format.
 
 import fs from "node:fs";

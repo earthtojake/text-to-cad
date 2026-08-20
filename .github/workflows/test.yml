@@ -33,7 +33,7 @@ jobs:
           node scripts/release/sync-version.mjs --check
 
   test:
-    name: Test
+    name: Test (Linux)
     runs-on: ubuntu-latest
 
     steps:
@@ -55,8 +55,63 @@ jobs:
       - name: Check production bundle layout
         run: scripts/github-workflows/check-builds.sh --skip-bundle-check
 
+      - name: Start the bundled CAD Viewer
+        run: scripts/test/test-viewer-launch.sh
+
       - name: Run documentation checks
         run: scripts/test/test-docs.sh
 
       - name: Run code tests
         run: scripts/test/test.sh
+
+  # A SEPARATE JOB, never a matrix on `test` above. A matrix renames that job's check to
+  # "Test (ubuntu-latest)", and `Test` is a required status check on develop -- it would stop
+  # being reported and every pull request would wait forever for a check that no longer exists.
+  #
+  # Runs the TESTS only, not the hygiene steps the Linux job wraps them in. Bundle freshness,
+  # the symlink layout and the published-tree checks are properties of the repository, not of
+  # an operating system; bundling is deterministic, so re-checking it here would buy nothing
+  # and cost minutes. The platform risk is in file I/O -- locks, paths, subprocesses, file
+  # URLs -- which is what the test suites exercise.
+  #
+  # Why this job exists at all: four of the last five user-reported bugs were Windows-only
+  # (#260, #266, #267, #269), and every one of them passed CI. The coverage was mostly already
+  # written -- test_coordination.py's holder test asserts exactly the cross-process sentinel
+  # read that #269 broke -- so what was missing was a runner, not a test.
+  test-windows:
+    name: Test (Windows)
+    runs-on: windows-latest
+
+    steps:
+      # Before checkout: Git for Windows materializes symlinks as text files containing the
+      # target path unless this is set, and `develop` is a symlink layout by design. Without
+      # it the runtime paths under skills/ are plain files and the suite tests nothing real.
+      - name: Enable Git symlinks
+        run: git config --global core.symlinks true
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+
+      # Three steps rather than test.sh, each running even if an earlier one failed, and the
+      # Python runner in --keep-going mode. While Windows is being brought up the failures are
+      # independent POSIX-isms in unrelated suites, and stopping at the first one turns a list
+      # into one ~10 minute round trip per entry. The Linux job keeps the fail-fast default.
+      - name: Run JS tests
+        run: scripts/test/test-js.sh
+        shell: bash
+
+      - name: Run Python tests
+        if: ${{ !cancelled() }}
+        run: scripts/test/test-python.sh --keep-going
+        shell: bash
+
+      # test-global.sh is deliberately absent, for the same reason the bundle and symlink
+      # steps are. It asserts REPOSITORY policy -- that manifests pin the canonical version,
+      # that lockfiles do not reach outside a skill, that the release scripts read the right
+      # VERSION path at a given ref -- by executing the repo's own bash tooling. None of that
+      # is shipped to a Windows user, and none of its answers can differ by operating system;
+      # running it here only asks whether `bash` on a Windows runner behaves like bash, which
+      # it does not (it resolves to the WSL stub and answers in UTF-16).

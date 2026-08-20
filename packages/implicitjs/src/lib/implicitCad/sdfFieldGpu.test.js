@@ -3,8 +3,8 @@
 // `sdfField.test.js` is the gate, and it is browser-free by necessity -- CI never runs
 // `playwright install`, and a gate that skips is not a gate. That leaves it with one stated
 // blind spot it cannot close from Node: GLSL is typed and JavaScript is not, so a rewrite that
-// turns `i == 0` into `i == 0.0` -- one of the two normalizer bugs
-// design/unified-glb-render-artifacts.md §7.2 names -- changes NOTHING a JS evaluator can
+// turns `i == 0` into `i == 0.0` -- one of the two known normalizer bugs -- changes
+// NOTHING a JS evaluator can
 // observe (`0` and `0.0` are the same Number) while making the shader fail to compile:
 //
 //   ERROR: '==' : wrong operand types - no operation '==' exists that takes a left-hand

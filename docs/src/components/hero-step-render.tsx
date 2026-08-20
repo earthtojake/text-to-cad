@@ -442,7 +442,7 @@ export function HeroStepRender() {
             href={HERO_STEP_DEMO_URL}
             target="_blank"
             rel="noreferrer"
-            title="Open planetary gear assembly in the CAD Skills demo"
+            title="Open planetary gear assembly in the text-to-cad demo"
           >
             {status}
           </a>

@@ -76,7 +76,9 @@ function resolveCadJsPackageRoot() {
   if (fs.existsSync(installedPackageSrc)) {
     return installedPackageSrc;
   }
-  return path.resolve(viewerAppRoot, "../packages/cadjs/src");
+  // Nothing resolved: name the in-app path so the failure points at this
+  // checkout rather than escaping to a parent workbench that may not exist.
+  return bundledPackageSrc;
 }
 
 function resolveDirectoryRoot() {

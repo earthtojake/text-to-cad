@@ -22,6 +22,7 @@ export { RENDER_FORMAT } from "cadjs/lib/fileFormats.js";
 export const TAB_TOOL_MODE = {
   REFERENCES: "references",
   DRAW: "draw",
+  MEASURE: "measure",
   PAN: "pan"
 };
 

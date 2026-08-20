@@ -4,6 +4,7 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
+from cadgen._internal.cli_locking import add_lock_timeout_argument
 from cadgen.catalog import StepImportOptions
 from cadgen.metadata import normalize_mesh_numeric
 
@@ -74,10 +75,14 @@ def _add_gen_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help=(
             "Print one JSON line per target on stdout reporting what happened to it "
-            "(built, current, or built by a concurrent run) and where its package is. "
+            "(built, current, built by a concurrent run, or left to one) and where its "
+            "package is. "
             "Human progress stays on stderr, so the two never interleave."
         ),
     )
+    # The same flag, spelled and defaulted the same way, as every other artifact CLI --
+    # scripts/gen is the one SKILL.md documents it on, and the one that did not accept it.
+    add_lock_timeout_argument(parser)
 
 
 def _validate_python_targets(targets: Sequence[str], *, parser: argparse.ArgumentParser) -> None:
@@ -103,7 +108,11 @@ def _sibling_step_output(target: str) -> str:
     # foo.step.py -> foo.step; plain foo.py -> foo.step (the target's logical STEP).
     if target.lower().endswith(".step.py"):
         return target[: -len(".py")]
-    return str(Path(target).with_suffix(".step"))
+    # as_posix(), because this half of a SOURCE=OUTPUT pair is a logical path. str() on a
+    # Path renders the NATIVE separator, so on Windows the two branches disagreed: the slice
+    # above kept "parts/second.step" and this one produced "parts\second.step" for the same
+    # shape of input. Windows accepts forward slashes, so one spelling serves both.
+    return Path(target).with_suffix(".step").as_posix()
 
 
 def _targets_with_step_outputs(
@@ -159,6 +168,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             force=bool(args.force),
             verbose=bool(args.verbose),
             json_output=bool(args.json),
+            lock_timeout_s=float(args.lock_timeout or 0.0),
         )
     except Exception as exc:  # noqa: BLE001 — the CLI boundary: report, do not traceback
         return report_cli_error(exc, tool="scripts/gen", verbose=bool(args.verbose))

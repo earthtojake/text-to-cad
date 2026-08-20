@@ -1,6 +1,7 @@
 export const FILE_SHEET_SECTION_IDS = Object.freeze({
   FILE_STATUS: "status",
   STEP_TREE: "tree",
+  STEP_MEASUREMENTS: "measurements",
   STEP_REFERENCE: "reference",
   STEP_PARAMETERS: "parameters",
   ROBOT_SDF: "sdf",
@@ -53,6 +54,9 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
         ...status,
         FILE_SHEET_SECTION_IDS.STEP_TREE,
         FILE_SHEET_SECTION_IDS.STEP_REFERENCE,
+        // Measurements follows Reference: both are readouts about geometry the
+        // user has picked, as against the Tree's inventory of what is in the file.
+        FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS,
         ...(options.hasStepModulePanel ? [FILE_SHEET_SECTION_IDS.STEP_PARAMETERS] : []),
         FILE_SHEET_SECTION_IDS.THEME_DISPLAY
       ];
@@ -63,7 +67,7 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
       // selectable in the viewport. The Tree panel is 556 lines inside StepFileSheet
       // reading 20 props and 33 derived locals; sharing it means extracting it, and a
       // second tree implementation for robots is exactly the parallel stack this effort
-      // exists to remove. Tracked as R1b in design/viewer-robot-parity.md.
+      // exists to remove.
       return [
         ...status,
         ...(isSdf ? [FILE_SHEET_SECTION_IDS.ROBOT_SDF] : []),
@@ -71,9 +75,9 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
         ...(showJoints ? [FILE_SHEET_SECTION_IDS.ROBOT_JOINTS] : [])
       ];
     case "mesh":
-      // A mesh (e.g. STL) has no file-specific sections; only a status tab when
-      // there's an issue. With none, the sheet is hidden entirely.
-      return [...status];
+      // Measure is the one mesh-specific control: vertex-to-vertex distance on
+      // the displayed triangles. Status still only appears when there is an issue.
+      return [...status, FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS];
     case "implicit":
       return [
         ...status,
@@ -112,7 +116,8 @@ export function defaultOpenFileSheetSectionIds(kind, options = {}) {
       ];
     case "mesh":
       return [
-        ...(options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : [])
+        ...(options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : []),
+        FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS
       ];
     case "implicit":
       return [

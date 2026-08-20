@@ -36,7 +36,7 @@ def _ocp_available() -> bool:
     sys.path.insert(0, str(_WORKTREE / "packages/cadgen/src"))
     try:
         importlib.import_module("OCP")
-        importlib.import_module("cadgen.step_artifact")
+        importlib.import_module("cadgen.step_artifact_cli")
         return True
     except Exception:
         return False
@@ -160,7 +160,7 @@ class ClientLifecycle(unittest.TestCase):
     def test_disabled_raises_for_cold_fallback(self):
         os.environ["VIEWER_CAD_WORKER"] = "0"
         with self.assertRaises(worker_client._WorkerError):
-            worker_client.run_cadgen("cadgen.step_artifact", [], str(_WORKTREE))
+            worker_client.run_cadgen("cadgen.step_artifact_cli", [], str(_WORKTREE))
 
 
 @unittest.skipUnless(_ocp_available(), "OpenCASCADE / cadgen not importable")
@@ -188,16 +188,16 @@ class WorkerBuildIntegration(unittest.TestCase):
         return (data.get("sourceClosureHash"), tuple(data.get("sourceClosureFiles") or ()))
 
     def test_warm_builds_match_cold(self):
-        cold = cadgen_bridge.run_cadgen_cold("cadgen.step_artifact", self._build_args(), str(_WORKTREE))
+        cold = cadgen_bridge.run_cadgen_cold("cadgen.step_artifact_cli", self._build_args(), str(_WORKTREE))
         self.assertTrue(cold.get("ok"), cold)
         cold_closure = self._closure()
 
-        warm1 = self.client.run_cadgen("cadgen.step_artifact", self._build_args(), str(_WORKTREE))
+        warm1 = self.client.run_cadgen("cadgen.step_artifact_cli", self._build_args(), str(_WORKTREE))
         self.assertTrue(warm1.get("ok"), warm1)
         self.assertTrue(warm1.get("packagePath"))
         w1 = self._closure()
 
-        warm2 = self.client.run_cadgen("cadgen.step_artifact", self._build_args(), str(_WORKTREE))
+        warm2 = self.client.run_cadgen("cadgen.step_artifact_cli", self._build_args(), str(_WORKTREE))
         self.assertTrue(warm2.get("ok"), warm2)
         w2 = self._closure()
 

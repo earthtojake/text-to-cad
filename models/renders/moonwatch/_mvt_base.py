@@ -19,7 +19,7 @@ the train `JEWEL_POSITIONS_UPPER` entries) rise a further 0.06 above
 `RATCHET_SCREW_TOP_Z` over `BARREL_POS`.
 
 NOTE: `_finishing.py` helpers assume `align=(None,None,None)` centers
-primitives; it actually leaves the raw OCC datum (see /BUGS.md). This module
+primitives; it actually leaves the raw OCC datum. This module
 compensates with corrective cuts (countersink cones, full-depth wheel
 windows, perlage z-shift) or constructive local replacements (`_screw`:
 flat slotted heads — F.slotted_screw's domed cap read as a featureless blob
@@ -390,8 +390,8 @@ def _blob(circles, clip_r, cutouts=()):
     ONE multi-operand fuse, clip LAST: pairwise 2D `+` decays once operands
     stop overlapping (the balance-cock STRIPE INSET went disjoint at the stud
     lobe, its `& Circle` clip returned silently EMPTY, and the cock shipped
-    with no striping cut at all — same failure class as /BUGS.md's keyless
-    entry)."""
+    with no striping cut at all — same failure class as the keyless-entry
+    defect)."""
     discs = [Pos(x, y) * Circle(r) for x, y, r in circles]
     prof = discs[0] + discs[1:] if len(discs) > 1 else discs[0]
     prof = prof & Circle(clip_r)
@@ -450,7 +450,7 @@ def _add_anglage(parts, ribbon, label):
     """Append a bridge's polished-bevel ribbon overlay (list of connected
     solids), one part per solid — same pattern/rationale as `_add_shadow`
     (disjoint arcs in one part trip validation; `Part(sol.wrapped)` loses
-    `.volume` on build123d 0.10, see /BUGS.md)."""
+    `.volume` on build123d 0.10)."""
     if not ribbon:
         return
     if len(ribbon) == 1:
@@ -500,7 +500,7 @@ def _sink_tool(cone_r=0.97, wall_r=0.72, cone_z=0.20, seat_z=0.60, bore_r=0.45):
     at depth cone_z — the bright polished ring of a real sink), a cylindrical
     seat counterbore holding chaton + jewel, then the through bore. Built
     locally: F.jewel_countersink_cut's cone is half above the surface AND
-    inverted (raw-OCC-datum bug, /BUGS.md), so at any parameterization its
+    inverted (raw-OCC-datum bug), so at any parameterization its
     opening bulges widest just under the rim — it cannot produce the
     countersink-ring read of a real jewel setting."""
     tool = (Pos(0, 0, -cone_z / 2 + 0.001) * Cone(wall_r, cone_r, cone_z)
@@ -548,7 +548,7 @@ def _grain(span_l, span_w, cx, cy, z_top, angle, clip=None):
 
 def _window_cutter(od, frac):
     """Full-depth replica of F.train_wheel's crossing-out cutter (the helper
-    only cuts the top half of every spoke window; see /BUGS.md)."""
+    only cuts the top half of every spoke window)."""
     r_o = od / 2.0
     r_root = r_o - r_o * frac
     rim_inner = r_root - od * 0.10
@@ -597,7 +597,7 @@ def _bevel_extrude(outline, z0, z1, w):
     tapered cap. OCC `chamfer` cannot cut this ring — F.anglage_top's
     whole-list retry shrank or dropped bevels, single-edge chamfers refuse
     concave junctions, and grouped chamfers after neighbors exist SEGFAULT
-    OCC (see /BUGS.md). Baking the bevel also means every later boolean
+    OCC. Baking the bevel also means every later boolean
     (stripes, sinks) cannot erase it. Built as ONE 3-section ruled loft
     (wall, wall, inward offset): fusing a straight extrude with a separate
     cap returned EMPTY on the barrel outline — OCC BOP glue failure on the
@@ -1352,7 +1352,7 @@ def _balance_parts():
     # lyre spring: crisp wire form — thin outer arc ring, three radial arms
     # into a small hub ring circling the cap jewel dome, two feet flanking the
     # opening (the old 0.20-wide band + fat feet fused into one white blob at
-    # macro). One multi-operand 2D fuse, gap wedge subtracted LAST (/BUGS.md).
+    # macro). One multi-operand 2D fuse, gap wedge subtracted LAST.
     # z 3.20..3.29 stays inside COCK_SHOCK_TOP_Z = 3.4.
     gap_a = -40.0
     outer_ring = Circle(1.06) - Circle(0.95)

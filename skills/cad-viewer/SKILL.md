@@ -43,6 +43,10 @@ arbitrary working directory — usually wherever the skill happens to be install
 not the model directory — so a relative path resolves against the wrong place.
 The `file=` value is relative to that directory.
 
+**On Windows the drive goes in the path, after the URL's leading slash**, with
+forward slashes: `D:\project\models` is `http://127.0.0.1:3245/D:/project/models`.
+The launcher prints this form already; build it the same way by hand.
+
 **The path is the workspace, not the file's folder.** The Viewer scans it
 recursively, so the file browser lists every model beneath it and the user can
 switch files without a new link. Pick the directory the user thinks of as their

@@ -70,7 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="python -m cadgen.dxf_artifact",
         description="Generate the CAD Viewer drawing-package artifact for one DXF entry.",
     )
-    parser.add_argument("--repo-root", default=".", help="Repository/workspace root (accepted for CLI parity with step_artifact).")
+    parser.add_argument("--repo-root", default=".", help="Repository/workspace root (accepted for CLI parity with step_artifact_cli).")
     parser.add_argument(
         "--source-path",
         required=True,
@@ -105,7 +105,7 @@ def build_dxf_artifact(
     lock_timeout_s: float = 0.0,
 ) -> dict[str, object]:
     """Build the drawing-package artifact for one DXF entry and RETURN the result payload
-    (the exact dict the CLI prints). Mirrors :func:`cadgen.step_artifact.build_step_artifact`
+    (the exact dict the CLI prints). Mirrors :func:`cadgen.step_artifact_cli.build_step_artifact`
     for the DXF pipeline, and takes the same two inputs STEP does:
 
     * a ``<name>.dxf.py`` generator — run it, and the package holds what it produced;
@@ -115,7 +115,7 @@ def build_dxf_artifact(
     function's lock**: one run id, one status record, one progress bar across both runtimes
     (design §7.4.2). With ``export`` set, the fresh drawing DXF is also written to that path.
     """
-    del repo_root  # payload paths are cwd-relative; kept for CLI parity with step_artifact
+    del repo_root  # payload paths are cwd-relative; kept for CLI parity with step_artifact_cli
     resolved_source = Path(source_path).expanduser().resolve()
     if not resolved_source.is_file():
         raise FileNotFoundError(f"DXF source does not exist: {resolved_source}")

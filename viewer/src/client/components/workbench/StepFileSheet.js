@@ -27,6 +27,8 @@ import AssemblyContextMenuItems from "./AssemblyContextMenuItems";
 import { buildFileStatusTab } from "./FileStatusSection";
 import { buildParameterControlsTab } from "./ParameterControlsSection";
 import { buildStepReferenceTab } from "./StepReferenceSection";
+import StepMeasurementsSection from "./StepMeasurementsSection";
+import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections";
 const treeChevronButtonClasses = "grid h-5 w-5 shrink-0 place-items-center rounded-sm px-0 text-current/60 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45";
 const treeRowActionButtonClasses = "h-5 w-5 rounded-sm px-0 text-current/60 shadow-none hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45 focus-visible:text-sidebar-accent-foreground";
 const treeRowContentClasses = "h-7 min-w-0 text-xs font-normal";
@@ -40,6 +42,8 @@ const treeDepthIndentPx = 26;
 const treeDepthGuideOffsetPx = 14;
 const treeDepthMaxPx = 156;
 const treeSectionId = "tree";
+const measurementsSectionId = FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS;
+const EMPTY_MEASUREMENTS = [];
 const treeRevealScrollPaddingTopPx = 120;
 function formatSeconds(value) {
   const numericValue = Math.max(Number(value) || 0, 0);
@@ -475,6 +479,12 @@ function StepModuleAnimationTimeControl({
 
 export default function StepFileSheet({
   open,
+  measurements = EMPTY_MEASUREMENTS,
+  activeMeasurementId = "",
+  measureModeActive = false,
+  onMeasurementActivate,
+  onMeasurementDelete,
+  onMeasurementsClear,
   isDesktop,
   width,
   onOpenChange,
@@ -713,6 +723,21 @@ export default function StepFileSheet({
   if (!selectedEntry) {
     return null;
   }
+
+  const measurementsSection = {
+    id: measurementsSectionId,
+    title: "Measure",
+    content: (
+      <StepMeasurementsSection
+        measurements={measurements}
+        activeId={activeMeasurementId}
+        measureModeActive={measureModeActive}
+        onActivate={onMeasurementActivate}
+        onDelete={onMeasurementDelete}
+        onClear={onMeasurementsClear}
+      />
+    )
+  };
 
   const sections = [
     {
@@ -1273,6 +1298,7 @@ export default function StepFileSheet({
       )
     },
     buildStepReferenceTab({ references: selectedReferences }),
+    measurementsSection,
     // The parameters tab is the shared ParameterControlsSection; the only
     // STEP-specific part is the time control, which tracks live playback.
     buildParameterControlsTab({

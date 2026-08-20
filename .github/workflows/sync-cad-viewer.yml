@@ -1,0 +1,139 @@
+name: Sync CAD Viewer Repo
+
+# Mirrors viewer/ into the standalone earthtojake/cad-viewer repo.
+#
+# The Release workflow calls this after it publishes, so the mirror tracks
+# releases rather than in-flight develop work. Dispatch it manually for an
+# out-of-band sync or a dry run.
+#
+# It mirrors from the release SOURCE commit, not from main: the publish tree
+# drops viewer/ (it is source, and what installs is the bundled runtime under
+# skills/cad-viewer), while the mirror is a source repo. Pointing this at main
+# fails fast on the missing viewer/package.json.
+#
+# The mirror is a straight copy with the viewer/packages/* symlinks dereferenced;
+# nothing rewrites paths on the way out. viewer/ is kept self-contained instead,
+# and viewer/scripts/selfContained.test.mjs (run below, in the mirror) is what
+# keeps it that way.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Source ref to mirror from — develop or a release source commit, never main.
+        required: true
+        default: develop
+        type: string
+      dry_run:
+        description: Build and verify the mirror without pushing it.
+        required: false
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      ref:
+        description: Source ref to mirror from.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-cad-viewer
+  cancel-in-progress: false
+
+env:
+  MIRROR_REPOSITORY: earthtojake/cad-viewer
+  MIRROR_BRANCH: main
+
+jobs:
+  sync:
+    name: Mirror viewer to cad-viewer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Cloned outside GITHUB_WORKSPACE on purpose: the sync script refuses to
+      # write anywhere inside the source repo.
+      - name: Clone the cad-viewer mirror
+        env:
+          CAD_VIEWER_SYNC_TOKEN: ${{ secrets.CAD_VIEWER_SYNC_TOKEN }}
+        run: |
+          if [ -z "${CAD_VIEWER_SYNC_TOKEN:-}" ]; then
+            echo "Missing GitHub Actions secret: CAD_VIEWER_SYNC_TOKEN" >&2
+            echo "It needs contents:write on ${MIRROR_REPOSITORY}." >&2
+            exit 1
+          fi
+          git clone \
+            --branch "$MIRROR_BRANCH" \
+            "https://x-access-token:${CAD_VIEWER_SYNC_TOKEN}@github.com/${MIRROR_REPOSITORY}.git" \
+            "${RUNNER_TEMP}/cad-viewer"
+
+      - name: Sync viewer into the mirror
+        run: scripts/viewer/sync-cad-viewer-repo.sh "${RUNNER_TEMP}/cad-viewer"
+
+      - name: Install mirror Node dependencies
+        working-directory: ${{ runner.temp }}/cad-viewer
+        run: npm ci
+
+      - name: Run mirror JS tests
+        working-directory: ${{ runner.temp }}/cad-viewer
+        run: npm run test
+
+      - name: Build the mirror
+        working-directory: ${{ runner.temp }}/cad-viewer
+        run: npm run build
+
+      # Installs the mirror's own requirements.txt, so this also proves the
+      # setup command the mirror's README gives users actually works.
+      - name: Install mirror Python dependencies
+        working-directory: ${{ runner.temp }}/cad-viewer
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run mirror backend tests
+        working-directory: ${{ runner.temp }}/cad-viewer
+        env:
+          PYTHONPATH: packages/cadgen/src
+        run: python -m unittest discover -s server_py/tests -t .
+
+      - name: Commit and push the mirror
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_REF: ${{ inputs.ref }}
+        working-directory: ${{ runner.temp }}/cad-viewer
+        run: |
+          version="$(tr -d '[:space:]' < "${GITHUB_WORKSPACE}/VERSION")"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Mirror is already up to date; nothing to push."
+            exit 0
+          fi
+          git commit -m "Sync CAD Viewer ${version} from ${GITHUB_REPOSITORY}@${SOURCE_SHA}" \
+            -m "Source ref: ${SOURCE_REF}"
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            echo "Dry run: built and verified the mirror, skipping push."
+            git show --stat HEAD
+            exit 0
+          fi
+          git push origin "HEAD:${MIRROR_BRANCH}"

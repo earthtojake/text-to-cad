@@ -72,8 +72,26 @@ export function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2;
 }
 
+// OrbitControls r161+ multiplies a ctrl+wheel deltaY by this before we ever see the effect
+// of zoomSpeed, because browsers report a trackpad pinch as a small ctrl+wheel. Callers divide
+// their pinch speed by it so the boost is applied once, not twice. Kept beside the predicate
+// that identifies those events so the two cannot drift apart.
+export const WHEEL_PINCH_DELTA_BOOST = 10;
+
+/** A trackpad PINCH: every browser spells it ctrl+wheel, whatever the pointer type. */
+export function isPinchWheelEvent(event) {
+  return Boolean(event?.ctrlKey);
+}
+
+/**
+ * A trackpad-ish wheel: a pinch, or the small pixel deltas a two-finger scroll produces.
+ *
+ * A mouse notch is a large delta (~100px) or a LINE-mode delta, so it never matches. deltaMode
+ * is checked explicitly rather than assumed: Firefox on Windows and Linux reports LINE (1),
+ * where `deltaY` is a line count of ~3 and would otherwise read as a tiny pixel delta.
+ */
 export function isTrackpadLikeWheelEvent(event) {
-  return event.ctrlKey || (event.deltaMode === 0 && Math.abs(event.deltaY) < 20);
+  return isPinchWheelEvent(event) || (event.deltaMode === 0 && Math.abs(event.deltaY) < 20);
 }
 
 export function normalizeViewportFrameInsets(value = {}) {

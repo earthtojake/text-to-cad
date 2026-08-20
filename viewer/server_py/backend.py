@@ -14,6 +14,7 @@ from urllib.parse import urlsplit, parse_qs, unquote
 
 from . import artifact as artifact_mod
 from . import cadgen_bridge
+from . import paths
 from . import scanner
 from .content_types import content_type_for_path
 from .save_dialog import pick_save_destination
@@ -50,6 +51,8 @@ def normalized_file_ref(value: str) -> str:
         return ""
     if "\0" in raw:
         raise ValueError("File path contains an invalid null byte")
+    # A ref can reach us in URL-path form (`/D:/models/part.step`) the same way ?dir= does.
+    raw = paths.filesystem_path_from_url_path(raw)
     return absolute_file_ref(raw) if os.path.isabs(raw) else raw.lstrip("/")
 
 
@@ -167,7 +170,10 @@ class LocalAssetBackend:
     kind = "local-fs"
 
     def resolve_root(self, root_dir: str = "") -> dict:
-        root_path = os.path.abspath(str(root_dir or "").strip() or os.getcwd())
+        # ?dir= is a URL path, so a Windows root arrives as `/D:/models`; abspath would
+        # read the leading slash as the current drive's root and answer `C:\D:\models`.
+        requested = paths.filesystem_path_from_url_path(str(root_dir or "").strip())
+        root_path = os.path.abspath(requested or os.getcwd())
         if "\0" in root_path:
             raise ValueError("CAD Viewer directory contains an invalid null byte")
         require_directory(root_path)
@@ -248,8 +254,8 @@ class LocalAssetBackend:
             # A same-stem `<name>.step.py` generator OWNS the entry even when an
             # exported `<name>.step` sits beside it. The export is the generator's
             # output, and only the generator can declare the model's `params`
-            # sidecar -- the documented way to attach one to an imported STEP
-            # (skills/cad/references/parameters.md). Resolving it here keeps the
+            # sidecar -- the documented way to attach one to an imported STEP.
+            # Resolving it here keeps the
             # build, the freshness check and STEP export all keyed on the same
             # source. cadgen's generator mode writes only the render package, so
             # the exported `.step` beside it is never rewritten.
@@ -357,6 +363,14 @@ class LocalAssetBackend:
             status = {"state": artifact_mod.ARTIFACT_STATE_READY, "ref": ref}
             if snap.busy:
                 status["busy"] = True
+                # An occupied generator (an export, an on-demand topology extraction) runs
+                # the same multi-minute gen_step a build does. It does NOT hide the model —
+                # nothing is being rewritten — so this rides alongside a ready artifact and
+                # the client shows it without blocking the render.
+                if snap.run_id:
+                    status["runId"] = snap.run_id
+                if snap.progress is not None:
+                    status["progress"] = snap.progress
             return status
         if code in artifact_mod.BUILDABLE_ARTIFACT_CODES:
             status = {"state": artifact_mod.ARTIFACT_STATE_NEEDS_BUILD, "reason": code, "ref": ref}
@@ -377,7 +391,7 @@ class LocalAssetBackend:
         candidate = os.path.join(os.path.dirname(step_path), os.path.basename(step_path) + ".py")
         return candidate if scanner._file_has_python_generator(candidate, "gen_step") else ""
 
-    # POST /__cad/artifact build — subprocess cadgen.step_artifact (OCP stays out of
+    # POST /__cad/artifact build — subprocess cadgen.step_artifact_cli (OCP stays out of
     # the server process).
     def generate_step_artifact(self, file_ref, force, resolved_root, catalog):
         resolved = self.resolve_step_source(file_ref, resolved_root)
@@ -397,7 +411,7 @@ class LocalAssetBackend:
             # package (the logical --step path never exists).
             args += ["--source-path", generator]
         result = self._run_artifact_build(
-            "cadgen.step_artifact", args, resolved_root["rootPath"],
+            "cadgen.step_artifact_cli", args, resolved_root["rootPath"],
             force=force, error_label="STEP render artifact build failed",
         )
         return {**result, "stepPath": step_path}

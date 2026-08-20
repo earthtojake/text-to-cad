@@ -1,0 +1,518 @@
+{
+  "comment": "Shared contract for the CAD selector grammar. The Python parser (cadgen.cad_ref_syntax) and the JS parser (cadjs/lib/cadRefs.js) are separate implementations of the same language; this fixture is the only thing that keeps them honest. Every case must hold in BOTH. Cases tagged phase 1 cover label selectors.",
+  "selectorCases": [
+    {
+      "phase": 0,
+      "why": "occurrence + entity, the canonical copy-button form",
+      "selector": "o1.12.f19",
+      "selectorType": "face",
+      "occurrenceId": "o1.12",
+      "ordinal": 19,
+      "canonical": "o1.12.f19"
+    },
+    {
+      "phase": 0,
+      "why": "deep nesting stays a single occurrence path",
+      "selector": "o1.2.3.4.5.6.e7",
+      "selectorType": "edge",
+      "occurrenceId": "o1.2.3.4.5.6",
+      "ordinal": 7,
+      "canonical": "o1.2.3.4.5.6.e7"
+    },
+    {
+      "phase": 0,
+      "why": "bare occurrence",
+      "selector": "o1.3",
+      "selectorType": "occurrence",
+      "occurrenceId": "o1.3",
+      "ordinal": null,
+      "canonical": "o1.3"
+    },
+    {
+      "phase": 0,
+      "why": "single-segment occurrence",
+      "selector": "o1",
+      "selectorType": "occurrence",
+      "occurrenceId": "o1",
+      "ordinal": null,
+      "canonical": "o1"
+    },
+    {
+      "phase": 0,
+      "why": "bare entity with no occurrence context",
+      "selector": "f45",
+      "selectorType": "face",
+      "occurrenceId": "",
+      "ordinal": 45,
+      "canonical": "f45"
+    },
+    {
+      "phase": 0,
+      "why": "every entity kind maps to its type name",
+      "selector": "s2",
+      "selectorType": "shape",
+      "occurrenceId": "",
+      "ordinal": 2,
+      "canonical": "s2"
+    },
+    {
+      "phase": 0,
+      "selector": "e9",
+      "selectorType": "edge",
+      "occurrenceId": "",
+      "ordinal": 9,
+      "canonical": "e9"
+    },
+    {
+      "phase": 0,
+      "selector": "v4",
+      "selectorType": "vertex",
+      "occurrenceId": "",
+      "ordinal": 4,
+      "canonical": "v4"
+    },
+    {
+      "phase": 0,
+      "why": "leading # is stripped",
+      "selector": "#o2.f1",
+      "selectorType": "face",
+      "occurrenceId": "o2",
+      "ordinal": 1,
+      "canonical": "o2.f1"
+    },
+    {
+      "phase": 0,
+      "why": "mates are NOT part of the structured grammar; they stay opaque",
+      "selector": "m1",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "ordinal": null,
+      "canonical": "m1"
+    },
+    {
+      "phase": 0,
+      "why": "unknown junk stays opaque rather than raising",
+      "selector": "not a selector!",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "ordinal": null,
+      "canonical": "not a selector!"
+    },
+    {
+      "phase": 1,
+      "why": "bare label resolves to an occurrence at the resolution layer, not the parser",
+      "selector": "eye_shank",
+      "selectorType": "label",
+      "occurrenceId": "",
+      "ordinal": null,
+      "label": "eye_shank",
+      "canonical": "eye_shank"
+    },
+    {
+      "phase": 1,
+      "why": "label + entity, the headline feature",
+      "selector": "servo_end_plate.f45",
+      "selectorType": "face",
+      "occurrenceId": "",
+      "ordinal": 45,
+      "label": "servo_end_plate",
+      "canonical": "servo_end_plate.f45"
+    },
+    {
+      "phase": 1,
+      "why": "colons appear inside real labels (mounting_eye:lower, piston_rod:chrome)",
+      "selector": "piston_rod:chrome.e3",
+      "selectorType": "edge",
+      "occurrenceId": "",
+      "ordinal": 3,
+      "label": "piston_rod:chrome",
+      "canonical": "piston_rod:chrome.e3"
+    },
+    {
+      "phase": 1,
+      "why": "numbered duplicate alias is just a label spelling to the parser",
+      "selector": "cast_rim:5spoke_2",
+      "selectorType": "label",
+      "occurrenceId": "",
+      "ordinal": null,
+      "label": "cast_rim:5spoke_2",
+      "canonical": "cast_rim:5spoke_2"
+    },
+    {
+      "phase": 1,
+      "why": "a label may not start with a digit; that stays opaque",
+      "selector": "5spoke",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "ordinal": null,
+      "canonical": "5spoke"
+    },
+    {
+      "phase": 1,
+      "why": "REGRESSION GUARD: o-prefixed labels must not be stolen by the occurrence form",
+      "selector": "outer_ring",
+      "selectorType": "label",
+      "occurrenceId": "",
+      "ordinal": null,
+      "label": "outer_ring",
+      "canonical": "outer_ring"
+    },
+    {
+      "phase": 1,
+      "why": "REGRESSION GUARD: an entity-looking label prefix must not be stolen either",
+      "selector": "frame_rail",
+      "selectorType": "label",
+      "occurrenceId": "",
+      "ordinal": null,
+      "label": "frame_rail",
+      "canonical": "frame_rail"
+    },
+    {
+      "phase": 0,
+      "why": "only a LEADING '#' is the token marker; a later one is not a separator",
+      "selector": "o1#f2",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "ordinal": null,
+      "canonical": "o1#f2"
+    },
+    {
+      "phase": 0,
+      "why": "a trailing '#' is part of the selector text, not something to drop",
+      "selector": "o1#",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "ordinal": null,
+      "canonical": "o1#"
+    },
+    {
+      "phase": 1,
+      "why": "an interior '#' must not splice two halves into one label",
+      "selector": "eye#shank",
+      "selectorType": "opaque",
+      "occurrenceId": "",
+      "ordinal": null,
+      "canonical": "eye#shank"
+    }
+  ],
+  "inheritanceCases": [
+    {
+      "phase": 0,
+      "why": "a bare entity after an occurrence inherits that occurrence",
+      "input": "o1.2,f3,f4",
+      "expected": [
+        "o1.2",
+        "o1.2.f3",
+        "o1.2.f4"
+      ]
+    },
+    {
+      "phase": 0,
+      "why": "an occurrence-entity selector also seeds inheritance",
+      "input": "o1.2.f3,f4",
+      "expected": [
+        "o1.2.f3",
+        "o1.2.f4"
+      ]
+    },
+    {
+      "phase": 0,
+      "why": "with no occurrence context bare entities stay bare",
+      "input": "f3,f4",
+      "expected": [
+        "f3",
+        "f4"
+      ]
+    },
+    {
+      "phase": 1,
+      "why": "a label seeds inheritance the same way an occurrence does",
+      "input": "eye_shank,f3,f4",
+      "expected": [
+        "eye_shank",
+        "eye_shank.f3",
+        "eye_shank.f4"
+      ]
+    },
+    {
+      "phase": 1,
+      "why": "label+entity seeds inheritance from its label",
+      "input": "servo_end_plate.f45,f46",
+      "expected": [
+        "servo_end_plate.f45",
+        "servo_end_plate.f46"
+      ]
+    },
+    {
+      "phase": 1,
+      "why": "a later occurrence overrides an inherited label",
+      "input": "eye_shank,f3,o2.1,f4",
+      "expected": [
+        "eye_shank",
+        "eye_shank.f3",
+        "o2.1",
+        "o2.1.f4"
+      ]
+    }
+  ],
+  "aliasCases": [
+    {
+      "phase": 1,
+      "why": "unique labels get a bare alias and no number",
+      "rows": [
+        {
+          "id": "o1.1",
+          "name": "eye_shank"
+        },
+        {
+          "id": "o1.2",
+          "name": "pressure_tube"
+        }
+      ],
+      "aliases": {
+        "eye_shank": "o1.1",
+        "pressure_tube": "o1.2"
+      },
+      "ambiguous": {}
+    },
+    {
+      "phase": 1,
+      "why": "duplicates get numbered aliases in occurrence-tree order; the bare name is ambiguous",
+      "rows": [
+        {
+          "id": "o1.3",
+          "name": "cast_rim:5spoke"
+        },
+        {
+          "id": "o1.7",
+          "name": "cast_rim:5spoke"
+        }
+      ],
+      "aliases": {
+        "cast_rim:5spoke_1": "o1.3",
+        "cast_rim:5spoke_2": "o1.7"
+      },
+      "ambiguous": {
+        "cast_rim:5spoke": [
+          "cast_rim:5spoke_1",
+          "cast_rim:5spoke_2"
+        ]
+      }
+    },
+    {
+      "phase": 1,
+      "why": "ordering is numeric per path segment, so o1.10 sorts AFTER o1.2",
+      "rows": [
+        {
+          "id": "o1.10",
+          "name": "bolt"
+        },
+        {
+          "id": "o1.2",
+          "name": "bolt"
+        }
+      ],
+      "aliases": {
+        "bolt_1": "o1.2",
+        "bolt_2": "o1.10"
+      },
+      "ambiguous": {
+        "bolt": [
+          "bolt_1",
+          "bolt_2"
+        ]
+      }
+    },
+    {
+      "phase": 1,
+      "why": "a numbered alias never collides with a label an author actually wrote",
+      "rows": [
+        {
+          "id": "o1.1",
+          "name": "servo_end_mount"
+        },
+        {
+          "id": "o1.2",
+          "name": "servo_end_mount"
+        },
+        {
+          "id": "o1.3",
+          "name": "servo_end_mount_1"
+        }
+      ],
+      "aliases": {
+        "servo_end_mount_2": "o1.1",
+        "servo_end_mount_3": "o1.2",
+        "servo_end_mount_1": "o1.3"
+      },
+      "ambiguous": {
+        "servo_end_mount": [
+          "servo_end_mount_2",
+          "servo_end_mount_3"
+        ]
+      }
+    },
+    {
+      "phase": 1,
+      "why": "names that cannot be labels are reachable numerically only",
+      "rows": [
+        {
+          "id": "o1.1",
+          "name": "o1.4"
+        },
+        {
+          "id": "o1.2",
+          "name": "f12"
+        },
+        {
+          "id": "o1.3",
+          "name": "m2"
+        },
+        {
+          "id": "o1.4",
+          "name": "5spoke"
+        },
+        {
+          "id": "o1.5",
+          "name": "has space"
+        },
+        {
+          "id": "o1.6",
+          "name": "has.dot"
+        },
+        {
+          "id": "o1.7",
+          "name": ""
+        }
+      ],
+      "aliases": {},
+      "ambiguous": {}
+    },
+    {
+      "phase": 1,
+      "why": "group (non-leaf) rows are addressable too",
+      "rows": [
+        {
+          "id": "o1.1",
+          "name": "damper_body"
+        },
+        {
+          "id": "o1.1.1",
+          "name": "pressure_tube"
+        }
+      ],
+      "aliases": {
+        "damper_body": "o1.1",
+        "pressure_tube": "o1.1.1"
+      },
+      "ambiguous": {}
+    },
+    {
+      "phase": 1,
+      "why": "a row may carry the render package's `occurrenceId` spelling instead of `id`",
+      "rows": [
+        {
+          "occurrenceId": "o1.1",
+          "name": "eye_shank"
+        },
+        {
+          "id": "o1.2",
+          "name": "pressure_tube"
+        }
+      ],
+      "aliases": {
+        "eye_shank": "o1.1",
+        "pressure_tube": "o1.2"
+      },
+      "ambiguous": {}
+    }
+  ],
+  "tokenCases": [
+    {
+      "phase": 2,
+      "why": "bare selector token \u2014 the form every existing ref uses",
+      "text": "#o1.2.f3",
+      "cadPath": "",
+      "selectors": [
+        "o1.2.f3"
+      ]
+    },
+    {
+      "phase": 2,
+      "why": "bare whole-entry token",
+      "text": "#",
+      "cadPath": "",
+      "selectors": []
+    },
+    {
+      "phase": 2,
+      "why": "file prefix, the viewer's copy format (a mesh keeps its extension)",
+      "text": "mounting_plate.stl#o1.2.f3",
+      "cadPath": "mounting_plate.stl",
+      "selectors": [
+        "o1.2.f3"
+      ]
+    },
+    {
+      "phase": 2,
+      "why": "directory-qualified prefix; `.step` is dropped so a generator shows as .py",
+      "text": "starship/super_heavy#o1.3",
+      "cadPath": "starship/super_heavy",
+      "selectors": [
+        "o1.3"
+      ]
+    },
+    {
+      "phase": 2,
+      "why": "prefix + comma list; inheritance still applies inside the token",
+      "text": "plate#o1.2,f3,f4",
+      "cadPath": "plate",
+      "selectors": [
+        "o1.2",
+        "o1.2.f3",
+        "o1.2.f4"
+      ]
+    },
+    {
+      "phase": 2,
+      "why": "prefix naming a whole file, no selectors",
+      "text": "mounting_plate.stl#",
+      "cadPath": "mounting_plate.stl",
+      "selectors": []
+    },
+    {
+      "phase": 2,
+      "why": "a label selector behind a prefix \u2014 the two features compose",
+      "text": "shock#eye_shank.f45",
+      "cadPath": "shock",
+      "selectors": [
+        "eye_shank.f45"
+      ]
+    },
+    {
+      "phase": 2,
+      "why": "the prefix is kept RAW by the parser; expanding a bare stem to .step.py is resolution's job",
+      "text": "a/b/c#o1",
+      "cadPath": "a/b/c",
+      "selectors": [
+        "o1"
+      ]
+    },
+    {
+      "phase": 2,
+      "why": "no '#' at all is not a token",
+      "text": "mounting_plate.stl",
+      "cadPath": null,
+      "selectors": null
+    },
+    {
+      "phase": 2,
+      "why": "leading whitespace is tolerated, as before",
+      "text": "   #f1",
+      "cadPath": "",
+      "selectors": [
+        "f1"
+      ]
+    }
+  ]
+}

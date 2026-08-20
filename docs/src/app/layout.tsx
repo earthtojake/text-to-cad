@@ -9,7 +9,7 @@ const socialPreview = {
   url: "/social-preview-gear.png",
   width: 1200,
   height: 630,
-  alt: "CAD Skills homepage showing a planetary gear CAD model",
+  alt: "text-to-cad homepage showing a planetary gear CAD model",
 };
 
 const themeScript = `

@@ -4,8 +4,7 @@
  * This is the build-time half of the DXF render path: `buildDxfPreviewMeshData` is reused
  * VERBATIM as an input (it is ~1,300 lines of meshing nobody is rewriting), and its output is
  * handed to the shared `writeGlb`. Once the package carries `preview.glb` the browser stops
- * parsing and extruding DXF at open time -- the viewport is fed a GLB like every other entry
- * (design/unified-glb-render-artifacts.md §7.4.2).
+ * parsing and extruding DXF at open time -- the viewport is fed a GLB like every other entry.
  *
  * It lives in `src/` rather than in `bin/dxf-artifact.mjs` so it is testable without spawning
  * a process: the builder script owns argv, file IO and the NDJSON protocol, and this owns the

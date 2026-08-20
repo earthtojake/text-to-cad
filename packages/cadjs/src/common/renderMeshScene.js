@@ -668,6 +668,11 @@ function roundedBounds(bounds) {
 // `ref` survives rather than `id`/`occurrenceId` because it is the form that goes
 // straight back into `--focus` / `--hide` / `inspect`; the bare id is one string slice
 // away for anyone who needs it.
+// A label ref (`#eye_shank`) addresses a part by the `name` already in every row, so this
+// payload deliberately does NOT carry a second `labelRef` identifier -- that would undo the
+// size work above for a string the row already contains. `inspect refs` reports the exact
+// paste spelling, including the numbered form for duplicated labels, where the output is
+// small enough for it to be free.
 export function listRenderableParts(meshData) {
   return toArray(meshData.parts).map((part, index) => {
     const occurrenceId = String(part?.occurrenceId || part?.id || "");

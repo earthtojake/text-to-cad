@@ -6,6 +6,7 @@ import json
 import hashlib
 import os
 import stat
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -30,7 +31,15 @@ def write_sliced_3mf(path: Path) -> None:
         archive.writestr("Metadata/plate_1.gcode", "; plate 1\nG1 X1\n")
 
 
-def write_fake_bambox(path: Path) -> None:
+def write_fake_bambox(path: Path) -> Path:
+    """Write a stand-in bambox CLI; returns the path to actually invoke it by.
+
+    A shebang is a POSIX loader feature. Windows ``CreateProcess`` reads the file's PE header
+    and refuses a text script with WinError 193, "%1 is not a valid Win32 application",
+    whatever the first line says -- so the executable there is a ``.cmd`` shim handing the
+    body to this interpreter. That is also the shape a pip- or npm-installed CLI takes on
+    Windows, which makes the fake more faithful there rather than less.
+    """
     script = textwrap.dedent(
         """\
         #!/usr/bin/env python3
@@ -53,8 +62,15 @@ def write_fake_bambox(path: Path) -> None:
         raise SystemExit(2)
         """
     )
-    path.write_text(script, encoding="utf-8")
-    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+    if os.name != "nt":
+        path.write_text(script, encoding="utf-8")
+        path.chmod(path.stat().st_mode | stat.S_IXUSR)
+        return path
+    body = path.with_suffix(".py")
+    body.write_text(script, encoding="utf-8")
+    shim = path.with_suffix(".cmd")
+    shim.write_text(f'@"{sys.executable}" "{body}" %*\n', encoding="utf-8")
+    return shim
 
 
 class BambuLanPrintTests(unittest.TestCase):
@@ -409,9 +425,8 @@ class BambuLanPrintTests(unittest.TestCase):
             root = Path(tmp)
             job = root / "job.gcode"
             output = root / "job.gcode.3mf"
-            fake_bambox = root / "bambox"
             write_gcode(job)
-            write_fake_bambox(fake_bambox)
+            fake_bambox = write_fake_bambox(root / "bambox")
             args = bambu.parse_args(
                 [
                     "package",
@@ -522,9 +537,8 @@ class BambuLanPrintTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             job = root / "job.gcode"
-            fake_bambox = root / "bambox"
             write_gcode(job)
-            write_fake_bambox(fake_bambox)
+            fake_bambox = write_fake_bambox(root / "bambox")
             args = bambu.parse_args(
                 [
                     "send",

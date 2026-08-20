@@ -202,6 +202,14 @@ def _parse_entry_ref_tokens(cad_path: str, refs_text: str = "") -> list[syntax.P
         if len(parsed_tokens) != 1 or parsed_tokens[0].token.strip() != normalized_line:
             raise CadRefError(f"Invalid selector ref {normalized_line!r}; expected #o1.2, #f1, #m1, or #o1.2.f1.")
         parsed = parsed_tokens[0]
+        # A copied ref may carry a file prefix. It is only usable when it names the entry this
+        # command was pointed at; otherwise the old behaviour here -- overwriting the parsed
+        # prefix with the command's own cad_path -- would inspect a different file than the ref
+        # asked for and report a confident answer about the wrong geometry.
+        try:
+            syntax.ensure_ref_file_matches(parsed.cad_path, cad_path, source_label=f"ref {parsed.token!r}")
+        except ValueError as error:
+            raise CadRefError(str(error)) from error
         tokens.append(
             syntax.ParsedToken(
                 line=line_no,
@@ -253,6 +261,12 @@ def _load_step_context(
     else:
         manifest = artifact.selector_bundle.manifest
         selector_index = lookup.build_selector_index(manifest, buffers=artifact.selector_bundle.buffers)
+        # An assembly's selector bundle is extracted from the composed compound and knows one
+        # occurrence; the refs users pick come from the instance tree. Without this, every
+        # `#o1.12` the viewer or `snapshot --mode list` hands out failed to resolve here.
+        from cadgen.assembly_lookup import index_with_assembly_occurrences
+
+        selector_index = index_with_assembly_occurrences(selector_index, artifact)
 
     resolved_kind = _entry_kind_from_manifest(
         manifest,
@@ -401,7 +415,9 @@ def _inspect_assembly_mate(
         "selectorType": "mate",
         "normalizedSelector": mate_id,
         "displaySelector": mate_id,
-        "copyText": syntax.build_cad_token(cad_path, mate_id),
+        # Bare: `cadPath` is already reported alongside, and a full logical path here would
+        # be longer than the shortest-unique-suffix prefix the viewer emits.
+        "copyText": syntax.build_cad_token("", mate_id),
         "label": f"Mate {_assembly_mate_label(row, mate_id)}",
         "summary": _assembly_mate_summary(row),
     }
@@ -436,9 +452,17 @@ def _occurrence_detail(row: dict[str, object], selector_index: lookup.SelectorIn
                 for grandchild in reversed(selector_index.occurrences)
                 if str(grandchild.get("parentId") or "").strip() == child_id
             )
+    # The exact spelling to paste to address this part by its label -- including the numbered
+    # form when several parts share a label, which is the one case a reader cannot guess from
+    # `name` alone. Omitted when the part has no usable label; then its numeric ref is the only
+    # way in, exactly as before labels existed.
+    from cadgen.label_refs import label_ref_for_occurrence
+
+    label_ref = label_ref_for_occurrence(getattr(selector_index, "label_aliases", {}) or {}, occurrence_id)
     return {
         "path": row.get("path"),
         "name": row.get("name"),
+        **({"labelRef": label_ref} if label_ref else {}),
         "sourceName": row.get("sourceName"),
         "parentId": lookup.display_selector(str(row.get("parentId") or ""), selector_index),
         "childCount": len(child_rows),
@@ -586,7 +610,7 @@ def _inspect_selector(
         "selectorType": selector_type,
         "normalizedSelector": normalized_selector,
         "displaySelector": display_selector,
-        "copyText": syntax.build_cad_token(cad_path, display_selector),
+        "copyText": syntax.build_cad_token("", display_selector),
         "label": _selection_label(selector_type, display_selector),
         "summary": _selection_summary(selector_type, row),
     }
@@ -634,6 +658,15 @@ def _parse_single_target_token(entry_target_text: str, selector: str = "") -> sy
         parsed_tokens = syntax.parse_cad_tokens(selector_text)
         if len(parsed_tokens) != 1 or parsed_tokens[0].token.strip() != selector_text:
             raise CadRefError(f"Expected exactly one selector ref such as #o1.2.f1; got {selector!r}.")
+        # frame/measure/align reach the selector through here rather than through
+        # _parse_entry_ref_tokens, so the file-prefix guard has to be applied here as well or a
+        # ref naming another file is silently measured against this one.
+        try:
+            syntax.ensure_ref_file_matches(
+                parsed_tokens[0].cad_path, entry_target.cad_path, source_label=f"ref {selector_text!r}"
+            )
+        except ValueError as error:
+            raise CadRefError(str(error)) from error
         selectors = parsed_tokens[0].selectors
     return syntax.ParsedToken(
         line=1,
@@ -681,7 +714,7 @@ def resolve_target_selection(
             row=row,
             normalized_selector=normalized_selector,
             display_selector=display_selector,
-            copy_text=syntax.build_cad_token(parsed.cad_path, display_selector),
+            copy_text=syntax.build_cad_token("", display_selector),
         )
     if len(selectors) != 1:
         raise CadRefError(f"Expected exactly one selector in target {entry_target!r}.")
@@ -699,7 +732,7 @@ def resolve_target_selection(
         row=row,
         normalized_selector=normalized_selector,
         display_selector=display_selector,
-        copy_text=syntax.build_cad_token(parsed.cad_path, display_selector),
+        copy_text=syntax.build_cad_token("", display_selector),
     )
 
 

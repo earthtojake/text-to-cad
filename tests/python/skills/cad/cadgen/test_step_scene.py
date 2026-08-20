@@ -11,6 +11,7 @@ from OCP.TopExp import TopExp_Explorer
 from OCP.TopoDS import TopoDS
 
 from cadgen._internal import step_scene
+from cadgen._internal import step_scene_cache, step_scene_mesh
 from cadgen._internal.step_scene import (
     LoadedStepScene,
     OccurrenceNode,
@@ -284,7 +285,7 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
 
     def test_adaptive_mesh_resolution_keeps_many_low_curvature_occurrences_balanced(self) -> None:
         with mock.patch.object(
-            step_scene,
+            step_scene_mesh,
             "_scene_mesh_resolution_hints",
             return_value={
                 "bboxDiag": 190.0,
@@ -312,7 +313,7 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
 
     def test_adaptive_mesh_resolution_uses_large_topology_profile_for_extreme_imports(self) -> None:
         with mock.patch.object(
-            step_scene,
+            step_scene_mesh,
             "_scene_mesh_resolution_hints",
             return_value={
                 "bboxDiag": None,
@@ -340,7 +341,7 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
 
     def test_adaptive_mesh_resolution_uses_curvature_pressure_before_raw_counts_explode(self) -> None:
         with mock.patch.object(
-            step_scene,
+            step_scene_mesh,
             "_scene_mesh_resolution_hints",
             return_value={
                 "bboxDiag": 120.0,

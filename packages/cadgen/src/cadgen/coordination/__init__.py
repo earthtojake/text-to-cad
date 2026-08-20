@@ -23,9 +23,10 @@ Producer::
                         force=force) as run:
         if run.skipped:                 # is_current() re-evaluated UNDER the lock
             return existing_payload()
-        run.phase(PHASE_GENERATE)
-        ...
-        run.advance()
+        run.phase(PHASE_COMPONENTS, total=len(work))  # a phase that can count
+        run.advance(detail=name)
+        run.phase(PHASE_GENERATE)                     # a phase that cannot
+        run.detail("airframe")
 
 Reader::
 
@@ -38,6 +39,7 @@ Reader::
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import os
 import time
 import warnings
@@ -49,6 +51,9 @@ from cadgen.coordination import record as _record
 from cadgen.coordination.kinds import (
     DRAWING_PACKAGE,
     IMPLICIT_PACKAGE,
+    PHASE_BROWSER,
+    PHASE_RENDER,
+    SNAPSHOT,
     STEP_PACKAGE,
     ArtifactKind,
 )
@@ -77,16 +82,19 @@ from cadgen.coordination.phases import (
     PHASE_PACKAGE,
     ProgressEvent,
     ProgressReporter,
-    phase_weights_from_stage_ms,
     render_progress_bar,
     resolve,
 )
 
 __all__ = [
     "ArtifactKind",
+    "BuildRun",
     "Contended",
     "DRAWING_PACKAGE",
     "IMPLICIT_PACKAGE",
+    "PHASE_BROWSER",
+    "PHASE_RENDER",
+    "SNAPSHOT",
     "NULL_PROGRESS",
     "PHASE_COMPONENTS",
     "PHASE_DONE",
@@ -103,11 +111,12 @@ __all__ = [
     "STATE_IDLE",
     "STATE_WRITING",
     "artifact_build",
+    "current_build",
     "generator_busy",
     "generator_lock_path",
     "generator_status_path",
-    "phase_weights_from_stage_ms",
     "render_progress_bar",
+    "reporting_as",
     "require_write_lock",
     "resolve",
     "snapshot",
@@ -169,7 +178,15 @@ def snapshot(output_dir: Path | str) -> Snapshot:
 
     generator_probe = probe(generator_lock_path(output_dir))
     if generator_probe.held:
-        return Snapshot(state=STATE_BUSY, run_id=read_run_id(generator_lock_path(output_dir)))
+        # A busy generator reports its phases too (an export runs the same gen_step a build
+        # does). Its record is a DIFFERENT file from the writer's, and attribution works the
+        # same way: only the run holding this sentinel may be rendered.
+        run_id = read_run_id(generator_lock_path(output_dir))
+        return Snapshot(
+            state=STATE_BUSY,
+            run_id=run_id,
+            progress=_record.progress_for_run(generator_status_path(output_dir), run_id),
+        )
 
     return Snapshot(
         state=STATE_IDLE,
@@ -188,9 +205,9 @@ class BuildRun:
     holding one -- which is how a stale record used to be rendered as live.
     """
 
-    __slots__ = ("_reporter", "contended", "run_id", "skipped")
+    __slots__ = ("_reporter", "contended", "degraded", "run_id", "skipped")
 
-    def __init__(self, reporter: Any, run_id: str | None) -> None:
+    def __init__(self, reporter: Any, run_id: str | None, *, degraded: bool = False) -> None:
         self._reporter = reporter
         self.run_id = run_id
         # Two ways to have no work to do, and a producer must handle both. ``skipped``: we
@@ -199,6 +216,17 @@ class BuildRun:
         # error; both mean "do not write the package".
         self.skipped = False
         self.contended = False
+        # We are writing WITHOUT mutual exclusion, because locking was unavailable here (a
+        # filesystem that refuses advisory locks, an unwritable __cadgen__). The build goes
+        # ahead -- a missing lock must never be the reason a user's build fails -- and
+        # ``run_id`` is still minted so progress has something to attribute itself to.
+        #
+        # A producer that hands work to a Node child MUST pass this on: the child proves it
+        # was started by the lock holder by matching its run id against the sentinel, and a
+        # degraded run never stamped one. This flag is the only way the child can tell "no
+        # lock was taken here" from "you are not the holder", which are the same empty
+        # sentinel from where it stands. See implicitjs/glb/assertWriteLock.js.
+        self.degraded = degraded
 
     def phase(self, name: str, *, total: int | None = None, detail: str = "") -> None:
         self._reporter.phase(name, total=total, detail=detail)
@@ -209,8 +237,49 @@ class BuildRun:
     def advance(self, count: int = 1, *, detail: str | None = None) -> None:
         self._reporter.advance(count, detail=detail)
 
+    def detail(self, text: str) -> None:
+        self._reporter.detail(text)
+
     def stage_ms_snapshot(self) -> dict[str, float]:
         return self._reporter.stage_ms_snapshot()
+
+
+# The run whose lock is held on this thread, for code that is too far from `artifact_build`
+# to be handed it. `run_node_builder` solves the same problem across a PIPE -- the Node
+# child describes its work and the holder publishes it -- and this is the in-process twin:
+# a generator's `gen_step()` is called with no arguments and cannot be given the BuildRun,
+# so it looks the run up instead. A ContextVar rather than a global because the viewer's
+# warm worker is long-lived and must never leak one build's reporter into another's.
+_CURRENT_BUILD: contextvars.ContextVar[BuildRun | None] = contextvars.ContextVar(
+    "cadgen_current_build", default=None
+)
+
+
+def current_build() -> BuildRun | None:
+    """The :class:`BuildRun` reporting for the work on this thread, or None outside a build.
+
+    Callers report through it and must never assume it exists: the same generator runs under
+    the CLI, the viewer's worker, a test harness, and a plain `python model.step.py`.
+    """
+    return _CURRENT_BUILD.get()
+
+
+@contextlib.contextmanager
+def reporting_as(run: BuildRun | None) -> Iterator[None]:
+    """Make ``run`` the :func:`current_build` for the duration of the block.
+
+    Nested binds are IGNORED: a model that composes child generators would otherwise have
+    the child's loop retarget the parent's phase, and the outermost loop is the one whose
+    count means anything to a reader.
+    """
+    if run is None or _CURRENT_BUILD.get() is not None:
+        yield
+        return
+    token = _CURRENT_BUILD.set(run)
+    try:
+        yield
+    finally:
+        _CURRENT_BUILD.reset(token)
 
 
 @contextlib.contextmanager
@@ -278,10 +347,12 @@ def artifact_build(
         return
 
     with stack:
+        # Degraded (no fcntl, unwritable dir, or a filesystem without advisory locks). Still
+        # report progress -- a bar with no mutual exclusion is better than no bar, and the
+        # reader surfaces `degraded` separately. The run carries the fact, because the minted
+        # id below is NOT in the sentinel and anything that checks it must know that.
+        degraded = run_id is None
         if run_id is None:
-            # Degraded (no fcntl, unwritable dir, or a filesystem without advisory locks).
-            # Still report progress -- a bar with no mutual exclusion is better than no bar,
-            # and the reader surfaces `degraded` separately.
             run_id = new_run_id()
 
         def _publish(outcome: str | None, event: ProgressEvent | None = None) -> None:
@@ -302,21 +373,14 @@ def artifact_build(
                 ),
             )
 
-        # Read the PREVIOUS run's measured stage times BEFORE publishing anything. The
-        # `starting` record carries stageMs: None (it is not a `done` outcome), so publishing
-        # first overwrites the very record this reads -- every build then fell back to the
-        # default phase split and the learned weighting was dead on arrival.
-        learned_stage_ms = _record.read_stage_ms(target)
-
         _publish(_record.OUTCOME_RUNNING)
 
         reporter = ProgressReporter(
             sinks=[s for s in (lambda e: _publish(None, e), sink) if s is not None],
-            stage_ms=learned_stage_ms,
             phases=kind.phases,
             labels=kind.labels,
         )
-        run = BuildRun(reporter, run_id)
+        run = BuildRun(reporter, run_id, degraded=degraded)
 
         if not force and is_current is not None:
             with contextlib.suppress(Exception):
@@ -328,7 +392,7 @@ def artifact_build(
 
         try:
             yield run
-        except BaseException:
+        except BaseException:  # include KeyboardInterrupt/SystemExit: a cancelled run is a failed run
             _publish(_record.OUTCOME_FAILED)
             raise
         reporter.finish()
@@ -340,14 +404,12 @@ def _terminal_event(reporter: ProgressReporter) -> ProgressEvent:
     return ProgressEvent(
         phase=PHASE_DONE,
         label=PHASE_LABELS[PHASE_DONE],
+        index=0,
+        count=0,
         done=0,
         total=None,
         determinate=False,
-        ratio=1.0,
-        ratio_floor=1.0,
-        ratio_ceiling=1.0,
         phase_started_at_ms=time.time() * 1000.0,
-        phase_expected_ms=None,
         elapsed_ms=0.0,
         stage_ms=reporter.stage_ms_snapshot(),
     )
@@ -393,7 +455,8 @@ def generator_busy(
     *,
     deadline_ms: float | None = None,
     on_wait: Callable[[float], None] | None = None,
-) -> Iterator[str | None]:
+    sink: Callable[[ProgressEvent], None] | None = None,
+) -> Iterator[BuildRun | None]:
     """Occupy an artifact's GENERATOR without claiming to rewrite its package.
 
     An export runs the model's ``gen_step()`` for a minute and writes a file somewhere else
@@ -408,10 +471,16 @@ def generator_busy(
     What it buys is a state a reader can distinguish: a busy generator does not hide the
     package on disk, and a writer does.
 
-    Its record goes to :func:`generator_status_path`, NOT to the writer's record. Sharing
-    one file let this run stomp a live build's progress and erase the stage times the next
-    build weights its bar from -- and the two runs cannot exclude each other, so there was
-    no lock that would have prevented it.
+    Its record goes to :func:`generator_status_path`, NOT to the writer's record. Sharing one
+    file let this run stomp a live build's progress -- and the two runs cannot exclude each
+    other, so there was no lock that would have prevented it.
+
+    Yields a :class:`BuildRun`, exactly as :func:`artifact_build` does, so the work under it
+    reports through the same phases. This run does the SAME ``gen_step()`` a build does -- for
+    a large assembly that is minutes -- and it used to report nothing at all to either
+    surface, because it had no reporter to report through. The only thing that differs is
+    where the record lands, and what a reader is entitled to conclude from it: an occupied
+    generator does not hide the package on disk.
     """
     if output_dir is None:
         yield None
@@ -421,7 +490,13 @@ def generator_busy(
     with exclusive(
         generator_lock_path(output_dir), deadline_ms=deadline_ms, on_wait=on_wait
     ) as run_id:
-        if run_id is not None:
+        # Degraded locking. Still report: a bar with no mutual exclusion beats no bar, and
+        # the reader surfaces `degraded` separately.
+        degraded = run_id is None
+        if run_id is None:
+            run_id = new_run_id()
+
+        def _publish(outcome: str | None, event: ProgressEvent | None = None) -> None:
             _record.write_record(
                 target,
                 _record.build_record(
@@ -429,20 +504,27 @@ def generator_busy(
                     kind=kind.name,
                     intent=_record.INTENT_GENERATE,
                     started_at_ms=started_at_ms,
-                    outcome=_record.OUTCOME_RUNNING,
+                    outcome=outcome,
+                    progress=event.progress_payload() if event is not None else None,
+                    stage_ms=(
+                        event.stage_ms
+                        if (event is not None and outcome == _record.OUTCOME_DONE)
+                        else None
+                    ),
                 ),
             )
+
+        _publish(_record.OUTCOME_RUNNING)
+        reporter = ProgressReporter(
+            sinks=[s for s in (lambda e: _publish(None, e), sink) if s is not None],
+            phases=kind.phases,
+            labels=kind.labels,
+        )
+        run = BuildRun(reporter, run_id, degraded=degraded)
         try:
-            yield run_id
-        finally:
-            if run_id is not None:
-                _record.write_record(
-                    target,
-                    _record.build_record(
-                        run_id=run_id,
-                        kind=kind.name,
-                        intent=_record.INTENT_GENERATE,
-                        started_at_ms=started_at_ms,
-                        outcome=_record.OUTCOME_DONE,
-                    ),
-                )
+            yield run
+        except BaseException:  # include KeyboardInterrupt/SystemExit: a cancelled run is a failed run
+            _publish(_record.OUTCOME_FAILED)
+            raise
+        reporter.finish()
+        _publish(_record.OUTCOME_DONE, _terminal_event(reporter))

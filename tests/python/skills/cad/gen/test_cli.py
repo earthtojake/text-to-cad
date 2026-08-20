@@ -37,6 +37,23 @@ class GenCliTests(unittest.TestCase):
             cli.main(["parts/sample.step.py", "--json"])
         self.assertTrue(generate.call_args.kwargs["json_output"])
 
+    def test_lock_timeout_parses_and_defaults_to_waiting(self) -> None:
+        """SKILL.md documents `--lock-timeout SECONDS` on this CLI; the parser rejected it.
+
+        The default must stay 0 (wait for the peer): an agent that asked for a build wants
+        the build, and giving up by default would leave it with no artifact."""
+        with mock.patch.object(cli, "generate_step_targets", return_value=0) as generate:
+            self.assertEqual(0, cli.main(["parts/sample.step.py"]))
+        self.assertEqual(0.0, generate.call_args.kwargs["lock_timeout_s"])
+
+        with mock.patch.object(cli, "generate_step_targets", return_value=0) as generate:
+            self.assertEqual(0, cli.main(["parts/sample.step.py", "--lock-timeout", "5"]))
+        self.assertEqual(5.0, generate.call_args.kwargs["lock_timeout_s"])
+
+    def test_lock_timeout_is_listed_in_help(self) -> None:
+        # The bug was reported partly from `--help`, which never mentioned the flag.
+        self.assertIn("--lock-timeout", cli.build_parser().format_help())
+
     def test_a_generator_failure_is_reported_not_tracebacked(self) -> None:
         # An uncaught generator exception used to reach the interpreter and print ~60
         # lines of runtime frames. The CLI is the boundary that turns it into a report.

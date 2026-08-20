@@ -113,7 +113,7 @@ def geometry_summary_from_manifest(manifest: dict[str, Any]) -> dict[str, object
     }
     try:
         index = build_selector_index(manifest)
-    except Exception:
+    except Exception:  # noqa: BLE001 - a selector-index build failure must not fail the manifest summary
         return summary
     summary["majorPlanes"] = major_planar_face_groups(index)
     return summary

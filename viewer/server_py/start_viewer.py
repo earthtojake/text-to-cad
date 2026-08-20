@@ -30,9 +30,11 @@ import sys
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from server_py import cadgen_bridge
+    from server_py.paths import url_path_from_filesystem_path
     from server_py.server_info import DEFAULT_VIEWER_PORT, DEFAULT_VIEWER_HOST
 else:
     from . import cadgen_bridge
+    from .paths import url_path_from_filesystem_path
     from .server_info import DEFAULT_VIEWER_PORT, DEFAULT_VIEWER_HOST
 
 _PROBE_TIMEOUT_S = 0.35
@@ -41,8 +43,12 @@ _VIEWER_APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def viewer_url(host: str, port: int, directory: str = "") -> str:
     """The Viewer URL for a directory: the absolute path IS the URL path, exactly as
-    in a file:// URL. No directory yields the bare origin, which opens the cwd."""
-    path = os.path.abspath(directory) if str(directory or "").strip() else ""
+    in a file:// URL. No directory yields the bare origin, which opens the cwd.
+
+    A Windows path is not already a URL path — pasting `D:\\models` on the end of the
+    origin yields `http://127.0.0.1:3245D:\\models`, which is not a URL at all — so the
+    absolute path is converted rather than concatenated."""
+    path = url_path_from_filesystem_path(os.path.abspath(directory)) if str(directory or "").strip() else ""
     return f"http://{host}:{port}{path or '/'}"
 
 

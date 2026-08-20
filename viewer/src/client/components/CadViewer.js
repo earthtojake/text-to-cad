@@ -13,6 +13,7 @@ import {
   transformDxfPreviewPositions
 } from "cadjs/lib/dxf/foldPreview";
 import { buildDxfPreviewMeshData, extractDxfScorePolylines } from "cadjs/lib/dxf/buildPreviewMesh";
+import { buildDxfDrawingLineGroups, drawingLineBounds } from "cadjs/lib/dxf/buildDrawingLines";
 import { STEP_TREE_TOPOLOGY_NODE_PREFIX } from "cadjs/lib/step/stepTree";
 import { copyImageBlobToClipboard } from "@/ui/clipboard";
 import { triggerBlobDownload } from "@/ui/download";
@@ -26,6 +27,7 @@ import {
   resolvePerspectiveSnapshot
 } from "cadjs/lib/perspective";
 import { VIEWER_PICK_MODE } from "cadjs/lib/viewer/constants";
+import { resolveScenePartRendering } from "cadjs/lib/viewer/partRendering";
 import { normalizeStepClipSettings } from "cadjs/lib/viewer/clipPlane";
 import {
   buildDrawingPoint,
@@ -144,6 +146,7 @@ import {
   buildFaceFillGeometryFromDisplayMeshes,
   buildFaceFillGeometryFromProxy,
   buildVertexMarkerMesh,
+  referenceExplodedViewMatrix,
   REFERENCE_CORNER_COLOR,
   REFERENCE_HIGHLIGHT_WIDTH_MULTIPLIER,
   REFERENCE_SELECTED_COLOR
@@ -162,6 +165,7 @@ import {
 import ViewPlaneControl from "./viewer/ViewPlaneControl";
 import { useImplicitRaymarch } from "./viewer/hooks/useImplicitRaymarch";
 import { useViewerDrawingOverlay } from "./viewer/hooks/useViewerDrawingOverlay";
+import { useViewerMeasureOverlay } from "./viewer/hooks/useViewerMeasureOverlay";
 import { useViewerPicking } from "./viewer/hooks/useViewerPicking";
 import { useViewerRuntime } from "./viewer/hooks/useViewerRuntime";
 import { PREVIEW_AUTO_ROTATE_SPEED } from "./viewer/orbitControls";
@@ -176,11 +180,13 @@ import {
   getActiveViewPlaneFaceId,
   getKeyboardOrbitAxes,
   getKeyboardOrbitCommand,
+  isPinchWheelEvent,
   isTrackpadLikeWheelEvent,
   KEYBOARD_ORBIT_NUDGE_RAD,
   normalizeViewportFrameInsets,
   readViewPlaneOrientation,
   stepKeyboardOrbit,
+  WHEEL_PINCH_DELTA_BOOST,
   VIEW_PLANE_DEFAULT_PRESET,
   VIEW_PLANE_FACE_BY_ID,
   VIEW_PLANE_FACES,
@@ -221,11 +227,24 @@ const IDLE_PIXEL_RATIO_CAP = 2;
 const INTERACTION_PIXEL_RATIO_CAP = 1.25;
 const INTERACTION_IDLE_DELAY_MS = 140;
 const DEFAULT_DAMPING_FACTOR = 0.14;
+// Wheel zoom speeds are exponents, not multipliers: OrbitControls r161+ scales the camera
+// distance by 0.95 ^ (zoomSpeed * |deltaY| / 100), with deltaY already normalized for
+// deltaMode. A standard mouse notch is |deltaY| = 100, so a speed of N means one notch moves
+// the camera by 0.95^N -- 2.5 is about -12%. Before r161 the same expression also divided by
+// floor(devicePixelRatio), which made every one of these numbers mean something different on
+// a 1x display than on a Retina one; that division is gone, so they are display-independent.
 const DEFAULT_ZOOM_SPEED = 4.5;
 const COARSE_POINTER_ZOOM_SPEED = 1.6;
 const EXPLODED_VIEW_ANIMATION_DURATION_MS = 1000;
-const ACCELERATED_WHEEL_ZOOM_SPEED = 10;
-const TRACKPAD_PINCH_ZOOM_SPEED = 14;
+// 5.0, not 2.5. The r161 upgrade removed OrbitControls' divide-by-devicePixelRatio, and I
+// retuned this against a single mouse notch without checking what else runs through it. A
+// trackpad flick does: isTrackpadLikeWheelEvent only claims deltas under 20, and momentum
+// carries an ordinary two-finger scroll well past that, so most of a gesture lands here.
+// 2.5 halved it. 5.0 restores exactly what a Retina Mac had before r161 -- 0.95^(5*d/100) is
+// the same curve as the old 0.95^(10*d/200) -- and every display now gets that same curve
+// instead of only the 2x ones.
+const ACCELERATED_WHEEL_ZOOM_SPEED = 5.0;
+const TRACKPAD_PINCH_ZOOM_SPEED = 7;
 const COARSE_POINTER_PINCH_ZOOM_SPEED = 2.4;
 const CAMERA_TRANSITION_EASING = Object.freeze({
   EASE_IN_OUT_CUBIC: "ease-in-out-cubic",
@@ -1749,6 +1768,7 @@ const CadViewer = forwardRef(function CadViewer({
   drawingOrientation = null,
   drawingMaterialColor = null,
   drawingGeometry = null,
+  drawingIsDocument = false,
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
   perspective = null,
@@ -1799,6 +1819,12 @@ const CadViewer = forwardRef(function CadViewer({
   onActivateReference,
   onDoubleActivateReference,
   onContextReference,
+  onMeasurePick,
+  onMeasureHoverPoint,
+  activeMeasurementId = "",
+  measureState = null,
+  measureModeActive = false,
+  allowMeshVertexSnap = false,
   onViewerAlertChange,
   onStepModuleTransformDetectedChange,
   urdfPosePicker = null
@@ -1828,6 +1854,11 @@ const CadViewer = forwardRef(function CadViewer({
   const interactionHostRef = useRef(null);
   const mountRef = useRef(null);
   const drawingCanvasRef = useRef(null);
+  const measureCanvasRef = useRef(null);
+  // The snap indicator needs the live hover point every frame; the workspace
+  // only needs to know which entity is under the cursor. Keeping the point in a
+  // ref lets the overlay track smoothly without re-rendering on every move.
+  const measureHoverRef = useRef(null);
   const drawingDraftRef = useRef(null);
   const drawingStrokesRef = useRef(Array.isArray(drawingStrokes) ? drawingStrokes : []);
   const drawingChangeRef = useRef(onDrawingStrokesChange);
@@ -1876,6 +1907,19 @@ const CadViewer = forwardRef(function CadViewer({
   const [cameraZoomPercent, setCameraZoomPercent] = useState(100);
   const [urdfPosePickerGuidePoint, setUrdfPosePickerGuidePoint] = useState(null);
   const [urdfPosePickerHoverActive, setUrdfPosePickerHoverActive] = useState(false);
+  // Bumped whenever the exploded view reaches a POSE it will hold: the end of the
+  // explode/collapse animation, a slider scrub, or a collapse back to rest. Overlays that bake
+  // a record's matrix at build time -- the reference highlight's edge lines and its face fill --
+  // re-read it here. Without it the highlight keeps the pose it was built against and only
+  // corrects itself when the pointer next moves, which reads as the highlight being wrong.
+  const [explodedViewPoseTick, setExplodedViewPoseTick] = useState(0);
+  // Bumped every time the scene is rebuilt and `runtime.displayRecords` becomes a fresh set of
+  // objects. State baked ONTO records rather than into React -- the exploded view's per-record
+  // matrix -- is lost by that rebuild and has to be re-applied. The scene rebuilds for reasons
+  // the exploded view knows nothing about (a topology load, an edge setting, part pickability),
+  // so this is a signal rather than a longer dependency list: the last attempt at a dependency
+  // list is why isolating a part while exploded collapsed the model.
+  const [displayRecordsToken, setDisplayRecordsToken] = useState(0);
   const activeViewPlaneFaceRef = useRef("");
   const defaultPerspectiveResettingRef = useRef(false);
   const previewModeRef = useRef(previewMode);
@@ -2824,6 +2868,104 @@ const CadViewer = forwardRef(function CadViewer({
   // DRAWING TRANSFORM: thickness and fold, one vertex rewrite, math from
   // cadjs/lib/dxf/foldPreview (node-tested; the snapshot runtime shares it by construction).
   //
+  // A dimensioned DRAWING renders as LINES, because that is what it is.
+  //
+  // A cut layout's closed contours get extruded into a flat pattern and drawn as a solid. A
+  // drawing -- plan views, sections, centre lines, a title block -- encloses nothing, so it has
+  // no flat pattern, bakes no preview.glb, and used to sit on LOADING forever waiting for a mesh
+  // that was never coming (issue #246). Its geometry.json is already everything needed to draw
+  // it, so it is drawn here: one LineSegments per layer, coloured from the layer table and
+  // hidden by the same layer switches a cut layout uses.
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    const group = runtime?.modelGroup;
+    const previous = runtime?.dxfDrawingLines || null;
+    const dispose = () => {
+      if (!previous) {
+        return;
+      }
+      previous.parent?.remove(previous);
+      for (const child of previous.children || []) {
+        child.geometry?.dispose?.();
+        child.material?.dispose?.();
+      }
+      if (runtime) {
+        runtime.dxfDrawingLines = null;
+      }
+    };
+    if (!group || !drawingIsDocument || !drawingGeometry?.geometry) {
+      dispose();
+      return undefined;
+    }
+    dispose();
+    const hiddenLayers = new Set(Array.isArray(drawingHiddenLayers) ? drawingHiddenLayers : []);
+    // ACI 7 is the DXF "default ink" colour: it means "whatever reads against the background",
+    // which is why the package resolves it to a near-white grey suited to a dark sheet. Taking
+    // that literally paints a drawing invisible on a light theme, so only a layer that names a
+    // real colour gets its own; the rest use the same slate the bend guides use, which reads on
+    // both themes.
+    const DEFAULT_INK = 0x5f6775;
+    const layerColors = new Map(
+      (Array.isArray(drawingGeometry.layers) ? drawingGeometry.layers : [])
+        .map((layer) => [layer?.name, Number(layer?.colorAci) === 7 ? null : layer?.colorHex])
+    );
+    const { layers } = buildDxfDrawingLineGroups(drawingGeometry);
+    if (!layers.length) {
+      return undefined;
+    }
+    const container = new THREE.Group();
+    container.userData.dxfDrawingLines = true;
+    for (const layer of layers) {
+      if (hiddenLayers.has(layer.name)) {
+        continue;
+      }
+      // Mesher space is y-up; the scene is CAD Z-up. Same (x, y, z) -> (x, z, -y) map the
+      // curved fold preview uses, so a drawing and a flat pattern share one orientation,
+      // one camera fit and one set of view controls.
+      const source = layer.positions;
+      const mapped = new Float32Array(source.length);
+      for (let index = 0; index < source.length; index += 3) {
+        mapped[index] = source[index];
+        mapped[index + 1] = source[index + 2];
+        mapped[index + 2] = -source[index + 1];
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(mapped, 3));
+      const color = layerColors.get(layer.name);
+      const lines = new THREE.LineSegments(
+        geometry,
+        new THREE.LineBasicMaterial({
+          color: typeof color === "string" && color ? new THREE.Color(color) : new THREE.Color(DEFAULT_INK),
+          transparent: false
+        })
+      );
+      lines.userData.dxfDrawingLayer = layer.name;
+      container.add(lines);
+    }
+    group.add(container);
+    if (runtime) {
+      runtime.dxfDrawingLines = container;
+    }
+    // A document has no mesh for the shared fit to measure, so its own extent stands in.
+    // Publishing runtime.modelBounds is how implicits get the shared zoom baseline, reset and
+    // fit with no format-specific branch (see handleImplicitModelBounds); a drawing joins the
+    // same path rather than growing a second one.
+    const meshBounds = drawingLineBounds({ layers });
+    const bounds = meshBounds
+      ? {
+        min: [meshBounds.min[0], meshBounds.min[2], -meshBounds.max[1]],
+        max: [meshBounds.max[0], meshBounds.max[2], -meshBounds.min[1]]
+      }
+      : null;
+    if (bounds && runtime?.THREE) {
+      applyRuntimeModelBounds(runtime.THREE, runtime, bounds, sceneScaleModeRef.current);
+      runtime.hasVisibleModel = true;
+      resetZoomAndPan({ animate: false });
+    }
+    runtime?.requestRender?.();
+    return undefined;
+  }, [drawingIsDocument, drawingGeometry, drawingHiddenLayers, viewerReadyTick]);
+
   // Applied SYNCHRONOUSLY when the meshes already exist. The previous version restored flat
   // positions in its cleanup and re-folded on the next animation frame — so every slider
   // tick painted one flat frame between the two, which is the flicker. Cleanup now only
@@ -3088,6 +3230,13 @@ const CadViewer = forwardRef(function CadViewer({
           curved.material = targets[0].child.material;
           curved.geometry.setAttribute("position", new THREE.BufferAttribute(mapped, 3));
           curved.geometry.setIndex(new THREE.BufferAttribute(curvedData.indices, 1));
+          // Drop the old normals first: computeVertexNormals REUSES an existing normal
+          // attribute, so on this reused geometry they stay at the vertex count of the FIRST
+          // curved build while every remesh changes it -- each bend's band adds vertices. The
+          // draw is then rejected outright ("vertex buffer is not big enough"), silently, the
+          // first time an index runs past that stale buffer. A four-bend panel goes blank on
+          // the fourth bend; three bends stay under the count and look fine.
+          curved.geometry.deleteAttribute("normal");
           curved.geometry.computeVertexNormals();
           curved.geometry.computeBoundingBox?.();
           curved.geometry.computeBoundingSphere?.();
@@ -3576,6 +3725,8 @@ const CadViewer = forwardRef(function CadViewer({
     cancelCameraTransition,
     clearKeyboardOrbitState,
     isTrackpadLikeWheelEvent,
+    isPinchWheelEvent,
+    WHEEL_PINCH_DELTA_BOOST,
     getKeyboardOrbitCommand,
     getKeyboardOrbitAxes,
     applyOrbitDelta,
@@ -3991,22 +4142,14 @@ const CadViewer = forwardRef(function CadViewer({
       !wireframeMode &&
       normalizedThemeSettings.materials?.overrideSourceColors !== true &&
       meshNeedsPartRenderingForSourceColors(meshData);
-    const shouldRenderParts =
-      effectiveRenderPartsIndividually ||
-      shouldRenderFillParts ||
-      shouldRenderSourceColorParts ||
-      Array.isArray(pickableParts) &&
-      pickableParts.length > 0 &&
-      (
-        pickMode === VIEWER_PICK_MODE.PARTS ||
-        pickMode === VIEWER_PICK_MODE.ASSEMBLY ||
-        pickMode === VIEWER_PICK_MODE.AUTO
-      );
-    const renderedParts = effectiveRenderPartsIndividually
-      ? (Array.isArray(meshData?.parts) ? meshData.parts : [])
-      : shouldRenderFillParts || shouldRenderSourceColorParts
-        ? meshData.parts
-        : pickableParts;
+    const { renderParts: shouldRenderParts, parts: renderedParts } = resolveScenePartRendering({
+      meshData,
+      renderPartsIndividually: effectiveRenderPartsIndividually,
+      fillRotationParts: shouldRenderFillParts,
+      sourceColorParts: shouldRenderSourceColorParts,
+      pickableParts,
+      pickMode
+    });
     const materialSettings = {
       ...normalizedThemeSettings.materials,
       envMapIntensity: normalizedThemeSettings.materials.envMapIntensity * (
@@ -4090,6 +4233,7 @@ const CadViewer = forwardRef(function CadViewer({
     edgesGroup.add(cadScene.edgesGroup);
     runtime.cadScene = cadScene;
     runtime.displayRecords = cadScene.displayRecords;
+    setDisplayRecordsToken((token) => token + 1);
     runtime.hasVisibleModel = true;
     runtime.activeModelKey = modelKey || "";
     const initialEdgeRuntimes = resolveTopologyDisplayEdgeRuntimes({
@@ -4678,6 +4822,7 @@ const CadViewer = forwardRef(function CadViewer({
         applyDisplayRecordTransform(THREE, record);
       }
       syncRecordTopologyDisplayEdgeTransforms(runtime, runtime.displayRecords);
+      setExplodedViewPoseTick((tick) => tick + 1);
       runtime.requestRender?.();
       animation.progress = 0;
       animation.layout = null;
@@ -4696,6 +4841,7 @@ const CadViewer = forwardRef(function CadViewer({
         applyDisplayRecordTransform(THREE, record);
       }
       syncRecordTopologyDisplayEdgeTransforms(runtime, runtime.displayRecords);
+      setExplodedViewPoseTick((tick) => tick + 1);
       runtime.requestRender?.();
       animation.progress = 0;
       return undefined;
@@ -4710,6 +4856,7 @@ const CadViewer = forwardRef(function CadViewer({
     if (!shouldAnimate) {
       animation.progress = targetProgress;
       applyExplodedViewRuntimeProgress(runtime, layout, targetProgress);
+      setExplodedViewPoseTick((tick) => tick + 1);
       return undefined;
     }
 
@@ -4734,6 +4881,7 @@ const CadViewer = forwardRef(function CadViewer({
       } else {
         animation.rafId = 0;
         animation.progress = targetProgress;
+        setExplodedViewPoseTick((tick) => tick + 1);
       }
     };
 
@@ -4750,6 +4898,7 @@ const CadViewer = forwardRef(function CadViewer({
     meshGeometrySource,
     modelKey,
     focusedPartIds.length,
+    displayRecordsToken,
     normalizedSceneScaleMode,
     normalizedThemeSettings,
     viewerReadyTick
@@ -5114,6 +5263,11 @@ const CadViewer = forwardRef(function CadViewer({
     const hoveredLineWidth = selectedLineWidth;
     const highlightEdgeColor = getHighlightEdgeColor(displayEdgeSettings);
     const highlightEdgeOpacity = getHighlightEdgeOpacity(displayEdgeSettings);
+    // In measure mode the snapped topology still needs a visible target, but the
+    // full-strength face fill would compete with the amber/cyan annotations.
+    const measureHoverHighlightOpacity = measureModeActive
+      ? Math.max(0.08, highlightEdgeOpacity * 0.35)
+      : highlightEdgeOpacity;
 
     const highlightReferenceStates = new Map();
     const runtimeReferences = Array.isArray(activeSelectorRuntime?.references)
@@ -5223,7 +5377,7 @@ const CadViewer = forwardRef(function CadViewer({
         const lineWidth = isHovered ? hoveredLineWidth : selectedLineWidth;
         const line = createScreenSpaceLineSegments(runtime, linePositions, {
           color: highlightColor,
-          opacity: highlightEdgeOpacity,
+          opacity: isHovered ? measureHoverHighlightOpacity : highlightEdgeOpacity,
           lineWidth,
           renderOrder: 26,
           depthTest: selectorType !== "edge",
@@ -5231,6 +5385,16 @@ const CadViewer = forwardRef(function CadViewer({
           depthBias: topologyLineDepthBiasForWidth(lineWidth, { visibilityClass: referenceVisibilityClass })
         });
         if (line) {
+          // The pick proxy these positions come from is world-at-rest; the exploded view moves
+          // the MESH and leaves the proxy alone, so without this the highlight for an exploded
+          // part draws where the part sits when collapsed. The face fill below needs no such
+          // matrix -- it is rebuilt from the live meshes, which already carry the offset.
+          const explodeMatrix = referenceExplodedViewMatrix(runtime, topologyReference);
+          if (explodeMatrix) {
+            line.matrixAutoUpdate = false;
+            line.matrix.copy(explodeMatrix);
+            line.matrixWorldNeedsUpdate = true;
+          }
           highlightGroup.add(line);
         }
       }
@@ -5239,7 +5403,7 @@ const CadViewer = forwardRef(function CadViewer({
         const fillGeometry = buildFaceFillGeometryFromDisplayMeshes(runtime, THREE, topologyReference) ||
           buildFaceFillGeometryFromProxy(runtime, THREE, activeSelectorRuntime, topologyReference);
         if (fillGeometry) {
-          const fillOpacity = highlightEdgeOpacity;
+          const fillOpacity = isHovered ? measureHoverHighlightOpacity : highlightEdgeOpacity;
           const fillMaterial = new THREE.MeshBasicMaterial({
             color: highlightColor,
             transparent: fillOpacity < 0.999,
@@ -5267,7 +5431,7 @@ const CadViewer = forwardRef(function CadViewer({
       clearOverlayGroup(runtime, highlightGroup);
       clearOverlayGroup(runtime, faceFillGroup);
     };
-  }, [activeSelectorRuntime, hoveredReferenceId, pickableReferenceMap, selectedReferenceIds, viewerReadyTick, viewerTheme, displayEdgeSettings]);
+  }, [activeSelectorRuntime, explodedViewPoseTick, hoveredReferenceId, pickableReferenceMap, selectedReferenceIds, viewerReadyTick, viewerTheme, displayEdgeSettings, measureModeActive]);
 
   useViewerDrawingOverlay({
     drawingCanvasRef,
@@ -5294,6 +5458,51 @@ const CadViewer = forwardRef(function CadViewer({
     drawingMinStrokeLengthPx: DRAWING_MIN_STROKE_LENGTH_PX
   });
 
+  // Click is followed by OrbitControls clearing hover before React commits
+  // draft.anchor, so the locked first point lives in a ref.
+  const measureLockedAnchorRef = useRef(null);
+
+  const handleMeasureHoverPoint = useCallback((pick) => {
+    measureHoverRef.current = pick || measureLockedAnchorRef.current || null;
+    onMeasureHoverPoint?.(pick);
+  }, [onMeasureHoverPoint]);
+
+  const handleMeasurePick = useCallback((pick) => {
+    if (pick && !measureLockedAnchorRef.current) {
+      measureLockedAnchorRef.current = pick;
+      measureHoverRef.current = pick;
+    } else if (pick && measureLockedAnchorRef.current) {
+      measureLockedAnchorRef.current = null;
+    }
+    onMeasurePick?.(pick);
+  }, [onMeasurePick]);
+
+  // Disarming the tool has to drop the indicator; the pointer may never move again.
+  useEffect(() => {
+    if (!measureModeActive) {
+      measureHoverRef.current = null;
+      measureLockedAnchorRef.current = null;
+    }
+  }, [measureModeActive]);
+
+  useEffect(() => {
+    if (!measureState?.draft?.anchor) {
+      measureLockedAnchorRef.current = null;
+    }
+  }, [measureState]);
+
+  useViewerMeasureOverlay({
+    measureCanvasRef,
+    measureState,
+    activeMeasurementId,
+    measureHoverRef,
+    measureModeActive,
+    runtimeRef,
+    mountRef,
+    previewMode,
+    viewerReadyTick
+  });
+
   useViewerPicking({
     runtimeRef,
     mountRef: interactionHostRef,
@@ -5311,8 +5520,11 @@ const CadViewer = forwardRef(function CadViewer({
     onActivateReference,
     onDoubleActivateReference,
     onContextReference,
+    onMeasurePick: handleMeasurePick,
+    onMeasureHoverPoint: handleMeasureHoverPoint,
     viewerReadyTick,
-    suppressTopologyPicking: stepAnimationPlaying
+    suppressTopologyPicking: stepAnimationPlaying,
+    allowMeshVertexSnap
   });
 
   return (
@@ -5327,6 +5539,12 @@ const CadViewer = forwardRef(function CadViewer({
       onPointerLeave={handlePosePickerPointerLeave}
     >
       <div className="h-full w-full" ref={mountRef} />
+      <canvas
+        ref={measureCanvasRef}
+        className="absolute inset-0 z-10 h-full w-full touch-none"
+        style={{ pointerEvents: "none" }}
+        aria-hidden="true"
+      />
       <canvas
         ref={drawingCanvasRef}
         className="absolute inset-0 z-10 h-full w-full touch-none"

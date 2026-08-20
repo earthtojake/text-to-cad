@@ -1,13 +1,17 @@
 import { useEffect, useRef } from "react";
-import { VIEWER_PICK_MODE } from "cadjs/lib/viewer/constants";
-import { pointVisibleByClipPlane } from "cadjs/lib/viewer/clipPlane";
-import { screenLimitedPickThreshold } from "cadjs/lib/viewer/pickingThresholds";
+import { VIEWER_PICK_MODE } from "cadjs/lib/viewer/constants.js";
+import {
+  classifyMeasurePick,
+  edgeGeometryFromSegments,
+  isFinitePoint,
+  pickMeshVertexByScreenDistance
+} from "cadjs/lib/viewer/measurement.js";
+import { buildEdgeLinePositionsFromProxy } from "cadjs/lib/viewer/referenceGeometry.js";
+import { pointVisibleByClipPlane } from "cadjs/lib/viewer/clipPlane.js";
+import { screenLimitedPickThreshold } from "cadjs/lib/viewer/pickingThresholds.js";
 import { createViewerContextMenuGestureState } from "./viewerContextMenuGesture.js";
 import { partIdFromIntersection, shouldRaycastRecordForPick } from "./partPicking.js";
 
-const FACE_BOUNDS_EPSILON = 0.25;
-const PLANE_SURFACE_EPSILON = 0.25;
-const CYLINDER_SURFACE_EPSILON = 0.35;
 const AUTO_EDGE_PICK_THRESHOLD_FACTOR = 1;
 const FRONT_LAYER_DISTANCE_FACTOR = 0.0015;
 const FRONT_LAYER_DISTANCE_MIN = 0.02;
@@ -21,6 +25,10 @@ const EDGE_PICK_PRIORITY_WITH_FACE_PX = EDGE_PICK_MAX_SCREEN_DISTANCE_WITH_FACE_
 const EDGE_HOVER_PRIORITY_WITH_FACE_PX = EDGE_HOVER_MAX_SCREEN_DISTANCE_WITH_FACE_PX;
 const CORNER_PICK_MAX_SCREEN_DISTANCE_PX = 5;
 const CORNER_HOVER_MAX_SCREEN_DISTANCE_PX = 4;
+// Mesh Measure has no face/edge fallback, so the corner window is wider
+// than STEP's 4/5 px. Still a screen-space cap, not "nearest of the triangle".
+const MESH_VERTEX_HOVER_MAX_SCREEN_DISTANCE_PX = 14;
+const MESH_VERTEX_PICK_MAX_SCREEN_DISTANCE_PX = 16;
 const CORNER_PICK_PRIORITY_WITH_OTHER_PX = 4;
 const CORNER_HOVER_PRIORITY_WITH_OTHER_PX = 3;
 const HOVER_PICK_MIN_MOVE_PX = 2;
@@ -28,339 +36,140 @@ const FINE_POINTER_TAP_SLOP_PX = 4;
 const COARSE_POINTER_TAP_SLOP_PX = 12;
 export const VIEWER_DOUBLE_CLICK_ACTIVATION_DELAY_MS = 220;
 
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function subtract(a, b) {
-  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-}
-
-function dot(a, b) {
-  return (a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2]);
-}
-
-function length(vector) {
-  return Math.sqrt(dot(vector, vector));
-}
-
-function normalizeAngleAround(angle, center) {
-  let adjusted = angle;
-  while (adjusted - center > Math.PI) {
-    adjusted -= Math.PI * 2;
+function applyColumnMajorMatrix4(point, elements) {
+  if (!isFinitePoint(point) || !elements || elements.length < 16) {
+    return null;
   }
-  while (adjusted - center < -Math.PI) {
-    adjusted += Math.PI * 2;
+  const x = point[0];
+  const y = point[1];
+  const z = point[2];
+  const w = (elements[3] * x) + (elements[7] * y) + (elements[11] * z) + elements[15];
+  if (!Number.isFinite(w) || Math.abs(w) < 1e-12) {
+    return null;
   }
-  return adjusted;
-}
-
-function pointInBounds(point, bounds, epsilon = 0.8) {
-  if (!Array.isArray(point) || point.length !== 3 || !bounds || !Array.isArray(bounds.min) || !Array.isArray(bounds.max)) {
-    return false;
-  }
-  return (
-    point[0] >= Number(bounds.min[0] || 0) - epsilon &&
-    point[0] <= Number(bounds.max[0] || 0) + epsilon &&
-    point[1] >= Number(bounds.min[1] || 0) - epsilon &&
-    point[1] <= Number(bounds.max[1] || 0) + epsilon &&
-    point[2] >= Number(bounds.min[2] || 0) - epsilon &&
-    point[2] <= Number(bounds.max[2] || 0) + epsilon
-  );
-}
-
-function pointInPolygon2d(point, polygon) {
-  let inside = false;
-  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
-    const x1 = polygon[index][0];
-    const y1 = polygon[index][1];
-    const x2 = polygon[previous][0];
-    const y2 = polygon[previous][1];
-    const intersects = ((y1 > point[1]) !== (y2 > point[1])) &&
-      (point[0] < ((x2 - x1) * (point[1] - y1)) / ((y2 - y1) || 1e-9) + x1);
-    if (intersects) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
-
-function distancePointToSegment2d(point, start, end) {
-  const dx = end[0] - start[0];
-  const dy = end[1] - start[1];
-  if (Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9) {
-    return Math.hypot(point[0] - start[0], point[1] - start[1]);
-  }
-  const t = clamp(
-    ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / (dx * dx + dy * dy),
-    0,
-    1
-  );
-  const projected = [start[0] + dx * t, start[1] + dy * t];
-  return Math.hypot(point[0] - projected[0], point[1] - projected[1]);
-}
-
-function distancePointToLoop2d(point, loop) {
-  let best = Infinity;
-  for (let index = 0, previous = loop.length - 1; index < loop.length; previous = index, index += 1) {
-    best = Math.min(best, distancePointToSegment2d(point, loop[previous], loop[index]));
-  }
-  return best;
-}
-
-function compareReferenceIdentity(a, b) {
-  const aKey = String(a?.entityId ?? a?.id ?? "");
-  const bKey = String(b?.entityId ?? b?.id ?? "");
-  return aKey.localeCompare(bKey);
-}
-
-function projectPointToPlane(point, surface) {
-  const origin = surface.origin || [0, 0, 0];
-  const relative = subtract(point, origin);
-  return [dot(relative, surface.xDir || [1, 0, 0]), dot(relative, surface.yDir || [0, 1, 0])];
-}
-
-function projectPointToCylinder(point, surface, thetaCenter) {
-  const origin = surface.origin || [0, 0, 0];
-  const axis = surface.axis || [0, 1, 0];
-  const xDir = surface.xDir || [1, 0, 0];
-  const yDir = surface.yDir || [0, 0, 1];
-  const relative = subtract(point, origin);
-  const axial = dot(relative, axis);
-  const radial = [
-    relative[0] - axis[0] * axial,
-    relative[1] - axis[1] * axial,
-    relative[2] - axis[2] * axial
+  return [
+    ((elements[0] * x) + (elements[4] * y) + (elements[8] * z) + elements[12]) / w,
+    ((elements[1] * x) + (elements[5] * y) + (elements[9] * z) + elements[13]) / w,
+    ((elements[2] * x) + (elements[6] * y) + (elements[10] * z) + elements[14]) / w
   ];
-  const theta = normalizeAngleAround(Math.atan2(dot(radial, yDir), dot(radial, xDir)), thetaCenter);
-  return [theta * (surface.radius || 1), axial];
 }
 
-function measurePointInsideLoops(projectedPoint, loops2d) {
-  const crossings = loops2d.reduce((count, loop) => count + (pointInPolygon2d(projectedPoint, loop) ? 1 : 0), 0);
-  if (crossings % 2 !== 1) {
+/**
+ * World-space corners of the triangle a mesh ray hit. Used to snap Measure
+ * picks to a vertex without walking the rest of the mesh.
+ */
+export function worldTriangleVerticesFromMeshIntersection(intersection) {
+  const face = intersection?.face;
+  const position = intersection?.object?.geometry?.attributes?.position;
+  const matrix = intersection?.object?.matrixWorld?.elements;
+  if (!face || !position || typeof position.getX !== "function" || !matrix) {
     return null;
   }
-  const boundaryDistance = loops2d.reduce(
-    (best, loop) => Math.min(best, distancePointToLoop2d(projectedPoint, loop)),
-    Infinity
-  );
-  return {
-    boundaryDistance
-  };
+  const vertices = [];
+  for (const index of [face.a, face.b, face.c]) {
+    if (!Number.isInteger(index) || index < 0 || index >= position.count) {
+      return null;
+    }
+    const local = [Number(position.getX(index)), Number(position.getY(index)), Number(position.getZ(index))];
+    const world = applyColumnMajorMatrix4(local, matrix);
+    if (!world) {
+      return null;
+    }
+    vertices.push(world);
+  }
+  return vertices;
 }
 
-function faceMatchAtPoint(reference, point) {
-  const pickData = reference?.pickData;
-  if (!pickData?.loops?.length || !pointInBounds(point, pickData.bbox, FACE_BOUNDS_EPSILON)) {
+const MESH_VERTEX_MEASURE_REFERENCE = Object.freeze({
+  selectorType: "vertex",
+  pickData: Object.freeze({ selectorType: "vertex" })
+});
+
+export function measureHitPointFromWorldIntersection(intersection) {
+  if (!intersection?.point) {
     return null;
   }
-
-  const surface = pickData.surface || {};
-
-  if (surface.type === "PLANE" && surface.origin && surface.normal && surface.xDir && surface.yDir) {
-    const planeDistance = Math.abs(dot(subtract(point, surface.origin), surface.normal));
-    if (planeDistance > PLANE_SURFACE_EPSILON) {
-      return null;
-    }
-    const projectedPoint = projectPointToPlane(point, surface);
-    const loops2d = pickData.loops.map((loop) => loop.map((loopPoint) => projectPointToPlane(loopPoint, surface)));
-    const loopMatch = measurePointInsideLoops(projectedPoint, loops2d);
-    if (!loopMatch) {
-      return null;
-    }
-    return {
-      boundaryDistance: loopMatch.boundaryDistance,
-      surfaceDistance: planeDistance
-    };
-  }
-
-  if (surface.type === "CYLINDRICAL_SURFACE" && surface.origin && surface.axis && surface.xDir && surface.yDir) {
-    const origin = surface.origin;
-    const axis = surface.axis;
-    const relative = subtract(point, origin);
-    const axial = dot(relative, axis);
-    const radial = [
-      relative[0] - axis[0] * axial,
-      relative[1] - axis[1] * axial,
-      relative[2] - axis[2] * axial
-    ];
-    const radialDistance = length(radial);
-    const radialError = Math.abs(radialDistance - surface.radius);
-    if (!surface.radius || radialError > CYLINDER_SURFACE_EPSILON) {
-      return null;
-    }
-    const pointTheta = Math.atan2(dot(radial, surface.yDir), dot(radial, surface.xDir));
-    const projectedPoint = projectPointToCylinder(point, surface, pointTheta);
-    const loops2d = pickData.loops.map((loop) =>
-      loop.map((loopPoint) => projectPointToCylinder(loopPoint, surface, pointTheta))
-    );
-    const loopMatch = measurePointInsideLoops(projectedPoint, loops2d);
-    if (!loopMatch) {
-      return null;
-    }
-    return {
-      boundaryDistance: loopMatch.boundaryDistance,
-      surfaceDistance: radialError
-    };
-  }
-
-  return null;
-}
-
-function faceLoopCount(reference) {
-  return reference?.loopCount ?? reference?.pickData?.loopCount ?? reference?.pickData?.loops?.length ?? 0;
-}
-
-function isPreferredFaceReference(reference) {
-  return faceLoopCount(reference) <= 1;
-}
-
-function chooseRedirectFaceReference(reference, point, references) {
-  const pickData = reference?.pickData;
-  const surface = pickData?.surface || {};
-  if (isPreferredFaceReference(reference) || surface.type !== "PLANE" || !surface.origin || !surface.xDir || !surface.yDir) {
+  const x = Number(intersection.point.x);
+  const y = Number(intersection.point.y);
+  const z = Number(intersection.point.z);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
     return null;
   }
+  return [x, y, z];
+}
 
-  const projectedPoint = projectPointToPlane(point, surface);
-  const loopEntries = Array.isArray(pickData.loopsMeta) ? pickData.loopsMeta : [];
-  const faceByEntityId = new Map(
-    (Array.isArray(references) ? references : [])
-      .filter((candidate) => candidate?.entityType === "ADVANCED_FACE")
-      .map((candidate) => [candidate.entityId, candidate])
-  );
-  const redirectCandidates = [];
-
-  for (const loopEntry of loopEntries) {
-    if (loopEntry?.isOuter || !Array.isArray(loopEntry.points) || loopEntry.points.length < 3) {
-      continue;
-    }
-    const loop2d = loopEntry.points.map((loopPoint) => projectPointToPlane(loopPoint, surface));
-    const inside = pointInPolygon2d(projectedPoint, loop2d);
-    const distance = distancePointToLoop2d(projectedPoint, loop2d);
-    if (!inside && distance > 1.1) {
-      continue;
-    }
-
-    for (const faceEntityId of loopEntry.adjacentFaceEntityIds || []) {
-      const candidate = faceByEntityId.get(faceEntityId);
-      if (!candidate || !isPreferredFaceReference(candidate)) {
-        continue;
-      }
-      redirectCandidates.push({
-        candidate,
-        distance,
-        inside
-      });
-    }
+/**
+ * The offset the viewer applies to re-centre the model. Selector geometry — the
+ * edge proxy, `pickData.center` — is authored around the model origin, while a
+ * ray hit is in world space, and these two frames differ by exactly this
+ * translation. The pick groups only ever have their position set (never rotation
+ * or scale), so a vector subtraction is the whole transform.
+ */
+export function measureModelOffsetFromRuntime(runtime) {
+  const position = (runtime?.facePickGroup || runtime?.edgePickGroup || runtime?.modelGroup)?.position;
+  if (!position) {
+    return [0, 0, 0];
   }
+  return [position.x, position.y, position.z].map((value) => (Number.isFinite(Number(value)) ? Number(value) : 0));
+}
 
-  redirectCandidates.sort((a, b) => {
-    if (a.inside !== b.inside) {
-      return a.inside ? -1 : 1;
-    }
-    if (Math.abs(a.distance - b.distance) > 1e-4) {
-      return a.distance - b.distance;
-    }
-    const aMetric = a.candidate.pickData?.metric ?? Infinity;
-    const bMetric = b.candidate.pickData?.metric ?? Infinity;
-    if (aMetric !== bMetric) {
-      return aMetric - bMetric;
-    }
-    return compareReferenceIdentity(a.candidate, b.candidate);
+export function measureWorldPointToModel(point, offset) {
+  if (!isFinitePoint(point)) {
+    return null;
+  }
+  const [dx, dy, dz] = offset || [0, 0, 0];
+  return [point[0] - dx, point[1] - dy, point[2] - dz];
+}
+
+export function measureModelPointToWorld(point, offset) {
+  if (!isFinitePoint(point)) {
+    return null;
+  }
+  const [dx, dy, dz] = offset || [0, 0, 0];
+  return [point[0] + dx, point[1] + dy, point[2] + dz];
+}
+
+/**
+ * Snapping runs in the model frame and only the resulting point is lifted back
+ * out to world. Translating the whole edge-segment buffer instead would redo
+ * hundreds of additions on every hover tick to reach the same answer.
+ */
+export function measurePickForPosition({
+  reference = null,
+  worldHitPoint = null,
+  referenceId = "",
+  bypassTopology = false,
+  edgeSegments = null,
+  edgeGeometry,
+  vertexPoint = null,
+  modelOffset = null
+} = {}) {
+  const hitPoint = isFinitePoint(worldHitPoint) ? worldHitPoint : null;
+  if (bypassTopology) {
+    return classifyMeasurePick({ reference: null, hitPoint, referenceId: "" });
+  }
+  const modelHitPoint = measureWorldPointToModel(hitPoint, modelOffset);
+  const pick = classifyMeasurePick({
+    reference,
+    hitPoint: modelHitPoint,
+    referenceId: referenceId || "",
+    edgeSegments,
+    edgeGeometry,
+    vertexPoint
   });
-
-  return redirectCandidates[0]?.candidate || null;
-}
-
-function compareFaceCandidates(a, b) {
-  const aSurfaceDistance = a.match?.surfaceDistance ?? Infinity;
-  const bSurfaceDistance = b.match?.surfaceDistance ?? Infinity;
-  if (Math.abs(aSurfaceDistance - bSurfaceDistance) > 1e-4) {
-    return aSurfaceDistance - bSurfaceDistance;
+  if (!pick) {
+    return null;
   }
-
-  const aBoundaryDistance = a.match?.boundaryDistance ?? -Infinity;
-  const bBoundaryDistance = b.match?.boundaryDistance ?? -Infinity;
-  if (Math.abs(aBoundaryDistance - bBoundaryDistance) > 1e-4) {
-    return bBoundaryDistance - aBoundaryDistance;
+  const worldPoint = measureModelPointToWorld(pick.point, modelOffset);
+  if (!worldPoint) {
+    return null;
   }
-
-  const aMetric = a.reference.pickData?.metric ?? Infinity;
-  const bMetric = b.reference.pickData?.metric ?? Infinity;
-  if (Math.abs(aMetric - bMetric) > 1e-4) {
-    return bMetric - aMetric;
-  }
-
-  const aPreferred = isPreferredFaceReference(a.reference) ? 0 : 1;
-  const bPreferred = isPreferredFaceReference(b.reference) ? 0 : 1;
-  if (aPreferred !== bPreferred) {
-    return aPreferred - bPreferred;
-  }
-
-  return compareReferenceIdentity(a.reference, b.reference);
-}
-
-function findBestFaceReference(references, point) {
-  const matches = [];
-  for (const reference of Array.isArray(references) ? references : []) {
-    const match = faceMatchAtPoint(reference, point);
-    if (!match) {
-      continue;
-    }
-    matches.push({
-      match,
-      reference
-    });
-  }
-  matches.sort(compareFaceCandidates);
-  return matches[0]?.reference || null;
-}
-
-function chooseBestFaceReferenceFromIntersections(references, intersections) {
-  const candidates = new Map();
-  for (const intersection of intersections) {
-    if (!intersection?.point || !intersection?.object) {
-      continue;
-    }
-    const localPoint = intersection.object.worldToLocal(intersection.point.clone());
-    const point = [localPoint.x, localPoint.y, localPoint.z];
-    let reference = findBestFaceReference(references, point);
-    const redirected = chooseRedirectFaceReference(reference, point, references);
-    if (redirected) {
-      reference = redirected;
-    }
-    if (!reference) {
-      continue;
-    }
-    const existing = candidates.get(reference.id);
-    if (!existing || intersection.distance < existing.distance) {
-      candidates.set(reference.id, {
-        distance: intersection.distance,
-        reference
-      });
-    }
-  }
-
-  const scored = [...candidates.values()];
-  scored.sort((a, b) => {
-    if (Math.abs(a.distance - b.distance) > 1e-4) {
-      return a.distance - b.distance;
-    }
-    const aMetric = a.reference.pickData?.metric ?? Infinity;
-    const bMetric = b.reference.pickData?.metric ?? Infinity;
-    if (aMetric !== bMetric) {
-      return aMetric - bMetric;
-    }
-    const aPreferred = isPreferredFaceReference(a.reference) ? 0 : 1;
-    const bPreferred = isPreferredFaceReference(b.reference) ? 0 : 1;
-    if (aPreferred !== bPreferred) {
-      return aPreferred - bPreferred;
-    }
-    return compareReferenceIdentity(a.reference, b.reference);
-  });
-  return scored[0]?.reference || null;
+  // A fitted arc centre is a position, so it has to come out to world space with
+  // the point. Radius and direction are translation-invariant and stay as they are.
+  const geometry = isFinitePoint(pick.geometry?.center)
+    ? { ...pick.geometry, center: measureModelPointToWorld(pick.geometry.center, modelOffset) }
+    : pick.geometry;
+  return { ...pick, point: worldPoint, geometry };
 }
 
 function chooseBestEdgeIntersection(intersections, measureScreenDistance = null) {
@@ -441,10 +250,13 @@ export function useViewerPicking({
   onActivateReference,
   onDoubleActivateReference,
   onContextReference,
+  onMeasurePick,
+  onMeasureHoverPoint,
   viewerReadyTick,
   // While a STEP animation is playing, reference hover/selection is suspended
   // so playback frames skip raycasts and pick-state rebuilds entirely.
-  suppressTopologyPicking = false
+  suppressTopologyPicking = false,
+  allowMeshVertexSnap = false
 }) {
   // Keep pointer listeners stable across parent rerenders; hover itself updates parent state.
   const pickModeRef = useRef(pickMode);
@@ -458,6 +270,9 @@ export function useViewerPicking({
   const onActivateReferenceRef = useRef(onActivateReference);
   const onDoubleActivateReferenceRef = useRef(onDoubleActivateReference);
   const onContextReferenceRef = useRef(onContextReference);
+  const onMeasurePickRef = useRef(onMeasurePick);
+  const onMeasureHoverPointRef = useRef(onMeasureHoverPoint);
+  const allowMeshVertexSnapRef = useRef(allowMeshVertexSnap);
   const allowedFaceReferenceIdsRef = useRef(new Set());
   const allowedEdgeReferenceIdsRef = useRef(new Set());
   const allowedVertexReferenceIdsRef = useRef(new Set());
@@ -473,6 +288,9 @@ export function useViewerPicking({
   onActivateReferenceRef.current = onActivateReference;
   onDoubleActivateReferenceRef.current = onDoubleActivateReference;
   onContextReferenceRef.current = onContextReference;
+  onMeasurePickRef.current = onMeasurePick;
+  onMeasureHoverPointRef.current = onMeasureHoverPoint;
+  allowMeshVertexSnapRef.current = allowMeshVertexSnap === true;
   allowedFaceReferenceIdsRef.current = new Set(
     (Array.isArray(pickableFaces) ? pickableFaces : [])
       .map((reference) => String(reference?.id || "").trim())
@@ -488,6 +306,19 @@ export function useViewerPicking({
       .map((reference) => String(reference?.id || "").trim())
       .filter(Boolean)
   );
+
+  // Arming the tool has to change the cursor immediately. Leaving it to the next
+  // hover tick means the select pointer lingers until the mouse happens to move.
+  useEffect(() => {
+    const container = mountRef.current;
+    if (!container || pickMode !== VIEWER_PICK_MODE.MEASURE) {
+      return undefined;
+    }
+    container.style.cursor = "crosshair";
+    return () => {
+      container.style.cursor = "";
+    };
+  }, [mountRef, pickMode, previewMode, viewerReadyTick]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -531,7 +362,8 @@ export function useViewerPicking({
       y: 0,
       lastX: NaN,
       lastY: NaN,
-      hoveredReferenceId: ""
+      hoveredReferenceId: "",
+      measureTickEmitted: false
     };
     const doubleClickEnabled = !defaultToCoarsePointer;
     let activationTimerId = 0;
@@ -960,6 +792,103 @@ export function useViewerPicking({
       return edgeCandidate?.reference?.id || faceReference?.id || vertexCandidate?.reference?.id || null;
     }
 
+    function measureReferenceById(referenceId) {
+      const selectorRuntime = selectorRuntimeRef.current;
+      const reference = selectorRuntime?.referenceMap?.get?.(referenceId) || null;
+      if (reference) {
+        return reference;
+      }
+      return (Array.isArray(selectorRuntime?.references) ? selectorRuntime.references : [])
+        .find((candidate) => String(candidate?.id || "").trim() === String(referenceId || "").trim()) || null;
+    }
+
+    // Hover re-resolves the same edge on every mouse move, so the last slice is
+    // kept rather than rebuilt each tick.
+    // Hover re-resolves the same edge every tick, and both the proxy slice and
+    // the geometry fit are functions of the reference alone.
+    let measureEdgeCache = { referenceId: "", segments: null, geometry: null };
+
+    function measureSnapGeometry(reference, referenceId) {
+      const selectorType = String(reference?.pickData?.selectorType || reference?.selectorType || "")
+        .trim()
+        .toLowerCase();
+      if (selectorType === "vertex") {
+        const center = reference?.pickData?.center;
+        return { edgeSegments: null, edgeGeometry: null, vertexPoint: isFinitePoint(center) ? center.slice(0, 3) : null };
+      }
+      if (selectorType !== "edge") {
+        return { edgeSegments: null, edgeGeometry: null, vertexPoint: null };
+      }
+      if (measureEdgeCache.referenceId !== referenceId) {
+        const segments = buildEdgeLinePositionsFromProxy(selectorRuntimeRef.current, reference);
+        measureEdgeCache = { referenceId, segments, geometry: edgeGeometryFromSegments(segments) };
+      }
+      return {
+        edgeSegments: measureEdgeCache.segments,
+        edgeGeometry: measureEdgeCache.geometry,
+        vertexPoint: null
+      };
+    }
+
+    function projectWorldArrayToClient(point) {
+      if (!isFinitePoint(point) || !runtime?.THREE?.Vector3) {
+        return null;
+      }
+      return projectPointToClient(new runtime.THREE.Vector3(point[0], point[1], point[2]));
+    }
+
+    function measureReferenceFromPosition(clientX, clientY, { hover = false, bypassTopology = false } = {}) {
+      setPointerFromPosition(clientX, clientY);
+      const modelIntersections = intersectVisibleModelMeshes();
+      const hitIntersection = frontMostModelIntersections(modelIntersections)
+        .find((intersection) => measureHitPointFromWorldIntersection(intersection)) || null;
+      const worldHitPoint = measureHitPointFromWorldIntersection(hitIntersection);
+      const modelOffset = measureModelOffsetFromRuntime(runtimeRef.current);
+      if (allowMeshVertexSnapRef.current && !bypassTopology) {
+        const triangleWorld = worldTriangleVerticesFromMeshIntersection(hitIntersection);
+        const maxScreenDistancePx = hover
+          ? MESH_VERTEX_HOVER_MAX_SCREEN_DISTANCE_PX
+          : MESH_VERTEX_PICK_MAX_SCREEN_DISTANCE_PX;
+        const meshSnap = pickMeshVertexByScreenDistance(
+          triangleWorld,
+          { x: clientX, y: clientY },
+          maxScreenDistancePx,
+          projectWorldArrayToClient
+        );
+        if (!meshSnap) {
+          return { pick: null, referenceId: "" };
+        }
+        return {
+          pick: measurePickForPosition({
+            reference: MESH_VERTEX_MEASURE_REFERENCE,
+            worldHitPoint,
+            referenceId: "",
+            vertexPoint: measureWorldPointToModel(meshSnap.point, modelOffset),
+            modelOffset
+          }),
+          referenceId: ""
+        };
+      }
+      const referenceId = bypassTopology ? "" : (pickTopologyReference(modelIntersections, clientX, clientY, { hover }) || "");
+      const reference = referenceId ? measureReferenceById(referenceId) : null;
+      const { edgeSegments, edgeGeometry, vertexPoint } = bypassTopology
+        ? { edgeSegments: null, edgeGeometry: null, vertexPoint: null }
+        : measureSnapGeometry(reference, referenceId);
+      return {
+        pick: measurePickForPosition({
+          reference,
+          worldHitPoint,
+          referenceId,
+          bypassTopology,
+          edgeSegments,
+          edgeGeometry,
+          vertexPoint,
+          modelOffset
+        }),
+        referenceId
+      };
+    }
+
     function pickReferenceAtPosition(clientX, clientY, { hover = false, preferTopology = false } = {}) {
       if (suppressTopologyPicking) {
         return null;
@@ -982,6 +911,9 @@ export function useViewerPicking({
       if (pickMode === VIEWER_PICK_MODE.AUTO) {
         return pickTopologyReference(modelIntersections, clientX, clientY, { hover }) ||
           pickPartReferenceFromIntersections(modelIntersections);
+      }
+      if (pickMode === VIEWER_PICK_MODE.MEASURE) {
+        return pickTopologyReference(modelIntersections, clientX, clientY, { hover });
       }
       return null;
     }
@@ -1028,7 +960,12 @@ export function useViewerPicking({
 
     function commitHoverState(referenceId) {
       const normalizedReferenceId = referenceId || "";
-      container.style.cursor = normalizedReferenceId ? "pointer" : "";
+      // Measuring keeps one cursor throughout. Swapping to the select pointer
+      // over a reference reads as "click to select this", when the click is
+      // going to drop a measurement point either way — what is snappable is
+      // shown by highlighting the entity, not by changing the cursor.
+      const isMeasureMode = pickModeRef.current === VIEWER_PICK_MODE.MEASURE;
+      container.style.cursor = isMeasureMode ? "crosshair" : (normalizedReferenceId ? "pointer" : "");
       if (hoverState.hoveredReferenceId === normalizedReferenceId) {
         return;
       }
@@ -1043,12 +980,17 @@ export function useViewerPicking({
       }
       hoverState.lastX = NaN;
       hoverState.lastY = NaN;
-      container.style.cursor = "";
-      if (!hoverState.hoveredReferenceId) {
+      container.style.cursor = pickModeRef.current === VIEWER_PICK_MODE.MEASURE ? "crosshair" : "";
+      const hadMeasureTick = hoverState.measureTickEmitted;
+      hoverState.measureTickEmitted = false;
+      if (!hoverState.hoveredReferenceId && !hadMeasureTick) {
         return;
       }
       hoverState.hoveredReferenceId = "";
       onHoverReferenceChangeRef.current?.("");
+      if (hadMeasureTick) {
+        onMeasureHoverPointRef.current?.(null);
+      }
     }
 
     function clearPendingActivation() {
@@ -1083,6 +1025,15 @@ export function useViewerPicking({
       }
       hoverState.lastX = hoverState.x;
       hoverState.lastY = hoverState.y;
+      if (pickModeRef.current === VIEWER_PICK_MODE.MEASURE) {
+        // The measure pass already raycast the model and resolved the topology
+        // reference under the cursor; picking again would double every hover.
+        hoverState.measureTickEmitted = true;
+        const measured = measureReferenceFromPosition(hoverState.x, hoverState.y, { hover: true });
+        onMeasureHoverPointRef.current?.(measured.pick);
+        commitHoverState(measured.referenceId || "");
+        return;
+      }
       commitHoverState(pickReferenceAtPosition(hoverState.x, hoverState.y, { hover: true }));
     }
 
@@ -1347,6 +1298,12 @@ export function useViewerPicking({
       pointerDown.pointerType = "";
       pointerDown.referenceId = "";
       if (suppressTopologyPicking) {
+        return;
+      }
+      if (pickModeRef.current === VIEWER_PICK_MODE.MEASURE) {
+        onMeasurePickRef.current?.(measureReferenceFromPosition(pointerDown.x, pointerDown.y, {
+          bypassTopology: !!event.shiftKey
+        }).pick);
         return;
       }
       const referenceId = pointerDownReferenceId || pickActivationReference(event.clientX, event.clientY, event.pointerType || "");

@@ -8,6 +8,7 @@ full generator+mesh+emit the previous holder had just finished.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -19,7 +20,9 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-_CADGEN_SRC = str(Path(__file__).resolve().parents[4] / "packages" / "cadgen" / "src")
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_CADGEN_SRC = str(_REPO_ROOT / "packages" / "cadgen" / "src")
+_GEN_CLI = _REPO_ROOT / "skills" / "cad" / "scripts" / "gen"
 
 BOX_GENERATOR = """from build123d import Box
 
@@ -93,6 +96,42 @@ class ConcurrentGenerationTest(unittest.TestCase):
         outputs = self._run_contenders(1)
         # Not the concurrent-skip path — the ordinary pre-lock fast path.
         self.assertIn("is current; skipped recompose", outputs[0])
+
+    def _package_dir(self):
+        return self.root / "__cadgen__" / "models" / "widget.step.py"
+
+    def _run_gen_cli(self, *extra):
+        """The skill CLI itself, not the library call the other tests use: the flag under
+        test is an argparse question, and `--lock-timeout` was documented in SKILL.md while
+        the parser rejected it."""
+        return subprocess.run(
+            [sys.executable, str(_GEN_CLI), str(self.generator), *extra],
+            cwd=str(self.root),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=600,
+        )
+
+    def test_lock_timeout_reports_the_peer_instead_of_waiting_for_it(self):
+        from cadgen.coordination.lock import exclusive
+        from cadgen.coordination.paths import write_lock_path
+
+        # A REAL peer: this process holds the same advisory lock the CLI will ask for.
+        with exclusive(write_lock_path(self._package_dir())) as held:
+            self.assertIsNotNone(held, "the test never acquired the lock it means to hold")
+            result = self._run_gen_cli("--lock-timeout", "0.25", "--json")
+
+        self.assertEqual(0, result.returncode, f"contention is not a failure:\n{result.stderr}")
+        payload = json.loads(result.stdout.strip())
+        self.assertTrue(payload["ok"])
+        self.assertTrue(payload["contended"], "SKILL.md documents contended:true for this case")
+        self.assertEqual("contended", payload["outcome"])
+        self.assertIn("not waiting", result.stderr)
+        # It declined to build, so it must not claim the peer's work either: no descriptor
+        # was written by this run, and nothing reports as built.
+        self.assertFalse((self._package_dir() / "assembly.json").exists())
+        self.assertNotIn("built", payload["outcome"])
 
     def tearDown(self):
         shutil.rmtree(self.root / "__cadgen__", ignore_errors=True)

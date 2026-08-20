@@ -77,6 +77,12 @@ function requireArg(args, name) {
   return value;
 }
 
+/** A boolean flag, written either bare (`--flag`, parsed as "true") or as `--flag 1`. */
+function parseFlag(value) {
+  const text = String(value || "").trim().toLowerCase();
+  return text === "1" || text === "true";
+}
+
 function positiveInt(value, name) {
   const numeric = Math.floor(Number(value));
   if (!Number.isFinite(numeric) || numeric <= 0) {
@@ -99,7 +105,8 @@ async function main() {
   const writeGlbPath = args["write-glb"] ? path.resolve(String(args["write-glb"])) : null;
 
   // Before anything is written: prove this process was started by the lock holder.
-  assertWriteLock(packageDir, runId);
+  // The parent sets --lock-degraded when it could not take a lock to be started by.
+  assertWriteLock(packageDir, runId, { degraded: parseFlag(args["lock-degraded"]) });
 
   // The first phase is reported BEFORE the model is loaded, so the client's ~120 ms first
   // poll finds a bar rather than a bare `generating`. Its denominator follows once the grid

@@ -57,7 +57,6 @@ import threading
 from collections import deque
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
-from urllib.request import pathname2url
 
 __all__ = [
     "NODE_ENV_VARS",
@@ -194,7 +193,13 @@ def node_resolve_bootstrap() -> str:
             f"cadgen's Node resolve bootstrap is missing: {path}. This file must ship with "
             "the package (see [tool.setuptools.package-data] in cadgen's pyproject.toml)."
         )
-    return "file://" + pathname2url(str(path))
+    # ``Path.as_uri()``, NOT "file://" + pathname2url. On Windows pathname2url already returns a
+    # leading ``///`` (nturl2path), so concatenating another ``file://`` produced a five-slash URL
+    # that Node rejects outright -- ERR_INVALID_FILE_URL_PATH, before the builder wrote anything
+    # (issue #266). POSIX returned ``/usr/...`` from the same call, so the bug was invisible
+    # there. as_uri() is correct on both and percent-encodes, which the plugin's own install path
+    # needs: it contains a space on Windows.
+    return path.as_uri()
 
 
 def _dispatch(message: Mapping[str, Any], run: Any) -> bool:
@@ -224,6 +229,12 @@ def _dispatch(message: Mapping[str, Any], run: Any) -> bool:
             count = 1
         detail = message.get("detail")
         run.advance(int(count), detail=str(detail) if isinstance(detail, str) else None)
+        return True
+    if kind == "detail":
+        detail = message.get("detail")
+        if not isinstance(detail, str):
+            return False
+        run.detail(detail)
         return True
     return False
 
@@ -278,6 +289,7 @@ def run_node_builder(
     ``{"type":"phase","phase":"sample","total":96|null}``        ``run.phase(phase, total=total)``
     ``{"type":"total","total":973214}``                          ``run.set_total(total)``
     ``{"type":"advance","n":1,"detail":"slice 12/96"}``          ``run.advance(n, detail=detail)``
+    ``{"type":"detail","detail":"welding seams"}``               ``run.detail(detail)``
     ``{"type":"result","ok":true,...}``                          becomes the return value
     ==========================================================  ==================================
 

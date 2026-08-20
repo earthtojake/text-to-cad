@@ -1,5 +1,4 @@
-// THE FIELD-AGREEMENT GATE (design/unified-glb-render-artifacts.md §9, phase 2 exit criteria;
-// a hard precondition on phase 3).
+// THE FIELD-AGREEMENT GATE.
 //
 // An implicit model is authored ONCE, in GLSL, and evaluated TWICE by unrelated code:
 //
@@ -101,8 +100,7 @@ const MODELS_WITHOUT_A_SURFACE = new Map([
   [
     "menger-sponge.implicit.js",
     "known model defect: sdf >= 2.77 everywhere inside its own declared bounds (the `cross` "
-    + "term never goes negative), so it has no surface on the GPU either -- see "
-    + "design/unified-glb-render-artifacts.md §0.0",
+    + "term never goes negative), so it has no surface on the GPU either",
   ],
 ]);
 

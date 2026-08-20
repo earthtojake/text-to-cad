@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CadViewer from "../CadViewer";
 import { CircleAlert, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
@@ -250,6 +250,10 @@ function ViewerContextMenu({
   );
 }
 
+// Width and typography shared by the copy button and the hidden ruler that decides whether
+// its label fits. One constant so the two cannot drift apart.
+const CTA_METRICS_CLASS = "h-9 w-fit min-w-0 max-w-full sm:max-w-[min(28rem,calc(100%-16rem))] shrink overflow-hidden px-4 text-[12px] font-semibold max-sm:w-full max-sm:pr-32";
+
 export default function CadRenderPane({
   viewerRef,
   renderFormat,
@@ -285,6 +289,7 @@ export default function CadRenderPane({
   drawingOrientation = null,
   drawingMaterialColor = null,
   drawingGeometry = null,
+  drawingIsDocument = false,
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
   viewPlaneOffsetRight = 16,
@@ -317,6 +322,11 @@ export default function CadRenderPane({
   handleModelReferenceActivate,
   handleModelReferenceDoubleActivate,
   handleModelReferenceContext,
+  onMeasurePick,
+  onMeasureHoverPoint,
+  activeMeasurementId = "",
+  measureState = null,
+  measureModeActive = false,
   viewerContextMenu = null,
   onViewerContextMenuClose,
   onViewerContextMenuCopyReference,
@@ -337,6 +347,7 @@ export default function CadRenderPane({
   handleStepModuleTransformDetectedChange,
   selectionCount,
   copyButtonLabel,
+  copyButtonCountLabel = "",
   copyReferenceTipActive = false,
   panToolActive = false,
   handleCopySelection,
@@ -442,7 +453,41 @@ export default function CadRenderPane({
     left: `calc(${viewportInsetPx(viewportFrameInsets?.left)}px + 1rem)`,
     right: `calc(${viewportInsetPx(viewportFrameInsets?.right)}px + 1rem)`
   };
-  const ctaLabel = ctaMode === "screenshot" ? "Copy Screenshot" : copyButtonLabel;
+  // A ref cut off mid-token reads like a broken ref rather than a long one, so when it does
+  // not fit we show the count instead. Whether it fits depends on the viewport, not the
+  // string, so it is measured rather than guessed from a length threshold.
+  //
+  // The measurement reads a hidden copy holding the FULL label. Measuring the visible span
+  // would oscillate: swapping in the shorter count label makes it fit again, which would swap
+  // the ref back in, and so on.
+  const ctaFullLabelRef = useRef(null);
+  const [ctaLabelFits, setCtaLabelFits] = useState(true);
+  const ctaRefLabel = ctaMode === "screenshot" ? "Copy Screenshot" : copyButtonLabel;
+  useLayoutEffect(() => {
+    const ruler = ctaFullLabelRef.current;
+    if (!ruler) {
+      return undefined;
+    }
+    const measure = () => {
+      // +1 so sub-pixel rounding does not read as an overflow.
+      setCtaLabelFits(ruler.scrollWidth <= ruler.clientWidth + 1);
+    };
+    measure();
+    // Belt and braces. ResizeObserver is the precise signal, but it is not always delivered
+    // promptly when the document is not being painted, and a window resize is the case that
+    // actually changes the answer.
+    window.addEventListener("resize", measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(ruler);
+    return () => {
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  }, [ctaRefLabel]);
+  const ctaLabel = ctaLabelFits || !copyButtonCountLabel || ctaMode === "screenshot"
+    ? ctaRefLabel
+    : copyButtonCountLabel;
+  // The title always carries the full ref, so the truncated case is still discoverable.
   const ctaTitle = ctaMode === "screenshot" ? "Copy screenshot to clipboard" : copyButtonLabel;
   const ctaDisabled = ctaMode === "screenshot"
     ? viewerLoading || !viewportHasRenderableContent
@@ -506,6 +551,7 @@ export default function CadRenderPane({
         drawingOrientation={drawingOrientation}
         drawingMaterialColor={drawingMaterialColor}
         drawingGeometry={drawingGeometry}
+        drawingIsDocument={drawingIsDocument}
         drawingThicknessMm={drawingThicknessMm}
         onCameraZoomPercentChange={onCameraZoomPercentChange}
         perspective={viewerPerspective}
@@ -523,7 +569,7 @@ export default function CadRenderPane({
         compactViewPlane={false}
         viewportFrameInsets={viewportFrameInsets}
         isLoading={viewerLoading}
-        pickMode={!hasTopology && !hasParts
+        pickMode={!hasTopology && !hasParts && !measureModeActive
           ? VIEWER_PICK_MODE.NONE
           : viewerPickModeForRenderPane({
             panToolActive,
@@ -537,7 +583,8 @@ export default function CadRenderPane({
             ),
             viewerMode,
             assemblyPickingActive,
-            focusedPartIds
+            focusedPartIds,
+            measureMode: measureModeActive
           })}
         panToolActive={panToolActive}
         renderPartsIndividually={capabilities.sceneScale === "urdf"
@@ -569,6 +616,12 @@ export default function CadRenderPane({
         onActivateReference={handleModelReferenceActivate}
         onDoubleActivateReference={handleModelReferenceDoubleActivate}
         onContextReference={handleModelReferenceContext}
+        onMeasurePick={onMeasurePick}
+        onMeasureHoverPoint={onMeasureHoverPoint}
+        activeMeasurementId={activeMeasurementId}
+        measureState={measureState}
+        measureModeActive={measureModeActive}
+        allowMeshVertexSnap={!hasTopology}
         onViewerAlertChange={handleViewerAlertChange}
         onStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
         urdfPosePicker={urdfPosePicker}
@@ -719,6 +772,15 @@ export default function CadRenderPane({
           className="pointer-events-none absolute z-20 flex min-w-0 justify-center"
           style={ctaOverlayStyle}
         >
+          {/* A hidden ruler carrying the FULL ref label under the same width constraints as
+              the button. Measured to decide whether the button can show the ref at all.
+              Deliberately independent of what the button currently displays: measuring the
+              visible label instead would latch, because swapping in the shorter count label
+              shrinks the box and makes the ref look permanently too wide. Kept outside the
+              button so the button's textContent stays exactly its label. */}
+          <span aria-hidden="true" className={cn("pointer-events-none invisible absolute left-0 top-0", CTA_METRICS_CLASS)}>
+            <span ref={ctaFullLabelRef} className="block min-w-0 max-w-full truncate">{ctaRefLabel}</span>
+          </span>
           <TutorialTip
             tipId={TUTORIAL_TIP_IDS.COPY_REFERENCE}
             active={ctaMode !== "screenshot" && copyReferenceTipActive}
@@ -729,7 +791,10 @@ export default function CadRenderPane({
               type="button"
               variant="default"
               size="sm"
-              className="pointer-events-auto h-9 w-fit min-w-0 max-w-[min(28rem,100%)] shrink overflow-hidden border border-primary/20 bg-primary/85 px-4 text-[12px] font-semibold text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/75 focus-visible:ring-primary/35 max-sm:w-full"
+              className={cn(
+                "pointer-events-auto border border-primary/20 bg-primary/85 text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/75 focus-visible:ring-primary/35",
+                CTA_METRICS_CLASS
+              )}
               disabled={ctaDisabled}
               onClick={() => {
                 if (ctaMode === "screenshot") {

@@ -192,7 +192,7 @@ class CadGenerationTests(unittest.TestCase):
         ``source == "generated"`` specs into the build pipeline and fell off the end for an
         imported/committed STEP — silently returning None (no package written) while the
         caller still reported success. `scripts/gen` no longer accepts direct STEP targets,
-        so this now drives the live on-demand path (`cadgen.step_artifact`) that inspect,
+        so this now drives the live on-demand path (`cadgen.step_artifact_cli`) that inspect,
         snapshot, the CAD Viewer, and `scripts/artifact` all share.
         """
         from build123d import Box, Compound, Pos
@@ -214,7 +214,7 @@ class CadGenerationTests(unittest.TestCase):
             "precondition: the package must not exist before the build",
         )
 
-        from cadgen.step_artifact import build_step_artifact
+        from cadgen.step_artifact_cli import build_step_artifact
 
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             payload = build_step_artifact(

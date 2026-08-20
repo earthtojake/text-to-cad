@@ -1,55 +1,44 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  estimatedLoadingRatio,
-  artifactProgressRatio,
-  formatArtifactProgress,
-  MAX_DISPLAY_PERCENT,
-  continuedLoadingRatio,
-  normalizeArtifactProgress
-} from "./artifactProgress.js";
+import { formatArtifactProgress, normalizeArtifactProgress } from "./artifactProgress.js";
 
-function componentsPayload(overrides = {}) {
+function countingPayload(overrides = {}) {
   return {
     phase: "components",
     label: "Meshing components",
     detail: "a1b2c3",
+    index: 3,
+    count: 4,
     done: 31,
     total: 50,
     determinate: true,
-    ratio: 0.62,
-    ratioFloor: 0.46,
-    ratioCeiling: 0.96,
-    phaseStartedAt: 1_000,
-    phaseExpectedMs: 8_000,
     updatedAt: 5_000,
     ...overrides
   };
 }
 
-function indeterminatePayload(overrides = {}) {
-  return componentsPayload({
+function labelOnlyPayload(overrides = {}) {
+  return countingPayload({
     phase: "generate",
     label: "Building geometry",
+    detail: "airframe",
+    index: 1,
     determinate: false,
     total: null,
     done: 0,
-    ratio: 0,
-    ratioFloor: 0,
-    ratioCeiling: 0.4,
-    phaseStartedAt: 1_000,
-    phaseExpectedMs: 10_000,
     ...overrides
   });
 }
 
 test("normalizeArtifactProgress keeps a well-formed payload", () => {
-  const progress = normalizeArtifactProgress(componentsPayload());
+  const progress = normalizeArtifactProgress(countingPayload());
   assert.equal(progress.phase, "components");
   assert.equal(progress.label, "Meshing components");
   assert.equal(progress.done, 31);
   assert.equal(progress.total, 50);
+  assert.equal(progress.index, 3);
+  assert.equal(progress.count, 4);
   assert.equal(progress.determinate, true);
 });
 
@@ -62,115 +51,92 @@ test("normalizeArtifactProgress returns null for anything unrenderable", () => {
 test("normalizeArtifactProgress does not trust determinate without a total", () => {
   // The build never emits this, but the payload is a file another process wrote —
   // trusting the flag over the count would render "31/null".
-  const progress = normalizeArtifactProgress(componentsPayload({ total: null }));
+  const progress = normalizeArtifactProgress(countingPayload({ total: null }));
   assert.equal(progress.determinate, false);
 });
 
 test("normalizeArtifactProgress degrades non-numeric fields instead of producing NaN", () => {
   const progress = normalizeArtifactProgress(
-    componentsPayload({ ratio: "hello", done: undefined, phaseStartedAt: null })
+    countingPayload({ done: undefined, index: "hello", updatedAt: null })
   );
-  assert.equal(progress.ratio, 0);
   assert.equal(progress.done, 0);
-  assert.equal(progress.phaseStartedAt, 0);
+  assert.equal(progress.index, 0);
+  assert.equal(progress.updatedAt, 0);
 });
 
-test("a determinate phase is reported exactly, never smoothed", () => {
-  const progress = normalizeArtifactProgress(componentsPayload());
-  // Same answer however much wall-clock time passes: the count is measured, and
-  // inventing motion between two real counts would misreport the one measured stage.
-  assert.equal(artifactProgressRatio(progress, 1_000), 0.62);
-  assert.equal(artifactProgressRatio(progress, 900_000), 0.62);
-});
-
-test("an indeterminate phase advances through its band on the clock", () => {
-  const progress = normalizeArtifactProgress(indeterminatePayload());
-  assert.equal(artifactProgressRatio(progress, 1_000), 0);
-  assert.ok(Math.abs(artifactProgressRatio(progress, 6_000) - 0.2) < 1e-9);
-  // Capped at the band ceiling: overrunning the estimate must not spill into the next
-  // phase's share of the bar.
-  assert.ok(Math.abs(artifactProgressRatio(progress, 999_000) - 0.4) < 1e-9);
-});
-
-test("an indeterminate phase with no recorded expectation sits where the build reported", () => {
-  const progress = normalizeArtifactProgress(
-    indeterminatePayload({ ratio: 0.1, phaseExpectedMs: 0 })
-  );
-  assert.equal(artifactProgressRatio(progress, 500_000), 0.1);
-});
-
-test("interpolation never drops below the position the build reported", () => {
-  const progress = normalizeArtifactProgress(indeterminatePayload({ ratio: 0.35 }));
-  assert.equal(artifactProgressRatio(progress, 1_100), 0.35);
-});
-
-test("formatArtifactProgress surfaces the real counts for a determinate phase", () => {
-  const frame = formatArtifactProgress(normalizeArtifactProgress(componentsPayload()));
+test("a phase that can count reports its real fraction and count", () => {
+  const frame = formatArtifactProgress(normalizeArtifactProgress(countingPayload()));
+  assert.equal(frame.determinate, true);
   assert.equal(frame.percent, 62);
   assert.equal(frame.counts, "31/50");
   assert.equal(frame.label, "Meshing components");
 });
 
-test("formatArtifactProgress omits counts when the phase has none", () => {
-  const frame = formatArtifactProgress(normalizeArtifactProgress(indeterminatePayload()));
+test("a phase that cannot count reports no number at all", () => {
+  // The whole point of the rewrite: an uncountable phase used to be given a percentage
+  // derived from a guessed phase weighting, which on a first build was simply 0 for the
+  // entire phase. `percent: null` is the caller's signal to render an indeterminate bar.
+  const frame = formatArtifactProgress(normalizeArtifactProgress(labelOnlyPayload()));
+  assert.equal(frame.determinate, false);
+  assert.equal(frame.percent, null);
   assert.equal(frame.counts, "");
+  assert.equal(frame.detail, "airframe", "it says what it is working on instead");
 });
 
-test("formatArtifactProgress never reads 100%", () => {
-  // The artifact is not ready until the build's own request resolves; a full bar
-  // beside a still-spinning viewer reads as a hang.
-  const frame = formatArtifactProgress(
-    normalizeArtifactProgress(componentsPayload({ done: 50, ratio: 1 }))
-  );
-  assert.equal(frame.percent, 99);
+test("a frame carries the phase's position in the run", () => {
+  assert.equal(formatArtifactProgress(normalizeArtifactProgress(countingPayload())).ordinal, "3/4");
+});
+
+test("a phase the kind did not declare has no ordinal rather than a bogus one", () => {
+  const frame = formatArtifactProgress(normalizeArtifactProgress(countingPayload({ index: 0 })));
+  assert.equal(frame.ordinal, "");
+});
+
+test("formatArtifactProgress is pure — the same frame renders the same whenever it is read", () => {
+  // There are no clocks in this module. A frame is a statement about the present that the
+  // build made; re-reading it later must not invent motion the build did not report.
+  const progress = normalizeArtifactProgress(countingPayload());
+  assert.deepEqual(formatArtifactProgress(progress), formatArtifactProgress(progress));
+});
+
+test("a completed phase is allowed to read 100%", () => {
+  // The old cap existed because the number described the WHOLE build, where a full bar
+  // beside a still-spinning viewer read as a hang. Per phase, finishing is just finishing —
+  // the next phase's frame replaces this one immediately.
+  const frame = formatArtifactProgress(normalizeArtifactProgress(countingPayload({ done: 50 })));
+  assert.equal(frame.percent, 100);
 });
 
 test("formatArtifactProgress maps null progress to null, not a zeroed bar", () => {
   assert.equal(formatArtifactProgress(null), null);
 });
 
-test("estimatedLoadingRatio moves without a denominator and never reaches 100%", () => {
-  const t0 = 1_000_000;
-  assert.equal(estimatedLoadingRatio(t0, t0), 0);
-  const early = estimatedLoadingRatio(t0, t0 + 1000);
-  const later = estimatedLoadingRatio(t0, t0 + 5000);
-  assert.ok(early > 0 && early < later, "the estimate must advance with elapsed time");
-  // An estimate that hits 100% would sit full while work continued, which reads as a hang.
-  assert.ok(estimatedLoadingRatio(t0, t0 + 10 * 60 * 1000) < 1);
+// A robot has no artifact build behind it — it is a URDF plus a pile of meshes — so its
+// loader's own count is the only progress in existence. It goes through the SAME two
+// functions as a build's, which is what lets the overlay stay ignorant of which subsystem
+// produced the frame. Before this the count was formatted into a string at the source and
+// only ever reached the filename chip.
+test("a robot mesh load formats through the same path as a build", () => {
+  const frame = formatArtifactProgress(
+    normalizeArtifactProgress({
+      phase: "meshes",
+      label: "Loading meshes",
+      done: 7,
+      total: 13,
+      determinate: true
+    })
+  );
+  assert.equal(frame.label, "Loading meshes");
+  assert.equal(frame.counts, "7/13");
+  assert.equal(frame.percent, 54);
+  assert.equal(frame.ordinal, "", "a robot load has no phase sequence to place itself in");
 });
 
-test("estimatedLoadingRatio is 0 before a load has started", () => {
-  assert.equal(estimatedLoadingRatio(0), 0);
-  assert.equal(estimatedLoadingRatio(Number.NaN), 0);
-});
-
-// The "stuck at 92%" regression. An implicit build reports real phases for ~38s (its bar
-// climbing past 0.94 during `polygonize`) and then stops reporting the moment it finishes,
-// while the package GLB is still being fetched and decoded. The old code fell back to
-// estimatedLoadingRatio there, whose clock started when the LOAD started -- so it returned
-// a fully-saturated 0.92: BELOW where the measurement had already reached, and frozen.
-test("continuedLoadingRatio resumes above the measured floor instead of snapping back", () => {
-  const measuredFloor = 0.945;
-  const handover = 1_000_000;
-  // The old behaviour, for contrast: a from-scratch estimate 38s into the load is pinned at
-  // its ceiling and is LOWER than what the build already measured.
-  const staleEstimate = estimatedLoadingRatio(handover - 38_000, handover);
-  assert.ok(staleEstimate < measuredFloor, "precondition: the stale estimate is a step backwards");
-
-  assert.equal(continuedLoadingRatio(measuredFloor, handover, handover), measuredFloor);
-  const tail = continuedLoadingRatio(measuredFloor, handover, handover + 4000);
-  assert.ok(tail > measuredFloor, "the tail must keep moving after the build stops reporting");
-  assert.ok(tail < 1, "the tail must never reach 100%");
-});
-
-test("continuedLoadingRatio stays under the display cap however long the tail runs", () => {
-  const ceiling = MAX_DISPLAY_PERCENT / 100;
-  const forever = continuedLoadingRatio(0.5, 1_000_000, 1_000_000 + 60 * 60 * 1000);
-  assert.ok(forever <= ceiling, `tail ${forever} must not exceed ${ceiling}`);
-});
-
-test("continuedLoadingRatio never walks a floor backwards", () => {
-  // A floor already at/above the ceiling must hold, not be dragged down to it.
-  assert.equal(continuedLoadingRatio(1, 1_000_000, 1_000_000 + 10_000), 1);
-  assert.equal(continuedLoadingRatio(0.6, 0, 1_000_000), 0.6);
+test("a robot stage with no count still renders as a labelled indeterminate frame", () => {
+  const frame = formatArtifactProgress(
+    normalizeArtifactProgress({ phase: "robot", label: "Building robot", determinate: false })
+  );
+  assert.equal(frame.label, "Building robot");
+  assert.equal(frame.percent, null);
+  assert.equal(frame.counts, "");
 });

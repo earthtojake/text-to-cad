@@ -8,7 +8,7 @@
  *  - CONSERVATIVE: call the interpreter's own helper/builtin function objects in the
  *    interpreter's order -- bit-identical by construction. This is the fallback for any
  *    expression whose type cannot be established.
- *  - TYPED (phase 2, design/implicit-glsl-compiler.md §6): GLSL is statically typed, so
+ *  - TYPED: GLSL is statically typed, so
  *    when an expression's SHAPE (scalar vs vec width) is certain, arithmetic inlines to raw
  *    JS operators and componentwise array literals. Each inlined form performs the same
  *    per-component IEEE-754 operations `mapBinary`/`mapUnary` would ("?? 0" fills are

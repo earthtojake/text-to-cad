@@ -19,7 +19,7 @@ DXF drawing package and the implicit-CAD render package).
   STEP and generated-DXF packages run the SAME validator and the SAME content digest
   cadgen's CLI gate uses, so the two never disagree about staleness. State machine:
   ready | needs-build | generating | error.
-- The build (POST) shells out to `cadgen.step_artifact`, keeping OCP out of the
+- The build (POST) shells out to `cadgen.step_artifact_cli`, keeping OCP out of the
   server process (crash/memory isolation).
 """
 
@@ -35,7 +35,9 @@ from pathlib import Path
 # would rebuild forever. cadgen._internal.source_hash is stdlib-only, so this costs the
 # server process nothing.
 from cadgen._internal.drawing_package import (
-    DRAWING_PACKAGE_SCHEMA_VERSION,
+    DXF_PACKAGE_SCHEMA_VERSION,
+    descriptor_is_drawing,
+    drawing_payload_keys,
     drawing_preview_bake_settings,
 )
 from cadgen._internal.implicit_package import (
@@ -46,7 +48,7 @@ from cadgen._internal.implicit_package import (
     implicit_bake_settings,
 )
 from cadgen._internal.package_freshness import (
-    ASSEMBLY_PACKAGE_SCHEMA_VERSION,
+    STEP_PACKAGE_VERSION,
     bake_hash_matches,
     canonical_bake_hash,
     schema_version_matches,
@@ -115,7 +117,7 @@ def owns_entry(entry) -> bool:
 _STEP_PACKAGE = {
     "descriptor": "assembly.json",
     "package_kind": "assembly-package",
-    "schema_version": ASSEMBLY_PACKAGE_SCHEMA_VERSION,
+    "schema_version": STEP_PACKAGE_VERSION,
     # The digest an IMPORTED entry's descriptor must record for its source file.
     "source_digest_field": "stepHash",
     "missing_digest": "missing_step_hash",
@@ -131,7 +133,7 @@ _STEP_PACKAGE = {
 _DRAWING_PACKAGE = {
     "descriptor": scanner.DRAWING_DESCRIPTOR_NAME,
     "package_kind": scanner.DRAWING_PACKAGE_KIND,
-    "schema_version": DRAWING_PACKAGE_SCHEMA_VERSION,
+    "schema_version": DXF_PACKAGE_SCHEMA_VERSION,
     "source_digest_field": "sourceDigest",
     # No dedicated "the drawing descriptor recorded no digest" code exists and none is
     # minted: a package that cannot be shown to be current IS stale, and stale_dxf_artifact
@@ -175,6 +177,17 @@ def _step_payload_refs(descriptor):
     return [str((component or {}).get("glb") or "").strip() for component in components.values()]
 
 
+def descriptor_declares_no_bake(descriptor):
+    """Whether this descriptor legitimately records no bake at all.
+
+    A drawing has no flat pattern, so it bakes nothing and records nothing -- but a drawing
+    descriptor that DOES carry a bakeHash is not exempt: it is claiming a payload it never
+    wrote, which is exactly what the gate is for."""
+    if not descriptor_is_drawing(descriptor):
+        return False
+    return not str(descriptor.get("bakeHash") or "").strip()
+
+
 def _drawing_payload_refs(descriptor):
     """The drawing package's one payload: the render GLB.
 
@@ -186,10 +199,10 @@ def _drawing_payload_refs(descriptor):
 
     Mirrors ``drawing_package_current`` in cadgen's drawing_package.py; the two authorities
     must ask the same question or a build and a status GET disagree."""
-    return [
-        str(descriptor.get("preview") or "").strip(),
-        str(descriptor.get("geometry") or "").strip(),
-    ]
+    # A dimensioned drawing has no flat pattern, so its package holds no preview.glb and
+    # never had a bake -- the payload list comes from cadgen so this side cannot drift into
+    # demanding one and reporting every drawing stale forever (issue #246).
+    return [str(descriptor.get(key) or "").strip() for key in drawing_payload_keys(descriptor)]
 
 
 def _implicit_payload_refs(descriptor):
@@ -240,10 +253,17 @@ def _validate_render_package(spec, source_path, payload_refs, model_folder):
         if not ref or not os.path.isfile(os.path.join(package_dir, ref)):
             return (False, spec["missing"])
     bake_settings = spec["bake_settings"]
-    if not bake_hash_matches(
-        descriptor, canonical_bake_hash(bake_settings() if bake_settings else None)
-    ):
-        return (False, spec["stale"])
+    # Two different "no bake" cases, and only one of them is legitimate:
+    #
+    # * a kind that bakes NOTHING (STEP) must still be checked, because a descriptor that
+    #   records a bakeHash anyway is stale -- that is the check, not an exemption from it;
+    # * a DRAWING profile genuinely has no flat pattern to bake, so demanding a bakeHash from
+    #   it would report it stale on every poll: a rebuild that never finishes.
+    if not descriptor_declares_no_bake(descriptor):
+        if not bake_hash_matches(
+            descriptor, canonical_bake_hash(bake_settings() if bake_settings else None)
+        ):
+            return (False, spec["stale"])
     if str(descriptor.get("sourceKind", "step")).strip().lower() == "python":
         if not os.path.isfile(source_path):
             return (False, "missing_source_path")

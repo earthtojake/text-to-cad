@@ -6,7 +6,6 @@ unsupported, the owns_entry gate, and the generation-lock reader.
 """
 
 import ast
-import fcntl
 import inspect
 import hashlib
 import json
@@ -18,6 +17,11 @@ import sys
 import tempfile
 import threading
 import time
+
+try:
+    import fcntl
+except ImportError:  # Windows -- see GenerationLock, which is the only user.
+    fcntl = None
 import unittest
 from unittest import mock
 
@@ -27,7 +31,7 @@ from server_py import artifact, scanner  # noqa: E402
 
 from cadgen._internal import drawing_package as _drawing_package  # noqa: E402
 from cadgen._internal.drawing_package import (  # noqa: E402
-    DRAWING_PACKAGE_SCHEMA_VERSION,
+    DXF_PACKAGE_SCHEMA_VERSION,
     drawing_preview_bake_settings,
 )
 from cadgen._internal import implicit_package as _implicit_package  # noqa: E402
@@ -36,11 +40,21 @@ from cadgen._internal.implicit_package import (  # noqa: E402
     implicit_bake_settings,
 )
 from cadgen._internal.package_freshness import (  # noqa: E402
-    ASSEMBLY_PACKAGE_SCHEMA_VERSION as _STEP_SCHEMA_VERSION,
+    STEP_PACKAGE_VERSION as _STEP_SCHEMA_VERSION,
     canonical_bake_hash,
 )
+from cadgen._internal.source_hash import closure_for_files  # noqa: E402
 
-_DXF_SCHEMA_VERSION = DRAWING_PACKAGE_SCHEMA_VERSION
+
+def _dump(path, payload):
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle)
+
+
+def _closure_for(source, base):
+    return closure_for_files(pathlib.Path(source), [pathlib.Path(source)], base=pathlib.Path(base))
+
+_DXF_SCHEMA_VERSION = DXF_PACKAGE_SCHEMA_VERSION
 _IMPLICIT_SCHEMA_VERSION = IMPLICIT_PACKAGE_SCHEMA_VERSION
 
 # Sentinel for "write no such key at all", distinct from "write an empty one".
@@ -299,6 +313,13 @@ class BakeHashGate(unittest.TestCase):
             )
 
 
+@unittest.skipIf(
+    fcntl is None,
+    "these drive raw fcntl.flock, which is the POSIX backend specifically. The Windows "
+    "backend's equivalent cross-process coverage lives in "
+    "tests/python/packages/cadgen/test_coordination_lock.py::RealBackendRegressionTests, "
+    "which runs on whatever platform it finds.",
+)
 class GenerationLock(unittest.TestCase):
     """The snapshot reports what the kernel says. There is no pid, heartbeat, or age to
     fake, so these drive the real fcntl states — including from a separate process,
@@ -724,7 +745,7 @@ class GeneratedDxfFreshness(unittest.TestCase):
         )
 
     def test_a_changed_bake_format_makes_every_drawing_stale(self):
-        # The other half of the pin in tests/python/skills/cad/cadgen/test_package_freshness:
+        # The other half of cadgen's own package-freshness pin:
         # the SAME callable owns the bake on both sides, so an edit to the producer's
         # settings invalidates packages here too instead of rendering an old bake silently.
         with tempfile.TemporaryDirectory() as root:
@@ -1188,7 +1209,7 @@ class ArtifactFormatDispatchIsTotal(unittest.TestCase):
 
         dispatch = worker._module_dispatch()
         for module in (
-            "cadgen.step_artifact",
+            "cadgen.step_artifact_cli",
             "cadgen.dxf_artifact",
             "cadgen.implicit_artifact",
             "cadgen.step_export_target",
@@ -1205,3 +1226,57 @@ class ArtifactFormatDispatchIsTotal(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DrawingProfileGate(unittest.TestCase):
+    """A dimensioned drawing bakes no prism, and must not be chased for one (issue #246)."""
+
+    def test_a_drawing_package_without_a_bake_is_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = os.path.join(directory, "workshop.dxf.py")
+            with open(source, "w", encoding="utf-8") as handle:
+                handle.write("def gen_dxf():\n    raise NotImplementedError\n")
+            package = os.path.join(directory, "__cadgen__", "models", "workshop.dxf.py")
+            os.makedirs(package, exist_ok=True)
+            with open(os.path.join(package, "geometry.json"), "w", encoding="utf-8") as handle:
+                handle.write("{}")
+            closure = _closure_for(source, directory)
+            _dump(os.path.join(package, "drawing.json"), {
+                "kind": "drawing-package",
+                "packageSchemaVersion": DXF_PACKAGE_SCHEMA_VERSION,
+                "profile": "drawing",
+                "sourceKind": "python",
+                "sourcePath": "workshop.dxf.py",
+                "geometry": "geometry.json",
+                "sourceClosureHash": closure.closure_hash,
+                "sourceClosureFiles": list(closure.files),
+            })
+            self.assertEqual((True, None), artifact.validate_dxf_freshness(directory, source))
+
+    def test_a_drawing_package_that_claims_a_bake_is_still_stale(self) -> None:
+        # The exemption is "records no bake", not "drawings skip the gate": a bakeHash on a
+        # package that baked nothing is a claim about a payload that does not exist.
+        with tempfile.TemporaryDirectory() as directory:
+            source = os.path.join(directory, "workshop.dxf.py")
+            with open(source, "w", encoding="utf-8") as handle:
+                handle.write("def gen_dxf():\n    raise NotImplementedError\n")
+            package = os.path.join(directory, "__cadgen__", "models", "workshop.dxf.py")
+            os.makedirs(package, exist_ok=True)
+            with open(os.path.join(package, "geometry.json"), "w", encoding="utf-8") as handle:
+                handle.write("{}")
+            closure = _closure_for(source, directory)
+            _dump(os.path.join(package, "drawing.json"), {
+                "kind": "drawing-package",
+                "packageSchemaVersion": DXF_PACKAGE_SCHEMA_VERSION,
+                "profile": "drawing",
+                "sourceKind": "python",
+                "sourcePath": "workshop.dxf.py",
+                "geometry": "geometry.json",
+                "bakeHash": "deadbeef",
+                "sourceClosureHash": closure.closure_hash,
+                "sourceClosureFiles": list(closure.files),
+            })
+            self.assertEqual(
+                (False, "stale_dxf_artifact"),
+                artifact.validate_dxf_freshness(directory, source),
+            )

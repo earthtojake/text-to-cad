@@ -49,6 +49,13 @@ def _raw_request(sock_path: Path, payload: dict) -> list[dict]:
     return frames
 
 
+@unittest.skipIf(
+    os.name == "nt",
+    "the daemon speaks over an AF_UNIX socket in a short /tmp directory. Neither half "
+    "carries to Windows -- there is no /tmp, and Python's AF_UNIX support there does not "
+    "cover this usage -- so this is a platform gap in the daemon, not something the test "
+    "can paper over.",
+)
 class CadgenDaemonTests(unittest.TestCase):
     """One daemon serves the whole class; methods are ordered (test_a/b/c) and
     test_c deliberately stops the daemon via the staleness path."""

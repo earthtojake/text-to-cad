@@ -56,7 +56,7 @@ class CadpyPythonpath(unittest.TestCase):
         self.assertEqual(command[:2], [sys.executable, "-c"])
         self.assertIn("import OCP", command[2])
         self.assertIn("import build123d", command[2])
-        self.assertIn("import cadgen.step_artifact", command[2])
+        self.assertIn("import cadgen.step_artifact_cli", command[2])
 
     def test_cadgen_runtime_probe_preserves_import_failure(self):
         completed = subprocess.CompletedProcess(

@@ -1,7 +1,26 @@
-const CAD_TOKEN_RE = /^\s*#([^\s]*)/;
+// `<file>#<selectors>`, file half optional. Mirrors CAD_TOKEN_RE in cadgen/cad_ref_syntax.py;
+// the tokenCases in cadRefs.parity.json are asserted by both languages. The prefix sits LEFT of
+// the '#' so it can never collide with the selector grammar on the right.
+const CAD_TOKEN_RE = /^\s*([^#\s]*)#([^\s]*)/;
 const OCCURRENCE_SELECTOR_RE = /^o((?:\d+)(?:\.\d+)*)$/;
 const OCCURRENCE_ENTITY_SELECTOR_RE = /^o((?:\d+)(?:\.\d+)*)\.([sfev])(\d+)$/;
 const ENTITY_SELECTOR_RE = /^([sfev])(\d+)$/;
+const MATE_SELECTOR_RE = /^m\d+$/i;
+
+// Mirrors LABEL_PATTERN in cadgen/cad_ref_syntax.py. Kept in step by cadRefs.parity.json,
+// which both this module's tests and the Python tests assert against.
+const LABEL_SOURCE = "[A-Za-z_][A-Za-z0-9_:]*";
+const LABEL_SELECTOR_RE = new RegExp(`^(${LABEL_SOURCE})$`);
+const LABEL_ENTITY_SELECTOR_RE = new RegExp(`^(${LABEL_SOURCE})\\.([sfev])(\\d+)$`);
+
+// The union of every selector form the viewer treats as a real CAD selector rather than an
+// opaque string. It lives here, beside the grammar it mirrors, because it was previously
+// copy-pasted into two viewer modules that had no test keeping them in step.
+const NATIVE_CAD_SELECTOR_RE = /^(?:o\d+(?:\.\d+)*(?:\.[sfev]\d+)?|[sfev]\d+|m\d+)$/i;
+
+export function isNativeCadSelector(candidate) {
+  return NATIVE_CAD_SELECTOR_RE.test(String(candidate || "").trim());
+}
 
 function selectorTypeForKind(kind) {
   if (kind === "s") {
@@ -27,7 +46,7 @@ export function normalizeCadPath(rawCadPath) {
   return normalized;
 }
 
-function parseStructuredSelector(rawSelector, { inheritedOccurrenceId = "" } = {}) {
+function parseStructuredSelector(rawSelector, { inheritedOccurrenceId = "", inheritedLabel = "" } = {}) {
   const selector = String(rawSelector || "").trim().replace(/^#/, "");
   if (!selector) {
     return null;
@@ -71,6 +90,17 @@ function parseStructuredSelector(rawSelector, { inheritedOccurrenceId = "" } = {
         canonical: `${inheritedOccurrenceId}.${kind}${ordinal}`
       };
     }
+    // An inherited label carries forward exactly like an inherited occurrence id.
+    if (inheritedLabel) {
+      return {
+        selectorType: selectorTypeForKind(kind),
+        occurrenceId: "",
+        ordinal,
+        kind,
+        label: inheritedLabel,
+        canonical: `${inheritedLabel}.${kind}${ordinal}`
+      };
+    }
     return {
       selectorType: selectorTypeForKind(kind),
       occurrenceId: "",
@@ -78,6 +108,38 @@ function parseStructuredSelector(rawSelector, { inheritedOccurrenceId = "" } = {
       kind,
       canonical: `${kind}${ordinal}`
     };
+  }
+
+  // Label forms are tried only after every numeric form, so an existing ref can never change
+  // meaning. Mates look like labels and are excluded explicitly.
+  if (!MATE_SELECTOR_RE.test(selector)) {
+    const labelEntityMatch = selector.match(LABEL_ENTITY_SELECTOR_RE);
+    if (labelEntityMatch) {
+      const label = labelEntityMatch[1];
+      const kind = labelEntityMatch[2];
+      const ordinal = Number(labelEntityMatch[3]);
+      return {
+        selectorType: selectorTypeForKind(kind),
+        occurrenceId: "",
+        ordinal,
+        kind,
+        label,
+        canonical: `${label}.${kind}${ordinal}`
+      };
+    }
+
+    const labelMatch = selector.match(LABEL_SELECTOR_RE);
+    if (labelMatch) {
+      const label = labelMatch[1];
+      return {
+        selectorType: "label",
+        occurrenceId: "",
+        ordinal: null,
+        kind: "",
+        label,
+        canonical: label
+      };
+    }
   }
 
   return {
@@ -99,15 +161,22 @@ export function normalizeCadRefSelectors(selectors) {
     : String(selectors || "").split(",");
   const normalizedSelectors = [];
   let inheritedOccurrenceId = "";
+  let inheritedLabel = "";
 
   for (const rawSelector of rawSelectors) {
-    const parsedSelector = parseStructuredSelector(rawSelector, { inheritedOccurrenceId });
+    const parsedSelector = parseStructuredSelector(rawSelector, { inheritedOccurrenceId, inheritedLabel });
     if (!parsedSelector) {
       continue;
     }
     normalizedSelectors.push(parsedSelector.canonical);
+    // Whichever naming scheme was used becomes the context for following bare entities,
+    // and clears the other one.
     if (parsedSelector.occurrenceId) {
       inheritedOccurrenceId = parsedSelector.occurrenceId;
+      inheritedLabel = "";
+    } else if (parsedSelector.label) {
+      inheritedLabel = parsedSelector.label;
+      inheritedOccurrenceId = "";
     }
   }
 
@@ -119,6 +188,7 @@ export function sortCadRefSelectors(selectors) {
   const uniqueSelectors = [...new Set(normalizedSelectors.filter(Boolean))];
   const rank = {
     occurrence: 1,
+    label: 1,
     shape: 2,
     face: 3,
     edge: 4,
@@ -151,24 +221,150 @@ export function sortCadRefSelectors(selectors) {
     .map((item) => item.selector);
 }
 
+function occurrenceSortKey(occurrenceId) {
+  const body = String(occurrenceId || "").replace(/^o/i, "");
+  const parts = [];
+  for (const chunk of body.split(".")) {
+    const value = Number(chunk);
+    if (!Number.isInteger(value)) {
+      return [1 << 30];
+    }
+    parts.push(value);
+  }
+  return parts;
+}
+
+function compareOccurrenceIds(left, right) {
+  const a = occurrenceSortKey(left);
+  const b = occurrenceSortKey(right);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const diff = (a[index] ?? -1) - (b[index] ?? -1);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return 0;
+}
+
+function labelCandidate(name) {
+  const text = String(name || "").trim();
+  if (!text) {
+    return "";
+  }
+  const parsed = parseStructuredSelector(text);
+  // parseStructuredSelector claims numeric forms first, so names like "f12", "o1" or "m2"
+  // come back as something other than a label and must not be aliased.
+  return parsed && parsed.selectorType === "label" && parsed.label === text ? text : "";
+}
+
+/**
+ * Map label aliases to occurrence ids. Mirrors cadgen.label_refs.build_label_aliases; the
+ * aliasCases in cadRefs.parity.json are asserted by both implementations.
+ *
+ * Duplicated labels are legitimate (two wheels, one rim label), so each gets a numbered alias
+ * in occurrence-tree order and the bare shared label resolves to nothing.
+ */
+export function buildLabelAliasMap(rows) {
+  const ordered = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const occurrenceId = String(row?.id || row?.occurrenceId || "").trim();
+    if (!occurrenceId) {
+      continue;
+    }
+    const candidate = labelCandidate(row?.name);
+    if (candidate) {
+      ordered.push({ occurrenceId, candidate });
+    }
+  }
+  ordered.sort((left, right) => compareOccurrenceIds(left.occurrenceId, right.occurrenceId));
+
+  const grouped = new Map();
+  for (const { occurrenceId, candidate } of ordered) {
+    if (!grouped.has(candidate)) {
+      grouped.set(candidate, []);
+    }
+    grouped.get(candidate).push(occurrenceId);
+  }
+
+  const authored = new Set(grouped.keys());
+  const aliases = {};
+  const ambiguous = {};
+
+  for (const [candidate, occurrenceIds] of grouped) {
+    if (occurrenceIds.length === 1) {
+      aliases[candidate] = occurrenceIds[0];
+      continue;
+    }
+    const numbered = [];
+    let nextIndex = 1;
+    for (const occurrenceId of occurrenceIds) {
+      let alias = "";
+      for (;;) {
+        alias = `${candidate}_${nextIndex}`;
+        nextIndex += 1;
+        if (!authored.has(alias) && !(alias in aliases)) {
+          break;
+        }
+      }
+      aliases[alias] = occurrenceId;
+      numbered.push(alias);
+    }
+    ambiguous[candidate] = numbered;
+  }
+
+  return { aliases, ambiguous };
+}
+
+/** The `#alias` to paste for an occurrence, or "" when it has none. */
+export function labelRefForOccurrence(aliasMap, occurrenceId) {
+  const aliases = aliasMap?.aliases || {};
+  const target = String(occurrenceId || "").trim();
+  for (const [alias, mapped] of Object.entries(aliases)) {
+    if (mapped === target) {
+      return `#${alias}`;
+    }
+  }
+  return "";
+}
+
+/**
+ * Resolve a label selector to its numeric equivalent. Returns "" when the label is unknown or
+ * ambiguous -- callers treat that the same way they treat any selector they cannot use.
+ */
+export function resolveLabelSelector(selector, aliasMap) {
+  const parsed = parseStructuredSelector(selector);
+  if (!parsed || !parsed.label) {
+    return String(selector || "").trim();
+  }
+  const occurrenceId = aliasMap?.aliases?.[parsed.label] || "";
+  if (!occurrenceId) {
+    return "";
+  }
+  if (parsed.selectorType === "label") {
+    return occurrenceId;
+  }
+  return `${occurrenceId}.${parsed.kind}${parsed.ordinal}`;
+}
+
 export function parseCadRefToken(copyText) {
   const match = String(copyText || "").trim().match(CAD_TOKEN_RE);
   if (!match) {
     return null;
   }
-  const selectorText = String(match[1] || "").trim();
+  // The prefix is kept RAW: the agent that resolves it back to a file does a literal suffix
+  // match against project paths, so normalizing (which would strip `.step.py`) breaks it.
+  const cadPath = String(match[1] || "").trim();
+  const selectorText = String(match[2] || "").trim();
   return {
     token: match[0],
-    cadPath: "",
+    cadPath,
     selectors: normalizeCadRefSelectors(selectorText)
   };
 }
 
 export function buildCadRefToken({ cadPath = "", selector = "", selectors } = {}) {
-  void cadPath;
+  const prefix = String(cadPath || "").trim();
   const selectorList = selectors !== undefined ? sortCadRefSelectors(selectors) : sortCadRefSelectors(selector ? [selector] : []);
-  if (!selectorList.length) {
-    return "#";
-  }
-  return `#${selectorList.join(",")}`;
+  // `<prefix>#` with no selectors is meaningful -- it names a whole file.
+  return `${prefix}#${selectorList.join(",")}`;
 }

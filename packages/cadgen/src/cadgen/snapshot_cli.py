@@ -35,6 +35,9 @@ import cadgen.lookup as lookup
 from cadgen.catalog import render_package_dir
 from cadgen.step_targets import ResolvedStepTarget, StepTopologyArtifact, StepTopologyArtifactError
 
+from cadgen.cli_logging import CliLogger
+from cadgen.coordination import PHASE_BROWSER, SNAPSHOT, ProgressReporter
+from cadgen.cli_progress import cli_progress_line
 from cadgen.snapshot_core import (
     THEME_OPTION_KEYS,
     BatchSnapshotRenderer,
@@ -73,7 +76,6 @@ from cadgen.snapshot_core import (
     SUPPORTED_OUTPUT_KEYS,
     SUPPORTED_RENDER_MODES,
     SnapshotError,
-    SnapshotProgress,
     TOPOLOGY_DISPLAY_MODES,
     WORKBENCH_RENDER_THEME_IDS,
     theme_id_for_job,
@@ -324,7 +326,9 @@ def parse_snapshot_args(argv: Sequence[str]) -> SnapshotOptions:
             index += 1
         elif arg.startswith("--job="):
             options.job = arg[len("--job=") :]
-        elif arg == "--input":
+        elif arg in {"--input", "-i"}:
+            # `-i` is advertised in the help beside `-o`, so it has to parse. It did not,
+            # which made the documented spelling of the CLI's most-used flag an error.
             options.input = parse_required_value(argv, index, arg)
             index += 1
         elif arg.startswith("--input="):
@@ -798,7 +802,13 @@ def artifact_selector_index(artifact: StepTopologyArtifact | None) -> lookup.Sel
     if manifest is None:
         return None
     buffers = selector_bundle.buffers if isinstance(selector_bundle.buffers, Mapping) else None
-    return lookup.build_selector_index(manifest, buffers=buffers)
+    index = lookup.build_selector_index(manifest, buffers=buffers)
+    # The bundle is extracted from the COMPOSED compound, which has no instance tree, so it
+    # describes even a 160-part assembly as one occurrence -- and `--focus`/`--hide` rejected
+    # every ref `--mode list` had just handed out. See `cadgen.assembly_lookup`.
+    from cadgen.assembly_lookup import index_with_assembly_occurrences
+
+    return index_with_assembly_occurrences(index, artifact)
 
 
 def validate_occurrence_selector(selector: str, *, selector_index: lookup.SelectorIndex | None, source_label: str) -> None:
@@ -813,13 +823,42 @@ def normalize_selection_selector(
     *,
     selector_index: lookup.SelectorIndex | None,
     source_label: str,
+    expected_cad_path: str = "",
 ) -> list[str]:
     text = str(raw_value or "").strip()
     if not text:
         return []
+    # A copied ref may carry a file prefix (`plate.step.py#o1.2`). Accept it when it names the
+    # model being rendered, refuse it when it names another -- rendering a different file's ref
+    # against this model would focus the wrong geometry and look like it worked.
+    if "#" in text:
+        prefix, _, remainder = text.partition("#")
+        if prefix.strip():
+            try:
+                cad_ref_syntax.ensure_ref_file_matches(
+                    prefix, expected_cad_path, source_label=f"{source_label} ref {text!r}"
+                )
+            except ValueError as error:
+                raise SnapshotError(str(error)) from error
+        text = remainder.strip()
+        if not text:
+            return []
     parsed = cad_ref_syntax.parse_selector(text)
     if parsed is None:
         return []
+    if parsed.label:
+        # Labels become numeric here, before any validation or job building, so everything
+        # downstream -- including the JS render runtime -- only ever sees occurrence ids.
+        from cadgen.label_refs import LabelResolutionError, resolve_label_selectors
+
+        alias_map = getattr(selector_index, "label_aliases", None) if selector_index else None
+        try:
+            resolved = resolve_label_selectors([text], alias_map)
+        except LabelResolutionError as error:
+            raise SnapshotError(f"{source_label} {error}") from error
+        parsed = cad_ref_syntax.parse_selector(resolved[0]) if resolved else None
+        if parsed is None:
+            return []
     if parsed.selector_type == "opaque":
         return [parsed.canonical]
     if parsed.selector_type != "occurrence":
@@ -838,11 +877,15 @@ def normalize_selection_filter_values(
     selector_index: lookup.SelectorIndex | None,
     source_label: str,
 ) -> list[str]:
-    _ = expected_cad_path
     selectors: list[str] = []
     for raw_value in selection_value_list(value):
         selectors.extend(
-            normalize_selection_selector(raw_value, selector_index=selector_index, source_label=source_label)
+            normalize_selection_selector(
+                raw_value,
+                selector_index=selector_index,
+                source_label=source_label,
+                expected_cad_path=expected_cad_path,
+            )
         )
     return selectors
 
@@ -1466,6 +1509,16 @@ def resolve_render_job_packet(
 
 
 
+def snapshot_progress_label(packet: object) -> str:
+    """The header the progress line commits: what this run is rendering."""
+    jobs = packet.get("jobs") if isinstance(packet, dict) else None
+    if not isinstance(jobs, list) or not jobs:
+        return "snapshot"
+    if len(jobs) == 1:
+        return str(jobs[0].get("input") or "snapshot")
+    return f"snapshot ({len(jobs)} jobs)"
+
+
 async def run_render_cli_async(
     argv: Sequence[str],
     *,
@@ -1490,18 +1543,27 @@ async def run_render_cli_async(
     if options.help:
         stdout.write(help_text(kinds=enabled, prog=prog))
         return 0
-    # Resolution is where a STEP or drawing package gets built, and on a cold model that is
-    # the SLOWEST part of a snapshot -- longer than the render. It has to report before it
-    # starts, not after.
-    progress = SnapshotProgress()
     raw_payload = load_job_from_options(options, stdin=stdin, cwd=cwd)
-    progress.phase("resolving input (building render artifacts if needed)")
+    # Resolution is where a STEP or drawing package gets built, and on a cold model that is
+    # the SLOWEST part of a snapshot -- longer than the render. It is deliberately NOT
+    # wrapped in a phase of ours: that build reports its own phases through artifact_build,
+    # and a second painter on the same terminal would both interleave with it and replace
+    # its detail with the single word "resolving".
     packet = resolve_render_job_packet(raw_payload, cwd=cwd, kinds=enabled)
-    progress.phase("starting browser")
-    result = await render_resolved_job_packet(
-        packet, runtime_dir=Path(runtime_dir), progress=progress
-    )
-    progress.clear()
+    logger = CliLogger("snapshot", verbose=False)
+    with cli_progress_line(
+        snapshot_progress_label(packet), logger=logger, fallback="Rendering..."
+    ) as sink:
+        progress = ProgressReporter(
+            sinks=[sink] if sink is not None else (),
+            phases=SNAPSHOT.phases,
+            labels=SNAPSHOT.labels,
+        )
+        progress.phase(PHASE_BROWSER)
+        result = await render_resolved_job_packet(
+            packet, runtime_dir=Path(runtime_dir), progress=progress
+        )
+        progress.finish()
     write_render_outputs(result)
     print_render_result(result, json_output=options.json, stdout=stdout)
     return 0

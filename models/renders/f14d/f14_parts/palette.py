@@ -49,6 +49,19 @@ WALKWAY = "#5E656B"
 PANEL_DARK = "#6B7278"
 PANEL_LIGHT = "#B6BDC3"
 
+# --- squadron scheme: VF-103 "Jolly Rogers" ---------------------------------
+# The one concession to high-vis on an otherwise low-vis jet, and the real one:
+# the Jolly Rogers kept gloss black tails through the TPS era while the rest of
+# the airframe stayed FS grey. It is the whole reason to paint this aircraft --
+# the black reads as a hard silhouette against the greys and gives the eye
+# somewhere to land, which a uniformly low-vis jet deliberately does not.
+#
+# Black is #1A1C20, not #000000: a true black loses every edge and crease under
+# the presentation rig's key light, so the fin reads as a flat cutout. This is
+# dark enough to be unambiguously black and light enough to hold a highlight.
+JOLLY_BLACK = "#1A1C20"     # gloss black fins, rudders, ventrals
+JOLLY_GOLD = "#C4A234"      # squadron trim -- fin cap band
+
 # --- hot / metallic ---------------------------------------------------------
 TITANIUM = "#8A8F94"        # nozzle shroud, aft fairings
 STEEL_BURN = "#6E6A66"      # heat-tinted steel around the nozzles

@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import io
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -141,6 +142,27 @@ class SnapshotCliTests(unittest.TestCase):
         self.assertEqual(job["outputs"][0]["path"], "tmp/cap.png")
         self.assertEqual(job["display"], {"mode": "wireframe"})
         self.assertEqual(job["render"]["sizeProfile"], "simple")
+
+    def test_every_short_flag_the_help_advertises_actually_parses(self) -> None:
+        """`-i` was in the help beside `-o` and was rejected by the parser.
+
+        Asserted against the help TEXT rather than a hand-written list of flags, so a
+        newly advertised short form cannot be added without being wired up."""
+        advertised = set(re.findall(r"/(-[a-zA-Z])\b", snapshot_main.help_text(kinds=CAD_KINDS)))
+        self.assertIn("-i", advertised, "the help no longer advertises -i; update this test")
+        for flag in sorted(advertised):
+            with self.subTest(flag=flag):
+                options = parse_snapshot_args([flag, "models/part.step"])
+                self.assertEqual(
+                    "models/part.step",
+                    options.input if flag == "-i" else options.output,
+                )
+
+    def test_short_and_long_input_spellings_agree(self) -> None:
+        self.assertEqual(
+            parse_snapshot_args(["--input", "models/part.step"]).input,
+            parse_snapshot_args(["-i", "models/part.step"]).input,
+        )
 
     def test_shortcut_focus_and_hide_flags_are_mutually_exclusive(self) -> None:
         with self.assertRaisesRegex(SnapshotError, "--focus and --hide cannot be used"):
@@ -1402,9 +1424,12 @@ class SnapshotCliTests(unittest.TestCase):
             )
 
     def test_timestamp_output_path_preserves_extension(self) -> None:
+        # The helper returns a NATIVE path -- both callers resolve its result as one --
+        # so the expectation is built the same way rather than hard-coding `/`, which
+        # failed on Windows against the `\` the helper actually returns (issue #196).
         self.assertEqual(
             timestamp_output_path("snapshots/review.png", "20260527T163012Z"),
-            "snapshots/review_20260527T163012Z.png",
+            str(Path("snapshots") / "review_20260527T163012Z.png"),
         )
 
     def test_removed_daemon_flags_stay_removed(self) -> None:

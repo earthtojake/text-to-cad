@@ -59,7 +59,7 @@ models/**/*.mkv
 # Local printer credentials
 /bambu-printers.json
 
-# Component-GLB render packages are regenerated on demand (per design/step-generation-rearchitecture.md §7); never committed.
+# Component-GLB render packages are regenerated on demand; never committed.
 .*.step.glb/
 .*.step.glb
 .*.stp.glb/

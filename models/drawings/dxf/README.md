@@ -24,6 +24,12 @@ they cover the skill's standalone-drafting and STEP-projection workflows.
 - `angled_tab.dxf.py` — plate with a corner gusset tab on a **45° bend line**.
   The fixture for arbitrary bend-line orientation: every other bend fixture is
   vertical, so a fold that only handles constant-X axes renders this one wrong.
+- `multi_bend_test_panel.dxf.py` — **four bends in three orientations** on one
+  blank: two parallel verticals, a horizontal tab fold whose line is a *chord*
+  (it spans only the tab, and the same infinite line continues along the panel's
+  bottom edge where no bend runs), and a 45° corner fold. The fixture for the
+  fold model itself — five faces, four hinges, a tree — and the one that fails
+  when a fold cuts by its infinite line instead of its own segment.
 - `label_plate.dxf.py` — laser-cut label plate exercising the annotation set:
   `TEXT` engraving, an **open** polyline on the engrave layer (a score that
   must render as a line, never a solid), and layer colors from the layer table.

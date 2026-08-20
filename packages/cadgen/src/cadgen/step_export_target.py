@@ -13,7 +13,7 @@ Two callers share this module, and they offer different formats:
 Both accept an imported ``.step``/``.stp`` or a generated ``gen_step()`` Python source;
 both always build from source, so exports can never be stale.
 
-It is deliberately distinct from :mod:`cadgen.step_artifact`, which only (re)builds the
+It is deliberately distinct from :mod:`cadgen.step_artifact_cli`, which only (re)builds the
 per-folder ``__cadgen__`` viewer GLB/topology package beside the source. This module
 produces standalone files and writes **no** package or beside-source artifacts. Within a
 run the scene is built once and meshed at most once, so every requested format comes from
@@ -41,7 +41,7 @@ from cadgen._internal.generation import (
 )
 from cadgen._internal.glb import export_native_glb_from_scene
 from cadgen.metadata import normalize_mesh_numeric
-from cadgen.step_artifact import _build_entry_spec, _cad_ref_for_step, infer_entry_kind
+from cadgen.step_artifact_cli import _build_entry_spec, _cad_ref_for_step, infer_entry_kind
 from cadgen.step_export import export_build123d_step_file
 from cadgen._internal.step_scene import (
     LoadedStepScene,
@@ -98,7 +98,7 @@ def _resolve_spec_and_scene(
 
     Generated model (``--source-path`` given): run ``gen_step()`` in-process to build the
     scene — generated models keep no on-disk STEP. Imported model: load the existing STEP
-    and classify it via :func:`cadgen.step_artifact.infer_entry_kind`.
+    and classify it via :func:`cadgen.step_artifact_cli.infer_entry_kind`.
     """
     if source_path is not None:
         source = source_from_path(source_path)
@@ -108,7 +108,7 @@ def _resolve_spec_and_scene(
         if spec.step_path is None:
             raise RuntimeError(f"Generator defines no STEP output: {source_path}")
         # Align the logical STEP path/name when the caller passed an explicit --step that the
-        # generator does not itself resolve to (mirrors cadgen.step_artifact).
+        # generator does not itself resolve to (mirrors cadgen.step_artifact_cli).
         if step_path is not None and spec.step_path.resolve() != step_path.resolve():
             spec = replace(
                 spec,

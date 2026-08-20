@@ -2,8 +2,8 @@
 
 The build spans two runtimes -- Python runs the generator and holds the lock, a Node child
 bakes ``preview.glb`` inside it -- so the cross-runtime tests here spawn a REAL node child.
-They skip when node or the JS dependency graph is unavailable, per the plan's test split
-(design/unified-glb-render-artifacts.md §10.1): Python owns the package as a coordinated
+They skip when node or the JS dependency graph is unavailable. The test split: Python
+owns the package as a coordinated
 artifact, JS owns everything downstream of "here is geometry", and the geometry itself is
 pinned by ``packages/cadjs/src/lib/dxf/previewGlb.test.js``.
 """

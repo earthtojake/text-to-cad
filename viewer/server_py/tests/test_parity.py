@@ -5,6 +5,7 @@ missing, regenerate it with: ``node viewer/server_py/tests/gen_golden.mjs``.
 """
 
 import json
+import os
 import pathlib
 import sys
 import unittest
@@ -21,7 +22,10 @@ def load_golden():
         raise unittest.SkipTest(
             "golden.json missing — run: node viewer/server_py/tests/gen_golden.mjs"
         )
-    return json.loads(_GOLDEN_PATH.read_text())
+    # encoding: golden.json is UTF-8 and holds names like 'résumé (1).glb'. read_text()
+    # without one uses the LOCALE encoding, which is cp1252 on a Windows runner -- so the
+    # corpus decoded into different characters and the encoders were blamed for it.
+    return json.loads(_GOLDEN_PATH.read_text(encoding='utf-8'))
 
 
 class EncodeUriComponentParity(unittest.TestCase):
@@ -47,6 +51,10 @@ class Base36Parity(unittest.TestCase):
             self.assertEqual(encoding.base36(int(source)), expected, source)
 
 
+@unittest.skipIf(
+    os.name == "nt",
+    "the corpus feeds POSIX absolute paths, and this is the one parity case that also\n    exercises absolute_file_ref -- which is platform-dependent BY DESIGN: on Windows\n    '/abs/x.glb' is drive-relative and resolves to 'D:/abs/x.glb'. The encoders either\n    side of it are pure string work and stay covered here.",
+)
 class AssetUrlParity(unittest.TestCase):
     def test_matches_node(self):
         for case in load_golden()["assetUrls"]:

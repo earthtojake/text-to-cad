@@ -151,7 +151,7 @@ function evaluateModel(model) {
 
   const sdf = createImplicitCadSdfEvaluator(model);
   const distances = points.map(([x, y, z]) => sdf(x, y, z));
-  // COVERAGE GATE for the GLSL->JS compiler (design/implicit-glsl-compiler.md C4). The
+  // COVERAGE GATE for the GLSL->JS compiler. The
   // compiler falls back to the interpreter silently on any problem -- correct for
   // production, but in the corpus it must be a loud failure: a codegen regression that
   // falls back everywhere keeps every digest green while the speedup silently vanishes.

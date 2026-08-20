@@ -605,10 +605,6 @@ def parse_command(line: str) -> str:
     if not stripped:
         return ""
     first = stripped.split(None, 1)[0].upper()
-    if re.fullmatch(r"[GMT]\d+(?:\.\d+)?", first):
-        if "." in first:
-            first = first.split(".", 1)[0]
-        return first
     return first
 
 
@@ -644,6 +640,8 @@ def validate_gcode_file(path: Path, profile: GCodeProfile) -> dict[str, Any]:
         errors.append("G-code file is empty.")
 
     absolute_positioning = True
+    extruder_absolute_positioning = True
+    extruder_position = 0.0
     x_min, x_max = profile.motion_bounds_mm["x"]
     y_min, y_max = profile.motion_bounds_mm["y"]
     z_min, z_max = profile.motion_bounds_mm["z"]
@@ -659,15 +657,26 @@ def validate_gcode_file(path: Path, profile: GCodeProfile) -> dict[str, Any]:
 
         if command == "G90":
             absolute_positioning = True
+            extruder_absolute_positioning = True
         elif command == "G91":
             absolute_positioning = False
+            extruder_absolute_positioning = False
             if "Relative positioning found; XYZ bounds validation is skipped while relative mode is active." not in warnings:
                 warnings.append("Relative positioning found; XYZ bounds validation is skipped while relative mode is active.")
+        elif command == "M82":
+            extruder_absolute_positioning = True
+        elif command == "M83":
+            extruder_absolute_positioning = False
+        elif command == "G92" and "E" in tokens:
+            extruder_position = tokens["E"]
 
         if command in {"G0", "G1", "G2", "G3"}:
             stats["movement_commands"] += 1
-            if command == "G1" and "E" in tokens:
-                stats["extrusion_moves"] += 1
+            if "E" in tokens:
+                next_extruder_position = tokens["E"] if extruder_absolute_positioning else extruder_position + tokens["E"]
+                if next_extruder_position > extruder_position:
+                    stats["extrusion_moves"] += 1
+                extruder_position = next_extruder_position
             if absolute_positioning:
                 if "X" in tokens and not x_min <= tokens["X"] <= x_max:
                     errors.append(f"Line {line_number}: X={tokens['X']} is outside X motion range {x_min}..{x_max} mm.")

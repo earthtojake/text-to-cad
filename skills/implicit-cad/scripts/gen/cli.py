@@ -4,7 +4,7 @@ Mirrors `skills/cad/scripts/gen` point for point -- positional targets, `--force
 `--verbose`, one format-specific bake knob (`--resolution`), sequential per-target locks, a
 CliLogger on stderr and one self-erasing progress line -- because there is ONE producer
 (`cadgen.implicit_artifact`) behind both this and the viewer's POST, and the CLI's job is to
-present it, not to reimplement any part of it (design/unified-glb-render-artifacts.md §4.7).
+present it, not to reimplement any part of it.
 
 Always builds the package. `--write` ALSO leaves the sibling `<name>.glb` beside the source
 (§0.1), in the export preset -- the package's own `model.glb` is quantized and

@@ -1,17 +1,29 @@
 name: Deploy Docs
 
+# Deploys the docs site from a SOURCE ref, never from main.
+#
+# The docs app is a website, not something anyone installs, and it builds against
+# repo-root packages/: docs/tsconfig.json maps cadjs/* to ../packages/cadjs/src/*,
+# and packages/cadjs/src/common pulls implicitjs. Both docs/ and packages/ are
+# therefore trimmed out of the publish tree, so main cannot build this.
+#
+# Releases pass the release SOURCE commit (release-pr's source_sha), which already
+# carries the bumped VERSION and the stamped docs/package.json that the site header
+# reads. To redeploy a past release, use that release's source commit -- every
+# publish commit records it as its second parent, so `git rev-parse <tag>^2`.
+
 on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Production-layout ref to deploy, normally main or a publish commit.
+        description: Source ref to deploy — develop, or a release source commit (git rev-parse <tag>^2). Never main.
         required: true
-        default: main
+        default: develop
         type: string
   workflow_call:
     inputs:
       ref:
-        description: Production-layout ref to deploy.
+        description: Source ref to deploy.
         required: true
         type: string
 
@@ -33,6 +45,22 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+
+      # A publish-layout ref has neither, and the failure would otherwise surface
+      # as an opaque module-resolution error deep in `next build`.
+      - name: Check this ref can build the docs site
+        run: |
+          missing=""
+          [ -d docs ] || missing="$missing docs/"
+          [ -d packages/cadjs/src ] || missing="$missing packages/cadjs/src"
+          [ -d packages/implicitjs/src ] || missing="$missing packages/implicitjs/src"
+          if [ -n "$missing" ]; then
+            echo "This ref cannot build the docs site; missing:$missing" >&2
+            echo "main is the publish branch and drops docs/ and packages/." >&2
+            echo "Deploy from a source ref instead — develop, or a release source" >&2
+            echo "commit: git rev-parse <tag>^2" >&2
+            exit 1
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

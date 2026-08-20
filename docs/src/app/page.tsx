@@ -4,7 +4,7 @@ import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 
-const skillsInstallCommand = "npx skills install earthtojake/text-to-cad";
+const skillsInstallCommand = "npx skills add earthtojake/text-to-cad";
 
 const pluginInstallCommands = [
   {
@@ -16,6 +16,13 @@ const pluginInstallCommands = [
     agent: "Claude Code",
     command:
       "claude plugin marketplace add earthtojake/text-to-cad\nclaude plugin install cad@text-to-cad",
+  },
+  // Grok Build reads the same .claude-plugin/marketplace.json as Claude Code -- there is no
+  // separate Grok manifest -- and installs straight from the repo rather than adding a
+  // marketplace first, so it is one command, not two.
+  {
+    agent: "Grok Build",
+    command: "grok plugin install earthtojake/text-to-cad --trust",
   },
 ];
 
@@ -86,13 +93,19 @@ const skillGroups = [
   },
 ];
 
+// Command boxes cap at half the 1200px content shell rather than filling it: a command is a
+// short line, and a full-bleed box puts a lot of empty card to the right of it. A cap, not a
+// width -- a narrow screen still gets the whole column.
+const COMMAND_BOX_CLASS =
+  "min-w-0 max-w-[min(600px,100%)] overflow-hidden border border-border bg-card";
+
 function InstallCommand({
   item,
 }: {
   item: (typeof pluginInstallCommands)[number];
 }) {
   return (
-    <div className="min-w-0 max-w-full overflow-hidden border border-border bg-card">
+    <div className={COMMAND_BOX_CLASS}>
       <div className="border-b border-border px-3 py-2 text-label uppercase tracking-[1.5px] text-muted-foreground">
         {item.agent}
       </div>
@@ -122,7 +135,7 @@ function InstallCommands() {
 
 function SkillsInstallCommand() {
   return (
-    <div className="min-w-0 max-w-full overflow-hidden border border-border bg-card">
+    <div className={COMMAND_BOX_CLASS}>
       <div className="flex min-h-[54px] min-w-0 max-w-full items-stretch">
         <code className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-pre px-3 py-2 text-sm leading-6 text-foreground">
           {skillsInstallCommand}
@@ -246,11 +259,21 @@ export default function Home() {
             <SectionIntro
               id="installation-title"
               title="INSTALL"
-              description="Install CAD Skills with the Skills CLI. Provider-native plugin installs are available as a secondary path."
+              description="Install text-to-cad with the Skills CLI. Provider-native plugin installs are available as a secondary path."
             />
 
             <div className="max-w-3xl space-y-3">
               <SkillsInstallCommand />
+              <p className="text-sm leading-6 text-muted-foreground">
+                <span className="text-foreground">Run the same command to update.</span>{" "}
+                <code className="text-foreground">add</code> re-fetches the package and
+                overwrites what is installed, so it refreshes existing skills and picks up any
+                skill added in a newer release.{" "}
+                <code className="text-foreground">npx skills update</code> only walks your
+                lockfile, so it silently misses new ones. Neither removes a skill that was
+                retired upstream — drop one with{" "}
+                <code className="text-foreground">npx skills remove &lt;skill&gt;</code>.
+              </p>
               <div className="pt-3">
                 <h3 className="mb-3 text-sm font-medium uppercase tracking-[1.5px] text-foreground">
                   Plugin Installs

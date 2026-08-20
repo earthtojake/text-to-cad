@@ -260,3 +260,46 @@ class ComponentPackageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ComponentPackageVersionSaltTest(unittest.TestCase):
+    """The cid must move when the component PAYLOAD changes, not only the geometry.
+
+    A cid addresses a built component GLB, and that GLB embeds the topology tables the
+    extractor produced. Keyed on geometry alone, an extractor fix leaves every cached
+    component wrong: the rebuild re-derives the same cid, finds the file present, and
+    reuses it (see build_package_from_compound's ``force`` handling).
+    """
+
+    def test_digest_is_salted_with_the_package_version(self) -> None:
+        import hashlib
+
+        digest, brep = component_package._content_hash_and_bytes(Box(1, 1, 1))
+        expected = hashlib.sha256(
+            str(component_package.STEP_PACKAGE_VERSION).encode("utf-8") + b"\x00" + brep
+        ).hexdigest()
+        self.assertEqual(expected, digest)
+        self.assertNotEqual(
+            hashlib.sha256(brep).hexdigest(),
+            digest,
+            "an unsalted digest would survive an extractor change",
+        )
+
+    def test_bumping_the_package_version_changes_every_cid(self) -> None:
+        box = Box(1, 1, 1)
+        before = component_package._content_hash_and_bytes(box)[0]
+        original = component_package.STEP_PACKAGE_VERSION
+        try:
+            component_package.STEP_PACKAGE_VERSION = original + 1
+            after = component_package._content_hash_and_bytes(box)[0]
+        finally:
+            component_package.STEP_PACKAGE_VERSION = original
+        self.assertNotEqual(before, after)
+        self.assertEqual(before, component_package._content_hash_and_bytes(box)[0])
+
+    def test_identical_geometry_still_dedups_within_one_version(self) -> None:
+        # The salt must not break within-model dedup: repeated parts share a component.
+        first = component_package._content_hash_and_bytes(Box(2, 3, 4))[0]
+        second = component_package._content_hash_and_bytes(Box(2, 3, 4))[0]
+        self.assertEqual(first, second)
+        self.assertNotEqual(first, component_package._content_hash_and_bytes(Box(2, 3, 5))[0])

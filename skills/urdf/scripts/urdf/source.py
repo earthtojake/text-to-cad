@@ -1182,6 +1182,19 @@ def _has_duplicates(values: list[str]) -> bool:
 
 
 # --- mesh URI helpers ---
+def _is_rooted(path: Path) -> bool:
+    """Does this path start from a root, rather than from wherever we happen to be?
+
+    ``is_absolute()`` is the obvious call and is wrong on Windows for the shape URDF files
+    are full of: "/opt/ros/share/robot/meshes/base.stl" has a root and no drive, which makes
+    it drive-RELATIVE there, so is_absolute() is False. Classifying it LOCAL_RELATIVE would
+    then resolve it against some unrelated base directory and silently produce a path the
+    author never wrote. A rooted path is not a relative path on any platform; on Windows it
+    means "from the root of the current drive", which is exactly what resolve() gives back.
+    """
+    return path.is_absolute() or bool(path.root)
+
+
 def classify_mesh_uri(uri: str) -> MeshReference:
     value = str(uri or "").strip()
     parsed = urlparse(value)
@@ -1200,7 +1213,7 @@ def classify_mesh_uri(uri: str) -> MeshReference:
 
     if parsed.scheme == "file":
         file_path = Path(unquote(parsed.path))
-        if file_path.is_absolute():
+        if _is_rooted(file_path):
             return MeshReference(uri=value, kind=MeshUriKind.LOCAL_ABSOLUTE, path=file_path.resolve())
         return MeshReference(uri=value, kind=MeshUriKind.LOCAL_RELATIVE, path=file_path)
 
@@ -1208,7 +1221,7 @@ def classify_mesh_uri(uri: str) -> MeshReference:
         return MeshReference(uri=value, kind=MeshUriKind.REMOTE)
 
     local_path = Path(value)
-    if local_path.is_absolute():
+    if _is_rooted(local_path):
         return MeshReference(uri=value, kind=MeshUriKind.LOCAL_ABSOLUTE, path=local_path.resolve())
     return MeshReference(uri=value, kind=MeshUriKind.LOCAL_RELATIVE, path=local_path)
 

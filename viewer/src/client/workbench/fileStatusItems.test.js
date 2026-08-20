@@ -239,7 +239,7 @@ test("viewer alerts normalize to status items", () => {
     title: "Failed to load render mesh",
     message: "404",
     resolution: "Reload the page.",
-    command: "python -m cadgen.step_artifact --repo-root . --step model.step"
+    command: "python -m cadgen.step_artifact_cli --repo-root . --step model.step"
   });
 
   assert.equal(item.level, FILE_STATUS_LEVELS.ERROR);

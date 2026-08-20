@@ -199,7 +199,6 @@ function transformPickData(pickData, transform) {
     center: Array.isArray(pickData.center) ? transformPoint(transform, pickData.center) : pickData.center,
     normal: Array.isArray(pickData.normal) ? transformVector(transform, pickData.normal) : pickData.normal,
     params: pickData.params ? transformParams(transform, pickData.params) : pickData.params,
-    points: transformPointList(transform, pickData.points),
     loops: Array.isArray(pickData.loops)
       ? pickData.loops.map((loop) => transformPointList(transform, loop))
       : pickData.loops,
@@ -418,6 +417,11 @@ function buildReference({
       kind: row.kind || null,
       bbox: row.bbox || null,
       surfaceType: row.surfaceType || null,
+      curveType: row.curveType || null,
+      // Measured quantities the topology already computed exactly. Rigid
+      // occurrence transforms preserve both, so they pass through unchanged.
+      length: Number.isFinite(Number(row.length)) ? Number(row.length) : null,
+      area: Number.isFinite(Number(row.area)) ? Number(row.area) : null,
       center: row.center || null,
       normal: row.normal || null,
       params: row.params || null,
@@ -728,10 +732,48 @@ function rowOccurrenceId(row, selectorType) {
     : String(row?.occurrenceId || row?.partId || "").trim();
 }
 
-function transformRowsByOccurrence(rows, selectorType, transformEntries) {
+/** Per selector type, rowIndex -> the occurrence id the VIEWER knows that row by.
+ *
+ * A row's own `occurrenceId` is the id from the component GLB it was decoded from, and
+ * `composeSelectorRuntimes` concatenates component tables verbatim -- so in an assembly every
+ * component's rows say `o1`, the local id, while its references were remapped to `o1.1`,
+ * `o1.2`, ... Matching a caller's per-part transform against the ROW id therefore matched
+ * nothing (or, worse, the wrong part), and the transform silently applied to no geometry:
+ * hovered edges stayed at rest while faces -- rebuilt from the live display meshes -- moved.
+ * References are what the viewer keys parts by everywhere else, so they decide here too.
+ */
+function occurrenceIdByRowIndexPerType(selectorRuntime) {
+  const byType = new Map();
+  for (const reference of Array.isArray(selectorRuntime?.references) ? selectorRuntime.references : []) {
+    const selectorType = String(reference?.selectorType || "").trim();
+    const rowIndex = Number(reference?.rowIndex);
+    const occurrenceId = String(reference?.occurrenceId || "").trim();
+    if (!selectorType || !Number.isInteger(rowIndex) || !occurrenceId) {
+      continue;
+    }
+    let byRowIndex = byType.get(selectorType);
+    if (!byRowIndex) {
+      byRowIndex = new Map();
+      byType.set(selectorType, byRowIndex);
+    }
+    if (!byRowIndex.has(rowIndex)) {
+      byRowIndex.set(rowIndex, occurrenceId);
+    }
+  }
+  // Occurrence references carry no occurrenceId of their own (they ARE the occurrence), so
+  // that table's remapped ids come from the runtime's own index.
+  if (selectorRuntime?.occurrenceIdByRowIndex instanceof Map) {
+    byType.set("occurrence", selectorRuntime.occurrenceIdByRowIndex);
+  }
+  return byType;
+}
+
+function transformRowsByOccurrence(rows, selectorType, transformEntries, occurrenceIdByRowIndex = null) {
   const transforms = [];
-  const nextRows = (Array.isArray(rows) ? rows : []).map((row) => {
-    const transform = transformForOccurrenceId(transformEntries, rowOccurrenceId(row, selectorType));
+  const nextRows = (Array.isArray(rows) ? rows : []).map((row, rowIndex) => {
+    const occurrenceId = String(occurrenceIdByRowIndex?.get(rowIndex) || "").trim()
+      || rowOccurrenceId(row, selectorType);
+    const transform = transformForOccurrenceId(transformEntries, occurrenceId);
     transforms.push(transform);
     return transform ? transformRow(row, transform) : row;
   });
@@ -791,10 +833,11 @@ export function buildTransformedSelectorRuntime(selectorRuntime, transformByPart
     return selectorRuntime || null;
   }
 
-  const occurrencesResult = transformRowsByOccurrence(selectorRuntime.occurrences, "occurrence", transformEntries);
-  const shapesResult = transformRowsByOccurrence(selectorRuntime.shapes, "shape", transformEntries);
-  const facesResult = transformRowsByOccurrence(selectorRuntime.faces, "face", transformEntries);
-  const edgesResult = transformRowsByOccurrence(selectorRuntime.edges, "edge", transformEntries);
+  const occurrenceIdByType = occurrenceIdByRowIndexPerType(selectorRuntime);
+  const occurrencesResult = transformRowsByOccurrence(selectorRuntime.occurrences, "occurrence", transformEntries, occurrenceIdByType.get("occurrence"));
+  const shapesResult = transformRowsByOccurrence(selectorRuntime.shapes, "shape", transformEntries, occurrenceIdByType.get("shape"));
+  const facesResult = transformRowsByOccurrence(selectorRuntime.faces, "face", transformEntries, occurrenceIdByType.get("face"));
+  const edgesResult = transformRowsByOccurrence(selectorRuntime.edges, "edge", transformEntries, occurrenceIdByType.get("edge"));
   const referenceTransforms = {
     occurrence: occurrencesResult.transforms,
     shape: shapesResult.transforms,

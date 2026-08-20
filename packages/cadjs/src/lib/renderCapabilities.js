@@ -85,10 +85,10 @@ const MESH_CAPABILITIES = Object.freeze({
   iconKind: ENTRY_ICON_KIND.STL_MESH,
   sheetKind: "mesh",
   label: "STL",
-  // A plain mesh is one body with no topology, no parts and no per-file settings: the
-  // minimal row, and the useful floor for what "shared" has to mean.
   parts: false,
   topology: false,
+  // Triangle-corner Measure only. Not B-rep topology.
+  measure: true,
   exploded: false,
   displayModes: false,
   clip: false,
@@ -115,6 +115,7 @@ const ROBOT_CAPABILITIES = Object.freeze({
   // right button pans, which is all a robot needs.
   parts: false,
   topology: false,
+  measure: false,
   exploded: false,
   displayModes: false,
   clip: false,
@@ -137,6 +138,7 @@ const DEFAULT_CAPABILITIES = Object.freeze({
   tools: VIEWPORT_TOOLS,
   parts: false,
   topology: false,
+  measure: false,
   exploded: false,
   displayModes: false,
   clip: false,
@@ -172,13 +174,14 @@ export const RENDER_CAPABILITIES = Object.freeze({
     label: "STEP",
     parts: true,
     topology: true,
+    measure: true,
     exploded: true,
     displayModes: true,
     clip: true,
     params: PARAMETER_SOURCE.SIDECAR,
     animations: true,
     artifactManaged: true,
-    rebuildCommand: "python -m cadgen.step_artifact --repo-root . --step",
+    rebuildCommand: "python -m cadgen.step_artifact_cli --repo-root . --step",
     exportFormats: Object.freeze(["step", "3mf", "stl", "glb"])
   }),
   [RENDER_FORMAT.STL]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...MESH_CAPABILITIES, label: "STL" }),

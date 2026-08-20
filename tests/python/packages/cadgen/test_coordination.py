@@ -7,6 +7,7 @@ protocol whose entire job is to survive being observed by another process.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import subprocess
@@ -17,6 +18,7 @@ import time
 import unittest
 import warnings
 from pathlib import Path
+from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
@@ -120,7 +122,7 @@ class GeneratorRecordIsolationTest(CoordinationTestCase):
                     intent="write",
                     started_at_ms=0.0,
                     outcome=None,
-                    progress={"phase": "components", "done": 7, "total": 9, "ratio": 0.5},
+                    progress={"phase": "components", "done": 7, "total": 9, "determinate": True},
                 ),
             )
             with generator_busy(STEP_PACKAGE, self.out):
@@ -131,21 +133,21 @@ class GeneratorRecordIsolationTest(CoordinationTestCase):
             )
             self.assertEqual("components", snap.progress["phase"])
 
-    def test_a_generator_run_does_not_erase_the_learned_stage_times(self):
-        # An export leaves a terminal record with no stageMs. Sharing the writer's file made
-        # that record the one the NEXT build read, so the model forgot its phase weighting.
+    def test_a_generator_run_does_not_overwrite_the_writers_record(self):
+        # An export leaves a terminal record of its own. While it shared the writer's file,
+        # that record replaced the build's -- erasing what the build reported it had done.
         with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
             run.phase(PHASE_COMPONENTS, total=2)
             run.advance()
-        learned = record_mod.read_stage_ms(status_path(self.out))
-        self.assertTrue(learned, "a successful build records what its phases cost")
+        recorded = record_mod.read_record(status_path(self.out))["stageMs"]
+        self.assertTrue(recorded, "a successful build records what its phases cost")
 
         with generator_busy(STEP_PACKAGE, self.out):
             pass
         self.assertEqual(
-            learned,
-            record_mod.read_stage_ms(status_path(self.out)),
-            "an export must not cost the next build its learned phase weighting",
+            recorded,
+            record_mod.read_record(status_path(self.out))["stageMs"],
+            "an export must not overwrite the build's own record",
         )
 
 
@@ -161,7 +163,7 @@ class RunAttributionTest(CoordinationTestCase):
                 intent="write",
                 started_at_ms=0.0,
                 outcome=None,
-                progress={"phase": "components", "done": 31, "total": 50, "ratio": 0.77},
+                progress={"phase": "components", "done": 31, "total": 50, "determinate": True},
             ),
         )
         with exclusive(write_lock_path(self.out)) as run_id:
@@ -183,7 +185,7 @@ class RunAttributionTest(CoordinationTestCase):
         self.assertEqual("failed", payload["outcome"])
         self.assertIsNone(
             payload["stageMs"],
-            "a failed run must not teach the next build's bar from partial stage times",
+            "partial times from a failed run are not durations anyone should print",
         )
 
     def test_stage_ms_is_recorded_after_a_successful_run(self):
@@ -194,28 +196,21 @@ class RunAttributionTest(CoordinationTestCase):
         self.assertEqual("done", payload["outcome"])
         self.assertIsInstance(payload["stageMs"], dict)
 
-    def test_the_next_run_learns_the_previous_runs_stage_times(self):
-        """The bar is weighted from the LAST build of this artifact.
+    def test_a_run_records_every_phase_it_entered(self):
+        """stageMs is a record of what THIS run cost, phase by phase.
 
-        artifact_build publishes a `starting` record before yielding, and that record carries
-        stageMs: None by construction. Reading the previous run's times AFTER publishing
-        therefore read the record just written and learned nothing -- silently reverting every
-        build to the default phase split. That matters most for a long indeterminate phase,
-        which is interpolated against the learned duration.
+        Nothing reads it back to predict the next build any more -- each phase reports itself
+        -- but the CLI prints a phase's duration as it closes, so the times have to be there
+        for every phase the run actually entered.
         """
         with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
             run.phase("generate")
             time.sleep(0.05)
             run.phase(PHASE_COMPONENTS, total=1)
             run.advance()
-        recorded = record_mod.read_stage_ms(status_path(self.out))
-        self.assertTrue(recorded, "the first run must record its stage times")
-
-        with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
-            learned = dict(run._reporter._expected)
-        self.assertEqual(
-            sorted(recorded), sorted(learned), "the next run did not learn the previous times"
-        )
+        recorded = record_mod.read_record(status_path(self.out))["stageMs"]
+        self.assertEqual({"generate", "components"}, set(recorded))
+        self.assertGreater(recorded["generate"], 0)
 
     def test_a_finished_run_reports_no_progress(self):
         with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
@@ -265,6 +260,76 @@ class WriteLockGuardTest(CoordinationTestCase):
             warnings.simplefilter("always")
             self.assertFalse(require_write_lock(self.out))
         self.assertTrue(any(issubclass(w.category, RuntimeWarning) for w in caught))
+
+
+class DegradedLockTest(CoordinationTestCase):
+    """A filesystem that refuses advisory locks must not fail the build -- on EITHER side.
+
+    Python's policy has always been "a missing lock must never be the reason a user's build
+    fails", and `artifact_build` honours it by minting a run id and carrying on. But that id
+    is never stamped into the sentinel, because nothing was locked to stamp it under, so the
+    Node builders (DXF, implicit) compared it against an empty sentinel and threw -- reporting
+    a lock violation for a filesystem that simply cannot lock. The run now carries the fact
+    across the boundary so the child can tell the two apart.
+    """
+
+    def _no_locks(self):
+        """`exclusive()` degrades on ENOLCK/EOPNOTSUPP: NFS, some SMB mounts, some binds."""
+
+        def refuse(handle, path, **kwargs):
+            raise OSError(errno.ENOLCK, "no locks available")
+
+        return mock.patch("cadgen.coordination.lock._acquire", refuse)
+
+    def test_a_degraded_run_says_so_and_still_builds(self):
+        with self._no_locks():
+            with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
+                self.assertTrue(run.degraded)
+                # Still a usable run: progress needs an id to attribute records to.
+                self.assertTrue(run.run_id)
+                # ...and that id is NOT in the sentinel, which is the whole problem.
+                self.assertEqual(b"", write_lock_path(self.out).read_bytes())
+
+    def test_a_normal_run_is_not_degraded(self):
+        with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
+            self.assertFalse(run.degraded)
+            stamped = write_lock_path(self.out).read_bytes()[:32].decode("ascii").strip()
+            self.assertEqual(run.run_id, stamped)
+
+    def test_the_degradation_reaches_the_node_child(self):
+        # The producers are the only things that can tell the child, so the flag has to
+        # survive the argv construction -- assert on the argv itself, not on the intent.
+        from cadgen._internal import drawing_package
+
+        seen = {}
+
+        def fake_builder(script, args, *, run, stdin_text=None, **kwargs):
+            seen["args"] = list(args)
+            # Stands in for the Node child. The producer checks what the payload CLAIMS
+            # against what is on disk, so the fake has to leave the file behind too.
+            self.out.mkdir(parents=True, exist_ok=True)
+            (self.out / "geometry.json").write_text("{}", encoding="utf-8")
+            return {
+                "ok": True,
+                "runId": run.run_id,
+                "geometryFile": "geometry.json",
+                "profile": "drawing",
+            }
+
+        with mock.patch.object(drawing_package, "run_node_builder", fake_builder):
+            with self._no_locks():
+                with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
+                    drawing_package.build_drawing_preview(
+                        self.out, dxf_text="0\nSECTION\n", run=run
+                    )
+            self.assertIn("--lock-degraded", seen["args"])
+
+            # And a healthy run does NOT claim degradation -- otherwise the escape hatch
+            # would be permanently open and the boundary would check nothing.
+            seen.clear()
+            with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
+                drawing_package.build_drawing_preview(self.out, dxf_text="0\nSECTION\n", run=run)
+            self.assertNotIn("--lock-degraded", seen["args"])
 
 
 class ProbeConcurrencyTest(CoordinationTestCase):

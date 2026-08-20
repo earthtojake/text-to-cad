@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -85,10 +86,22 @@ export function SiteHeaderClient({
       <div className="mx-auto flex h-full w-full max-w-[1200px] items-center gap-3 px-4 sm:px-6">
         <Link
           href="/"
-          className="flex min-w-0 items-center text-foreground transition hover:text-primary"
+          className="flex min-w-0 items-center gap-2 text-foreground transition hover:text-primary"
         >
+          {/* unoptimized: a 22px logo mark gains nothing from the image
+              optimizer, and this way it is served straight from /public
+              instead of costing a function invocation per render. */}
+          <Image
+            src="/favicon.png"
+            alt=""
+            width={22}
+            height={22}
+            priority
+            unoptimized
+            className="size-[22px] shrink-0 rounded-[5px]"
+          />
           <span className="min-w-0 truncate text-sm font-medium">
-            CAD Skills
+            text-to-cad
           </span>
         </Link>
 
@@ -112,20 +125,6 @@ export function SiteHeaderClient({
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:ml-0">
-          <Button
-            asChild
-            variant="outline"
-            className="card-glow h-8 border-border bg-card px-2 text-ui text-foreground hover:bg-secondary hover:text-primary"
-          >
-            <a
-              href="https://cad.fun"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Open demo in a new tab"
-            >
-              DEMO
-            </a>
-          </Button>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -138,7 +137,7 @@ export function SiteHeaderClient({
                   href={discordUrl}
                   target="_blank"
                   rel="noreferrer"
-                  aria-label="Join the CAD Skills Discord"
+                  aria-label="Join the text-to-cad Discord"
                 >
                   <DiscordLogo className="size-3.5" />
                 </a>

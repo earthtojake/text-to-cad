@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import os
 
-VIEWER_SERVER_INFO_SCHEMA_VERSION = 1
+from .paths import filesystem_path_from_url_path
+
 VIEWER_SERVER_APP_ID = "cad-viewer"
 DEFAULT_VIEWER_HOST = "127.0.0.1"
 DEFAULT_VIEWER_PORT = 3245
@@ -23,8 +24,13 @@ def normalize_viewer_port(value, fallback=DEFAULT_VIEWER_PORT) -> int:
 
 def _resolve_view_root(root_dir: str) -> dict:
     """The requested directory, absolute. Empty means the process cwd — the same
-    fallback the backend applies, since a request's URL path IS its directory."""
-    resolved = os.path.abspath(str(root_dir or "").strip() or os.getcwd())
+    fallback the backend applies, since a request's URL path IS its directory.
+
+    Routed through the URL-path reader for the same reason `LocalAssetBackend.resolve_root`
+    is:
+    a Windows directory arrives as `/D:/models`, which abspath alone turns into
+    `C:\\D:\\models`."""
+    resolved = os.path.abspath(filesystem_path_from_url_path(str(root_dir or "").strip()) or os.getcwd())
     return {"dir": resolved, "rootPath": resolved, "rootName": os.path.basename(resolved)}
 
 
@@ -44,7 +50,6 @@ def build_viewer_server_info(
     normalized_port = normalize_viewer_port(port)
     normalized_mode = str(server_mode or "").strip()
     info = {
-        "schemaVersion": VIEWER_SERVER_INFO_SCHEMA_VERSION,
         "app": VIEWER_SERVER_APP_ID,
         "viewerVersion": str(viewer_version or ""),
     }

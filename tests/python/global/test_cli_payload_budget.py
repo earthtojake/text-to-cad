@@ -76,7 +76,7 @@ class CompactStdoutTests(unittest.TestCase):
     # missed by the first pass of this test and were still pretty-printing.
     STDOUT_JSON_SOURCES = (
         "packages/cadgen/src/cadgen/snapshot_core.py",
-        "packages/cadgen/src/cadgen/step_artifact.py",
+        "packages/cadgen/src/cadgen/step_artifact_cli.py",
         "packages/cadgen/src/cadgen/dxf_artifact.py",
         "skills/cad/scripts/inspect/inspect_refs/cli.py",
         "skills/cad/scripts/artifact/cli.py",

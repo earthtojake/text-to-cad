@@ -19,7 +19,8 @@ test("file sheet section defaults match current sheet behavior", () => {
   // In the tabbed layout the Tree is the only default-open section; Display is
   // the default-active bottom tab, resolved by the tab layout, not this list.
   assert.deepEqual(defaultOpenFileSheetSectionIds("step", { hasStepModulePanel: true }), ["tree"]);
-  assert.deepEqual(defaultOpenFileSheetSectionIds("mesh", { hasFileStatus: true }), ["status"]);
+  assert.deepEqual(defaultOpenFileSheetSectionIds("mesh"), ["measurements"]);
+  assert.deepEqual(defaultOpenFileSheetSectionIds("mesh", { hasFileStatus: true }), ["status", "measurements"]);
   assert.deepEqual(defaultOpenFileSheetSectionIds("implicit", { hasFileStatus: true }), ["status"]);
   assert.deepEqual(defaultOpenFileSheetSectionIds("implicit"), []);
   assert.deepEqual(
@@ -56,13 +57,13 @@ test("rendered file sheet sections include closed-by-default sections", () => {
     "status",
     "tree",
     "reference",
+    "measurements",
     "parameters",
     "display"
   ]);
   assert.deepEqual(renderedFileSheetSectionIds("srdf"), ["joints"]);
-  // A mesh has no file-specific sections (only a status tab when there's an issue).
-  assert.deepEqual(renderedFileSheetSectionIds("mesh"), []);
-  assert.deepEqual(renderedFileSheetSectionIds("mesh", { hasFileStatus: true }), ["status"]);
+  assert.deepEqual(renderedFileSheetSectionIds("mesh"), ["measurements"]);
+  assert.deepEqual(renderedFileSheetSectionIds("mesh", { hasFileStatus: true }), ["status", "measurements"]);
   // An implicit is NOT status-only any more: it raymarches its own GLSL, so its graphics
   // settings (and params, when the model declares any) are live controls again.
   assert.deepEqual(renderedFileSheetSectionIds("implicit"), ["graphics"]);

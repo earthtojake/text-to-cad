@@ -5,8 +5,7 @@ Viewer's "Export model" action must not mesh geometry in the browser. It used to
 client loaded the ``.implicit.js`` module, meshed and serialized it in the tab, and POSTed
 the bytes for the server to write -- which made the viewer carry a second, live geometry
 runtime purely so a menu item could work. The mesher is JS either way; the difference is
-which process runs it, and running it here means the viewer keeps exactly one render path
-(design/unified-glb-render-artifacts.md §8, §0.1 decision 3).
+which process runs it, and running it here means the viewer keeps exactly one render path.
 
 **Live-valued, unlike the render package.** ``model.glb`` is baked at ``params.*.default``
 and one fixed resolution, on purpose. An export is not: ``--params`` / ``--animation`` /

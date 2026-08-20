@@ -338,7 +338,7 @@ def _fin(side):
     # two batches: each is internally disjoint, but the ribs cross the spars
     body = body - spar_tools
     body = body - rib_tools
-    return P.style(body, "fin", P.GREY_LIGHT)
+    return P.style(body, "fin", P.JOLLY_BLACK)
 
 
 def _rudder(side):
@@ -346,7 +346,7 @@ def _rudder(side):
     keep = _hinge_prism(side, H_RUD_LO + RUDDER_GAP, H_RUD_HI - RUDDER_GAP,
                         RUDDER_GAP)
     body = body & keep
-    return P.style(body, "rudder", P.GREY_MID)
+    return P.style(body, "rudder", P.JOLLY_BLACK)
 
 
 def _hinge_fairings(side):
@@ -363,7 +363,7 @@ def _hinge_fairings(side):
         pl = Plane(origin=_fin_world(x + 0.020 * M, h, 0.0, side),
                    x_dir=Vector(1.0, 0.0, 0.0),
                    z_dir=Vector(0.0, side * FIN_SIN, FIN_COS))
-        out.append(P.style(pl.location * pod, f"rudder_hinge_{i:02d}", P.GREY_MID))
+        out.append(P.style(pl.location * pod, f"rudder_hinge_{i:02d}", P.JOLLY_BLACK))
     return group("rudder_hinges", out)
 
 
@@ -431,7 +431,7 @@ def _fin_fairing(side):
             top.append(Vector(x, y, z0 + dt))
             bot.append(Vector(x, y, z0 + db))
         faces.append(Face(Wire([Spline(*top).edge(), Spline(*bot).edge()])))
-    return P.style(loft(faces), "fin_root_fairing", P.GREY_MID)
+    return P.style(loft(faces), "fin_root_fairing", P.JOLLY_BLACK)
 
 
 # ---------------------------------------------------------------------------
@@ -487,7 +487,7 @@ def _fin_tip(side):
                    lambda x: (fin_w(x) + 0.014 * M) * prof(x) + 0.006 * M,
                    lambda x: 0.046 * M * prof(x) + 0.004 * M,
                    lambda x: 0.118 * M * (0.34 + 0.66 * prof(x)))
-    kids = [P.style(cap, "fin_tip_ecm", P.GREY_LIGHT)]
+    kids = [P.style(cap, "fin_tip_ecm", P.JOLLY_GOLD)]
 
     # forward-looking RWR antenna in its own dielectric bullet
     xb0, xb1 = x_le - 0.235 * M, x_le + 0.215 * M
@@ -564,7 +564,7 @@ def _fin_fasteners(side):
     # exactly the collapse-to-one-occurrence behaviour wanted here: a fastener
     # row is one painted feature, not two hundred assembly parts, and two
     # hundred coloured leaves would swamp the render package.
-    return P.style(Compound(solids), "fin_fasteners", P.GREY_MID)
+    return P.style(Compound(solids), "fin_fasteners", P.JOLLY_BLACK)
 
 
 # ---------------------------------------------------------------------------
@@ -741,7 +741,7 @@ def _ventral(side):
             thk *= math.sqrt(max(0.0, 1.0 - (0.975 * q) ** 2))
         pts = biconvex_points(thk / c, c, n=VENT_N, le_round=0.04)
         faces.append(_aerofoil_face(_vent_plane(h, side), pts, VENT_N))
-    return P.style(loft(faces), "ventral_fin", P.GREY_LIGHT)
+    return P.style(loft(faces), "ventral_fin", P.JOLLY_BLACK)
 
 
 def _ventral_fairing(side):
@@ -784,7 +784,7 @@ def _ventral_fairing(side):
         bot[0] = Vector(bot[0].X, bot[0].Y, top[0].Z)
         bot[-1] = Vector(bot[-1].X, bot[-1].Y, top[-1].Z)
         faces.append(Face(Wire([Spline(*top).edge(), Spline(*bot).edge()])))
-    return P.style(loft(faces), "ventral_fairing", P.GREY_LIGHT)
+    return P.style(loft(faces), "ventral_fairing", P.JOLLY_BLACK)
 
 
 # ---------------------------------------------------------------------------

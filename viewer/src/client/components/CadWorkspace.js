@@ -41,7 +41,11 @@ import StatusToast from "./workbench/StatusToast";
 import UrdfFileSheet from "./workbench/UrdfFileSheet";
 import ViewerAlertDialog from "./workbench/ViewerAlertDialog";
 import ViewerLoadingOverlay from "./workbench/ViewerLoadingOverlay";
-import { formatArtifactProgress } from "@/workbench/artifactProgress.js";
+import {
+  ARTIFACT_PROGRESS_POLL_MS,
+  formatArtifactProgress,
+  normalizeArtifactProgress
+} from "@/workbench/artifactProgress.js";
 import FloatingToolBar from "./workbench/FloatingToolBar";
 import CadWorkspaceTopBar from "./workbench/CadWorkspaceTopBar";
 import CadWorkspaceHome from "./workbench/CadWorkspaceHome";
@@ -124,9 +128,11 @@ import {
   buildNormalizedReferenceState,
   buildReferenceCacheKey,
   buildSelectionCopyButtonLabel,
+  buildSelectionCopyCountLabel,
   buildSelectionCopyPayload,
   buildWholeStepEntryCopyReference,
   canonicalCadRefCopyText,
+  withFileRefPrefix,
   computeNextSelectionIds,
   orderedStringListEqual,
   parseAssemblyPartReferenceSelectionId,
@@ -139,6 +145,7 @@ import {
   entryHasDxf,
   entryHasImplicitCad,
   entryHasMesh,
+  entryIsDrawingDocument,
   entryHasReferences,
   entryHasUrdf,
   entryMeshAssetSignature,
@@ -196,9 +203,18 @@ import {
   setStepAnimationFrame
 } from "@/workbench/stepAnimationStore";
 import {
+  applyMeasureRulerDelete,
+  applyMeasureRulerHover,
+  applyMeasureRulerPick,
+  cancelMeasureRulerDraft,
+  clearMeasureRulerMeasurements,
+  measureRulerStateForChange
+} from "@/workbench/measureRulerState";
+import {
   buildDefaultParameterAnimationState,
   findParameterAnimation,
-  hasParameterAnimations
+  hasParameterAnimations,
+  shouldPublishAnimationFrame
 } from "@/workbench/parameterAnimation";
 import {
   buildUrdfJointAnglesCopyText,
@@ -231,7 +247,8 @@ import {
   shouldDeferFileParamSelection,
   writeCadParam,
 } from "@/workbench/sidebar";
-import { buildCadRefToken } from "cadjs/lib/cadRefs.js";
+import { buildCadRefToken, isNativeCadSelector } from "cadjs/lib/cadRefs.js";
+import { shortestUniquePathSuffixes } from "cadjs/lib/filePathSuffix.js";
 import {
   applyUrdfPoseToMeshData,
   buildDefaultUrdfJointValues,
@@ -256,7 +273,7 @@ import {
   URDF_JOINT_ANIMATION_FOLLOW_MS
 } from "cadjs/lib/urdf/jointAnimation";
 import { checkMoveIt2ServerLive, moveit2ServerEnabled, requestMoveIt2Server } from "cadjs/lib/urdf/moveit2ServerClient";
-import { readActiveCadDir } from "../workbench/cadManifestStore.js";
+import { readActiveCadDir, requestArtifactStatus } from "../workbench/cadManifestStore.js";
 import {
   FILE_STATUS_LEVELS,
   buildFileStatusItems,
@@ -412,11 +429,9 @@ function stepTreeNodeIdForWorkspace(node) {
   return String(node?.id || node?.occurrenceId || "").trim();
 }
 
-const NATIVE_CAD_SELECTOR_RE = /^(?:o\d+(?:\.\d+)*(?:\.[sfev]\d+)?|[sfev]\d+|m\d+)$/i;
-
 function nativeCadSelectorCandidate(value) {
   const selector = String(value || "").trim();
-  return NATIVE_CAD_SELECTOR_RE.test(selector) ? selector : "";
+  return isNativeCadSelector(selector) ? selector : "";
 }
 
 function selectorFromStepTreeInternalId(value) {
@@ -1392,6 +1407,7 @@ export default function CadWorkspace({
     urdfError,
     setUrdfError,
     urdfLoadStage,
+    urdfLoadProgress,
     referenceState,
     setReferenceState,
     referenceStatus,
@@ -1485,17 +1501,38 @@ export default function CadWorkspace({
   // every loading state that is not an artifact build). Only meaningful while
   // generating — a stale frame must not outlive the build that produced it.
   const selectedArtifactProgress = selectedArtifactGenerating ? selectedArtifact.progress : null;
+  // What the loading overlay reports. A model being BUILT reports through the artifact
+  // pipeline; a robot has no build behind it at all — it is a URDF plus a pile of meshes —
+  // and its loader's own mesh count is then the only progress in existence. The two are
+  // mutually exclusive in practice, and normalizing both through one function is what keeps
+  // the overlay from having to know which subsystem it is looking at.
+  const selectedLoadProgress =
+    selectedArtifactProgress || normalizeArtifactProgress(urdfLoadProgress);
   const activeStepArtifactGenerationFiles = useMemo(
     () => (selectedArtifactGenerating && catalogSelectedEntry ? [fileKey(catalogSelectedEntry)] : []),
     [selectedArtifactGenerating, catalogSelectedEntry]
   );
   // While the artifact is missing/stale/building/broken, hide the (possibly stale) render assets so
   // the viewer shows a loading or error state and renders only the fresh artifact once ready.
+  // The shortest path suffix that names each catalog entry uniquely -- almost always just the
+  // filename. Copied refs carry it so they still say which file they belong to when pasted
+  // into a prompt spanning several files, without the length of a full relative path.
+  const fileRefPrefixByPath = useMemo(
+    () => shortestUniquePathSuffixes(catalogEntries.map((entry) => cadFileParamForEntry(entry))),
+    [catalogEntries]
+  );
   const selectedEntry = useMemo(
-    () => (!catalogSelectedEntry || selectedArtifact.status === "ready"
-      ? catalogSelectedEntry
-      : entryWithoutRenderAssets(catalogSelectedEntry)),
-    [catalogSelectedEntry, selectedArtifact.status]
+    () => {
+      const base = !catalogSelectedEntry || selectedArtifact.status === "ready"
+        ? catalogSelectedEntry
+        : entryWithoutRenderAssets(catalogSelectedEntry);
+      if (!base) {
+        return base;
+      }
+      const fileRefPrefix = fileRefPrefixByPath.get(cadFileParamForEntry(base)) || "";
+      return fileRefPrefix ? { ...base, fileRefPrefix } : base;
+    },
+    [catalogSelectedEntry, selectedArtifact.status, fileRefPrefixByPath]
   );
   // Cache states never become user-facing "issues"; only a fatal build/source failure does.
   const selectedStepSourceStatus = selectedArtifact.status === "error"
@@ -1525,9 +1562,7 @@ export default function CadWorkspace({
     ? selectedEntrySourceFormat
     : entryRenderAssetFormat(selectedEntry);
   const selectedFileSheetKind = fileSheetKindForEntry(selectedEntry);
-  // Some kinds (e.g. a mesh/STL) have no file-specific sections; when so, hide
-  // the file-sheet toggle and the sheet entirely instead of showing an empty
-  // sidebar.
+  // Hide the file-sheet toggle when the kind has no sections.
   const selectedFileSheetHasSections = useMemo(
     () => renderedFileSheetSectionIds(selectedFileSheetKind).length > 0,
     [selectedFileSheetKind]
@@ -1546,11 +1581,11 @@ export default function CadWorkspace({
   const fileLinkCopyAvailable = false;
   // `isStepView` used to stand in for all four of these at once, which is why adding a
   // format meant auditing every one of its ~15 uses to work out which sense was meant.
-  // They are separate capabilities; today only STEP declares them, and that is a fact
-  // about the table rather than about this file.
+  // They are separate capabilities; the table is the source of truth.
   const selectedEntryContentKind = viewportContentKind(selectedEntrySourceFormat);
   const supportsParts = hasCapability(selectedEntrySourceFormat, "parts");
   const supportsTopology = hasCapability(selectedEntrySourceFormat, "topology");
+  const supportsMeasure = hasCapability(selectedEntrySourceFormat, "measure");
   const supportsDisplayModes = hasCapability(selectedEntrySourceFormat, "displayModes");
   const supportsSidecarParams =
     parameterSourceKind(selectedEntrySourceFormat) === PARAMETER_SOURCE.SIDECAR;
@@ -1582,6 +1617,8 @@ export default function CadWorkspace({
   const selectedEntryHasDisplayEdges = entryHasDisplayEdges(selectedEntry);
   const selectedEntryHasDxf = entryHasDxf(selectedEntry);
   const selectedEntryHasImplicit = entryHasImplicitCad(selectedEntry);
+  // A dimensioned drawing renders its own 2D geometry: there is no mesh to wait for.
+  const selectedEntryIsDrawingDocument = entryIsDrawingDocument(selectedEntry);
   // The selected entry's render artifact is (re)building -> show the loading state. Replaces the
   // old !entryHasMesh + buildable-code derivation.
   const selectedStepArtifactRenderPending = selectedArtifactGenerating;
@@ -2279,6 +2316,14 @@ export default function CadWorkspace({
     const duration = Math.max(Number(animation.duration) || 1, 0.001);
     let frameId = 0;
     let previousTimeMs = animationNowMs();
+    // Frame pacing -- see shouldPublishAnimationFrame.  A published frame is
+    // measured by the gap to the next callback, which includes the downstream
+    // render, and the next publish waits that long again.  previousTimeMs only
+    // advances on a publish, so time skipped this way still lands in the next
+    // delta and playback stays wall-clock accurate.
+    let publishedAtMs = NaN;
+    let publishCostMs = 0;
+    let measuringPublish = false;
     setStepAnimationElapsed(clampNumber(stepModuleAnimationStateRef.current.elapsedSec, 0, duration));
 
     const tick = (timeMs) => {
@@ -2286,8 +2331,18 @@ export default function CadWorkspace({
       if (!currentState.playing || currentState.activeId !== animation.id) {
         return;
       }
+      if (measuringPublish) {
+        publishCostMs = timeMs - publishedAtMs;
+        measuringPublish = false;
+      }
+      if (!shouldPublishAnimationFrame({ timeMs, publishedAtMs, publishCostMs })) {
+        frameId = window.requestAnimationFrame(tick);
+        return;
+      }
       const deltaSec = Math.max((timeMs - previousTimeMs) / 1000, 0);
       previousTimeMs = timeMs;
+      publishedAtMs = timeMs;
+      measuringPublish = true;
       const speed = clampNumber(currentState.speed, 0.1, 5);
       let elapsedSec = getStepAnimationElapsed() + (deltaSec * speed);
       let playing = currentState.playing;
@@ -3047,6 +3102,9 @@ export default function CadWorkspace({
     selectedArtifact.status === "error";
   const meshViewerLoading =
     !!selectedEntry &&
+    // A DRAWING has no flat pattern and bakes nothing, so "no mesh yet" is its finished state,
+    // not a pending one. Waiting on the mesh path left the pane on LOADING forever (issue #246).
+    !selectedEntryIsDrawingDocument &&
     (selectedStepArtifactRenderPending || !artifactBlocksRender) &&
     status !== ASSET_STATUS.ERROR &&
     (!selectedMeshMatches || status === ASSET_STATUS.LOADING || selectedStepModuleLoading);
@@ -5196,6 +5254,75 @@ export default function CadWorkspace({
     viewerPickableEdges.length ||
     viewerPickableVertices.length
   );
+  // Measuring needs a mesh to hit. Topology, when loaded, upgrades STEP hits
+  // from free points to edge and face snaps.
+  const measureModeActive = supportsMeasure &&
+    tabToolMode === TAB_TOOL_MODE.MEASURE &&
+    Boolean(selectedMeshData) &&
+    !viewerLoading;
+  const [measureRulerState, setMeasureRulerState] = useState(null);
+  const [activeMeasureId, setActiveMeasureId] = useState("");
+  const handleMeasurePick = useCallback((pick) => {
+    setMeasureRulerState((current) => applyMeasureRulerPick(current, pick));
+  }, []);
+  const handleMeasureHoverPoint = useCallback((hover) => {
+    setMeasureRulerState((current) => applyMeasureRulerHover(current, hover));
+  }, []);
+  const handleMeasureDelete = useCallback((measurementId) => {
+    setMeasureRulerState((current) => applyMeasureRulerDelete(current, measurementId));
+  }, []);
+  const handleMeasureCancelDraft = useCallback(() => {
+    setMeasureRulerState((current) => cancelMeasureRulerDraft(current));
+  }, []);
+  const handleMeasureClear = useCallback(() => {
+    setMeasureRulerState((current) => clearMeasureRulerMeasurements(current));
+  }, []);
+  const measureMeasurements = measureRulerState?.measurements || EMPTY_LIST;
+  // Only rescue the highlight when the row it points at is gone (deleted or
+  // cleared). Taking a new measurement promotes it separately, below; doing it
+  // here as well would fight the user's own row clicks, because a live draft
+  // rewrites this state on every hover tick.
+  useEffect(() => {
+    setActiveMeasureId((current) => {
+      if (current && measureMeasurements.some((item) => item.id === current)) {
+        return current;
+      }
+      return measureMeasurements.length ? measureMeasurements[measureMeasurements.length - 1].id : "";
+    });
+  }, [measureMeasurements]);
+  useEffect(() => {
+    setMeasureRulerState((current) => measureRulerStateForChange(current, { entryChanged: true }));
+  }, [selectedKey]);
+  useEffect(() => {
+    setMeasureRulerState((current) => measureRulerStateForChange(current, { toolActive: measureModeActive }));
+  }, [measureModeActive]);
+  // A new measurement reveals the tab that holds it. Re-appending (rather than
+  // just ensuring membership) moves it to the end, and last-in-pane wins tab
+  // resolution — so it also wins the pane back if the user has since clicked Tree.
+  const measurementCountRef = useRef(0);
+  useEffect(() => {
+    const count = measureMeasurements.length;
+    const grew = count > measurementCountRef.current;
+    measurementCountRef.current = count;
+    if (!grew) {
+      return;
+    }
+    setActiveMeasureId(measureMeasurements[count - 1].id);
+    if (!renderedSelectedFileSheetSectionIds.includes(FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS)) {
+      return;
+    }
+    setTabToolsOpen(true);
+    setFileSheetOpenSectionIds((current) => normalizeFileSheetOpenSectionIds(
+      [
+        ...(Array.isArray(current) ? current : [])
+          .filter((id) => id !== FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS),
+        FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS
+      ],
+      renderedSelectedFileSheetSectionIds
+    ));
+  }, [measureMeasurements, renderedSelectedFileSheetSectionIds, setTabToolsOpen]);
+
+  const measureToolDisabled = viewerLoading || !selectedMeshData || !supportsMeasure;
   const topologySelectionActive =
     (isAssemblyView && requestedStepTreeTopologyNodeIds.length > 0) ||
     topLevelReferenceSelectionActive;
@@ -5236,11 +5363,17 @@ export default function CadWorkspace({
 
     if (selectedArtifactGenerating) {
       const frame = selectedArtifactProgress ? formatArtifactProgress(selectedArtifactProgress) : null;
+      // One number, and only a measured one: a phase's own count. An uncountable phase adds
+      // nothing here rather than a percentage of the whole build, which nothing can honestly
+      // compute. The phase name and sub-unit live in the tooltip, which is opened on purpose.
+      const chip = frame?.determinate ? frame.counts : "";
       return {
         loading: true,
-        label: frame ? `${ARTIFACT_GENERATING_LABEL} ${frame.percent}%` : ARTIFACT_GENERATING_LABEL,
+        label: chip ? `${ARTIFACT_GENERATING_LABEL} ${chip}` : ARTIFACT_GENERATING_LABEL,
         title: frame
-          ? `${frame.label}${frame.counts ? ` — ${frame.counts}` : ""}`
+          ? [frame.label, frame.ordinal && `phase ${frame.ordinal}`, frame.detail]
+              .filter(Boolean)
+              .join(" — ")
           : "Generator script is running"
       };
     }
@@ -6328,15 +6461,28 @@ export default function CadWorkspace({
     stepTreeCopyReferenceMap,
     stepTreeRoot
   ]);
+  // Every copied line funnels through here, from all three of the copy builders above and the
+  // selector runtime, so the file prefix is applied once at this point rather than threaded
+  // through each of them. withFileRefPrefix is idempotent, so lines that already carry one
+  // (parts and mates, which are built from the entry) pass through untouched.
   const canonicalCopySelectionLines = useMemo(
     () => copySelectionPayload.lines
       .map((line) => canonicalCadRefCopyText(line))
+      .map((line) => withFileRefPrefix(line, selectedEntry?.fileRefPrefix))
       .filter(Boolean),
-    [copySelectionPayload.lines]
+    [copySelectionPayload.lines, selectedEntry]
   );
   const copyButtonLabel = useMemo(
     () => buildSelectionCopyButtonLabel(canonicalCopySelectionLines, { count: copySelectionPayload.copiedCount }),
     [canonicalCopySelectionLines, copySelectionPayload.copiedCount]
+  );
+  // Shown instead of the ref when the ref will not fit. CadRenderPane decides that by
+  // measuring, since whether it fits depends on the viewport, not the string.
+  const copyButtonCountLabel = useMemo(
+    () => buildSelectionCopyCountLabel(
+      copySelectionPayload.copiedCount || canonicalCopySelectionLines.length
+    ),
+    [copySelectionPayload.copiedCount, canonicalCopySelectionLines.length]
   );
   // The tip teaches reference syntax, so it fires on the first pick that yields
   // a reference to copy — a component, a subassembly, or a face/edge. Gating it
@@ -6537,7 +6683,16 @@ export default function CadWorkspace({
     }
 
     try {
-      await copyTextToClipboard(lines.map((line) => canonicalCadRefCopyText(line)).filter(Boolean).join("\n"));
+      // The SAME prefixing the button label gets. This is the write that matters, and it
+      // built its own payload rather than reusing canonicalCopySelectionLines, so leaving it
+      // out made the label promise a file prefix the clipboard never carried.
+      await copyTextToClipboard(
+        lines
+          .map((line) => canonicalCadRefCopyText(line))
+          .map((line) => withFileRefPrefix(line, selectedEntry?.fileRefPrefix))
+          .filter(Boolean)
+          .join("\n")
+      );
       const copiedCount = payload.copiedCount ||
         selectedReferencesForCopy.length +
         selectedPartReferencesForCopy.length +
@@ -7810,7 +7965,7 @@ export default function CadWorkspace({
     setViewerAlertOpen(false);
     // Anything unrecognized falls back to selection rather than sticking the
     // viewer in a mode with no tool behind it.
-    const normalizedMode = mode === TAB_TOOL_MODE.DRAW || mode === TAB_TOOL_MODE.PAN
+    const normalizedMode = mode === TAB_TOOL_MODE.DRAW || mode === TAB_TOOL_MODE.MEASURE || mode === TAB_TOOL_MODE.PAN
       ? mode
       : TAB_TOOL_MODE.REFERENCES;
     setTabToolMode(normalizedMode);
@@ -7966,9 +8121,43 @@ export default function CadWorkspace({
     setCopyStatus("");
     setScreenshotStatus("");
     setFileAccessBusyKey(busyKey);
+    // An export re-runs the model's generator, which on a large assembly is minutes — the
+    // same work a build does, and now reported the same way. The export request itself is
+    // one long-lived call, so the position comes from polling the status route beside it:
+    // the generator holds its own lock, so the model stays readable and reports `busy`.
+    const exportLabel = exportFormatLabel(exportFormat);
+    let progressTimer = 0;
+    // Checked before every write. A poll can be mid-flight when the export resolves, and
+    // without this its late answer lands ON TOP of the "Exported ..." result.
+    let progressStopped = false;
+    const stopExportProgress = () => {
+      progressStopped = true;
+      if (progressTimer) {
+        window.clearTimeout(progressTimer);
+        progressTimer = 0;
+      }
+    };
+    const pollExportProgress = async () => {
+      try {
+        const status = await requestArtifactStatus(fileRef);
+        const frame = formatArtifactProgress(normalizeArtifactProgress(status?.progress));
+        if (frame && !progressStopped) {
+          const detail = frame.detail ? ` · ${frame.detail}` : "";
+          const counts = frame.counts ? ` ${frame.counts}` : "";
+          setCopyStatus(`Exporting ${exportLabel} — ${frame.label}${detail}${counts}`);
+        }
+      } catch {
+        // Decoration only: a failed poll must never disturb the export itself.
+      }
+      if (!progressStopped) {
+        progressTimer = window.setTimeout(pollExportProgress, ARTIFACT_PROGRESS_POLL_MS);
+      }
+    };
     try {
-      setCopyStatus(`Exporting ${exportFormatLabel(exportFormat)}...`);
+      setCopyStatus(`Exporting ${exportLabel}...`);
+      progressTimer = window.setTimeout(pollExportProgress, ARTIFACT_PROGRESS_POLL_MS);
       const payload = await requestModelExport({ file: fileRef, format: exportFormat });
+      stopExportProgress();
       if (payload?.cancelled) {
         // User dismissed the native save dialog — clear the in-progress status, no error.
         setCopyStatus("");
@@ -7987,6 +8176,7 @@ export default function CadWorkspace({
     } catch (error) {
       setCopyStatus(error instanceof Error ? error.message : "Export failed");
     } finally {
+      stopExportProgress();
       setFileAccessBusyKey((current) => (current === busyKey ? "" : current));
     }
   }, []);
@@ -8074,6 +8264,8 @@ export default function CadWorkspace({
     sidebarOpen,
     previewUiStateRef,
     tabToolMode,
+    measureDraftActive: Boolean(measureRulerState?.draft?.anchor),
+    onCancelMeasureDraft: handleMeasureCancelDraft,
     drawingUndoStackRef,
     drawingRedoStackRef,
     handleUndoDrawing,
@@ -8292,6 +8484,7 @@ export default function CadWorkspace({
           drawingOrientation={selectedEntryIsDrawing ? drawingOrientation : null}
           drawingMaterialColor={selectedEntryIsDrawing ? dxfMaterialPreset(drawingMaterial).colorHex : null}
           drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
+          drawingIsDocument={selectedEntryIsDrawingDocument}
           drawingThicknessMm={selectedEntryIsDrawing ? drawingThicknessMm : 0}
           onCameraZoomPercentChange={setViewerZoomPercent}
           renderPartsIndividually={isUrdfView || Boolean(selectedStepParameterRuntime)}
@@ -8335,6 +8528,7 @@ export default function CadWorkspace({
           focusedPartIds={viewerFocusedPartIds}
           boundsAnimationActive={robotBoundsAnimationActive}
           drawToolActive={drawToolActive}
+          measureModeActive={measureModeActive}
           drawingTool={drawingTool}
           drawingStrokes={drawingStrokes}
           handleDrawingStrokesChange={handleDrawingStrokesChange}
@@ -8343,6 +8537,10 @@ export default function CadWorkspace({
           handleModelReferenceActivate={handleModelReferenceActivate}
           handleModelReferenceDoubleActivate={handleModelReferenceDoubleActivate}
           handleModelReferenceContext={handleModelReferenceContext}
+          onMeasurePick={handleMeasurePick}
+          onMeasureHoverPoint={handleMeasureHoverPoint}
+          activeMeasurementId={activeMeasureId}
+          measureState={measureRulerState}
           viewerContextMenu={viewerContextMenu}
           onViewerContextMenuClose={closeViewerContextMenu}
           onViewerContextMenuCopyReference={copyViewerContextMenuReference}
@@ -8363,6 +8561,7 @@ export default function CadWorkspace({
           handleStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
           selectionCount={selectionCount}
           copyButtonLabel={copyButtonLabel}
+          copyButtonCountLabel={copyButtonCountLabel}
           copyReferenceTipActive={copyReferenceTipActive}
           panToolActive={panToolActive}
           handleCopySelection={handleCopySelection}
@@ -8470,6 +8669,8 @@ export default function CadWorkspace({
                 animationDisabled={!!activeAnimationRuntime?.disabled}
                 handleAnimationPlayToggle={activeAnimationRuntime?.onPlayToggle}
                 drawToolActive={drawToolActive}
+                measureModeActive={measureModeActive}
+                measureDisabled={measureToolDisabled}
                 panToolActive={panToolActive}
                 handleSelectTabToolMode={handleSelectTabToolMode}
                 viewerLoading={viewerLoading}
@@ -8504,7 +8705,7 @@ export default function CadWorkspace({
               <ViewerLoadingOverlay
                 viewerLoading={effectiveViewerLoading}
                 previewMode={previewMode}
-                progress={selectedArtifactProgress}
+                progress={selectedLoadProgress}
               />
             </div>
 
@@ -8519,6 +8720,12 @@ export default function CadWorkspace({
                 selectedEntry={selectedEntry}
                 viewerLoading={viewerLoading || assemblySidebarLoading}
                 isAssemblyView={isAssemblyView}
+                measurements={measureMeasurements}
+                activeMeasurementId={activeMeasureId}
+                measureModeActive={measureModeActive}
+                onMeasurementActivate={setActiveMeasureId}
+                onMeasurementDelete={handleMeasureDelete}
+                onMeasurementsClear={handleMeasureClear}
                 stepTreeRoot={displayStepTreeRoot}
                 assemblyMates={selectedAssemblyMates}
                 expandedTreeNodeIds={expandedStepTreeNodeIds}
@@ -8723,6 +8930,12 @@ export default function CadWorkspace({
                 themeTabs={themeTabs}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
                 onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
+                measurements={measureMeasurements}
+                activeMeasurementId={activeMeasureId}
+                measureModeActive={measureModeActive}
+                onMeasurementActivate={setActiveMeasureId}
+                onMeasurementDelete={handleMeasureDelete}
+                onMeasurementsClear={handleMeasureClear}
               />
             ) : null}
 

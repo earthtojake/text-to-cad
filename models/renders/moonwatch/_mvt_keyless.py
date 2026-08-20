@@ -13,7 +13,7 @@ Everything here stays in the dial-side band z [-2.64, -1.5] EXCEPT:
 - the cannon / hour wheel pipes, which extend below -2.64 because they pass
   through the dial at assembly (pipe ends ~ -3.4 / -3.1).
 
-`_finishing.py`'s align=(None,None,None) datum quirks (see /BUGS.md) are
+`_finishing.py`'s align=(None,None,None) datum quirks are
 compensated locally exactly as `_mvt_base.py` does: `F.pinion` spans
 z [0, L]; `F.slotted_screw` gets corrective shank/slot cuts via `_screw`.
 
@@ -176,7 +176,7 @@ def _edges_at_z(part, z, tol=1e-4):
 
 def _screw(head_d=S.SCREW_HEAD_DIAMETER, hh=0.32, shank=0.9,
            slot_w=S.SCREW_SLOT_WIDTH, color=S.BLUED):
-    """F.slotted_screw + corrective cuts (see /BUGS.md: align datum): flatten
+    """F.slotted_screw + corrective cuts (align datum): flatten
     the shank stub poking through the dome, cut a proper centered slot.
     Returns (part, top): head apex ~ local z = top, shank hanging below."""
     s = F.slotted_screw(head_diameter=head_d, head_height=hh,
@@ -396,7 +396,7 @@ def _motion_parts():
 
     # cannon pinion at the center: 12 leaves, pipe down through the dial.
     # -3 deg seats the mesh at the measured minimum flank contact
-    # (F.pinion leaves sit half a leaf-width off-axis; see /BUGS.md)
+    # (F.pinion leaves sit half a leaf-width off-axis)
     rot_c = _ang(ctr, mw) + 180.0 / S.CANNON_PINION_LEAVES - 3.0
     leaves = Pos(0, 0, _CANNON_LEAF_Z[0]) * Rot(0, 0, rot_c) * F.pinion(
         S.CANNON_PINION_LEAVES, CANNON_TIP_D,

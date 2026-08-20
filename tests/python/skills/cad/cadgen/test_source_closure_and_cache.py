@@ -16,7 +16,7 @@ from OCP.TopAbs import TopAbs_FACE
 from OCP.TopExp import TopExp_Explorer
 
 from cadgen._internal import source_hash as cad_source_hash
-from cadgen._internal import step_scene
+from cadgen._internal import step_scene, step_scene_cache
 from cadgen._internal.step_scene import LoadedStepScene, OccurrenceNode
 from tests.python.support.tmp_root import temporary_directory
 
@@ -168,7 +168,9 @@ class BinarySceneCacheTests(unittest.TestCase):
             step_scene._write_step_scene_cache(self._scene(step_path), step_hash="hash-xyz")
 
             with mock.patch.object(
-                step_scene, "STEP_SCENE_CACHE_SCHEMA_VERSION", step_scene.STEP_SCENE_CACHE_SCHEMA_VERSION + 1
+                step_scene_cache,
+                "STEP_SCENE_CACHE_SCHEMA_VERSION",
+                step_scene.STEP_SCENE_CACHE_SCHEMA_VERSION + 1,
             ):
                 self.assertIsNone(
                     step_scene._read_step_scene_cache(step_path, step_hash="hash-xyz")
@@ -198,3 +200,120 @@ class ImportStepCachedTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UserSiteIsNotModelCodeTest(unittest.TestCase):
+    """Dependencies installed with ``pip install --user`` are third party, not model code.
+
+    Regression for #215. ``sysconfig.get_paths()`` answers for the DEFAULT (prefix-based)
+    scheme only, so it never names the per-user scheme. build123d/OCP/numpy installed with
+    ``pip install --user`` — the normal layout on a machine whose system site-packages needs
+    admin rights — were therefore classified as model code and evicted from ``sys.modules``
+    before every build. numpy cannot survive re-import while its C extension is loaded, so
+    every build died with "module 'numpy.dtypes' has no attribute 'BoolDType'", including a
+    five-line Box generator.
+    """
+
+    def setUp(self) -> None:
+        cad_source_hash._interpreter_roots.cache_clear()
+        cad_source_hash._excluded_roots.cache_clear()
+        cad_source_hash.is_first_party_source_file.cache_clear()
+
+    tearDown = setUp
+
+    def test_user_site_packages_is_excluded(self) -> None:
+        import site
+
+        user_site = Path(site.getusersitepackages())
+        self.assertFalse(
+            cad_source_hash.is_first_party_source_file(user_site / "numpy" / "__init__.py"),
+            "a --user installed dependency must not be treated as model code",
+        )
+        self.assertFalse(
+            cad_source_hash.is_first_party_source_file(
+                user_site / "build123d" / "geometry.py"
+            )
+        )
+
+    def test_the_user_scheme_purelib_is_excluded(self) -> None:
+        # The path sysconfig itself reports for the per-user scheme, which is what the
+        # default-scheme lookup was missing.
+        import sysconfig
+
+        user_paths = sysconfig.get_paths(sysconfig.get_preferred_scheme("user"))
+        purelib = user_paths.get("purelib")
+        self.assertTrue(purelib, "the platform must describe a per-user purelib")
+        self.assertFalse(
+            cad_source_hash.is_first_party_source_file(Path(purelib) / "pkg" / "mod.py")
+        )
+
+    def test_the_user_base_itself_is_not_excluded(self) -> None:
+        # Deliberately narrower than the fix suggested in the issue: the user BASE holds
+        # bin/ and share/ too, and excluding all of it would classify a model kept anywhere
+        # beneath it as third party — dropping it from the closure and silently disabling
+        # staleness detection for that model.
+        import site
+
+        user_base = Path(site.getuserbase())
+        model = user_base / "projects" / "widget" / "widget.step.py"
+        self.assertTrue(
+            cad_source_hash.is_first_party_source_file(model),
+            "a model under the user base must stay first party",
+        )
+
+    def test_a_model_beside_the_repo_is_still_first_party(self) -> None:
+        with temporary_directory(prefix="closure-model") as root:
+            model = Path(root) / "widget.step.py"
+            model.write_text("from build123d import Box\n")
+            self.assertTrue(cad_source_hash.is_first_party_source_file(model))
+
+
+class ExtensionOwningPackagesSurviveEvictionTest(unittest.TestCase):
+    """A package with a loaded C extension is never evicted, whatever the install layout.
+
+    The root lists are a denylist and will keep missing layouts (``pip install --target``,
+    conda, PYTHONPATH trees). This backstop turns "wrong closure" into the worst case
+    instead of "every build crashes", because a half-evicted extension package cannot be
+    re-imported.
+    """
+
+    def test_numpy_is_never_evicted_even_if_misclassified(self) -> None:
+        import numpy
+
+        with mock.patch.object(
+            cad_source_hash,
+            "repo_local_loaded_modules",
+            return_value={"numpy": Path(numpy.__file__)},
+        ):
+            evicted = cad_source_hash.evict_first_party_modules()
+
+        self.assertNotIn("numpy", evicted)
+        self.assertIn("numpy", sys.modules, "evicting numpy breaks every later import")
+
+    def test_a_pure_python_module_is_still_evicted(self) -> None:
+        module_name = "cadgen_test_pure_python_module"
+        module = type(sys)(module_name)
+        module.__file__ = "/tmp/does-not-matter/widget.step.py"
+        sys.modules[module_name] = module
+        self.addCleanup(sys.modules.pop, module_name, None)
+
+        with mock.patch.object(
+            cad_source_hash,
+            "repo_local_loaded_modules",
+            return_value={module_name: Path(module.__file__)},
+        ):
+            evicted = cad_source_hash.evict_first_party_modules()
+
+        self.assertIn(module_name, evicted)
+        self.assertNotIn(module_name, sys.modules)
+
+    def test_extension_owners_are_detected_by_suffix_not_by_name(self) -> None:
+        protected = cad_source_hash._packages_owning_loaded_extensions()
+        # Whatever compiled packages this interpreter has loaded, numpy is one of them.
+        import numpy  # noqa: F401
+
+        self.assertIn("numpy", protected)
+        # A stdlib pure-Python package must not be swept into the protected set.
+        import json  # noqa: F401
+
+        self.assertNotIn("json", protected)

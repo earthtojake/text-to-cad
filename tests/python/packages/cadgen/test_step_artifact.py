@@ -8,7 +8,7 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from cadgen import step_artifact  # noqa: E402
+from cadgen import step_artifact_cli  # noqa: E402
 from cadgen import step_export_target  # noqa: E402
 from tests.python.support.cad_test_roots import IsolatedCadRoots  # noqa: E402
 
@@ -51,7 +51,7 @@ class BuildStepArtifactTests(unittest.TestCase):
         kind."""
         imported_step = self._materialize_imported_step()
 
-        payload = step_artifact.build_step_artifact(
+        payload = step_artifact_cli.build_step_artifact(
             repo_root=Path.cwd(),
             step=imported_step,
         )
@@ -67,7 +67,7 @@ class BuildStepArtifactTests(unittest.TestCase):
     def test_imported_step_build_accepts_kind_override(self) -> None:
         imported_step = self._materialize_imported_step()
 
-        payload = step_artifact.build_step_artifact(
+        payload = step_artifact_cli.build_step_artifact(
             repo_root=Path.cwd(),
             step=imported_step,
             kind="assembly",

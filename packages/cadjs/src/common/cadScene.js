@@ -1769,6 +1769,24 @@ function resolveMaterialSettings(theme, settings = {}) {
   return theme.materials || {};
 }
 
+/** Whether this mesh data can ONLY be drawn as separate per-part meshes.
+ *
+ * A composed component-GLB package declares ``partTransformsBaked: false``: its top-level
+ * arrays hold each unique COMPONENT's geometry in its own local frame, and placement lives
+ * solely in each part's transform. Two things break if such a model is drawn as one merged
+ * mesh:
+ *
+ * * placement -- every shared component is drawn once at the origin, which is how an
+ *   assembly loses all four wheels and grows one in the middle;
+ * * CAD EDGES -- the surface-edge attributes live on each part's ``sourceMesh``, not in the
+ *   top-level arrays, so the merged geometry has none and the surface-edge material is never
+ *   selected. A single-occurrence part hides the first symptom (its local frame IS world) and
+ *   shows only the second: a part rendered with no edges at all while assemblies have them.
+ */
+export function meshDataRequiresPartRendering(meshData) {
+  return meshData?.partTransformsBaked === false;
+}
+
 export function resolvePartsToRender(meshData, theme, settings) {
   if (Array.isArray(settings.parts)) {
     return settings.parts.filter((part) => toNumber(part?.vertexCount) > 0 && toNumber(part?.triangleCount) > 0);
@@ -1792,7 +1810,7 @@ export function resolvePartsToRender(meshData, theme, settings) {
     // world), but anything genuinely placed by its transform lands in the wrong spot. That
     // is how a car loses all four wheels and grows one under its middle when the STEP
     // parameter module is switched off. Per-part rendering is the only correct mode here.
-    if (meshData?.partTransformsBaked === false) {
+    if (meshDataRequiresPartRendering(meshData)) {
       return parts;
     }
     if (meshUsesPartSourceColors(meshData, parts) || meshUsesPartSourceOpacity(parts)) {

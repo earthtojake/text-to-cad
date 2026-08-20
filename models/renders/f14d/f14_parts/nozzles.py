@@ -30,8 +30,18 @@ radial gutters -- going to black.
 
 from __future__ import annotations
 
+import math
+
 from build123d import (Axis, Box, Line, Location, Plane, Solid, Spline, Vector,
                        Wire, make_face)
+
+# Only for the compound-unwrapping fallback in _revolve; see its docstring.
+from OCP.BRepPrimAPI import BRepPrimAPI_MakeRevol
+from OCP.Standard import Standard_TypeMismatch
+from OCP.TopAbs import TopAbs_SOLID
+from OCP.TopExp import TopExp_Explorer
+from OCP.TopoDS import TopoDS
+from OCP.gp import gp_Ax1, gp_Dir, gp_Pnt
 
 from cadgen import compound_from_instances
 
@@ -173,8 +183,44 @@ def _profile_face(outer, inner):
 
 
 def _revolve(outer, inner, arc=360.0):
-    """Solid of revolution, or a sector CENTRED on the +Z meridian."""
-    solid = Solid.revolve(_profile_face(outer, inner), arc, Axis.X)
+    """Solid of revolution, or a sector CENTRED on the +Z meridian.
+
+    ``Solid.revolve`` is not safe to call directly here.  For some annular
+    profiles -- ``_joint_ring``'s is one -- OCC's revol builder hands back a
+    ``TopAbs_COMPOUND`` that wraps the single solid rather than the solid
+    itself, and build123d downcasts the result with an unguarded
+    ``TopoDS.Solid(...)``, which raises ``Standard_TypeMismatch``.  That is what
+    took the whole nozzle group out of the aircraft: ``gen_step()`` skips a
+    system that raises, so the jet built with no exhaust nozzles at all and
+    every occurrence after them shifted up one.
+
+    The compound is not a sign of bad geometry -- it contains exactly one solid
+    with the volume the profile implies -- so unwrap it rather than rebuilding
+    the profile.
+    """
+    face = _profile_face(outer, inner)
+    try:
+        solid = Solid.revolve(face, arc, Axis.X)
+    except Standard_TypeMismatch:
+        builder = BRepPrimAPI_MakeRevol(
+            face.wrapped,
+            gp_Ax1(gp_Pnt(0.0, 0.0, 0.0), gp_Dir(1.0, 0.0, 0.0)),
+            math.radians(arc),
+        )
+        builder.Build()
+        # Walked with TopExp rather than Shape.cast(): cast returns None for a
+        # compound in this build123d, which is how this fallback failed the
+        # first time round.
+        explorer = TopExp_Explorer(builder.Shape(), TopAbs_SOLID)
+        found = []
+        while explorer.More():
+            found.append(TopoDS.Solid_s(explorer.Current()))
+            explorer.Next()
+        if len(found) != 1:
+            raise RuntimeError(
+                f"revolve produced {len(found)} solids, expected exactly 1"
+            )
+        solid = Solid(found[0])
     if arc < 359.9:
         solid = Location((0, 0, 0), (-0.5 * arc, 0, 0)) * solid
     return solid

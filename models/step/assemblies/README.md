@@ -38,7 +38,9 @@ description packages — lives in [`../../renders/`](../../renders/README.md).
 
 - `cutaway_turbofan_engine.step.py`, `flying_car.step.py`,
   `lunar_rover_corner_assembly.step.py`, `mechanical_iris_aperture.step.py`,
-  `miniature_spiral_staircase.step.py`, `pelican_riding_bicycle.step.py`,
+  `miniature_spiral_staircase.step.py`, `motorcycle_shock_absorber.step.py`
+  (coilover damper with a native linear damper-stroke joint, spring seated
+  face-to-face on both perches), `pelican_riding_bicycle.step.py`,
   `photo_coffee_cup.step.py`, `planetary_gear_assembly.step.py` (+
   `.params.js`), `robotic_hand_end_effector.step.py`,
   `six_axis_industrial_robot_arm.step.py`, `six_blade_open_propeller.step.py`:

@@ -1,6 +1,10 @@
 import path from "node:path";
 
-import { pathIsInside } from "cadjs/lib/pathUtils.mjs";
+// By path, not by the bare "cadjs" specifier. This module runs from the shipped CAD Viewer
+// runtime, which vendors packages/cadjs but has no node_modules to resolve a package name
+// through. viewer/packages/cadjs is a symlink in development and a real directory once
+// bundled, so the same relative path works in both.
+import { pathIsInside } from "../packages/cadjs/src/lib/pathUtils.mjs";
 
 export function resolveDirectoryRoot({
   directoryRoot = "",

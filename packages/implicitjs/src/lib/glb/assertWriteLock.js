@@ -13,10 +13,23 @@
  * That makes this a real boundary rather than a comment: a builder run by hand against a
  * package directory, or with a stale run id, throws before it writes a byte.
  *
- * It throws UNCONDITIONALLY -- there is no `CADGEN_STRICT_LOCKS` escape hatch like the Python
- * side's. The Python check is old enough to have callers whose environments must degrade
- * rather than fail; this one is new, and new code fails loud
- * (design/unified-glb-render-artifacts.md §0.2, §4.4).
+ * ONE case does not throw, and it is not a policy preference: when the PARENT reports that
+ * locking was unavailable (`--lock-degraded`, from `BuildRun.degraded`). No run id reaches
+ * the sentinel then, so there is nothing here to check, and failing would make this the
+ * reason a build dies on a filesystem that cannot lock -- exactly what the Python side's
+ * `require_write_lock()` refuses to do. Only the parent can tell that apart from an
+ * unverified id; from here both look like an empty sentinel.
+ *
+ * That case warns and continues with no `CADGEN_STRICT_LOCKS` escape, deliberately. Python's
+ * flag turns a MISSING lock into an error, and a degraded run does not read as missing there
+ * either -- `exclusive()` registers it, so `require_write_lock()` returns true. Honouring the
+ * flag only here would invent a third policy that fires in no environment CI can reach: a
+ * filesystem that refuses `flock` is not one any runner has.
+ *
+ * A degraded run does not read the sentinel at all. It may still hold an id from an earlier
+ * run that DID lock -- on a share reached from two machines, say -- and refusing on that
+ * would be liveness inferred from a run id, which `coordination/lock.py` forbids in capitals:
+ * a stamped id says who ran, never who is running.
  */
 
 import fs from "node:fs";
@@ -36,15 +49,50 @@ export function writeLockPath(packageDir) {
 
 /**
  * Throw unless `runId` is the run id currently stamped into `packageDir`'s write sentinel.
+ *
+ * `degraded` is the parent's report that locking was unavailable, so no id was stamped and
+ * there is nothing to verify -- see the note above.
  */
-export function assertWriteLock(packageDir, runId) {
+export function assertWriteLock(packageDir, runId, { degraded = false } = {}) {
   const sentinel = writeLockPath(packageDir);
   const expected = String(runId || "").trim();
+
+  if (degraded) {
+    // stderr, not stdout: stdout carries the progress protocol and the result payload.
+    console.warn(
+      `cadgen: writing ${packageDir} without mutual exclusion -- this filesystem does not `
+      + "support the generation lock, so a concurrent build of the same model is not prevented."
+    );
+    return;
+  }
+
   let stamped = "";
+  let readError = null;
   try {
     stamped = fs.readFileSync(sentinel).subarray(0, RUN_ID_BYTES).toString("ascii").trim();
-  } catch {
-    stamped = "";
+  } catch (error) {
+    // Say WHICH failure this is. Collapsing an unreadable sentinel into "" reported a
+    // mismatch against a file that held exactly the right run id, which is how issue #269
+    // presented: EBUSY from a mandatory Windows lock, described as a lock violation. The
+    // lock no longer sits on this file, so a read error here means something else -- and
+    // whatever it is, the reader deserves to be told about it rather than misdirected.
+    readError = error;
+  }
+  if (readError && readError.code === "ENOENT") {
+    // No sentinel at all. Not a read failure and not a mismatch: nobody has ever held this
+    // lock, so a parent that thinks it holds one is wrong about which directory it is in.
+    throw new Error(
+      `no generation lock exists for ${packageDir} `
+      + `(nothing has ever held ${sentinel}, so --run-id ${expected || "<missing>"} `
+      + "cannot have been stamped by its holder)"
+    );
+  }
+  if (readError) {
+    throw new Error(
+      `could not read the generation sentinel for ${packageDir}: `
+      + `${readError.code || readError.message} reading ${sentinel}. `
+      + "The run id could not be checked, so the package was not written."
+    );
   }
   if (!expected || stamped !== expected) {
     throw new Error(

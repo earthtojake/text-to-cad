@@ -69,7 +69,7 @@ Use the active project Python interpreter; treat `python` in examples as an inte
 [scripts/gen] re-run with --verbose for the full traceback
 ```
 
-**A build waits for a concurrent build of the same model** rather than racing it, and says so on stderr (`waiting for another run to finish building ...`), repeating while it waits. Pass `--lock-timeout SECONDS` to give up instead and report `{"ok":true,"contended":true}`. With `--json`, each target's `outcome` is `built`, `current`, or `skipped-peer`.
+**A build waits for a concurrent build of the same model** rather than racing it, and says so on stderr (`waiting for another run to finish building ...`), repeating while it waits. Pass `--lock-timeout SECONDS` to give up instead and report `{"ok":true,"contended":true}`. With `--json`, each target's `outcome` is `built`, `current`, `skipped-peer` (the peer finished and its package is current), or `contended` (the peer is still building and this run declined to wait).
 
 Target paths resolve from the command's current working directory, not from the skill directory. Run commands from the workspace that owns the artifacts and pass cwd-relative target paths so project CAD files never resolve accidentally under the skill directory. Keep a STEP output and its Python generator in the same directory with the same basename unless the user explicitly requests otherwise.
 

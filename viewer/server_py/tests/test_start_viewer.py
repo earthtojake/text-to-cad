@@ -54,6 +54,10 @@ def _run(argv, port_free=True, child_code=0, cad_backend_error=""):
 class ViewerUrlTest(unittest.TestCase):
     """The absolute directory IS the URL path, like a file:// URL."""
 
+    @unittest.skipIf(
+        os.name == "nt",
+        "pins a POSIX absolute path to a POSIX URL path. On Windows a leading-slash path\n        is drive-relative, so the answer is D:/Users/me/models -- correct there, and not\n        what this literal says. The drive-letter form is covered by test_windows_drive_paths.",
+    )
     def test_directory_becomes_the_url_path(self):
         self.assertEqual(
             "http://127.0.0.1:3245/Users/me/models",
@@ -70,7 +74,10 @@ class ViewerUrlTest(unittest.TestCase):
 
     def test_relative_directory_is_resolved_absolute(self):
         url = sav.viewer_url("127.0.0.1", 3245, "models")
-        self.assertIn(os.path.abspath("models"), url)
+        # as_posix(): the URL spells an absolute path in URL form, so on Windows it reads
+        # D:/a/.../models while os.path.abspath gives D:\a\...\models. Same path, and
+        # only the same STRING on POSIX.
+        self.assertIn(pathlib.Path("models").resolve().as_posix(), url)
 
 
 class LauncherTest(unittest.TestCase):
@@ -130,7 +137,7 @@ class LauncherTest(unittest.TestCase):
             self.assertTrue(payload["url"].startswith("http://"))
             # The URL carries the cwd as its path, never a ?dir= query.
             self.assertNotIn("?dir=", payload["url"])
-            self.assertIn(os.getcwd(), payload["url"])
+            self.assertIn(pathlib.Path.cwd().as_posix(), payload["url"])
 
 
 if __name__ == "__main__":

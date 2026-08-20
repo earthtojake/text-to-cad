@@ -297,7 +297,7 @@ const BUILTINS = {
   // fine and then failed the moment it was MESHED ("Unknown GLSL function: cosh", which is
   // exactly how `catenoid-ring-bridge` behaved). The baked render package makes the CPU
   // evaluator the thing users see, so a builtin the shader has and this does not is a
-  // divergence, not a missing feature (design/unified-glb-render-artifacts.md §7.2).
+  // divergence, not a missing feature.
   radians: (value) => mapUnary(value, (component) => (component * Math.PI) / 180),
   degrees: (value) => mapUnary(value, (component) => (component * 180) / Math.PI),
   asin: (value) => mapUnary(value, Math.asin),

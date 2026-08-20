@@ -11,8 +11,9 @@ import {
 import EntryIcon from "./EntryIcon";
 import {
   DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND,
-  isViewerReleaseMajorMinorNewer,
+  DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT,
   isViewerReleaseNewer,
+  isViewerReleaseUpdateSuggested,
   viewerGithubLatestReleaseApiUrl,
   viewerGithubLatestReleaseUrl,
   normalizeViewerDiscordUrl,
@@ -711,7 +712,7 @@ function latestReleaseCheckState(currentVersion, release) {
   const latestReleaseNewer = isViewerReleaseNewer(currentVersion, latestVersion);
 
   return {
-    updateAvailable: isViewerReleaseMajorMinorNewer(currentVersion, latestVersion),
+    updateAvailable: isViewerReleaseUpdateSuggested(currentVersion, latestVersion),
     latestVersion,
     releaseUrl,
     installCommand,
@@ -824,6 +825,7 @@ function VersionTooltipRow({ label, version, action = null }) {
 function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestReleaseCheck }) {
   const normalizedVersion = String(version || "").trim();
   const [installCopyStatus, setInstallCopyStatus] = useState("");
+  const [promptCopyStatus, setPromptCopyStatus] = useState("");
   const copyGestureHandledRef = useRef(false);
 
   if (!normalizedVersion) {
@@ -843,6 +845,7 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
   const installCommand = String(
     releaseCheck?.installCommand || DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
   ).trim() || DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND;
+  const updatePrompt = DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT;
   const upToDate = Boolean(latestVersion) && !latestReleaseNewer;
   const label = updateAvailable
     ? "Update CAD Viewer"
@@ -866,6 +869,27 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
       }, 1600);
     } catch {
       setInstallCopyStatus("failed");
+    }
+  };
+
+  const handleCopyUpdatePrompt = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (copyGestureHandledRef.current) {
+      return;
+    }
+    copyGestureHandledRef.current = true;
+    globalThis.setTimeout(() => {
+      copyGestureHandledRef.current = false;
+    }, 250);
+    try {
+      await copyTextToClipboard(updatePrompt);
+      setPromptCopyStatus("copied");
+      globalThis.setTimeout(() => {
+        setPromptCopyStatus("");
+      }, 1600);
+    } catch {
+      setPromptCopyStatus("failed");
     }
   };
 
@@ -947,7 +971,7 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
             />
           )}
           <div className="flex min-w-0 flex-col gap-1.5">
-            <div className="px-0.5 text-[11px] font-medium leading-none text-muted-foreground">Update Command</div>
+            <div className="px-0.5 text-[11px] font-medium leading-none text-muted-foreground">In your terminal</div>
             <div className="flex h-8 min-w-0 items-center gap-2 rounded-sm border border-border/60 bg-muted/35 p-1 pl-2">
               <code className="min-w-0 flex-1 whitespace-nowrap font-mono text-[11px] leading-5 text-foreground">
                 {installCommand}
@@ -969,7 +993,38 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
               </Button>
             </div>
           </div>
-          {installCopyStatus === "failed" ? (
+          <div className="flex min-w-0 flex-col gap-1.5">
+            {/* The same update, handed to an agent instead of run in a terminal. */}
+            <div className="px-0.5 text-[11px] font-medium leading-none text-muted-foreground">
+              Or ask your agent
+            </div>
+            {/* Shows the message VERBATIM, wrapped rather than truncated: the row above it is
+                the literal command it copies, so a summarised label here reads as though the
+                agent were being sent something vaguer than the terminal option. It is not --
+                the same command is in it. The width cap is what makes it wrap. */}
+            <div className="flex min-h-8 min-w-0 items-center gap-2 rounded-sm border border-border/60 bg-muted/35 p-1 pl-2">
+              <span className="min-w-0 max-w-[15.5rem] flex-1 text-[11px] leading-4 text-foreground">
+                {updatePrompt}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-border text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                aria-label={promptCopyStatus === "copied" ? "Agent message copied" : "Copy agent message"}
+                title={updatePrompt}
+                onPointerDown={handleCopyUpdatePrompt}
+                onClick={handleCopyUpdatePrompt}
+              >
+                {promptCopyStatus === "copied" ? (
+                  <Check className="size-3" aria-hidden="true" />
+                ) : (
+                  <Copy className="size-3" aria-hidden="true" />
+                )}
+              </Button>
+            </div>
+          </div>
+          {installCopyStatus === "failed" || promptCopyStatus === "failed" ? (
             <div className="text-[11px] text-muted-foreground">Copy failed</div>
           ) : null}
           {upToDate ? (
@@ -1189,8 +1244,8 @@ export default function CadWorkspaceTopBar({
             asChild
             variant="ghost"
             size="icon-sm"
-            aria-label="Join the CAD Skills Discord"
-            title="Join the CAD Skills Discord"
+            aria-label="Join the text-to-cad Discord"
+            title="Join the text-to-cad Discord"
             className={topBarIconButtonClasses}
           >
             <a href={discordUrl} target="_blank" rel="noreferrer">

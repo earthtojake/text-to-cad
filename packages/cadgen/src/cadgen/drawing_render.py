@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DXF_RENDER_SCHEMA_VERSION = 1
 SUPPORTED_ENTITY_TYPES = {"LINE", "ARC", "CIRCLE", "LWPOLYLINE"}
 ANGLE_EPSILON = 1e-9
 
@@ -294,7 +293,7 @@ def _flattened_line_entities(entity, *, layer_name: str) -> list[LineEntity] | N
         return None
     try:
         points = [(float(p[0]), float(p[1])) for p in flattening(0.05)]
-    except Exception:
+    except Exception:  # noqa: BLE001 - a degenerate or unsupported entity must not fail the render payload
         return None
     if len(points) < 2:
         return None
@@ -399,7 +398,6 @@ def build_dxf_render_payload(dxf_path: Path, *, file_ref: str) -> dict[str, obje
         touch_layer(circle.layer)["circleCount"] += 1
 
     return {
-        "schemaVersion": DXF_RENDER_SCHEMA_VERSION,
         "fileRef": file_ref,
         "sourceUnits": int(getattr(document, "units", 0) or 0),
         "defaultThicknessMm": 0.0,

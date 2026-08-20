@@ -9,8 +9,8 @@ viewer shares. The package makes it an ordinary baked mesh:
       model.glb       # the baked mesh (quantized + meshopt-compressed)
 
 **Baked, not live.** The mesh is sampled at the model's ``params.*.default`` values and one
-fixed resolution; live parameters and animations are gone, deliberately and with no opt-in
-(design/unified-glb-render-artifacts.md §0.1). Those settings are invisible to every other
+fixed resolution; live parameters and animations are gone, deliberately and with no
+opt-in. Those settings are invisible to every other
 freshness signal -- the source is unchanged, the payload is present, the closure still hashes
 -- so they are canonicalized into ``bakeHash`` and compared by BOTH freshness authorities.
 
@@ -36,6 +36,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+from cadgen._internal.atomic_replace import replace_atomic
 from cadgen._internal.node_runtime import node_builder_script, run_node_builder
 from cadgen._internal.package_freshness import (
     bake_hash_matches,
@@ -158,7 +159,9 @@ def build_implicit_mesh(
     Its run id is handed to the child, which checks it against the lock sentinel before
     writing anything -- so ONE run id, one status record and one progress bar span both
     runtimes, and a builder started outside the lock throws (see
-    ``implicitjs/glb/assertWriteLock.js``).
+    ``implicitjs/glb/assertWriteLock.js``). A run that could not take a lock at all says so
+    with ``--lock-degraded``, so the child skips a check it cannot pass rather than turning a
+    filesystem without advisory locks into a failed build.
 
     Raises on any Node-side failure; the caller must then leave no descriptor behind.
     """
@@ -178,6 +181,10 @@ def build_implicit_mesh(
         "--resolution", str(int(resolution)),
         "--max-cells", str(int(DEFAULT_BAKE_MAX_CELLS)),
     ]
+    if bool(getattr(run, "degraded", False)):
+        # Locking was unavailable, so the run id above is minted rather than stamped and the
+        # child cannot verify it. Say so, instead of letting it read as a lock violation.
+        args += ["--lock-degraded", "1"]
     if threads is not None:
         args += ["--threads", str(int(threads))]
     if write_glb is not None:
@@ -221,7 +228,7 @@ def _write_descriptor(package_dir: Path, descriptor: dict[str, object]) -> dict[
     with temp_path.open("w", encoding="utf-8") as handle:
         json.dump(descriptor, handle, indent=2, sort_keys=True)
         handle.write("\n")
-    os.replace(temp_path, descriptor_path)
+    replace_atomic(temp_path, descriptor_path)
     return descriptor
 
 

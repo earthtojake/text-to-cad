@@ -4,7 +4,7 @@ A long-lived subprocess that imports cadgen / OpenCASCADE ONCE and then services
 many STEP build/export requests in-process, so the viewer pays the ~OCP-import +
 kernel-warm cost a single time instead of per request. It is the CAD Viewer's
 specific wrapper around the GENERAL cadgen cores — it adds no geometry logic of its
-own; it only calls :func:`cadgen.step_artifact.run_cli_payload` and
+own; it only calls :func:`cadgen.step_artifact_cli.run_cli_payload` and
 :func:`cadgen.step_export_target.run_cli_payload` (the same callables the agent CLI
 uses), passing ``reset_runtime_closure=True`` so repeated warm builds record the
 identical source closure a cold CLI would.
@@ -15,7 +15,7 @@ server's build/export backend.
 
 Protocol — newline-delimited JSON-RPC 2.0 on stdio:
   request : {"jsonrpc":"2.0","id":N,"method":"invoke",
-             "params":{"module":"cadgen.step_artifact","args":[...],"repo_root":"..."}}
+             "params":{"module":"cadgen.step_artifact_cli","args":[...],"repo_root":"..."}}
   response: {"jsonrpc":"2.0","id":N,"result":{...cadgen payload dict...}}
             {"jsonrpc":"2.0","id":N,"error":{"code":C,"message":"..."}}
 
@@ -56,13 +56,13 @@ def _module_dispatch():
     """Map a cadgen CLI module name to its in-process payload entrypoint. Imported
     lazily inside the worker process so the (warm) OCP import happens here, not in
     the parent server."""
-    from cadgen import dxf_artifact, implicit_artifact, implicit_export, step_artifact, step_export_target
+    from cadgen import dxf_artifact, implicit_artifact, implicit_export, step_artifact_cli, step_export_target
 
     return {
         "cadgen.dxf_artifact": dxf_artifact.run_cli_payload,
         "cadgen.implicit_artifact": implicit_artifact.run_cli_payload,
         "cadgen.implicit_export": implicit_export.run_cli_payload,
-        "cadgen.step_artifact": step_artifact.run_cli_payload,
+        "cadgen.step_artifact_cli": step_artifact_cli.run_cli_payload,
         "cadgen.step_export_target": step_export_target.run_cli_payload,
     }
 

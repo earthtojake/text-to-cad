@@ -21,6 +21,10 @@ Flat single-file `<name>.step.py` generators live in
   `movement_base`, `keyless_works`, `chrono_works`, `movement`, `bracelet`,
   `moonwatch` for the full watch) plus a `finishing_sampler` coupon, and a
   `render/` suite of presentation themes and animation job templates.
+- [motorbike/](motorbike/README.md): retro step-through scooter — `_spec.py`
+  hardpoint/palette source of truth, shared `_lib.py` geometry vocabulary, 19
+  part entries plus a 23-occurrence `motorbike` assembly with native steering,
+  wheel-spin, engine-swing, and stand-pivot joints.
 - [qdd_actuator/](qdd_actuator): quasi-direct-drive actuator with a parameter
   sidecar.
 - [raptor3/](raptor3): Raptor 3 engine concept with a parameter sidecar.

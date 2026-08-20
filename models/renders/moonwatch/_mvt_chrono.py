@@ -29,7 +29,7 @@ over bridge screw heads (top 2.91) at z >= 2.96, over the ratchet wheel
 stud drops only onto open plate (z=0) or a bridge top (2.85) that is clear
 below (verified against the base's train-wheel plan in `_mvt_base`).
 
-`_finishing.py`'s align=(None,None,None) datum quirks (see /BUGS.md) are
+`_finishing.py`'s align=(None,None,None) datum quirks are
 compensated locally exactly as `_mvt_base.py` does (centered primitives via
 default align; `F.train_wheel` spoke windows re-cut full depth).
 """
@@ -211,7 +211,7 @@ def _cyl(r, h, z0):
 
 
 def _fuse2d(pieces, clip_r=13.4):
-    """ONE multi-operand sketch fuse + regularizing clip (see /BUGS.md)."""
+    """ONE multi-operand sketch fuse + regularizing clip."""
     prof = pieces[0] + pieces[1:] if len(pieces) > 1 else pieces[0]
     return prof & Circle(clip_r)
 
@@ -275,7 +275,7 @@ def _bop_clean(shape):
 def _lever(profile, z_band, label, anglage=S.ANGLAGE_WIDTH_SMALL,
            color=S.STEEL_LEVER, cuts=()):
     """Extrude a lever plate, apply top anglage BEFORE the bore cuts
-    (chamfer-after-boolean is the OCC segfault class, /BUGS.md).
+    (chamfer-after-boolean is the OCC segfault class).
 
     F.safe_chamfer only checks volume > 0, but on some capsule-chain
     perimeters OCC returns a positive-volume chamfer whose skinny faces are
@@ -297,7 +297,7 @@ def _lever(profile, z_band, label, anglage=S.ANGLAGE_WIDTH_SMALL,
 def _screw_head(head_d=1.1, hh=0.24, slot_angle=0.0, color=S.BLUED):
     """Flat mirror-top slotted screw head, top at z = 0, hanging below —
     the same constructive read as `_mvt_base._screw` (domed F.slotted_screw
-    caps render as featureless blobs at macro; see /BUGS.md)."""
+    caps render as featureless blobs at macro)."""
     r = head_d / 2.0
     ch = min(0.07, 0.30 * hh)
     depth = min(0.16, hh - 0.06)
@@ -329,7 +329,7 @@ def _stud_and_screw(parts, x, y, base_z, lever_z0, lever_z1, label,
 
 def _window_cutter(od, frac):
     """Full-depth replica of F.train_wheel's crossing-out cutter (the helper
-    only cuts the top half of every spoke window; see /BUGS.md)."""
+    only cuts the top half of every spoke window)."""
     r_o = od / 2.0
     r_root = r_o - r_o * frac
     rim_inner = r_root - od * 0.10
@@ -882,8 +882,8 @@ def build_chrono():
     parts += _brake_parts()
     parts += _chrono_bridge_parts()
 
-    # Per-component export drops the color of bare-`Compound` leaves (see
-    # /BUGS.md) — coerce every leaf to Part and reattach label/color.
+    # Per-component export drops the color of bare-`Compound` leaves --
+    # coerce every leaf to Part and reattach label/color.
     from build123d import Compound, Part
     out = []
     for p in parts:

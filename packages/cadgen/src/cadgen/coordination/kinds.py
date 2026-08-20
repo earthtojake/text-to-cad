@@ -59,7 +59,7 @@ PHASE_WRITE = "write"
 # in the NODE child (parse the drawing, mesh the flat pattern, write the GLB) while this
 # process holds the lock, so they are declared here -- one run id and one status record span
 # both runtimes, and the bar has to be weighted over the phases it will actually be told
-# about (design/unified-glb-render-artifacts.md §7.4.2).
+# about.
 DRAWING_PACKAGE = ArtifactKind(
     name="drawing-package",
     phases=(PHASE_GENERATE, PHASE_PARSE, PHASE_MESH, PHASE_WRITE, PHASE_FINALIZE),
@@ -81,6 +81,24 @@ IMPLICIT_PACKAGE = ArtifactKind(
         PHASE_WELD: "Welding vertices",
         PHASE_WRITE: "Writing package",
     },
+)
+
+# A snapshot render. Not a coordinated artifact -- it takes no lock and writes no status
+# record, because it produces an image, not a package another process might read half-built.
+# It is a kind anyway so its CLI reports through the same phase model as everything else;
+# before this it had a second, unrelated progress implementation of its own.
+#
+# Note what is NOT a phase here: resolving the input. That step builds the STEP/drawing
+# package when the model is cold, which is the slowest part of a whole snapshot -- and that
+# build reports its OWN phases through artifact_build. Declaring a `resolve` phase here would
+# put two painters on one terminal and replace the build's detail with the word "resolving".
+PHASE_BROWSER = "browser"
+PHASE_RENDER = "render"
+
+SNAPSHOT = ArtifactKind(
+    name="snapshot",
+    phases=(PHASE_BROWSER, PHASE_RENDER),
+    labels={PHASE_BROWSER: "Starting browser", PHASE_RENDER: "Rendering"},
 )
 
 # An export (STEP/STL/3MF/GLB/DXF) writes no package -- it occupies the model's GENERATOR

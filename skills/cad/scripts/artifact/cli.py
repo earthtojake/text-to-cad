@@ -9,7 +9,7 @@ from cadgen.metadata import normalize_mesh_numeric
 
 
 def build_step_artifact(*args, **kwargs):
-    from cadgen.step_artifact import build_step_artifact as build
+    from cadgen.step_artifact_cli import build_step_artifact as build
 
     return build(*args, **kwargs)
 

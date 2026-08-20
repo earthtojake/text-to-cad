@@ -263,3 +263,17 @@ test("an artifact error falls back to a message when the record carries none", (
   assert.equal(alert.title, "Render artifact build failed");
   assert.ok(alert.message.length > 0);
 });
+
+test("a drawing with no mesh is not an error, but a failed build still is", () => {
+  // A dimensioned drawing encloses nothing to extrude, so it bakes no mesh BY DESIGN. Reporting
+  // "no mesh data is available" told the user to rebuild assets that were already complete.
+  const drawing = { file: "plans/panel.dxf.py", kind: "dxf", drawingProfile: "drawing" };
+  assert.equal(buildViewerMeshAlert(drawing, false, ""), null);
+  // A cut layout with no mesh is still a real problem.
+  const layout = { file: "parts/bracket.dxf.py", kind: "dxf", drawingProfile: "cut" };
+  assert.equal(buildViewerMeshAlert(layout, false, "")?.summary, "Mesh unavailable");
+  // And a drawing whose BUILD failed reports the build failure, which outranks the mesh card.
+  const failed = buildViewerMeshAlert(drawing, false, "", { status: "error", error: "bad entity" });
+  assert.equal(failed?.summary, "Build failed");
+  assert.match(failed?.message, /bad entity/u);
+});

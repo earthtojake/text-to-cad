@@ -84,11 +84,28 @@ class NodeRuntimeTestCase(unittest.TestCase):
 
     @staticmethod
     def alive(pid: int) -> bool:
-        try:
-            os.kill(pid, 0)
-        except (ProcessLookupError, PermissionError):
-            return False
-        return True
+        """Is this pid still running? Signal 0 is the POSIX idiom and not portable.
+
+        Windows has no signal 0: ``os.kill(pid, 0)`` reaches ``TerminateProcess`` with an
+        exit code of 0 and raises WinError 87 for the bogus parameter -- an error that reads
+        like "the process is gone" and is not. ``OpenProcess`` is the honest question there,
+        and ``tasklist`` asks it without ctypes.
+        """
+        if os.name != "nt":
+            try:
+                os.kill(pid, 0)
+            except (ProcessLookupError, PermissionError):
+                return False
+            return True
+        listed = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {int(pid)}", "/NH"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        # tasklist prints "INFO: No tasks are running..." rather than an empty table, and
+        # exits 0 either way, so the pid has to be looked for in the output.
+        return str(pid) in listed.stdout
 
 
 class ProtocolTest(NodeRuntimeTestCase):
@@ -339,10 +356,10 @@ reportResult({ ok: true, packagePath: process.argv[2] });
         self.assertEqual(4, sampled[-1].total)
         self.assertEqual("slice 4/4", sampled[-1].detail)
 
-        # The bar advanced through the child's work rather than sitting at the phase floor.
-        self.assertGreater(sampled[-1].ratio, sampled[0].ratio)
-        # And the terminal record carries the phases the CHILD reported, so the next build of
-        # this artifact weights its bar from them.
+        # The count advanced through the child's work rather than sitting at zero.
+        self.assertGreater(sampled[-1].fraction, sampled[0].fraction)
+        # And the terminal record carries the phases the CHILD reported, so the run's own
+        # timings account for the work it did.
         self.assertIn("sample", events[-1].stage_ms or {})
 
 

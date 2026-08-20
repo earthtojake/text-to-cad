@@ -21,7 +21,7 @@
 //   node viewer/scripts/e2e-theme-conformance.mjs --dir <models-root> [--url http://127.0.0.1:3245]
 //                                                 [--out <dir>] [--baseline <file>]
 //
-// Requires a viewer already serving <models-root> (npm --prefix viewer run start) and
+// Requires a viewer already serving <models-root> (npm run start) and
 // playwright available. Exits non-zero on a parity failure or an unresponsive surface.
 
 import fs from "node:fs";

@@ -10,13 +10,13 @@
     "description": "CAD, robotics, fabrication, and local review plugins."
   },
   "description": "CAD, robotics, fabrication, and local review plugins.",
-  "version": "0.4.2",
+  "version": "0.4.20",
   "plugins": [
     {
       "name": "cad",
       "source": "./",
       "description": "CAD, robotics, fabrication, and local review skills.",
-      "version": "0.4.2",
+      "version": "0.4.20",
       "author": {
         "name": "earthtojake"
       },

@@ -1,6 +1,6 @@
 const DEFAULT_SITE_ORIGIN = "https://www.texttocad.dev";
 const SITE_DESCRIPTION = "A library of agent skills for CAD, CAE and CAM";
-const SITE_TITLE = `CAD Skills | ${SITE_DESCRIPTION}`;
+const SITE_TITLE = `text-to-cad | ${SITE_DESCRIPTION}`;
 
 function normalizeOrigin(value: string | undefined, fallback: string) {
   const candidate = value?.trim() || fallback;
@@ -13,11 +13,10 @@ function normalizeOrigin(value: string | undefined, fallback: string) {
 }
 
 export const siteConfig = {
-  name: "CAD Skills",
+  name: "text-to-cad",
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   keywords: [
-    "CAD Skills",
     "text-to-cad",
     "CAD agents",
     "agent skills",

@@ -70,26 +70,29 @@ there is no stored fallback, so the same URL always shows the same thing.
 
 ## Project Layout
 
-- `src/client/`: React app, browser state, styling, and viewer/workbench UI.
+- `src/client/`: React app, browser state, styling, and viewer + workbench UI.
 - `src/client/components/`: top-level CAD, DXF, workbench, and shadcn-style UI
   components.
 - `src/client/workbench/`: selection, persistence, file-sheet, alert, motion,
   and reference helpers that are not React components.
 - `src/client/ui/`: viewer-owned browser utilities such as clipboard, color
   scheme, class merging, and DOM helpers.
-- `src/server/`: local and hosted backend adapters, HTTP middleware, and the
-  local production server.
-- `api/cad/`: Vercel serverless shims for `/__cad/*` routes.
-- `scripts/`: developer and runtime launchers, plus the test runner.
+- `src/shared/`: config helpers shared by the client and the launchers.
+- `server_py/`: the Python backend — local filesystem CAD API (`/__cad/*`),
+  artifact generation, and the production static server for `dist/`.
+- `scripts/`: developer and runtime launchers, the test runner, and the
+  end-to-end sweeps.
 - `docs/`: workflow reference docs for backend storage, browser persistence,
-  and MoveIt2.
+  render types, settings UI, and MoveIt2.
 - `moveit2_server/`: optional Python websocket backend for SRDF controls.
+- `packages/cadjs`, `packages/implicitjs`, `packages/cadgen`: the shared
+  runtimes this app depends on. Keep reusable parsing, rendering, sidecar,
+  selector, topology, implicit shader, snapshot, and export logic in these
+  packages rather than in `src/`.
 
-The shared non-React CAD runtime source lives in `../packages/cadjs`, and the
-shared non-React implicit CAD runtime source lives in `../packages/implicitjs`.
-On `develop`, `viewer/packages/*` is a symlinked development layout; keep
-reusable parsing, rendering, sidecar, selector, topology, implicit shader,
-snapshot, and export logic in the source packages.
+`packages/*` is a symlinked development layout inside the text-to-cad workbench
+and a real vendored copy in a standalone checkout; every path in this app is
+written to work either way.
 
 ## Common Commands
 
@@ -106,7 +109,13 @@ npm run test         # Discover and run all JS tests
 
 ```bash
 node scripts/run-tests.mjs src/client/workbench/sidebar.test.js
-node scripts/run-tests.mjs src/server/localAssetBackend.test.mjs
+node scripts/run-tests.mjs src/shared/viewerConfig.test.mjs
+```
+
+Python backend tests run separately:
+
+```bash
+python -m unittest discover -s server_py/tests -t .
 ```
 
 ## Runtime Configuration
@@ -143,11 +152,10 @@ assets are served by the local backend and are not copied into `dist/`.
 - [Browser storage](./docs/storage.md): URL, `localStorage`, and
   `sessionStorage` ownership.
 - [MoveIt2 server](./docs/moveit2-server.md): optional SRDF websocket backend.
-- `cadjs` render pipeline: shared render APIs used by the viewer, docs, and
-  snapshot runtime. In this workbench, see
-  `../packages/cadjs/docs/render-pipeline.md`.
-- `implicitjs` runtime: shared implicit CAD model, shader render, snapshot, and
-  export APIs. In this workbench, see `../packages/implicitjs/README.md`.
+- [`cadjs` render pipeline](./packages/cadjs/docs/render-pipeline.md): shared
+  render APIs used by the viewer, docs, and snapshot runtime.
+- [`implicitjs` runtime](./packages/implicitjs/README.md): shared implicit CAD
+  model, shader render, snapshot, and export APIs.
 
 ## Verification
 

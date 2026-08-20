@@ -1,92 +1,47 @@
-import { useEffect, useRef, useState } from "react";
-
 import { Progress } from "@/components/ui/progress";
-import {
-  ARTIFACT_PROGRESS_POLL_MS,
-  MAX_DISPLAY_PERCENT,
-  continuedLoadingRatio,
-  estimatedLoadingRatio,
-  formatArtifactProgress
-} from "@/workbench/artifactProgress.js";
+import { formatArtifactProgress } from "@/workbench/artifactProgress.js";
 
-// Two words, max. The status line names the stage; the number says how far along. Anything
-// longer starts wrapping over the 3D scene and stops being scannable at a glance.
+// Two words, max. Anything longer starts wrapping over the 3D scene and stops being
+// scannable at a glance.
 const DEFAULT_STATUS = "Loading";
 
 /**
- * The one loading indicator: a status word top-left, a percent top-right, and a bar.
+ * The one loading indicator: what is happening on the left, how far along on the right, bar.
  *
- * The bar is ALWAYS shown while loading. When the build reports real progress we use it;
- * when it does not — a plain asset read, a decode, the window before a build's first
- * event — we estimate against the clock (see `estimatedLoadingRatio`). A bar that only
- * appears for the subset of loads that happen to be instrumented is worse than one that is
- * always there, because its absence reads as "stuck" rather than "unmeasured".
+ * Two lines, never more. The status line is as SPECIFIC as the build can make it — the phase
+ * plus the sub-unit in flight, on one line ("Building geometry · airframe") — because the
+ * phase alone goes stale for minutes at a time on a big model, and a status that has not
+ * changed in twenty minutes is the failure this whole pipeline exists to fix. Putting the
+ * sub-unit on its own row instead cost a third row and made the overlay resize whenever a
+ * phase started or stopped naming things; over a live 3D scene that was worse than the
+ * information was worth.
  *
- * A load can cross from measured to unmeasured HALFWAY THROUGH: an artifact build reports
- * real phases and then stops the moment it finishes, while the package GLB still has to be
- * fetched and decoded. The measured high-water mark is therefore kept as a floor and the
- * remainder eased from there (`continuedLoadingRatio`), so the bar neither jumps backwards
- * nor freezes at the from-scratch estimate's ceiling.
+ * The phase ordinal ("2 of 4") is the one thing deliberately dropped: it answers a question
+ * nobody asks mid-build, and it competed with the count for the eye.
+ *
+ * The bar takes one of two forms, chosen by what the build can honestly say. A phase that
+ * knows its work list fills it and shows the count ("312/1127"); a phase that does not gets
+ * an INDETERMINATE bar and NO number beside it. There is no overall percentage and no clock.
+ * Both were previously required to keep one bar moving across four phases of unknowable
+ * relative cost, and both lied: a first build had no measurements to weight the phases with,
+ * so the bar sat at 0% for the whole of a ten-minute generate phase and then jumped to 46%.
+ * A sliding bar says "working, no estimate" — which is the truth — and needs no repaint timer
+ * to say it, because CSS animates it.
  */
 export default function ViewerLoadingOverlay({
   viewerLoading,
   previewMode,
   progress = null
 }) {
-  const active = viewerLoading && !previewMode;
-  const startedAtRef = useRef(0);
-  // The highest ratio this load actually MEASURED, and when the measurement stopped. The
-  // bar is monotonic within a load, so a floor is the whole mechanism: once something real
-  // is known, no later estimate may walk it back.
-  const measuredFloorRef = useRef(0);
-  const tailStartedAtRef = useRef(0);
-  const [, setTick] = useState(0);
-
-  useEffect(() => {
-    if (!active) {
-      startedAtRef.current = 0;
-      measuredFloorRef.current = 0;
-      tailStartedAtRef.current = 0;
-      return undefined;
-    }
-    startedAtRef.current = Date.now();
-    measuredFloorRef.current = 0;
-    tailStartedAtRef.current = 0;
-    // Repaint on the same cadence the artifact status is polled, so the estimated bar and
-    // a reported one advance at one rate rather than two.
-    const intervalId = window.setInterval(() => {
-      setTick((current) => current + 1);
-    }, ARTIFACT_PROGRESS_POLL_MS);
-    return () => window.clearInterval(intervalId);
-  }, [active]);
-
-  if (!active) {
+  if (!viewerLoading || previewMode) {
     return null;
   }
 
   const frame = progress ? formatArtifactProgress(progress) : null;
-  let ratio;
-  if (frame) {
-    // Measured: record the high-water mark and clear any tail clock, so a build that
-    // resumes reporting (a handoff to another run) goes back to real positions.
-    measuredFloorRef.current = Math.max(measuredFloorRef.current, frame.ratio);
-    tailStartedAtRef.current = 0;
-    ratio = measuredFloorRef.current;
-  } else if (measuredFloorRef.current > 0) {
-    // The measured phase ended but the load did not — start the tail clock at the handover
-    // (once; a re-render must not keep resetting it) and ease on from the floor.
-    if (!tailStartedAtRef.current) {
-      tailStartedAtRef.current = Date.now();
-    }
-    ratio = continuedLoadingRatio(measuredFloorRef.current, tailStartedAtRef.current);
-  } else {
-    ratio = estimatedLoadingRatio(startedAtRef.current);
-  }
-  // Derived from the ratio the bar is drawing, never from the raw frame: on a run handoff
-  // the floor can sit above what the new run reports, and a number disagreeing with the bar
-  // beside it is worse than either being slightly stale.
-  const percent = Math.min(MAX_DISPLAY_PERCENT, Math.round(ratio * 100));
   const status = frame?.label || DEFAULT_STATUS;
+  // Anything without a real fraction — an uncountable phase, or a plain asset read that
+  // reports nothing at all — renders as indeterminate.
+  const value = frame?.determinate ? frame.percent : null;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
@@ -104,12 +59,22 @@ export default function ViewerLoadingOverlay({
                 tailwind-merge classGroup for one call site. */}
             <span className="truncate text-[11px] uppercase tracking-wider text-muted-foreground">
               {status}
+              {/* The sub-unit rides on the SAME line as the phase, in its authored case —
+                  it is data ("airframe", "o1.7.3 nozzle_petal"), not a label, and shouting
+                  it would make a content hash even harder to read. `truncate` on the parent
+                  clips the pair from the right rather than letting it wrap over the scene. */}
+              {frame?.detail ? (
+                <span className="normal-case tracking-normal text-muted-foreground/60">
+                  {" · "}
+                  {frame.detail}
+                </span>
+              ) : null}
             </span>
-            <span className="text-[11px] tabular-nums text-muted-foreground">
-              {percent}%
+            <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+              {frame?.counts || ""}
             </span>
           </div>
-          <Progress value={percent} aria-label={status} />
+          <Progress value={value} aria-label={status} />
         </div>
       </div>
     </div>

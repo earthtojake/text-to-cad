@@ -10,8 +10,8 @@
 //   CPU  meshing  : `sdfEvaluator.js`'s BUILTINS table (the same ~60 helpers, hand-written a
 //                   second time in JS) + the RAW, un-normalized `model.glslSource`
 //
-// Neither input nor implementation is shared, and design/unified-glb-render-artifacts.md §7.2
-// promotes the CPU side from an export-only convenience to the geometry users actually see.
+// Neither input nor implementation is shared, and the CPU side is no longer an export-only
+// convenience -- it is the geometry users actually see.
 // So this module evaluates the GPU side's inputs -- the shader's own GLSL helper bodies, over
 // the shader's own normalized source -- and the test asserts the two agree numerically.
 //

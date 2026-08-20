@@ -1,4 +1,4 @@
-"""``cadgen.step_artifact`` must short-circuit on an already-current package.
+"""``cadgen.step_artifact_cli`` must short-circuit on an already-current package.
 
 This is the module the CAD Viewer's build POST runs, and it is a DIFFERENT path from
 ``cadgen.generation`` (covered by test_concurrent_generation.py). Its "already current"
@@ -13,6 +13,7 @@ re-run?" is measured rather than inferred from timing.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -26,6 +27,21 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cadgen/src")
 
 _CADGEN_SRC = str(Path(__file__).resolve().parents[4] / "packages" / "cadgen" / "src")
+
+
+def _child_env() -> dict[str, str]:
+    """The environment the CLI actually runs under: inherited, with PYTHONPATH overlaid.
+
+    This used to be a curated ``{"PYTHONPATH": ..., "PATH": "/usr/bin:/bin"}``, which was
+    never what it claimed to model -- ``viewer/server_py`` spawns these from
+    ``dict(os.environ)`` -- and on Windows it was fatal rather than merely inaccurate.
+    Dropping ``SystemRoot`` breaks Winsock initialisation in the child, so ``import asyncio``
+    (reached from build123d through IPython) died with WinError 10106 before the generator
+    ran at all.
+    """
+    env = dict(os.environ)
+    env["PYTHONPATH"] = _CADGEN_SRC
+    return env
 
 # Appends one line per gen_step() call, so the test can count real generator runs.
 COUNTING_GENERATOR = """from pathlib import Path
@@ -52,14 +68,14 @@ class StepArtifactSkipTest(unittest.TestCase):
         """Run the module exactly as viewer/server_py/backend.py does."""
         proc = subprocess.run(
             [
-                sys.executable, "-m", "cadgen.step_artifact",
+                sys.executable, "-m", "cadgen.step_artifact_cli",
                 "--repo-root", str(self.root),
                 "--step", str(self.root / "widget.step"),
                 "--source-path", str(self.generator),
                 *extra,
             ],
             cwd=str(self.root),
-            env={"PYTHONPATH": _CADGEN_SRC, "PATH": "/usr/bin:/bin"},
+            env=_child_env(),
             capture_output=True,
             text=True,
             timeout=600,
@@ -108,12 +124,12 @@ class StepArtifactSkipTest(unittest.TestCase):
         re-evaluates is_current() under the lock, which turns the loser into a no-op.
         """
         script = [
-            sys.executable, "-m", "cadgen.step_artifact",
+            sys.executable, "-m", "cadgen.step_artifact_cli",
             "--repo-root", str(self.root),
             "--step", str(self.root / "widget.step"),
             "--source-path", str(self.generator),
         ]
-        env = {"PYTHONPATH": _CADGEN_SRC, "PATH": "/usr/bin:/bin"}
+        env = _child_env()
         first = subprocess.Popen(script, cwd=str(self.root), env=env,
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         time.sleep(0.3)

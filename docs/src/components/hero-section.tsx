@@ -4,17 +4,17 @@ import type { CSSProperties } from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { HeroStepRender } from "@/components/hero-step-render";
 
-const textToCadAscii = String.raw`████████╗███████╗██╗  ██╗████████╗   ████████╗ ██████╗     ██████╗ █████╗ ██████╗ 
-╚══██╔══╝██╔════╝╚██╗██╔╝╚══██╔══╝   ╚══██╔══╝██╔═══██╗   ██╔════╝██╔══██╗██╔══██╗
-   ██║   █████╗   ╚███╔╝    ██║         ██║   ██║   ██║   ██║     ███████║██║  ██║
-   ██║   ██╔══╝   ██╔██╗    ██║         ██║   ██║   ██║   ██║     ██╔══██║██║  ██║
-   ██║   ███████╗██╔╝ ██╗   ██║   ██╗   ██║   ╚██████╔╝██╗╚██████╗██║  ██║██████╔╝
-   ╚═╝   ╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝   ╚═╝    ╚═════╝ ╚═╝ ╚═════╝╚═╝  ╚═╝╚═════╝ `;
+const textToCadAscii = String.raw`████████╗███████╗██╗  ██╗████████╗██████╗  ██████╗ █████╗ ██████╗ 
+╚══██╔══╝██╔════╝╚██╗██╔╝╚══██╔══╝╚════██╗██╔════╝██╔══██╗██╔══██╗
+   ██║   █████╗   ╚███╔╝    ██║    █████╔╝██║     ███████║██║  ██║
+   ██║   ██╔══╝   ██╔██╗    ██║   ██╔═══╝ ██║     ██╔══██║██║  ██║
+   ██║   ███████╗██╔╝ ██╗   ██║   ███████╗╚██████╗██║  ██║██████╔╝
+   ╚═╝   ╚══════╝╚═╝  ╚═╝   ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═════╝ `;
 
 const ASCII_MEASURE_FONT_SIZE = 10;
 // Floor low enough that the widest wordmark still FITS on the narrowest phones
-// rather than being clipped by the frame's overflow-hidden. TEXT.TO.CAD is 82
-// columns, which needs ~7px at 375px and ~6px at 320px — a higher floor silently
+// rather than being clipped by the frame's overflow-hidden. TEXT2CAD is 66
+// columns, which needs ~6px at 375px and ~5px at 320px — a higher floor silently
 // cut the trailing glyphs off.
 const ASCII_MIN_FONT_SIZE = 5;
 const ASCII_MAX_FONT_SIZE = 18;

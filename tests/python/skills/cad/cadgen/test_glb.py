@@ -3,6 +3,7 @@ import struct
 import unittest
 from array import array
 from pathlib import Path
+from unittest import mock
 
 import build123d
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
@@ -10,6 +11,7 @@ from OCP.TopAbs import TopAbs_FACE
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopoDS import TopoDS
 
+from cadgen._internal import glb as glb_module
 from cadgen._internal.glb import (
     export_assembly_glb_from_scene,
     export_native_glb_from_scene,
@@ -89,6 +91,47 @@ def _read_glb_json(path: Path) -> dict[str, object]:
     if chunk_type != b"JSON":
         raise AssertionError("First GLB chunk is not JSON")
     return json.loads(payload[20:20 + chunk_length].decode("utf-8"))
+
+
+class AtomicGlbWriteTests(unittest.TestCase):
+    """The GLB writer inherits the SMB retry rather than implementing one.
+
+    These started as PR #244's tests against an inline retry loop here. The loop moved to
+    cadgen._internal.atomic_replace when the other six artifact renames needed the same policy
+    (issue #241 fails on whichever rename loses first), so what is worth asserting here is the
+    delegation -- the policy itself is pinned in tests/python/packages/cadgen/test_atomic_replace.py.
+    """
+
+    def test_the_writer_renames_through_the_shared_helper(self) -> None:
+        with temporary_directory(prefix="cad-glb-atomic-") as temp_dir:
+            target = Path(temp_dir) / "component.glb"
+            with mock.patch.object(
+                glb_module, "write_bytes_atomic", wraps=glb_module.write_bytes_atomic
+            ) as write:
+                glb_module._atomic_write_bytes(target, b"glTF")
+            write.assert_called_once_with(target, b"glTF")
+            self.assertEqual(b"glTF", target.read_bytes())
+
+    def test_a_windows_sharing_violation_still_retries_through_that_helper(self) -> None:
+        from cadgen._internal import atomic_replace
+
+        locked = PermissionError(13, "file is in use")
+        locked.winerror = atomic_replace.WINDOWS_SHARING_VIOLATION
+        real_replace = atomic_replace.os.replace
+        attempts = []
+
+        def flaky(source, destination):
+            attempts.append(source)
+            if len(attempts) < 2:
+                raise locked
+            real_replace(source, destination)
+
+        with temporary_directory(prefix="cad-glb-atomic-") as temp_dir:
+            target = Path(temp_dir) / "component.glb"
+            with mock.patch.object(atomic_replace.os, "replace", side_effect=flaky), \
+                 mock.patch.object(atomic_replace.time, "sleep"):
+                glb_module._atomic_write_bytes(target, b"glTF")
+        self.assertEqual(2, len(attempts))
 
 
 class GlbExportTests(unittest.TestCase):

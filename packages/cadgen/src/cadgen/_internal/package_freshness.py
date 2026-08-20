@@ -1,7 +1,6 @@
 """Descriptor-level freshness primitives shared by BOTH freshness authorities.
 
-A render package's currency is decided twice, by design (see
-``design/unified-glb-render-artifacts.md`` §3.3/§5.3): the viewer's validator
+A render package's currency is decided twice, by design: the viewer's validator
 (``viewer/server_py/artifact.py``) decides what a status GET answers, and the producer's
 per-kind ``is_current`` callable — re-evaluated under the generation lock — decides
 whether a build no-ops. When the two disagree the failure is SILENT rather than loud: the
@@ -24,12 +23,22 @@ import hashlib
 import json
 from typing import Any, Mapping
 
-# Descriptor (assembly.json) layout version for the component-GLB package. Defined in this
-# stdlib-only module rather than beside the emitter in ``_internal.component_package`` (which
-# imports the CAD runtime) so the viewer's validator can gate on the same number without
-# loading OCP. Bumping it invalidates every assembly package: it is the single invalidation
-# channel, in place of per-field compatibility branches.
-ASSEMBLY_PACKAGE_SCHEMA_VERSION = 2
+# One number per file type covers everything about how that type's package was produced:
+# the descriptor's layout AND the bytes inside the payloads it references. Bumping it both
+# makes the viewer's validator refuse existing packages and (for STEP, via the component cid
+# salt in _internal.component_package) forces the payloads to be re-emitted rather than
+# reused by geometry. Splitting those two into separate numbers is how a fix ships half
+# applied: the descriptor advances while content-addressed payloads are reused unchanged.
+#
+# Deliberately per file type, not one number for all of them: a drawing rebuild is
+# milliseconds and a large STEP assembly is tens of seconds, so a DXF change must not
+# re-mesh every STEP model on next open.
+#
+# 3: the topology extractor's curveType/continuity names were corrupted by a memoization
+#    collision between the numerically overlapping GeomAbs_* enum families (see
+#    _internal.step_scene._enum_name), so every package built before that fix records
+#    surface names on its edges.
+STEP_PACKAGE_VERSION = 3
 
 SCHEMA_VERSION_FIELD = "packageSchemaVersion"
 BAKE_HASH_FIELD = "bakeHash"

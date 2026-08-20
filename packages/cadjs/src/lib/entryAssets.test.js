@@ -6,6 +6,7 @@ import {
   entryAssetBytes,
   entryAssetUrl,
   entryHasDxf,
+  entryIsDrawingDocument,
   entryHasDisplayEdges,
   entryHasMesh,
   entryHasReferences,
@@ -138,4 +139,18 @@ test("robot and reference signatures match persisted session expectations", () =
     url: "/robot.sdf",
     hash: "sdf-hash"
   }), "sdf-hash");
+});
+
+test("a dimensioned drawing is a document, a cut layout is not", () => {
+  // Both arrive with no glb relation, so the profile is the only thing that tells them apart --
+  // and getting it wrong means waiting forever for a mesh that is never coming (issue #246).
+  const drawing = { file: "plans/panel.dxf.py", kind: "dxf", drawingProfile: "drawing" };
+  const layout = { file: "parts/bracket.dxf.py", kind: "dxf", drawingProfile: "cut" };
+  assert.equal(entryIsDrawingDocument(drawing), true);
+  assert.equal(entryIsDrawingDocument(layout), false);
+  // An unbuilt entry has no profile yet: not a document until the package says so.
+  assert.equal(entryIsDrawingDocument({ file: "parts/bracket.dxf.py", kind: "dxf" }), false);
+  // The profile only means anything for a DXF.
+  assert.equal(entryIsDrawingDocument({ file: "a/b.step", kind: "step", drawingProfile: "drawing" }), false);
+  assert.equal(entryIsDrawingDocument(null), false);
 });

@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from cadgen._internal.atomic_replace import write_bytes_atomic
 from cadgen._internal.glb_mesh_payload import (
     CAD_TO_GLB_SCALE,
     DEFAULT_MATERIAL,
@@ -20,6 +21,7 @@ from cadgen._internal.glb_mesh_payload import (
     scene_glb_mesh_payload_key,
 )
 from cadgen._internal.glb_topology import (
+    GLB_VERSION,
     STEP_EDGE_BARYCENTRIC_ATTRIBUTE,
     STEP_EDGE_CLASS_ATTRIBUTE,
     STEP_EDGE_SURFACE_CLASS_CODES,
@@ -40,7 +42,6 @@ UNSIGNED_INT = 5125
 TRIANGLES = 4
 STEP_TOPOLOGY_LEGACY_IDENTITY_KEYS = frozenset({"cadRef", "cadPath"})
 GLB_MAGIC = 0x46546C67
-GLB_VERSION = 2
 IDENTITY_TRANSFORM = (
     1.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0,
@@ -138,13 +139,9 @@ def write_empty_glb(target_path: Path) -> Path:
 
 
 def _atomic_write_bytes(target_path: Path, payload: bytes) -> None:
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = target_path.with_name(f"{target_path.name}.{os.getpid()}.{time.time_ns()}.tmp")
-    try:
-        temp_path.write_bytes(payload)
-        temp_path.replace(target_path)
-    finally:
-        temp_path.unlink(missing_ok=True)
+    # The SMB retry that used to be inline here now covers every artifact rename -- see
+    # cadgen._internal.atomic_replace, and issue #241.
+    write_bytes_atomic(target_path, payload)
 
 
 def build_step_topology_index_manifest(

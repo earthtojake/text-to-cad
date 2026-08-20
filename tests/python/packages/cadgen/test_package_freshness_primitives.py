@@ -19,7 +19,7 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cadgen/src")
 
 from cadgen._internal.package_freshness import (  # noqa: E402
-    ASSEMBLY_PACKAGE_SCHEMA_VERSION,
+    STEP_PACKAGE_VERSION,
     bake_hash_matches,
     canonical_bake_hash,
     descriptor_bake_hash,
@@ -98,7 +98,7 @@ class BakeHashMatchTests(unittest.TestCase):
 
 class SchemaVersionGateTests(unittest.TestCase):
     def test_exact_int_equality_only(self):
-        current = ASSEMBLY_PACKAGE_SCHEMA_VERSION
+        current = STEP_PACKAGE_VERSION
         self.assertTrue(schema_version_matches({"packageSchemaVersion": current}, current))
         for recorded in (
             None,
@@ -114,14 +114,14 @@ class SchemaVersionGateTests(unittest.TestCase):
                 )
 
     def test_a_descriptor_that_records_nothing_is_not_current(self):
-        self.assertFalse(schema_version_matches({}, ASSEMBLY_PACKAGE_SCHEMA_VERSION))
+        self.assertFalse(schema_version_matches({}, STEP_PACKAGE_VERSION))
 
     def test_the_emitter_stamps_the_shared_constant(self):
         # component_package writes the descriptor; the viewer cannot import it (CAD
         # runtime). One constant, or the two sides drift by exactly one bump.
         from cadgen._internal.component_package import PACKAGE_SCHEMA_VERSION
 
-        self.assertEqual(ASSEMBLY_PACKAGE_SCHEMA_VERSION, PACKAGE_SCHEMA_VERSION)
+        self.assertEqual(STEP_PACKAGE_VERSION, PACKAGE_SCHEMA_VERSION)
 
 
 _PROBE = """

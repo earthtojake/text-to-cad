@@ -22,6 +22,11 @@ from pathlib import Path
 # This is the single classifier: drawing_render (and the viewer's parseDxf)
 # follow the same token rule so validation, snapshots, and rendering agree.
 _LAYER_INTENT_BY_TOKEN = {
+    # An explicit cut token WINS: a layer called CUT_SECTION is a cut path whose name happens
+    # to mention a view, and classifying it as annotation would skip the closure check on the
+    # one layer that most needs it.
+    "cut": "cut",
+    "profile": "cut",
     "bend": "bend",
     "fold": "bend",
     "engrave": "engrave",
@@ -32,6 +37,33 @@ _LAYER_INTENT_BY_TOKEN = {
     "notes": "reference",
     "annotation": "reference",
     "construction": "reference",
+    # A dimensioned drawing's furniture. None of it is a cut path, and every one of these was
+    # previously classified as one, so a plan-and-sections drawing could not generate at all
+    # (issue #246). Whole tokens still, so PREFORM does not match ref and SECTIONAL does not
+    # match section.
+    "dim": "reference",
+    "dims": "reference",
+    "dimension": "reference",
+    "dimensions": "reference",
+    "section": "reference",
+    "sections": "reference",
+    "hidden": "reference",
+    "center": "reference",
+    "centre": "reference",
+    "centerline": "reference",
+    "centreline": "reference",
+    "phantom": "reference",
+    "title": "reference",
+    "titleblock": "reference",
+    "border": "reference",
+    "frame": "reference",
+    "viewport": "reference",
+    "hatch": "reference",
+    "text": "reference",
+    "label": "reference",
+    "labels": "reference",
+    "leader": "reference",
+    "axis": "reference",
 }
 _LAYER_TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
 _ANNOTATION_ENTITY_TYPES = frozenset({"TEXT", "MTEXT", "DIMENSION", "LEADER", "MULTILEADER", "HATCH"})
@@ -40,7 +72,7 @@ _COORDINATE_TOLERANCE = 1e-6
 
 @dataclass(frozen=True)
 class DrawingFinding:
-    severity: str  # "error" | "warning"
+    severity: str  # "error" | "warning" | "info"
     code: str
     message: str
 
@@ -59,7 +91,7 @@ class DrawingValidationError(ValueError):
 def layer_intent(layer_name: str) -> str:
     """Classify a layer name into ``cut`` | ``bend`` | ``engrave`` | ``reference``."""
     tokens = [t for t in _LAYER_TOKEN_SPLIT.split(str(layer_name or "").strip().lower()) if t]
-    for intent in ("bend", "engrave", "reference"):
+    for intent in ("cut", "bend", "engrave", "reference"):
         if any(_LAYER_INTENT_BY_TOKEN.get(token) == intent for token in tokens):
             return intent
     return "cut"
@@ -67,6 +99,101 @@ def layer_intent(layer_name: str) -> str:
 
 def layer_allows_open_geometry(layer_name: str) -> bool:
     return layer_intent(layer_name) != "cut"
+
+
+
+# --- is this file a DRAWING or a cut layout? ------------------------------------------
+# Answered from the FILE, using the format's own constructs, rather than from a field a
+# generator sets: the same rule then holds for a .dxf that came out of AutoCAD and is being
+# validated post-hoc, which is the case that matters (issue #246 -- a workshop drawing already
+# sitting with the cabinetmaker).
+#
+# The apparatus below is what a dimensioned drawing has and a laser-cut layout never does. A
+# cut file is model-space geometry at 1:1 with no dimensions, no viewports and nothing to plot
+# a title block into: it is a toolpath, not a document.
+_DRAWING_APPARATUS_ENTITY_TYPES = frozenset({"DIMENSION", "LEADER", "MULTILEADER", "ARC_DIMENSION"})
+# Standard DXF linetypes with an ISO 128 / ASME Y14.2 meaning that is not "cut here".
+_ANNOTATION_LINETYPE_TOKENS = frozenset({
+    "hidden", "hidden2", "hiddenx2",
+    "center", "center2", "centerx2", "centre",
+    "phantom", "phantom2", "phantomx2",
+    "dashdot", "dashdot2", "dashdotx2", "divide", "dot",
+})
+
+
+def _linetype_is_annotation(linetype: object) -> bool:
+    tokens = [t for t in _LAYER_TOKEN_SPLIT.split(str(linetype or "").strip().lower()) if t]
+    return any(token in _ANNOTATION_LINETYPE_TOKENS for token in tokens)
+
+
+def layer_table_intents(document: object) -> dict[str, str]:
+    """Layer intents the FILE itself declares, by layer name.
+
+    Two standard DXF properties say "this layer is not a cut path" without anyone having to
+    name it so:
+
+    * ``plot = 0`` -- a non-plotting layer. Construction geometry, by the convention every CAD
+      package writes and reads.
+    * a dashed/centre/phantom linetype -- ISO 128 line types for hidden edges, axes and
+      break lines. A cut path is continuous.
+    """
+    intents: dict[str, str] = {}
+    try:
+        layers = list(document.layers)
+    except Exception:  # noqa: BLE001 - a document with no readable layer table simply declares no intents
+        return intents
+    for layer in layers:
+        name = str(getattr(getattr(layer, "dxf", None), "name", "") or "").strip()
+        if not name:
+            continue
+        plot = getattr(getattr(layer, "dxf", None), "plot", 1)
+        linetype = getattr(getattr(layer, "dxf", None), "linetype", "")
+        if _linetype_is_annotation(linetype):
+            # A BEND layer is conventionally dashed too, and bend keeps its own intent: it is
+            # not a cut path either, and the bend checks want to know it is a bend.
+            intents[name] = "bend" if layer_intent(name) == "bend" else "reference"
+        elif str(plot) in {"0", "False"}:
+            intents[name] = "reference"
+    return intents
+
+
+def drawing_apparatus(document: object) -> dict[str, int]:
+    """Counts of the constructs that make a DXF a drawing rather than a cut layout."""
+    counts = {"dimensions": 0, "viewports": 0, "paperspace_entities": 0}
+    try:
+        for entity in document.entitydb.values() if hasattr(document, "entitydb") else []:
+            kind = entity.dxftype()
+            if kind in _DRAWING_APPARATUS_ENTITY_TYPES:
+                counts["dimensions"] += 1
+            elif kind == "VIEWPORT":
+                counts["viewports"] += 1
+    except Exception:  # noqa: BLE001 - ezdxf entity reads can raise per entity; a partial count still classifies
+        pass
+    try:
+        for layout in document.layouts:
+            if layout.name.lower() == "model":
+                continue
+            counts["paperspace_entities"] += sum(1 for _ in layout)
+    except Exception:  # noqa: BLE001 - same, for layouts: an unreadable layout contributes nothing
+        pass
+    return counts
+
+
+def document_is_drawing(document: object) -> tuple[bool, str]:
+    """Whether this file is a dimensioned drawing, and the evidence for saying so.
+
+    Positive evidence only. "Nothing closes, so it must be a drawing" would excuse a genuinely
+    broken cut layout, which is the one thing this check exists to catch.
+    """
+    counts = drawing_apparatus(document)
+    reasons = []
+    if counts["dimensions"]:
+        reasons.append(f"{counts['dimensions']} dimension/leader entities")
+    if counts["viewports"]:
+        reasons.append(f"{counts['viewports']} paper-space viewports")
+    if counts["paperspace_entities"] and not counts["viewports"]:
+        reasons.append(f"{counts['paperspace_entities']} paper-space entities")
+    return bool(reasons), ", ".join(reasons)
 
 
 def _rounded(value: float) -> float:
@@ -109,7 +236,7 @@ def _open_endpoints(entity) -> tuple[tuple[float, float], tuple[float, float]] |
             if len(control_points) < 2:
                 return None
             return (_point_key(control_points[0]), _point_key(control_points[-1]))
-        except Exception:
+        except (AttributeError, TypeError, IndexError):  # a malformed SPLINE has no usable endpoints
             return None
     return None
 
@@ -181,7 +308,7 @@ def validate_drawing_document(document: object) -> list[DrawingFinding]:
     units = 0
     try:
         units = int(header.get("$INSUNITS", 0)) if header is not None else 0
-    except Exception:
+    except (TypeError, ValueError):  # malformed or non-numeric $INSUNITS
         units = 0
     if units <= 0:
         findings.append(
@@ -191,6 +318,21 @@ def validate_drawing_document(document: object) -> list[DrawingFinding]:
                 "document units are unset; set them explicitly (e.g. doc.units = ezdxf.units.MM)",
             )
         )
+
+    # A drawing is not a cut layout, and the file says which it is. Closure is required of cut
+    # paths; a plan-and-sections drawing has none, and failing it for that is what made issue
+    # #246's workshop drawing ungeneratable.
+    is_drawing, drawing_evidence = document_is_drawing(document)
+    if is_drawing:
+        findings.append(
+            DrawingFinding(
+                "info",
+                "drawing_document",
+                f"treated as a dimensioned drawing ({drawing_evidence}); cut-profile closure "
+                "is not required. Cut layouts have no dimensions or viewports.",
+            )
+        )
+    declared_layer_intents = layer_table_intents(document)
 
     modelspace = document.modelspace()
     geometry_count = 0
@@ -221,6 +363,8 @@ def validate_drawing_document(document: object) -> list[DrawingFinding]:
                 continue
             seen_signatures.add(signature)
 
+        if is_drawing or declared_layer_intents.get(layer, "cut") != "cut":
+            continue
         if layer_allows_open_geometry(layer):
             continue
         if kind == "LWPOLYLINE":

@@ -3,6 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { normalizeImplicitCadModel } from "./model.js";
+import { unsupportedNodeVersionMessage } from "./nodeModuleSupport.js";
 import {
   exportImplicitCadAnimatedGlb,
   exportImplicitCadModel,
@@ -75,7 +76,18 @@ export async function loadImplicitCadModelFromPath(inputPath, {
   }
   const inputUrl = pathToFileURL(resolvedInput);
   inputUrl.searchParams.set("mtime", String(Number(stats.mtimeMs)));
-  const moduleValue = await import(inputUrl.href);
+  let moduleValue;
+  try {
+    moduleValue = await import(inputUrl.href);
+  } catch (error) {
+    // Blame the interpreter when the interpreter is at fault: on Node < 22 a plain `.js`
+    // model file fails with "Unexpected token 'export'", which reads as a broken model.
+    const unsupported = unsupportedNodeVersionMessage(error, { inputPath: resolvedInput });
+    if (unsupported) {
+      throw new Error(unsupported, { cause: error });
+    }
+    throw error;
+  }
   const defaultModel = normalizeImplicitCadModel(moduleValue, { sourceUrl: inputUrl.href });
   const nextParams = isObject(params) ? params : isObject(parameterValues) ? parameterValues : null;
   if (nextParams || animationState) {

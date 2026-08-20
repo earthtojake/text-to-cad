@@ -8,6 +8,7 @@ import {
   Pause,
   Play,
   PenTool,
+  Ruler,
   X
 } from "lucide-react";
 import {
@@ -122,6 +123,8 @@ function DesktopFloatingToolBar({
   animationDisabled = false,
   handleAnimationPlayToggle,
   drawToolActive,
+  measureModeActive = false,
+  measureDisabled = false,
   panToolActive,
   handleSelectTabToolMode,
   viewerLoading,
@@ -293,6 +296,16 @@ function DesktopFloatingToolBar({
                   </ToolbarButton>
 
                   <ToolbarButton
+                    label="Measure"
+                    active={measureModeActive}
+                    onClick={() => handleSelectTabToolMode("measure")}
+                    disabled={measureDisabled}
+                    aria-pressed={measureModeActive}
+                  >
+                    <Ruler className="size-3" strokeWidth={2} aria-hidden="true" />
+                  </ToolbarButton>
+
+                  <ToolbarButton
                     label="Draw"
                     active={drawToolActive}
                     onClick={() => handleSelectTabToolMode("draw")}
@@ -343,6 +356,7 @@ function DesktopFloatingToolBar({
         </div>
         </div>
       </TooltipProvider>
+
 
       {!previewMode && supportsTool(renderFormat, "draw") && drawToolActive ? (
         <DrawingToolbar

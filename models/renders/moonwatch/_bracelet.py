@@ -198,8 +198,7 @@ def _crowned_face(xa, xb, z_top, z_bot, s_top, bev, s_bot=0.0, rnd=(False, False
     45-degree bevels (wrist side). Baking crown, bevels, and shoulder
     rounds into the SECTION replaces 3D edge chamfers/fillets entirely
     — OCC's chamfer on link perimeters that touch dome/eye-cap tangent
-    chains silently fails, churns for minutes, or segfaults (see
-    /BUGS.md).
+    chains silently fails, churns for minutes, or segfaults.
     """
     ba, bb = bev if isinstance(bev, tuple) else (bev, bev)
     ra, rb = rnd
@@ -667,7 +666,7 @@ def make_end_link():
     # lines (along Y at the outer widths, near the top), the joint-1
     # rolled shoulder (chamfering its loft-station seams would flatten
     # the roll — and OCC chamfers on such tangent chains fail or
-    # segfault, see /BUGS.md), and the groove shoulders crisp
+    # segfault), and the groove shoulders crisp
     def _keep(e):
         bb = e.bounding_box()
         on_bevel_band = (

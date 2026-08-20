@@ -102,7 +102,7 @@ def quantity_color_rgba_from_color(color: object) -> object | None:
                 max(0.0, min(1.0, float(rgb.Blue()))),
                 max(0.0, min(1.0, float(wrapped.Alpha()))),
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - OCP Quantity color reads can raise C++ exceptions; fall back to the wrapped color
             return wrapped
 
     from OCP.Quantity import Quantity_Color, Quantity_ColorRGBA, Quantity_TOC_RGB
@@ -160,7 +160,7 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
             return TopLoc_Location()
         try:
             return location()
-        except Exception:
+        except Exception:  # noqa: BLE001 - OCP Location() can raise; degrade to the identity location
             return TopLoc_Location()
 
     def shape_without_location(shape: object) -> object:
@@ -172,7 +172,7 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
             return wrapped
         try:
             return located(TopLoc_Location())
-        except Exception:
+        except Exception:  # noqa: BLE001 - OCP Located() can raise on unusual shapes; keep the unlocated shape
             return wrapped
 
     def shape_definition_for_tree(shape: object) -> object:

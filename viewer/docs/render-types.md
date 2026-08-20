@@ -37,7 +37,7 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 | `params` | `sidecar` (`.step.js`), `module` (in-`.implicit.js`), or `null`. |
 | `animations` | Has animation clips, so transport controls apply. |
 | `posePicker` | Robot pose picking. |
-| `artifactManaged` | Builds a package before it can render. A **subset** of `owns_entry` in `viewer/server_py/artifact.py`, not a mirror: the server also owns implicit entries (it builds their packages for export and snapshot) but an implicit raymarches live and must never wait on that build. A format listed here that the server does not own blocks forever. |
+| `artifactManaged` | Builds a package before it can render. A **subset** of `owns_entry` in `server_py/artifact.py`, not a mirror: the server also owns implicit entries (it builds their packages for export and snapshot) but an implicit raymarches live and must never wait on that build. A format listed here that the server does not own blocks forever. |
 | `exportFormats` | What `/__cad/export` can produce for it. |
 
 ### Rules
@@ -101,12 +101,12 @@ every artifact-managed kind.
 
 ## Standing gate
 
-`viewer/scripts/e2e-format-sweep.mjs` loads one fixture per format against a running
+`scripts/e2e-format-sweep.mjs` loads one fixture per format against a running
 viewer and asserts each draws something with no page errors:
 
 ```bash
-npm --prefix viewer run start -- --port 3245 --host 127.0.0.1   # from the models root
-node viewer/scripts/e2e-format-sweep.mjs --dir <abs-models-root> [--all-implicits]
+npm run start -- --port 3245 --host 127.0.0.1   # from the models root
+node scripts/e2e-format-sweep.mjs --dir <abs-models-root> [--all-implicits]
 ```
 
 Run it for any change to shared viewer code. It uses `page.screenshot()` against a
@@ -181,7 +181,7 @@ is not rediscovered as a viewer bug, which it is not.
 ### Conformance harness
 
 ```bash
-node viewer/scripts/e2e-theme-conformance.mjs --dir <abs-models-root> [--out <dir>] [--baseline <file>]
+node scripts/e2e-theme-conformance.mjs --dir <abs-models-root> [--out <dir>] [--baseline <file>]
 ```
 
 Loads one mesh scene and one implicit scene under all eight presets and asserts:
@@ -198,5 +198,5 @@ Loads one mesh scene and one implicit scene under all eight presets and asserts:
    identically, which is exactly what the raymarcher did while `lighting.fill` and
    `lighting.rim` were being dropped at normalization.
 
-`viewer/scripts/theme-conformance-baseline.json` records the measured means so a change of
+`scripts/theme-conformance-baseline.json` records the measured means so a change of
 look is visible in a diff rather than only in a pass/fail.

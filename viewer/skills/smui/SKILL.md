@@ -1,7 +1,7 @@
 # smui — Terminal Theme for the CAD Viewer UI
 
 Local copy of the **smui** ("spacemolt") design system
-(<https://smui.statico.io/skill.md>), adapted for the text-to-cad CAD Viewer.
+(<https://smui.statico.io/skill.md>), adapted for the CAD Viewer.
 smui is a Nord-inspired terminal aesthetic for shadcn/ui with light and dark
 modes: sharp edges, monospace everything. Read this whole document before
 restyling viewer UI.
@@ -13,12 +13,12 @@ opaque panels, because viewer panels float over a live 3D scene.
 
 ---
 
-## In this app (text-to-cad viewer)
+## In this app (CAD Viewer)
 
 This app is **Vite + Tailwind v4**, not Next.js, so ignore the upstream
 `next/font` and `next-themes` instructions — the equivalents here are:
 
-- **Tokens live in [`viewer/src/client/styles/globals.css`](../../src/client/styles/globals.css).**
+- **Tokens live in [`src/client/styles/globals.css`](../../src/client/styles/globals.css).**
   The shadcn CSS variables are set directly in `:root` (light "Snow Storm") and
   `.dark` (dark "Polar Night"); the Tailwind v4 `@theme inline` block maps them
   to utilities and sets `--radius` to `0`. Do **not** run `npx shadcn add` —
@@ -249,7 +249,7 @@ Register colors in `globals.css` so you can use `bg-smui-frost-2`,
 ## tailwind-merge Fix
 
 Custom text sizes conflict with tailwind-merge. Extend the app's `cn()`
-(`viewer/src/client/ui/utils`):
+(`src/client/ui/utils`):
 
 ```ts
 import { clsx, type ClassValue } from "clsx";

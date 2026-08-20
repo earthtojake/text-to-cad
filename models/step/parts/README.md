@@ -27,6 +27,9 @@ compounds, so they live in `../assemblies/` as `spiral_staircase.step.py` and
   `circular_edges`, `polar_point`, `trapezoid_tooth_profile`, …) used by the
   fixtures above. `../assemblies/planetary_gear_stage.step.py` also imports it,
   via a `sys.path` insert pointing back at this directory.
+- `mx_switch_socket.py`: shared Cherry MX plate-mount socket cutter used by the
+  motorcycle fidget parts above (14 mm plate hole with print clearance, 1.5 mm
+  plate, tab reliefs, switch-body pocket).
 
 ## Simple examples
 
@@ -60,6 +63,20 @@ because the structured fixtures above already carry richer versions.
 - `centrifugal_impeller.step.py`, `electronics_enclosure_base.step.py`: single
   standalone demo parts (originally from `models/fun/`), more expressive than
   the structured fixtures but still one monolithic body.
+- `motorcycle_shock_fidget.step.py`, `motorcycle_wheel_fidget.step.py`,
+  `motorcycle_helmet_fidget.step.py`, `motorcycle_seat_fidget.step.py`:
+  motorcycle-themed desk fidgets that each snap in a Cherry MX keyboard
+  switch (blue-switch click as the fidget action). Multi-color labeled
+  compounds of touching solids rather than single fused bodies, so each
+  material region stays inspectable. They share the MX plate socket cutter
+  from `mx_switch_socket.py`.
+- `print_in_place_hinge.step.py`: print-in-place barrel hinge (two bored end
+  knuckles interleaved with a solid center knuckle and a captive headed pin),
+  authored flat in its 180-degree-open print pose with FDM clearances.
+- `print_in_place_multi_pivot_phone_holder.step.py`: four-link print-in-place
+  holder (base plate, two arms, phone cradle) on three of the same barrel
+  pivots, printed flat as one 94 x 248 mm job and articulating after printing;
+  the cradle width regenerates for phones or small tablets.
 - `research_humanoid.step.py`: a single-body GPT-5.6 humanoid concept
   (originally from `models/experiments/gpt-5.6-sol/`). The other two
   humanoid concepts from that set (`compact_humanoid`, `sculpted_humanoid`)

@@ -92,9 +92,22 @@ test("a plain mesh is the minimal row", () => {
     const row = renderCapabilities(format);
     assert.equal(row.parts, false);
     assert.equal(row.topology, false);
+    assert.equal(row.measure, true);
     assert.equal(row.params, null);
     assert.equal(row.artifactManaged, false);
   }
+});
+
+test("measure does not imply topology", () => {
+  // Mesh Measure snaps to triangle vertices. It must not light up STEP
+  // face/edge references, the tree, or exploded view.
+  for (const format of [RENDER_FORMAT.STL, RENDER_FORMAT.THREE_MF, RENDER_FORMAT.GLB]) {
+    assert.equal(hasCapability(format, "measure"), true, `${format} should measure`);
+    assert.equal(hasCapability(format, "topology"), false, `${format} must not claim topology`);
+  }
+  assert.equal(hasCapability(RENDER_FORMAT.STEP, "measure"), true);
+  assert.equal(hasCapability(RENDER_FORMAT.URDF, "measure"), false);
+  assert.equal(hasCapability(RENDER_FORMAT.DXF, "measure"), false);
 });
 
 test("implicit renders live: parameters from its module, never artifact-managed", () => {

@@ -5,17 +5,17 @@
 <br>
 
 <pre>
-████████╗███████╗██╗  ██╗████████╗   ████████╗ ██████╗     ██████╗ █████╗ ██████╗ 
-╚══██╔══╝██╔════╝╚██╗██╔╝╚══██╔══╝   ╚══██╔══╝██╔═══██╗   ██╔════╝██╔══██╗██╔══██╗
-   ██║   █████╗   ╚███╔╝    ██║         ██║   ██║   ██║   ██║     ███████║██║  ██║
-   ██║   ██╔══╝   ██╔██╗    ██║         ██║   ██║   ██║   ██║     ██╔══██║██║  ██║
-   ██║   ███████╗██╔╝ ██╗   ██║   ██╗   ██║   ╚██████╔╝██╗╚██████╗██║  ██║██████╔╝
-   ╚═╝   ╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝   ╚═╝    ╚═════╝ ╚═╝ ╚═════╝╚═╝  ╚═╝╚═════╝ 
+████████╗███████╗██╗  ██╗████████╗██████╗  ██████╗ █████╗ ██████╗ 
+╚══██╔══╝██╔════╝╚██╗██╔╝╚══██╔══╝╚════██╗██╔════╝██╔══██╗██╔══██╗
+   ██║   █████╗   ╚███╔╝    ██║    █████╔╝██║     ███████║██║  ██║
+   ██║   ██╔══╝   ██╔██╗    ██║   ██╔═══╝ ██║     ██╔══██║██║  ██║
+   ██║   ███████╗██╔╝ ██╗   ██║   ███████╗╚██████╗██║  ██║██████╔╝
+   ╚═╝   ╚══════╝╚═╝  ╚═╝   ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═════╝ 
 </pre>
 
 A library of agent skills for CAD, CAE and CAM
 
-[Docs](https://www.texttocad.dev) | [Demo](https://cad.fun)
+[Docs](https://www.texttocad.dev)
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/earthtojake/text-to-cad/test.yml?branch=develop&style=for-the-badge&logo=githubactions&logoColor=white&label=Tests)](https://github.com/earthtojake/text-to-cad/actions/workflows/test.yml?query=branch%3Adevelop)
 [![Join Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/5FGB9DwJYU)
@@ -32,11 +32,34 @@ A library of agent skills for CAD, CAE and CAM
 
 </div>
 
-# CAD Skills
+# text-to-cad
 
-CAD Skills is a library of agent skills for generating, inspecting, sourcing,
+text-to-cad is a library of agent skills for generating, inspecting, sourcing,
 slicing, and handing off CAD and robot-description artifacts from local project
 files.
+
+<table>
+  <tr>
+    <td width="33%">
+      <a href="./assets/text-to-cad-demo.gif">
+        <img src="./assets/text-to-cad-demo.gif" alt="CAD skill demo showing generated geometry in CAD Viewer" width="100%">
+      </a>
+      <a href="./skills/cad/SKILL.md"><strong>CAD</strong></a>
+    </td>
+    <td width="33%">
+      <a href="./assets/urdf-demo.gif">
+        <img src="./assets/urdf-demo.gif" alt="URDF skill demo showing robot description output in CAD Viewer" width="100%">
+      </a>
+      <a href="./skills/urdf/SKILL.md"><strong>URDF</strong></a>
+    </td>
+    <td width="33%">
+      <a href="./assets/srdf-moveit2-demo.gif">
+        <img src="./assets/srdf-moveit2-demo.gif" alt="SRDF MoveIt2 skill demo showing inverse kinematics in CAD Viewer" width="100%">
+      </a>
+      <a href="./skills/srdf/SKILL.md"><strong>SRDF / MoveIt2</strong></a>
+    </td>
+  </tr>
+</table>
 
 ## 🧰 Skills
 
@@ -64,18 +87,30 @@ generated skill outputs needed by provider installers.
 
 ### Skills
 
-Install CAD Skills with the Skills CLI:
+Install text-to-cad with the Skills CLI:
 
 ```bash
-npx skills install earthtojake/text-to-cad
+npx skills add earthtojake/text-to-cad
 ```
 
 This is the preferred installation path. It installs the individual skills
 directly for supported agents.
 
+**Use the same command to update.** `add` re-fetches the package and overwrites
+what is already installed, so it both refreshes existing skills and installs any
+skill added in a newer release. `npx skills update` only refreshes skills already
+in your lockfile, so it silently misses new ones — which matters here, because
+releases do add skills.
+
+Neither command removes a skill that was retired upstream; drop one with
+`npx skills remove <skill>` if you need to.
+
+(`npx skills install …` still works — it is an undocumented alias for `add`.)
+
 ### Plugins
 
-Provider-native plugin installs are also available for Codex and Claude Code:
+Provider-native plugin installs are also available for Codex, Claude Code, and
+Grok Build:
 
 ```bash
 # Codex (requires Codex 0.142.0 or newer)
@@ -93,42 +128,18 @@ claude plugin marketplace add earthtojake/text-to-cad
 claude plugin install cad@text-to-cad
 ```
 
+Grok Build uses the existing `.claude-plugin/marketplace.json`; there is no
+separate Grok plugin manifest.
+
+```bash
+# Grok Build
+grok plugin install earthtojake/text-to-cad --trust
+grok plugin enable cad
+```
+
 Restart your agent if newly installed skills do not appear. For local
 development, branch from `develop`, open PRs against `develop`, and use the symlink
 workflow in [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## 📸 Screenshots
-
-The repo stores heavyweight GIF assets in `assets/**` through Git LFS and
-excludes that tree from default LFS pulls, so lightweight clones do not fetch
-them. To hydrate the demo assets locally, run:
-
-```bash
-git lfs pull --include="assets/**"
-```
-
-<table>
-  <tr>
-    <td width="33%">
-      <a href="./assets/text-to-cad-demo.gif">
-        <img src="./assets/text-to-cad-demo.gif" alt="CAD skill demo showing generated geometry in CAD Viewer" width="100%">
-      </a>
-      <a href="./skills/cad/SKILL.md"><strong>CAD</strong></a>
-    </td>
-    <td width="33%">
-      <a href="./assets/urdf-demo.gif">
-        <img src="./assets/urdf-demo.gif" alt="URDF skill demo showing robot description output in CAD Viewer" width="100%">
-      </a>
-      <a href="./skills/urdf/SKILL.md"><strong>URDF</strong></a>
-    </td>
-    <td width="33%">
-      <a href="./assets/srdf-moveit2-demo.gif">
-        <img src="./assets/srdf-moveit2-demo.gif" alt="SRDF MoveIt2 skill demo showing inverse kinematics in CAD Viewer" width="100%">
-      </a>
-      <a href="./skills/srdf/SKILL.md"><strong>SRDF / MoveIt2</strong></a>
-    </td>
-  </tr>
-</table>
 
 ## 🛠️ Contributing
 

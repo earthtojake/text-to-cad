@@ -32,6 +32,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote, urlparse
 
+from cadgen.coordination import PHASE_RENDER, resolve as resolve_progress
+
 
 SNAPSHOT_ORIGIN = "http://snapshot.local"
 SNAPSHOT_RENDER_URL = f"{SNAPSHOT_ORIGIN}/render.html"
@@ -789,7 +791,7 @@ class BatchSnapshotRenderer:
                 timeout=DEFAULT_TIMEOUT_SECONDS * 1000,
             )
             self.started = True
-        except Exception:
+        except Exception:  # noqa: BLE001 - any startup failure must still tear down the browser, then re-raise
             await self.close()
             raise
 
@@ -840,62 +842,33 @@ class BatchSnapshotRenderer:
         if self.context is not None:
             try:
                 await self.context.close()
-            except Exception:
+            except Exception:  # noqa: BLE001 - best-effort teardown; a failing close must not mask the original error
                 pass
             self.context = None
         if self.browser is not None:
             try:
                 await self.browser.close()
-            except Exception:
+            except Exception:  # noqa: BLE001 - best-effort teardown; a failing close must not mask the original error
                 pass
             self.browser = None
         if self.playwright is not None:
             try:
                 await self.playwright.stop()
-            except Exception:
+            except Exception:  # noqa: BLE001 - best-effort teardown; a failing close must not mask the original error
                 pass
             self.playwright = None
         self.page = None
         self.started = False
 # --- progress ----------------------------------------------------------------------
-# A snapshot was silent for its ENTIRE run. On a cold assembly that is an artifact build
-# plus a browser launch plus a render -- tens of seconds of nothing on either stream, which
-# is indistinguishable from a hang. Every other long operation in this repo reports (a
-# generation lock now says why it is waiting; `gen` paints a phase bar), and this did not.
+# A snapshot was silent for its ENTIRE run, then grew a progress class of its own: free-text
+# phases, its own tty handling, its own clear(). Two implementations of one idea, sharing
+# nothing, guaranteed to drift.
 #
-# Same shape as those: a self-erasing line on a tty, and on a non-tty -- an agent's captured
-# log -- one durable line per PHASE CHANGE rather than a bar smeared over hundreds of
-# writes. Never on stdout: stdout is the result.
-class SnapshotProgress:
-    """Reports what a snapshot is doing, to stderr, without becoming part of the result."""
+# It reports through the shared phase model now (SNAPSHOT in coordination/kinds.py). The
+# per-job counter that used to be formatted INTO a phase name ("rendering 3/12 model.step")
+# is a real done/total, so a reader can render it as a bar like any other counted phase --
+# and the CLI line, the tty handling and the non-tty degradation all come from one place.
 
-    __slots__ = ("_stream", "_is_tty", "_width", "_last", "_enabled")
-
-    def __init__(self, stream: Any = None, *, enabled: bool = True) -> None:
-        self._stream = stream if stream is not None else sys.stderr
-        self._is_tty = bool(getattr(self._stream, "isatty", lambda: False)())
-        self._enabled = bool(enabled)
-        self._width = 0
-        self._last = ""
-
-    def phase(self, text: str) -> None:
-        if not self._enabled or text == self._last:
-            return
-        self._last = text
-        if self._is_tty:
-            padding = max(0, self._width - len(text))
-            self._width = len(text)
-            print(f"\r{text}{' ' * padding}", end="", file=self._stream, flush=True)
-        else:
-            print(text, file=self._stream, flush=True)
-
-    def clear(self) -> None:
-        if self._enabled and self._is_tty and self._width:
-            print(f"\r{' ' * self._width}\r", end="", file=self._stream, flush=True)
-        self._width = 0
-
-
-NULL_SNAPSHOT_PROGRESS = SnapshotProgress(enabled=False)
 
 
 async def render_resolved_job_packet(
@@ -903,18 +876,19 @@ async def render_resolved_job_packet(
     *,
     runtime_dir: Path,
     renderer: BatchSnapshotRenderer | None = None,
-    progress: SnapshotProgress | None = None,
+    progress: object | None = None,
 ) -> dict[str, object]:
     snapshot_renderer = renderer or BatchSnapshotRenderer(runtime_dir)
-    report = progress if progress is not None else NULL_SNAPSHOT_PROGRESS
+    report = resolve_progress(progress)
     started = time.perf_counter()
     results: list[dict[str, object]] = []
     total = len(packet["jobs"])
+    # The job list is known in full before the first render, so this is a real count rather
+    # than a number formatted into a phase name. Same shape as meshing components.
+    report.phase(PHASE_RENDER, total=total)
     try:
-        for index, job in enumerate(packet["jobs"], start=1):
-            label = str(job.get("input") or "")
-            counter = f" {index}/{total}" if total > 1 else ""
-            report.phase(f"rendering{counter} {label}".rstrip())
+        for job in packet["jobs"]:
+            report.detail(str(job.get("input") or ""))
             result = await snapshot_renderer.render(job)
             # The browser result knows nothing about artifact resolution; --debug
             # diagnostics are attached at resolve time, so merge them into the
@@ -924,8 +898,8 @@ async def render_resolved_job_packet(
             if is_plain_object(debug_info) and is_plain_object(result):
                 result = {**result, "debug": debug_info}
             results.append(result if packet["single"] else {"input": job.get("input"), **result})
+            report.advance()
     finally:
-        report.clear()
         await snapshot_renderer.close()
     if packet["single"]:
         return results[0]

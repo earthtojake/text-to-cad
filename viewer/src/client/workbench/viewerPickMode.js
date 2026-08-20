@@ -1,7 +1,7 @@
 import { VIEWER_PICK_MODE } from "cadjs/lib/viewer/constants.js";
 
-// Callers gate on capabilities before reaching here: a format with neither parts nor
-// topology never picks, so this function no longer needs to know which format it is.
+// Callers decide whether picking is enabled (parts, topology, or Measure).
+// This helper stays format-agnostic.
 export function viewerPickModeForRenderPane({
   panToolActive = false,
   topologySelectionPending = false,
@@ -10,7 +10,8 @@ export function viewerPickModeForRenderPane({
   topologyPickingActive = false,
   viewerMode = "",
   assemblyPickingActive = false,
-  focusedPartIds = ""
+  focusedPartIds = "",
+  measureMode = false
 } = {}) {
   // While panning, a drag is a camera move — picking on release would select
   // whatever the drag happened to finish over.
@@ -19,6 +20,13 @@ export function viewerPickModeForRenderPane({
   }
   if (topologySelectionPending || topologySelectionUnavailable || topologySelectionDeferred) {
     return VIEWER_PICK_MODE.NONE;
+  }
+  // Measure outranks both part and topology selection, and needs neither. The
+  // endpoint always comes from the ray hit on the visible mesh; loaded topology
+  // only refines that hit into a snap. An assembly with nothing expanded still
+  // measures surface to surface across its parts.
+  if (measureMode) {
+    return VIEWER_PICK_MODE.MEASURE;
   }
   if (
     viewerMode === "assembly" &&

@@ -1,6 +1,6 @@
 {
   "name": "cadjs",
-  "version": "0.4.2",
+  "version": "0.4.20",
   "private": true,
   "type": "module",
   "description": "Reusable CAD render/viewer runtime for docs, CAD Viewer, and generated snapshot browser assets.",
@@ -28,7 +28,7 @@
     "gifenc": "^1.0.3",
     "implicitjs": "file:../implicitjs",
     "meshoptimizer": "^1.2.0",
-    "three": "0.160.0",
+    "three": "0.161.0",
     "three-mesh-bvh": "0.8.0"
   }
 }

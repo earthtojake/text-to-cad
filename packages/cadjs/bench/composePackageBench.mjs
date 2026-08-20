@@ -1,8 +1,7 @@
 // Structural render-cost benchmark for a component-GLB package.
 //
-// Measures the metrics the viewer large-package rendering plan targets
-// (design/viewer-large-package-rendering.md), at the JS/meshData layer so it
-// runs deterministically in Node with no GPU/browser:
+// Measures the metrics that matter for large-package rendering, at the JS/meshData
+// layer so it runs deterministically in Node with no GPU/browser:
 //
 //   - occurrences vs unique components (the dedup the render layer keeps)
 //   - composed top-level vertices vs unique-component vertices. The shared-geometry

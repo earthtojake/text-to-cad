@@ -1,5 +1,15 @@
 import { Matrix4, ShapeUtils, Vector2, Vector3 } from "three";
 
+import {
+  assignHolesToRegions,
+  buildFoldBridgeGeometry,
+  buildFoldLine,
+  buildRegionPlacements,
+  decomposeFoldRegions,
+  foldLineSpanForRegion,
+  foldSignedDistance
+} from "./foldRegions.js";
+
 export const DEFAULT_DXF_PREVIEW_THICKNESS_MM = 2;
 export const MIN_DXF_PREVIEW_THICKNESS_MM = 0.2;
 export const MAX_DXF_PREVIEW_THICKNESS_MM = 25;
@@ -18,6 +28,11 @@ const MAX_ARC_SEGMENTS = 160;
 const BEND_LINE_ELEVATION_MM = 0.04;
 const GEOMETRY_EPSILON_MM = 1e-3;
 const BEND_LINE_AXIS_EPSILON_MM = 1e-2;
+// How far short of the material's edge a fold line may stop. Generous next to the axis epsilon
+// on purpose: a bend line is authored to a rounded coordinate while the contour it has to reach
+// may end on a fillet tangent, so a few hundredths of a millimetre is authoring noise, not a
+// bend line that fails to separate the part.
+const BEND_LINE_FULL_SPAN_TOLERANCE_MM = 0.05;
 const MIN_BEND_BRIDGE_SEGMENTS = 6;
 const MAX_BEND_BRIDGE_SEGMENTS = 48;
 const VISUAL_BEND_INSIDE_RADIUS_RATIO = 0.6;
@@ -409,20 +424,24 @@ export function extractOrderedDxfBendLines(dxfData) {
   return sortBendLines(bendLines);
 }
 
-/** Only bends that are actually FOLDING need the banded strip decomposition, and that
- *  decomposition is X-slab based — so the vertical-line requirement applies to active
- *  bends, never to a flat pattern whose angled bend lines are just crease marks. (The
- *  viewer's boxed fold handles any orientation; it catches this error and falls back.) */
+/** A folding bend has to be a usable hinge; WHERE it is and how it is angled no longer matter.
+ *
+ * Orientation used to be checked here, because the decomposition sliced the blank into vertical
+ * X-slabs and could not represent anything else. It splits per FACE along each fold's own
+ * segment now (see foldRegions.js), so a bend at any angle folds -- and the one rule left is
+ * that the line has to be long enough to be a line at all. Whether it actually separates a face
+ * in two is decided by the decomposition, which knows the faces. */
 function validateActiveBendLines(bendLines, bendSettings) {
   bendLines.forEach((bendLine, index) => {
     const angleDeg = normalizeDxfBendAngleDeg(bendSettings?.[index]?.angleDeg, 0);
     if (angleDeg === 0) {
       return;
     }
-    if (Math.abs(bendLine.start[0] - bendLine.end[0]) > BEND_LINE_AXIS_EPSILON_MM) {
-      throw new Error("DXF 3D bend preview currently requires vertical bend lines");
-    }
-    if (Math.abs(bendLine.end[1] - bendLine.start[1]) <= GEOMETRY_EPSILON_MM) {
+    const length = Math.hypot(
+      bendLine.end[0] - bendLine.start[0],
+      bendLine.end[1] - bendLine.start[1]
+    );
+    if (length <= GEOMETRY_EPSILON_MM) {
       throw new Error("DXF bend line length is too small for preview bending");
     }
   });
@@ -467,72 +486,6 @@ export function normalizeDxfBendSettings(dxfData, value) {
       angleDeg: normalizeDxfBendAngleDeg(current.angleDeg, DEFAULT_DXF_BEND_ANGLE_DEG)
     };
   });
-}
-
-function clipEdgeAgainstMinX(start, end, minX) {
-  const deltaX = end[0] - start[0];
-  if (Math.abs(deltaX) <= GEOMETRY_EPSILON_MM) {
-    return [minX, start[1]];
-  }
-  const t = (minX - start[0]) / deltaX;
-  return [minX, start[1] + (end[1] - start[1]) * t];
-}
-
-function clipEdgeAgainstMaxX(start, end, maxX) {
-  const deltaX = end[0] - start[0];
-  if (Math.abs(deltaX) <= GEOMETRY_EPSILON_MM) {
-    return [maxX, start[1]];
-  }
-  const t = (maxX - start[0]) / deltaX;
-  return [maxX, start[1] + (end[1] - start[1]) * t];
-}
-
-function clipLoopAgainstMinX(loop, minX) {
-  if (!loop.length) {
-    return [];
-  }
-  const output = [];
-  for (let index = 0; index < loop.length; index += 1) {
-    const current = loop[index];
-    const previous = loop[(index + loop.length - 1) % loop.length];
-    const currentInside = current[0] >= minX - GEOMETRY_EPSILON_MM;
-    const previousInside = previous[0] >= minX - GEOMETRY_EPSILON_MM;
-    if (currentInside) {
-      if (!previousInside) {
-        output.push(clipEdgeAgainstMinX(previous, current, minX));
-      }
-      output.push(current);
-    } else if (previousInside) {
-      output.push(clipEdgeAgainstMinX(previous, current, minX));
-    }
-  }
-  return removeConsecutiveDuplicates(output);
-}
-
-function clipLoopAgainstMaxX(loop, maxX) {
-  if (!loop.length) {
-    return [];
-  }
-  const output = [];
-  for (let index = 0; index < loop.length; index += 1) {
-    const current = loop[index];
-    const previous = loop[(index + loop.length - 1) % loop.length];
-    const currentInside = current[0] <= maxX + GEOMETRY_EPSILON_MM;
-    const previousInside = previous[0] <= maxX + GEOMETRY_EPSILON_MM;
-    if (currentInside) {
-      if (!previousInside) {
-        output.push(clipEdgeAgainstMaxX(previous, current, maxX));
-      }
-      output.push(current);
-    } else if (previousInside) {
-      output.push(clipEdgeAgainstMaxX(previous, current, maxX));
-    }
-  }
-  return removeConsecutiveDuplicates(output);
-}
-
-function clipLoopToSlab(loop, leftX, rightX) {
-  return clipLoopAgainstMaxX(clipLoopAgainstMinX(loop, leftX), rightX);
 }
 
 function loopBounds(loop) {
@@ -660,145 +613,52 @@ function buildFlatStripDefinitions(sortedLoops) {
   return strips;
 }
 
-function holeClassificationForStrip(loop, leftX, rightX) {
-  const bounds = loopBounds(loop);
-  if (bounds.maxX <= leftX + GEOMETRY_EPSILON_MM || bounds.minX >= rightX - GEOMETRY_EPSILON_MM) {
-    return "outside";
-  }
-  if (bounds.minX >= leftX - GEOMETRY_EPSILON_MM && bounds.maxX <= rightX + GEOMETRY_EPSILON_MM) {
-    return "inside";
-  }
-  return "intersects";
-}
-
-function buildBendProfiles(outerBounds, bendLines, bendSettings, halfThickness, bendGeometry = null) {
-  // Sheet-metal bend geometry the caller may pin: an explicit inside radius (mm) and a
-  // K-factor placing the neutral axis within the thickness. The defaults reproduce the
-  // historical visual bend: radius 0.6x thickness, neutral axis at mid-thickness (K=0.5).
-  const requestedRadius = toFiniteNumber(bendGeometry?.insideRadiusMm, 0);
-  const kFactor = clamp(toFiniteNumber(bendGeometry?.kFactor, 0.5), 0.05, 0.95);
-  const profiles = bendLines.map((bendLine, index) => {
-    const bendSetting = bendSettings[index] || {
-      direction: DXF_BEND_DIRECTION.UP,
-      angleDeg: DEFAULT_DXF_BEND_ANGLE_DEG
-    };
-    const angleRadians = bendAngleRadiansForSetting(bendSetting);
-    const angleMagnitude = Math.abs(angleRadians);
-    const insideRadius = requestedRadius > 0
-      ? Math.max(requestedRadius, GEOMETRY_EPSILON_MM)
-      : Math.max(halfThickness * 2 * VISUAL_BEND_INSIDE_RADIUS_RATIO, GEOMETRY_EPSILON_MM);
-    const neutralRadius = insideRadius + kFactor * halfThickness * 2;
-    const desiredHalfWidth = angleMagnitude > 1e-6 ? (neutralRadius * angleMagnitude) / 2 : 0;
-    return {
-      bendLine,
-      angleRadians,
-      insideRadius,
-      neutralRadius,
-      leftX: bendLine.x - desiredHalfWidth,
-      rightX: bendLine.x + desiredHalfWidth
-    };
-  });
-
-  for (let index = 0; index < profiles.length; index += 1) {
-    const profile = profiles[index];
-    profile.leftX = clamp(profile.leftX, outerBounds.minX, profile.bendLine.x);
-    profile.rightX = clamp(profile.rightX, profile.bendLine.x, outerBounds.maxX);
-  }
-
-  for (let index = 0; index < profiles.length - 1; index += 1) {
-    const current = profiles[index];
-    const next = profiles[index + 1];
-    const midpoint = (current.bendLine.x + next.bendLine.x) / 2;
-    current.rightX = Math.min(current.rightX, midpoint);
-    next.leftX = Math.max(next.leftX, midpoint);
-  }
-
-  return profiles.map((profile) => {
-    const flatWidth = Math.max(profile.rightX - profile.leftX, 0);
-    const angleMagnitude = Math.abs(profile.angleRadians);
-    const neutralRadius = angleMagnitude > 1e-6 && flatWidth > GEOMETRY_EPSILON_MM
-      ? flatWidth / angleMagnitude
-      : profile.neutralRadius;
-    return {
-      ...profile,
-      flatWidth,
-      neutralRadius,
-      insideRadius: Math.max(neutralRadius - kFactor * halfThickness * 2, GEOMETRY_EPSILON_MM)
-    };
-  });
-}
-
-function ensureHolesDoNotCrossBendBands(holeLoops, bendProfiles) {
-  for (const holeLoop of holeLoops) {
-    for (const bendProfile of bendProfiles) {
-      if (bendProfile.rightX - bendProfile.leftX <= GEOMETRY_EPSILON_MM) {
-        continue;
-      }
-      if (holeClassificationForStrip(holeLoop, bendProfile.leftX, bendProfile.rightX) !== "outside") {
-        throw new Error("DXF 3D bend preview does not support holes crossing bend radius bands");
-      }
+/** The face that a bend line's guide should ride on.
+ *
+ * For a fold, the parent side is arbitrary but stable: the guide marks where the bend IS, so it
+ * belongs to whichever face still contains the line's own position. For a crease, that is the
+ * face the crease sits inside. */
+function regionIndexForGuide(regions, bendLine, foldIndex, adjacency, parents) {
+  const midpoint = [
+    (bendLine.start[0] + bendLine.end[0]) / 2,
+    (bendLine.start[1] + bendLine.end[1]) / 2
+  ];
+  if (foldIndex >= 0) {
+    // The guide belongs to the fold's HINGE PARENT, which is the frame its curved band is
+    // already built in, so the dashes land on the crease. Picking any face that merely sits on
+    // the fold's negative side does not: with more than two faces, several share that side
+    // without touching the fold, and the guide gets drawn with a face's matrix that has nothing
+    // to do with this bend -- dashes floating off the part.
+    const edge = adjacency.find((candidate) => candidate.foldIndex === foldIndex);
+    if (edge) {
+      const [a, b] = edge.regions;
+      return parents[b]?.region === a ? a : b;
     }
   }
+  const containing = regions.findIndex((region) => pointInLoop(midpoint, region.outerLoop));
+  return containing >= 0 ? containing : 0;
 }
 
-function buildStripDefinitions(outerLoop, holeLoops, bendProfiles) {
-  const outerBounds = loopBounds(outerLoop);
-  ensureHolesDoNotCrossBendBands(holeLoops, bendProfiles);
-
-  const strips = [];
-  let leftX = outerBounds.minX;
-  for (let index = 0; index <= bendProfiles.length; index += 1) {
-    const bendProfile = bendProfiles[index] || null;
-    const rightX = bendProfile ? bendProfile.leftX : outerBounds.maxX;
-    if (rightX - leftX <= GEOMETRY_EPSILON_MM) {
-      if (bendProfile) {
-        leftX = Math.max(leftX, bendProfile.rightX);
-      }
+/** Whether an edge of a face lies along a fold's band, where the bend continues.
+ *
+ * Those edges are internal: drawing them would put a cut line down the middle of a bend. The
+ * slab version compared against the strip's left/right X; this asks the folds directly, so it
+ * holds for a band at any angle. */
+function isFoldBandEdge(start, end, strip) {
+  for (const foldLine of strip.foldLines || []) {
+    if (foldLine.halfWidth <= GEOMETRY_EPSILON_MM) {
       continue;
     }
-    const clippedOuter = normalizeLoopWinding(clipLoopToSlab(outerLoop, leftX, rightX), { clockwise: true });
-    if (clippedOuter.length < 3) {
-      if (bendProfile) {
-        leftX = Math.max(leftX, bendProfile.rightX);
-      }
-      continue;
-    }
-
-    const stripHoles = [];
-    for (const holeLoop of holeLoops) {
-      const classification = holeClassificationForStrip(holeLoop, leftX, rightX);
-      if (classification === "inside") {
-        stripHoles.push(normalizeLoopWinding(holeLoop, { clockwise: false }));
-        continue;
-      }
-      if (classification === "intersects") {
-        throw new Error("DXF 3D bend preview does not support holes crossing bend lines");
-      }
-    }
-
-    strips.push({
-      index: strips.length,
-      transformIndex: index,
-      leftX,
-      rightX,
-      outerLoop: clippedOuter,
-      holeLoops: stripHoles,
-      isLeftExterior: approxEqual(leftX, outerBounds.minX),
-      isRightExterior: approxEqual(rightX, outerBounds.maxX)
-    });
-
-    if (bendProfile) {
-      leftX = Math.max(leftX, bendProfile.rightX);
+    const startDistance = Math.abs(foldSignedDistance(foldLine, start));
+    const endDistance = Math.abs(foldSignedDistance(foldLine, end));
+    if (
+      Math.abs(startDistance - foldLine.halfWidth) <= 1e-3 &&
+      Math.abs(endDistance - foldLine.halfWidth) <= 1e-3
+    ) {
+      return true;
     }
   }
-
-  if (!strips.length) {
-    throw new Error("DXF preview could not build bendable strip geometry");
-  }
-  return {
-    strips,
-    bounds: outerBounds
-  };
+  return false;
 }
 
 function appendTriangle(vertices, indices, a, b, c) {
@@ -866,19 +726,6 @@ function appendTransformedEdgeSegment(vertices, edgeIndices, matrix, start, end)
   edgeIndices.push(startIndex, endIndex);
 }
 
-function isInternalStripBoundaryEdge(start, end, strip) {
-  if (!approxEqual(start[0], end[0], BEND_LINE_AXIS_EPSILON_MM)) {
-    return false;
-  }
-  if (approxEqual(start[0], strip.leftX, BEND_LINE_AXIS_EPSILON_MM) && !strip.isLeftExterior) {
-    return true;
-  }
-  if (approxEqual(start[0], strip.rightX, BEND_LINE_AXIS_EPSILON_MM) && !strip.isRightExterior) {
-    return true;
-  }
-  return false;
-}
-
 function appendLoopSideFaces(vertices, indices, matrix, loop, topY, bottomY, shouldSkipEdge = () => false) {
   for (let index = 0; index < loop.length; index += 1) {
     const start = loop[index];
@@ -941,159 +788,6 @@ function appendLoopEdgeSegments(vertices, edgeIndices, matrix, loop, topY, botto
 function bendAngleRadiansForSetting(setting) {
   return (normalizeDxfBendDirection(setting?.direction) === DXF_BEND_DIRECTION.DOWN ? -1 : 1)
     * ((normalizeDxfBendAngleDeg(setting?.angleDeg) * Math.PI) / 180);
-}
-
-function buildRotationAroundAxisMatrix(axisStart, axisEnd, angleRadians) {
-  if (Math.abs(angleRadians) <= 1e-9) {
-    return new Matrix4().identity();
-  }
-  const start = new Vector3(...axisStart);
-  const end = new Vector3(...axisEnd);
-  const axisVector = end.clone().sub(start);
-  if (axisVector.lengthSq() <= 1e-12) {
-    return new Matrix4().identity();
-  }
-  axisVector.normalize();
-  const translateToOrigin = new Matrix4().makeTranslation(-start.x, -start.y, -start.z);
-  const rotate = new Matrix4().makeRotationAxis(axisVector, angleRadians);
-  const translateBack = new Matrix4().makeTranslation(start.x, start.y, start.z);
-  return translateBack.multiply(rotate).multiply(translateToOrigin);
-}
-
-function buildBendContinuationMatrix(bendProfile) {
-  const angleRadians = bendProfile.angleRadians;
-  const angleMagnitude = Math.abs(angleRadians);
-  if (angleMagnitude <= 1e-9 || bendProfile.flatWidth <= GEOMETRY_EPSILON_MM) {
-    return new Matrix4().identity();
-  }
-  const bendSign = angleRadians < 0 ? -1 : 1;
-  const endX = bendProfile.leftX + bendProfile.neutralRadius * Math.sin(angleMagnitude);
-  const endY = bendSign * bendProfile.neutralRadius * (1 - Math.cos(angleMagnitude));
-  const translateToTangent = new Matrix4().makeTranslation(-bendProfile.rightX, 0, 0);
-  const rotate = new Matrix4().makeRotationZ(angleRadians);
-  const translateToEnd = new Matrix4().makeTranslation(endX, endY, 0);
-  return translateToEnd.multiply(rotate).multiply(translateToTangent);
-}
-
-function buildSegmentTransforms(bendProfiles, halfThickness, guideElevationSign = 1) {
-  const transforms = [new Matrix4().identity()];
-  const bendTransforms = [];
-  const guideLineSegments = [];
-  // Which face the bend guides hover over. The guides are one-sided (the solid is
-  // symmetric, they are not): a consumer whose axis convention maps this mesher's +Y to
-  // its own "down" (the CAD viewer's Z-up mapping does) asks for -1 so the guides land on
-  // the face the user is looking at instead of under the sheet.
-  const guideY = guideElevationSign * (halfThickness + BEND_LINE_ELEVATION_MM);
-  let currentMatrix = new Matrix4().identity();
-
-  for (const bendProfile of bendProfiles) {
-    const bendLine = bendProfile.bendLine;
-    const baseMatrix = currentMatrix.clone();
-    guideLineSegments.push(
-      ...applyMatrixToPoint(baseMatrix, [bendLine.start[0], guideY, bendLine.start[1]]),
-      ...applyMatrixToPoint(baseMatrix, [bendLine.end[0], guideY, bendLine.end[1]])
-    );
-
-    bendTransforms.push({
-      bendProfile,
-      matrix: baseMatrix
-    });
-    if (bendProfile.flatWidth > GEOMETRY_EPSILON_MM) {
-      currentMatrix = baseMatrix.clone().multiply(buildBendContinuationMatrix(bendProfile));
-    } else {
-      const axisStart = applyMatrixToPoint(baseMatrix, [bendLine.start[0], 0, bendLine.start[1]]);
-      const axisEnd = applyMatrixToPoint(baseMatrix, [bendLine.end[0], 0, bendLine.end[1]]);
-      const bendMatrix = buildRotationAroundAxisMatrix(axisStart, axisEnd, bendProfile.angleRadians);
-      currentMatrix = bendMatrix.clone().multiply(baseMatrix);
-    }
-    transforms.push(currentMatrix.clone());
-  }
-
-  return {
-    transforms,
-    bendTransforms,
-    guideLineSegments
-  };
-}
-
-function mergeIntervals(intervals) {
-  const sortedIntervals = intervals
-    .map(([min, max]) => [Math.min(min, max), Math.max(min, max)])
-    .filter(([min, max]) => max - min > GEOMETRY_EPSILON_MM)
-    .sort((a, b) => a[0] - b[0]);
-  const merged = [];
-  for (const interval of sortedIntervals) {
-    const previous = merged[merged.length - 1];
-    if (previous && interval[0] <= previous[1] + GEOMETRY_EPSILON_MM) {
-      previous[1] = Math.max(previous[1], interval[1]);
-      continue;
-    }
-    merged.push([...interval]);
-  }
-  return merged;
-}
-
-function collectBoundaryIntervals(loop, boundaryX) {
-  const intervals = [];
-  for (let index = 0; index < loop.length; index += 1) {
-    const start = loop[index];
-    const end = loop[(index + 1) % loop.length];
-    if (
-      approxEqual(start[0], boundaryX, BEND_LINE_AXIS_EPSILON_MM) &&
-      approxEqual(end[0], boundaryX, BEND_LINE_AXIS_EPSILON_MM) &&
-      Math.abs(end[1] - start[1]) > GEOMETRY_EPSILON_MM
-    ) {
-      intervals.push([start[1], end[1]]);
-    }
-  }
-  return intervals;
-}
-
-function intersectIntervalSets(leftIntervals, rightIntervals) {
-  const intersections = [];
-  for (const left of leftIntervals) {
-    for (const right of rightIntervals) {
-      const min = Math.max(left[0], right[0]);
-      const max = Math.min(left[1], right[1]);
-      if (max - min > GEOMETRY_EPSILON_MM) {
-        intersections.push([min, max]);
-      }
-    }
-  }
-  return mergeIntervals(intersections);
-}
-
-function collectBendIntervals(strips, bendProfile) {
-  const leftIntervals = [];
-  const rightIntervals = [];
-  for (const strip of strips) {
-    if (approxEqual(strip.rightX, bendProfile.leftX, BEND_LINE_AXIS_EPSILON_MM) && !strip.isRightExterior) {
-      leftIntervals.push(...collectBoundaryIntervals(strip.outerLoop, bendProfile.leftX));
-    }
-    if (approxEqual(strip.leftX, bendProfile.rightX, BEND_LINE_AXIS_EPSILON_MM) && !strip.isLeftExterior) {
-      rightIntervals.push(...collectBoundaryIntervals(strip.outerLoop, bendProfile.rightX));
-    }
-  }
-  const mergedLeft = mergeIntervals(leftIntervals);
-  const mergedRight = mergeIntervals(rightIntervals);
-  if (mergedLeft.length && mergedRight.length) {
-    return intersectIntervalSets(mergedLeft, mergedRight);
-  }
-  if (mergedLeft.length) {
-    return mergedLeft;
-  }
-  if (mergedRight.length) {
-    return mergedRight;
-  }
-  return [[bendProfile.bendLine.yMin, bendProfile.bendLine.yMax]].filter(([min, max]) => max - min > GEOMETRY_EPSILON_MM);
-}
-
-function bendBridgeSegmentCount(radius, angleRadians) {
-  return clamp(
-    sampleCountForSweep(Math.max(radius, GEOMETRY_EPSILON_MM), angleRadians),
-    MIN_BEND_BRIDGE_SEGMENTS,
-    MAX_BEND_BRIDGE_SEGMENTS
-  );
 }
 
 function bendArcPoint(bendProfile, surfaceY, z, angleRadians) {
@@ -1233,15 +927,6 @@ function appendBendBridgeInterval(vertices, indices, edgeVertices, edgeIndices, 
   }
 }
 
-function appendBendBridgeGeometry(vertices, indices, edgeVertices, edgeIndices, strips, bendTransforms, halfThickness) {
-  for (const bendTransform of bendTransforms) {
-    const intervals = collectBendIntervals(strips, bendTransform.bendProfile);
-    for (const interval of intervals) {
-      appendBendBridgeInterval(vertices, indices, edgeVertices, edgeIndices, bendTransform, interval, halfThickness);
-    }
-  }
-}
-
 function buildBounds(vertices) {
   if (!vertices.length) {
     return {
@@ -1300,22 +985,110 @@ export function buildDxfPreviewMeshData(dxfData, thicknessMm, bendSettings = nul
   validateActiveBendLines(bendLines, normalizedBendSettings);
   const halfThickness = normalizedThicknessMm / 2;
   let strips;
-  let bendTransforms;
   let guideLineSegments;
   let transforms;
-  if (bendLines.length) {
-    const outerBounds = loopBounds(outerLoop);
-    const bendProfiles = buildBendProfiles(outerBounds, bendLines, normalizedBendSettings, halfThickness, {
-      insideRadiusMm: options?.bendInsideRadiusMm,
-      kFactor: options?.bendKFactor
+  // Only a bend that actually FOLDS needs the strip decomposition, which is what the
+  // comment on validateActiveBendLines has always claimed. The decomposition slices the
+  // part into vertical X-slabs at each bend's midpoint X, so a bend line that is not
+  // vertical, or not full-length, becomes a phantom full-height boundary in the middle of
+  // the part — and any hole straddling that phantom X was rejected as "crossing bend
+  // lines" from tens of millimetres away. The orientation guard did not catch it because
+  // it returns early at angle 0, which is the default: an inert crease mark skipped the
+  // guard and then drove the orientation-sensitive decomposition anyway.
+  const hasFoldingBend = bendLines.some(
+    (_, index) => normalizeDxfBendAngleDeg(normalizedBendSettings?.[index]?.angleDeg, 0) !== 0
+  );
+  let foldBridges = [];
+  if (bendLines.length && hasFoldingBend) {
+    // Fold lines are built for the bends that actually FOLD. A bend left at 0 degrees is a
+    // crease mark: it draws as a guide and must not cut the blank into faces.
+    const foldLines = [];
+    const guideOwners = [];
+    bendLines.forEach((bendLine, index) => {
+      const setting = normalizedBendSettings?.[index];
+      const angleDeg = normalizeDxfBendAngleDeg(setting?.angleDeg, 0);
+      if (angleDeg === 0) {
+        guideOwners.push({ bendLine, foldIndex: -1 });
+        return;
+      }
+      const foldLine = buildFoldLine({
+        bendLine,
+        angleRadians: bendAngleRadiansForSetting(setting),
+        insideRadiusMm: toFiniteNumber(options?.bendInsideRadiusMm, 0),
+        kFactor: clamp(toFiniteNumber(options?.bendKFactor, 0.5), 0.05, 0.95),
+        halfThicknessMm: halfThickness
+      });
+      if (!foldLine) {
+        throw new Error("DXF bend line length is too small for preview bending");
+      }
+      guideOwners.push({ bendLine, foldIndex: foldLines.length });
+      foldLines.push(foldLine);
     });
-    ({ strips } = buildStripDefinitions(outerLoop, holeLoops, bendProfiles));
-    ({ transforms, bendTransforms, guideLineSegments } = buildSegmentTransforms(bendProfiles, halfThickness, guideElevationSign));
+
+    const { regions, adjacency } = decomposeFoldRegions(outerLoop, foldLines);
+    assignHolesToRegions(regions, holeLoops, foldLines);
+    const { placements, parents } = buildRegionPlacements(regions, foldLines, adjacency);
+
+    strips = regions.map((region, index) => ({
+      index,
+      transformIndex: index,
+      outerLoop: normalizeLoopWinding(region.outerLoop, { clockwise: true }),
+      holeLoops: region.holeLoops.map((loop) => normalizeLoopWinding(loop, { clockwise: false })),
+      region,
+      foldLines
+    }));
+    transforms = placements;
+
+    // One curved band per hinge, in the PARENT's frame, spanning the length the two faces
+    // actually share along that fold.
+    foldBridges = adjacency.map((edge) => {
+      const [a, b] = edge.regions;
+      const parentIsA = parents[b]?.region === a;
+      const parentIndex = parentIsA ? a : b;
+      const childIndex = parentIsA ? b : a;
+      const foldLine = foldLines[edge.foldIndex];
+      const childSide = regions[childIndex].sides
+        .find((entry) => entry.foldIndex === edge.foldIndex)?.side || 1;
+      const parentSpan = foldLineSpanForRegion(regions[parentIndex], foldLine);
+      const childSpan = foldLineSpanForRegion(regions[childIndex], foldLine);
+      if (!parentSpan || !childSpan) {
+        return null;
+      }
+      return buildFoldBridgeGeometry({
+        foldLine,
+        side: childSide,
+        span: {
+          min: Math.max(parentSpan.min, childSpan.min),
+          max: Math.min(parentSpan.max, childSpan.max)
+        },
+        halfThickness,
+        parentMatrix: placements[parentIndex]
+      });
+    }).filter(Boolean);
+
+    // Guides ride on the face that owns them, so a crease on a folded face folds with it.
+    const guideY = guideElevationSign * (halfThickness + BEND_LINE_ELEVATION_MM);
+    guideLineSegments = guideOwners.flatMap(({ bendLine, foldIndex }) => {
+      const ownerIndex = regionIndexForGuide(regions, bendLine, foldIndex, adjacency, parents);
+      const matrix = transforms[ownerIndex] || new Matrix4().identity();
+      return [
+        ...applyMatrixToPoint(matrix, [bendLine.start[0], guideY, bendLine.start[1]]),
+        ...applyMatrixToPoint(matrix, [bendLine.end[0], guideY, bendLine.end[1]])
+      ];
+    });
   } else {
     strips = buildFlatStripDefinitions(loops);
     transforms = [new Matrix4().identity()];
-    bendTransforms = [];
-    guideLineSegments = [];
+    // Crease marks still draw, at their REAL endpoints. Emitting the flat plate without
+    // them (as one reading of "skip the decomposition" would) would silently drop the bend
+    // lines from every flat pattern that has them, which is the whole point of the layer.
+    // Unfolded, the guides need no transform, so this is what buildSegmentTransforms
+    // produces for the first bend with an identity base matrix.
+    const guideY = guideElevationSign * (halfThickness + BEND_LINE_ELEVATION_MM);
+    guideLineSegments = bendLines.flatMap((bendLine) => [
+      bendLine.start[0], guideY, bendLine.start[1],
+      bendLine.end[0], guideY, bendLine.end[1]
+    ]);
   }
 
   const triangleVertices = [];
@@ -1354,7 +1127,10 @@ export function buildDxfPreviewMeshData(dxfData, thicknessMm, bendSettings = nul
       );
     }
 
-    const skipOuterEdge = (start, end) => isInternalStripBoundaryEdge(start, end, strip);
+    // Only a fold's band edge is internal; a flat pattern's every edge is a real cut.
+    const skipOuterEdge = strip.foldLines
+      ? (start, end) => isFoldBandEdge(start, end, strip)
+      : () => false;
     appendLoopSideFaces(triangleVertices, indices, matrix, strip.outerLoop, halfThickness, -halfThickness, skipOuterEdge);
     appendLoopEdgeSegments(edgeVertices, edgeIndices, matrix, strip.outerLoop, halfThickness, -halfThickness, skipOuterEdge);
 
@@ -1363,15 +1139,17 @@ export function buildDxfPreviewMeshData(dxfData, thicknessMm, bendSettings = nul
       appendLoopEdgeSegments(edgeVertices, edgeIndices, matrix, holeLoop, halfThickness, -halfThickness);
     }
   }
-  appendBendBridgeGeometry(
-    triangleVertices,
-    indices,
-    edgeVertices,
-    edgeIndices,
-    strips,
-    bendTransforms,
-    halfThickness
-  );
+  for (const bridge of foldBridges) {
+    for (const [a, b, c] of bridge.triangles) {
+      appendTriangle(triangleVertices, indices, a, b, c);
+    }
+    for (const [a, b] of bridge.edges) {
+      appendVertex(edgeVertices, a[0], a[1], a[2]);
+      appendVertex(edgeVertices, b[0], b[1], b[2]);
+      const index = (edgeVertices.length / 3) - 2;
+      edgeIndices.push(index, index + 1);
+    }
+  }
 
   const triangleVertexCount = triangleVertices.length / 3;
   const combinedVertices = new Float32Array(triangleVertices.length + edgeVertices.length);

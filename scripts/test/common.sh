@@ -30,8 +30,8 @@ run_python_unittest() {
   done < <(find "$REPO_ROOT/$start_dir" -name 'test*.py' -print | sort)
 
   if [ "${#test_files[@]}" -eq 0 ]; then
-    echo "No Python tests found under $start_dir"
-    return 0
+    echo "No Python tests found under $start_dir" >&2
+    return 1
   fi
 
   for path_entry in "$@"; do

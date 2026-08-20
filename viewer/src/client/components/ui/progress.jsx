@@ -10,12 +10,14 @@ import { cn } from "@/ui/utils"
  * `--primary` as the fill, and a muted track. The track is deliberately thin — this sits
  * over a live 3D scene, so it reads as a status line rather than a widget.
  *
- * `value` of `null` is INDETERMINATE per the radix contract. Callers that have no real
- * denominator should still pass a number (an estimate) rather than null, so the bar always
- * moves; see `estimatedLoadingRatio` in workbench/artifactProgress.js.
+ * `value` of `null` is INDETERMINATE per the radix contract, and callers that have no
+ * denominator SHOULD pass it. A sliding bar says "working, no estimate" honestly; the
+ * alternative — inventing a number so the bar always has one — is how a ten-minute phase
+ * came to display a confident 0%.
  */
 function Progress({ className, value, ...props }) {
   const clamped = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : null;
+  const indeterminate = clamped === null;
   return (
     <ProgressPrimitive.Root
       data-slot="progress"
@@ -25,8 +27,14 @@ function Progress({ className, value, ...props }) {
     >
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
-        className="h-full w-full flex-1 bg-primary transition-transform duration-200 ease-out"
-        style={{ transform: `translateX(-${100 - (clamped ?? 0)}%)` }}
+        data-indeterminate={indeterminate ? "true" : undefined}
+        className={cn(
+          "h-full bg-primary",
+          indeterminate
+            ? "w-1/3 cad-progress-indeterminate"
+            : "w-full flex-1 transition-transform duration-200 ease-out"
+        )}
+        style={indeterminate ? undefined : { transform: `translateX(-${100 - clamped}%)` }}
       />
     </ProgressPrimitive.Root>
   );
