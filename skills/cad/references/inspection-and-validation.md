@@ -132,8 +132,9 @@ use one of: #cast_rim:5spoke_1 (o1.7.2), #cast_rim:5spoke_2 (o1.14.2)
 1. Generation completed and the STEP/STP file exists.
 2. `refs --facts --planes --positioning` confirms scale, labels, major planes, and placement-ready references. Run this for every generated artifact.
 3. `validate` confirms the geometry is sound: valid topology, closed shells, no self-intersection, and positive volume on every solid. Run this for every generated artifact.
-4. Spec-driven checks: `measure` for every user-specified dimension, offset, or clearance; `align` for interfaces that should be flush or centered; `frame` for orientation and occurrence-placement expectations; `diff` for modifications that could affect unrelated geometry.
-5. Snapshot the primary STEP/STP per `snapshot-review.md`, then convert every visual concern into a deterministic geometry check before it becomes a validation claim.
+4. `interfere` confirms no two positioned parts occupy the same space. Run this for every assembly with more than one part, and re-run it after any positioning change — see below.
+5. Spec-driven checks: `measure` for every user-specified dimension, offset, or clearance; `align` for interfaces that should be flush or centered; `frame` for orientation and occurrence-placement expectations; `diff` for modifications that could affect unrelated geometry.
+6. Snapshot the primary STEP/STP per `snapshot-review.md`, then convert every visual concern into a deterministic geometry check before it becomes a validation claim.
 
 ### `refs --facts` "ok" is not a geometry claim
 
@@ -163,6 +164,26 @@ check reading a compound's total volume sees nothing wrong.
 
 Pass `--skip-self-intersection` on large assemblies if the boolean test
 dominates runtime.
+
+### Neither `refs` nor `validate` checks part-vs-part interference
+
+Both `refs --facts` and `validate` inspect solids independently — each part
+can be individually well-formed (closed, positive volume, correct topology)
+while still overlapping another part in world space. Two accurately-modeled
+gears with a tooth-phase error, a bracket clamped through the case it's
+supposed to clear, or a joint rotated into its own previous link are all
+`validate`-clean and only show up under an interference check:
+
+```bash
+python scripts/inspect interfere models/assembly/assembly.step.py
+python scripts/inspect interfere models/assembly/assembly.step.py --refs o1.2,o1.5   # narrow the pair set
+python scripts/inspect interfere models/assembly/assembly.step.py --tolerance 25     # ignore small nominal contact
+```
+
+Run it for any assembly with more than one positioned part, and re-run it
+after any change to positioning, joint angles, or a parameterized pose —
+not only once at whatever pose the assembly happened to be built at. A part
+that clears at rest can still clash somewhere in its range of motion.
 
 ## Reference discovery
 
@@ -254,6 +275,7 @@ Validation:
 - Bounding box: <dimensions and units>
 - Major planes/refs: <summary>
 - Positioning: <frame/measure/align results if relevant>
+- Interference: <clash count and pairs tested, for any multi-part assembly>
 - Feature checks: <holes, cutouts, bosses, etc.>
 - Visual review: `$cad-viewer` viewer link returned; CAD `scripts/snapshot` PNG/GIF included or skipped with reason; follow-up geometry checks for any visual findings
 ```
