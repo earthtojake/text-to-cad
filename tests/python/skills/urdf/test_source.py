@@ -325,6 +325,81 @@ class UrdfSourceTests(unittest.TestCase):
             read_urdf_source(source_path)
         self.assertTrue(any("triangle" in str(warning.message) for warning in caught))
 
+    def test_read_urdf_source_warns_on_inertia_magnitude_implausible_for_box(self) -> None:
+        # references/inertials.md's own "Sanity Gate" example: a 0.5 kg,
+        # 10 cm box with ixx = 2.0 kg*m^2 is wrong by ~1000x.
+        source_path = self._write_urdf(
+            "robot",
+            """
+            <robot name="sample-robot">
+              <link name="base_link">
+                <inertial>
+                  <mass value="0.5" />
+                  <inertia ixx="2.0" ixy="0" ixz="0" iyy="2.0" iyz="0" izz="2.0" />
+                </inertial>
+                <visual>
+                  <geometry><box size="0.1 0.1 0.1" /></geometry>
+                </visual>
+              </link>
+            </robot>
+            """,
+        )
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", UrdfSourceWarning)
+            read_urdf_source(source_path)
+        self.assertTrue(any("more than 10x off" in str(warning.message) for warning in caught))
+
+    def test_read_urdf_source_accepts_inertia_matching_box_geometry(self) -> None:
+        source_path = self._write_urdf(
+            "robot",
+            """
+            <robot name="sample-robot">
+              <link name="base_link">
+                <inertial>
+                  <mass value="0.5" />
+                  <inertia ixx="0.000833" ixy="0" ixz="0" iyy="0.000833" iyz="0" izz="0.000833" />
+                </inertial>
+                <visual>
+                  <geometry><box size="0.1 0.1 0.1" /></geometry>
+                </visual>
+              </link>
+            </robot>
+            """,
+        )
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", UrdfSourceWarning)
+            read_urdf_source(source_path)
+        self.assertFalse(any("more than 10x off" in str(warning.message) for warning in caught))
+
+    def test_read_urdf_source_skips_magnitude_check_for_mesh_geometry(self) -> None:
+        # No independent size is available for a mesh without loading the
+        # file, so the magnitude check should not fire here even though this
+        # inertia is just as implausible as the box case above.
+        mesh_path = self._write_mesh("base")
+        source_path = self._write_urdf(
+            "robot",
+            f"""
+            <robot name="sample-robot">
+              <link name="base_link">
+                <inertial>
+                  <mass value="0.5" />
+                  <inertia ixx="2.0" ixy="0" ixz="0" iyy="2.0" iyz="0" izz="2.0" />
+                </inertial>
+                <visual>
+                  <geometry><mesh filename="{mesh_path.as_posix()}" /></geometry>
+                </visual>
+              </link>
+            </robot>
+            """,
+        )
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", UrdfSourceWarning)
+            read_urdf_source(source_path)
+        self.assertFalse(any("more than 10x off" in str(warning.message) for warning in caught))
+
     def test_read_urdf_source_rejects_invalid_origin_vector(self) -> None:
         source_path = self._write_urdf(
             "robot",
