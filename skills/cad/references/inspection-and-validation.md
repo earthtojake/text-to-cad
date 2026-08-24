@@ -185,6 +185,37 @@ after any change to positioning, joint angles, or a parameterized pose —
 not only once at whatever pose the assembly happened to be built at. A part
 that clears at rest can still clash somewhere in its range of motion.
 
+### A single generated pose does not validate a moving joint
+
+The paragraph above describes re-running `interfere` reactively, after a
+manual change. A moving joint needs the opposite discipline: validate its
+motion proactively, as part of the same pass that validates its rest pose,
+because nothing forces a second look otherwise. An assembly built with a
+`RevoluteJoint`/`LinearJoint`/`CylindricalJoint`/`BallJoint` (see
+`positioning.md`), or with a raw `Location`/`Rotation` driven by an angle or
+position parameter, can pass `interfere` cleanly at whatever pose `gen_step()`
+happens to default to while being geometrically unable to move at all — parts
+that are each individually clear at rest can still be pinned to positions
+that only a rigid, non-moving structure could satisfy simultaneously, so the
+one pose that was checked proves nothing about the pose the servo/hinge/slide
+is actually meant to reach.
+
+Before reporting a jointed assembly as validated:
+
+1. Identify the joint's stated range from the brief (`cad-brief.md`) or the
+   source spec — both limits, plus any interior pose the spec calls out.
+2. Generate or pose the assembly at representative points across that range
+   — both limits at minimum, and a mid-point for anything but a small range
+   — by driving the joint's angle/position parameter (see `parameters.md`
+   for exposing one as a `gen_step()` argument).
+3. Run `interfere` at each pose, not only the default. A clash that appears
+   only at one extreme, or a joint that turns out to be unable to reach its
+   stated range at all, is a real finding — report it the same way a
+   rest-pose clash is reported, not as a caveat.
+
+Skip this only when the assembly has no moving joint, or the user explicitly
+asked for a static/frozen pose.
+
 ## Reference discovery
 
 Compact facts and planes:
@@ -275,7 +306,7 @@ Validation:
 - Bounding box: <dimensions and units>
 - Major planes/refs: <summary>
 - Positioning: <frame/measure/align results if relevant>
-- Interference: <clash count and pairs tested, for any multi-part assembly>
+- Interference: <clash count and pairs tested, for any multi-part assembly; for a moving joint, the poses swept across its range, not only the rest pose>
 - Feature checks: <holes, cutouts, bosses, etc.>
 - Visual review: `$cad-viewer` viewer link returned; CAD `scripts/snapshot` PNG/GIF included or skipped with reason; follow-up geometry checks for any visual findings
 ```

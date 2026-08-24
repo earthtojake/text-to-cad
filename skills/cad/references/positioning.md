@@ -169,6 +169,13 @@ Use the simplest joint that expresses the source-level relationship:
 
 When only final static placement matters and no meaningful joint datum exists, use explicit `Location` transforms and validate them.
 
+A `Revolute`/`Linear`/`Cylindrical`/`Ball` joint (or a raw `Location`/
+`Rotation` driven by an angle or position parameter) defines motion, not just
+one static pose. Defining it is not the same as validating it: see
+`inspection-and-validation.md`'s range-of-motion requirement before treating
+a jointed assembly as validated — an `interfere` pass at a single pose cannot
+show the assembly can actually reach the rest of its stated range.
+
 ## Assembly positioning workflow
 
 1. Choose the fixed/root component.
