@@ -11,7 +11,7 @@ The brief should answer:
 - What is being modeled, and is it a part, assembly, modification, inspection task, or secondary output request?
 - What dimensions and units are specified, and which missing dimensions are inferable?
 - Which features are required?
-- Which faces, axes, origins, joints, or interfaces control positioning?
+- Which faces, axes, origins, joints, or interfaces control positioning? For a joint that moves — a hinge, pivot, slider, or rotating stage — what is its stated range (both limits), so validation can sweep it instead of checking only the pose the model happens to default to?
 - What output files are requested?
 - What must be validated before success is reported?
 
@@ -51,7 +51,7 @@ CAD brief:
 - Overall dimensions: <width/depth/height or equivalent>
 - Functional features: <holes, slots, ribs, bosses, pockets, shells, text, etc.>
 - Manufacturing assumptions: <only when relevant>
-- Positioning/mating: <interfaces, datums, child placements, joints, alignment rules>
+- Positioning/mating: <interfaces, datums, child placements, joints (type + range when the joint moves), alignment rules>
 - Paths: <generator .py, STEP target, secondary outputs if requested>
 - Validation targets: <bbox, solid count, labels, spec-driven measurements, refs>
 - Assumptions: <only meaningful inferred choices>
