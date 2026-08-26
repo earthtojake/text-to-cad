@@ -13,7 +13,11 @@ import {
   transformDxfPreviewPositions
 } from "cadjs/lib/dxf/foldPreview";
 import { buildDxfPreviewMeshData, extractDxfScorePolylines } from "cadjs/lib/dxf/buildPreviewMesh";
-import { buildDxfDrawingLineGroups, drawingLineBounds } from "cadjs/lib/dxf/buildDrawingLines";
+import {
+  buildDxfDrawingLineGroups,
+  drawingLineBounds,
+  visibleDrawingLineGroups
+} from "cadjs/lib/dxf/buildDrawingLines";
 import { STEP_TREE_TOPOLOGY_NODE_PREFIX } from "cadjs/lib/step/stepTree";
 import { copyImageBlobToClipboard } from "@/ui/clipboard";
 import { triggerBlobDownload } from "@/ui/download";
@@ -1883,6 +1887,7 @@ const CadViewer = forwardRef(function CadViewer({
   const [transformedDisplayEdgeRuntime, setTransformedDisplayEdgeRuntime] = useState(null);
   const [defaultPerspectiveDetached, setDefaultPerspectiveDetached] = useState(false);
   const [error, setError] = useState("");
+  const [drawingVisibilityMessage, setDrawingVisibilityMessage] = useState("");
   const [viewerReadyTick, setViewerReadyTick] = useState(0);
   const [runtimeResetToken, setRuntimeResetToken] = useState(0);
   const [activeViewPlaneFace, setActiveViewPlaneFace] = useState("");
@@ -2878,10 +2883,10 @@ const CadViewer = forwardRef(function CadViewer({
     };
     if (!group || !drawingIsDocument || !drawingGeometry?.geometry) {
       dispose();
+      setDrawingVisibilityMessage("");
       return undefined;
     }
     dispose();
-    const hiddenLayers = new Set(Array.isArray(drawingHiddenLayers) ? drawingHiddenLayers : []);
     // ACI 7 is the DXF "default ink" colour: it means "whatever reads against the background",
     // which is why the package resolves it to a near-white grey suited to a dark sheet. Taking
     // that literally paints a drawing invisible on a light theme, so only a layer that names a
@@ -2892,16 +2897,22 @@ const CadViewer = forwardRef(function CadViewer({
       (Array.isArray(drawingGeometry.layers) ? drawingGeometry.layers : [])
         .map((layer) => [layer?.name, Number(layer?.colorAci) === 7 ? null : layer?.colorHex])
     );
-    const { layers } = buildDxfDrawingLineGroups(drawingGeometry);
+    const groups = buildDxfDrawingLineGroups(drawingGeometry);
+    const { layers } = visibleDrawingLineGroups(groups, drawingHiddenLayers);
     if (!layers.length) {
+      if (runtime) {
+        runtime.hasVisibleModel = false;
+      }
+      setDrawingVisibilityMessage(
+        groups.layers.length ? "All drawing layers are hidden." : "Drawing has no renderable geometry."
+      );
+      runtime?.requestRender?.();
       return undefined;
     }
+    setDrawingVisibilityMessage("");
     const container = new THREE.Group();
     container.userData.dxfDrawingLines = true;
     for (const layer of layers) {
-      if (hiddenLayers.has(layer.name)) {
-        continue;
-      }
       // Mesher space is y-up; the scene is CAD Z-up. Same (x, y, z) -> (x, z, -y) map the
       // curved fold preview uses, so a drawing and a flat pattern share one orientation,
       // one camera fit and one set of view controls.
@@ -5561,6 +5572,11 @@ const CadViewer = forwardRef(function CadViewer({
       {error ? (
         <p className="cad-glass-popover pointer-events-none absolute left-4 top-24 z-20 rounded-[10px] border border-[var(--ui-error-bg)] px-4 py-3 text-sm text-[var(--ui-error-text)] shadow-[var(--ui-shadow-soft)] sm:top-20">
           {error}
+        </p>
+      ) : null}
+      {drawingVisibilityMessage ? (
+        <p className="cad-glass-popover pointer-events-none absolute left-4 top-24 z-20 rounded-[10px] border border-sidebar-border px-4 py-3 text-sm text-sidebar-foreground shadow-[var(--ui-shadow-soft)] sm:top-20">
+          {drawingVisibilityMessage}
         </p>
       ) : null}
     </div>

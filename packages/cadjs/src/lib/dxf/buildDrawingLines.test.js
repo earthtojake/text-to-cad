@@ -4,7 +4,8 @@ import { test } from "node:test";
 import {
   buildDxfDrawingLineGroups,
   drawingHasRenderableGeometry,
-  drawingLineBounds
+  drawingLineBounds,
+  visibleDrawingLineGroups
 } from "./buildDrawingLines.js";
 
 const DRAWING = {
@@ -110,6 +111,21 @@ test("bounds cover the drawing, for fitting a camera with no mesh to measure", (
   assert.equal(bounds.min[2], -25);
   assert.equal(bounds.max[2], 425);
   assert.equal(drawingLineBounds({ layers: [] }), null);
+});
+
+test("visible drawing bounds exclude hidden and distant layers", () => {
+  const groups = buildDxfDrawingLineGroups({
+    geometry: {
+      lines: [
+        { layer: "VISIBLE", start: [0, 0], end: [10, 0] },
+        { layer: "HIDDEN_FAR", start: [10000, 10000], end: [20000, 20000] }
+      ]
+    }
+  });
+  const visible = visibleDrawingLineGroups(groups, ["HIDDEN_FAR"]);
+  assert.deepEqual(visible.layers.map((layer) => layer.name), ["VISIBLE"]);
+  assert.equal(drawingLineBounds(visible).max[0], 10);
+  assert.equal(visibleDrawingLineGroups(groups, ["VISIBLE", "HIDDEN_FAR"]).layers.length, 0);
 });
 
 function arcXRange(arc) {

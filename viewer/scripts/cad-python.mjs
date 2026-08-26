@@ -13,6 +13,16 @@ function firstExistingFile(paths) {
   return paths.find((candidate) => fs.existsSync(candidate)) || "";
 }
 
+function virtualEnvironmentPython(root) {
+  if (!root) {
+    return [];
+  }
+  return [
+    path.join(root, ".venv", "Scripts", "python.exe"),
+    path.join(root, ".venv", "bin", "python"),
+  ];
+}
+
 function firstExistingDirectory(paths) {
   return paths.find((candidate) => {
     try {
@@ -59,10 +69,13 @@ export function cadPythonExecutable(repoRoot) {
     return configured;
   }
   const resolvedRepoRoot = path.resolve(repoRoot || "");
+  const launchRoot = String(process.env.INIT_CWD || "").trim();
   return firstExistingFile([
-    path.join(resolvedRepoRoot, ".venv", "bin", "python"),
-    path.join(process.cwd(), ".venv", "bin", "python"),
-    path.join(PACKAGE_ROOT, ".venv", "bin", "python"),
+    ...virtualEnvironmentPython(launchRoot),
+    ...virtualEnvironmentPython(resolvedRepoRoot),
+    ...virtualEnvironmentPython(process.cwd()),
+    ...virtualEnvironmentPython(PACKAGE_ROOT),
+    findUpFile(path.join(".venv", "Scripts", "python.exe")),
     findUpFile(path.join(".venv", "bin", "python")),
   ]) || "python3";
 }

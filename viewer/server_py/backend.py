@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import sys
 from urllib.parse import urlsplit, parse_qs, unquote
 
 from . import artifact as artifact_mod
@@ -473,6 +475,17 @@ class LocalAssetBackend:
             # reports the peer's run so the client attaches to its progress.
             return {"ok": True, "contended": True, "error": "", "result": result}
         error = "" if result.get("ok") else str(result.get("error") or error_label)
+        if error:
+            node = next(
+                (
+                    str(os.environ.get(name) or "").strip()
+                    for name in ("CADGEN_NODE", "VIEWER_CAD_NODE", "CAD_NODE")
+                    if str(os.environ.get(name) or "").strip()
+                ),
+                "",
+            ) or shutil.which("node") or "unresolved"
+            mode = str(result.get("_viewerBackendMode") or "unknown")
+            error = f"{error}\nViewer runtime: Python={sys.executable}; Node={node}; backend={mode}"
         return {"ok": bool(result.get("ok")), "error": error, "result": result}
 
     def resolve_artifact(self, file_ref, force, resolved_root, catalog):

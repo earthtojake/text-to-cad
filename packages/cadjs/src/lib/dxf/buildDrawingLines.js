@@ -134,6 +134,19 @@ export function drawingHasRenderableGeometry(dxfData) {
   return buildDxfDrawingLineGroups(dxfData).layers.length > 0;
 }
 
+/** Return only the line groups that are currently visible in the drawing viewport. */
+export function visibleDrawingLineGroups(groups, hiddenLayerNames = []) {
+  const hidden = new Set(
+    Array.isArray(hiddenLayerNames)
+      ? hiddenLayerNames.map((name) => normalizeLayerName(name))
+      : []
+  );
+  return {
+    layers: (Array.isArray(groups?.layers) ? groups.layers : [])
+      .filter((layer) => !hidden.has(normalizeLayerName(layer?.name)))
+  };
+}
+
 /** The drawing's extent in the sheet plane, for fitting a camera to a document that has no mesh. */
 export function drawingLineBounds(groups) {
   const min = [Infinity, Infinity, Infinity];

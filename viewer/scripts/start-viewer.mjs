@@ -14,6 +14,10 @@ const viewerRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 const repoRoot = path.resolve(viewerRoot, "..");
 const python = cadPythonExecutable(repoRoot);
 const baseEnv = cadPythonEnv(repoRoot);
+// The Python backend launches Node builders later. Pin those children to the exact
+// runtime that successfully launched this viewer instead of resolving a potentially
+// different `node` from PATH.
+baseEnv.VIEWER_CAD_NODE ||= process.execPath;
 // server_py lives under viewer/ — prepend it so `python -m server_py.*` resolves.
 baseEnv.PYTHONPATH = [viewerRoot, baseEnv.PYTHONPATH].filter(Boolean).join(path.delimiter);
 

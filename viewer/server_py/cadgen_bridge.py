@@ -133,10 +133,16 @@ def run_cadgen(module: str, args, repo_root: str, timeout: float | None = None) 
     try:
         from . import worker_client
 
-        return worker_client.run_cadgen(module, args, repo_root, timeout=timeout)
+        return {
+            **worker_client.run_cadgen(module, args, repo_root, timeout=timeout),
+            "_viewerBackendMode": "warm-worker",
+        }
     except worker_client._WorkerError:
         pass  # worker disabled or faulted -> cold subprocess below
-    return run_cadgen_cold(module, args, repo_root, timeout=timeout)
+    return {
+        **run_cadgen_cold(module, args, repo_root, timeout=timeout),
+        "_viewerBackendMode": "cold-subprocess",
+    }
 
 
 def run_cadgen_cold(module: str, args, repo_root: str, timeout: float | None = None) -> dict:
