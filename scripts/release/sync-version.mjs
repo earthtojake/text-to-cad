@@ -63,12 +63,6 @@ export const jsonTargets = [
     fields: [["version"], ["packages", "", "version"]],
     required: false,
   },
-  { path: "skills/cad/scripts/packages/implicitjs/package.json", fields: [["version"]], required: false },
-  {
-    path: "skills/cad/scripts/packages/implicitjs/package-lock.json",
-    fields: [["version"], ["packages", "", "version"]],
-    required: false,
-  },
 ];
 
 const tomlTargets = [

@@ -75,6 +75,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Validate build-test rehearsal pairing
+        env:
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+          BUMP: ${{ inputs.bump }}
+          SET_VERSION: ${{ inputs.set_version }}
+        run: |
+          # AGENTS.md and CONTRIBUTING.md: target_branch=build-test exists to rehearse
+          # the CI/CD pipeline, so it must publish base_branch AS IT STANDS -- bump=none.
+          # Anything else burns a version number and opens a release PR for a rehearsal.
+          if [ "$TARGET_BRANCH" = "build-test" ] && [ "$BUMP" != "none" ]; then
+            echo "::error title=Invalid release dispatch::target_branch=build-test is a CI/CD rehearsal and must be paired with bump=none (got bump=$BUMP). Re-dispatch with bump=none."
+            exit 1
+          fi
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
