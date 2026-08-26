@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseDxf } from "./parseDxf.js";
+import { parseDxf, stripMtextFormatting } from "./parseDxf.js";
 
 function dxfText(lines) {
   return `${lines.join("\n")}\n`;
@@ -296,4 +296,24 @@ test("a HATCH's seed point is not read as another boundary vertex", () => {
       );
     }
   }
+});
+
+const BS = String.fromCharCode(92);
+
+// \p is paragraph PROPERTIES; \P is a paragraph BREAK. Matching the break
+// case-insensitively consumed only the two characters of \p and left its
+// payload in the engraved text.
+test("MTEXT paragraph properties are removed whole", () => {
+  assert.equal(stripMtextFormatting(`${BS}pxqc;PART A`), "PART A");
+  assert.equal(stripMtextFormatting(`${BS}pxi-2,l2,t2;Item`), "Item");
+});
+
+test("an MTEXT paragraph break is still a newline", () => {
+  assert.equal(stripMtextFormatting(`Line1${BS}PLine2`), "Line1\nLine2");
+});
+
+test("other MTEXT inline property runs are unaffected", () => {
+  assert.equal(stripMtextFormatting(`${BS}H2.5x;BIG`), "BIG");
+  assert.equal(stripMtextFormatting(`${BS}C1;RED`), "RED");
+  assert.equal(stripMtextFormatting("plain"), "plain");
 });
