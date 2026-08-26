@@ -169,3 +169,72 @@ class MoveItPyAdapterHelperTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MoveItPyCacheTests(unittest.TestCase):
+    """The warm-instance cache is bounded LRU: heavyweight ROS nodes cannot be allowed
+    to accumulate one per model for the life of the server."""
+
+    def _adapter(self, limit: int) -> MoveItPyAdapter:
+        adapter = MoveItPyAdapter()
+        adapter.CACHE_LIMIT = limit
+        return adapter
+
+    class _FakeMoveIt:
+        instances: list["MoveItPyCacheTests._FakeMoveIt"] = []
+
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.shutdown_calls = 0
+
+        def shutdown(self) -> None:
+            self.shutdown_calls += 1
+
+    def tearDown(self) -> None:
+        MoveItPyCacheTests._FakeMoveIt.instances.clear()
+
+    def test_cache_sheds_the_least_recently_used_instance_beyond_the_limit(self) -> None:
+        adapter = self._adapter(2)
+        first = self._FakeMoveIt("a")
+        second = self._FakeMoveIt("b")
+        third = self._FakeMoveIt("c")
+
+        adapter._store_moveit("a", first)
+        adapter._store_moveit("b", second)
+        adapter._store_moveit("c", third)
+
+        self.assertIsNone(adapter._cached_moveit("a"), "oldest instance must be evicted")
+        self.assertEqual(first.shutdown_calls, 1, "an evicted ROS node must be shut down")
+        self.assertIs(adapter._cached_moveit("b"), second)
+        self.assertIs(adapter._cached_moveit("c"), third)
+
+    def test_a_cache_hit_refreshes_recency(self) -> None:
+        adapter = self._adapter(2)
+        first = self._FakeMoveIt("a")
+        second = self._FakeMoveIt("b")
+
+        adapter._store_moveit("a", first)
+        adapter._store_moveit("b", second)
+        # Touching "a" makes "b" the least recently used.
+        self.assertIs(adapter._cached_moveit("a"), first)
+        third = self._FakeMoveIt("c")
+        adapter._store_moveit("c", third)
+
+        self.assertIs(adapter._cached_moveit("a"), first)
+        self.assertIsNone(adapter._cached_moveit("b"))
+        self.assertEqual(second.shutdown_calls, 1)
+
+    def test_an_eviction_shutdown_failure_is_swallowed(self) -> None:
+        adapter = self._adapter(1)
+        broken = self._FakeMoveIt("broken")
+
+        def explode() -> None:
+            raise RuntimeError("node already gone")
+
+        broken.shutdown = explode  # type: ignore[method-assign]
+        adapter._store_moveit("broken", broken)
+        survivor = self._FakeMoveIt("survivor")
+        adapter._store_moveit("survivor", survivor)
+
+        self.assertIsNone(adapter._cached_moveit("broken"), "eviction must proceed past the failure")
+        self.assertIs(adapter._cached_moveit("survivor"), survivor)

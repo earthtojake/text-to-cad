@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
+import os
+from collections import OrderedDict
 from pathlib import Path
 import subprocess
 import sys
@@ -289,8 +292,14 @@ class _JointStateSeeder:
 class MoveItPyAdapter:
     """MoveIt 2 adapter used by the local ROS 2 MoveIt2 server."""
 
+    # Warm MoveItPy instances are heavyweight (a ROS node plus planning context per
+    # model), so the cache is bounded: at most this many distinct models stay warm,
+    # least-recently-used first out. Each model still pays its own first-touch cost;
+    # the bound just stops an unbounded crawl across many robots.
+    CACHE_LIMIT = max(1, int(os.environ.get("MOVEIT_PY_ADAPTER_CACHE", "5")))
+
     def __init__(self) -> None:
-        self._moveit_by_key: dict[str, Any] = {}
+        self._moveit_by_key: OrderedDict[str, Any] = OrderedDict()
 
     def _config_dict(self, request: Any) -> dict[str, Any]:
         urdf_path = Path(str(request.context.get("urdfPath") or ""))
@@ -341,8 +350,9 @@ class MoveItPyAdapter:
             ) from exc
 
         cache_key = str(request.context.get("modelAssetHash") or request.context.get("urdfPath") or "")
-        if cache_key in self._moveit_by_key:
-            return self._moveit_by_key[cache_key]
+        cached = self._cached_moveit(cache_key)
+        if cached is not None:
+            return cached
 
         if not rclpy.ok():
             rclpy.init(args=None)
@@ -362,8 +372,28 @@ class MoveItPyAdapter:
                 moveit = MoveItPy(node_name=f"moveit2_server_{node_hash}")
         finally:
             joint_state_seeder.stop()
-        self._moveit_by_key[cache_key] = moveit
+        self._store_moveit(cache_key, moveit)
         return moveit
+
+    def _cached_moveit(self, cache_key: str) -> Any | None:
+        """The warm instance for ``cache_key``, refreshing its recency, or None."""
+        moveit = self._moveit_by_key.get(cache_key)
+        if moveit is not None:
+            self._moveit_by_key.move_to_end(cache_key)
+        return moveit
+
+    def _store_moveit(self, cache_key: str, moveit: Any) -> None:
+        """Insert a built instance and shed the least-recently-used ones beyond the
+        bound. Eviction shuts each instance down best-effort -- it is a ROS node with
+        native state, so letting it be garbage-collected silently would leak the node."""
+        self._moveit_by_key[cache_key] = moveit
+        self._moveit_by_key.move_to_end(cache_key)
+        while len(self._moveit_by_key) > self.CACHE_LIMIT:
+            _, evicted = self._moveit_by_key.popitem(last=False)
+            shutdown = getattr(evicted, "shutdown", None)
+            if callable(shutdown):
+                with contextlib.suppress(Exception):
+                    shutdown()
 
     def _planning_component(self, request: Any, planning_group: str) -> Any:
         return self._moveit(request).get_planning_component(planning_group)
