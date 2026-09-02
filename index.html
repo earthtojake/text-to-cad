@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Alex Rivers — Developer Portfolio</title>
+  <style>
+    :root{
+      --bg:#ffffff; --text:#0f172a; --muted:#475569; --card:#f8fafc; --accent:#7c3aed;
+      --radius:12px; --ff:system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+    }
+    @media (prefers-color-scheme: dark){
+      :root{ --bg:#0b1220; --text:#e6eef8; --muted:#94a3b8; --card:#071025; }
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:var(--ff);font-size:15px;}
+    .container{max-width:980px;margin:40px auto;padding:24px}
+    header{display:flex;justify-content:space-between;align-items:center}
+    .brand{display:flex;gap:16px;align-items:center}
+    .logo{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),#5b21b6);color:white;font-weight:700}
+    nav{display:flex;gap:14px}
+    a{color:var(--muted);text-decoration:none}
+    .hero{display:flex;gap:20px;align-items:center;margin:36px 0}
+    .avatar{width:96px;height:96px;border-radius:20px;display:grid;place-items:center;font-size:48px;background:var(--card);box-shadow:0 6px 18px rgba(0,0,0,0.06)}
+    .tagline h1{margin:0;font-size:24px}
+    .tagline p{margin:6px 0 0;color:var(--muted);line-height:1.35}
+    .accent{color:var(--accent);font-weight:600}
+    .controls{display:flex;gap:10px;align-items:center}
+    .toggle{display:inline-flex;align-items:center;gap:8px;background:var(--card);padding:6px 10px;border-radius:999px}
+
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:18px}
+    .card{background:var(--card);border-radius:var(--radius);padding:18px;display:flex;gap:14px;align-items:flex-start;transition:transform .22s ease,box-shadow .22s ease;box-shadow:0 6px 14px rgba(2,6,23,0.04)}
+    .card:hover{transform:translateY(-8px);box-shadow:0 18px 40px rgba(2,6,23,0.12)}
+    .card .icon{width:52px;height:52px;border-radius:10px;display:grid;place-items:center;font-size:22px;background:linear-gradient(180deg,rgba(124,58,237,0.12),rgba(124,58,237,0.06));color:var(--accent)}
+    .card h3{margin:0;font-size:16px}
+    .card p{margin:6px 0 0;color:var(--muted);font-size:14px}
+
+    @media (max-width:720px){.grid{grid-template-columns:1fr}.container{padding:16px}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="logo">AR</div>
+        <div>
+          <div style="font-weight:700">Alex Rivers</div>
+          <div style="font-size:13px;color:var(--muted)">Full‑stack & toolchain tinkerer</div>
+        </div>
+      </div>
+      <div class="controls">
+        <nav>
+          <a href="#">About</a>
+          <a href="#projects">Projects</a>
+          <a href="#contact">Contact</a>
+        </nav>
+        <div class="toggle" id="themeToggle" role="button" aria-pressed="false" tabindex="0">
+          <span id="themeIcon">🌙</span>
+          <small style="color:var(--muted)">Dark</small>
+        </div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="avatar" aria-hidden="true">👩‍💻</div>
+      <div class="tagline">
+        <h1>Hi — I'm <span class="accent">Alex Rivers</span></h1>
+        <p>Building delightful tooling and reliable systems. I turn design intent into dependable developer workflows.</p>
+      </div>
+    </section>
+
+    <main id="projects">
+      <div class="grid">
+        <article class="card">
+          <div class="icon">🛠️</div>
+          <div>
+            <h3>ForgeKit</h3>
+            <p>A modular CLI and plugin framework that streamlines build pipelines for small teams.</p>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="icon">🧭</div>
+          <div>
+            <h3>RouteSense</h3>
+            <p>Lightweight runtime for mapping, routing heuristics, and offline geospatial previews.</p>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="icon">🖼️</div>
+          <div>
+            <h3>SnapGL</h3>
+            <p>Web-first renderer and snapshot tool for exporting high-fidelity GLB previews from procedural models.</p>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="icon">🔐</div>
+          <div>
+            <h3>KeyKeep</h3>
+            <p>Small secrets manager with transparent audit logs and ephemeral API tokens for CI jobs.</p>
+          </div>
+        </article>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Theme toggle with prefers-color-scheme fallback
+    const root = document.documentElement;
+    const toggle = document.getElementById('themeToggle');
+    const icon = document.getElementById('themeIcon');
+
+    function applyTheme(pref){
+      if(pref==='dark') root.style.setProperty('--bg','#071025'), root.style.setProperty('--text','#e6eef8');
+      else root.style.removeProperty('--bg'), root.style.removeProperty('--text');
+      toggle.setAttribute('aria-pressed', pref==='dark');
+      icon.textContent = pref==='dark' ? '☀️' : '🌙';
+    }
+
+    const saved = localStorage.getItem('theme');
+    if(saved){ applyTheme(saved); }
+    else if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){ applyTheme('dark'); }
+    else applyTheme('light');
+
+    toggle.addEventListener('click', ()=>{
+      const now = toggle.getAttribute('aria-pressed') === 'true' ? 'light' : 'dark';
+      localStorage.setItem('theme', now);
+      applyTheme(now);
+    });
+    toggle.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' ') toggle.click(); });
+  </script>
+</body>
+</html>
