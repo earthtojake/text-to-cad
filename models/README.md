@@ -22,6 +22,7 @@ models/
 │   ├── stl/  3mf/  glb/
 ├── drawings/
 │   └── dxf/               2D DXF fixtures (generators + imported files)
+├── integrations/          cross-tool source, handoff, and regression fixtures
 ├── implicits/             browser-native implicit CAD (.implicit.js)
 └── robots/                imported robot fixtures with URDF/SRDF
     └── elrobot/ lekiwi/ openarm/ so101/ tom/
@@ -48,8 +49,9 @@ the sources and is gitignored — never commit it.
   - [step/mechanisms/](step/mechanisms/README.md): flattened, imported
     mechanism STEP demos and their viewer sidecars.
   - `models/renders/` and `models/robots/` (below) are the only other places
-    STEP files belong — both keep STEP sources inside self-contained project
-    folders.
+STEP files belong — both keep STEP sources inside self-contained project
+folders. Cross-tool handoff fixtures that must retain several source formats
+together belong in `models/integrations/`.
 - [renders/](renders/README.md): large concept renders and related
   experiments — every model that needs a folder of its own rather than a flat
   generator file. All 12: the educational public-source SpaceX reconstruction
@@ -63,6 +65,9 @@ the sources and is gitignored — never commit it.
 - [drawings/dxf/](drawings/dxf/README.md): small 2D DXF fixtures — Python
   `gen_dxf()` generator examples and imported permissively licensed `.dxf`
   files for tooling robustness tests.
+- [integrations/](integrations/): cross-tool fixtures that keep their source
+  formats, generated exchange artifacts, and reproducible handoff checks
+  together.
 - [robots/](robots/README.md): imported robot fixtures with URDF/SRDF — each
   keeps its own mix of STEP, mesh, and other file types alongside the robot
   description rather than splitting across the buckets above. (The authored

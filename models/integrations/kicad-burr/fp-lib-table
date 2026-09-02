@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "Burr")(type "KiCad")(uri "${KIPRJMOD}/Burr.pretty")(options "")(descr "Burr KiCad handoff fixture footprints"))
+)

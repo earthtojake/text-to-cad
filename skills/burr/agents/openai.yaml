@@ -1,0 +1,4 @@
+interface:
+  display_name: "Burr"
+  short_description: "Browse CAD and check STEP assemblies"
+  default_prompt: "Use $burr to browse local STEP, STL, or GLB models and inspect STEP assembly interference without overstating the result."

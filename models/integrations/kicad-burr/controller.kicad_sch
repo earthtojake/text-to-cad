@@ -1,0 +1,18 @@
+(kicad_sch
+	(version 20250901)
+	(generator "eeschema")
+	(generator_version "10.0")
+	(uuid "4cd289aa-3bc7-4dc5-a679-96f6bd55a7b2")
+	(paper "A4")
+	(title_block
+		(title "Burr KiCad handoff fixture")
+		(comment 1 "Mechanical integration fixture; intentionally no electrical circuit")
+	)
+	(lib_symbols)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)

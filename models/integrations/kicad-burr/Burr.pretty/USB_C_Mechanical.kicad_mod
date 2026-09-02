@@ -1,0 +1,87 @@
+(footprint "USB_C_Mechanical"
+	(version 20250907)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(descr "Mechanically representative USB-C receptacle for the Burr handoff fixture")
+	(tags "USB C mechanical integration Burr")
+	(property "Reference" "REF**"
+		(at 0 -5 0)
+		(layer "F.SilkS")
+		(uuid "b778bf91-2130-4d86-b50b-5b1b2d5a7fe5")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "USB-C"
+		(at 0 5 0)
+		(layer "F.Fab")
+		(uuid "c4c14a93-da12-4709-99c7-7e67ff99a412")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" "https://gct.co/connector/usb4105"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "c10b70c6-d4b3-48c4-8de0-00deaa909df7")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" "USB Type-C receptacle used as a mechanically obvious enclosure interface"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "7bc20558-719e-466d-9cf4-6bd1700217d7")
+		(effects
+			(font
+				(size 1.27 1.27)
+				(thickness 0.15)
+			)
+		)
+	)
+	(fp_rect
+		(start -4.75 0.5)
+		(end 4.75 3.75)
+		(stroke
+			(width 0.2)
+			(type default)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "6b6008cf-3957-44e2-92af-cde5093242a3")
+	)
+	(fp_rect
+		(start -5 -4)
+		(end 5 4)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "c672ae92-1892-4cec-b830-d8af7d6f0ef7")
+	)
+	(model "${KIPRJMOD}/Burr.3dshapes/USB_C_Mechanical.step"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+)

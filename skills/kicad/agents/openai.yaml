@@ -1,0 +1,4 @@
+interface:
+  display_name: "KiCad"
+  short_description: "Design and validate KiCad electronics projects"
+  default_prompt: "Use $kicad to create or update a KiCad electronics project, verify it with ERC and DRC, and export mechanical outputs when needed."
