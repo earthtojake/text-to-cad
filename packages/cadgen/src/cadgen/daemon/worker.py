@@ -234,6 +234,17 @@ def _invoke(request: dict) -> dict:
 
 def serve() -> int:
     os.environ["CADGEN_DAEMON_CHILD"] = "1"
+    # This process's stdout is not a console, it is the pool's FRAME CHANNEL, so
+    # its encoding belongs to the protocol rather than to the platform. Windows
+    # would otherwise hand it the ANSI code page: a job whose message carries a
+    # character that page cannot represent would either arrive mangled or, with
+    # strict handling, kill the frame mid-write. Both ends say utf-8 (see
+    # pool.Worker's Popen) and neither infers it.
+    for stream in (sys.stdout, sys.stdin):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            with contextlib.suppress(OSError, ValueError):
+                reconfigure(encoding="utf-8", errors="backslashreplace")
     _emit({"ready": os.getpid()})
     for line in sys.stdin:
         line = line.strip()

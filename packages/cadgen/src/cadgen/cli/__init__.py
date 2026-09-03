@@ -201,6 +201,13 @@ def _use_utf8_std_streams() -> None:
     it. CLI ENTRY POINTS ONLY -- these are process globals owned by whoever
     embedded us, so a library import must never touch them.
     """
+    if os.environ.get("CADGEN_DAEMON_CHILD"):
+        # Inside a warm worker these are not console streams: stdout is the
+        # pool's frame channel, pinned by the protocol at both ends
+        # (daemon.worker.serve). Reconfiguring it here re-encoded the frames
+        # under the parent's decoder and turned one failure into two different
+        # messages, cold versus warm.
+        return
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is None:  # a caller replaced it with a plain object

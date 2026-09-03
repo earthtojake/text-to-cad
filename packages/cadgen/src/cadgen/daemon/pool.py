@@ -270,7 +270,13 @@ class Worker:
         self.proc = subprocess.Popen(
             [sys.executable, "-m", "cadgen.daemon.worker"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None,
-            env=env, text=True, bufsize=1,
+            # utf-8 EXPLICITLY, not the locale's guess: this pipe carries the
+            # worker's JSON frames, and on Windows `text=True` alone decodes the
+            # ANSI code page. The worker encodes utf-8 (see worker.serve), so a
+            # message with a character outside that page arrived as mojibake --
+            # cold and warm builds then reported one failure two different ways,
+            # which the warm-equivalence test is there to forbid.
+            env=env, text=True, encoding="utf-8", errors="backslashreplace", bufsize=1,
         )
         self.jobs_served = 0
         self.busy = False
