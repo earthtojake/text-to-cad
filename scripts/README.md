@@ -25,11 +25,10 @@ Lower-level scripts stay grouped by ownership:
 - `test/`: code test runner and targeted test subcommands.
 - `github-workflows/`: release-layout and development-layout check entrypoints
   used by GitHub Actions.
-- `dev/`: symlink layout setup and verification for development checkouts.
 - `install/`: local skill install/uninstall scripts for agent skill folders.
 - `utils/`: shared helper scripts used by durable repo commands.
 - `release/`: version bumping, release commits, tags, and GitHub Releases.
-- `viewer/`, `git-hooks/`: specialized repo tooling (scripts/viewer operates on apps/viewer).
+- `git-hooks/`: the pre-commit hook `.githooks` delegates to.
 
 Root `tests/` contains repo-wide policy tests that are not owned by one package,
 skill, or app runtime.
@@ -74,24 +73,13 @@ disagree about symlinks, and Codex `plugin add` drops them silently, publishing 
 skill whose files are simply missing. Plugin manifest and marketplace validation
 lives in `tests/python/global/test_plugin_manifests.py`.
 
-The CAD Viewer runtime (built client + stdlib-only Python server) is bundled INTO the cad-viewer
-skill at `skills/cad-viewer/scripts/viewer` by `bundle-cad-viewer.sh`. On develop
-that path stays a development symlink to `apps/viewer/` and the Vite output is
-never committed; CI and the publish job bundle first, so the publish tree carries
-the real runtime and `scripts/github-workflows/check-publish-tree.sh` refuses to
-publish without it.
-
-## Dev
-
-`scripts/dev/setup-symlinks.sh` is the master development-layout script:
-
-```bash
-scripts/dev/setup-symlinks.sh
-scripts/dev/setup-symlinks.sh --check
-```
-
-It links generated-copy targets back to their canonical source directories and
-checks that those symlinks are present.
+The CAD Viewer's built client is the `--viewer` stage of
+`bundle-cadgen-runtime.sh`: a vite build of `apps/viewer` rsynced into
+`packages/cadgen/src/cadgen/_runtime/viewer`, which is gitignored (wheel-only; a
+checkout serves `apps/viewer/dist` directly). `--check` skips that stage and
+`--print-outputs` omits it; `scripts/release/check-wheel-contents.sh` is the gate
+that proves the wheel got it. The server is `cadgen.viewer`, plain Python in the
+package.
 
 ## Install
 

@@ -154,9 +154,6 @@ jobs:
             echo "No version metadata changes; the publish gate decides whether this version still needs to ship."
           fi
 
-      - name: Check development symlink layout
-        run: scripts/dev/setup-symlinks.sh --check
-
       - name: Show dry-run diff
         if: inputs.dry_run
         run: |
@@ -354,10 +351,6 @@ jobs:
         if: steps.gate.outputs.should_publish == 'true'
         uses: ./.github/actions/setup-deps
 
-      - name: Check development symlink layout
-        if: steps.gate.outputs.should_publish == 'true'
-        run: scripts/dev/setup-symlinks.sh --check
-
       - name: Bundle production outputs
         if: steps.gate.outputs.should_publish == 'true'
         run: scripts/bundle/bundle.sh --clean
@@ -413,20 +406,20 @@ jobs:
           packages-dir: packages/cadgen/dist
           skip-existing: true
 
-      # main is develop with the skill bundles materialized, versions stamped,
-      # skill requirements pinned, and ONLY models/ removed. The source roots
-      # (apps/, packages/, tests/, requirements-dev.txt) ship, so the source
-      # behind a release is discoverable on the default branch; together they are
-      # ~15 MB with no LFS objects, and models/ is the fixture corpus whose
-      # absence is the only one that buys anything. The plugin package is the
-      # repository root, so a plugin install copies all of it; the Skills CLI
-      # copies skills/<name> alone. Neither can rely on a sibling directory, which
-      # is why the ships-alone law stands unchanged with packages/ present:
+      # main is develop with versions stamped, skill requirements pinned, and
+      # ONLY models/ removed. The source roots (apps/, packages/, tests/,
+      # requirements-dev.txt) ship, so the source behind a release is
+      # discoverable on the default branch; together they are ~15 MB with no LFS
+      # objects, and models/ is the fixture corpus whose absence is the only one
+      # that buys anything. The plugin package is the repository root, so a
+      # plugin install copies all of it; the Skills CLI copies skills/<name>
+      # alone. Neither can rely on a sibling directory, which is why the
+      # ships-alone law stands unchanged with packages/ present:
       # check-publish-tree.sh below fails the publish if a skill reaches into it.
+      # No skill carries a generated runtime any more (the CAD Viewer ships in
+      # the cadgen wheel), so the bundle above feeds the wheel, not this tree.
       #
-      # prepare-publish-tree.sh removes models/ and dereferences the development
-      # symlink the bundle leaves in place (apps/viewer/packages/cadgen-js); a
-      # symlink must never reach the published tree. It runs after the bundle,
+      # prepare-publish-tree.sh removes models/. It runs after the bundle,
       # check-builds, and the tests, so the tree they validated is untouched.
       #
       # PUBLISH_TREE_REMOVED_ROOTS comes from the script -- the single source of
@@ -442,8 +435,7 @@ jobs:
       # An installed skill resolves cadgen from PyPI at this release's version:
       # no installer runs an editable install, and the Skills CLI does not even
       # copy the sibling packages/cadgen. Verified again by check-publish-tree.sh
-      # before the tree is committed, which also confirms the pin left the viewer
-      # app's cadgen>= floor alone.
+      # before the tree is committed.
       - name: Pin cadgen requirements to the published PyPI version
         if: steps.gate.outputs.should_publish == 'true'
         run: |
@@ -452,8 +444,8 @@ jobs:
 
       # The publish-tree contract, asserted over exactly the paths `git add -A`
       # will stage: models/ absent; apps/, packages/, tests/ present; no symlink
-      # anywhere; the bundled CAD Viewer runtime real and complete; no LFS-tracked
-      # path outside the README media; no skill reaching into a repo root.
+      # anywhere; no LFS-tracked path outside the README media; no skill
+      # reaching into a repo root.
       - name: Check publish tree
         if: steps.gate.outputs.should_publish == 'true'
         run: scripts/github-workflows/check-publish-tree.sh
@@ -578,26 +570,11 @@ jobs:
       ref: ${{ needs.release-pr.outputs.source_sha }}
     secrets: inherit
 
-  # Mirrors from the release SOURCE commit, not the publish commit: the mirror
-  # is a source repo, and it dereferences apps/viewer/packages/cadgen-js itself
-  # from the live package source rather than taking the publish tree's copy.
-  sync-cad-viewer:
-    name: Sync CAD Viewer Repo
-    needs:
-      - release-pr
-      - publish
-    if: ${{ needs.publish.outputs.published == 'true' && inputs.target_branch == 'main' }}
-    uses: ./.github/workflows/sync-cad-viewer.yml
-    with:
-      ref: ${{ needs.release-pr.outputs.source_sha }}
-    secrets: inherit
-
   tag-release:
     name: Tag and GitHub Release
     needs:
       - publish
       - deploy-docs
-      - sync-cad-viewer
     if: ${{ needs.publish.outputs.published == 'true' && inputs.target_branch == 'main' }}
     runs-on: ubuntu-latest
 

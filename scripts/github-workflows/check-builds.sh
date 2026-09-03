@@ -83,9 +83,9 @@ while IFS= read -r generated_path; do
   check_generated_path "$generated_path"
 done < <(generated_paths)
 
-# The generated paths above cover only the bundle outputs; skills/ as a whole is what
-# ships to the three plugin installers, so sweep it directly. The rule is simply: no
-# symlinks, anywhere, ever. See the note above on why this matters: Codex drops them
+# The generated paths above are cadgen's committed runtime, inside packages/; skills/
+# as a whole is what ships to the three plugin installers, so sweep it directly. The
+# rule is simply: no symlinks, anywhere, ever. See the note above on why this matters: Codex drops them
 # silently, shipping a skill with missing files and no error. The publish tree gets the
 # same sweep over EVERY shipping path (apps/ included) from check-publish-tree.sh.
 check_skills_tree_has_no_symlinks() {

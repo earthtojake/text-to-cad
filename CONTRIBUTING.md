@@ -150,38 +150,32 @@ is gone. cadgen now carries the JavaScript it executes as well as the Python.
 Canonical source directories are:
 
 - `skills/*` for skill instructions, references, and the thin entrypoints.
-- `apps/viewer/` for the CAD Viewer app — the React client (`src/`) AND its
-  stdlib-only Python backend (`server/`). Its built client + server ship
-  inside the cad-viewer skill; cadgen ships no viewer.
+- `apps/viewer/` for the CAD Viewer's React client. Its backend is
+  `cadgen.viewer` (in `packages/cadgen`), and its built `dist/` ships inside the
+  cadgen wheel as `cadgen/_runtime/viewer`.
 - `packages/*` for the shared runtimes. `packages/cadgen` is the published
-  distribution; `packages/cadgen-js` is its JS build input.
+  distribution; `packages/cadgen-js` is its JS build input, and the client's.
 
-On `develop`, `apps/viewer/packages/cadgen-js` is a symlink mirroring the root
-sources. Treat them as aliases, not separate source roots — edit the canonical path.
-
-Two source trees ship whole and must work in isolation outside this repo — the
+One source tree ships whole and must work in isolation outside this repo — the
 ships-alone law, enforced by the markdown-isolation check in
-`tests/python/global/test_package_boundaries.py`:
-
-- `packages/cadgen` builds into the PyPI wheel with cadgen-js bundled in at
-  build time; its README is the PyPI long description.
-- `apps/viewer` mirrors UNCHANGED into the standalone `earthtojake/cad-viewer`
-  repo at each release (`apps/viewer/scripts/selfContained.test.mjs` is the
-  in-app fence), with cadgen-js dereferenced into a vendored copy; cadgen from
-  PyPI is its only Python dependency, and a soft one.
-
-Markdown under either tree must be true and actionable with this repo gone:
-name the bundled thing ("the cadgen-js runtime bundled at build time"), never
-the repo path to its source, and keep commands relative to the package itself.
-Repo-development guidance for them belongs here, not in the packages.
+`tests/python/global/test_package_boundaries.py`: `packages/cadgen` builds into
+the PyPI wheel with cadgen-js and the viewer client bundled in at build time; its
+README is the PyPI long description. Markdown under it must be true and
+actionable with this repo gone: name the bundled thing ("the cadgen-js runtime
+bundled at build time"), never the repo path to its source, and keep commands
+relative to the package itself. Repo-development guidance belongs here, not in
+the package. `apps/viewer` is a client package with a boundary of its own
+(`apps/viewer/scripts/selfContained.test.mjs`): it imports cadgen-js by name and
+nothing else from outside its directory.
 
 ## Working On cadgen In This Repo
 
 - `scripts/test/test-python.sh` (or path-targeted `unittest`) for the engine;
   `tests/python/global/` holds the policy gates that enforce the design laws in
   `packages/cadgen/README.md`.
-- Editing anything the bundlers consume? `scripts/bundle/bundle.sh`, commit the
-  regenerated `_runtime/`, then `scripts/dev/setup-symlinks.sh`.
+- Editing anything the bundlers consume? `scripts/bundle/bundle.sh`, then commit
+  the regenerated `_runtime/node` and `_runtime/browser` (`_runtime/viewer` is
+  gitignored: the wheel build writes it, a checkout serves `apps/viewer/dist`).
 - `VERSION` at the repo root is canonical; release tooling stamps every
   duplicate. Never hand-edit versions under `packages/`.
 
@@ -191,29 +185,25 @@ Repo-development guidance for them belongs here, not in the packages.
 prod, behaviours worth knowing, testing); everything below is workbench-only
 and deliberately lives here.
 
-Launching from a lightweight worktree. The server IS the Python process now, so
-the interpreter you launch with is the only place cadgen is looked for — there
-is no `CADGEN_PYTHON` hand-down any more. The served directory is the cwd (there
-is no directory flag), so `cd` into the worktree's `models/` first. Use the
-primary checkout's venv with the WORKTREE's cadgen sources on `PYTHONPATH`, or
-the worktree exercises the main checkout's cadgen:
+The backend is `cadgen viewer` — the `cadgen.viewer` package, so the
+interpreter that has cadgen is the server. The served directory is the cwd
+(there is no directory flag), so `cd` into the worktree's `models/` first. From
+a lightweight worktree, use the primary checkout's venv with the WORKTREE's
+cadgen sources on `PYTHONPATH`, or the worktree exercises the main checkout's
+cadgen. The client resolves to `apps/viewer/dist` in a checkout (`npm run
+build` there first); `--dist` or `CADGEN_VIEWER_DIST` point elsewhere:
 
 ```bash
 cd <worktree>/models && \
 PYTHONPATH=<worktree>/packages/cadgen/src \
-<main>/.venv/bin/python <worktree>/apps/viewer/server/main.py \
-  --dist <worktree>/apps/viewer/dist \
-  --host 127.0.0.1 --json
+<main>/.venv/bin/python -m cadgen.viewer --host 127.0.0.1 --json
 ```
 
 For `npm run dev`, set `VIEWER_PYTHON` the same way — it defaults to `python3`,
-which is right for the standalone mirror and usually wrong here for two separate
-reasons. On macOS `python3` is still 3.9, which is BELOW the server's floor and
-is refused at startup with a message naming the version and this variable. And
-even at a supported version, a dev backend that cannot import cadgen views fine
-but cannot import STEP. The dev plugin logs the interpreter it resolved and
-warns when `stepImportAvailable` is false, so both degradations announce
-themselves at startup:
+which is usually wrong here: on macOS `python3` is still 3.9, BELOW the
+server's floor and refused at startup with a message naming the version and
+this variable, and a `python3` without cadgen has no server to run at all. The
+dev plugin logs the interpreter it resolved:
 
 ```bash
 VIEWER_PYTHON=<main>/.venv/bin/python \
@@ -225,31 +215,19 @@ npm --prefix <worktree>/apps/viewer run dev
 `--api-only`, and Vite serves the client. Production is the opposite — no built
 `dist/`, no start.
 
-The backend's own tests live at `apps/viewer/tests_server/` (outside `server/`,
-so the skill bundle's `server/` rsync never sees them), and `npm run test`
-does NOT collect them — it covers `src/` and `scripts/` only. In this repo
-`scripts/test/test-python.sh` runs them, on Linux through `test.sh` and directly
-in the Windows CI job; run that, or the app-root command it wraps:
+The backend's tests live at `tests/python/packages/cadgen/viewer/` and run with
+the cadgen package suite (`scripts/test/test-python.sh`, on Linux through
+`test.sh` and directly in the Windows CI job); `npm run test` covers the client's
+`src/` and `scripts/` only. `test_module_boundaries.py` holds the one structural
+law: nothing in `cadgen.viewer` imports the CAD kernel at module scope, so
+`cadgen viewer` starts as fast as `cadgen --help` and the kernel loads only in
+the compile worker.
 
-```bash
-cd apps/viewer && python -m unittest discover -s tests_server -t .
-```
-
-The runner passes `VIEWER_REQUIRE_CADGEN_PARITY=1`, which promotes
-`test_store_paths.AgreesWithCadgen` from "skip when cadgen is absent" to a hard
-failure. That class is what compares the viewer's store-key derivations against
-cadgen's, value for value, and it replaced ~190 lines of literal pins in
-`tests/python/global/test_render_contract_sync.py`; without the flag it would
-run in no automated configuration anywhere, because the only other runner is the
-standalone mirror's CI, which has no cadgen by design.
-`test_render_contract_sync.TheCrossLanguageGuardsActuallyRun` is what keeps that
-wiring from being removed again.
-
-Launcher reuse keys on realpath(root) × identity token (the version salted
-with the newest mtime across `server/*.py` and the built `dist/`), so another
-checkout's instance can never be handed back for a worktree's root — and a
-resident instance running pre-pull or pre-rebuild code fails the match and a
-fresh one starts.
+Launcher reuse keys on realpath(root) × identity token (the cadgen version
+salted with the newest mtime across `cadgen/viewer/*.py` and the default client
+location), so another checkout's instance can never be handed back for a
+worktree's root — and a resident instance running pre-pull or pre-rebuild code
+fails the match and a fresh one starts.
 
 Worktrees deliberately carry no `node_modules`; link them from the primary
 checkout before building. cadgen-js needs all three of its runtime
@@ -269,14 +247,10 @@ Do not extend the trick to the docs app: Turbopack rejects a symlinked
 `apps/docs/node_modules`, so the docs app needs a real install in any checkout
 that builds it.
 
-Never let a symlink reach the published tree (see Branch Layouts): the mirror
-sync dereferences `apps/viewer/packages/*` into real vendored copies, and
+Never let a symlink reach the published tree (see Branch Layouts):
 `scripts/github-workflows/check-builds.sh` enforces symlink-free publishes.
 
-Production-output checks are intentionally centralized. Normal development
-should stay in the symlinked `develop` layout. When you specifically need to inspect
-production outputs locally, use a temporary checkout or rerun
-`scripts/dev/setup-symlinks.sh` afterward, then run:
+Production-output checks are intentionally centralized:
 
 ```bash
 scripts/bundle/bundle.sh --clean
@@ -315,9 +289,7 @@ publishing a skill whose files are simply missing at runtime.
 requirements pinned to the release, and ONLY `models/` removed. The publish job
 (`.github/workflows/release.yml`) produces it in this order, after the bundle and
 every check have run against the untrimmed tree: `scripts/release/prepare-publish-tree.sh`
-drops `models/` and dereferences the one development symlink the bundle leaves in
-place (`apps/viewer/packages/cadgen-js` becomes a real copy of the package
-source); `scripts/release/pin-cadgen-requirements.sh` rewrites every skill's
+drops `models/`; `scripts/release/pin-cadgen-requirements.sh` rewrites every skill's
 `cadgen` line to `cadgen==<VERSION>`; `scripts/github-workflows/check-publish-tree.sh`
 asserts the result over exactly the paths `git add -A` will stage; then the
 publish commit is written. Root `docs/` (the hand-migration guides) ships too,
@@ -330,12 +302,9 @@ What that means for what you find on `main`:
   should be discoverable on the default branch and together they are ~15 MB with
   no LFS objects. `models/` is the fixture corpus, the one root whose absence
   buys anything, and the only one removed.
-- `apps/viewer/` (the CAD Viewer SOURCE) and `skills/cad-viewer/scripts/viewer`
-  (the BUNDLED runtime: built client + Python server, materialized by
-  `bundle-cad-viewer.sh`) both exist. The skill needs the runtime with no install
-  step; the source is there to read, and to keep `main` a faithful snapshot of
-  `develop`. The standalone `earthtojake/cad-viewer` mirror is still synced from
-  the release SOURCE commit, not from `main`.
+- `apps/viewer/` (the CAD Viewer client's source) is there to read. The
+  Viewer itself ships in the cadgen wheel (`cadgen viewer`), so no skill carries
+  a runtime and nothing is bundled into the publish tree.
 - `tests/` ships without its `models/` fixtures, so it is readable, not runnable,
   on `main`. Run the suites from a `develop` checkout.
 - `packages/` being present is NOT permission for a skill to import from it. The
@@ -345,10 +314,8 @@ What that means for what you find on `main`:
   on the first `npx skills add`. `check-publish-tree.sh` fails the publish on any
   such reference; `tests/python/global/test_skill_self_containment.py` and
   `test_package_boundaries.py` hold the same law on `develop`.
-- No symlink, anywhere. The dev layout's two symlinks are both materialized
-  (`skills/cad-viewer/scripts/viewer` by the bundle,
-  `apps/viewer/packages/cadgen-js` by `prepare-publish-tree.sh`), and
-  `check-publish-tree.sh` refuses any that remains.
+- No symlink, anywhere. The repository has no development symlinks left, and
+  `check-publish-tree.sh` refuses any that appears.
 - No LFS-tracked path except the README demo media under `assets/`. Installers
   clone without git-lfs and receive pointer files, so an LFS-tracked skill fixture
   or runtime asset would ship broken; `check-publish-tree.sh` fails on any LFS
@@ -356,17 +323,16 @@ What that means for what you find on `main`:
   MB each and GitHub renders LFS media in the README regardless.
 
 `main` is publish-only: do not open PRs to `main` or push it directly. The `Test`
-workflow runs on `develop` and PRs to `develop`: it starts from the symlink
-layout, verifies that layout, checks generated outputs against their sources
-with `scripts/bundle/bundle.sh --check`, runs `scripts/bundle/bundle.sh
---clean`, checks the production layout without rebuilding it, runs
-documentation checks, and runs the code tests against that generated output.
+workflow runs on `develop` and PRs to `develop`: it checks generated outputs
+against their sources with `scripts/bundle/bundle.sh --check`, runs
+`scripts/bundle/bundle.sh --clean`, checks the production layout without
+rebuilding it, runs documentation checks, and runs the code tests against that
+generated output.
 
-Most generated paths cannot drift on `develop` because they are symlinks to
-their canonical sources, and the freshness check skips those. It covers the
-generated outputs that `develop` does commit as real files, such as the CAD
-snapshot runtime built from `packages/cadgen-js`, and
-version metadata derived from `VERSION`.
+The freshness check covers the generated outputs `develop` commits as real
+files — cadgen's Node builders and snapshot runtime built from
+`packages/cadgen-js` — and version metadata derived from `VERSION`. The viewer
+client (`_runtime/viewer`) is gitignored and built only for the wheel.
 
 ## Releases
 
@@ -569,10 +535,8 @@ repo-local Python runtime, for example:
 ```
 
 Repo-owned Python tests live under `tests/python/`, grouped by tested surface:
-`skills/<skill>`, `packages/<package>`, and `global`. The CAD Viewer backend is
-the exception and lives with the app it ships with, at `apps/viewer/tests_server/`,
-because `apps/viewer` mirrors out of this repo whole and must carry its own
-suite. `scripts/test/test-python.sh` runs both.
+`skills/<skill>`, `packages/<package>`, and `global`. The CAD Viewer backend's
+suite is `tests/python/packages/cadgen/viewer/`, part of the cadgen package suite.
 
 For fast CAD Viewer source iteration, run the root viewer app in dev mode. Do
 not run the packaged viewer from an installed cadgen while modifying Viewer

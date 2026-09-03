@@ -96,12 +96,13 @@ class PackagesNeverImportApps(unittest.TestCase):
         self.assertEqual(offenders, [])
 
 
-# The ships-alone law. Two shipped surfaces leave this repo whole:
+# The ships-alone law. Two surfaces leave this repo whole:
 #   - packages/cadgen builds into the PyPI wheel (README.md is its long
-#     description; cadgen-js arrives already bundled under _runtime/).
-#   - apps/viewer mirrors UNCHANGED into the standalone earthtojake/cad-viewer
-#     repo (its own packages/cadgen-js symlink dereferences into a vendored
-#     copy; nothing rewrites paths on the way out).
+#     description; cadgen-js and the viewer client arrive already bundled
+#     under _runtime/).
+#   - apps/viewer is the CAD Viewer's client package: it names cadgen-js (its
+#     one dependency) and its own files, never the repo's tooling or the
+#     cadgen source it is served by.
 #   - skills/ installs standalone: the Skills CLI copies skills/<name> by
 #     itself, and Claude Code and Codex copy the PUBLISHED tree, which has no
 #     models/ and never installs its packages/ — so a skill that points at this
@@ -129,7 +130,7 @@ _MD_ISOLATION_ROOTS: dict[str, tuple[str, ...]] = {
         r"CONTRIBUTING\.md",
         r"\.github/",
     ),
-    # The viewer owns scripts/, skills/smui/, and a vendored
+    # The viewer client owns scripts/, skills/smui/, and imports
     # packages/cadgen-js — those stay legal; the repo's families do not.
     "apps/viewer": (
         r"apps/",
@@ -174,9 +175,6 @@ _URL_RE = re.compile(r"https?://\S+")
 
 
 def _markdown_files(root: Path):
-    # rglob's ** never descends into symlinked directories, so a skill's dev
-    # symlink into apps/ (skills/cad-viewer/scripts/viewer) is not rescanned
-    # under the skills rules; the viewer's own root already covers it.
     for path in sorted(root.rglob("*.md")):
         if _MD_SKIPPED_DIRS.intersection(path.parts):
             continue

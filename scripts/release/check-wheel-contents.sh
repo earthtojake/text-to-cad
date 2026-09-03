@@ -3,15 +3,18 @@ set -euo pipefail
 
 # Assert the cadgen wheel actually contains its runtime assets.
 #
-# cadgen ships JavaScript it executes (Node builders, the snapshot browser bundle).
+# cadgen ships JavaScript it executes (Node builders, the snapshot browser bundle, the
+# CAD Viewer's built client) and non-Python data its server reads (collation.json).
 # Those arrive through `[tool.setuptools.package-data]`, which is exactly the kind of
 # declaration that fails QUIETLY: a glob that does not match nested files produces a
 # wheel that imports fine, passes every Python test, and then cannot build a DXF preview
-# on a user's machine. The repo has already been bitten by the same shape of bug in JS
-# bundling (an entry tree-shaken to a 20-byte shebang, exit code 0).
+# -- or serve a Viewer -- on a user's machine. The repo has already been bitten by the
+# same shape of bug in JS bundling (an entry tree-shaken to a 20-byte shebang, exit
+# code 0).
 #
-# So: build the wheel, list it, and require the paths to be present. The CAD Viewer is
-# NOT in the wheel: it is a standalone app bundled by the cad-viewer skill.
+# So: build the wheel, list it, and require the paths to be present. The viewer client
+# is NOT committed (scripts/bundle/skills/bundle-cadgen-runtime.sh --viewer writes it
+# right before the build), so this is the only gate proving it made the wheel.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -41,6 +44,12 @@ REQUIRED=(
   "cadgen/assets.py"
   "cadgen/cli/__init__.py"
   "cadgen/cli/step_build.py"
+  "cadgen/cli/viewer.py"
+  "cadgen/viewer/__init__.py"
+  "cadgen/viewer/__main__.py"
+  "cadgen/viewer/main.py"
+  "cadgen/viewer/compile_worker.py"
+  "cadgen/viewer/collation.json"
   "cadgen/authoring.py"
   "cadgen/build123d.py"
   # The robot validators moved out of skills/{sdf,srdf,urdf}/scripts into cadgen, so a
@@ -67,6 +76,7 @@ REQUIRED=(
   "cadgen/_runtime/node/THIRD_PARTY_LICENSES.txt"
   "cadgen/_runtime/browser/snapshot-render.js"
   "cadgen/_runtime/browser/render.html"
+  "cadgen/_runtime/viewer/index.html"
 )
 
 echo "Building cadgen wheel for content check..."

@@ -3,9 +3,8 @@ set -euo pipefail
 
 # Verify a prepared publish tree is what `main` is allowed to carry.
 #
-# The contract (CONTRIBUTING.md, "Branch Layouts"): `main` is `develop` with the
-# skill bundles materialized, versions stamped, skill requirements pinned, and
-# ONLY models/ removed. This runs in the Release workflow after
+# The contract (CONTRIBUTING.md, "Branch Layouts"): `main` is `develop` with
+# versions stamped, skill requirements pinned, and ONLY models/ removed. This runs in the Release workflow after
 # scripts/release/prepare-publish-tree.sh and pin-cadgen-requirements.sh, right
 # before the publish commit, over the files that commit will contain -- the
 # index plus untracked files that .gitignore does not exclude, which is exactly
@@ -19,9 +18,7 @@ set -euo pipefail
 #   3. NO symlink anywhere in what ships. Codex `plugin add` drops symlinks with
 #      no error (scripts/github-workflows/check-builds.sh has the details), so
 #      one that reaches main ships a broken skill to every Codex user;
-#   4. the bundled CAD Viewer runtime is a real directory with the built client
-#      and the Python server, and no sourcemaps, bytecode or node_modules ship
-#      inside a skill;
+#   4. no sourcemaps, bytecode, node_modules or tests ship inside a skill;
 #   5. NO LFS-tracked path ships, apart from the README demo media under assets/.
 #      Installers clone without git-lfs and receive pointer files; for a skill
 #      fixture or a runtime asset that is a silently broken install. The README
@@ -30,10 +27,7 @@ set -euo pipefail
 #   6. no skill SOURCE reaches into a repo root (../../../packages/, apps/,
 #      tests/, models/). packages/ being present on main is not permission to
 #      import from it: the Skills CLI installs skills/<name> alone, so the
-#      sibling is not there. Generated artifacts are exempt (a bundled dist/ is
-#      self-contained; its sourcemaps are excluded from the bundle anyway);
-#   7. apps/viewer/requirements.txt still declares its cadgen FLOOR: the pin
-#      rewrites skills, never the standalone app.
+#      sibling is not there.
 #
 # Usage: scripts/github-workflows/check-publish-tree.sh
 
@@ -88,12 +82,10 @@ done < <("$PREPARE_SCRIPT" --print-removed-roots)
 echo "==> Source roots ship (main is develop minus models/)"
 for marker in \
   apps/viewer/package.json \
-  apps/viewer/server/main.py \
   apps/docs/package.json \
   packages/cadgen/pyproject.toml \
+  packages/cadgen/src/cadgen/viewer/main.py \
   packages/cadgen-js/package.json \
-  apps/viewer/packages/cadgen-js/package.json \
-  apps/viewer/packages/cadgen-js/src \
   tests/python \
   requirements-dev.txt \
   skills \
@@ -116,22 +108,12 @@ while IFS= read -r path; do
 done < "$paths_file"
 [ "$symlinks" -eq 0 ] && echo "    none"
 
-echo "==> Bundled CAD Viewer runtime"
-runtime=skills/cad-viewer/scripts/viewer
-if [ -L "$runtime" ] || [ ! -d "$runtime" ]; then
-  fail "$runtime must be a real directory (the bundled runtime), not a symlink"
-else
-  for required in package.json server/main.py dist/index.html; do
-    if [ -f "$runtime/$required" ]; then
-      echo "    $runtime/$required"
-    else
-      fail "bundled CAD Viewer runtime is missing $runtime/$required"
-    fi
-  done
-fi
+echo "==> Skills ship no build or test leftovers"
 if grep -E '^skills/.*(\.map|/__pycache__/|\.pyc|/node_modules/|/tests?/)' "$paths_file" > "$paths_file.skill-junk"; then
   fail "skills/ ships build or test leftovers:"
   sed 's/^/      /' "$paths_file.skill-junk" >&2
+else
+  echo "    none"
 fi
 rm -f "$paths_file.skill-junk"
 
@@ -159,20 +141,13 @@ done <<< "$lfs_hits"
 echo "==> No skill source reaches a repo root"
 skill_root_refs="$(
   grep -rIlE '\.\./\.\./\.\./(packages|apps|tests|models)/|["'"'"']\.\./\.\./(packages|apps|tests|models)/' skills \
-    --exclude='*.map' --exclude-dir=dist --exclude-dir=node_modules 2>/dev/null || true
+    --exclude-dir=node_modules 2>/dev/null || true
 )"
 if [ -n "$skill_root_refs" ]; then
   fail "a skill reaches into a repo root; an installed skill has no siblings (the Skills CLI copies skills/<name> alone):"
   printf '%s\n' "$skill_root_refs" | sed 's/^/      /' >&2
 else
   echo "    none"
-fi
-
-echo "==> The viewer app keeps its cadgen floor"
-if grep -Eq '^cadgen>=' apps/viewer/requirements.txt && ! grep -q 'cadgen==' apps/viewer/requirements.txt; then
-  echo "    $(grep -E '^cadgen>=' apps/viewer/requirements.txt)"
-else
-  fail "apps/viewer/requirements.txt must declare cadgen>= (a floor), never a pin"
 fi
 
 if [ "$failures" -ne 0 ]; then

@@ -57,7 +57,7 @@ flow, CI/CD-testing and resume options, and local/manual fallbacks.
 - `.claude-plugin/`, `.codex-plugin/`: agent plugin manifests. The repository
   root is the plugin package; its skills are `skills/` directly.
 - `models/`: sample and durable CAD/robot-description fixtures.
-- `apps/viewer/`: editable CAD Viewer source app.
+- `apps/viewer/`: the CAD Viewer's React client (its backend is `cadgen.viewer`).
 - `packages/cadgen-js`: shared JS CAD/render/runtime code, UI-framework agnostic.
 - `packages/cadgen`: the published distribution — STEP/GLB/topology generation,
   the skill CLI parsers, the CAD Viewer backend + client, and the Node/browser
@@ -73,11 +73,10 @@ flow, CI/CD-testing and resume options, and local/manual fallbacks.
   `packages/cadgen/README.md` (the laws), `packages/cadgen-js/README.md`,
   `apps/viewer/README.md`, and `apps/docs/README.md` before changing
   generation, rendering, storage, layout, or public interfaces.
-- Ships-alone law: `packages/cadgen` (the built PyPI wheel) and `apps/viewer`
-  (mirrored unchanged to `earthtojake/cad-viewer`) each work in isolation
-  outside this repo, so their markdown must not refer to anything outside the
+- Ships-alone law: `packages/cadgen` (the built PyPI wheel) works in isolation
+  outside this repo, so its markdown must not refer to anything outside the
   package — enforced by `tests/python/global/test_package_boundaries.py`.
-  Repo-development guidance for them goes in `CONTRIBUTING.md`.
+  Repo-development guidance for it goes in `CONTRIBUTING.md`.
 
 - Keep root guidance short. Put domain workflows, CLI details, and validation
   policy in the relevant `skills/<skill>/SKILL.md` or `references/` file.
@@ -121,17 +120,13 @@ flow, CI/CD-testing and resume options, and local/manual fallbacks.
   Code preserves them, and Codex `plugin add` drops them with no error, shipping
   a skill with missing files. `scripts/github-workflows/check-builds.sh` enforces
   this; do not relax it.
-- `apps/viewer/` is the whole CAD Viewer app: the React client (`src/`) AND its
-  stdlib-only Python backend (`server/`). It is a standalone app, separate from
-  cadgen: the cad-viewer skill bundles the built client + server at
-  `skills/cad-viewer/scripts/viewer` (a dev symlink here; materialized by
-  `bundle-cad-viewer.sh` for publish), and each release mirrors `apps/viewer/` to the
-  standalone `earthtojake/cad-viewer` repo. cadgen-js is bundled into the client
-  at BUILD time; cadgen is an ordinary PyPI dependency of the interpreter that
-  runs `server/main.py`, imported in a worker the server owns to compile foreign
-  STEP imports. It stays SOFT — no module in `server/` imports it at module
-  scope, so absent cadgen viewing still works and only imports degrade. Keep
-  repo-level tooling in `scripts/`, not under `apps/viewer/`.
+- The CAD Viewer is `cadgen viewer`: the server is `cadgen.viewer` (Python, in
+  `packages/cadgen`), the React client's source is `apps/viewer/` and its build
+  ships in the wheel at `cadgen/_runtime/viewer` (gitignored; a checkout serves
+  `apps/viewer/dist`). The cad-viewer skill is instructions over that verb.
+  Nothing in `cadgen.viewer` imports the CAD kernel at module scope — the one
+  kernel action, importing a foreign STEP, runs in a worker the server owns.
+  Keep repo-level tooling in `scripts/`, not under `apps/viewer/`.
 - `packages/cadgen-js` must stay reusable/non-React; app UI and workflow state
   belong in `apps/viewer/`. It holds the shared CAD render/runtime code: one package,
   one copy of each shared primitive.
@@ -194,10 +189,9 @@ when touching shared surfaces or before handoff:
 - CAD Viewer or `packages/cadgen-js`:
   `npm --prefix packages/cadgen-js test`,
   `npm --prefix apps/viewer run test`, `npm --prefix apps/viewer run build`.
-  The Viewer is two languages and `npm run test` covers only one of them — the
-  Python backend's suite is `apps/viewer/tests_server`, run by
-  `scripts/test/test-python.sh`. Touching `apps/viewer/server/` means running
-  that, not just the JS.
+  The Viewer is two languages and `npm run test` covers only the client — the
+  backend's suite is `tests/python/packages/cadgen/viewer`, run by
+  `scripts/test/test-python.sh`. Touching `cadgen/viewer/` means running that.
 - Docs site: `npm --prefix apps/docs run check`
 - Targeted Python tests: `./.venv/bin/python -m unittest <changed test paths>`
 

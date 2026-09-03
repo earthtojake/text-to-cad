@@ -64,40 +64,13 @@ class PinScriptPresenceTest(unittest.TestCase):
             )
         self.assertTrue(checked, "no skill requirements name cadgen")
 
-    def test_the_viewer_app_declares_cadgen_as_a_floor_and_is_never_pinned(self):
-        """`apps/viewer` is an APP, not a skill, and the pin deliberately skips it.
-
-        It needs a requirements file of its own because it is mirrored verbatim to
-        the standalone `earthtojake/cad-viewer` repo, which has no skill manifest
-        beside it and must still be installable. What it must NOT have is `cadgen==`:
-        the pin exists so a published SKILL resolves one exact release from PyPI,
-        while a standalone app wants "at least this new" and would otherwise fight
-        whatever newer cadgen the user already has. A `cadgen>=` line does not match
-        the script's bare-name regex, so this is enforced rather than assumed.
-
-        The floor is load-bearing, not decorative -- the import path calls
-        `build_step_artifact(..., sink=)`, which older releases do not accept -- so
-        it is checked against the constant the server names in its upgrade hint.
-        """
-        req = REPO_ROOT / "apps" / "viewer" / "requirements.txt"
-        self.assertTrue(req.is_file(), f"missing {req}")
-        text = req.read_text(encoding="utf-8")
-        self.assertNotIn("cadgen==", text, "the viewer app must declare a floor, not a pin")
-
-        declared = [line.strip() for line in text.splitlines() if line.strip().startswith("cadgen")]
-        self.assertEqual(len(declared), 1, f"expected one cadgen requirement, got {declared}")
-        self.assertTrue(declared[0].startswith("cadgen>="), declared[0])
-
-        floor = declared[0].split(">=", 1)[1].strip()
-        worker = (REPO_ROOT / "apps" / "viewer" / "server" / "compile_worker.py").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(
-            f'MINIMUM_CADGEN_VERSION = "{floor}"',
-            worker,
-            "requirements.txt and MINIMUM_CADGEN_VERSION must name the same release",
-        )
-
+    def test_the_viewer_client_has_no_python_requirements(self):
+        # apps/viewer is the CAD Viewer's CLIENT; its backend is cadgen.viewer,
+        # installed by `pip install cadgen`. A requirements.txt here would be a
+        # second place to state that dependency, and the pin script would then
+        # have to decide whether it is a skill (pin) or an app (floor) -- a
+        # distinction that no longer exists.
+        self.assertFalse((REPO_ROOT / "apps" / "viewer" / "requirements.txt").exists())
 
 class PinScriptBehaviourTest(unittest.TestCase):
     """Run the real script against a throwaway tree shaped like the publish tree."""

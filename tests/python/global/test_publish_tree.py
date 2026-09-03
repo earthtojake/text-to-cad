@@ -1,27 +1,23 @@
-"""`main` is `develop` with bundles materialized, versions stamped, requirements pinned,
-and ONLY models/ removed -- held by test, not prose.
+"""`main` is `develop` with versions stamped, requirements pinned, and ONLY models/
+removed -- held by test, not prose.
 
 The trim used to drop apps/, tests/, packages/ and requirements-dev.txt too. It no longer
 does, and two things have to stay true now that those roots ship:
 
-* no symlink may reach the published tree. The bundle materializes
-  skills/cad-viewer/scripts/viewer, but apps/viewer/packages/cadgen-js is a tracked
-  development symlink that nothing materialized -- with apps/ shipping it would have
-  reached main, and Codex `plugin add` drops symlinks silently.
-  scripts/release/prepare-publish-tree.sh dereferences it;
+* no symlink may reach the published tree: Codex `plugin add` drops symlinks silently.
+  The repository has no development symlinks left, so this is a fence, not a step;
 * packages/ being present is not permission for a skill to import from it (the Skills
   CLI installs skills/<name> alone). scripts/github-workflows/check-publish-tree.sh
   keeps the reach check that used to live inline in release.yml, and adds the rest of
-  the contract: models/ absent, the source roots present, the bundled viewer runtime
-  real and complete, and no LFS-tracked path outside the README media.
+  the contract: models/ absent, the source roots present, and no LFS-tracked path
+  outside the README media.
 
-Both scripts run against a throwaway git repo shaped like a bundled checkout.
+Both scripts run against a throwaway git repo shaped like a checkout.
 """
 
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -32,7 +28,6 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 PREPARE = REPO_ROOT / "scripts" / "release" / "prepare-publish-tree.sh"
 CHECK = REPO_ROOT / "scripts" / "github-workflows" / "check-publish-tree.sh"
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
-DEV_SYMLINK_SCRIPTS = sorted((REPO_ROOT / "scripts" / "dev" / "skills").glob("setup-*-skill-symlink.sh"))
 
 LFS_POINTER = "version https://git-lfs.github.com/spec/v1\noid sha256:%s\nsize 12\n" % ("0" * 64)
 
@@ -77,36 +72,19 @@ class PublishTreeScriptsExist(unittest.TestCase):
             "the trim list lives in prepare-publish-tree.sh, and apps/, tests/, packages/ ship",
         )
 
-    def test_every_dev_symlink_is_materialized_somewhere(self) -> None:
-        """A dev symlink is either a bundle output or dereferenced by prepare-publish-tree.sh.
+    def test_no_tracked_symlink_exists_anywhere(self) -> None:
+        """The repository carries no development symlinks, so none can reach main.
 
-        Otherwise it reaches main. Read from the setup scripts, so a new dev symlink has
-        to be taught to one of the two before it can be committed.
+        The bundle used to materialize one (the cad-viewer skill's runtime) and
+        prepare-publish-tree.sh dereferenced another (apps/viewer/packages/cadgen-js).
+        Both are gone; a tracked symlink appearing again is a new publish hazard, and
+        this names it before the release workflow does.
         """
-        links: set[str] = set()
-        for script in DEV_SYMLINK_SCRIPTS:
-            for match in re.finditer(r'setup_link "\$MODE" "([^"]+)"', script.read_text(encoding="utf-8")):
-                links.add(match.group(1))
-        self.assertTrue(links, "no development symlinks found in scripts/dev/skills")
-
-        bundle_outputs = set(
-            subprocess.run(
-                ["bash", str(REPO_ROOT / "scripts" / "bundle" / "bundle-skill.sh"), "--all", "--print-outputs"],
-                capture_output=True, text=True, check=True,
-            ).stdout.split()
-        )
-        dereferenced = set(
-            subprocess.run(
-                ["bash", str(PREPARE), "--print-dereferenced-links"], capture_output=True, text=True, check=True
-            ).stdout.split()
-        )
-        unhandled = sorted(links - bundle_outputs - dereferenced)
-        self.assertEqual(
-            unhandled,
-            [],
-            "development symlinks that nothing materializes for the publish tree "
-            "(add a bundler, or list them in prepare-publish-tree.sh)",
-        )
+        tracked = subprocess.run(
+            ["git", "ls-files", "-s"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+        ).stdout.splitlines()
+        symlinks = sorted(line.split("\t", 1)[1] for line in tracked if line.startswith("120000 "))
+        self.assertEqual(symlinks, [], "tracked symlinks would reach the publish tree")
 
 
 class PublishTreeFixture(unittest.TestCase):
@@ -122,14 +100,13 @@ class PublishTreeFixture(unittest.TestCase):
             shutil.copy2(script, target)
         self._write("VERSION", "9.9.9\n")
         self._write(".gitattributes", "*.step filter=lfs diff=lfs merge=lfs -text\nassets/** filter=lfs diff=lfs merge=lfs -text\n")
-        self._write(".gitignore", "node_modules\ndist\n!skills/cad-viewer/scripts/viewer/dist/\n!skills/cad-viewer/scripts/viewer/dist/**\n")
+        self._write(".gitignore", "node_modules\ndist\n")
         self._write("models/part.step", "ISO-10303-21;\n")
         self._write("models/README.md", "fixtures\n")
         self._write("apps/viewer/package.json", "{}\n")
-        self._write("apps/viewer/server/main.py", "print('viewer')\n")
-        self._write("apps/viewer/requirements.txt", "cadgen>=1.0.0\n")
         self._write("apps/docs/package.json", "{}\n")
         self._write("packages/cadgen/pyproject.toml", "[project]\nname='cadgen'\n")
+        self._write("packages/cadgen/src/cadgen/viewer/main.py", "print('viewer')\n")
         self._write("packages/cadgen-js/package.json", "{}\n")
         self._write("packages/cadgen-js/src/index.js", "export {}\n")
         self._write("packages/cadgen-js/node_modules/three/package.json", "{}\n")
@@ -139,14 +116,8 @@ class PublishTreeFixture(unittest.TestCase):
         self._write("assets/demo.gif", LFS_POINTER)
         self._write("skills/cad/SKILL.md", "# cad\n")
         self._write("skills/cad/requirements.txt", "cadgen==9.9.9\n")
-        runtime = "skills/cad-viewer/scripts/viewer"
-        self._write(f"{runtime}/package.json", '{"version": "9.9.9"}\n')
-        self._write(f"{runtime}/server/main.py", "print('bundled')\n")
-        self._write(f"{runtime}/dist/index.html", "<html></html>\n")
-        # The development symlink the bundle leaves in place.
-        link = self.root / "apps" / "viewer" / "packages" / "cadgen-js"
-        link.parent.mkdir(parents=True)
-        link.symlink_to("../../../packages/cadgen-js")
+        self._write("skills/cad-viewer/SKILL.md", "# cad-viewer\n")
+        self._write("skills/cad-viewer/requirements.txt", "cadgen==9.9.9\n")
 
         self._git("init", "--quiet")
         self._git("config", "user.email", "t@example.com")
@@ -178,19 +149,6 @@ class PrepareBehaviour(PublishTreeFixture):
         for kept in ("apps", "packages", "tests", "requirements-dev.txt", "docs", "assets", "skills"):
             self.assertTrue((self.root / kept).exists(), f"{kept} must survive")
 
-    def test_dereferences_the_viewer_package_symlink_without_node_modules(self) -> None:
-        self._prepare()
-        copy = self.root / "apps" / "viewer" / "packages" / "cadgen-js"
-        self.assertFalse(copy.is_symlink())
-        self.assertTrue(copy.is_dir())
-        self.assertTrue((copy / "package.json").is_file())
-        self.assertTrue((copy / "src" / "index.js").is_file())
-        self.assertFalse((copy / "node_modules").exists(), "installed state must not be copied")
-        self.assertEqual(
-            (copy / "src" / "index.js").read_text(encoding="utf-8"),
-            (self.root / "packages" / "cadgen-js" / "src" / "index.js").read_text(encoding="utf-8"),
-        )
-
     def test_is_idempotent(self) -> None:
         self.assertEqual(0, self._prepare().returncode)
         second = self._prepare()
@@ -202,7 +160,6 @@ class CheckBehaviour(PublishTreeFixture):
         before = self._check()
         self.assertEqual(1, before.returncode)
         self.assertIn("models/ must not be present", before.stderr)
-        self.assertIn("symlink in the publish tree", before.stderr)
 
         self._prepare()
         after = self._check()
@@ -246,19 +203,12 @@ class CheckBehaviour(PublishTreeFixture):
         self.assertIn("a skill reaches into a repo root", result.stderr)
         self.assertIn("skills/cad/scripts/helper.py", result.stderr)
 
-    def test_an_incomplete_viewer_bundle_fails(self) -> None:
+    def test_skill_build_leftovers_fail(self) -> None:
         self._prepare()
-        (self.root / "skills" / "cad-viewer" / "scripts" / "viewer" / "dist" / "index.html").unlink()
+        self._write("skills/cad/scripts/__pycache__/helper.cpython-313.pyc", "\x00")
         result = self._check()
         self.assertEqual(1, result.returncode)
-        self.assertIn("missing skills/cad-viewer/scripts/viewer/dist/index.html", result.stderr)
-
-    def test_a_pinned_viewer_app_fails(self) -> None:
-        self._prepare()
-        self._write("apps/viewer/requirements.txt", "cadgen==9.9.9\n")
-        result = self._check()
-        self.assertEqual(1, result.returncode)
-        self.assertIn("must declare cadgen>=", result.stderr)
+        self.assertIn("skills/ ships build or test leftovers", result.stderr)
 
 
 if __name__ == "__main__":
