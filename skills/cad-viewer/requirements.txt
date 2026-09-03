@@ -1,8 +1,4 @@
-# The Viewer server is stdlib-only Python, and this is the interpreter that
-# runs it. cadgen is imported IN-PROCESS, in a worker the server owns, to
-# compile foreign STEP imports — there is no discovery and no CADGEN_PYTHON any
-# more, so this file is the only door it comes through.
-# The server still starts without it: viewing works, and imports answer with an
-# install hint (or an upgrade hint naming the version, when the installed
-# cadgen is too old for the compile entry point).
+# The CAD Viewer is `cadgen viewer`: the server and the prebuilt client ship
+# inside the cadgen distribution, so this is the only dependency. Unpinned on
+# develop (the repo's editable install satisfies it); the release pins it.
 cadgen
