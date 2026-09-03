@@ -209,9 +209,29 @@ class WorkerGone(RuntimeError):
         self.exit_status = exit_status
 
 
+# Windows reports a violent death as the process's exit code -- an NTSTATUS with the
+# error severity bits set. These are from Microsoft's ntstatus.h / [MS-ERREF]; verify
+# any addition against it, and never gloss a code with a CAUSE the number cannot prove.
+_NTSTATUS_NAMES = {
+    0xC0000005: "STATUS_ACCESS_VIOLATION",      # the Windows SIGSEGV -- a kernel crash
+    0xC0000017: "STATUS_NO_MEMORY",             # confirms the out-of-memory suspicion
+    0xC00000FD: "STATUS_STACK_OVERFLOW",        # runaway recursion, not memory pressure
+    0xC000013A: "STATUS_CONTROL_C_EXIT",        # the user interrupted it; NOT a crash
+    0xC0000374: "STATUS_HEAP_CORRUPTION",
+    0xC0000409: "STATUS_STACK_BUFFER_OVERRUN",  # __fastfail / abort-class native fatal
+}
+
+
 def describe_exit(status: int | None) -> str:
-    """``exited with code 1`` / ``was killed by SIGKILL (signal 9)`` / ``closed its
-    output while still running`` -- the evidence a dead worker leaves."""
+    """``exited with code 1`` / ``was killed by SIGKILL (signal 9)`` / ``exited with
+    0xC0000005 (STATUS_ACCESS_VIOLATION)`` / ``closed its output while still running``
+    -- the evidence a dead worker leaves.
+
+    Windows has no signals for a crash: the kernel kills the process and the
+    NTSTATUS becomes its exit code, which rendered as decimal 3221225477 matched
+    nothing a user could search. As 0xC0000005 it matches Event Viewer, WER and
+    every search result, and the name says whether to suspect memory, recursion
+    or their own Ctrl+C."""
     if status is None:
         return "closed its output while still running"
     if status < 0:
@@ -223,6 +243,14 @@ def describe_exit(status: int | None) -> str:
             return f"was killed by {signal.Signals(-status).name} (signal {-status})"
         except ValueError:
             return f"was killed by signal {-status}"
+    if 0xC0000000 <= status <= 0xFFFFFFFF:
+        # A DWORD in the NTSTATUS error range. No os.name test is needed: POSIX
+        # cannot produce one (exit codes truncate to 0-255 and signals come back
+        # negative), and the upper bound keeps subprocess's sys.maxsize sentinel
+        # out of this arm. An unnamed code gets the hex and nothing else -- an
+        # invented gloss would be worse than none.
+        named = _NTSTATUS_NAMES.get(status)
+        return f"exited with 0x{status:08X}" + (f" ({named})" if named else "")
     return f"exited with code {status}"
 
 

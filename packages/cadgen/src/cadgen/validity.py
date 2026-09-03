@@ -412,6 +412,10 @@ class _Report:
         self.groups = groups
         self.self_intersection = self_intersection
         self.out = out
+        # The first intermediate --out write that could not land, kept so the
+        # run can say the on-disk partial is behind rather than leaving the
+        # reader to trust a stale checkedPrototypeCount.
+        self.dropped_write: OSError | None = None
         self.findings: dict[int, list[dict[str, object]]] = {}
         self.errors: list[dict[str, object]] = []
 
@@ -434,7 +438,17 @@ class _Report:
         else:
             self.findings[group.index] = _group_findings(group, results or [])
         if self.out is not None:
-            self.write(partial=len(self.findings) < len(self.groups))
+            # A dropped INTERMEDIATE write must not end the run. On Windows
+            # os.replace is refused while anything holds the DESTINATION open,
+            # and this feature exists so someone can watch the file -- so the
+            # reader would abort the very validate they were following, after
+            # it had already run for half an hour. The initial write still
+            # rejects an undeliverable --out in the first second, and the final
+            # write still fails loudly, so a persistent problem is never quiet.
+            try:
+                self.write(partial=len(self.findings) < len(self.groups))
+            except OSError as error:
+                self.dropped_write = error
 
     def document(self, *, partial: bool) -> dict[str, object]:
         parts: list[dict[str, object]] = []
@@ -492,12 +506,24 @@ def _check_groups(
         except Exception as exc:  # noqa: BLE001 - one bad part is a finding, not a crash
             return None, f"{type(exc).__name__}: {exc}"
 
+    announced_dropped_write = False
+
     def finished(group: PrototypeGroup, results, error) -> None:
+        nonlocal announced_dropped_write
         report.record(group, results, error)
         summary = error or ("FAIL" if report.findings.get(group.index) else "ok")
         logger.debug(
             f"checked {group.name} [{group.first.ref}] x{len(group.occurrences)}: {summary}"
         )
+        if report.dropped_write is not None and not announced_dropped_write:
+            announced_dropped_write = True
+            # Once, not per prototype: the run continues and the final write
+            # still has to succeed, but the partial on disk is now behind and
+            # nothing else would say so.
+            logger.info(
+                f"could not update the partial report at {report.out}: {report.dropped_write}. "
+                "The run continues; the file on disk is behind until the final write."
+            )
         progress.advance(detail=group.name)
 
     if workers <= 1:

@@ -9,6 +9,7 @@ full generator+mesh+emit the previous holder had just finished.
 from __future__ import annotations
 
 import json
+import contextlib
 import os
 import shutil
 import subprocess
@@ -62,12 +63,29 @@ class ConcurrentGenerationTest(unittest.TestCase):
             )
             for _ in range(count)
         ]
-        outputs = []
-        for proc in procs:
-            out, _ = proc.communicate(timeout=600)
-            self.assertEqual(0, proc.returncode, f"a concurrent build failed:\n{out}")
-            outputs.append(out)
-        return outputs
+        # Drain EVERY contender before asserting on any of them, and kill whatever
+        # is left in a finally. The assertion used to sit inside this loop, so the
+        # first non-zero contender abandoned the rest -- still running, still
+        # holding this temp dir as their cwd, while addCleanup deleted it. On
+        # Windows a process's cwd is opened without FILE_SHARE_DELETE, so the pin
+        # lasts the child's whole lifetime and the cleanup fails with WinError 32,
+        # stacking a misleading tempfile ERROR on top of the real failure. It also
+        # threw away the other contenders' output -- in a test about which
+        # contender built and which skipped, the one thing worth reading.
+        drained = []
+        try:
+            for proc in procs:
+                out, _ = proc.communicate(timeout=600)
+                drained.append((proc.returncode, out))
+        finally:
+            for proc in procs:
+                if proc.poll() is None:
+                    proc.kill()
+                    with contextlib.suppress(OSError):
+                        proc.wait(timeout=30)
+        for code, out in drained:
+            self.assertEqual(0, code, f"a concurrent build failed:\n{out}")
+        return [out for _code, out in drained]
 
     def test_exactly_one_contender_builds_the_package(self):
         outputs = self._run_contenders(3)

@@ -285,13 +285,38 @@ def _job_words(payload: dict) -> tuple[str, list[str], list[str]]:
 
 
 def cold_rerun_command(payload: dict) -> str:
-    """The exact command that runs this job in its own process, warm path off."""
+    """The job's command alone, quoted for this platform's shell -- no env prefix.
+
+    The prefix is the caller's business because it is shell-specific, and this
+    function cannot know the shell: `set X=0 && cmd` is cmd.exe only, and in
+    PowerShell it assigns a variable literally named `X=0` and then fails on
+    `&&` (a syntax error in 5.1). Guessing produces a line the user pastes and
+    that silently does the wrong thing, at the worst possible moment.
+    """
     import shlex
 
     _prog, _args, cold = _job_words(payload)
-    if os.name == "nt":
-        return f"set CADGEN_DAEMON=0 && {subprocess.list2cmdline(cold)}"
-    return f"CADGEN_DAEMON=0 {shlex.join(cold)}"
+    return subprocess.list2cmdline(cold) if os.name == "nt" else shlex.join(cold)
+
+
+def cold_rerun_instructions(payload: dict) -> str:
+    """The rerun, spelled for whatever shell the user is in.
+
+    POSIX keeps the one-liner. Windows gets a shell-neutral instruction first --
+    which is what makes Git Bash, fish and csh users safe without enumerating
+    them -- and then both paste-able forms, because the two shells that ship
+    with Windows need different syntax and no signal reliably distinguishes them.
+    """
+    command = cold_rerun_command(payload)
+    if os.name != "nt":
+        return f"  CADGEN_DAEMON=0 {command}\n"
+    return (
+        "  Set CADGEN_DAEMON=0 in the environment, then run:\n"
+        f"    {command}\n"
+        "  Or in one line:\n"
+        f"    cmd.exe      set CADGEN_DAEMON=0 && {command}\n"
+        f"    PowerShell   $env:CADGEN_DAEMON='0'; {command}\n"
+    )
 
 
 def worker_died_message(payload: dict, death: dict) -> str:
@@ -309,7 +334,7 @@ def worker_died_message(payload: dict, death: dict) -> str:
         f"cadgen-daemon: the warm worker running `{job}` died mid-job ({detail}) -- "
         "most likely out of memory, or a crash in the geometry kernel. The job was NOT "
         "retried. Run it cold, in its own process, to see the failure directly:\n"
-        f"  {cold_rerun_command(payload)}\n"
+        f"{cold_rerun_instructions(payload)}"
     )
 
 

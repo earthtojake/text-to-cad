@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from cadgen._internal.atomic_replace import (
+    open_with_ladder,
+    read_bytes_with_ladder,
+    write_bytes_atomic,
+)
 from cadgen._internal.step_scene import LoadedStepScene, load_step_scene_from_xcaf_doc, step_file_hash
 
 
@@ -791,7 +796,7 @@ def _canonicalize_style_tail_in_file(path: Path, scan: _StyleTailScan) -> bool:
     which is exact for any shape and costs what every write used to cost.
     """
     tail_start, total, size = scan.tail_start, scan.total, scan.size
-    data = path.read_bytes()
+    data = read_bytes_with_ladder(path)
     # OCCT writes entities in number order, so the tail begins at #tail_start;
     # the header check below holds this to account rather than trusting it.
     first_header = data.rfind(b"\n#%d = " % tail_start)
@@ -829,7 +834,7 @@ def _canonicalize_style_tail_in_file(path: Path, scan: _StyleTailScan) -> bool:
     if canonical is None:
         return False
     if canonical != suffix:
-        with path.open("r+b") as handle:
+        with open_with_ladder(path, "r+b") as handle:
             handle.seek(region_start)
             handle.write(canonical)
             handle.truncate()
@@ -962,13 +967,16 @@ def write_xcaf_doc_step_file(
                 if plan is not None:
                     tail_start, _total, old_numbers = plan
                     canonical = _apply_style_tail_plan_in_text(
-                        output_path.read_bytes(), tail_start, old_numbers
+                        read_bytes_with_ladder(output_path), tail_start, old_numbers
                     )
                     # A text shape this did not recognize either leaves the file
                     # exactly as OCCT wrote it: nondeterministically ordered,
                     # never corrupt.
                     if canonical is not None:
-                        output_path.write_bytes(canonical)
+                        # Atomic, not a truncating rewrite in place: this is a user
+                        # artifact, and a whole-file `wb` that dies midway leaves a
+                        # half-written STEP where the tail rewrite above cannot.
+                        write_bytes_atomic(output_path, canonical)
     return step_file_hash(output_path)
 
 

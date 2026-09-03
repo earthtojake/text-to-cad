@@ -70,6 +70,37 @@ WINDOWS_SHARING_VIOLATION = 32
 RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2, 0.4)
 
 
+def open_with_ladder(path: Path | str, mode: str):
+    """``open()`` behind the same bounded, WinError-32-only retry the renames get.
+
+    Reopening a file this process just wrote and closed is refused on Windows
+    while a handle lingers -- a deferred close, a real-time scanner, or an
+    indexer -- and every rename in this module already waits that out. The
+    reopens did not, which mattered once the STEP writer began rewriting its own
+    tail in place: the file OCCT had just closed is reopened up to three times
+    per export.
+
+    Deliberately narrow, exactly like ``_run_ladder``: only WinError 32 waits.
+    A denial (5), a missing file, or a bad mode is a real error and surfaces at
+    once rather than 750 ms later, and off Windows ``winerror`` does not exist,
+    so this is precisely ``open()`` on POSIX.
+    """
+    for delay in (*RETRY_DELAYS_SECONDS, None):
+        try:
+            return Path(path).open(mode)
+        except OSError as error:
+            if getattr(error, "winerror", None) != WINDOWS_SHARING_VIOLATION or delay is None:
+                raise
+            time.sleep(delay)
+    raise AssertionError("unreachable: the ladder either returns a handle or raises")
+
+
+def read_bytes_with_ladder(path: Path | str) -> bytes:
+    """``Path.read_bytes()`` through :func:`open_with_ladder`."""
+    with open_with_ladder(path, "rb") as handle:
+        return handle.read()
+
+
 def temp_suffix() -> str:
     """A collision-free suffix for a sibling temp file, ending in ``.tmp``.
 

@@ -183,7 +183,36 @@ def _usage() -> str:
     return _USAGE_HEAD + "\n".join(lines) + "\n" + _USAGE_TAIL
 
 
+def _use_utf8_std_streams() -> None:
+    """Write UTF-8 out of a CLI process, whatever the console code page says.
+
+    Windows gives a Python process a legacy code page rather than UTF-8 for std
+    streams. What that costs was measured, not assumed: 37 characters in one CI
+    log arrived as U+FFFD, so every teaching message that reaches a pipe loses
+    its non-ASCII text -- precisely the text an agent or a user reads when
+    something has already gone wrong. It also removes a latent hard failure:
+    cp1252 happens to carry the em dash, but an OEM console page (cp437, cp850)
+    cannot, and under strict error handling that is a UnicodeEncodeError from a
+    message rather than from the work. ASCII-ifying our own strings would not
+    reach it, because a user's own path can contain anything.
+
+    `backslashreplace` rather than `replace`: if a stream still cannot take a
+    character, an escape a reader can decode beats a question mark that destroys
+    it. CLI ENTRY POINTS ONLY -- these are process globals owned by whoever
+    embedded us, so a library import must never touch them.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:  # a caller replaced it with a plain object
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (OSError, ValueError):  # detached or already closed
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _use_utf8_std_streams()
     argv = list(sys.argv[1:] if argv is None else argv)
 
     if not argv or argv[0] in {"-h", "--help", "help"}:

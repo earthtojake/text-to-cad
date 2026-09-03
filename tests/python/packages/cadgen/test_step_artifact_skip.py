@@ -13,6 +13,7 @@ re-run?" is measured rather than inferred from timing.
 from __future__ import annotations
 
 import json
+import contextlib
 import os
 import shutil
 import subprocess
@@ -137,11 +138,30 @@ class StepArtifactSkipTest(unittest.TestCase):
         time.sleep(0.3)
         second = subprocess.Popen(script, cwd=str(self.root), env=env,
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        outs = []
-        for proc in (first, second):
-            out, _ = proc.communicate(timeout=600)
-            self.assertEqual(0, proc.returncode, f"a contender failed:\n{out}")
-            outs.append(out)
+        # Drain EVERY contender before asserting on any of them, and kill whatever
+        # is left in a finally. The assertion used to sit inside this loop, so the
+        # first non-zero contender abandoned the rest -- still running, still
+        # holding this temp dir as their cwd, while addCleanup deleted it. On
+        # Windows a process's cwd is opened without FILE_SHARE_DELETE, so the pin
+        # lasts the child's whole lifetime and the cleanup fails with WinError 32,
+        # stacking a misleading tempfile ERROR on top of the real failure. It also
+        # threw away the other contenders' output -- in a test about which
+        # contender built and which skipped, the one thing worth reading.
+        contenders = (first, second)
+        drained = []
+        try:
+            for proc in contenders:
+                out, _ = proc.communicate(timeout=600)
+                drained.append((proc.returncode, out))
+        finally:
+            for proc in contenders:
+                if proc.poll() is None:
+                    proc.kill()
+                    with contextlib.suppress(OSError):
+                        proc.wait(timeout=30)
+        for code, out in drained:
+            self.assertEqual(0, code, f"a contender failed:\n{out}")
+        outs = [out for _code, out in drained]
 
         self.assertEqual(
             1,

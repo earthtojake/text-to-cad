@@ -112,6 +112,35 @@ def _generator_search_paths(resolved_script_path: Path) -> list[str]:
     return search_paths
 
 
+@contextlib.contextmanager
+def _without_bytecode_writes():
+    """Write no ``.pyc`` for anything imported inside this window.
+
+    The purge below can only delete what it is allowed to delete. On POSIX an
+    unlink succeeds whatever holds the file, so the purge always lands; on
+    Windows a ``__pycache__`` entry held open by a scanner, an editor, or a
+    sibling interpreter refuses deletion, and the purge swallows it
+    (``ignore_errors=True``). What survives is a stale ``.pyc`` that CPython
+    will then accept, because it validates by (whole-second mtime, size) -- two
+    same-length edits inside one second is exactly an agent's edit loop. The
+    result is a build against code that is not on disk: silently wrong output,
+    which is worse than any crash.
+
+    So the guarantee stops resting on a delete succeeding. Nothing cadgen
+    imports for a model writes bytecode at all, which means there is nothing to
+    go stale and nothing to validate wrongly. Model libraries are small and this
+    window runs once per job, so recompiling from source costs the milliseconds
+    the entry script already pays (it is compiled from bytes at :58-63 for this
+    same reason).
+    """
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        yield
+    finally:
+        sys.dont_write_bytecode = previous
+
+
 def _purge_stale_bytecode(script_path: Path) -> None:
     """Drop ``__pycache__`` beside the generator and its static import closure, once per job.
 
@@ -120,7 +149,13 @@ def _purge_stale_bytecode(script_path: Path) -> None:
     cadence of an agent-driven edit loop. The job boundary is the one place the
     first-party module space is rebuilt, so it is the one place this belongs
     (the scope layer used to do it on every miss, mid-job, alongside an eviction
-    that broke lazy imports)."""
+    that broke lazy imports).
+
+    Best-effort by design, and no longer the guarantee: ``ignore_errors=True``
+    hides a Windows refusal to delete an open ``.pyc``, so correctness rests on
+    :func:`_without_bytecode_writes` instead -- cadgen writes no bytecode for
+    model code, so after this sweep there is nothing left to go stale. This
+    clears what OTHER tools left behind."""
     import shutil
 
     from cadgen._internal import scope_capture
@@ -561,7 +596,11 @@ def _run_script_generator_body(
     evict_first_party_modules()
     _purge_stale_bytecode(spec.script_path)
     modules_before_load = set(sys.modules)
-    with record_first_party_execution() as executed_files, record_discovered_inputs() as read_files:
+    with (
+        _without_bytecode_writes(),
+        record_first_party_execution() as executed_files,
+        record_discovered_inputs() as read_files,
+    ):
         with logger.timed(f"load generator {spec.source_ref}"):
             module = _load_generator_module(spec.script_path)
         # `model_format` is the DISPATCH kind ("step"/"dxf" decides which payload

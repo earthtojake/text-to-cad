@@ -191,21 +191,47 @@ class DescribeExit(unittest.TestCase):
 
 
 class ColdRerunSpelling(unittest.TestCase):
-    def test_the_posix_rerun_is_an_env_prefix(self):
+    """The rerun has to be paste-able in the shell the user is actually in.
+
+    `cold_rerun_command` returns the COMMAND only: the env prefix is
+    shell-specific and this code cannot know the shell. `set X=0 && cmd` works
+    in cmd.exe and, in PowerShell, assigns a variable literally named `X=0`
+    before failing on `&&` -- so the message offers both spellings under a
+    neutral instruction instead of guessing.
+    """
+
+    COMMAND = "cadgen step inspect validate tmp/noexh/noexh.step --out validate.json"
+
+    def test_the_command_carries_no_env_prefix_on_either_platform(self):
+        for name in ("posix", "nt"):
+            with self.subTest(os_name=name), mock.patch.object(client.os, "name", name):
+                spelled = client.cold_rerun_command(PAYLOAD)
+                self.assertEqual(self.COMMAND, spelled)
+                self.assertNotIn("CADGEN_DAEMON", spelled)
+
+    def test_posix_keeps_the_one_line_env_prefix(self):
         with mock.patch.object(client.os, "name", "posix"):
             self.assertEqual(
-                "CADGEN_DAEMON=0 cadgen step inspect validate tmp/noexh/noexh.step --out validate.json",
-                client.cold_rerun_command(PAYLOAD),
+                f"  CADGEN_DAEMON=0 {self.COMMAND}\n",
+                client.cold_rerun_instructions(PAYLOAD),
             )
 
-    def test_the_windows_rerun_is_a_cmd_set_statement(self):
-        """Pinned from either host: `set VAR=0 && ...` is the only spelling cmd.exe
-        runs, and an env prefix is a syntax error there."""
+    def test_windows_offers_both_shells_under_a_neutral_instruction(self):
         with mock.patch.object(client.os, "name", "nt"):
-            command = client.cold_rerun_command(PAYLOAD)
-        self.assertTrue(command.startswith("set CADGEN_DAEMON=0 && "), command)
-        self.assertIn("cadgen step inspect validate", command)
+            spelled = client.cold_rerun_instructions(PAYLOAD)
+        self.assertIn("Set CADGEN_DAEMON=0 in the environment", spelled)
+        self.assertIn(f"set CADGEN_DAEMON=0 && {self.COMMAND}", spelled)
+        self.assertIn(f"$env:CADGEN_DAEMON='0'; {self.COMMAND}", spelled)
+        # The bare command stands alone on its own line, so it is paste-able in
+        # a shell neither spelling covers (Git Bash, fish, csh).
+        self.assertIn(f"\n    {self.COMMAND}\n", spelled)
 
+    def test_the_message_carries_the_spelling_for_the_running_platform(self):
+        for name in ("posix", "nt"):
+            with self.subTest(os_name=name), mock.patch.object(client.os, "name", name):
+                message = client.worker_died_message(PAYLOAD, {"detail": "worker 1 exited with code 1"})
+                self.assertIn(client.cold_rerun_instructions(PAYLOAD), message)
+                self.assertIn("was NOT", message)
 
 if __name__ == "__main__":
     unittest.main()

@@ -294,5 +294,79 @@ class EveryRenameGoesThroughTheHelperTest(unittest.TestCase):
         )
 
 
+class OpenWithLadderTest(unittest.TestCase):
+    """Reopening a file we just wrote gets the same narrow wait the renames get.
+
+    The STEP writer reopens its own output up to three times per export -- read
+    it, rewrite the tail in place, hash it -- and on Windows each of those is
+    refused while a deferred close or a scanner still holds the handle. Only
+    WinError 32 waits; a denial or a missing file must surface at once, and off
+    Windows this is plain open().
+    """
+
+    def setUp(self) -> None:
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory(prefix="cadgen-ladder-")
+        self.addCleanup(self._tmp.cleanup)
+        self.path = Path(self._tmp.name) / "payload.step"
+        self.path.write_bytes(b"ISO-10303-21;\n")
+
+    def test_a_clean_open_reads_the_file(self) -> None:
+        with atomic_replace.open_with_ladder(self.path, "rb") as handle:
+            self.assertEqual(b"ISO-10303-21;\n", handle.read())
+        self.assertEqual(b"ISO-10303-21;\n", atomic_replace.read_bytes_with_ladder(self.path))
+
+    def test_a_sharing_violation_is_waited_out_then_the_open_succeeds(self) -> None:
+        real_open = Path.open
+        attempts = []
+
+        def flaky(self_path, mode, *args, **kwargs):
+            attempts.append(mode)
+            if len(attempts) <= 2:
+                raise sharing_violation()
+            return real_open(self_path, mode, *args, **kwargs)
+
+        with mock.patch.object(Path, "open", flaky), mock.patch("time.sleep") as sleep:
+            with atomic_replace.open_with_ladder(self.path, "rb") as handle:
+                self.assertEqual(b"ISO-10303-21;\n", handle.read())
+        self.assertEqual(3, len(attempts))
+        self.assertEqual(list(atomic_replace.RETRY_DELAYS_SECONDS[:2]), [c.args[0] for c in sleep.call_args_list])
+
+    def test_the_ladder_is_bounded_and_the_violation_propagates(self) -> None:
+        with mock.patch.object(Path, "open", side_effect=sharing_violation()), mock.patch("time.sleep") as sleep:
+            with self.assertRaises(PermissionError) as raised:
+                atomic_replace.open_with_ladder(self.path, "rb")
+        self.assertEqual(atomic_replace.WINDOWS_SHARING_VIOLATION, raised.exception.winerror)
+        self.assertEqual(len(atomic_replace.RETRY_DELAYS_SECONDS), sleep.call_count)
+
+    def test_any_other_error_surfaces_at_once(self) -> None:
+        denied = PermissionError(13, "Access is denied")
+        denied.winerror = 5
+        with mock.patch.object(Path, "open", side_effect=denied), mock.patch("time.sleep") as sleep:
+            with self.assertRaises(PermissionError) as raised:
+                atomic_replace.open_with_ladder(self.path, "rb")
+        self.assertEqual(5, raised.exception.winerror)
+        self.assertEqual(0, sleep.call_count)
+
+    def test_a_missing_file_is_not_retried(self) -> None:
+        with mock.patch("time.sleep") as sleep:
+            with self.assertRaises(FileNotFoundError):
+                atomic_replace.open_with_ladder(self.path.with_name("absent.step"), "rb")
+        self.assertEqual(0, sleep.call_count)
+
+    def test_every_step_writer_reopen_goes_through_the_ladder(self) -> None:
+        """The rule the atomic_replace docstring states: harden one and the
+        failure moves to the next. Pins that no reopen of the written STEP was
+        left on a bare open()."""
+        import re as _re
+
+        for relative in ("cadgen/step_export.py", "cadgen/_internal/step_hash.py"):
+            source = (REPO_ROOT / "packages" / "cadgen" / "src" / relative).read_text(encoding="utf-8")
+            body = source.split('"""', 2)[-1] if source.count('"""') >= 2 else source
+            bare = _re.findall(r"^(?!.*ladder).*\b(?:read_bytes\(\)|write_bytes\(|\.open\(\s*[\"']r)", body, _re.M)
+            self.assertEqual([], bare, f"{relative} reopens its output without the ladder: {bare}")
+
+
 if __name__ == "__main__":
     unittest.main()
