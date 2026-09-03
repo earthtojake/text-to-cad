@@ -1,9 +1,10 @@
 # Repo-source development environment: running tests and tools from a checkout.
 #
-# The editable cadgen below is what every skill's `cadgen` requirement resolves to
-# locally. Skills name the DISTRIBUTION unpinned on develop precisely so this install
-# satisfies them; the release pins them to the published version at publish time
-# (scripts/release/pin-cadgen-requirements.sh).
+# The editable cadgen below is what every skill's `cadgen==<VERSION>` requirement
+# resolves to locally: sync-version.mjs stamps packages/cadgen/pyproject.toml from
+# VERSION, so the editable install reports exactly the pinned version. Installing a
+# skill's requirements.txt WITHOUT this file fetches the last published release from
+# PyPI instead of the checkout -- this file is the development door.
 --editable ./packages/cadgen
 
 # cadgen's own runtime dependencies (build123d, cadquery-ocp, ezdxf, shapely) come with

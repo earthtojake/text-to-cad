@@ -55,7 +55,8 @@ class RequirementsPinGuard(unittest.TestCase):
         self.assertSilent(self.root / "requirements.txt")
 
     def test_unpinned_distribution_is_silent(self) -> None:
-        # This is the develop checkout's own shape.
+        # Only the `==` form is a pin; a bare line is not one and is not enforced here
+        # (check-version.sh is what rejects it in the repo).
         self.assertSilent(self._requirements("cadgen\n"))
 
     def test_unpinned_with_extras_is_silent(self) -> None:

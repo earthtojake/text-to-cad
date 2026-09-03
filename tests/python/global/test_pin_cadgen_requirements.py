@@ -22,7 +22,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "scripts" / "release" / "pin-cadgen-requirements.sh"
-# What a skill's requirements.txt says on develop: the distribution, unpinned.
+# A bare distribution line -- what the pin script must rewrite (check-version.sh
+# rejects it on main, where every skill pins cadgen==VERSION).
 UNPINNED = "cadgen"
 # With extras, which the pin must preserve -- dropping them silently uninstalls
 # playwright from every published skill that renders.
