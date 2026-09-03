@@ -262,33 +262,28 @@ def _normalize_step_payload(
     *,
     script_path: Path,
 ) -> dict[str, object]:
+    """A @step returns a build123d shape and nothing else.
+
+    The dict envelope (``{"shape": ..., "stl": ..., "mesh_tolerance": ...}``) is
+    gone: exports are declared with ``@stl``/``@threemf``/``@glb`` stacked on the
+    model and tolerances with ``@step(mesh_tolerance=...)``. A dict here is a hard
+    error that names those decorators; the static parser refuses the same shape
+    before a build starts.
+    """
     from build123d import Shape as Build123dShape
 
     if isinstance(result, Build123dShape):
         return {"shape": result}
     if isinstance(result, dict):
-        # stl / 3mf / mesh_tolerance / mesh_angular_tolerance are consumed via the static
-        # metadata path (per-generator STL/3MF outputs + mesh tolerances). The
-        # vocabulary is STEP_ENVELOPE_FIELDS — one table shared with the static
-        # parser so the two can never disagree.
-        from cadgen.metadata import STEP_ENVELOPE_FIELDS
-
-        extra_fields = sorted(str(key) for key in result if key not in STEP_ENVELOPE_FIELDS)
-        if extra_fields:
-            joined = ", ".join(extra_fields)
-            supported = ", ".join(sorted(STEP_ENVELOPE_FIELDS))
-            raise TypeError(
-                f"{_display_path(script_path)} @step envelope has unsupported "
-                f"field(s): {joined}; supported fields: {supported}"
-            )
-        if "shape" not in result:
-            raise TypeError(
-                f"{_display_path(script_path)} @step envelope must define 'shape'"
-            )
-        return {"shape": result["shape"]}
+        raise TypeError(
+            f"{_display_path(script_path)} @step returned a dict; a model returns a "
+            "build123d shape and nothing else. Declare mesh exports with "
+            "@stl/@threemf/@glb stacked on the model and tolerances with "
+            "@step(mesh_tolerance=..., mesh_angular_tolerance=...)."
+        )
     raise TypeError(
-        f"{_display_path(script_path)} @step must return a build123d Shape "
-        "or a {'shape': ...} envelope"
+        f"{_display_path(script_path)} @step must return a build123d Shape, got "
+        f"{type(result).__name__}"
     )
 
 
@@ -371,19 +366,19 @@ def _effective_step_spec_for_scene(spec: EntrySpec, scene: LoadedStepScene | Non
 
 
 def _write_shape_step_payload(
-    envelope: dict[str, object],
+    payload: dict[str, object],
     *,
     output_path: Path,
     script_path: Path,
     logger: CliLogger,
     entry_kind: str,
 ) -> LoadedStepScene:
-    shape = envelope.get("shape")
+    shape = payload.get("shape")
     from build123d import Shape as Build123dShape
 
     if not isinstance(shape, Build123dShape):
         raise TypeError(
-            f"{_display_path(script_path)} @step envelope field 'shape' must be a build123d Shape, "
+            f"{_display_path(script_path)} @step must return a build123d Shape, "
             f"got {type(shape).__name__}"
         )
     # A @step run builds the render scene in memory and does NOT write a text STEP — STEP is
@@ -637,7 +632,7 @@ def _run_script_generator_body(
 
     source_closure: PythonSourceClosure | None = None
     if model_format == "step":
-        envelope = _normalize_step_payload(raw_payload, script_path=spec.script_path)
+        payload = _normalize_step_payload(raw_payload, script_path=spec.script_path)
         if spec.step_path is None:
             raise RuntimeError(f"{spec.source_ref} has no configured STEP output")
         # Kinematics + bake pose + animation text (validated at decoration);
@@ -662,11 +657,11 @@ def _run_script_generator_body(
             discovered_inputs=[*read_files, *declared.inputs],
         )
         generated_scene = _write_shape_step_payload(
-            envelope,
+            payload,
             output_path=spec.step_path,
             script_path=spec.script_path,
             logger=logger,
-            entry_kind=_shape_payload_entry_kind(envelope.get("shape"), fallback=spec.kind),
+            entry_kind=_shape_payload_entry_kind(payload.get("shape"), fallback=spec.kind),
         )
         if declared.block:
             generated_scene.kinematics = declared.block

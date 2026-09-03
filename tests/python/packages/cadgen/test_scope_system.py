@@ -44,6 +44,10 @@ def _demo_compound() -> Compound:
     inner.location = Location((0, 25, 0))
     root = Compound(children=[box_a, pin, inner], label="demo")
     root._color = Color(0.8, 0.1, 0.1, 1.0)
+    # Mates are NOT part of what a thawed scope carries (the sidecar boundary:
+    # a thawed child is geometry only), so they are deliberately absent from the
+    # fingerprint below; a fresh compound with mates and its thaw must still
+    # package identically.
     root.assembly_mates = [{"id": "m1", "type": "revolute",
                             "fixed": "#widget_a.f1", "moving": "#widget_b.f2"}]
     return root
@@ -60,12 +64,6 @@ def _package(compound: Compound, package_dir: Path) -> dict:
             {k: occ.get(k) for k in ("id", "name", "component", "transform")}
             for occ in descriptor.get("occurrences") or []
         ],
-        # Mates ride the source sidecar; the descriptor is STEP-pure.
-        "assemblyMates": (
-            json.loads((package_dir / "source.json").read_text()).get("assemblyMates")
-            if (package_dir / "source.json").is_file()
-            else None
-        ),
         "componentBytes": {
             p.name: hashlib.sha256(p.read_bytes()).hexdigest()
             for p in sorted((package_dir / "components").glob("*.surf"))
@@ -119,17 +117,14 @@ class FreezeThawPackagerGate(StoreIsolatedTest):
         thawed_fp = _package(thawed, self._dir("thawed_tree"))
         self.assertEqual(fresh_fp, thawed_fp)
 
-    def test_envelope_round_trip(self) -> None:
-        frozen = scope_store.freeze_value(
-            {"shape": _demo_compound(), "params": "demo.params.js"})
-        thawed = scope_store.thaw_value(frozen)
-        self.assertEqual(thawed["params"], "demo.params.js")
-        self.assertEqual(thawed["shape"].label, "demo")
-
-    def test_unfreezable_envelope_extra(self) -> None:
+    def test_a_dict_holding_a_shape_is_unfreezable(self) -> None:
+        # There is no envelope kind: a @step returns a bare shape, and a dict
+        # that smuggles one falls through to plain execution like any other
+        # non-JSON dict.
         with self.assertRaises(scope_store.Unfreezable):
-            scope_store.freeze_value({"shape": _demo_compound(),
-                                      "callback": lambda: None})
+            scope_store.freeze_value({"shape": _demo_compound(), "params": "demo.params.js"})
+        with self.assertRaises(scope_store.Unfreezable):
+            scope_store.freeze_value({"shape": _demo_compound(), "callback": lambda: None})
 
 
 class ScopeCaptureTest(StoreIsolatedTest):

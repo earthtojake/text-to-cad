@@ -271,23 +271,10 @@ class CadGenerationTests(unittest.TestCase):
         *,
         with_dxf: bool = False,
         dxf_before_step: bool = False,
-        step_output: str | None = None,
-        stl: str | None = None,
-        three_mf: str | None = None,
-        mesh_tolerance: float | None = None,
-        mesh_angular_tolerance: float | None = None,
+        dict_return: dict[str, str] | None = None,
     ) -> Path:
-        fields: list[str] = ["'shape': _shape()"]
-        if step_output is not None:
-            fields.append(f"'step_output': {step_output!r}")
-        if stl is not None:
-            fields.append(f"'stl': {stl!r}")
-        if three_mf is not None:
-            fields.append(f"'3mf': {three_mf!r}")
-        if mesh_tolerance is not None:
-            fields.append(f"'mesh_tolerance': {mesh_tolerance!r}")
-        if mesh_angular_tolerance is not None:
-            fields.append(f"'mesh_angular_tolerance': {mesh_angular_tolerance!r}")
+        # A @step returns a bare shape. ``dict_return`` writes the retired dict
+        # envelope instead, for the one test that asserts it is refused.
         prologue = [
             "from pathlib import Path",
             f'DISPLAY_NAME = "{name}"',
@@ -307,14 +294,21 @@ class CadGenerationTests(unittest.TestCase):
             "    return build123d.Box(1, 1, 1)",
             "",
         ]
+        if dict_return is None:
+            return_lines = ["    return _shape()"]
+        else:
+            return_lines = [
+                "    return {",
+                "        'shape': _shape(),",
+                *[f"        {key!r}: {value!r}," for key, value in dict_return.items()],
+                "    }",
+            ]
         step_block = [
             "from cadgen import step",
             "@step",
             "def model():",
             "    _record('gen_step')",
-            "    return {",
-            *[f"        {field}," for field in fields],
-            "    }",
+            *return_lines,
             "",
         ]
         del dxf_before_step  # gen_dxf lives in a dedicated <name>.py sibling now
@@ -361,16 +355,10 @@ class CadGenerationTests(unittest.TestCase):
         *,
         instances: list[dict[str, object]],
         with_dxf: bool = False,
-        step_output: str | None = None,
-        stl: str | None = None,
-        three_mf: str | None = None,
-        mesh_tolerance: float | None = None,
-        mesh_angular_tolerance: float | None = None,
     ) -> Path:
         # model() returns an inline multi-child Compound literal so the static AST
         # classifier (which looks for Compound(children=...)) sees kind=assembly. The
-        # instance list controls the count/names of child boxes — a stand-in for the
-        # legacy {'instances': ...} envelope.
+        # instance list controls the count/names of child boxes.
         instance_names = [str(inst.get("name", f"part_{idx}")) for idx, inst in enumerate(instances)]
         shape_expr = (
             "Compound("
@@ -378,17 +366,6 @@ class CadGenerationTests(unittest.TestCase):
             f"label={name!r}"
             ")"
         )
-        fields: list[str] = [f"'shape': {shape_expr}"]
-        if step_output is not None:
-            fields.append(f"'step_output': {step_output!r}")
-        if stl is not None:
-            fields.append(f"'stl': {stl!r}")
-        if three_mf is not None:
-            fields.append(f"'3mf': {three_mf!r}")
-        if mesh_tolerance is not None:
-            fields.append(f"'mesh_tolerance': {mesh_tolerance!r}")
-        if mesh_angular_tolerance is not None:
-            fields.append(f"'mesh_angular_tolerance': {mesh_angular_tolerance!r}")
         lines = [
             "from pathlib import Path",
             "from build123d import Box, Compound",
@@ -408,9 +385,7 @@ class CadGenerationTests(unittest.TestCase):
             "@step",
             "def model():",
             "    _record('gen_step')",
-            "    return {",
-            *[f"        {field}," for field in fields],
-            "    }",
+            f"    return {shape_expr}",
             "",
         ]
         assembly_path = self.temp_root / f"{name}.py"
@@ -505,7 +480,7 @@ class CadGenerationTests(unittest.TestCase):
                     "from cadgen import step",
                     "@step",
                     "def model():",
-                    "    return {'shape': object()}",
+                    "    return object()",
                     "",
                 ]
             ),
@@ -517,23 +492,14 @@ class CadGenerationTests(unittest.TestCase):
         self.assertEqual(script_path.with_suffix(".step"), spec.step_path)
         self.assertEqual(self._cad_ref("missing_output"), spec.cad_ref)
 
-    def test_generated_source_rejects_legacy_step_output_field(self) -> None:
-        self._generator_script("flat", step_output="custom/renamed.step")
-
-        with self.assertRaisesRegex(ValueError, "unsupported field\\(s\\): step_output"):
-            cad_generation.list_entry_specs()
-
-    def test_generated_source_rejects_legacy_parent_output(self) -> None:
-        self._generator_script("flat", step_output="../../../flat.step")
-
-        with self.assertRaisesRegex(ValueError, "unsupported field\\(s\\): step_output"):
-            cad_generation.list_entry_specs()
-
-    def test_generated_source_rejects_invalid_legacy_output_suffix(self) -> None:
-        self._generator_script("flat", step_output="flat.stp")
-
-        with self.assertRaisesRegex(ValueError, "unsupported field\\(s\\): step_output"):
-            cad_generation.list_entry_specs()
+    def test_generated_source_rejects_a_dict_return(self) -> None:
+        # The dict envelope is gone: a @step returns a bare shape, and any dict
+        # -- whatever it carries -- is refused with the decorators to use instead.
+        for extra in ({"step_output": "custom/renamed.step"}, {"stl": "flat.stl"}, {}):
+            with self.subTest(extra=sorted(extra)):
+                self._generator_script("flat", dict_return=extra)
+                with self.assertRaisesRegex(ValueError, r"returns a dict.*@stl/@threemf/@glb"):
+                    cad_generation.list_entry_specs()
 
     def test_generated_dxf_defaults_output_to_sibling_stem(self) -> None:
         script_path = self._dxf_generator_script("flat")
@@ -552,7 +518,7 @@ class CadGenerationTests(unittest.TestCase):
                     "from cadgen import step",
                     "@step",
                     "def model():",
-                    "    return {'shape': object()}",
+                    "    return object()",
                     "",
                     "from cadgen import dxf",
                     "@dxf",
@@ -575,7 +541,7 @@ class CadGenerationTests(unittest.TestCase):
                     "from cadgen import step",
                     "@step",
                     "def model():",
-                    "    return {'shape': object()}",
+                    "    return object()",
                     "",
                     "from cadgen import dxf",
                     "@dxf",
@@ -600,7 +566,7 @@ class CadGenerationTests(unittest.TestCase):
                     "from cadgen import step",
                     "@step",
                     "def model():",
-                    "    return {'shape': object()}",
+                    "    return object()",
                     "",
                     "from cadgen import dxf",
                     "@dxf",
@@ -632,7 +598,7 @@ class CadGenerationTests(unittest.TestCase):
                     "from cadgen import step",
                     "@step",
                     "def model():",
-                    "    return {'shape': object()}",
+                    "    return object()",
                     "",
                     "def gen_urdf():",
                     "    return '<robot name=\"sample\" />'",
@@ -1299,7 +1265,7 @@ class CadGenerationTests(unittest.TestCase):
             + "\n", encoding="utf-8"
         )
 
-        with self.assertRaisesRegex(ValueError, "must return a build123d shape or a \\{'shape': \\.\\.\\.\\} envelope"):
+        with self.assertRaisesRegex(ValueError, "must return a build123d shape"):
             cad_generation.list_entry_specs()
 
     def test_decorated_dxf_scripts_are_first_class_entries(self) -> None:
@@ -1324,24 +1290,6 @@ class CadGenerationTests(unittest.TestCase):
         spec = next(spec for spec in specs if spec.source_path == script_path)
         self.assertEqual("dxf", spec.kind)
         self.assertEqual(self.temp_root / "flat.dxf", spec.dxf_path)
-
-    def test_generated_part_ignores_mesh_settings_from_envelope_metadata(self) -> None:
-        self._generator_script(
-            "meshy",
-            stl="meshy.stl",
-            three_mf="meshy.3mf",
-            mesh_tolerance=0.2,
-            mesh_angular_tolerance=0.25,
-        )
-
-        specs = {
-            spec.cad_ref: spec
-            for spec in cad_generation.list_entry_specs()
-            if spec.cad_ref.startswith(f"{self.relative_dir}/")
-        }
-
-        self.assertIsNone(specs[self._cad_ref("meshy")].mesh_tolerance)
-        self.assertIsNone(specs[self._cad_ref("meshy")].mesh_angular_tolerance)
 
     def test_imported_step_defaults_to_part(self) -> None:
         self._write_step("imported")
@@ -1590,7 +1538,7 @@ class CadGenerationTests(unittest.TestCase):
             "@step\n"
             "def model():\n"
             "    import build123d\n"
-            "    return {'shape': build123d.Box(dims.WIDTH, 2.0, 1.0)}\n",
+            "    return build123d.Box(dims.WIDTH, 2.0, 1.0)\n",
             encoding="utf-8",
         )
         return script, helper

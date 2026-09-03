@@ -31,46 +31,28 @@ def _srgb_to_linear(component: float) -> float:
 
 
 class CompoundAssemblyGenerationTests(unittest.TestCase):
-    def test_step_payload_rejects_legacy_output_field(self) -> None:
-        with self.assertRaisesRegex(TypeError, "unsupported field\\(s\\): step_output"):
-            generation._normalize_step_payload(
-                {"shape": object(), "step_output": "legacy.step"},
-                script_path=Path("part.py"),
-            )
-
-    def test_step_payload_rejects_assembly_mates_envelope_field(self) -> None:
-        # assembly_mates is hard-deprecated as an envelope field. Semantic mates now
-        # ride on the returned shape (compound.assembly_mates) and are collected at
-        # export, so a model() envelope must never carry an assembly_mates key.
-        with self.assertRaisesRegex(TypeError, "unsupported field\\(s\\): assembly_mates"):
-            generation._normalize_step_payload(
-                {
-                    "shape": object(),
-                    "assembly_mates": [{"sourceLabel": "servo_to_bracket"}],
-                },
-                script_path=Path("assembly.py"),
-            )
-
-    def test_step_payload_rejects_unknown_params_field(self) -> None:
-        # 'params' is not an envelope field. It fails through the ordinary
-        # closed-vocabulary error naming the supported set — no retired-name
-        # special case.
-        with self.assertRaisesRegex(
-            TypeError, r"unsupported field\(s\): params.*supported fields:"
+    def test_step_payload_rejects_a_dict_and_names_the_decorators(self) -> None:
+        # A @step returns a bare shape. The dict envelope is gone; a dict of ANY
+        # shape is refused at run time with the decorators that replaced it.
+        for payload in (
+            {"shape": object()},
+            {"shape": object(), "stl": "part.stl"},
+            {"shape": object(), "mesh_tolerance": 0.01},
+            {"shape": object(), "assembly_mates": [{"sourceLabel": "servo_to_bracket"}]},
+            {"shape": object(), "params": "tom.params.js"},
         ):
-            generation._normalize_step_payload(
-                {"shape": object(), "params": "tom.params.js"},
-                script_path=Path("assembly.py"),
-            )
+            with self.subTest(payload=sorted(payload)):
+                with self.assertRaisesRegex(TypeError, r"returned a dict.*@stl/@threemf/@glb.*mesh_tolerance"):
+                    generation._normalize_step_payload(payload, script_path=Path("part.py"))
 
-    def test_static_metadata_rejects_unknown_params_field(self) -> None:
-        # The static parser validates against the SAME vocabulary as the runtime
-        # (STEP_ENVELOPE_FIELDS): 'params' must fail at parse time with the same
-        # closed-vocabulary error.
-        from cadgen.metadata import STEP_ENVELOPE_FIELDS
+    def test_step_payload_rejects_non_shapes(self) -> None:
+        with self.assertRaisesRegex(TypeError, r"must return a build123d Shape, got NoneType"):
+            generation._normalize_step_payload(None, script_path=Path("part.py"))
 
-        self.assertNotIn("params", STEP_ENVELOPE_FIELDS)
-        with tempfile.TemporaryDirectory(prefix="cadgen-params-field-") as tempdir:
+    def test_static_metadata_rejects_a_dict_return(self) -> None:
+        # The static parser refuses the same thing before a build starts, with
+        # the same guidance.
+        with tempfile.TemporaryDirectory(prefix="cadgen-dict-return-") as tempdir:
             script_path = Path(tempdir) / "assembly.py"
             script_path.write_text(
                 "\n".join(
@@ -86,15 +68,12 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with self.assertRaisesRegex(
-                ValueError, r"unsupported field\(s\): params.*supported fields:"
-            ):
+            with self.assertRaisesRegex(ValueError, r"returns a dict.*@stl/@threemf/@glb"):
                 parse_generator_metadata(script_path)
 
     def test_shape_assembly_mates_attribute_round_trips_to_scene(self) -> None:
-        # Mates set on the returned compound survive STEP-scene export onto
-        # scene.assembly_mates with canonical m{n} ids — the replacement for the
-        # removed assembly_mates envelope field.
+        # Mates set on the returned ROOT compound survive STEP-scene export onto
+        # scene.assembly_mates with canonical m{n} ids.
         import build123d
 
         with tempfile.TemporaryDirectory(prefix="cadgen-compound-") as tempdir:
@@ -130,34 +109,6 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
             ],
             scene.assembly_mates,
         )
-
-    def test_metadata_rejects_legacy_output_fields(self) -> None:
-        # @dxf is absent here on purpose: a drawing's return carries no static
-        # metadata at all now (design/dxf-build123d.md), so there is no envelope
-        # for the parser to reject. The emitter owns that rejection instead --
-        # see tests/python/packages/cadgen/test_dxf_write_determinism.py.
-        cases = [
-            ("step", "return {'shape': object(), 'step_output': 'legacy.step'}", "step_output"),
-        ]
-        for decorator, return_line, field_name in cases:
-            with self.subTest(decorator=decorator), tempfile.TemporaryDirectory(prefix="cadgen-output-field-") as tempdir:
-                script_path = Path(tempdir) / "part.py"
-                script_path.write_text(
-                    "\n".join(
-                        [
-                            f"from cadgen import {decorator}",
-                            "",
-                            f"@{decorator}",
-                            "def model():",
-                            f"    {return_line}",
-                            "",
-                        ]
-                    ),
-                    encoding="utf-8",
-                )
-
-                with self.assertRaisesRegex(ValueError, f"unsupported field\\(s\\): {field_name}"):
-                    parse_generator_metadata(script_path)
 
     def test_run_selected_specs_preserves_action_stdout(self) -> None:
         spec = SimpleNamespace(source_ref="part.py")

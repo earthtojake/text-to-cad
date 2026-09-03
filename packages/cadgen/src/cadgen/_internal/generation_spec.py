@@ -179,7 +179,7 @@ def _resolve_cli_output_path(
     # to a SOURCE=OUTPUT target.
     #
     # The same wording in ``cadgen.metadata`` is absolute on purpose and must stay that way:
-    # that one validates a path written into a checked-in ``@step`` envelope, which is
+    # that one validates the ``out=`` path written into a checked-in ``@step`` decorator, which is
     # read on every platform, so POSIX separators are the portable form there. One rule is
     # about a user's disk, the other about a file in the repository.
     if os.name != "nt" and "\\" in value:

@@ -9,7 +9,7 @@ from pathlib import Path
 class InvalidModelScriptError(ValueError):
     """A script whose model DECLARATION is malformed in a way directory
     discovery should skip-with-a-note rather than abort on (e.g. two models in
-    one file). Contract violations inside a single model (bad envelope fields,
+    one file). Contract violations inside a single model (a dict return,
     bad decorator arguments) stay plain ValueErrors and DO abort, because an
     explicitly-targeted build must fail loudly."""
 
@@ -53,14 +53,6 @@ class MeshExportDecl:
     kinematics: object | None = None
     bake_pose: dict | None = None
 
-
-STEP_ENVELOPE_FIELDS = {
-    "shape",
-    "stl",
-    "3mf",
-    "mesh_tolerance",
-    "mesh_angular_tolerance",
-}
 
 
 def _display_path(path: Path) -> str:
@@ -322,7 +314,7 @@ def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
                 kind = _parse_step_return_metadata(script_path=script_path, function=function)
             except ValueError as exc:
                 # A return shape the inference cannot read needs an explicit kind;
-                # a genuinely invalid envelope keeps its own pointed error.
+                # a dict return or a bare None keeps its own pointed error.
                 if "must return one value" not in str(exc):
                     raise
                 raise ValueError(
@@ -360,34 +352,26 @@ def _parse_step_return_metadata(
     script_path: Path,
     function: ast.FunctionDef,
 ) -> str:
-    return_node = _single_return_value(script_path=script_path, function=function)
-    local_assignments = _function_local_assignments(function)
-    if not isinstance(return_node, ast.Dict):
-        return _parse_bare_step_return(
-            script_path=script_path,
-            function=function,
-            return_node=return_node,
-            local_assignments=local_assignments,
-        )
+    """Infer ``kind`` from the ONE thing a @step may return: a build123d shape.
 
-    envelope = _parse_literal_return_envelope(script_path=script_path, function=function)
-    _reject_unsupported_fields(
-        script_path=script_path,
-        function_name=function.name,
-        envelope=envelope,
-        allowed_fields=STEP_ENVELOPE_FIELDS,
-    )
-    if "shape" not in envelope:
+    A dict return is refused here, statically, with the decorators that replaced
+    the old ``{"shape": ..., "stl": ...}`` envelope named in the message; the
+    runtime check in ``generation_runner`` says the same thing for a dict that
+    only appears at run time.
+    """
+    return_node = _single_return_value(script_path=script_path, function=function)
+    if isinstance(return_node, ast.Dict):
         raise ValueError(
-            f"{_display_path(script_path)} @step envelope must define 'shape'"
+            f"{_display_path(script_path)} {function.name}() returns a dict; a @step "
+            "model returns a build123d shape and nothing else. Declare mesh exports "
+            "with @stl/@threemf/@glb stacked on the model and tolerances with "
+            "@step(mesh_tolerance=..., mesh_angular_tolerance=...)."
         )
-    return (
-        "assembly"
-        if _is_compound_assembly_expression(
-            envelope["shape"],
-            local_assignments=local_assignments,
-        )
-        else "part"
+    return _parse_bare_step_return(
+        script_path=script_path,
+        function=function,
+        return_node=return_node,
+        local_assignments=_function_local_assignments(function),
     )
 
 
@@ -405,8 +389,7 @@ def _parse_bare_step_return(
         return "assembly"
     if isinstance(return_node, ast.Constant) and return_node.value is None:
         raise ValueError(
-            f"{_display_path(script_path)} {function.name}() must return a build123d shape "
-            "or a {'shape': ...} envelope"
+            f"{_display_path(script_path)} {function.name}() must return a build123d shape"
         )
     return "part"
 
@@ -506,30 +489,6 @@ def _is_multi_item_sequence_expression(
     return False
 
 
-def _parse_literal_return_envelope(
-    *,
-    script_path: Path,
-    function: ast.FunctionDef,
-) -> dict[str, ast.expr]:
-    value = _single_return_value(script_path=script_path, function=function)
-    if not isinstance(value, ast.Dict):
-        raise ValueError(
-            f"{_display_path(script_path)} {function.name}() must return a generator envelope dict"
-        )
-    envelope: dict[str, ast.expr] = {}
-    for key_node, value_node in zip(value.keys, value.values, strict=True):
-        if not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
-            raise ValueError(
-                f"{_display_path(script_path)} {function.name}() envelope keys must be string literals"
-            )
-        key = key_node.value
-        if key in envelope:
-            raise ValueError(
-                f"{_display_path(script_path)} {function.name}() envelope duplicate field: {key}"
-            )
-        envelope[key] = value_node
-    return envelope
-
 
 def _single_return_value(
     *,
@@ -544,63 +503,4 @@ def _single_return_value(
     return returns[0].value
 
 
-def _reject_unsupported_fields(
-    *,
-    script_path: Path,
-    function_name: str,
-    envelope: dict[str, ast.expr],
-    allowed_fields: set[str],
-) -> None:
-    extra_fields = sorted(key for key in envelope if key not in allowed_fields)
-    if extra_fields:
-        joined = ", ".join(extra_fields)
-        supported = ", ".join(sorted(allowed_fields))
-        raise ValueError(
-            f"{_display_path(script_path)} {function_name}() envelope has unsupported "
-            f"field(s): {joined}; supported fields: {supported}"
-        )
 
-
-def _literal_field(
-    *,
-    script_path: Path,
-    function_name: str,
-    envelope: dict[str, ast.expr],
-    field_name: str,
-) -> object | None:
-    if field_name not in envelope:
-        return None
-    try:
-        return ast.literal_eval(envelope[field_name])
-    except (ValueError, SyntaxError) as exc:
-        raise ValueError(
-            f"{_display_path(script_path)} {function_name}() envelope {field_name} must be a literal"
-        ) from exc
-
-
-def _parse_path_field(
-    *,
-    script_path: Path,
-    function_name: str,
-    envelope: dict[str, ast.expr],
-    field_name: str,
-) -> str | None:
-    value = _literal_field(
-        script_path=script_path,
-        function_name=function_name,
-        envelope=envelope,
-        field_name=field_name,
-    )
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(
-            f"{_display_path(script_path)} {function_name}() envelope {field_name} "
-            "must be a non-empty string"
-        )
-    if "\\" in value:
-        raise ValueError(
-            f"{_display_path(script_path)} {function_name}() envelope {field_name} "
-            "must use POSIX '/' separators"
-        )
-    return value.strip()

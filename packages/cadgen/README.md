@@ -62,12 +62,23 @@ There is no automatic GC: `cadgen cache gc` is the only sweeper, and every
 tier is content-addressed and best-effort, so deletion never needs
 coordination — a racing reader re-misses and rebuilds.
 
-### 3. One sidecar per artifact
+### 3. One sidecar per artifact, and it belongs to that artifact alone
 
 `part.step` gets `part.step.json` — schema-versioned sections (closure,
 kinematics, animation, meshExports). New capability = new section + schema
 bump, never a second sidecar file. Model-side, beside the artifact, so it
 travels with the file it describes.
+
+A sidecar describes the model that declared it — never its parent, never its
+children. A parent composing a child receives GEOMETRY (tree, labels, colors,
+placements, exact shape) and nothing else: the child's mates, kinematics and
+animation are written by the child's own build into the child's own sidecar,
+and an assembly that needs a relation declares it on the assembly. This is
+what lets a cached child stand in for its function: the cache carries
+geometry, and geometry is all a parent may read.
+*Pressure-test*: build a child that declares mates, then build a parent that
+composes it. The parent's sidecar must contain only the parent's own
+declarations, and the child's sidecar must be unchanged by the parent's build.
 
 ### 4. Zero metadata in written artifacts
 

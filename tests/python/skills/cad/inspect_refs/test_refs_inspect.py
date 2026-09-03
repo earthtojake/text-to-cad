@@ -484,7 +484,7 @@ class InspectRefsTests(unittest.TestCase):
         self.step_path.unlink()
         script_path = self.step_path.with_suffix(".py")
         script_path.write_text(
-            "from cadgen import step\n@step\ndef model():\n    return {'shape': object()}\n",
+            "from cadgen import step\n@step\ndef model():\n    return object()\n",
             encoding="utf-8",
         )
         source_identity = python_source_hash(script_path)
