@@ -233,6 +233,12 @@ Decided mechanically; there is no error path.
   becomes the parent's own **components**. Modifying a child is legitimate and
   fully tracked (the child is still in `children` because it was called); it
   simply makes the parent own that geometry instead of linking.
+- Placement that keeps the link: `child.moved(loc)` and `Location * child`
+  (the same shape, re-placed). build123d's `child.located(loc)` deep-copies
+  the geometry (`BRepBuilderAPI_Copy`), which serializes to different bytes —
+  a new component id, so a component rather than a link. That is not new
+  cost (the copy never shared a component id either); it is why the skill
+  places with `moved()`.
 - **The materialize contract.** A parent may rely on: the child's exact
   geometry, its labels, colors and placements, as a compound whose children
   mirror the child's grouping. It receives nothing else — a child's sidecar

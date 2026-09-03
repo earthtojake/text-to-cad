@@ -157,11 +157,13 @@ def rig():
 ```
 
 **Link or component.** Place a child's shape as it came back — `moved()`,
-`located()`, relabelled, recolored — and the parent's result LINKS to the
-child's (stored once, shared by every parent). Modify it (a boolean, a
+`Location * child`, relabelled, recolored — and the parent's result LINKS to
+the child's (stored once, shared by every parent). Modify it (a boolean, a
 mirror, extracting a sub-shape) and the parent owns that geometry as its own
-components; the dependency is tracked either way. Put geometry changes that
-belong to the child in the child's file.
+components; the dependency is tracked either way. Prefer `moved()` over
+`located()`: `located()` deep-copies the geometry, which also makes it the
+parent's own component. Put geometry changes that belong to the child in the
+child's file.
 
 **`sys.path` does not survive into the model function.** The pipeline restores
 `sys.path` after loading the module, so do imports at module top level and

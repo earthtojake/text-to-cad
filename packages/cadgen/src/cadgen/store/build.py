@@ -52,11 +52,14 @@ def _tagged_intact(node: Any) -> str | None:
     tag = getattr(node, TREE_TAG, None)
     if not tag:
         return None
-    partner = getattr(getattr(node, PARTNER_TAG, None), "shape", None)
+    holder = getattr(node, PARTNER_TAG, None)
+    partner = getattr(holder, "shape", None)
     wrapped = getattr(node, "wrapped", None)
     if partner is None or wrapped is None:
         return str(tag)
     try:
+        # The same shape, placed (moved(), Location * shape) -> a link. A new
+        # TShape (a boolean, a mirror, located()'s deep copy) -> the parent's own.
         return str(tag) if wrapped.IsPartner(partner) else None
     except Exception:  # noqa: BLE001 - an odd wrapper is not intact
         return None

@@ -291,7 +291,7 @@ class CompileClient:
 
         result: dict | None = None
         try:
-            result = self._run(candidate, package_dir, force=force)
+            result = self._run(candidate, build_key, force=force)
         except BaseException as error:  # noqa: BLE001 - a supervisor fault is still an answer
             # Attached waiters are owed an answer even when this thread is being
             # torn down, so the result is set before the exception continues.
@@ -305,9 +305,9 @@ class CompileClient:
             raise
         finally:
             with self._lock:
-                self._in_flight.pop(package_dir, None)
+                self._in_flight.pop(build_key, None)
             if self._registry is not None:
-                self._registry.clear(package_dir)
+                self._registry.clear(build_key)
             entry.result = result
             entry.done.set()
         return result

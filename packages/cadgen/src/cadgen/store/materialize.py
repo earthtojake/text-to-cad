@@ -30,11 +30,15 @@ PARTNER_TAG = "__cadgen_tree_shape__"
 
 class _Partner:
     """The materialized shape's ``TopoDS_Shape`` handle, IDENTITY-preserving
-    under copy: build123d's ``moved()``/``located()`` deep-copy the Python
-    wrapper, and a deep-copied ``TopoDS_Shape`` attribute would be a NEW handle
-    that no longer partners the result's ``wrapped``. This holder copies to
-    itself, so ``IsPartner`` still asks the right question: same TShape (placed)
-    or a different one (modified by a boolean, a mirror, ...)."""
+    under copy: build123d's ``moved()`` (and ``Location * shape``) copies the
+    Python wrapper and re-places the same TShape, and a copied ``TopoDS_Shape``
+    attribute would be a NEW handle that no longer partners the result's
+    ``wrapped``. This holder copies to itself, so ``IsPartner`` still asks the
+    right question: same TShape (placed) or a different one (modified by a
+    boolean, a mirror — or ``located()``, which deep-copies the geometry with
+    ``BRepBuilderAPI_Copy`` and so yields new bytes, new cids and a component;
+    that is the same cost it always had, and the skill says to place with
+    ``moved()``)."""
 
     __slots__ = ("shape",)
 
