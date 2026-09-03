@@ -1,0 +1,129 @@
+{
+  "_comment": "Presentation theme for the W16 critic renders. Dark studio, explicit lights plus the studio HDRI (verified to load in the headless renderer: it changes reflections), metal-friendly materials. Edge styling is NOT a theme key: it lives in presentation_display.json.",
+  "colorMode": "dark",
+  "projection": "perspective",
+  "materials": {
+    "defaultColor": "#9ea3a8",
+    "fillColors": [
+      "#9ea3a8"
+    ],
+    "cycleColors": false,
+    "overrideSourceColors": false,
+    "tintMode": "blend",
+    "tintStrength": 0,
+    "saturation": 1.0,
+    "contrast": 1.1,
+    "brightness": 0.98,
+    "roughness": 0.48,
+    "metalness": 0.42,
+    "clearcoat": 0.12,
+    "clearcoatRoughness": 0.3,
+    "opacity": 1,
+    "envMapIntensity": 1.0,
+    "emissiveIntensity": 0.03
+  },
+  "background": {
+    "type": "radial",
+    "solidColor": "#0b0c0e",
+    "linearStart": "#15171b",
+    "linearEnd": "#07080a",
+    "linearAngle": 135,
+    "radialInner": "#1f2329",
+    "radialOuter": "#08090b"
+  },
+  "floor": {
+    "mode": "stage",
+    "enabled": true,
+    "followModel": true,
+    "color": "#14171b",
+    "roughness": 0.4,
+    "reflectivity": 0.3,
+    "shadowOpacity": 0.7,
+    "horizonBlend": 0.4,
+    "gridCenterColor": "#5a5f66",
+    "gridCellColor": "#2a2e34",
+    "gridOpacity": 0.0,
+    "gridDensity": 1,
+    "grid": {
+      "enabled": false,
+      "centerColor": "#5a5f66",
+      "cellColor": "#2a2e34",
+      "opacity": 0.0,
+      "density": 1
+    }
+  },
+  "environment": {
+    "enabled": true,
+    "presetId": "studio-hdri-43",
+    "intensity": 0.85,
+    "rotationY": -0.35,
+    "useAsBackground": false
+  },
+  "lighting": {
+    "toneMappingExposure": 1.02,
+    "directional": {
+      "enabled": true,
+      "color": "#fff4e6",
+      "intensity": 2.6,
+      "position": {
+        "x": 900,
+        "y": -700,
+        "z": 1100
+      }
+    },
+    "fill": {
+      "enabled": true,
+      "color": "#93a8bf",
+      "intensity": 1.5,
+      "position": {
+        "x": -900,
+        "y": -600,
+        "z": 350
+      }
+    },
+    "rim": {
+      "enabled": true,
+      "color": "#dbe7f5",
+      "intensity": 2.6,
+      "position": {
+        "x": -900,
+        "y": 900,
+        "z": 600
+      }
+    },
+    "spot": {
+      "enabled": true,
+      "color": "#ffffff",
+      "intensity": 1.0,
+      "angle": 0.85,
+      "distance": 0,
+      "position": {
+        "x": 150,
+        "y": 100,
+        "z": 1500
+      }
+    },
+    "point": {
+      "enabled": true,
+      "color": "#9ec2e8",
+      "intensity": 0.5,
+      "distance": 0,
+      "position": {
+        "x": -700,
+        "y": 400,
+        "z": -150
+      }
+    },
+    "ambient": {
+      "enabled": true,
+      "color": "#aebdcc",
+      "intensity": 0.5
+    },
+    "hemisphere": {
+      "enabled": true,
+      "skyColor": "#c4d3e2",
+      "groundColor": "#0e1014",
+      "intensity": 1.1
+    }
+  }
+}

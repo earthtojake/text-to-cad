@@ -1,0 +1,21 @@
+{
+  "_comment": "Display settings for W16 presentation renders: solid mode, edges kept but very dark and thin so casting parting lines read as shutlines rather than CAD linework.",
+  "mode": "solid",
+  "edges": {
+    "enabled": true,
+    "color": "#07090b",
+    "thickness": 0.7,
+    "classes": {
+      "feature": { "color": "#07090b", "opacity": 0.55, "thickness": 0.8 },
+      "tangent": { "color": "#07090b", "opacity": 0.0, "thickness": 0.5 },
+      "seam": { "color": "#07090b", "opacity": 0.0, "thickness": 0.5 },
+      "degenerate": { "color": "#07090b", "opacity": 0.0, "thickness": 0 }
+    },
+    "highlightColor": "#b08d57",
+    "highlightOpacity": 1,
+    "highlightThickness": 2,
+    "silhouette": false,
+    "silhouetteScale": 0,
+    "depthTest": true
+  }
+}
