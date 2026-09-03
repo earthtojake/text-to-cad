@@ -32,6 +32,8 @@ root component
 
 A numeric `Location(...)` should usually correspond to a stated datum, offset, clearance, screw axis, face contact, or joint relationship.
 
+Place a shape with `Pos(...) * shape`, `Rot(...) * shape`, `Location(...) * shape`, or `shape.moved(loc)` — these move the shape and keep its geometry shared. Avoid `shape.located(loc)`: it deep-copies the geometry, which is slower and, for a child model placed in an assembly, breaks the cache's ability to reference the child instead of copying it.
+
 Group a functional unit — a bearing, a gearbox stage, a fastener set — into a sub-assembly node with `asm.add_module(name, children)` when it is placed, reasoned about, or repeated as a unit; nested occurrence refs such as `#o1.12.1` then stay meaningful.
 
 ## Part-local positioning
