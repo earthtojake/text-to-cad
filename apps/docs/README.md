@@ -18,11 +18,10 @@ npm dependencies. Never the viewer, never cadgen Python.
 npm --prefix apps/docs run check    # the CI gate: lint + typecheck + build
 ```
 
-Deployment is the `Deploy Docs` workflow only, and it deploys a SOURCE ref
-(default `develop`), not `main`: the site is built from the commit a release was
-cut from, and publish commits from before `main` carried `apps/` and `packages/`
-(which this app builds against) cannot build it at all. The Vercel project's
-Root Directory setting (in Vercel, not this repo) must point at `apps/docs`.
+Deployment is the `Deploy Docs` workflow only. It deploys a ref of this
+repository (default `main`; a release passes its own commit, and a past release
+is redeployed from its tag). The Vercel project's Root Directory setting (in
+Vercel, not this repo) must point at `apps/docs`.
 
 Hero STEP assets under `public/hero/` are the model's render package +
 sidecar, committed as PLAIN files (never LFS — Vercel serves them statically

@@ -77,7 +77,7 @@ jobs:
         run: scripts/test/test-installed.sh
 
   # A SEPARATE JOB, never a matrix on `test` above. A matrix renames that job's check to
-  # "Test (ubuntu-latest)", and `Test` is a required status check on develop -- it would stop
+  # "Test (ubuntu-latest)", and `Test` is a required status check on main -- it would stop
   # being reported and every pull request would wait forever for a check that no longer exists.
   #
   # Runs the TESTS only, not the hygiene steps the Linux job wraps them in. Bundle freshness

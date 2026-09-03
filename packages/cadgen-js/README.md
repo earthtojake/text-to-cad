@@ -74,8 +74,8 @@ schema constants.
 
 - `npm --prefix packages/cadgen-js test` (node:test; no browser needed).
 - Anything here that the bundlers consume changes the shipped runtimes:
-  run `scripts/bundle/bundle.sh`, commit the regenerated `_runtime/`, then
-  `scripts/dev/setup-symlinks.sh`. The staleness gate in CI enforces this.
+  run `scripts/bundle/bundle.sh` and commit the regenerated `_runtime/node`
+  and `_runtime/browser`. The staleness gate in CI enforces this.
 - The viewer dev server aliases this package's source, and Vite's
   transform cache can outlive HMR — if an edit doesn't show up, restart
   the dev server and delete `apps/viewer/node_modules/.vite`.

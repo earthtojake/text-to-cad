@@ -29,7 +29,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 
-# `cadgen`, `cadgen[snapshot]`, or either pinned -- the publish tree is the pinned form.
+# `cadgen`, `cadgen[snapshot]`, or either pinned -- main carries the pinned form.
 _CADGEN_LINE = re.compile(r"^cadgen(?:\[(?P<extras>[a-z0-9_,.-]+)\])?\s*(?:==\s*\S+)?\s*$")
 
 

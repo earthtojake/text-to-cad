@@ -1,8 +1,8 @@
 # Keep CAD exchange files and generated render/topology assets out of normal git object history.
-# assets/ holds the README demo gifs (17-26 MB each) and is the ONE LFS family that ships on
-# main: installers clone without git-lfs and get pointer files there, which is harmless for
-# README decoration and fatal for anything a skill runs. scripts/github-workflows/
-# check-publish-tree.sh fails the publish on any other LFS-tracked path.
+# assets/ holds the README demo gifs (17-26 MB each). Installers clone without git-lfs and get
+# pointer files, which is harmless for README decoration and for the models/ fixture corpus
+# (nothing installs it) and fatal for anything a skill runs: scripts/github-workflows/
+# check-builds.sh fails on any LFS-tracked path under skills/.
 assets/** filter=lfs diff=lfs merge=lfs -text
 # Keep spec markdown in normal git so reviews and diffs stay readable.
 assets/**/*.md !filter !diff !merge text

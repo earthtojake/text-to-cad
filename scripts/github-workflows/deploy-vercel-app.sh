@@ -25,7 +25,7 @@ Deploys one Vercel project to production from the current checkout:
 4. appends a deployment summary to GITHUB_STEP_SUMMARY when set
 
 Requires VERCEL_TOKEN and VERCEL_ORG_ID in the environment and the vercel CLI
-on PATH. Run from a production-layout checkout (a main publish commit).
+on PATH. Run from a checkout of main (or a release tag).
 EOF
 }
 

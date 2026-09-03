@@ -17,7 +17,7 @@ A library of agent skills for CAD, CAE and CAM
 
 [Docs](https://www.texttocad.dev)
 
-[![Tests](https://img.shields.io/github/actions/workflow/status/earthtojake/text-to-cad/test.yml?branch=develop&style=for-the-badge&logo=githubactions&logoColor=white&label=Tests)](https://github.com/earthtojake/text-to-cad/actions/workflows/test.yml?query=branch%3Adevelop)
+[![Tests](https://img.shields.io/github/actions/workflow/status/earthtojake/text-to-cad/test.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=Tests)](https://github.com/earthtojake/text-to-cad/actions/workflows/test.yml?query=branch%3Amain)
 [![Join Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/5FGB9DwJYU)
 [![GitHub stars](https://img.shields.io/github/stars/earthtojake/text-to-cad?style=for-the-badge&logo=github&label=Stars)](https://github.com/earthtojake/text-to-cad/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
@@ -82,11 +82,10 @@ robot description files, simulation, and local review.
 
 ## 💻 Installation
 
-For production use, install or clone from `main`. It is the published snapshot
-of `develop`: the same source with the skill bundles materialized (the CAD
-Viewer runtime inside the cad-viewer skill), versions stamped, skill
-requirements pinned to the release, and `models/` (the fixture corpus) omitted.
-Develop against `develop`, never `main`.
+Install or clone from `main`: it is the source tree, and every skill's
+`requirements.txt` pins the `cadgen` release it was published with. (`models/`,
+the fixture corpus, arrives as small LFS pointers and is not needed to use the
+skills.)
 
 ### Skills
 
@@ -141,11 +140,11 @@ grok plugin enable cad
 ```
 
 Restart your agent if newly installed skills do not appear. For local
-development, branch from `develop`, open PRs against `develop`, and use the symlink
-workflow in [CONTRIBUTING.md](CONTRIBUTING.md).
+development, branch from `main`, open PRs against `main`, and follow
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 🛠️ Contributing
 
-Development happens from the `develop` branch; open PRs against `develop`, not `main`.
+Branch from `main` and open PRs against `main`.
 For local contribution workflow, skill linking, and validation guidance, see
 [CONTRIBUTING.md](CONTRIBUTING.md).

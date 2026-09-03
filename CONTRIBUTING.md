@@ -6,10 +6,10 @@ fixture/artifact area.
 
 ## Local Checkout
 
-For development, branch from `develop` and open PRs back to `develop`:
+`main` is the only long-lived branch: branch from it and open PRs back to it.
 
 ```bash
-git clone --branch develop https://github.com/earthtojake/text-to-cad.git
+git clone https://github.com/earthtojake/text-to-cad.git
 cd text-to-cad
 git switch -c my-change
 ```
@@ -29,9 +29,13 @@ development. After pulling, reinstall `requirements-dev.txt` to refresh the
 editable-install metadata: `cadgen.__version__` reports the installed
 dist-info by design — it is release-grained, so dev code is always newer than
 its number — and nothing behavioral consults it, but stale metadata makes the
-reported number drift further from the code than it has to. Skill-specific environments may install generated, skill-local
-package copies so they match production, but on `develop` you should still edit the
-source package under `packages/*`.
+reported number drift further from the code than it has to.
+
+Install `requirements-dev.txt`, not a skill's `requirements.txt`: the skill
+files pin `cadgen==<VERSION>` (the release PR stamps them, and they are what an
+installer resolves from PyPI). The editable install reports that same version,
+so the pin is satisfied in a checkout — but `pip install -r skills/<s>/requirements.txt`
+on its own would fetch the previous RELEASE from PyPI over your working copy.
 
 For CAD Viewer development:
 
@@ -261,224 +265,124 @@ Do not run lower-level bundle scripts as part of routine iteration; use the
 script-specific details in `scripts/README.md` only when you are debugging a
 production-output check.
 
-## Branch Layouts
+## Branch Layout
 
-Open development PRs against `develop`, not `main`. The `develop` branch keeps
-generated copy targets as symlinks so the editable source remains under
-`skills/`, `viewer/`, and `packages/`:
+`main` is the source tree, what installers clone, and what releases are cut
+from. There is no development symlink layout and no generated publish tree:
+every path is the real file, and the repository root is itself the agent plugin
+package (`.claude-plugin/` and `.codex-plugin/` hold the manifests; the plugin's
+skills are `skills/` directly), so whatever is on `main` is what agent
+installers copy.
 
-```bash
-scripts/dev/setup-symlinks.sh
-scripts/dev/setup-symlinks.sh --check
-```
+Three consequences are enforced by `scripts/github-workflows/check-builds.sh`
+on every push:
 
-The `main` production branch must be installable from a plain checkout, so it
-contains generated production outputs instead of symlinks. The repository root
-is itself the agent plugin package — `.claude-plugin/` and `.codex-plugin/` hold
-the manifests and the plugin's skills are `skills/` directly — so whatever is on
-`main` is what agent installers copy.
+- **No tracked symlink, anywhere.** The installers disagree about symlinks and
+  one loses data silently: the Skills CLI dereferences them, Claude Code
+  preserves them, and Codex `plugin add` drops them with no error at all,
+  publishing a skill whose files are simply missing at runtime.
+- **No LFS-tracked path under `skills/`.** Installers clone without git-lfs and
+  receive pointer files. `models/` and `assets/` stay LFS: nothing installs
+  them, `.lfsconfig` excludes them from default fetches (a fresh clone is ~27 MB
+  with `models/` as pointers), and `.gitattributes` export-ignores `models/`
+  from archives.
+- **No skill reaching into a repo root.** `packages/` being present is not
+  permission to import from it: the Skills CLI installs `skills/<name>` alone,
+  so `../../../packages/` would work in a checkout and break on the first
+  `npx skills add`. `tests/python/global/test_skill_self_containment.py` and
+  `test_package_boundaries.py` hold the same law.
 
-Replacing symlinks with real copies on `main` is a correctness requirement, not
-a convention. The installers disagree about symlinks and one loses data
-silently: the Skills CLI dereferences them into real files, Claude Code
-preserves them verbatim, and Codex `plugin add` drops them with no error at all,
-publishing a skill whose files are simply missing at runtime.
-`scripts/github-workflows/check-builds.sh` is the gate that enforces this.
+Skill `requirements.txt` files pin `cadgen==<VERSION>` in the tree. The release
+PR stamps them with the bump, and `scripts/release/check-version.sh` asserts
+every pin equals `VERSION` — so a bare `cadgen` line or a stale pin fails the
+`Version Check` job.
 
-`main` is `develop` with the skill bundles materialized, versions stamped, skill
-requirements pinned to the release, and ONLY `models/` removed. The publish job
-(`.github/workflows/release.yml`) produces it in this order, after the bundle and
-every check have run against the untrimmed tree: `scripts/release/prepare-publish-tree.sh`
-drops `models/`; `scripts/release/pin-cadgen-requirements.sh` rewrites every skill's
-`cadgen` line to `cadgen==<VERSION>`; `scripts/github-workflows/check-publish-tree.sh`
-asserts the result over exactly the paths `git add -A` will stage; then the
-publish commit is written. Root `docs/` (the hand-migration guides) ships too,
-because the cad skill's migration references link to it by hosted URL.
-
-What that means for what you find on `main`:
-
-- `apps/`, `packages/`, `tests/`, and `requirements-dev.txt` are present. They
-  used to be trimmed; they no longer are, because the source behind a release
-  should be discoverable on the default branch and together they are ~15 MB with
-  no LFS objects. `models/` is the fixture corpus, the one root whose absence
-  buys anything, and the only one removed.
-- `apps/viewer/` (the CAD Viewer client's source) is there to read. The
-  Viewer itself ships in the cadgen wheel (`cadgen viewer`), so no skill carries
-  a runtime and nothing is bundled into the publish tree.
-- `tests/` ships without its `models/` fixtures, so it is readable, not runnable,
-  on `main`. Run the suites from a `develop` checkout.
-- `packages/` being present is NOT permission for a skill to import from it. The
-  ships-alone law stands: the Skills CLI installs `skills/<name>` alone, plugin
-  installers copy the whole tree, and neither runs an editable install, so a
-  skill that reached into `../../../packages/` would work on `main` and break
-  on the first `npx skills add`. `check-publish-tree.sh` fails the publish on any
-  such reference; `tests/python/global/test_skill_self_containment.py` and
-  `test_package_boundaries.py` hold the same law on `develop`.
-- No symlink, anywhere. The repository has no development symlinks left, and
-  `check-publish-tree.sh` refuses any that appears.
-- No LFS-tracked path except the README demo media under `assets/`. Installers
-  clone without git-lfs and receive pointer files, so an LFS-tracked skill fixture
-  or runtime asset would ship broken; `check-publish-tree.sh` fails on any LFS
-  path outside `assets/`. The three gifs stay LFS-tracked because they are 17-26
-  MB each and GitHub renders LFS media in the README regardless.
-
-`main` is publish-only: do not open PRs to `main` or push it directly. The `Test`
-workflow runs on `develop` and PRs to `develop`: it checks generated outputs
-against their sources with `scripts/bundle/bundle.sh --check`, runs
-`scripts/bundle/bundle.sh --clean`, checks the production layout without
-rebuilding it, runs documentation checks, and runs the code tests against that
-generated output.
-
-The freshness check covers the generated outputs `develop` commits as real
+The `Test` workflow runs on pushes to `main` and PRs against it: it checks
+generated outputs against their sources with `scripts/bundle/bundle.sh --check`,
+runs `scripts/bundle/bundle.sh --clean`, checks the layout without rebuilding
+it, runs documentation checks, and runs the code tests against that generated
+output. The freshness check covers the generated outputs `main` commits as real
 files — cadgen's Node builders and snapshot runtime built from
 `packages/cadgen-js` — and version metadata derived from `VERSION`. The viewer
 client (`_runtime/viewer`) is gitignored and built only for the wheel.
 
 ## Releases
 
-Normal development PRs should not bump `VERSION`; release versions
-are reserved for release PRs so the canonical repo version, Git tag, and GitHub
-Release describe the same production commit. PRs that do touch release state
-must keep `VERSION` and derived version metadata valid; the `Test`
-workflow checks that metadata in a separate job so code tests still run when it
-is wrong.
+Normal development PRs should not bump `VERSION`; release versions are reserved
+for release PRs so the canonical repo version, the skill pins, the Git tag, the
+PyPI wheel and the GitHub Release all describe one commit. PRs that do touch
+release state must keep `VERSION`, the derived metadata and the pins valid; the
+`Test` workflow checks all three in a separate job so code tests still run when
+they are wrong.
 
 ### Shipping a release
 
-Run the `Release` GitHub Actions workflow. Its defaults are the real-release
-settings — build from `develop` (`base_branch=develop`), publish to `main`
-(`target_branch=main`), and publish the GitHub Release (`publish=true`, not a
-draft) — and the input descriptions in `.github/workflows/release.yml` are
-authoritative. Choose the semver bump (`patch`, `minor`, or `major`) or an
-exact `set_version` deliberately for every release; if a release request does
-not specify one, confirm it rather than assuming. `bump=none` is not a release
-setting — see "Publishing without a version bump" below:
+Run the `Release` GitHub Actions workflow. Its inputs are `bump`
+(`patch|minor|major|none`), `set_version` (an exact X.Y.Z instead of a bump),
+`dry_run`, and `publish` (`true` publishes the GitHub Release; `false` leaves a
+draft). Choose the bump deliberately for every release; if a release request
+does not specify one, confirm it rather than assuming.
 
 ```bash
-gh workflow run release.yml --ref develop -f bump=patch
+gh workflow run release.yml --ref main -f bump=patch
 ```
 
-One run bumps `VERSION` plus derived metadata on a
-`release/<version>` branch, opens a release PR, merges it into `develop`
-immediately, and then runs the publish, docs deploy, and tag/GitHub Release
-jobs in the same run. The release PR does not wait for its own CI checks; the
-publish job repeats the full bundle and test validation against exactly what
-ships. The publish job ships to `main` only when the
-source version is newer than `main` and the latest semver tag, and refuses
-sources that do not contain the previous publish source commit. It writes a
-generated production merge commit on top of the previous publish target with
-the release source as the second parent, which keeps `main` fast-forwardable
-while preserving source commits for release notes and contributor attribution.
-The GitHub Release is published immediately by default; set `publish=false` to
-review it as a draft first. Treat generated outputs as CI products, not edit
-targets.
+One run, on `main`:
 
-The publish job also uploads `packages/cadgen` to
-[PyPI](https://pypi.org/project/cadgen/). The upload runs after the production
-bundle is validated but BEFORE `main` is pushed: the publish tree pins
-`cadgen==<version>` from PyPI (`scripts/release/pin-cadgen-requirements.sh`
-rewrites the editable requirement lines), so a failed PyPI upload must block the
-release rather than ship a `main` whose skill installs cannot resolve. The PyPI version always
-equals `VERSION`; `sync-version.mjs` stamps
-`packages/cadgen/pyproject.toml` and the publish job refuses to upload on a
-mismatch. Uploads use `skip-existing`, so a rerun after a post-upload failure
-(for example a failed `main` push) is idempotent and resumes like any other
-failed publish. Local development keeps the editable symlinked installs.
+1. **Release PR.** Bumps `VERSION`, stamps the derived metadata
+   (`sync-version.mjs`) and every skill's `cadgen==` pin
+   (`pin-cadgen-requirements.sh`), commits on `release/<version>`, opens a PR
+   against `main`, and merges it. The merged commit is THE release commit.
+2. **Publish.** Checks out that commit, runs `check-version.sh`, `bundle.sh
+   --clean` (cadgen's committed runtime reproduced byte for byte plus the
+   gitignored viewer client), `check-builds.sh`, the docs and code tests, the
+   wheel-contents check, builds the sdist + wheel and uploads them to PyPI
+   (`skip-existing`, so a rerun is a no-op).
+3. **Deploy Docs** and **Tag + GitHub Release**, both from the same commit.
 
-#### One-time PyPI setup
+The publish gate ships only when `VERSION` is past the latest semver tag, or
+equal to it with the tag missing (a run that uploaded the wheel and died before
+tagging). Nothing is committed or pushed to `main` after the release PR merge:
+the tag points at the source commit, and `git describe` on `main` is meaningful.
 
-The PyPI upload authenticates with [trusted
-publishing](https://docs.pypi.org/trusted-publishers/) (GitHub OIDC); no API
-token secret is stored. Before the first release that publishes to PyPI, add a
-trusted publisher for the `cadgen` project on PyPI (use "Add a pending
-publisher" if the project does not exist yet): repository
-`earthtojake/text-to-cad`, workflow `release.yml`, environment left blank.
+### Republishing and resuming (`bump=none`)
 
-### Publishing without a version bump
+`bump=none` republishes `main` as it stands. `sync-version` and the pin still
+run, so if the derived metadata or the pins have drifted from `VERSION` they go
+through a release PR rather than shipping the drift; otherwise the release PR
+step is skipped and the publish gate decides. This is the resume path: a run
+that uploaded the wheel and failed before the tag or the docs deploy is
+finished by `bump=none` — the PyPI upload is idempotent and the tag is still
+missing, so the gate lets it through.
 
-`bump=none` publishes `base_branch` exactly as it stands: no version change, no
-release PR, straight to the publish jobs. Use it whenever the version is already
-right or is beside the point — resuming a failed publish, and rehearsing the
-pipeline against `build-test`. `set_version` is only for naming a specific *new*
-version; it is not the way to say "leave the version alone".
+### Testing pipeline changes
 
-`sync-version.mjs` still runs under `bump=none`, so a base branch whose derived
-metadata has drifted from `VERSION` is caught and goes through a release PR
-rather than publishing the drift.
-
-### Testing CI/CD and build changes
-
-Use `target_branch=build-test` only when explicitly testing changes to the
-CI/CD pipeline or production build outputs; it is never part of a normal
-release and should never be chosen by default. It rehearses the full publish
-flow without touching `main`, deploying, creating a tag/release, uploading to
-PyPI, or syncing the CAD Viewer mirror:
-
-```bash
-gh workflow run release.yml --ref <branch> \
-  -f bump=none -f base_branch=<branch> -f target_branch=build-test
-```
-
-Pair it with `bump=none` so a rehearsal does not consume a version number or
-move `VERSION` on the branch you are testing. Bump for real (`bump=patch`) only
-when the change under test is the version machinery itself — `bump-version.sh`
-or `sync-version.mjs` — since `bump=none` skips that stage. `dry_run=true`
-previews the version changes only, and `auto_merge=false` stops after preparing
-the release PR.
-
-### Resuming a failed publish
-
-If a run fails partway — including after `main` has moved but before the semver
-tag exists — rerun `Release` with `bump=none`. The version already reached
-`base_branch` on the first attempt, so there is nothing to bump; the workflow
-skips the release PR and proceeds straight to the publish jobs, and the publish
-gate handles both shapes (`main` not yet moved, and `main` moved with the tag
-missing).
+There is no rehearsal branch. `dry_run=true` runs the version preparation and
+stops after printing the diff; everything after that is exercised by `test.yml`
+on the PR that changes it (`bundle.sh --clean`, `check-builds.sh`, the tests,
+`check-wheel-contents.sh`). A change to the tag or PyPI steps is verified by
+the next real release.
 
 ### Redeploying the docs site
 
-The standalone `Deploy Docs` workflow redeploys the docs site to Vercel
-production without running a release. It deploys a **source** ref and defaults
-to `develop`:
+`Deploy Docs` (`.github/workflows/deploy-docs.yml`) redeploys without a
+release, from a ref that defaults to `main`:
 
 ```bash
-gh workflow run deploy-docs.yml -f ref=develop
+gh workflow run deploy-docs.yml -f ref=main
+gh workflow run deploy-docs.yml -f ref=0.5.0   # a past release: its tag
 ```
-
-Deploy from a source ref, not `main`. The docs app lives at `apps/docs/` and
-builds against repo-root `packages/` (`apps/docs/tsconfig.json` maps
-`cadgen-js/*` to `../../packages/cadgen-js/src/*`). `main` carries both since
-the publish trim stopped at `models/`, but the site is built from the commit the
-release was cut from (the one `git rev-parse <tag>^2` recovers), and publish
-commits from before that change have no `apps/` at all. The workflow checks for
-`apps/docs` and `packages/cadgen-js/src` up front and fails with that
-explanation rather than an opaque module-resolution error inside `next build`.
-
-The deploy runs the Vercel CLI from the repo root and takes the project root
-from the **Vercel project's Root Directory setting**, which lives in Vercel, not
-in this repo; it must read `apps/docs` (see `apps/docs/README.md`). No docs
-deploy has run since the site moved there, so the first post-move deploy is the
-one that proves the setting.
-
-To redeploy the site as it stood at a past release, use that release's source
-commit. Every publish commit records it as its second parent:
-
-```bash
-gh workflow run deploy-docs.yml -f ref="$(git rev-parse 0.4.6^2)"
-```
-
-The CAD Viewer is a local-filesystem app and has no hosted deployment.
 
 ### Local and manual fallbacks
 
 For local release preparation, use the same scripts the workflow calls:
 
 ```bash
-git fetch origin develop
 git fetch --tags origin
 scripts/release/bump-version.sh patch --no-commit
 node scripts/release/sync-version.mjs
-scripts/release/check-version.sh --incremented-from origin/main
+scripts/release/pin-cadgen-requirements.sh
+scripts/release/check-version.sh --incremented-from "refs/tags/$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)"
 node scripts/release/sync-version.mjs --check
 ```
 
@@ -488,13 +392,78 @@ draft release unless `--publish` is passed.
 
 ### Repository settings
 
-Configure GitHub branch settings/rulesets so `main` rejects PRs and direct
-pushes, leaving the `Release` workflow's publish job as the only writer. Enable
-repository tag rulesets for `[0-9]*.[0-9]*.[0-9]*` before publishing from
-`main`, and enable immutable releases once the production flow is trusted.
+`main` requires a PR with the `Version Check`, `Test (Linux)` and `Test
+(Windows)` status checks (strict: up to date with `main`), no force pushes and
+no deletions — the rules `develop` carried before the cutover. The `Release`
+workflow's release PR merges through the same gate. Keep the repository tag
+ruleset for `[0-9]*.[0-9]*.[0-9]*` and immutable releases.
 
-Production users should continue cloning `main`; developers should treat
-`develop` plus the `Release` workflow as the only route to `main`.
+### Cutover runbook (one time, manual)
+
+`main` today holds the OLD publish tree: 29 generated commits, each with the
+release source commit as its second parent, whose trees carry the materialized
+skill runtime and no `models/`. The last is `0e94cd1d Publish 0.4.28 from develop
+to main`; its merge base with the source history is `cce04de6` (the 0.4.28
+release merge on `develop`). A normal merge of the source branch into it
+conflicts on every path the publish transformation touched (the deleted
+symlinks, `models/`, the pins), so the first landing replaces `main`'s history
+rather than merging into it. Two options:
+
+- **A (recommended): fast-forward `main` to the source head.** Land this work
+  on the source branch first (merge `claude/cadgen-viewer` into
+  `release/0.5.0`, finish 0.5.0 there), then point `main` at that head. The
+  publish commits stay reachable from the release tags (`0.4.28^1` is the old
+  main tip), so nothing is lost, and `main`'s history becomes the source
+  history with no synthetic commits in it.
+- **B: force-push the branch directly.** Same result, skipping the intermediate
+  merge; only if 0.5.0 is not going to be finished on `release/0.5.0` first.
+
+Steps, in order (none of these are run by the workflow):
+
+1. Confirm the default branch and record the current rules (read-only):
+   ```bash
+   gh repo view --json defaultBranchRef --jq .defaultBranchRef.name     # main
+   gh api repos/earthtojake/text-to-cad/branches/develop/protection
+   gh api repos/earthtojake/text-to-cad/rulesets                          # "main publish only", id 17058028
+   ```
+2. Retire the `main publish only` ruleset (it blocks updates, deletions,
+   non-fast-forward pushes and requires linear history — which would refuse
+   both the cutover push and every future PR merge):
+   ```bash
+   gh api --method DELETE repos/earthtojake/text-to-cad/rulesets/17058028
+   ```
+3. Land the history. Option A:
+   ```bash
+   git fetch origin
+   git push origin release/0.5.0:main --force-with-lease=main:0e94cd1d
+   ```
+   Option B: `git push origin claude/cadgen-viewer:main --force-with-lease=main:0e94cd1d`.
+   `--force-with-lease` pins the expected old tip so a concurrent publish
+   cannot be overwritten unseen.
+4. Protect `main` the way `develop` was protected (the classic branch-protection
+   API, mirroring what step 1 recorded):
+   ```bash
+   gh api --method PUT repos/earthtojake/text-to-cad/branches/main/protection \
+     --input - <<'JSON'
+   {"required_status_checks":{"strict":true,"contexts":["Version Check","Test (Linux)","Test (Windows)"]},
+    "enforce_admins":false,"required_pull_request_reviews":null,"restrictions":null,
+    "allow_force_pushes":false,"allow_deletions":false,"required_linear_history":false}
+   JSON
+   ```
+   The `Test` workflow must have run once on `main` for the contexts to exist;
+   push a no-op PR if GitHub rejects unknown contexts.
+5. Delete the retired branches once nothing references them:
+   ```bash
+   gh api --method DELETE repos/earthtojake/text-to-cad/branches/develop/protection
+   git push origin --delete develop release/0.5.0
+   git branch -r | sed -n 's#^ *origin/\(release/.*\)#\1#p' | xargs -n1 git push origin --delete
+   ```
+6. Archive the mirror and drop its secret: `gh repo archive earthtojake/cad-viewer`
+   and `gh secret delete CAD_VIEWER_SYNC_TOKEN`. `BUILD_TEST_PUSH_TOKEN` is
+   unused too and can go.
+7. The first release after the cutover is an ordinary
+   `gh workflow run release.yml --ref main -f bump=minor` (0.5.0). The gate
+   compares against the latest tag (0.4.28), not against the old `main`.
 
 ## Iteration Loop
 

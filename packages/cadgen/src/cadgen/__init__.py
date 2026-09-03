@@ -115,9 +115,9 @@ def __getattr__(name: str):
 
 if TYPE_CHECKING:
     # Mirrors the lazy __getattr__ above so type checkers and editors see the root exports
-    # without importing OCP. Every name here must have a branch there. develop's version of
-    # this block pulled two names from the api alias module, which this branch deletes --
-    # they come from their real modules now.
+    # without importing OCP. Every name here must have a branch there. An earlier version
+    # of this block pulled two names from the api alias module, since deleted -- they come
+    # from their real modules now.
     from cadgen import build123d, dxf, glb, step, stl, threemf
     from cadgen.assembly import AssemblyHelper, MateRelation, MateTarget, label_shape, label_text, target
     from cadgen.color import linear_to_srgb, srgb, srgb_to_linear

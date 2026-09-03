@@ -1,9 +1,9 @@
-"""The publish tree must resolve cadgen from PyPI, not editable from a sibling.
+"""Every skill pins cadgen to VERSION, and the release PR is what stamps the pins.
 
-A source checkout installs cadgen with `--editable ./<path>/packages/cadgen`,
-which only resolves because the package sits beside the skill. An installed
-skill has no such sibling, so the Release workflow rewrites every requirement to
-`cadgen==<VERSION>` before committing the publish tree.
+An installed skill resolves cadgen from PyPI (the Skills CLI copies skills/<name>
+alone; no sibling packages/ is there to install editable), so the pin has to name
+a release that exists. main is both the source tree and what installers clone,
+so the pins live in it and move with every version bump.
 
 That rewrite used to live in `scripts/bundle/bundle-plugin.sh`, over the
 generated `plugins/cad/skills` copy. When the plugin package moved to the repo
@@ -76,7 +76,7 @@ class PinScriptPresenceTest(unittest.TestCase):
         self.assertFalse((REPO_ROOT / "apps" / "viewer" / "requirements.txt").exists())
 
 class PinScriptBehaviourTest(unittest.TestCase):
-    """Run the real script against a throwaway tree shaped like the publish tree."""
+    """Run the real script against a throwaway tree shaped like the repo."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

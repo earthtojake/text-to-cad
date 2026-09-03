@@ -4,17 +4,14 @@ Use these durable entrypoints for normal work:
 
 | Task | Command |
 | ---- | ------- |
-| Set up dev symlinks | `scripts/dev/setup-symlinks.sh` |
-| Check dev symlinks | `scripts/dev/setup-symlinks.sh --check` |
 | Bundle production outputs | `scripts/bundle/bundle.sh --clean` |
 | Check production outputs are fresh | `scripts/bundle/bundle.sh --check` |
 | Bundle one skill output | `scripts/bundle/bundle-skill.sh <skill-id>` |
 | Run code tests | `scripts/test/test.sh` |
 | Run docs checks | `scripts/test/test-docs.sh` |
 | Check canonical release version | `scripts/release/check-version.sh` |
-| Pin cadgen to PyPI in a publish tree | `scripts/release/pin-cadgen-requirements.sh` |
-| Shape a bundled checkout into the publish tree (drop `models/`, dereference dev symlinks) | `scripts/release/prepare-publish-tree.sh` |
-| Verify the publish tree before it is committed | `scripts/github-workflows/check-publish-tree.sh` |
+| Stamp every skill's `cadgen==` pin from `VERSION` | `scripts/release/pin-cadgen-requirements.sh` |
+| Check the shipping contract (no symlink, no LFS under skills/, no repo reach) | `scripts/github-workflows/check-builds.sh` |
 | Install local skills into agents | `scripts/install/install-skills.sh --agent codex` |
 | Uninstall local skill links | `scripts/install/uninstall-skills.sh --agent codex` |
 
@@ -116,13 +113,14 @@ Use `scripts/release/check-version.sh` for CI/read-only checks:
 
 ```bash
 scripts/release/check-version.sh
-scripts/release/check-version.sh --incremented-from origin/main
+scripts/release/check-version.sh --incremented-from refs/tags/<latest tag>
 ```
 
-Normal development branches should not bump `VERSION`. Use the
-`Release` GitHub Actions workflow to open and ship the release PR from
-`develop`; use `scripts/release/bump-version.sh` only as a local fallback for
-that release PR:
+`check-version.sh` also asserts every skill's `cadgen==` pin equals `VERSION`;
+`scripts/release/pin-cadgen-requirements.sh` stamps them. Normal development
+branches should not bump `VERSION`. Use the `Release` GitHub Actions workflow to
+open and ship the release PR against `main`; use `scripts/release/bump-version.sh`
+only as a local fallback for that release PR:
 
 ```bash
 scripts/release/bump-version.sh patch --dry-run
@@ -141,11 +139,8 @@ fallback. It creates the semver git tag from `VERSION` and creates
 a GitHub Release with generated notes; unlike the `Release` workflow, which
 publishes the release by default, the script creates a draft unless
 `--publish` is passed.
-Use `scripts/release/check-publish-source.sh` to verify that a source ref
-contains the previous release source before the publish job writes a new
-generated target commit.
 Use `scripts/github-workflows/deploy-vercel-app.sh` only from the `Deploy Docs`
-and `Deploy Viewer` workflows; it configures Vercel Authentication for preview
+workflow; it configures Vercel Authentication for preview
 deployments only, deploys one Vercel project to production, and verifies its
 public URLs.
 `scripts/release/create-github-release.sh` remains as a manual all-in-one
@@ -155,12 +150,10 @@ fallback, but the workflow path is preferred.
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to `develop`; PRs to `develop`; manual dispatch | Checks `VERSION` and derived metadata as a separate job so the test job still runs if release metadata is wrong. The test job checks the `develop` symlink layout, bundles temporary production outputs, checks that layout without rebuilding it, and runs docs and code tests against the generated output. Superseded PR runs are cancelled. |
-| `release.yml` | manual dispatch | The single release workflow: release PR, production publish commit to the target branch, models upload, web-app deploys, semver tag, and GitHub Release in one run. See the Releases section in `CONTRIBUTING.md` for the full flow, CI/CD-testing, and resume options. |
-| `deploy-docs.yml` | manual dispatch; called by `release.yml` | Deploys the docs app to Vercel production from a production-layout ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
+| `test.yml` | pushes to `main`; PRs to `main`; manual dispatch | Checks `VERSION`, derived metadata and the skill pins as a separate job so the test job still runs if release metadata is wrong. The test job checks generated outputs against their sources, bundles production outputs, checks the layout without rebuilding it, and runs docs and code tests against the generated output. Superseded PR runs are cancelled. |
+| `release.yml` | manual dispatch | The single release workflow: release PR against `main` (version bump + metadata + skill pins), cadgen wheel to PyPI, docs deploy, semver tag, and GitHub Release -- all on the one merged commit. See the Releases section in `CONTRIBUTING.md` for the flow and the `bump=none` resume path. |
+| `deploy-docs.yml` | manual dispatch; called by `release.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
 
-In short: use `release.yml` for releases, use `deploy-docs.yml` to redeploy the
-docs site from `main`, treat `develop` as the editable symlink branch, and keep
-`main` as the explicit publish-only production branch for user clones and
-published releases. The CAD Viewer is a local-filesystem app with no hosted
-deployment.
+In short: use `release.yml` for releases and `deploy-docs.yml` to redeploy the
+docs site. `main` is the one branch: the source, what installers clone, and what
+releases tag. The CAD Viewer is a local-filesystem app with no hosted deployment.
