@@ -130,9 +130,9 @@ class GateTruthTable(StoreCase):
     def test_clause_2_a_semantic_edit_is_stale_but_a_comment_is_not(self) -> None:
         script = self.model("plate")
         self.record(script, tree=self.tree_for("plate"))
-        script.write_text(script.read_text() + "\n# a trailing comment\n", encoding="utf-8")
+        script.write_text(script.read_text(encoding="utf-8") + "\n# a trailing comment\n", encoding="utf-8")
         self.assertIsNone(self.stale_clause(script), "comments and formatting are not inputs")
-        script.write_text(script.read_text().replace("SIZE = 10.0", "SIZE = 11.0"), encoding="utf-8")
+        script.write_text(script.read_text(encoding="utf-8").replace("SIZE = 10.0", "SIZE = 11.0"), encoding="utf-8")
         self.assertEqual(self.stale_clause(script), 2)
 
     def test_clause_3_a_child_whose_result_moved_or_is_itself_stale(self) -> None:
@@ -150,7 +150,7 @@ class GateTruthTable(StoreCase):
         # The pin matches again but the child itself is stale (its source moved on).
         self.record(child, tree=child_tree)
         self.assertIsNone(self.stale_clause(parent))
-        child.write_text(child.read_text().replace("SIZE = 10.0", "SIZE = 12.0"), encoding="utf-8")
+        child.write_text(child.read_text(encoding="utf-8").replace("SIZE = 10.0", "SIZE = 12.0"), encoding="utf-8")
         self.assertEqual(self.stale_clause(parent), 3)
 
     def test_clause_3_an_identical_result_after_a_child_edit_leaves_the_parent_current(self) -> None:
@@ -159,7 +159,7 @@ class GateTruthTable(StoreCase):
         child_tree = self.tree_for("pin")
         self.record(parent, tree=self.tree_for("arm"), children=[(child, child_tree)])
         # The child was edited and rebuilt, and produced the SAME tree.
-        child.write_text(child.read_text().replace("SIZE = 10.0", "SIZE = 10.0 * 1"), encoding="utf-8")
+        child.write_text(child.read_text(encoding="utf-8").replace("SIZE = 10.0", "SIZE = 10.0 * 1"), encoding="utf-8")
         self.record(child, tree=child_tree)
         self.assertIsNone(self.stale_clause(parent), "a parent depends on its children by result")
 
@@ -252,7 +252,7 @@ class PublishRule(StoreCase):
         self.record(script, tree=self.tree_for("plate"))
         self.assertFalse(decide(script, ran_closure_hash="0" * 64, ran_files=[str(script)]).publish_outputs)
         # With nothing current on disk, an older build still publishes (better than nothing).
-        script.write_text(script.read_text().replace("SIZE = 10.0", "SIZE = 13.0"), encoding="utf-8")
+        script.write_text(script.read_text(encoding="utf-8").replace("SIZE = 10.0", "SIZE = 13.0"), encoding="utf-8")
         self.assertTrue(decide(script, ran_closure_hash="0" * 64, ran_files=[str(script)]).publish_outputs)
 
 
@@ -379,6 +379,53 @@ class LinkOrComponent(StoreCase):
         )
 
 
+class StoreCli(StoreCase):
+    def run_cli(self, argv):
+        import io
+        from contextlib import redirect_stdout
+
+        from cadgen.cli import store as store_cli
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            code = store_cli.main(argv)
+        return code, buffer.getvalue()
+
+    def test_info_counts_objects_and_entries(self) -> None:
+        import json
+
+        script = self.model("plate")
+        self.record(script, tree=self.tree_for("plate"))
+        code, out = self.run_cli(["info", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out)
+        self.assertEqual(payload["root"], os.environ["CADGEN_CACHE_DIR"])
+        self.assertEqual(payload["objects"]["count"], 2, "one component object and one tree")
+        self.assertEqual(payload["index"]["model"], 1)
+
+    def test_why_reports_the_clause_and_exits_nonzero_when_stale(self) -> None:
+        import json
+
+        script = self.model("plate")
+        code, out = self.run_cli(["why", str(script), "--json"])
+        self.assertEqual(code, 1)
+        self.assertTrue(json.loads(out)["stale"])
+        self.record(script, tree=self.tree_for("plate"))
+        code, out = self.run_cli(["why", str(script)])
+        self.assertEqual(code, 0)
+        self.assertIn("verdict current", out)
+        self.assertIn("[ok] 2 closure", out)
+
+    def test_gc_dry_run_removes_nothing(self) -> None:
+        from cadgen.store.objects import has_object, put_object
+
+        orphan = put_object(b"orphan")
+        code, out = self.run_cli(["gc", "--dry-run", "--grace-hours", "0"])
+        self.assertEqual(code, 0)
+        self.assertIn("would remove 1 objects", out)
+        self.assertTrue(has_object(orphan))
+
+
 class ChildrenByResult(StoreCase):
     """End to end over real model runs: a child edit with identical geometry
     leaves the parent current; a geometry change rebuilds it."""
@@ -404,11 +451,11 @@ class ChildrenByResult(StoreCase):
         self.assertEqual(self.run_model(arm), "current")
         self.assertEqual(self.run_model(pin), "current", "the child was built inline and recorded")
 
-        pin.write_text(pin.read_text().replace("height=12.0", "height=12.0 * 1.0"), encoding="utf-8")
+        pin.write_text(pin.read_text(encoding="utf-8").replace("height=12.0", "height=12.0 * 1.0"), encoding="utf-8")
         self.assertEqual(self.run_model(pin), "built", "a semantic edit rebuilds the child")
         self.assertEqual(self.run_model(arm), "current", "identical geometry: the parent's pin still holds")
 
-        pin.write_text(pin.read_text().replace("radius=2.0", "radius=2.5"), encoding="utf-8")
+        pin.write_text(pin.read_text(encoding="utf-8").replace("radius=2.0", "radius=2.5"), encoding="utf-8")
         self.assertEqual(self.run_model(arm), "built", "a geometry change reaches the parent")
 
         from cadgen.store.records import read_record

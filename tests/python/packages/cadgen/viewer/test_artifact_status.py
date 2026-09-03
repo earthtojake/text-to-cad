@@ -1,10 +1,8 @@
 """The freshness verdict, the state machine, and where progress is read from.
 
 Ports ``artifactStatus.test.mjs`` and ``buildProgress.test.mjs``, and adds the
-case neither could have: a record published at the PACKAGES tier must be
-visible. That is the defect this step fixes — ``cadgen step compile`` publishes
-there, the old reader looked only in ``locks/``, and so the viewer's own import
-never showed a bar.
+fixtures over the store: a document's result is a tree plus a record, and the
+verdict reads them (STORE.md).
 """
 
 from __future__ import annotations
@@ -32,6 +30,8 @@ from cadgen.viewer.build_progress import (
     build_progress_snapshot,
     status_record_path,
 )
+
+from tests.python.support.store_fixtures import seed_result
 
 STEP_BYTES = b"ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n"
 
@@ -61,19 +61,28 @@ class _Tree:
         return str(path)
 
     def package(self, step_path, *, kind="assembly-package", components=("c0.surf",), write_payloads=True):
-        package_dir = Path(store_paths.render_package_dir(step_path))
-        package_dir.mkdir(parents=True, exist_ok=True)
-        descriptor = {
-            "kind": kind,
-            "components": {f"k{i}": {"surf": name} for i, name in enumerate(components)},
-        }
-        (package_dir / "assembly.json").write_text(json.dumps(descriptor), encoding="utf-8")
-        if write_payloads:
-            for name in components:
-                target = package_dir / name
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(b"SURF\x00")
-        return package_dir
+        """Seed the document's result: a tree (one component per name) and a
+        record keyed by the document itself. Returns the tree hash."""
+        import hashlib
+
+        descriptor = {"kind": kind, "components": {f"k{i}": {} for i, _name in enumerate(components)}}
+        tree = seed_result(step_path, descriptor, surf=b"SURF\x00")
+        if not write_payloads:
+            from cadgen.store.objects import object_path
+
+            object_path(hashlib.sha256(b"SURF\x00").hexdigest()).unlink()
+        return tree
+
+    def generated_record(self, step_path, script_name="src/plate.py", body=None):
+        """A record for a MODEL that wrote ``step_path`` (a generated document)."""
+        from cadgen.store.records import note_document, write_record
+
+        script = self.root / script_name
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text("", encoding="utf-8")
+        write_record(script, body or {"sourceKind": "python", "tree": "", "closure": {"hash": "", "files": []}, "children": [], "outputs": {}})
+        note_document(step_path, script)
+        return script
 
     def record(self, output_dir, **fields):
         path = Path(status_record_path(str(output_dir)))
@@ -185,7 +194,8 @@ class Verdicts(ArtifactStatusTestCase):
         step = self.tree.step()
         self.tree.package(step)
         Path(step).write_bytes(STEP_BYTES + b"\n")
-        # Content keying IS the digest gate: different bytes, different key.
+        # The record lists the document's sha (gate clause 5): different bytes,
+        # no result for them.
         self.assertEqual(
             artifact_status(step, str(self.tree.root)),
             {"state": "needs-build", "reason": "missing_glb"},
@@ -212,44 +222,21 @@ class Verdicts(ArtifactStatusTestCase):
             {"state": "error", "error": f"No render-artifact format owns this entry: {path}"},
         )
 
-    def test_the_gate_order_missing_then_descriptor_then_kind_then_components(self):
+    def test_the_gate_order_missing_then_components_then_ready(self):
         step = self.tree.step()
-        package_dir = Path(store_paths.render_package_dir(step))
-
         self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
 
-        package_dir.mkdir(parents=True)
-        self.assertEqual(
-            artifact_status(step, str(self.tree.root))["reason"], "missing_step_topology"
-        )
-
-        (package_dir / "assembly.json").write_text('{"kind":"other"}', encoding="utf-8")
-        self.assertEqual(
-            artifact_status(step, str(self.tree.root))["reason"], "unsupported_step_topology"
-        )
-
-        (package_dir / "assembly.json").write_text(
-            '{"kind":"assembly-package","components":{}}', encoding="utf-8"
-        )
+        self.tree.package(step, components=())
         self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
+
+        self.tree.package(step)
+        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "ready"})
 
     def test_a_component_whose_surf_payload_is_absent_is_missing_glb(self):
         step = self.tree.step()
         self.tree.package(step, write_payloads=False)
         self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
 
-    def test_a_package_at_an_older_schema_key_stops_resolving(self):
-        # The schema gate lives in the package KEY, not in a descriptor field.
-        step = self.tree.step()
-        package_dir = self.tree.package(step)
-        stale = package_dir.with_name(
-            package_dir.name.replace(
-                f"-v{store_paths.CACHE_SCHEMA_VERSION}",
-                f"-v{store_paths.CACHE_SCHEMA_VERSION - 1}",
-            )
-        )
-        package_dir.rename(stale)
-        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
 
 
 class GeneratedClassification(ArtifactStatusTestCase):
@@ -271,43 +258,37 @@ class GeneratedClassification(ArtifactStatusTestCase):
         )
         self.assertFalse(is_generated_document(step))
 
-        record = Path(store_paths.source_provenance_record_path(step))
-        record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text(json.dumps({"sourceKind": "python"}), encoding="utf-8")
+        self.tree.generated_record(step)
         self.assertTrue(is_generated_document(step))
 
     def test_an_evicted_truncated_or_kindless_record_degrades_to_imported(self):
+        from cadgen.store.index import entry_path, model_key
+
         step = self.tree.step()
-        record = Path(store_paths.source_provenance_record_path(step))
+        record = entry_path("model", model_key(step))
         record.parent.mkdir(parents=True, exist_ok=True)
         for body in ("{ truncated", "{}", '{"sourceKind":"   "}', "[]", "null"):
             record.write_text(body, encoding="utf-8")
-            # Never raises: the records tier is evictable, so a missing or
-            # broken marker is a routine state, not a fault.
+            # Never raises: the index is evictable, so a missing or broken
+            # record is a routine state, not a fault.
             self.assertFalse(is_generated_document(step), body)
 
     def test_classification_rides_on_a_failing_verdict_too(self):
         # The case where it matters most is a document with NO package: that is
         # exactly when the import path asks whether to offer a compile.
         step = self.tree.step()
-        record = Path(store_paths.source_provenance_record_path(step))
-        record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text(json.dumps({"sourceKind": "python"}), encoding="utf-8")
+        self.tree.generated_record(step)
         verdict = resolve_artifact_verdict(step, str(self.tree.root))
         self.assertFalse(verdict["ok"])
         self.assertEqual(verdict["code"], "missing_glb")
         self.assertTrue(verdict["generated"])
         self.assertTrue(verdict["rawStep"])
 
-    def test_provenance_is_path_keyed_while_packages_are_content_keyed(self):
+    def test_records_are_keyed_by_path_while_results_are_shared_by_content(self):
         one = self.tree.step("one.step")
         two = self.tree.step("two.step")
-        self.assertEqual(
-            store_paths.render_package_dir(one), store_paths.render_package_dir(two)
-        )
-        record = Path(store_paths.source_provenance_record_path(one))
-        record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text(json.dumps({"sourceKind": "python"}), encoding="utf-8")
+        self.assertEqual(self.tree.package(one), self.tree.package(two), "same bytes, one tree")
+        self.tree.generated_record(one)
         self.assertTrue(is_generated_document(one))
         self.assertFalse(is_generated_document(two))
 
@@ -375,23 +356,7 @@ class ProgressReader(ArtifactStatusTestCase):
         for key in ("phase", "label", "done", "total", "determinate"):
             self.assertIn(key, progress, key)
 
-    def test_a_record_at_the_PACKAGES_tier_is_visible(self):
-        # THE REGRESSION TEST FOR THIS STEP. `cadgen step compile` publishes at
-        # status_path(render_package_dir(...)), not the locks tier — so reading
-        # only locks/ meant the viewer's own import never reported a phase.
-        step = self.tree.step()
-        self.assertIsNone(build_progress_snapshot(step))
-        self.tree.record(store_paths.render_package_dir(step), runId="pkg-run")
-        snapshot = build_progress_snapshot(step)
-        self.assertIsNotNone(snapshot, "a packages-tier record must be read")
-        self.assertEqual(snapshot["runId"], "pkg-run")
 
-    def test_the_fresher_of_the_two_tiers_wins(self):
-        step = self.tree.step()
-        now = round(time.time() * 1000)
-        self.tree.record(store_paths.coordination_scope(step), runId="older", updatedAt=now - 5000)
-        self.tree.record(store_paths.render_package_dir(step), runId="newer", updatedAt=now)
-        self.assertEqual(build_progress_snapshot(step)["runId"], "newer")
 
     def test_a_terminal_or_stale_or_absent_record_yields_nothing(self):
         step = self.tree.step()
@@ -438,17 +403,14 @@ class ProgressReader(ArtifactStatusTestCase):
         self.tree.record(store_paths.coordination_scope(step))
         self.assertIs(build_progress_snapshot(step)["busy"], False)
 
-        self.tree.record(store_paths.render_package_dir(step), runId="pkg-run")
-        self.assertIs(build_progress_snapshot(step)["busy"], False)
-
-        registry.publish(store_paths.render_package_dir(step), "live", {"phase": "components"})
+        registry.publish(store_paths.coordination_scope(step), "live", {"phase": "components"})
         self.assertIs(build_progress_snapshot(step, registry=registry)["busy"], False)
 
 
 class InProcessRegistry(ArtifactStatusTestCase):
     def test_our_own_build_is_served_from_memory_not_from_disk(self):
         step = self.tree.step()
-        package_dir = store_paths.render_package_dir(step)
+        package_dir = store_paths.coordination_scope(step)
         registry = ProgressRegistry()
         registry.publish(package_dir, "live-run", {"phase": "components", "done": 4, "total": 9})
         snapshot = build_progress_snapshot(step, registry=registry)
@@ -459,12 +421,12 @@ class InProcessRegistry(ArtifactStatusTestCase):
         step = self.tree.step()
         self.tree.record(store_paths.coordination_scope(step), runId="from-disk")
         registry = ProgressRegistry()
-        registry.publish(store_paths.render_package_dir(step), "in-process", {"phase": "package"})
+        registry.publish(store_paths.coordination_scope(step), "in-process", {"phase": "package"})
         self.assertEqual(build_progress_snapshot(step, registry=registry)["runId"], "in-process")
 
     def test_clearing_falls_back_to_the_file_tiers(self):
         step = self.tree.step()
-        package_dir = store_paths.render_package_dir(step)
+        package_dir = store_paths.coordination_scope(step)
         registry = ProgressRegistry()
         registry.publish(package_dir, "live", {"phase": "package"})
         registry.clear(package_dir)
@@ -475,7 +437,7 @@ class InProcessRegistry(ArtifactStatusTestCase):
         # in a finally. The window is for producers we cannot observe.
         step = self.tree.step()
         registry = ProgressRegistry()
-        registry.publish(store_paths.render_package_dir(step), "live", {"phase": "generate"})
+        registry.publish(store_paths.coordination_scope(step), "live", {"phase": "generate"})
         snapshot = build_progress_snapshot(step, registry=registry)
         self.assertIsNotNone(snapshot)
         self.assertGreater(snapshot["progress"]["updatedAt"], 0)
@@ -503,27 +465,6 @@ class InvalidUtf8(ArtifactStatusTestCase):
         self.assertIn(marker, body, "precondition: the fixture carries the marker")
         path.write_bytes(body.replace(marker, self.BAD))
 
-    def test_a_descriptor_with_one_bad_byte_stays_ready(self):
-        # THE STATE CHANGE: ready -> needs-build. The viewer offered to rebuild
-        # a package that was already complete on disk.
-        step = self.tree.step()
-        package_dir = self.tree.package(step)
-        descriptor = package_dir / "assembly.json"
-        descriptor.write_bytes(
-            json.dumps(
-                {
-                    "kind": "assembly-package",
-                    "name": "NAME_HERE",
-                    "components": {"k0": {"surf": "c0.surf"}},
-                }
-            ).encode("utf-8")
-        )
-        self._corrupt(descriptor)
-        self.assertEqual(
-            artifact_status(step, str(self.tree.root)),
-            {"state": "ready"},
-            "an undecodable byte inside the descriptor must not read as NO descriptor",
-        )
 
     def test_a_progress_record_with_one_bad_byte_stays_in_flight(self):
         # THE OTHER STATE CHANGE: generating -> ready. The record is written by

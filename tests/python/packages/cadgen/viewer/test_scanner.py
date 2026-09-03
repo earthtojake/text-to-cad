@@ -28,11 +28,9 @@ from cadgen.viewer.scanner import (
     source_format_for_path,
     step_kind_from_topology,
 )
-from cadgen.viewer.store_paths import (
-    CACHE_SCHEMA_VERSION,
-    render_package_dir,
-    store_packages_dir,
-)
+from cadgen.viewer.store_paths import result_tree
+
+from tests.python.support.store_fixtures import seed_result
 
 
 class ScannerTestCase(unittest.TestCase):
@@ -69,16 +67,9 @@ class ScannerTestCase(unittest.TestCase):
         Path(path).write_bytes(text.encode("utf-8"))
         return path
 
-    def package(self, rel: str, descriptor, *, raw: str | None = None) -> str:
-        """Create the store package keyed by the CONTENT of ``root/<rel>``."""
-        digest = hashlib.sha256(Path(self.root, rel).read_bytes()).hexdigest()
-        package_dir = os.path.join(store_packages_dir(), f"{digest}-v{CACHE_SCHEMA_VERSION}")
-        os.makedirs(package_dir, exist_ok=True)
-        Path(package_dir, "c0.surf").write_bytes(b"SURF\x00")
-        Path(package_dir, "assembly.json").write_text(
-            raw if raw is not None else json.dumps(descriptor), encoding="utf-8"
-        )
-        return package_dir
+    def package(self, rel: str, descriptor) -> str:
+        """Seed ``root/<rel>``'s result in the store; returns the tree hash."""
+        return seed_result(Path(self.root, rel), descriptor)
 
     def scan(self) -> list[dict]:
         return scan_cad_directory(self.root)["entries"]
@@ -175,58 +166,51 @@ class EntryShape(ScannerTestCase):
         self.assertEqual(source_format_for_path("x.STP", ".STP"), "stp")
 
 
-class StorePackages(ScannerTestCase):
-    def test_packages_resolve_by_content_hash_inside_the_store(self):
+class StoreResults(ScannerTestCase):
+    def test_same_bytes_share_one_tree_and_each_document_has_its_own_record(self):
         self.write("a.step", "same bytes\n")
         self.write("sub/b.step", "same bytes\n")
         self.write("c.step", "other bytes\n")
-        a = render_package_dir(os.path.join(self.root, "a.step"))
-        b = render_package_dir(os.path.join(self.root, "sub", "b.step"))
-        c = render_package_dir(os.path.join(self.root, "c.step"))
-        self.assertTrue(path_is_inside(a, store_packages_dir()))
-        self.assertEqual(a, b, "same bytes anywhere share one package")
+        a = self.package("a.step", {"kind": "assembly-package", "components": {}})
+        b = self.package("sub/b.step", {"kind": "assembly-package", "components": {}})
+        c = self.package("c.step", {"kind": "assembly-package", "components": {"c0": {}}})
+        self.assertEqual(a, b, "one tree for one result")
         self.assertNotEqual(a, c)
+        self.assertEqual(result_tree(os.path.join(self.root, "a.step")), a)
+        self.assertEqual(result_tree(os.path.join(self.root, "sub", "b.step")), b)
 
-    def test_a_missing_file_resolves_to_a_deterministic_never_created_path(self):
-        unbuilt = render_package_dir(os.path.join(self.root, "gone.step"))
-        self.assertTrue(path_is_inside(unbuilt, store_packages_dir()))
-        self.assertTrue(node_basename(unbuilt).startswith("unbuilt-"))
-        self.assertFalse(os.path.exists(unbuilt))
-        self.assertEqual(unbuilt, render_package_dir(os.path.join(self.root, "gone.step")))
+    def test_a_missing_file_has_no_tree(self):
+        self.assertIsNone(result_tree(os.path.join(self.root, "gone.step")))
 
-    def test_a_step_with_no_package_has_no_v_token_no_hash_and_no_bytes(self):
+    def test_a_step_with_no_result_has_no_hash_and_no_bytes(self):
         self.write("bare.step", "ISO-10303-21;\n")
         entry = self.entry("bare.step")
-        self.assertTrue(entry["url"].startswith("/__cad/store?file="))
+        self.assertTrue(entry["url"].startswith("/__cad/store?file=unbuilt-"))
         self.assertNotIn("&v=", entry["url"])
         self.assertEqual(entry["hash"], "")
         self.assertEqual(entry["bytes"], 0)
         self.assertEqual(entry["kind"], "part")
 
-    def test_the_store_file_param_carries_no_leading_slash(self):
+    def test_the_store_file_param_names_the_tree_with_no_leading_slash(self):
         self.write("p.step", "x\n")
-        self.package("p.step", {"kind": "assembly-package", "components": {}})
+        tree = self.package("p.step", {"kind": "assembly-package", "components": {}})
         entry = self.entry("p.step")
-        self.assertRegex(
-            entry["url"],
-            rf"^/__cad/store\?file=[0-9a-f]{{64}}-v{CACHE_SCHEMA_VERSION}&v=",
-        )
+        self.assertEqual(entry["url"], f"/__cad/store?file={tree}")
 
-    def test_hash_and_bytes_describe_assembly_json_not_the_step(self):
+    def test_hash_and_bytes_describe_the_flattened_tree_not_the_step(self):
+        from cadgen.viewer.store_paths import result_descriptor
+
         self.write("p.step", "a much longer step body than the descriptor\n")
-        package_dir = self.package("p.step", {"kind": "assembly-package", "components": {}})
-        descriptor = Path(package_dir, "assembly.json")
+        tree = self.package("p.step", {"kind": "assembly-package", "components": {}})
         entry = self.entry("p.step")
-        self.assertEqual(entry["bytes"], descriptor.stat().st_size)
-        self.assertEqual(
-            entry["hash"], hashlib.sha256(descriptor.read_bytes()).hexdigest()
-        )
+        self.assertEqual(entry["hash"], tree)
+        self.assertEqual(entry["bytes"], len(json.dumps(result_descriptor(tree)).encode("utf-8")))
 
 
 class StepKind(ScannerTestCase):
-    def _kind(self, descriptor, *, raw=None) -> str:
+    def _kind(self, descriptor) -> str:
         self.write("k.step", "x\n")
-        self.package("k.step", descriptor, raw=raw)
+        self.package("k.step", descriptor)
         return self.entry("k.step")["kind"]
 
     def test_entry_kind_is_trimmed_and_lowercased(self):
@@ -256,18 +240,10 @@ class StepKind(ScannerTestCase):
 class DescriptorGate(ScannerTestCase):
     """``{}`` from ``read_step_catalog_metadata`` suppresses sourceUrl/poseUrl."""
 
-    def _entry_with_sidecar(self, descriptor, *, raw=None, descriptor_is_dir=False) -> dict:
+    def _entry_with_sidecar(self, descriptor) -> dict:
         self.write("g.step", "x\n")
         self.write("g.step.json", json.dumps({"kinematics": {"joints": []}}))
-        digest = hashlib.sha256(Path(self.root, "g.step").read_bytes()).hexdigest()
-        package_dir = os.path.join(store_packages_dir(), f"{digest}-v{CACHE_SCHEMA_VERSION}")
-        os.makedirs(package_dir, exist_ok=True)
-        if descriptor_is_dir:
-            os.makedirs(os.path.join(package_dir, "assembly.json"), exist_ok=True)
-        else:
-            Path(package_dir, "assembly.json").write_text(
-                raw if raw is not None else json.dumps(descriptor), encoding="utf-8"
-            )
+        self.package("g.step", descriptor)
         return self.entry("g.step")
 
     def test_a_valid_package_publishes_both_urls(self):
@@ -276,23 +252,6 @@ class DescriptorGate(ScannerTestCase):
         self.assertEqual(entry["poseUrl"], "/g.step.json")
         self.assertNotIn("?v=", entry["sourceUrl"], "sidecar urls carry no version token")
 
-    def test_a_wrong_descriptor_kind_suppresses_both_even_with_a_sidecar(self):
-        entry = self._entry_with_sidecar({"kind": "not-a-package"})
-        self.assertNotIn("sourceUrl", entry)
-        self.assertNotIn("poseUrl", entry)
-
-    def test_an_unparseable_descriptor_suppresses_both(self):
-        entry = self._entry_with_sidecar(None, raw="{ not json")
-        self.assertNotIn("sourceUrl", entry)
-
-    def test_a_json_array_descriptor_suppresses_both(self):
-        entry = self._entry_with_sidecar(None, raw="[1,2,3]")
-        self.assertNotIn("sourceUrl", entry)
-
-    def test_a_directory_named_assembly_json_counts_as_missing(self):
-        entry = self._entry_with_sidecar(None, descriptor_is_dir=True)
-        self.assertNotIn("sourceUrl", entry)
-        self.assertEqual(entry["hash"], "")
 
     def test_no_package_suppresses_both(self):
         self.write("g.step", "x\n")

@@ -37,11 +37,9 @@ from urllib.parse import quote
 
 from cadgen.viewer import handler as handler_module
 from cadgen.viewer.http_app import create_cad_app
-from cadgen.viewer.store_paths import (
-    CACHE_SCHEMA_VERSION,
-    render_package_dir,
-    store_packages_dir,
-)
+from cadgen.viewer.store_paths import result_tree
+
+from tests.python.support.store_fixtures import seed_result
 
 SECRET = "TOP-SECRET-BYTES"
 
@@ -82,15 +80,10 @@ class AttackFixture:
         os.symlink(os.path.join(self.outside, "secret.step"), os.path.join(self.root, "escape.step"))
         os.symlink(self.outside, os.path.join(self.root, "lib"))
 
-        # A real package in the store, with a hidden staging sibling.
-        self.package_name = f"{'a' * 64}-v{CACHE_SCHEMA_VERSION}"
-        package = os.path.join(store_packages_dir(), self.package_name)
-        os.makedirs(os.path.join(package, "components"))
-        Path(package, "components", "c0.surf").write_bytes(b"SURF\x00\x01\x02")
-        Path(package, "assembly.json").write_text('{"kind":"assembly-package"}', encoding="utf-8")
-        staging = os.path.join(store_packages_dir(), ".building-x")
-        os.makedirs(staging)
-        Path(staging, "assembly.json").write_text(SECRET, encoding="utf-8")
+        # A real result in the store: the tree hash is what the store route serves.
+        self.package_name = seed_result(
+            Path(self.root, "part.step"), {"kind": "assembly-package", "components": {"c0": {}}}, surf=b"SURF\x00\x01\x02"
+        )
         Path(self.cache, "packages-evil-marker").write_text(SECRET, encoding="utf-8")
 
         self.dist = os.path.join(self.base, "dist")
@@ -547,8 +540,7 @@ class L_ArtifactRouteContainment(SecurityTestCase):
 
     def test_the_whole_chain_dies_at_the_build_route(self):
         victim = os.path.join(self.fixture.outside, "secret.step")
-        package_dir = render_package_dir(victim)
-        key = os.path.basename(package_dir)
+        key = "f" * 64
 
         # 1. The hop that was always correct, kept as the control.
         status, _, body = self.fixture.asset(victim)
@@ -559,9 +551,9 @@ class L_ArtifactRouteContainment(SecurityTestCase):
         status, _, body = self.artifact(victim, method="POST")
         self.assertDenied(status, body, {403})
         self.assertEqual(json.loads(body)["error"], "Forbidden")
-        self.assertFalse(
-            os.path.isdir(package_dir),
-            "a refused ref must never reach the kernel: no package may exist",
+        self.assertIsNone(
+            result_tree(victim),
+            "a refused ref must never reach the kernel: no result may exist",
         )
 
         # 3/4. Nothing was compiled, so there is nothing to read back out.

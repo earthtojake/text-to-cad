@@ -34,6 +34,7 @@ from .backend import require_contained
 from .store_paths import (
     SOURCE_SIDECAR_SCHEMA_VERSION,
     component_object_present,
+    document_current,
     record_for,
     result_descriptor,
     result_tree,
@@ -143,7 +144,7 @@ def is_generated_document(step_path) -> bool:
     if sidecar is not None and sidecar.get("schemaVersion") == SOURCE_SIDECAR_SCHEMA_VERSION:
         return True
     record = record_for(step_path)
-    return bool(record is not None and str(record.get("sourceKind") or "").strip())
+    return bool(record is not None and str(record.get("sourceKind") or "").strip().lower() == "python")
 
 
 def owns_step_path(file_path) -> bool:
@@ -222,7 +223,9 @@ def _validate_step(step_path: str) -> dict:
     """
     generated = is_generated_document(step_path)
     tree = result_tree(step_path)
-    if tree is None:
+    if tree is None or not document_current(step_path):
+        # No result for THESE bytes: never built, its objects collected, or the
+        # document edited since its record was written.
         return {"ok": False, "code": "missing_glb", "tree": None, "generated": generated}
     descriptor = result_descriptor(tree)
     if descriptor is None:
@@ -250,7 +253,7 @@ def _validate_step(step_path: str) -> dict:
             "generated": generated,
         }
     for component in components:
-        surf = str((component or {}).get("surf") or "") if isinstance(component, dict) else ""
+        surf = str((component or {}).get("surfObject") or "") if isinstance(component, dict) else ""
         if not surf or not component_object_present(surf):
             return {
                 "ok": False,

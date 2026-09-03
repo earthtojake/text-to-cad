@@ -84,7 +84,7 @@ def seed_result(
             for i, cid in enumerate(tree_components, start=1)
         ]
     tree: dict[str, Any] = {
-        "label": descriptor.get("label") or document.stem,
+        "label": descriptor.get("label") or "model",
         "entryKind": descriptor.get("entryKind") or entry_kind,
         "units": "mm",
         "components": tree_components,

@@ -33,8 +33,10 @@ COMPONENT_DIRNAME = "components"
 
 
 def descriptor_for_view(tree_hash: str) -> dict[str, Any] | None:
-    """The flattened descriptor with component refs spelled as package-relative
-    paths (``components/<object>.surf``), the shape the JS client expects."""
+    """The flattened tree with component refs spelled as view-relative paths
+    (``components/<cid>.surf``, the file name every reader derives from an
+    occurrence's component id) and the object hashes beside them
+    (``surfObject``/``brepObject``)."""
     descriptor = flatten(tree_hash)
     if descriptor is None:
         return None
@@ -44,19 +46,28 @@ def descriptor_for_view(tree_hash: str) -> dict[str, Any] | None:
             digest = str((entry or {}).get(key) or "")
             if digest:
                 entry[f"{key}Object"] = digest
-                entry[key] = f"{COMPONENT_DIRNAME}/{digest}.{key}"
+                entry[key] = f"{COMPONENT_DIRNAME}/{cid}.{key}"
     return descriptor
 
 
-def component_object_for_ref(ref: str) -> tuple[str, str] | None:
-    """``components/<object>.surf`` -> (object hash, suffix), or None."""
+def component_object_for_ref(ref: str, descriptor: dict[str, Any] | None = None) -> tuple[str, str] | None:
+    """``components/<cid>.surf`` -> (object hash, suffix) through ``descriptor``
+    (a view descriptor); a bare object hash in place of the cid also resolves.
+    None when nothing matches."""
     name = str(ref or "").replace("\\", "/").rsplit("/", 1)[-1]
     if "." not in name:
         return None
-    digest, suffix = name.rsplit(".", 1)
-    if not is_object_hash(digest) or suffix not in ("surf", "brep", "glb"):
+    stem, suffix = name.rsplit(".", 1)
+    if suffix not in ("surf", "brep", "glb"):
         return None
-    return digest, suffix
+    if descriptor is not None:
+        entry = (descriptor.get("components") or {}).get(stem) or {}
+        digest = str(entry.get(f"{suffix}Object") or "")
+        if is_object_hash(digest):
+            return digest, suffix
+    if is_object_hash(stem):
+        return stem, suffix
+    return None
 
 
 def views_root() -> Path:
@@ -103,11 +114,11 @@ def export_view(tree_hash: str, dest: Path | None = None) -> Path:
     root = Path(dest) if dest is not None else Path(tempfile.mkdtemp(prefix="cadgen-view-"))
     comp_dir = root / COMPONENT_DIRNAME
     comp_dir.mkdir(parents=True, exist_ok=True)
-    for entry in (descriptor.get("components") or {}).values():
+    for cid, entry in (descriptor.get("components") or {}).items():
         for key in ("surf", "brep"):
             digest = str(entry.get(f"{key}Object") or "")
             if digest:
-                target = comp_dir / f"{digest}.{key}"
+                target = comp_dir / f"{cid}.{key}"
                 if not target.exists():
                     shutil.copyfile(object_path(digest), target)
     (root / DESCRIPTOR_NAME).write_text(json.dumps(descriptor), encoding="utf-8")
@@ -131,7 +142,7 @@ def ingest_view(view_dir: Path, *, base_tree: dict[str, Any]) -> tuple[str, dict
         for key in ("surf", "brep"):
             digest = str(entry.pop(f"{key}Object", "") or "")
             if not digest:
-                resolved = component_object_for_ref(str(entry.get(key) or ""))
+                resolved = component_object_for_ref(str(entry.get(key) or ""), descriptor)
                 digest = resolved[0] if resolved else ""
             entry[key] = digest
         components[cid] = entry
@@ -152,21 +163,23 @@ def ingest_view(view_dir: Path, *, base_tree: dict[str, Any]) -> tuple[str, dict
 
 
 def virtual_path(rel: str) -> tuple[bytes | Path | None, str]:
-    """Resolve ``<tree>/assembly.json`` or ``<tree>/components/<object>.<suffix>``.
+    """Resolve ``<tree>`` (or ``<tree>/assembly.json``) and ``<tree>/components/<cid>.<suffix>``.
 
     Returns ``(payload, content_type)``: bytes for the descriptor, a Path for a
     component object (streamable), or ``(None, "")`` when nothing matches."""
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p]
-    if len(parts) < 2 or not is_object_hash(parts[0]):
+    if not parts or not is_object_hash(parts[0]):
         return None, ""
     tree_hash = parts[0]
-    if parts[1:] == [DESCRIPTOR_NAME]:
+    if parts[1:] in ([], [DESCRIPTOR_NAME]):
+        # The tree itself IS the "directory" the client names; its descriptor
+        # answers for both spellings.
         descriptor = descriptor_for_view(tree_hash)
         if descriptor is None:
             return None, ""
         return json.dumps(descriptor).encode("utf-8"), "application/json"
     if len(parts) == 3 and parts[1] == COMPONENT_DIRNAME:
-        resolved = component_object_for_ref(parts[2])
+        resolved = component_object_for_ref(parts[2], descriptor_for_view(tree_hash))
         if resolved is None:
             return None, ""
         digest, suffix = resolved

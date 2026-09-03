@@ -240,15 +240,16 @@ def _sha256_file(file_path, stat_result=None) -> str:
 
 
 def _store_asset_url(tree: str) -> str:
-    """``/__cad/store?file=<tree>/assembly.json``.
+    """``/__cad/store?file=<tree>``.
 
-    Raw ``encodeURIComponent``, not form encoding: the client's
-    ``resolvePackageAssetUrl`` rewrites this same ``file`` param for sub-assets
-    (``<tree>/components/<object>.surf``), and the value carries NO leading
-    slash (the store route strips them, but the catalog must not emit one). No
-    ``?v=`` token: a tree is content-addressed, so its hash IS the version.
+    The tree hash stands where a directory used to: the client's
+    ``resolvePackageAssetUrl`` appends ``/assembly.json`` and
+    ``/components/<cid>.surf`` to this same ``file`` param, and the store route
+    resolves both by hash. The value carries NO leading slash (the route strips
+    them, but the catalog must not emit one). No ``?v=`` token: a tree is
+    content-addressed, so its hash IS the version.
     """
-    return f"/__cad/store?file={encode_uri_component(f'{tree}/{_STEP_DESCRIPTOR_NAME}')}"
+    return f"/__cad/store?file={encode_uri_component(tree)}"
 
 
 def asset_for_path(repo_root, file_path) -> dict | None:

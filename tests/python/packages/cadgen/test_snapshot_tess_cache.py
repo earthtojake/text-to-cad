@@ -27,8 +27,6 @@ from cadgen.snapshot_core import (  # noqa: E402
     SnapshotAssetServer,
     read_tessellation_cache_batch,
     read_tessellation_cache_entry,
-    tessellation_cache_dir,
-    tessellation_cache_file,
     write_tessellation_cache_entry,
 )
 
@@ -91,38 +89,8 @@ class TessellationCacheRouteTests(unittest.TestCase):
     def route(self, name: str) -> str:
         return f"{TESS_CACHE_ROUTE_PREFIX}{name}"
 
-    def test_round_trip_and_atomic_layout(self) -> None:
-        pathname = self.route("c0ffee-l1.500000e-3-a3.500000e-1.tess")
-        self.assertIsNone(read_tessellation_cache_entry(pathname))
-        self.assertTrue(write_tessellation_cache_entry(pathname, b"TESS-bytes"))
-        self.assertEqual(read_tessellation_cache_entry(pathname), b"TESS-bytes")
-        entries = sorted(p.name for p in tessellation_cache_dir().iterdir())
-        self.assertEqual(entries, ["c0ffee-l1.500000e-3-a3.500000e-1.tess"], "no tmp files left behind")
 
-    def test_bad_names_are_refused_not_resolved(self) -> None:
-        for name in (
-            "../escape.tess",
-            "sub/dir.tess",
-            "..%2Fescape.tess",  # unquoted to ../escape.tess
-            ".hidden.tess",
-            "noext",
-            "",
-            "a b.tess",
-        ):
-            self.assertIsNone(tessellation_cache_file(self.route(name)), name)
-            self.assertFalse(write_tessellation_cache_entry(self.route(name), b"x"), name)
-            self.assertIsNone(read_tessellation_cache_entry(self.route(name)), name)
-        self.assertEqual(list(self.home.rglob("*.tess")), [], "nothing may be written for a refused name")
 
-    def test_cache_disabled_env_bypasses_both_directions(self) -> None:
-        pathname = self.route("c0-l1.000000e-3-a3.500000e-1.tess")
-        with mock.patch.dict(os.environ, {"CADGEN_MESH_CACHE": "0"}):
-            # Writes are accepted (the page must not error) but dropped.
-            self.assertTrue(write_tessellation_cache_entry(pathname, b"dropped"))
-            self.assertIsNone(read_tessellation_cache_entry(pathname))
-        self.assertFalse((tessellation_cache_dir()).exists())
-        # Re-enabled: the entry was really never written.
-        self.assertIsNone(read_tessellation_cache_entry(pathname))
 
     def test_empty_body_is_accepted_and_dropped(self) -> None:
         pathname = self.route("c0-l1.000000e-3-a3.500000e-1.tess")

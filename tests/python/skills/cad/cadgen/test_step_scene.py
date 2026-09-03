@@ -102,14 +102,20 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
             compound = scene_to_build123d_compound(scene)
             package_dir = result_view_dir(step_path)
             step_hash = step_file_hash(step_path)
+            from cadgen.store.records import write_record
+
             with artifact_build(STEP_PACKAGE, package_dir):
-                build_view(
+                built = build_view(
                     compound,
                     package_dir=package_dir,
                     root_name="synthetic",
                     single_component=False,
                     provenance={"stepHash": step_hash, "sourceKind": "step"},
                 )
+            write_record(
+                step_path,
+                {"sourceKind": "step", "entryKind": "assembly", "tree": built["tree"], "closure": {"hash": step_hash, "files": [], "static": True}, "children": [], "outputs": {}, "stepHash": step_hash},
+            )
 
             restored = scene_from_render_package(step_path, step_hash=step_hash)
             self.assertIsNotNone(restored)
