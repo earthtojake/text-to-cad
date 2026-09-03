@@ -7,13 +7,13 @@ name: Deploy Docs
 # ../../packages/cadgen-js/src/*), so it needs the source tree, which every ref
 # of main is. Releases pass the release commit itself, which carries the bumped
 # VERSION and the stamped apps/docs/package.json the site header reads. To
-# redeploy a past release, pass its tag.
+# redeploy a past release, pass its tag (`v0.5.0`; bare `0.4.28` before 0.5.0).
 
 on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Ref to deploy — main, or a release tag.
+        description: Ref to deploy — main, or a release tag (v0.5.0).
         required: true
         default: main
         type: string

@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
 
 BUMP_VERSION="$SCRIPT_DIR/bump-version.sh"
+# shellcheck source=release-tags.sh
+source "$SCRIPT_DIR/release-tags.sh"
 REMOTE="${RELEASE_REMOTE:-origin}"
 REPO=""
 DRY_RUN=0
@@ -133,7 +135,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     echo "- Run scripts/test/test.sh"
   fi
   echo "- Commit canonical release version and bundled outputs as: Release $next_version"
-  echo "- Create git tag: $next_version"
+  echo "- Create git tag: $(release_tag_name "$next_version")"
   if [ "$SKIP_PUSH" -eq 0 ]; then
     echo "- Push current branch and tag to $REMOTE"
   fi
@@ -154,12 +156,13 @@ if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --o
   die "working tree must be clean before release prep starts"
 fi
 
-if git rev-parse -q --verify "refs/tags/$next_version" >/dev/null; then
-  die "local tag already exists: $next_version"
+next_tag="$(release_tag_name "$next_version")"
+if git rev-parse -q --verify "refs/tags/$next_tag" >/dev/null; then
+  die "local tag already exists: $next_tag"
 fi
 
-if git ls-remote --exit-code --tags "$REMOTE" "refs/tags/$next_version" >/dev/null 2>&1; then
-  die "remote tag already exists on $REMOTE: $next_version"
+if git ls-remote --exit-code --tags "$REMOTE" "refs/tags/$next_tag" >/dev/null 2>&1; then
+  die "remote tag already exists on $REMOTE: $next_tag"
 else
   ls_remote_status=$?
   if [ "$ls_remote_status" -ne 2 ]; then
@@ -173,8 +176,8 @@ if [ "$SKIP_RELEASE" -eq 0 ]; then
   if [ -n "$REPO" ]; then
     gh_repo_args=(-R "$REPO")
   fi
-  if gh "${gh_repo_args[@]}" release view "$next_version" >/dev/null 2>&1; then
-    die "GitHub Release already exists: $next_version"
+  if gh "${gh_repo_args[@]}" release view "$next_tag" >/dev/null 2>&1; then
+    die "GitHub Release already exists: $next_tag"
   fi
 fi
 
@@ -196,15 +199,15 @@ if git diff --cached --quiet; then
 fi
 
 git commit -m "Release $next_version"
-git tag "$next_version"
+git tag "$next_tag"
 
 if [ "$SKIP_PUSH" -eq 0 ]; then
   git push "$REMOTE" "$branch"
-  git push "$REMOTE" "$next_version"
+  git push "$REMOTE" "refs/tags/$next_tag"
 fi
 
 if [ "$SKIP_RELEASE" -eq 0 ]; then
-  release_args=(release create "$next_version" --verify-tag --generate-notes --title "$next_version")
+  release_args=(release create "$next_tag" --verify-tag --generate-notes --title "$next_tag")
   if [ "$PUBLISH" -eq 0 ]; then
     release_args+=(--draft)
   fi

@@ -10,6 +10,8 @@ VERSION_FILE="$REPO_ROOT/$VERSION_PATH"
 # comparisons against older tags always need this fallback; it is not
 # transitional and must not be removed once main carries the new path.
 LEGACY_VERSION_PATH="plugins/cad/VERSION"
+# shellcheck source=release-tags.sh
+source "$SCRIPT_DIR/release-tags.sh"
 
 PART=""
 SET_VERSION=""
@@ -362,7 +364,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     fi
   fi
   if [ "$TAG" -eq 1 ]; then
-    echo "Would create release tag: $next_version"
+    echo "Would create release tag: $(release_tag_name "$next_version")"
   fi
   echo "Release workflow: gh workflow run release.yml"
   echo "Local fallback: scripts/release/bump-version.sh --set-version $next_version --no-commit"
@@ -378,9 +380,9 @@ if [ "$COMMIT" -eq 1 ] || [ "$AMEND" -eq 1 ]; then
 fi
 
 if [ "$TAG" -eq 1 ]; then
-  create_release_tag "$next_version"
+  create_release_tag "$(release_tag_name "$next_version")"
 elif [ "$COMMIT" -eq 1 ] || [ "$AMEND" -eq 1 ]; then
-  echo "Release tag to create separately: $next_version"
+  echo "Release tag to create separately: $(release_tag_name "$next_version")"
 else
   echo "Release workflow: gh workflow run release.yml"
   echo "Local fallback: scripts/release/bump-version.sh --set-version $next_version --no-commit"

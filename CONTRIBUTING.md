@@ -340,10 +340,14 @@ One run, on `main`:
    (`skip-existing`, so a rerun is a no-op).
 3. **Deploy Docs** and **Tag + GitHub Release**, both from the same commit.
 
-The publish gate ships only when `VERSION` is past the latest semver tag, or
-equal to it with the tag missing (a run that uploaded the wheel and died before
-tagging). Nothing is committed or pushed to `main` after the release PR merge:
-the tag points at the source commit, and `git describe` on `main` is meaningful.
+Release tags are `v<VERSION>` (`v0.5.0`) from 0.5.0 on; releases before that
+were tagged bare (`0.4.28`), and `scripts/release/release-tags.sh` is the one
+place that knows both spellings — every "latest tag" lookup goes through it and
+compares versions, not tag strings. The publish gate ships only when `VERSION`
+is past the latest release tag, or equal to it with the tag missing (a run that
+uploaded the wheel and died before tagging). Nothing is committed or pushed to
+`main` after the release PR merge: the tag points at the source commit, and
+`git describe` on `main` is meaningful.
 
 ### Republishing and resuming (`bump=none`)
 
@@ -370,7 +374,7 @@ release, from a ref that defaults to `main`:
 
 ```bash
 gh workflow run deploy-docs.yml -f ref=main
-gh workflow run deploy-docs.yml -f ref=0.5.0   # a past release: its tag
+gh workflow run deploy-docs.yml -f ref=v0.5.0  # a past release: its tag
 ```
 
 ### Local and manual fallbacks
@@ -382,7 +386,7 @@ git fetch --tags origin
 scripts/release/bump-version.sh patch --no-commit
 node scripts/release/sync-version.mjs
 scripts/release/pin-cadgen-requirements.sh
-scripts/release/check-version.sh --incremented-from "refs/tags/$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1)"
+scripts/release/check-version.sh --incremented-from "refs/tags/$(source scripts/release/release-tags.sh && latest_release_tag)"
 node scripts/release/sync-version.mjs --check
 ```
 
@@ -396,7 +400,12 @@ draft release unless `--publish` is passed.
 (Windows)` status checks (strict: up to date with `main`), no force pushes and
 no deletions — the rules `develop` carried before the cutover. The `Release`
 workflow's release PR merges through the same gate. Keep the repository tag
-ruleset for `[0-9]*.[0-9]*.[0-9]*` and immutable releases.
+ruleset (extend its pattern to cover `v[0-9]*.[0-9]*.[0-9]*` beside the bare
+form) and immutable releases.
+
+Dependency updates arrive as Dependabot PRs (`.github/dependabot.yml`: weekly,
+one grouped PR per ecosystem for minor + patch bumps, labelled `dependencies`
+so they land in the release notes' Maintenance category).
 
 ### Cutover runbook (one time, manual)
 
@@ -463,7 +472,7 @@ Steps, in order (none of these are run by the workflow):
    unused too and can go.
 7. The first release after the cutover is an ordinary
    `gh workflow run release.yml --ref main -f bump=minor` (0.5.0). The gate
-   compares against the latest tag (0.4.28), not against the old `main`.
+   compares against the latest tag (`0.4.28`, bare) and creates `v0.5.0`.
 
 ## Iteration Loop
 

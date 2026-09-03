@@ -13,6 +13,9 @@ name: Release
 # bump=none republishes main as it stands: the resume path when a previous run
 # uploaded the wheel (skip-existing makes that a no-op) but failed before the
 # tag, or when the docs deploy needs rerunning for the current version.
+#
+# Release tags are `v<VERSION>` from 0.5.0 on; earlier releases were tagged bare
+# (`0.4.28`). scripts/release/release-tags.sh is the one place that knows both.
 
 on:
   workflow_dispatch:
@@ -135,7 +138,7 @@ jobs:
           # check-version.sh covers VERSION's shape AND every skill pin equalling it.
           node scripts/release/sync-version.mjs --check
           if [ "$CHANGED" = "true" ]; then
-            latest_tag="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1 || true)"
+            latest_tag="$(source scripts/release/release-tags.sh && latest_release_tag)"
             if [ -n "$latest_tag" ]; then
               scripts/release/check-version.sh --incremented-from "refs/tags/$latest_tag"
             else
@@ -256,14 +259,15 @@ jobs:
       - name: Check canonical release version
         run: scripts/release/check-version.sh
 
-      # Publish only when the version is new: past the latest tag, or equal to it
-      # with the tag missing (a run that uploaded the wheel and died before
-      # tagging -- bump=none resumes it; skip-existing makes the re-upload a no-op).
+      # Publish only when the version is new: past the latest release tag (either
+      # spelling), or equal to it with the tag missing (a run that uploaded the
+      # wheel and died before tagging -- bump=none resumes it; skip-existing
+      # makes the re-upload a no-op).
       - name: Evaluate release gate
         id: gate
         run: |
           current_version="$(tr -d '[:space:]' < VERSION)"
-          latest_tag="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1 || true)"
+          latest_tag="$(source scripts/release/release-tags.sh && latest_release_tag)"
           if [ -z "$latest_tag" ]; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
             echo "No release tag yet; publishing $current_version."
@@ -274,9 +278,10 @@ jobs:
             echo "Release version $current_version advanced past $latest_tag; publishing."
             exit 0
           fi
-          if ! git rev-parse --verify --quiet "refs/tags/$current_version" >/dev/null; then
+          current_tag="$(source scripts/release/release-tags.sh && release_tag_name "$current_version")"
+          if ! git rev-parse --verify --quiet "refs/tags/$current_tag" >/dev/null; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "Version $current_version has no tag yet; resuming publish."
+            echo "Version $current_version has no tag ($current_tag) yet; resuming publish."
             exit 0
           fi
           echo "should_publish=false" >> "$GITHUB_OUTPUT"

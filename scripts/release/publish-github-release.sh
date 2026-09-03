@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
+# shellcheck source=release-tags.sh
+source "$SCRIPT_DIR/release-tags.sh"
 
 REMOTE="${RELEASE_REMOTE:-origin}"
 REPO=""
@@ -20,8 +22,8 @@ Usage:
 Creates the immutable release identity for the current repo version:
 
 1. verifies VERSION contains a valid canonical version
-2. verifies a new version is greater than the latest local semver tag
-3. creates and pushes the semver git tag for VERSION
+2. verifies a new version is greater than the latest local release tag
+3. creates and pushes the release tag for VERSION (`v<VERSION>`)
 4. creates a GitHub Release for that tag with generated notes
 
 Options:
@@ -101,9 +103,10 @@ require_command git
 
 version="$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")"
 [ -n "$version" ] || die "VERSION is empty"
-tag_name="$version"
+tag_name="$(release_tag_name "$version")"
 target_commit="$(git rev-parse "$TARGET_REF^{commit}")"
-latest_tag="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1 || true)"
+# Either spelling: releases before 0.5.0 were tagged bare (see release-tags.sh).
+latest_tag="$(latest_release_tag)"
 
 tag_commit=""
 if git rev-parse --verify --quiet "refs/tags/$tag_name" >/dev/null; then

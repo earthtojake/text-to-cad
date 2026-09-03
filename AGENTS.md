@@ -16,8 +16,9 @@ Do not bump the canonical release version in `VERSION` during normal
 development work. Ship releases only through the single `Release` GitHub
 Actions workflow, which opens and merges a release PR against `main` (bumping
 `VERSION`, the derived metadata and every skill's `cadgen==` pin together),
-then publishes the `cadgen` wheel to PyPI, deploys the docs site, and tags +
-GitHub-Releases that same merged commit in one run.
+then publishes the `cadgen` wheel to PyPI, deploys the docs site, and tags
+(`v<VERSION>`; releases before 0.5.0 are bare `0.4.x` tags) + GitHub-Releases
+that same merged commit in one run.
 
 When asked to publish, make, or ship a release, dispatch `Release` with its
 defaults (`publish=true`, a published GitHub Release, not a draft). Never pick

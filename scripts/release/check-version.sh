@@ -13,7 +13,9 @@ Checks that VERSION contains a valid canonical release version and that every
 skill's requirements.txt pins cadgen to exactly that version (main is the source
 branch AND what installers clone, so an unpinned or stale pin ships).
 With --incremented-from, also checks that the current version is greater than
-the version at REF.
+the version at REF (a commit, branch, or release tag -- `v0.5.0` or the bare
+`0.4.28` spelling releases before 0.5.0 used; the VERSION file at that commit
+is what is compared, so the tag's spelling does not matter).
 
 Options:
   --incremented-from REF  Compare current release version against REF.
