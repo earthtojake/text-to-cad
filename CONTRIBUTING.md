@@ -317,55 +317,78 @@ they are wrong.
 
 ### Shipping a release
 
-Run the `Release` GitHub Actions workflow. Its inputs are `bump`
-(`patch|minor|major|none`), `set_version` (an exact X.Y.Z instead of a bump),
-`dry_run`, and `publish` (`true` publishes the GitHub Release; `false` leaves a
-draft). Choose the bump deliberately for every release; if a release request
-does not specify one, confirm it rather than assuming.
+Two GitHub Actions workflows, one release. `Prepare Release`
+(`release-prepare.yml`, manual) is the version bump as a PR; `Publish Release`
+(`release-publish.yml`) fires on the push its merge makes and does everything
+else to that one commit.
 
 ```bash
-gh workflow run release.yml --ref main -f bump=patch
+gh workflow run release-prepare.yml --ref main -f bump=patch
 ```
 
-One run, on `main`:
+`Prepare Release` takes `bump` (`patch|minor|major`), `set_version` (an exact
+X.Y.Z instead of a bump), `target` (the branch the PR is opened against —
+`main`, or `build-test` to rehearse) and `dry_run`. Choose the bump
+deliberately for every release; if a release request does not specify one,
+confirm it rather than assuming. It bumps `VERSION`, stamps the derived
+metadata (`sync-version.mjs`) and every skill's `cadgen==` pin
+(`pin-cadgen-requirements.sh`), commits on `release/<version>`, opens the PR,
+merges it through the API (the PAT, as before — no "allow auto-merge" setting
+is involved) and deletes the branch. The merged commit is THE release commit.
 
-1. **Release PR.** Bumps `VERSION`, stamps the derived metadata
-   (`sync-version.mjs`) and every skill's `cadgen==` pin
-   (`pin-cadgen-requirements.sh`), commits on `release/<version>`, opens a PR
-   against `main`, and merges it. The merged commit is THE release commit.
-2. **Publish.** Checks out that commit, runs `check-version.sh`, `bundle.sh
-   --clean` (cadgen's committed runtime reproduced byte for byte plus the
-   gitignored viewer client), `check-builds.sh`, the docs and code tests, the
-   wheel-contents check, builds the sdist + wheel and uploads them to PyPI
-   (`skip-existing`, so a rerun is a no-op).
-3. **Deploy Docs** and **Tag + GitHub Release**, both from the same commit.
+`Publish Release`, on that push:
 
-Release tags are `v<VERSION>` (`v0.5.0`) from 0.5.0 on; releases before that
-were tagged bare (`0.4.28`), and `scripts/release/release-tags.sh` is the one
-place that knows both spellings — every "latest tag" lookup goes through it and
-compares versions, not tag strings. The publish gate ships only when `VERSION`
-is past the latest release tag, or equal to it with the tag missing (a run that
-uploaded the wheel and died before tagging). Nothing is committed or pushed to
-`main` after the release PR merge: the tag points at the source commit, and
-`git describe` on `main` is meaningful.
+1. `check-version.sh`, then the gate: `VERSION` must be past the latest release
+   tag (either spelling — `scripts/release/release-tags.sh` is the one place
+   that knows `v0.5.0` and the bare `0.4.28` before it, and it compares
+   versions, not tag strings), or equal to it with the tag missing.
+2. `bundle.sh --clean` (cadgen's committed runtime reproduced byte for byte
+   plus the gitignored viewer client), `check-builds.sh`, the docs and code
+   tests, the wheel-contents check, `python -m build`.
+3. Install test: the built wheel into a fresh venv — `cadgen --help`, `cadgen
+   viewer --help`, `cadgen doctor skills/cad-viewer` — then
+   `scripts/test/test-installed.sh`; the distribution is uploaded as a workflow
+   artifact (`cadgen-<version>`).
+4. **On `main` only:** PyPI upload (`skip-existing`, so a rerun is a no-op),
+   `Deploy Docs`, then the `v<VERSION>` tag and the GitHub Release. Nothing is
+   committed or pushed to `main` after the release PR merge: the tag points at
+   the source commit, and `git describe` on `main` is meaningful.
 
-### Republishing and resuming (`bump=none`)
+### Resuming and republishing
 
-`bump=none` republishes `main` as it stands. `sync-version` and the pin still
-run, so if the derived metadata or the pins have drifted from `VERSION` they go
-through a release PR rather than shipping the drift; otherwise the release PR
-step is skipped and the publish gate decides. This is the resume path: a run
-that uploaded the wheel and failed before the tag or the docs deploy is
-finished by `bump=none` — the PyPI upload is idempotent and the tag is still
-missing, so the gate lets it through.
+Dispatch `Publish Release` on `main`:
 
-### Testing pipeline changes
+```bash
+gh workflow run release-publish.yml --ref main            # or -f publish=false for a draft
+```
 
-There is no rehearsal branch. `dry_run=true` runs the version preparation and
-stops after printing the diff; everything after that is exercised by `test.yml`
-on the PR that changes it (`bundle.sh --clean`, `check-builds.sh`, the tests,
-`check-wheel-contents.sh`). A change to the tag or PyPI steps is verified by
-the next real release.
+It runs against the current head. A run that uploaded the wheel and failed
+before the tag or the docs deploy is finished this way — the PyPI upload is
+idempotent and the tag is still missing, so the gate lets it through. A head
+whose version is already tagged skips at the gate. There is no `bump=none`: a
+version that needs re-preparing goes through `Prepare Release` again.
+
+### Rehearsing on `build-test`
+
+`build-test` is a long-lived branch whose only job is to run `Publish Release`
+without side effects. Every push to it (including a rehearsal release PR merge)
+runs the full pipeline through the install test and the artifact upload, then
+prints what it WOULD have uploaded, deployed and tagged
+(`publish-github-release.sh --dry-run`) and stops. To rehearse a release:
+
+```bash
+git push origin main:build-test                                    # or any branch under test
+gh workflow run release-prepare.yml --ref main -f bump=patch -f target=build-test
+```
+
+The gate compares the rehearsal's `VERSION` against the repository's REAL tags,
+exactly as `main` would — that is the intended behaviour: a rehearsal bump
+passes the gate and exercises everything, while an unbumped push to
+`build-test` (say, a pipeline fix) skips at the gate with the same message
+`main` would give. A rehearsal consumes that version number on `build-test`
+only; `main` and the tags are untouched, so the real release re-uses it. `Test`
+also runs on `build-test` pushes and PRs. `dry_run=true` on `Prepare Release`
+stops after printing the version diff, for changes to the preparation itself.
 
 ### Redeploying the docs site
 
@@ -391,15 +414,17 @@ node scripts/release/sync-version.mjs --check
 ```
 
 `scripts/release/publish-github-release.sh` is the manual fallback for the tag
-and GitHub Release step. Unlike the `Release` workflow, the script creates a
+and GitHub Release step. Unlike `Publish Release`, the script creates a
 draft release unless `--publish` is passed.
 
 ### Repository settings
 
 `main` requires a PR with the `Version Check`, `Test (Linux)` and `Test
 (Windows)` status checks (strict: up to date with `main`), no force pushes and
-no deletions — the rules `develop` carried before the cutover. The `Release`
-workflow's release PR merges through the same gate. Keep the repository tag
+no deletions — the rules `develop` carried before the cutover. `Prepare
+Release`'s PR merges through the same gate via the API (no "allow auto-merge"
+repository setting is needed). `build-test` needs no protection: the
+irreversible steps never run there. Keep the repository tag
 ruleset (extend its pattern to cover `v[0-9]*.[0-9]*.[0-9]*` beside the bare
 form) and immutable releases.
 
@@ -470,9 +495,12 @@ Steps, in order (none of these are run by the workflow):
 6. Archive the mirror and drop its secret: `gh repo archive earthtojake/cad-viewer`
    and `gh secret delete CAD_VIEWER_SYNC_TOKEN`. `BUILD_TEST_PUSH_TOKEN` is
    unused too and can go.
-7. The first release after the cutover is an ordinary
-   `gh workflow run release.yml --ref main -f bump=minor` (0.5.0). The gate
-   compares against the latest tag (`0.4.28`, bare) and creates `v0.5.0`.
+7. Create `build-test` from `main` (`git push origin main:build-test`) so the
+   rehearsal target exists; optionally rehearse first with
+   `gh workflow run release-prepare.yml --ref main -f bump=minor -f target=build-test`.
+8. The first release after the cutover is an ordinary
+   `gh workflow run release-prepare.yml --ref main -f bump=minor` (0.5.0). The
+   gate compares against the latest tag (`0.4.28`, bare) and creates `v0.5.0`.
 
 ## Iteration Loop
 

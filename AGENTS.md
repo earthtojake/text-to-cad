@@ -13,21 +13,27 @@ the tree is the real file.
 ## Release Workflow
 
 Do not bump the canonical release version in `VERSION` during normal
-development work. Ship releases only through the single `Release` GitHub
-Actions workflow, which opens and merges a release PR against `main` (bumping
-`VERSION`, the derived metadata and every skill's `cadgen==` pin together),
-then publishes the `cadgen` wheel to PyPI, deploys the docs site, and tags
-(`v<VERSION>`; releases before 0.5.0 are bare `0.4.x` tags) + GitHub-Releases
-that same merged commit in one run.
+development work; the `Test` workflow refuses a PR that changes `VERSION` from
+any branch but `release/*`. Releases are two GitHub Actions workflows:
 
-When asked to publish, make, or ship a release, dispatch `Release` with its
-defaults (`publish=true`, a published GitHub Release, not a draft). Never pick
-the semver bump yourself: if the request does not name patch, minor, major, or
-an exact version, ask which one before dispatching. `bump=none` republishes
-`main` as it stands — the way to resume a run that uploaded the wheel but failed
-before the tag or the docs deploy — and is never a release setting. There is no
-rehearsal target; test pipeline changes with `dry_run=true`, which stops after
-showing the version diff.
+- `Prepare Release` (`release-prepare.yml`, manual): opens and merges a release
+  PR against `main` that bumps `VERSION`, the derived metadata and every
+  skill's `cadgen==` pin together.
+- `Publish Release` (`release-publish.yml`): fires on the push that merge makes.
+  Bundles, tests, builds the `cadgen` wheel, installs and exercises it, keeps
+  the distribution as a workflow artifact, then — on `main` only — uploads to
+  PyPI, deploys the docs site, and tags (`v<VERSION>`; releases before 0.5.0
+  are bare `0.4.x` tags) + GitHub-Releases that same merged commit.
+
+When asked to publish, make, or ship a release, dispatch `Prepare Release` on
+`main`. Never pick the semver bump yourself: if the request does not name patch,
+minor, major, or an exact version, ask which one before dispatching. To resume a
+run that uploaded the wheel but failed before the tag or the docs deploy, or to
+republish the current head, dispatch `Publish Release` on `main` (`publish=false`
+leaves the GitHub Release as a draft). `target=build-test` on `Prepare Release`
+is the rehearsal — the same PR against `build-test`, whose pushes run `Publish
+Release` without PyPI, docs or tag — and is never a release; use it only when the
+user explicitly asks to test the pipeline.
 
 The standalone `Deploy Docs` workflow redeploys the docs site from a ref
 (default `main`, or a release tag) without running a release.
@@ -42,7 +48,7 @@ default fetches; `.gitattributes` export-ignores it from archives); nothing
 installs it. `scripts/github-workflows/check-builds.sh` enforces the shipping
 contract on every push: no tracked symlink, no LFS path under `skills/`, no
 skill reaching into a repo root. See the Releases section in `CONTRIBUTING.md`
-for the full flow, the resume path, and local/manual fallbacks.
+for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
 
 ## Repo Map
 
@@ -161,9 +167,9 @@ when touching shared surfaces or before handoff:
     canonical release version and the skill pins in a separate job so code
     tests still run when version metadata is wrong; its test job checks
     generated outputs against their sources, bundles production outputs, and
-    runs docs and code tests against that bundle. The `Release` workflow's
-    publish job repeats those checks on the release commit before the wheel
-    ships. GitHub branch settings should require a PR for `main`.
+    runs docs and code tests against that bundle. `Publish Release` repeats
+    those checks on the release commit before the wheel ships. GitHub branch
+    settings should require a PR for `main`.
 - Focused test runners: `scripts/test/test-js.sh`,
   `scripts/test/test-docs.sh`, `scripts/test/test-python.sh`,
   `scripts/test/test-global.sh`
