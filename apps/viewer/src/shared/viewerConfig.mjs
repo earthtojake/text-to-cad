@@ -1,15 +1,20 @@
 export const DEFAULT_VIEWER_GITHUB_URL = "https://github.com/earthtojake/text-to-cad";
 export const DEFAULT_VIEWER_DISCORD_URL = "https://discord.gg/5FGB9DwJYU";
-// `add` rather than `update`: both refresh what is installed, but only `add` picks up a skill
-// that is NEW in a release, because `update` walks the lockfile. Releases here do add skills,
-// so `update` would quietly leave them out. (`install` is an undocumented alias for `add`.)
-export const DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND = "npx skills add earthtojake/text-to-cad";
+// Two steps, because the Viewer IS cadgen (`cadgen viewer`): refreshing the skills alone
+// changes nothing that is running. `add` rather than `update` for the skills: both refresh
+// what is installed, but only `add` picks up a skill that is NEW in a release, because
+// `update` walks the lockfile. (`install` is an undocumented alias for `add`.) Then cadgen
+// itself: the refreshed skills pin `cadgen==<release>`, and `--upgrade cadgen` resolves the
+// same release from PyPI without this command having to know where the Skills CLI put the
+// requirements.txt (it differs per agent).
+export const DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND =
+  "npx skills add earthtojake/text-to-cad && python -m pip install --upgrade cadgen";
 
 // The other way to take an update: hand this to your agent instead of running the command
 // yourself. One short line -- it is read at a glance in a popover, and it is pasted into a chat
 // where the agent already knows the rest of the job.
 export const DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT =
-  "Update the text-to-cad skills with `npx skills add earthtojake/text-to-cad`.";
+  "Update the text-to-cad skills with `npx skills add earthtojake/text-to-cad`, then upgrade cadgen to the release they pin.";
 
 export function normalizeViewerDefaultFile(value = "") {
   const rawValue = String(value ?? "").trim();
@@ -44,13 +49,29 @@ export function viewerGithubRepositoryUrl(value = "", fallback = DEFAULT_VIEWER_
   }
 }
 
+/** A release VERSION as displayed and compared: a GitHub `tag_name` (`v0.5.0`, or the bare
+ * `0.4.28` releases before 0.5.0 used) or a `refs/tags/...` ref, with the tag dressing removed.
+ * The one place the `v` is stripped; everything downstream sees bare versions. */
+export function normalizeViewerReleaseVersion(value = "") {
+  return String(value ?? "")
+    .trim()
+    .replace(/^refs\/tags\//iu, "")
+    .replace(/^v(?=\d)/iu, "");
+}
+
+/** The tag a release VERSION is published under: `v<version>` from 0.5.0 on. */
+export function viewerReleaseTagName(version = "") {
+  const normalizedVersion = normalizeViewerReleaseVersion(version);
+  return normalizedVersion ? `v${normalizedVersion}` : "";
+}
+
 export function viewerGithubReleaseUrl(version = "", value = "", fallback = DEFAULT_VIEWER_GITHUB_URL) {
-  const normalizedVersion = String(version || "").trim();
+  const tagName = viewerReleaseTagName(version);
   const repositoryUrl = viewerGithubRepositoryUrl(value, fallback);
-  if (!normalizedVersion || !repositoryUrl) {
+  if (!tagName || !repositoryUrl) {
     return "";
   }
-  return `${repositoryUrl}/releases/tag/${encodeURIComponent(normalizedVersion)}`;
+  return `${repositoryUrl}/releases/tag/${encodeURIComponent(tagName)}`;
 }
 
 export function viewerGithubLatestReleaseUrl(value = "", fallback = DEFAULT_VIEWER_GITHUB_URL) {
@@ -122,8 +143,14 @@ export function normalizeViewerSkillsInstallCommand(
   fallback = DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
 ) {
   const command = cleanInstallCommandCandidate(value);
-  // Both spellings: `install` is an alias for `add`, and release bodies may use either.
-  if (/^npx\s+skills\s+(?:install|add)(?:\s+\S+)+$/iu.test(command)) {
+  // Both spellings: `install` is an alias for `add`, and release bodies may use either. An
+  // optional second step upgrades cadgen (`&& [python -m] pip install ...`), which is what
+  // actually moves the running Viewer; anything else chained on is not an install command.
+  if (
+    /^npx\s+skills\s+(?:install|add)(?:\s+(?!&&)\S+)+(?:\s*&&\s*(?:python3?\s+-m\s+)?pip\s+install(?:\s+(?!&&)\S+)+)?$/iu.test(
+      command
+    )
+  ) {
     return command;
   }
   return String(fallback || "").trim();
@@ -188,10 +215,7 @@ function cleanInstallCommandCandidate(value = "") {
 }
 
 function parseViewerReleaseVersion(value = "") {
-  const rawValue = String(value ?? "")
-    .trim()
-    .replace(/^refs\/tags\//i, "")
-    .replace(/^v/i, "");
+  const rawValue = normalizeViewerReleaseVersion(value);
   if (!rawValue) {
     return null;
   }

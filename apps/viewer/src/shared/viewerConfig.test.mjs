@@ -9,6 +9,8 @@ import {
   isViewerReleaseMajorMinorNewer,
   isViewerReleaseNewer,
   isViewerReleaseUpdateSuggested,
+  normalizeViewerReleaseVersion,
+  viewerReleaseTagName,
   normalizeViewerDefaultFile,
   normalizeViewerDiscordUrl,
   normalizeViewerGithubUrl,
@@ -70,11 +72,42 @@ test("viewerGithubRepositoryUrl trims GitHub branch paths to the repository", ()
   );
 });
 
-test("viewerGithubReleaseUrl links to the requested release tag", () => {
+test("viewerGithubReleaseUrl links to the v-prefixed release tag", () => {
+  // Releases are tagged `v<version>` from 0.5.0 on; the running version is bare.
   assert.equal(
-    viewerGithubReleaseUrl("0.1.10", "github.com/example/repo/tree/main"),
-    "https://github.com/example/repo/releases/tag/0.1.10"
+    viewerGithubReleaseUrl("0.5.0", "github.com/example/repo/tree/main"),
+    "https://github.com/example/repo/releases/tag/v0.5.0"
   );
+  // An already-prefixed value is not doubled.
+  assert.equal(
+    viewerGithubReleaseUrl("v0.5.0", "github.com/example/repo"),
+    "https://github.com/example/repo/releases/tag/v0.5.0"
+  );
+  assert.equal(viewerGithubReleaseUrl("", "github.com/example/repo"), "");
+});
+
+test("normalizeViewerReleaseVersion strips the tag dressing once, for display and comparison", () => {
+  assert.equal(normalizeViewerReleaseVersion("v0.5.0"), "0.5.0");
+  assert.equal(normalizeViewerReleaseVersion("0.4.28"), "0.4.28");
+  assert.equal(normalizeViewerReleaseVersion("refs/tags/v0.5.0"), "0.5.0");
+  assert.equal(normalizeViewerReleaseVersion(" V0.5.0 "), "0.5.0");
+  // Only a `v` in front of a digit is tag dressing.
+  assert.equal(normalizeViewerReleaseVersion("vnext"), "vnext");
+  assert.equal(viewerReleaseTagName("0.5.0"), "v0.5.0");
+  assert.equal(viewerReleaseTagName("v0.5.0"), "v0.5.0");
+  assert.equal(viewerReleaseTagName(""), "");
+});
+
+test("release comparison accepts a v-prefixed tag_name against a bare running version", () => {
+  // 0.4.28 running (the last bare-tagged release), v0.5.0 latest -> an update.
+  assert.equal(isViewerReleaseNewer("0.4.28", "v0.5.0"), true);
+  assert.equal(isViewerReleaseUpdateSuggested("0.4.28", "v0.5.0"), true);
+  // v0.5.0 running (however spelled), v0.5.0 latest -> up to date.
+  assert.equal(isViewerReleaseNewer("v0.5.0", "v0.5.0"), false);
+  assert.equal(isViewerReleaseNewer("0.5.0", "v0.5.0"), false);
+  assert.equal(isViewerReleaseUpdateSuggested("0.5.0", "v0.5.0"), false);
+  // Mixed the other way round: a bare latest never beats a newer v-tagged running version.
+  assert.equal(isViewerReleaseNewer("v0.5.0", "0.4.28"), false);
 });
 
 test("viewerGithubLatestReleaseUrl links to the latest release page", () => {
@@ -128,11 +161,27 @@ test("a patch release is worth prompting about, at this cadence", () => {
   assert.equal(isViewerReleaseMajorMinorNewer("0.4.9", "0.4.10"), false);
 });
 
-test("normalizeViewerSkillsInstallCommand accepts skills add/install and nothing else", () => {
+test("normalizeViewerSkillsInstallCommand accepts skills add/install, optionally followed by a pip step", () => {
   // A shell prompt and padding are stripped, so a command pasted out of a release body works.
   assert.equal(
     normalizeViewerSkillsInstallCommand("$ npx   skills add   earthtojake/text-to-cad"),
     "npx skills add earthtojake/text-to-cad"
+  );
+  // The default is the two-step form: the Viewer is cadgen, so the skills refresh alone
+  // upgrades nothing that is running.
+  assert.equal(
+    normalizeViewerSkillsInstallCommand(DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND),
+    DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
+  );
+  assert.match(DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND, /^npx skills add earthtojake\/text-to-cad && python -m pip install --upgrade cadgen$/u);
+  assert.equal(
+    normalizeViewerSkillsInstallCommand("npx skills add example/repo && pip install -r skills/cad-viewer/requirements.txt"),
+    "npx skills add example/repo && pip install -r skills/cad-viewer/requirements.txt"
+  );
+  // Only a pip install may be chained on; anything else falls back.
+  assert.equal(
+    normalizeViewerSkillsInstallCommand("npx skills add example/repo && rm -rf ~"),
+    DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
   );
   // `install` is an undocumented alias for `add`, and older release bodies use it, so it stays
   // acceptable rather than being rewritten into the fallback.
@@ -166,19 +215,25 @@ test("viewerSkillsInstallCommandFromText extracts release-body install commands"
     ].join("\n")),
     "npx skills install example/repo"
   );
+  // The two-step form survives extraction whole, from a fenced block or inline code.
+  const twoStep = "npx skills add example/repo && python -m pip install --upgrade cadgen";
+  assert.equal(viewerSkillsInstallCommandFromText(`Update with \`${twoStep}\`.`), twoStep);
+  assert.equal(viewerSkillsInstallCommandFromText(`Steps:\n${twoStep}\n`), twoStep);
   assert.equal(
     viewerSkillsInstallCommandFromText("No command here."),
     DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
   );
 });
 
-test("the agent update prompt names the command, in one short line", () => {
+test("the agent update prompt names the command and the cadgen upgrade, in one short line", () => {
   assert.match(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT, /npx skills add earthtojake\/text-to-cad/u);
   // `add`, not `update`: only `add` picks up a skill that is new in a release.
   assert.doesNotMatch(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT, /npx skills update/u);
+  // The skills refresh alone upgrades nothing that is running: the prompt says to move cadgen too.
+  assert.match(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT, /upgrade cadgen/u);
   // It is read at a glance in a popover, so it stays one short line.
   assert.equal(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT.split("\n").length, 1);
-  assert.ok(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT.length < 90);
+  assert.ok(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT.length < 140);
 });
 
 test("normalizeViewerSkillsUpdatePrompt rejects a prompt with no command in it", () => {

@@ -14,6 +14,7 @@ import {
   DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT,
   isViewerReleaseNewer,
   isViewerReleaseUpdateSuggested,
+  normalizeViewerReleaseVersion,
   viewerGithubLatestReleaseApiUrl,
   viewerGithubLatestReleaseUrl,
   normalizeViewerDiscordUrl,
@@ -613,7 +614,9 @@ function writeLatestReleaseCache(apiUrl, release, now = Date.now()) {
 }
 
 function latestReleaseFromPayload(payload, fallbackReleaseUrl = "") {
-  const latestVersion = String(payload?.tag_name || "").trim();
+  // `tag_name` is `v0.5.0`; the chip, the aria-label and the comparison all want `0.5.0`.
+  // Normalized ONCE, here, so nothing downstream has to know about tag spellings.
+  const latestVersion = normalizeViewerReleaseVersion(payload?.tag_name);
   if (!latestVersion) {
     return null;
   }
