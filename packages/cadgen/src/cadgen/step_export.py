@@ -16,37 +16,41 @@ from cadgen._internal.step_scene import LoadedStepScene, load_step_scene_from_xc
 
 
 def _collect_assembly_mates(shape: Any) -> list[dict[str, Any]]:
+    """The mates THIS model declared: the root compound's own ``assembly_mates``.
+
+    The sidecar boundary: a sidecar belongs only to the model that declares it,
+    never to its parent or its children. A parent composing a child receives
+    geometry -- tree, labels, colors, placements, exact shape -- and nothing
+    else, so a child's mates are written by the child's own build into the
+    child's own sidecar and are NOT gathered here. This used to walk the whole
+    tree; an assembly that needs a relation declares it on the assembly.
+    """
     mates: list[dict[str, Any]] = []
     seen: set[str] = set()
-
-    def visit(node: Any) -> None:
-        raw_mates = getattr(node, "assembly_mates", None)
-        if isinstance(raw_mates, list):
-            for raw_mate in raw_mates:
-                if not isinstance(raw_mate, dict):
-                    continue
-                key = repr(raw_mate)
-                if key in seen:
-                    continue
-                seen.add(key)
-                mate = dict(raw_mate)
-                mate_id = f"m{len(mates) + 1}"
-                source_label = str(
-                    mate.get("sourceLabel") or
-                    mate.get("name") or
-                    mate.get("label") or
-                    mate.get("id") or
-                    ""
-                ).strip()
-                mate["id"] = mate_id
-                mate["label"] = mate_id
-                if source_label and source_label != mate_id:
-                    mate["sourceLabel"] = source_label
-                mates.append(mate)
-        for child in list(getattr(node, "children", []) or []):
-            visit(child)
-
-    visit(shape)
+    raw_mates = getattr(shape, "assembly_mates", None)
+    if not isinstance(raw_mates, list):
+        return mates
+    for raw_mate in raw_mates:
+        if not isinstance(raw_mate, dict):
+            continue
+        key = repr(raw_mate)
+        if key in seen:
+            continue
+        seen.add(key)
+        mate = dict(raw_mate)
+        mate_id = f"m{len(mates) + 1}"
+        source_label = str(
+            mate.get("sourceLabel") or
+            mate.get("name") or
+            mate.get("label") or
+            mate.get("id") or
+            ""
+        ).strip()
+        mate["id"] = mate_id
+        mate["label"] = mate_id
+        if source_label and source_label != mate_id:
+            mate["sourceLabel"] = source_label
+        mates.append(mate)
     return mates
 
 

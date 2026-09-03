@@ -129,31 +129,42 @@ class AssemblyHelperTests(unittest.TestCase):
             compound.assembly_mates,
         )
 
-    def test_export_collection_renumbers_mates_globally(self) -> None:
+    def test_export_collection_reads_only_the_root_models_own_mates(self) -> None:
+        # The sidecar boundary: a child's mates belong to the child's own
+        # sidecar and never ride up. The collector reads the ROOT compound's own
+        # `assembly_mates` -- what this model declared -- and ignores what its
+        # children declared for themselves.
         with fake_build123d():
-            first = AssemblyHelper("first")
-            first_base = first.add(FakePart(), "first_base")
-            first_lid = first.add(FakePart(), "first_lid")
-            first_base_frame = first.rigid_frame(first_base, "seat", FakeLocation("first_base"))
-            first_lid_frame = first.rigid_frame(first_lid, "underside", FakeLocation("first_lid"))
-            first.face_to_face(first_base_frame, first_lid_frame, label="first_mate")
-            first_compound = first.build()
+            child = AssemblyHelper("child")
+            child_base = child.add(FakePart(), "child_base")
+            child_lid = child.add(FakePart(), "child_lid")
+            child_base_frame = child.rigid_frame(child_base, "seat", FakeLocation("child_base"))
+            child_lid_frame = child.rigid_frame(child_lid, "underside", FakeLocation("child_lid"))
+            child.face_to_face(child_base_frame, child_lid_frame, label="child_mate")
+            child_compound = child.build()
 
-            second = AssemblyHelper("second")
-            second_base = second.add(FakePart(), "second_base")
-            second_lid = second.add(FakePart(), "second_lid")
-            second_base_frame = second.rigid_frame(second_base, "seat", FakeLocation("second_base"))
-            second_lid_frame = second.rigid_frame(second_lid, "underside", FakeLocation("second_lid"))
-            second.face_to_face(second_base_frame, second_lid_frame, label="second_mate")
-            second_compound = second.build()
+            parent = AssemblyHelper("parent")
+            parent.add(child_compound, "child")   # composed child, carrying its own mate
+            parent_plate = parent.add(FakePart(), "plate")
+            parent_bracket = parent.add(FakePart(), "bracket")
+            plate_frame = parent.rigid_frame(parent_plate, "top", FakeLocation("plate_top"))
+            bracket_frame = parent.rigid_frame(parent_bracket, "foot", FakeLocation("bracket_foot"))
+            parent.face_to_face(plate_frame, bracket_frame, label="parent_mate")
+            parent_compound = parent.build()
 
-            root = FakeCompound(label="root", children=[first_compound, second_compound])
+        mates = _collect_assembly_mates(parent_compound)
+        self.assertEqual(["m1"], [mate["id"] for mate in mates])
+        self.assertEqual(["parent_mate"], [mate["sourceLabel"] for mate in mates])
 
-        mates = _collect_assembly_mates(root)
+        # And the child's own build still sees its own mate, untouched.
+        child_mates = _collect_assembly_mates(child_compound)
+        self.assertEqual(["child_mate"], [mate["sourceLabel"] for mate in child_mates])
 
-        self.assertEqual(["m1", "m2"], [mate["id"] for mate in mates])
-        self.assertEqual(["m1", "m2"], [mate["label"] for mate in mates])
-        self.assertEqual(["first_mate", "second_mate"], [mate["sourceLabel"] for mate in mates])
+        # A bare compound with no declarations of its own collects nothing, no
+        # matter what its children carry.
+        with fake_build123d():
+            root = FakeCompound(label="root", children=[child_compound, parent_compound])
+        self.assertEqual([], _collect_assembly_mates(root))
 
     def test_helper_accepts_existing_native_joint_labels(self) -> None:
         with fake_build123d():

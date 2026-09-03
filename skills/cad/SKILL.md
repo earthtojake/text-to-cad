@@ -110,7 +110,9 @@ ride the script's argv: `--force`, `--json`, `--verbose`, `-o PATH`,
 Rules the decorator enforces: importing a model module never builds; a model
 file without a `__main__` call never builds either — always end the script with
 `if __name__ == "__main__": <model>()`; a top-level call takes no arguments (the
-declared output is the model's one configuration); a model function takes
+declared output is the model's one configuration); composition returns
+geometry only — a child's sidecar (mates, kinematics, animation) never rides up
+into a parent, so an assembly declares its own relations; a model function takes
 **no parameters** — parametric geometry lives in a plain factory function the
 model calls with its values, and a different configuration is a different
 model with its own file; one `@step`/`@dxf` model per file.
