@@ -40,12 +40,13 @@ class SkillIsInstructionsOnly(unittest.TestCase):
         for retired in ("npm --prefix scripts/viewer run start", "main.mjs", "scripts/viewer/server/main.py"):
             self.assertNotIn(retired, skill_md, retired)
 
-    def test_requirements_name_cadgen_and_nothing_else(self):
-        # Unpinned on develop (the editable install satisfies it); the release
-        # pins it. No extras: the Viewer never renders headlessly.
+    def test_requirements_name_cadgen_pinned_to_version_and_nothing_else(self):
+        # Pinned to VERSION like every skill (the release PR stamps it). No
+        # extras: the Viewer never renders headlessly.
+        version = repo_path("VERSION").read_text(encoding="utf-8").strip()
         requirements = (VIEWER_SKILL / "requirements.txt").read_text(encoding="utf-8")
         lines = [line for line in requirements.splitlines() if line.strip() and not line.startswith("#")]
-        self.assertEqual(lines, ["cadgen"])
+        self.assertEqual(lines, [f"cadgen=={version}"])
 
 
 if __name__ == "__main__":
