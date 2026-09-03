@@ -498,7 +498,15 @@ Steps, in order (none of these are run by the workflow):
 7. Create `build-test` from `main` (`git push origin main:build-test`) so the
    rehearsal target exists; optionally rehearse first with
    `gh workflow run release-prepare.yml --ref main -f bump=minor -f target=build-test`.
-8. The first release after the cutover is an ordinary
+8. Re-point PyPI trusted publishing at the new workflow file. A trusted
+   publisher is bound to the workflow FILENAME, and the upload used to run from
+   `release.yml`; it now runs from `release-publish.yml`. On pypi.org → project
+   `cadgen` → Publishing, add a publisher for `earthtojake/text-to-cad`,
+   workflow `release-publish.yml` (no environment), then remove the
+   `release.yml` one. Skipping this makes the first real upload fail with an
+   OIDC "invalid publisher" error after every other gate has passed; the
+   rehearsal on `build-test` cannot catch it because it never uploads.
+9. The first release after the cutover is an ordinary
    `gh workflow run release-prepare.yml --ref main -f bump=minor` (0.5.0). The
    gate compares against the latest tag (`0.4.28`, bare) and creates `v0.5.0`.
 
