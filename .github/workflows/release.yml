@@ -1,10 +1,24 @@
 name: Release
 
+# One button: bump VERSION on main through a release PR, then publish the cadgen
+# wheel to PyPI, deploy the docs site, and tag + GitHub-Release the SAME commit.
+#
+# main is the source branch. There is no publish tree, no transformed commit and
+# no second branch: what a release publishes is the merged release commit on
+# main, and the tag points at it. Skill requirements are pinned to VERSION on
+# main itself (the release PR stamps them, scripts/release/check-version.sh
+# asserts them), so an installer that clones main at any commit gets a skill
+# whose pin names a cadgen that exists on PyPI.
+#
+# bump=none republishes main as it stands: the resume path when a previous run
+# uploaded the wheel (skip-existing makes that a no-op) but failed before the
+# tag, or when the docs deploy needs rerunning for the current version.
+
 on:
   workflow_dispatch:
     inputs:
       bump:
-        description: Semver part to bump when set_version is empty. Use none to publish base_branch as it stands, without touching the version.
+        description: Semver part to bump when set_version is empty. Use none to republish main as it stands (the resume path).
         required: true
         default: patch
         type: choice
@@ -17,36 +31,13 @@ on:
         description: Exact X.Y.Z version to release instead of bumping. Leave empty unless you are naming a specific new version.
         required: false
         type: string
-      base_branch:
-        description: Branch to release from and merge the release PR into.
-        required: true
-        default: develop
-        type: string
-      target_branch:
-        description: Publish target. Use main for releases; use build-test only to test CI/CD or build changes.
-        required: true
-        default: main
-        type: choice
-        options:
-          - main
-          - build-test
       dry_run:
-        description: Show the release version changes without pushing, merging, or publishing.
+        description: Show the release version changes without opening a PR, merging, or publishing.
         required: true
         default: false
         type: boolean
       publish:
         description: Publish the GitHub Release. Set to false to leave it as a draft.
-        required: true
-        default: true
-        type: boolean
-      create_release:
-        description: Create the GitHub Release after pushing the tag.
-        required: true
-        default: true
-        type: boolean
-      auto_merge:
-        description: Merge the release PR immediately, then publish. Set to false to only prepare the PR.
         required: true
         default: true
         type: boolean
@@ -56,7 +47,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: release-${{ inputs.base_branch }}-${{ inputs.target_branch }}
+  group: release-main
   cancel-in-progress: false
 
 jobs:
@@ -65,13 +56,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
-      source_sha: ${{ steps.publish_source.outputs.sha }}
+      release_sha: ${{ steps.release_sha.outputs.sha }}
 
     steps:
-      - name: Check out base branch
+      - name: Check out main
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.base_branch }}
+          ref: main
           fetch-depth: 0
           persist-credentials: false
 
@@ -85,18 +76,15 @@ jobs:
           RELEASE_ORCHESTRATOR_TOKEN: ${{ secrets.RELEASE_ORCHESTRATOR_TOKEN }}
           PREPARE_RELEASE_TOKEN: ${{ secrets.PREPARE_RELEASE_TOKEN }}
           PUBLISH_PUSH_TOKEN: ${{ secrets.PUBLISH_PUSH_TOKEN }}
-          BUILD_TEST_PUSH_TOKEN: ${{ secrets.BUILD_TEST_PUSH_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          release_token="${RELEASE_ORCHESTRATOR_TOKEN:-${PREPARE_RELEASE_TOKEN:-${PUBLISH_PUSH_TOKEN:-${BUILD_TEST_PUSH_TOKEN:-$GITHUB_TOKEN}}}}"
+          release_token="${RELEASE_ORCHESTRATOR_TOKEN:-${PREPARE_RELEASE_TOKEN:-${PUBLISH_PUSH_TOKEN:-$GITHUB_TOKEN}}}"
           if [ -n "${RELEASE_ORCHESTRATOR_TOKEN:-}" ]; then
             echo "Using RELEASE_ORCHESTRATOR_TOKEN for release orchestration."
           elif [ -n "${PREPARE_RELEASE_TOKEN:-}" ]; then
             echo "Using PREPARE_RELEASE_TOKEN for release orchestration."
           elif [ -n "${PUBLISH_PUSH_TOKEN:-}" ]; then
             echo "Using PUBLISH_PUSH_TOKEN for release orchestration."
-          elif [ -n "${BUILD_TEST_PUSH_TOKEN:-}" ]; then
-            echo "Using BUILD_TEST_PUSH_TOKEN for release orchestration."
           else
             echo "Using GITHUB_TOKEN for release orchestration."
           fi
@@ -107,32 +95,34 @@ jobs:
             echo "RELEASE_TOKEN=$release_token"
           } >> "$GITHUB_ENV"
 
+      # Release preparation is three stamps from one number: VERSION itself, the
+      # derived package/plugin metadata (sync-version.mjs), and every skill's
+      # cadgen pin (pin-cadgen-requirements.sh). All three land in the release
+      # PR, so main never carries a version whose pins or metadata disagree with it.
       - name: Prepare canonical version
         id: version
         env:
           BUMP: ${{ inputs.bump }}
           SET_VERSION: ${{ inputs.set_version }}
-          BASE_BRANCH: ${{ inputs.base_branch }}
         run: |
-          # bump=none publishes base_branch as it stands. That is what resuming a
-          # failed publish and rehearsing the pipeline against build-test both
-          # want: the version is already correct, or irrelevant. sync-version
-          # still runs, so a base branch whose derived metadata has drifted from
-          # VERSION shows up as changed=true and goes through a release PR rather
-          # than publishing the drift.
+          # bump=none publishes main as it stands. sync-version and the pin still
+          # run, so a main whose derived metadata or pins have drifted from VERSION
+          # shows up as changed=true and goes through a release PR rather than
+          # publishing the drift.
           if [ "$BUMP" = "none" ] && [ -z "$SET_VERSION" ]; then
-            echo "No version change requested; publishing $BASE_BRANCH as it stands."
+            echo "No version change requested; publishing main as it stands."
           elif [ -n "$SET_VERSION" ]; then
             scripts/release/bump-version.sh --set-version "$SET_VERSION" --no-commit
           else
             scripts/release/bump-version.sh "$BUMP" --no-commit
           fi
           node scripts/release/sync-version.mjs
+          scripts/release/pin-cadgen-requirements.sh
           version="$(tr -d '[:space:]' < VERSION)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           if git diff --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "Base branch already contains release version $version; skipping the release PR."
+            echo "main already carries release version $version with current metadata and pins; skipping the release PR."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "Prepared release version: $version"
@@ -142,12 +132,14 @@ jobs:
         env:
           CHANGED: ${{ steps.version.outputs.changed }}
         run: |
+          # check-version.sh covers VERSION's shape AND every skill pin equalling it.
           node scripts/release/sync-version.mjs --check
           if [ "$CHANGED" = "true" ]; then
-            scripts/release/check-version.sh --incremented-from origin/main
             latest_tag="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1 || true)"
             if [ -n "$latest_tag" ]; then
               scripts/release/check-version.sh --incremented-from "refs/tags/$latest_tag"
+            else
+              scripts/release/check-version.sh
             fi
           else
             scripts/release/check-version.sh
@@ -168,14 +160,13 @@ jobs:
         if: ${{ !inputs.dry_run && steps.version.outputs.changed == 'true' }}
         id: release_pr
         env:
-          BASE_BRANCH: ${{ inputs.base_branch }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           branch="release/$VERSION"
-          body="Bumps VERSION and derived package/plugin metadata to $VERSION. This PR was created by the one-button Release workflow, which merges it into $BASE_BRANCH immediately; the publish job revalidates the full production bundle before anything ships to the target branch."
+          body="Bumps VERSION, derived package/plugin metadata and every skill's cadgen pin to $VERSION. Created by the one-button Release workflow, which merges it into main immediately; the publish job revalidates the tree before the wheel ships."
 
           git checkout -B "$branch"
           git add -A
@@ -187,13 +178,13 @@ jobs:
             pr_url="$(printf '%s\n' "$pr_json" | jq -r '.url')"
             gh pr edit "$pr_number" \
               --repo "$GITHUB_REPOSITORY" \
-              --base "$BASE_BRANCH" \
+              --base main \
               --title "Release $VERSION" \
               --body "$body"
           else
             pr_url="$(gh pr create \
               --repo "$GITHUB_REPOSITORY" \
-              --base "$BASE_BRANCH" \
+              --base main \
               --head "$branch" \
               --title "Release $VERSION" \
               --body "$body")"
@@ -206,7 +197,7 @@ jobs:
           echo "Release PR: $pr_url"
 
       - name: Merge release pull request
-        if: ${{ !inputs.dry_run && inputs.auto_merge && steps.release_pr.outputs.created == 'true' }}
+        if: ${{ !inputs.dry_run && steps.release_pr.outputs.created == 'true' }}
         env:
           PR_NUMBER: ${{ steps.release_pr.outputs.number }}
         run: |
@@ -230,127 +221,78 @@ jobs:
             exit 1
           fi
 
-      - name: Stop before publish when auto-merge is disabled
-        if: ${{ !inputs.dry_run && !inputs.auto_merge }}
-        run: echo "auto_merge=false; the release PR was prepared but the publish jobs were skipped."
-
-      - name: Resolve publish source
-        if: ${{ !inputs.dry_run && inputs.auto_merge }}
-        id: publish_source
-        env:
-          BASE_BRANCH: ${{ inputs.base_branch }}
+      # The commit every later job builds, deploys and tags. One SHA: the merged
+      # release commit on main (or main's head when nothing changed).
+      - name: Resolve release commit
+        if: ${{ !inputs.dry_run }}
+        id: release_sha
         run: |
-          git fetch --no-tags origin "+$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH"
-          source_sha="$(git rev-parse "origin/$BASE_BRANCH^{commit}")"
-          echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
-          echo "Publishing $BASE_BRANCH at $source_sha."
+          git fetch --no-tags origin "+main:refs/remotes/origin/main"
+          release_sha="$(git rev-parse "origin/main^{commit}")"
+          echo "sha=$release_sha" >> "$GITHUB_OUTPUT"
+          echo "Releasing main at $release_sha."
 
   publish:
     name: Publish
     needs: release-pr
-    if: ${{ !inputs.dry_run && inputs.auto_merge }}
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      # Trusted publishing (OIDC) for the PyPI upload that gates the main push.
+      contents: read
+      # Trusted publishing (OIDC) for the PyPI upload.
       id-token: write
     outputs:
-      published: ${{ steps.push.outputs.published }}
-      publish_sha: ${{ steps.commit.outputs.publish_sha }}
+      published: ${{ steps.publish_done.outputs.published }}
+      release_sha: ${{ needs.release-pr.outputs.release_sha }}
 
     steps:
-      - name: Check out publish source
+      - name: Check out release commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-pr.outputs.source_sha }}
+          ref: ${{ needs.release-pr.outputs.release_sha }}
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Configure publish credentials
-        env:
-          PUBLISH_PUSH_TOKEN: ${{ secrets.PUBLISH_PUSH_TOKEN }}
-          BUILD_TEST_PUSH_TOKEN: ${{ secrets.BUILD_TEST_PUSH_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [ -n "$PUBLISH_PUSH_TOKEN" ]; then
-            git remote set-url origin "https://x-access-token:${PUBLISH_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-            echo "Using PUBLISH_PUSH_TOKEN for publish push."
-          elif [ -n "$BUILD_TEST_PUSH_TOKEN" ]; then
-            git remote set-url origin "https://x-access-token:${BUILD_TEST_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-            echo "Using BUILD_TEST_PUSH_TOKEN for publish push."
-          else
-            git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-            echo "Using GITHUB_TOKEN for publish push."
-          fi
 
       - name: Check canonical release version
         run: scripts/release/check-version.sh
 
+      # Publish only when the version is new: past the latest tag, or equal to it
+      # with the tag missing (a run that uploaded the wheel and died before
+      # tagging -- bump=none resumes it; skip-existing makes the re-upload a no-op).
       - name: Evaluate release gate
         id: gate
-        env:
-          BASE_BRANCH: ${{ inputs.base_branch }}
-          TARGET_BRANCH: ${{ inputs.target_branch }}
         run: |
-          source_sha="$(git rev-parse HEAD)"
-          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
-
-          if [ "$TARGET_BRANCH" != "main" ]; then
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "Build-test publish requested for $source_sha (CI/CD or build testing only)."
-            exit 0
-          fi
-
-          if [ "$BASE_BRANCH" != "develop" ]; then
-            echo "Real releases must publish develop to main; got base_branch=$BASE_BRANCH." >&2
-            exit 2
-          fi
-
           current_version="$(tr -d '[:space:]' < VERSION)"
           latest_tag="$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n 1 || true)"
-          if ! scripts/release/check-version.sh --incremented-from origin/main >/tmp/publish-main-version-check.log 2>&1; then
-            # main published before the plugin package moved to the repository
-            # root keeps the canonical version at plugins/cad/VERSION.
-            main_version="$(git show origin/main:VERSION 2>/dev/null || git show origin/main:plugins/cad/VERSION)"
-            main_version="$(printf '%s' "$main_version" | tr -d '[:space:]')"
-            if [ "$main_version" = "$current_version" ] && ! git rev-parse --verify --quiet "refs/tags/$current_version" >/dev/null; then
-              echo "Release version already reached origin/main, but tag $current_version is missing; resuming publish."
-            else
-              echo "should_publish=false" >> "$GITHUB_OUTPUT"
-              echo "Skipping publish: version has not advanced past origin/main."
-              exit 0
-            fi
-          fi
-          if [ -n "$latest_tag" ] && ! scripts/release/check-version.sh --incremented-from "refs/tags/$latest_tag" >/tmp/publish-tag-version-check.log 2>&1; then
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping publish: version has not advanced past latest tag $latest_tag."
+          if [ -z "$latest_tag" ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "No release tag yet; publishing $current_version."
             exit 0
           fi
-
-          echo "should_publish=true" >> "$GITHUB_OUTPUT"
-          echo "Release version advanced; publishing $source_sha to $TARGET_BRANCH."
+          if scripts/release/check-version.sh --incremented-from "refs/tags/$latest_tag" >/tmp/publish-tag-version-check.log 2>&1; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "Release version $current_version advanced past $latest_tag; publishing."
+            exit 0
+          fi
+          if ! git rev-parse --verify --quiet "refs/tags/$current_version" >/dev/null; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "Version $current_version has no tag yet; resuming publish."
+            exit 0
+          fi
+          echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          echo "Skipping publish: version $current_version is already tagged."
 
       - name: Skip non-release publish
         if: steps.gate.outputs.should_publish != 'true'
-        run: echo "Publish only updates main when the source version is newer than main and the latest release tag."
-
-      - name: Validate publish target
-        if: steps.gate.outputs.should_publish == 'true'
-        env:
-          SOURCE_SHA: ${{ steps.gate.outputs.source_sha }}
-          TARGET_BRANCH: ${{ inputs.target_branch }}
-        run: |
-          scripts/release/check-publish-source.sh --source-ref "$SOURCE_SHA" --target-ref origin/main
-          if [ "$TARGET_BRANCH" = "main" ]; then
-            echo "Validated main publish target."
-          else
-            echo "Validated build-test target against origin/main."
-          fi
+        run: echo "Nothing to publish; main's version is already released."
 
       - name: Set up dependencies
         if: steps.gate.outputs.should_publish == 'true'
         uses: ./.github/actions/setup-deps
 
+      # The bundle feeds the WHEEL: cadgen's Node builders and snapshot bundle
+      # (committed, so --clean must reproduce them byte for byte) and the CAD
+      # Viewer client (gitignored, wheel-only). Nothing here writes to git.
       - name: Bundle production outputs
         if: steps.gate.outputs.should_publish == 'true'
         run: scripts/bundle/bundle.sh --clean
@@ -367,17 +309,6 @@ jobs:
         if: steps.gate.outputs.should_publish == 'true'
         run: scripts/test/test.sh
 
-      # cadgen is built and uploaded BEFORE the target-branch push: a failed
-      # upload must block the release, because the publish tree pins
-      # cadgen==<version> from PyPI and a main without the matching PyPI release
-      # would break skill installs. Uploading before the pin also means the pin
-      # can only ever name a version that already exists. If PyPI succeeds but a
-      # later step fails, rerun Release with bump=none; skip-existing makes the
-      # re-upload a no-op.
-      #
-      # Only the upload itself is gated on main. The version check and the build
-      # run for build-test too, so a rehearsal exercises everything about this
-      # that can be exercised without publishing.
       - name: Check cadgen package version matches the canonical release version
         if: steps.gate.outputs.should_publish == 'true'
         run: |
@@ -387,6 +318,8 @@ jobs:
             exit 1
           fi
 
+      # Package data fails quietly: a glob that stops matching produces a wheel
+      # that imports fine and cannot build a DXF preview or serve the Viewer.
       - name: Check cadgen wheel contents
         if: steps.gate.outputs.should_publish == 'true'
         run: |
@@ -399,190 +332,48 @@ jobs:
           python3 -m pip install --upgrade build
           python3 -m build packages/cadgen
 
+      # Uploaded BEFORE the tag: the skill pins on main name this version, so a
+      # tagged release without its wheel would break every skill install. If the
+      # upload succeeds and a later step fails, rerun with bump=none.
       - name: Publish cadgen to PyPI
-        if: ${{ steps.gate.outputs.should_publish == 'true' && inputs.target_branch == 'main' }}
+        if: steps.gate.outputs.should_publish == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/cadgen/dist
           skip-existing: true
 
-      # main is develop with versions stamped, skill requirements pinned, and
-      # ONLY models/ removed. The source roots (apps/, packages/, tests/,
-      # requirements-dev.txt) ship, so the source behind a release is
-      # discoverable on the default branch; together they are ~15 MB with no LFS
-      # objects, and models/ is the fixture corpus whose absence is the only one
-      # that buys anything. The plugin package is the repository root, so a
-      # plugin install copies all of it; the Skills CLI copies skills/<name>
-      # alone. Neither can rely on a sibling directory, which is why the
-      # ships-alone law stands unchanged with packages/ present:
-      # check-publish-tree.sh below fails the publish if a skill reaches into it.
-      # No skill carries a generated runtime any more (the CAD Viewer ships in
-      # the cadgen wheel), so the bundle above feeds the wheel, not this tree.
-      #
-      # prepare-publish-tree.sh removes models/. It runs after the bundle,
-      # check-builds, and the tests, so the tree they validated is untouched.
-      #
-      # PUBLISH_TREE_REMOVED_ROOTS comes from the script -- the single source of
-      # truth for what was dropped: the commit step below reads it both to assert
-      # the roots are absent and to stop demanding generated outputs under them.
-      - name: Prepare publish tree
+      - name: Record publish
         if: steps.gate.outputs.should_publish == 'true'
-        run: |
-          scripts/release/prepare-publish-tree.sh
-          removed_roots="$(scripts/release/prepare-publish-tree.sh --print-removed-roots | tr '\n' ' ')"
-          echo "PUBLISH_TREE_REMOVED_ROOTS=${removed_roots% }" >> "$GITHUB_ENV"
+        id: publish_done
+        run: echo "published=true" >> "$GITHUB_OUTPUT"
 
-      # An installed skill resolves cadgen from PyPI at this release's version:
-      # no installer runs an editable install, and the Skills CLI does not even
-      # copy the sibling packages/cadgen. Verified again by check-publish-tree.sh
-      # before the tree is committed.
-      - name: Pin cadgen requirements to the published PyPI version
-        if: steps.gate.outputs.should_publish == 'true'
-        run: |
-          scripts/release/pin-cadgen-requirements.sh
-          scripts/release/pin-cadgen-requirements.sh --check
-
-      # The publish-tree contract, asserted over exactly the paths `git add -A`
-      # will stage: models/ absent; apps/, packages/, tests/ present; no symlink
-      # anywhere; no LFS-tracked path outside the README media; no skill
-      # reaching into a repo root.
-      - name: Check publish tree
-        if: steps.gate.outputs.should_publish == 'true'
-        run: scripts/github-workflows/check-publish-tree.sh
-
-      - name: Commit publish result
-        if: steps.gate.outputs.should_publish == 'true'
-        id: commit
-        env:
-          BASE_BRANCH: ${{ inputs.base_branch }}
-          SOURCE_SHA: ${{ steps.gate.outputs.source_sha }}
-          TARGET_BRANCH: ${{ inputs.target_branch }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          for root in ${PUBLISH_TREE_REMOVED_ROOTS:-models}; do
-            if [ -n "$(git ls-files -- "$root")" ]; then
-              echo "$root/ must not be present in the publish commit." >&2
-              git ls-files -- "$root" >&2
-              exit 1
-            fi
-          done
-
-          # Every gate above this line -- check-builds.sh, test.sh, test-docs.sh -- ran
-          # against the WORKING TREE, where bundle.sh had just written the generated outputs.
-          # `git add -A` honours .gitignore, so a generated path that is ignored (or unstaged
-          # for any other reason) passes all of them and still ships missing. This asserts
-          # against the INDEX, which is what actually becomes the commit. It is the check that
-          # would have caught a snapshot runtime shipping empty.
-          unstaged_generated=""
-          while IFS= read -r generated_path; do
-            [ -n "$generated_path" ] || continue
-            # Outputs under a trimmed root are deliberately absent here. They were
-            # still built and validated by check-builds.sh before the trim; they
-            # are just not part of what ships.
-            trimmed=0
-            for root in ${PUBLISH_TREE_REMOVED_ROOTS:-}; do
-              case "$generated_path" in
-                "$root"/*) trimmed=1 ;;
-              esac
-            done
-            if [ "$trimmed" -eq 1 ]; then
-              continue
-            fi
-            if [ -z "$(git ls-files -- "$generated_path" | head -n 1)" ]; then
-              unstaged_generated="$unstaged_generated$generated_path"$'\n'
-            fi
-          done <<< "$(scripts/bundle/bundle-skill.sh --all --print-outputs)"
-          if [ -n "$unstaged_generated" ]; then
-            echo "Generated outputs are missing from the publish commit:" >&2
-            printf '%s' "$unstaged_generated" | sed 's/^/- /' >&2
-            echo "They exist in the working tree but nothing staged them; check .gitignore." >&2
-            exit 1
-          fi
-
-          version="$(tr -d '[:space:]' < VERSION)"
-          if target_base_sha="$(git rev-parse --verify "origin/$TARGET_BRANCH^{commit}" 2>/dev/null)"; then
-            echo "Using existing $TARGET_BRANCH as publish parent: $target_base_sha"
-          else
-            target_base_sha="$(git rev-parse --verify "origin/main^{commit}")"
-            echo "Target branch $TARGET_BRANCH does not exist; using origin/main as publish parent: $target_base_sha"
-          fi
-          release_base_sha="$(git rev-parse --verify "origin/main^{commit}")"
-          previous_source_sha="$(scripts/release/check-publish-source.sh --target-ref origin/main --print-previous-source)"
-          included_commits="$(git log --oneline --no-decorate "$previous_source_sha..$SOURCE_SHA" || true)"
-
-          message_file="$(mktemp)"
-          {
-            echo "Publish $version from $BASE_BRANCH to $TARGET_BRANCH"
-            echo
-            echo "Source ref: $BASE_BRANCH"
-            echo "Source commit: $SOURCE_SHA"
-            echo "Target branch: $TARGET_BRANCH"
-            echo "Previous target: $target_base_sha"
-            echo "Release base: $release_base_sha"
-            echo "Previous source: $previous_source_sha"
-            echo
-            echo "Included commits since previous source:"
-            if [ -n "$included_commits" ]; then
-              echo "$included_commits"
-            else
-              echo "(no source commits beyond previous published source)"
-            fi
-          } > "$message_file"
-
-          tree_sha="$(git write-tree)"
-          commit_parents=(-p "$target_base_sha")
-          if [ "$SOURCE_SHA" != "$target_base_sha" ]; then
-            commit_parents+=(-p "$SOURCE_SHA")
-          fi
-          publish_commit="$(git commit-tree "$tree_sha" "${commit_parents[@]}" -F "$message_file")"
-          git reset --hard "$publish_commit"
-          echo "publish_sha=$publish_commit" >> "$GITHUB_OUTPUT"
-          echo "Created publish commit: $publish_commit"
-
-      - name: Push target branch
-        if: steps.gate.outputs.should_publish == 'true'
-        id: push
-        env:
-          TARGET_BRANCH: ${{ inputs.target_branch }}
-        run: |
-          if [ "$TARGET_BRANCH" = "main" ]; then
-            git push origin HEAD:main
-          else
-            git push --force-with-lease origin "HEAD:$TARGET_BRANCH"
-          fi
-          echo "published=true" >> "$GITHUB_OUTPUT"
-
-  # Deploys from the release SOURCE commit, not the publish commit. main carries
-  # apps/docs and packages/ too since the trim stopped at models/, but the site
-  # is built from the commit the release was cut from -- the one `git rev-parse
-  # <tag>^2` recovers -- and never from a generated tree. Still gated on the
-  # publish succeeding, so the site never moves for a release that did not ship.
+  # The docs site is built from the release commit itself: main is the source
+  # tree, and apps/docs/package.json carries the stamped version the header reads.
   deploy-docs:
     name: Deploy Docs
     needs:
       - release-pr
       - publish
-    if: ${{ needs.publish.outputs.published == 'true' && inputs.target_branch == 'main' }}
+    if: ${{ needs.publish.outputs.published == 'true' }}
     uses: ./.github/workflows/deploy-docs.yml
     with:
-      ref: ${{ needs.release-pr.outputs.source_sha }}
+      ref: ${{ needs.release-pr.outputs.release_sha }}
     secrets: inherit
 
   tag-release:
     name: Tag and GitHub Release
     needs:
+      - release-pr
       - publish
       - deploy-docs
-    if: ${{ needs.publish.outputs.published == 'true' && inputs.target_branch == 'main' }}
+    if: ${{ needs.publish.outputs.published == 'true' }}
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out publish commit
+      - name: Check out release commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.publish.outputs.publish_sha }}
+          ref: ${{ needs.release-pr.outputs.release_sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -603,13 +394,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           INPUT_PUBLISH: ${{ inputs.publish }}
-          INPUT_CREATE_RELEASE: ${{ inputs.create_release }}
         run: |
           args=(--target HEAD)
           if [ "$INPUT_PUBLISH" = "true" ]; then
             args+=(--publish)
-          fi
-          if [ "$INPUT_CREATE_RELEASE" != "true" ]; then
-            args+=(--skip-release)
           fi
           scripts/release/publish-github-release.sh "${args[@]}"

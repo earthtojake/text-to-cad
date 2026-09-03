@@ -9,7 +9,9 @@ usage() {
 Usage:
   scripts/release/check-version.sh [--incremented-from REF]
 
-Checks that VERSION contains a valid canonical release version.
+Checks that VERSION contains a valid canonical release version and that every
+skill's requirements.txt pins cadgen to exactly that version (main is the source
+branch AND what installers clone, so an unpinned or stale pin ships).
 With --incremented-from, also checks that the current version is greater than
 the version at REF.
 
@@ -54,3 +56,24 @@ if [ -n "$BASE_REF" ]; then
 else
   "$SCRIPT_DIR/bump-version.sh" --check
 fi
+
+# Every skill that names cadgen must pin THIS version. The release PR stamps the
+# pins (pin-cadgen-requirements.sh) alongside VERSION; a bare `cadgen` line or a
+# pin at another version means the two moved separately.
+version="$(tr -d '[:space:]' < VERSION)"
+stale=0
+while IFS= read -r manifest; do
+  if grep -Eq '^cadgen(\[[a-z0-9_,-]+\])?[[:space:]]*$' "$manifest"; then
+    echo "$manifest names cadgen without a pin; expected cadgen==$version" >&2
+    stale=1
+  elif line="$(grep -E '^cadgen(\[[a-z0-9_,-]+\])?[[:space:]]*==' "$manifest" || true)" && [ -n "$line" ] \
+      && ! printf '%s\n' "$line" | grep -Eq "==[[:space:]]*$version[[:space:]]*$"; then
+    echo "$manifest pins '$line'; expected cadgen==$version" >&2
+    stale=1
+  fi
+done < <(find skills -mindepth 2 -maxdepth 2 -name requirements.txt -type f | sort)
+if [ "$stale" -ne 0 ]; then
+  echo "Run scripts/release/pin-cadgen-requirements.sh to stamp the pins from VERSION." >&2
+  exit 1
+fi
+echo "Skill cadgen pins match VERSION ($version)."

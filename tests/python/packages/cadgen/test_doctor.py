@@ -37,7 +37,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn(f"cadgen {cadgen.__version__}", out)
         self.assertIn("none found", out)
 
-    def test_unpinned_requirements_is_the_dev_checkout_and_passes(self) -> None:
+    def test_unpinned_requirements_has_nothing_to_enforce_and_passes(self) -> None:
         with TemporaryDirectory() as tmp:
             (Path(tmp) / "requirements.txt").write_text("cadgen[snapshot]\n", encoding="utf-8")
             code, out, _ = _run([tmp])

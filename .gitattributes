@@ -26,3 +26,7 @@ apps/docs/public/hero/** !filter !diff !merge -text
 # Tiny plain-text STEP used by the viewer launch smoke's end-to-end import
 # (CI checks out without LFS, so this one fixture must be real text).
 models/examples/imported/import-smoke.step !filter !diff !merge text
+
+# The fixture corpus is LFS and never installed; archives (tarball installers,
+# GitHub source downloads) omit it. Clones keep it as pointers via .lfsconfig.
+models/ export-ignore

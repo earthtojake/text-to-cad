@@ -1,4 +1,4 @@
 # The CAD Viewer is `cadgen viewer`: the server and the prebuilt client ship
 # inside the cadgen distribution, so this is the only dependency. Unpinned on
 # develop (the repo's editable install satisfies it); the release pins it.
-cadgen
+cadgen==0.4.28

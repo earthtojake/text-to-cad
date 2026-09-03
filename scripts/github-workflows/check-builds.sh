@@ -83,23 +83,55 @@ while IFS= read -r generated_path; do
   check_generated_path "$generated_path"
 done < <(generated_paths)
 
-# The generated paths above are cadgen's committed runtime, inside packages/; skills/
-# as a whole is what ships to the three plugin installers, so sweep it directly. The
-# rule is simply: no symlinks, anywhere, ever. See the note above on why this matters: Codex drops them
-# silently, shipping a skill with missing files and no error. The publish tree gets the
-# same sweep over EVERY shipping path (apps/ included) from check-publish-tree.sh.
-check_skills_tree_has_no_symlinks() {
-  local first_link
-  first_link="$(find "$REPO_ROOT/skills" -name node_modules -prune -o -type l -print -quit)"
-  if [ -n "$first_link" ]; then
-    echo "skills/ must not contain symlinks: they are dropped silently by Codex" >&2
-    echo "plugin installs, shipping a skill with missing files." >&2
-    echo "First symlink: $first_link" >&2
+# The generated paths above are cadgen's committed runtime, inside packages/. main is
+# the source branch AND what every installer clones, so the rest of the shipping
+# contract is checked over the tree itself, here, on every run:
+#
+#   * no symlink anywhere (tracked): Codex drops them silently -- see above;
+#   * no LFS-tracked path under skills/: installers clone without git-lfs and get
+#     pointer files, which for a skill fixture or runtime asset is a silently broken
+#     install. models/ and assets/ stay LFS: nothing installs them, .lfsconfig keeps
+#     them as pointers, and .gitattributes export-ignores models/ from archives;
+#   * no skill reaching into a repo root (../../../packages/, apps/, tests/, models/):
+#     the Skills CLI installs skills/<name> alone, so the sibling is not there.
+check_tree_has_no_symlinks() {
+  local links
+  links="$(git -C "$REPO_ROOT" ls-files -s | awk '$1 == "120000" { print $4 }')"
+  if [ -n "$links" ]; then
+    echo "Tracked symlinks would ship to every installer, and Codex plugin installs" >&2
+    echo "drop them silently, shipping a skill with missing files:" >&2
+    printf '%s\n' "$links" | sed 's/^/  /' >&2
     exit 1
   fi
 }
 
-check_skills_tree_has_no_symlinks
+check_skills_have_no_lfs_paths() {
+  local hits
+  hits="$(git -C "$REPO_ROOT" ls-files skills | git -C "$REPO_ROOT" check-attr --stdin filter |
+    sed -n 's/: filter: lfs$//p')"
+  if [ -n "$hits" ]; then
+    echo "LFS-tracked paths under skills/ (installers clone without git-lfs):" >&2
+    printf '%s\n' "$hits" | sed 's/^/  /' >&2
+    exit 1
+  fi
+}
+
+check_skills_do_not_reach_repo_roots() {
+  local refs
+  refs="$(
+    grep -rIlE '\.\./\.\./\.\./(packages|apps|tests|models)/|["'"'"']\.\./\.\./(packages|apps|tests|models)/' \
+      "$REPO_ROOT/skills" --exclude-dir=node_modules 2>/dev/null || true
+  )"
+  if [ -n "$refs" ]; then
+    echo "A skill reaches into a repo root; an installed skill has no siblings:" >&2
+    printf '%s\n' "$refs" | sed 's/^/  /' >&2
+    exit 1
+  fi
+}
+
+check_tree_has_no_symlinks
+check_skills_have_no_lfs_paths
+check_skills_do_not_reach_repo_roots
 
 if [ "$RUN_BUNDLE_CHECK" -eq 1 ]; then
   "$REPO_ROOT/scripts/bundle/bundle.sh" --check

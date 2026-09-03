@@ -78,8 +78,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
 }
 
 # `cadgen==1.2.3` / `cadgen[snapshot]==1.2.3`, as written by
-# scripts/release/pin-cadgen-requirements.sh. Only the `==` form is a pin: a bare
-# `cadgen` line is the development checkout, which resolves to the editable install.
+# scripts/release/pin-cadgen-requirements.sh. Only the `==` form is a pin; a bare
+# `cadgen` line has nothing to enforce.
 _PIN_RE = re.compile(r"^cadgen(?:\[[a-z0-9_,.-]+\])?\s*==\s*(?P<pin>[^\s;#]+)")
 
 
@@ -87,9 +87,10 @@ def read_requirements_pin(requirements_path) -> str | None:
     """The exact ``cadgen==<version>`` a requirements.txt pins, or ``None``.
 
     ``None`` covers the non-cases uniformly: file absent/unreadable, or cadgen named
-    unpinned — which is exactly the development checkout, whose editable install has no
-    release version to match. Callers decide what a mismatch means (``cadgen doctor``
-    reports it; :func:`enforce_requirements_pin` exits). String comparison rather than
+    without a pin. Callers decide what a mismatch means (``cadgen doctor`` reports it;
+    :func:`enforce_requirements_pin` exits). A source checkout's editable install
+    reports the repository's VERSION, which is what the checked-in pins name, so the
+    pin matches there too. String comparison rather than
     PEP 440 on purpose: pins are written mechanically as exact ``==`` by
     scripts/release/pin-cadgen-requirements.sh.
     """

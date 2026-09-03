@@ -1,24 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Rewrite every `--editable <path>/packages/cadgen` requirement to
-# `cadgen==<VERSION>` so published skills resolve cadgen from PyPI.
+# Stamp every skill's cadgen requirement to `cadgen==<VERSION>`.
 #
-# A source checkout installs cadgen editable through the development symlinks,
-# which only resolves because `packages/cadgen` sits beside the skill. An
-# installed skill has no such sibling, so the published tree must name the PyPI
-# release instead. The vendored package copy stays in the bundle as an offline
-# fallback (`pip install ./<path>/packages/cadgen`).
+# main is the source branch and what installers clone, so the pins live IN the
+# tree: the release PR runs this beside bump-version.sh and sync-version.mjs, and
+# scripts/release/check-version.sh asserts every pin equals VERSION from then
+# on. A developer's editable install of packages/cadgen reports VERSION too
+# (sync-version stamps pyproject.toml), so `cadgen==X` is satisfied in a checkout
+# without touching PyPI -- install requirements-dev.txt, not a skill's
+# requirements.txt, which would fetch the previous release from PyPI instead.
 #
-# This is a PUBLISH-TREE transformation, run by the Release workflow between
-# `bundle.sh --clean` and the publish commit — the same place `models/` is
-# removed. It deliberately does NOT live in bundle.sh: that also runs `--check`
-# against a development checkout, where rewriting the checked-in requirements
-# would dirty the source tree and break the freshness check.
-#
-# Before the plugin package moved to the repo root, this ran inside
-# bundle-plugin.sh over the generated `plugins/cad/skills` copy. There is no
-# copy any more — `skills/` is what ships — so it runs over the tree in place.
+# A bare `cadgen` / `cadgen[extras]` line is rewritten; an existing `==` pin at
+# another version is rewritten too, so a bump moves every pin at once.
 #
 # Usage: scripts/release/pin-cadgen-requirements.sh [--check]
 #   --check  report what would change and exit 1 if anything would, without writing.
@@ -40,16 +34,17 @@ if [ -z "$version" ]; then
   exit 1
 fi
 
-# A skill that no longer vendors cadgen names the DISTRIBUTION instead, optionally with
-# extras (`cadgen[snapshot]`). Unpinned on develop so the editable install from
-# requirements-dev.txt satisfies it; pinned here so a published skill resolves the exact
-# release from PyPI.
-DIST_RE='^cadgen(\[[a-z0-9_,-]+\])?[[:space:]]*$'
+# A skill names the DISTRIBUTION, optionally with extras (`cadgen[snapshot]`), either
+# bare or pinned to some version. Both spellings are rewritten to this VERSION.
+DIST_RE='^cadgen(\[[a-z0-9_,-]+\])?[[:space:]]*(==[[:space:]]*[^[:space:]#;]+)?[[:space:]]*$'
 
 pending=0
 while IFS= read -r manifest; do
   if ! grep -Eq "$DIST_RE" "$manifest"; then
     continue
+  fi
+  if grep -Eq "^cadgen(\[[a-z0-9_,-]+\])?[[:space:]]*==[[:space:]]*$version[[:space:]]*$" "$manifest"; then
+    continue  # already at this version
   fi
   if [ "$CHECK_ONLY" -eq 1 ]; then
     echo "would pin: $manifest -> cadgen==$version"
@@ -66,6 +61,6 @@ done < <(
 )
 
 if [ "$CHECK_ONLY" -eq 1 ] && [ "$pending" -ne 0 ]; then
-  echo "Unpinned cadgen requirements remain." >&2
+  echo "cadgen requirements are not pinned to $version." >&2
   exit 1
 fi

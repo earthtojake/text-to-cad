@@ -34,22 +34,27 @@ class PinScriptPresenceTest(unittest.TestCase):
         self.assertTrue(SCRIPT.is_file(), f"missing {SCRIPT}")
         self.assertTrue(os.access(SCRIPT, os.X_OK), f"{SCRIPT} is not executable")
 
-    def test_release_workflow_runs_it_before_the_publish_commit(self):
+    def test_release_workflow_pins_in_the_release_pr(self):
+        # The pin is stamped WITH the version bump, in the release PR against main,
+        # so main never carries a VERSION its skill pins disagree with.
         workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-        self.assertIn("scripts/release/pin-cadgen-requirements.sh", workflow)
+        bump_at = workflow.index("scripts/release/bump-version.sh")
         pin_at = workflow.index("scripts/release/pin-cadgen-requirements.sh")
-        commit_at = workflow.index("Commit publish result")
-        self.assertLess(pin_at, commit_at, "pinning must run before the publish commit")
+        pr_at = workflow.index("Create or update release pull request")
+        self.assertLess(bump_at, pin_at)
+        self.assertLess(pin_at, pr_at, "pinning must happen before the release PR is committed")
 
-    def test_checked_in_requirements_stay_unpinned(self):
-        """A source checkout must NOT be pinned — the pin is publish-only.
+    def test_checked_in_requirements_are_pinned_to_version(self):
+        """main is the source branch AND what installers clone, so the pins live in it.
 
-        Two unpinned spellings are legal on develop, and both must resolve to the repo's
-        own cadgen locally: `--editable <path>/packages/cadgen` for a skill that still
-        vendors it, and the bare distribution name (optionally with extras) for one that
-        installs it. Either way `cadgen==` must not appear in the tree, or a developer
-        would silently install a released cadgen over their working copy.
+        Every skill naming cadgen pins exactly VERSION. The editable install a
+        developer gets from requirements-dev.txt reports that same version
+        (sync-version.mjs stamps pyproject.toml), so the pin is satisfied in a checkout
+        too; `pip install -r skills/<s>/requirements.txt` on its own would fetch the
+        release from PyPI, which is why requirements-dev.txt is the development door.
+        check-version.sh enforces the same rule in CI.
         """
+        version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         checked = 0
         for req in sorted(REPO_ROOT.glob("skills/*/requirements.txt")):
             text = req.read_text(encoding="utf-8")
@@ -57,11 +62,9 @@ class PinScriptPresenceTest(unittest.TestCase):
                 continue
             checked += 1
             rel = req.relative_to(REPO_ROOT)
-            self.assertNotIn("cadgen==", text, f"{rel} must not be pinned in the source tree")
-            self.assertTrue(
-                any(line.strip().startswith("cadgen") for line in text.splitlines()),
-                f"{rel} should name the cadgen distribution",
-            )
+            pins = [line.strip() for line in text.splitlines() if line.strip().startswith("cadgen")]
+            self.assertEqual(len(pins), 1, f"{rel} should name cadgen once: {pins}")
+            self.assertRegex(pins[0], rf"^cadgen(\[[a-z0-9_,-]+\])?==\s*{version}$", f"{rel}: {pins[0]}")
         self.assertTrue(checked, "no skill requirements name cadgen")
 
     def test_the_viewer_client_has_no_python_requirements(self):
@@ -140,6 +143,14 @@ class PinScriptBehaviourTest(unittest.TestCase):
         self.assertEqual(1, result.returncode, "unpinned requirements must fail --check")
         self.assertIn("would pin", result.stdout)
         self.assertEqual(f"{UNPINNED}\n", target.read_text(encoding="utf-8"), "--check must not write")
+
+    def test_a_stale_pin_is_moved_to_the_current_version(self):
+        # A bump moves EVERY pin: a skill left at the previous release would name a
+        # cadgen whose CLI the skill text no longer matches.
+        target = self._write("skills/cad/requirements.txt", "cadgen[snapshot]==1.0.0\n")
+        self.assertEqual(1, self._run("--check").returncode)
+        self._run()
+        self.assertEqual("cadgen[snapshot]==9.9.9\n", target.read_text(encoding="utf-8"))
 
     def test_check_mode_passes_once_pinned(self):
         self._write("skills/cad/requirements.txt", f"{UNPINNED}\n")
