@@ -83,9 +83,12 @@ calls the decorated function:
 from cadgen import build123d as bd
 from cadgen import step
 
+WIDTH = 10.0
+
+
 @step()                       # or @dxf() for drawings; out= relocates the artifact
-def bracket(width: float = 10.0):
-    return bd.Box(width, 10, 10)
+def bracket():
+    return bd.Box(WIDTH, 10, 10)
 
 if __name__ == "__main__":
     bracket()
@@ -107,8 +110,10 @@ ride the script's argv: `--force`, `--json`, `--verbose`, `-o PATH`,
 Rules the decorator enforces: importing a model module never builds; a model
 file without a `__main__` call never builds either — always end the script with
 `if __name__ == "__main__": <model>()`; a top-level call takes no arguments (the
-declared output is the default configuration); one `@step`/`@dxf` model per
-file; parameters must all have defaults.
+declared output is the model's one configuration); a model function takes
+**no parameters** — parametric geometry lives in a plain factory function the
+model calls with its values, and a different configuration is a different
+model with its own file; one `@step`/`@dxf` model per file.
 
 Use the active project Python interpreter; treat `python` in examples as an interpreter placeholder. Every operational verb is a `cadgen` subcommand (warm-by-default; `python -m cadgen.cli <verb>` is the PATH-independent equivalent). Use `cadgen <verb> --help` for the complete current interface; reference docs show recommended workflows, not every flag. Install per `requirements.txt`; `cadgen doctor <skill-dir>` verifies the installed cadgen matches this skill's pin (docs drift silently on a mismatched install).
 

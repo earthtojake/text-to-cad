@@ -376,8 +376,11 @@ from cadgen import build123d as bd
 from cadgen import dxf
 
 
+KERF = 0.15
+
+
 @dxf
-def bracket_plate(kerf: float = 0.15):
+def bracket_plate():
     with bd.BuildSketch() as cut:
         bd.Rectangle(60, 40)
         bd.Circle(8, mode=bd.Mode.SUBTRACT)
@@ -385,7 +388,7 @@ def bracket_plate(kerf: float = 0.15):
             bd.Circle(2.25, mode=bd.Mode.SUBTRACT)
     with bd.BuildSketch() as mark:
         bd.Text("REV B", font_size=6)
-    return {"CUT": bd.offset(cut.sketch, amount=kerf), "ENGRAVE": mark.sketch}
+    return {"CUT": bd.offset(cut.sketch, amount=KERF), "ENGRAVE": mark.sketch}
 
 
 if __name__ == "__main__":

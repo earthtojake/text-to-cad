@@ -12,9 +12,12 @@ the decorated function; that call builds it:
 from cadgen import build123d as bd
 from cadgen import step
 
+WIDTH = 10.0
+
+
 @step()
-def bracket(width: float = 10.0):
-    return bd.Box(width, 10, 10)
+def bracket():
+    return bd.Box(WIDTH, 10, 10)
 
 if __name__ == "__main__":
     bracket()
@@ -50,8 +53,23 @@ Rules the decorator enforces:
   model or an expensive helper), never for anything with side effects.
 - **One model per file.** The file is the model; entry identity, packages, and
   closures key off it.
-- **Parameters must all have defaults** — the pipeline calls the function with
-  no arguments; defaults are the authored values.
+- **A model takes no parameters.** It is one configuration of one output, so
+  there is nothing for an argument to select; the decorator refuses a
+  parameter list. Parametric geometry is a plain factory the model calls:
+
+  ```python
+  def _bracket(width: float, thickness: float) -> bd.Shape:
+      return bd.Box(width, 10, thickness)
+
+  @step()
+  def bracket():
+      return _bracket(width=40.0, thickness=6.0)
+  ```
+
+  A second configuration is a second model (`bracket_wide.py`), with its own
+  STEP — the way two part numbers are two parts. Authored values that a model
+  shares with its drawing or its assembly live in module constants
+  (`WIDTH = 40.0`) that the siblings import.
 - Options: `out=`, `kind="part"|"assembly"` (else inferred from the return),
   `mesh_tolerance=`, `mesh_angular_tolerance=`. The return is a build123d
   `Shape` or a `{"shape": ..., "stl": ..., "3mf": ..., "mesh_tolerance": ...,

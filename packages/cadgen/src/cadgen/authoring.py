@@ -8,8 +8,8 @@ A CAD model is a plain Python script; the decorator declares the model and
     from cadgen import step
 
     @step()                      # out= defaults to <stem>.step beside the
-    def bracket(width: float = 10.0):    # script; pass out="..." to relocate
-        return bd.Box(width, 10, 10)
+    def bracket():               # script; pass out="..." to relocate
+        return bd.Box(40, 10, 10)
 
     if __name__ == "__main__":
         bracket()
@@ -40,8 +40,9 @@ Semantics:
 Per-run flags ride ``sys.argv`` of the top-level call: ``--force``,
 ``--verbose``, ``--json``, ``-o/--output``, ``--mesh-tolerance``,
 ``--mesh-angular-tolerance``, ``--lock-timeout``. Durable configuration lives
-in the decorator call. A top-level call takes no arguments (the declared
-output is the model's default configuration).
+in the decorator call. A model function takes no parameters: it is one
+configuration of one output. Parametric geometry lives in a plain factory the
+model calls; another configuration is another model.
 
 This module must import light (no OCP): the whole point is that a model
 script's body costs ~0.2s before the gate and the warm handoff run.
@@ -146,17 +147,24 @@ def _script_path_of(func: Callable[..., Any]) -> Path:
 
 
 def _validate_signature(func: Callable[..., Any], *, fmt: str) -> None:
-    signature = inspect.signature(func)
-    for parameter in signature.parameters.values():
-        if parameter.kind in (parameter.VAR_POSITIONAL, parameter.VAR_KEYWORD):
-            raise TypeError(
-                f"@{fmt} model {func.__name__}() must not accept variadic arguments"
-            )
-        if parameter.default is parameter.empty:
-            raise TypeError(
-                f"@{fmt} model {func.__name__}() parameters must all have defaults — "
-                "the pipeline calls it with no arguments"
-            )
+    """A model takes no parameters.
+
+    A model is one configuration with one declared output; there is nothing
+    for an argument to select. Geometry that varies belongs in a plain factory
+    function the model calls — ``def _bracket(width): ...`` and
+    ``@step def bracket(): return _bracket(40.0)`` — and a second configuration
+    is a second model with its own output. Enforced here and by the static
+    parser (cadgen.metadata) so a build never has to guess what to pass.
+    """
+    parameters = list(inspect.signature(func).parameters.values())
+    if parameters:
+        listed = ", ".join(p.name for p in parameters)
+        raise TypeError(
+            f"@{fmt} model {func.__name__}() takes no parameters (got: {listed}). A "
+            "model is one configuration of one output: move the parameters to a "
+            f"plain factory function and have {func.__name__}() call it with the "
+            "values this model uses; a different configuration is a different model."
+        )
 
 
 def _register(defn: ModelDef) -> None:
@@ -244,10 +252,8 @@ def _decorator(
                 return func(*args, **kwargs)
             if args or kwargs:
                 raise TypeError(
-                    f"{func.__name__}() was called with arguments outside a build; a "
-                    "top-level call builds the model's declared output, which is its "
-                    "default configuration. Pass arguments only when composing it "
-                    "from another model."
+                    f"{func.__name__}() takes no arguments: a model is one configuration "
+                    "of one output. Calling it builds that output."
                 )
             # A top-level call builds. The registry entry may have been extended by a
             # mesh decorator stacked ABOVE @step since `defn` was captured, so read it

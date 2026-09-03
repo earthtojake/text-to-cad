@@ -27,10 +27,13 @@ DEPTH = 40.0
 THICKNESS = 4.0
 
 
+HOLE_D = 4.5
+
+
 @step(out="../STEP/plate.step")
-def plate(hole_d: float = 4.5):
+def plate():
     body = bd.Box(WIDTH, DEPTH, THICKNESS)
-    return holes.corner_holes(body, WIDTH, DEPTH, THICKNESS, hole_d)
+    return holes.corner_holes(body, WIDTH, DEPTH, THICKNESS, HOLE_D)
 
 
 if __name__ == "__main__":
@@ -51,12 +54,15 @@ from lib import holes
 from plate import DEPTH, WIDTH  # importing a model never builds it
 
 
+HOLE_D = 4.5
+
+
 @dxf(out="../DXF/plate_drawing.dxf")
-def plate_drawing(hole_d: float = 4.5):
+def plate_drawing():
     with bd.BuildSketch() as cut:
         bd.Rectangle(WIDTH, DEPTH)
         with bd.Locations(*holes.corner_hole_centers(WIDTH, DEPTH)):
-            bd.Circle(hole_d / 2, mode=bd.Mode.SUBTRACT)
+            bd.Circle(HOLE_D / 2, mode=bd.Mode.SUBTRACT)
     return cut.sketch  # a bare shape is the CUT layer
 
 

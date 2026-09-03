@@ -50,11 +50,14 @@ from cadgen import build123d as bd
 from cadgen import dxf
 
 
+HOLE_D = 4.5
+
+
 @dxf
-def gasket(hole_d: float = 4.5):
+def gasket():
     with bd.BuildSketch() as cut:
         bd.Rectangle(60, 40)
-        bd.Circle(hole_d / 2, mode=bd.Mode.SUBTRACT)
+        bd.Circle(HOLE_D / 2, mode=bd.Mode.SUBTRACT)
     return cut.sketch          # bare shape -> the CUT layer
 
 
@@ -94,9 +97,12 @@ Copy the full generator template for the applicable workflow from
    from cadgen import dxf, flatten
    from bracket import bracket        # closure-tracked; importing never builds
 
+   KERF = 0.15
+
+
    @dxf
-   def bracket_drawing(kerf: float = 0.15):
-       return flatten.flat_pattern(bracket(), coordinate=3.0, kerf=kerf)
+   def bracket_drawing():
+       return flatten.flat_pattern(bracket(), coordinate=3.0, kerf=KERF)
 
 
    if __name__ == "__main__":
@@ -119,10 +125,13 @@ Copy the full generator template for the applicable workflow from
 
    _HERE = Path(__file__).resolve().parent
 
+   KERF = 0.15
+
+
    @dxf
-   def panel_flat(kerf: float = 0.15):
+   def panel_flat():
        panel = read_step(_HERE / "imported" / "vendor_panel.step")   # recorded input
-       return flatten.flat_pattern(panel, coordinate=3.0, kerf=kerf)
+       return flatten.flat_pattern(panel, coordinate=3.0, kerf=KERF)
 
 
    if __name__ == "__main__":

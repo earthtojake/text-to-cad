@@ -32,12 +32,15 @@ MODEL = textwrap.dedent("""\
     from cadgen import glb, step, stl, threemf
 
 
+    SIZE = 12.0
+
+
     @step(out="../STEP/widget.step")
     @stl(out="../STL/widget.stl")
     @glb
     @threemf(out="../3MF/widget.3mf", mesh_tolerance=5e-3)
-    def widget(size: float = 12.0):
-        body = bd.Box(size, size / 2, 3)
+    def widget():
+        body = bd.Box(SIZE, SIZE / 2, 3)
         body -= bd.Pos(0, 0, 0) * bd.Cylinder(2, 10)
         return body
 
@@ -124,7 +127,7 @@ class MeshExportMetadataTest(unittest.TestCase):
     def test_runtime_decorators_converge_both_orders(self) -> None:
         from cadgen.authoring import step as step_deco, stl as stl_deco
 
-        def below(size: float = 1.0):
+        def below():
             return None
 
         from cadgen.authoring import _REGISTRY, registered_model
@@ -142,7 +145,7 @@ class MeshExportMetadataTest(unittest.TestCase):
         # above-@step order as if in a fresh file.
         _REGISTRY.pop(this_file, None)
 
-        def above(size: float = 1.0):
+        def above():
             return None
 
         step_deco(above)

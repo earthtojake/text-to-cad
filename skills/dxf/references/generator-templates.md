@@ -98,12 +98,15 @@ from <name> import <name>          # transparent callable; closure-tracked
 THICKNESS_MM = 6.0                 # TODO: the profile face's height
 
 
+KERF = 0.0
+
+
 @dxf
-def drawing(kerf: float = 0.0):
+def drawing():
     return flatten.flat_pattern(
         <name>(),
         coordinate=THICKNESS_MM,   # TODO: which face plane defines the profile
-        kerf=kerf,
+        kerf=KERF,
     )
 
 
@@ -155,11 +158,14 @@ from cadgen import dxf, flatten, read_step
 _STEP_PATH = Path(__file__).parent / "imported" / "vendor_panel.step"
 
 
+KERF = 0.15
+
+
 @dxf
-def drawing(kerf: float = 0.15):
+def drawing():
     part = read_step(_STEP_PATH)
     top_z = part.bounding_box().max.Z
-    return flatten.flat_pattern(part, coordinate=top_z, kerf=kerf)
+    return flatten.flat_pattern(part, coordinate=top_z, kerf=KERF)
 
 
 if __name__ == "__main__":

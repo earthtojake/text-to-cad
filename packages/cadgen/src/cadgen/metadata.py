@@ -290,17 +290,20 @@ def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
         )
 
     function, fmt, call_kwargs = decorated[0]
-    if function.args.vararg or function.args.kwarg:
+    params = [
+        *function.args.posonlyargs,
+        *function.args.args,
+        *function.args.kwonlyargs,
+        *([function.args.vararg] if function.args.vararg else []),
+        *([function.args.kwarg] if function.args.kwarg else []),
+    ]
+    if params:
+        listed = ", ".join(p.arg for p in params)
         raise ValueError(
-            f"{_display_path(script_path)} {function.name}() must not accept variadic arguments"
-        )
-    positional = [*function.args.posonlyargs, *function.args.args]
-    if len(function.args.defaults) < len(positional) or any(
-        default is None for default in function.args.kw_defaults
-    ):
-        raise ValueError(
-            f"{_display_path(script_path)} {function.name}() parameters must all have "
-            "defaults — the pipeline calls it with no arguments"
+            f"{_display_path(script_path)} {function.name}() takes no parameters (got: "
+            f"{listed}). A model is one configuration of one output: move the parameters "
+            f"to a plain factory function and have {function.name}() call it with the "
+            "values this model uses; a different configuration is a different model."
         )
 
     out_target = _decorator_string_kwarg(call_kwargs, "out", script_path=script_path)

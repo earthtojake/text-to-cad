@@ -51,9 +51,12 @@ Two mechanical rules:
    from cadgen import build123d as bd
    from cadgen import step
 
+   WIDTH = 10.0
+
+
    @step(out="../STEP/plate.step")
-   def plate(width: float = 10.0):
-       return bd.Box(width, 10, 10)
+   def plate():
+       return bd.Box(WIDTH, 10, 10)
 
 
    if __name__ == "__main__":

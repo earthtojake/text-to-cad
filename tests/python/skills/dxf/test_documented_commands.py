@@ -47,13 +47,16 @@ _BRACKET_MODEL = '''from cadgen import build123d as bd
 from cadgen import step
 
 
+THICKNESS = 3.0
+
+
 @step(kind="part")
-def bracket(thickness: float = 3.0):
+def bracket():
     with bd.BuildSketch() as profile:
         bd.Rectangle(40, 25)
         with bd.Locations((-14, 0), (14, 0)):
             bd.Circle(2.5, mode=bd.Mode.SUBTRACT)
-    return bd.extrude(profile.sketch, amount=thickness)
+    return bd.extrude(profile.sketch, amount=THICKNESS)
 
 
 if __name__ == "__main__":
@@ -69,12 +72,15 @@ _VENDOR_MODEL = '''from cadgen import build123d as bd
 from cadgen import step
 
 
+THICKNESS = 3.0
+
+
 @step(kind="part")
-def vendor_panel(thickness: float = 3.0):
+def vendor_panel():
     with bd.BuildSketch() as profile:
         bd.Rectangle(60, 40)
         bd.Circle(4, mode=bd.Mode.SUBTRACT)
-    return bd.extrude(profile.sketch, amount=thickness)
+    return bd.extrude(profile.sketch, amount=THICKNESS)
 
 
 if __name__ == "__main__":
@@ -235,11 +241,14 @@ class DocumentedCommandForms(_DrawingHarness):
         from cadgen import dxf
 
 
+        HOLE_D = 4.5
+
+
         @dxf
-        def gasket(hole_d: float = 4.5):
+        def gasket():
             with bd.BuildSketch() as cut:
                 bd.Rectangle(60, 40)
-                bd.Circle(hole_d / 2, mode=bd.Mode.SUBTRACT)
+                bd.Circle(HOLE_D / 2, mode=bd.Mode.SUBTRACT)
             return cut.sketch
 
 

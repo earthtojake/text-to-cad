@@ -12,15 +12,18 @@ from cadgen import dxf, flatten
 from lib import clamp_plate_profile
 
 
+KERF_MM = 0.0
+
+
 @dxf(out="../DXF/clamp_plate.dxf")
-def clamp_plate(kerf: float = 0.0):
+def clamp_plate():
     return flatten.flat_pattern(
         clamp_plate_profile.plate(),
         normal_axis="z",
         normal_sign=1.0,
         coordinate_axis="z",
         coordinate=clamp_plate_profile.THICKNESS_MM,
-        kerf=kerf,
+        kerf=KERF_MM,
     )
 
 
