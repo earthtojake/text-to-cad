@@ -294,9 +294,6 @@ export default function CadRenderPane({
   hiddenPartIds,
   selectedPartIds,
   hoveredPartId,
-  assemblyMates = EMPTY_LIST,
-  selectedMateIds = EMPTY_LIST,
-  hoveredMateId = "",
   hoveredReferenceId,
   selectedReferenceIds,
   selectorRuntime,
@@ -548,9 +545,6 @@ export default function CadRenderPane({
         hiddenPartIds={hasParts ? hiddenPartIds : []}
         selectedPartIds={hasParts ? selectedPartIds : []}
         hoveredPartId={hasParts ? hoveredPartId : ""}
-        assemblyMates={hasParts ? assemblyMates : []}
-        selectedMateIds={hasParts ? selectedMateIds : []}
-        hoveredMateId={hasParts ? hoveredMateId : ""}
         hoveredReferenceId={hasTopology ? hoveredReferenceId : ""}
         selectedReferenceIds={hasTopology ? selectedReferenceIds : []}
         selectorRuntime={hasTopology ? selectorRuntime : null}

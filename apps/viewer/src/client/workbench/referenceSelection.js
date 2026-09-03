@@ -308,19 +308,7 @@ export function buildWholeStepEntryCopyReference(entry) {
   };
 }
 
-export function buildAssemblyMateSelector(mate) {
-  return String(mate?.id || "").trim();
-}
-
-export function buildAssemblyMateCopyText(mate, entry) {
-  const selector = buildAssemblyMateSelector(mate);
-  if (!selector) {
-    return "";
-  }
-  return buildCadRefToken({ cadPath: fileRefPrefixForEntry(entry), selector });
-}
-
-export function buildSelectionCopyPayload({ references = [], parts = [], mates = [], entry = null } = {}) {
+export function buildSelectionCopyPayload({ references = [], parts = [], entry = null } = {}) {
   const referencesForCopy = Array.isArray(references) ? [...references] : [];
   const missingPartNames = [];
 
@@ -333,17 +321,6 @@ export function buildSelectionCopyPayload({ references = [], parts = [], mates =
     const partReferenceId = String(part?.id || part?.occurrenceId || "").trim();
     referencesForCopy.push({
       id: `assembly-part:${partReferenceId}`,
-      copyText
-    });
-  }
-
-  for (const mate of Array.isArray(mates) ? mates : []) {
-    const copyText = buildAssemblyMateCopyText(mate, entry);
-    if (!copyText) {
-      continue;
-    }
-    referencesForCopy.push({
-      id: `assembly-mate:${String(mate?.id || "").trim()}`,
       copyText
     });
   }

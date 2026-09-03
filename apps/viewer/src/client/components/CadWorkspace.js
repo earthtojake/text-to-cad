@@ -122,7 +122,6 @@ import {
   parseParameterValuesPasteText
 } from "@/workbench/parameterControls";
 import {
-  buildAssemblyMateCopyText,
   buildNormalizedReferenceState,
   buildReferenceCacheKey,
   buildSelectionCopyButtonLabel,
@@ -647,7 +646,6 @@ function copyPayloadWithSelectedIdFallback(
   {
     selectedReferenceIds = [],
     selectedPartIds = [],
-    selectedMateIds = [],
     copyReferenceMap = null
   } = {}
 ) {
@@ -663,8 +661,7 @@ function copyPayloadWithSelectedIdFallback(
   }
   const fallbackLines = uniqueStringList([
     ...selectedCopyLinesFromIds(selectedReferenceIds, copyReferenceMap),
-    ...selectedCopyLinesFromIds(selectedPartIds, copyReferenceMap),
-    ...selectedCopyLinesFromIds(selectedMateIds, copyReferenceMap)
+    ...selectedCopyLinesFromIds(selectedPartIds, copyReferenceMap)
   ]);
   return {
     ...(payload || {}),
@@ -1090,11 +1087,9 @@ export default function CadWorkspace({
   const [dxfViewMode, setDxfViewMode] = useState("2d");
   const [referenceQuery, setReferenceQuery] = useState("");
   const [selectedReferenceIds, setSelectedReferenceIds] = useState([]);
-  const [selectedMateIds, setSelectedMateIds] = useState([]);
   const [largeFileState, setLargeFileState] = useState(() => normalizeLargeFileState(DEFAULT_LARGE_FILE_STATE));
   const [hoveredListReferenceId, setHoveredListReferenceId] = useState("");
   const [hoveredModelReferenceId, setHoveredModelReferenceId] = useState("");
-  const [hoveredMateId, setHoveredMateId] = useState("");
   const [selectedPartIds, setSelectedPartIds] = useState([]);
   const [selectedRenderPartIdByAssemblyPartId, setSelectedRenderPartIdByAssemblyPartId] = useState({});
   const [selectedWholeEntryCadRefToken, setSelectedWholeEntryCadRefToken] = useState("");
@@ -2229,19 +2224,6 @@ export default function CadWorkspace({
   const assemblyRoot = selectedAssemblyStructureReady
     ? selectedMeshData?.assemblyRoot || null
     : null;
-  const selectedAssemblyMates = selectedAssemblyStructureReady && Array.isArray(selectedMeshData?.assemblyMates)
-    ? selectedMeshData.assemblyMates
-    : [];
-  const selectedAssemblyMateMap = useMemo(() => {
-    const map = new Map();
-    for (const mate of selectedAssemblyMates) {
-      const mateId = String(mate?.id || "").trim();
-      if (mateId) {
-        map.set(mateId, mate);
-      }
-    }
-    return map;
-  }, [selectedAssemblyMates]);
   const stepTreeRoot = useMemo(() => {
     if (!supportsParts) {
       return null;
@@ -2611,10 +2593,9 @@ export default function CadWorkspace({
   const drawModeActive = supportsTool(selectedEntrySourceFormat, "draw") &&
     tabToolMode === TAB_TOOL_MODE.DRAW;
   const panToolActive = tabToolMode === TAB_TOOL_MODE.PAN;
-  const selectionCountBase = selectedPartIds.length + selectedReferenceIds.length + selectedMateIds.length;
+  const selectionCountBase = selectedPartIds.length + selectedReferenceIds.length;
 
   const selectedReferenceIdsRef = useRef(selectedReferenceIds);
-  const selectedMateIdsRef = useRef(selectedMateIds);
   const selectedPartIdsRef = useRef(selectedPartIds);
   const selectedEntryBuildSnapshotRef = useRef({
     fileRef: "",
@@ -3454,8 +3435,6 @@ export default function CadWorkspace({
     setReferenceQuery(nextTab.referenceQuery);
     selectedReferenceIdsRef.current = nextTab.selectedReferenceIds;
     setSelectedReferenceIds(nextTab.selectedReferenceIds);
-    selectedMateIdsRef.current = [];
-    setSelectedMateIds([]);
     selectedPartIdsRef.current = nextTab.selectedPartIds;
     setSelectedPartIds(nextTab.selectedPartIds);
     setSelectedRenderPartIdByAssemblyPartId({});
@@ -3466,7 +3445,6 @@ export default function CadWorkspace({
     setIsolatedAssemblyNodeIds([]);
     setHoveredListReferenceId("");
     setHoveredModelReferenceId("");
-    setHoveredMateId("");
     setHoveredListPartId("");
     setHoveredModelPartId("");
     setCopyStatus("");
@@ -3483,12 +3461,10 @@ export default function CadWorkspace({
 
   const resetActiveDirectory = useCallback(() => {
     selectedReferenceIdsRef.current = [];
-    selectedMateIdsRef.current = [];
     selectedPartIdsRef.current = [];
     setSelectedWholeEntryCadRefToken("");
     setReferenceQuery("");
     setSelectedReferenceIds([]);
-    setSelectedMateIds([]);
     setSelectedPartIds([]);
     setSelectedRenderPartIdByAssemblyPartId({});
     setExpandedStepTreeNodeIds([]);
@@ -3499,7 +3475,6 @@ export default function CadWorkspace({
     setLargeFileState(normalizeLargeFileState(DEFAULT_LARGE_FILE_STATE));
     setHoveredListReferenceId("");
     setHoveredModelReferenceId("");
-    setHoveredMateId("");
     setHoveredListPartId("");
     setHoveredModelPartId("");
     setCopyStatus("");
@@ -3709,10 +3684,6 @@ export default function CadWorkspace({
   useEffect(() => {
     selectedReferenceIdsRef.current = selectedReferenceIds;
   }, [selectedReferenceIds]);
-
-  useEffect(() => {
-    selectedMateIdsRef.current = selectedMateIds;
-  }, [selectedMateIds]);
 
   useEffect(() => {
     selectedPartIdsRef.current = selectedPartIds;
@@ -5209,31 +5180,23 @@ export default function CadWorkspace({
         )
       ))
       .filter(Boolean);
-    const selectedMatesForCopy = selectedMateIds
-      .map((id) => selectedAssemblyMateMap.get(id))
-      .filter(Boolean);
-
     return copyPayloadWithSelectedIdFallback(buildSelectionCopyPayload({
       references: [
         ...selectedReferencesForCopy,
         ...selectedPartReferencesForCopy
       ],
       parts: [],
-      mates: selectedMatesForCopy,
       entry: selectedEntry
     }), {
       selectedReferenceIds,
       selectedPartIds,
-      selectedMateIds,
       copyReferenceMap: stepTreeCopyReferenceMap
     });
   }, [
     assemblyPartMap,
     displayStepTreeRoot,
     effectiveActiveReferenceMap,
-    selectedAssemblyMateMap,
     selectedEntry,
-    selectedMateIds,
     selectedPartIds,
     selectedReferenceIds,
     stepTreeCopyReferenceMap,
@@ -5334,7 +5297,7 @@ export default function CadWorkspace({
       }
       return;
     }
-    const next = !multiSelect && (selectedPartIdsRef.current.length || selectedMateIdsRef.current.length)
+    const next = !multiSelect && selectedPartIdsRef.current.length
       ? (normalizedReferenceId ? [normalizedReferenceId] : [])
       : computeNextSelectionIds(selectedReferenceIdsRef.current, normalizedReferenceId, { multiSelect });
     if (next.length && !isDesktop) {
@@ -5345,10 +5308,6 @@ export default function CadWorkspace({
       selectedPartIdsRef.current = [];
       setSelectedPartIds([]);
       setSelectedRenderPartIdByAssemblyPartId({});
-    }
-    if (!multiSelect && selectedMateIdsRef.current.length) {
-      selectedMateIdsRef.current = [];
-      setSelectedMateIds([]);
     }
     selectedReferenceIdsRef.current = next;
     setSelectedReferenceIds(next);
@@ -5370,22 +5329,17 @@ export default function CadWorkspace({
 
   const clearReferenceSelection = useCallback(() => {
     selectedReferenceIdsRef.current = [];
-    selectedMateIdsRef.current = [];
     setSelectedWholeEntryCadRefToken("");
     setSelectedReferenceIds([]);
-    setSelectedMateIds([]);
     setCopyStatus("");
   }, []);
 
   const resetReferenceInteractionState = useCallback(() => {
     selectedReferenceIdsRef.current = [];
-    selectedMateIdsRef.current = [];
     setSelectedWholeEntryCadRefToken("");
     setSelectedReferenceIds([]);
-    setSelectedMateIds([]);
     setHoveredListReferenceId("");
     setHoveredModelReferenceId("");
-    setHoveredMateId("");
     setCopyStatus("");
   }, []);
 
@@ -5424,13 +5378,9 @@ export default function CadWorkspace({
         )
       ))
       .filter(Boolean);
-    const selectedMatesForCopy = selectedMateIdsRef.current
-      .map((id) => selectedAssemblyMateMap.get(id))
-      .filter(Boolean);
     if (
       !selectedReferencesForCopy.length &&
-      !selectedPartReferencesForCopy.length &&
-      !selectedMatesForCopy.length
+      !selectedPartReferencesForCopy.length
     ) {
       setCopyStatus("Nothing selected");
       return;
@@ -5442,12 +5392,10 @@ export default function CadWorkspace({
         ...selectedPartReferencesForCopy
       ],
       parts: [],
-      mates: selectedMatesForCopy,
       entry: selectedEntry
     }), {
       selectedReferenceIds: selectedReferenceIdsRef.current,
       selectedPartIds: selectedPartIdsRef.current,
-      selectedMateIds: selectedMateIdsRef.current,
       copyReferenceMap: stepTreeCopyReferenceMap
     });
     const { lines, missingPartNames = [] } = payload;
@@ -5473,8 +5421,7 @@ export default function CadWorkspace({
       );
       const copiedCount = payload.copiedCount ||
         selectedReferencesForCopy.length +
-        selectedPartReferencesForCopy.length +
-        selectedMatesForCopy.length -
+        selectedPartReferencesForCopy.length -
         missingPartNames.length;
       const missingSuffix = missingPartNames.length
         ? ` (${missingPartNames.length} unavailable)`
@@ -5487,7 +5434,6 @@ export default function CadWorkspace({
     assemblyPartMap,
     displayStepTreeRoot,
     effectiveActiveReferenceMap,
-    selectedAssemblyMateMap,
     selectedEntry,
     setScreenshotStatus,
     stepTreeCopyReferenceMap,
@@ -5574,7 +5520,7 @@ export default function CadWorkspace({
     if (isAssemblyView && !scopedSelectableNodeIds.has(normalizedPartId) && !alreadySelected) {
       return selectedPartIdsRef.current;
     }
-    const next = !multiSelect && (selectedReferenceIdsRef.current.length || selectedMateIdsRef.current.length)
+    const next = !multiSelect && selectedReferenceIdsRef.current.length
       ? (normalizedPartId ? [normalizedPartId] : [])
       : computeNextSelectionIds(selectedPartIdsRef.current, partId, { multiSelect });
     if (next.length && !isDesktop) {
@@ -5584,10 +5530,6 @@ export default function CadWorkspace({
     if (!multiSelect && selectedReferenceIdsRef.current.length) {
       selectedReferenceIdsRef.current = [];
       setSelectedReferenceIds([]);
-    }
-    if (!multiSelect && selectedMateIdsRef.current.length) {
-      selectedMateIdsRef.current = [];
-      setSelectedMateIds([]);
     }
     selectedPartIdsRef.current = next;
     setSelectedPartIds(next);
@@ -5639,60 +5581,18 @@ export default function CadWorkspace({
     toggleReferenceSelection(normalizedReferenceId, { multiSelect, source: "tree" });
   }, [toggleReferenceSelection]);
 
-  const toggleMateSelection = useCallback((mateId, { multiSelect = false } = {}) => {
-    if (stepUpdateInProgress || stepModuleTreeSelectionDisabled) {
-      return;
-    }
-    setActiveTreeNodeScrollKey("");
-    const normalizedMateId = String(mateId || "").trim();
-    if (!normalizedMateId || !selectedAssemblyMateMap.has(normalizedMateId)) {
-      return;
-    }
-    const next = !multiSelect && (selectedPartIdsRef.current.length || selectedReferenceIdsRef.current.length)
-      ? [normalizedMateId]
-      : computeNextSelectionIds(selectedMateIdsRef.current, normalizedMateId, { multiSelect });
-    if (next.length && !isDesktop) {
-      setSidebarOpen(false);
-    }
-    setSelectedWholeEntryCadRefToken("");
-    if (!multiSelect && selectedPartIdsRef.current.length) {
-      selectedPartIdsRef.current = [];
-      setSelectedPartIds([]);
-      setSelectedRenderPartIdByAssemblyPartId({});
-    }
-    if (!multiSelect && selectedReferenceIdsRef.current.length) {
-      selectedReferenceIdsRef.current = [];
-      setSelectedReferenceIds([]);
-    }
-    selectedMateIdsRef.current = next;
-    setSelectedMateIds(next);
-    setCopyStatus("");
-  }, [
-    isDesktop,
-    selectedAssemblyMateMap,
-    stepModuleTreeSelectionDisabled,
-    stepUpdateInProgress
-  ]);
-
-  const selectStepTreeMateNode = useCallback((mateId, { multiSelect = false } = {}) => {
-    toggleMateSelection(mateId, { multiSelect });
-  }, [toggleMateSelection]);
-
   const clearAssemblySelectionForFocus = useCallback(() => {
     setActiveTreeNodeScrollKey("");
     selectedPartIdsRef.current = [];
     selectedReferenceIdsRef.current = [];
-    selectedMateIdsRef.current = [];
     setSelectedWholeEntryCadRefToken("");
     setSelectedPartIds([]);
     setSelectedRenderPartIdByAssemblyPartId({});
     setSelectedReferenceIds([]);
-    setSelectedMateIds([]);
     setHoveredListPartId("");
     setHoveredModelPartId("");
     setHoveredListReferenceId("");
     setHoveredModelReferenceId("");
-    setHoveredMateId("");
     setViewerContextMenu(null);
     setCopyStatus("");
   }, []);
@@ -5794,7 +5694,6 @@ export default function CadWorkspace({
     if (
       selectedPartIdsRef.current.length ||
       selectedReferenceIdsRef.current.length ||
-      selectedMateIdsRef.current.length ||
       selectedWholeEntryCadRefToken
     ) {
       clearAssemblySelection();
@@ -6496,29 +6395,6 @@ export default function CadWorkspace({
     stepTreeRoot
   ]);
 
-  const copyStepTreeMateReference = useCallback(async (mateId) => {
-    const normalizedMateId = String(mateId || "").trim();
-    const mate = normalizedMateId ? selectedAssemblyMateMap.get(normalizedMateId) || null : null;
-    if (!mate) {
-      setCopyStatus("No selector ref is available for this mate");
-      return;
-    }
-    const copyText = buildAssemblyMateCopyText(mate, selectedEntry);
-    if (!copyText) {
-      setCopyStatus("No selector ref is available for this mate");
-      return;
-    }
-    try {
-      await copyTextToClipboard(copyText);
-      setCopyStatus("Copied reference");
-    } catch (error) {
-      setCopyStatus(error instanceof Error ? error.message : "Failed to copy reference");
-    }
-  }, [
-    selectedAssemblyMateMap,
-    selectedEntry
-  ]);
-
   const selectViewerContextMenuNode = useCallback((menu) => {
     const referenceId = String(menu?.referenceId || "").trim();
     if (referenceId) {
@@ -7175,9 +7051,6 @@ export default function CadWorkspace({
           hiddenPartIds={viewerHiddenPartIds}
           selectedPartIds={viewerSelectedPartIds}
           hoveredPartId={viewerHoveredPartIds}
-          assemblyMates={selectedAssemblyMates}
-          selectedMateIds={selectedMateIds}
-          hoveredMateId={hoveredMateId}
           hoveredReferenceId={effectiveHoveredReferenceId}
           selectedReferenceIds={selectedReferenceIds}
           selectorRuntime={effectiveSelectorRuntime}
@@ -7363,26 +7236,21 @@ export default function CadWorkspace({
                 onMeasurementDelete={handleMeasureDelete}
                 onMeasurementsClear={handleMeasureClear}
                 stepTreeRoot={displayStepTreeRoot}
-                assemblyMates={selectedAssemblyMates}
                 expandedTreeNodeIds={expandedStepTreeNodeIds}
                 loadableTreeNodeIds={loadableStepTreeTopologyNodeIds}
                 selectedPartIds={selectedPartIds}
                 selectedReferenceIds={selectedReferenceIds}
                 selectedReferences={selectedReferenceItems}
-                selectedMateIds={selectedMateIds}
                 selectableNodeIds={isolatedStepTreeSelectableNodeIds}
                 activeTreeNodeId={activeStepTreeNodeId}
                 activeTreeNodeScrollKey={activeTreeNodeScrollKey}
                 hoveredPartId={hoveredPartId}
                 hoveredReferenceId={effectiveHoveredReferenceId}
-                hoveredMateId={hoveredMateId}
                 hiddenPartIds={hiddenPartIds}
                 focusedNodeIds={focusedAssemblyNodeIds}
                 onSelectTreeNode={selectStepTreeNode}
                 onSelectReferenceNode={selectStepTreeReferenceNode}
-                onSelectMateNode={selectStepTreeMateNode}
                 onCopyTreeNodeReference={copyStepTreeContextMenuReference}
-                onCopyMateNodeReference={copyStepTreeMateReference}
                 onFocusTreeNode={focusStepTreeNode}
                 onUnfocusTreeNode={handleExitSingleIsolate}
                 onExitAllIsolate={handleExitIsolate}
@@ -7391,7 +7259,6 @@ export default function CadWorkspace({
                 onClearSelection={clearAssemblySelection}
                 onHoverTreeNode={setHoveredListPartId}
                 onHoverReferenceNode={setHoveredListReferenceId}
-                onHoverMateNode={setHoveredMateId}
                 treeSelectionDisabled={stepModuleTreeSelectionDisabled}
                 treeSelectionDisabledReason={stepModuleTreeSelectionDisabledReason}
                 onTogglePartVisibility={togglePartVisibility}

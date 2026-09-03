@@ -57,70 +57,6 @@ import { selectRequestedAssemblyComponents } from "../../../workbench/referenceS
 // UI and is pure latency now: it serialised 13 fetches three at a time for no benefit.
 const ROBOT_MESH_LOAD_CONCURRENCY = 8;
 
-function toVectorArray(value) {
-  if (!Array.isArray(value) || value.length < 3) {
-    return null;
-  }
-  const vector = value.slice(0, 3).map((component) => Number(component));
-  return vector.every((component) => Number.isFinite(component)) ? vector : null;
-}
-
-function normalizeMateEndpoint(endpoint) {
-  if (!endpoint || typeof endpoint !== "object") {
-    return null;
-  }
-  const result = {
-    part: String(endpoint.part || "").trim(),
-    frame: String(endpoint.frame || "").trim()
-  };
-  const position = toVectorArray(endpoint.position);
-  const orientation = toVectorArray(endpoint.orientation);
-  if (position) {
-    result.position = position;
-  }
-  if (orientation) {
-    result.orientation = orientation;
-  }
-  const axes = endpoint.axes && typeof endpoint.axes === "object" ? endpoint.axes : null;
-  if (axes) {
-    const normalizedAxes = {};
-    for (const key of ["x", "y", "z"]) {
-      const axis = toVectorArray(axes[key]);
-      if (axis) {
-        normalizedAxes[key] = axis;
-      }
-    }
-    if (Object.keys(normalizedAxes).length) {
-      result.axes = normalizedAxes;
-    }
-  }
-  return result.position || result.orientation || result.part || result.frame ? result : null;
-}
-
-function assemblyMatesFromTopology(topologyManifest) {
-  const mates = topologyManifest?.assemblyMates;
-  if (!Array.isArray(mates)) {
-    return [];
-  }
-  return mates
-    .filter((mate) => mate && typeof mate === "object")
-    .map((mate, index) => {
-      const id = String(mate.id || `m${index + 1}`).trim() || `m${index + 1}`;
-      return {
-        id,
-        label: String(mate.label || id).trim() || id,
-        sourceLabel: String(mate.sourceLabel || mate.name || "").trim(),
-        type: String(mate.type || mate.relation || "mate").trim(),
-        relation: String(mate.relation || mate.type || "mate").trim(),
-        fixed: String(mate.fixed || "").trim(),
-        moving: String(mate.moving || "").trim(),
-        parameters: mate.parameters && typeof mate.parameters === "object" ? mate.parameters : {},
-        fixedEndpoint: normalizeMateEndpoint(mate.fixedEndpoint),
-        movingEndpoint: normalizeMateEndpoint(mate.movingEndpoint)
-      };
-    });
-}
-
 function abortLoad(controllerRef) {
   controllerRef.current?.abort();
   controllerRef.current = null;
@@ -201,55 +137,40 @@ function loadRenderMeshForEntry(entry, options) {
   });
 }
 
-// The ONE client-side merge point (mirrors cadgen's package-aware manifest
-// reader): the store descriptor (assembly.json) is a pure function of the
-// STEP bytes; everything source-derived — assembly mates included — rides the
-// MODEL-SIDE sidecar (<name>.step.json, entry.sourceUrl). Attach the
-// sidecar's mates here so every descriptor consumer keeps seeing one shape.
-// A missing sidecar simply means the model is imported, which has no mates.
-// One fetch per (descriptor URL, sidecar URL) pair: the mesh path and the
-// selector path both resolve the same descriptor when a model opens, and the
-// URLs carry a ?v= version token, so a keyed cache is naturally invalidated
-// when the underlying files change. Bounded to keep long sessions flat.
+// One fetch per descriptor URL: the mesh path and the selector path both
+// resolve the same descriptor when a model opens, and the URL carries a ?v=
+// version token, so a keyed cache is naturally invalidated when the underlying
+// file changes. Bounded to keep long sessions flat. The store descriptor
+// (assembly.json) is a pure function of the STEP bytes; nothing source-derived
+// is merged into it here.
 const PACKAGE_DESCRIPTOR_CACHE = new Map();
 const PACKAGE_DESCRIPTOR_CACHE_LIMIT = 32;
 
-async function loadPackageDescriptorWithSource(packageAssetUrl, { signal, sourceUrl = "" } = {}) {
+async function loadPackageDescriptor(packageAssetUrl, { signal } = {}) {
   const descriptorUrl = resolvePackageAssetUrl(packageAssetUrl, "assembly.json");
-  const cacheKey = `${descriptorUrl}\u0000${sourceUrl}`;
-  if (PACKAGE_DESCRIPTOR_CACHE.has(cacheKey)) {
-    return PACKAGE_DESCRIPTOR_CACHE.get(cacheKey);
+  if (PACKAGE_DESCRIPTOR_CACHE.has(descriptorUrl)) {
+    return PACKAGE_DESCRIPTOR_CACHE.get(descriptorUrl);
   }
-  const promise = (async () => {
-    const descriptor = await loadRenderJson(descriptorUrl, { signal }).catch(() => null);
-    if (!descriptor || descriptor.kind !== "assembly-package" || !sourceUrl) {
-      return descriptor;
-    }
-    const sidecar = await loadRenderJson(sourceUrl, { signal }).catch(() => null);
-    if (sidecar && Array.isArray(sidecar.assemblyMates) && sidecar.assemblyMates.length) {
-      return { ...descriptor, assemblyMates: sidecar.assemblyMates };
-    }
-    return descriptor;
-  })();
+  const promise = loadRenderJson(descriptorUrl, { signal }).catch(() => null);
   if (PACKAGE_DESCRIPTOR_CACHE.size >= PACKAGE_DESCRIPTOR_CACHE_LIMIT) {
     PACKAGE_DESCRIPTOR_CACHE.clear();
   }
-  PACKAGE_DESCRIPTOR_CACHE.set(cacheKey, promise);
+  PACKAGE_DESCRIPTOR_CACHE.set(descriptorUrl, promise);
   promise.then((value) => {
     // Never cache a failed/aborted resolve: the next caller should retry.
     if (!value) {
-      PACKAGE_DESCRIPTOR_CACHE.delete(cacheKey);
+      PACKAGE_DESCRIPTOR_CACHE.delete(descriptorUrl);
     }
   });
   return promise;
 }
 
+
 function createAssemblyPreviewMeshData(meshData, topologyManifest = null) {
   return {
     ...meshData,
     parts: null,
-    assemblyRoot: assemblyRootFromTopology(topologyManifest),
-    assemblyMates: assemblyMatesFromTopology(topologyManifest)
+    assemblyRoot: assemblyRootFromTopology(topologyManifest)
   };
 }
 
@@ -430,10 +351,7 @@ export function useCadAssets({
       file: entry.file,
       kind: entry.kind,
       meshHash: getAssemblyMeshHash(entry),
-      meshData: {
-        ...meshData,
-        assemblyMates: assemblyMatesFromTopology(descriptor)
-      },
+      meshData,
       assemblyStructureReady: true,
       assemblyInteractionReady: true,
       assemblyBackgroundError: ""
@@ -626,10 +544,7 @@ export function useCadAssets({
         // Component-GLB package: the canonical STEP artifact is a directory. Probe for
         // its assembly.json, fetch each unique component GLB once, and compose them in
         // world space. A non-package descriptor is a stale/unbuilt artifact (throws below).
-        const packageDescriptor = await loadPackageDescriptorWithSource(meshUrl, {
-          signal: controller.signal,
-          sourceUrl: String(entry?.sourceUrl || "")
-        });
+        const packageDescriptor = await loadPackageDescriptor(meshUrl, { signal: controller.signal });
         if (packageDescriptor && packageDescriptor.kind === "assembly-package") {
           setMeshLoadStage("loading components");
           const componentEntries = Object.entries(packageDescriptor.components || {});
@@ -755,10 +670,7 @@ export function useCadAssets({
       // by occurrence id) so nested faces/edges become pickable.
       const glbUrl = entryAssetUrl(entry, "glb");
       const packageDescriptor = glbUrl
-        ? await loadPackageDescriptorWithSource(glbUrl, {
-            signal: controller.signal,
-            sourceUrl: String(entry?.sourceUrl || "")
-          })
+        ? await loadPackageDescriptor(glbUrl, { signal: controller.signal })
         : null;
       if (packageDescriptor && packageDescriptor.kind === "assembly-package") {
         // Lazy topology: an assembly loads selector topology only for the occurrences the user has
