@@ -67,7 +67,7 @@ class CompileTestCase(unittest.TestCase):
     def spawn_count(self) -> int:
         if not self.spawn_log.exists():
             return 0
-        return len([line for line in self.spawn_log.read_text().splitlines() if line.strip()])
+        return len([line for line in self.spawn_log.read_text(encoding="utf-8").splitlines() if line.strip()])
 
 
 class ResultsAndErrorsAreValues(CompileTestCase):
