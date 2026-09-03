@@ -109,7 +109,7 @@ def model():
     return asm.build()
 ```
 
-The fixed target is listed first and the moving target second. In the example above, the base stays fixed and the lid moves. The helper records the relationship in source and calls native build123d `connect_to()` under the hood; exported STEP contains the resolved static placement and native assembly labels, not persistent external constraints.
+The fixed target is listed first and the moving target second. In the example above, the base stays fixed and the lid moves. The helper is a positioning tool: it calls native build123d `connect_to()` under the hood and its whole output is the placed geometry — nothing about the relationship is recorded or exported. The STEP contains the resolved static placement and native assembly labels, not persistent constraints. Motion that should persist (joints the viewer animates, pose presets) is declared with `kinematics=` on the decorator (`references/kinematics.md`), not with the positioning helper.
 
 Use helper labels intentionally:
 

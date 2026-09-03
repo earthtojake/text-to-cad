@@ -38,7 +38,6 @@ __all__ = [
     "couple",
     "build123d",
     "srgb",
-    "MateRelation",
     "MateTarget",
     "compound_from_instances",
     "read_step",
@@ -81,12 +80,11 @@ def __getattr__(name: str):
         from cadgen.step_topology_artifact import ensure_step_topology_artifact
 
         return ensure_step_topology_artifact
-    if name in {"AssemblyHelper", "MateRelation", "MateTarget", "label_shape", "label_text", "target"}:
-        from cadgen.assembly import AssemblyHelper, MateRelation, MateTarget, label_shape, label_text, target
+    if name in {"AssemblyHelper", "MateTarget", "label_shape", "label_text", "target"}:
+        from cadgen.assembly import AssemblyHelper, MateTarget, label_shape, label_text, target
 
         return {
             "AssemblyHelper": AssemblyHelper,
-            "MateRelation": MateRelation,
             "MateTarget": MateTarget,
             "label_text": label_text,
             "label_shape": label_shape,
@@ -119,7 +117,7 @@ if TYPE_CHECKING:
     # of this block pulled two names from the api alias module, since deleted -- they come
     # from their real modules now.
     from cadgen import build123d, dxf, glb, step, stl, threemf
-    from cadgen.assembly import AssemblyHelper, MateRelation, MateTarget, label_shape, label_text, target
+    from cadgen.assembly import AssemblyHelper, MateTarget, label_shape, label_text, target
     from cadgen.color import linear_to_srgb, srgb, srgb_to_linear
     from cadgen.kinematics import couple, cylindrical, fastened, revolute, slider
     from cadgen.instances import compound_from_instances

@@ -6,7 +6,6 @@ import unittest
 from contextlib import contextmanager
 
 from cadgen.assembly import AssemblyHelper, MateTarget, label_shape, label_text, target
-from cadgen.step_export import _collect_assembly_mates
 
 
 class FakeLocation:
@@ -89,82 +88,29 @@ class AssemblyHelperTests(unittest.TestCase):
             base_frame = assembly.rigid_frame(base, "lid_seat", FakeLocation("base_frame"))
             lid_frame = assembly.rigid_frame(lid, "underside", FakeLocation("lid_frame"))
 
-            relation = assembly.face_to_face(base_frame, lid_frame)
+            assembly.face_to_face(base_frame, lid_frame, label="lid_mate")
 
+        # Positioning is the whole output: the moving joint is connected to the
+        # fixed one, and nothing else is recorded on the helper or the compound.
         fixed_joint = base.joints["lid_seat"]
         moving_joint = lid.joints["underside"]
-        self.assertEqual("face_to_face", relation.relation)
-        self.assertEqual("lid_seat", relation.fixed)
-        self.assertEqual("underside", relation.moving)
-        self.assertEqual({"part": "base", "frame": "lid_seat"}, relation.fixed_endpoint)
-        self.assertEqual({"part": "lid", "frame": "underside"}, relation.moving_endpoint)
         self.assertEqual([(moving_joint, {})], fixed_joint.connections)
+        self.assertFalse(hasattr(assembly, "relations"))
 
-    def test_build_records_mate_endpoint_payloads(self) -> None:
+    def test_build_attaches_no_mate_metadata(self) -> None:
         with fake_build123d():
             assembly = AssemblyHelper("enclosure")
             base = assembly.add(FakePart(), "base")
             lid = assembly.add(FakePart(), "lid")
             base_frame = assembly.rigid_frame(base, "lid_seat", FakeLocation("base_frame"))
             lid_frame = assembly.rigid_frame(lid, "underside", FakeLocation("lid_frame"))
-
             assembly.face_to_face(base_frame, lid_frame, label="lid_mate")
             compound = assembly.build()
 
-        self.assertEqual(
-            [
-                {
-                    "id": "m1",
-                    "label": "m1",
-                    "sourceLabel": "lid_mate",
-                    "type": "face_to_face",
-                    "relation": "face_to_face",
-                    "fixed": "lid_seat",
-                    "moving": "underside",
-                    "parameters": {},
-                    "fixedEndpoint": {"part": "base", "frame": "lid_seat"},
-                    "movingEndpoint": {"part": "lid", "frame": "underside"},
-                }
-            ],
-            compound.assembly_mates,
-        )
-
-    def test_export_collection_reads_only_the_root_models_own_mates(self) -> None:
-        # The sidecar boundary: a child's mates belong to the child's own
-        # sidecar and never ride up. The collector reads the ROOT compound's own
-        # `assembly_mates` -- what this model declared -- and ignores what its
-        # children declared for themselves.
-        with fake_build123d():
-            child = AssemblyHelper("child")
-            child_base = child.add(FakePart(), "child_base")
-            child_lid = child.add(FakePart(), "child_lid")
-            child_base_frame = child.rigid_frame(child_base, "seat", FakeLocation("child_base"))
-            child_lid_frame = child.rigid_frame(child_lid, "underside", FakeLocation("child_lid"))
-            child.face_to_face(child_base_frame, child_lid_frame, label="child_mate")
-            child_compound = child.build()
-
-            parent = AssemblyHelper("parent")
-            parent.add(child_compound, "child")   # composed child, carrying its own mate
-            parent_plate = parent.add(FakePart(), "plate")
-            parent_bracket = parent.add(FakePart(), "bracket")
-            plate_frame = parent.rigid_frame(parent_plate, "top", FakeLocation("plate_top"))
-            bracket_frame = parent.rigid_frame(parent_bracket, "foot", FakeLocation("bracket_foot"))
-            parent.face_to_face(plate_frame, bracket_frame, label="parent_mate")
-            parent_compound = parent.build()
-
-        mates = _collect_assembly_mates(parent_compound)
-        self.assertEqual(["m1"], [mate["id"] for mate in mates])
-        self.assertEqual(["parent_mate"], [mate["sourceLabel"] for mate in mates])
-
-        # And the child's own build still sees its own mate, untouched.
-        child_mates = _collect_assembly_mates(child_compound)
-        self.assertEqual(["child_mate"], [mate["sourceLabel"] for mate in child_mates])
-
-        # A bare compound with no declarations of its own collects nothing, no
-        # matter what its children carry.
-        with fake_build123d():
-            root = FakeCompound(label="root", children=[child_compound, parent_compound])
-        self.assertEqual([], _collect_assembly_mates(root))
+        # The compound is geometry: labeled children, no mate payload. Persisted
+        # motion semantics are @step(kinematics=), per model.
+        self.assertFalse(hasattr(compound, "assembly_mates"))
+        self.assertEqual(["base", "lid"], [child.label for child in compound.children])
 
     def test_helper_accepts_existing_native_joint_labels(self) -> None:
         with fake_build123d():
@@ -182,14 +128,13 @@ class AssemblyHelperTests(unittest.TestCase):
                 joint_location=FakeLocation("leaf_axis"),
             )
 
-            relation = assembly.revolute(
+            assembly.revolute(
                 (frame, "hinge_axis"),
                 (leaf, "leaf_axis"),
                 angle=45,
             )
 
-        self.assertEqual("revolute", relation.relation)
-        self.assertEqual({"angle": 45}, relation.parameters)
+        # The connect options reach the native joint; that is the only effect.
         self.assertEqual([(moving_joint, {"angle": 45})], fixed_joint.connections)
 
     def test_axis_frames_use_native_joint_axis_argument(self) -> None:
@@ -217,12 +162,13 @@ class AssemblyHelperTests(unittest.TestCase):
             base_frame = assembly.rigid_frame(base, "seat", FakeLocation("base"))
             lid_frame = assembly.rigid_frame(lid, "underside", FakeLocation("lid"))
 
-            relation = assembly.face_to_face(base_frame, lid_frame, offset=0.5)
+            assembly.face_to_face(base_frame, lid_frame, offset=0.5)
 
         offset_joint = base.joints["seat:offset"]
         self.assertIsInstance(offset_joint.location, FakeLocation)
         self.assertEqual(("mul", "base", (0.0, 0.0, 0.5)), offset_joint.location.value)
-        self.assertEqual("seat:offset", relation.fixed)
+        # The moving joint connected to the OFFSET frame, not the original seat.
+        self.assertEqual([(lid.joints["underside"], {})], offset_joint.connections)
 
     def test_build_returns_labeled_compound(self) -> None:
         with fake_build123d():

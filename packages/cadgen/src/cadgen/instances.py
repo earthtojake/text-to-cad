@@ -30,8 +30,6 @@ if TYPE_CHECKING:
 def compound_from_instances(
     name: str,
     instances: Sequence[tuple[Any, Location, str]],
-    *,
-    assembly_mates: Sequence[dict[str, Any]] | None = None,
 ) -> Compound:
     """Bake ``(prototype, location, name)`` placements into one labeled compound.
 
@@ -59,8 +57,6 @@ def compound_from_instances(
     # cadgen._internal.component_package.build_package_from_compound); a plain
     # build123d compound has no such attribute and falls back to the child walk.
     compound._occurrence_tree = {"id": "o1", "name": name, "children": occurrence_children}
-    if assembly_mates:
-        compound.assembly_mates = [dict(mate) for mate in assembly_mates]
     return compound
 
 

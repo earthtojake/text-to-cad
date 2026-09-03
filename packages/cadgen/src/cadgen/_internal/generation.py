@@ -284,12 +284,11 @@ def _assembly_provenance_manifest(
     return build_step_topology_index_manifest(minimal, entry_kind=entry_kind)
 
 
-def _source_sidecar_payload(scene: LoadedStepScene, compound: object | None) -> dict[str, object] | None:
+def _source_sidecar_payload(scene: LoadedStepScene) -> dict[str, object] | None:
     """The sidecar payload for a GENERATED build, or None for an import.
 
     Everything source-derived lands here: provenance (the no-op gate's
-    closure), the copied animation module text, assembly mates (authored in
-    Python, unrepresentable in STEP), and the build timestamp — the one
+    closure), the copied animation module text, and the build timestamp — the one
     volatile field, which moving here keeps the descriptor byte-stable across
     identical rebuilds. The KINEMATICS section is injected later, once the
     staging package exists to resolve axis refs against.
@@ -328,11 +327,6 @@ def _source_sidecar_payload(scene: LoadedStepScene, compound: object | None) -> 
         # source-derived state, and generated files carry no reference back
         # to the source tree.
         payload["animation"] = {"clips": str(animation_source)}
-    mates = getattr(compound, "assembly_mates", None) if compound is not None else None
-    if not mates:
-        mates = getattr(scene, "assembly_mates", None)
-    if isinstance(mates, (list, tuple)) and mates:
-        payload["assemblyMates"] = list(mates)
     payload["generatedAt"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return payload
 
@@ -494,7 +488,7 @@ def _generate_part_outputs(
         # perf investigation needs to tell "we re-extracted components" from
         # "we re-assembled the STEP document" from "we resolved kinematics".
         with logger.timed("package: sidecar payload"):
-            sidecar_payload = _source_sidecar_payload(scene, shape)
+            sidecar_payload = _source_sidecar_payload(scene)
         generated = sidecar_payload is not None
         if generated:
             mesh_export_section = _mesh_exports_sidecar_section(spec)

@@ -15,49 +15,7 @@ from cadgen._internal.atomic_replace import (
 from cadgen._internal.step_scene import LoadedStepScene, load_step_scene_from_xcaf_doc, step_file_hash
 
 
-def _collect_assembly_mates(shape: Any) -> list[dict[str, Any]]:
-    """The mates THIS model declared: the root compound's own ``assembly_mates``.
-
-    The sidecar boundary: a sidecar belongs only to the model that declares it,
-    never to its parent or its children. A parent composing a child receives
-    geometry -- tree, labels, colors, placements, exact shape -- and nothing
-    else, so a child's mates are written by the child's own build into the
-    child's own sidecar and are NOT gathered here. This used to walk the whole
-    tree; an assembly that needs a relation declares it on the assembly.
-    """
-    mates: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    raw_mates = getattr(shape, "assembly_mates", None)
-    if not isinstance(raw_mates, list):
-        return mates
-    for raw_mate in raw_mates:
-        if not isinstance(raw_mate, dict):
-            continue
-        key = repr(raw_mate)
-        if key in seen:
-            continue
-        seen.add(key)
-        mate = dict(raw_mate)
-        mate_id = f"m{len(mates) + 1}"
-        source_label = str(
-            mate.get("sourceLabel") or
-            mate.get("name") or
-            mate.get("label") or
-            mate.get("id") or
-            ""
-        ).strip()
-        mate["id"] = mate_id
-        mate["label"] = mate_id
-        if source_label and source_label != mate_id:
-            mate["sourceLabel"] = source_label
-        mates.append(mate)
-    return mates
-
-
-def _attach_assembly_mates(scene: LoadedStepScene, shape: Any) -> LoadedStepScene:
-    assembly_mates = _collect_assembly_mates(shape)
-    if assembly_mates:
-        scene.assembly_mates = assembly_mates
+def _attach_occurrence_tree(scene: LoadedStepScene, shape: Any) -> LoadedStepScene:
     # compound_from_instances bakes placements at the OCCT level, so the
     # compound has no build123d children and _create_bin_xcaf_doc flattens it
     # to a single shape. Its assembly hierarchy lives in the explicit
@@ -994,7 +952,7 @@ def export_build123d_step_scene(
         output_path,
         label=getattr(to_export, "label", None),
     )
-    return _attach_assembly_mates(scene, to_export)
+    return _attach_occurrence_tree(scene, to_export)
 
 
 def build_build123d_step_scene(
@@ -1011,7 +969,7 @@ def build_build123d_step_scene(
         source_kind=source_kind,
         source_hash=source_hash,
     )
-    return _attach_assembly_mates(scene, to_export)
+    return _attach_occurrence_tree(scene, to_export)
 
 
 def export_build123d_step_file(

@@ -9,9 +9,8 @@ labeling (enumerated from source, see design doc W2):
     class, label, raw color (``_color`` — never the inheriting getter, which
     MUTATES the tree it reads), cad_material, per-node location, anytree
     children, and ``_occurrence_tree`` (whose leaves hold live shapes +
-    Locations and are re-pointed at thawed reconstructions). NOT
-    ``assembly_mates``: a thawed child is geometry only — mates are the child's
-    own sidecar's business (the sidecar boundary, packages/cadgen/README.md).
+    Locations and are re-pointed at thawed reconstructions). A thawed child is
+    geometry only (the sidecar boundary, packages/cadgen/README.md).
 
 Anything else non-JSON-able on a node makes the value Unfreezable: the scope
 simply is not cached, and execution falls through (correctness never depends

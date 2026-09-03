@@ -460,116 +460,6 @@ def _selection_summary(selector_type: str, row: dict[str, object]) -> str:
     return f"corner edges={row.get('edgeCount')}"
 
 
-def _assembly_mate_rows(
-    manifest: dict[str, object], step_path: Path | None = None
-) -> list[dict[str, object]]:
-    rows = manifest.get("assemblyMates")
-    if not isinstance(rows, list) and step_path is not None:
-        # Mates are source-derived and live in the model-side sidecar
-        # (source_sidecar.py); the store package descriptor is STEP-pure.
-        from cadgen._internal.source_sidecar import read_source_sidecar
-
-        rows = (read_source_sidecar(step_path) or {}).get("assemblyMates")
-    if not isinstance(rows, list):
-        return []
-    return [dict(row) for row in rows if isinstance(row, dict)]
-
-
-def _assembly_mate_by_selector(context: EntryContext, raw_selector: str) -> dict[str, object] | None:
-    normalized_selector = str(raw_selector or "").strip().replace("#", "", 1)
-    if not normalized_selector:
-        return None
-    for row in _assembly_mate_rows(context.manifest, context.step_path):
-        if str(row.get("id") or "").strip() == normalized_selector:
-            return row
-    return None
-
-
-def _looks_like_assembly_mate_selector(raw_selector: str) -> bool:
-    selector = str(raw_selector or "").strip().replace("#", "", 1)
-    return len(selector) > 1 and selector[0] == "m" and selector[1:].isdigit()
-
-
-def _assembly_mate_label(row: dict[str, object], selector: str) -> str:
-    return (
-        str(row.get("sourceLabel") or "").strip()
-        or str(row.get("name") or "").strip()
-        or str(row.get("label") or "").strip()
-        or selector
-    )
-
-
-def _assembly_mate_summary(row: dict[str, object]) -> str:
-    relation = str(row.get("type") or row.get("relation") or "mate").strip() or "mate"
-    fixed = str(row.get("fixed") or "").strip()
-    moving = str(row.get("moving") or "").strip()
-    endpoints = f"{fixed} -> {moving}" if fixed and moving else fixed or moving
-    return " ".join(part for part in (relation, endpoints) if part)
-
-
-def _assembly_mate_detail(row: dict[str, object]) -> dict[str, object]:
-    payload: dict[str, object] = {
-        "id": row.get("id"),
-        "label": row.get("label"),
-        "sourceLabel": row.get("sourceLabel"),
-        "type": row.get("type") or row.get("relation"),
-        "fixed": row.get("fixed"),
-        "moving": row.get("moving"),
-    }
-    for key in ("parameters", "fixedEndpoint", "movingEndpoint"):
-        if key in row:
-            payload[key] = row.get(key)
-    return payload
-
-
-def _inspect_assembly_mate(
-    cad_path: str,
-    raw_selector: str,
-    context: EntryContext,
-    *,
-    detail: bool,
-    positioning: bool,
-) -> tuple[dict[str, object], dict[str, object] | None]:
-    selector = str(raw_selector or "").strip().replace("#", "", 1)
-    row = _assembly_mate_by_selector(context, selector)
-    if row is None:
-        return (
-            {
-                "status": "error",
-                "selectorType": "mate" if _looks_like_assembly_mate_selector(selector) else "opaque",
-                "normalizedSelector": selector,
-                "displaySelector": selector,
-            },
-            {
-                "kind": "selector",
-                "message": f"Selector '{raw_selector}' did not resolve against {cad_path}.",
-            },
-        )
-
-    mate_id = str(row.get("id") or selector).strip() or selector
-    selection: dict[str, object] = {
-        "status": "resolved",
-        "selectorType": "mate",
-        "normalizedSelector": mate_id,
-        "displaySelector": mate_id,
-        # Bare: `cadPath` is already reported alongside, and a full logical path here would
-        # be longer than the shortest-unique-suffix prefix the viewer emits.
-        "copyText": syntax.build_cad_token("", mate_id),
-        "label": f"Mate {_assembly_mate_label(row, mate_id)}",
-        "summary": _assembly_mate_summary(row),
-    }
-    if detail:
-        selection["detail"] = _assembly_mate_detail(row)
-    if positioning:
-        selection["positioning"] = {
-            "selectorType": "mate",
-            "selector": mate_id,
-            "fixedEndpoint": row.get("fixedEndpoint"),
-            "movingEndpoint": row.get("movingEndpoint"),
-        }
-    return selection, None
-
-
 def _occurrence_detail(row: dict[str, object], selector_index: lookup.SelectorIndex) -> dict[str, object]:
     occurrence_id = str(row.get("id") or "").strip()
     child_rows = [
@@ -732,17 +622,6 @@ def _inspect_selector(
                 "message": f"Unsupported selector '{raw_selector}'.",
             },
         )
-
-    if parsed_selector.selector_type == "opaque":
-        mate_selection, mate_error = _inspect_assembly_mate(
-            cad_path,
-            raw_selector,
-            context,
-            detail=detail,
-            positioning=positioning,
-        )
-        if mate_error is None or _looks_like_assembly_mate_selector(raw_selector):
-            return mate_selection, mate_error
 
     if context.selector_index is None:
         raise CadRefError(f"Selector index unavailable for {cad_path}")
