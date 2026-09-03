@@ -134,7 +134,7 @@ class RunModelArgvTests(unittest.TestCase):
             code = runner.run_model_argv([str(script)])
         self.assertEqual(1, code)
         message = stderr.getvalue()
-        self.assertIn("must be a build123d Shape", message)
+        self.assertIn("must return a build123d Shape", message)
         self.assertNotIn("naming", message)
 
 
