@@ -1,0 +1,223 @@
+name: Prepare Release
+
+# Half one of a release: the version bump, as a PR. Bumps VERSION, stamps the derived
+# package/plugin metadata (sync-version.mjs) and every skill's cadgen pin
+# (pin-cadgen-requirements.sh), opens `release/X.Y.Z` against the target branch and
+# merges it. That merge is what fires the other half, Publish Release
+# (release-publish.yml), which builds, tests, uploads and tags the merged commit.
+#
+# `target` defaults to main. `build-test` is the rehearsal: the same PR against a
+# branch whose pushes run Publish Release WITHOUT the irreversible steps (no PyPI, no
+# docs deploy, no tag). A rehearsal consumes a version number on build-test only; the
+# repository's tags decide what is "released", so main is unaffected.
+#
+# There is no bump=none here: republishing or resuming the current head of main is
+# `gh workflow run release-publish.yml --ref main`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semver part to bump when set_version is empty.
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      set_version:
+        description: Exact X.Y.Z version to release instead of bumping. Leave empty unless you are naming a specific new version.
+        required: false
+        type: string
+      target:
+        description: Branch the release PR is opened against and merged into. main for releases; build-test to rehearse the pipeline.
+        required: true
+        default: main
+        type: string
+      dry_run:
+        description: Show the release version changes without opening or merging a PR.
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-prepare-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  release-pr:
+    name: Release PR
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      merged_sha: ${{ steps.merged.outputs.sha }}
+
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Configure release credentials
+        env:
+          RELEASE_ORCHESTRATOR_TOKEN: ${{ secrets.RELEASE_ORCHESTRATOR_TOKEN }}
+          PREPARE_RELEASE_TOKEN: ${{ secrets.PREPARE_RELEASE_TOKEN }}
+          PUBLISH_PUSH_TOKEN: ${{ secrets.PUBLISH_PUSH_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          release_token="${RELEASE_ORCHESTRATOR_TOKEN:-${PREPARE_RELEASE_TOKEN:-${PUBLISH_PUSH_TOKEN:-$GITHUB_TOKEN}}}"
+          if [ -n "${RELEASE_ORCHESTRATOR_TOKEN:-}" ]; then
+            echo "Using RELEASE_ORCHESTRATOR_TOKEN for release orchestration."
+          elif [ -n "${PREPARE_RELEASE_TOKEN:-}" ]; then
+            echo "Using PREPARE_RELEASE_TOKEN for release orchestration."
+          elif [ -n "${PUBLISH_PUSH_TOKEN:-}" ]; then
+            echo "Using PUBLISH_PUSH_TOKEN for release orchestration."
+          else
+            echo "Using GITHUB_TOKEN for release orchestration."
+          fi
+
+          git remote set-url origin "https://x-access-token:${release_token}@github.com/${GITHUB_REPOSITORY}.git"
+          {
+            echo "GH_TOKEN=$release_token"
+            echo "RELEASE_TOKEN=$release_token"
+          } >> "$GITHUB_ENV"
+
+      # Three stamps from one number: VERSION itself, the derived package/plugin
+      # metadata, and every skill's cadgen pin. All three land in the release PR, so
+      # the target never carries a version whose pins or metadata disagree with it.
+      - name: Prepare canonical version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+          SET_VERSION: ${{ inputs.set_version }}
+        run: |
+          if [ -n "$SET_VERSION" ]; then
+            scripts/release/bump-version.sh --set-version "$SET_VERSION" --no-commit
+          else
+            scripts/release/bump-version.sh "$BUMP" --no-commit
+          fi
+          node scripts/release/sync-version.mjs
+          scripts/release/pin-cadgen-requirements.sh
+          version="$(tr -d '[:space:]' < VERSION)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git diff --quiet; then
+            echo "Nothing changed: the target already carries release version $version with current metadata and pins." >&2
+            echo "To republish or resume that version, run Publish Release instead." >&2
+            exit 1
+          fi
+          echo "Prepared release version: $version"
+
+      - name: Check release version metadata
+        run: |
+          # check-version.sh covers VERSION's shape AND every skill pin equalling it. The
+          # comparison is against the repository's real release tags (either spelling --
+          # see scripts/release/release-tags.sh), whatever branch this targets.
+          node scripts/release/sync-version.mjs --check
+          latest_tag="$(source scripts/release/release-tags.sh && latest_release_tag)"
+          if [ -n "$latest_tag" ]; then
+            scripts/release/check-version.sh --incremented-from "refs/tags/$latest_tag"
+          else
+            scripts/release/check-version.sh
+          fi
+
+      - name: Show dry-run diff
+        if: inputs.dry_run
+        run: |
+          git diff --stat
+          git diff -- VERSION
+
+      - name: Stop after dry run
+        if: inputs.dry_run
+        run: echo "Dry run requested; no release branch, PR, or merge."
+
+      - name: Create or update release pull request
+        if: ${{ !inputs.dry_run }}
+        id: release_pr
+        env:
+          TARGET: ${{ inputs.target }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          branch="release/$VERSION"
+          body="Bumps VERSION, derived package/plugin metadata and every skill's cadgen pin to $VERSION. Created by Prepare Release, which merges it into $TARGET immediately; the merge runs Publish Release."
+
+          git checkout -B "$branch"
+          git add -A
+          git commit -m "Release $VERSION"
+          git push --force-with-lease origin "$branch"
+
+          if pr_json="$(gh pr view "$branch" --repo "$GITHUB_REPOSITORY" --json number,url 2>/dev/null)"; then
+            pr_number="$(printf '%s\n' "$pr_json" | jq -r '.number')"
+            pr_url="$(printf '%s\n' "$pr_json" | jq -r '.url')"
+            gh pr edit "$pr_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "$TARGET" \
+              --title "Release $VERSION" \
+              --body "$body"
+          else
+            pr_url="$(gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base "$TARGET" \
+              --head "$branch" \
+              --title "Release $VERSION" \
+              --body "$body")"
+            pr_number="$(gh pr view "$pr_url" --repo "$GITHUB_REPOSITORY" --json number --jq '.number')"
+          fi
+
+          echo "number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "url=$pr_url" >> "$GITHUB_OUTPUT"
+          echo "Release PR: $pr_url"
+
+      # Merged through the API with the PAT, as before; the merge event is what starts
+      # Publish Release on the target branch. The release branch is deleted afterwards.
+      - name: Merge release pull request
+        if: ${{ !inputs.dry_run }}
+        env:
+          PR_NUMBER: ${{ steps.release_pr.outputs.number }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          pr_json="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid)"
+          head_sha="$(printf '%s\n' "$pr_json" | jq -r '.headRefOid')"
+          merged=false
+          for attempt in $(seq 1 6); do
+            if gh api \
+              --method PUT \
+              "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/merge" \
+              -f merge_method=merge \
+              -f sha="$head_sha"; then
+              merged=true
+              break
+            fi
+            echo "Merge attempt $attempt failed; retrying while GitHub computes mergeability..."
+            sleep 10
+          done
+          if [ "$merged" != "true" ]; then
+            echo "Could not merge release PR #$PR_NUMBER." >&2
+            exit 1
+          fi
+          git push origin --delete "release/$VERSION" || echo "release/$VERSION already gone."
+
+      - name: Resolve merged commit
+        if: ${{ !inputs.dry_run }}
+        id: merged
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          git fetch --no-tags origin "+$TARGET:refs/remotes/origin/$TARGET"
+          sha="$(git rev-parse "origin/$TARGET^{commit}")"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Release ${{ steps.version.outputs.version }} merged into $TARGET at $sha; Publish Release runs on that push."

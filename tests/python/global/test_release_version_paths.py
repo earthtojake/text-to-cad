@@ -7,7 +7,7 @@ release tags forever after that, since tags are immutable.
 
 Without a fallback the script fails with git's exit 128 ("path 'VERSION' exists
 on disk, but not in <ref>") rather than a version comparison, which takes the
-whole `Release` workflow down at its first gate. These tests pin the fallback.
+whole Publish Release workflow down at its first gate. These tests pin the fallback.
 """
 
 from __future__ import annotations

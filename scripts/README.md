@@ -118,9 +118,10 @@ scripts/release/check-version.sh --incremented-from refs/tags/<latest tag>
 
 `check-version.sh` also asserts every skill's `cadgen==` pin equals `VERSION`;
 `scripts/release/pin-cadgen-requirements.sh` stamps them. Normal development
-branches should not bump `VERSION`. Use the `Release` GitHub Actions workflow to
-open and ship the release PR against `main`; use `scripts/release/bump-version.sh`
-only as a local fallback for that release PR:
+branches should not bump `VERSION`. Use the `Prepare Release` GitHub Actions
+workflow to open and merge the release PR against `main` (its merge runs
+`Publish Release`); use `scripts/release/bump-version.sh` only as a local
+fallback for that release PR:
 
 ```bash
 scripts/release/bump-version.sh patch --dry-run
@@ -129,14 +130,14 @@ scripts/release/bump-version.sh patch --no-commit
 
 `VERSION` is the only canonical release bump file. Duplicate
 package, plugin, lockfile, and Python `pyproject.toml` versions are derived from
-it; the `Release` workflow stamps them with `scripts/release/sync-version.mjs`,
+it; `Prepare Release` stamps them with `scripts/release/sync-version.mjs`,
 and `scripts/bundle/bundle.sh` re-checks the same metadata before writing or
 checking production outputs.
 
 Use `scripts/release/publish-github-release.sh` only from the `Release`
 workflow after a main production bundle, or as a manual production-branch
 fallback. It creates the semver git tag from `VERSION` and creates
-a GitHub Release with generated notes; unlike the `Release` workflow, which
+a GitHub Release with generated notes; unlike `Publish Release`, which
 publishes the release by default, the script creates a draft unless
 `--publish` is passed.
 Use `scripts/github-workflows/deploy-vercel-app.sh` only from the `Deploy Docs`
@@ -151,9 +152,11 @@ fallback, but the workflow path is preferred.
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
 | `test.yml` | pushes to `main`; PRs to `main`; manual dispatch | Checks `VERSION`, derived metadata and the skill pins as a separate job so the test job still runs if release metadata is wrong. The test job checks generated outputs against their sources, bundles production outputs, checks the layout without rebuilding it, and runs docs and code tests against the generated output. Superseded PR runs are cancelled. |
-| `release.yml` | manual dispatch | The single release workflow: release PR against `main` (version bump + metadata + skill pins), cadgen wheel to PyPI, docs deploy, semver tag, and GitHub Release -- all on the one merged commit. See the Releases section in `CONTRIBUTING.md` for the flow and the `bump=none` resume path. |
-| `deploy-docs.yml` | manual dispatch; called by `release.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
+| `release-prepare.yml` (`Prepare Release`) | manual dispatch | The version bump as a PR: bumps `VERSION`, stamps metadata and skill pins, opens `release/X.Y.Z` against `target` (default `main`; `build-test` rehearses) and merges it. The merge is what runs `Publish Release`. |
+| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged), bundle, tests, wheel build, install test, distribution artifact; then -- on `main` only -- PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release. On `build-test` it prints what it would have tagged and stops. |
+| `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
 
-In short: use `release.yml` for releases and `deploy-docs.yml` to redeploy the
-docs site. `main` is the one branch: the source, what installers clone, and what
-releases tag. The CAD Viewer is a local-filesystem app with no hosted deployment.
+In short: `Prepare Release` bumps, `Publish Release` ships, `Deploy Docs`
+redeploys. `main` is the one branch: the source, what installers clone, and what
+releases tag; `build-test` is the rehearsal. The CAD Viewer is a local-filesystem
+app with no hosted deployment.

@@ -38,7 +38,7 @@ Options:
   --publish         Publish the GitHub Release immediately.
   -h, --help        Show this help.
 
-The workflow path should run this from the production branch after generated
+Publish Release runs this on the merged release commit after generated
 outputs have been validated. Local use is a manual fallback.
 EOF
 }

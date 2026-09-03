@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Release tag naming, shared by the release scripts and the Release workflow.
+# Release tag naming, shared by the release scripts and the release workflows.
 #
 # Tags are `v<VERSION>` from 0.5.0 onward. Releases before that were tagged bare
 # (`0.4.28`), and tags are permanent, so anything that asks "what is the latest

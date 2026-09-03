@@ -5,9 +5,11 @@ on:
   pull_request:
     branches:
       - main
+      - build-test
   push:
     branches:
       - main
+      - build-test
 
 concurrency:
   group: test-${{ github.ref }}
@@ -21,6 +23,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          # The VERSION guard below diffs against the PR base.
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -31,6 +36,30 @@ jobs:
         run: |
           scripts/release/check-version.sh
           node scripts/release/sync-version.mjs --check
+
+      # Only a release PR moves VERSION. Prepare Release opens those from `release/X.Y.Z`
+      # and stamps the metadata and the skill pins with the same commit; a hand-made bump
+      # would ship a version whose pins, wheel and tag do not line up.
+      - name: Only release/* branches may change VERSION
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- VERSION; then
+            echo "VERSION unchanged."
+            exit 0
+          fi
+          case "$HEAD_REF" in
+            release/*) echo "VERSION changed on $HEAD_REF (a release PR)." ;;
+            *)
+              echo "This PR changes VERSION but its branch is '$HEAD_REF', not release/*." >&2
+              echo "Version bumps come from the Prepare Release workflow:" >&2
+              echo "  gh workflow run release-prepare.yml --ref main -f bump=patch" >&2
+              exit 1
+              ;;
+          esac
 
   test:
     name: Test (Linux)

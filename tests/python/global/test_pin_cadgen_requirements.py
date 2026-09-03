@@ -35,10 +35,10 @@ class PinScriptPresenceTest(unittest.TestCase):
         self.assertTrue(SCRIPT.is_file(), f"missing {SCRIPT}")
         self.assertTrue(os.access(SCRIPT, os.X_OK), f"{SCRIPT} is not executable")
 
-    def test_release_workflow_pins_in_the_release_pr(self):
-        # The pin is stamped WITH the version bump, in the release PR against main,
-        # so main never carries a VERSION its skill pins disagree with.
-        workflow = (REPO_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    def test_prepare_release_pins_in_the_release_pr(self):
+        # The pin is stamped WITH the version bump, in the release PR, so the target
+        # never carries a VERSION its skill pins disagree with.
+        workflow = (REPO_ROOT / ".github" / "workflows" / "release-prepare.yml").read_text(encoding="utf-8")
         bump_at = workflow.index("scripts/release/bump-version.sh")
         pin_at = workflow.index("scripts/release/pin-cadgen-requirements.sh")
         pr_at = workflow.index("Create or update release pull request")

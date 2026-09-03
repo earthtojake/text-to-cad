@@ -38,8 +38,8 @@ function usage() {
 
 Synchronizes duplicate package and plugin metadata versions from the canonical
 VERSION file. Release preparation edits that file, then
-stamps derived metadata from it; the bundle script and the Release workflow
-re-check the same metadata before production output is written.
+stamps derived metadata from it; the bundle script and the Publish Release
+workflow re-check the same metadata before production output is written.
 
 Options:
   --check  Fail if derived version metadata is stale.
