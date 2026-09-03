@@ -96,16 +96,18 @@ if __name__ == "__main__":
 
 The decorator only declares the model. Calling it at the top level (from
 `__main__`, with no arguments) builds it: `python bracket.py` writes
-`bracket.step` and its render package beside the script, and a repeat run of an
-unchanged model is a fast no-op. Called from inside another model's body, the
-same name returns the shape — that is how an assembly composes its children
-(wrap the call in `cadgen.compose.memo` to cache it across builds). The
+`bracket.step` beside the script and the model's result into the store, and a
+repeat run of an unchanged model is a fast no-op. Called from inside another
+model's body, the same name returns the shape — that is how an assembly
+composes its children: the child is built if stale (or loaded from the store),
+and its result is linked into the parent's. The
 `from cadgen import build123d as bd` idiom is the canonical import: it is a
 lazy, transparent re-export of build123d (same names, same behavior), so the
 freshness gate and warm-daemon handoff run before any kernel import is paid.
 Raw `import build123d` still works but costs ~2.5s per re-run. Per-run flags
-ride the script's argv: `--force`, `--json`, `--verbose`, `-o PATH`,
-`--mesh-tolerance`, `--mesh-angular-tolerance`, `--lock-timeout SECONDS`.
+ride the script's argv: `--force` (this model only; its children still go
+through the freshness gate), `--json`, `--verbose`, `--mesh-tolerance`,
+`--mesh-angular-tolerance`, `--lock-timeout SECONDS`.
 
 Rules the decorator enforces: importing a model module never builds; a model
 file without a `__main__` call never builds either — always end the script with
@@ -175,7 +177,7 @@ Silent generators are unaffected.
 
 **A build waits for a concurrent build of the same model** rather than racing it, and says so on stderr (`waiting for another run to finish building ...`), repeating while it waits. Pass `--lock-timeout SECONDS` to give up instead and report `{"ok":true,"contended":true}`. With `--json`, each target's `outcome` is `built`, `current`, `skipped-peer` (the peer finished and its package is current), or `contended` (the peer is still building and this run declined to wait).
 
-Target paths resolve from the command's current working directory, not from the skill directory. Run commands from the workspace that owns the artifacts and pass cwd-relative target paths so project CAD files never resolve accidentally under the skill directory. By default a model's STEP is its sibling with the same stem; the artifact→source link is recorded in the render package (descriptor provenance), so relocating outputs with `out=` is safe.
+Target paths resolve from the command's current working directory, not from the skill directory. Run commands from the workspace that owns the artifacts and pass cwd-relative target paths so project CAD files never resolve accidentally under the skill directory. By default a model's STEP is its sibling with the same stem; the artifact→source link is recorded in the store's record for the model, so relocating outputs with `out=` is safe.
 
 CAD references are `#...` selector tokens local to a target, for example `#o1.2` or `#o1.2.f1`. Pass the STEP/CAD file as a separate target argument when using CAD CLIs.
 
@@ -189,7 +191,7 @@ Scale depth to the task: a simple part needs a short brief and few spec-driven c
 4. **Check named purchasable components.** When an assembly includes named off-the-shelf actuators, servos, motors, electronics boards, connectors, or other purchasable components, search `$step-parts` before creating simplified placeholder geometry. If no exact match is found, record the miss and then use a documented envelope.
 5. **Plan before coding.** Define parameters, intent labels, source paths, expected bounding boxes, and any mating/positioning datums before editing.
 6. **Edit source, not generated artifacts.** Author a plain `.py` model script with one `@step`-decorated function (underscore-prefixed helper modules carry shared code; see `references/step-generation.md`). When a model script exists, run IT, never hand-edit its exported STEP. Imported STEP/STP files (no script) are handed straight to `cadgen step inspect`, `step snapshot` and the mesh doors — each makes whatever it needs on demand.
-7. **Generate explicit targets.** Run each model script directly (`python <model>.py`); do not sweep directories. Every run writes the model's `.step` (sibling `<stem>.step` by default; `out=` in the decorator or `-o PATH` to relocate); declare `@stl`/`@threemf`/`@glb` exports on the model, or run `cadgen stl|3mf|glb build` for one-off mesh files. For multi-model project structure, see the `$cad-project` skill.
+7. **Generate explicit targets.** Run each model script directly (`python <model>.py`); do not sweep directories. Every run writes the model's `.step` (sibling `<stem>.step` by default; `out=` in the decorator relocates it); declare `@stl`/`@threemf`/`@glb` exports on the model, or run `cadgen stl|3mf|glb build` for one-off mesh files. For multi-model project structure, see the `$cad-project` skill.
 8. **Validate geometrically.** Run `cadgen step inspect refs <step-or-cad-target> --facts --planes --positioning` as the baseline, then verify the dimensions and relationships the user's spec calls out with targeted `measure`, `align`, `frame`, or `diff` checks. Run `cadgen step inspect validate <step-or-cad-target>` for geometry soundness: `refs --facts` reports counts and bounds, and its `ok` field covers ref resolution only — an open shell and an inverted solid both pass it.
 9. **Snapshot the primary STEP — snapshot validation is mandatory.** After creating or visibly updating a primary STEP/STP part or assembly, ALWAYS run CAD `cadgen step snapshot` against it and review the output; deterministic checks passing is not a reason to skip. The only skip cases are documented in `references/snapshot-review.md` (no visible geometry changed, or no valid artifact exists); report the reason when skipping.
 10. **Repair and rerun.** If a check fails, change the smallest responsible source section, regenerate, and rerun the failed validation.

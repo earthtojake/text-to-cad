@@ -127,8 +127,8 @@ Use the frame method that matches native build123d joint inputs: `rigid_frame()`
 ## Child dependencies
 
 A child part is wired in one of two modes — **LINKED** (a generated child:
-import its model function, wrap with `cadgen.compose.memo` when it is worth
-caching; the default) or **UNLINKED** (a document read via
+import its model function and call it; the default) or **UNLINKED** (a
+document read via
 `cadgen.read_step`: imported parts, or a generated child the user explicitly
 asked to decouple). The modes, their staleness semantics, and the code live
 in "Composing on other parts" in `step-generation.md`. Positioning-wise the

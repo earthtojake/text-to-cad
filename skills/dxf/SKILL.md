@@ -210,7 +210,6 @@ directory as the geometry it derives from, named `<name>.py`.
 
 Flags (a model script runs itself; there is no generation CLI):
 
-- `-o`/`--output PATH` — write the drawing somewhere other than its declared target.
 - `--force` — regenerate even when the recorded output is current.
 - `--verbose`, `--json`, `--lock-timeout SECONDS`.
 
@@ -264,7 +263,6 @@ review geometry visually with `$cad-viewer`.
 
 ```bash
 python path/to/source.py
-python path/to/source.py -o path/to/output.dxf
 python path/to/source.py --force
 ```
 

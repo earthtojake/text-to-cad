@@ -28,12 +28,13 @@ python bracket.py                 # builds bracket.step + its render package
 python bracket.py --force --json  # per-run flags ride the script's argv
 ```
 
-Every run keeps the model's render package (the document of record: exact-shape
-`.brep` blobs + `.surf` render views + descriptor, in the user-level store keyed by the document's content hash)
-current and ALWAYS writes the `.step` output, assembled from that package rather
-than re-generated. Unchanged sources are a fast no-op. The default output is the
+Every run keeps the model's result in the user-level store (a tree of exact
+`.brep` + `.surf` components, plus links to its children's results) current and
+ALWAYS writes the `.step` output, assembled from that result rather than
+re-generated. Unchanged sources are a fast no-op. The default output is the
 sibling `<stem>.step`; relocate it durably with `@step(out="path/to/out.step")`
-(relative to the script) or per-run with `-o PATH` (relative to the command cwd).
+(relative to the script). There is no per-run output override: a model has one
+output, and the store's record of it is keyed by the script.
 Do not put output paths in the model's return value. Mesh formats are declared
 on the model with `@stl`/`@threemf`/`@glb`, or written by the matching
 `cadgen <format> build` door (see `supported-exports.md`).
@@ -47,10 +48,10 @@ Rules the decorator enforces:
   build exits with the pipeline's code. It takes no arguments — the declared
   output is the model's default configuration.
 - **A call inside a build composes.** From another model's body the same name
-  returns the shape; nothing is written for the child. This is what makes
-  composition ordinary Python. Cache a child across builds with
-  `cadgen.compose.memo(child.child)`; `memo` is for pure functions (a child
-  model or an expensive helper), never for anything with side effects.
+  returns the shape: the child is built if it is stale (writing ITS `.step`
+  and record), otherwise loaded from the store, and either way its result is
+  linked into the parent's. This is what makes composition ordinary Python;
+  there is nothing to cache by hand.
 - **One model per file.** The file is the model; entry identity, packages, and
   closures key off it.
 - **A model takes no parameters.** It is one configuration of one output, so
@@ -125,39 +126,42 @@ modes. Choose deliberately:
   Read it with `cadgen.read_step`, below.
 
 A linked child is just an import: model scripts are real modules, and
-`import widget; widget.widget()` returns the shape with no build side
-effects (the import tracer records the child's files into the parent's
-closure, so staleness flows). What comes back is GEOMETRY only — tree,
-labels, colors, placements. A child's sidecar content (its mates, kinematics,
-animation) never rides up into the parent: declare what the assembly needs on
-the assembly, with `cadgen.assembly` on the parent's own compound. For anything expensive, wrap the imported
-function with **`cadgen.compose.memo`** — importing links, `memo` caches.
-The wrapped call becomes a SCOPE keyed by the child's own source closure
-plus the call arguments, so an edit that does not reach the child's files
-skips that child's Python and kernel work entirely (this is what makes
-big-assembly edits cost seconds instead of minutes). The contract: a
-memoized function is pure given its arguments and source closure, and
-returns shapes/compounds (or JSON-able values). A decorated model function
-is just its geometry here — its own `out=`/export declarations fire only
-when it is the entry being built:
+`from widget import widget` binds the model with no build side effects.
+Calling `widget()` inside the parent's body builds the child when it is stale
+(writing the child's own `.step`) or loads its result from the store, and
+returns the shape. What comes back is GEOMETRY only — tree, labels, colors,
+placements. A child's sidecar content (its mates, kinematics, animation) never
+rides up into the parent: declare what the assembly needs on the assembly,
+with `cadgen.assembly` on the parent's own compound.
+
+The parent depends on the child by RESULT, not by source: its record pins the
+child's result hash, so a child edit that yields identical geometry leaves the
+parent current, and an edit that does not reach a child skips that child's
+Python and kernel work entirely (this is what makes big-assembly edits cost
+seconds instead of minutes). Import only the model function from a model
+file (`from widget import widget`); importing anything else from it (a
+constant, a helper) makes that file part of the parent's own source closure.
+A decorated model function is just its geometry here — its own `out=`/export
+declarations fire only when it is the entry being built:
 
 ```python
 from cadgen import build123d as bd
 from cadgen import step
-from cadgen.compose import memo
-from widget import widget as build_widget   # importing links; never builds
-
-_WIDGET = memo(build_widget)                # memo caches
+from widget import widget   # importing binds; never builds
 
 @step(kind="assembly")
 def rig():
-    widget = _WIDGET()          # cached scope; compose into the parent
-    widget.label = "widget"
+    w = widget()              # built if stale, else loaded; compose into the parent
+    w.label = "widget"
     ...
 ```
 
-The same wrapper serves in-file use: decorate an expensive local function
-with `@memo` and it caches under the same contract.
+**Link or component.** Place a child's shape as it came back — `moved()`,
+`located()`, relabelled, recolored — and the parent's result LINKS to the
+child's (stored once, shared by every parent). Modify it (a boolean, a
+mirror, extracting a sub-shape) and the parent owns that geometry as its own
+components; the dependency is tracked either way. Put geometry changes that
+belong to the child in the child's file.
 
 **`sys.path` does not survive into the model function.** The pipeline restores
 `sys.path` after loading the module, so do imports at module top level and
@@ -265,11 +269,12 @@ on implicit resolution by `inspect`, `snapshot`, or the Viewer.
 
 ## Viewer artifacts
 
-Every model run keeps the render package (in the user-level store, keyed by
-the document's content hash) current as the build output.
-It powers CAD Viewer review, `$cad-viewer` workflows, and `cadgen step inspect`
-refs, and is not optional in the STEP workflow. Imported STEP/STP files get the
-same package on demand, per the previous section.
+Every model run keeps the model's result in the user-level store (a tree of
+exact-geometry components plus links to its children's results, recorded
+against the script) current as the build output. It powers CAD Viewer review,
+`$cad-viewer` workflows, and `cadgen step inspect` refs, and is not optional in
+the STEP workflow. Imported STEP/STP files get the same result on demand, per
+the previous section.
 
 ## After generation
 

@@ -6,7 +6,7 @@ Read this file when the user requests STL, 3MF, or native GLB output files from 
 
 STL, 3MF, and native GLB are mesh exports, not substitutes for STEP. Validate the primary CAD geometry first, then export the requested formats. Do not treat exported mesh renders as CAD validation; inspect and snapshot the primary model per the standard workflow.
 
-Native GLB exports are ordinary glTF 2.0 binary files for external tools: Y-up, with one material per distinct part/face color. Do not confuse them with the CAD Viewer render artifact — the render package directory in the user-level store (`~/.cache/cadgen/packages/<stepHash>-v<N>/`: an `assembly.json` descriptor plus a `components/` dir of content-addressed exact-geometry components) — which the model script builds and a mesh door never writes.
+Native GLB exports are ordinary glTF 2.0 binary files for external tools: Y-up, with one material per distinct part/face color. Do not confuse them with the CAD Viewer render artifact — the model's result tree in the user-level store (`~/.cache/cadgen`: content-addressed exact-geometry components plus links to child results) — which the model script builds and a mesh door never writes.
 
 ## Declare the exports the model always has
 

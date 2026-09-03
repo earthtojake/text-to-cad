@@ -46,20 +46,24 @@ Deleting every `.py` in a project must not change what renders.
 - Source scripts are PROGRAMS: run, never passed to CLIs, never parsed by
   renderers.
 
-### 2. The cache contains only format-derived build and render artifacts
+### 2. The store contains only derived results
 
-`~/.cache/cadgen` holds data derivable from a file's bytes — render
-packages, tessellations, freshness records — and nothing else.
+`~/.cache/cadgen` is the store: content-addressed objects (a model's result
+tree and the components it is made of) and input-addressed index entries
+(the per-model record, op-memo and tessellation entries) — data derivable
+from sources and documents, and nothing else. Its layout, formats, gate and
+invariants are the contract in [`STORE.md`](STORE.md); read it before
+touching anything that writes to or reads from the store.
 
-*Pressure-test*: everything in the cache is (a) a pure function of some
-file's bytes plus schema versions, (b) safely deletable at any time, and
-(c) rebuildable from generated files alone. If losing a cache entry would
-lose information, that information is in the wrong place.
+*Pressure-test*: everything in the store is (a) a pure function of some
+source or document, (b) safely deletable at any time, and (c) rebuildable
+by running the models again. If losing a store entry would lose information,
+that information is in the wrong place.
 
-**The cache is what the bytes imply; the sidecar is what the author meant.**
+**The store is what the sources imply; the sidecar is what the author meant.**
 
-There is no automatic GC: `cadgen cache gc` is the only sweeper, and every
-tier is content-addressed and best-effort, so deletion never needs
+There is no automatic GC: `cadgen store gc` is the only sweeper, and every
+object is immutable and idempotently written, so deletion never needs
 coordination — a racing reader re-misses and rebuilds.
 
 ### 3. One sidecar per artifact, and it belongs to that artifact alone
@@ -182,7 +186,7 @@ src/cadgen/
 Verbs by format: `step` compile · build · snapshot · inspect;
 `stl`/`3mf`/`glb` build · snapshot; `dxf` snapshot; `urdf`/`sdf`
 validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
-`cadgen cache|daemon|doctor` are status commands, and `cadgen viewer
+`cadgen store|daemon|doctor` are status commands, and `cadgen viewer
 [list|stop]` the CAD Viewer's launcher and instance manager — all deliberately
 outside the mirror pattern. `cadgen step compile` is internal tooling: skills never
 teach it — doors compile missing packages on demand.
