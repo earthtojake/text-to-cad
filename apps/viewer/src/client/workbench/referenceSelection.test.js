@@ -3,7 +3,6 @@ import { test } from "node:test";
 
 import {
   buildAssemblyPartCopyText,
-  buildAssemblyMateCopyText,
   fileRefPrefixForEntry,
   buildNormalizedReferenceState,
   buildReferenceCacheKey,
@@ -154,35 +153,6 @@ test("copy helpers merge selector refs and keep plain fallback lines", () => {
   assert.equal(buildSelectionCopyButtonLabel([]), "Copy refs");
 });
 
-test("assembly mate refs copy as selector lines", () => {
-  const assemblyEntry = {
-    ...STEP_ENTRY,
-    kind: "assembly"
-  };
-  const mate = {
-    id: "m1",
-    label: "m1",
-    sourceLabel: "block mate",
-    type: "face_to_face",
-    fixed: "block_pocket_floor:offset",
-    moving: "bottom_center"
-  };
-  const mateCopyText = buildAssemblyMateCopyText(mate, assemblyEntry);
-  assert.equal(
-    mateCopyText,
-    "#m1"
-  );
-
-  const payload = buildSelectionCopyPayload({
-    mates: [mate],
-    entry: assemblyEntry
-  });
-  assert.deepEqual(payload.lines, [
-    "#m1"
-  ]);
-  assert.equal(payload.copiedCount, 1);
-});
-
 test("selection utility helpers preserve list and topology path behavior", () => {
   assert.deepEqual(parseAssemblyPartReferenceSelectionId("assembly-part:part-a"), { partId: "part-a" });
   assert.deepEqual(parseAssemblyPartReferenceSelectionId("topology|part-b|face|f1"), { partId: "part-b" });
@@ -244,7 +214,6 @@ test("copy text carries the entry's shortest unique path suffix", () => {
     buildAssemblyPartCopyText({ occurrenceId: "o1.6", name: "prism" }, entry),
     "assy.step#o1.6"
   );
-  assert.equal(buildAssemblyMateCopyText({ id: "m1" }, entry), "assy.step#m1");
   assert.equal(buildWholeStepEntryCopyReference(entry).copyText, "assy.step#");
   assert.equal(fileRefPrefixForEntry(entry), "assy.step");
 });
@@ -256,7 +225,6 @@ test("an entry with no prefix emits the bare refs it always did", () => {
     buildAssemblyPartCopyText({ occurrenceId: "o1.6", name: "prism" }, STEP_ENTRY),
     "#o1.6"
   );
-  assert.equal(buildAssemblyMateCopyText({ id: "m1" }, STEP_ENTRY), "#m1");
   assert.equal(buildWholeStepEntryCopyReference(STEP_ENTRY).copyText, "#");
   assert.equal(fileRefPrefixForEntry(STEP_ENTRY), "");
 });
@@ -268,7 +236,7 @@ test("canonical copy text keeps a file prefix instead of dropping the line", () 
 
 test("withFileRefPrefix is idempotent, which is what lets it run at one funnel", () => {
   // Copy text arrives at the funnel from several builders: some already carry a prefix (parts
-  // and mates, built from the entry), some do not (tree-node selections). Applying this once at
+  // built from the entry), some do not (tree-node selections). Applying this once at
   // the end is only safe because a second application is a no-op.
   assert.equal(withFileRefPrefix("#o1.2", "plate.stl"), "plate.stl#o1.2");
   assert.equal(withFileRefPrefix("plate.stl#o1.2", "plate.stl"), "plate.stl#o1.2");

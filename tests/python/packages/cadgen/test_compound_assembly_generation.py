@@ -38,7 +38,6 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
             {"shape": object()},
             {"shape": object(), "stl": "part.stl"},
             {"shape": object(), "mesh_tolerance": 0.01},
-            {"shape": object(), "assembly_mates": [{"sourceLabel": "servo_to_bracket"}]},
             {"shape": object(), "params": "tom.params.js"},
         ):
             with self.subTest(payload=sorted(payload)):
@@ -70,45 +69,6 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, r"returns a dict.*@stl/@threemf/@glb"):
                 parse_generator_metadata(script_path)
-
-    def test_shape_assembly_mates_attribute_round_trips_to_scene(self) -> None:
-        # Mates set on the returned ROOT compound survive STEP-scene export onto
-        # scene.assembly_mates with canonical m{n} ids.
-        import build123d
-
-        with tempfile.TemporaryDirectory(prefix="cadgen-compound-") as tempdir:
-            left = build123d.Box(1, 1, 1)
-            left.label = "servo"
-            right = build123d.Pos(2, 0, 0) * build123d.Box(1, 1, 1)
-            right.label = "bracket"
-            shape = build123d.Compound(children=[left, right], label="assembly")
-            shape.assembly_mates = [
-                {
-                    "sourceLabel": "servo_to_bracket",
-                    "relation": "rigid",
-                    "fixed": "servo:mount",
-                    "moving": "bracket:foot",
-                }
-            ]
-
-            scene = export_build123d_step_scene(
-                shape,
-                Path(tempdir) / "assembly.step",
-            )
-
-        self.assertEqual(
-            [
-                {
-                    "id": "m1",
-                    "label": "m1",
-                    "sourceLabel": "servo_to_bracket",
-                    "relation": "rigid",
-                    "fixed": "servo:mount",
-                    "moving": "bracket:foot",
-                }
-            ],
-            scene.assembly_mates,
-        )
 
     def test_run_selected_specs_preserves_action_stdout(self) -> None:
         spec = SimpleNamespace(source_ref="part.py")

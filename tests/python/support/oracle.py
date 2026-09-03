@@ -122,22 +122,21 @@ def fingerprint(entry_path: Path) -> dict:
         for path in sorted((pkg / "components").glob(pattern))
     }
 
-    # Mates are source-derived, so they ride the MODEL-SIDE sidecar (<name>.step
-    # gets <name>.step.json beside it); an imported model has no sidecar and
-    # therefore no mates. `kinematics` is the current spelling; the legacy
-    # `assemblyMates` key is still read so older sidecars fingerprint the same.
+    # Kinematics are source-derived, so they ride the MODEL-SIDE sidecar
+    # (<name>.step gets <name>.step.json beside it); an imported model has no
+    # sidecar and therefore no kinematics.
     artifact = artifact_path(entry_path)
     sidecar_path = artifact.with_name(f"{artifact.name}.json")
-    mates = None
+    kinematics = None
     if sidecar_path.is_file():
         sidecar = json.loads(sidecar_path.read_text())
-        mates = sidecar.get("kinematics", sidecar.get("assemblyMates"))
+        kinematics = sidecar.get("kinematics")
 
     return {
         "cids": sorted((descriptor.get("components") or {}).keys()),
         "occurrences": occurrences,
         "componentBytes": components,
-        "assemblyMates": mates,
+        "kinematics": kinematics,
         "bbox": descriptor.get("bbox"),
     }
 
@@ -167,8 +166,8 @@ def diff_fingerprints(a: dict, b: dict) -> list[str]:
     missing = set(a["componentBytes"]) ^ set(b["componentBytes"])
     if missing:
         problems.append(f"component files differ: {sorted(missing)[:6]}")
-    if a["assemblyMates"] != b["assemblyMates"]:
-        problems.append("assemblyMates differ")
+    if a["kinematics"] != b["kinematics"]:
+        problems.append("kinematics differ")
     if a["bbox"] != b["bbox"]:
         problems.append("bbox differs")
     return problems

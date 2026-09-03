@@ -204,12 +204,6 @@ def scene_from_render_package(step_path: Path, *, step_hash: str) -> LoadedStepS
         step_hash=step_hash,
         source_kind="step",
     )
-    from cadgen._internal.source_sidecar import read_source_sidecar
-
-    sidecar = read_source_sidecar(step_path) or {}
-    mates = sidecar.get("assemblyMates")
-    if isinstance(mates, list):
-        scene.assembly_mates = [dict(mate) for mate in mates if isinstance(mate, dict)]
     return scene
 
 

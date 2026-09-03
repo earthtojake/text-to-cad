@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Box, Boxes, ChevronRight, Eye, EyeOff, Link2, X } from "lucide-react";
+import { Box, Boxes, ChevronRight, Eye, EyeOff, X } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
   STEP_MODEL_ROOT_ID,
@@ -30,7 +30,6 @@ const treeRowActionButtonClasses = "h-5 w-5 rounded-sm px-0 text-current/60 shad
 const treeRowContentClasses = "h-7 min-w-0 text-xs font-normal";
 const treeGroupLabelClasses = "px-2 pb-1 pt-2 text-[10px] font-medium text-sidebar-foreground/45";
 const treeGlyphIconClasses = "size-3.5 shrink-0 text-current/60";
-const treeMateIconSlotClasses = "grid h-5 w-5 shrink-0 place-items-center text-current/60";
 // One indent level equals the expand-chevron's footprint (w-5 button + gap-1.5),
 // so a leaf row's glyph (which has no chevron) lines up exactly under its
 // expandable parent's glyph instead of sitting a few pixels to the left.
@@ -226,15 +225,6 @@ function stepTreeRowTooltip(row, {
   ].filter(Boolean).join("\n");
 }
 
-function mateRowTooltip(mate, disabledReason = "") {
-  return [
-    formatTreeTooltipLine("Mate", mate?.label),
-    formatTreeTooltipLine("Ref", formatRefForTooltip(mate?.id)),
-    formatTreeTooltipLine("Info", mate?.detail),
-    formatTreeTooltipLine("Status", disabledReason),
-  ].filter(Boolean).join("\n");
-}
-
 function StepTreeDepthGuides({ depth }) {
   const normalizedDepth = Math.min(
     Math.max(Math.trunc(Number(depth) || 0), 0),
@@ -398,31 +388,6 @@ function StepTreeRowGlyph({ row }) {
   return <Icon className={treeGlyphIconClasses} strokeWidth={1.6} aria-hidden="true" />;
 }
 
-function normalizeAssemblyMateRows(assemblyMates) {
-  if (!Array.isArray(assemblyMates)) {
-    return [];
-  }
-  return assemblyMates
-    .filter((mate) => mate && typeof mate === "object")
-    .map((mate, index) => {
-      const fallbackId = `m${index + 1}`;
-      const id = String(mate.id || fallbackId).trim() || fallbackId;
-      const sourceLabel = String(mate.sourceLabel || mate.name || "").trim();
-      const rawLabel = String(mate.label || "").trim();
-      const label = sourceLabel || (rawLabel && rawLabel !== id ? rawLabel : "") || id;
-      const type = String(mate.type || mate.relation || "mate").trim() || "mate";
-      const fixed = String(mate.fixed || "").trim();
-      const moving = String(mate.moving || "").trim();
-      const endpoints = fixed && moving ? `${fixed} -> ${moving}` : fixed || moving;
-      const detail = [id, type, endpoints].filter(Boolean).join(" ");
-      return {
-        id,
-        label,
-        detail,
-      };
-    });
-}
-
 export default function StepFileSheet({
   open,
   measurements = EMPTY_MEASUREMENTS,
@@ -439,26 +404,21 @@ export default function StepFileSheet({
   viewerLoading,
   isAssemblyView = false,
   stepTreeRoot,
-  assemblyMates = [],
   expandedTreeNodeIds,
   loadableTreeNodeIds = [],
   selectedPartIds,
   selectedReferenceIds = [],
   selectedReferences = [],
-  selectedMateIds = [],
   selectableNodeIds = null,
   activeTreeNodeId: activeTreeNodeIdProp = "",
   activeTreeNodeScrollKey = "",
   hoveredPartId,
   hoveredReferenceId = "",
-  hoveredMateId = "",
   hiddenPartIds,
   focusedNodeIds = [],
   onSelectTreeNode,
   onSelectReferenceNode,
-  onSelectMateNode,
   onCopyTreeNodeReference,
-  onCopyMateNodeReference,
   onFocusTreeNode,
   onUnfocusTreeNode,
   onExitAllIsolate,
@@ -467,7 +427,6 @@ export default function StepFileSheet({
   onClearSelection,
   onHoverTreeNode,
   onHoverReferenceNode,
-  onHoverMateNode,
   treeSelectionDisabled = false,
   treeSelectionDisabledReason = "",
   onTogglePartVisibility,
@@ -492,17 +451,12 @@ export default function StepFileSheet({
   const activeSelectedReferenceId = String(
     Array.isArray(selectedReferenceIds) ? selectedReferenceIds[selectedReferenceIds.length - 1] || "" : ""
   ).trim();
-  const selectedMateIdSet = useMemo(
-    () => new Set((Array.isArray(selectedMateIds) ? selectedMateIds : []).map((id) => String(id || "").trim()).filter(Boolean)),
-    [selectedMateIds]
-  );
   const hiddenIds = Array.isArray(hiddenPartIds) ? hiddenPartIds : [];
   const focusedNodeIdSet = useMemo(
     () => new Set((Array.isArray(focusedNodeIds) ? focusedNodeIds : []).map((id) => String(id || "").trim()).filter(Boolean)),
     [focusedNodeIds]
   );
   const normalizedHoveredReferenceId = String(hoveredReferenceId || "").trim();
-  const normalizedHoveredMateId = String(hoveredMateId || "").trim();
   const selectableNodeIdSet = useMemo(() => {
     if (!Array.isArray(selectableNodeIds)) {
       return null;
@@ -514,10 +468,6 @@ export default function StepFileSheet({
   const elideRootTreeRow = treeRootChildren.length > 0 && (
     isAssemblyView ||
     stepTreeNodeId(treeRoot) === STEP_MODEL_ROOT_ID
-  );
-  const assemblyMateRows = useMemo(
-    () => normalizeAssemblyMateRows(assemblyMates),
-    [assemblyMates]
   );
   const visibleRows = useMemo(
     () => flattenVisibleStepTreeRows(treeRoot, expandedTreeNodeIds, {
@@ -551,9 +501,6 @@ export default function StepFileSheet({
   // Show All renders only when something is hidden, so a fully visible tree keeps a header
   // with nothing to click.
   const hasHiddenTreeRows = hiddenTreeRowIds.size > 0;
-  const hasMateRows = assemblyMateRows.length > 0;
-  const showInstancesLabel = hasMateRows;
-  const showMateSections = hasMateRows;
   const activeReferenceTreeRow = useMemo(
     () => activeSelectedReferenceId
       ? visibleRows.find((row) => String(row?.topologyReferenceId || "").trim() === activeSelectedReferenceId) || null
@@ -731,12 +678,6 @@ export default function StepFileSheet({
                       Show All
                     </button>
                   ) : null}
-                </div>
-              ) : null}
-
-              {showInstancesLabel ? (
-                <div className={treeGroupLabelClasses} role="presentation">
-                  Instances
                 </div>
               ) : null}
 
@@ -1174,97 +1115,6 @@ export default function StepFileSheet({
                 <FileSheetStatusText className="py-1">
                   No assembly tree
                 </FileSheetStatusText>
-              ) : null}
-
-              {showMateSections ? (
-                <>
-                  <div className={treeGroupLabelClasses} role="presentation">
-                    Mates
-                  </div>
-                  {assemblyMateRows.map((mate) => {
-                    const mateSelected = selectedMateIdSet.has(mate.id);
-                    const mateHovered = normalizedHoveredMateId === mate.id;
-                    const mateSelectionDisabled = treeSelectionDisabled || typeof onSelectMateNode !== "function";
-                    const mateTitle = mateRowTooltip(mate, treeSelectionTitle);
-                    const selectMate = (event) => {
-                      onSelectMateNode?.(mate.id, { multiSelect: event?.shiftKey === true });
-                    };
-                    return (
-                      <ContextMenu key={mate.id} modal={false}>
-                        <ContextMenuTrigger asChild>
-                          <div
-                            role="treeitem"
-                            aria-label={[mate.label, mate.detail].filter(Boolean).join(" ")}
-                            aria-selected={mateSelected}
-                            aria-disabled={mateSelectionDisabled}
-                            tabIndex={mateSelectionDisabled ? -1 : 0}
-                            className={cn(
-                              "flex h-7 min-w-0 max-w-full items-center gap-2 rounded-md px-2 text-xs outline-none transition-colors",
-                              mateSelectionDisabled
-                                ? "cursor-default text-sidebar-foreground/55"
-                                : "cursor-pointer text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground",
-                              mateSelected
-                                ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                                : mateHovered && "bg-sidebar-accent text-sidebar-accent-foreground"
-                            )}
-                            title={mateTitle}
-                            onClick={(event) => {
-                              if (mateSelectionDisabled) {
-                                event.preventDefault();
-                                return;
-                              }
-                              selectMate(event);
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.target !== event.currentTarget || mateSelectionDisabled) {
-                                return;
-                              }
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                selectMate(event);
-                              }
-                            }}
-                            onMouseEnter={() => {
-                              if (!mateSelectionDisabled) {
-                                onHoverMateNode?.(mate.id);
-                              }
-                            }}
-                            onMouseLeave={() => {
-                              if (!mateSelectionDisabled) {
-                                onHoverMateNode?.("");
-                              }
-                            }}
-                          >
-                            <span className={treeMateIconSlotClasses} aria-hidden="true">
-                              <Link2 className="size-3.5" strokeWidth={1.8} />
-                            </span>
-                            <span className="min-w-0 flex-1 truncate font-medium leading-4">
-                              {mate.label}
-                            </span>
-                          </div>
-                        </ContextMenuTrigger>
-                        <ContextMenuContent className="w-44">
-                          <AssemblyContextMenuItems
-                            Item={ContextMenuItem}
-                            Separator={ContextMenuSeparator}
-                            selected={mateSelected}
-                            copyReferenceDisabled={!mate.id || typeof onCopyMateNodeReference !== "function"}
-                            selectDisabled={mateSelectionDisabled}
-                            showIsolate={false}
-                            showHideOther={false}
-                            showVisibility={false}
-                            showHideAll={false}
-                            showExpandCollapse={false}
-                            onCopyReference={() => {
-                              onCopyMateNodeReference?.(mate.id);
-                            }}
-                            onSelect={selectMate}
-                          />
-                        </ContextMenuContent>
-                      </ContextMenu>
-                    );
-                  })}
-                </>
               ) : null}
               </div>
             </div>

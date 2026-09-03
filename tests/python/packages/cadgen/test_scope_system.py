@@ -44,12 +44,6 @@ def _demo_compound() -> Compound:
     inner.location = Location((0, 25, 0))
     root = Compound(children=[box_a, pin, inner], label="demo")
     root._color = Color(0.8, 0.1, 0.1, 1.0)
-    # Mates are NOT part of what a thawed scope carries (the sidecar boundary:
-    # a thawed child is geometry only), so they are deliberately absent from the
-    # fingerprint below; a fresh compound with mates and its thaw must still
-    # package identically.
-    root.assembly_mates = [{"id": "m1", "type": "revolute",
-                            "fixed": "#widget_a.f1", "moving": "#widget_b.f2"}]
     return root
 
 

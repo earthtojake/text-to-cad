@@ -164,8 +164,7 @@ export const clips = {
 - `m.get(target)` takes a LABEL (canonical) or occurrence-id refs
   (`"#o1.3.1"`, comma lists; each id covers its whole subtree). Unknown
   targets THROW — a typo never silently animates nothing. Labels here match
-  RENDERED PARTS only, unlike a mate ref: to animate a whole group, name its
-  occurrence id.
+  RENDERED PARTS only: to animate a whole group, name its occurrence id.
 - Handles: `.rotate(axis, degrees, origin=[0,0,0])`, `.translate(vec)`,
   `.opacity(0..1)`, `.visible(bool)`. Successive transform calls
   PREMULTIPLY: spin about a part's own center first, then orbit the origin,

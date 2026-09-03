@@ -151,7 +151,7 @@ class GeneratedStepFidelityTests(unittest.TestCase):
         self.assertEqual(sorted(generated.keys()), sorted(imported.keys()))
         for banned in (
             "sourceKind", "sourcePath", "sourceHash", "sourceClosureHash",
-            "sourceClosureFiles", "pose", "assemblyMates", "generatedAt",
+            "sourceClosureFiles", "pose", "generatedAt",
         ):
             self.assertNotIn(banned, generated)
             self.assertNotIn(banned, imported)

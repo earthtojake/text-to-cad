@@ -71,13 +71,13 @@ travels with the file it describes.
 
 A sidecar describes the model that declared it — never its parent, never its
 children. A parent composing a child receives GEOMETRY (tree, labels, colors,
-placements, exact shape) and nothing else: the child's mates, kinematics and
+placements, exact shape) and nothing else: the child's kinematics and
 animation are written by the child's own build into the child's own sidecar,
 and an assembly that needs a relation declares it on the assembly. This is
 what lets a cached child stand in for its function: the cache carries
 geometry, and geometry is all a parent may read.
-*Pressure-test*: build a child that declares mates, then build a parent that
-composes it. The parent's sidecar must contain only the parent's own
+*Pressure-test*: build a child that declares `kinematics=`, then build a parent
+that composes it. The parent's sidecar must contain only the parent's own
 declarations, and the child's sidecar must be unchanged by the parent's build.
 
 ### 4. Zero metadata in written artifacts
@@ -162,7 +162,7 @@ src/cadgen/
                          #   cylindrical/fastened, couple, normalize)
   compose.py             # memo — the traced, cached composition scope
   step_scene.py          # read_step and scene loading (recorded inputs)
-  assembly.py            # AssemblyHelper, mates, labels
+  assembly.py            # AssemblyHelper — positioning through native joints, labels
   results.py             # the typed Results every verb returns (stdlib-only)
   cli/                   # generated command shells, one per <format> <verb>
   daemon/                # warm worker pool (supervisor never imports OCP)

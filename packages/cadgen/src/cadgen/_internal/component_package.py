@@ -54,7 +54,6 @@ COMPONENT_PROVENANCE_KEYS = (
     "stepPath",
     "stepHash",
     "generatedAt",
-    "assemblyMates",
 )
 def is_assembly_package(path: Path) -> bool:
     """True when ``path`` is a component-package directory (has assembly.json)."""
@@ -504,7 +503,7 @@ def build_package_from_compound(
       compound whose direct children are the occurrences (``part.moved(transform)`` with
       ``child.label`` the name). Each child is content-addressed by its *local* (unlocated)
       geometry, so repeated parts share one component GLB; the per-child location supplies
-      the world transform. Mates ride on ``compound.assembly_mates``.
+      the world transform.
     - **part** (``single_component=True``): the whole rigid shape is one occurrence at
       identity referencing one component (its full geometry) — a degenerate package. The
       part/assembly choice is made by the caller from the generator's authored kind, never

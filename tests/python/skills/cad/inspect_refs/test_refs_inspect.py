@@ -268,29 +268,6 @@ def _refs_manifest(cad_ref: str) -> dict[str, object]:
                 0,
             ]
         ],
-        "assemblyMates": [
-            {
-                "id": "m1",
-                "label": "m1",
-                "sourceLabel": "face_to_face:block_pocket_floor_offset:bottom_center",
-                "type": "face_to_face",
-                "fixed": "block_pocket_floor:offset",
-                "moving": "bottom_center",
-                "parameters": {"offset": 0.2},
-                "fixedEndpoint": {
-                    "position": [6.0, 1.0, 0.0],
-                    "axes": {
-                        "z": [0.0, 0.0, 1.0],
-                    },
-                },
-                "movingEndpoint": {
-                    "position": [7.0, 2.0, 1.0],
-                    "axes": {
-                        "z": [0.0, 0.0, 1.0],
-                    },
-                },
-            }
-        ],
         "relations": {
             "faceEdgeRows": [0, 1, 0],
             "edgeFaceRows": [0, 1, 0],
@@ -406,7 +383,7 @@ class InspectRefsTests(unittest.TestCase):
         which in production returns the render-package descriptor with a
         descriptor-backed selector bundle (selector rows composed on demand
         from the per-component .surf files). Everything below that boundary
-        (grammar, lookup, measure, align, mates) runs for real.
+        (grammar, lookup, measure, align) runs for real.
         """
         resolved_step_path = step_path or self.step_path
         edge_rendering = {
@@ -535,22 +512,6 @@ class InspectRefsTests(unittest.TestCase):
         self.assertEqual("o1.2.f1", selection["normalizedSelector"])
         self.assertEqual("plane area=20.0", selection["summary"])
         self.assertEqual(["e1", "e2"], selection["detail"]["adjacentEdgeSelectors"])
-
-    def test_assembly_mate_lookup_resolves_numbered_ref(self) -> None:
-        with self._mock_glb_topology(_refs_manifest(self.cad_ref)):
-            result = refs_inspect.inspect_cad_refs(self.cad_ref, "#m1", detail=True, positioning=True)
-
-        self.assertTrue(result["ok"])
-        selection = result["tokens"][0]["selections"][0]
-        self.assertEqual("mate", selection["selectorType"])
-        self.assertEqual("m1", selection["normalizedSelector"])
-        self.assertEqual("#m1", selection["copyText"])
-        self.assertEqual("Mate face_to_face:block_pocket_floor_offset:bottom_center", selection["label"])
-        self.assertEqual("face_to_face block_pocket_floor:offset -> bottom_center", selection["summary"])
-        self.assertEqual("face_to_face:block_pocket_floor_offset:bottom_center", selection["detail"]["sourceLabel"])
-        self.assertEqual({"offset": 0.2}, selection["detail"]["parameters"])
-        self.assertEqual("mate", selection["positioning"]["selectorType"])
-        self.assertEqual([6.0, 1.0, 0.0], selection["positioning"]["fixedEndpoint"]["position"])
 
     def test_vertex_lookup_resolves_corner_detail(self) -> None:
         with self._mock_glb_topology(_refs_manifest(self.cad_ref)):
