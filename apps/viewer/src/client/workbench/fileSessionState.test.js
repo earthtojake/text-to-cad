@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { restoreAnimationState } from "cadgen-js/common/animationClock.js";
+
 import {
   createFileSessionSnapshot,
   FILE_SESSION_STORAGE_VERSION,
@@ -347,7 +349,13 @@ test("pose and animation are stored as independent slices", () => {
     entry,
     slices: {
       stepModule: { enabled: true, parameterValues: { drive: 315 } },
-      animation: { activeClipId: "meshCycle", elapsedSec: 2.25, speed: 1.5, loopEnabled: false }
+      animation: {
+        activeClipId: "meshCycle",
+        enabled: false,
+        elapsedSec: 2.25,
+        speed: 1.5,
+        loopEnabled: false
+      }
     }
   }), { storage });
 
@@ -356,10 +364,46 @@ test("pose and animation are stored as independent slices", () => {
     enabled: true,
     parameterValues: { drive: 315 }
   });
+  // Each slice carries its OWN gate: the pose gate above says whether the mate
+  // graph drives, this one says whether the clip does, and neither restores the
+  // other's. A file switched to rest must reopen at rest.
   assert.deepEqual(restored.slices.animation, {
     activeClipId: "meshCycle",
+    enabled: false,
     elapsedSec: 2.25,
     speed: 1.5,
+    loopEnabled: false
+  });
+});
+
+test("an animation slice stored before the gate existed reopens gated on", () => {
+  // End to end, because neither half proves it alone: the stored bytes have no
+  // `enabled` field, and the transport the tab actually opens with is whatever
+  // restoreAnimationState makes of them against the model's real clips. A slice
+  // written before the gate existed is not a slice that asked for animation
+  // off. Its idle state was an EMPTY clip id, which is also what the app itself
+  // persists while a model's clips are still compiling, so reading either as
+  // "the user chose rest" opens a freshly-opened model switched off.
+  const storage = createMemoryStorage();
+  const entry = stepEntry("parts/bracket.step", "mesh", "module");
+  const clips = {
+    meshCycle: { id: "meshCycle", label: "Mesh cycle", duration: 6, loop: true, update() {} }
+  };
+
+  writeFileSessionState("models", entry.file, createFileSessionSnapshot({
+    entry,
+    slices: { animation: { activeClipId: "", elapsedSec: 1, speed: 2, loopEnabled: false } }
+  }), { storage });
+
+  const slice = readFileSessionState("models", entry.file, entry, { storage }).slices.animation;
+  assert.equal(slice.enabled, true);
+  assert.deepEqual(restoreAnimationState(slice, clips), {
+    activeClipId: "meshCycle",
+    enabled: true,
+    playing: false,
+    elapsedSec: 0,
+    // The slice's own transport preferences come back with it.
+    speed: 2,
     loopEnabled: false
   });
 });

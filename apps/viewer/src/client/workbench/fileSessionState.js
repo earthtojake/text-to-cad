@@ -231,14 +231,18 @@ function normalizeStepModuleSlice(value) {
   };
 }
 
-// The ANIMATION slice: which clip, where its clock stopped, and how it plays.
-// `playing` is deliberately absent — a restored session never resumes playback.
+// The ANIMATION slice: which clip, whether it drives the model, where its clock
+// stopped, and how it plays. `playing` is deliberately absent — a restored
+// session never resumes playback — but `enabled` is not playback: it is the
+// section's gate, and a session that forgot it would reopen animating a model
+// the user had switched to rest.
 function normalizeAnimationSlice(value) {
   if (!isPlainObject(value)) {
     return null;
   }
   return {
     activeClipId: normalizeString(value.activeClipId),
+    enabled: normalizeBoolean(value.enabled, true),
     elapsedSec: Math.max(normalizeNumber(value.elapsedSec, 0), 0),
     speed: Math.min(Math.max(normalizeNumber(value.speed, 1), 0.1), 3),
     loopEnabled: normalizeBoolean(value.loopEnabled, true)

@@ -190,6 +190,7 @@ import {
   animationClipDuration,
   animationClipList,
   animationNowMs,
+  animationRenderFrame,
   buildDefaultAnimationState,
   clampAnimationElapsed,
   clampAnimationSpeed,
@@ -203,6 +204,7 @@ import {
   resetAnimationClock,
   setAnimationClock
 } from "@/workbench/animationClockStore";
+import { resolveStepModuleLoad } from "@/workbench/stepModuleLoad";
 import {
   applyMeasureRulerDelete,
   applyMeasureRulerHover,
@@ -1652,20 +1654,19 @@ export default function CadWorkspace({
         fileKey(selectedEntry),
         selectedEntry
       );
-      const restoredStepModuleState = restoredSessionState?.slices?.stepModule || null;
-      setStepModuleLoadState({
+      // A sidecar with no kinematics section resolves to a NULL definition —
+      // an animation-only model has a sidecar and lands here — so the ready
+      // state is committed from one place that expects that (see
+      // workbench/stepModuleLoad); the Kinematics tab is then absent, not empty.
+      const resolved = resolveStepModuleLoad({
         url: selectedStepModuleUrl,
-        status: "ready",
-        error: "",
-        definition
-      });
-      const nextParameterValues = normalizeStepModuleParameterValues(
         definition,
-        restoredStepModuleState?.parameterValues || definition.defaultParameterValues
-      );
-      stepModuleParameterValuesRef.current = nextParameterValues;
-      setStepModuleParameterValues(nextParameterValues);
-      setStepModuleEnabled(restoredStepModuleState ? restoredStepModuleState.enabled !== false : true);
+        restored: restoredSessionState?.slices?.stepModule || null
+      });
+      setStepModuleLoadState(resolved.loadState);
+      stepModuleParameterValuesRef.current = resolved.parameterValues;
+      setStepModuleParameterValues(resolved.parameterValues);
+      setStepModuleEnabled(resolved.enabled);
     }).catch((error) => {
       if (cancelled) {
         return;
@@ -1840,16 +1841,22 @@ export default function CadWorkspace({
   // What the viewport needs to draw one animated frame: the compiled clip and a
   // time. The render pane swaps in the live clock while playing; everything else
   // about playback stays out of the render path.
-  const selectedAnimationRuntime = useMemo(() => {
-    if (!selectedActiveAnimationClip) {
-      return null;
-    }
-    return {
-      clip: selectedActiveAnimationClip,
-      elapsedSec: animationState.elapsedSec,
-      playing: animationState.playing === true
-    };
-  }, [animationState.elapsedSec, animationState.playing, selectedActiveAnimationClip]);
+  //
+  // The Animation section's gate expresses itself HERE and nowhere else, mirroring
+  // the pose gate above: switched off this memo is null, and null is already how
+  // the viewport draws the rest scene — pose only, evaluator never run. So there
+  // is no "disabled" render path, only the absence of a frame.
+  const selectedAnimationRuntime = useMemo(() => animationRenderFrame({
+    enabled: animationState.enabled !== false,
+    clip: selectedActiveAnimationClip,
+    elapsedSec: animationState.elapsedSec,
+    playing: animationState.playing
+  }), [
+    animationState.elapsedSec,
+    animationState.enabled,
+    animationState.playing,
+    selectedActiveAnimationClip
+  ]);
   const handleStepModuleTransformDetectedChange = useCallback(() => {}, []);
   const stepModuleTreeSelectionDisabled = false;
   const stepModuleTreeSelectionDisabledReason = "";
@@ -1922,13 +1929,19 @@ export default function CadWorkspace({
 
   const handleAnimationClipSelect = useCallback((clipId) => {
     const clip = findAnimationClip(selectedAnimationClips, clipId);
+    if (!clip) {
+      // The picker only ever offers clips this model ships, so an id that does
+      // not resolve is a stale event, not a request to idle the transport —
+      // idling is the section's gate.
+      return;
+    }
     const nextState = {
       ...animationStateRef.current,
-      activeClipId: clip?.id || "",
+      activeClipId: clip.id,
       playing: false,
       elapsedSec: 0,
       // The loop preference follows the newly-selected clip's own default.
-      loopEnabled: clip ? clip.loop !== false : true
+      loopEnabled: clip.loop !== false
     };
     animationStateRef.current = nextState;
     setAnimationState(nextState);
@@ -1937,8 +1950,13 @@ export default function CadWorkspace({
 
   const handleAnimationPlayToggle = useCallback(() => {
     const currentState = animationStateRef.current;
-    // Play at rest starts the first clip: with one clip there is no select to
-    // pick it from, and with several it is the obvious one to open on.
+    // A GUARD, not a UI path: once the clips compile the selection is always one
+    // of them (the default picks clip 0, a restore falls back to clip 0, and the
+    // picker only offers ids that resolve), and before they compile there are no
+    // clips to find at all, so both lookups miss and this returns below. It
+    // stays because Play doing nothing would be the silent failure — if a
+    // selection ever went empty with clips in hand, Play should start the first
+    // one rather than shrug.
     const clip = findAnimationClip(selectedAnimationClips, currentState.activeClipId)
       || findAnimationClip(selectedAnimationClips, firstAnimationClipId(selectedAnimationClips));
     if (!clip) {
@@ -1962,14 +1980,40 @@ export default function CadWorkspace({
       ? 0
       : clampAnimationElapsed(currentState.elapsedSec, duration);
     setAnimationClock(elapsedSec);
+    // Play means "run this clip", so it opens the gate rather than doing
+    // nothing visible: the toolbar's Play button lives outside the tab and has
+    // no way to say that animation is switched off.
     const nextState = {
       ...currentState,
       activeClipId: clip.id,
+      enabled: true,
       elapsedSec,
       playing: true
     };
     animationStateRef.current = nextState;
     setAnimationState(nextState);
+  }, [selectedAnimationClips]);
+
+  // Turning animation off idles the transport without rewinding it: the clock
+  // settles where it stands (while playing the authoritative time is the clock
+  // store's, not React state's) and playback stops. Turning it back on resumes
+  // from that frame; only Restart returns the clip to zero.
+  const handleAnimationEnabledChange = useCallback((enabled) => {
+    const currentState = animationStateRef.current;
+    const nextEnabled = enabled !== false;
+    const clip = findAnimationClip(selectedAnimationClips, currentState.activeClipId);
+    const elapsedSec = currentState.playing && clip
+      ? clampAnimationElapsed(getAnimationClock(), animationClipDuration(clip))
+      : currentState.elapsedSec;
+    const nextState = {
+      ...currentState,
+      enabled: nextEnabled,
+      elapsedSec,
+      playing: nextEnabled ? currentState.playing : false
+    };
+    animationStateRef.current = nextState;
+    setAnimationState(nextState);
+    setAnimationClock(elapsedSec);
   }, [selectedAnimationClips]);
 
   const handleAnimationRestart = useCallback(() => {
@@ -2025,6 +2069,7 @@ export default function CadWorkspace({
   useEffect(() => {
     if (
       !selectedActiveAnimationClip ||
+      animationState.enabled === false ||
       !animationState.playing ||
       typeof window === "undefined" ||
       typeof window.requestAnimationFrame !== "function"
@@ -2085,7 +2130,7 @@ export default function CadWorkspace({
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [animationState.playing, selectedActiveAnimationClip]);
+  }, [animationState.enabled, animationState.playing, selectedActiveAnimationClip]);
 
   // THE content signal: "is there anything on screen?", answered once for every format.
   // Consumers (toolbar gates, CTA, preview mode, zoom pill, alert blocking) read this
@@ -3278,6 +3323,7 @@ export default function CadWorkspace({
         },
         animation: {
           activeClipId: animationState.activeClipId,
+          enabled: animationState.enabled,
           elapsedSec: snapshotAnimationElapsedSec,
           speed: animationState.speed,
           loopEnabled: animationState.loopEnabled
@@ -7371,11 +7417,13 @@ export default function CadWorkspace({
                   error: selectedAnimationError,
                   clips: selectedAnimationClipList,
                   activeClipId: animationState.activeClipId,
+                  enabled: animationState.enabled !== false,
                   playing: animationState.playing,
                   elapsedSec: animationState.elapsedSec,
                   speed: animationState.speed,
                   loopEnabled: animationState.loopEnabled,
                   onClipSelect: handleAnimationClipSelect,
+                  onEnabledChange: handleAnimationEnabledChange,
                   onPlayToggle: handleAnimationPlayToggle,
                   onRestart: handleAnimationRestart,
                   onScrub: handleAnimationScrub,

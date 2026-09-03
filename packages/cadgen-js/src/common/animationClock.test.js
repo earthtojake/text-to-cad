@@ -4,10 +4,10 @@ import { test } from "node:test";
 import {
   MAX_ANIMATION_FRAME_MS,
   MIN_ANIMATION_FRAME_MS,
-  REST_CLIP_ID,
   advanceAnimationElapsed,
   animationClipList,
   animationFrameBudgetMs,
+  animationRenderFrame,
   buildDefaultAnimationState,
   findAnimationClip,
   firstAnimationClipId,
@@ -32,19 +32,48 @@ test("clips list in declaration order with their transport metadata", () => {
   assert.equal(firstAnimationClipId(CLIPS), "meshCycle");
 });
 
-test("rest is the default selection and resolves to no clip", () => {
-  // Zero cost until the user opts in: an unselected Animation tab must leave
-  // the model showing exactly what the Pose tab set.
-  assert.deepEqual(buildDefaultAnimationState(), {
-    activeClipId: "",
+test("a model opens on its first declared clip, gated on and paused", () => {
+  // There is no "no clip" selection any more: the transport's idle state is the
+  // Animation section's gate switch, so the picker always names a real clip and
+  // the default selection is the model's first one.
+  assert.deepEqual(buildDefaultAnimationState(CLIPS), {
+    activeClipId: "meshCycle",
+    enabled: true,
     playing: false,
     elapsedSec: 0,
     speed: 1,
     loopEnabled: true
   });
+  // The opening clip's own loop preference comes with it, exactly as picking it
+  // from the select would set.
+  assert.equal(
+    buildDefaultAnimationState({
+      once: { id: "once", label: "Once", duration: 2, loop: false, update() {} }
+    }).loopEnabled,
+    false
+  );
+  // Called before the clips compile (the file-switch reset) there is nothing to
+  // select yet, and the load effect restores against the real clips.
+  assert.equal(buildDefaultAnimationState().activeClipId, "");
   assert.equal(findAnimationClip(CLIPS, ""), null);
-  assert.equal(findAnimationClip(CLIPS, REST_CLIP_ID), null);
   assert.equal(findAnimationClip(CLIPS, "meshCycle")?.id, "meshCycle");
+});
+
+test("the gate, not the selection, decides whether a clip drives the model", () => {
+  // The render pass gets a frame or it gets null, and null IS the rest scene:
+  // the evaluator never runs and the model shows exactly what the Pose tab set.
+  // That is the behaviour the removed "No clip" entry used to produce, now on a
+  // switch, so turning animation off costs the render path no new code.
+  assert.deepEqual(
+    animationRenderFrame({ enabled: true, clip: CLIPS.meshCycle, elapsedSec: 2, playing: true }),
+    { clip: CLIPS.meshCycle, elapsedSec: 2, playing: true }
+  );
+  assert.equal(
+    animationRenderFrame({ enabled: false, clip: CLIPS.meshCycle, elapsedSec: 2, playing: true }),
+    null
+  );
+  // A selection with no clip behind it (clips still compiling) draws nothing either.
+  assert.equal(animationRenderFrame({ enabled: true, clip: null }), null);
 });
 
 test("a still-frame request resolves to the viewer's own render-pass shape", () => {
@@ -70,8 +99,7 @@ test("a still-frame request for an unknown clip names the declared clips", () =>
     () => resolveAnimationFrame({}, { clip: "orbit" }),
     /Unknown animation clip: orbit\. This model declares no animation clips/
   );
-  // Rest is not a clip a still can ask for by name, and a nameless request is a bug.
-  assert.throws(() => resolveAnimationFrame(CLIPS, { clip: REST_CLIP_ID }), /Unknown animation clip/);
+  // A nameless request is a bug, not a request for a rest frame.
   assert.throws(() => resolveAnimationFrame(CLIPS, {}), /requires a clip name/);
   assert.throws(() => resolveAnimationFrame(CLIPS, { clip: "meshCycle", time: -1 }), /seconds >= 0/);
   assert.throws(() => resolveAnimationFrame(CLIPS, { clip: "meshCycle", time: "soon" }), /seconds >= 0/);
@@ -80,16 +108,83 @@ test("a still-frame request for an unknown clip names the declared clips", () =>
 test("a restored session keeps the clock but never resumes playback", () => {
   assert.deepEqual(
     restoreAnimationState({ activeClipId: "meshCycle", playing: true, elapsedSec: 2.5, speed: 9, loopEnabled: false }, CLIPS),
-    { activeClipId: "meshCycle", playing: false, elapsedSec: 2.5, speed: 3, loopEnabled: false }
+    { activeClipId: "meshCycle", enabled: true, playing: false, elapsedSec: 2.5, speed: 3, loopEnabled: false }
   );
-  // A clip the model no longer ships falls back to rest rather than to some
-  // other clip that happens to be first.
+  // The gate is restored with the rest of the transport: a file the user
+  // switched to rest must not reopen animating.
+  assert.equal(
+    restoreAnimationState({ activeClipId: "meshCycle", enabled: false }, CLIPS).enabled,
+    false
+  );
+  // A clip the model no longer ships used to fall back to rest. Rest is a gate
+  // now, so a selection that DIED falls back to the first clip WITH THE GATE
+  // OFF: the selection stays legible and the model still does not animate
+  // something the user never picked.
   assert.deepEqual(
     restoreAnimationState({ activeClipId: "gone", elapsedSec: 4 }, CLIPS),
-    { activeClipId: "", playing: false, elapsedSec: 0, speed: 1, loopEnabled: true }
+    { activeClipId: "meshCycle", enabled: false, playing: false, elapsedSec: 0, speed: 1, loopEnabled: true }
   );
   // Elapsed past the clip's end clamps to its duration.
   assert.equal(restoreAnimationState({ activeClipId: "inspectExplode", elapsedSec: 99 }, CLIPS).elapsedSec, 5);
+});
+
+test("a slice with no selection recorded opens the model normally", () => {
+  // `activeClipId: ""` is NOT a dead clip and not a retired sentinel: it is what
+  // this module returns before a model's clips compile, so the file-switch reset
+  // holds it and the debounced session save can persist it mid-load. Reading it
+  // as "the user chose rest" gated a model's FIRST open off — clips that take
+  // longer than the save debounce to compile opened switched off, and the off
+  // was then persisted. It says nothing about the gate, so the model opens
+  // exactly as it would with no session at all. A slice written before the gate
+  // existed lands here too, and opens gated ON.
+  assert.deepEqual(
+    restoreAnimationState({ activeClipId: "", elapsedSec: 4 }, CLIPS),
+    { activeClipId: "meshCycle", enabled: true, playing: false, elapsedSec: 0, speed: 1, loopEnabled: true }
+  );
+  // The gate the slice DID record still wins on that path.
+  assert.equal(restoreAnimationState({ activeClipId: "", enabled: false }, CLIPS).enabled, false);
+});
+
+test("transport preferences survive a selection that does not resolve", () => {
+  // Speed and loop belong to the slice, not to the clip: whether the stored id
+  // resolves says nothing about how fast playback runs or whether it repeats.
+  // Both are reachable with no clip in hand — a file switch restores against
+  // null clips on purpose, because the previous file's are still loaded.
+  for (const clips of [CLIPS, null]) {
+    assert.deepEqual(
+      restoreAnimationState({ activeClipId: "gone", speed: 2.5, loopEnabled: false }, clips),
+      {
+        activeClipId: clips ? "meshCycle" : "",
+        enabled: clips ? false : true,
+        playing: false,
+        elapsedSec: 0,
+        speed: 2.5,
+        loopEnabled: false
+      }
+    );
+  }
+  // With no clips at all there is nothing to call dead, so the gate is the
+  // slice's own and the real clips decide the selection once they compile.
+  assert.equal(
+    restoreAnimationState({ activeClipId: "meshCycle", enabled: true }, null).enabled,
+    true
+  );
+});
+
+test("a restored clip carries its OWN loop preference, not the opening clip's", () => {
+  const clips = {
+    meshCycle: CLIPS.meshCycle,
+    once: { id: "once", label: "Once", duration: 2, loop: false, update() {} }
+  };
+  // The slice names `once`, which declares loop: false. Falling back to the
+  // FIRST clip's preference here would loop a clip authored not to.
+  assert.equal(restoreAnimationState({ activeClipId: "once" }, clips).loopEnabled, false);
+  assert.equal(restoreAnimationState({ activeClipId: "meshCycle" }, clips).loopEnabled, true);
+  // A recorded preference still wins over the clip's default.
+  assert.equal(
+    restoreAnimationState({ activeClipId: "once", loopEnabled: true }, clips).loopEnabled,
+    true
+  );
 });
 
 test("the clock wraps when looping and stops at the end when not", () => {

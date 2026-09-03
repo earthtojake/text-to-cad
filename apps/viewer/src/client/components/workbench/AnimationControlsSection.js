@@ -2,8 +2,7 @@ import { Pause, Play, RotateCcw } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
   ANIMATION_SPEED_MAX,
-  ANIMATION_SPEED_MIN,
-  REST_CLIP_ID
+  ANIMATION_SPEED_MIN
 } from "cadgen-js/common/animationClock";
 import { useAnimationClock } from "@/workbench/animationClockStore";
 import { animationClipOptions } from "@/workbench/animationClipOptions";
@@ -12,6 +11,7 @@ import { Slider } from "../ui/slider";
 import {
   FILE_SHEET_COMPACT_BUTTON_CLASSES,
   FILE_SHEET_PRECISION_SLIDER_CLASSES,
+  FileSheetBooleanToggle,
   FileSheetButtonRow,
   FileSheetSelectRow,
   FileSheetSliderField,
@@ -83,9 +83,10 @@ export default function AnimationControlsSection({ runtime = null }) {
   const error = String(runtime?.error || "").trim();
   const activeClip = clips.find((clip) => clip.id === runtime?.activeClipId) || null;
   const duration = Math.max(Number(activeClip?.duration) || 1, 0.001);
-  // "No clip" is a selection, not a missing one: with no clip active the model
-  // shows whatever the Pose tab set and the evaluator never runs.
-  const atRest = !activeClip;
+  // The section's gate: with animation off the evaluator never runs and the
+  // model shows whatever the Pose tab set. A clip is always selected, so this
+  // switch — not a picker entry — is how the transport is idled.
+  const enabled = runtime?.enabled !== false;
   if (!animationControlsHaveContent(runtime)) {
     return null;
   }
@@ -100,26 +101,46 @@ export default function AnimationControlsSection({ runtime = null }) {
       ) : null}
 
       {clips.length ? (
-        // "Playback", not "Clip": the group and the row inside it must not share
-        // a name (viewer/docs/settings-ui.md), and the group is the transport.
-        <FileSheetSubsection title="Playback">
+        // "Animation" names the system this group drives, the way the Kinematics
+        // tab's section does. It does not collide with any row inside it
+        // (settings-ui.md forbids a group sharing a name with its own rows, and
+        // the rows here are Clip, Loop, Time and Speed).
+        <FileSheetSubsection
+          title="Animation"
+          // The transport gate rides this heading on the shared right-edge control
+          // axis, exactly as the Kinematics tab's mate gate does.
+          trailing={(
+            <FileSheetBooleanToggle
+              checked={enabled}
+              onCheckedChange={(checked) => runtime?.onEnabledChange?.(checked)}
+              ariaLabel="Enable animation"
+            />
+          )}
+        >
           {/* The section's primary control: which clip is selected reframes the
-              transport and the time/speed rows beneath it. The built-in "No clip"
-              entry is the transport's idle state -- the model stays wherever the
-              Pose tab put it -- and sits apart from the authored clips, which are
-              grouped under their own heading (see workbench/animationClipOptions). */}
+              transport and the time/speed rows beneath it. It lists the model's
+              authored clips and nothing else -- the idle state is the gate switch
+              above, not an entry here -- and the gate disables it with every
+              other row it owns, exactly as the Kinematics tab's gate disables the
+              DOFs and presets it owns. A gate turns its whole feature off; one
+              live row under an off switch reads as a control that still does
+              something, and this one silently rewinds the clock. */}
           <FileSheetSelectRow
             stacked
             label="Clip"
-            value={activeClip?.id || REST_CLIP_ID}
-            onValueChange={(nextValue) => {
-              runtime?.onClipSelect?.(nextValue === REST_CLIP_ID ? "" : nextValue);
-            }}
+            value={activeClip?.id || ""}
+            onValueChange={(nextValue) => runtime?.onClipSelect?.(nextValue)}
+            disabled={!enabled}
             ariaLabel="Animation clip"
             options={animationClipOptions(clips)}
           />
           {/* "Restart" is deliberately not called "Reset": it returns playback to
-              zero, where the Pose tab's Reset returns the DOFs to their defaults. */}
+              zero, where the Pose tab's Reset returns the DOFs to their defaults.
+              Play is the ONE control the gate does not disable, here and on the
+              toolbar: pressing it means "run this clip", so it opens the gate.
+              The toolbar's copy sits outside this tab and has no way to say that
+              animation is switched off, and a Play that did nothing would be the
+              worse failure -- so both buttons behave the same way. */}
           <FileSheetButtonRow columns={2}>
             <Button
               type="button"
@@ -143,7 +164,7 @@ export default function AnimationControlsSection({ runtime = null }) {
               size="sm"
               className={cn(compactButtonClasses, "justify-center")}
               onClick={() => runtime?.onRestart?.()}
-              disabled={atRest}
+              disabled={!enabled}
               aria-label="Restart animation"
               title="Restart"
             >
@@ -155,14 +176,14 @@ export default function AnimationControlsSection({ runtime = null }) {
             label="Loop"
             checked={runtime?.loopEnabled !== false}
             onCheckedChange={(checked) => runtime?.onLoopToggle?.(checked)}
-            disabled={atRest}
+            disabled={!enabled}
             ariaLabel="Loop animation playback"
           />
           <AnimationTimeControl
             playing={runtime?.playing === true}
             elapsedSec={runtime?.elapsedSec}
             duration={duration}
-            enabled={!atRest}
+            enabled={enabled}
             onScrub={runtime?.onScrub}
           />
           <FileSheetSliderField
@@ -176,7 +197,7 @@ export default function AnimationControlsSection({ runtime = null }) {
               }));
             }}
             valueInputProps={{
-              disabled: atRest,
+              disabled: !enabled,
               ariaLabel: "Animation speed value"
             }}
           >
@@ -187,7 +208,7 @@ export default function AnimationControlsSection({ runtime = null }) {
               max={ANIMATION_SPEED_MAX}
               step={0.1}
               onValueChange={(nextValue) => runtime?.onSpeedChange?.(nextValue?.[0] ?? 1)}
-              disabled={atRest}
+              disabled={!enabled}
               aria-label="Animation speed"
             />
           </FileSheetSliderField>
