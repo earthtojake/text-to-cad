@@ -1,10 +1,8 @@
 import path from "node:path";
 
-// By path, not by the bare "cadgen-js" specifier. This module runs from the shipped CAD Viewer
-// runtime, which vendors packages/cadgen-js but has no node_modules to resolve a package name
-// through. viewer/packages/cadgen-js is a symlink in development and a real directory once
-// bundled, so the same relative path works in both.
-import { pathIsInside } from "../packages/cadgen-js/src/lib/pathUtils.mjs";
+// By name: this module runs only in development (vite.config.mjs and its tests),
+// where node_modules links cadgen-js through the package.json `file:` dependency.
+import { pathIsInside } from "cadgen-js/lib/pathUtils.mjs";
 
 export function resolveDirectoryRoot({
   directoryRoot = "",

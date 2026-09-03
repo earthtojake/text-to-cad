@@ -5,8 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-// server/ is Python now and has no JS tests; its suites live in tests_server/
-// and run under `python -m unittest discover -s tests_server -t .`.
+// The backend is cadgen.viewer (Python, in packages/cadgen); its suite runs with
+// the cadgen package tests. What lives here is the client and its scripts.
 const defaultTestRoots = [
   path.join(packageRoot, "src"),
   path.join(packageRoot, "scripts"),

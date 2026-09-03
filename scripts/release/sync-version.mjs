@@ -20,7 +20,7 @@ export const jsonTargets = [
     fields: [
       ["version"],
       ["packages", "", "version"],
-      ["packages", "packages/cadgen-js", "version"],
+      ["packages", "../../packages/cadgen-js", "version"],
     ],
   },
   { path: ".claude-plugin/plugin.json", fields: [["version"]] },

@@ -1,10 +1,8 @@
-// This app ships alone: it runs in place inside the workbench repo it is
-// developed in, and it mirrors UNCHANGED into the standalone cad-viewer repo.
-// The mirror is a straight copy — nothing rewrites paths on the way out — so
-// any reference that reaches above this directory is broken the moment it
-// ships. These tests are that fence. `packages/*` is excluded: it is a
-// vendored dependency (a symlink in the workbench, a real copy in the
-// mirror), so it owns its own internal references.
+// The client is a package with a boundary: it imports cadgen-js by NAME (resolved
+// by the vite alias / the `file:` dependency) and nothing else from outside its
+// own directory. A relative specifier that climbs out of the app root is a
+// reach into a sibling package's internals, which this fence refuses -- the
+// same law tests/python/global/test_package_boundaries.py holds for markdown.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -14,7 +12,6 @@ import { fileURLToPath } from "node:url";
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SKIPPED_DIRS = new Set([
   "node_modules",
-  "packages",
   "dist",
   "dist-verify",
   ".vite",
@@ -94,38 +91,6 @@ test("markdown relative links resolve to files inside the app root", () => {
     offenders,
     [],
     `markdown links must resolve inside the viewer app root:\n  ${offenders.join("\n  ")}`
-  );
-});
-
-test("markdown never names a path outside the app root", () => {
-  // Broader than the link check above: this also covers prose, inline code, and
-  // fenced blocks. Markdown under this directory may only refer to itself, so a
-  // `../` that climbs out is unaddressable in a standalone checkout, and an
-  // `apps/`-prefixed path is the workbench spelling of an in-app path.
-  // \x60 is a backtick: escaping one inside String.raw would leave the
-  // backslash in place, and `\`` is an invalid escape in a unicode class.
-  const boundary = String.raw`(?:^|[\s\x60("'\[|])`;
-  const pathBody = String.raw`[A-Za-z0-9_.@/-]`;
-  const climbingPattern = new RegExp(`${boundary}((?:\\.\\./)+${pathBody}*)`, "gu");
-  const workbenchPrefixPattern = new RegExp(`${boundary}(apps/${pathBody}+)`, "gu");
-  const offenders = [];
-  for (const filePath of collectFiles(appRoot, /\.md$/u)) {
-    const source = fs.readFileSync(filePath, "utf8");
-    const label = path.relative(appRoot, filePath);
-    for (const match of source.matchAll(climbingPattern)) {
-      const resolved = path.resolve(path.dirname(filePath), match[1]);
-      if (escapesAppRoot(resolved)) {
-        offenders.push(`${label} -> ${match[1]} (climbs out of the app root)`);
-      }
-    }
-    for (const match of source.matchAll(workbenchPrefixPattern)) {
-      offenders.push(`${label} -> ${match[1]} (drop the workbench "apps/" prefix)`);
-    }
-  }
-  assert.deepEqual(
-    offenders,
-    [],
-    `markdown under the viewer app root may only refer to itself:\n  ${offenders.join("\n  ")}`
   );
 });
 

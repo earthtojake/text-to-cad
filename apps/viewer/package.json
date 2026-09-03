@@ -9,7 +9,7 @@
     "test": "node scripts/run-tests.mjs"
   },
   "dependencies": {
-    "cadgen-js": "file:./packages/cadgen-js",
+    "cadgen-js": "file:../../packages/cadgen-js",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.8.0",
