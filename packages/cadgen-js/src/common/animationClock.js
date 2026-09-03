@@ -8,10 +8,12 @@
 // a DOF, or a pose preset. The Pose tab and the Animation tab share a model and
 // nothing else.
 
-// The "no clip" selection. Animation is opt-in: until a clip is chosen the
-// evaluator never runs and the model shows exactly the pose the Pose tab set,
-// so a model that merely SHIPS clips pays nothing for them.
-export const REST_CLIP_ID = "__rest__";
+// Whether the transport drives the model is a GATE, not a selection: the
+// Animation section's enable switch. With it off the evaluator never runs and
+// the model shows exactly the pose the Pose tab set. The clip picker therefore
+// carries the model's authored clips and nothing else -- a built-in "no clip"
+// entry used to stand in for this gate, which read as an authored clip named
+// after a state and collided with pose presets literally named `rest`.
 
 export const ANIMATION_SPEED_MIN = 0.1;
 export const ANIMATION_SPEED_MAX = 3;
@@ -55,17 +57,17 @@ export function hasAnimationClips(clips) {
   return animationClipList(clips).length > 0;
 }
 
-/** The clip an id selects, or null for rest / an id no longer in the model. */
+/** The clip an id selects, or null for an id this model does not ship. */
 export function findAnimationClip(clips, clipId) {
   const id = normalizeString(clipId);
-  if (!id || id === REST_CLIP_ID || !clips || typeof clips !== "object") {
+  if (!id || !clips || typeof clips !== "object") {
     return null;
   }
   const clip = clips[id];
   return clip && typeof clip.update === "function" ? clip : null;
 }
 
-/** The id the transport should act on when the user hits Play at rest. */
+/** The clip the transport opens on: a model's first declared clip. */
 export function firstAnimationClipId(clips) {
   return animationClipList(clips)[0]?.id || "";
 }
@@ -100,32 +102,97 @@ export function resolveAnimationFrame(clips, request) {
   return { clip, elapsedSec: time, playing: false };
 }
 
-export function buildDefaultAnimationState() {
+/** The transport a model opens on: its FIRST declared clip, gated on, paused at
+ * zero. Selecting a clip is not the same act as running one, so the gate and the
+ * selection are separate fields — `enabled` says whether the clip drives the
+ * model, `playing` only says whether the clock is moving. Called before the
+ * clips compile (the file-switch reset), `clips` is absent and the selection is
+ * empty until the load effect restores against the real ones.
+ *
+ * The gate opens with the model, which is a deliberate reversal of what the
+ * removed "no clip" entry gave: a model that merely SHIPS clips used to cost
+ * nothing until the user picked one, and now it costs one evaluator pass at
+ * t = 0 on open, and shows that frame rather than the authored placement when
+ * the first clip's t = 0 is not identity. Selecting is what the picker does;
+ * running is what the gate does, and a declared clip that nothing runs until a
+ * switch is found reads as a broken tab. Turn the gate off to get the old
+ * zero-cost open back — for THIS file, remembered. */
+export function buildDefaultAnimationState(clips) {
+  const clip = findAnimationClip(clips, firstAnimationClipId(clips));
   return {
-    activeClipId: "",
+    activeClipId: clip?.id || "",
+    enabled: true,
     playing: false,
     elapsedSec: 0,
     speed: 1,
-    loopEnabled: true
+    // The opening clip's own loop preference, exactly as selecting it would set.
+    loopEnabled: clip ? clip.loop !== false : true
   };
 }
 
-/** Restore a persisted slice against the clips this model actually has:
- * a clip that no longer exists falls back to rest, and playback never resumes
- * on load (a session restore that starts animating on its own is a surprise). */
+/** Restore a persisted slice against the clips this model actually has.
+ * Playback never resumes on load (a session restore that starts animating on
+ * its own is a surprise), and the transport preferences the slice recorded —
+ * the gate, the speed, the loop — are its own: they survive every path here,
+ * because a selection that no longer resolves says nothing about how fast the
+ * clip should run or whether it should loop.
+ *
+ * Two different things arrive with no clip behind them and only ONE of them is
+ * a user decision:
+ *
+ *   - NO selection recorded (`activeClipId: ""`). That is not a legacy
+ *     sentinel — it is the state this module still returns before a model's
+ *     clips compile, so the file-switch reset writes it and the debounced
+ *     session save can persist it. It says nothing about the gate, so the model
+ *     opens exactly as it would with no stored session at all: first clip,
+ *     gate as recorded (on, for a slice written before the gate existed).
+ *   - A selection this model NO LONGER SHIPS (a renamed or deleted clip, with
+ *     other clips still compiled). That selection died: fall back to the first
+ *     clip with the gate OFF, so the picker stays legible without the model
+ *     silently animating something the user never picked. */
 export function restoreAnimationState(stored, clips) {
-  const defaults = buildDefaultAnimationState();
+  const defaults = buildDefaultAnimationState(clips);
   if (!stored || typeof stored !== "object") {
     return defaults;
   }
+  const speed = clampAnimationSpeed(stored.speed ?? defaults.speed);
+  const enabled = typeof stored.enabled === "boolean" ? stored.enabled : defaults.enabled;
   const clip = findAnimationClip(clips, stored.activeClipId);
+  if (!clip) {
+    const selectionDied = normalizeString(stored.activeClipId) !== "" && hasAnimationClips(clips);
+    return {
+      ...defaults,
+      enabled: selectionDied ? false : enabled,
+      speed,
+      loopEnabled: typeof stored.loopEnabled === "boolean" ? stored.loopEnabled : defaults.loopEnabled
+    };
+  }
   return {
-    activeClipId: clip?.id || "",
+    activeClipId: clip.id,
+    enabled,
     playing: false,
-    elapsedSec: clip ? clampAnimationElapsed(stored.elapsedSec, animationClipDuration(clip)) : 0,
-    speed: clampAnimationSpeed(stored.speed ?? defaults.speed),
-    loopEnabled: typeof stored.loopEnabled === "boolean" ? stored.loopEnabled : defaults.loopEnabled
+    elapsedSec: clampAnimationElapsed(stored.elapsedSec, animationClipDuration(clip)),
+    speed,
+    // The RESOLVED clip's own loop preference, not the opening clip's: a slice
+    // that names clip B must not inherit clip A's default.
+    loopEnabled: typeof stored.loopEnabled === "boolean" ? stored.loopEnabled : clip.loop !== false
   };
+}
+
+/** What the render pass draws for the animation system, or null when the
+ * transport is not driving the model. Null IS the rest scene: with no frame the
+ * evaluator never runs and the model shows exactly what the Pose tab set, which
+ * is the one behaviour the section's gate switch has to reproduce. */
+export function animationRenderFrame({
+  enabled = true,
+  clip = null,
+  elapsedSec = 0,
+  playing = false
+} = {}) {
+  if (enabled === false || !clip) {
+    return null;
+  }
+  return { clip, elapsedSec, playing: playing === true };
 }
 
 export function clampAnimationElapsed(value, duration) {

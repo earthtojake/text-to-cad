@@ -34,6 +34,12 @@ Tab body                    px-0, vertical stack of sections
 - Everyday settings stay visible. Progressive disclosure is allowed only when a
   gate switch turns a whole feature off (Floor, Grid, Environment, a light):
   the switch stays, the dependent rows unmount.
+- A gate reaches every row it owns. Whether they unmount (Floor, Grid) or go
+  disabled (Kinematics, Animation), the section picks one and applies it to all
+  of them: one live control under an off switch reads as a control that still
+  does something. The single exception is a control whose meaning IS "turn this
+  on and do it" — Animation's `Play`, which opens the gate rather than sitting
+  dead under it, because the toolbar carries the same button outside the sheet.
 - Split a tab by *what the controls act on*, not by what fits. Pose and
   Animation are two tabs for exactly that reason: `Pose` is the enable switch,
   a slider per kinematic DOF, and the model's named presets; `Animation` is the
@@ -188,14 +194,15 @@ Joints › `Group state`, and Animation › `Clip`, which reframes the transport
 and the time/speed rows beneath it. Pass `stacked` for those and for nothing
 else; a second stacked select in one group means one of them is not primary.
 
-**A built-in state is not a list entry.** When a select mixes one built-in
-selection with the artifact's own items — Animation › `Clip` leads with the
-transport's idle state, then the authored clips — the built-in entry is
-labelled for the state it puts the control in (`No clip`), not with a name an
-author could also use (`Rest`), and it stays ungrouped at the top while the
-authored items sit under a group heading (`Clips`). Two entries that read alike
-but mean different things is the failure this prevents: a robot's pose preset
-named `rest` beside a transport entry named `Rest`.
+**A built-in state is not a list entry — it is a gate switch.** A select lists
+the artifact's own items and nothing else. When a feature also has an idle
+state, that state is the section's gate switch, not a row in the list: Animation
+› `Clip` names only the model's authored clips, and the Animation section's
+header switch is what stops the clip driving the model. The list used to lead
+with a built-in `No clip` entry, and one entry that reads like the others but
+means something else is the failure this rules out — a robot's pose preset named
+`rest` beside a transport entry standing for "not playing". Two kinds of thing,
+two controls.
 
 ### Repeated item groups — `FileSheetItemGroup`
 

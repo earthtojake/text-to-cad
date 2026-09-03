@@ -1,48 +1,36 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { REST_CLIP_ID } from "cadgen-js/common/animationClock.js";
+import { animationClipOptions } from "./animationClipOptions.js";
 
-import {
-  AUTHORED_CLIPS_GROUP_LABEL,
-  NO_CLIP_OPTION_LABEL,
-  animationClipOptions
-} from "./animationClipOptions.js";
-
-test("the built-in no-clip entry leads, ungrouped, and is not labelled like a clip", () => {
-  const options = animationClipOptions([
-    { id: "spin", label: "Spin" },
-    { id: "walk", label: "Walk" }
-  ]);
-  assert.equal(options[0].value, REST_CLIP_ID);
-  assert.equal(options[0].label, NO_CLIP_OPTION_LABEL);
-  assert.equal(options[0].group, undefined);
-  // Authored clips keep module order and sit under their own heading, so the
-  // dropdown reads as a state followed by a list rather than one list.
+test("the picker lists the model's authored clips and nothing else", () => {
+  // The built-in "No clip" entry is gone: the transport's idle state is the
+  // Animation section's gate switch, not a row in a list of clips. With one
+  // kind of thing in the list there is nothing to separate it from, so the
+  // "Clips" group heading went with it.
   assert.deepEqual(
-    options.slice(1),
+    animationClipOptions([
+      { id: "spin", label: "Spin" },
+      { id: "walk", label: "Walk" }
+    ]),
     [
-      { value: "spin", label: "Spin", group: AUTHORED_CLIPS_GROUP_LABEL },
-      { value: "walk", label: "Walk", group: AUTHORED_CLIPS_GROUP_LABEL }
+      { value: "spin", label: "Spin" },
+      { value: "walk", label: "Walk" }
     ]
   );
 });
 
-test("an authored clip called Rest cannot be confused with the built-in entry", () => {
-  // The sibling-project complaint: a pose or clip literally named `rest` used to
-  // produce two indistinguishable "Rest" rows. The built-in entry's label never
-  // collides with an authored name, and the two never share a group.
+test("an authored clip called Rest is just a clip", () => {
+  // The collision this list used to guard against — a built-in state entry
+  // reading like an authored clip, beside a pose preset literally named `rest`
+  // — is now structurally impossible: no entry here is a state.
   const options = animationClipOptions([{ id: "rest", label: "Rest" }]);
-  assert.equal(options.length, 2);
-  assert.notEqual(options[0].label, options[1].label);
-  assert.notEqual(options[0].value, options[1].value);
-  assert.equal(options[1].group, AUTHORED_CLIPS_GROUP_LABEL);
-  assert.equal(options[0].group, undefined);
-  assert.notEqual(NO_CLIP_OPTION_LABEL.toLowerCase(), "rest");
+  assert.deepEqual(options, [{ value: "rest", label: "Rest" }]);
 });
 
-test("no clips still yields the no-clip entry alone", () => {
-  assert.deepEqual(animationClipOptions(undefined), [
-    { value: REST_CLIP_ID, label: NO_CLIP_OPTION_LABEL }
-  ]);
+test("no clips yields no options", () => {
+  // The section does not render without clips, so an empty list is empty — it
+  // never falls back to an entry that stands for a state.
+  assert.deepEqual(animationClipOptions(undefined), []);
+  assert.deepEqual(animationClipOptions([]), []);
 });
