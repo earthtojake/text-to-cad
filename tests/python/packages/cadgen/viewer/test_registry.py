@@ -13,18 +13,13 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent.parent
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
-
-from server import registry  # noqa: E402
+from cadgen.viewer import registry
 
 
 class RegistrySandbox(unittest.TestCase):
@@ -120,7 +115,7 @@ class RegisterAndUnregister(RegistrySandbox):
         package_dir = json.loads(Path(target).read_text(encoding="utf-8"))["packageDir"]
         self.assertNotIn("%20", package_dir)
         self.assertTrue(os.path.isdir(package_dir))
-        self.assertEqual(os.path.basename(package_dir), "server")
+        self.assertEqual(os.path.basename(package_dir), "viewer")
 
     def test_corrupt_and_non_integer_entries_are_skipped(self) -> None:
         directory = registry.registry_dir()

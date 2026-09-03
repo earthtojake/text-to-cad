@@ -11,18 +11,13 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent.parent
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
-
-from server import store_paths  # noqa: E402
-from server.artifact_status import (  # noqa: E402
+from cadgen.viewer import store_paths
+from cadgen.viewer.artifact_status import (
     artifact_status,
     is_generated_document,
     owns_artifact_path,
@@ -30,8 +25,8 @@ from server.artifact_status import (  # noqa: E402
     owns_step_path,
     resolve_artifact_verdict,
 )
-from server.backend import ForbiddenAssetError  # noqa: E402
-from server.build_progress import (  # noqa: E402
+from cadgen.viewer.backend import ForbiddenAssetError
+from cadgen.viewer.build_progress import (
     PROGRESS_FRESHNESS_MS,
     ProgressRegistry,
     build_progress_snapshot,
@@ -565,7 +560,9 @@ class InvalidUtf8(ArtifactStatusTestCase):
             "natural_sort.py",
         }
         offenders = []
-        for path in sorted((APP_ROOT / "server").glob("*.py")):
+        import cadgen.viewer
+
+        for path in sorted(Path(cadgen.viewer.__file__).parent.glob("*.py")):
             if path.name in allowed:
                 continue
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

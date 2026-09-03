@@ -12,18 +12,13 @@ from __future__ import annotations
 import http.client
 import os
 import socket
-import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent.parent
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
-
-from server import handler as handler_module  # noqa: E402
-from server.http_app import create_cad_app, host_is_allowed, hostname_only  # noqa: E402
+from cadgen.viewer import handler as handler_module
+from cadgen.viewer.http_app import create_cad_app, host_is_allowed, hostname_only
 
 
 class ServerFixture:
@@ -215,7 +210,7 @@ class ServerInfo(HttpLayerTestCase):
         order = [
             '"app"', '"viewerVersion"', '"identityToken"', '"serverMode"', '"serverFeatures"', '"backend"',
             '"rootPath"', '"rootName"', '"port"', '"pid"',
-            '"stepArtifactGenerationAvailable"', '"stepImportAvailable"',
+            '"stepArtifactGenerationAvailable"',
             '"packageDir"', '"startedAt"', '"url"',
         ]
         positions = [text.index(key) for key in order]

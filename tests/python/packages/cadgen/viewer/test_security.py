@@ -29,20 +29,15 @@ import http.client
 import json
 import os
 import shutil
-import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
 from urllib.parse import quote
 
-APP_ROOT = Path(__file__).resolve().parent.parent
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
-
-from server import handler as handler_module  # noqa: E402
-from server.http_app import create_cad_app  # noqa: E402
-from server.store_paths import (  # noqa: E402
+from cadgen.viewer import handler as handler_module
+from cadgen.viewer.http_app import create_cad_app
+from cadgen.viewer.store_paths import (
     CACHE_SCHEMA_VERSION,
     render_package_dir,
     store_packages_dir,

@@ -13,16 +13,11 @@ import hashlib
 import json
 import os
 import shutil
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent.parent
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
-
-from server.scanner import (  # noqa: E402
+from cadgen.viewer.scanner import (
     CAD_CATALOG_SCHEMA_VERSION,
     is_served_cad_asset,
     node_basename,
@@ -33,7 +28,7 @@ from server.scanner import (  # noqa: E402
     source_format_for_path,
     step_kind_from_topology,
 )
-from server.store_paths import (  # noqa: E402
+from cadgen.viewer.store_paths import (
     CACHE_SCHEMA_VERSION,
     render_package_dir,
     store_packages_dir,

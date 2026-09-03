@@ -9,10 +9,8 @@ Entries are OPAQUE here: this module stores and frames bytes. The one codec
 lives in ``packages/cadgen-js/src/lib/surf/tessellationCache.js``, which is also
 the batch format's home, and the framing below is pinned against that decoder.
 
-Store I/O is a deliberate local implementation rather than an import of
-cadgen's ``meshes_dir()``, for the same reason ``store_paths.py`` is: reading
-and writing the mesh cache is a VIEWING-path operation, and it must not make
-cadgen a hard dependency of looking at a model.
+The directory is cadgen's ``meshes_dir()`` -- one store, one spelling of where
+it is -- and the entry I/O here is the route's framing over it.
 
 THE NAME PATTERN IS THE WHOLE DEFENCE. This cache lives OUTSIDE every served
 root — containment cannot help here, because there is no root to be inside of.
@@ -27,8 +25,10 @@ import os
 import re
 import struct
 
+from cadgen._internal.atomic_replace import replace_atomic
+from cadgen._internal.cache_paths import meshes_dir
+
 from .encoding import UriError, strict_decode_uri_component
-from .store_paths import cadgen_cache_root_dir
 
 __all__ = [
     "TESS_CACHE_BATCH_MAGIC",
@@ -64,7 +64,7 @@ def _tessellation_cache_enabled() -> bool:
 
 
 def tessellation_cache_dir() -> str:
-    return os.path.join(cadgen_cache_root_dir(), "meshes")
+    return str(meshes_dir())
 
 
 def _read_cached_tessellation_bytes(key: str) -> bytes | None:
@@ -90,7 +90,7 @@ def _write_cached_tessellation_bytes(key: str, data: bytes) -> None:
         temp = f"{target}.{os.getpid()}.tmp"
         with open(temp, "wb") as handle:
             handle.write(data)
-        os.replace(temp, target)
+        replace_atomic(temp, target)
     except OSError:
         pass
 

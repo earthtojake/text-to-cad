@@ -8,7 +8,7 @@ cannot drift into agreement with a bug on either side.
 
 Regenerate with::
 
-    node tests_server/golden/gen_golden.mjs
+    node tests/python/packages/cadgen/viewer/golden/gen_golden.mjs
 """
 
 from __future__ import annotations
@@ -18,11 +18,7 @@ import sys
 import unittest
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent.parent
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
-
-from server import encoding, natural_sort, url_norm  # noqa: E402
+from cadgen.viewer import encoding, natural_sort, url_norm
 
 GOLDEN_PATH = Path(__file__).resolve().parent / "golden" / "golden.json"
 # encoding="utf-8" is load-bearing: a Windows runner's cp1252 default once

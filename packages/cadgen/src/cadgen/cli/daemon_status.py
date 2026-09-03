@@ -3,7 +3,7 @@
 Warm compute you cannot see is warm compute you stop trusting. The daemon is on by
 default now and starts itself, so the question "why was that build slow" needs an answer
 that is not "read the log file beside a hashed socket path". Same reasoning as the
-CAD Viewer's instance list (`apps/viewer/server/main.py list` in the viewer app).
+CAD Viewer's instance list (`cadgen viewer list`).
 
 Asks the running daemon rather than inspecting the filesystem: the socket's existence
 proves nothing (a stale file outlives a killed daemon), and only the supervisor knows

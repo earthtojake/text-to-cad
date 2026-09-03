@@ -67,9 +67,9 @@ class PackageVersionIsOneNumberPerFileTypeTest(unittest.TestCase):
         # Deliberately NOT one shared number: a drawing rebuild is milliseconds and a
         # large STEP assembly is tens of seconds, so a DXF change must not re-mesh every
         # STEP model on next open. The gate lives in the store KEY salt now
-        # (the viewer's store_paths), not in a descriptor check: a version bump
-        # orphans old packages by key.
-        source = (ROOT / "apps/viewer/server/store_paths.py").read_text(encoding="utf-8")
+        # (cadgen.catalog.package_dir_for_hash), not in a descriptor check: a
+        # version bump orphans old packages by key.
+        source = (ROOT / "packages/cadgen/src/cadgen/catalog.py").read_text(encoding="utf-8")
         # DXF is absent by design: a generated drawing's render IS the sibling
         # .dxf the client parses, so there is no artifact to gate.
         for constant in (
@@ -104,7 +104,7 @@ class DeadVersionsStayDeadTest(unittest.TestCase):
     def test_viewer_server_info_schema_version_is_gone(self) -> None:
         self.assertNotIn(
             "VIEWER_SERVER_INFO_SCHEMA_VERSION",
-            (ROOT / "apps/viewer/server/http_app.py").read_text(encoding="utf-8"),
+            (ROOT / "packages/cadgen/src/cadgen/viewer/http_app.py").read_text(encoding="utf-8"),
         )
 
     def test_the_gltf_container_version_is_declared_once(self) -> None:

@@ -29,11 +29,14 @@ class Registry(unittest.TestCase):
                 )
                 self.assertTrue(help_text.strip(), f"{name} needs help text")
 
-    def test_viewer_is_not_registered(self):
-        # The CAD Viewer left cadgen with the cadgen/viewer split (2026-08-28):
-        # it starts via `python apps/viewer/server/main.py` (or the cad-viewer skill's
-        # bundled copy), never through this dispatcher.
-        self.assertNotIn("viewer", cli._COMMANDS)
+    def test_the_viewer_verbs_are_registered_and_lazy(self):
+        # The CAD Viewer's backend is cadgen.viewer, reached through the front
+        # door as one serve verb plus the two manager verbs. Registered by dotted
+        # module name like everything else, so `cadgen --help` imports none of it.
+        for name in ("viewer", "viewer list", "viewer stop"):
+            self.assertIn(name, cli._COMMANDS)
+            module_name, _ = cli._COMMANDS[name]
+            self.assertTrue(module_name.startswith("cadgen.cli.viewer"), module_name)
 
 
 class Dispatch(unittest.TestCase):

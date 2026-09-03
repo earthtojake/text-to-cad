@@ -21,7 +21,6 @@ preflight fail. Do not add them.
 
 from __future__ import annotations
 
-import json
 import os
 import stat
 import threading
@@ -88,21 +87,23 @@ def host_is_allowed(host_header, bound_host) -> bool:
 
 
 def read_viewer_version() -> str:
-    """``package.json``'s version, ``""`` on any failure.
+    """The installed cadgen distribution's version, ``""`` when there is no metadata.
 
     One half of the launcher's reuse key (see ``identity_token``): both sides
-    of that comparison must read the version the same way, and the bundled
-    runtime's package.json is the one file that carries it.
-
-    ``errors="replace"``, as ``readFileSync(url, "utf8")`` did: a version this
-    process cannot read is a version the reuse key cannot match, which silently
-    spawns a second viewer instead of reusing the running one.
+    of that comparison must read the version the same way. Metadata, not
+    ``cadgen.__version__``: the reuse probe runs in a launcher that has not
+    imported anything heavy, and ``.dist-info`` is what an installed wheel
+    carries. ``""`` is a source tree on ``PYTHONPATH`` with no install behind
+    it, which is how this repo's own test runners supply cadgen -- there the
+    mtime salt does all the work.
     """
+    from importlib.metadata import PackageNotFoundError, version
+
     try:
-        package_json = Path(__file__).resolve().parent.parent / "package.json"
-        text = package_json.read_text(encoding="utf-8", errors="replace")
-        return str(json.loads(text).get("version") or "")
-    except Exception:  # noqa: BLE001 - a malformed package.json is not fatal
+        return str(version("cadgen") or "")
+    except PackageNotFoundError:
+        return ""
+    except Exception:  # noqa: BLE001 - a metadata read that fails tells us nothing
         return ""
 
 
@@ -128,16 +129,19 @@ def newest_mtime_ns(base_dir, *, suffix: str = "") -> int:
 
 
 def identity_token() -> str:
-    """This code's identity: the viewer version SALTED with its files' newest mtime.
+    """This code's identity: the cadgen version SALTED with its files' newest mtime.
 
     The daemon's shape (``compute_version_token`` in cadgen/daemon/client.py):
-    ``<version>:<newest mtime_ns>``, over BOTH halves of the app — ``server/``'s
-    ``.py`` files and the built ``dist/`` beside it. The version alone is
-    frozen between releases, so in a checkout it made reuse source-blind: a
-    ``git pull`` followed by a launch reused a resident server running last
-    week's code. The mtime salt ends that — a pull or rebuild changes the
-    token, the resident's recorded token no longer matches, and a fresh
-    instance starts. In a published bundle the files never change after
+    ``<version>:<newest mtime_ns>``, over BOTH halves of the viewer — this
+    package's ``.py`` files and the built client at its DEFAULT location
+    (``cadgen.assets.viewer_dist_dir()``, never a ``--dist`` override: both
+    sides of a reuse comparison must salt with the same directory, and the
+    relauncher does not know what the resident was pointed at). The version
+    alone is frozen between releases, so in a checkout it made reuse
+    source-blind: a ``git pull`` followed by a launch reused a resident server
+    running last week's code. The mtime salt ends that — a pull or rebuild
+    changes the token, the resident's recorded token no longer matches, and a
+    fresh instance starts. In an installed wheel the files never change after
     install, so the token is constant and behavior is exactly version-keyed
     reuse.
 
@@ -149,10 +153,11 @@ def identity_token() -> str:
     The walk covers ~20 server files and ~25 dist files: well under a
     millisecond, paid once per launch.
     """
-    app_root = Path(__file__).resolve().parent.parent
+    from cadgen import assets
+
     newest = max(
-        newest_mtime_ns(app_root / "server", suffix=".py"),
-        newest_mtime_ns(app_root / "dist"),
+        newest_mtime_ns(Path(__file__).resolve().parent, suffix=".py"),
+        newest_mtime_ns(assets.viewer_dist_dir()),
     )
     return f"{read_viewer_version()}:{newest}"
 
@@ -213,20 +218,10 @@ class CadApp:
             # The viewer is a static visualization tool: it never runs
             # generators or exports. The CLIs own those; this stays false.
             "stepArtifactGenerationAvailable": False,
-            "stepImportAvailable": self.step_import_available(),
             "packageDir": _PACKAGE_DIR,
             "startedAt": self.started_at,
             "url": f"http://{self.host}:{self.port}",
         }
-
-    def step_import_available(self) -> bool:
-        """Whether a foreign STEP can be imported.
-
-        A real probe, never a constant ``True``: a viewer launched by an
-        interpreter without cadgen has to degrade to viewing-only rather than
-        offer an import that cannot happen.
-        """
-        return self.ops.step_import_available()
 
     # --- gates ------------------------------------------------------------
 

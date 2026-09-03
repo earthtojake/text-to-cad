@@ -66,10 +66,14 @@ include = ["cadgen*"]
 
 [tool.setuptools.package-data]
 # _runtime holds everything cadgen executes that is not Python: the esbuilt Node
-# builders and the headless browser bundle the snapshot CLI drives. It is data, not a
-# subpackage (no __init__), and it is found at call time by cadgen.assets.
+# builders, the headless browser bundle the snapshot CLI drives, and the CAD Viewer's
+# built client that `cadgen viewer` serves. It is data, not a subpackage (no
+# __init__), and it is found at call time by cadgen.assets.
 # Verified by scripts/release/check-wheel-contents.sh.
 cadgen = ["py.typed", "*.pyi", "_runtime/**/*"]
+# The viewer server's catalog ordering is ICU root collation, read from this table at
+# runtime; it ships beside the code that reads it.
+"cadgen.viewer" = ["collation.json"]
 # The Node builder bridge (cadgen/_internal/node_runtime.py) spawns node with
 # `--import node_resolve_register.mjs`; both .mjs files must ship with the package.
 "cadgen._internal" = ["*.mjs"]

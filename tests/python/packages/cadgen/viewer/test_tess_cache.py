@@ -14,16 +14,11 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent.parent
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
-
-from server.tess_cache import (  # noqa: E402
+from cadgen.viewer.tess_cache import (
     TESS_CACHE_ROUTE_PREFIX,
     read_tess_cache_batch,
     read_tess_cache_entry,
@@ -34,16 +29,10 @@ from server.tess_cache import (  # noqa: E402
 
 GOOD_KEY = "c0ffee-t1-l1.500000e-3-a3.500000e-1"
 
-# The authoritative codec, INSIDE this app. cadgen-js is vendored at
-# packages/cadgen-js — a link in a development checkout, a real tree wherever
-# the app ships — so this one path resolves in every layout.
-#
-# It used to be computed from APP_ROOT.parent.parent, which is a path in the
-# workbench this app is developed in and does not exist where the app ships.
-# The test was @skipUnless that file existed, so in the standalone repo — the
-# one place the backend suite actually ran — it silently skipped, and the
-# encoder's framing was checked nowhere at all.
-CADGEN_JS_CODEC = APP_ROOT / "packages" / "cadgen-js" / "src" / "lib" / "surf" / "tessellationCache.js"
+# The authoritative codec: cadgen-js in this repository. The suite is root-owned
+# and runs from a checkout, so the source path is always present -- no skip.
+REPO_ROOT = Path(__file__).resolve().parents[5]
+CADGEN_JS_CODEC = REPO_ROOT / "packages" / "cadgen-js" / "src" / "lib" / "surf" / "tessellationCache.js"
 
 
 class TessCacheTestCase(unittest.TestCase):

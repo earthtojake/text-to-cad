@@ -214,7 +214,7 @@ def remove_source_sidecar(step_path: Path | str) -> None:
     """Imports must never leave a stale generated-marker behind (e.g. a
     re-import over a model that used to be generated)."""
     source_sidecar_path(step_path).unlink(missing_ok=True)
-    _provenance_record_path(step_path).unlink(missing_ok=True)
+    provenance_record_path(step_path).unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +236,7 @@ _PROVENANCE_FIELDS = (
 )
 
 
-def _provenance_record_path(step_path: Path | str) -> Path:
+def provenance_record_path(step_path: Path | str) -> Path:
     from cadgen.catalog import artifact_path_key
     from cadgen._internal.cache_paths import records_dir
 
@@ -247,7 +247,7 @@ def write_source_provenance_record(step_path: Path | str, payload: Mapping[str, 
     body = {key: payload[key] for key in _PROVENANCE_FIELDS if key in payload}
     body.setdefault("schemaVersion", SOURCE_SIDECAR_SCHEMA_VERSION)
     try:
-        existing = json.loads(_provenance_record_path(step_path).read_text(encoding="utf-8"))
+        existing = json.loads(provenance_record_path(step_path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         existing = None
     if isinstance(existing, dict):
@@ -255,7 +255,7 @@ def write_source_provenance_record(step_path: Path | str, payload: Mapping[str, 
             k: v for k, v in body.items() if k != "generatedAt"
         }:
             return
-    target = _provenance_record_path(step_path)
+    target = provenance_record_path(step_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_name(f".{target.name}{temp_suffix()}")
     temp.write_text(json.dumps(body, sort_keys=True), encoding="utf-8")
@@ -271,7 +271,7 @@ def read_source_provenance(step_path: Path | str) -> dict[str, Any] | None:
     rebuild, which re-records — never an error.
     """
     try:
-        payload = json.loads(_provenance_record_path(step_path).read_text(encoding="utf-8"))
+        payload = json.loads(provenance_record_path(step_path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return payload if isinstance(payload, dict) else None

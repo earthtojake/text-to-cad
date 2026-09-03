@@ -116,6 +116,11 @@ UNCLASSIFIED = {
     "cache",
     "daemon",
     "daemon status",
+    # The viewer launcher owns its parser: the launch contract (reuse-or-start,
+    # port roll, the --json announce line) is not a function signature to mirror.
+    "viewer",
+    "viewer list",
+    "viewer stop",
 }
 
 HEAVY = ("OCP", "build123d", "ezdxf", "shapely")

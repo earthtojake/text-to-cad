@@ -29,19 +29,13 @@ import hashlib
 import json
 import os
 import shutil
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent.parent
-SERVER_DIR = APP_ROOT / "server"
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
-
-from server.backend import LocalAssetBackend  # noqa: E402
-from server.scanner import scan_cad_directory  # noqa: E402
-from server.store_paths import CACHE_SCHEMA_VERSION, store_packages_dir  # noqa: E402
+from cadgen.viewer.backend import LocalAssetBackend
+from cadgen.viewer.scanner import scan_cad_directory
+from cadgen.viewer.store_paths import CACHE_SCHEMA_VERSION, store_packages_dir
 
 # Characters NTFS refuses in a filename. POSIX writes every fixture name below;
 # Windows skips exactly the names its filesystem cannot represent, and the

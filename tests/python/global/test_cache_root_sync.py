@@ -6,11 +6,6 @@ directory from the same environment, or the "one cache warms every consumer"
 property silently splits into per-language stores. Same spirit as
 test_render_contract_sync: a one-sided change fails here before it can ship.
 
-The viewer server's own copy of that resolver is Python now, and is compared to
-cadgen's by VALUE across an environment matrix in
-apps/viewer/tests_server/test_store_paths.py, which replaced the grep for three
-literals that used to live here.
-
 Also pins the mesh-cache key's tessellator-version salt across languages:
 TESSELLATION_VERSION (tessellate.js) == MESH_TESSELLATION_VERSION
 (cache_paths.py), and the tessellator's DEFAULT_OPTIONS tolerances against their

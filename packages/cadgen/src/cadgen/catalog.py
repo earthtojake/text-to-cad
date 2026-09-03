@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 from fnmatch import fnmatch
@@ -256,10 +257,18 @@ def artifact_path_key(entry_path: Path) -> str:
     """The model-path identity for locks, progress and freshness records:
     sha256 of the resolved artifact path, truncated. Path-keyed on purpose —
     a lock must exclude two builds of the same MODEL while the content hash
-    they will produce is still unknown."""
+    they will produce is still unknown.
+
+    A path that cannot be resolved (an embedded NUL, a symlink loop) keys on
+    its lexical absolute form rather than raising: the viewer server derives
+    this key for whatever a request names, and an odd path must be a "no
+    package" answer there, not a 500."""
     import hashlib
 
-    resolved = str(Path(entry_path).expanduser().resolve())
+    try:
+        resolved = str(Path(entry_path).expanduser().resolve())
+    except (OSError, ValueError, RuntimeError):
+        resolved = os.path.abspath(str(entry_path))
     return hashlib.sha256(resolved.encode("utf-8")).hexdigest()[:24]
 
 
@@ -267,28 +276,49 @@ def artifact_path_key(entry_path: Path) -> str:
 # catalog scan or status poll re-asks for the same file's hash constantly,
 # and rereading megabytes each time would turn polling into IO. A stale hit
 # requires an edit that preserves BOTH mtime_ns and size — not a real editor.
+#
+# Bounded and locked: the viewer server shares this memo across request
+# threads for the life of the process, and a large corpus would otherwise
+# grow it without limit.
 _ARTIFACT_HASH_MEMO: dict[str, tuple[int, int, str]] = {}
+_ARTIFACT_HASH_MEMO_LIMIT = 4096
+_ARTIFACT_HASH_MEMO_LOCK = threading.Lock()
+
+
+def _remember_artifact_hash(key: str, mtime_ns: int, size: int, digest: str) -> None:
+    with _ARTIFACT_HASH_MEMO_LOCK:
+        if len(_ARTIFACT_HASH_MEMO) >= _ARTIFACT_HASH_MEMO_LIMIT:
+            _ARTIFACT_HASH_MEMO.clear()
+        _ARTIFACT_HASH_MEMO[key] = (mtime_ns, size, digest)
 
 
 def artifact_file_hash(entry_path: Path) -> str | None:
-    """sha256 of the artifact file's bytes, memoized; None when unreadable."""
+    """sha256 of the artifact file's bytes, memoized; None when unreadable.
+
+    Streamed in 1 MiB chunks: a status poll must not materialize a
+    multi-hundred-MB STEP in memory to learn its key."""
     import hashlib
 
-    resolved = Path(entry_path).expanduser().resolve()
-    key = str(resolved)
     try:
+        resolved = Path(entry_path).expanduser().resolve()
         stat = resolved.stat()
-    except OSError:
+    except (OSError, ValueError, RuntimeError):
         return None
-    cached = _ARTIFACT_HASH_MEMO.get(key)
+    key = str(resolved)
+    with _ARTIFACT_HASH_MEMO_LOCK:
+        cached = _ARTIFACT_HASH_MEMO.get(key)
     if cached is not None and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
         return cached[2]
+    digest = hashlib.sha256()
     try:
-        digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
+        with open(resolved, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
     except OSError:
         return None
-    _ARTIFACT_HASH_MEMO[key] = (stat.st_mtime_ns, stat.st_size, digest)
-    return digest
+    hexdigest = digest.hexdigest()
+    _remember_artifact_hash(key, stat.st_mtime_ns, stat.st_size, hexdigest)
+    return hexdigest
 
 
 def seed_artifact_hash(entry_path: Path, digest: str) -> None:
@@ -300,7 +330,7 @@ def seed_artifact_hash(entry_path: Path, digest: str) -> None:
         stat = resolved.stat()
     except OSError:
         return
-    _ARTIFACT_HASH_MEMO[str(resolved)] = (stat.st_mtime_ns, stat.st_size, digest)
+    _remember_artifact_hash(str(resolved), stat.st_mtime_ns, stat.st_size, digest)
 
 
 def package_dir_for_hash(step_hash: str) -> Path:

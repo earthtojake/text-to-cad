@@ -22,6 +22,8 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from cadgen._internal.atomic_replace import replace_atomic
+
 __all__ = [
     "REGISTRY_DIR_NAME",
     "PROBE_TIMEOUT_SECONDS",
@@ -101,7 +103,7 @@ def register(*, host, port, root: str = "", viewer_version: str = "", token: str
     try:
         with open(temporary, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, separators=(",", ":"))
-        os.replace(temporary, target)
+        replace_atomic(temporary, target)
     except OSError:
         try:
             os.unlink(temporary)

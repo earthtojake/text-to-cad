@@ -29,8 +29,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent.parent
-MAIN = APP_ROOT / "server" / "main.py"
+from cadgen.viewer import main as main_module
+
+PACKAGE_DIR = Path(main_module.__file__).resolve().parent
+# The documented module spelling, so the child resolves the SAME cadgen this
+# suite imports (PYTHONPATH is inherited through ``env``).
+LAUNCH = [sys.executable, "-m", "cadgen.viewer"]
 
 
 class LauncherFixture(unittest.TestCase):
@@ -75,7 +79,7 @@ class LauncherFixture(unittest.TestCase):
         # The launcher has no directory flag: the cwd IS the served directory,
         # so fixtures choose what a launch serves by choosing its cwd.
         child = subprocess.Popen(
-            [sys.executable, str(MAIN), *args],
+            [*LAUNCH, *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -297,29 +301,36 @@ class IdentityToken(LauncherFixture):
     With the salt, a resident whose code has since changed on disk fails the
     match, a fresh instance starts, and the old one is left alone.
 
-    Everything runs against a STAGED copy of server/ + its own dist, so
-    touching mtimes never dirties the real checkout — whose developer may have
-    a live viewer keyed on those very files.
+    Everything runs against a STAGED copy of the cadgen package + its own dist,
+    so touching mtimes never dirties the real checkout — whose developer may
+    have a live viewer keyed on those very files.
     """
 
     def stage_app(self) -> str:
         staged = os.path.join(self._tmp.name, "staged-identity")
-        shutil.copytree(os.path.join(str(APP_ROOT), "server"), os.path.join(staged, "server"))
+        # The whole package, not just cadgen/viewer: the child imports `cadgen`
+        # first, and a half-package on PYTHONPATH would shadow the real one.
+        shutil.copytree(
+            str(PACKAGE_DIR.parent),
+            os.path.join(staged, "src", "cadgen"),
+            ignore=shutil.ignore_patterns("__pycache__", "_runtime"),
+        )
         os.makedirs(os.path.join(staged, "dist"))
         Path(staged, "dist", "index.html").write_text("<html>viewer</html>", encoding="utf-8")
-        # read_viewer_version reads the package.json beside server/; give the
-        # staged app one so the token's version half is real.
-        Path(staged, "package.json").write_text('{"version":"9.9.9-staged"}', encoding="utf-8")
         return staged
 
     def launch_staged(self, staged: str, root: str) -> subprocess.Popen:
         child = subprocess.Popen(
-            [sys.executable, os.path.join(staged, "server", "main.py"), "--json"],
+            [*LAUNCH, "--json"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             cwd=root,
-            env=self.env(),
+            env=self.env(
+                PYTHONPATH=os.path.join(staged, "src"),
+                # The default dist location is the salt's other half.
+                CADGEN_VIEWER_DIST=os.path.join(staged, "dist"),
+            ),
         )
         self._children.append(child)
         return child
@@ -342,11 +353,11 @@ class IdentityToken(LauncherFixture):
         self.assertEqual(self.json_line(reused_stdout)["action"], "reused")
 
         token_at_start = self.server_info(a["port"])["identityToken"]
-        self.assertIn("9.9.9-staged:", token_at_start, "the token is version:mtime")
+        self.assertRegex(token_at_start, r"^[^:]*:\d+$", "the token is version:mtime")
 
         # A pull: a server source's mtime moves forward.
         future = time.time() + 60
-        os.utime(os.path.join(staged, "server", "scanner.py"), (future, future))
+        os.utime(os.path.join(staged, "src", "cadgen", "viewer", "scanner.py"), (future, future))
 
         # The resident answers with the token computed AT ITS OWN START —
         # never a re-read, which would let a stale server claim freshness.
@@ -379,13 +390,7 @@ class DistFreshnessWarning(unittest.TestCase):
     function: the launch path calls it once, right before binding.
     """
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        if str(APP_ROOT) not in sys.path:
-            sys.path.insert(0, str(APP_ROOT))
-        from server import main as main_module
-
-        cls.main_module = main_module
+    main_module = main_module
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -458,52 +463,26 @@ class ApiOnly(LauncherFixture):
         # The exemption must be exactly as wide as --api-only: a PRODUCTION launch
         # with no built client stays a hard, named failure.
         #
-        # Run from a copy of server/ so VIEWER_ROOT — and therefore the dist
-        # fallback — lands in a directory with no dist/. Skipping when the
-        # developer's own checkout happens to be built would mean skipping in CI
-        # too, which builds the client before it runs the tests.
-        staged = os.path.join(self._tmp.name, "staged-app")
-        shutil.copytree(os.path.join(str(APP_ROOT), "server"), os.path.join(staged, "server"))
-        self.assertFalse(os.path.exists(os.path.join(staged, "dist")))
-
-        child = subprocess.Popen(
-            [sys.executable, os.path.join(staged, "server", "main.py")],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=self.make_root(),
-            env=self.env(),
-        )
-        self._children.append(child)
-        _, stderr = child.communicate(timeout=30)
-        self.assertEqual(child.returncode, 1)
+        # CADGEN_VIEWER_DIST wins the default-dist resolution, so pointing it
+        # at an EMPTY directory makes "no client anywhere" true regardless of
+        # whether this checkout has built apps/viewer. Skipping when the
+        # developer's own checkout happens to be built would mean skipping in
+        # CI too, which builds the client before it runs the tests.
+        nowhere = self.make_root()
+        code, _, stderr = self.run_to_exit([], cwd=self.make_root(), CADGEN_VIEWER_DIST=nowhere)
+        self.assertEqual(code, 1)
         self.assertIn("No built CAD Viewer client found", stderr)
         self.assertIn("--api-only", stderr, "the refusal must name the dev-mode escape")
 
-    def test_the_staged_copy_starts_once_it_is_given_a_client(self) -> None:
-        # Control for the test above: same staged tree, same command, plus a
-        # dist. Without this, a refusal caused by the copy being broken in some
-        # unrelated way would read as the dist check working.
-        staged = os.path.join(self._tmp.name, "staged-app-with-dist")
-        shutil.copytree(os.path.join(str(APP_ROOT), "server"), os.path.join(staged, "server"))
-        os.makedirs(os.path.join(staged, "dist"))
-        Path(staged, "dist", "index.html").write_text("<html>viewer</html>", encoding="utf-8")
-
-        child = subprocess.Popen(
-            [
-                sys.executable,
-                os.path.join(staged, "server", "main.py"),
-                "--json",
-                "--ephemeral",
-                "--no-registry",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+    def test_the_same_launch_starts_once_it_is_given_a_client(self) -> None:
+        # Control for the test above: same command, the env now naming a real
+        # dist. Without this, a refusal caused by something unrelated would
+        # read as the dist check working.
+        child = self.launch(
+            ["--json", "--ephemeral", "--no-registry"],
             cwd=self.make_root(),
-            env=self.env(),
+            CADGEN_VIEWER_DIST=self.make_dist(),
         )
-        self._children.append(child)
         self.assertEqual(self.json_line(self.wait_for_url_line(child))["action"], "started")
 
 
@@ -518,10 +497,6 @@ class InterpreterFloor(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        if str(APP_ROOT) not in sys.path:
-            sys.path.insert(0, str(APP_ROOT))
-        from server import main as main_module
-
         cls.main_module = main_module
 
     def test_the_interpreter_running_this_suite_is_accepted(self) -> None:
@@ -541,7 +516,7 @@ class InterpreterFloor(unittest.TestCase):
         # interpreter it is refusing: a SyntaxError anywhere above the guard
         # replaces the friendly message with a traceback. Parse everything up to
         # and including the guard against 3.9's grammar.
-        source = (APP_ROOT / "server" / "main.py").read_text(encoding="utf-8")
+        source = Path(self.main_module.__file__).read_text(encoding="utf-8")
         guard, marker, _ = source.partition("_UNSUPPORTED_PYTHON = unsupported_python_message()")
         self.assertTrue(marker, "the startup guard moved; update this test")
         ast.parse(guard + marker, filename="main.py", feature_version=(3, 9))
@@ -568,10 +543,6 @@ class Refusals(LauncherFixture):
         # a missing model rather than a missing directory. In-process rather
         # than a subprocess because Popen(cwd=...) refuses a missing directory
         # in the PARENT, so a child can never be started inside one.
-        if str(APP_ROOT) not in sys.path:
-            sys.path.insert(0, str(APP_ROOT))
-        from server import main as main_module
-
         dist = self.make_dist()
         doomed = tempfile.mkdtemp(dir=self._tmp.name, prefix="cad-doomed-")
         held = os.getcwd()
@@ -587,23 +558,29 @@ class Refusals(LauncherFixture):
         self.assertIn("no longer exists", stderr.getvalue())
 
     def test_dist_resolution_falls_back_and_then_gives_up(self) -> None:
-        # Tested at the function rather than through a launch, because the
-        # fallback candidate is the app's own dist/ — present in a checkout
-        # after a build, so a subprocess could not reach the refusal.
-        if str(APP_ROOT) not in sys.path:
-            sys.path.insert(0, str(APP_ROOT))
-        from server import main as main_module
-
+        # Tested at the function, with the default location pinned through
+        # CADGEN_VIEWER_DIST so the checkout's own build cannot mask a case.
         dist = self.make_dist()
-        self.assertEqual(main_module.resolve_dist_dir(dist), os.path.abspath(dist))
+        fallback = self.make_dist()
         empty = self.make_root()  # a directory with no index.html
-        self.assertEqual(
-            main_module.resolve_dist_dir(empty),
-            os.path.abspath(os.path.join(main_module.VIEWER_ROOT, "dist"))
-            if os.path.exists(os.path.join(main_module.VIEWER_ROOT, "dist", "index.html"))
-            else "",
-            "an explicit --dist without index.html falls through to the app's own dist",
-        )
+        previous = os.environ.get("CADGEN_VIEWER_DIST")
+        try:
+            os.environ["CADGEN_VIEWER_DIST"] = fallback
+            self.assertEqual(main_module.resolve_dist_dir(dist), os.path.abspath(dist))
+            # realpath on both sides: the env resolver canonicalizes, and macOS
+            # spells the temp dir through a /var -> /private/var symlink.
+            self.assertEqual(
+                os.path.realpath(main_module.resolve_dist_dir(empty)),
+                os.path.realpath(fallback),
+                "an explicit --dist without index.html falls through to the default location",
+            )
+            os.environ["CADGEN_VIEWER_DIST"] = empty
+            self.assertEqual(main_module.resolve_dist_dir(""), "", "no index.html anywhere is no client")
+        finally:
+            if previous is None:
+                os.environ.pop("CADGEN_VIEWER_DIST", None)
+            else:
+                os.environ["CADGEN_VIEWER_DIST"] = previous
 
 
 class ListAndStop(LauncherFixture):
@@ -673,48 +650,58 @@ class ListAndStop(LauncherFixture):
 
 
 class ArgumentGrammar(unittest.TestCase):
-    """The parse rules, in-process — no launch needed to pin argument handling."""
+    """The parse rules, in-process — no launch needed to pin argument handling.
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        if str(APP_ROOT) not in sys.path:
-            sys.path.insert(0, str(APP_ROOT))
-        from server import main as main_module
+    argparse now, with the launcher's refusal shape kept: an unknown argument is
+    a refusal naming the FIRST unknown token, and every refusal exits 2.
+    """
 
-        cls.parse_args = staticmethod(main_module.parse_args)
-        cls.main_module = main_module
+    @staticmethod
+    def parse(argv: list[str]) -> dict:
+        return main_module.parse_args(argv)
 
-    def test_parsing_continues_past_an_unknown_and_records_the_first(self) -> None:
-        # This is why the launcher cannot use argparse: argparse errors here.
-        # parse_args records the refusal (main exits 2 on it) but keeps parsing,
-        # so the refusal message can be exact while later flags still land.
-        args = self.parse_args(["--totally-unknown", "value", "--json"])
-        self.assertEqual(args["unknown"], "--totally-unknown")
-        self.assertTrue(args["json"])
+    def refuses(self, argv: list[str]) -> str:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as caught:
+            self.parse(argv)
+        self.assertEqual(caught.exception.code, 2, argv)
+        return stderr.getvalue()
 
-    def test_port_zero_and_garbage_both_mean_strict_default(self) -> None:
-        # `Number(x) || default` keeps the default while still setting
-        # portExplicit. Asymmetric and unpinned by any client, but reproducing
-        # it exactly costs two lines and diverging costs a silent behaviour
-        # change. --ephemeral is the spelling for "any free port".
-        for value in ("0", "abc", ""):
-            args = self.parse_args(["--port", value])
-            self.assertEqual(args["port"], 3245, value)
-            self.assertTrue(args["port_explicit"], value)
+    def test_an_unknown_argument_is_a_refusal_naming_the_first_unknown(self) -> None:
+        # `--dir /tmp` must name --dir, not the path that followed it.
+        message = self.refuses(["--dir", "/tmp", "--json"])
+        self.assertIn("unknown argument: --dir", message)
+        self.assertNotIn("/tmp", message.splitlines()[0])
 
-    def test_an_out_of_range_port_falls_back_to_the_non_strict_default(self) -> None:
+    def test_port_zero_and_garbage_are_refused_not_defaulted(self) -> None:
+        # The old hand-rolled parser read `--port 0` and `--port abc` as a
+        # STRICT 3245 — a typo silently changed what the launcher did. Both are
+        # refusals now; --ephemeral is the spelling for "any free port".
+        self.assertIn("port out of range", self.refuses(["--port", "0"]))
+        self.assertIn("not a port number", self.refuses(["--port", "abc"]))
+
+    def test_an_out_of_range_port_is_refused(self) -> None:
         for value in ("70000", "-1"):
-            args = self.parse_args(["--port", value])
-            self.assertEqual(args["port"], 3245, value)
-            self.assertFalse(args["port_explicit"], value)
+            self.assertIn("port out of range", self.refuses(["--port", value]), value)
 
-    def test_a_valueless_trailing_port_does_not_crash(self) -> None:
-        args = self.parse_args(["--port"])
-        self.assertEqual(args["port"], 3245)
-        self.assertTrue(args["port_explicit"])
+    def test_a_valueless_trailing_port_is_refused(self) -> None:
+        self.assertIn("--port", self.refuses(["--port"]))
+
+    def test_port_and_ephemeral_are_mutually_exclusive(self) -> None:
+        # One asks for THIS port, the other for ANY port; both at once is a
+        # contradiction the old parser resolved silently in --ephemeral's favour.
+        self.assertIn("not allowed with", self.refuses(["--port", "3999", "--ephemeral"]))
+
+    def test_an_explicit_port_is_strict_and_the_default_is_not(self) -> None:
+        explicit = self.parse(["--port", "3999"])
+        self.assertEqual(explicit["port"], 3999)
+        self.assertTrue(explicit["port_explicit"])
+        default = self.parse([])
+        self.assertEqual(default["port"], 3245)
+        self.assertFalse(default["port_explicit"])
 
     def test_the_three_dev_flags_default_off_and_are_independent(self) -> None:
-        defaults = self.parse_args([])
+        defaults = self.parse([])
         for flag in ("ephemeral", "no_registry", "api_only"):
             self.assertFalse(defaults[flag], flag)
         for argument, key in (
@@ -722,26 +709,30 @@ class ArgumentGrammar(unittest.TestCase):
             ("--no-registry", "no_registry"),
             ("--api-only", "api_only"),
         ):
-            args = self.parse_args([argument])
+            args = self.parse([argument])
             self.assertTrue(args[key], argument)
             others = {"ephemeral", "no_registry", "api_only"} - {key}
             for other in others:
                 self.assertFalse(args[other], f"{argument} must not imply --{other}")
 
     def test_repeated_flags_take_the_last_value(self) -> None:
-        self.assertEqual(self.parse_args(["--host", "a", "--host", "b"])["host"], "b")
+        self.assertEqual(self.parse(["--host", "a", "--host", "b"])["host"], "b")
+
+    def test_no_abbreviations(self) -> None:
+        # `--ap` for --api-only is exactly the kind of accidental match a typo
+        # becomes. argparse abbreviates by default; the launcher must not.
+        self.assertIn("unknown argument: --ap", self.refuses(["--ap"]))
 
     def test_the_served_directory_is_the_cwd_with_no_special_cases(self) -> None:
         # No flag, no environment variable: the cwd IS the served directory,
-        # even inside the app itself — serving the Viewer's own directory is
-        # legitimate (its fixtures), and refusing it would block launching from
-        # inside a skill bundle.
-        for cwd in (str(APP_ROOT), str(APP_ROOT / "server")):
+        # even inside the package itself — serving the Viewer's own directory
+        # is legitimate, and refusing it would be a special case to explain.
+        for cwd in (str(PACKAGE_DIR), str(PACKAGE_DIR.parent)):
             with self.subTest(cwd=cwd):
                 held = os.getcwd()
                 os.chdir(cwd)
                 try:
-                    self.assertEqual(self.main_module.served_directory(), cwd)
+                    self.assertEqual(main_module.served_directory(), cwd)
                 finally:
                     os.chdir(held)
 
@@ -750,14 +741,14 @@ class ArgumentSurface(unittest.TestCase):
     """A launcher that answers --help by starting a server reads as broken, and
     a tolerated typo silently changes what it serves.
 
-    Both were real: `main.py --help` used to fall through the parser and boot an
+    Both were real: `--help` used to fall through the parser and boot an
     instance, and a misspelled flag started a viewer on the invocation directory
     and served an empty catalog while looking fine.
     """
 
     def _run(self, *argv: str) -> subprocess.CompletedProcess:
         return subprocess.run(
-            [sys.executable, str(MAIN), *argv],
+            [*LAUNCH, *argv],
             capture_output=True,
             text=True,
             timeout=30,
@@ -766,13 +757,28 @@ class ArgumentSurface(unittest.TestCase):
     def test_help_answers_on_stdout_and_starts_nothing(self) -> None:
         result = self._run("--help")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("usage: python server/main.py", result.stdout)
+        self.assertIn("usage: python -m cadgen.viewer", result.stdout)
         self.assertIn("--host", result.stdout)
+        self.assertIn("python -m cadgen.viewer list", result.stdout, "the manager verbs are in the usage")
+        self.assertIn("python -m cadgen.viewer stop", result.stdout)
         self.assertNotIn("--root", result.stdout, "the launcher has no directory flag")
         self.assertEqual(result.stderr, "")
 
     def test_short_help_is_the_same_answer(self) -> None:
         self.assertEqual(self._run("-h").returncode, 0)
+
+    def test_the_front_door_names_itself_in_help(self) -> None:
+        # Through `cadgen viewer` the same parser says "cadgen viewer", so the
+        # usage a user reads matches the command they typed.
+        result = subprocess.run(
+            [sys.executable, "-m", "cadgen.cli", "viewer", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("usage: cadgen viewer", result.stdout)
+        self.assertIn("cadgen viewer list", result.stdout)
 
     def test_an_unknown_argument_is_refused_not_ignored(self) -> None:
         result = self._run("--dir", "/tmp")
@@ -788,6 +794,13 @@ class ArgumentSurface(unittest.TestCase):
         result = self._run("--root", "/tmp")
         self.assertEqual(result.returncode, 2)
         self.assertIn("unknown argument: --root", result.stderr)
+
+    def test_a_manager_verb_after_a_flag_is_a_serve_refusal(self) -> None:
+        # Only argv[0] selects list/stop: `--json list` is a serve invocation
+        # with an unknown argument, not a list.
+        result = self._run("--json", "list")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("unknown argument: list", result.stderr)
 
 
 if __name__ == "__main__":

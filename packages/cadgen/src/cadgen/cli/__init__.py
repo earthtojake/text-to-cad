@@ -15,10 +15,6 @@ costs seconds and needs the heavy dependency set installed. ``cadgen --help`` an
 unknown command must not pay for that, so the registry stores dotted module names as
 strings and imports exactly the one being run. Do not hoist these to module-level imports
 when adding commands.
-
-The CAD Viewer is NOT here: it is a standalone app (the ``cad-viewer`` skill bundles it;
-a checkout runs ``apps/viewer/server/main.py`` directly), and cadgen is exclusively the
-programmatic generation/inspection/snapshot toolchain.
 """
 
 from __future__ import annotations
@@ -73,6 +69,12 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # without it `cadgen daemon status` falls through to one-word `daemon` and the
     # supervisor treats "status" as a stray argument.
     "daemon status": ("cadgen.cli.daemon_status", "show the warm daemon's workers"),
+    # The CAD Viewer. One-word `viewer` serves the cwd (what the cad-viewer skill
+    # teaches); the two-word entries are the instance manager, split into their own
+    # modules for the same dispatch reason `daemon status` is.
+    "viewer": ("cadgen.cli.viewer", "serve the current directory in the CAD Viewer"),
+    "viewer list": ("cadgen.cli.viewer_list", "show running CAD Viewers and what each serves"),
+    "viewer stop": ("cadgen.cli.viewer_stop", "terminate a running CAD Viewer"),
 }
 
 # `cadgen==1.2.3` / `cadgen[snapshot]==1.2.3`, as written by

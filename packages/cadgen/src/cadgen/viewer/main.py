@@ -1,22 +1,21 @@
-#!/usr/bin/env python3
-"""Single-port CAD Viewer server and instance manager.
+"""Single-port CAD Viewer server and instance manager: ``cadgen viewer``.
 
-Launching is UNCONDITIONAL, Jupyter-style: running ``main.py`` from a directory
-always ends with the URL of a live, correct Viewer for that directory. If an
-identity-probed instance already serves ``realpath(cwd)`` at this identity
-token (version salted with the app files' newest mtime — see
-``identity_token``), its URL is printed with ``action:"reused"`` and nothing is spawned
-(``--new`` skips the lookup); otherwise the server binds the first free port
-from 3245 upward and prints ``action:"started"``. An EXPLICIT ``--port`` stays
-strict — it exits 1 when taken — because then the port was the ask. The printed
-URL (and the ``--json {url,port,action}`` line) is the contract; the port is an
-output of launch, never something the caller reasons about.
+Launching is UNCONDITIONAL, Jupyter-style: running ``cadgen viewer`` from a
+directory always ends with the URL of a live, correct Viewer for that directory.
+If an identity-probed instance already serves ``realpath(cwd)`` at this identity
+token (version salted with the code's newest mtime — see ``identity_token``),
+its URL is printed with ``action:"reused"`` and nothing is spawned (``--new``
+skips the lookup); otherwise the server binds the first free port from 3245
+upward and prints ``action:"started"``. An EXPLICIT ``--port`` stays strict — it
+exits 1 when taken — because then the port was the ask. The printed URL (and the
+``--json {url,port,action}`` line) is the contract; the port is an output of
+launch, never something the caller reasons about.
 
-Also the instance manager: ``main.py list [--json]`` shows every running Viewer
-(identity-probed, stale entries reaped) and ``main.py stop --port <n>`` /
-``--pid <n>`` terminates one. These live here rather than in a separate tool
-because the registry the server writes is the only source of truth. Dev never
-registers (``--no-registry``): the registry is bundled instances only.
+Also the instance manager: ``cadgen viewer list [--json]`` shows every running
+Viewer (identity-probed, stale entries reaped) and ``cadgen viewer stop --port
+<n>`` / ``--pid <n>`` terminates one. These live here rather than in a separate
+tool because the registry the server writes is the only source of truth. Dev
+never registers (``--no-registry``): the registry is installed instances only.
 
 Three flags exist for the dev server and nowhere else: ``--ephemeral`` (bind any
 free port), ``--no-registry`` (stay out of reuse), and ``--api-only`` (serve the
@@ -29,23 +28,21 @@ by choosing where to run. The page is always the bare origin; ``?file=``
 selects a file inside that directory. To serve a second directory, just launch
 again from it.
 
-cadgen is NOT required to start: without it the viewer serves packaged models
-read-only and importing a foreign STEP answers with an install hint.
-
 Launch is::
 
     cd <the directory to serve>
-    <the interpreter that installed requirements.txt> <path to>/server/main.py
+    cadgen viewer            # or: python -m cadgen.viewer
 
-There is no interpreter discovery, and deliberately so: the previous backend
+There is no interpreter discovery, and deliberately so: an earlier backend
 searched ``$CADGEN_PYTHON``, ``PATH``, and ``<servedRoot>/.venv/bin/python``,
 which meant OPENING AN UNTRUSTED FOLDER THAT SHIPS A .venv handed it the
-interpreter to execute. The server is now the interpreter. Do not reintroduce a
-search in any form.
+interpreter to execute. The server IS the interpreter that installed cadgen.
+Do not reintroduce a search in any form.
 """
 
 from __future__ import annotations
 
+import argparse
 import errno
 import json
 import os
@@ -59,18 +56,18 @@ from pathlib import Path
 # --- interpreter floor ---------------------------------------------------
 #
 # Checked HERE, at import, before a single request can arrive. macOS still
-# ships Python 3.9 as `python3` — which is also the default this app's dev
+# ships Python 3.9 as `python3` — which is also the default the client's dev
 # server spawns — and on 3.9 the server BOOTS, prints the URL contract, and
 # then answers the very first catalog request with a raw
 # `realpath() got an unexpected keyword argument 'strict'`. A tool that starts
 # and then fails on first contact is worse than one that refuses to start, so
-# it refuses to start.
+# it refuses to start. pip enforces cadgen's own floor for an installed wheel;
+# this covers a source tree reached through PYTHONPATH, where nothing else does.
 #
 # The floor is 3.11, not the 3.10 today's code strictly needs (`strict=` landed
-# in 3.10): 3.11 is what cadgen's own metadata requires and what the skill
-# documents, and one number that is true everywhere beats three that drift.
-# Everything in this block is deliberately 3.9-parseable, or the refusal would
-# itself be a SyntaxError.
+# in 3.10): 3.11 is what cadgen's metadata requires, and one number that is
+# true everywhere beats two that drift. Everything in this block is
+# deliberately 3.9-parseable, or the refusal would itself be a SyntaxError.
 MINIMUM_PYTHON = (3, 11)
 
 
@@ -91,7 +88,7 @@ def unsupported_python_message(version_info=None, executable: str = "") -> str:
         "    {executable}\n"
         "\n"
         "Run the server with a newer one:\n"
-        "    {newer} server/main.py\n"
+        "    {newer} -m cadgen.viewer\n"
         "For `npm run dev`, name it with VIEWER_PYTHON:\n"
         "    VIEWER_PYTHON={newer} npm run dev\n"
         "\n"
@@ -112,26 +109,19 @@ if _UNSUPPORTED_PYTHON:
     sys.stderr.flush()
     raise SystemExit(1)
 
-# The one legal sys.path insert: this file's own directory's parent, so
-# `server.*` imports resolve when main.py is run as a script. It is inside the
-# skill root, which is what the self-containment rules permit. NEVER PYTHONPATH,
-# never site.addsitedir, never a path outside this tree.
-_APP_ROOT = str(Path(__file__).resolve().parent.parent)
-if _APP_ROOT not in sys.path:
-    sys.path.insert(0, _APP_ROOT)
+from cadgen import assets  # noqa: E402
 
-from server import registry  # noqa: E402
-from server.handler import CadHTTPServer, make_handler_class  # noqa: E402
-from server.http_app import create_cad_app, identity_token, newest_mtime_ns  # noqa: E402
+from . import registry  # noqa: E402
+from .handler import CadHTTPServer, make_handler_class  # noqa: E402
+from .http_app import create_cad_app, identity_token, newest_mtime_ns  # noqa: E402
 
+DEFAULT_PROG = "cadgen viewer"
 DEFAULT_VIEWER_HOST = "127.0.0.1"
 DEFAULT_VIEWER_PORT = 3245
 # How far past the default the launcher will roll looking for a free port
 # before giving up. Far beyond any plausible number of live Viewers.
 PORT_ROLL_LIMIT = 100
 STOP_WAIT_SECONDS = 3.0
-
-VIEWER_ROOT = str(Path(__file__).resolve().parent.parent)
 
 # EADDRINUSE/EACCES are the only "taken" signals. Windows raises WSAEADDRINUSE /
 # WSAEACCES, which Python maps onto these same errnos.
@@ -164,80 +154,108 @@ def _compact_json(payload) -> str:
     return json.dumps(payload, separators=(",", ":"))
 
 
-def parse_args(argv: list[str]) -> dict:
-    """Hand-rolled, NOT argparse.
+# argparse prefixes this with "usage: " itself.
+USAGE = """{prog} [--host HOST] [--port N | --ephemeral] [--new] [--json]
+       {pad} [--dist DIR] [--api-only] [--no-registry]
+       {prog} list [--json]
+       {prog} stop (--port N | --pid N)"""
 
-    Two incompatibilities make argparse the wrong tool: it errors on unknown
-    arguments where this launcher tolerates them, and ``type=int`` exits 2 on
-    ``--port abc`` where this falls back. Reproducing the fallbacks in argparse
-    costs more than the loop.
+DESCRIPTION = """Serve ONE directory of CAD artifacts: the directory you run it from. There is
+no flag for it — cd there first. The page is the bare origin; `?file=` selects
+an artifact inside that directory.
+"""
+
+_HELP = {
+    "host": "bind address (default: 127.0.0.1)",
+    "port": (
+        "strict: this port or fail. Default rolls from 3245 upward and reuses a "
+        "live viewer already serving this directory."
+    ),
+    "ephemeral": "bind an OS-assigned port; never reuse, never register",
+    "new": "start a fresh instance instead of reusing a live one",
+    "json": "announce the instance as one JSON line on stdout",
+    "dist": "built client to serve (default: the bundled client; env CADGEN_VIEWER_DIST)",
+    "api_only": "serve only /__cad and /__tess_cache (a dev server owns the client)",
+    "no_registry": "do not record this instance for `list`/`stop`/reuse",
+}
+
+
+def _port_number(raw: str) -> int:
+    """A TCP port, or an argparse error naming what was wrong.
+
+    ``0`` is refused rather than read as "any port": that spelling is
+    ``--ephemeral``, and a launcher that quietly turned ``--port 0`` into a
+    strict 3245 (as the old hand-rolled parser did) was a trap.
     """
-    args = {
-        "host": DEFAULT_VIEWER_HOST,
-        "port": DEFAULT_VIEWER_PORT,
-        # Explicit --port means "this port or fail"; the default means "any free
-        # port from the base" and enables the reuse lookup + roll.
-        "port_explicit": False,
-        "dist": "",
-        "json": False,
-        "fresh": False,
-        # Additive flags, all three for dev (see vite.config.mjs).
-        "ephemeral": False,
-        "no_registry": False,
-        "api_only": False,
-        "help": False,
-        "unknown": "",
+    try:
+        value = int(raw, 10)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a port number: {raw!r}") from None
+    if not (0 < value <= 65535):
+        raise argparse.ArgumentTypeError(f"port out of range (1-65535): {raw}")
+    return value
+
+
+class _Parser(argparse.ArgumentParser):
+    """argparse with the launcher's refusal shape.
+
+    An unknown argument is a REFUSAL, not a shrug: a misspelled flag once started
+    a viewer on the wrong directory and served an empty catalog while looking
+    fine. argparse refuses too, but names every stray token in one line —
+    ``--dir /tmp`` would read as two problems. The FIRST unknown is the useful
+    one, so ``parse`` below reports exactly that. This also catches the retired
+    ``--root <dir>``: the served directory is the cwd now.
+    """
+
+    def error(self, message: str) -> None:  # noqa: D401 - argparse's contract
+        _err(f"{self.prog}: {message}\n")
+        _err(f"run `{self.prog} --help` for the arguments this launcher takes\n")
+        raise SystemExit(2)
+
+    def parse(self, argv: list[str]) -> argparse.Namespace:
+        namespace, unknown = self.parse_known_args(argv)
+        if unknown:
+            self.error(f"unknown argument: {unknown[0]}")
+        return namespace
+
+
+def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
+    parser = _Parser(
+        prog=prog,
+        usage=USAGE.format(prog=prog, pad=" " * len(prog)),
+        description=DESCRIPTION,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,
+    )
+    parser.add_argument("--host", default=DEFAULT_VIEWER_HOST, help=_HELP["host"])
+    # Explicit --port means "this port or fail"; the default (None) means "any
+    # free port from the base" and enables the reuse lookup + roll.
+    binding = parser.add_mutually_exclusive_group()
+    binding.add_argument("--port", type=_port_number, default=None, metavar="N", help=_HELP["port"])
+    binding.add_argument("--ephemeral", action="store_true", help=_HELP["ephemeral"])
+    parser.add_argument("--new", dest="fresh", action="store_true", help=_HELP["new"])
+    parser.add_argument("--json", action="store_true", help=_HELP["json"])
+    parser.add_argument("--dist", default="", metavar="DIR", help=_HELP["dist"])
+    parser.add_argument("--api-only", dest="api_only", action="store_true", help=_HELP["api_only"])
+    parser.add_argument("--no-registry", dest="no_registry", action="store_true", help=_HELP["no_registry"])
+    return parser
+
+
+def parse_args(argv: list[str], *, prog: str = DEFAULT_PROG) -> dict:
+    """The serve arguments as a dict; exits 2 (via argparse) on a refusal."""
+    namespace = build_parser(prog).parse(list(argv))
+    return {
+        "host": namespace.host,
+        "port": namespace.port if namespace.port is not None else DEFAULT_VIEWER_PORT,
+        "port_explicit": namespace.port is not None,
+        "dist": namespace.dist or "",
+        "json": namespace.json,
+        "fresh": namespace.fresh,
+        # Additive flags, all three for dev (see the client's vite.config.mjs).
+        "ephemeral": namespace.ephemeral,
+        "no_registry": namespace.no_registry,
+        "api_only": namespace.api_only,
     }
-    index = 0
-    while index < len(argv):
-        arg = argv[index]
-        if arg == "--host":
-            index += 1
-            args["host"] = (argv[index] if index < len(argv) else "") or args["host"]
-        elif arg == "--port":
-            index += 1
-            raw = argv[index] if index < len(argv) else ""
-            # `Number(x) || default`: 0, NaN and a missing value are all falsy
-            # and keep the default WHILE STILL SETTING port_explicit — so
-            # `--port 0` means strict 3245, not an ephemeral port. That is what
-            # --ephemeral is for.
-            try:
-                parsed = int(str(raw), 10)
-            except (TypeError, ValueError):
-                parsed = 0
-            args["port"] = parsed or args["port"]
-            args["port_explicit"] = True
-        elif arg == "--dist":
-            index += 1
-            args["dist"] = (argv[index] if index < len(argv) else "") or ""
-        elif arg == "--json":
-            args["json"] = True
-        elif arg == "--new":
-            args["fresh"] = True
-        elif arg == "--ephemeral":
-            args["ephemeral"] = True
-        elif arg == "--no-registry":
-            args["no_registry"] = True
-        elif arg == "--api-only":
-            args["api_only"] = True
-        elif arg in ("-h", "--help"):
-            args["help"] = True
-        else:
-            # An unknown argument is a REFUSAL, not a shrug. Tolerating them
-            # meant a typo silently changed what the viewer did: a misspelled
-            # flag started a viewer on the wrong directory and served an empty
-            # catalog, and `--help` started a server instead of answering.
-            # This also catches the retired `--root <dir>`: the served
-            # directory is the cwd now, chosen by launching from it.
-            # The FIRST unknown is the useful one: `--dir /tmp` should name
-            # --dir, not the path that followed it.
-            if not args["unknown"]:
-                args["unknown"] = arg
-        index += 1
-    if not (0 < args["port"] <= 65535):
-        args["port"] = DEFAULT_VIEWER_PORT
-        args["port_explicit"] = False
-    return args
 
 
 def served_directory() -> str:
@@ -259,7 +277,13 @@ def served_directory() -> str:
 
 
 def resolve_dist_dir(explicit: str) -> str:
-    candidates = [c for c in (str(explicit or "").strip(), os.path.join(VIEWER_ROOT, "dist")) if c]
+    """The built client to serve: ``--dist``, else ``cadgen.assets.viewer_dist_dir()``.
+
+    That resolver is env ``CADGEN_VIEWER_DIST``, then a checkout's
+    ``apps/viewer/dist``, then the packaged ``_runtime/viewer``. A candidate
+    counts only with an ``index.html`` in it; ``""`` means nothing usable.
+    """
+    candidates = [c for c in (str(explicit or "").strip(), str(assets.viewer_dist_dir())) if c]
     for candidate in candidates:
         resolved = os.path.abspath(candidate)
         if os.path.exists(os.path.join(resolved, "index.html")):
@@ -369,13 +393,19 @@ def _format_entry(entry: dict) -> str:
     )
 
 
-def list_command(argv: list[str]) -> int:
+def build_list_parser(prog: str = f"{DEFAULT_PROG} list") -> argparse.ArgumentParser:
+    parser = _Parser(prog=prog, description="Show running CAD Viewers and what each serves.", allow_abbrev=False)
+    parser.add_argument("--json", action="store_true", help="print the registry entries as JSON")
+    return parser
+
+
+def list_command(argv: list[str], *, prog: str = f"{DEFAULT_PROG} list") -> int:
     """What CAD Viewers are running, and whose code answers each port.
 
     A viewer serves one directory fixed at startup, so instances differ both by
-    what they serve and by WHICH CHECKOUT'S CODE holds the port.
+    what they serve and by WHICH INSTALL'S CODE holds the port.
     """
-    as_json = "--json" in argv
+    as_json = build_list_parser(prog).parse(list(argv)).json
     entries = registry.live_entries()  # also reaps anything that fails its identity probe
     if as_json:
         _out(f"{_compact_json(entries)}\n")
@@ -389,29 +419,23 @@ def list_command(argv: list[str]) -> int:
     return 0
 
 
-def stop_command(argv: list[str]) -> int:
+def build_stop_parser(prog: str = f"{DEFAULT_PROG} stop") -> argparse.ArgumentParser:
+    parser = _Parser(prog=prog, description="Terminate a running CAD Viewer.", allow_abbrev=False)
+    which = parser.add_mutually_exclusive_group()
+    which.add_argument("--port", type=int, default=None, metavar="N", help="the viewer answering this port")
+    which.add_argument("--pid", type=int, default=None, metavar="N", help="the viewer with this process id")
+    return parser
+
+
+def stop_command(argv: list[str], *, prog: str = f"{DEFAULT_PROG} stop") -> int:
     """Terminate a running CAD Viewer.
 
     Only ever signals a process the registry can still identify: ``live_entries``
     probes each recorded port and requires the answering pid to match.
     """
-    port = None
-    pid = None
-    index = 0
-    while index < len(argv):
-        if argv[index] == "--port":
-            index += 1
-            try:
-                port = int(argv[index]) if index < len(argv) else None
-            except (TypeError, ValueError):
-                port = None
-        elif argv[index] == "--pid":
-            index += 1
-            try:
-                pid = int(argv[index]) if index < len(argv) else None
-            except (TypeError, ValueError):
-                pid = None
-        index += 1
+    selected = build_stop_parser(prog).parse(list(argv))
+    port = selected.port
+    pid = selected.pid
     if not port and not pid:
         _err("Specify which viewer to stop: --port <n> or --pid <n>.\n")
         return 2
@@ -482,47 +506,27 @@ def _bind(host: str, port: int, args: dict) -> CadHTTPServer:
             port += 1
 
 
-USAGE = """usage: python server/main.py [--host HOST] [--port N] [--new]
-       python server/main.py list
-       python server/main.py stop --port N | --pid N
+def main(argv: list[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
+    """``python -m cadgen.viewer``: serve, or ``list``/``stop`` when argv[0] says so.
 
-Serve ONE directory of CAD artifacts: the directory you run it from. There is
-no flag for it — cd there first. The page is always the bare origin; `?file=`
-selects an artifact inside that directory.
-
-  --host HOST     bind address (default: 127.0.0.1)
-  --port N        strict: this port or fail. Default rolls from 3245 upward.
-  --dist DIR      built client to serve (default: the app's own dist/)
-  --new           force a fresh instance instead of reusing a live one
-  --json          announce the instance as JSON on stdout
-  --ephemeral     never reuse, never register (dev backends)
-  --no-registry   do not write the instance registry
-  --api-only      serve only /__cad and /__tess_cache (Vite owns the client)
-
-Viewing needs only the standard library. Importing a foreign .step needs
-cadgen; without it viewing is unaffected and imports answer with a hint.
-"""
-
-
-def main(argv: list[str] | None = None) -> int:
-    argv = sys.argv[1:] if argv is None else argv
-    # Only argv[0] is inspected, so `main.py --json list` is a SERVE
-    # invocation with an unknown arg, not a list.
+    Only argv[0] is inspected, so ``--json list`` is a SERVE invocation with an
+    unknown arg, not a list. The ``cadgen`` front door reaches the three verbs
+    through ``cadgen.cli.viewer``, ``viewer_list`` and ``viewer_stop`` instead,
+    which call :func:`serve`, :func:`list_command` and :func:`stop_command`.
+    """
+    argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "list":
-        return list_command(argv[1:])
+        return list_command(argv[1:], prog=f"{prog} list")
     if argv and argv[0] == "stop":
-        return stop_command(argv[1:])
+        return stop_command(argv[1:], prog=f"{prog} stop")
+    return serve(argv, prog=prog)
 
-    args = parse_args(argv)
-    if args["help"]:
-        # A help request IS an answer: stdout, exit 0. A launcher that answers
-        # --help by starting a server reads as broken.
-        sys.stdout.write(USAGE)
-        return 0
-    if args["unknown"]:
-        _err(f"unknown argument: {args['unknown']}\n")
-        _err("run with --help for the arguments this launcher takes\n")
-        return 2
+
+def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
+    # argparse answers --help on stdout with exit 0 and refuses an unknown
+    # argument with exit 2, both before anything below runs. A launcher that
+    # answered --help by starting a server read as broken.
+    args = parse_args(argv, prog=prog)
 
     try:
         directory = served_directory()
@@ -547,19 +551,20 @@ def main(argv: list[str] | None = None) -> int:
                 _out(f"{_compact_json({'url': url, 'port': held['port'], 'action': 'reused'})}\n")
             return 0
 
-    # Checked AFTER the reuse lookup, so a reuse succeeds with no --dist.
+    # Checked AFTER the reuse lookup, so a reuse succeeds with no client on disk.
     #
     # --api-only exempts the check because in dev the CLIENT COMES FROM VITE:
     # this process serves only /__cad and /__tess_cache, and requiring a built
-    # dist/ made `npm run dev` fail on any checkout that had not run
+    # dist made `npm run dev` fail on any checkout that had not run
     # `npm run build` first — dist/ is gitignored, so that is every fresh
     # clone. The dist routes still answer 404 in that mode, which is what they
     # already do for an empty dist_dir.
     dist_dir = "" if args["api_only"] else resolve_dist_dir(args["dist"])
     if not dist_dir and not args["api_only"]:
         _err(
-            "No built CAD Viewer client found. Build one with `npm run build` "
-            "in the CAD Viewer app directory, or point --dist at a dist directory. "
+            "No built CAD Viewer client found. This cadgen was installed without one; "
+            "in a checkout, build it with `npm run build` in apps/viewer, or point "
+            "--dist (or CADGEN_VIEWER_DIST) at a dist directory. "
             "(--api-only serves the API alone, for a dev server that supplies its own client.)\n"
         )
         return 1
@@ -576,7 +581,7 @@ def main(argv: list[str] | None = None) -> int:
                     f"Port {port} on {host} is already serving a CAD Viewer: "
                     f"pid {holder.get('pid')}, viewer {holder.get('version') or '?'}, "
                     f"from {holder.get('packageDir') or '?'}.\n"
-                    f"Stop it with `{sys.executable} {os.path.abspath(__file__)} stop --port {port}`, "
+                    f"Stop it with `{prog} stop --port {port}`, "
                     f"or rerun without --port to take any free port.\n"
                 )
             else:
@@ -652,4 +657,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main(sys.argv[1:], prog="python -m cadgen.viewer"))

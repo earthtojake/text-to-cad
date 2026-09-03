@@ -5,10 +5,7 @@ and export belong to model scripts and the CLIs. The one build-shaped thing the
 viewer does is importing a raw FOREIGN ``.step`` — making its render package
 current in the shared store, which is exactly the cache action — and that goes
 through ``compile_client``, which calls cadgen's compile entry point in a
-private worker.
-
-cadgen remains a SOFT dependency: absent, viewing is unaffected and imports fail
-with one actionable message. Nothing in this module imports it.
+private worker so the kernel never loads into the long-lived server.
 """
 
 from __future__ import annotations
@@ -43,9 +40,6 @@ class CadgenOps:
         self.root_dir = os.path.abspath(str(root_dir or ""))
         self.registry = registry if registry is not None else ProgressRegistry()
         self.client = client if client is not None else CompileClient(registry=self.registry)
-
-    def step_import_available(self) -> bool:
-        return self.client.available()
 
     def shutdown(self) -> None:
         self.client.shutdown()
@@ -101,37 +95,26 @@ class CadgenOps:
         # The ONLY buildable state the viewer supports is importing a raw
         # foreign STEP. Everything else renders what exists or names the CLI.
         if verdict.get("rawStep") and not verdict.get("generated"):
-            if self.step_import_available():
-                # The import offer is exactly Node's three keys. It deliberately
-                # does NOT carry `blocked` through from `status`.
-                #
-                # `blocked` is set by artifact_status when the snapshot says
-                # `busy`, and NOTHING in this backend can say that: every
-                # snapshot is minted by _snapshot_from_record or the synthetic
-                # in-flight one, and both hardcode busy=False — as the Node
-                # buildProgressSnapshot did before them. So the flag was
-                # unreachable, and an unreachable flag that flips the client
-                # from BUILD to ATTACH is a trap for the next reader, not a
-                # safeguard. The real "a peer holds the lock" signal is
-                # `contended`, which build_artifact answers with `generating`
-                # and the client attaches to.
-                #
-                # busy/blocked stay in artifact_status.py: they are pinned there
-                # by the ported spec, which supplies the snapshot directly.
-                return {
-                    "state": ARTIFACT_STATE.NEEDS_BUILD,
-                    "reason": status.get("reason"),
-                    "stepImport": True,
-                }
-            # The reason, not a generic sentence: an installed-but-too-old
-            # cadgen has a DIFFERENT fix from an absent one, and this card is
-            # the only place the user is told either.
+            # The import offer is exactly Node's three keys. It deliberately
+            # does NOT carry `blocked` through from `status`.
+            #
+            # `blocked` is set by artifact_status when the snapshot says
+            # `busy`, and NOTHING in this backend can say that: every
+            # snapshot is minted by _snapshot_from_record or the synthetic
+            # in-flight one, and both hardcode busy=False — as the Node
+            # buildProgressSnapshot did before them. So the flag was
+            # unreachable, and an unreachable flag that flips the client
+            # from BUILD to ATTACH is a trap for the next reader, not a
+            # safeguard. The real "a peer holds the lock" signal is
+            # `contended`, which build_artifact answers with `generating`
+            # and the client attaches to.
+            #
+            # busy/blocked stay in artifact_status.py: they are pinned there
+            # by the ported spec, which supplies the snapshot directly.
             return {
-                "state": ARTIFACT_STATE.ERROR,
-                "error": (
-                    "This STEP file has not been imported yet, and "
-                    f"{self.client.unavailable_message()}"
-                ),
+                "state": ARTIFACT_STATE.NEEDS_BUILD,
+                "reason": status.get("reason"),
+                "stepImport": True,
             }
 
         # No stale-render limbo exists under content keying: an edited file

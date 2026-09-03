@@ -14,7 +14,6 @@ real compiling would exercise on purpose (nothing makes OCCT segfault to order).
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 import tempfile
 import threading
@@ -22,16 +21,11 @@ import time
 import unittest
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent.parent
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
-
-from server import compile_client as compile_client_module  # noqa: E402
-from server.backend import ForbiddenAssetError  # noqa: E402
-from server.build_progress import ProgressRegistry  # noqa: E402
-from server.cadgen_ops import CLI_BUILD_HINT, CadgenOps  # noqa: E402
-from server.compile_client import CompileClient, set_cadgen_probe_for_tests  # noqa: E402
-from server.store_paths import render_package_dir  # noqa: E402
+from cadgen.viewer.backend import ForbiddenAssetError
+from cadgen.viewer.build_progress import ProgressRegistry
+from cadgen.viewer.cadgen_ops import CLI_BUILD_HINT, CadgenOps
+from cadgen.viewer.compile_client import ACQUIRE_TIMEOUT_SECONDS, CompileClient
+from cadgen.viewer.store_paths import render_package_dir
 
 FAKE_WORKER = str(Path(__file__).resolve().parent / "fake_worker.py")
 
@@ -49,10 +43,6 @@ class CompileTestCase(unittest.TestCase):
         self.spawn_log = Path(self.tmp.name, "spawns.log")
         os.environ["FAKE_WORKER_SPAWN_LOG"] = str(self.spawn_log)
         self.addCleanup(lambda: os.environ.pop("FAKE_WORKER_SPAWN_LOG", None))
-        # cadgen is not actually needed by the fake worker, but the supervisor
-        # checks availability before spawning.
-        set_cadgen_probe_for_tests(lambda: True)
-        self.addCleanup(set_cadgen_probe_for_tests, None)
 
     def _restore_cache(self) -> None:
         if self._previous_cache is None:
@@ -117,7 +107,7 @@ class ResultsAndErrorsAreValues(CompileTestCase):
         registry = ProgressRegistry()
         client = self.client(registry=registry)
         candidate = self.step("slow.step")
-        from server.store_paths import render_package_dir
+        from cadgen.viewer.store_paths import render_package_dir
 
         package_dir = render_package_dir(candidate)
 
@@ -143,7 +133,7 @@ class ResultsAndErrorsAreValues(CompileTestCase):
         self.assertGreater(max(done_count for _, done_count in seen), 1)
 
     def test_the_registry_entry_is_cleared_when_the_compile_ends(self):
-        from server.store_paths import render_package_dir
+        from cadgen.viewer.store_paths import render_package_dir
 
         registry = ProgressRegistry()
         client = self.client(registry=registry)
@@ -161,7 +151,7 @@ class CrashIsolation(CompileTestCase):
         self.assertIn("crash.step", result["error"])
 
     def test_the_in_flight_entry_clears_so_the_next_request_is_not_stuck(self):
-        from server.store_paths import render_package_dir
+        from cadgen.viewer.store_paths import render_package_dir
 
         client = self.client()
         candidate = self.step("crash.step")
@@ -285,7 +275,7 @@ class Deduplication(CompileTestCase):
         # poll rather than pin a request thread for someone else's build.
         self.assertTrue(result["ok"])
         self.assertTrue(result["contended"])
-        self.assertLess(elapsed, compile_client_module.ACQUIRE_TIMEOUT_SECONDS + 2)
+        self.assertLess(elapsed, ACQUIRE_TIMEOUT_SECONDS + 2)
 
 
 class WorkerReuse(CompileTestCase):
@@ -310,7 +300,7 @@ class WorkerReuse(CompileTestCase):
 
 class IdleWatchdog(CompileTestCase):
     def test_a_silent_worker_is_killed_and_the_entry_leaves_generating(self):
-        from server.store_paths import render_package_dir
+        from cadgen.viewer.store_paths import render_package_dir
 
         os.environ["VIEWER_CADGEN_IDLE_TIMEOUT"] = "1"
         self.addCleanup(lambda: os.environ.pop("VIEWER_CADGEN_IDLE_TIMEOUT", None))
@@ -320,123 +310,6 @@ class IdleWatchdog(CompileTestCase):
         self.assertFalse(result["ok"])
         self.assertIn("went silent", result["error"])
         self.assertFalse(client.in_flight(render_package_dir(candidate)))
-
-
-class SoftDependency(CompileTestCase):
-    def test_with_no_cadgen_the_import_path_names_the_fix_and_nothing_spawns(self):
-        set_cadgen_probe_for_tests(lambda: False)
-        client = self.client()
-        result = client.compile(self.step("ok.step"))
-        self.assertFalse(result["ok"])
-        self.assertIn("requires cadgen", result["error"])
-        self.assertIn("Viewing existing models does not need cadgen", result["error"])
-        self.assertEqual(self.spawn_count(), 0)
-
-
-class OldCadgenIsUnavailable(CompileTestCase):
-    """An importable cadgen that is too old must degrade, never crash.
-
-    Availability used to be PRESENCE alone, which made this the worst of the
-    three possible states: the probe answered ``stepImportAvailable: true``, the
-    client showed an Import button, and then every single import failed with a
-    raw ``build_step_artifact() got an unexpected keyword argument 'sink'``. A
-    version the viewer cannot use is a cadgen it does not have.
-    """
-
-    def setUp(self) -> None:
-        super().setUp()
-        # The real probe, not the presence override — this is a test ABOUT the
-        # probe. Presence and capability are faked separately, because the two
-        # answers are what the probe combines, and because this suite also runs
-        # in the standalone repo, where cadgen is genuinely absent.
-        set_cadgen_probe_for_tests(None)
-        self._patch("_cadgen_present", lambda: True)
-        self._patch("installed_cadgen_version", lambda: "0.4.28")
-
-    def _patch(self, name, value):
-        original = getattr(compile_client_module, name)
-        setattr(compile_client_module, name, value)
-        self.addCleanup(setattr, compile_client_module, name, original)
-
-    def _supports(self, answer):
-        self._patch("cadgen_supports_progress_sink", lambda: answer)
-
-    def test_an_old_cadgen_reports_unavailable_rather_than_offering_the_import(self):
-        self._supports(False)
-        client = self.client()
-        self.assertFalse(client.available())
-        message = client.unavailable_message()
-        self.assertIn("or newer", message)
-        self.assertIn("pip install --upgrade", message)
-        self.assertIn("0.4.28", message, "the version it HAS is what makes the hint actionable")
-
-    def test_an_old_cadgen_refuses_the_compile_before_spawning_anything(self):
-        self._supports(False)
-        client = self.client()
-        result = client.compile(self.step("ok.step"))
-        self.assertFalse(result["ok"])
-        self.assertIn("requires cadgen", result["error"])
-        self.assertNotIn("unexpected keyword argument", result["error"])
-        self.assertEqual(self.spawn_count(), 0, "a cadgen the viewer cannot use costs no worker")
-
-    def test_the_status_card_names_the_upgrade_not_the_install(self):
-        self._supports(False)
-        registry = ProgressRegistry()
-        ops = CadgenOps(str(self.root), registry=registry, client=self.client(registry=registry))
-        self.step("ok.step")
-        status = ops.artifact_status("ok.step")
-        self.assertEqual(status["state"], "error")
-        self.assertIn("has not been imported yet", status["error"])
-        self.assertIn("pip install --upgrade", status["error"])
-
-    def test_only_a_definite_no_refuses_the_import(self):
-        # None is "could not tell" — a zipped install, a moved module. Refusing
-        # on an unknown would break working setups to guard against a broken
-        # one, so an unknown is usable and the worker re-asks the real object.
-        for answer in (True, None):
-            with self.subTest(answer=answer):
-                self._supports(answer)
-                self.assertTrue(self.client().available())
-
-    def test_the_repos_own_cadgen_answers_the_capability_probe_yes(self):
-        """The check must not refuse the install every contributor and CI has.
-
-        An editable install stamps its metadata version at install time and this
-        repo does not bump VERSION during development, so a version floor would
-        report the working copy as too old — the exact install that definitely
-        HAS the feature. This is the guard against reintroducing that.
-        """
-        import importlib.util
-
-        from server.compile_worker import cadgen_supports_progress_sink
-
-        if importlib.util.find_spec("cadgen") is None:
-            self.skipTest("no cadgen on this interpreter (the standalone repo's CI)")
-        self.assertIs(cadgen_supports_progress_sink(), True)
-
-    def test_the_worker_refuses_an_old_build_entry_point_instead_of_raising_TypeError(self):
-        """The backstop, asked of the REAL object one step from the call.
-
-        The static probe reads a file; this asks the function. It is what covers
-        everything the file cannot show — a zipped install, a module moved to a
-        name this code does not know — and the user gets the actionable sentence
-        either way, never cadgen's TypeError about an argument they have never
-        heard of.
-        """
-        from server import compile_worker
-
-        def old_build_step_artifact(*, repo_root, step, source_path=None, force=False):
-            raise AssertionError("must never be called")
-
-        with self.assertRaises(RuntimeError) as caught:
-            compile_worker._require_progress_sink(old_build_step_artifact)
-        self.assertIn("or newer", str(caught.exception))
-        self.assertIn("pip install --upgrade", str(caught.exception))
-
-        def current_build_step_artifact(*, repo_root, step, sink=None):
-            raise AssertionError("must never be called")
-
-        compile_worker._require_progress_sink(current_build_step_artifact)  # no raise
 
 
 class OpsWiring(CompileTestCase):
@@ -471,19 +344,10 @@ class OpsWiring(CompileTestCase):
             {"state": "needs-build", "reason": "missing_glb", "stepImport": True},
         )
 
-    def test_with_no_cadgen_the_offer_becomes_an_actionable_error(self):
-        set_cadgen_probe_for_tests(lambda: False)
-        ops = self.ops()
-        self.step("ok.step")
-        status = ops.artifact_status("ok.step")
-        self.assertEqual(status["state"], "error")
-        self.assertIn("has not been imported yet", status["error"])
-        self.assertIn("requires cadgen", status["error"])
-
     def test_a_generated_document_is_never_routed_through_the_compile_door(self):
         import json as json_module
 
-        from server import store_paths
+        from cadgen.viewer import store_paths
 
         ops = self.ops()
         candidate = self.step("gen.step")
@@ -538,26 +402,13 @@ class OpsWiring(CompileTestCase):
             thread.join()
 
 
-def _cadgen_is_importable() -> bool:
-    return (
-        subprocess.run(
-            [sys.executable, "-c", "import cadgen"], capture_output=True, check=False
-        ).returncode
-        == 0
-    )
-
-
-@unittest.skipUnless(
-    _cadgen_is_importable(),
-    "cadgen is not importable — the REAL worker cannot run, and the server "
-    "itself must keep working without it",
-)
 class TheRealWorkerFramesABareMessage(CompileTestCase):
     """The other half of the error-message fix, in the process that formats it.
 
     Everything else here drives ``fake_worker.py``, which can only assert that
-    the PARENT relays what it is given. This runs ``compile_worker.py`` itself
-    against a document the kernel refuses, and reads what it actually sends.
+    the PARENT relays what it is given. This runs the real
+    ``cadgen.viewer.compile_worker`` against a document the kernel refuses, and
+    reads what it actually sends.
     """
 
     def test_the_error_frame_carries_the_message_not_the_class_name(self):
