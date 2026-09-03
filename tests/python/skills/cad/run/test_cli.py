@@ -22,7 +22,7 @@ STEP_MODEL = (
     "from cadgen import step\n"
     "@step\n"
     "def model():\n"
-    "    return {'shape': object()}\n"
+    "    return object()\n"
 )
 DXF_MODEL = (
     "from cadgen import dxf\n"

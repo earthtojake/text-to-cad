@@ -7,9 +7,11 @@ consumers read from a compound — the packager's walk and STEP export's XCAF
 labeling (enumerated from source, see design doc W2):
 
     class, label, raw color (``_color`` — never the inheriting getter, which
-    MUTATES the tree it reads), cad_material, assembly_mates, per-node
-    location, anytree children, and ``_occurrence_tree`` (whose leaves hold
-    live shapes + Locations and are re-pointed at thawed reconstructions).
+    MUTATES the tree it reads), cad_material, per-node location, anytree
+    children, and ``_occurrence_tree`` (whose leaves hold live shapes +
+    Locations and are re-pointed at thawed reconstructions). NOT
+    ``assembly_mates``: a thawed child is geometry only — mates are the child's
+    own sidecar's business (the sidecar boundary, packages/cadgen/README.md).
 
 Anything else non-JSON-able on a node makes the value Unfreezable: the scope
 simply is not cached, and execution falls through (correctness never depends
@@ -37,7 +39,7 @@ from pathlib import Path
 from cadgen._internal.atomic_replace import replace_atomic
 from cadgen._internal.source_hash import closure_hash_matches
 
-_SCOPE_STORE_VERSION = 1
+_SCOPE_STORE_VERSION = 2
 
 
 class Unfreezable(Exception):
@@ -199,16 +201,11 @@ def _freeze_occurrence_tree(tree: dict) -> dict:
 
 
 def freeze_value(value) -> dict:
-    """Freeze a @step-style result: Shape/Compound, a dict envelope with a
-    ``shape`` key, or a JSON scalar structure."""
+    """Freeze a scope result: a Shape/Compound, a JSON scalar structure, or a
+    sequence of those. (A @step returns a bare shape; there is no dict envelope.)"""
     if isinstance(value, _JSON_SCALARS):
         return {"kind": "literal", "value": value}
     if isinstance(value, dict):
-        if "shape" in value:
-            rest = {k: _json_safe(v, what=f"envelope[{k}]")
-                    for k, v in value.items() if k != "shape"}
-            return {"kind": "envelope", "shape": freeze_value(value["shape"]),
-                    "rest": rest}
         return {"kind": "literal", "value": _json_safe(value, what="dict")}
     if isinstance(value, (list, tuple)):
         if all(isinstance(v, _JSON_SCALARS) for v in value):
@@ -229,9 +226,6 @@ def freeze_value(value) -> dict:
     material = getattr(value, "cad_material", None)
     if material is not None:
         node["cadMaterial"] = _json_safe(material, what="cad_material")
-    mates = getattr(value, "assembly_mates", None)
-    if mates is not None:
-        node["assemblyMates"] = _json_safe(mates, what="assembly_mates")
 
     children = list(getattr(value, "children", []) or [])
     occurrence_tree = getattr(value, "_occurrence_tree", None)
@@ -308,10 +302,6 @@ def thaw_value(node: dict):
     kind = node.get("kind")
     if kind == "literal":
         return node.get("value")
-    if kind == "envelope":
-        result = dict(node.get("rest") or {})
-        result["shape"] = thaw_value(node["shape"])
-        return result
     if kind == "seq":
         items = [thaw_value(item) for item in node.get("items") or []]
         return tuple(items) if node.get("tuple") else items
@@ -348,8 +338,6 @@ def thaw_value(node: dict):
         shape._color = None
     if node.get("cadMaterial") is not None:
         shape.cad_material = node["cadMaterial"]
-    if node.get("assemblyMates") is not None:
-        shape.assembly_mates = node["assemblyMates"]
     if node.get("occurrenceTree") is not None:
         shape._occurrence_tree = _thaw_occurrence_tree(node["occurrenceTree"])
     return shape

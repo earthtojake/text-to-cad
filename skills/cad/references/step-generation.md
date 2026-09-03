@@ -71,9 +71,12 @@ Rules the decorator enforces:
   shares with its drawing or its assembly live in module constants
   (`WIDTH = 40.0`) that the siblings import.
 - Options: `out=`, `kind="part"|"assembly"` (else inferred from the return),
-  `mesh_tolerance=`, `mesh_angular_tolerance=`. The return is a build123d
-  `Shape` or a `{"shape": ..., "stl": ..., "3mf": ..., "mesh_tolerance": ...,
-  "mesh_angular_tolerance": ...}` envelope — those are the only fields.
+  `mesh_tolerance=`, `mesh_angular_tolerance=`. **The return is a build123d
+  `Shape` and nothing else** — a dict return is refused. Mesh exports are
+  declared with `@stl`/`@threemf`/`@glb` stacked on the model; tolerances on
+  the decorators. Everything a model declares about itself lives in its
+  decorators, and a child's declarations never ride up into a parent (see
+  "Composition" below).
 
 **Imports:** `from cadgen import build123d as bd` is the canonical import — a
 lazy, transparent re-export (same names, same objects on first touch), so a
@@ -124,7 +127,10 @@ modes. Choose deliberately:
 A linked child is just an import: model scripts are real modules, and
 `import widget; widget.widget()` returns the shape with no build side
 effects (the import tracer records the child's files into the parent's
-closure, so staleness flows). For anything expensive, wrap the imported
+closure, so staleness flows). What comes back is GEOMETRY only — tree,
+labels, colors, placements. A child's sidecar content (its mates, kinematics,
+animation) never rides up into the parent: declare what the assembly needs on
+the assembly, with `cadgen.assembly` on the parent's own compound. For anything expensive, wrap the imported
 function with **`cadgen.compose.memo`** — importing links, `memo` caches.
 The wrapped call becomes a SCOPE keyed by the child's own source closure
 plus the call arguments, so an edit that does not reach the child's files

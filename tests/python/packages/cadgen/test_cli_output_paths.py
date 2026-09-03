@@ -9,10 +9,10 @@ refused. Found by the Windows CI job on its first run, in
 ``test_package_portability.setUpClass``.
 
 The identically worded rule in :mod:`cadgen.metadata` is absolute ON PURPOSE and is asserted
-here too, so a later change cannot "consistently" relax both. That one validates a path
-written into a checked-in ``model()`` envelope, which is read on every platform; POSIX
-separators are the portable form for a file in the repository. These are two different rules
-that happen to share a sentence.
+here too, so a later change cannot "consistently" relax both. That one validates the
+``out=`` path written into a checked-in ``@step``/``@dxf`` decorator, which is read on every
+platform; POSIX separators are the portable form for a file in the repository. These are two
+different rules that happen to share a sentence.
 """
 
 from __future__ import annotations
@@ -75,23 +75,17 @@ class CliOutputPathSeparatorTest(unittest.TestCase):
         self.assertEqual(output.resolve(), specs[0].output_path)
 
 
-class EnvelopePathRuleStaysAbsoluteTest(unittest.TestCase):
+class DecoratorPathRuleStaysAbsoluteTest(unittest.TestCase):
     """The repository-facing rule is NOT platform-conditional, on any platform."""
 
-    def test_an_envelope_path_with_a_backslash_is_rejected_everywhere(self):
+    def test_a_decorator_out_path_with_a_backslash_is_rejected_everywhere(self):
         import ast
 
-        from cadgen.metadata import _parse_path_field
+        from cadgen.metadata import _decorator_string_kwarg
 
-        script = Path("widget.py")
-        envelope = {"step": ast.Constant(value=r"models\widget.step")}
+        kwargs = {"out": ast.Constant(value=r"models\widget.step")}
         with self.assertRaisesRegex(ValueError, "POSIX"):
-            _parse_path_field(
-                script_path=script,
-                function_name="model",
-                envelope=envelope,
-                field_name="step",
-            )
+            _decorator_string_kwarg(kwargs, "out", script_path=Path("widget.py"))
 
 
 if __name__ == "__main__":

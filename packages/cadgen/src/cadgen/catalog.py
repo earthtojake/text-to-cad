@@ -380,8 +380,8 @@ def _iter_python_sources(root: Path) -> tuple[CadSource, ...]:
         except (CadSourceError, InvalidModelScriptError, RuntimeError) as exc:
             # Directory discovery is resilient: an unparseable script or a
             # malformed model DECLARATION must not abort catalog-wide operations
-            # on unrelated targets. A single model's contract violations (bad
-            # envelope fields, bad decorator args) still raise: an explicitly
+            # on unrelated targets. A single model's contract violations (a dict
+            # return, bad decorator args) still raise: an explicitly
             # authored model that cannot build must fail loudly everywhere.
             print(f"[cadgen] skipping invalid CAD source: {exc}", file=sys.stderr)
             continue
