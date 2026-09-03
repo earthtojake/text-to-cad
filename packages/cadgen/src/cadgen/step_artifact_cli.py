@@ -26,7 +26,7 @@ from cadgen._internal.generation import (
 )
 from cadgen.coordination import PHASE_GENERATE, STEP_PACKAGE, ProgressEvent, artifact_build
 from cadgen.metadata import normalize_mesh_numeric
-from cadgen.catalog import coordination_scope, render_package_dir
+from cadgen.catalog import coordination_scope, result_view_dir
 from cadgen.render import relative_to_cwd
 from cadgen._internal.step_scene import LoadedStepScene, load_step_scene, step_file_hash
 from cadgen.catalog import iter_cad_sources, source_from_path
@@ -142,7 +142,7 @@ def _result_payload(
 
 
 def _generated_result_payload(spec: EntrySpec, scene: LoadedStepScene, stats: dict[str, object] | None = None) -> dict[str, object]:
-    artifact_path = render_package_dir(spec.entry_path)
+    artifact_path = result_view_dir(spec.entry_path)
     source_kind = str(getattr(scene, "source_kind", "step") or "step").strip().lower()
     step_hash = str(getattr(scene, "step_hash", "") or "").strip()
     if not step_hash and spec.step_path is not None and spec.step_path.is_file():
@@ -185,7 +185,7 @@ def _existing_result_payload(spec: EntrySpec, artifact: StepTopologyArtifact) ->
 def _current_artifact_for_spec(spec: EntrySpec) -> StepTopologyArtifact | None:
     if not _existing_topology_artifact_matches_spec_without_scene(spec):
         return None
-    package_dir = render_package_dir(spec.entry_path)
+    package_dir = result_view_dir(spec.entry_path)
     # A component-GLB package is a DIRECTORY, and validate_step_topology_artifact() gates on
     # `.is_file()` (step_targets.py) -- so routing a package through it always raised
     # missing_glb, this whole fast path returned None, and EVERY build re-ran the generator.
@@ -412,7 +412,7 @@ def build_step_artifact(
     # import found nothing and the overlay fell back to a bare indeterminate bar.
     # `package_dir` stays because the RESULT payloads name the package; only the
     # coordination identity is path-keyed.
-    package_dir = render_package_dir(existing_spec.entry_path) if existing_spec.entry_path else None
+    package_dir = result_view_dir(existing_spec.entry_path) if existing_spec.entry_path else None
     scope = coordination_scope(existing_spec.entry_path) if existing_spec.entry_path else None
     # This builds exactly what a model-script run builds, and reported nothing while doing it:
     # the sidecar went to the viewer and a terminal caller watched a silent process.

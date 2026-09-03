@@ -74,12 +74,6 @@ class CadSource:
         return self.script_path if self.script_path is not None else self.step_path
 
     @property
-    def render_package_path(self) -> Path | None:
-        if self.kind == "dxf" or self.entry_path is None:
-            return None
-        return render_package_dir(self.entry_path)
-
-    @property
     def generated_paths(self) -> tuple[Path, ...]:
         # FILE outputs only — the store package dir is deliberately absent:
         # two same-content documents legally SHARE one content-keyed package,
@@ -333,37 +327,52 @@ def seed_artifact_hash(entry_path: Path, digest: str) -> None:
     _remember_artifact_hash(str(resolved), stat.st_mtime_ns, stat.st_size, digest)
 
 
-def package_dir_for_hash(step_hash: str) -> Path:
-    """The store-primary render-package directory for a document's content
-    hash: ``<cache>/packages/<hash>-v<CACHE_SCHEMA_VERSION>``. One package per
-    document, whichever producer built it; the version salt retires whole
-    generations on schema bumps (``cadgen cache gc`` sweeps the orphans)."""
-    from cadgen._internal.cache_paths import packages_dir
-    from cadgen._internal.cache_schema import CACHE_SCHEMA_VERSION
+def result_tree_for(entry_path: Path) -> str | None:
+    """The current tree hash behind a CAD artifact on disk, or None.
 
-    return packages_dir() / f"{step_hash}-v{CACHE_SCHEMA_VERSION}"
+    A generated document maps to its model through the sidecar; an imported
+    document is its own source (``cadgen.store.records.record_for_document``).
+    The tree's flattened view (``cadgen.store.trees.flatten``) is what every
+    reader that used to open a package directory reads now."""
+    from cadgen.store.records import record_for_document
+
+    record = record_for_document(Path(entry_path))
+    if record is None:
+        return None
+    tree = str(record.get("tree") or "").strip()
+    return tree or None
 
 
-def render_package_dir(entry_path: Path) -> Path:
-    """The render package for a CAD artifact file, resolved by CONTENT: the
-    file's bytes are hashed (memoized) and looked up in the store. A missing
-    or unreadable file resolves to a deterministic never-created path, so
-    every existence-checking caller answers "no package" without special
-    cases. Producers never write here blindly — generation and import write
-    through :func:`package_dir_for_hash` with the hash they just produced."""
-    digest = artifact_file_hash(entry_path)
-    if digest is None:
-        from cadgen._internal.cache_paths import packages_dir
+def result_descriptor_for(entry_path: Path) -> dict | None:
+    """The flattened descriptor (legacy shape, component refs as object hashes)
+    behind a CAD artifact on disk, or None when it has no current tree."""
+    from cadgen.store.trees import flatten
 
-        return packages_dir() / f"unbuilt-{artifact_path_key(entry_path)}"
-    return package_dir_for_hash(digest)
+    tree = result_tree_for(entry_path)
+    return flatten(tree) if tree else None
+
+
+def result_view_dir(entry_path: Path) -> Path:
+    """A package-shaped VIEW (a per-process temporary directory) of the tree
+    behind a CAD artifact, for consumers that need files on disk — the Node
+    exporters, the selector-index composer, the snapshot page. When the artifact
+    has no current tree, a deterministic never-created path, so existence checks
+    answer "no result" without special cases. The store itself holds no result
+    directories (``cadgen.store.view``)."""
+    from cadgen.store.view import view_dir_for, views_root
+
+    tree = result_tree_for(entry_path)
+    if tree is None:
+        return views_root() / f"unbuilt-{artifact_path_key(entry_path)}"
+    return view_dir_for(tree)
 
 
 def coordination_scope(entry_path: Path) -> Path:
     """The lock/progress scope for builds of this model: a path-keyed name
-    under the cache root's ``locks/`` tier. Never created as a directory —
-    the coordination layer derives dot-named sibling files from it."""
-    from cadgen._internal.cache_paths import locks_dir
+    under the store's ``locks/`` tier (phase 2 deletes the lock layer). Never
+    created as a directory — the coordination layer derives dot-named sibling
+    files from it."""
+    from cadgen.store.paths import locks_dir
 
     return locks_dir() / artifact_path_key(entry_path)
 

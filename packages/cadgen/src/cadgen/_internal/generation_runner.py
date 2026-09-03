@@ -19,7 +19,7 @@ from cadgen._internal.source_hash import python_source_hash
 from cadgen._internal.source_hash import record_discovered_inputs
 from cadgen._internal.source_hash import record_first_party_execution
 from cadgen._internal.step_scene import LoadedStepScene
-from cadgen.catalog import coordination_scope, render_package_dir
+from cadgen.catalog import coordination_scope
 from cadgen.cli_logging import CliLogger
 from cadgen.cli_progress import cli_progress_line
 from cadgen.coordination import DRAWING_PACKAGE
@@ -618,12 +618,20 @@ def _run_script_generator_body(
         # and without this the longest phase of most builds reports nothing at all. Silent
         # generators are unaffected -- nothing reads the binding unless they ask for it.
         from cadgen.authoring import building
+        from cadgen.store.closure import ExecutionHashes
 
+        # Hash at execution: every first-party file is hashed the moment it runs
+        # (the exec audit hook) — never after the body — so an edit landing
+        # mid-build cannot be hashed into the record over the old source's
+        # geometry. The script's own bytes were compiled above from disk; hash
+        # them now, before the body runs.
         with (
             logger.timed(f"run {model_format} model {spec.source_ref}"),
             reporting_as(progress),
-            building(),
+            ExecutionHashes() as executed_hashes,
+            building(spec.script_path) as frame,
         ):
+            executed_hashes.note(spec.script_path)
             try:
                 raw_payload = generator()
             except ModuleNotFoundError as error:
@@ -649,12 +657,21 @@ def _run_script_generator_body(
         # location, and basing the closure there changed every recorded
         # relpath — the same source hashed differently depending on where its
         # export was written, defeating every closure-keyed reuse.
-        source_closure = capture_runtime_closure(
-            modules_before_load,
+        # The closure a record carries: the script + its static closure (stopping at
+        # child models — a result edge is tracked by pin, not by file), every file
+        # that executed (hashed AT execution), and the data files the run declared.
+        from cadgen.store.closure import build_closure
+
+        for read_path in [*read_files, *declared.inputs]:
+            executed_hashes.note(read_path)
+        store_closure = build_closure(
             spec.script_path,
-            base=spec.script_path.parent,
-            executed_files=executed_files,
+            executed=executed_hashes.hashes,
             discovered_inputs=[*read_files, *declared.inputs],
+            children=[child for child, _tree in frame.children],
+        )
+        source_closure = PythonSourceClosure(
+            closure_hash=store_closure.hash, files=store_closure.files
         )
         generated_scene = _write_shape_step_payload(
             payload,
@@ -667,6 +684,11 @@ def _run_script_generator_body(
             generated_scene.kinematics = declared.block
             generated_scene.bake_pose = declared.bake_pose
         generated_scene.animation_source = declared.animation_source
+        # Children pinned by the body's calls — recorded from the CALLS, never
+        # derived from the tree's links (a modified child is still a dependency).
+        generated_scene.store_children = [
+            {"model": str(child), "tree": tree} for child, tree in frame.children
+        ]
     elif model_format == "dxf":
         from cadgen._internal.dxf_output import record_dxf_output
 

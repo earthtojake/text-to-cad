@@ -18,8 +18,8 @@ producers used to pass DIFFERENT output dirs:
 * a model-script run passed ``coordination_scope(entry_path)``, the model-path
   keyed ``locks/`` tier;
 * ``cadgen step compile`` — and the re-emit, and the on-demand topology
-  rebuild — passed ``render_package_dir(entry_path)``, the CONTENT-keyed
-  ``packages/`` tier.
+  rebuild — passed the CONTENT-keyed render directory of the old store, a
+  layout that no longer exists (results are trees in ``objects/`` now).
 
 The Node reader derived only the locks spelling. So a script run's progress
 appeared and a COMPILE's never did — which is the viewer's own import, the case
@@ -73,7 +73,7 @@ import os
 import threading
 import time
 
-from .store_paths import coordination_scope, render_package_dir
+from .store_paths import coordination_scope
 
 __all__ = [
     "PROGRESS_FRESHNESS_MS",
@@ -199,17 +199,17 @@ class ProgressRegistry:
 
 def build_progress_snapshot(entry_path, *, registry: ProgressRegistry | None = None) -> dict | None:
     """The build view for one model: ours if we are building it, else a peer's."""
-    package_dir = render_package_dir(entry_path)
+    build_key = coordination_scope(entry_path)
     if registry is not None:
-        live = registry.snapshot(package_dir)
+        live = registry.snapshot(build_key)
         if live is not None:
             return live
 
     now_ms = time.time() * 1000.0
     best = None
-    # BOTH tiers, because the two producers key their records differently. See
-    # the module docstring: reading only the locks tier is the defect.
-    for output_dir in (coordination_scope(entry_path), package_dir):
+    # One key for every producer: the model-path ``locks/`` name. See the
+    # module docstring for the two-spelling defect this closed.
+    for output_dir in (build_key,):
         found = _read_fresh_record(status_record_path(output_dir), now_ms)
         if found is not None and (best is None or found[0] > best[0]):
             best = found

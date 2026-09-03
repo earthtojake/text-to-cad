@@ -227,12 +227,11 @@ def _build_export_package_from_scene(
     *,
     logger: CliLogger,
 ) -> None:
-    """Extract the scene's exact geometry into ``package_dir`` (surf extraction
-    only — no OCCT meshing). Run at most ONCE per export run: every requested
-    format tessellates from this one package."""
-    from cadgen.coordination.lock import exclusive
-    from cadgen.coordination.paths import write_lock_path
-    from cadgen._internal.component_package import build_package_from_compound
+    """Extract the scene's exact geometry into a tree (surf extraction only —
+    no OCCT meshing) and lay a view of it at ``package_dir``. Run at most ONCE
+    per export run: every requested format tessellates from this one view."""
+    from cadgen.store.build import build_tree_from_compound
+    from cadgen.store.view import export_view
 
     compound = getattr(scene, "source_compound", None)
     if compound is None:
@@ -240,18 +239,14 @@ def _build_export_package_from_scene(
 
         compound = scene_to_build123d_compound(scene)
 
-    package_dir.mkdir(parents=True, exist_ok=True)
     with logger.timed("extract exact geometry"):
-        # The write lock is formally required at the package mutation
-        # boundary; on a private temp dir it is uncontended by construction.
-        with exclusive(write_lock_path(package_dir)):
-            build_package_from_compound(
-                compound,
-                package_dir=package_dir,
-                root_name=spec.step_path.stem,
-                single_component=spec.kind != "assembly",
-                force=True,
-            )
+        tree_hash, _tree, _stats = build_tree_from_compound(
+            compound,
+            root_name=spec.step_path.stem,
+            entry_kind=spec.kind,
+            single_component=spec.kind != "assembly",
+        )
+    export_view(tree_hash, package_dir)
 
 
 def _effective_export_tolerances(
@@ -298,14 +293,28 @@ def _current_store_package(spec: EntrySpec) -> Path | None:
     mesh exporter consumes, and extraction is pure waste. A stale or unbuilt
     model returns None and the caller builds from source, so exports can never
     serve stale geometry (the #308 class)."""
-    from cadgen.catalog import render_package_dir
+    from cadgen.catalog import result_tree_for
     from cadgen.step_artifact_cli import _current_artifact_for_spec
 
     if spec.entry_path is None:
         return None
     if _current_artifact_for_spec(spec) is None:
         return None
-    return render_package_dir(spec.entry_path)
+    tree = result_tree_for(spec.entry_path)
+    return _view_for_tree(tree) if tree else None
+
+
+def _view_for_tree(tree_hash: str) -> Path:
+    """A package-shaped VIEW of a tree for the Node exporter (the store holds
+    no result directories). Temporary; removed at interpreter exit."""
+    import atexit
+    import shutil
+
+    from cadgen.store.view import export_view
+
+    view_dir = export_view(tree_hash)
+    atexit.register(shutil.rmtree, view_dir, True)
+    return view_dir
 
 
 def _ensure_imported_store_package(
@@ -314,22 +323,21 @@ def _ensure_imported_store_package(
     *,
     logger: CliLogger,
 ) -> Path:
-    """The store render package for an imported STEP, built if missing.
+    """A view of the imported STEP's tree, built if missing.
 
-    An imported file's package is keyed by its content hash, so it can never be
-    stale — only absent. On a miss this warms the SHARED store through the same
-    build (and locks) `cadgen step build` uses; nothing export-specific is
-    stored, and every later export, view, or snapshot of these bytes reuses it."""
-    from cadgen.catalog import render_package_dir
+    An imported file is its own source: its record keys on the document and its
+    closure is the document's bytes, so it can never be stale — only absent. On
+    a miss this builds through the same path `cadgen step build` uses."""
+    from cadgen.catalog import result_tree_for
     from cadgen.step_artifact_cli import build_step_artifact
 
-    package_dir = render_package_dir(step_path)
-    if not (package_dir / "assembly.json").is_file():
+    tree = result_tree_for(step_path)
+    if tree is None:
         build_step_artifact(repo_root=repo_root, step=step_path, logger=logger)
-        package_dir = render_package_dir(step_path)
-    if not (package_dir / "assembly.json").is_file():
-        raise RuntimeError(f"no render package for {step_path.name} after import build")
-    return package_dir
+        tree = result_tree_for(step_path)
+    if tree is None:
+        raise RuntimeError(f"no tree for {step_path.name} after import build")
+    return _view_for_tree(tree)
 
 
 def _export_scene(
@@ -367,7 +375,7 @@ def _export_scene(
                     f"{spec.source_ref}: refusing to export a generated model from its own "
                     f"{_display_name_for(spec.step_path)} -- the scene carries no generator "
                     "output to serialize, so the file on disk is the PREVIOUS build. Rerun "
-                    "with a fresh generation (run `cadgen cache gc` if this "
+                    "with a fresh generation (run `cadgen store gc` if this "
                     "persists) rather than trusting this export."
                 )
             if spec.step_path.resolve() != out.resolve():
@@ -489,12 +497,15 @@ def _export_mesh_jobs(
         document_hash = (
             artifact_file_hash(spec.entry_path) if spec.entry_path is not None else None
         )
+        model = spec.script_path if (spec.source == "generated" and spec.script_path is not None) else spec.entry_path
         pending = [
             job
             for job in jobs
             if force
+            or model is None
             or not mesh_export_current(
                 job.out,
+                model=model,
                 document_hash=document_hash,
                 mesh_tolerance=job.mesh_tolerance,
                 mesh_angular_tolerance=job.mesh_angular_tolerance,
@@ -508,10 +519,11 @@ def _export_mesh_jobs(
         run_mesh_exporter(
             package_dir, pending, name=name, default_color=default_color, logger=logger
         )
-        if document_hash:
+        if document_hash and model is not None:
             for job in pending:
                 record_mesh_export(
                     job.out,
+                    model=model,
                     document_hash=document_hash,
                     fmt=job.fmt,
                     mesh_tolerance=job.mesh_tolerance,

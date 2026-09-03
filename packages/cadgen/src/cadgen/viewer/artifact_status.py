@@ -33,8 +33,10 @@ import re
 from .backend import require_contained
 from .store_paths import (
     SOURCE_SIDECAR_SCHEMA_VERSION,
-    render_package_dir,
-    source_provenance_record_path,
+    component_object_present,
+    record_for,
+    result_descriptor,
+    result_tree,
     source_sidecar_path,
 )
 
@@ -140,7 +142,7 @@ def is_generated_document(step_path) -> bool:
     sidecar = _read_json(source_sidecar_path(step_path))
     if sidecar is not None and sidecar.get("schemaVersion") == SOURCE_SIDECAR_SCHEMA_VERSION:
         return True
-    record = _read_json(source_provenance_record_path(step_path))
+    record = record_for(step_path)
     return bool(record is not None and str(record.get("sourceKind") or "").strip())
 
 
@@ -219,22 +221,22 @@ def _validate_step(step_path: str) -> dict:
     model whose real fix is rerunning its script.
     """
     generated = is_generated_document(step_path)
-    package_dir = render_package_dir(step_path)
-    if not os.path.isdir(package_dir):
-        return {"ok": False, "code": "missing_glb", "packageDir": package_dir, "generated": generated}
-    descriptor = _read_json(os.path.join(package_dir, STEP_DESCRIPTOR_NAME))
+    tree = result_tree(step_path)
+    if tree is None:
+        return {"ok": False, "code": "missing_glb", "tree": None, "generated": generated}
+    descriptor = result_descriptor(tree)
     if descriptor is None:
         return {
             "ok": False,
             "code": "missing_step_topology",
-            "packageDir": package_dir,
+            "tree": tree,
             "generated": generated,
         }
     if descriptor.get("kind") != STEP_PACKAGE_KIND:
         return {
             "ok": False,
             "code": "unsupported_step_topology",
-            "packageDir": package_dir,
+            "tree": tree,
             "descriptor": descriptor,
             "generated": generated,
         }
@@ -243,21 +245,21 @@ def _validate_step(step_path: str) -> dict:
         return {
             "ok": False,
             "code": "missing_glb",
-            "packageDir": package_dir,
+            "tree": tree,
             "descriptor": descriptor,
             "generated": generated,
         }
     for component in components:
         surf = str((component or {}).get("surf") or "") if isinstance(component, dict) else ""
-        if not surf or not os.path.exists(os.path.join(package_dir, surf)):
+        if not surf or not component_object_present(surf):
             return {
                 "ok": False,
                 "code": "missing_glb",
-                "packageDir": package_dir,
+                "tree": tree,
                 "descriptor": descriptor,
                 "generated": generated,
             }
-    return {"ok": True, "packageDir": package_dir, "descriptor": descriptor, "generated": generated}
+    return {"ok": True, "tree": tree, "descriptor": descriptor, "generated": generated}
 
 
 def resolve_artifact_verdict(file_ref, root_dir) -> dict:

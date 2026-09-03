@@ -27,7 +27,6 @@ def _build_parser(prog: str) -> argparse.ArgumentParser:
         description="Build this CAD model (run by calling its @step/@dxf function).",
     )
     parser.add_argument("script", help="The decorated model script.")
-    parser.add_argument("-o", "--output", help="Override the model's output path.")
     parser.add_argument("--force", action="store_true", help="Rebuild even when current.")
     parser.add_argument("--mesh-tolerance", type=float)
     parser.add_argument("--mesh-angular-tolerance", type=float)
@@ -72,21 +71,17 @@ def run_model_argv(argv: Sequence[str], *, prog: str = "python <model>.py") -> i
 
             return generate_dxf_targets(
                 [str(script)],
-                output=args.output,
                 force=bool(args.force),
                 verbose=bool(args.verbose),
             )
 
         from cadgen.generation import generate_step_targets
 
-        # Native spelling on BOTH halves of the pair. ``as_posix()`` here used to
-        # hand ``C:\...\model.py=C:/.../model.step`` to a parser that splits on
-        # the first "=", so one invocation printed a path two different ways. An
-        # explicit -o is passed through VERBATIM: it is the user's own text, and
-        # round-tripping it through Path would rewrite what they typed.
-        output = args.output if args.output else str(Path(source.step_path))
+        # The model's ``out=`` is the ONE spelling of where its document goes:
+        # there is no per-run override (the record is keyed by the script, and
+        # two documents for one model would be two truths).
         return generate_step_targets(
-            [f"{script}={output}"],
+            [str(script)],
             step_options=StepImportOptions(
                 mesh_tolerance=_numeric(args.mesh_tolerance, "mesh_tolerance"),
                 mesh_angular_tolerance=_numeric(

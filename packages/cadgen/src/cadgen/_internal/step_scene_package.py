@@ -100,11 +100,10 @@ def scene_from_render_package(step_path: Path, *, step_hash: str) -> LoadedStepS
     the package is absent or unreadable — every miss falls back to the
     text-STEP parse. Content keying answers schema and hash by construction:
     a package that resolves for these bytes is current-scheme and theirs."""
-    from cadgen.catalog import render_package_dir
-    from cadgen._internal.component_package import read_package_descriptor
+    from cadgen.catalog import result_descriptor_for
+    from cadgen.store.objects import object_path
 
-    package_dir = render_package_dir(step_path)
-    descriptor = read_package_descriptor(package_dir)
+    descriptor = result_descriptor_for(step_path)
     if not isinstance(descriptor, dict) or descriptor.get("kind") != "assembly-package":
         return None
     components = descriptor.get("components")
@@ -120,7 +119,12 @@ def scene_from_render_package(step_path: Path, *, step_hash: str) -> LoadedStepS
     for cid, entry in components.items():
         if not isinstance(entry, dict):
             return None
-        shape = _shape_from_brep(package_dir / str(entry.get("brep") or f"components/{cid}.brep"))
+        try:
+            brep_path = object_path(str(entry.get("brep") or ""))
+            surf_path = object_path(str(entry.get("surf") or ""))
+        except ValueError:
+            return None
+        shape = _shape_from_brep(brep_path)
         if shape is None:
             return None
         key = _shape_hash(shape)
@@ -129,8 +133,7 @@ def scene_from_render_package(step_path: Path, *, step_hash: str) -> LoadedStepS
         color = entry.get("color")
         if isinstance(color, list) and len(color) == 4:
             prototype_colors[key] = tuple(float(c) for c in color)
-        face_colors = _face_colors_from_surf(
-            package_dir / str(entry.get("surf") or f"components/{cid}.surf"), shape)
+        face_colors = _face_colors_from_surf(surf_path, shape)
         if face_colors:
             prototype_face_colors[key] = face_colors
 

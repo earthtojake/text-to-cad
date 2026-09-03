@@ -1,7 +1,7 @@
 """The viewer server's side of the shared component-tessellation cache.
 
-The same ``~/.cache/cadgen/meshes`` store the export CLI and the snapshot host
-use, served to the client on ``/__tess_cache/`` — GET one entry, POST one
+The same mesh index (``index/mesh`` -> objects, ``STORE.md``) the snapshot host
+serves, exposed to the client on ``/__tess_cache/`` — GET one entry, POST one
 write-back, POST ``/batch`` for the TESB container (one round trip for a whole
 assembly's hit set).
 
@@ -9,8 +9,8 @@ Entries are OPAQUE here: this module stores and frames bytes. The one codec
 lives in ``packages/cadgen-js/src/lib/surf/tessellationCache.js``, which is also
 the batch format's home, and the framing below is pinned against that decoder.
 
-The directory is cadgen's ``meshes_dir()`` -- one store, one spelling of where
-it is -- and the entry I/O here is the route's framing over it.
+The entry I/O here is the route's framing over ``cadgen.store``: a key names an
+index entry, the entry names the object holding the bytes.
 
 THE NAME PATTERN IS THE WHOLE DEFENCE. This cache lives OUTSIDE every served
 root — containment cannot help here, because there is no root to be inside of.
@@ -24,9 +24,6 @@ import json
 import os
 import re
 import struct
-
-from cadgen._internal.atomic_replace import replace_atomic
-from cadgen._internal.cache_paths import meshes_dir
 
 from .encoding import UriError, strict_decode_uri_component
 
@@ -64,33 +61,36 @@ def _tessellation_cache_enabled() -> bool:
 
 
 def tessellation_cache_dir() -> str:
-    return str(meshes_dir())
+    """The mesh index (``index/mesh``); entries point at objects."""
+    from cadgen.store.paths import index_dir
+
+    return str(index_dir("mesh"))
 
 
 def _read_cached_tessellation_bytes(key: str) -> bytes | None:
     if not _tessellation_cache_enabled():
         return None
     try:
-        with open(os.path.join(tessellation_cache_dir(), f"{key}{_TESS_SUFFIX}"), "rb") as handle:
-            return handle.read()
+        from cadgen.store.index import read_entry
+        from cadgen.store.objects import read_object
+
+        entry = read_entry("mesh", key)
+        digest = str((entry or {}).get("object") or "")
+        return read_object(digest) if digest else None
     except (OSError, ValueError):
         return None
 
 
 def _write_cached_tessellation_bytes(key: str, data: bytes) -> None:
-    """Best-effort: a full disk or a permissions problem must not fail callers."""
+    """Best-effort: a full disk or a permissions problem must not fail callers.
+    The bytes become an object; the entry maps the key to it."""
     if not _tessellation_cache_enabled():
         return
     try:
-        directory = tessellation_cache_dir()
-        os.makedirs(directory, exist_ok=True)
-        target = os.path.join(directory, f"{key}{_TESS_SUFFIX}")
-        # Temp + rename so a concurrent reader never sees a half-written entry.
-        # The pid in the temp name keeps two processes off each other's temp.
-        temp = f"{target}.{os.getpid()}.tmp"
-        with open(temp, "wb") as handle:
-            handle.write(data)
-        replace_atomic(temp, target)
+        from cadgen.store.index import write_entry
+        from cadgen.store.objects import put_object
+
+        write_entry("mesh", key, {"object": put_object(data)})
     except OSError:
         pass
 

@@ -22,7 +22,7 @@ from .artifact_status import (
 from .backend import require_contained
 from .build_progress import ProgressRegistry, build_progress_snapshot
 from .compile_client import CompileClient
-from .store_paths import render_package_dir
+from .store_paths import coordination_scope
 
 __all__ = ["CLI_BUILD_HINT", "CadgenOps", "create_cadgen_ops"]
 
@@ -74,10 +74,10 @@ class CadgenOps:
             return {"state": ARTIFACT_STATE.READY}
 
         candidate = self._candidate(file_ref)
-        package_dir = render_package_dir(candidate)
+        build_key = coordination_scope(candidate)
 
         snapshot = build_progress_snapshot(candidate, registry=self.registry)
-        if snapshot is None and self.client.in_flight(package_dir):
+        if snapshot is None and self.client.in_flight(build_key):
             # Our worker is starting up but has not reported a phase yet. An
             # indeterminate generating badge beats showing nothing, and it is
             # what the client's attach loop needs in order to have something to

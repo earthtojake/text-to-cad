@@ -52,7 +52,7 @@ import threading
 import time
 import uuid
 
-from .store_paths import render_package_dir
+from .store_paths import coordination_scope
 
 __all__ = [
     "ACQUIRE_TIMEOUT_SECONDS",
@@ -270,17 +270,17 @@ class CompileClient:
         Returns the CompileResult shape on success, or ``{"ok": False, "error":
         ...}``. Never raises for a build failure: a failure is a value.
         """
-        package_dir = render_package_dir(candidate)
+        build_key = coordination_scope(candidate)
 
         # Get-or-create in ONE critical section. Node got this atomicity free
         # from its event loop; a check, then a create, then a store under
         # separate acquisitions lets two threads each start a compile of one
         # document — minutes of duplicated kernel work racing on the store.
         with self._lock:
-            existing = self._in_flight.get(package_dir)
+            existing = self._in_flight.get(build_key)
             if existing is None:
                 entry = _Import()
-                self._in_flight[package_dir] = entry
+                self._in_flight[build_key] = entry
                 owner = True
             else:
                 entry, owner = existing, False

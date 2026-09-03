@@ -170,12 +170,9 @@ def reemit_step_document(
     do), annotation-only (rewrite the sidecar beside bytes that already match),
     or emit.
     """
-    from cadgen.catalog import artifact_file_hash, render_package_dir
-    from cadgen._internal.source_sidecar import (
-        read_source_provenance,
-        write_source_provenance_record,
-        write_source_sidecar,
-    )
+    from cadgen.catalog import artifact_file_hash, result_tree_for
+    from cadgen._internal.source_sidecar import read_source_provenance, write_source_sidecar
+    from cadgen.store.records import update_record
 
     input_hash = artifact_file_hash(document)
     if not input_hash:
@@ -184,11 +181,11 @@ def reemit_step_document(
     at = None if kinematics_def is None else kinematics_def.at
 
     sidecar = read_source_provenance(out) or {}
-    package_dir = render_package_dir(out)
+    tree = result_tree_for(out)
     bytes_current = (
         not force
         and out.is_file()
-        and (package_dir / "assembly.json").is_file()
+        and tree is not None
         and str(sidecar.get("sourceKind") or "") == "step"
         and str(sidecar.get("sourceHash") or "") == input_hash
         and _same_pose((sidecar.get("kinematics") or {}).get("bakedPose"), at)
@@ -197,36 +194,43 @@ def reemit_step_document(
         return {
             "ok": True,
             "document": out,
-            "package": package_dir,
+            "package": tree,
             "skipped": True,
             "sidecarOnly": False,
         }
     if bytes_current and at is None:
         # The ANNOTATION changed but the bytes cannot have: no bake point, same
-        # input. Re-resolve the declaration against the package already on disk
-        # and rewrite the sidecar — no OCCT, no emit, no new content key.
+        # input. Re-resolve the declaration against a view of the tree already in
+        # the store and rewrite the sidecar — no OCCT, no emit, no new tree.
         payload = dict(sidecar)
         payload["annotationHash"] = digest
         payload.pop("kinematics", None)
         payload.pop("animation", None)
         if kinematics_def is not None:
-            from cadgen._internal.kinematics_resolve import resolve_kinematics_block
+            import shutil
 
-            resolved, _ids = resolve_kinematics_block(
-                kinematics_def.block,
-                package_dir=package_dir,
-                step_path=out,
-                source_ref=_display(out),
-            )
+            from cadgen._internal.kinematics_resolve import resolve_kinematics_block
+            from cadgen.store.view import export_view
+
+            view_dir = export_view(tree)
+            try:
+                resolved, _ids = resolve_kinematics_block(
+                    kinematics_def.block,
+                    package_dir=view_dir,
+                    step_path=out,
+                    source_ref=_display(out),
+                )
+            finally:
+                shutil.rmtree(view_dir, ignore_errors=True)
             payload["kinematics"] = resolved
         if animation_source:
             payload["animation"] = {"clips": animation_source}
-        write_source_provenance_record(out, payload)
+        update_record(out, annotationHash=digest, kinematics=payload.get("kinematics"))
         write_source_sidecar(out, payload)
         return {
             "ok": True,
             "document": out,
-            "package": package_dir,
+            "package": tree,
             "skipped": False,
             "sidecarOnly": True,
         }
@@ -244,7 +248,7 @@ def reemit_step_document(
     return {
         "ok": out.is_file(),
         "document": out,
-        "package": render_package_dir(out),
+        "package": result_tree_for(out),
         "skipped": False,
         "sidecarOnly": False,
     }

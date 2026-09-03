@@ -36,7 +36,6 @@ from urllib.parse import quote, unquote, urlparse
 from cadgen.coordination import PHASE_RENDER, resolve as resolve_progress
 from cadgen.results import SnapshotFile, SnapshotResult, SnapshotTimings
 from cadgen._internal.atomic_replace import replace_atomic, write_bytes_atomic
-from cadgen._internal.cache_paths import meshes_dir
 
 
 SNAPSHOT_ORIGIN = "http://snapshot.local"
@@ -384,10 +383,10 @@ def asset_url_for_store_path(file_path: Path) -> str:
     """Asset URL for a file in the render-package store (outside any render
     root): served by the ``/__store_asset/`` route, confined to the store's
     ``packages/`` tier. Same mtime/size version key as root assets."""
-    from cadgen._internal.cache_paths import packages_dir
+    from cadgen.store.view import views_root
 
     resolved_path = Path(file_path).resolve()
-    base = packages_dir().resolve()
+    base = views_root().resolve()
     if not path_is_inside_or_equal(resolved_path, base):
         raise SnapshotError(f"Store asset must be inside the package store: {file_path}")
     relative_path = resolved_path.relative_to(base).as_posix()
@@ -929,48 +928,22 @@ def tessellation_cache_enabled() -> bool:
     return os.environ.get("CADGEN_MESH_CACHE") != "0"
 
 
-def tessellation_cache_dir() -> Path:
-    # One root for every user-level cache (CADGEN_CACHE_DIR / platform cache
-    # dir): cadgen._internal.cache_paths is the Python authority, mirrored by
-    # cadgenCacheRootDir in the JS store modules.
-    return meshes_dir()
-
-
-def tessellation_cache_file(pathname: str) -> Path | None:
-    """Validated cache path for a /__tess_cache/ route, or None to refuse."""
-    name = unquote(pathname[len(TESS_CACHE_ROUTE_PREFIX):])
-    if not TESS_CACHE_NAME_PATTERN.fullmatch(name) or ".." in name:
-        return None
-    return tessellation_cache_dir() / name
-
-
 def read_tessellation_cache_entry(pathname: str) -> bytes | None:
+    """One entry's bytes, from the mesh index (``index/mesh`` -> object); None
+    for a refused name, a miss, or a disabled cache."""
+    from cadgen.viewer.tess_cache import read_tess_cache_entry
+
     if not tessellation_cache_enabled():
         return None
-    target = tessellation_cache_file(pathname)
-    if target is None:
-        return None
-    try:
-        return target.read_bytes()
-    except OSError:
-        return None
+    status, data = read_tess_cache_entry(pathname)
+    return data if status == 200 else None
 
 
 def write_tessellation_cache_entry(pathname: str, body: bytes | None) -> bool:
-    """Best-effort atomic write; False only for an invalid name (a 403)."""
-    target = tessellation_cache_file(pathname)
-    if target is None:
-        return False
-    if not tessellation_cache_enabled() or not body:
-        return True  # accepted and dropped: the page must never fail on this
-    try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        temp = target.with_name(f"{target.name}.{os.getpid()}.tmp")
-        temp.write_bytes(body)
-        replace_atomic(temp, target)
-    except OSError:
-        pass  # best-effort: a full disk must never fail a snapshot
-    return True
+    """Best-effort write-back; False only for an invalid name (a 403)."""
+    from cadgen.viewer.tess_cache import write_tess_cache_entry
+
+    return write_tess_cache_entry(pathname, body) != 403
 
 
 # POST /__tess_cache/batch: one round trip for N entries — a many-component
@@ -1019,9 +992,9 @@ STORE_ASSET_ROUTE_PREFIX = "/__store_asset/"
 
 
 def _store_packages_root() -> Path:
-    from cadgen._internal.cache_paths import packages_dir
+    from cadgen.store.view import views_root
 
-    return packages_dir()
+    return views_root()
 
 
 class SnapshotAssetServer:

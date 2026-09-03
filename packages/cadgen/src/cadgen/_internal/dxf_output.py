@@ -39,12 +39,12 @@ def dxf_export_record_path(output_path: Path) -> Path:
     """The freshness record for a written drawing, keyed by its bytes. A
     missing/unreadable drawing resolves to a deterministic never-written path
     so existence checks just answer "no record"."""
-    from cadgen._internal.cache_paths import records_dir
+    from cadgen.store.paths import index_dir
 
     digest = artifact_file_hash(Path(output_path))
     if digest is None:
-        return records_dir() / f"unbuilt-{artifact_path_key(Path(output_path))}.{DXF_EXPORT_RECORD_NAME}"
-    return records_dir() / f"{digest}.{DXF_EXPORT_RECORD_NAME}"
+        return index_dir("dxf") / f"unbuilt-{artifact_path_key(Path(output_path))}"
+    return index_dir("dxf") / digest
 
 
 def _read_record(record_path: Path) -> dict | None:

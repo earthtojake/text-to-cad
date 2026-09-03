@@ -21,7 +21,6 @@ from cadgen.catalog import find_source_by_path
 from cadgen.catalog import iter_cad_sources
 from cadgen.catalog import normalize_cad_ref
 from cadgen.catalog import normalize_source_ref
-from cadgen.catalog import render_package_dir
 from cadgen.cli_logging import CliLogger
 from cadgen.cli_progress import cli_progress_line
 from cadgen.metadata import GeneratorMetadata
@@ -250,7 +249,6 @@ def _spec_output_paths(spec: EntrySpec) -> tuple[Path, ...]:
     paths: list[Path] = []
     if spec.step_path is not None:
         paths.append(spec.step_path)
-        paths.append(render_package_dir(spec.entry_path))
     for path in (spec.dxf_path,):
         if path is not None:
             paths.append(path)

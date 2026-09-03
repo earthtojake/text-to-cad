@@ -120,55 +120,51 @@ def pose_token(pose_values: dict | None) -> str:
     return json.dumps({str(k): float(v) for k, v in pose_values.items()}, sort_keys=True)
 
 
-def mesh_export_record_path(output_path: Path) -> Path:
-    """The freshness record for a written mesh, keyed by its bytes. A missing
-    or unreadable file resolves to a deterministic never-written path so
-    existence checks just answer "no record"."""
-    from cadgen.catalog import artifact_file_hash, artifact_path_key
-    from cadgen._internal.cache_paths import records_dir
+def _sha256_of(path: Path) -> str | None:
+    import hashlib
 
-    digest = artifact_file_hash(Path(output_path))
-    if digest is None:
-        return records_dir() / f"unbuilt-{artifact_path_key(Path(output_path))}.{MESH_EXPORT_RECORD_KIND}.json"
-    return records_dir() / f"{digest}.{MESH_EXPORT_RECORD_KIND}.json"
-
-
-def _read_record(record_path: Path) -> dict | None:
+    digest = hashlib.sha256()
     try:
-        data = json.loads(record_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(chunk)
+    except OSError:
         return None
-    return data if isinstance(data, dict) and data.get("kind") == MESH_EXPORT_RECORD_KIND else None
+    return digest.hexdigest()
 
 
 def record_mesh_export(
     output_path: Path,
     *,
+    model: Path,
     document_hash: str,
     fmt: str,
     mesh_tolerance: float | None,
     mesh_angular_tolerance: float | None,
     pose_values: dict | None = None,
 ) -> None:
-    """Merge this export into the mesh's content-keyed record. Multiple
-    documents may legally produce identical mesh bytes, so the record keeps a
-    documents map rather than one owner. Best-effort."""
+    """Record a written mesh as one of the MODEL's outputs (STORE.md: mesh
+    exports live in the model record, gated by clause 5). Best-effort."""
     try:
-        from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
+        from cadgen.store.records import read_record, write_record
 
-        record_path = mesh_export_record_path(output_path)
-        record_path.parent.mkdir(parents=True, exist_ok=True)
-        data = _read_record(record_path) or {"kind": MESH_EXPORT_RECORD_KIND, "documents": {}}
-        documents = data.setdefault("documents", {})
-        documents[str(document_hash)] = {
-            "fmt": fmt,
+        record = read_record(model)
+        if record is None:
+            return
+        digest = _sha256_of(Path(output_path))
+        if digest is None:
+            return
+        outputs = dict(record.get("outputs") or {})
+        outputs[str(Path(output_path).expanduser().resolve())] = {
+            "sha256": digest,
+            "declared": fmt,
+            "document": str(document_hash),
             "chord": _tolerance_token(mesh_tolerance),
             "angle": _tolerance_token(mesh_angular_tolerance),
             "pose": pose_token(pose_values),
         }
-        tmp = record_path.with_name(f"{record_path.name}{temp_suffix()}")
-        tmp.write_text(json.dumps(data), encoding="utf-8")
-        replace_atomic(tmp, record_path)
+        record["outputs"] = outputs
+        write_record(model, record)
     except Exception:  # noqa: BLE001 - a failed record only costs a re-export
         pass
 
@@ -176,24 +172,30 @@ def record_mesh_export(
 def mesh_export_current(
     output_path: Path,
     *,
+    model: Path,
     document_hash: str | None,
     mesh_tolerance: float | None,
     mesh_angular_tolerance: float | None,
     pose_values: dict | None = None,
 ) -> bool:
-    """Whether the mesh on disk is the CURRENT export of this document at
-    these tolerances and this pose: its content-keyed record names the
-    document with a matching tolerance pair and pose token."""
-    if not document_hash or not Path(output_path).is_file():
+    """Whether the mesh on disk is the CURRENT export of this model's document
+    at these tolerances and this pose: the model record lists it with matching
+    document hash, tolerance pair, pose token — and its bytes verify."""
+    from cadgen.store.records import read_record
+
+    path = Path(output_path)
+    if not document_hash or not path.is_file():
         return False
-    data = _read_record(mesh_export_record_path(output_path))
-    if data is None:
+    record = read_record(model)
+    if record is None:
         return False
-    entry = (data.get("documents") or {}).get(str(document_hash))
+    entry = (record.get("outputs") or {}).get(str(path.expanduser().resolve()))
     if not isinstance(entry, dict):
         return False
     return (
-        entry.get("chord") == _tolerance_token(mesh_tolerance)
+        entry.get("document") == str(document_hash)
+        and entry.get("chord") == _tolerance_token(mesh_tolerance)
         and entry.get("angle") == _tolerance_token(mesh_angular_tolerance)
         and entry.get("pose") == pose_token(pose_values)
+        and _sha256_of(path) == entry.get("sha256")
     )

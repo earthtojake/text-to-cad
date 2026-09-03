@@ -23,7 +23,7 @@ from cadgen._internal.generation import (
     relative_to_cwd,
     run_script_generator,
 )
-from cadgen.catalog import coordination_scope, render_package_dir
+from cadgen.catalog import coordination_scope, result_view_dir
 from cadgen._internal.step_scene import LoadedStepScene, load_step_scene_cached
 from cadgen.step_artifact_cli import infer_entry_kind
 from cadgen.step_targets import (
@@ -122,7 +122,7 @@ def _ensure_step_topology_artifact(
     )
     if debug is not None:
         debug["source"] = spec.source
-    resolved_artifact_path = artifact_path or render_package_dir(spec.entry_path)
+    resolved_artifact_path = artifact_path or result_view_dir(spec.entry_path)
 
     # The canonical render artifact for a generated assembly is a component-GLB package
     # directory, which carries no whole-assembly selector topology (faces/edges). inspect
@@ -264,7 +264,7 @@ def _assembly_topology_artifact(
     ``topology.glb`` sidecar is involved at all."""
     from cadgen._internal.component_package import read_package_descriptor
 
-    descriptor = read_package_descriptor(render_package_dir(spec.entry_path))
+    descriptor = read_package_descriptor(result_view_dir(spec.entry_path))
     if not require_selector:
         if descriptor is not None:
             if debug is not None:
@@ -275,7 +275,7 @@ def _assembly_topology_artifact(
                 kind="assembly",
                 source_path=spec.source_path,
                 step_path=spec.step_path,
-                artifact_path=render_package_dir(spec.entry_path),
+                artifact_path=result_view_dir(spec.entry_path),
                 manifest=descriptor,
                 selector_bundle=None,
             )
@@ -307,7 +307,7 @@ def _assembly_topology_artifact(
             kind="assembly",
             source_path=spec.source_path,
             step_path=spec.step_path,
-            artifact_path=render_package_dir(spec.entry_path),
+            artifact_path=result_view_dir(spec.entry_path),
             manifest=descriptor,
             selector_bundle=SelectorBundle(manifest=descriptor),
         )
@@ -325,13 +325,13 @@ def _assembly_topology_artifact(
     deadline = time.monotonic() + 5.0
     while descriptor is None and time.monotonic() < deadline:
         time.sleep(0.05)
-        descriptor = read_package_descriptor(render_package_dir(spec.entry_path))
+        descriptor = read_package_descriptor(result_view_dir(spec.entry_path))
     if descriptor is None:
         raise StepTopologyArtifactError(
             code="missing_glb",
             cad_path=spec.cad_ref,
             step_path=spec.step_path,
-            artifact_path=render_package_dir(spec.entry_path),
+            artifact_path=result_view_dir(spec.entry_path),
             regenerate_command=REGENERATE_STEP_COMMAND,
             message=(
                 f"Render package descriptor for {spec.cad_ref} did not appear "
@@ -345,7 +345,7 @@ def _assembly_topology_artifact(
         kind="assembly",
         source_path=spec.source_path,
         step_path=spec.step_path,
-        artifact_path=render_package_dir(spec.entry_path),
+        artifact_path=result_view_dir(spec.entry_path),
         manifest=descriptor,
         selector_bundle=SelectorBundle(manifest=descriptor) if require_selector else None,
     )

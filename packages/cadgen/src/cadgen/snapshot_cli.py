@@ -37,7 +37,7 @@ from typing import Any
 import cadgen.cad_ref_syntax as cad_ref_syntax
 import cadgen.lookup as lookup
 from cadgen.assets import browser_runtime_dir
-from cadgen.catalog import render_package_dir
+from cadgen.catalog import result_view_dir
 from cadgen.step_targets import ResolvedStepTarget, StepTopologyArtifact, StepTopologyArtifactError
 
 from cadgen.cli_logging import CliLogger
@@ -888,8 +888,8 @@ def resolve_step_render_job(
     )
 
     # The render package is content-keyed in the user-level store: the entry
-    # file's bytes are hashed and looked up (cadgen.catalog.render_package_dir).
-    package_dir = render_package_dir(source_path)
+    # file's bytes are hashed and looked up (cadgen.catalog.result_view_dir).
+    package_dir = result_view_dir(source_path)
     if not package_dir.is_dir():
         raise SnapshotError(f"STEP/STP render input is missing its render package: {package_dir}")
 

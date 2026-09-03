@@ -31,8 +31,8 @@ Semantics:
 - **A call inside a build composes.** While a build is running (any model's,
   any thread of this process), calling a decorated name runs its body and
   returns the shape (or drawing) — this is how an assembly uses its children.
-  Nothing is written for the child; wrap the call in ``cadgen.compose.memo``
-  to cache it across builds.
+  A model called from inside another model's build is a CHILD: it is built (or
+  loaded from the store when current) and its tree is linked into the parent.
 - **One model per file.** Entry identity (refs, packages, closures) is keyed
   by the source file everywhere in the pipeline, so a file defines exactly one
   ``@step`` or ``@dxf`` model.
@@ -85,18 +85,54 @@ __all__ = [
 _BUILD_STATE = threading.local()
 
 
+class BuildFrame:
+    """One model body in flight on this thread.
+
+    ``children`` is recorded from the CALLS the body makes — every child wrapper
+    entered — never from what the geometry became; ``pins`` is the resolution
+    map: the first tree a child resolved to is the tree every later call in this
+    build composes (snapshot isolation)."""
+
+    def __init__(self, script_path: Path | None) -> None:
+        self.script_path = script_path
+        self.children: list[tuple[Path, str]] = []
+        self.pins: dict[Path, str] = {}
+
+    def pin(self, child: Path, tree: str) -> str:
+        pinned = self.pins.setdefault(child, tree)
+        self.children.append((child, pinned))
+        return pinned
+
+
+def _same_file(left: Path, right: Path) -> bool:
+    try:
+        return Path(left).resolve() == Path(right).resolve()
+    except (OSError, RuntimeError):
+        return Path(left) == Path(right)
+
+
 def build_in_progress() -> bool:
-    return getattr(_BUILD_STATE, "depth", 0) > 0
+    return bool(getattr(_BUILD_STATE, "frames", None))
+
+
+def current_frame() -> BuildFrame | None:
+    frames = getattr(_BUILD_STATE, "frames", None)
+    return frames[-1] if frames else None
 
 
 @contextlib.contextmanager
-def building() -> Iterator[None]:
-    """Mark this thread as executing a model body (the pipeline's call site)."""
-    _BUILD_STATE.depth = getattr(_BUILD_STATE, "depth", 0) + 1
+def building(script_path: Path | None = None) -> Iterator[BuildFrame]:
+    """Mark this thread as executing a model body (the pipeline's call site).
+    Yields the frame that collects the body's child pins."""
+    frames = getattr(_BUILD_STATE, "frames", None)
+    if frames is None:
+        frames = _BUILD_STATE.frames = []
+    frame = BuildFrame(script_path)
+    frames.append(frame)
     try:
-        yield
+        yield frame
     finally:
-        _BUILD_STATE.depth -= 1
+        frames.pop()
 
 
 @dataclass(frozen=True)
@@ -247,9 +283,18 @@ def _decorator(
 
         @functools.wraps(func)
         def model(*args: Any, **kwargs: Any) -> Any:
-            if build_in_progress():
-                # Composition: an assembly's body asked for this child's geometry.
-                return func(*args, **kwargs)
+            frame = current_frame()
+            if frame is not None:
+                if args or kwargs:
+                    raise TypeError(f"{func.__name__}() takes no arguments: a model is one configuration of one output.")
+                if frame.script_path is not None and _same_file(frame.script_path, script_path):
+                    # The pipeline building THIS model is asking for its body.
+                    return func()
+                # Composition: a parent's body asked for this child. Same rule as the
+                # top level — stale → build, then hand back its geometry — except the
+                # geometry is materialized from the child's tree and the call is
+                # pinned into the parent's record.
+                return _compose_child(_REGISTRY.get(script_path, defn))
             if args or kwargs:
                 raise TypeError(
                     f"{func.__name__}() takes no arguments: a model is one configuration "
@@ -439,6 +484,53 @@ def _maybe_hint_eager_imports(defn: ModelDef) -> None:
         "~2.5s import (see the cad skill docs).",
         file=sys.stderr,
     )
+
+
+def _compose_child(defn: ModelDef) -> Any:
+    """A parent's body called a child: make it current, pin it, hand back geometry.
+
+    ``stale → build → materialize`` — the same three steps as the top level. A
+    stale child is built through the ONE pipeline (as a child process, so the
+    parent's already-imported modules are never evicted mid-body; with a daemon
+    up, the run is a job on the child's worker). The first tree a child
+    resolves to in this build is pinned; every later call composes that tree.
+    """
+    from cadgen.store.gate import stale
+    from cadgen.store.materialize import materialize
+    from cadgen.store.records import read_record
+
+    frame = current_frame()
+    pinned = frame.pins.get(defn.script_path) if frame is not None else None
+    if pinned is None:
+        if stale(defn.script_path).stale:
+            _build_child(defn)
+        record = read_record(defn.script_path)
+        tree = str((record or {}).get("tree") or "")
+        if not tree:
+            raise RuntimeError(
+                f"{defn.script_path.name} built but left no record; cannot compose it"
+            )
+        pinned = frame.pin(defn.script_path, tree) if frame is not None else tree
+    elif frame is not None:
+        frame.children.append((defn.script_path, pinned))
+    return materialize(pinned, label=defn.func.__name__)
+
+
+def _build_child(defn: ModelDef) -> None:
+    """Build a child model through the pipeline in a child process."""
+    import subprocess
+
+    env = dict(os.environ)
+    completed = subprocess.run(
+        [sys.executable, "-m", "cadgen.cli._run_model", str(defn.script_path)],
+        cwd=str(defn.script_path.parent),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "").strip()
+        raise RuntimeError(f"child model {defn.script_path.name} failed to build:\n{detail}")
 
 
 def _build(defn: ModelDef) -> int:
