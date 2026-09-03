@@ -120,18 +120,18 @@ def _model_artifacts(root: Path) -> list[Path]:
 
 
 def package_files(root: Path) -> list[Path]:
-    """Every persisted build output for the models in ``root``: the store
-    packages their artifacts resolve to, plus the model-side sidecars."""
-    from cadgen.catalog import result_view_dir
+    """Every persisted build output: EVERY object in the store (components and
+    trees — a moved project is a set of new records over the same objects, so
+    the objects are what a move must leave untouched), plus the model-side
+    sidecars under ``root``."""
+    from cadgen.store.objects import iter_objects
 
     out: list[Path] = []
     for artifact in _model_artifacts(root):
         sidecar = Path(f"{artifact}.step.json")
         if sidecar.is_file():
             out.append(sidecar)
-        package = result_view_dir(artifact)
-        if package.is_dir():
-            out.extend(path for path in sorted(package.rglob("*")) if path.is_file())
+    out.extend(path for _digest, path in iter_objects())
     return out
 
 
@@ -219,12 +219,12 @@ class PackagePortabilityTest(unittest.TestCase):
 
     def test_every_package_kind_was_actually_built(self) -> None:
         # Guards the tests below from passing vacuously on an empty tree: every
-        # document resolves to a store package by its content hash.
-        from cadgen.catalog import result_view_dir
+        # document resolves to a tree in the store.
+        from cadgen.catalog import result_tree_for
 
         for name in ("widget.step", "rig.step", "imported.step"):
             with self.subTest(entry=name):
-                self.assertTrue(result_view_dir(self.root / name).is_dir())
+                self.assertIsNotNone(result_tree_for(self.root / name))
 
     def test_the_model_folder_is_pristine(self) -> None:
         # The store-primary exit gate: a model folder holds sources, documents

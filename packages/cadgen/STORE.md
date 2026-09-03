@@ -207,6 +207,14 @@ Each with the failure it prevents.
 - **Objects are immutable.** An object is written once under its hash and
   never edited. Prevents: a component changing under every tree that shares
   it.
+- **A moved project is a set of new models.** Records are keyed by the
+  resolved script path, so copying or moving a project makes every model in
+  it read as unbuilt (clause 1). The first build after the move runs each
+  body once, finds every component and tree already in the store (same
+  geometry, same hashes — nothing is re-extracted or rewritten), and writes
+  new records; the old records become unreachable and GC collects them.
+  Prevents: two projects at different paths sharing one record and one
+  overwriting the other's outputs list.
 - **Outputs are not store contents.** The `.step`, sidecar and meshes live in
   the project; the record validates them by sha (clause 5). Prevents: a
   store wipe destroying a user's documents, and a document pretending to be

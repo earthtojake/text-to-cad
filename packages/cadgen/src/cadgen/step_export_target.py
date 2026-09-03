@@ -497,7 +497,14 @@ def _export_mesh_jobs(
         document_hash = (
             artifact_file_hash(spec.entry_path) if spec.entry_path is not None else None
         )
-        model = spec.script_path if (spec.source == "generated" and spec.script_path is not None) else spec.entry_path
+        if spec.source == "generated" and spec.script_path is not None:
+            model = spec.script_path
+        else:
+            # A document at a bare door: the store remembers which script wrote
+            # it (a generated document) or it is its own source (an import).
+            from cadgen.store.records import source_for_document
+
+            model = source_for_document(spec.entry_path) if spec.entry_path is not None else None
         pending = [
             job
             for job in jobs

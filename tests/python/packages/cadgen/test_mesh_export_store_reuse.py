@@ -90,10 +90,12 @@ class MeshExportStoreReuseTest(unittest.TestCase):
         return proc
 
     def _package_dirs(self) -> set[str]:
-        packages = self.store / "packages"
-        if not packages.is_dir():
+        """The records in the store: an export of an imported document writes
+        exactly one (keyed by the document), and a second export none."""
+        records = self.store / "index" / "model"
+        if not records.is_dir():
             return set()
-        return {p.name for p in packages.iterdir() if p.is_dir()}
+        return {p.name for p in records.iterdir() if p.is_file()}
 
     def test_a_current_document_exports_from_its_store_package(self) -> None:
         entry = _write_model(self.root, size=6.0)

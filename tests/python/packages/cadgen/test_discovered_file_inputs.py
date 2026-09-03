@@ -328,9 +328,12 @@ class DeclaredAnimationInputTests(unittest.TestCase):
         import json
 
         self._run()
+        from unittest import mock
+
         from cadgen.store.records import read_record
 
-        recorded = read_record(self.project / "hinge.py")
+        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": self.environment["CADGEN_CACHE_DIR"]}):
+            recorded = read_record(self.project / "hinge.py")
         self.assertIsNotNone(recorded, "the build must leave a record for the model")
         files = sorted(os.path.basename(f) for f in recorded["closure"]["files"])
         self.assertEqual(files, ["hinge.anim.js", "hinge.py"])

@@ -479,7 +479,7 @@ def _generate_part_outputs(
             shape = scene_to_build123d_compound(scene)
         from cadgen._internal.source_sidecar import remove_source_sidecar, write_source_sidecar
         from cadgen.store.build import build_tree_from_compound
-        from cadgen.store.records import write_record
+        from cadgen.store.records import read_record, write_record
 
         with logger.timed("tree: sidecar payload"):
             sidecar_payload = _source_sidecar_payload(scene)
@@ -596,6 +596,13 @@ def _generate_part_outputs(
                 [("reemit", str(reemit_source_hash)), ("annotation", str(getattr(scene, "reemit_annotation_hash", "") or ""))]
             )
             closure_static = True
+        # Declared mesh exports recorded by earlier runs stay listed: each one
+        # carries the document hash it was cut from, so the mesh gate re-checks
+        # it against THIS document and re-exports only what no longer matches.
+        previous = read_record(model_path) or {}
+        for output_path, entry in (previous.get("outputs") or {}).items():
+            if isinstance(entry, dict) and entry.get("declared") and output_path not in outputs:
+                outputs[output_path] = entry
         record = {
             "entryKind": spec.kind,
             "sourceKind": "step" if (not generated or reemit_source_hash) else "python",
