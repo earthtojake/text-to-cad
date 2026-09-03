@@ -146,3 +146,7 @@ KINEMATICS = {"mates": _MATES, "poses": _POSES}
 @step(out="../STEP/lyra.step", kinematics=KINEMATICS, animation="lyra.anim.js")
 def lyra():
     return assemble()
+
+
+if __name__ == "__main__":
+    lyra()

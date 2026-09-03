@@ -251,3 +251,7 @@ def cabinet_panel_drawing():
         labels.append(_text(value, position, TITLE_TEXT_MM))
 
     return {"CUT": cut.sketch, "ENGRAVE": [*labels, *ann.edges]}
+
+
+if __name__ == "__main__":
+    cabinet_panel_drawing()

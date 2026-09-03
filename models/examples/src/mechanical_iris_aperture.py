@@ -531,3 +531,7 @@ def mechanical_iris_aperture():
         label=MODEL_LABEL,
     )
     return assembly
+
+
+if __name__ == "__main__":
+    mechanical_iris_aperture()

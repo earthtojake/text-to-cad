@@ -14,3 +14,7 @@ from lib import trim as T
 @step(out="../STEP/mirror.step")
 def mirror():
     return bd.Compound(children=T.build_mirror(1.0), label="mirror")
+
+
+if __name__ == "__main__":
+    mirror()

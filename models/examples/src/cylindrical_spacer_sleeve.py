@@ -8,3 +8,7 @@ from lib.simple_model_library import make_cylindrical_spacer_sleeve
 @step(out="../STEP/cylindrical_spacer_sleeve.step")
 def cylindrical_spacer_sleeve():
     return make_cylindrical_spacer_sleeve()
+
+
+if __name__ == "__main__":
+    cylindrical_spacer_sleeve()

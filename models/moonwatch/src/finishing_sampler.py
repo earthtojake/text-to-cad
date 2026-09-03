@@ -68,3 +68,7 @@ def finishing_sampler():
     parts.append(cam)
 
     return bd.Compound(children=parts, label="finishing_sampler")
+
+
+if __name__ == "__main__":
+    finishing_sampler()

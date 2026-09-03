@@ -60,7 +60,7 @@ Ask one focused clarification question only when missing information makes the m
 The command surface (the `cadgen` console script, installed with the package):
 
 ```bash
-python <model>.py            # a model script BUILDS ITSELF (the @step/@dxf decorator)
+python <model>.py            # its __main__ calls the @step/@dxf model, which builds it
 cadgen step build IN OUT  # re-emit an existing STEP as a new one, with kinematics
 cadgen stl build ...      # one door per mesh format; `3mf` and `glb` are the others
 cadgen step inspect ...   # refs, measure, align, frame, diff
@@ -76,7 +76,8 @@ says so. Nothing needs a separate cache or import step: each door makes what it
 needs. A document that has drifted from its script is refused by name — rerun
 `python <script>` rather than looking for a flag.
 
-Generation has NO CLI. A model is a plain Python script:
+Generation has NO CLI. A model is a plain Python script whose `__main__`
+calls the decorated function:
 
 ```python
 from cadgen import build123d as bd
@@ -85,10 +86,17 @@ from cadgen import step
 @step()                       # or @dxf() for drawings; out= relocates the artifact
 def bracket(width: float = 10.0):
     return bd.Box(width, 10, 10)
+
+if __name__ == "__main__":
+    bracket()
 ```
 
-Running `python bracket.py` builds `bracket.step` and its render package beside
-the script; a repeat run of an unchanged model is a fast no-op. The
+The decorator only declares the model. Calling it at the top level (from
+`__main__`, with no arguments) builds it: `python bracket.py` writes
+`bracket.step` and its render package beside the script, and a repeat run of an
+unchanged model is a fast no-op. Called from inside another model's body, the
+same name returns the shape — that is how an assembly composes its children
+(wrap the call in `cadgen.compose.memo` to cache it across builds). The
 `from cadgen import build123d as bd` idiom is the canonical import: it is a
 lazy, transparent re-export of build123d (same names, same behavior), so the
 freshness gate and warm-daemon handoff run before any kernel import is paid.
@@ -96,10 +104,11 @@ Raw `import build123d` still works but costs ~2.5s per re-run. Per-run flags
 ride the script's argv: `--force`, `--json`, `--verbose`, `-o PATH`,
 `--mesh-tolerance`, `--mesh-angular-tolerance`, `--lock-timeout SECONDS`.
 
-Rules the decorator enforces: importing a model module never builds (composition
-imports the module and calls the function to get the shape); one `@step`/`@dxf`
-model per file; everything the model needs is defined above the decorated
-function; parameters must all have defaults.
+Rules the decorator enforces: importing a model module never builds; a model
+file without a `__main__` call never builds either — always end the script with
+`if __name__ == "__main__": <model>()`; a top-level call takes no arguments (the
+declared output is the default configuration); one `@step`/`@dxf` model per
+file; parameters must all have defaults.
 
 Use the active project Python interpreter; treat `python` in examples as an interpreter placeholder. Every operational verb is a `cadgen` subcommand (warm-by-default; `python -m cadgen.cli <verb>` is the PATH-independent equivalent). Use `cadgen <verb> --help` for the complete current interface; reference docs show recommended workflows, not every flag. Install per `requirements.txt`; `cadgen doctor <skill-dir>` verifies the installed cadgen matches this skill's pin (docs drift silently on a mismatched install).
 

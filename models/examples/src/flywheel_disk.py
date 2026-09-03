@@ -8,3 +8,7 @@ from lib.simple_model_library import make_flywheel_disk
 @step(out="../STEP/flywheel_disk.step")
 def flywheel_disk():
     return make_flywheel_disk()
+
+
+if __name__ == "__main__":
+    flywheel_disk()

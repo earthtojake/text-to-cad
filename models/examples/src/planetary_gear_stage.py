@@ -169,3 +169,7 @@ def planetary_gear_stage():
         parts.append(_make_pin(f"planet_pin_{index + 1}", center))
 
     return bd.Compound(obj=parts, children=parts, label="simplified_planetary_gear_stage")
+
+
+if __name__ == "__main__":
+    planetary_gear_stage()

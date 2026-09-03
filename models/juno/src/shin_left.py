@@ -16,3 +16,7 @@ from lib.legs import build_shin
 @threemf(out="../3MF/shin_left.3mf")
 def shin_left():
     return build_shin('left')
+
+
+if __name__ == "__main__":
+    shin_left()

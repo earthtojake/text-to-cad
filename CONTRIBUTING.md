@@ -53,7 +53,7 @@ repo `.venv`, or a skill-specific one) and invoke the `cadgen` front door:
 
 The skills ship no launcher scripts: every operational verb is a `cadgen`
 subcommand (`cadgen <verb>`, or `python -m cadgen.cli <verb>` when the console
-script is not on PATH), and a model script builds itself (`python <model>.py`).
+script is not on PATH), and `python <model>.py` builds a model through the `__main__` call at the end of its script.
 The robot validators used to be the exception, running on bare `python3` while
 their logic lived under `skills/`; that logic is `cadgen.{urdf,sdf,srdf}_*` now,
 so they need cadgen like everything else.

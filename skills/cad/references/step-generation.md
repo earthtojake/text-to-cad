@@ -5,7 +5,8 @@ Python source, or when working with imported STEP/STP files.
 
 ## The model script is the tool
 
-Generation has no CLI. A model is a plain Python script that builds itself:
+Generation has no CLI. A model is a plain Python script whose `__main__` calls
+the decorated function; that call builds it:
 
 ```python
 from cadgen import build123d as bd
@@ -14,6 +15,9 @@ from cadgen import step
 @step()
 def bracket(width: float = 10.0):
     return bd.Box(width, 10, 10)
+
+if __name__ == "__main__":
+    bracket()
 ```
 
 ```bash
@@ -33,11 +37,17 @@ on the model with `@stl`/`@threemf`/`@glb`, or written by the matching
 
 Rules the decorator enforces:
 
-- **Import never builds.** Only running the script as `__main__` builds;
-  importing the module registers the model, and calling the function returns
-  the shape. This is what makes composition and testing ordinary Python.
-- **Decoration-time execution.** Everything the model needs (helpers,
-  constants, imports) must be defined ABOVE the decorated function.
+- **The decorator only declares.** Nothing runs at decoration or import time.
+  A model file without `if __name__ == "__main__": <model>()` never builds.
+- **A top-level call builds.** Calling the decorated name when no build is in
+  progress (`__main__`, a REPL) runs the pipeline and returns `None`; a failed
+  build exits with the pipeline's code. It takes no arguments — the declared
+  output is the model's default configuration.
+- **A call inside a build composes.** From another model's body the same name
+  returns the shape; nothing is written for the child. This is what makes
+  composition ordinary Python. Cache a child across builds with
+  `cadgen.compose.memo(child.child)`; `memo` is for pure functions (a child
+  model or an expensive helper), never for anything with side effects.
 - **One model per file.** The file is the model; entry identity, packages, and
   closures key off it.
 - **Parameters must all have defaults** — the pipeline calls the function with
@@ -51,7 +61,7 @@ Rules the decorator enforces:
 lazy, transparent re-export (same names, same objects on first touch), so a
 current model's re-run never pays the ~2.5s kernel import: the freshness gate
 and warm-daemon handoff fire before any `bd.` attribute resolves. Raw
-`import build123d` still works, just slower on re-runs (the decorator prints a
+`import build123d` still works, just slower on re-runs (the build prints a
 one-line hint).
 
 ## Generated vs imported STEP

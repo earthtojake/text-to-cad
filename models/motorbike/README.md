@@ -44,7 +44,7 @@ raked 27 deg, parameterized by `steer_point(t)`.
 ## Commands (run from this directory)
 
 ```bash
-python src/<entry>.py                                   # a model builds itself
+python src/<entry>.py                                   # its __main__ builds the model
 python src/<entry>.py                                   # unchanged: a no-op
 ls src/*.py | xargs -n1 -P4 python                      # everything, in parallel
 cadgen step inspect refs STEP/<entry>.step --facts

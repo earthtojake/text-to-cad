@@ -16,3 +16,7 @@ from lib.joints import build_hip_carrier
 @threemf(out="../3MF/hip_carrier_left.3mf")
 def hip_carrier_left():
     return build_hip_carrier('left')
+
+
+if __name__ == "__main__":
+    hip_carrier_left()

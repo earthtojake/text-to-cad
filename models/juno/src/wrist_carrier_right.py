@@ -16,3 +16,7 @@ from lib.joints import build_wrist_carrier
 @threemf(out="../3MF/wrist_carrier_right.3mf")
 def wrist_carrier_right():
     return build_wrist_carrier('right')
+
+
+if __name__ == "__main__":
+    wrist_carrier_right()

@@ -16,3 +16,7 @@ from lib.joints import build_ankle_link
 @threemf(out="../3MF/ankle_link_left.3mf")
 def ankle_link_left():
     return build_ankle_link('left')
+
+
+if __name__ == "__main__":
+    ankle_link_left()

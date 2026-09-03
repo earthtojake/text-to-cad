@@ -32,6 +32,10 @@ from cadgen import step
 @step
 def model():
     return Box(12.0, 8.0, 4.0)
+
+
+if __name__ == "__main__":
+    model()
 """
 
 # Each contender runs the same in-process build the CLI runs.

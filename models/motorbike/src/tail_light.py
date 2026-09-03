@@ -14,3 +14,7 @@ def tail_light():
     if isinstance(built, list):
         return bd.Compound(children=built, label="tail_light")
     return built
+
+
+if __name__ == "__main__":
+    tail_light()

@@ -1,7 +1,8 @@
 """The library-first authoring surface: ``@step`` and ``@dxf``
 (design/library-first-generation.md).
 
-A CAD model is a plain Python script; the decorator is the entrypoint::
+A CAD model is a plain Python script; the decorator declares the model and
+``__main__`` builds it by calling it::
 
     from cadgen import build123d as bd
     from cadgen import step
@@ -10,27 +11,37 @@ A CAD model is a plain Python script; the decorator is the entrypoint::
     def bracket(width: float = 10.0):    # script; pass out="..." to relocate
         return bd.Box(width, 10, 10)
 
-Semantics (settled in the design doc):
+    if __name__ == "__main__":
+        bracket()
 
-- **Decoration-time execution.** When the defining module is ``__main__``,
-  decoration runs the full existing pipeline right here — freshness gate,
-  locks/progress, incremental package build, ``.step`` assembly — via the warm
-  daemon when available, in-process otherwise. Everything the model needs must
-  therefore be defined ABOVE the decorated function.
-- **Import never builds.** Importing a model module only registers.
-- **Transparent callable.** Calling the decorated function returns the shape
-  (or drawing) and nothing else — composition imports the module and calls it.
+Semantics:
+
+- **Decoration only declares.** Applying ``@step``/``@dxf`` registers the
+  model and returns a callable of the same name. Nothing runs at decoration
+  time and nothing runs on import; a model file can be imported, inspected and
+  composed freely.
+- **A top-level call builds.** Calling the decorated name when no build is in
+  progress (``__main__``, a REPL, a test) runs the full pipeline — freshness
+  gate, locks/progress, incremental package build, ``.step``/``.dxf`` output —
+  via the warm daemon when available, in-process otherwise. It returns
+  ``None``: the caller is the build's initiator, and loading the shape back
+  into it would force the kernel import the gate exists to avoid. A failed
+  build raises ``SystemExit`` with the pipeline's exit code, so ``python
+  model.py`` exits the way a build should.
+- **A call inside a build composes.** While a build is running (any model's,
+  any thread of this process), calling a decorated name runs its body and
+  returns the shape (or drawing) — this is how an assembly uses its children.
+  Nothing is written for the child; wrap the call in ``cadgen.compose.memo``
+  to cache it across builds.
 - **One model per file.** Entry identity (refs, packages, closures) is keyed
   by the source file everywhere in the pipeline, so a file defines exactly one
-  ``@step`` or ``@dxf`` model. (Supersedes the design doc's "multiple steps
-  build in file order" sketch; recorded in its execution log.)
-- **A direct run ends the process** (``SystemExit`` with the pipeline's exit
-  code) whether it dispatched warm or ran in-process — the two paths must not
-  disagree about whether trailing module code executes.
+  ``@step`` or ``@dxf`` model.
 
-Per-run flags ride ``sys.argv``: ``--force``, ``--verbose``, ``--json``,
-``-o/--output``, ``--mesh-tolerance``, ``--mesh-angular-tolerance``,
-``--lock-timeout``. Durable configuration lives in the decorator call.
+Per-run flags ride ``sys.argv`` of the top-level call: ``--force``,
+``--verbose``, ``--json``, ``-o/--output``, ``--mesh-tolerance``,
+``--mesh-angular-tolerance``, ``--lock-timeout``. Durable configuration lives
+in the decorator call. A top-level call takes no arguments (the declared
+output is the model's default configuration).
 
 This module must import light (no OCP): the whole point is that a model
 script's body costs ~0.2s before the gate and the warm handoff run.
@@ -38,12 +49,15 @@ script's body costs ~0.2s before the gate and the warm handoff run.
 
 from __future__ import annotations
 
+import contextlib
+import functools
 import inspect
 import os
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from cadgen.kinematics import KinematicsDef, normalize_kinematics
 from cadgen.metadata import MeshExportDecl, resolve_model_output_path
@@ -57,7 +71,31 @@ __all__ = [
     "ModelDef",
     "registered_model",
     "registered_models",
+    "building",
+    "build_in_progress",
 ]
+
+
+# Whether a build is running on this thread. The pipeline enters ``building()``
+# around the model body it executes, so a decorated name called from inside
+# that body composes (returns geometry) while the same name called from
+# ``__main__`` or a REPL builds. Thread-local because the daemon worker and the
+# CLI can both host builds on threads that must not see each other's state.
+_BUILD_STATE = threading.local()
+
+
+def build_in_progress() -> bool:
+    return getattr(_BUILD_STATE, "depth", 0) > 0
+
+
+@contextlib.contextmanager
+def building() -> Iterator[None]:
+    """Mark this thread as executing a model body (the pipeline's call site)."""
+    _BUILD_STATE.depth = getattr(_BUILD_STATE, "depth", 0) + 1
+    try:
+        yield
+    finally:
+        _BUILD_STATE.depth -= 1
 
 
 @dataclass(frozen=True)
@@ -198,14 +236,30 @@ def _decorator(
         )
         _register(defn)
         func.__cadgen_model__ = defn  # type: ignore[attr-defined]
-        if func.__module__ == "__main__":
-            # Decoration-time execution: running the script builds the model.
-            # A mesh decorator stacked ABOVE @step has not run yet in THIS
-            # process — that is fine: the pipeline re-imports the module under
-            # a loader name (never __main__), where every decorator applies
-            # before the runner reads the registry.
-            raise SystemExit(_run_from_main(defn))
-        return func
+
+        @functools.wraps(func)
+        def model(*args: Any, **kwargs: Any) -> Any:
+            if build_in_progress():
+                # Composition: an assembly's body asked for this child's geometry.
+                return func(*args, **kwargs)
+            if args or kwargs:
+                raise TypeError(
+                    f"{func.__name__}() was called with arguments outside a build; a "
+                    "top-level call builds the model's declared output, which is its "
+                    "default configuration. Pass arguments only when composing it "
+                    "from another model."
+                )
+            # A top-level call builds. The registry entry may have been extended by a
+            # mesh decorator stacked ABOVE @step since `defn` was captured, so read it
+            # back rather than closing over the original.
+            current = _REGISTRY.get(script_path, defn)
+            code = _build(current)
+            if code != 0:
+                raise SystemExit(code)
+            return None
+
+        model.__cadgen_model__ = defn  # type: ignore[attr-defined]
+        return model
 
     return apply
 
@@ -371,24 +425,24 @@ def _maybe_hint_eager_imports(defn: ModelDef) -> None:
         if source:
             where += f" ({source.strip()})"
     print(
-        f"hint: the CAD kernel was imported before {defn.script_path.name}'s @step could "
-        f"gate the run{where}. Module bodies must not touch it: use `from cadgen import "
+        f"hint: the CAD kernel was imported before {defn.script_path.name}'s build was "
+        f"asked for{where}. Module bodies must not touch it: use `from cadgen import "
         "build123d as bd` instead of importing build123d/OCP, and keep `bd.<anything>` "
         "out of module-level constants and default arguments (each one resolves the "
-        "attribute at import). Then re-runs skip the ~2.5s import when the model is "
-        "current (see the cad skill docs).",
+        "attribute at import). Then a call on a current model returns without the "
+        "~2.5s import (see the cad skill docs).",
         file=sys.stderr,
     )
 
 
-def _run_from_main(defn: ModelDef) -> int:
-    """Run the pipeline for a directly-executed model script and return its exit code."""
+def _build(defn: ModelDef) -> int:
+    """Run the pipeline for a top-level call of a model and return its exit code."""
     argv = sys.argv[1:]
     _maybe_hint_eager_imports(defn)
 
-    # Warm handoff BEFORE any heavy import. The daemon worker re-imports this module under a loader name (never
-    # __main__), so the decorator over there only registers and the runner
-    # calls the function — the documented double-import semantics.
+    # Warm handoff BEFORE any heavy import. The daemon worker imports the module
+    # under a loader name (never __main__), so its `__main__` block does not run
+    # there; the runner executes the model body inside `building()`.
     if os.environ.get("CADGEN_DAEMON") != "0" and not os.environ.get("CADGEN_DAEMON_CHILD"):
         try:
             from cadgen.daemon.client import run_via_daemon

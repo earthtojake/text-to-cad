@@ -96,6 +96,10 @@ _MODEL = textwrap.dedent(
             part.label = f"part_{index}"
             parts.append(part)
         return bd.Compound(children=parts)
+
+
+    if __name__ == "__main__":
+        pool_probe()
     '''
 )
 

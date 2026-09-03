@@ -51,3 +51,7 @@ def circular_flange():
     part = safe_fillet(part, edges, radius=OUTER_FILLET)
     part.label = "circular_flange_bolt_pattern"
     return part
+
+
+if __name__ == "__main__":
+    circular_flange()

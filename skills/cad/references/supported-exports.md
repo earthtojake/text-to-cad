@@ -22,6 +22,10 @@ from cadgen import glb, step, stl
 @glb
 def bracket():
     return bd.Box(40, 20, 6)
+
+
+if __name__ == "__main__":
+    bracket()
 ```
 
 `python models/bracket.py` then writes the STEP **and** the declared meshes, and heals any of them that were deleted — no separate export step. The declarations are recorded in the document's sidecar, which is where the mesh doors read them from.

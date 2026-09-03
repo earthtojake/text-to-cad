@@ -123,3 +123,7 @@ def radial_engine_cylinder():
     part = safe_fillet(part, _edge_fillets(part), radius=EDGE_FILLET)
     part.label = "radial_engine_cylinder_cooling_fins"
     return part
+
+
+if __name__ == "__main__":
+    radial_engine_cylinder()

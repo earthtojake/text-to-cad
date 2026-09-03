@@ -332,3 +332,7 @@ def planetary_gear_assembly():
         label="simplified_planetary_gear_assembly",
     )
     return assembly
+
+
+if __name__ == "__main__":
+    planetary_gear_assembly()

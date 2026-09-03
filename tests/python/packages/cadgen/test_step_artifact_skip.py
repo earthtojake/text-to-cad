@@ -55,6 +55,10 @@ from cadgen import step
 def model():
     Path(__file__).with_name("gen_calls.log").open("a").write("call\\n")
     return Box(12.0, 8.0, 4.0)
+
+
+if __name__ == "__main__":
+    model()
 """
 
 

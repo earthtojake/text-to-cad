@@ -147,7 +147,7 @@ class ColdRunsStayInProcess(unittest.TestCase):
                     ), mock.patch(
                         "cadgen.cli._run_model.run_model_argv", return_value=0
                     ) as pipeline:
-                        self.assertEqual(authoring._run_from_main(_defn(fmt)), 0)
+                        self.assertEqual(authoring._build(_defn(fmt)), 0)
                     run.assert_not_called()
                     pipeline.assert_called_once()
 
@@ -156,14 +156,14 @@ class ColdRunsStayInProcess(unittest.TestCase):
         with mock.patch.dict("os.environ", {"CADGEN_DAEMON": "0"}, clear=False), \
                 mock.patch.object(sys, "argv", ["preimport-model.py"]), \
                 mock.patch("cadgen.cli._run_model.run_model_argv", return_value=3):
-            self.assertEqual(authoring._run_from_main(_defn("dxf")), 3)
+            self.assertEqual(authoring._build(_defn("dxf")), 3)
 
     def test_a_warm_dxf_run_still_hands_off(self):
         with mock.patch.dict("os.environ", {"CADGEN_DAEMON": "1"}, clear=False), \
                 mock.patch("cadgen.daemon.client.run_via_daemon", return_value=0) as daemon, \
                 mock.patch("subprocess.run") as rerun, \
                 mock.patch.object(sys, "argv", ["preimport-model.py"]):
-            self.assertEqual(authoring._run_from_main(_defn("dxf")), 0)
+            self.assertEqual(authoring._build(_defn("dxf")), 0)
         daemon.assert_called_once()
         self.assertEqual(daemon.call_args.args[0], "run")
         rerun.assert_not_called()

@@ -14,3 +14,7 @@ def steering_cover():
     if isinstance(built, list):
         return bd.Compound(children=built, label="steering_cover")
     return built
+
+
+if __name__ == "__main__":
+    steering_cover()

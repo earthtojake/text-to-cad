@@ -158,3 +158,7 @@ def print_in_place_hinge():
     asm.revolute(bore_axis, pin_axis, angle=0.0, label="hinge_articulation")
 
     return asm.build()
+
+
+if __name__ == "__main__":
+    print_in_place_hinge()

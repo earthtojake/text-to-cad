@@ -14,3 +14,7 @@ def front_fork():
     if isinstance(built, list):
         return bd.Compound(children=built, label="front_fork")
     return built
+
+
+if __name__ == "__main__":
+    front_fork()

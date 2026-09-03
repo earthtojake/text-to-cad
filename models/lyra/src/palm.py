@@ -17,3 +17,7 @@ from lib.palm import build_palm
 @step(out="../STEP/palm.step")
 def palm():
     return build_palm()
+
+
+if __name__ == "__main__":
+    palm()

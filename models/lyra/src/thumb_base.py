@@ -17,3 +17,7 @@ from lib.digits import build_thumb_base
 @step(out="../STEP/thumb_base.step")
 def thumb_base():
     return build_thumb_base()
+
+
+if __name__ == "__main__":
+    thumb_base()

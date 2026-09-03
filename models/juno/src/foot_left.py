@@ -16,3 +16,7 @@ from lib.legs import build_foot
 @threemf(out="../3MF/foot_left.3mf")
 def foot_left():
     return build_foot('left')
+
+
+if __name__ == "__main__":
+    foot_left()

@@ -32,3 +32,7 @@ def l_bracket_flat():
     bend = bd.Line((LEG_A_LENGTH_MM, 0.0), (LEG_A_LENGTH_MM, BLANK_WIDTH_MM))
 
     return {"CUT": cut.sketch, "BEND": bend}
+
+
+if __name__ == "__main__":
+    l_bracket_flat()

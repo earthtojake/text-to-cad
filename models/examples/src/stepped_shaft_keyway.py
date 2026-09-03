@@ -54,3 +54,7 @@ def stepped_shaft_keyway():
     part = safe_chamfer(part, end_edges, length=END_CHAMFER)
     part.label = "stepped_shaft_keyway"
     return part
+
+
+if __name__ == "__main__":
+    stepped_shaft_keyway()

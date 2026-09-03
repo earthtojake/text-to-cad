@@ -16,3 +16,7 @@ from lib.hand import build_hand
 @threemf(out="../3MF/hand_left.3mf")
 def hand_left():
     return build_hand('left')
+
+
+if __name__ == "__main__":
+    hand_left()

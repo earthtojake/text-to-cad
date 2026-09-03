@@ -64,6 +64,10 @@ def {name}():
     if not kids:
         raise RuntimeError("nothing built")
     return bd.Compound(children=kids, label="review")
+
+
+if __name__ == "__main__":
+    {name}()
 '''
 
 
@@ -87,7 +91,7 @@ def main():
     entry = d / f"{name}.py"
     entry.write_text(TEMPLATE.format(src=str(SRC), mods=full, name=name))
 
-    r = subprocess.run([PY, str(entry)],  # a model script builds itself
+    r = subprocess.run([PY, str(entry)],  # its __main__ builds the model
                        cwd=str(d), capture_output=True, text=True)
     sys.stderr.write(r.stderr)
     if r.returncode != 0:

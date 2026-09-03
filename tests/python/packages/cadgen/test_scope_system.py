@@ -149,6 +149,10 @@ class ScopeCaptureTest(StoreIsolatedTest):
                 box = Solid.make_box(s, s, s)
                 box.label = "part"
                 return box
+
+
+            if __name__ == "__main__":
+                model()
             """))
         return entry
 
@@ -203,6 +207,18 @@ class ScopeCaptureTest(StoreIsolatedTest):
 
 
 class ComposeSeamTest(StoreIsolatedTest):
+    """These tests stand in for a PARENT's body composing a child: outside a
+    build, calling a decorated name would build it, so each test runs inside
+    ``building()`` — the state a real parent's call site is always in."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from cadgen.authoring import building
+
+        active = building()
+        active.__enter__()
+        self.addCleanup(active.__exit__, None, None, None)
+
     def _write_model(self) -> Path:
         root = self._dir("modelc")
         (root / "_spec.py").write_text("SIZE = 5.0\n")
@@ -218,6 +234,10 @@ class ComposeSeamTest(StoreIsolatedTest):
                 box = Solid.make_box(_spec.SIZE, _spec.SIZE, _spec.SIZE)
                 box.label = "child"
                 return box
+
+
+            if __name__ == "__main__":
+                model()
             """))
         return child
 

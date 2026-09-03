@@ -54,6 +54,10 @@ class ScopeMissKeepsJobModulesTest(unittest.TestCase):
                 plate = bd.Box(dims.SIZE * 4, dims.SIZE * 4, 1).moved(bd.Location((0, 0, -3)))
                 core.label = "core"; plate.label = "plate"
                 return bd.Compound(children=[core, plate], label="model")
+
+
+            if __name__ == "__main__":
+                model()
             '''),
             encoding="utf-8",
         )

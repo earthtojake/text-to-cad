@@ -14,3 +14,7 @@ def center_stand():
     if isinstance(built, list):
         return bd.Compound(children=built, label="center_stand")
     return built
+
+
+if __name__ == "__main__":
+    center_stand()

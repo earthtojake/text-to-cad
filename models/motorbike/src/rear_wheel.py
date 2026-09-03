@@ -11,3 +11,7 @@ from lib import wheels as W
 @step(out="../STEP/rear_wheel.step")
 def rear_wheel():
     return bd.Compound(children=W.build_rear_wheel(), label="rear_wheel")
+
+
+if __name__ == "__main__":
+    rear_wheel()

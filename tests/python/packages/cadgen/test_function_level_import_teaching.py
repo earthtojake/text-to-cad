@@ -58,6 +58,10 @@ class FunctionLevelImportTeachingTest(unittest.TestCase):
             def lazy_import():
                 from lib import dims
                 return bd.Box(dims.size(), 5, 5)
+
+
+            if __name__ == "__main__":
+                lazy_import()
             ''',
         )
         with self.assertRaises(RuntimeError) as raised:
@@ -80,6 +84,10 @@ class FunctionLevelImportTeachingTest(unittest.TestCase):
             def missing_dep():
                 import no_such_third_party_package_xyz
                 return bd.Box(5, 5, 5)
+
+
+            if __name__ == "__main__":
+                missing_dep()
             ''',
         )
         with self.assertRaises(ModuleNotFoundError):

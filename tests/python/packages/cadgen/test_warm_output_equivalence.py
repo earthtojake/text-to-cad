@@ -48,6 +48,10 @@ def model():
         with Locations((0, 0, 0)):
             Cylinder(4, 40, mode=Mode.SUBTRACT)
     return part.part
+
+
+if __name__ == "__main__":
+    model()
 """
 
 ASSEMBLY = """from build123d import Box, BuildPart, Location, Pos
@@ -61,6 +65,10 @@ def model():
         Box(8, 8, 20)
     post.part.locate(Location(Pos(0, 0, 12.5)))
     return base.part + post.part
+
+
+if __name__ == "__main__":
+    model()
 """
 
 DRAWING = """from cadgen import build123d as bd
@@ -73,6 +81,10 @@ def drawing():
         bd.Rectangle(60, 40)
         bd.Circle(8, mode=bd.Mode.SUBTRACT)
     return cut.sketch
+
+
+if __name__ == "__main__":
+    drawing()
 """
 
 
@@ -285,6 +297,8 @@ class WarmOutputEquivalence(unittest.TestCase):
             "@step\n"
             "def model():\n"
             "    raise ValueError('bad radius')\n"
+            "if __name__ == '__main__':\n"
+            "    model()\n"
         )
         tree = self._tree("broken.py", broken)
         cold_code, cold_out = _run(["broken.py"], tree, CADGEN_DAEMON="0")

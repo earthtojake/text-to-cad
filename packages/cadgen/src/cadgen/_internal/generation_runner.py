@@ -605,9 +605,11 @@ def _run_script_generator_body(
             module = _load_generator_module(spec.script_path)
         # `model_format` is the DISPATCH kind ("step"/"dxf" decides which payload
         # contract applies below); the attribute looked up is the decorated entry
-        # function — the module is imported under a loader name, never __main__,
-        # so decoration only registered and this call is the one execution (the
-        # documented double-import semantics).
+        # — the module is imported under a loader name, never __main__, so its
+        # `__main__` block does not run and this call is the one execution. The
+        # call happens inside `building()`, which is what makes the decorated
+        # name run its body (and lets the children it calls compose) instead of
+        # starting a build of its own.
         metadata = spec.generator_metadata
         entry_name = getattr(metadata, "entry_function", None) if metadata is not None else None
         if not entry_name:
@@ -620,7 +622,13 @@ def _run_script_generator_body(
         # work over a pipe: the entry function takes no arguments and so cannot be handed the run,
         # and without this the longest phase of most builds reports nothing at all. Silent
         # generators are unaffected -- nothing reads the binding unless they ask for it.
-        with logger.timed(f"run {model_format} model {spec.source_ref}"), reporting_as(progress):
+        from cadgen.authoring import building
+
+        with (
+            logger.timed(f"run {model_format} model {spec.source_ref}"),
+            reporting_as(progress),
+            building(),
+        ):
             try:
                 raw_payload = generator()
             except ModuleNotFoundError as error:

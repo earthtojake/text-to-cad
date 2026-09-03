@@ -16,3 +16,7 @@ from lib.torso import build_torso
 @threemf(out="../3MF/torso.3mf")
 def torso():
     return build_torso()
+
+
+if __name__ == "__main__":
+    torso()

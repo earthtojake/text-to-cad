@@ -17,3 +17,7 @@ def movement_base():
     compound = bd.Compound(children=M.build_base(), label="movement_base")
     materials.apply(compound)
     return compound
+
+
+if __name__ == "__main__":
+    movement_base()

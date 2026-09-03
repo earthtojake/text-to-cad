@@ -624,3 +624,7 @@ def cutaway_turbofan_engine():
         _make_display_base(),
     ]
     return _make_compound(MODEL_LABEL, bodies)
+
+
+if __name__ == "__main__":
+    cutaway_turbofan_engine()

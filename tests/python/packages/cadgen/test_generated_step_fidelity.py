@@ -48,6 +48,10 @@ def model():
     right.label = "right"
     right.color = Color(0.0, 0.0, 1.0, 1.0)
     return Compound(children=[left, right])
+
+
+if __name__ == "__main__":
+    model()
 """
 
 

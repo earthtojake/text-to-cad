@@ -56,6 +56,10 @@ def gasket(hole_d: float = 4.5):
         bd.Rectangle(60, 40)
         bd.Circle(hole_d / 2, mode=bd.Mode.SUBTRACT)
     return cut.sketch          # bare shape -> the CUT layer
+
+
+if __name__ == "__main__":
+    gasket()
 ```
 
 - **Bare shape** → one `CUT` layer. That is the whole contract for most drawings.
@@ -83,8 +87,8 @@ Copy the full generator template for the applicable workflow from
 
 2. **Flat pattern of a generated STEP part**: a drawing script beside the model
    it derives from, with its OWN stem (one model per file — `bracket_drawing.py`
-   beside `bracket.py`). Import the model and call it; a decorated model function
-   is a transparent callable, and importing never builds:
+   beside `bracket.py`). Import the model and call it: inside a build, a
+   decorated model returns its shape, and importing never builds:
 
    ```python
    from cadgen import dxf, flatten
@@ -93,6 +97,10 @@ Copy the full generator template for the applicable workflow from
    @dxf
    def bracket_drawing(kerf: float = 0.15):
        return flatten.flat_pattern(bracket(), coordinate=3.0, kerf=kerf)
+
+
+   if __name__ == "__main__":
+       bracket_drawing()
    ```
 
    The imported module and its own imports are recorded in the drawing's source
@@ -115,6 +123,10 @@ Copy the full generator template for the applicable workflow from
    def panel_flat(kerf: float = 0.15):
        panel = read_step(_HERE / "imported" / "vendor_panel.step")   # recorded input
        return flatten.flat_pattern(panel, coordinate=3.0, kerf=kerf)
+
+
+   if __name__ == "__main__":
+       panel_flat()
    ```
 
    **Never read a STEP this project generates.** Reading the `.step` a `@step`
@@ -166,11 +178,11 @@ Use these defaults unless the user specifies otherwise:
 ## Tool
 
 ```bash
-python <drawing>.py [flags]      # a @dxf model script writes its sibling .dxf
+python <drawing>.py [flags]      # its __main__ calls the @dxf model, which writes the sibling .dxf
 cadgen dxf snapshot <drawing.dxf> <file.png>   # render it
 ```
 
-**Running the script is the only door.** There is no `cadgen dxf build`: a
+**Running the script (its `__main__` call) is the only door.** There is no `cadgen dxf build`: a
 `.dxf` has no derived state a command must materialize — the file IS the
 product, the CAD Viewer parses it directly, and `dxf snapshot` meshes it on
 demand. The script's own gate makes a rebuild cheap: an unchanged source whose

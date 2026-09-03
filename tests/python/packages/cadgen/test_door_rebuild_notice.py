@@ -42,6 +42,10 @@ from lib import size
 @step
 def model():
     return Box(size.WIDTH, 8.0, 4.0)
+
+
+if __name__ == "__main__":
+    model()
 """
 
 HELPER = "WIDTH = {width}\n"

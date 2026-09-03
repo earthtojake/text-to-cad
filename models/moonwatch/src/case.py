@@ -16,3 +16,7 @@ def case():
     compound = bd.Compound(children=C.build_case_parts(), label="case")
     M.apply(compound)
     return compound
+
+
+if __name__ == "__main__":
+    case()

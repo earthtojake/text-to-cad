@@ -17,3 +17,7 @@ from lib.digits import build_finger_distal
 @step(out="../STEP/pinky_distal.step")
 def pinky_distal():
     return build_finger_distal("pinky")
+
+
+if __name__ == "__main__":
+    pinky_distal()

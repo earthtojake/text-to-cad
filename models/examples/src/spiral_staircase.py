@@ -133,3 +133,7 @@ def spiral_staircase():
     parts.append(_make_handrail())
     parts.extend(_make_baluster(index) for index in range(TREAD_COUNT))
     return bd.Compound(obj=parts, children=parts, label="spiral_staircase_helical_handrail")
+
+
+if __name__ == "__main__":
+    spiral_staircase()

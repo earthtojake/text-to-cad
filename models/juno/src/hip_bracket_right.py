@@ -16,3 +16,7 @@ from lib.joints import build_hip_bracket
 @threemf(out="../3MF/hip_bracket_right.3mf")
 def hip_bracket_right():
     return build_hip_bracket('right')
+
+
+if __name__ == "__main__":
+    hip_bracket_right()

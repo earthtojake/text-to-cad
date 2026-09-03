@@ -16,3 +16,7 @@ from lib.joints import build_neck_collar
 @threemf(out="../3MF/neck_collar.3mf")
 def neck_collar():
     return build_neck_collar()
+
+
+if __name__ == "__main__":
+    neck_collar()

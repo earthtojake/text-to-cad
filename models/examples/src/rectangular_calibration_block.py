@@ -32,3 +32,7 @@ def rectangular_calibration_block():
     part = safe_chamfer(part, line_edges_at_z(part, HEIGHT), length=TOP_CHAMFER)
     part.label = "rectangular_calibration_block"
     return part
+
+
+if __name__ == "__main__":
+    rectangular_calibration_block()

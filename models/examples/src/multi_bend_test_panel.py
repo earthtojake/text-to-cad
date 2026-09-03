@@ -97,3 +97,7 @@ def multi_bend_test_panel():
     ]
 
     return {"CUT": cut.sketch, "BEND": bends}
+
+
+if __name__ == "__main__":
+    multi_bend_test_panel()

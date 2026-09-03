@@ -639,8 +639,4 @@ def compact_humanoid() -> object:
 
 
 if __name__ == "__main__":
-    # The CAD skill launcher owns STEP output.  This direct entry point is only
-    # a fast source-contract check and intentionally writes no artifacts.
-    model = compact_humanoid()
-    print(model.label)
-    print(design_metrics())
+    compact_humanoid()

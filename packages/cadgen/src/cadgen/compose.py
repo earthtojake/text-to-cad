@@ -7,9 +7,10 @@ store keyed by source — the function's file, its static import closure, plus
 everything observed executing/reading during a miss — and by its arguments,
 so an edit that does not reach a scope's sources skips the scope's Python,
 kernel work, and any nondeterminism wholesale. Importing links; ``memo``
-caches. A decorated model function passed to ``memo`` is just its geometry:
-calling it never builds, and the child's own export declarations fire only
-when the child is the entry being built. Validation is a semantic re-hash of
+caches. A decorated model passed to ``memo`` is just its geometry: inside a
+build a decorated name composes (returns the shape) rather than building, and
+the child's own export declarations fire only when the child is the entry
+being built. Validation is a semantic re-hash of
 the recorded file list (stat-cached, milliseconds); a resident session can
 install a cheaper validator that answers from its watcher.
 
@@ -158,14 +159,19 @@ def memo(fn):
     """Cache a function as a traced scope: a sibling model's imported entry
     function, or any expensive helper. The function must be pure given its
     arguments and its source closure, and must return shapes/compounds (or
-    JSON-able values). A decorated model function is just its geometry here:
-    the wrapper caches the shape; the child's own export declarations fire
-    only when the child is the entry being built. Freshness is per RUN (like
-    imports): each build re-imports edited modules, and the scope key —
-    the child's file + traced closure + args — decides hit or miss."""
+    JSON-able values). A decorated model is just its geometry here: inside a
+    build its call composes, the wrapper caches the shape, and the child's own
+    export declarations fire only when the child is the entry being built.
+    Freshness is per RUN (like imports): each build re-imports edited modules,
+    and the scope key — the child's file + traced closure + args — decides hit
+    or miss."""
     import functools
+    import inspect
 
-    file_name = fn.__globals__.get("__file__")
+    # The scope root is the file that DEFINES the function. A decorated model
+    # arrives as the decorator's wrapper, whose own globals are cadgen's; look
+    # through it to the body it wraps.
+    file_name = inspect.unwrap(fn).__globals__.get("__file__")
     entry_file = Path(file_name).resolve() if file_name else None
 
     @functools.wraps(fn)

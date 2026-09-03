@@ -273,3 +273,7 @@ def print_in_place_multi_pivot_phone_holder():
     asm.revolute(j3_bore, j3_pin, angle=0.0, label="wrist_pivot")
 
     return asm.build()
+
+
+if __name__ == "__main__":
+    print_in_place_multi_pivot_phone_holder()

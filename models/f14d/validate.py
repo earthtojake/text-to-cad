@@ -112,7 +112,7 @@ def main():
     ok = True
 
     print("=== build ===")
-    rc, out, err = run([PY, str(ENTRY)])  # a model script builds itself
+    rc, out, err = run([PY, str(ENTRY)])  # its __main__ builds the model
     print(out or err.splitlines()[-1] if (out or err) else "")
     if rc != 0:
         print(f"FAIL: gen exited {rc}")

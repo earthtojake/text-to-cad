@@ -14,3 +14,7 @@ def rear_shock():
     if isinstance(built, list):
         return bd.Compound(children=built, label="rear_shock")
     return built
+
+
+if __name__ == "__main__":
+    rear_shock()

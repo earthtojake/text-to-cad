@@ -326,3 +326,7 @@ def pelican_riding_bicycle() -> bd.Compound:
     assembly = _group("pelican_riding_bicycle", [bicycle, pelican, ground])
     assembly.label = "pelican_riding_bicycle"
     return assembly
+
+
+if __name__ == "__main__":
+    pelican_riding_bicycle()

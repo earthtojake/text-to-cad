@@ -82,6 +82,10 @@ class KernelImportHintTest(unittest.TestCase):
             @step(out="hinted.step")
             def hinted():
                 return geo.cube(5)
+
+
+            if __name__ == "__main__":
+                hinted()
             '''),
             encoding="utf-8",
         )
@@ -105,6 +109,10 @@ class KernelImportHintTest(unittest.TestCase):
                 box = bd.Box(5, 5, 5)
                 box.color = GREY
                 return box
+
+
+            if __name__ == "__main__":
+                clean()
             '''),
             encoding="utf-8",
         )

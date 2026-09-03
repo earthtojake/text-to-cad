@@ -229,3 +229,7 @@ def assemble() -> bd.Compound:
 @step(out="../STEP/juno.step", kinematics=KINEMATICS, animation="juno.anim.js")
 def juno():
     return assemble()
+
+
+if __name__ == "__main__":
+    juno()

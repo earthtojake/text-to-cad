@@ -17,3 +17,7 @@ from lib.digits import build_finger_distal
 @step(out="../STEP/ring_distal.step")
 def ring_distal():
     return build_finger_distal("ring")
+
+
+if __name__ == "__main__":
+    ring_distal()

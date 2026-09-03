@@ -40,6 +40,10 @@ MODEL = textwrap.dedent("""\
         body = bd.Box(size, size / 2, 3)
         body -= bd.Pos(0, 0, 0) * bd.Cylinder(2, 10)
         return body
+
+
+    if __name__ == "__main__":
+        widget()
     """)
 
 
@@ -82,6 +86,10 @@ class MeshExportMetadataTest(unittest.TestCase):
             @stl(out="a_print.stl", mesh_tolerance=4e-4)
             def part():
                 return None
+
+
+            if __name__ == "__main__":
+                part()
             """))
         self.assertEqual([d.out for d in variants.mesh_exports],
                          ["a_draft.stl", "a_print.stl"])

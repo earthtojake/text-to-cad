@@ -17,3 +17,7 @@ from lib.pelvis import build_pelvis
 @threemf(out="../3MF/pelvis.3mf")
 def pelvis():
     return build_pelvis()
+
+
+if __name__ == "__main__":
+    pelvis()

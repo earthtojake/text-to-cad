@@ -386,6 +386,10 @@ def bracket_plate(kerf: float = 0.15):
     with bd.BuildSketch() as mark:
         bd.Text("REV B", font_size=6)
     return {"CUT": bd.offset(cut.sketch, amount=kerf), "ENGRAVE": mark.sketch}
+
+
+if __name__ == "__main__":
+    bracket_plate()
 '''
 
 
@@ -439,10 +443,15 @@ class DxfRunPathDeterminismTest(unittest.TestCase):
     def test_the_written_file_matches_the_emitter(self) -> None:
         """No transformation sits between the emitter and the file on disk."""
         from cadgen._internal.dxf_emit import emit_dxf
+        from cadgen.authoring import building
 
         namespace: dict = {}
         exec(compile(_DRAWING_MODEL, "<drawing-model>", "exec"), namespace)  # noqa: S102
-        expected, _ = emit_dxf(namespace["bracket_plate"](), label="bracket_plate.py")
+        # Calling the decorated name outside a build would BUILD it; inside
+        # `building()` it composes and returns the drawing, which is what the
+        # emitter comparison needs.
+        with building():
+            expected, _ = emit_dxf(namespace["bracket_plate"](), label="bracket_plate.py")
         self.assertEqual(self._build(None), expected)
 
 

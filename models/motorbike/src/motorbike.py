@@ -252,3 +252,7 @@ def motorbike():
     asm.connect(bar_right, mirror_right, relation="rigid", label="mirror_right_mount")
 
     return asm.build()
+
+
+if __name__ == "__main__":
+    motorbike()

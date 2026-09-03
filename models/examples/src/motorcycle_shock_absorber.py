@@ -307,3 +307,7 @@ def _build():
 @step(out="../STEP/motorcycle_shock_absorber.step")
 def motorcycle_shock_absorber():
     return _build()
+
+
+if __name__ == "__main__":
+    motorcycle_shock_absorber()

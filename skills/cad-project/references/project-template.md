@@ -31,6 +31,10 @@ THICKNESS = 4.0
 def plate(hole_d: float = 4.5):
     body = bd.Box(WIDTH, DEPTH, THICKNESS)
     return holes.corner_holes(body, WIDTH, DEPTH, THICKNESS, hole_d)
+
+
+if __name__ == "__main__":
+    plate()
 ```
 
 ## `src/plate_drawing.py`
@@ -54,6 +58,10 @@ def plate_drawing(hole_d: float = 4.5):
         with bd.Locations(*holes.corner_hole_centers(WIDTH, DEPTH)):
             bd.Circle(hole_d / 2, mode=bd.Mode.SUBTRACT)
     return cut.sketch  # a bare shape is the CUT layer
+
+
+if __name__ == "__main__":
+    plate_drawing()
 ```
 
 A `@dxf` function returns build123d 2D geometry and the engine writes the DXF —

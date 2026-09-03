@@ -16,3 +16,7 @@ from lib.joints import build_yaw_housing
 @threemf(out="../3MF/yaw_housing_right.3mf")
 def yaw_housing_right():
     return build_yaw_housing('right')
+
+
+if __name__ == "__main__":
+    yaw_housing_right()

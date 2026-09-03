@@ -249,3 +249,7 @@ def moonwatch():
     compound = bd.Compound(children=children, label="moonwatch")
     materials.apply(compound)
     return compound
+
+
+if __name__ == "__main__":
+    moonwatch()

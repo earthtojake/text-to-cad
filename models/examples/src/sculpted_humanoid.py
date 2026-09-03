@@ -2448,10 +2448,4 @@ def sculpted_humanoid():
 
 
 if __name__ == "__main__":
-    model = sculpted_humanoid()
-    print(
-        "sculpted_humanoid",
-        f"children={len(model.children)}",
-        f"mates={len(model.assembly_mates)}",
-        f"bbox={model.bounding_box().size}",
-    )
+    sculpted_humanoid()

@@ -17,3 +17,7 @@ from lib.digits import build_thumb_distal
 @step(out="../STEP/thumb_distal.step")
 def thumb_distal():
     return build_thumb_distal()
+
+
+if __name__ == "__main__":
+    thumb_distal()

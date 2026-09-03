@@ -20,6 +20,10 @@ STANDALONE_DXF_SOURCE = textwrap.dedent(
         with bd.BuildSketch() as cut:
             bd.Rectangle(40, 20)
         return cut.sketch
+
+
+    if __name__ == "__main__":
+        drawing()
     '''
 ).strip()
 

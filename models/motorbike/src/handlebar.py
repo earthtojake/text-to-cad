@@ -14,3 +14,7 @@ def handlebar():
     if isinstance(built, list):
         return bd.Compound(children=built, label="handlebar")
     return built
+
+
+if __name__ == "__main__":
+    handlebar()

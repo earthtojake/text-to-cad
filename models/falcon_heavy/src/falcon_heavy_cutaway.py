@@ -19,3 +19,7 @@ def falcon_heavy_cutaway():
     groups = fc.build_vehicle(cutaway=True)
     return bd.Compound(obj=groups, children=groups,
                     label="falcon_heavy_cutaway__educational_nonfunctional")
+
+
+if __name__ == "__main__":
+    falcon_heavy_cutaway()

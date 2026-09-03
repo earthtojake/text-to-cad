@@ -36,6 +36,10 @@ class NoStaleBytecodeTest(unittest.TestCase):
             @step(out="model.step")
             def model():
                 return bd.Box(dims.SIZE, dims.SIZE, dims.SIZE)
+
+
+            if __name__ == "__main__":
+                model()
             '''),
             encoding="utf-8",
         )

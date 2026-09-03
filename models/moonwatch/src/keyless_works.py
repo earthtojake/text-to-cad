@@ -19,3 +19,7 @@ def keyless_works():
     compound = bd.Compound(children=K.build_keyless(), label="keyless_works")
     materials.apply(compound)
     return compound
+
+
+if __name__ == "__main__":
+    keyless_works()

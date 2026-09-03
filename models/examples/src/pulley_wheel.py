@@ -8,3 +8,7 @@ from lib.simple_model_library import make_pulley_wheel
 @step(out="../STEP/pulley_wheel.step")
 def pulley_wheel():
     return make_pulley_wheel()
+
+
+if __name__ == "__main__":
+    pulley_wheel()

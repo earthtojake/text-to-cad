@@ -16,3 +16,7 @@ from lib.head import build_head
 @threemf(out="../3MF/head.3mf")
 def head():
     return build_head()
+
+
+if __name__ == "__main__":
+    head()

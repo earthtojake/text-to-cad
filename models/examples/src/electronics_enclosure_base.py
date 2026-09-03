@@ -68,3 +68,7 @@ def electronics_enclosure_base():
     part = enclosure.part
     part.label = "electronics_enclosure_base"
     return part
+
+
+if __name__ == "__main__":
+    electronics_enclosure_base()

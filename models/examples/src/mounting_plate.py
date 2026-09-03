@@ -11,3 +11,7 @@ from lib.simple_model_library import make_mounting_plate
 @glb(out="../GLB/mounting_plate.glb")
 def mounting_plate():
     return make_mounting_plate()
+
+
+if __name__ == "__main__":
+    mounting_plate()

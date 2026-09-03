@@ -157,3 +157,7 @@ def motorcycle_seat_fidget():
     compound = bd.Compound(children=_make_parts())
     compound.label = "motorcycle_seat_fidget"
     return compound
+
+
+if __name__ == "__main__":
+    motorcycle_seat_fidget()

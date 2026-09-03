@@ -36,6 +36,10 @@ from cadgen import step
 @step
 def model():
     return build123d.Box(10.0, 8.0, 4.0)
+
+
+if __name__ == "__main__":
+    model()
 """
 
 
@@ -318,7 +322,7 @@ class CadgenDaemonTests(unittest.TestCase):
 
         def run() -> None:
             # The decorator's real handoff shape: the script path leads argv and
-            # prog is how the user spelled it (cadgen.authoring._run_from_main).
+            # prog is how the user spelled it (cadgen.authoring._build).
             env = {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(self.address)}
             out, err = io.StringIO(), io.StringIO()
             with mock.patch.dict(os.environ, env):

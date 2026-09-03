@@ -44,3 +44,7 @@ def u_channel_bracket():
     bends = [bd.Line((x, 0.0), (x, BLANK_WIDTH_MM)) for x in BEND_XS_MM]
 
     return {"CUT": cut.sketch, "BEND": bends}
+
+
+if __name__ == "__main__":
+    u_channel_bracket()

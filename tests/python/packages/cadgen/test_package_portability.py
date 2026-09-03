@@ -45,6 +45,10 @@ from cadgen import step
 @step
 def model():
     return Box(20.0, 12.0, 4.0)
+
+
+if __name__ == "__main__":
+    model()
 """
 
 CHILD = """from build123d import Cylinder
@@ -54,6 +58,10 @@ from cadgen import step
 @step
 def model():
     return Cylinder(3.0, 20.0)
+
+
+if __name__ == "__main__":
+    model()
 """
 
 # Composes the sibling child the documented way: path-load, then call its model().
@@ -82,6 +90,10 @@ def model():
     bolt = Pos(0.0, 0.0, 13.0) * _child.model()
     bolt.label = "bolt"
     return Compound(children=[plate, bolt])
+
+
+if __name__ == "__main__":
+    model()
 """
 
 DRAWING = """from cadgen import build123d as bd
@@ -93,6 +105,10 @@ def drawing():
     with bd.BuildSketch() as cut:
         bd.Rectangle(60, 40)
     return {"CUT": cut.sketch}
+
+
+if __name__ == "__main__":
+    drawing()
 """
 
 

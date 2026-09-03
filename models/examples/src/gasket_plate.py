@@ -33,3 +33,7 @@ def gasket_plate():
     crosshair = [bd.Line((-half, 0), (half, 0)), bd.Line((0, -half), (0, half))]
 
     return {"CUT": cut.sketch, "ENGRAVE": crosshair}
+
+
+if __name__ == "__main__":
+    gasket_plate()

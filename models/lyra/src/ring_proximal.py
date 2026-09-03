@@ -17,3 +17,7 @@ from lib.digits import build_finger_proximal
 @step(out="../STEP/ring_proximal.step")
 def ring_proximal():
     return build_finger_proximal("ring")
+
+
+if __name__ == "__main__":
+    ring_proximal()

@@ -54,12 +54,17 @@ Two mechanical rules:
    @step(out="../STEP/plate.step")
    def plate(width: float = 10.0):
        return bd.Box(width, 10, 10)
+
+
+   if __name__ == "__main__":
+       plate()
    ```
 
    `out=` resolves relative to the script, so the project relocates as a
    unit.
 2. **`src/` holds ONLY runnable model scripts.** Every `.py` directly under
-   `src/` is a model — run it to build it. Everything shared goes in
+   `src/` is a model that ends with `if __name__ == "__main__": <model>()` —
+   run it to build it. Everything shared goes in
    `src/lib/`. So `ls src/*.py` IS the model catalog. `src/lib/` is a regular
    package, not a namespace one: it always contains an `__init__.py`, and a
    one-line docstring naming what the package holds is enough.

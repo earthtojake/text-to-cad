@@ -22,3 +22,7 @@ def clamp_plate(kerf: float = 0.0):
         coordinate=clamp_plate_profile.THICKNESS_MM,
         kerf=kerf,
     )
+
+
+if __name__ == "__main__":
+    clamp_plate()

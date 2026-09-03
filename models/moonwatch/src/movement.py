@@ -36,3 +36,7 @@ def movement():
     children.append(chrono)
 
     return bd.Compound(children=children, label="movement")
+
+
+if __name__ == "__main__":
+    movement()

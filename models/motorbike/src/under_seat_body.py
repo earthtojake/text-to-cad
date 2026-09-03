@@ -14,3 +14,7 @@ def under_seat_body():
     if isinstance(built, list):
         return bd.Compound(children=built, label="under_seat_body")
     return built
+
+
+if __name__ == "__main__":
+    under_seat_body()

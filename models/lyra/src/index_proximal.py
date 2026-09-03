@@ -17,3 +17,7 @@ from lib.digits import build_finger_proximal
 @step(out="../STEP/index_proximal.step")
 def index_proximal():
     return build_finger_proximal("index")
+
+
+if __name__ == "__main__":
+    index_proximal()

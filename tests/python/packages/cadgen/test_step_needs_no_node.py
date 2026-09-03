@@ -46,6 +46,10 @@ def model():
         Box(30, 20, 10)
         Cylinder(radius=4, height=10, mode=Mode.SUBTRACT)
     return part.part
+
+
+if __name__ == "__main__":
+    model()
 """
 
 _PROBE = """

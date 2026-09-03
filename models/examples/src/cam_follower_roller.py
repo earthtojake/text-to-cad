@@ -8,3 +8,7 @@ from lib.simple_model_library import make_cam_follower_roller
 @step(out="../STEP/cam_follower_roller.step")
 def cam_follower_roller():
     return make_cam_follower_roller()
+
+
+if __name__ == "__main__":
+    cam_follower_roller()

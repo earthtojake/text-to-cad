@@ -17,3 +17,7 @@ from lib.digits import build_finger_middle
 @step(out="../STEP/pinky_middle.step")
 def pinky_middle():
     return build_finger_middle("pinky")
+
+
+if __name__ == "__main__":
+    pinky_middle()

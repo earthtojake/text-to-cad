@@ -16,3 +16,7 @@ from lib.joints import build_shoulder_pod
 @threemf(out="../3MF/shoulder_pod_right.3mf")
 def shoulder_pod_right():
     return build_shoulder_pod('right')
+
+
+if __name__ == "__main__":
+    shoulder_pod_right()

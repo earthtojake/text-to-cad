@@ -51,6 +51,10 @@ def profile():
         if abs(f.normal_at(f.center()).Z - 1) < 1e-6 and abs(f.center().Z - top_z) < 1e-6
     ][0]
     return bd.Location((0, 0, -top_z)) * face
+
+
+if __name__ == "__main__":
+    profile()
 '''
 
 _STEP_MODEL = '''from pathlib import Path
@@ -63,6 +67,10 @@ HERE = Path(__file__).resolve().parent
 @step(kind="part")
 def wrapped():
     return read_step(HERE / "vendor.step")
+
+
+if __name__ == "__main__":
+    wrapped()
 '''
 
 
@@ -207,7 +215,9 @@ class DiscoveredFileInputTests(unittest.TestCase):
             "from cadgen import step\n\n\n"
             "@step(kind='part')\n"
             "def plain():\n"
-            "    return bd.Box(10, 10, 10)\n",
+            "    return bd.Box(10, 10, 10)\n\n\n"
+            "if __name__ == '__main__':\n"
+            "    plain()\n",
         )
         self._run(model)
         artifact = self.project / "plain.step"
@@ -233,6 +243,10 @@ def hinge():
     base = label_shape(bd.Box(20, 20, 4), "base")
     arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")
     return bd.Compound(children=[base, arm])
+
+
+if __name__ == "__main__":
+    hinge()
 '''
 
 

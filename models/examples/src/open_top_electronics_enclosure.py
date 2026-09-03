@@ -64,3 +64,7 @@ def open_top_electronics_enclosure():
     part = enclosure.part
     part.label = "open_top_electronics_enclosure_bosses"
     return part
+
+
+if __name__ == "__main__":
+    open_top_electronics_enclosure()

@@ -520,3 +520,7 @@ def photo_coffee_cup():
     parts.extend(_make_blue_logo())
 
     return bd.Compound(obj=parts, children=parts, label=MODEL_LABEL)
+
+
+if __name__ == "__main__":
+    photo_coffee_cup()

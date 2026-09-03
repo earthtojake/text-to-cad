@@ -1,9 +1,10 @@
 """Internal runner for a directly-executed decorated model script.
 
-NOT a user-facing CLI — the user interface is ``python <model>.py`` and the
-``@step``/``@dxf`` decorator (cadgen.authoring), which dispatches here either
-in-process or through the warm daemon (tool ``"run"``). The argv shape is
-``[script, flags...]`` so the daemon can replay exactly what the decorator saw.
+NOT a user-facing CLI — the user interface is ``python <model>.py``, whose
+``__main__`` calls the decorated model; that top-level call (cadgen.authoring)
+dispatches here either in-process or through the warm daemon (tool ``"run"``).
+The argv shape is ``[script, flags...]`` so the daemon can replay exactly what
+the call saw.
 
 This module exists so BOTH dispatch paths drive the one existing pipeline
 (``cadgen.generation.generate_step_targets`` / ``generate_dxf_targets``) —
@@ -23,7 +24,7 @@ from cadgen.metadata import normalize_mesh_numeric
 def _build_parser(prog: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=prog,
-        description="Build this CAD model (run by the @step/@dxf decorator).",
+        description="Build this CAD model (run by calling its @step/@dxf function).",
     )
     parser.add_argument("script", help="The decorated model script.")
     parser.add_argument("-o", "--output", help="Override the model's output path.")

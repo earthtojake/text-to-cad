@@ -15,3 +15,7 @@ from lib import mvt_chrono as C
 @step(out="../STEP/chrono_works.step")
 def chrono_works():
     return bd.Compound(children=C.build_chrono(), label="chronograph_works")
+
+
+if __name__ == "__main__":
+    chrono_works()

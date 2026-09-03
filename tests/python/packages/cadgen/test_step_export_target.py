@@ -26,6 +26,10 @@ from cadgen import step
 @step
 def model():
     return Box(10.0, 10.0, 10.0)
+
+
+if __name__ == "__main__":
+    model()
 """
 
 # Magic bytes we can assert on; STL (binary) and 3MF (zip) just get a non-empty check.

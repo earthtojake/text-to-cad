@@ -18,3 +18,7 @@ def falcon_heavy():
     groups = fc.build_vehicle()
     return bd.Compound(obj=groups, children=groups,
                     label="falcon_heavy__educational_public_source_reconstruction")
+
+
+if __name__ == "__main__":
+    falcon_heavy()

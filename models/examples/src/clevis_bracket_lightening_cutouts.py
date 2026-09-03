@@ -152,3 +152,7 @@ def clevis_bracket_lightening_cutouts():
     part = safe_fillet(part, _lug_base_edges(part), radius=LUG_FILLET)
     part.label = "aerospace_clevis_bracket_lightening_cutouts"
     return part
+
+
+if __name__ == "__main__":
+    clevis_bracket_lightening_cutouts()

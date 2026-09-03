@@ -14,3 +14,7 @@ def exhaust():
     if isinstance(built, list):
         return bd.Compound(children=built, label="exhaust")
     return built
+
+
+if __name__ == "__main__":
+    exhaust()

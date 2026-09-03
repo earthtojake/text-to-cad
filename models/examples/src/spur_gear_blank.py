@@ -11,3 +11,7 @@ from lib.simple_model_library import make_spur_gear_blank
 @glb(out="../GLB/spur_gear_blank.glb")
 def spur_gear_blank():
     return make_spur_gear_blank()
+
+
+if __name__ == "__main__":
+    spur_gear_blank()

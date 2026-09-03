@@ -14,3 +14,7 @@ def rear_fender():
     if isinstance(built, list):
         return bd.Compound(children=built, label="rear_fender")
     return built
+
+
+if __name__ == "__main__":
+    rear_fender()

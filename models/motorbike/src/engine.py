@@ -14,3 +14,7 @@ def engine():
     if isinstance(built, list):
         return bd.Compound(children=built, label="engine")
     return built
+
+
+if __name__ == "__main__":
+    engine()

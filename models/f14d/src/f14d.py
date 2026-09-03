@@ -132,3 +132,7 @@ def f14d():
     if not groups:
         raise RuntimeError("no F-14 part modules built")
     return bd.Compound(children=groups, label="f14d_super_tomcat")
+
+
+if __name__ == "__main__":
+    f14d()

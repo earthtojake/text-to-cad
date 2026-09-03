@@ -132,3 +132,7 @@ KINEMATICS = {
 def hypercar():
     groups = [module.build() for _name, module in SYSTEMS]
     return bd.Compound(children=groups, label="mid_engine_hypercar")
+
+
+if __name__ == "__main__":
+    hypercar()

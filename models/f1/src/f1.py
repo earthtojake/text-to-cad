@@ -113,3 +113,7 @@ def assemble() -> bd.Compound:
 @step(out="../STEP/f1.step", animation="f1.anim.js")
 def f1():
     return assemble()
+
+
+if __name__ == "__main__":
+    f1()

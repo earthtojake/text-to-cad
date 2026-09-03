@@ -199,3 +199,7 @@ def motorcycle_shock_fidget():
     compound = bd.Compound(children=_make_parts())
     compound.label = "motorcycle_shock_fidget"
     return compound
+
+
+if __name__ == "__main__":
+    motorcycle_shock_fidget()

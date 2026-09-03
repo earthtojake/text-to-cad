@@ -17,3 +17,7 @@ def bracelet():
     compound = build_bracelet()
     materials.apply(compound)
     return compound
+
+
+if __name__ == "__main__":
+    bracelet()

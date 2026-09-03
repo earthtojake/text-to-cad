@@ -16,3 +16,7 @@ from lib.arms import build_bicep
 @threemf(out="../3MF/bicep_right.3mf")
 def bicep_right():
     return build_bicep('right')
+
+
+if __name__ == "__main__":
+    bicep_right()

@@ -16,3 +16,7 @@ from lib.arms import build_forearm
 @threemf(out="../3MF/forearm_left.3mf")
 def forearm_left():
     return build_forearm('left')
+
+
+if __name__ == "__main__":
+    forearm_left()

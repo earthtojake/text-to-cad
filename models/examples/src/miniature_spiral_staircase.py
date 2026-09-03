@@ -176,3 +176,7 @@ def miniature_spiral_staircase():
         label="miniature_spiral_staircase",
     )
     return assembly
+
+
+if __name__ == "__main__":
+    miniature_spiral_staircase()

@@ -34,7 +34,7 @@ comparisons (solid display, `presentation-large` size profile);
 PY=../../.venv/bin/python
 CADGEN=../../.venv/bin/cadgen
 
-$PY src/<model>.py                                  # a model script builds itself
+$PY src/<model>.py                                  # its __main__ builds the model
 ls src/*.py | xargs -n1 -P4 $PY                     # rebuild everything
 $CADGEN step inspect refs STEP/<model>.step --facts
 $CADGEN step inspect validate STEP/<model>.step

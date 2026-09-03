@@ -17,3 +17,7 @@ from lib.digits import build_finger_proximal
 @step(out="../STEP/middle_proximal.step")
 def middle_proximal():
     return build_finger_proximal("middle")
+
+
+if __name__ == "__main__":
+    middle_proximal()

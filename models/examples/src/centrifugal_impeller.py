@@ -216,3 +216,7 @@ def centrifugal_impeller():
     part.label = MODEL_LABEL
     part.color = bd.Color(0.62, 0.66, 0.70, 1.0)
     return part
+
+
+if __name__ == "__main__":
+    centrifugal_impeller()

@@ -17,3 +17,7 @@ from lib.digits import build_finger_proximal
 @step(out="../STEP/pinky_proximal.step")
 def pinky_proximal():
     return build_finger_proximal("pinky")
+
+
+if __name__ == "__main__":
+    pinky_proximal()

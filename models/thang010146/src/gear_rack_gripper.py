@@ -124,3 +124,7 @@ KINEMATICS = {
 )
 def gear_rack_gripper():
     return read_step(_SOURCE)
+
+
+if __name__ == "__main__":
+    gear_rack_gripper()

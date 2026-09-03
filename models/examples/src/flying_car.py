@@ -408,3 +408,7 @@ def flying_car():
             road_gear(),
         ],
     )
+
+
+if __name__ == "__main__":
+    flying_car()

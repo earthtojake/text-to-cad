@@ -17,3 +17,7 @@ from lib.digits import build_finger_middle
 @step(out="../STEP/ring_middle.step")
 def ring_middle():
     return build_finger_middle("ring")
+
+
+if __name__ == "__main__":
+    ring_middle()

@@ -17,3 +17,7 @@ from lib.digits import build_thumb_proximal
 @step(out="../STEP/thumb_proximal.step")
 def thumb_proximal():
     return build_thumb_proximal()
+
+
+if __name__ == "__main__":
+    thumb_proximal()

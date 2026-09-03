@@ -1020,3 +1020,7 @@ KINEMATICS = {
       animation="qdd_actuator.anim.js")
 def qdd_actuator():
     return build_actuator(explode=0.0)
+
+
+if __name__ == "__main__":
+    qdd_actuator()

@@ -50,6 +50,10 @@ KINEMATICS = {
 @step(out="../STEP/arm.step", kinematics=KINEMATICS,
       animation="arm.anim.js")
 def arm(): ...
+
+
+if __name__ == "__main__":
+    arm()
 ```
 
 - **Mate kinds**: `revolute` (degrees about an axis), `slider` (model units

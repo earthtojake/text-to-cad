@@ -54,6 +54,10 @@ def bracket(thickness: float = 3.0):
         with bd.Locations((-14, 0), (14, 0)):
             bd.Circle(2.5, mode=bd.Mode.SUBTRACT)
     return bd.extrude(profile.sketch, amount=thickness)
+
+
+if __name__ == "__main__":
+    bracket()
 '''
 
 
@@ -71,6 +75,10 @@ def vendor_panel(thickness: float = 3.0):
         bd.Rectangle(60, 40)
         bd.Circle(4, mode=bd.Mode.SUBTRACT)
     return bd.extrude(profile.sketch, amount=thickness)
+
+
+if __name__ == "__main__":
+    vendor_panel()
 '''
 
 _VENDOR_STEP: Path | None = None
@@ -233,6 +241,10 @@ class DocumentedCommandForms(_DrawingHarness):
                 bd.Rectangle(60, 40)
                 bd.Circle(hole_d / 2, mode=bd.Mode.SUBTRACT)
             return cut.sketch
+
+
+        if __name__ == "__main__":
+            gasket()
         """
     )
 
@@ -327,6 +339,10 @@ class DocumentedCommandForms(_DrawingHarness):
                     document = ezdxf.new()
                     document.modelspace().add_circle((0, 0), 5)
                     return {"document": document}
+
+
+                if __name__ == "__main__":
+                    legacy()
                 """
             ),
             encoding="utf-8",

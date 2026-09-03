@@ -88,3 +88,7 @@ KINEMATICS = {
 )
 def flip_mechanism_180():
     return read_step(_SOURCE)
+
+
+if __name__ == "__main__":
+    flip_mechanism_180()

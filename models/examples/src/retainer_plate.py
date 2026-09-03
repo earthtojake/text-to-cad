@@ -8,3 +8,7 @@ from lib.simple_model_library import make_retainer_plate
 @step(out="../STEP/retainer_plate.step")
 def retainer_plate():
     return make_retainer_plate()
+
+
+if __name__ == "__main__":
+    retainer_plate()

@@ -39,6 +39,10 @@ def hinge():
     base = label_shape(bd.Box(20, 20, 4), "base")
     arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")
     return bd.Compound(children=[base, arm])
+
+
+if __name__ == "__main__":
+    hinge()
 """
 
 ANIM_JS = "export const clips = { demo: { duration: 2, update(t, m) {} } };\n"
@@ -72,6 +76,10 @@ def grouped():
         label_shape(bd.Pos(18, 0, 6) * bd.Box(4, 6, 6), "arm_tip"),
     ])
     return bd.Compound(children=[base, arm])
+
+
+if __name__ == "__main__":
+    grouped()
 """
 
 
@@ -264,6 +272,10 @@ def latch():
     base = label_shape(bd.Box(20, 20, 4), "base")
     arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")
     return bd.Compound(children=[base, arm])
+
+
+if __name__ == "__main__":
+    latch()
 """
 
 

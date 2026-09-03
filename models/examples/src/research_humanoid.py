@@ -1350,6 +1350,4 @@ def research_humanoid() -> object:
 
 
 if __name__ == "__main__":
-    model = research_humanoid()
-    print(model.label)
-    print(design_metrics())
+    research_humanoid()

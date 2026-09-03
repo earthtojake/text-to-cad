@@ -14,3 +14,7 @@ def frame():
     if isinstance(built, list):
         return bd.Compound(children=built, label="frame")
     return built
+
+
+if __name__ == "__main__":
+    frame()

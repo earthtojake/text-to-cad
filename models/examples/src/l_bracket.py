@@ -101,3 +101,7 @@ def l_bracket():
     part = safe_fillet(part, _transition_edges(part), radius=TRANSITION_FILLET)
     part.label = "l_bracket_gussets_two_hole_directions"
     return part
+
+
+if __name__ == "__main__":
+    l_bracket()

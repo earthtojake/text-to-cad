@@ -552,3 +552,7 @@ def lunar_rover_corner_assembly():
         fasteners(),
     ]
     return group("lunar_rover_wheel_suspension_corner", children)
+
+
+if __name__ == "__main__":
+    lunar_rover_corner_assembly()

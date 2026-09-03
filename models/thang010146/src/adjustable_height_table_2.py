@@ -149,3 +149,7 @@ KINEMATICS = {
 )
 def adjustable_height_table_2():
     return read_step(_SOURCE)
+
+
+if __name__ == "__main__":
+    adjustable_height_table_2()

@@ -119,8 +119,9 @@ done <"$WORK/commands.txt"
 step "Build a real STEP with no repo in sight"
 mkdir -p "$EMPTY/models"
 cat >"$EMPTY/models/probe.py" <<'PY'
-# A model script declares one @step function and builds itself (library-first:
-# there is no gen verb). Deliberately the simplest one that exists: this checks
+# A model script declares one @step function and builds it from __main__
+# (library-first: there is no gen verb). Deliberately the simplest one that
+# exists: this checks
 # that an installed cadgen can build at all, not that it models anything
 # interesting. @stl declares a mesh serialization so the mesh door has something
 # to produce below.
@@ -132,9 +133,13 @@ from cadgen import step, stl
 @stl
 def probe():
     return bd.Box(10, 10, 10)
+
+
+if __name__ == "__main__":
+    probe()
 PY
-# Running the script IS the build: a model script is the one source door, and
-# no CLI verb takes its place.
+# Running the script IS the build: its __main__ calls the model, and no CLI verb
+# takes its place.
 "$VENV/bin/python" models/probe.py >"$WORK/build.log" 2>&1 \
   || { cat "$WORK/build.log" >&2; fail "python <model>.py"; }
 [ -f "$EMPTY/models/probe.step" ] \

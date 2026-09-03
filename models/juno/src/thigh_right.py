@@ -16,3 +16,7 @@ from lib.legs import build_thigh
 @threemf(out="../3MF/thigh_right.3mf")
 def thigh_right():
     return build_thigh('right')
+
+
+if __name__ == "__main__":
+    thigh_right()

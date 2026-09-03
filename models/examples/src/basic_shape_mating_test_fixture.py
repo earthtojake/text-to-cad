@@ -308,3 +308,7 @@ def basic_shape_mating_test_fixture():
     asm.face_to_face(prism_v_bottom, prism_bottom_vertex, offset=-PRISM_COLLISION_DEPTH)
 
     return asm.build()
+
+
+if __name__ == "__main__":
+    basic_shape_mating_test_fixture()

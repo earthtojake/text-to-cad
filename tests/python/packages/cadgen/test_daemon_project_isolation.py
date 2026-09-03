@@ -66,6 +66,10 @@ def model():
     # crossed worker fails the build rather than quietly changing the box.
     assert ONLY_IN_{tag} == "{tag}"
     return Box(width(), 8.0, 4.0)
+
+
+if __name__ == "__main__":
+    model()
 """
 
 PROJECTS = {

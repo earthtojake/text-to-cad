@@ -1314,3 +1314,7 @@ def mars_rover_concept():
         power_rtg(),
     ]
     return group("mars_rover_concept", children)
+
+
+if __name__ == "__main__":
+    mars_rover_concept()

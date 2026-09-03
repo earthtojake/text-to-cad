@@ -8,3 +8,7 @@ from lib.simple_model_library import make_gusset_plate
 @step(out="../STEP/gusset_plate.step")
 def gusset_plate():
     return make_gusset_plate()
+
+
+if __name__ == "__main__":
+    gusset_plate()

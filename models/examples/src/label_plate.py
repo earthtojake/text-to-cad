@@ -43,3 +43,7 @@ def label_plate():
     score = bd.Polyline(*SCORE_POINTS_MM)
 
     return {"CUT": cut.sketch, "ENGRAVE": [serial.sketch, score]}
+
+
+if __name__ == "__main__":
+    label_plate()

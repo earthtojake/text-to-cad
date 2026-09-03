@@ -14,3 +14,7 @@ def leg_shield():
     if isinstance(built, list):
         return bd.Compound(children=built, label="leg_shield")
     return built
+
+
+if __name__ == "__main__":
+    leg_shield()

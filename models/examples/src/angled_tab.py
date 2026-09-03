@@ -37,3 +37,7 @@ def angled_tab():
     )
 
     return {"CUT": cut.sketch, "BEND": bend}
+
+
+if __name__ == "__main__":
+    angled_tab()

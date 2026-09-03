@@ -43,6 +43,10 @@ def drawing():
         bd.Rectangle(WIDTH_MM, HEIGHT_MM)
         bd.Circle(HOLE_D_MM / 2, mode=bd.Mode.SUBTRACT)
     return cut.sketch
+
+
+if __name__ == "__main__":
+    drawing()
 ```
 
 Two layers, when the part is both cut and marked:
@@ -66,6 +70,10 @@ def drawing():
     with bd.BuildSketch() as mark:
         bd.Text("REV B", font_size=6)
     return {"CUT": cut.sketch, "ENGRAVE": mark.sketch}
+
+
+if __name__ == "__main__":
+    drawing()
 ```
 
 Text is engraved **outlines**, not DXF `TEXT` entities: cut and marking
@@ -97,6 +105,10 @@ def drawing(kerf: float = 0.0):
         coordinate=THICKNESS_MM,   # TODO: which face plane defines the profile
         kerf=kerf,
     )
+
+
+if __name__ == "__main__":
+    drawing()
 ```
 
 `flat_pattern` is selection + flatten + union + optional kerf offset in one
@@ -148,6 +160,10 @@ def drawing(kerf: float = 0.15):
     part = read_step(_STEP_PATH)
     top_z = part.bounding_box().max.Z
     return flatten.flat_pattern(part, coordinate=top_z, kerf=kerf)
+
+
+if __name__ == "__main__":
+    drawing()
 ```
 
 ## Common additions

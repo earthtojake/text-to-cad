@@ -17,3 +17,7 @@ from lib.digits import build_thumb_metacarpal
 @step(out="../STEP/thumb_metacarpal.step")
 def thumb_metacarpal():
     return build_thumb_metacarpal()
+
+
+if __name__ == "__main__":
+    thumb_metacarpal()

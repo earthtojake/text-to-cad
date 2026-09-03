@@ -17,3 +17,7 @@ def dial():
     compound = bd.Compound(children=D.build_dial_parts(), label="dial")
     M.apply(compound)
     return compound
+
+
+if __name__ == "__main__":
+    dial()

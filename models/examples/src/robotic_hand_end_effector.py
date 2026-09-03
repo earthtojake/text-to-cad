@@ -579,3 +579,7 @@ def robotic_hand_end_effector():
         label="articulated_cybernetic_robotic_hand_end_effector",
     )
     return assembly
+
+
+if __name__ == "__main__":
+    robotic_hand_end_effector()

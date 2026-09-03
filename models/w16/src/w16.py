@@ -69,3 +69,7 @@ def w16():
         group("ancillaries", _ANCILLARIES(SECTIONED)),
     ]
     return bd.Compound(children=[g for g in groups if g is not None], label="w16")
+
+
+if __name__ == "__main__":
+    w16()

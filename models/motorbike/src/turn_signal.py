@@ -17,3 +17,7 @@ from lib import trim as T
 def turn_signal():
     x, y, z = S.FRONT_SIGNAL_POS
     return bd.Compound(children=T.build_turn_signal((x, y, z), 1.0), label="turn_signal")
+
+
+if __name__ == "__main__":
+    turn_signal()

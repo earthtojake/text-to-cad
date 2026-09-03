@@ -14,3 +14,7 @@ def headlight():
     if isinstance(built, list):
         return bd.Compound(children=built, label="headlight")
     return built
+
+
+if __name__ == "__main__":
+    headlight()

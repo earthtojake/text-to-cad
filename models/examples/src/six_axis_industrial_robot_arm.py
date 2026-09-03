@@ -596,3 +596,7 @@ def six_axis_industrial_robot_arm():
         label="six_axis_industrial_robot_arm_static_display_pose",
     )
     return assembly
+
+
+if __name__ == "__main__":
+    six_axis_industrial_robot_arm()

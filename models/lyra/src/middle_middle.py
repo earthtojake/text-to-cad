@@ -17,3 +17,7 @@ from lib.digits import build_finger_middle
 @step(out="../STEP/middle_middle.step")
 def middle_middle():
     return build_finger_middle("middle")
+
+
+if __name__ == "__main__":
+    middle_middle()

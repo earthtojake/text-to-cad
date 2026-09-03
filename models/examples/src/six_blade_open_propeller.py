@@ -359,3 +359,7 @@ def six_blade_open_propeller():
         parts.append(_make_blade_body(index))
 
     return bd.Compound(obj=parts, children=parts, label=MODEL_LABEL)
+
+
+if __name__ == "__main__":
+    six_blade_open_propeller()

@@ -35,6 +35,10 @@ def hinge():
     base = label_shape(bd.Box(20, 20, 4), "base")
     arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")
     return bd.Compound(children=[base, arm])
+
+
+if __name__ == "__main__":
+    hinge()
 """
 
 KINEMATICS = {
