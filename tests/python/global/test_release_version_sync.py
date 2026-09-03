@@ -104,7 +104,7 @@ class VersionSyncMirrorTests(unittest.TestCase):
                     )
 
     def test_derived_metadata_is_synced_at_the_current_version(self) -> None:
-        """The gate the Release workflow runs, at the version in VERSION."""
+        """The gate the release workflows run, at the version in VERSION."""
         result = subprocess.run(
             ["node", str(SYNC_SCRIPT), "--check"],
             capture_output=True,

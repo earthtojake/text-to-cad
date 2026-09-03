@@ -3,6 +3,7 @@ export const DEFAULT_VIEWER_DISCORD_URL = "https://discord.gg/5FGB9DwJYU";
 // `add` rather than `update`: both refresh what is installed, but only `add` picks up a skill
 // that is NEW in a release, because `update` walks the lockfile. Releases here do add skills,
 // so `update` would quietly leave them out. (`install` is an undocumented alias for `add`.)
+// Skills only: the skill text tells the agent when and how to install or upgrade cadgen.
 export const DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND = "npx skills add earthtojake/text-to-cad";
 
 // The other way to take an update: hand this to your agent instead of running the command
@@ -44,13 +45,29 @@ export function viewerGithubRepositoryUrl(value = "", fallback = DEFAULT_VIEWER_
   }
 }
 
+/** A release VERSION as displayed and compared: a GitHub `tag_name` (`v0.5.0`, or the bare
+ * `0.4.28` releases before 0.5.0 used) or a `refs/tags/...` ref, with the tag dressing removed.
+ * The one place the `v` is stripped; everything downstream sees bare versions. */
+export function normalizeViewerReleaseVersion(value = "") {
+  return String(value ?? "")
+    .trim()
+    .replace(/^refs\/tags\//iu, "")
+    .replace(/^v(?=\d)/iu, "");
+}
+
+/** The tag a release VERSION is published under: `v<version>` from 0.5.0 on. */
+export function viewerReleaseTagName(version = "") {
+  const normalizedVersion = normalizeViewerReleaseVersion(version);
+  return normalizedVersion ? `v${normalizedVersion}` : "";
+}
+
 export function viewerGithubReleaseUrl(version = "", value = "", fallback = DEFAULT_VIEWER_GITHUB_URL) {
-  const normalizedVersion = String(version || "").trim();
+  const tagName = viewerReleaseTagName(version);
   const repositoryUrl = viewerGithubRepositoryUrl(value, fallback);
-  if (!normalizedVersion || !repositoryUrl) {
+  if (!tagName || !repositoryUrl) {
     return "";
   }
-  return `${repositoryUrl}/releases/tag/${encodeURIComponent(normalizedVersion)}`;
+  return `${repositoryUrl}/releases/tag/${encodeURIComponent(tagName)}`;
 }
 
 export function viewerGithubLatestReleaseUrl(value = "", fallback = DEFAULT_VIEWER_GITHUB_URL) {
@@ -122,8 +139,10 @@ export function normalizeViewerSkillsInstallCommand(
   fallback = DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
 ) {
   const command = cleanInstallCommandCandidate(value);
-  // Both spellings: `install` is an alias for `add`, and release bodies may use either.
-  if (/^npx\s+skills\s+(?:install|add)(?:\s+\S+)+$/iu.test(command)) {
+  // Both spellings: `install` is an alias for `add`, and release bodies may use either. No
+  // token may carry a shell operator (`&&`, `;`, `|`, backticks, `$`): this string is put in
+  // front of the user to run, so a release body must not be able to chain anything onto it.
+  if (/^npx\s+skills\s+(?:install|add)(?:\s+[^\s;&|`$]+)+$/iu.test(command)) {
     return command;
   }
   return String(fallback || "").trim();
@@ -188,10 +207,7 @@ function cleanInstallCommandCandidate(value = "") {
 }
 
 function parseViewerReleaseVersion(value = "") {
-  const rawValue = String(value ?? "")
-    .trim()
-    .replace(/^refs\/tags\//i, "")
-    .replace(/^v/i, "");
+  const rawValue = normalizeViewerReleaseVersion(value);
   if (!rawValue) {
     return null;
   }

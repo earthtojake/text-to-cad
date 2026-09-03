@@ -1,0 +1,246 @@
+name: Publish Release
+
+# Half two of a release: everything that happens to the merged release commit. Runs on
+# every push to main (the merge Prepare Release makes, or any other push -- the gate
+# below decides whether there is anything to publish) and on every push to build-test,
+# the rehearsal branch. Manual dispatch republishes or resumes the current head of a
+# branch: a run that uploaded the wheel and died before the tag is finished by
+# dispatching this on main again (PyPI's skip-existing makes the re-upload a no-op).
+#
+# Two kinds of step. Everything up to and including the artifact upload runs on both
+# branches. The IRREVERSIBLE steps -- PyPI upload, docs deploy, tag + GitHub Release --
+# run only on refs/heads/main; on build-test the run prints what it would have tagged
+# and released and stops. That is the whole point of build-test: a bumped VERSION
+# lands there through a rehearsal Prepare Release, the gate compares it against the
+# repository's REAL tags exactly as main would, and nothing outside this run changes.
+#
+# Release tags are `v<VERSION>` from 0.5.0 on; earlier releases were tagged bare
+# (`0.4.28`). scripts/release/release-tags.sh is the one place that knows both.
+
+on:
+  push:
+    branches:
+      - main
+      - build-test
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the GitHub Release (main only). Set to false to leave it as a draft.
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Trusted publishing (OIDC) for the PyPI upload.
+      id-token: write
+    outputs:
+      should_publish: ${{ steps.gate.outputs.should_publish }}
+      version: ${{ steps.gate.outputs.version }}
+      release_sha: ${{ github.sha }}
+      is_main: ${{ steps.gate.outputs.is_main }}
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check canonical release version
+        run: scripts/release/check-version.sh
+
+      # Publish only when the version is new: past the latest release tag (either
+      # spelling), or equal to it with the tag missing (a run that uploaded the wheel
+      # and died before tagging; a rerun resumes it). On build-test the same
+      # comparison runs against the same real tags -- a rehearsal bump passes the
+      # gate exactly as it would on main, and an unbumped build-test push skips.
+      - name: Evaluate release gate
+        id: gate
+        run: |
+          current_version="$(tr -d '[:space:]' < VERSION)"
+          echo "version=$current_version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            echo "is_main=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_main=false" >> "$GITHUB_OUTPUT"
+            echo "Rehearsal on $GITHUB_REF_NAME: the irreversible steps (PyPI, docs, tag) are skipped."
+          fi
+          latest_tag="$(source scripts/release/release-tags.sh && latest_release_tag)"
+          current_tag="$(source scripts/release/release-tags.sh && release_tag_name "$current_version")"
+          if [ -z "$latest_tag" ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "No release tag yet; publishing $current_version."
+            exit 0
+          fi
+          if scripts/release/check-version.sh --incremented-from "refs/tags/$latest_tag" >/tmp/publish-tag-version-check.log 2>&1; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "Release version $current_version advanced past $latest_tag; publishing."
+            exit 0
+          fi
+          if ! git rev-parse --verify --quiet "refs/tags/$current_tag" >/dev/null; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "Version $current_version has no tag ($current_tag) yet; resuming publish."
+            exit 0
+          fi
+          echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          echo "Nothing to publish: version $current_version is already tagged ($current_tag)."
+
+      - name: Set up dependencies
+        if: steps.gate.outputs.should_publish == 'true'
+        uses: ./.github/actions/setup-deps
+
+      # The bundle feeds the WHEEL: cadgen's Node builders and snapshot bundle
+      # (committed, so --clean must reproduce them byte for byte) and the CAD Viewer
+      # client (gitignored, wheel-only). Nothing here writes to git.
+      - name: Bundle production outputs
+        if: steps.gate.outputs.should_publish == 'true'
+        run: scripts/bundle/bundle.sh --clean
+
+      - name: Validate production bundle layout
+        if: steps.gate.outputs.should_publish == 'true'
+        run: scripts/github-workflows/check-builds.sh --skip-bundle-check
+
+      - name: Run documentation checks
+        if: steps.gate.outputs.should_publish == 'true'
+        run: scripts/test/test-docs.sh
+
+      - name: Run code tests
+        if: steps.gate.outputs.should_publish == 'true'
+        run: scripts/test/test.sh
+
+      - name: Check cadgen package version matches the canonical release version
+        if: steps.gate.outputs.should_publish == 'true'
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if ! grep -Eq "^version = \"$version\"$" packages/cadgen/pyproject.toml; then
+            echo "packages/cadgen/pyproject.toml version does not match VERSION ($version)." >&2
+            exit 1
+          fi
+
+      # Package data fails quietly: a glob that stops matching produces a wheel that
+      # imports fine and cannot build a DXF preview or serve the Viewer.
+      - name: Check cadgen wheel contents
+        if: steps.gate.outputs.should_publish == 'true'
+        run: |
+          python -m pip install build
+          scripts/release/check-wheel-contents.sh
+
+      - name: Build cadgen sdist and wheel
+        if: steps.gate.outputs.should_publish == 'true'
+        run: |
+          python3 -m pip install --upgrade build
+          python3 -m build packages/cadgen
+
+      # The wheel that is about to ship, installed into a fresh venv with no repo on
+      # the path: the front door, the viewer verb and the skill pin check all answer.
+      # test-installed.sh then drives the same wheel through a real build.
+      - name: Install the built wheel and exercise it
+        if: steps.gate.outputs.should_publish == 'true'
+        run: |
+          wheel="$(find packages/cadgen/dist -name '*.whl' -type f | head -n 1)"
+          [ -n "$wheel" ] || { echo "no wheel under packages/cadgen/dist" >&2; exit 1; }
+          python3 -m venv "$RUNNER_TEMP/install-test"
+          "$RUNNER_TEMP/install-test/bin/python" -m pip install --quiet --no-deps "$wheel"
+          (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cadgen" --help >/dev/null)
+          (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cadgen" viewer --help >/dev/null)
+          "$RUNNER_TEMP/install-test/bin/cadgen" doctor skills/cad-viewer
+          scripts/test/test-installed.sh
+
+      # The distribution is kept whether or not it ships: a rehearsal's artifact is
+      # what you inspect instead of a PyPI upload, and a main run's is the record of
+      # exactly what was uploaded.
+      - name: Upload the distribution as a workflow artifact
+        if: steps.gate.outputs.should_publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cadgen-${{ steps.gate.outputs.version }}
+          path: packages/cadgen/dist/*
+          if-no-files-found: error
+
+      # ---- irreversible from here: main only -------------------------------------
+
+      # Uploaded BEFORE the tag: the skill pins on main name this version, so a tagged
+      # release without its wheel would break every skill install. If the upload
+      # succeeds and a later step fails, dispatch this workflow on main again.
+      - name: Publish cadgen to PyPI
+        if: ${{ steps.gate.outputs.should_publish == 'true' && steps.gate.outputs.is_main == 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/cadgen/dist
+          skip-existing: true
+
+      - name: Rehearsal summary (build-test)
+        if: ${{ steps.gate.outputs.should_publish == 'true' && steps.gate.outputs.is_main != 'true' }}
+        run: |
+          echo "Rehearsal complete on $GITHUB_REF_NAME at $GITHUB_SHA."
+          echo "Would have uploaded: $(ls packages/cadgen/dist)"
+          echo "Would have deployed the docs site from $GITHUB_SHA."
+          # --dry-run computes the tag and the release it would create without
+          # pushing anything; the version check inside it runs for real.
+          scripts/release/publish-github-release.sh --target HEAD --dry-run --publish
+
+  # The docs site is built from the release commit itself: main is the source tree,
+  # and apps/docs/package.json carries the stamped version the header reads.
+  deploy-docs:
+    name: Deploy Docs
+    needs: publish
+    if: ${{ needs.publish.outputs.should_publish == 'true' && needs.publish.outputs.is_main == 'true' }}
+    uses: ./.github/workflows/deploy-docs.yml
+    with:
+      ref: ${{ needs.publish.outputs.release_sha }}
+    secrets: inherit
+
+  tag-release:
+    name: Tag and GitHub Release
+    needs:
+      - publish
+      - deploy-docs
+    if: ${{ needs.publish.outputs.should_publish == 'true' && needs.publish.outputs.is_main == 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.publish.outputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure tag push credentials
+        env:
+          PUBLISH_PUSH_TOKEN: ${{ secrets.PUBLISH_PUSH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "$PUBLISH_PUSH_TOKEN" ]; then
+            git remote set-url origin "https://x-access-token:${PUBLISH_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            echo "Using PUBLISH_PUSH_TOKEN for tag push."
+          else
+            git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            echo "Using GITHUB_TOKEN for tag push."
+          fi
+
+      # A push-triggered run has no `publish` input: it publishes. Only a manual
+      # dispatch can ask for a draft.
+      - name: Create release tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+        run: |
+          args=(--target HEAD)
+          if [ "${INPUT_PUBLISH:-true}" = "true" ]; then
+            args+=(--publish)
+          fi
+          scripts/release/publish-github-release.sh "${args[@]}"

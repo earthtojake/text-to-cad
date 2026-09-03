@@ -25,41 +25,6 @@ run_suite() {
   fi
 }
 
-# The CAD Viewer backend suite, run EXACTLY as the standalone app's own CI runs it:
-# `discover -s tests_server -t .` from the app directory. Not through
-# run_python_unittest, and not with a path list of its own -- the app ships alone and
-# validates itself with that one command, so reproducing it verbatim is what keeps the
-# two runners from testing different sets.
-#
-# It lives in test-python.sh because it is a Python unittest suite and this is the
-# repo's Python runner: from here it reaches the Linux `Run code tests` step through
-# test.sh AND the Windows job, which calls this script directly. Windows matters most
-# of all here -- the port moved path handling, locks, subprocesses and file URLs from
-# Node to Python, which is precisely the class of bug that has only ever shown up on
-# Windows.
-#
-# VIEWER_REQUIRE_CADGEN_PARITY turns the store-key equality guard from opportunistic
-# into mandatory. That guard replaced ~190 lines of literal grep pins that used to run
-# on every CI run; without the flag it is @skip-on-absent-cadgen, and the only other
-# place it runs is the standalone app's CI, which has no cadgen by design -- so it
-# would execute nowhere at all.
-run_viewer_backend_suite() {
-  section "CAD Viewer backend Python tests"
-  # Fail closed, as run_python_unittest does: `unittest discover` exits 0 when it
-  # collects nothing, so a renamed or emptied directory would otherwise report a green
-  # suite that never ran -- which is the exact failure this whole arm exists to end.
-  if [ -z "$(find "$REPO_ROOT/apps/viewer/tests_server" -name 'test*.py' -print -quit 2>/dev/null)" ]; then
-    echo "No Python tests found under apps/viewer/tests_server" >&2
-    return 1
-  fi
-  (
-    cd "$REPO_ROOT/apps/viewer"
-    PYTHONPATH="$REPO_ROOT/packages/cadgen/src${PYTHONPATH:+:$PYTHONPATH}" \
-      VIEWER_REQUIRE_CADGEN_PARITY=1 \
-      "$PYTHON_BIN" -m unittest discover -s tests_server -t .
-  )
-}
-
 cd "$REPO_ROOT"
 
 # Turn the render-package write-lock assertion into a hard failure for tests. In
@@ -75,6 +40,11 @@ CADGEN_TEST_CACHE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/cadgen-test-store.XXXXXX")"
 trap 'rm -rf "$CADGEN_TEST_CACHE_DIR"' EXIT
 export CADGEN_CACHE_DIR="$CADGEN_TEST_CACHE_DIR"
 
+# The cadgen package suite includes the CAD Viewer backend (tests/python/packages/cadgen/viewer):
+# the server is cadgen.viewer, and this is the one runner that reaches every pull request --
+# through test.sh on Linux and directly in the Windows job. Windows matters most of all for the
+# viewer: path handling, locks, subprocesses and file URLs are precisely the class of bug that
+# has only ever shown up there.
 run_suite "cadgen package Python tests" "tests/python/packages/cadgen" "packages/cadgen/src"
 
 while IFS= read -r skill; do
@@ -87,12 +57,6 @@ while IFS= read -r skill; do
       "skills/$skill/scripts" "packages/cadgen/src"
   fi
 done < <("$LIST_SKILLS_SCRIPT")
-
-if [ "$KEEP_GOING" -eq 1 ]; then
-  run_viewer_backend_suite || failed_suites+=("CAD Viewer backend Python tests")
-else
-  run_viewer_backend_suite
-fi
 
 if [ "${#failed_suites[@]}" -gt 0 ]; then
   printf '\n==> FAILING SUITES (%d)\n' "${#failed_suites[@]}"

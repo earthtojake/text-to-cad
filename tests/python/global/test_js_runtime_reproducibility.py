@@ -25,9 +25,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 VIEWER_DIR = REPO_ROOT / "apps" / "viewer"
-# The resolver moved with viewer bundling when the viewer left the cadgen
-# wheel (cadgen/viewer split): the cad-viewer skill bundler owns it now.
-VIEWER_BUNDLER = REPO_ROOT / "scripts" / "bundle" / "skills" / "bundle-cad-viewer.sh"
+# The resolver lives with the viewer client's bundle stage: the cadgen runtime
+# bundler builds the client into the wheel (--viewer), so it owns the choice.
+VIEWER_BUNDLER = REPO_ROOT / "scripts" / "bundle" / "skills" / "bundle-cadgen-runtime.sh"
 CADJS_RUNNER = REPO_ROOT / "packages" / "cadgen-js" / "scripts" / "run-tests.mjs"
 TEST_RUNNERS = (
     CADJS_RUNNER,
@@ -81,6 +81,7 @@ def resolved_viewer_package_manager(*lockfiles: str, override: str = "") -> str:
                 # spelled that variable differently over time, so set both.
                 "VIEWER_SRC": str(viewer_dir),
                 "VIEWER_DIR": str(viewer_dir),
+                "VIEWER_APP_DIR": str(viewer_dir),
                 "VIEWER_PACKAGE_MANAGER": override,
             }
         )

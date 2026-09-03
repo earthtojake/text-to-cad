@@ -64,13 +64,10 @@ models/**/*.mkv
 # `python -m build` scratch space (scripts/release/check-wheel-contents.sh).
 packages/cadgen/build/
 
-# Production CAD Viewer runtime dist is committed on main (the publish tree's
-# bundled cad-viewer skill). On develop, skills/cad-viewer/scripts/viewer must
-# stay a symlink to viewer/, whose own dist/ the blanket rule above already
-# ignores; these exceptions only take effect once the bundle has materialized
-# the runtime as a real directory.
-!skills/cad-viewer/scripts/viewer/dist/
-!skills/cad-viewer/scripts/viewer/dist/**
+# The CAD Viewer client's place in the cadgen wheel. Written by
+# `scripts/bundle/bundle.sh` (the --viewer stage) right before `python -m build`;
+# never committed, because a checkout serves apps/viewer/dist directly.
+packages/cadgen/src/cadgen/_runtime/viewer/
 
 # Design notes are local working files, never committed (user policy 2026-08-29).
 design/

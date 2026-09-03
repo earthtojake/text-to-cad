@@ -1,8 +1,8 @@
 # Keep CAD exchange files and generated render/topology assets out of normal git object history.
-# assets/ holds the README demo gifs (17-26 MB each) and is the ONE LFS family that ships on
-# main: installers clone without git-lfs and get pointer files there, which is harmless for
-# README decoration and fatal for anything a skill runs. scripts/github-workflows/
-# check-publish-tree.sh fails the publish on any other LFS-tracked path.
+# assets/ holds the README demo gifs (17-26 MB each). Installers clone without git-lfs and get
+# pointer files, which is harmless for README decoration and for the models/ fixture corpus
+# (nothing installs it) and fatal for anything a skill runs: scripts/github-workflows/
+# check-builds.sh fails on any LFS-tracked path under skills/.
 assets/** filter=lfs diff=lfs merge=lfs -text
 # Keep spec markdown in normal git so reviews and diffs stay readable.
 assets/**/*.md !filter !diff !merge text
@@ -26,3 +26,7 @@ apps/docs/public/hero/** !filter !diff !merge -text
 # Tiny plain-text STEP used by the viewer launch smoke's end-to-end import
 # (CI checks out without LFS, so this one fixture must be real text).
 models/examples/imported/import-smoke.step !filter !diff !merge text
+
+# The fixture corpus is LFS and never installed; archives (tarball installers,
+# GitHub source downloads) omit it. Clones keep it as pointers via .lfsconfig.
+models/ export-ignore

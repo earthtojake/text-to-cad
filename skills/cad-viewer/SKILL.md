@@ -8,32 +8,32 @@ description: Start CAD Viewer and return review links for CAD and robot-descript
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 Use the installed local skill files as the runtime source of truth; the
 repository link is only for provenance and release review. If the user asks to
-modify, debug, or iterate on CAD Viewer source itself, clone the standalone
-[earthtojake/cad-viewer](https://github.com/earthtojake/cad-viewer) repository
-and work there — this installed skill runtime runs the Viewer, it is not where
-you edit it.
+modify, debug, or iterate on CAD Viewer source itself, that is the repository's
+work, not this skill's — this skill runs the Viewer, it is not where you edit it.
 
 Use this skill to open existing or newly generated CAD,
 robot-description, or DXF files in CAD Viewer and hand back live review links. The expected input is one or more explicit file paths.
 
 ## Setup
 
-The Viewer ships INSIDE THIS SKILL, under `scripts/viewer/` — the prebuilt
-client bundle plus a stdlib-only Python server. There is nothing to install for
-the Viewer itself: the one requirement is the Python (>= 3.11) that installed
-this skill's `requirements.txt`. That same interpreter is where cadgen comes
-from, and importing a raw foreign STEP is the only thing that needs it; a
-missing cadgen answers imports with an install hint, an installed-but-too-old
-cadgen answers with an upgrade hint naming the version to install, and viewing
-is unaffected either way.
+The Viewer is part of `cadgen`: install this skill's `requirements.txt` into a
+Python >= 3.11 and the `cadgen` command carries the server and the prebuilt
+client. There is nothing else to install and no Node at run time.
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+`cadgen doctor <this skill's directory>` confirms the installed cadgen matches
+the version this skill was published against.
 
 ## Start Viewer
 
 Launching is unconditional: the command below always ends with the URL of a
 live Viewer for the launch directory. If one is already running for that
 directory with the same Viewer code on disk (the reuse key is
-realpath(directory) x an identity token — the version salted with the app
-files' newest mtime, so a rebuilt or updated Viewer never hands back a stale
+realpath(directory) x an identity token — the cadgen version salted with the
+Viewer files' newest mtime, so an upgraded Viewer never hands back a stale
 instance), its URL is returned (`"action": "reused"`);
 otherwise a new server starts on the first free port from `3245` upward
 (`"action": "started"`). Never pick or reason about ports — read the URL the
@@ -44,14 +44,12 @@ the cwd IS the served directory.
 > The base port `3245` is `0xCAD` — "CAD" in hexadecimal.
 
 ```bash
-cd /absolute/project/models && python /absolute/path/to/skill/scripts/viewer/server/main.py --host 127.0.0.1 --json
+cd /absolute/project/models && cadgen viewer --host 127.0.0.1 --json
 ```
 
-(`main.py` lives at `scripts/viewer/server/main.py` inside this skill; name it
-by absolute path, because you are standing in the directory to serve, never in
-the skill. `python` must be the interpreter you installed `requirements.txt`
-into — the server IS that interpreter, and it is the only place cadgen is
-looked for.)
+(`cadgen` must be the one installed from this skill's `requirements.txt`. If it
+is not on `PATH`, `python -m cadgen.viewer` with that interpreter is the same
+launcher.)
 
 **Choose the launch directory deliberately — it is the whole ballgame.** The
 cwd decides what the catalog SCANS (a project root drags in `node_modules`,
@@ -65,7 +63,7 @@ Flags: `--json` prints the machine-readable last stdout line
 (`{"url", "port", "action": "started"|"reused"}`) — always pass it and take the
 URL from there. `--new` forces a fresh instance instead of reusing. An
 explicit `--port <n>` is strict — "this port or fail" — and disables
-both reuse and rolling.
+both reuse and rolling. `cadgen viewer --help` lists the rest.
 
 ## URL shape
 
@@ -94,14 +92,13 @@ URL it prints is the truth. In sandboxed agent environments, local binding
 failures such as `EPERM`/`EACCES` can still occur; rerun with the needed
 permission/escalation.
 
-`python <skill>/scripts/viewer/server/main.py list` shows every running
-instance with the directory it serves; `python <skill>/scripts/viewer/server/main.py
-stop --port <n>` ends one. (Both run from anywhere — only launching cares about
-the cwd.)
+`cadgen viewer list` shows every running instance with the directory it
+serves; `cadgen viewer stop --port <n>` ends one. (Both run from anywhere —
+only launching cares about the cwd.)
 To review a directory outside the current root, just `cd` there and launch
 again — reuse-or-start makes the second launch cheap and correct.
 
-## Generation is the CAD skill's job; imports call cadgen
+## Generation is the CAD skill's job; imports compile in the Viewer
 
 The Viewer is a static visualization tool: it renders artifacts that already
 exist. Generated models must be built first by running their model script (see
@@ -111,13 +108,9 @@ Raw `.step`/`.stp` files ARE importable from the Viewer: an unimported STEP
 reports `needs-build` and the in-Viewer import writes the standard render
 package. The Viewer calls cadgen's compile entry point directly, in a worker it
 owns, so progress and errors come back as data — the import reports live
-progress frames while it compiles. cadgen has to be importable by the
-interpreter running the Viewer, and new enough for the compile entry point —
-there is no search, no `CADGEN_PYTHON`, and no virtualenv probing; a cadgen that
-is absent or too old makes the Viewer say exactly that (naming the upgrade)
-and keep viewing. When an agent is doing the work there is nothing to run first:
-every cadgen door makes the package it needs on demand, so just use the file
-and return the link.
+progress frames while it compiles. When an agent is doing the work there is
+nothing to run first: every cadgen door makes the package it needs on demand,
+so just use the file and return the link.
 
 ## Links
 

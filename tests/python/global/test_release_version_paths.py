@@ -7,7 +7,7 @@ release tags forever after that, since tags are immutable.
 
 Without a fallback the script fails with git's exit 128 ("path 'VERSION' exists
 on disk, but not in <ref>") rather than a version comparison, which takes the
-whole `Release` workflow down at its first gate. These tests pin the fallback.
+whole Publish Release workflow down at its first gate. These tests pin the fallback.
 """
 
 from __future__ import annotations
@@ -50,6 +50,9 @@ def init_repo(root: Path) -> None:
     script_copy.parent.mkdir(parents=True, exist_ok=True)
     script_copy.write_bytes(BUMP_SCRIPT.read_bytes())
     script_copy.chmod(0o755)
+    # bump-version.sh sources its sibling tag helper; the copy needs it beside it.
+    helper = BUMP_SCRIPT.with_name("release-tags.sh")
+    (script_copy.parent / helper.name).write_bytes(helper.read_bytes())
 
 
 def build_repo(root: Path, base_version_path: str, base_version: str) -> None:

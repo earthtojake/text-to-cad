@@ -1,35 +1,28 @@
 # CAD Viewer
 
-A local-filesystem CAD review app: a React client (`src/`) over a stdlib-only
-Python backend (`server/`). One instance serves ONE directory,
-fixed at start; the page is always the bare origin and `?file=` selects an
-artifact inside that root. There is no hosted deployment — the `cad-viewer`
-skill bundles the built client + server, and each release mirrors this app
-into the standalone `earthtojake/cad-viewer` repo unchanged.
+A local-filesystem CAD review app. This directory is the React CLIENT; the
+backend is `cadgen viewer` — the `cadgen.viewer` package in the cadgen Python
+distribution — and the built client ships inside that same wheel. One instance
+serves ONE directory, fixed at start; the page is always the bare origin and
+`?file=` selects an artifact inside that root. There is no hosted deployment.
 
 **PURPOSE** — the application: all UI, workflow, and session state for
 reviewing CAD artifacts (catalog, tabs, selection, pose, animation,
 measurements, themes).
 
-**MAY DEPEND ON** — `cadgen-js` (the shared CAD render/runtime package,
-vendored at `packages/cadgen-js` and imported via the `cadgen-js`
-specifier) and its own npm dependencies, both of which are bundled into the
-client AT BUILD TIME. The backend imports `cadgen` — an ordinary PyPI package —
-to compile foreign STEP imports, and it is a SOFT dependency: nothing in
-`server/` imports it at module scope, so absent cadgen viewing still works and
-only imports answer with an install hint.
+**MAY DEPEND ON** — `cadgen-js` (the shared CAD render/runtime package at
+`packages/cadgen-js`, imported by the `cadgen-js` specifier) and its own npm
+dependencies, all bundled into the client AT BUILD TIME. At run time it talks
+to `cadgen viewer` over `/__cad` and `/__tess_cache`, and to nothing else.
 
-**DEPENDED ON BY** — nothing. No code imports from this app, by law.
+**DEPENDED ON BY** — the cadgen wheel, which carries this client's build
+(`cadgen/_runtime/viewer`). No code imports from this app.
 
 ## The laws that bind the app
 
-- **Ships alone**: this app works in isolation — the built client, the
-  stdlib-only Python server, and the vendored `packages/cadgen-js` are
-  everything it needs; cadgen from PyPI is its only Python dependency, and
-  a soft one. Nothing in the app — code or markdown — refers outside this
-  directory: it ships unchanged, so an out-of-directory reference is
-  broken the moment it leaves. `scripts/selfContained.test.mjs` and
-  `tests_server/test_module_boundaries.py` are the fences.
+- **One boundary**: the client imports `cadgen-js` by name and nothing else
+  from outside this directory (`scripts/selfContained.test.mjs` is the fence).
+  The backend is not here: its code, its tests and its laws live with cadgen.
 - **Three-input law**: everything renders from the artifact file, its
   sidecar (`<name>.step.json`), and the cache. The viewer never reads
   source code and never rebuilds on source changes — generated outputs are
@@ -51,63 +44,42 @@ npm run dev -- --host 127.0.0.1
 # open http://127.0.0.1:5173/?file=<path relative to the served root>
 ```
 
-Prod (the shipped bundle — build the client first, then run the server FROM
-the directory to serve; there is no directory flag, the cwd IS the served
-directory):
+Dev spawns the real backend — `python -m cadgen.viewer --api-only` on an
+ephemeral port — and proxies `/__cad` and `/__tess_cache` to it, so there is one
+implementation, not two, and Vite owns the client. `VIEWER_PYTHON` names the
+interpreter that has cadgen installed (it defaults to `python3`, which on macOS
+is still 3.9 — below the server's floor of 3.11 — and rarely the one with
+cadgen); `VIEWER_BACKEND_URL` attaches to a backend you started yourself. No
+build is needed first.
+
+Prod is `cadgen viewer`, run FROM the directory to serve (there is no directory
+flag, the cwd IS the served directory). In a checkout it serves this app's
+`dist/` — build it first — and an installed wheel serves the copy it carries:
 
 ```bash
 npm run build
-cd <the directory to serve> && python <path to>/server/main.py --host 127.0.0.1 --json
+cd <the directory to serve> && cadgen viewer --host 127.0.0.1 --json
 ```
-
-`python` must be **3.11 or newer**: the server checks at startup and refuses
-below that, naming the version it needs, rather than starting and then failing
-on the first request. macOS still ships 3.9 as `python3`, so on a Mac
-`VIEWER_PYTHON` usually has to name a newer one.
-
-Viewing needs nothing but the standard library. STEP **import** needs cadgen,
-which `requirements.txt` declares:
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-That is a floor (`cadgen>=…`) rather than a pin, and it is real: the import path
-calls cadgen's build entry point with a progress sink that older releases do not
-accept. What the running server checks is the installed **signature**, not the
-version — an editable checkout reports the last release's number whatever its
-source contains — so a cadgen that is absent OR too old degrades identically:
-`stepImportAvailable` is false, viewing is untouched, and the import is refused
-with the command that fixes it. See `MINIMUM_CADGEN_VERSION` and
-`cadgen_supports_progress_sink` in `server/compile_worker.py`.
-
-Dev needs no build first — it spawns that same `server/main.py` on an ephemeral
-port with `--api-only` and proxies `/__cad` and `/__tess_cache` to it, so there
-is one implementation, not two, and Vite owns the client. Set `VIEWER_PYTHON`
-to choose the interpreter, or `VIEWER_BACKEND_URL` to attach to one you started
-yourself. Production does need the build, and refuses to start without it.
 
 The launcher is unconditional and prints the URL it serves: a live instance
 already serving that realpath with the same code on disk is REUSED
 (`action:"reused"`); otherwise it binds the first free port from 3245 upward.
 `--new` forces a fresh instance of the same code; an explicit `--port` is
-strict. The URL line (and the `--json` line) is written only after the socket
-is bound and listening with the app attached, so the first request after
-reading it answers — no poll, no retry, no grace period; the launcher tests pin
-this. `main.py list` shows every running instance; `main.py stop --port <n>`
-ends one. Do not stop instances you did not start. Dev lives on Vite's
-port (5173, strict) and never enters the instance registry.
+strict; `--dist DIR` (or `CADGEN_VIEWER_DIST`) names another built client. The
+URL line (and the `--json` line) is written only after the socket is bound and
+listening with the app attached, so the first request after reading it answers
+— no poll, no retry, no grace period. `cadgen viewer list` shows every running
+instance; `cadgen viewer stop --port <n>` ends one. Do not stop instances you
+did not start. Dev lives on Vite's port (5173, strict) and never enters the
+instance registry.
 
-Reuse keys on realpath(served directory) × an identity token — the viewer
-version salted with the newest mtime across `server/`'s `.py` files and the
-built `dist/` (`identity_token` in `server/http_app.py`) — so an instance
-serving a different directory, the same directory from another copy of the
-app, or code that has since been edited, pulled, or rebuilt is never handed
-back by mistake. In a published bundle the files never change after install,
-so the token reduces to version-keyed reuse there. In a checkout, a server
-that finds client sources (`src/`) beside the `dist/` it serves also warns
-once on stderr when any source is newer than the build — detection only; it
-keeps serving.
+Reuse keys on realpath(served directory) × an identity token — the cadgen
+version salted with the newest mtime across the server's `.py` files and the
+built client — so an instance serving a different directory, the same directory
+from another install, or code that has since been edited, pulled, or rebuilt is
+never handed back by mistake. In a checkout, a server that finds `src/` beside
+the `dist/` it serves also warns once on stderr when any source is newer than
+the build — detection only; it keeps serving.
 
 ## Behaviours worth knowing before concluding something is broken
 
@@ -126,37 +98,26 @@ keeps serving.
 ## The shape of the app
 
 ```
-server/     # stdlib-only Python backend: scanner.py (catalog),
-            #   backend.py/http_app.py (routes), handler.py (sockets),
-            #   artifact_status.py (freshness authority), store_paths.py
-            #   (store layout, mirroring cadgen — equality-tested),
-            #   compile_client/compile_worker.py (the cadgen import path),
-            #   tess_cache.py, registry.py + main.py (the launcher)
-tests_server/ # the backend's suite — unittest, NOT collected by `npm run test`
 src/client/ # React app: CadWorkspace (state root), CadViewer (scene +
             #   effects application), workbench/ (tabs, sections, session
             #   state, playback), render/ (viewport)
 scripts/    # app tooling incl. e2e helpers and selfContained.test.mjs
-            #   (the mirror's no-external-paths gate)
+            #   (the boundary fence) and the dev-backend spawn helpers
 docs/       # subsystem docs; settings-ui.md is the CURATED design-system
             #   reference for all settings UI work — binding, read it
             #   before touching controls
-dist/       # built client (gitignored)
+dist/       # built client (gitignored); what `cadgen viewer` serves in a
+            #   checkout and what the wheel bundles
 ```
 
 ## Testing
 
-Two suites, one per language, both run from this directory:
-
 ```bash
-npm run test                                   # client + app tooling (node:test, beside the code)
-python -m unittest discover -s tests_server -t .   # the backend (stdlib unittest)
+npm run test    # client + app tooling (node:test, beside the code)
 ```
 
-Neither covers the other, so running only one leaves half the app unchecked.
-The backend suite's cadgen equality guard skips where cadgen is absent;
-`VIEWER_REQUIRE_CADGEN_PARITY=1` turns that skip into a failure, for anywhere
-cadgen is expected to be present.
+The backend's suite lives with cadgen and is not collected here; running only
+`npm run test` leaves that half unchecked.
 
 Headless UI verification uses Playwright with `--use-angle=metal` —
 the default software WebGL renderer is not what users see.

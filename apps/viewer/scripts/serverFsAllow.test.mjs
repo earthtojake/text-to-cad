@@ -4,7 +4,7 @@ import test from "node:test";
 import { resolveServerFsAllow } from "./serverFsAllow.mjs";
 
 test("server fs allow list includes the real path behind a symlinked package root", () => {
-  // The develop layout: viewer/packages/cadgen-js is a symlink to packages/cadgen-js.
+  // A checkout that reaches cadgen-js through a link: the real path is allowed too.
   const realpath = (value) =>
     value === "/repo/viewer/packages/cadgen-js/src" ? "/repo/packages/cadgen-js/src" : value;
   const allow = resolveServerFsAllow(["/repo/viewer", "/repo/viewer/packages/cadgen-js/src"], { realpath });

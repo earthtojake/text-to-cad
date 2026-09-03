@@ -58,8 +58,8 @@ def main(argv: list[str] | None = None, prog: str = "cadgen doctor") -> int:
 
     pin = read_requirements_pin(requirements)
     if pin is None:
-        # A bare `cadgen` line (or none) is the development checkout: nothing to enforce.
-        sys.stdout.write(f"  pin      unpinned in {requirements} (development checkout)\n")
+        # A bare `cadgen` line (or none): nothing to enforce.
+        sys.stdout.write(f"  pin      unpinned in {requirements}\n")
         return 0
     if pin == installed:
         sys.stdout.write(f"  pin      OK — cadgen=={pin} ({requirements})\n")

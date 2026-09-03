@@ -123,10 +123,8 @@ def cad_node_executable(repo_root: Path | str | None = None) -> str:
         return str(Path(found).resolve())
 
     raise NodeUnavailable(
-        "node was not found on PATH. The DXF and mesh-export builders run in Node, and "
-        "the packaged CAD Viewer runtime is itself launched by node -- so a missing node "
-        "means this environment is broken, not merely unconfigured. Install Node.js (>=20), "
-        "or point CADGEN_NODE at an existing node binary."
+        "node was not found on PATH. The DXF and mesh-export builders run in Node. "
+        "Install Node.js (>=20), or point CADGEN_NODE at an existing node binary."
     )
 
 

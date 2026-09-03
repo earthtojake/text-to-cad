@@ -7,51 +7,39 @@
 # and stayed broken from 0.4.0 to 0.4.18 because no test ever executed the one command the
 # skill documents.
 #
-# The command below is that command. Keep it identical to the one in
-# skills/cad-viewer/SKILL.md; if the doc changes, this changes with it. Launching is
+# The command below is that command: `cadgen viewer --host 127.0.0.1 --json`, spelled
+# `python -m cadgen.viewer` so the interpreter is explicit. Keep it identical to the one
+# in skills/cad-viewer/SKILL.md; if the doc changes, this changes with it. Launching is
 # unconditional (the server rolls to a free port and prints the real URL/port), so this
 # script chooses no port: it reads the port from the --json line, exactly as an agent
-# does. It requires the bundled runtime (a real directory, not the dev symlink) — run
-# scripts/bundle/bundle.sh first, exactly as test.yml does.
+# does. It serves the client the WHEEL ships -- cadgen/_runtime/viewer, written by
+# scripts/bundle/bundle.sh -- pinned through CADGEN_VIEWER_DIST so a checkout's own
+# apps/viewer/dist cannot stand in for it. Run bundle.sh first, exactly as test.yml does.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 HOST="127.0.0.1"
-# VIEWER_RUNTIME_DIR points the smoke test at a runtime bundled somewhere else.
-# It is not decoration: bundling IN PLACE replaces the development symlink at
-# the default path with a real directory, so a developer who runs this script
-# has to repair their checkout with scripts/dev/setup-symlinks.sh afterwards.
-# Bundling into a scratch directory and naming it here costs nothing and leaves
-# the tree alone. CI always uses the default, because test.yml bundles in place
-# on a throwaway runner.
-RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/skills/cad-viewer/scripts/viewer}"
+# VIEWER_RUNTIME_DIR points the smoke test at a client bundled somewhere else
+# (CADGEN_RUNTIME_CHECK_DIR-style scratch builds). CI uses the default.
+RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cadgen/src/cadgen/_runtime/viewer}"
 
-echo "==> CAD Viewer launch smoke test (\$PYTHON scripts/viewer/server/main.py)"
+echo "==> CAD Viewer launch smoke test (\$PYTHON -m cadgen.viewer)"
 
-if [ -L "$RUNTIME" ]; then
-  # A symlinked runtime would smoke-test viewer/ instead of the bundle output.
-  echo "FAIL: $RUNTIME is still the development symlink; bundle first." >&2
-  exit 1
-fi
-if [ ! -f "$RUNTIME/server/main.py" ]; then
-  echo "FAIL: no bundled CAD Viewer runtime at $RUNTIME" >&2
+# The built client has to be IN the wheel's runtime: its absence is the exact regression
+# this guards, and it surfaces as a served page that is 404 rather than as a bad server.
+if [ ! -f "$RUNTIME/index.html" ]; then
+  echo "FAIL: no bundled CAD Viewer client at $RUNTIME (index.html missing)" >&2
   echo "      Run scripts/bundle/bundle.sh first (test.yml bundles before this step)." >&2
   exit 1
 fi
-# The built client has to be IN the runtime: its absence is the exact regression this
-# guards, and it surfaces as a served page that is 404 rather than as a bad server.
-if [ ! -f "$RUNTIME/dist/index.html" ]; then
-  echo "FAIL: the bundled runtime carries no built client (dist/index.html missing)" >&2
-  exit 1
-fi
+export CADGEN_VIEWER_DIST="$RUNTIME"
 
 log="$(mktemp)"
 serve_root="$(mktemp -d)"
-# The server IS a Python process now: this is the interpreter that plays the
-# role of "the one that installed skills/cad-viewer/requirements.txt", which is
-# the only door cadgen comes through. There is no CADGEN_PYTHON any more.
+# This is the interpreter that plays the role of "the one that installed
+# skills/cad-viewer/requirements.txt" -- the server is a module of that cadgen.
 #
 # Resolution FALLS BACK instead of demanding a repo venv, because there are two
 # venv-less callers and both are ordinary:
@@ -119,7 +107,7 @@ export CADGEN_CACHE_DIR="$(mktemp -d)"
 # The launcher has no directory flag: the cwd IS the served directory, so the
 # launch cd's there first — exactly as SKILL.md instructs. `exec` makes the
 # subshell BECOME the python process, so $! is the server's pid.
-(cd "$serve_root" && exec "$PYTHON" "$RUNTIME/server/main.py" --host "$HOST" --json) > "$log" 2>&1 &
+(cd "$serve_root" && exec "$PYTHON" -m cadgen.viewer --host "$HOST" --json) > "$log" 2>&1 &
 server_pid=$!
 disown "$server_pid" 2>/dev/null || true
 
@@ -148,7 +136,7 @@ if [ -z "$PORT" ]; then
 fi
 
 # The launcher writes the {url,port,action} line only after the socket is bound and
-# listening with the app attached (pinned by tests_server/test_launcher.py
+# listening with the app attached (pinned by tests/python/packages/cadgen/viewer/test_launcher.py
 # AnnounceIsConnectable: first request, no retry, 1s budget), so the FIRST request after
 # reading it answers 200. The two extra attempts are slack for a starved CI runner, not
 # cover for the launcher — a miss is printed so it cannot pass silently, and a launcher
@@ -179,7 +167,7 @@ fi
 
 # Launch idempotence: relaunching from the same directory at the same version must
 # REUSE the running viewer (same port, action:"reused"), not spawn a second instance.
-reuse_json="$(cd "$serve_root" && "$PYTHON" "$RUNTIME/server/main.py" --host "$HOST" --json | grep '^{' | tail -1)"
+reuse_json="$(cd "$serve_root" && "$PYTHON" -m cadgen.viewer --host "$HOST" --json | grep '^{' | tail -1)"
 if ! printf '%s' "$reuse_json" | grep -q '"action":"reused"'; then
   echo "FAIL: relaunching the same root did not reuse the running viewer: $reuse_json" >&2
   exit 1
@@ -191,10 +179,8 @@ fi
 
 # End-to-end import FROM THE BUNDLE: a raw STEP in the served root goes
 # needs-build -> POST build (cadgen's compile entry point, called in the
-# server's own worker) -> ready with a real package. cadgen reaches the server
-# only by being importable from $PYTHON — the same soft-dependency contract
-# users get from requirements.txt. The fixture is deliberately non-LFS (CI
-# checks out without LFS).
+# server's own worker) -> ready with a real package. The fixture is
+# deliberately non-LFS (CI checks out without LFS).
 FIXTURE="$REPO_ROOT/models/examples/imported/import-smoke.step"
 if ! head -1 "$FIXTURE" | grep -q "ISO-10303-21"; then
   echo "FAIL: import fixture is not STEP text (LFS pointer?): $FIXTURE" >&2
@@ -230,12 +216,12 @@ fi
 
 # The instance-manager side of the same entrypoint: list must show this server,
 # stop must end it.
-if ! "$PYTHON" "$RUNTIME/server/main.py" list | grep -q "port $PORT"; then
-  echo "FAIL: 'main.py list' did not report the running viewer" >&2
+if ! "$PYTHON" -m cadgen.viewer list | grep -q "port $PORT"; then
+  echo "FAIL: 'cadgen viewer list' did not report the running viewer" >&2
   exit 1
 fi
-if ! "$PYTHON" "$RUNTIME/server/main.py" stop --port "$PORT" | grep -q "Stopped CAD Viewer"; then
-  echo "FAIL: 'main.py stop --port $PORT' did not stop the viewer" >&2
+if ! "$PYTHON" -m cadgen.viewer stop --port "$PORT" | grep -q "Stopped CAD Viewer"; then
+  echo "FAIL: 'cadgen viewer stop --port $PORT' did not stop the viewer" >&2
   exit 1
 fi
 

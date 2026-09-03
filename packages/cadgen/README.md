@@ -4,20 +4,22 @@ The published distribution: everything that turns CAD source into documents,
 documents into derived state, and derived state into pixels and meshes. One
 PyPI package carrying both language halves — the Python engine under
 `src/cadgen/`, and the built JavaScript it executes under
-`src/cadgen/_runtime/` (the cadgen-js runtime, bundled in at build time; the
-JS *source* lives in its own package and never ships as source).
+`src/cadgen/_runtime/` (the cadgen-js runtime and the CAD Viewer's client,
+bundled in at build time; the JS *source* lives in its own packages and never
+ships as source).
 
 **PURPOSE** — the engine and its command surface: model execution, the
 content-keyed cache, document assembly, kinematics, exports, validation,
-inspection, snapshots, and the warm daemon.
+inspection, snapshots, the warm daemon, and the CAD Viewer (`cadgen viewer`:
+a local HTTP server over the built client, one directory per instance).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily,
 never at namespace-import time) and the *built outputs* of `cadgen-js`.
 Never app code, never `cadgen-js` source at runtime.
 
-**DEPENDED ON BY** — every skill (as a pinned installed distribution) and
-the CAD Viewer's build path (`cadgen step build` spawned for foreign STEP
-imports — a soft dependency; viewing works without it).
+**DEPENDED ON BY** — every skill (as a pinned installed distribution). The
+CAD Viewer is not a dependent but a part: `cadgen.viewer` serves the client and
+compiles foreign STEP imports in a worker process it owns.
 
 ## The design laws
 
@@ -158,16 +160,20 @@ src/cadgen/
                          #   cli_from_function, doors (documents-only gate),
                          #   source_sidecar, step_assemble/step_reemit,
                          #   caches (op memo, scope store, cache_paths)
+  viewer/                # the CAD Viewer's server: launcher (main),
+                         #   routes (http_app), catalog (scanner), freshness
+                         #   authority (artifact_status), compile worker
   _runtime/              # BUILT JS (browser snapshot renderer, node
-                         #   builders) — generated from cadgen-js, never
+                         #   builders, the viewer client) — generated, never
                          #   edited here
 ```
 
 Verbs by format: `step` compile · build · snapshot · inspect;
 `stl`/`3mf`/`glb` build · snapshot; `dxf` snapshot; `urdf`/`sdf`
 validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
-`cadgen cache|daemon|doctor` are status commands, deliberately outside the
-mirror pattern. `cadgen step compile` is internal tooling: skills never
+`cadgen cache|daemon|doctor` are status commands, and `cadgen viewer
+[list|stop]` the CAD Viewer's launcher and instance manager — all deliberately
+outside the mirror pattern. `cadgen step compile` is internal tooling: skills never
 teach it — doors compile missing packages on demand.
 
 Developed in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad);

@@ -15,10 +15,6 @@ costs seconds and needs the heavy dependency set installed. ``cadgen --help`` an
 unknown command must not pay for that, so the registry stores dotted module names as
 strings and imports exactly the one being run. Do not hoist these to module-level imports
 when adding commands.
-
-The CAD Viewer is NOT here: it is a standalone app (the ``cad-viewer`` skill bundles it;
-a checkout runs ``apps/viewer/server/main.py`` directly), and cadgen is exclusively the
-programmatic generation/inspection/snapshot toolchain.
 """
 
 from __future__ import annotations
@@ -73,11 +69,17 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # without it `cadgen daemon status` falls through to one-word `daemon` and the
     # supervisor treats "status" as a stray argument.
     "daemon status": ("cadgen.cli.daemon_status", "show the warm daemon's workers"),
+    # The CAD Viewer. One-word `viewer` serves the cwd (what the cad-viewer skill
+    # teaches); the two-word entries are the instance manager, split into their own
+    # modules for the same dispatch reason `daemon status` is.
+    "viewer": ("cadgen.cli.viewer", "serve the current directory in the CAD Viewer"),
+    "viewer list": ("cadgen.cli.viewer_list", "show running CAD Viewers and what each serves"),
+    "viewer stop": ("cadgen.cli.viewer_stop", "terminate a running CAD Viewer"),
 }
 
 # `cadgen==1.2.3` / `cadgen[snapshot]==1.2.3`, as written by
-# scripts/release/pin-cadgen-requirements.sh. Only the `==` form is a pin: a bare
-# `cadgen` line is the development checkout, which resolves to the editable install.
+# scripts/release/pin-cadgen-requirements.sh. Only the `==` form is a pin; a bare
+# `cadgen` line has nothing to enforce.
 _PIN_RE = re.compile(r"^cadgen(?:\[[a-z0-9_,.-]+\])?\s*==\s*(?P<pin>[^\s;#]+)")
 
 
@@ -85,9 +87,10 @@ def read_requirements_pin(requirements_path) -> str | None:
     """The exact ``cadgen==<version>`` a requirements.txt pins, or ``None``.
 
     ``None`` covers the non-cases uniformly: file absent/unreadable, or cadgen named
-    unpinned — which is exactly the development checkout, whose editable install has no
-    release version to match. Callers decide what a mismatch means (``cadgen doctor``
-    reports it; :func:`enforce_requirements_pin` exits). String comparison rather than
+    without a pin. Callers decide what a mismatch means (``cadgen doctor`` reports it;
+    :func:`enforce_requirements_pin` exits). A source checkout's editable install
+    reports the repository's VERSION, which is what the checked-in pins name, so the
+    pin matches there too. String comparison rather than
     PEP 440 on purpose: pins are written mechanically as exact ``==`` by
     scripts/release/pin-cadgen-requirements.sh.
     """

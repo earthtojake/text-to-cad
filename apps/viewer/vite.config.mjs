@@ -37,49 +37,22 @@ function normalizeViewerAllowedHosts(value) {
     .filter(Boolean);
 }
 
-function readViewerPackageVersion(appRoot) {
-  try {
-    const packageJson = JSON.parse(fs.readFileSync(path.join(appRoot, "package.json"), "utf8"));
-    return String(packageJson.version || "");
-  } catch {
-    return "";
-  }
-}
-
-function findRootPackageSrc(packageDirName) {
-  let current = viewerAppRoot;
-  for (;;) {
-    const candidate = path.join(current, "packages", packageDirName, "src");
-    if (
-      fs.existsSync(candidate) &&
-      fs.existsSync(path.join(current, "packages", packageDirName, "package.json"))
-    ) {
-      return candidate;
-    }
-    const next = path.dirname(current);
-    if (next === current) {
-      return "";
-    }
-    current = next;
-  }
-}
-
+// cadgen-js is this repository's `packages/cadgen-js`, two levels up: the client is
+// built from its SOURCE (the package is `private`, not installed from a registry),
+// and package.json names the same path as a `file:` dependency so node_modules
+// carries a link to it for tooling that resolves by name. An installed copy under
+// node_modules is the fallback for a checkout laid out some other way.
 function resolveCadJsPackageRoot() {
-  const bundledPackageSrc = path.join(viewerAppRoot, "packages", "cadgen-js", "src");
-  if (fs.existsSync(bundledPackageSrc)) {
-    return bundledPackageSrc;
-  }
-  const rootPackageSrc = findRootPackageSrc("cadgen-js");
-  if (rootPackageSrc) {
-    return rootPackageSrc;
+  const repoPackageSrc = path.resolve(viewerAppRoot, "..", "..", "packages", "cadgen-js", "src");
+  if (fs.existsSync(repoPackageSrc)) {
+    return repoPackageSrc;
   }
   const installedPackageSrc = path.join(viewerAppRoot, "node_modules", "cadgen-js", "src");
   if (fs.existsSync(installedPackageSrc)) {
     return installedPackageSrc;
   }
-  // Nothing resolved: name the in-app path so the failure points at this
-  // checkout rather than escaping to a parent workbench that may not exist.
-  return bundledPackageSrc;
+  // Nothing resolved: name the repo path so the failure points at the layout.
+  return repoPackageSrc;
 }
 
 function resolveDirectoryRoot() {
@@ -91,27 +64,27 @@ function resolveDirectoryRoot() {
   });
 }
 
-// Dev runs the SAME backend as production — the same server/main.py — but as a
-// second process that Vite proxies to, because a Python server cannot be
-// in-process Vite middleware. `npm run dev` stays ONE command: this plugin
-// spawns the backend on an ephemeral port, reads the port off its
-// {url,port,action} line, and hands it to the proxy in the server block.
+// Dev runs the SAME backend as production — `cadgen viewer`, spawned as
+// `python -m cadgen.viewer` — but as a second process that Vite proxies to,
+// because a Python server cannot be in-process Vite middleware. `npm run dev`
+// stays ONE command: this plugin spawns the backend on an ephemeral port, reads
+// the port off its {url,port,action} line, and hands it to the proxy in the
+// server block.
 //
 // The backend runs --ephemeral --no-registry --api-only. --no-registry is a
 // CORRECTNESS requirement, not tidiness: a registered dev backend would be
-// found by a later `main.py` launch from the same directory (reuse keys on the
-// served realpath at the same version), handing an agent a URL served by
-// Vite's proxy target instead of a real Viewer. --api-only is what makes dev work on a checkout that has never
-// been built: Vite serves the client here, so this backend needs no dist/ —
-// and dist/ is gitignored, so without it `npm run dev` failed on every fresh
-// clone with a complaint about a missing build.
+// found by a later `cadgen viewer` launch from the same directory (reuse keys
+// on the served realpath at the same version), handing an agent a URL served by
+// Vite's proxy target instead of a real Viewer. --api-only is what makes dev
+// work on a checkout that has never been built: Vite serves the client here, so
+// this backend needs no dist/ — and dist/ is gitignored, so without it
+// `npm run dev` failed on every fresh clone with a complaint about a missing
+// build.
 //
-// VIEWER_PYTHON names the interpreter, defaulting to python3 — right for the
-// standalone repo, usually WRONG in a checkout where the interpreter carrying
-// cadgen is the repo venv. So the resolved interpreter and its
-// stepImportAvailable answer are logged at startup: a backend that cannot
-// import cadgen says so here rather than three clicks later as a failed STEP
-// import. See CONTRIBUTING.md for the checkout recipe.
+// VIEWER_PYTHON names the interpreter that has cadgen installed, defaulting to
+// python3 — usually WRONG in a checkout, where that interpreter is the repo
+// venv. The resolved interpreter is logged at startup so an exit is
+// attributable. See CONTRIBUTING.md for the checkout recipe.
 //
 // VIEWER_BACKEND_URL attaches to a backend you started yourself, which is also
 // how you put a debugger on it.
@@ -136,7 +109,8 @@ async function startDevBackend() {
   const child = spawn(
     python,
     [
-      path.join(viewerAppRoot, "server", "main.py"),
+      "-m",
+      "cadgen.viewer",
       "--host",
       "127.0.0.1",
       "--ephemeral",
@@ -169,20 +143,6 @@ async function startDevBackend() {
   const announced = await readFirstJsonLine(child.stdout);
   const target = String(announced.url || "").replace(/\/+$/u, "");
   console.info(`CAD Viewer backend: ${target} (${python}, serving ${directoryRoot})`);
-
-  // Announce the degradation instead of letting it surface three clicks later
-  // as a failed STEP import.
-  try {
-    const info = await (await fetch(`${target}/__cad/server`)).json();
-    if (!info.stepImportAvailable) {
-      console.warn(
-        `CAD Viewer backend cannot import cadgen (${python}): viewing works, STEP import will not. ` +
-          "Set VIEWER_PYTHON to an interpreter with cadgen installed.",
-      );
-    }
-  } catch {
-    // A dead backend is reported far more clearly by the proxy itself.
-  }
   return target;
 }
 
@@ -330,8 +290,9 @@ export default defineConfig(async ({ command }) => ({
           })()
         : undefined,
     fs: {
-      // Real paths too: Vite checks ids after resolution, and the develop layout
-      // reaches cadgen-js through a symlink. See scripts/serverFsAllow.mjs.
+      // cadgen-js lives outside the app root, so it must be allowed explicitly;
+      // real paths too, in case a checkout reaches it through a link. See
+      // scripts/serverFsAllow.mjs.
       allow: resolveServerFsAllow([viewerAppRoot, cadJsPackageRoot], {
         realpath: fs.realpathSync,
       }),
