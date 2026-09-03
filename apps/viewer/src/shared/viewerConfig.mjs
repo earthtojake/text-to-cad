@@ -1,20 +1,16 @@
 export const DEFAULT_VIEWER_GITHUB_URL = "https://github.com/earthtojake/text-to-cad";
 export const DEFAULT_VIEWER_DISCORD_URL = "https://discord.gg/5FGB9DwJYU";
-// Two steps, because the Viewer IS cadgen (`cadgen viewer`): refreshing the skills alone
-// changes nothing that is running. `add` rather than `update` for the skills: both refresh
-// what is installed, but only `add` picks up a skill that is NEW in a release, because
-// `update` walks the lockfile. (`install` is an undocumented alias for `add`.) Then cadgen
-// itself: the refreshed skills pin `cadgen==<release>`, and `--upgrade cadgen` resolves the
-// same release from PyPI without this command having to know where the Skills CLI put the
-// requirements.txt (it differs per agent).
-export const DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND =
-  "npx skills add earthtojake/text-to-cad && python -m pip install --upgrade cadgen";
+// `add` rather than `update`: both refresh what is installed, but only `add` picks up a skill
+// that is NEW in a release, because `update` walks the lockfile. Releases here do add skills,
+// so `update` would quietly leave them out. (`install` is an undocumented alias for `add`.)
+// Skills only: the skill text tells the agent when and how to install or upgrade cadgen.
+export const DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND = "npx skills add earthtojake/text-to-cad";
 
 // The other way to take an update: hand this to your agent instead of running the command
 // yourself. One short line -- it is read at a glance in a popover, and it is pasted into a chat
 // where the agent already knows the rest of the job.
 export const DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT =
-  "Update the text-to-cad skills with `npx skills add earthtojake/text-to-cad`, then upgrade cadgen to the release they pin.";
+  "Update the text-to-cad skills with `npx skills add earthtojake/text-to-cad`.";
 
 export function normalizeViewerDefaultFile(value = "") {
   const rawValue = String(value ?? "").trim();
@@ -143,14 +139,10 @@ export function normalizeViewerSkillsInstallCommand(
   fallback = DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
 ) {
   const command = cleanInstallCommandCandidate(value);
-  // Both spellings: `install` is an alias for `add`, and release bodies may use either. An
-  // optional second step upgrades cadgen (`&& [python -m] pip install ...`), which is what
-  // actually moves the running Viewer; anything else chained on is not an install command.
-  if (
-    /^npx\s+skills\s+(?:install|add)(?:\s+(?!&&)\S+)+(?:\s*&&\s*(?:python3?\s+-m\s+)?pip\s+install(?:\s+(?!&&)\S+)+)?$/iu.test(
-      command
-    )
-  ) {
+  // Both spellings: `install` is an alias for `add`, and release bodies may use either. No
+  // token may carry a shell operator (`&&`, `;`, `|`, backticks, `$`): this string is put in
+  // front of the user to run, so a release body must not be able to chain anything onto it.
+  if (/^npx\s+skills\s+(?:install|add)(?:\s+[^\s;&|`$]+)+$/iu.test(command)) {
     return command;
   }
   return String(fallback || "").trim();

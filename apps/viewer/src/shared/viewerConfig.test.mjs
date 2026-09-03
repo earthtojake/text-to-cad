@@ -161,24 +161,24 @@ test("a patch release is worth prompting about, at this cadence", () => {
   assert.equal(isViewerReleaseMajorMinorNewer("0.4.9", "0.4.10"), false);
 });
 
-test("normalizeViewerSkillsInstallCommand accepts skills add/install, optionally followed by a pip step", () => {
+test("normalizeViewerSkillsInstallCommand accepts skills add/install and nothing chained on", () => {
   // A shell prompt and padding are stripped, so a command pasted out of a release body works.
   assert.equal(
     normalizeViewerSkillsInstallCommand("$ npx   skills add   earthtojake/text-to-cad"),
     "npx skills add earthtojake/text-to-cad"
   );
-  // The default is the two-step form: the Viewer is cadgen, so the skills refresh alone
-  // upgrades nothing that is running.
+  // The default is skills-only: the skills tell the agent when and how to install cadgen.
   assert.equal(
     normalizeViewerSkillsInstallCommand(DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND),
     DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
   );
-  assert.match(DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND, /^npx skills add earthtojake\/text-to-cad && python -m pip install --upgrade cadgen$/u);
+  assert.equal(DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND, "npx skills add earthtojake/text-to-cad");
+  // Nothing may be chained on -- not even a pip install. This string is put in front of the
+  // user to run, so a release body cannot smuggle a second command through it.
   assert.equal(
-    normalizeViewerSkillsInstallCommand("npx skills add example/repo && pip install -r skills/cad-viewer/requirements.txt"),
-    "npx skills add example/repo && pip install -r skills/cad-viewer/requirements.txt"
+    normalizeViewerSkillsInstallCommand("npx skills add example/repo && pip install --upgrade cadgen"),
+    DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
   );
-  // Only a pip install may be chained on; anything else falls back.
   assert.equal(
     normalizeViewerSkillsInstallCommand("npx skills add example/repo && rm -rf ~"),
     DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
@@ -215,22 +215,28 @@ test("viewerSkillsInstallCommandFromText extracts release-body install commands"
     ].join("\n")),
     "npx skills install example/repo"
   );
-  // The two-step form survives extraction whole, from a fenced block or inline code.
-  const twoStep = "npx skills add example/repo && python -m pip install --upgrade cadgen";
-  assert.equal(viewerSkillsInstallCommandFromText(`Update with \`${twoStep}\`.`), twoStep);
-  assert.equal(viewerSkillsInstallCommandFromText(`Steps:\n${twoStep}\n`), twoStep);
+  // Inline code and bare lines extract too.
+  assert.equal(
+    viewerSkillsInstallCommandFromText("Update with `npx skills add example/repo`."),
+    "npx skills add example/repo"
+  );
+  // A chained command in a release body is not an install command: fall back.
+  assert.equal(
+    viewerSkillsInstallCommandFromText("Steps:\nnpx skills add example/repo && pip install --upgrade cadgen\n"),
+    DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
+  );
   assert.equal(
     viewerSkillsInstallCommandFromText("No command here."),
     DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND
   );
 });
 
-test("the agent update prompt names the command and the cadgen upgrade, in one short line", () => {
+test("the agent update prompt names the skills command alone, in one short line", () => {
   assert.match(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT, /npx skills add earthtojake\/text-to-cad/u);
   // `add`, not `update`: only `add` picks up a skill that is new in a release.
   assert.doesNotMatch(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT, /npx skills update/u);
-  // The skills refresh alone upgrades nothing that is running: the prompt says to move cadgen too.
-  assert.match(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT, /upgrade cadgen/u);
+  // Skills only: the refreshed skills tell the agent when and how to install cadgen.
+  assert.doesNotMatch(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT, /cadgen|pip/u);
   // It is read at a glance in a popover, so it stays one short line.
   assert.equal(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT.split("\n").length, 1);
   assert.ok(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT.length < 140);
