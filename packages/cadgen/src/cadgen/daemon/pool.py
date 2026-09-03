@@ -218,10 +218,11 @@ def describe_exit(status: int | None) -> str:
         import signal
 
         try:
-            name = signal.Signals(-status).name
+            # Windows' Signals enum has no member 9, so the fallback is the
+            # ordinary wording there -- it must not stutter `signal 9 (signal 9)`.
+            return f"was killed by {signal.Signals(-status).name} (signal {-status})"
         except ValueError:
-            name = f"signal {-status}"
-        return f"was killed by {name} (signal {-status})"
+            return f"was killed by signal {-status}"
     return f"exited with code {status}"
 
 

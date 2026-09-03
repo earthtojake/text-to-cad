@@ -10,8 +10,16 @@ CAD_TEST_TMP_ROOT = TMP_ROOT / "cad-skill-tests"
 
 
 def temporary_directory(*, prefix: str) -> tempfile.TemporaryDirectory[str]:
+    """A test temp directory whose cleanup waits out the Windows sharing violation.
+
+    Every directory a test writes into is exposed to the runner's real-time
+    scanner, and some are exposed to a subprocess whose handles outlive the kill
+    that ended it. Both hold ``WinError 32`` for a moment, and neither is the
+    test's own bug. ``RetryingTemporaryDirectory`` is plain ``cleanup()`` off
+    Windows and still fails loudly on a genuinely leaked handle, so this is the
+    ladder rather than an exemption -- see the class below."""
     CAD_TEST_TMP_ROOT.mkdir(parents=True, exist_ok=True)
-    return tempfile.TemporaryDirectory(prefix=prefix, dir=CAD_TEST_TMP_ROOT)
+    return RetryingTemporaryDirectory(prefix=prefix, dir=CAD_TEST_TMP_ROOT)
 
 
 def named_tmp_root(name: str) -> Path:

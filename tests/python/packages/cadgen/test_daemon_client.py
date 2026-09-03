@@ -81,10 +81,10 @@ class DeadWorkerMessage(unittest.TestCase):
         self.assertIn("out of memory", err)
         self.assertIn("`cadgen step inspect validate tmp/noexh/noexh.step --out validate.json`", err)
         self.assertIn("NOT retried", err)
-        self.assertIn(
-            "CADGEN_DAEMON=0 cadgen step inspect validate tmp/noexh/noexh.step --out validate.json",
-            err,
-        )
+        # The rerun spelling is the platform's, so ask the helper that composes it.
+        # That makes this assertion only "the message carries the rerun"; the
+        # exact text of BOTH spellings is pinned in ColdRerunSpelling below.
+        self.assertIn(client.cold_rerun_command(PAYLOAD), err)
         self.assertNotIn("worker closed the connection", err)
 
     def test_a_job_with_no_prog_is_named_by_its_tool(self):
@@ -172,9 +172,39 @@ class ServerRelaysTheDeath(unittest.TestCase):
 
 class DescribeExit(unittest.TestCase):
     def test_signal_code_and_open_pipe_are_told_apart(self):
-        self.assertEqual(pool_mod.describe_exit(-9), "was killed by SIGKILL (signal 9)")
+        import signal
+
+        expected = "was killed by SIGKILL (signal 9)" if hasattr(signal, "SIGKILL") else "was killed by signal 9"
+        self.assertEqual(pool_mod.describe_exit(-9), expected)
         self.assertEqual(pool_mod.describe_exit(2), "exited with code 2")
         self.assertEqual(pool_mod.describe_exit(None), "closed its output while still running")
+
+    def test_an_unnamed_signal_is_not_described_twice(self):
+        """99 is not a signal on any host, so this is the Windows wording for 9 --
+        `was killed by signal 9 (signal 9)` was the stutter it used to produce."""
+        self.assertEqual(pool_mod.describe_exit(-99), "was killed by signal 99")
+
+    def test_a_windows_exit_status_is_a_code_not_a_signal(self):
+        """Windows' Popen.wait returns a non-negative DWORD: a TerminateProcess
+        kill comes back as the exit CODE, never as a negative signal."""
+        self.assertEqual(pool_mod.describe_exit(9), "exited with code 9")
+
+
+class ColdRerunSpelling(unittest.TestCase):
+    def test_the_posix_rerun_is_an_env_prefix(self):
+        with mock.patch.object(client.os, "name", "posix"):
+            self.assertEqual(
+                "CADGEN_DAEMON=0 cadgen step inspect validate tmp/noexh/noexh.step --out validate.json",
+                client.cold_rerun_command(PAYLOAD),
+            )
+
+    def test_the_windows_rerun_is_a_cmd_set_statement(self):
+        """Pinned from either host: `set VAR=0 && ...` is the only spelling cmd.exe
+        runs, and an env prefix is a syntax error there."""
+        with mock.patch.object(client.os, "name", "nt"):
+            command = client.cold_rerun_command(PAYLOAD)
+        self.assertTrue(command.startswith("set CADGEN_DAEMON=0 && "), command)
+        self.assertIn("cadgen step inspect validate", command)
 
 
 if __name__ == "__main__":
