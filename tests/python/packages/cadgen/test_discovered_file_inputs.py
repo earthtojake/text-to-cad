@@ -328,10 +328,12 @@ class DeclaredAnimationInputTests(unittest.TestCase):
         import json
 
         self._run()
-        records = list((self.project / "store" / "records").glob("*.source.json"))
-        self.assertEqual(len(records), 1, records)
-        recorded = json.loads(records[0].read_text(encoding="utf-8"))
-        self.assertEqual(sorted(recorded["sourceClosureFiles"]), ["hinge.anim.js", "hinge.py"])
+        from cadgen.store.records import read_record
+
+        recorded = read_record(self.project / "hinge.py")
+        self.assertIsNotNone(recorded, "the build must leave a record for the model")
+        files = sorted(os.path.basename(f) for f in recorded["closure"]["files"])
+        self.assertEqual(files, ["hinge.anim.js", "hinge.py"])
 
 
 class ReaderSurfaceTests(unittest.TestCase):

@@ -105,9 +105,9 @@ class KinematicsBuildTests(unittest.TestCase):
         )
 
     def _descriptor(self, script: Path) -> dict:
-        from cadgen.catalog import render_package_dir
+        from cadgen.catalog import result_view_dir
 
-        package = render_package_dir(script.with_suffix(".step"))
+        package = result_view_dir(script.with_suffix(".step"))
         return json.loads((package / "assembly.json").read_text())
 
     def _sidecar(self, script: Path) -> dict:

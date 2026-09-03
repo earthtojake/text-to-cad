@@ -24,7 +24,7 @@ add_repo_path("packages/cadgen/src")
 
 from cadgen import step_artifact_cli  # noqa: E402
 from cadgen._internal.step_assemble import assemble_step_from_package  # noqa: E402
-from cadgen.catalog import render_package_dir  # noqa: E402
+from cadgen.catalog import result_view_dir  # noqa: E402
 from tests.python.support.cad_test_roots import IsolatedCadRoots  # noqa: E402
 
 # Two occurrences of DISTINCT parts with per-occurrence colors and a
@@ -79,7 +79,7 @@ class GeneratedStepFidelityTests(unittest.TestCase):
 
     def _descriptor(self, step_path: Path) -> dict:
         return json.loads(
-            (render_package_dir(step_path) / "assembly.json").read_text(encoding="utf-8")
+            (result_view_dir(step_path) / "assembly.json").read_text(encoding="utf-8")
         )
 
     def test_generated_descriptor_records_occurrence_colors_and_pose(self) -> None:
@@ -115,7 +115,7 @@ class GeneratedStepFidelityTests(unittest.TestCase):
         _, logical_step = self._build_generated_package()
         out = self.temp_root / "out" / "colored.step"
         out.parent.mkdir(parents=True, exist_ok=True)
-        assemble_step_from_package(render_package_dir(logical_step), out)
+        assemble_step_from_package(result_view_dir(logical_step), out)
         text = out.read_text(encoding="utf-8", errors="ignore")
         self.assertIn(
             "COLOUR",
@@ -139,7 +139,7 @@ class GeneratedStepFidelityTests(unittest.TestCase):
         exported_dir = self.temp_root / "roundtrip"
         exported_dir.mkdir()
         exported = exported_dir / "colored.step"
-        assemble_step_from_package(render_package_dir(logical_step), exported)
+        assemble_step_from_package(result_view_dir(logical_step), exported)
         payload = step_artifact_cli.build_step_artifact(
             repo_root=Path.cwd(),
             step=exported,
@@ -181,7 +181,7 @@ class GeneratedStepFidelityTests(unittest.TestCase):
         exported_dir = self.temp_root / "clean"
         exported_dir.mkdir()
         exported = exported_dir / "colored.step"
-        assemble_step_from_package(render_package_dir(logical_step), exported)
+        assemble_step_from_package(result_view_dir(logical_step), exported)
         text = exported.read_text(encoding="utf-8", errors="ignore")
         self.assertNotIn("cadgen:", text)
         self.assertNotIn("colored.py", text)
@@ -195,7 +195,7 @@ class GeneratedStepFidelityTests(unittest.TestCase):
         exported_dir = self.temp_root / "imported"
         exported_dir.mkdir()
         exported = exported_dir / "colored.step"
-        assemble_step_from_package(render_package_dir(logical_step), exported)
+        assemble_step_from_package(result_view_dir(logical_step), exported)
 
         payload = step_artifact_cli.build_step_artifact(
             repo_root=Path.cwd(),

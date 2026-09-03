@@ -97,10 +97,10 @@ def artifact_path(entry_path: Path) -> Path:
 
 def package_dir(entry_path: Path) -> Path:
     # The package resolves from the STORE by the ARTIFACT's content hash
-    # (cadgen.catalog.render_package_dir), wherever out= routed it.
-    from cadgen.catalog import render_package_dir
+    # (cadgen.catalog.result_view_dir), wherever out= routed it.
+    from cadgen.catalog import result_view_dir
 
-    return render_package_dir(artifact_path(entry_path))
+    return result_view_dir(artifact_path(entry_path))
 
 
 def fingerprint(entry_path: Path) -> dict:

@@ -7,9 +7,7 @@ import build123d
 from build123d import Compound, Location
 
 from cadgen.instances import compound_from_instances
-from cadgen._internal.component_package import (
-    build_package_from_compound as _RAW_BUILD_PACKAGE,
-)
+from tests.python.support.store_fixtures import build_view as _RAW_BUILD_PACKAGE
 
 
 def _build_package(compound, **kwargs):

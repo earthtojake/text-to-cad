@@ -148,7 +148,7 @@ def _manifest(root: pathlib.Path) -> dict[str, str]:
 
     Lock and progress files are transient scaffolding, not output.
     """
-    from cadgen.catalog import render_package_dir
+    from cadgen.catalog import result_view_dir
 
     out: dict[str, str] = {}
     for artifact in sorted(root.rglob("*")):
@@ -158,7 +158,7 @@ def _manifest(root: pathlib.Path) -> dict[str, str]:
         if artifact.suffix in {".step", ".stp", ".dxf"} or rel.endswith(".step.json"):
             out[rel] = _digest(artifact)
         if artifact.suffix in {".step", ".stp"}:
-            package = render_package_dir(artifact)
+            package = result_view_dir(artifact)
             if package.is_dir():
                 for entry in sorted(package.rglob("*")):
                     if entry.is_file():

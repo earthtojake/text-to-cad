@@ -206,7 +206,7 @@ class CadGenerationTests(unittest.TestCase):
         export_build123d_step_scene(assembly, step_path)
         self.assertTrue(step_path.is_file())
 
-        package_dir = cad_catalog.render_package_dir(step_path)
+        package_dir = cad_catalog.result_view_dir(step_path)
         self.assertFalse(
             (package_dir / "assembly.json").exists(),
             "precondition: the package must not exist before the build",
@@ -1348,7 +1348,7 @@ class CadGenerationTests(unittest.TestCase):
         # whole-model selector bundle (selectors are extracted on demand by inspect).
         self.assertEqual(1, len(package_calls))
         self.assertTrue(package_calls[0]["single_component"])
-        self.assertTrue(cad_catalog.render_package_dir(step_path).is_dir())
+        self.assertTrue(cad_catalog.result_view_dir(step_path).is_dir())
         self.assertIsNone(result.selector_bundle)
 
     def test_generate_part_outputs_reuses_current_topology_artifact(self) -> None:
@@ -1522,7 +1522,7 @@ class CadGenerationTests(unittest.TestCase):
 
         load_scene.assert_not_called()
         self.assertEqual(1, len(package_calls))
-        self.assertTrue(cad_catalog.render_package_dir(step_path).is_dir())
+        self.assertTrue(cad_catalog.result_view_dir(step_path).is_dir())
 
     # --- Incremental-regen freshness gate (D) --------------------------------
 
@@ -1599,7 +1599,7 @@ class CadGenerationTests(unittest.TestCase):
         # A missing render artifact (the package directory) forces a rebuild — gen_step
         # writes no STEP, so the render package, not the STEP, is the freshness anchor.
         # The package is keyed by the entry filename (the generator), not the logical .step.
-        shutil.rmtree(cad_catalog.render_package_dir(spec.entry_path))
+        shutil.rmtree(cad_catalog.result_view_dir(spec.entry_path))
         self.assertTrue(cad_generation._generated_child_is_stale(spec, force=False))
 
     def _spec(self, ref: str, kind: str, step_name: str) -> cad_generation.EntrySpec:
@@ -1686,7 +1686,7 @@ class CadGenerationTests(unittest.TestCase):
         # gen_step writes no STEP — the package directory is the freshness anchor, so
         # currency rides on the recorded source closure, not an on-disk STEP hash. The
         # package is keyed by the entry filename (the generator), not the logical .step.
-        glb_path = cad_catalog.render_package_dir(spec.entry_path)
+        glb_path = cad_catalog.result_view_dir(spec.entry_path)
         glb_path.mkdir(parents=True, exist_ok=True)
         manifest = {
             "_sourceSidecar": {
@@ -1732,7 +1732,7 @@ class CadGenerationTests(unittest.TestCase):
         )
         # The package directory is keyed by the entry filename (the generator), not the
         # logical .step.
-        glb_path = cad_catalog.render_package_dir(spec.entry_path)
+        glb_path = cad_catalog.result_view_dir(spec.entry_path)
         glb_path.mkdir(parents=True, exist_ok=True)  # package directory
         manifest = {
             "_sourceSidecar": {

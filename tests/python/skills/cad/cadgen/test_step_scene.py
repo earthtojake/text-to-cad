@@ -92,18 +92,18 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
             )
 
             from cadgen._internal.step_hash import step_file_hash
-            from cadgen._internal.component_package import build_package_from_compound
+            from tests.python.support.store_fixtures import build_view
             from cadgen._internal.step_scene_mesh import scene_to_build123d_compound
             from cadgen._internal.step_scene_package import scene_from_render_package
-            from cadgen.catalog import render_package_dir
+            from cadgen.catalog import result_view_dir
             from cadgen.coordination import artifact_build
             from cadgen.coordination.kinds import STEP_PACKAGE
 
             compound = scene_to_build123d_compound(scene)
-            package_dir = render_package_dir(step_path)
+            package_dir = result_view_dir(step_path)
             step_hash = step_file_hash(step_path)
             with artifact_build(STEP_PACKAGE, package_dir):
-                build_package_from_compound(
+                build_view(
                     compound,
                     package_dir=package_dir,
                     root_name="synthetic",

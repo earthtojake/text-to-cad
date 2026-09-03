@@ -17,9 +17,12 @@ tree's links — that is what makes the link/component decision in
 ``cadgen.store.trees`` safe. ``closure.files`` are relative to the script's
 folder and hashed by ``cadgen.store.closure``.
 
-Identity is the SCRIPT. A generated document maps to its record through the
-sidecar's ``sourcePath``; an imported document (a vendor ``.step`` with no
-script) is its own source and keys on its own path.
+Identity is the SCRIPT. A generated document carries no tie back to its
+source (a generated file is independent of its script), so the store keeps
+the reverse map itself: ``index/document/<sha256(document path)>`` names the
+model that wrote the document. A missing entry reads as "an imported
+document" — the document is its own source and keys on its own path — which
+costs one rebuild and never correctness.
 """
 
 from __future__ import annotations
@@ -69,22 +72,27 @@ def _resolved(path: Path | str) -> str:
         return os.path.abspath(str(path))
 
 
-def source_for_document(document: Path | str) -> Path:
-    """The model a document belongs to: the script its sidecar names when the
-    document was generated, else the document itself (an imported source)."""
-    document = Path(document)
-    try:
-        from cadgen._internal.source_sidecar import read_source_sidecar
+def note_document(document: Path | str, model: Path | str) -> None:
+    """Remember that ``model`` wrote ``document`` (the reverse map a door needs
+    to find a document's record). Idempotent; atomic."""
+    write_entry("document", model_key(document), {"model": _resolved(model)})
 
-        sidecar = read_source_sidecar(document) or {}
-    except Exception:  # noqa: BLE001 - an unreadable sidecar is "no sidecar"
-        sidecar = {}
-    if str(sidecar.get("sourceKind") or "").strip().lower() == "python":
-        recorded = str(sidecar.get("sourcePath") or "").strip()
-        if recorded:
-            candidate = (document.parent / recorded).resolve()
-            if candidate.is_file():
-                return candidate
+
+def forget_document(document: Path | str) -> None:
+    remove_entry("document", model_key(document))
+
+
+def source_for_document(document: Path | str) -> Path:
+    """The model a document belongs to: the script the store remembers writing
+    it (when that script still exists), else the document itself (an imported
+    source)."""
+    document = Path(document)
+    entry = read_entry("document", model_key(document)) or {}
+    recorded = str(entry.get("model") or "").strip()
+    if recorded:
+        candidate = Path(recorded)
+        if candidate.is_file():
+            return candidate
     try:
         return document.expanduser().resolve()
     except (OSError, ValueError, RuntimeError):

@@ -52,7 +52,7 @@ def _cmd_info(as_json: bool) -> int:
         "index": counts,
     }
     if as_json:
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(payload, separators=(",", ":")))
         return 0
     print(f"store  {payload['root']}")
     print(f"objects  {objects} ({_human(object_bytes)})")
@@ -75,7 +75,7 @@ def _cmd_why(target: str, as_json: bool) -> int:
     record = read_record(model)
     tree = get_tree(str(record.get("tree"))) if record and record.get("tree") else None
     if as_json:
-        print(json.dumps({"model": str(model), "stale": verdict.stale, "clauses": verdict.clauses, "record": record}, indent=2))
+        print(json.dumps({"model": str(model), "stale": verdict.stale, "clauses": verdict.clauses, "record": record}, separators=(",", ":")))
         return 0 if not verdict.stale else 1
     print(f"model   {model}")
     print(f"verdict {'STALE' if verdict.stale else 'current'}  ({verdict.reason()})")
@@ -123,7 +123,7 @@ def _cmd_gc(dry_run: bool, grace_hours: float, as_json: bool) -> int:
         "removedBytes": report.removed_bytes,
     }
     if as_json:
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(payload, separators=(",", ":")))
         return 0
     verb = "would remove" if dry_run else "removed"
     print(f"{report.records} records, {report.reachable} reachable objects, {report.kept_by_grace} kept by grace; {verb} {report.removed} objects ({_human(report.removed_bytes)})")
@@ -136,7 +136,7 @@ def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
     info = sub.add_parser("info", help="what is in the store, by kind")
     info.add_argument("--json", action="store_true")
     why = sub.add_parser("why", help="why the gate says a model is stale (or current)")
-    why.add_argument("model", help="a model script (or a generated .step; its sidecar names the script)")
+    why.add_argument("model", help="a model script (or a generated .step; the store remembers which script wrote it)")
     why.add_argument("--json", action="store_true")
     gc = sub.add_parser("gc", help="mark and sweep unreachable objects")
     gc.add_argument("--dry-run", action="store_true")

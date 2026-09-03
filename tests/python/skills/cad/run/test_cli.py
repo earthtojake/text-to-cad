@@ -58,7 +58,7 @@ class RunModelArgvTests(unittest.TestCase):
                 ),
             )
         generate.assert_called_once()
-        self.assertEqual([f"{script}={self.root / 'bracket.step'}"], generate.call_args.args[0])
+        self.assertEqual([str(script)], generate.call_args.args[0])
         self.assertTrue(generate.call_args.kwargs["force"])
         self.assertTrue(generate.call_args.kwargs["json_output"])
         self.assertEqual(5.0, generate.call_args.kwargs["lock_timeout_s"])
@@ -72,11 +72,6 @@ class RunModelArgvTests(unittest.TestCase):
             runner.run_model_argv([str(script)])
         self.assertEqual(0.0, generate.call_args.kwargs["lock_timeout_s"])
 
-    def test_output_override_retargets_the_pair(self) -> None:
-        script = self._write("bracket.py", STEP_MODEL)
-        with mock.patch("cadgen.generation.generate_step_targets", return_value=0) as generate:
-            runner.run_model_argv([str(script), "-o", "out/custom.step"])
-        self.assertEqual([f"{script}=out/custom.step"], generate.call_args.args[0])
 
     def test_out_kwarg_is_the_declared_output(self) -> None:
         script = self._write(
@@ -86,7 +81,7 @@ class RunModelArgvTests(unittest.TestCase):
         with mock.patch("cadgen.generation.generate_step_targets", return_value=0) as generate:
             runner.run_model_argv([str(script)])
         self.assertEqual(
-            [f"{script}={self.root / 'exports' / 'bracket.step'}"],
+            [str(script)],
             generate.call_args.args[0],
         )
 

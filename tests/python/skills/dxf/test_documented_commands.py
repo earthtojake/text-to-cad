@@ -280,9 +280,6 @@ class DocumentedCommandForms(_DrawingHarness):
         self.run_drawing("gasket.py", "--force")
         self.assertEqual(first, (self.project / "gasket.dxf").read_bytes())
 
-    def test_output_flag_renames_the_drawing(self) -> None:
-        self.run_drawing("gasket.py", "-o", "out/custom.dxf")
-        self.assertTrue((self.project / "out" / "custom.dxf").is_file())
 
     def test_there_is_no_dxf_build_door(self) -> None:
         """A drawing has no derived state a door must materialize — the viewer

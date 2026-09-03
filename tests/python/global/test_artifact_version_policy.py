@@ -67,9 +67,9 @@ class PackageVersionIsOneNumberPerFileTypeTest(unittest.TestCase):
         # Deliberately NOT one shared number: a drawing rebuild is milliseconds and a
         # large STEP assembly is tens of seconds, so a DXF change must not re-mesh every
         # STEP model on next open. The gate lives in the store KEY salt now
-        # (cadgen.catalog.package_dir_for_hash), not in a descriptor check: a
-        # version bump orphans old packages by key.
-        source = (ROOT / "packages/cadgen/src/cadgen/catalog.py").read_text(encoding="utf-8")
+        # (the component id salt in component_package._content_hash_and_bytes),
+        # not in a descriptor check: a version bump re-keys every component.
+        source = (ROOT / "packages/cadgen/src/cadgen/_internal/component_package.py").read_text(encoding="utf-8")
         # DXF is absent by design: a generated drawing's render IS the sibling
         # .dxf the client parses, so there is no artifact to gate.
         for constant in (

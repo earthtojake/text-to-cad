@@ -122,14 +122,14 @@ def _model_artifacts(root: Path) -> list[Path]:
 def package_files(root: Path) -> list[Path]:
     """Every persisted build output for the models in ``root``: the store
     packages their artifacts resolve to, plus the model-side sidecars."""
-    from cadgen.catalog import render_package_dir
+    from cadgen.catalog import result_view_dir
 
     out: list[Path] = []
     for artifact in _model_artifacts(root):
         sidecar = Path(f"{artifact}.step.json")
         if sidecar.is_file():
             out.append(sidecar)
-        package = render_package_dir(artifact)
+        package = result_view_dir(artifact)
         if package.is_dir():
             out.extend(path for path in sorted(package.rglob("*")) if path.is_file())
     return out
@@ -154,10 +154,10 @@ def mtimes(root: Path) -> dict[str, int]:
     package files keyed store-relative. A rebuild changes these; a move
     followed by a no-op does not. Stronger than reading a producer's own
     "current" wording, which is exactly the claim under test."""
-    from cadgen._internal.cache_paths import packages_dir
+    from cadgen.store.paths import objects_dir
 
     out: dict[str, int] = {}
-    store = packages_dir()
+    store = objects_dir()
     for path in package_content_files(root):
         try:
             key = f"<store>/{path.relative_to(store).as_posix()}"
@@ -220,11 +220,11 @@ class PackagePortabilityTest(unittest.TestCase):
     def test_every_package_kind_was_actually_built(self) -> None:
         # Guards the tests below from passing vacuously on an empty tree: every
         # document resolves to a store package by its content hash.
-        from cadgen.catalog import render_package_dir
+        from cadgen.catalog import result_view_dir
 
         for name in ("widget.step", "rig.step", "imported.step"):
             with self.subTest(entry=name):
-                self.assertTrue(render_package_dir(self.root / name).is_dir())
+                self.assertTrue(result_view_dir(self.root / name).is_dir())
 
     def test_the_model_folder_is_pristine(self) -> None:
         # The store-primary exit gate: a model folder holds sources, documents
@@ -418,12 +418,12 @@ class DescriptorIsIndependentOfTheWorkingDirectoryTest(unittest.TestCase):
     """
 
     def _descriptor_built_from(self, cwd: Path, project: Path) -> dict:
-        from cadgen.catalog import render_package_dir
+        from cadgen.catalog import result_view_dir
         from cadgen.generation import generate_step_targets
 
         step = project / "widget.step"
         if step.exists():
-            shutil.rmtree(render_package_dir(step), ignore_errors=True)
+            shutil.rmtree(result_view_dir(step), ignore_errors=True)
             step.unlink()
         previous = Path.cwd()
         os.chdir(cwd)
@@ -432,7 +432,7 @@ class DescriptorIsIndependentOfTheWorkingDirectoryTest(unittest.TestCase):
         finally:
             os.chdir(previous)
         descriptor = json.loads(
-            (render_package_dir(step) / "assembly.json").read_text(encoding="utf-8")
+            (result_view_dir(step) / "assembly.json").read_text(encoding="utf-8")
         )
         # The descriptor is a pure function of the STEP bytes — no timestamp
         # to excuse (generatedAt rides the source sidecar now).

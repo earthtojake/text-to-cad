@@ -16,7 +16,7 @@ from cadgen._internal import assembly_spec
 from cadgen._internal import generation as cad_generation
 from cadgen import step_targets
 from cadgen._internal.glb_topology import STEP_TOPOLOGY_SCHEMA_VERSION
-from cadgen.catalog import render_package_dir
+from cadgen.catalog import result_view_dir
 from cadgen.selector_types import SelectorBundle, SelectorProfile
 from cadgen._internal.source_hash import python_source_hash
 from tests.python.support.cad_test_roots import IsolatedCadRoots
@@ -416,7 +416,7 @@ class InspectRefsTests(unittest.TestCase):
                 kind=target.kind,
                 source_path=target.source_path,
                 step_path=target.step_path,
-                artifact_path=__import__("cadgen.catalog", fromlist=["render_package_dir"]).render_package_dir(resolved_step_path),
+                artifact_path=__import__("cadgen.catalog", fromlist=["result_view_dir"]).result_view_dir(resolved_step_path),
                 manifest=topology_manifest,
                 selector_bundle=bundle,
             )

@@ -55,7 +55,7 @@ class GeneratedStepExportGuardTest(unittest.TestCase):
         self.assertIn("refusing to export a generated model", message)
         # The message has to name the model and say what to do, or it reads as an internal fault.
         self.assertIn("models/part.py", message)
-        self.assertIn("cadgen cache gc", message)
+        self.assertIn("cadgen store gc", message)
         self.assertFalse(self.out.exists(), "a refused export must leave no output behind")
 
     def test_an_imported_entry_still_copies(self) -> None:

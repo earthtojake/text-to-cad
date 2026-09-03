@@ -623,6 +623,12 @@ def _generate_part_outputs(
                 stats["published"] = False
                 return stats
         write_record(model_path, record)
+        if generated:
+            from cadgen.store.records import note_document
+
+            for output_path in outputs:
+                if Path(output_path) != model_path:
+                    note_document(output_path, model_path)
         stats["published"] = True
         return stats
 

@@ -104,9 +104,9 @@ class ConcurrentGenerationTest(unittest.TestCase):
 
     def test_package_is_intact_after_concurrent_builds(self):
         self._run_contenders(3)
-        from cadgen.catalog import render_package_dir
+        from cadgen.catalog import result_view_dir
 
-        package = render_package_dir(self.root / "widget.step")
+        package = result_view_dir(self.root / "widget.step")
         descriptor = package / "assembly.json"
         self.assertTrue(descriptor.is_file(), "no descriptor after concurrent builds")
         # The viewer's freshness gate must accept the package the race produced.
@@ -125,9 +125,9 @@ class ConcurrentGenerationTest(unittest.TestCase):
         self.assertIn("step export is current; reusing", outputs[0])
 
     def _package_dir(self):
-        from cadgen.catalog import render_package_dir
+        from cadgen.catalog import result_view_dir
 
-        return render_package_dir(self.root / "widget.step")
+        return result_view_dir(self.root / "widget.step")
 
     def _lock_scope(self):
         from cadgen.catalog import coordination_scope

@@ -290,6 +290,10 @@ def _decorator(
                 if frame.script_path is not None and _same_file(frame.script_path, script_path):
                     # The pipeline building THIS model is asking for its body.
                     return func()
+                if fmt == "dxf":
+                    # A drawing is not a model in the graph: nothing pins or
+                    # records it. Called inside a build it is just its body.
+                    return func()
                 # Composition: a parent's body asked for this child. Same rule as the
                 # top level — stale → build, then hand back its geometry — except the
                 # geometry is materialized from the child's tree and the call is

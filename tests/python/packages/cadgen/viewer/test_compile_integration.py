@@ -25,7 +25,7 @@ from cadgen.viewer.backend import ForbiddenAssetError
 from cadgen.viewer.build_progress import ProgressRegistry
 from cadgen.viewer.cadgen_ops import CLI_BUILD_HINT, CadgenOps
 from cadgen.viewer.compile_client import ACQUIRE_TIMEOUT_SECONDS, CompileClient
-from cadgen.viewer.store_paths import render_package_dir
+from cadgen.viewer.store_paths import coordination_scope
 
 FAKE_WORKER = str(Path(__file__).resolve().parent / "fake_worker.py")
 
@@ -107,9 +107,9 @@ class ResultsAndErrorsAreValues(CompileTestCase):
         registry = ProgressRegistry()
         client = self.client(registry=registry)
         candidate = self.step("slow.step")
-        from cadgen.viewer.store_paths import render_package_dir
+        from cadgen.viewer.store_paths import coordination_scope
 
-        package_dir = render_package_dir(candidate)
+        package_dir = coordination_scope(candidate)
 
         seen = []
 
@@ -133,13 +133,13 @@ class ResultsAndErrorsAreValues(CompileTestCase):
         self.assertGreater(max(done_count for _, done_count in seen), 1)
 
     def test_the_registry_entry_is_cleared_when_the_compile_ends(self):
-        from cadgen.viewer.store_paths import render_package_dir
+        from cadgen.viewer.store_paths import coordination_scope
 
         registry = ProgressRegistry()
         client = self.client(registry=registry)
         candidate = self.step("ok.step")
         client.compile(candidate)
-        self.assertIsNone(registry.snapshot(render_package_dir(candidate)))
+        self.assertIsNone(registry.snapshot(coordination_scope(candidate)))
 
 
 class CrashIsolation(CompileTestCase):
@@ -151,12 +151,12 @@ class CrashIsolation(CompileTestCase):
         self.assertIn("crash.step", result["error"])
 
     def test_the_in_flight_entry_clears_so_the_next_request_is_not_stuck(self):
-        from cadgen.viewer.store_paths import render_package_dir
+        from cadgen.viewer.store_paths import coordination_scope
 
         client = self.client()
         candidate = self.step("crash.step")
         client.compile(candidate)
-        self.assertFalse(client.in_flight(render_package_dir(candidate)))
+        self.assertFalse(client.in_flight(coordination_scope(candidate)))
 
     def test_a_replacement_worker_is_spawned_lazily_on_the_next_request(self):
         client = self.client()
@@ -300,7 +300,7 @@ class WorkerReuse(CompileTestCase):
 
 class IdleWatchdog(CompileTestCase):
     def test_a_silent_worker_is_killed_and_the_entry_leaves_generating(self):
-        from cadgen.viewer.store_paths import render_package_dir
+        from cadgen.viewer.store_paths import coordination_scope
 
         os.environ["VIEWER_CADGEN_IDLE_TIMEOUT"] = "1"
         self.addCleanup(lambda: os.environ.pop("VIEWER_CADGEN_IDLE_TIMEOUT", None))
@@ -309,7 +309,7 @@ class IdleWatchdog(CompileTestCase):
         result = client.compile(candidate)
         self.assertFalse(result["ok"])
         self.assertIn("went silent", result["error"])
-        self.assertFalse(client.in_flight(render_package_dir(candidate)))
+        self.assertFalse(client.in_flight(coordination_scope(candidate)))
 
 
 class OpsWiring(CompileTestCase):
@@ -467,7 +467,7 @@ class ContainmentHappensBeforeTheKernel(CompileTestCase):
         with self.assertRaises(ForbiddenAssetError):
             ops.artifact_status(victim)
         self.assertEqual(self.spawn_count(), 0)
-        self.assertFalse(os.path.isdir(render_package_dir(victim)))
+        self.assertFalse(os.path.isdir(coordination_scope(victim)))
 
     def test_a_relative_ref_that_walks_out_never_reaches_a_worker(self):
         ops = self.ops()

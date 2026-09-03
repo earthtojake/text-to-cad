@@ -13,6 +13,8 @@ is the part with a wrong answer that looks plausible.
 
 from __future__ import annotations
 
+from tests.python.support.store_fixtures import build_view
+
 import tempfile
 import unittest
 from unittest import mock
@@ -67,7 +69,7 @@ class AssemblyOccurrenceRefsTest(unittest.TestCase):
         self.root = Path(self._tmp.name)
         self.package_dir = self.root / "__cadgen__" / "models" / "demo.py"
         with exclusive(write_lock_path(self.package_dir)):
-            component_package.build_package_from_compound(
+            build_view(
                 _demo_compound(), package_dir=self.package_dir, root_name="demo"
             )
         descriptor = component_package.read_package_descriptor(self.package_dir)
@@ -604,7 +606,7 @@ class AssemblyGroupNodesTest(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.package_dir = Path(self._tmp.name) / "__cadgen__" / "models" / "nested.py"
         with exclusive(write_lock_path(self.package_dir)):
-            component_package.build_package_from_compound(
+            build_view(
                 _nested_compound(), package_dir=self.package_dir, root_name="nested"
             )
         self.descriptor = component_package.read_package_descriptor(self.package_dir)
