@@ -183,43 +183,44 @@ def _usage() -> str:
     return _USAGE_HEAD + "\n".join(lines) + "\n" + _USAGE_TAIL
 
 
-def _use_utf8_std_streams() -> None:
-    """Write UTF-8 out of a CLI process, whatever the console code page says.
+def _harden_std_stream_errors() -> None:
+    """Make an unencodable character survive as an escape instead of killing the write.
 
-    Windows gives a Python process a legacy code page rather than UTF-8 for std
-    streams. What that costs was measured, not assumed: 37 characters in one CI
-    log arrived as U+FFFD, so every teaching message that reaches a pipe loses
-    its non-ASCII text -- precisely the text an agent or a user reads when
-    something has already gone wrong. It also removes a latent hard failure:
-    cp1252 happens to carry the em dash, but an OEM console page (cp437, cp850)
-    cannot, and under strict error handling that is a UnicodeEncodeError from a
-    message rather than from the work. ASCII-ifying our own strings would not
-    reach it, because a user's own path can contain anything.
+    Windows gives a CLI process a legacy code page, and under strict error
+    handling a character it cannot represent raises UnicodeEncodeError -- from
+    the MESSAGE rather than from the work, which is the worst possible moment.
+    cp1252 happens to carry the em dash and ellipsis this repo's teaching
+    messages use, but an OEM console page (cp437, cp850) carries neither, and a
+    user's own path can contain anything at all.
 
-    `backslashreplace` rather than `replace`: if a stream still cannot take a
-    character, an escape a reader can decode beats a question mark that destroys
-    it. CLI ENTRY POINTS ONLY -- these are process globals owned by whoever
-    embedded us, so a library import must never touch them.
+    Only the error HANDLER changes. Switching the encoding to utf-8 was tried
+    and reverted: it fixed how CI logs render and broke everything on Windows
+    that decodes our output with the platform's own code page -- including this
+    repo's own subprocess tests, where a cold build then reported an error
+    differently from a warm one. What we emit stays what the platform expects;
+    what cannot be emitted degrades to a backslash-u escape, which a reader
+    can decode,
+    rather than to a question mark that destroys it.
+
+    CLI ENTRY POINTS ONLY: these are process globals owned by whoever embedded
+    us, so a library import must never touch them, and a daemon worker -- whose
+    stdout is the pool's frame channel, pinned by the protocol at both ends --
+    is not a CLI boundary.
     """
     if os.environ.get("CADGEN_DAEMON_CHILD"):
-        # Inside a warm worker these are not console streams: stdout is the
-        # pool's frame channel, pinned by the protocol at both ends
-        # (daemon.worker.serve). Reconfiguring it here re-encoded the frames
-        # under the parent's decoder and turned one failure into two different
-        # messages, cold versus warm.
         return
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is None:  # a caller replaced it with a plain object
             continue
         try:
-            reconfigure(encoding="utf-8", errors="backslashreplace")
+            reconfigure(errors="backslashreplace")
         except (OSError, ValueError):  # detached or already closed
             pass
 
 
 def main(argv: list[str] | None = None) -> int:
-    _use_utf8_std_streams()
+    _harden_std_stream_errors()
     argv = list(sys.argv[1:] if argv is None else argv)
 
     if not argv or argv[0] in {"-h", "--help", "help"}:

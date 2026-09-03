@@ -41,9 +41,9 @@ def _build_parser(prog: str) -> argparse.ArgumentParser:
 def run_model_argv(argv: Sequence[str], *, prog: str = "python <model>.py") -> int:
     # The other CLI entry point: `python model.py` reaches the pipeline here,
     # never through cadgen.cli.main, so it needs the same UTF-8 streams.
-    from cadgen.cli import _use_utf8_std_streams
+    from cadgen.cli import _harden_std_stream_errors
 
-    _use_utf8_std_streams()
+    _harden_std_stream_errors()
     parser = _build_parser(prog)
     args = parser.parse_args(list(argv))
     script = Path(args.script).expanduser().resolve()

@@ -19,7 +19,7 @@ import sys
 import unittest
 from unittest import mock
 
-from cadgen.cli import _use_utf8_std_streams
+from cadgen.cli import _harden_std_stream_errors
 from cadgen.daemon import pool, worker
 
 
@@ -53,7 +53,12 @@ class FrameChannelEncodingTest(unittest.TestCase):
 
 class CliHelperOwnershipTest(unittest.TestCase):
     """The CLI helper reconfigures process globals, so it must not run where the
-    streams belong to somebody else -- the worker being the case that bit."""
+    streams belong to somebody else -- the worker being the case that bit.
+
+    It changes the error HANDLER only. Changing the ENCODING was reverted: our
+    output is decoded on Windows by consumers that assume the platform code
+    page, so emitting utf-8 made a cold build report an error differently from
+    a warm one."""
 
     def setUp(self) -> None:
         self._prev = os.environ.get("CADGEN_DAEMON_CHILD")
@@ -72,7 +77,7 @@ class CliHelperOwnershipTest(unittest.TestCase):
             stream = mock.Mock()
             stream.reconfigure.side_effect = lambda **kw: calls.append(kw)
             self.enterContext(mock.patch.object(sys, name, stream))
-        _use_utf8_std_streams()
+        _harden_std_stream_errors()
         self.assertEqual([], calls, "the helper reconfigured the pool's frame channel")
 
     def test_it_reconfigures_at_a_real_cli_boundary(self) -> None:
@@ -82,9 +87,9 @@ class CliHelperOwnershipTest(unittest.TestCase):
             stream = mock.Mock()
             stream.reconfigure.side_effect = lambda **kw: calls.append(kw)
             self.enterContext(mock.patch.object(sys, name, stream))
-        _use_utf8_std_streams()
+        _harden_std_stream_errors()
         self.assertEqual(
-            [{"encoding": "utf-8", "errors": "backslashreplace"}] * 2,
+            [{"errors": "backslashreplace"}] * 2,
             calls,
         )
 
@@ -92,7 +97,7 @@ class CliHelperOwnershipTest(unittest.TestCase):
         os.environ.pop("CADGEN_DAEMON_CHILD", None)
         for name in ("stdout", "stderr"):
             self.enterContext(mock.patch.object(sys, name, object()))
-        _use_utf8_std_streams()  # must not raise
+        _harden_std_stream_errors()  # must not raise
 
 
 if __name__ == "__main__":
