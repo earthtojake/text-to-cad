@@ -207,14 +207,21 @@ Each with the failure it prevents.
 - **Objects are immutable.** An object is written once under its hash and
   never edited. Prevents: a component changing under every tree that shares
   it.
-- **A moved project is a set of new models.** Records are keyed by the
-  resolved script path, so copying or moving a project makes every model in
-  it read as unbuilt (clause 1). The first build after the move runs each
-  body once, finds every component and tree already in the store (same
-  geometry, same hashes — nothing is re-extracted or rewritten), and writes
-  new records; the old records become unreachable and GC collects them.
-  Prevents: two projects at different paths sharing one record and one
-  overwriting the other's outputs list.
+- **Portability: a moved project is a set of new models over the same
+  objects.** Nothing path-dependent enters an object: closure files are
+  recorded relative to the script, trees hold geometry, names and placements
+  only, and component ids are content hashes — so a moved or copied project
+  hashes to the same closures and the same trees. Records ARE keyed by the
+  resolved script path, so after a move every model reads as unbuilt (clause
+  1); its first build runs the body once, finds every component and tree
+  already present (nothing is re-extracted or rewritten; the tree hash comes
+  out identical), writes a new record and re-notes its documents in
+  `index/document`. Until that first build, a moved GENERATED document has no
+  document entry and reads as an import (its own source); an actually imported
+  document gets a new record at its new path pointing at the same tree. The
+  records at the old path become unreachable and GC collects them. Prevents:
+  two projects at different paths sharing one record and one overwriting the
+  other's outputs list; and a path or timestamp changing a hash.
 - **Outputs are not store contents.** The `.step`, sidecar and meshes live in
   the project; the record validates them by sha (clause 5). Prevents: a
   store wipe destroying a user's documents, and a document pretending to be

@@ -120,18 +120,31 @@ def _model_artifacts(root: Path) -> list[Path]:
 
 
 def package_files(root: Path) -> list[Path]:
-    """Every persisted build output: EVERY object in the store (components and
-    trees — a moved project is a set of new records over the same objects, so
-    the objects are what a move must leave untouched), plus the model-side
-    sidecars under ``root``."""
-    from cadgen.store.objects import iter_objects
+    """Every persisted build output: the objects every record's tree reaches
+    (components and trees — a moved project is a set of new records over the
+    same objects, so those objects are what a move must leave untouched), plus
+    the model-side sidecars under ``root``. Op-memo objects are deliberately
+    not compared: they are a kernel cache, not a result."""
+    import json
+
+    from cadgen.store.index import iter_entries
+    from cadgen.store.objects import object_path
+    from cadgen.store.trees import tree_objects
 
     out: list[Path] = []
     for artifact in _model_artifacts(root):
         sidecar = Path(f"{artifact}.step.json")
         if sidecar.is_file():
             out.append(sidecar)
-    out.extend(path for _digest, path in iter_objects())
+    reachable: set[str] = set()
+    for _key, entry in iter_entries("model"):
+        try:
+            tree = str(json.loads(entry.read_text(encoding="utf-8")).get("tree") or "")
+        except (OSError, ValueError):
+            continue
+        if tree:
+            reachable |= tree_objects(tree) | {tree}
+    out.extend(sorted(object_path(digest) for digest in reachable))
     return out
 
 
@@ -189,11 +202,14 @@ class PackagePortabilityTest(unittest.TestCase):
     def _build(cls, root: Path) -> None:
         from cadgen.generation import generate_step_targets
 
-        # An imported STEP: exported from the part, then given its own render package, which
-        # is the one descriptor whose source is a .step file rather than a generator. Kept out
-        # of the no-op pass below because an explicit export ALWAYS writes its file -- that is
-        # the documented contract, not a freshness miss.
-        generate_step_targets([f"{root / 'widget.py'}={root / 'imported.step'}"])
+        # An imported STEP: the part's document COPIED under another name, so the
+        # store has no memory of a model writing it and it is its own source (a
+        # vendor file). The export itself is kept out of the no-op pass below
+        # because an explicit export ALWAYS writes its file -- that is the
+        # documented contract, not a freshness miss.
+        generate_step_targets([f"{root / 'widget.py'}={root / 'exported.step'}"])
+        shutil.copyfile(root / "exported.step", root / "imported.step")
+        (root / "exported.step").unlink()
         cls._noop_pass(root)
 
     @staticmethod
