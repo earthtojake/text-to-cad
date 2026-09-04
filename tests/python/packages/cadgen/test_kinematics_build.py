@@ -126,7 +126,7 @@ class KinematicsBuildTests(unittest.TestCase):
         self.assertEqual(0, self._build(script))
 
         sidecar = self._sidecar(script)
-        self.assertEqual(sidecar["schemaVersion"], 5)
+        self.assertEqual(sidecar["schemaVersion"], 6)
         # The sidecar file carries the branded suffix.
         self.assertTrue((self.root / "hinge.step.json").is_file())
 

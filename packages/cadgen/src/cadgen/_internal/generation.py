@@ -319,38 +319,6 @@ def _source_sidecar_payload(scene: LoadedStepScene) -> dict[str, object] | None:
     return payload
 
 
-def _mesh_exports_sidecar_section(spec: EntrySpec) -> list[dict[str, object]]:
-    """The sidecar's ``meshExports`` section: what this model DECLARES.
-
-    The script run is the only thing that can see ``@stl``/``@glb``/``@threemf``
-    (a kinematics dict is not statically evaluable, and a CLI must never import
-    a model module), so it records the declarations here and the bare mesh
-    doors read them back off the DOCUMENT. ``out`` is relative to the artifact
-    so the pair travels together; the tolerances are the EFFECTIVE pair the run
-    wrote at, ``null`` meaning the tessellator default.
-    """
-    if not spec.mesh_exports or spec.step_path is None:
-        return []
-    base = spec.step_path.parent.resolve()
-    entries: list[dict[str, object]] = []
-    for declared in spec.mesh_exports:
-        chord = declared.mesh_tolerance if declared.mesh_tolerance is not None else spec.mesh_tolerance
-        angle = (
-            declared.mesh_angular_tolerance
-            if declared.mesh_angular_tolerance is not None
-            else spec.mesh_angular_tolerance
-        )
-        entries.append(
-            {
-                "fmt": declared.fmt,
-                "out": Path(os.path.relpath(declared.path, base)).as_posix(),
-                "meshTolerance": chord,
-                "meshAngularTolerance": angle,
-            }
-        )
-    return entries
-
-
 def _generate_part_outputs(
     spec: EntrySpec,
     *,
@@ -453,10 +421,6 @@ def _generate_part_outputs(
         with logger.timed("tree: sidecar payload"):
             sidecar_payload = _source_sidecar_payload(scene)
         generated = sidecar_payload is not None
-        if generated:
-            mesh_export_section = _mesh_exports_sidecar_section(spec)
-            if mesh_export_section:
-                sidecar_payload["meshExports"] = mesh_export_section
 
         # Content-pure fields the tree carries (capabilities, edge classes); the
         # provenance fields (stepHash, generatedAt, sourceKind…) go to the record.

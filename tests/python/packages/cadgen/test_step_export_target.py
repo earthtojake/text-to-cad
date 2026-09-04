@@ -164,15 +164,14 @@ class StepExportTargetTests(unittest.TestCase):
             step_export_target.export_cad_target(generator, [("stl", None)])
         self.assertIn("run it: python", str(cm.exception))
 
-    def test_a_bare_door_with_no_declarations_teaches_both_ways_out(self) -> None:
-        # An imported document declares nothing, so "every declared variant" is
-        # empty — which is a teaching error, not a silent sibling default.
+    def test_a_bare_door_writes_the_sibling_default(self) -> None:
+        # A door reads no declarations: OUT omitted means the sibling default
+        # beside the document, for an import exactly as for a generated model.
         document = self._write_box_document()
-        with self.assertRaises(ValueError) as cm:
-            step_export_target.export_cad_target(document, [("stl", None)])
-        message = str(cm.exception)
-        self.assertIn("declare @stl on the model and run python <script>", message)
-        self.assertIn("explicit OUT", message)
+        payload = step_export_target.export_cad_target(document, [("stl", None)])
+        self.assertTrue(payload["ok"])
+        self.assertEqual([str(document.with_suffix(".stl"))], [entry["path"] for entry in payload["files"]])
+        self._assert_export_file(document.with_suffix(".stl"), "stl")
 
     def test_export_cad_target_writes_mesh_formats(self) -> None:
         document = self._write_box_document()

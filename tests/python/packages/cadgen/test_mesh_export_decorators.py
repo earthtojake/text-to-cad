@@ -204,10 +204,14 @@ class MeshExportProductionTest(unittest.TestCase):
         self.assertIn("wrote STL", heal.stderr)
         self.assertNotIn("wrote GLB", heal.stderr)
 
-        # DOOR parity: a bare `cadgen stl build` on the DOCUMENT reads the
-        # declared variants out of its sidecar and the shared ledger makes it
-        # a no-op; an explicit OUT is byte-identical to what the run wrote.
+        # DOOR parity: a bare `cadgen stl build` on the DOCUMENT reads no
+        # declaration — it writes the sibling default beside the document once,
+        # and the shared ledger makes the next bare run a no-op; an explicit OUT
+        # is byte-identical to what the run wrote.
         door = "from cadgen.cli.stl_build import main; raise SystemExit(main())"
+        sibling = self._run("-c", door, "STEP/widget.step", "--verbose")
+        self.assertIn("wrote STL", sibling.stdout)
+        self.assertTrue((self.project / "STEP" / "widget.stl").is_file())
         skip = self._run("-c", door, "STEP/widget.step", "--verbose")
         self.assertNotIn("tessellate", skip.stderr + skip.stdout)
         self.assertIn("current STL", skip.stdout)
@@ -221,12 +225,12 @@ class MeshExportProductionTest(unittest.TestCase):
 
         # --force re-exports past the ledger but does NOT rebuild the model:
         # the bytes are the same because the geometry is.
-        declared = self.project / "STL" / "widget.stl"
-        before = declared.read_bytes()
+        sibling_path = self.project / "STEP" / "widget.stl"
+        before = sibling_path.read_bytes()
         forced = self._run("-c", door, "STEP/widget.step", "--force", "--verbose")
         self.assertIn("wrote STL", forced.stdout)
         self.assertNotIn("run step model", forced.stderr)
-        self.assertEqual(before, declared.read_bytes())
+        self.assertEqual(before, sibling_path.read_bytes())
 
         # A door writes ONLY its own format: nothing here touches the .step or
         # the sibling declarations of the other two formats.
@@ -304,10 +308,11 @@ class MeshExportProductionTest(unittest.TestCase):
         self.assertIn("wrote STL", heal.stderr)
         self.assertNotIn("wrote GLB", heal.stderr)
 
-    def test_a_bare_door_produces_every_declared_variant(self) -> None:
-        # `OUT` omitted means the DECLARATIONS, plural: two @stl variants of one
-        # model are two files, at their own tolerances, from one door run —
-        # read from the document's sidecar, not from the model module.
+    def test_a_bare_door_writes_one_mesh_beside_the_document(self) -> None:
+        # A door reads no declarations. Two @stl variants belong to the RUN
+        # (python src/widget.py writes both); a bare door on the document writes
+        # exactly one STL, the sibling default, and the ledger makes the second
+        # bare run a no-op.
         (self.project / "src" / "widget.py").write_text(
             MODEL.replace(
                 '@stl(out="../STL/widget.stl")',
@@ -319,23 +324,18 @@ class MeshExportProductionTest(unittest.TestCase):
         self._run("src/widget.py")
         draft = self.project / "STL" / "widget_draft.stl"
         printed = self.project / "STL" / "widget_print.stl"
-        for path in (draft, printed):
-            path.unlink()
+        self.assertTrue(draft.is_file() and printed.is_file(), "the run writes its declared variants")
+        self.assertFalse((self.project / "STEP" / "widget.step.json").exists(), "no kinematics, no sidecar")
 
         wrote = self._run("-c", "from cadgen.cli.stl_build import main; raise SystemExit(main())",
                           "STEP/widget.step")
-        self.assertTrue(draft.is_file() and printed.is_file(), wrote.stdout)
-        self.assertNotEqual(
-            draft.read_bytes(),
-            printed.read_bytes(),
-            "each variant must be written at its own declared tolerance",
-        )
-        self.assertEqual(2, wrote.stdout.count("wrote STL"))
+        sibling = self.project / "STEP" / "widget.stl"
+        self.assertTrue(sibling.is_file(), wrote.stdout + wrote.stderr)
+        self.assertEqual(1, wrote.stdout.count("wrote STL"), wrote.stdout)
 
-        # And the ledger now covers both: a second bare run rewrites neither.
         again = self._run("-c", "from cadgen.cli.stl_build import main; raise SystemExit(main())",
                           "STEP/widget.step")
-        self.assertEqual(2, again.stdout.count("current STL"))
+        self.assertEqual(1, again.stdout.count("current STL"), again.stdout)
 
 
 if __name__ == "__main__":

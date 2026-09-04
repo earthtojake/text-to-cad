@@ -261,13 +261,9 @@ def _effective_export_tolerances(
     format-level (@stl/@glb/@threemf) > @step model-level explicit >
     tessellator default (None).
 
-    At a DOCUMENT door the declarations come from the sidecar, where the run
-    that wrote the document already folded its model-level policy in; the spec
-    supplies the policy only for the Viewer's spec-driven export path."""
-    matches = list(spec.mesh_exports)
-    if not matches and spec.step_path is not None:
-        matches = list(_sidecar_declarations(spec.step_path, fmt))
-    matches = [d for d in matches if d.fmt == fmt]
+    At a DOCUMENT door there are no declarations to read — a door tessellates
+    the document's tree at the tolerance it was asked for, or the default."""
+    matches = [d for d in spec.mesh_exports if d.fmt == fmt]
     # With VARIANTS declared, an ad-hoc explicit-out export is ambiguous about
     # which declaration it means — fall back to the model policy rather than
     # guess. A single declaration is unambiguous and applies.
@@ -646,9 +642,8 @@ def _resolve_export_output(
     takes NATIVE path semantics like every other cadgen path argument: absolute
     as given, ``~`` expanded, and a relative path resolved against the process's
     working directory. The persisted, portable form is the DECORATOR
-    declaration (``@stl(out=...)``), which is script-anchored, written into the
-    sidecar's ``meshExports`` and re-read relative to the document — that path
-    is reached through ``spec.mesh_exports`` above and is untouched here."""
+    declaration (``@stl(out=...)``), which is script-anchored and reached
+    through ``spec.mesh_exports`` above."""
     if raw is None and spec is not None:
         declared = next((d for d in spec.mesh_exports if d.fmt == fmt), None)
         if declared is not None:
@@ -659,28 +654,6 @@ def _resolve_export_output(
     if out.suffix.lower() != FORMAT_SUFFIX[fmt]:
         raise ValueError(f"{fmt} OUT must end with {FORMAT_SUFFIX[fmt]}: {raw}")
     return out
-
-
-def _sidecar_declarations(step_path: Path, fmt: str) -> "tuple":
-    """The document's declared variants of ``fmt``, from its sidecar.
-
-    DOCUMENTS-ONLY: a door never imports a model module and never reads the
-    Python registry. What the model declared was recorded into the sidecar's
-    ``meshExports`` section by the script run that wrote the document, so the
-    door reads a file (design/pose-animation-split.md, CLI/doors follow-on).
-    """
-    from cadgen._internal.source_sidecar import sidecar_mesh_exports
-
-    return tuple(entry for entry in sidecar_mesh_exports(step_path) if entry.fmt == fmt)
-
-
-def _no_declarations_error(step_path: Path, fmt: str) -> ValueError:
-    decorator = {"stl": "@stl", "3mf": "@threemf", "glb": "@glb"}[fmt]
-    return ValueError(
-        f"{step_path.name} declares no {fmt.upper()} exports: declare "
-        f"{decorator} on the model and run python <script>, or name an "
-        f"explicit OUT"
-    )
 
 
 def export_cad_target(
@@ -702,8 +675,7 @@ def export_cad_target(
     run, no source, no extraction — and one Node invocation serializes every requested
     format from one tessellation, so all formats come from identical geometry.
     ``outputs`` pairs a format name with an explicit output path, or ``None`` for the
-    DOCUMENT's declarations (all variants, read from its sidecar). ``force``
-    re-exports past the ledger. Nothing here moves geometry: a mesh is the
+    sibling default beside the document. ``force`` re-exports past the ledger. Nothing here moves geometry: a mesh is the
     document's tree, tessellated.
 
     Writes no ``.step`` and no beside-source artifacts; a document missing its render
@@ -765,23 +737,10 @@ def export_cad_target(
         )
 
     for fmt, raw in outputs:
-        if raw is None:
-            # A bare door means the DOCUMENT's declarations — ALL variants of
-            # this format, exactly as the script run produced them, read from
-            # the sidecar. Run-level tolerance arguments override each
-            # variant's own.
-            declared = _sidecar_declarations(step_path, fmt)
-            if not declared:
-                raise _no_declarations_error(step_path, fmt)
-            for decl in declared:
-                chord = mesh_tolerance if mesh_tolerance is not None else decl.mesh_tolerance
-                angle = (
-                    mesh_angular_tolerance
-                    if mesh_angular_tolerance is not None
-                    else decl.mesh_angular_tolerance
-                )
-                _add(fmt, decl.path, chord, angle)
-            continue
+        # A bare door writes ONE mesh: the sibling default beside the document
+        # (or the model's declared path when the run knows it), at the requested
+        # tolerance or the default. Nothing is looked up in a sidecar — the
+        # document's tree is tessellated as it is.
         out = _resolve_export_output(fmt, raw, logical_step=spec.step_path, spec=spec)
         chord, angle = _effective_export_tolerances(
             spec,

@@ -912,17 +912,20 @@ them.
 | Animation | `.params.js` demo modes; GIF export | `<name>.anim.js`, text copied into the sidecar; PNG stills only |
 | Mesh outputs | `scripts/export --stl/--3mf/--glb` | `@stl`/`@threemf`/`@glb` decorators, or the format doors |
 
-### The sidecar: `<name>.step.json`, schema 5
+### The sidecar: `<name>.step.json`, schema 6
 
-A sidecar carries **declarations only**, and exists **only when the model needs
-one** — when it declares kinematics, animation, or mesh exports. A plain model
-that is geometry and nothing else writes no sidecar at all.
+A sidecar carries **declarations only**, and exists **only when strictly
+necessary** — today, when the model declares kinematics. A model that declares
+none writes no sidecar at all, and a rebuild of a model that dropped its
+kinematics deletes the stale one. What a model declares about its outputs
+(`@stl`/`@glb`/`@threemf`) lives in its store record; the `meshExports`
+section that once copied it beside the STEP is gone (a mesh door tessellates
+the document's tree and writes the file it was asked for, no lookup).
 
 ```
-schemaVersion   5
+schemaVersion   6
 kinematics      typed mates with axes resolved to world numbers, couplings, pose presets
 animation       the .anim.js choreography TEXT, copied
-meshExports     what the @stl/@glb/@threemf declarations resolved to
 ```
 
 There is **no** `sourceKind`, `sourcePath`, `sourceHash`, `sourceClosure`, or

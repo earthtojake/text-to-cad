@@ -24,7 +24,6 @@ from cadgen._internal.source_sidecar import (
     SidecarSchemaError,
     read_source_provenance,
     read_source_sidecar,
-    sidecar_mesh_exports,
     source_sidecar_path,
     write_source_sidecar,
 )
@@ -42,7 +41,6 @@ CURRENT_SIDECAR = {
             }
         ]
     },
-    "meshExports": [{"fmt": "stl", "out": "hinge.stl"}],
 }
 
 
@@ -68,11 +66,9 @@ class SidecarSchemaGate(unittest.TestCase):
         payload = read_source_sidecar(self.document)
         self.assertIsNotNone(payload)
         self.assertEqual(SOURCE_SIDECAR_SCHEMA_VERSION, payload["schemaVersion"])
-        self.assertEqual(("stl",), tuple(e.fmt for e in sidecar_mesh_exports(self.document)))
 
     def test_a_missing_sidecar_is_not_an_error(self) -> None:
         self.assertIsNone(read_source_sidecar(self.document))
-        self.assertEqual((), sidecar_mesh_exports(self.document))
 
     def test_another_schema_is_refused_with_the_current_requirement(self) -> None:
         self._write_at_schema(SOURCE_SIDECAR_SCHEMA_VERSION - 1)
@@ -80,7 +76,10 @@ class SidecarSchemaGate(unittest.TestCase):
         with self.assertRaises(SidecarSchemaError) as caught:
             read_source_sidecar(self.document)
         message = str(caught.exception)
-        self.assertIn(f"unsupported sidecar schema 4 (expected {SOURCE_SIDECAR_SCHEMA_VERSION})", message)
+        self.assertIn(
+            f"unsupported sidecar schema {SOURCE_SIDECAR_SCHEMA_VERSION - 1} (expected {SOURCE_SIDECAR_SCHEMA_VERSION})",
+            message,
+        )
         self.assertIn("python hinge.py", message)
         self.assertIn("cadgen step build", message)
         # The error states the requirement and the remedy, never the history.
@@ -105,12 +104,6 @@ class SidecarSchemaGate(unittest.TestCase):
         self.assertFalse(model_is_generated(self.document))
         self._write_at_schema(SOURCE_SIDECAR_SCHEMA_VERSION)
         self.assertTrue(model_is_generated(self.document))
-
-    def test_the_mesh_export_reader_inherits_the_gate(self) -> None:
-        self._write_at_schema(SOURCE_SIDECAR_SCHEMA_VERSION - 1)
-
-        with self.assertRaises(SidecarSchemaError):
-            sidecar_mesh_exports(self.document)
 
     def test_provenance_never_falls_back_to_the_sidecar(self) -> None:
         """Source identity lives in the records tier alone. A document with a

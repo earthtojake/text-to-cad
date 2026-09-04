@@ -39,7 +39,6 @@ loses its kinematics.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -51,15 +50,15 @@ from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
 # path from the artifact (:func:`source_sidecar_path`), or match the artifact
 # suffix too (`.step.json` / `.stp.json`).
 SOURCE_SIDECAR_SUFFIX = ".json"
-# 5: provenance moved OUT of the sidecar (a generated file must carry no tie
-#    to its source; the freshness gates read the records tier). 4 added the
-#    meshExports section.
-SOURCE_SIDECAR_SCHEMA_VERSION = 5
+# 6: the meshExports section is gone — a mesh door tessellates the document's
+#    tree and writes the file it was asked for; what a model declares lives in
+#    its record. 5 moved provenance out of the sidecar.
+SOURCE_SIDECAR_SCHEMA_VERSION = 6
 
 # What a sidecar may CONTAIN: declarations only. Anything source-derived-as-
 # provenance (paths, hashes, closures, timestamps) belongs to the provenance
 # record; a sidecar sits beside the artifact and ships with it.
-_SIDECAR_SECTIONS = ("schemaVersion", "kinematics", "animation", "meshExports")
+_SIDECAR_SECTIONS = ("schemaVersion", "kinematics", "animation")
 
 
 def source_sidecar_path(step_path: Path | str) -> Path:
@@ -119,12 +118,13 @@ def model_is_generated(step_path: Path | str) -> bool:
 
 # The sections that WARRANT a sidecar. Provenance alone does not: it also
 # lives in the assembly.json, and a file per plain model is pure clutter.
-_WARRANTING_SECTIONS = ("kinematics", "animation", "meshExports")
+_WARRANTING_SECTIONS = ("kinematics", "animation")
 
 
 def sidecar_is_warranted(payload: Mapping[str, Any] | None) -> bool:
     """Whether this payload carries anything the model actually needs a
-    sidecar FOR (kinematics, animation, or declared mesh exports)."""
+    sidecar FOR. A sidecar is written only when strictly necessary: metadata
+    with no reader beside the artifact belongs in the record, not in a file."""
     if not payload:
         return False
     return any(payload.get(section) for section in _WARRANTING_SECTIONS)
@@ -148,66 +148,6 @@ def write_source_sidecar(step_path: Path | str, payload: Mapping[str, Any]) -> N
     temp = target.with_name(f".{target.name}{temp_suffix()}")
     temp.write_text(json.dumps(body, sort_keys=True), encoding="utf-8")
     replace_atomic(temp, target)
-
-
-@dataclass(frozen=True)
-class SidecarMeshExport:
-    """One ``meshExports`` entry, with ``out`` resolved beside the document.
-
-    ``mesh_tolerance``/``mesh_angular_tolerance`` are the EFFECTIVE values the
-    script run wrote at (declaration explicit, else the model's policy);
-    ``None`` inherits the tessellator default. ``at`` is the bake point's
-    ``{dof: value}``, or ``None`` for authored rest.
-    """
-
-    fmt: str
-    path: Path
-    mesh_tolerance: float | None = None
-    mesh_angular_tolerance: float | None = None
-    at: dict[str, float] | None = None
-
-
-def _optional_float(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def sidecar_mesh_exports(step_path: Path | str) -> tuple[SidecarMeshExport, ...]:
-    """The document's declared mesh exports, from its sidecar.
-
-    The mesh doors' one source of declarations: a document, not a script and
-    not the Python registry (design/pose-animation-split.md, CLI/doors
-    follow-on). An imported document has no sidecar and therefore no
-    declarations — an empty tuple, which the door turns into a teaching error.
-    """
-    artifact = Path(step_path)
-    payload = read_source_sidecar(artifact) or {}
-    raw = payload.get("meshExports")
-    if not isinstance(raw, list):
-        return ()
-    resolved: list[SidecarMeshExport] = []
-    for entry in raw:
-        if not isinstance(entry, Mapping):
-            continue
-        fmt = str(entry.get("fmt") or "").strip()
-        out = str(entry.get("out") or "").strip()
-        if not fmt or not out:
-            continue
-        at = entry.get("at")
-        resolved.append(
-            SidecarMeshExport(
-                fmt=fmt,
-                path=(artifact.parent / out).resolve(),
-                mesh_tolerance=_optional_float(entry.get("meshTolerance")),
-                mesh_angular_tolerance=_optional_float(entry.get("meshAngularTolerance")),
-                at={str(k): float(v) for k, v in at.items()} if isinstance(at, Mapping) and at else None,
-            )
-        )
-    return tuple(resolved)
 
 
 def remove_source_sidecar(step_path: Path | str) -> None:

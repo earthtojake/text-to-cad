@@ -104,8 +104,8 @@ class MeshExportStoreReuseTest(unittest.TestCase):
         step_file = self.root / "block.step"
         self.assertTrue(step_file.is_file(), "model script writes its STEP")
 
-        # The declared variants come from the sidecar the run wrote — the door
-        # imports no model module and reads no source.
+        # The door imports no model module and reads no source: it tessellates
+        # the tree behind these bytes and writes the sibling default.
         for fmt in ("stl", "glb", "3mf"):
             current = self._export(fmt, "block.step", "--force")
             # Straight to the tessellator: the tree is already keyed by these
@@ -135,18 +135,18 @@ class MeshExportStoreReuseTest(unittest.TestCase):
         self.assertEqual(step_before, step_file.read_bytes())
         self.assertEqual(stl_before, step_file.with_suffix(".stl").read_bytes())
 
-    def test_a_bare_door_needs_declarations_in_the_sidecar(self) -> None:
-        # An imported document declares nothing, so there is no variant set to
-        # produce — and the answer is a teaching error, not a guessed sibling.
+    def test_a_bare_door_writes_the_sibling_mesh(self) -> None:
+        # A door reads no declarations: a bare door tessellates the document's
+        # tree and writes ONE mesh beside it — imported or generated alike.
         entry = _write_model(self.root, size=6.0)
         self.assertEqual(0, self._run([entry.name], self.root).returncode)
         imported = self.root / "imported_block.step"
         imported.write_bytes((self.root / "block.step").read_bytes() + b"\n")
+        self.assertFalse(imported.with_suffix(".step.json").exists(), "an import has no sidecar")
 
-        bare = self._door("stl", "imported_block.step")
-        self.assertEqual(1, bare.returncode)
-        self.assertIn("declare @stl on the model and run python <script>", bare.stderr)
-        self.assertIn("explicit OUT", bare.stderr)
+        bare = self._export("stl", "imported_block.step")
+        self.assertTrue(imported.with_suffix(".stl").is_file(), bare.stderr)
+        self.assertIn("wrote STL", bare.stdout + bare.stderr)
 
     def test_an_imported_document_compiles_once_then_reuses(self) -> None:
         entry = _write_model(self.root, size=6.0)
