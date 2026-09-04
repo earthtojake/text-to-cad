@@ -41,6 +41,9 @@ jobs:
   publish:
     name: Publish
     runs-on: ubuntu-latest
+    env:
+      # Four test files at a time: each is a kernel-loading interpreter (~450 MB).
+      CADGEN_TEST_JOBS: "4"
     permissions:
       contents: read
       # Trusted publishing (OIDC) for the PyPI upload.

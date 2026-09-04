@@ -64,6 +64,9 @@ jobs:
   test:
     name: Test (Linux)
     runs-on: ubuntu-latest
+    env:
+      # Four test files at a time: each is a kernel-loading interpreter (~450 MB).
+      CADGEN_TEST_JOBS: "4"
 
     steps:
       - name: Check out repository
@@ -122,6 +125,9 @@ jobs:
   test-windows:
     name: Test (Windows)
     runs-on: windows-latest
+    env:
+      # Four test files at a time: each is a kernel-loading interpreter (~450 MB).
+      CADGEN_TEST_JOBS: "4"
 
     steps:
       - name: Check out repository
