@@ -451,55 +451,40 @@ so they land in the release notes' Maintenance category).
 `main` today holds the OLD publish tree: 29 generated commits, each with the
 release source commit as its second parent, whose trees carry the materialized
 skill runtime and no `models/`. The last is `0e94cd1d Publish 0.4.28 from develop
-to main`; its merge base with the source history is `cce04de6` (the 0.4.28
-release merge on `develop`). A normal merge of the source branch into it
-conflicts on every path the publish transformation touched (the deleted
-symlinks, `models/`, the pins), so the first landing replaces `main`'s history
-rather than merging into it. Two options:
+to main`. A plain merge of the source branch into it conflicted on every path
+the publish transformation touched, so the source branch recorded that history
+as an ancestor instead: `release/0.5.0` carries `git merge -s ours origin/main`
+(dc4f501d), a merge whose tree is the source tree unchanged. Since then PR #273
+(`release/0.5.0` → `main`) is an ordinary pull request: the required checks run
+on it, and merging it lands the source history on `main` with the old publish
+commits reachable as ancestors. Nothing is force-pushed.
 
-- **A (recommended): fast-forward `main` to the source head.** Land this work
-  on the source branch first (merge `claude/cadgen-viewer` into
-  `release/0.5.0`, finish 0.5.0 there), then point `main` at that head. The
-  publish commits stay reachable from the release tags (`0.4.28^1` is the old
-  main tip), so nothing is lost, and `main`'s history becomes the source
-  history with no synthetic commits in it.
-- **B: force-push the branch directly.** Same result, skipping the intermediate
-  merge; only if 0.5.0 is not going to be finished on `release/0.5.0` first.
+Steps, in order (none of these are run by the workflow). Steps 1, 2 and 4 were
+done on 2026-09-04; `develop`'s protection is still in place until step 5.
 
-Steps, in order (none of these are run by the workflow):
-
-1. Confirm the default branch and record the current rules (read-only):
+1. Record the current rules (read-only):
    ```bash
    gh repo view --json defaultBranchRef --jq .defaultBranchRef.name     # main
    gh api repos/earthtojake/text-to-cad/branches/develop/protection
-   gh api repos/earthtojake/text-to-cad/rulesets                          # "main publish only", id 17058028
+   gh api repos/earthtojake/text-to-cad/rulesets
    ```
-2. Retire the `main publish only` ruleset (it blocks updates, deletions,
-   non-fast-forward pushes and requires linear history — which would refuse
-   both the cutover push and every future PR merge):
-   ```bash
-   gh api --method DELETE repos/earthtojake/text-to-cad/rulesets/17058028
-   ```
-3. Land the history. Option A:
-   ```bash
-   git fetch origin
-   git push origin release/0.5.0:main --force-with-lease=main:0e94cd1d
-   ```
-   Option B: `git push origin claude/cadgen-viewer:main --force-with-lease=main:0e94cd1d`.
-   `--force-with-lease` pins the expected old tip so a concurrent publish
-   cannot be overwritten unseen.
-4. Protect `main` the way `develop` was protected (the classic branch-protection
-   API, mirroring what step 1 recorded):
+2. Retire the `main publish only` ruleset (it blocked updates, deletions and
+   non-fast-forward pushes and required linear history, which would refuse
+   every PR merge). Done: ruleset 17058028 deleted.
+3. Land the history: merge PR #273 once its required checks are green
+   (`gh pr merge 273 --merge`). Keep the merge commit; do not squash — the
+   source history is the point.
+4. Protect `main` the way `develop` was protected (done; the classic
+   branch-protection API):
    ```bash
    gh api --method PUT repos/earthtojake/text-to-cad/branches/main/protection \
      --input - <<'JSON'
    {"required_status_checks":{"strict":true,"contexts":["Version Check","Test (Linux)","Test (Windows)"]},
-    "enforce_admins":false,"required_pull_request_reviews":null,"restrictions":null,
-    "allow_force_pushes":false,"allow_deletions":false,"required_linear_history":false}
+    "enforce_admins":false,
+    "required_pull_request_reviews":{"dismiss_stale_reviews":false,"require_code_owner_reviews":false,"required_approving_review_count":0},
+    "restrictions":null,"allow_force_pushes":false,"allow_deletions":false,"required_linear_history":false}
    JSON
    ```
-   The `Test` workflow must have run once on `main` for the contexts to exist;
-   push a no-op PR if GitHub rejects unknown contexts.
 5. Delete the retired branches once nothing references them:
    ```bash
    gh api --method DELETE repos/earthtojake/text-to-cad/branches/develop/protection
