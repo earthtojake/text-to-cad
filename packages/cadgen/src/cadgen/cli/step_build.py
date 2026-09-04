@@ -7,7 +7,7 @@ parameter: this module only names which function the command is
 (design/format-doors.md).
 
 ``IN.step OUT.step``: one document in, a NEW document out, re-emitted in
-cadgen's dialect and optionally annotated with ``--kinematics``/``--animation``.
+cadgen's dialect and optionally annotated with ``--kinematics``.
 OUT is a REQUIRED positional, which is what tells this apart from the cache
 action next door — compile caches a document; build writes a new one.
 """

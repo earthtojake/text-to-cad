@@ -108,7 +108,7 @@ class NormalizeTests(unittest.TestCase):
         self.assertEqual(defn.dof_ids(), ("elbow", "extend", "curl"))
 
     def test_the_key_vocabulary_is_closed(self) -> None:
-        with self.assertRaisesRegex(ValueError, "unknown key.*animation is its own @step kwarg"):
+        with self.assertRaisesRegex(ValueError, "unknown key.*choreography is the render module"):
             normalize_kinematics(_arm_block(animation="x.js"), where="@step")
         with self.assertRaisesRegex(ValueError, "must be a dict"):
             normalize_kinematics([revolute("j", parent="#a", child="#b", axis="#b.f1", limits=(0, 1))], where="@step")

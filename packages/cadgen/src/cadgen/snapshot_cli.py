@@ -929,18 +929,19 @@ def resolve_step_render_job(
     kinematics_block = (
         sidecar.get("kinematics") if isinstance(sidecar.get("kinematics"), dict) else None
     )
-    animation_block = (
-        sidecar.get("animation") if isinstance(sidecar.get("animation"), dict) else None
-    )
-    animation_text = str(animation_block.get("clips") or "") if animation_block else ""
-    if kinematics_block or animation_text.strip():
-        # The sidecar is the page's ONE runtime input beyond geometry: typed
-        # mates are the articulation mechanism (--kinematics DOF values fold
-        # through the shared FK evaluator, cadgen-js kinematicsModule) and the
-        # copied .anim.js text is the choreography (--animation compiles it
-        # through the shared clip runtime). Either section makes the URL worth
-        # resolving; each loader reads only its own section.
+    if kinematics_block:
+        # Typed mates are the articulation mechanism: --kinematics DOF values
+        # fold through the shared FK evaluator (cadgen-js kinematicsModule),
+        # which reads the sidecar's kinematics section.
         resolved["stepParameterUrl"] = asset_url_for_path(source_sidecar_path(source_path), root_path)
+    from cadgen._internal.render_module import read_render_module_text, render_module_path
+
+    # Choreography is the render module beside the document (<name>.step.js),
+    # discovered by name and loaded by the page through the shared loader; no
+    # build wrote it and the sidecar knows nothing of it.
+    render_module_text = read_render_module_text(source_path)
+    if render_module_text is not None:
+        resolved["renderModuleUrl"] = asset_url_for_path(render_module_path(source_path), root_path)
     if kinematics_block:
         # A pose NAME and every DOF id are validated HERE, against the
         # declaration the CLI just loaded — a typo must fail as a clean CLI
@@ -976,21 +977,21 @@ def resolve_step_render_job(
             "see the cad skill's kinematics reference"
         )
     if animation_request is not None:
-        if not animation_text.strip():
+        if render_module_text is None:
             raise SnapshotError(
-                f"{input_path.name} declares no animation, so there is no clip frame to "
-                "render — declare animation= (a .anim.js module) on the model's @step; "
-                "see the cad skill's kinematics reference"
+                f"{input_path.name} has no render module, so there is no clip frame to "
+                f"render — author {render_module_path(source_path).name} beside the document "
+                "(export const clips = {...}); see the cad skill's kinematics reference"
             )
-        # The clip NAME is validated HERE against the declaration the CLI just
-        # loaded — a typo must fail as a clean CLI error naming the clips the
-        # model has, not as a stack trace out of the browser runtime (which
-        # repeats the check, with the compiled clips in hand, as the backstop
-        # and the authority for a module that builds its clips indirectly).
-        from cadgen._internal.animation_clips import declared_clip_ids
+        # The clip NAME is validated HERE against the module the CLI just read —
+        # a typo must fail as a clean CLI error naming the clips the model has,
+        # not as a stack trace out of the browser runtime (which repeats the
+        # check, with the compiled clips in hand, as the backstop and the
+        # authority for a module that builds its clips indirectly).
+        from cadgen._internal.render_module import declared_clip_ids
 
         clip_name = str(animation_request["clip"])
-        declared_clips = declared_clip_ids(animation_text)
+        declared_clips = declared_clip_ids(render_module_text)
         if declared_clips is not None and clip_name not in declared_clips:
             raise SnapshotError(
                 f"Unknown animation clip: {clip_name}. "
@@ -1052,7 +1053,8 @@ def resolve_drawing_render_job(
         )
     if job.get("animation") is not None:
         raise SnapshotError(
-            "an animation frame requires a STEP model with a sidecar; drawings have no clips"
+            "an animation frame requires a STEP document with a render module beside it; "
+            "drawings have no clips"
         )
 
     mode = str(job.get("mode") or "view").strip().lower()

@@ -440,7 +440,7 @@ def normalize_kinematics(value: object, *, where: str) -> KinematicsDef:
         raise _fail(
             f"{where} kinematics has unknown key(s) {sorted(unknown)}; "
             f"the vocabulary is closed: {list(KINEMATICS_KEYS)} "
-            "(animation is its own @step kwarg, never a kinematics key)"
+            "(choreography is the render module beside the document, never a kinematics key)"
         )
 
     raw_mates = value.get("mates", [])

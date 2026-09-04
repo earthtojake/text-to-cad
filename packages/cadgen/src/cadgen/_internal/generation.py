@@ -282,7 +282,7 @@ def _source_sidecar_payload(scene: LoadedStepScene) -> dict[str, object] | None:
     """The sidecar payload for a GENERATED build, or None for an import.
 
     Everything source-derived lands here: provenance (the no-op gate's
-    closure), the copied animation module text, and the build timestamp — the one
+    closure) and the build timestamp — the one
     volatile field, which moving here keeps the descriptor byte-stable across
     identical rebuilds. The KINEMATICS section is injected later, once the
     staging package exists to resolve axis refs against.
@@ -315,12 +315,6 @@ def _source_sidecar_payload(scene: LoadedStepScene) -> dict[str, object] | None:
         if closure_hash and closure_files:
             payload["sourceClosureHash"] = closure_hash
             payload["sourceClosureFiles"] = list(closure_files)
-    animation_source = getattr(scene, "animation_source", None)
-    if animation_source:
-        # COPIED text, never a path: the sidecar is the one durable home for
-        # source-derived state, and generated files carry no reference back
-        # to the source tree.
-        payload["animation"] = {"clips": str(animation_source)}
     payload["generatedAt"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return payload
 

@@ -44,6 +44,8 @@ import re
 import stat as stat_module
 import threading
 
+from cadgen._internal.render_module import is_render_module_name, render_module_path
+
 from .content_types import extension_of
 from .encoding import encode_uri_component, encode_url_path, file_version
 from .natural_sort import sort_catalog_entries
@@ -528,7 +530,6 @@ def read_step_catalog_metadata(descriptor, source_path=None) -> dict:
         sidecar = parsed if _is_js_object(parsed) else None
     entry_kind = descriptor.get("entryKind")
     kinematics = sidecar.get("kinematics") if isinstance(sidecar, dict) else None
-    animation = sidecar.get("animation") if isinstance(sidecar, dict) else None
     return {
         "topology": {
             "index": descriptor,
@@ -539,7 +540,6 @@ def read_step_catalog_metadata(descriptor, source_path=None) -> dict:
         # URL. What produced the document is not a catalog fact.
         "hasSourceSidecar": sidecar is not None,
         "kinematics": kinematics if _is_js_object(kinematics) else None,
-        "animation": animation if _is_js_object(animation) else None,
     }
 
 
@@ -549,12 +549,9 @@ def _create_step_entry(repo_root, root_path, source_path, extension) -> dict:
     metadata = read_step_catalog_metadata(descriptor, source_path)
     topology = metadata.get("topology")
     descriptor_body = json.dumps(descriptor) if metadata else ""
-    # `metadata.kinematics || metadata.animation || null`: an EMPTY object is
-    # truthy in JS, so an empty `kinematics: {}` block still yields a poseUrl.
-    # Python's `or` would drop it.
-    kinematics = metadata.get("kinematics")
-    animation = metadata.get("animation")
-    pose_block = kinematics if kinematics is not None else animation
+    # An EMPTY `kinematics: {}` block still yields a poseUrl (JS truthiness);
+    # Python's `or` would drop it, so the test is `is not None`.
+    pose_block = metadata.get("kinematics")
     entry = {
         "file": repo_relative_path(root_path, source_path),
         "kind": step_kind_from_topology(topology),
@@ -569,10 +566,16 @@ def _create_step_entry(repo_root, root_path, source_path, extension) -> dict:
         # asset route; the client fetches and merges it. No ?v= token here.
         entry["sourceUrl"] = _asset_url_for_path(repo_root, source_sidecar_path(source_path))
     if pose_block is not None:
-        # Typed mates + choreography, the only articulation mechanisms.
+        # Typed mates, the articulation mechanism the sidecar carries.
         entry["poseUrl"] = entry.get("sourceUrl") or _asset_url_for_path(
             repo_root, source_sidecar_path(source_path)
         )
+    render_module = render_module_path(source_path)
+    if render_module.is_file():
+        # The render module beside the document (<name>.step.js): authored,
+        # discovered by name, loaded by the client. Its presence is the only
+        # thing the catalog says about it.
+        entry["renderModuleUrl"] = _asset_url_for_path(repo_root, render_module)
     return entry
 
 
@@ -587,14 +590,17 @@ def is_served_cad_asset(file_path) -> bool:
     The sidecar test matches the FULL pair of suffixes, never
     ``SOURCE_SIDECAR_SUFFIX`` alone — that is ``.json``, and serving every JSON
     file under the root would hand out configs, secrets and anything else that
-    happens to be there. A loose ``.js`` beside a model is never served; the
-    ``.params.js`` mechanism is retired.
+    happens to be there. The same goes for ``.js``: only the render module,
+    matched on its full ``.step.js``/``.stp.js`` pair, is served — a loose
+    script beside a model is not.
     """
     text = str(file_path or "")
     if is_hidden_name(node_basename(text)):
         return False
     lowered = text.lower()
     if any(lowered.endswith(name) for name in SOURCE_SIDECAR_NAMES):
+        return True
+    if is_render_module_name(lowered):
         return True
     return extension_of(text) in SOURCE_EXTENSIONS
 

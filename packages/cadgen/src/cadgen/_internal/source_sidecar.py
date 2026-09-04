@@ -51,15 +51,17 @@ from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
 # path from the artifact (:func:`source_sidecar_path`), or match the artifact
 # suffix too (`.step.json` / `.stp.json`).
 SOURCE_SIDECAR_SUFFIX = ".json"
-# 5: provenance moved OUT of the sidecar (a generated file must carry no tie
+# 6: the animation section is gone — choreography is the render module beside
+#    the document (`<name>.step.js`), loaded by the viewer and never by a build.
+#    5 moved provenance OUT of the sidecar (a generated file must carry no tie
 #    to its source; the freshness gates read the records tier). 4 added the
 #    meshExports section.
-SOURCE_SIDECAR_SCHEMA_VERSION = 5
+SOURCE_SIDECAR_SCHEMA_VERSION = 6
 
 # What a sidecar may CONTAIN: declarations only. Anything source-derived-as-
 # provenance (paths, hashes, closures, timestamps) belongs to the provenance
 # record; a sidecar sits beside the artifact and ships with it.
-_SIDECAR_SECTIONS = ("schemaVersion", "kinematics", "animation", "meshExports")
+_SIDECAR_SECTIONS = ("schemaVersion", "kinematics", "meshExports")
 
 
 def source_sidecar_path(step_path: Path | str) -> Path:
@@ -119,12 +121,12 @@ def model_is_generated(step_path: Path | str) -> bool:
 
 # The sections that WARRANT a sidecar. Provenance alone does not: it also
 # lives in the package descriptor, and a file per plain model is pure clutter.
-_WARRANTING_SECTIONS = ("kinematics", "animation", "meshExports")
+_WARRANTING_SECTIONS = ("kinematics", "meshExports")
 
 
 def sidecar_is_warranted(payload: Mapping[str, Any] | None) -> bool:
     """Whether this payload carries anything the model actually needs a
-    sidecar FOR (kinematics, animation, or declared mesh exports)."""
+    sidecar FOR (kinematics or declared mesh exports)."""
     if not payload:
         return False
     return any(payload.get(section) for section in _WARRANTING_SECTIONS)

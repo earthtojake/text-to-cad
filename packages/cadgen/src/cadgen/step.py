@@ -13,7 +13,7 @@ Two verbs make documents, and the difference is what lands on disk:
 * ``build`` writes a NEW document — ``IN.step OUT.step`` — re-emitted through
   cadgen's own pipeline (OCCT read -> package -> canonical XCAF writer), so the
   output's bytes are deterministic whichever kernel wrote the input, and
-  optionally annotated with ``kinematics=``/``animation=``. OUT is REQUIRED,
+  optionally annotated with ``kinematics=``. OUT is REQUIRED,
   which is what tells the two verbs apart at the command line.
 
 Model scripts are RUN, never passed here: ``python model.py`` is the one source
@@ -90,7 +90,6 @@ def build(
     out: Path,
     *,
     kinematics: str | dict | None = None,
-    animation: Path | None = None,
     force: bool = False,
     verbose: bool = False,
 ) -> BuildResult:
@@ -104,20 +103,19 @@ def build(
     in a model script. Vendor metadata (PMI, GD&T) does not survive; a model
     that keeps evolving belongs in a script instead.
 
-    Re-running is a no-op. Editing only the kinematics or animation refreshes
-    OUT's sidecar without re-emitting a byte.
+    Re-running is a no-op. Editing only the kinematics refreshes OUT's sidecar
+    without re-emitting a byte. Choreography is not an annotation: it is the
+    render module beside OUT (``OUT.js``), which the viewer loads by name.
 
     target: the STEP/STP document to read.
     out: the STEP/STP document to write. Required, and never TARGET itself.
     kinematics: the kinematics SPACE this document declares — inline JSON or a
         .json path, with the same {mates, couplings, poses, at} vocabulary the
         decorator takes.
-    animation: a .js choreography module whose TEXT is copied into the sidecar.
     force: re-emit even when the freshness gate says OUT is current.
     verbose: show detailed progress and timing on stderr.
     """
     from cadgen._internal.step_reemit import (
-        load_animation_text,
         load_kinematics_space,
         reemit_step_document,
         resolve_output,
@@ -127,12 +125,10 @@ def build(
     document, destination = resolve_output(target, out)
     where = "cadgen step build"
     kinematics_def = load_kinematics_space(kinematics, where=where)
-    animation_source = load_animation_text(animation, where=where)
     payload = reemit_step_document(
         document,
         destination,
         kinematics_def=kinematics_def,
-        animation_source=animation_source,
         force=force,
         logger=CliLogger(where, verbose=verbose),
     )

@@ -42,7 +42,6 @@ COMPONENT_PROVENANCE_KEYS = (
     "sourceKind",
     "sourcePath",
     "kinematics",
-    "animation",
     "sourceHash",
     "sourceClosureHash",
     "sourceClosureFiles",

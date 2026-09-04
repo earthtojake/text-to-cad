@@ -166,9 +166,10 @@ def step_snapshot_verb(door: str):
         display: a display mode name, display-settings JSON, or a file path.
         kinematics: pose values — a declared preset name or {dof: value}
             JSON, validated against the model's kinematics declaration.
-        animation: one still frame of a clip the model's .anim.js declares —
-            the clip name (with --time), or {"clip": name, "time": seconds}
-            JSON; layered over the kinematics pose the way the viewer does.
+        animation: one still frame of a clip the document's render module
+            (<name>.step.js beside it) declares — the clip name (with --time),
+            or {"clip": name, "time": seconds} JSON; layered over the
+            kinematics pose the way the viewer does.
         time: seconds into the animation clip (default 0); requires animation.
         focus: occurrence ref rendered at full opacity (repeatable); the
             rest of the assembly is ghosted in place.

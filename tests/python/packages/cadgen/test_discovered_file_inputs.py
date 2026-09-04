@@ -238,7 +238,7 @@ KINEMATICS = {
 }
 
 
-@step(kind="assembly", kinematics=KINEMATICS, animation="hinge.anim.js")
+@step(kind="assembly", kinematics=KINEMATICS)
 def hinge():
     base = label_shape(bd.Box(20, 20, 4), "base")
     arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")
@@ -254,20 +254,17 @@ def _clip(label: str) -> str:
     return f'export const clips = {{ demo: {{ label: "{label}", duration: 2, update(t, m) {{}} }} }};\n'
 
 
-class DeclaredAnimationInputTests(unittest.TestCase):
-    """The file `@step(animation=...)` names is a freshness input too.
+class RenderModuleIsNotABuildInputTests(unittest.TestCase):
+    """The render module beside the document (`hinge.step.js`) is the viewer's.
 
-    The sidecar carries a COPY of the animation module's text, and the
-    documented way to ship an edited clip is to re-run the model. That only
-    holds if the edit makes the model stale. It did not: the file was read
-    AFTER the closure was captured, so the model reported ``current``, the
-    stale copy shipped, and the viewer played the old clip through any number
-    of reloads. Same shape as the vendor-STEP hole above, same fix — the
-    declared file joins the closure, byte-hashed.
+    Choreography never touches geometry or the tree, so it is not a build
+    input: no decorator names it, no build reads it, the sidecar carries no
+    copy of it, and editing it is a reload in the viewer — never a rebuild.
+    The model stays `current` through any edit of the module.
     """
 
     def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory(prefix="declared-animation-")
+        self._tmp = tempfile.TemporaryDirectory(prefix="render-module-")
         self.addCleanup(self._tmp.cleanup)
         self.project = Path(self._tmp.name).resolve()
         self.environment = dict(os.environ)
@@ -280,8 +277,9 @@ class DeclaredAnimationInputTests(unittest.TestCase):
             }
         )
         (self.project / "hinge.py").write_text(_ANIMATED_MODEL, encoding="utf-8")
-        self.animation = self.project / "hinge.anim.js"
-        self.animation.write_text(_clip("Showcase"), encoding="utf-8")
+        # Beside the DOCUMENT (the output), not the script: hinge.step.js.
+        self.render_module = self.project / "hinge.step.js"
+        self.render_module.write_text(_clip("Showcase"), encoding="utf-8")
 
     def _run(self, *args: str) -> str:
         import json
@@ -297,36 +295,26 @@ class DeclaredAnimationInputTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
         return json.loads(completed.stdout.strip().splitlines()[-1])["outcome"]
 
-    def _sidecar_clip(self) -> str:
+    def _sidecar(self) -> dict:
         import json
 
-        sidecar = json.loads((self.project / "hinge.step.json").read_text(encoding="utf-8"))
-        return sidecar["animation"]["clips"]
+        return json.loads((self.project / "hinge.step.json").read_text(encoding="utf-8"))
 
-    def test_editing_the_animation_rebuilds_and_ships_the_new_clip(self) -> None:
+    def test_editing_the_render_module_never_makes_the_model_stale(self) -> None:
         self.assertEqual(self._run(), "built")
         self.assertEqual(self._run(), "current")
-        self.assertEqual(self._sidecar_clip(), _clip("Showcase"))
+        self.assertNotIn("animation", self._sidecar(), "the sidecar carries no copy of the module")
 
-        self.animation.write_text(_clip("Showcase EDITED"), encoding="utf-8")
-        self.assertEqual(self._run(), "built", "an edited clip must make the model stale")
-        self.assertEqual(self._sidecar_clip(), _clip("Showcase EDITED"))
-        self.assertEqual(self._run(), "current")
-
-    def test_a_touch_with_identical_bytes_stays_a_no_op(self) -> None:
-        self.assertEqual(self._run(), "built")
-        payload = self.animation.read_bytes()
-        self.animation.unlink()
-        self.animation.write_bytes(payload)
-        self.assertEqual(self._run(), "current", "the input is the file's content, not its mtime")
+        self.render_module.write_text(_clip("Showcase EDITED"), encoding="utf-8")
+        self.assertEqual(self._run(), "current", "choreography is a reload, never a rebuild")
+        self.render_module.unlink()
+        self.assertEqual(self._run(), "current", "nor is its absence a build concern")
 
     def test_force_still_rebuilds_a_current_model(self) -> None:
         self.assertEqual(self._run(), "built")
         self.assertEqual(self._run("--force"), "built")
 
-    def test_the_animation_file_is_recorded_in_the_closure(self) -> None:
-        import json
-
+    def test_the_render_module_is_not_in_the_closure(self) -> None:
         self._run()
         from unittest import mock
 
@@ -336,7 +324,7 @@ class DeclaredAnimationInputTests(unittest.TestCase):
             recorded = read_record(self.project / "hinge.py")
         self.assertIsNotNone(recorded, "the build must leave a record for the model")
         files = sorted(os.path.basename(f) for f in recorded["closure"]["files"])
-        self.assertEqual(files, ["hinge.anim.js", "hinge.py"])
+        self.assertEqual(files, ["hinge.py"])
 
 
 class ReaderSurfaceTests(unittest.TestCase):

@@ -3,8 +3,9 @@
 The decoration-time vocabulary is pinned in test_kinematics_def; this covers
 the BUILD half (design/pose-animation-split.md): mate refs validate against
 real occurrences, axis selector refs resolve to world numbers, the block lands
-in the ``.step.json`` sidecar (schema 4) with the animation module's text
-COPIED in, and the kinematics dict's ``"at"`` key bakes the artifact —
+in the ``.step.json`` sidecar (kinematics only — choreography is the render
+module beside the document, which no build reads), and the kinematics dict's
+``"at"`` key bakes the artifact —
 descriptor transforms move, and the sidecar re-zeroes so the artifact as
 written is q=0.
 """
@@ -122,13 +123,12 @@ class KinematicsBuildTests(unittest.TestCase):
         )
         return script
 
-    def test_kinematics_and_animation_land_in_the_sidecar(self) -> None:
-        script = self._write("hinge.py", extra=', animation="hinge.anim.js"')
-        (self.root / "hinge.anim.js").write_text(ANIM_JS, encoding="utf-8")
+    def test_kinematics_lands_in_the_sidecar(self) -> None:
+        script = self._write("hinge.py")
         self.assertEqual(0, self._build(script))
 
         sidecar = self._sidecar(script)
-        self.assertEqual(sidecar["schemaVersion"], 5)
+        self.assertEqual(sidecar["schemaVersion"], 6)
         # The sidecar file carries the branded suffix.
         self.assertTrue((self.root / "hinge.step.json").is_file())
 
@@ -142,10 +142,9 @@ class KinematicsBuildTests(unittest.TestCase):
         self.assertEqual(mate["axis"], {"origin": [0.0, 0.0, 6.0], "dir": [0.0, 0.0, 1.0]})
         self.assertEqual(block["poses"], {"open": {"swing": 45.0}})
 
-        # The animation module's TEXT is copied; no path to the source tree
-        # appears anywhere in the sidecar.
-        self.assertEqual(sidecar["animation"], {"clips": ANIM_JS})
-        self.assertNotIn("hinge.anim.js", json.dumps(sidecar))
+        # Choreography is not a sidecar section: the render module beside the
+        # document (hinge.step.js) is the viewer's, never the build's.
+        self.assertNotIn("animation", sidecar)
 
         # The descriptor stays STEP-pure: kinematics is sidecar-only.
         self.assertNotIn("kinematics", self._descriptor(script))
@@ -199,9 +198,11 @@ class KinematicsBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "'#wrist' does not name an occurrence"):
             self._build(script)
 
-    def test_a_missing_animation_module_fails_the_build(self) -> None:
+    def test_animation_is_not_a_decorator_argument(self) -> None:
+        # No decorator names JavaScript: the render module beside the document
+        # is discovered by name. `animation=` is an unknown argument like any other.
         script = self._write("noanim.py", extra=', animation="nope.anim.js"')
-        with self.assertRaisesRegex(FileNotFoundError, "animation module not found"):
+        with self.assertRaisesRegex(TypeError, "unexpected keyword argument: animation"):
             self._build(script)
 
     def test_at_bakes_the_artifact_and_rezeroes_the_sidecar(self) -> None:
