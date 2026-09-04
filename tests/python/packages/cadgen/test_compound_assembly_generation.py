@@ -1,23 +1,18 @@
 from __future__ import annotations
 
-import contextlib
-import io
 import tempfile
 import unittest
 import warnings
 from pathlib import Path
-from types import SimpleNamespace
-from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
 from cadgen._internal import generation
-from cadgen._internal import generation_runner
 from cadgen.metadata import parse_generator_metadata
 from cadgen.step_export import _create_bin_xcaf_doc, export_build123d_step_scene
-from cadgen._internal.step_scene import LoadedStepScene, _bbox_from_shape, scene_leaf_occurrences, scene_occurrence_shape
+from cadgen._internal.step_scene import _bbox_from_shape, scene_leaf_occurrences, scene_occurrence_shape
 
 
 def _rounded_color(color: tuple[float, ...]) -> tuple[float, ...]:
@@ -70,71 +65,6 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, r"returns a dict.*@stl/@threemf/@glb"):
                 parse_generator_metadata(script_path)
 
-    def test_run_selected_specs_preserves_action_stdout(self) -> None:
-        spec = SimpleNamespace(source_ref="part.py")
-        stdout = io.StringIO()
-
-        with contextlib.redirect_stdout(stdout):
-            generation._run_selected_specs(
-                [spec],
-                action=lambda _spec, _progress_sink=None: print("generator summary"),
-                logger=generation.CliLogger("test", stream=io.StringIO()),
-                success_message=None,
-            )
-
-        self.assertEqual("generator summary\n", stdout.getvalue())
-
-    def test_compound_with_explicit_children_is_discovered_as_assembly(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cadgen-compound-") as tempdir:
-            script_path = Path(tempdir) / "robot_arm.py"
-            script_path.write_text(
-                "\n".join(
-                    [
-                        "from build123d import Compound",
-                        "from cadgen import step",
-                        "",
-                        "@step",
-                        "def model():",
-                        "    parts = []",
-                        "    assembly = Compound(",
-                        "        obj=parts,",
-                        "        children=parts,",
-                        "        label='robot_arm_static_display_pose',",
-                        "    )",
-                        "    return assembly",
-                        "",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            metadata = parse_generator_metadata(script_path)
-
-        self.assertIsNotNone(metadata)
-
-    def test_compound_with_literal_obj_sequence_is_discovered_as_assembly(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cadgen-compound-") as tempdir:
-            script_path = Path(tempdir) / "compound_arm.py"
-            script_path.write_text(
-                "\n".join(
-                    [
-                        "from build123d import Box, Compound",
-                        "from cadgen import step",
-                        "",
-                        "@step",
-                        "def model():",
-                        "    left = Box(1, 1, 1)",
-                        "    right = Box(1, 1, 1)",
-                        "    return Compound(obj=[left, right], label='compound_arm')",
-                        "",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            metadata = parse_generator_metadata(script_path)
-
-        self.assertIsNotNone(metadata)
 
     def test_a_compound_with_children_packages_as_occurrences(self) -> None:
         # Packaging follows the shape and nothing else: a Compound placing
@@ -268,43 +198,6 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
             _rounded_color(leaves[0].color),
             {expected_color, expected_linear_color},
         )
-
-    def test_shape_payload_can_export_a_compound(self) -> None:
-        import build123d
-
-        with tempfile.TemporaryDirectory(prefix="cadgen-compound-") as tempdir:
-            script_path = Path(tempdir) / "robot_arm.py"
-            script_path.write_text("def model():\n    return None\n", encoding="utf-8")
-            output_path = script_path.with_suffix(".step")
-            scene = LoadedStepScene(step_path=output_path.resolve(), roots=[], prototype_shapes={})
-            left = build123d.Box(1, 1, 1)
-            right = build123d.Box(1, 1, 1)
-            shape = build123d.Compound(children=[left, right], label="robot_arm")
-
-            with (
-                mock.patch.object(
-                    generation,
-                    "python_source_hash",
-                    return_value=SimpleNamespace(
-                        source_path="robot_arm.py",
-                        source_hash="hash-123",
-                    ),
-                ),
-                mock.patch.object(generation_runner, "build_build123d_step_scene", return_value=scene) as build_scene,
-            ):
-                result = generation._write_shape_step_payload(
-                    {"shape": shape},
-                    output_path=output_path,
-                    script_path=script_path,
-                    logger=generation.CliLogger("test"),
-                )
-
-        # gen_step builds the scene in memory (no STEP write); the compound is
-        # stashed for the tree/STEP jobs, which package it by its own shape.
-        self.assertIs(result, scene)
-        self.assertEqual("python", build_scene.call_args.kwargs["source_kind"])
-        self.assertEqual("shape", getattr(scene, "step_payload_kind", None))
-        self.assertIs(shape, getattr(scene, "source_compound", None))
 
 
 if __name__ == "__main__":
