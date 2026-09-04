@@ -29,6 +29,18 @@ runs:
         python -m pip install --upgrade pip
         python -m pip install -r requirements-dev.txt
 
+    # `cadgen snapshot` renders in Playwright's own Chromium build. The Linux image
+    # happens to carry one; Windows does not, and a missing browser fails the
+    # snapshot suites with "Executable doesn't exist". Install it on every OS.
+    - name: Install the snapshot browser
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" = "Linux" ]; then
+          python -m playwright install --with-deps chromium
+        else
+          python -m playwright install chromium
+        fi
+
     - name: Install Node dependencies
       shell: bash
       run: |
