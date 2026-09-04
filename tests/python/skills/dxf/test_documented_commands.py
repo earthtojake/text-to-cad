@@ -23,6 +23,7 @@ Also pinned here: the retired-contract teaching error points at `SKILL.md`, so
 from __future__ import annotations
 
 import ast
+import concurrent.futures
 import os
 import re
 import shutil
@@ -208,11 +209,17 @@ class DocumentedModelsBuild(_DrawingHarness):
             if _is_runnable_model(block)
         ]
         self.assertGreaterEqual(len(sources), 3, "the docs should carry runnable examples")
+        models = []
         for name, index, block in sources:
+            model = self.project / f"documented_{name.replace('.', '_')}_{index}.py"
+            model.write_text(block, encoding="utf-8")
+            models.append((name, index, model))
+        # The documented drawings are independent, so they build side by side, each in
+        # its own process.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            list(pool.map(lambda entry: self.run_drawing(entry[2].name), models))
+        for name, index, model in models:
             with self.subTest(document=name, block=index):
-                model = self.project / f"documented_{name.replace('.', '_')}_{index}.py"
-                model.write_text(block, encoding="utf-8")
-                self.run_drawing(model.name)
                 drawing = model.with_suffix(".dxf")
                 self.assertTrue(drawing.is_file(), f"{model.name} wrote no drawing")
                 self.assertGreater(drawing.stat().st_size, 0)
