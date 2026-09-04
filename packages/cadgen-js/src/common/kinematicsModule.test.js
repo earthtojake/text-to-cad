@@ -52,7 +52,7 @@ test("a sidecar at any other schema is refused with the current requirement", as
   await assert.rejects(
     () => loadKinematicsModuleDefinition(SIDECAR_URL, { cadPath: "hinge.step" }),
     (error) => {
-      assert.match(error.message, /unsupported sidecar schema 4 \(expected 5\)/);
+      assert.match(error.message, /unsupported sidecar schema 5 \(expected 6\)/);
       assert.match(error.message, /python hinge\.py/);
       assert.match(error.message, /cadgen step build/);
       return true;
@@ -65,16 +65,16 @@ test("a sidecar declaring no schema at all is refused the same way", async (t) =
 
   await assert.rejects(
     () => loadKinematicsModuleDefinition(SIDECAR_URL),
-    /unsupported sidecar schema none \(expected 5\)/
+    /unsupported sidecar schema none \(expected 6\)/
   );
 });
 
 test("the animation loader is gated on the same schema", async (t) => {
-  stubSidecar(t, { schemaVersion: 4, animation: { clips: "export default {};" } });
+  stubSidecar(t, { schemaVersion: SOURCE_SIDECAR_SCHEMA_VERSION - 1, animation: { clips: "export default {};" } });
 
   await assert.rejects(
     () => loadAnimationSource(SIDECAR_URL),
-    /unsupported sidecar schema 4 \(expected 5\)/
+    /unsupported sidecar schema 5 \(expected 6\)/
   );
 });
 
