@@ -578,21 +578,31 @@ def merge_assembly_occurrences(
     manifest = dict(index.manifest)
     stats = dict(manifest.get("stats")) if isinstance(manifest.get("stats"), Mapping) else {}
     stats["occurrenceCount"] = len(occurrences)
+    # The rows are the tree's leaves (groups travel separately as group_nodes). A
+    # document with exactly one leaf -- a part -- keeps the bare grammar: `#f19`
+    # canonicalizes to that leaf's `f19`, which is what single_occurrence_id is for.
+    leaf_ids = [str(row.get("id")) for row in rows if row.get("id")]
+    stats["leafOccurrenceCount"] = len(leaf_ids)
     manifest["stats"] = stats
+    single = index.single_occurrence_id or (leaf_ids[0] if len(leaf_ids) == 1 else "")
     return replace(
         index,
         manifest=manifest,
         occurrences=occurrences,
         occurrence_by_id=occurrence_by_id,
         group_nodes=group_nodes,
+        leaf_occurrence_ids=leaf_ids,
+        single_occurrence_id=single,
     )
 
 
 def _index_with_assembly_occurrences(index: SelectorIndex, artifact: object) -> SelectorIndex:
     if index is None or artifact is None:
         return index
-    if str(getattr(artifact, "kind", "")) != "assembly":
-        return index
+    # Every tree's selector tables live in its components and are composed here per
+    # occurrence -- a part's single component included. Skipping parts left them with
+    # the empty base index: no occurrence, face or edge resolved and the facts
+    # counted zero faces.
     package_dir = getattr(artifact, "artifact_path", None)
     if not isinstance(package_dir, Path):
         return index
