@@ -667,6 +667,46 @@ class StoreCli(StoreCase):
         self.assertTrue(has_object(orphan))
 
 
+# The two-level fixture ChildrenByResult runs: a pin and an arm that places it twice.
+# Written by the test so the run reads nothing under models/.
+LINK_PIN_SOURCE = """\
+from cadgen import step
+from cadgen import build123d as bd
+
+
+@step(out="../STEP/link_pin.step")
+def link_pin():
+    return bd.Cylinder(radius=2.0, height=12.0)
+
+
+if __name__ == "__main__":
+    link_pin()
+"""
+
+LINK_ARM_SOURCE = """\
+from cadgen import step
+from cadgen import build123d as bd
+
+from link_pin import link_pin
+
+
+@step(out="../STEP/link_arm.step")
+def link_arm():
+    bar = bd.Box(40.0, 8.0, 4.0)
+    bar.label = "bar"
+    pin = link_pin()
+    left = pin.moved(bd.Location((-15.0, 0.0, 2.0)))
+    left.label = "pin_left"
+    right = pin.moved(bd.Location((15.0, 0.0, 2.0)))
+    right.label = "pin_right"
+    return bd.Compound(children=[bar, left, right], label="link_arm")
+
+
+if __name__ == "__main__":
+    link_arm()
+"""
+
+
 class ChildrenByResult(StoreCase):
     """End to end over real model runs: a child edit with identical geometry
     leaves the parent current; a geometry change rebuilds it."""
@@ -683,8 +723,8 @@ class ChildrenByResult(StoreCase):
     def test_a_parent_pins_its_children_by_result(self) -> None:
         src = self.root / "src"
         src.mkdir()
-        for name in ("link_pin.py", "link_arm.py"):
-            shutil.copyfile(REPO / "models/assemblies/src/link_robot" / name, src / name)
+        (src / "link_pin.py").write_text(LINK_PIN_SOURCE, encoding="utf-8")
+        (src / "link_arm.py").write_text(LINK_ARM_SOURCE, encoding="utf-8")
         (self.root / "STEP").mkdir()
         pin, arm = src / "link_pin.py", src / "link_arm.py"
 
