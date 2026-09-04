@@ -38,6 +38,7 @@ import time
 import traceback
 
 from cadgen.daemon import transport
+from cadgen.daemon.jobs import JobLedger
 from cadgen.daemon.client import (
     compute_version_token,
     daemon_address,
@@ -172,6 +173,9 @@ def _status_payload() -> dict:
     snapshot = _POOL.snapshot()
     snapshot.update({
         "jobsRunning": _BROKER.snapshot(),
+        # Every job, whoever asked: state, phase n/total and declared outputs
+        # (cadgen.daemon.jobs). The CAD Viewer's progress feed.
+        "jobs": _JOBS.snapshot(),
         "pid": os.getpid(),
         "socket": str(daemon_address()),
         "identity": daemon_identity(),
@@ -246,6 +250,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
     # file are still one job).
     subject = model or _document_path(argv, cwd)
     closure = str(request.get("closure") or "")
+    job = _JOBS.adopt(_JOBS.start(tool=tool, subject=subject, argv=argv), subject=subject, tool=tool, argv=argv)
     inflight = None
     if subject and closure and request.get("coalesce"):
         inflight = _BROKER.claim(subject, closure)
@@ -253,8 +258,10 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             # Identical source is already building: attach, relay its exit, run nothing.
             _log(f"{tool} {model}: coalesced onto the job in flight")
             inflight["done"].wait()
+            code = inflight["exit"] if inflight["exit"] is not None else 1
+            _JOBS.finish(job, code)
             with contextlib.suppress(OSError), send_lock:
-                _send(conn, {"exit": inflight["exit"] if inflight["exit"] is not None else 1})
+                _send(conn, {"exit": code})
             return
     try:
         worker = _POOL.acquire(model)
@@ -262,6 +269,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         # A spawn that never announced itself. There is no worker to blame and nothing
         # to retry warm; the client sees the failure and can run cold.
         _log(f"{tool}: could not start a worker: {exc}")
+        _JOBS.finish(job, 1)
         if subject and closure and request.get("coalesce"):
             _BROKER.finish(subject, closure, 1)
         with contextlib.suppress(OSError), send_lock:
@@ -290,6 +298,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             if "exit" in frame:
                 exit_code = int(frame.get("exit") or 0)
                 break
+            _JOBS.observe(frame)
             with send_lock:
                 _send(conn, frame)
     except pool_mod.WorkerGone as exc:
@@ -316,6 +325,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         watchdog.join(timeout=CLIENT_LIVENESS_INTERVAL_SECONDS + 1.0)
         # A killed worker is not reusable; release() drops it and the pool respawns.
         _POOL.release(worker, healthy=healthy and worker.alive())
+        _JOBS.finish(job, exit_code)
         if subject and closure and request.get("coalesce"):
             _BROKER.finish(subject, closure, exit_code)
 
@@ -327,6 +337,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
 
 
 _INFLIGHT: set[threading.Thread] = set()
+_JOBS = JobLedger()
 _STARTED_AT = time.time()
 _REQUESTS_SERVED = [0]
 

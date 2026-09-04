@@ -19,7 +19,6 @@ import unittest
 from pathlib import Path
 
 from cadgen.viewer.backend import ForbiddenAssetError
-from cadgen.viewer.build_progress import ProgressRegistry
 from cadgen.viewer.cadgen_ops import CadgenOps
 from cadgen.viewer.imports import ImportCompiler
 
@@ -86,7 +85,7 @@ class ImportTestCase(unittest.TestCase):
         return ImportCompiler(submit=self.submit)
 
     def ops(self) -> CadgenOps:
-        return CadgenOps(str(self.root), registry=ProgressRegistry(), client=self.compiler())
+        return CadgenOps(str(self.root), client=self.compiler())
 
     def step(self, name: str) -> str:
         path = self.root / name

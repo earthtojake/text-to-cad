@@ -30,7 +30,7 @@ print(json.dumps({{
     "heavy": sorted(m for m in ("OCP", "build123d", "ezdxf", "numpy") if m in sys.modules),
     "has_api": all(
         hasattr(cadgen.coordination, name)
-        for name in ("artifact_build", "generator_busy", "progress_path", "BuildRun")
+        for name in ("artifact_build", "generator_busy", "new_run_id", "BuildRun")
     ),
 }}))
 """

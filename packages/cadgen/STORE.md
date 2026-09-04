@@ -43,8 +43,8 @@ memo (bare), scope, blob. They do not appear in code or documentation.
   index/mesh/<key>                    tessellation entries → object hash
 ```
 
-Nothing else lives under the root. A build's advisory progress record is
-process state, not content, and lives in the daemon's state directory (§7).
+Nothing else lives under the root. A build's progress is process state, not
+content: the daemon's job ledger, read over its socket (§7, §9).
 
 ### The two sides of the store — a law
 
@@ -348,11 +348,13 @@ No serialization, no cancellation, no waiting on another build.
 - **No locks.** There is no lock layer: every store write is atomic
   (temp + rename) and idempotent, the document is written to a temp file and
   moved into place, the record cross-validates the outputs by sha (gate
-  clause 5), and the publish rule decides same-model outcomes. What remains
-  is an advisory progress record per model in the daemon's state directory
-  (`<tmp>/cadgen-daemon/progress/<key>.json`, not the store) that the CAD
-  Viewer reads for its progress badge and ages out; nothing reads it to
-  decide freshness. With `CADGEN_DAEMON=0` concurrent builds are unbrokered
+  clause 5), and the publish rule decides same-model outcomes. Progress is
+  not on disk at all: the daemon keeps a ledger of every job it runs (state,
+  phase n/total, the job's declared output paths) and serves it with `daemon
+  status`; the CAD Viewer matches jobs to the documents it shows by output
+  path — a CLI build, a parent's child build and its own compile read alike —
+  and nothing reads any of it to decide freshness. With `CADGEN_DAEMON=0`
+  there is no ledger, and concurrent builds are unbrokered
   — safe by the two invariants above, wasteful, and a debugging mode.
 
 ## 8. GC

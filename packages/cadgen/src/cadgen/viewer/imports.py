@@ -11,8 +11,8 @@ never does.
 
 Concurrent viewer requests for one document attach to the first: one job, one
 answer for all of them. Progress reaches the status endpoint through the
-advisory progress record the compile publishes (``build_progress``), not
-through this module — the job is the producer, this is a waiter.
+daemon's job ledger (``build_progress``), not through this module — the job is
+the producer, this is a waiter.
 """
 
 from __future__ import annotations

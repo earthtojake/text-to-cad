@@ -20,7 +20,7 @@ from .artifact_status import (
     resolve_artifact_verdict,
 )
 from .backend import require_contained
-from .build_progress import ProgressRegistry, build_progress_snapshot
+from .build_progress import build_progress_snapshot
 from .imports import ImportCompiler
 from .store_paths import build_scope
 
@@ -28,12 +28,11 @@ __all__ = ["CadgenOps", "create_cadgen_ops"]
 
 
 class CadgenOps:
-    def __init__(self, root_dir: str, *, registry=None, client=None) -> None:
+    def __init__(self, root_dir: str, *, client=None) -> None:
         # Resolved once. Containment compares this against every candidate, and
         # a root spelled relatively would make that comparison depend on the
         # process's current directory.
         self.root_dir = os.path.abspath(str(root_dir or ""))
-        self.registry = registry if registry is not None else ProgressRegistry()
         self.client = client if client is not None else ImportCompiler()
 
     def shutdown(self) -> None:
@@ -71,12 +70,13 @@ class CadgenOps:
         candidate = self._candidate(file_ref)
         build_key = build_scope(candidate)
 
-        snapshot = build_progress_snapshot(candidate, registry=self.registry)
+        # The daemon's job ledger: any job with this document among its outputs,
+        # whoever submitted it (a CLI build, a parent's child build, our compile).
+        snapshot = build_progress_snapshot(candidate)
         if snapshot is None and self.client.in_flight(build_key):
-            # Our worker is starting up but has not reported a phase yet. An
-            # indeterminate generating badge beats showing nothing, and it is
-            # what the client's attach loop needs in order to have something to
-            # attach TO.
+            # Our own compile before the daemon lists it (or with no daemon at
+            # all): an indeterminate generating badge beats showing nothing, and
+            # it is what the client's attach loop needs to attach TO.
             snapshot = {"writing": True, "busy": False, "runId": None, "progress": None}
 
         # Resolved once and threaded through both uses below.

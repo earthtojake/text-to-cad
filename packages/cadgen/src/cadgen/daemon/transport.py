@@ -53,7 +53,7 @@ def _family() -> str:
 
 
 def state_dir() -> Path:
-    """Where the address, the auth key and the advisory progress records live.
+    """Where the address, the auth key and the log live.
 
     ONE derivation, owned by ``cadgen.coordination.paths`` (stdlib-only, imported by the
     viewer too); this is the daemon's spelling of it.

@@ -1,8 +1,8 @@
 """THE artifact-status authority: freshness verdicts from pure file reads.
 
 What this module deliberately does NOT decide is "is a build in flight". The
-caller supplies a snapshot (``build_progress.py``, which reads the advisory
-progress record) and this module reads it.
+caller supplies a snapshot (``build_progress.py``: the daemon's job ledger,
+matched to the document by declared output path) and this module reads it.
 
 Nothing here imports cadgen. Status is answered for a directory of models by an
 interpreter that may have no kernel installed at all, and every read degrades to
@@ -226,14 +226,14 @@ def resolve_artifact_verdict(file_ref, root_dir) -> dict:
 def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
     """The ``GET /__cad/artifact`` state machine.
 
-    ``snapshot`` is the build view — ``{writing, busy, runId, progress}`` — or
-    ``None`` when there is none. Key PRESENCE is the contract: an absent
-    ``runId`` or ``progress`` must be absent, never ``None``.
+    ``snapshot`` is the build view from the daemon's job ledger
+    (``build_progress``) — ``{writing, busy, runId, progress}`` while a job with
+    this document among its outputs runs, ``{failed: {...}}`` when the latest
+    one failed — or ``None`` when there is none. Key PRESENCE is the contract:
+    an absent ``runId`` or ``progress`` must be absent, never ``None``.
 
-    ``verdict`` lets a caller that already resolved one pass it in. The route
-    needs the verdict again to decide whether to offer an import, and resolving
-    twice per poll meant re-reading the sidecar and the provenance record on
-    every 400ms tick of every build.
+    ``verdict`` lets a caller that already resolved one pass it in: the route
+    needs it again to decide whether to offer a compile.
     """
     if verdict is None:
         verdict = resolve_artifact_verdict(file_ref, root_dir)
@@ -251,8 +251,13 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
             status["progress"] = snapshot["progress"]
         return status
 
+    failed = snapshot.get("failed")
     if verdict.get("ok"):
         status = {"state": ARTIFACT_STATE.READY}
+        if isinstance(failed, dict):
+            # The tree renders; the latest build of this document failed. Both
+            # facts, the render first.
+            status["failed"] = failed
         if snapshot.get("busy"):
             status["busy"] = True
             if snapshot.get("runId"):
@@ -262,6 +267,9 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
         return status
 
     code = verdict.get("code")
+    if isinstance(failed, dict):
+        # No tree for these bytes and the latest job for the document failed.
+        return {"state": ARTIFACT_STATE.ERROR, "reason": "build_failed", "error": "the last build of this document failed", "failed": failed}
     if code in BUILDABLE_CODES:
         status = {"state": ARTIFACT_STATE.NEEDS_BUILD, "reason": code}
         if snapshot.get("busy"):

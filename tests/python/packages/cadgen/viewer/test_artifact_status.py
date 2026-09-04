@@ -23,12 +23,6 @@ from cadgen.viewer.artifact_status import (
     resolve_artifact_verdict,
 )
 from cadgen.viewer.backend import ForbiddenAssetError
-from cadgen.viewer.build_progress import (
-    PROGRESS_FRESHNESS_MS,
-    ProgressRegistry,
-    build_progress_snapshot,
-    status_record_path,
-)
 
 from tests.python.support.store_fixtures import seed_result
 
@@ -79,25 +73,6 @@ class _Tree:
 
             object_path(hashlib.sha256(b"SURF\x00").hexdigest()).unlink()
         return tree
-
-    def record(self, output_dir, **fields):
-        path = Path(status_record_path(str(output_dir)))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "schemaVersion": 3,
-            "runId": "run-1",
-            "outcome": None,
-            "updatedAt": round(time.time() * 1000),
-            "phase": "components",
-            "label": "Meshing components",
-            "done": 3,
-            "total": 10,
-            "determinate": True,
-        }
-        payload.update(fields)
-        path.write_text(json.dumps(payload), encoding="utf-8")
-        return path
-
 
 class ArtifactStatusTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -278,104 +253,6 @@ class SnapshotShapes(ArtifactStatusTestCase):
         )
 
 
-class ProgressReader(ArtifactStatusTestCase):
-    def test_a_fresh_record_becomes_a_writing_snapshot_with_phase_fields_on_top(self):
-        step = self.tree.step()
-        self.tree.record(store_paths.build_scope(step))
-        snapshot = build_progress_snapshot(step)
-        self.assertTrue(snapshot["writing"])
-        self.assertFalse(snapshot["busy"])
-        self.assertEqual(snapshot["runId"], "run-1")
-        progress = snapshot["progress"]
-        for key in ("phase", "label", "done", "total", "determinate"):
-            self.assertIn(key, progress, key)
-
-
-    def test_a_terminal_or_stale_or_absent_record_yields_nothing(self):
-        step = self.tree.step()
-        scope = store_paths.build_scope(step)
-        self.assertIsNone(build_progress_snapshot(step))
-
-        self.tree.record(scope, outcome="done")
-        self.assertIsNone(build_progress_snapshot(step), "a finished run is not in flight")
-
-        self.tree.record(
-            scope, updatedAt=round(time.time() * 1000) - PROGRESS_FRESHNESS_MS - 1000
-        )
-        self.assertIsNone(build_progress_snapshot(step), "a killed producer's badge ages out")
-
-    def test_the_reader_is_schema_blind(self):
-        # buildProgress.test.mjs wrote schemaVersion 1 and expected a snapshot.
-        # The viewer cannot know a peer's run id before reading the record, so
-        # staleness is gated on outcome plus the window, not on attribution.
-        step = self.tree.step()
-        self.tree.record(store_paths.build_scope(step), schemaVersion=1)
-        self.assertIsNotNone(build_progress_snapshot(step))
-
-    def test_a_non_string_run_id_becomes_none(self):
-        step = self.tree.step()
-        self.tree.record(store_paths.build_scope(step), runId=17)
-        self.assertIsNone(build_progress_snapshot(step)["runId"])
-
-    def test_no_producer_can_emit_busy(self):
-        """The invariant behind dropping ``blocked`` from the import offer.
-
-        ``busy`` is what makes ``artifact_status`` set ``blocked``, and
-        ``blocked`` flips the client from BUILD to ATTACH. No snapshot producer
-        in this backend can set it: every snapshot comes from
-        ``_snapshot_from_record`` or the synthetic in-flight one, and both
-        hardcode it false — as the Node ``buildProgressSnapshot`` did. So
-        carrying the flag out of ``CadgenOps`` protected nothing and misled a
-        reader about what could reach the client. If a real producer ever
-        appears, this test fails first and the offer can be reconsidered
-        deliberately.
-        """
-        step = self.tree.step()
-        registry = ProgressRegistry()
-
-        self.tree.record(store_paths.build_scope(step))
-        self.assertIs(build_progress_snapshot(step)["busy"], False)
-
-        registry.publish(store_paths.build_scope(step), "live", {"phase": "components"})
-        self.assertIs(build_progress_snapshot(step, registry=registry)["busy"], False)
-
-
-class InProcessRegistry(ArtifactStatusTestCase):
-    def test_our_own_build_is_served_from_memory_not_from_disk(self):
-        step = self.tree.step()
-        package_dir = store_paths.build_scope(step)
-        registry = ProgressRegistry()
-        registry.publish(package_dir, "live-run", {"phase": "components", "done": 4, "total": 9})
-        snapshot = build_progress_snapshot(step, registry=registry)
-        self.assertEqual(snapshot["runId"], "live-run")
-        self.assertEqual(snapshot["progress"]["done"], 4)
-
-    def test_the_live_channel_beats_a_peer_record(self):
-        step = self.tree.step()
-        self.tree.record(store_paths.build_scope(step), runId="from-disk")
-        registry = ProgressRegistry()
-        registry.publish(store_paths.build_scope(step), "in-process", {"phase": "package"})
-        self.assertEqual(build_progress_snapshot(step, registry=registry)["runId"], "in-process")
-
-    def test_clearing_falls_back_to_the_file_tiers(self):
-        step = self.tree.step()
-        package_dir = store_paths.build_scope(step)
-        registry = ProgressRegistry()
-        registry.publish(package_dir, "live", {"phase": "package"})
-        registry.clear(package_dir)
-        self.assertIsNone(build_progress_snapshot(step, registry=registry))
-
-    def test_no_freshness_window_applies_to_the_live_channel(self):
-        # The entry exists only while a worker we own is running, and is cleared
-        # in a finally. The window is for producers we cannot observe.
-        step = self.tree.step()
-        registry = ProgressRegistry()
-        registry.publish(store_paths.build_scope(step), "live", {"phase": "generate"})
-        snapshot = build_progress_snapshot(step, registry=registry)
-        self.assertIsNotNone(snapshot)
-        self.assertGreater(snapshot["progress"]["updatedAt"], 0)
-
-
 class InvalidUtf8(ArtifactStatusTestCase):
     """A byte that is not UTF-8 must not change the answer the client acts on.
 
@@ -398,19 +275,6 @@ class InvalidUtf8(ArtifactStatusTestCase):
         self.assertIn(marker, body, "precondition: the fixture carries the marker")
         path.write_bytes(body.replace(marker, self.BAD))
 
-
-    def test_a_progress_record_with_one_bad_byte_stays_in_flight(self):
-        # THE OTHER STATE CHANGE: generating -> ready. The record is written by
-        # a peer build WHILE it runs, so a read can land on a torn multi-byte
-        # character; the client stopped attaching and called the model finished
-        # in the middle of someone else's build.
-        step = self.tree.step()
-        record = self.tree.record(store_paths.build_scope(step), label="NAME_HERE")
-        self._corrupt(record)
-        snapshot = build_progress_snapshot(step)
-        self.assertIsNotNone(snapshot, "an undecodable byte must not read as no build in flight")
-        self.assertTrue(snapshot["writing"])
-        self.assertEqual(snapshot["runId"], "run-1")
 
     def test_no_backend_reader_opens_a_text_file_strictly(self):
         """The sweep, as a rule rather than three cases.

@@ -1,11 +1,12 @@
-"""Build progress: how a run narrates its phases, in process and on disk.
+"""Build progress: how a run narrates its phases, in process.
 
 There is NO lock here. Two builds of one model may run at once; the store's publish
 rule (``cadgen.store.publish``) decides which result the model's record points at,
 and every write under the store is atomic, so concurrent builds produce two valid
 results and one pointer — never a torn one (STORE.md §7). What this package owns is
-narration: the phase a build is in, how far through it is, and the advisory record
-of that on disk for readers in other processes (the CAD Viewer's progress badge).
+narration: the phase a build is in and how far through it is, delivered to the
+sinks a run is given (the CLI bar, the build tree's events — which the daemon's job
+ledger and, through it, the CAD Viewer read). Nothing is written to disk.
 
 **stdlib only.** The viewer's long-lived server process imports this module, and it must
 never drag OCP/build123d/ezdxf into that process. ``cadgen/__init__.py`` defers all of its
@@ -26,9 +27,8 @@ Producer::
         run.phase(PHASE_GENERATE)                     # a phase that cannot
         run.detail("airframe")
 
-Reader (the viewer)::
-
-    record = read_record(progress_path(scope))   # advisory; stale after a crash
+Readers in other processes get the same narration from the daemon's job ledger
+(``cadgen.daemon.jobs``), fed by the build tree's event frames.
 """
 
 from __future__ import annotations
@@ -40,7 +40,6 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
-from cadgen.coordination import record as _record
 from cadgen.coordination.kinds import (
     DRAWING_PACKAGE,
     PHASE_BROWSER,
@@ -52,7 +51,6 @@ from cadgen.coordination.kinds import (
     VALIDATION,
     ArtifactKind,
 )
-from cadgen.coordination.paths import generator_progress_path, progress_path
 from cadgen.coordination.phases import (
     NULL_PROGRESS,
     PHASE_COMPONENTS,
@@ -92,9 +90,7 @@ __all__ = [
     "artifact_build",
     "current_build",
     "generator_busy",
-    "generator_progress_path",
     "new_run_id",
-    "progress_path",
     "render_progress_bar",
     "reporting_as",
     "resolve",
@@ -183,40 +179,16 @@ def reporting_as(run: BuildRun | None) -> Iterator[None]:
 @contextlib.contextmanager
 def _reported_run(
     kind: ArtifactKind,
-    target: Path,
-    intent: str,
     *,
     is_current: Callable[[], bool] | None,
     force: bool,
     sink: Callable[[ProgressEvent], None] | None,
 ) -> Iterator[BuildRun]:
-    """One run's record lifecycle: ``starting`` before any work, phases as they happen,
-    ``done`` WITH the run's stage times or ``failed`` WITHOUT them, so a failed run cannot
-    teach the next build's bar."""
-    started_at_ms = time.time() * 1000.0
+    """One run's narration: phases as they happen to the sink, a terminal ``done``
+    frame when the body returns, nothing when it raises."""
     run_id = new_run_id()
-
-    def _publish(outcome: str | None, event: ProgressEvent | None = None) -> None:
-        _record.write_record(
-            target,
-            _record.build_record(
-                run_id=run_id,
-                kind=kind.name,
-                intent=intent,
-                started_at_ms=started_at_ms,
-                outcome=outcome,
-                progress=event.progress_payload() if event is not None else None,
-                stage_ms=(
-                    event.stage_ms
-                    if (event is not None and outcome == _record.OUTCOME_DONE)
-                    else None
-                ),
-            ),
-        )
-
-    _publish(_record.OUTCOME_RUNNING)
     reporter = ProgressReporter(
-        sinks=[s for s in (lambda e: _publish(None, e), sink) if s is not None],
+        sinks=[s for s in (sink,) if s is not None],
         phases=kind.phases,
         labels=kind.labels,
     )
@@ -226,17 +198,11 @@ def _reported_run(
         with contextlib.suppress(Exception):
             run.skipped = bool(is_current())
     if run.skipped:
-        _publish(_record.OUTCOME_SKIPPED)
         yield run
         return
 
-    try:
-        yield run
-    except BaseException:  # include KeyboardInterrupt/SystemExit: a cancelled run is a failed run
-        _publish(_record.OUTCOME_FAILED)
-        raise
+    yield run
     reporter.finish()
-    _publish(_record.OUTCOME_DONE, _terminal_event(reporter))
 
 
 @contextlib.contextmanager
@@ -253,7 +219,7 @@ def artifact_build(
     ``scope`` is the model's build scope (``cadgen.catalog.build_scope``: a name derived
     from the model path, known before any geometry is). None means a producer with no
     coordinated output: ``is_current`` is still answered -- freshness is not a reporting
-    question -- but nothing is recorded.
+    question -- and the run narrates nowhere.
 
     ``force=True`` skips only the ``is_current()`` call.
     """
@@ -264,10 +230,7 @@ def artifact_build(
                 run.skipped = bool(is_current())
         yield run
         return
-    with _reported_run(
-        kind, progress_path(scope), _record.INTENT_WRITE,
-        is_current=is_current, force=force, sink=sink,
-    ) as run:
+    with _reported_run(kind, is_current=is_current, force=force, sink=sink) as run:
         yield run
 
 
@@ -281,20 +244,15 @@ def generator_busy(
     """Report a run that occupies a model's GENERATOR without rewriting its outputs.
 
     An export runs the model's ``@step`` entry for a minute and writes a file somewhere else
-    entirely. Its record goes to :func:`generator_progress_path`, NOT to the writer's record:
-    sharing one file let an export stomp a live build's progress, and its terminal record
-    carries no ``stageMs`` that would erase the phase weighting the next build reads.
+    entirely; it narrates through the same phases without being a build of the model.
 
-    Yields a :class:`BuildRun`, exactly as :func:`artifact_build` does, so the work under it
-    reports through the same phases. None when there is no scope to report under.
+    Yields a :class:`BuildRun`, exactly as :func:`artifact_build` does. None when there is
+    no scope to report under.
     """
     if scope is None:
         yield None
         return
-    with _reported_run(
-        kind, generator_progress_path(scope), _record.INTENT_GENERATE,
-        is_current=None, force=True, sink=sink,
-    ) as run:
+    with _reported_run(kind, is_current=None, force=True, sink=sink) as run:
         yield run
 
 

@@ -1,159 +1,107 @@
-"""Where a build's position comes from — ours in memory, a peer's from disk.
+"""Where a document's build position comes from: the daemon's job ledger.
 
-TWO PRODUCERS, TWO CHANNELS
----------------------------
-OUR OWN build reports IN PROCESS. The compile worker installs a progress sink
-and every ``ProgressEvent`` arrives here as a frame, so the bar the client draws
-is the build narrating itself rather than a file being scraped. Nothing is read
-from disk for a build this server started.
+ONE PRODUCER, ONE CHANNEL. Every job the daemon runs — ``python model.py`` in a
+terminal, a parent's child build, a door's compile, this viewer's own compile —
+is one entry in the daemon's ledger (``cadgen.daemon.jobs``), carrying the
+job's DECLARED OUTPUT PATHS and its state as the build tree narrates it:
+submitted → queued → building [phase, done/total] → done | failed. The viewer
+asks the daemon (``cadgen.daemon.client.status``), matches jobs to the document
+it displays by output path, and shows ``compiling · <phase> n/total`` for any
+of them alike; ``failed`` when the latest job for the document failed.
 
-A PEER's build — ``python model.py`` in a terminal, a ``cadgen step compile``,
-another viewer — has no in-process channel, so those stay file-based: every
-producer publishes an advisory record at ``progress_path(build_scope(model))``
-(``cadgen.coordination.paths``), keyed by the MODEL path, which is the one
-identity a reader holds before the build has produced anything.
+Artifact-side only: no record, no script, no closure is read here, and nothing
+on disk is scraped — there is no advisory progress record any more. With no
+daemon (``CADGEN_DAEMON=0``, or none running) there is no feed: a document then
+reads from its tree alone, and the viewer's own compile is reported by the
+compile client's in-flight marker (``cadgen_ops``).
 
-DELIBERATELY SCHEMA-BLIND AND RUN-ATTRIBUTION-FREE
---------------------------------------------------
-``schemaVersion`` is not checked and ``runId`` is only passed through (the
-client resets its bar when it changes). Nothing proves a peer is alive: the
-record is written data, so staleness is gated on ``outcome`` plus a freshness
-window, and a killed peer's badge ages out rather than pinning an entry to a
-loading overlay forever.
-
-No kernel import: this is a viewing-path read. ``cadgen.coordination.paths`` is
-stdlib-only by contract.
+No kernel import: this is a viewing-path read.
 """
 
 from __future__ import annotations
 
-import json
+import os
 import threading
 import time
 
-from cadgen.coordination.paths import progress_path
+__all__ = ["FEED_CACHE_SECONDS", "build_progress_snapshot", "jobs_for_document"]
 
-from .store_paths import build_scope
+# One status poll per open document every ~400 ms; one socket round-trip per
+# window serves them all.
+FEED_CACHE_SECONDS = 0.25
+_RUNNING = ("submitted", "queued", "building")
 
-__all__ = [
-    "PROGRESS_FRESHNESS_MS",
-    "ProgressRegistry",
-    "build_progress_snapshot",
-    "status_record_path",
-]
-
-# A peer record older than this is treated as absent. It is the ONLY thing that
-# retires a record left behind by a killed producer: records are never unlinked
-# (a reader mid-read would see the file vanish), so a crashed peer's last
-# non-terminal write would otherwise say "generating" forever.
-PROGRESS_FRESHNESS_MS = 20_000
+_guard = threading.Lock()
+_cache: tuple[float, list[dict]] = (0.0, [])
 
 
-def status_record_path(scope: str) -> str:
-    """The advisory progress record for a build scope, as a string."""
-    return str(progress_path(scope))
+def _daemon_jobs(now: float) -> list[dict]:
+    global _cache
+    with _guard:
+        stamp, jobs = _cache
+        if now - stamp < FEED_CACHE_SECONDS:
+            return jobs
+    from cadgen.daemon import client
 
-
-def _read_fresh_record(record_path: str, now_ms: float):
-    """A live, non-terminal record, or ``None``.
-
-    Returns ``(updated_at, record)`` so a caller can compare candidates without
-    re-parsing.
-
-    ``errors="replace"``: the record is written by a peer build WHILE IT RUNS,
-    so a read can legitimately land on a partial write; strict decoding turned
-    a torn multi-byte character into ``UnicodeDecodeError``, which is a
-    ``ValueError`` and was swallowed as "no build in flight" — the client stopped
-    showing the peer's progress and reported the model ready mid-build.
-    """
     try:
-        with open(record_path, "r", encoding="utf-8", errors="replace") as handle:
-            record = json.load(handle)
+        status = client.status()
+    except Exception:  # noqa: BLE001 - a status read never fails a poll
+        status = None
+    jobs = [job for job in ((status or {}).get("jobs") or []) if isinstance(job, dict)]
+    with _guard:
+        _cache = (now, jobs)
+    return jobs
+
+
+def _real(path) -> str:
+    try:
+        return os.path.realpath(str(path))
     except (OSError, ValueError):
-        return None
-    if not isinstance(record, dict):
-        return None
-    # A record with an outcome describes a FINISHED run: done, failed or
-    # skipped. Rendering one as in-flight is how a completed build kept a
-    # spinner on screen.
-    if record.get("outcome") is not None:
-        return None
-    try:
-        updated_at = float(record.get("updatedAt") or 0)
-    except (TypeError, ValueError):
-        return None
-    if updated_at != updated_at or updated_at in (float("inf"), float("-inf")):  # NaN/inf
-        return None
-    if now_ms - updated_at > PROGRESS_FRESHNESS_MS:
-        return None
-    return updated_at, record
+        return str(path)
 
 
-def _snapshot_from_record(record: dict) -> dict:
-    """The record IS the progress payload.
+def jobs_for_document(entry_path, *, jobs: list[dict] | None = None) -> list[dict]:
+    """Every listed job whose declared outputs include ``entry_path``, oldest first."""
+    target = _real(entry_path)
+    listed = jobs if jobs is not None else _daemon_jobs(time.time())
+    matching = [job for job in listed if target in {_real(p) for p in (job.get("outputs") or [])}]
+    return sorted(matching, key=lambda job: float(job.get("startedAt") or 0.0))
 
-    Its phase fields are flattened at the top level in exactly the shape the
-    client's ``normalizeArtifactProgress`` reads, so one reader serves every
-    producer and the extra identity keys ride along harmlessly.
-    """
-    run_id = record.get("runId")
+
+def _progress_payload(job: dict) -> dict:
+    """The phase block in the shape the client's ``normalizeArtifactProgress`` reads."""
+    total = job.get("total")
+    done = job.get("done")
+    phase = job.get("phase") or job.get("state") or "building"
     return {
-        "writing": True,
-        "busy": False,
-        "runId": run_id if isinstance(run_id, str) else None,
-        "progress": record,
+        "phase": phase,
+        "label": phase,
+        "done": done if isinstance(done, int) else 0,
+        "total": total if isinstance(total, int) else None,
+        "determinate": isinstance(total, int) and total > 0,
+        "detail": "",
+        "updatedAt": round(float(job.get("updatedAt") or 0.0) * 1000.0),
     }
 
 
-class ProgressRegistry:
-    """The in-process channel: what OUR builds are reporting, right now.
+def build_progress_snapshot(entry_path, *, jobs: list[dict] | None = None) -> dict | None:
+    """The build view for one document, from the daemon's ledger.
 
-    Keyed by build scope, the same key the in-flight map uses, so a status poll
-    and the build it is asking about agree on identity.
-
-    The writer is the compile client's frame-reader thread and the readers are
-    request threads, so every access is guarded — Node got this serialised for
-    free from its event loop.
+    ``{"writing": True, "runId", "progress"}`` while a job with this output is
+    running; ``{"writing": False, "failed": {...}}`` when the latest such job
+    failed; ``None`` when nothing is (or was recently) building it. ``busy`` is
+    always False: no producer here can say it.
     """
-
-    def __init__(self) -> None:
-        self._guard = threading.Lock()
-        self._entries: dict[str, dict] = {}
-
-    def publish(self, scope: str, run_id: str, payload: dict) -> None:
-        """Record one progress frame.
-
-        ``run_id`` must be STABLE for the whole run: the client resets its bar
-        to null when it changes, because a ratio is monotonic only within a run.
-        """
-        record = dict(payload)
-        record["runId"] = run_id
-        record["updatedAt"] = round(time.time() * 1000.0)
-        with self._guard:
-            self._entries[scope] = record
-
-    def clear(self, scope: str) -> None:
-        with self._guard:
-            self._entries.pop(scope, None)
-
-    def snapshot(self, scope: str) -> dict | None:
-        """The live snapshot for a build we are running, or ``None``.
-
-        No freshness window applies: the entry exists only while the client owns
-        a running worker for it, and is cleared in a ``finally``. The window is
-        for records whose producer we cannot observe.
-        """
-        with self._guard:
-            record = self._entries.get(scope)
-        return _snapshot_from_record(record) if record is not None else None
-
-
-def build_progress_snapshot(entry_path, *, registry: ProgressRegistry | None = None) -> dict | None:
-    """The build view for one model: ours if we are building it, else a peer's."""
-    scope = build_scope(entry_path)
-    if registry is not None:
-        live = registry.snapshot(scope)
-        if live is not None:
-            return live
-    found = _read_fresh_record(status_record_path(scope), time.time() * 1000.0)
-    return _snapshot_from_record(found[1]) if found is not None else None
+    matching = jobs_for_document(entry_path, jobs=jobs)
+    running = [job for job in matching if job.get("state") in _RUNNING]
+    if running:
+        job = running[-1]
+        return {"writing": True, "busy": False, "runId": job.get("id"), "progress": _progress_payload(job)}
+    if matching and matching[-1].get("state") == "failed":
+        job = matching[-1]
+        return {
+            "writing": False,
+            "busy": False,
+            "failed": {"runId": job.get("id"), "exit": job.get("exit"), "tool": job.get("tool")},
+        }
+    return None

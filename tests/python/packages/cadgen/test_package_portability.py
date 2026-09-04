@@ -301,35 +301,6 @@ class PackagePortabilityTest(unittest.TestCase):
                         "a recorded path must be posix so it survives crossing platforms",
                     )
 
-    def test_the_only_machine_specific_files_are_the_transient_run_state(self) -> None:
-        """The status record names a pid and a host, and that is allowed -- it describes a
-        RUN, not the artifact. What is not allowed is any of it reaching the package's own
-        content, which is what the rest of this class checks. Pinned so the record cannot
-        quietly grow a path field and become part of the cache. Run state lives in the
-        daemon's state directory, never under the store, keyed by model path."""
-        from cadgen.catalog import artifact_path_key
-        from cadgen.coordination.paths import progress_dir
-
-        keys = {
-            artifact_path_key(self.root / name)
-            for name in ("widget.step", "rig.step", "imported.step", "sheet.py")
-        }
-        run_state = [
-            path for path in sorted(progress_dir().rglob("*"))
-            if path.is_file() and is_run_state(path)
-            and any(key in path.name for key in keys)
-        ]
-        self.assertTrue(run_state, "no status records were written at all")
-        for path in run_state:
-            if not path.name.endswith(".json"):
-                continue
-            record = json.loads(path.read_text(encoding="utf-8"))
-            with self.subTest(record=path.name):
-                self.assertEqual({"pid", "host"}, {"pid", "host"} & set(record))
-                for key, value in record.items():
-                    if isinstance(value, str):
-                        self.assertNotIn(os.sep, value, f"{key} in the status record looks like a path")
-
     def test_moving_the_project_rebuilds_nothing(self) -> None:
         moved = self.root.parent / "moved-elsewhere" / "project"
         moved.parent.mkdir(parents=True, exist_ok=True)
