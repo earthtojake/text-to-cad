@@ -10,8 +10,6 @@ from cadgen.selector_types import SelectorBundle
 
 
 STEP_SUFFIXES = (".step", ".stp")
-REGENERATE_STEP_COMMAND = "python"
-REGENERATE_STEP_PROMPT = "Regenerate STEP artifacts with the following command using the CAD skill:"
 
 
 class CadRefError(RuntimeError):
@@ -57,6 +55,13 @@ class StepTopologyArtifact:
 
 
 class StepTopologyArtifactError(CadRefError):
+    """A door could not produce or read the tree behind a document.
+
+    A door never refuses a document and never tells the user to run anything:
+    when the compile of the document's bytes fails, ``message`` is that
+    compile's own error, and that is the whole report.
+    """
+
     def __init__(
         self,
         *,
@@ -65,14 +70,12 @@ class StepTopologyArtifactError(CadRefError):
         cad_path: str,
         step_path: Path,
         artifact_path: Path,
-        regenerate_command: str,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.cad_path = cad_path
         self.step_path = step_path
         self.artifact_path = artifact_path
-        self.regenerate_command = regenerate_command
 
     def to_error(self) -> dict[str, object]:
         return {
@@ -80,7 +83,6 @@ class StepTopologyArtifactError(CadRefError):
             "message": str(self),
             "cadPath": self.cad_path,
             "stepPath": _display_path(self.step_path),
-            "regenerateCommand": self.regenerate_command,
         }
 
 

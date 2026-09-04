@@ -510,10 +510,12 @@ def _maybe_hint_eager_imports(defn: ModelDef) -> None:
     print(
         f"hint: the CAD kernel was imported before {defn.script_path.name}'s build was "
         f"asked for{where}. Module bodies must not touch it: use `from cadgen import "
-        "build123d as bd` instead of importing build123d/OCP, and keep `bd.<anything>` "
+        "build123d as bd` instead of importing build123d/OCP, keep `bd.<anything>` "
         "out of module-level constants and default arguments (each one resolves the "
-        "attribute at import). Then a call on a current model returns without the "
-        "~2.5s import (see the cad skill docs).",
+        "attribute at import), and call `read_step` inside the model body or a "
+        "function it calls, never at module level (reading a vendor STEP at import "
+        "pays the kernel AND the parse on every current rerun). Then a call on a "
+        "current model returns without the ~2.5s import (see the cad skill docs).",
         file=sys.stderr,
     )
 

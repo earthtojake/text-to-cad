@@ -73,14 +73,17 @@ def _build_fixture(root: str, cache: str) -> None:
         seed_result(Path(root, rel), descriptor)
 
     valid = {"kind": "assembly-package", "components": {"c0": {"surf": "c0.surf"}}}
+    TWO_OCCURRENCES = [{'id': 'o1.1', 'name': 'a', 'component': 'c0', 'transform': [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]}, {'id': 'o1.2', 'name': 'b', 'component': 'c0', 'transform': [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 10, 0, 0, 1]}]
 
     # --- descriptor variants ---------------------------------------------
     write("a_part.step", "part\n")
     package("a_part.step", valid)
     write("b_assembly.step", "assembly\n")
-    package("b_assembly.step", {"kind": "assembly-package", "entryKind": "  ASSEMBLY  "})
+    # kind is the TREE's (store.trees.tree_kind): two occurrences make these
+    # two the fixture's assemblies; the descriptor's entryKind text is ignored.
+    package("b_assembly.step", {"kind": "assembly-package", "entryKind": "  ASSEMBLY  ", "occurrences": TWO_OCCURRENCES})
     write("c_root.step", "root\n")
-    package("c_root.step", {"kind": "assembly-package", "assembly": {"root": {"x": 1}}})
+    package("c_root.step", {"kind": "assembly-package", "assembly": {"root": {"x": 1}}, "occurrences": TWO_OCCURRENCES})
     write("d_root_string.step", "rootstr\n")
     package("d_root_string.step", {"kind": "assembly-package", "assembly": {"root": "x"}})
     write("l_dir_descriptor.step", "dird\n")

@@ -124,6 +124,30 @@ def _rebase_id(link_id: str, child_id: str) -> str:
     return f"{link_id}{suffix}"
 
 
+def tree_kind(tree: dict[str, Any] | None) -> str:
+    """``"assembly"`` or ``"part"``, read off the TREE and nowhere else.
+
+    A tree with links, or with more than one own occurrence, is an assembly; one
+    occurrence and no links is a part. The authored ``kind=`` (or the static
+    inference from a model's return) only steers how a build packages its own
+    geometry; what a run reports, what ``inspect`` reports, and what
+    ``inspect diff`` compares is this, so the three can never disagree.
+    """
+    if not isinstance(tree, dict):
+        return "part"
+    if tree.get("links"):
+        return "assembly"
+    return "assembly" if len(tree.get("occurrences") or []) > 1 else "part"
+
+
+def tree_kind_for(tree_hash: str | None) -> str | None:
+    """:func:`tree_kind` of a stored tree, or None when there is no such tree."""
+    if not tree_hash:
+        return None
+    tree = get_tree(tree_hash)
+    return tree_kind(tree) if tree is not None else None
+
+
 def flatten(tree_hash: str, *, memo: dict[str, dict[str, Any]] | None = None) -> dict[str, Any] | None:
     """The legacy descriptor for a tree, links expanded. None when the tree is missing."""
     memo = memo if memo is not None else {}
@@ -196,6 +220,7 @@ def flatten(tree_hash: str, *, memo: dict[str, dict[str, Any]] | None = None) ->
     }
     descriptor["kind"] = FLAT_KIND
     descriptor["tree"] = tree_hash
+    descriptor["entryKind"] = tree_kind(tree)
     descriptor["components"] = components
     root = (tree.get("assembly") or {}).get("root")
     expanded_root = expand(root) if isinstance(root, dict) else None

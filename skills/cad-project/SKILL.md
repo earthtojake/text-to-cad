@@ -82,7 +82,16 @@ models import directly, from any working directory. A model may share its stem
 with the `lib/` module it wraps (`src/body.py` over `lib/body.py`); the two are
 different modules (`body` and `lib.body`), so alias the import — `from lib
 import body as body_lib` — rather than let the module name shadow the model
-function you are about to define:
+function you are about to define. The same shadowing bites a file that needs
+**both** a sibling's constants or helpers **and** its model function: `import
+base_clamp` binds the module, then `from base_clamp import base_clamp` rebinds
+the same name to the function (or the other way round, depending on order).
+Alias the module — `import base_clamp as base_clamp_mod` beside `from
+base_clamp import base_clamp` — and read constants through the alias. Code in
+`lib/` may call a model function too (`from servo import servo` inside a
+`lib/` helper pins the child exactly as a call from the parent's own body
+does); the child's file must be importable from the caller's `sys.path`, which
+in this layout means it sits in the same `src/` (or the same group directory):
 
 ```python
 from lib import fasteners            # a helper module: any edit to it rebuilds this model

@@ -58,10 +58,16 @@ class Slots(PrivateBrokerFixture):
             self._settle(lambda s, n=len(threads): s["queued"] == n)
         self.assertTrue(queued_seen.wait(2.0), "a queued requester was never told it was queued")
         self.assertEqual(self.private.broker.snapshot()["running"], 2, "the limit was exceeded")
-        for lease in held:
-            lease.release()
+        # Free ONE slot. The broker grants strictly in queue order, but the
+        # waiters record their turn client-side, after the grant crosses the
+        # socket; with two slots freed at once, two grants land together and
+        # the appends race. With one slot the grants cascade -- each waiter
+        # releases only after it has recorded its turn -- so the order seen
+        # here is the broker's order and nothing else.
+        held[0].release()
         for thread in threads:
             thread.join(timeout=10)
+        held[1].release()
         self.assertEqual(order, ["first", "second", "third"])
         self.assertLessEqual(self.private.broker.snapshot()["peakRunning"], 2)
 

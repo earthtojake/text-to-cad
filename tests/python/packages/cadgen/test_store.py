@@ -452,6 +452,54 @@ class TreeFlattening(StoreCase):
         self.assertEqual(flat["assembly"]["root"]["children"][0]["nodeType"], "subassembly")
 
 
+class TreeKind(StoreCase):
+    """kind is read off the tree, in one place, for every reporter."""
+
+    def test_one_occurrence_and_no_links_is_a_part(self) -> None:
+        from cadgen.store.trees import flatten, get_tree, tree_kind
+
+        tree = self.tree_for("plate")
+        self.assertEqual("part", tree_kind(get_tree(tree)))
+        self.assertEqual("part", flatten(tree)["entryKind"])
+
+    def test_a_link_makes_an_assembly_whatever_the_authored_kind_said(self) -> None:
+        from cadgen.store.objects import put_object
+        from cadgen.store.trees import flatten, get_tree, put_tree, tree_kind, tree_kind_for
+
+        child = self.tree_for("pin")
+        digest = put_object(b"SURF\x01")
+        parent = put_tree(
+            {
+                "label": "arm",
+                "entryKind": "part",  # the static inference's answer; the tree overrules it
+                "units": "mm",
+                "components": {"c1": {"surf": digest, "brep": digest, "contentHash": "c1"}},
+                "occurrences": [{"id": "o1.1", "name": "arm_body", "component": "c1", "transform": IDENTITY}],
+                "links": [{"id": "o1.2", "name": "pin", "tree": child, "transform": IDENTITY}],
+                "assembly": {"root": {"id": "o1", "name": "arm", "nodeType": "assembly", "children": [
+                    {"id": "o1.1", "name": "arm_body", "nodeType": "part", "leafPartIds": ["o1.1"], "children": []},
+                    {"id": "o1.2", "name": "pin", "nodeType": "link", "leafPartIds": ["o1.2"], "children": []},
+                ]}},
+                "stats": {"occurrenceCount": 1, "linkCount": 1},
+            }
+        )
+        self.assertEqual("assembly", tree_kind(get_tree(parent)))
+        self.assertEqual("assembly", tree_kind_for(parent))
+        self.assertEqual("assembly", flatten(parent)["entryKind"])
+
+    def test_two_own_occurrences_are_an_assembly(self) -> None:
+        from cadgen.store.trees import tree_kind
+
+        tree = {"occurrences": [{"id": "o1.1"}, {"id": "o1.2"}], "links": []}
+        self.assertEqual("assembly", tree_kind(tree))
+
+    def test_no_tree_is_no_kind(self) -> None:
+        from cadgen.store.trees import tree_kind_for
+
+        self.assertIsNone(tree_kind_for(None))
+        self.assertIsNone(tree_kind_for("0" * 64))
+
+
 class GcReachability(StoreCase):
     def test_reachable_through_links_kept_orphans_swept_after_grace(self) -> None:
         from cadgen.store.gc import collect

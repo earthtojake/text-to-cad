@@ -212,8 +212,13 @@ Mechanically:
 `@dxf` takes **only `out=`**. It has no `kind=` (a drawing is 2D geometry), no
 `kinematics=` and no `animation=`; passing any of them is an error.
 
-Decorator arguments are read **statically** and must be literals — a tolerance
-cannot be imported from a constants module. Unknown keyword arguments are
+Two decorator arguments are read **statically**, before the module runs, and
+must be literals: `out=` (a string) and the two tolerances (numbers) — plus
+`kind=` when you write it. A tolerance therefore cannot come from a constants
+module; write the number in each decorator (a project README can name the
+shared value). `kinematics=` and `animation=` are ordinary Python evaluated
+when the module loads — a dict built at import, or loaded from a file, is fine
+and is what the kinematics reference shows. Unknown keyword arguments are
 rejected outright on every decorator.
 
 #### The one path-semantics exception
@@ -391,8 +396,14 @@ if __name__ == "__main__":
   placements) and nothing else; **mates never propagate up**. The v0.4
   `assembly_mates` promotion plumbing is deleted, and so is
   `AssemblyHelper.relations`.
-- **Dynamic imports** (`__import__`, `importlib`) of model modules are not
-  tracked. Import children explicitly.
+- **Dynamic imports** (`__import__`, `importlib`, and loading a sibling model
+  file by path with `importlib.util.spec_from_file_location`) of model modules
+  are not tracked. Import children explicitly. Two v0.4 habits hide here: a
+  script that loaded a sibling model file **to read one constant** becomes
+  `from sibling import CONSTANT` (tracked by value); a script that loaded a
+  sibling model module **to rebuild it under different constants** (re-exec,
+  environment variables, monkeypatched globals) becomes a factory in `lib/`
+  that takes those values as arguments, called by two ordinary models.
 
 ### 4. Move articulation to kinematics + `.anim.js`
 
@@ -1037,7 +1048,10 @@ it from its bytes.
       is gone.
 - [ ] Every model script runs clean, a second run prints `current`, and
       `cadgen store why` agrees.
-- [ ] `cadgen step inspect validate` passes on each primary STEP.
+- [ ] `cadgen step inspect validate` passes on each STEP you author. Purchased
+      and vendor solids brought in with `read_step` are inputs, not your
+      geometry: validate them once to know what you have, and expect an
+      assembly that contains them to report their defects, not yours.
 - [ ] A snapshot of each primary STEP has been rendered and reviewed.
 - [ ] Tolerance flags have been re-derived from the new relative defaults, not
       copied.

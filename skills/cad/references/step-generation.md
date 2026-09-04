@@ -227,6 +227,13 @@ What an importer TAKES from a model file decides how that file counts:
 Inputs join the closure too: a `read_step` document and a declared `.anim.js`
 are hashed as build inputs.
 
+Two decorator arguments are read **statically** (parsed from the file before
+it runs) and must be literals: `out=` and the mesh tolerances (`kind=` too,
+when written). Everything else on a decorator — `kinematics=`, `animation=` —
+is ordinary Python evaluated at import, so a kinematics dict may be built or
+loaded there. A tolerance shared across a project is written as the same
+number in each decorator; the project README names the value.
+
 ### Mirrored parts are their own models
 
 STEP cannot express a reflection, so a right-hand part is not a mirrored
