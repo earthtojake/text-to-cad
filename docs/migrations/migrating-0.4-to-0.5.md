@@ -118,6 +118,14 @@ import inside the body or a helper resolves the same way, and the file it loads
 is hashed when it executes, so it is tracked either way. Module-top imports keep
 the graph visible up front; that is the only reason to prefer them.
 
+**Import roots are yours to declare.** cadgen adds nothing to the import path
+that `python script.py` would not: the script's folder, then your `PYTHONPATH`.
+It infers no project root from directory names (v0.4's `STEP/` and
+`robot_common/` ancestor rules are gone). A project whose models import from a
+shared root — `from lib.dims import W` two folders down — declares that root
+the standard Python way, `PYTHONPATH=src`, and the daemon carries it into every
+build it runs for you.
+
 **Reading a vendor STEP.** Use `cadgen.read_step`, never
 `build123d.import_step`:
 
