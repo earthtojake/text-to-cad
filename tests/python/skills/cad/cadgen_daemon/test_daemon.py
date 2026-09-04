@@ -215,13 +215,30 @@ class CadgenDaemonTests(unittest.TestCase):
         self.assertEqual(0, exit_code, output)
         self.assertIn("is current", output)
 
-    def test_b_second_request_is_fast_and_correct(self) -> None:
-        started = time.perf_counter()
+    def test_b_second_request_is_warm_and_correct(self) -> None:
+        # Warm means the SAME worker serves the model again without a fresh kernel
+        # import -- observed through the daemon's status (worker identity and job
+        # count), not through a wall-clock bound that a loaded CI runner can miss.
+        before = self._worker_for("box.py")
         exit_code, output = self._warm_run(["box.py"])
-        elapsed = time.perf_counter() - started
         self.assertEqual(0, exit_code, output)
         self.assertIn("is current", output)
-        self.assertLess(elapsed, 2.0, f"warm request took {elapsed:.2f}s")
+        after = self._worker_for("box.py")
+        self.assertIsNotNone(after, "no worker is bound to box.py after a warm request")
+        if before is not None:
+            self.assertEqual(before["pid"], after["pid"], "the warm request did not reuse box.py's worker")
+            self.assertGreater(int(after.get("jobs") or 0), int(before.get("jobs") or 0))
+        self.assertNotIn("the CAD kernel was imported before", output)
+
+    def _worker_for(self, name: str) -> dict | None:
+        env = {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(self.address)}
+        with mock.patch.dict(os.environ, env):
+            os.environ.pop("CADGEN_DAEMON_CHILD", None)
+            status = daemon_client.status() or {}
+        for worker in status.get("workers") or []:
+            if str(worker.get("model") or "").endswith(name):
+                return worker
+        return None
 
     def test_c_version_token_mismatch_triggers_restart(self) -> None:
         frames = _raw_request(

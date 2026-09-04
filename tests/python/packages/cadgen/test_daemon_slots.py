@@ -277,10 +277,16 @@ class DaemonExecutor(_Executor):
         return int(jobs.get("peakRunning") or 0)
 
     def check_pin_built_once(self, outs) -> None:
+        # Two roots started together share the daemon. Whether the second root's ask for
+        # pin coalesces onto the first's job or finds it already current depends on which
+        # process reaches the daemon first; the invariant is that pin's body ran ONCE.
+        # (Coalescing itself is proven deterministically by the broker unit tests.)
+        built = 0
+        for _out, err in outs:
+            built += sum(1 for e in self._events(err) if Path(e["model"]).stem == "pin" and e["state"] == "done")
         status = daemon_client.status() or {}
-        self.assertGreaterEqual((status.get("jobsRunning") or {}).get("coalesced", 0), 1, status)
-        log = self.log_path.read_text(encoding="utf-8")
-        self.assertIn("coalesced onto the job in flight", log)
+        coalesced = int((status.get("jobsRunning") or {}).get("coalesced", 0))
+        self.assertEqual(built, 1, f"pin was built {built} times (coalesced {coalesced}): {status}")
 
     def test_z_a_one_slot_daemon_builds_the_three_level_tree(self):
         # A separate daemon with ONE slot: a held slot would deadlock the parent waiting on

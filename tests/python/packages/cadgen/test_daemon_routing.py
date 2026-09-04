@@ -206,22 +206,28 @@ class DaemonRouting(unittest.TestCase):
         self.assertNotEqual(left[0]["pid"], right[0]["pid"])
 
     def test_a_busy_model_runs_a_second_request_on_an_extra_without_waiting(self):
+        # Synchronized on OBSERVED state, not the clock: the second request is issued
+        # only once the daemon reports the first one's worker busy on slow.py, so the
+        # only place it can run without waiting is an extra. The status counter
+        # `concurrent` is bumped when an extra is bound to an already-bound model.
         before = (self._status() or {}).get("concurrent", 0)
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             first = executor.submit(self._build, "slow.py", "--force")
-            time.sleep(1.0)
+            deadline = time.monotonic() + 120
+            while time.monotonic() < deadline:
+                if any(w["busy"] for w in self._workers_for("slow.py")):
+                    break
+                self.assertFalse(first.done(), "the first build finished before it was seen busy")
+                time.sleep(0.05)
+            else:
+                self.fail("the first build never went busy on slow.py")
             second = executor.submit(self._build, "slow.py", "--force")
-            started = time.monotonic()
             second_code, second_out, _ = second.result(timeout=300)
-            second_elapsed = time.monotonic() - started
             first_code, first_out, _ = first.result(timeout=300)
         self.assertEqual(first_code, 0, first_out)
         self.assertEqual(second_code, 0, second_out)
         status = self._status() or {}
         self.assertGreater(status.get("concurrent", 0), before, "no extra was bound for the busy model")
-        # The second finished on its own clock: had it queued behind the first (4 s body)
-        # it would have taken both bodies.
-        self.assertLess(second_elapsed, 7.5)
 
     def test_a_parent_submits_children_which_land_on_their_own_workers(self):
         code, output, events = self._build("pair.py", "--force")
