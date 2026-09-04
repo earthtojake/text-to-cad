@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # The VERSION guard below diffs against the PR base.
           fetch-depth: 0
@@ -70,7 +70,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
@@ -131,7 +131,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps

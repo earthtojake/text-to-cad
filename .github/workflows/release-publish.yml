@@ -56,7 +56,7 @@ jobs:
 
     steps:
       - name: Check out release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -217,7 +217,7 @@ jobs:
 
     steps:
       - name: Check out release commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.publish.outputs.release_sha }}
           fetch-depth: 0

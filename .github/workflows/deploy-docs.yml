@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Check out deploy ref
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
