@@ -79,9 +79,6 @@ class CompactStdoutTests(unittest.TestCase):
         # `--mode list` parts inventory, and each inspection's report.
         "packages/cadgen/src/cadgen/results.py",
         "packages/cadgen/src/cadgen/step_artifact_cli.py",
-        # dxf_artifact (both module and cli shim) was deleted by the standalone-viewer
-        # DXF migration; its replacement emits one compact JSON line and is checked here.
-        "packages/cadgen/src/cadgen/dxf_export_target.py",
         "packages/cadgen/src/cadgen/cli/step_inspect/cli.py",
         # Every GENERATED CLI (`cadgen <format> <verb>`) serializes its Result
         # here rather than in its own module, so one entry covers all of them.
