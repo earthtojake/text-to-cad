@@ -106,7 +106,7 @@ class DoorFirstCall(unittest.TestCase):
         payload = json.loads(result.stdout.strip())
         self.assertTrue(payload["ok"], payload)
         token = payload["tokens"][0]
-        self.assertEqual("src/pin_copy.step", token["stepPath"])
+        self.assertEqual("src/pin_copy.step", token["document"])
         self.assertEqual("part", token["summary"]["kind"])
         self.assertEqual(1, token["summary"]["occurrenceCount"])
         self.assertEqual([], payload.get("errors", []))

@@ -86,8 +86,7 @@ class StepTopologyArtifactError(CadRefError):
         return {
             "code": self.code,
             "message": str(self),
-            "cadPath": self.cad_path,
-            "stepPath": _display_path(self.step_path),
+            "document": _display_path(self.step_path),
         }
 
 

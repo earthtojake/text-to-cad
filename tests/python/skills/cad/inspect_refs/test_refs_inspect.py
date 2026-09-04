@@ -475,7 +475,7 @@ class InspectRefsTests(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         token = result["tokens"][0]
-        self.assertEqual(refs_inspect._display_path(self.step_path), token["stepPath"])
+        self.assertEqual(refs_inspect._display_path(self.step_path), token["document"])
         self.assertEqual(1, token["summary"]["occurrenceCount"])
 
     def test_context_provider_can_supply_in_memory_entry_context(self) -> None:
@@ -608,7 +608,7 @@ class InspectRefsTests(unittest.TestCase):
             result = refs_inspect.inspect_cad_refs(self.cad_ref)
 
         self.assertTrue(result["ok"])
-        self.assertEqual(self.cad_ref, result["tokens"][0]["cadPath"])
+        self.assertEqual(refs_inspect._display_path(self.step_path), result["tokens"][0]["document"])
 
     def test_non_leaf_occurrence_detail_reports_children(self) -> None:
         with self._mock_glb_topology(_refs_manifest(self.cad_ref)):

@@ -96,7 +96,7 @@ def _result_payload(
     tree = result_tree_for(spec.entry_path)
     payload: dict[str, object] = {
         "ok": True,
-        "stepPath": relative_to_cwd(spec.step_path),
+        "document": relative_to_cwd(spec.step_path),
         # The tree these bytes resolve to (index/document → tree): the result's
         # identity, never a directory — nothing of the sort exists in the store.
         "tree": tree,
@@ -105,8 +105,6 @@ def _result_payload(
         "sourceKind": source_kind,
         "stats": stats or {},
     }
-    if step_hash:
-        payload["stepHash"] = step_hash
     if source_hash:
         payload["sourceHash"] = source_hash
     if load_elapsed_ms is not None:
