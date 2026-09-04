@@ -111,6 +111,9 @@ def describe_exit(status: int | None) -> str:
     return f"exited with code {status}"
 
 
+_TIMED_OUT = object()  # _read_frame: the wait elapsed; distinct from None (pipe closed)
+
+
 class Worker:
     """One warm subprocess. Owned by the pool; never shared between concurrent jobs."""
 
@@ -146,6 +149,8 @@ class Worker:
         self._reader = threading.Thread(target=self._pump, name="cadgen-worker-frames", daemon=True)
         self._reader.start()
         ready = self._read_frame(timeout=SPAWN_TIMEOUT_SECONDS)
+        if ready is _TIMED_OUT:
+            ready = None
         if not ready or "ready" not in ready:
             self.kill()
             raise WorkerGone(
@@ -165,12 +170,18 @@ class Worker:
                 self._frames.put({"stream": "stderr", "data": line})
         self._frames.put(None)
 
-    def _read_frame(self, timeout: float | None = None) -> dict | None:
-        """The next frame, or None when the pipe closed or ``timeout`` elapsed."""
+    def _read_frame(self, timeout: float | None = None) -> dict | None | object:
+        """The next frame; None when the pipe closed; ``_TIMED_OUT`` when ``timeout`` elapsed.
+
+        The two are told apart on purpose: a worker that died is reported by its
+        exit status, a worker that is merely quiet by the silence timeout. Folding
+        them into one None let a SIGKILLed worker read as "went silent" whenever
+        its pipe's EOF arrived a beat before the kernel let it be reaped.
+        """
         try:
             return self._frames.get(timeout=timeout)
         except queue.Empty:
-            return None
+            return _TIMED_OUT
 
     def send(self, request: dict) -> None:
         if self.proc.poll() is not None or self.proc.stdin is None:
@@ -189,13 +200,13 @@ class Worker:
         """
         while True:
             frame = self._read_frame(timeout=silence_timeout)
+            if frame is _TIMED_OUT:
+                self.kill()
+                raise WorkerGone(
+                    f"worker {getattr(self, 'pid', self.proc.pid)} went silent for "
+                    f"{silence_timeout:.0f}s and was killed"
+                )
             if frame is None:
-                if silence_timeout is not None and self.alive():
-                    self.kill()
-                    raise WorkerGone(
-                        f"worker {getattr(self, 'pid', self.proc.pid)} went silent for "
-                        f"{silence_timeout:.0f}s and was killed"
-                    )
                 status = self._exit_status()
                 raise WorkerGone(
                     f"worker {getattr(self, 'pid', self.proc.pid)} {describe_exit(status)}",
