@@ -352,7 +352,12 @@ class TransientExecutor(_Executor):
         self.assertEqual(built, {"pin", "arm", "robot"})
         stats = json.loads(self.stats.read_text(encoding="utf-8"))
         self.assertEqual(stats["peakRunning"], 1, stats)
-        self.assertGreaterEqual(stats["coalesced"], 1, "arm's pin and robot's pin were not one job")
+        # robot asks for pin twice (once itself, once through arm). Whether the second
+        # ask coalesces onto the first job or finds it already current depends on which
+        # child process reaches the broker first -- FIFO is over acquire calls, not over
+        # submissions -- so the invariant is that pin is BUILT once, either way.
+        pin_done = [e for e in self._events(err) if Path(e["model"]).stem == "pin" and e["state"] == "done"]
+        self.assertEqual(len(pin_done), 1, "the shared child was built more than once")
 
     def test_one_root_calling_two_parents_that_share_a_child_builds_it_once(self):
         (self.src / "both.py").write_text(
