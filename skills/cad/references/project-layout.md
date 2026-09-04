@@ -72,9 +72,10 @@ Two mechanical rules:
    package, not a namespace one: it always contains an `__init__.py`, and a
    one-line docstring naming what the package holds is enough.
 
-Because scripts sit directly in `src/`, imports need no setup: python puts the
-script's own directory — `src/` — on `sys.path`, so shared code and sibling
-models import directly, from any working directory. A model may share its stem
+Because scripts sit directly in `src/`, imports need no setup: a build's
+import path is exactly `python script.py`'s — the script's own directory,
+`src/`, plus whatever `PYTHONPATH` the project sets — so shared code and
+sibling models import directly, from any working directory. A model may share its stem
 with the `lib/` module it wraps (`src/body.py` over `lib/body.py`); the two are
 different modules (`body` and `lib.body`), so alias the import — `from lib
 import body as body_lib` — rather than let the module name shadow the model
@@ -86,8 +87,9 @@ Alias the module — `import base_clamp as base_clamp_mod` beside `from
 base_clamp import base_clamp` — and read constants through the alias. Code in
 `lib/` may call a model function too (`from servo import servo` inside a
 `lib/` helper pins the child exactly as a call from the parent's own body
-does); the child's file must be importable from the caller's `sys.path`, which
-in this layout means it sits in the same `src/` (or the same group directory):
+does); the child's file must be importable from the caller's `sys.path` (its
+folder, or a root the project declares via `PYTHONPATH`), which in this layout
+means it sits in the same `src/` (or the same group directory):
 
 ```python
 from lib import fasteners            # a helper module: any edit to it rebuilds this model
@@ -175,13 +177,14 @@ part models do not pile up beside another's:
 Three rules keep a group as simple as a flat project:
 
 1. **A group is self-contained.** Its root, its parts, its drawings and its
-   `lib/` all live in the one directory, and nothing imports across groups.
-   Python puts the script's own directory on `sys.path`, so inside a group
-   `from wheel import wheel` and `from lib import hub` work exactly as they
-   do in a flat `src/` — and that is also why a cross-group import cannot
-   work without path setup, which no model script does. Code two groups both
-   need is either a sign they are one group, or a helper each group carries
-   its own copy of; a shared `src/lib/` is for flat projects only.
+   `lib/` all live in the one directory, and groups do not import each other
+   — by convention, not by mechanism. Inside a group `from wheel import wheel`
+   and `from lib import hub` work exactly as they do in a flat `src/`, because
+   the script's own directory is on the import path; a root shared by several
+   groups is declared with `PYTHONPATH=src`, never inferred by cadgen. Code two
+   groups both need is either a sign they are one group, or a helper each
+   group carries its own copy of; a shared `src/lib/` is for flat projects
+   only.
 2. **Outputs mirror the grouping.** Every model in `src/<group>/` declares
    `out="../../STEP/<group>/<stem>.step"` (meshes: `../../STL/<group>/…`), so
    the format folders stay browsable one assembly at a time and the CAD Viewer

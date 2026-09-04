@@ -109,7 +109,8 @@ one-line hint). Keep `bd.<anything>` out of module-level constants and default
 arguments for the same reason.
 
 **A model runs like `python script.py`.** Its folder is on `sys.path` for the
-whole build, so an import inside the body, or inside a helper the body calls,
+whole build, plus your `PYTHONPATH` — cadgen adds nothing else and infers no
+project root — so an import inside the body, or inside a helper the body calls,
 resolves exactly like one at module top — and the file it loads is hashed when
 it executes, so it is in the closure either way. Prefer module-top imports for
 readability and so the static scan sees the graph up front; a lazy import is
