@@ -46,7 +46,7 @@ PHASE_LABELS = {
     PHASE_GENERATE: "Building geometry",
     PHASE_PACKAGE: "Collecting parts",
     PHASE_COMPONENTS: "Meshing components",
-    PHASE_FINALIZE: "Writing package",
+    PHASE_FINALIZE: "Writing outputs",
     PHASE_DONE: "Done",
 }
 
