@@ -1,102 +1,124 @@
-"""The layering rule, held on the artifacts the repo actually ships.
+"""The layering rule, held on a build the test performs itself.
 
-design/pose-animation-split.md pins where each kind of state lives, and both
-halves are invisible until something breaks:
+Two stores of state sit beside a generated STEP and neither may leak into the other:
 
-* The CACHE PACKAGE is what the bytes imply — derived, evictable, content-keyed.
-  Kinematics and animation are not derivable from artifact bytes, so a tree
-  carrying either would make identical-bytes artifacts collide and would be
-  destroyed by `cadgen cache gc`.
-* The SIDECAR is what the author meant, and it TRAVELS WITH THE FILE. A path
-  into somebody's source tree inside it is a dependency a generated file must
-  never have: the animation module's text is COPIED for exactly this reason,
-  and `sourcePath` is stored relative to the document so the pair relocates
-  together.
+* The TREE is what the bytes imply -- derived, evictable, content-keyed. Kinematics
+  is not derivable from artifact bytes, so a tree carrying it would make
+  identical-bytes documents collide and would be swept by `cadgen store gc`.
+* The SIDECAR is what the author declared, and it TRAVELS WITH THE FILE. It holds
+  kinematics and nothing else (law 17): no mesh declarations, no choreography (the
+  render module beside the document is read by the viewer, never by a build), and
+  no path into anybody's source tree.
 
-These read committed model artifacts rather than building anything, so they are
-fast and they fail on what would actually ship.
+The fixture is a hinge with one revolute mate, written and built here in a fresh
+store, so the assertions hold on a real build and read nothing under models/.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
+import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-MODELS = REPO_ROOT / "models"
+from tests.python.support.paths import REPO_ROOT, add_repo_path
 
-# Keys that belong to the sidecar and must never appear in assembly.json.
+add_repo_path("packages/cadgen/src")
+
+HINGE_SOURCE = """\
+import cadgen
+from cadgen import label_shape, step
+from cadgen import build123d as bd
+
+KINEMATICS = {
+    "mates": [
+        cadgen.revolute("swing", parent="#base", child="#arm",
+                        origin=(0, 0, 6), direction=(0, 0, 1), limits=(0, 90)),
+    ],
+    "poses": {"open": {"swing": 45}},
+}
+
+
+@step(kinematics=KINEMATICS)
+def hinge():
+    base = label_shape(bd.Box(20, 20, 4), "base")
+    arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")
+    return bd.Compound(children=[base, arm])
+
+
+if __name__ == "__main__":
+    hinge()
+"""
+
+# Keys that belong to the sidecar and must never appear in the tree's assembly.json.
 SIDECAR_ONLY_KEYS = ("kinematics",)
 
 
-def _sidecars() -> list[Path]:
-    return sorted(MODELS.rglob("*.step.json"))
+class LayeringCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._project = tempfile.TemporaryDirectory(prefix="layering-")
+        cls._store = tempfile.TemporaryDirectory(prefix="layering-store-")
+        root = Path(cls._project.name)
+        script = root / "hinge.py"
+        script.write_text(HINGE_SOURCE, encoding="utf-8")
+        env = dict(os.environ)
+        env.update(
+            {
+                "CADGEN_DAEMON": "0",
+                "CADGEN_CACHE_DIR": cls._store.name,
+                "PYTHONPATH": str(REPO_ROOT / "packages" / "cadgen" / "src"),
+            }
+        )
+        completed = subprocess.run(
+            [sys.executable, script.name],
+            cwd=str(root),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise AssertionError(completed.stderr[-2000:])
+        cls.document = root / "hinge.step"
+        cls.sidecar = json.loads((root / "hinge.step.json").read_text(encoding="utf-8"))
+        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": cls._store.name}):
+            from cadgen.catalog import result_view_dir
+
+            view = result_view_dir(cls.document)
+        cls.descriptor = json.loads((view / "assembly.json").read_text(encoding="utf-8"))
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._project.cleanup()
+        cls._store.cleanup()
 
 
-def _descriptors() -> list[Path]:
-    # Committed packages, if any: the store is a user-level cache, so this
-    # normally finds the assembly.json files only where a fixture pins one.
-    return sorted(MODELS.rglob("assembly.json"))
+class TreeCarriesNoAuthoredState(LayeringCase):
+    def test_the_tree_carries_no_kinematics(self) -> None:
+        for key in SIDECAR_ONLY_KEYS:
+            self.assertNotIn(
+                key,
+                self.descriptor,
+                f"{key!r} is AUTHORED state and belongs in the sidecar; a content-keyed "
+                "tree cannot hold it (identical bytes would collide, and gc would sweep it)",
+            )
 
 
-class PackageCarriesNoAuthoredState(unittest.TestCase):
-    def test_no_descriptor_carries_kinematics_or_animation(self) -> None:
-        for descriptor_path in _descriptors():
-            with self.subTest(descriptor=str(descriptor_path.relative_to(REPO_ROOT))):
-                try:
-                    descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
-                except ValueError:
-                    continue
-                if not isinstance(descriptor, dict):
-                    continue
-                for key in SIDECAR_ONLY_KEYS:
-                    self.assertNotIn(
-                        key,
-                        descriptor,
-                        f"{key!r} is AUTHORED state and belongs in the sidecar; a "
-                        "content-keyed package cannot hold it (identical bytes would "
-                        "collide, and `cadgen cache gc` would delete it)",
-                    )
+class SidecarCarriesKinematicsOnly(LayeringCase):
+    def test_the_sidecar_holds_kinematics_and_its_schema_and_nothing_else(self) -> None:
+        self.assertEqual(sorted(self.sidecar), ["kinematics", "schemaVersion"])
 
-
-class SidecarCarriesNoSourceTreePaths(unittest.TestCase):
-    def test_a_sidecar_never_reaches_back_into_a_source_tree(self) -> None:
-        # A generated file must have zero dependencies on the machine that made
-        # it. `sourcePath` is the one path field, and it is document-relative.
-        for sidecar_path in _sidecars():
-            with self.subTest(sidecar=str(sidecar_path.relative_to(REPO_ROOT))):
-                payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
-                self.assertIsInstance(payload, dict)
-                source_path = str(payload.get("sourcePath") or "")
-                if source_path:
-                    self.assertFalse(
-                        Path(source_path).is_absolute() or source_path.startswith("~"),
-                        f"sourcePath {source_path!r} is absolute; it is recorded "
-                        "relative to the document so the pair relocates together",
-                    )
-                for recorded in payload.get("sourceClosureFiles") or ():
-                    self.assertFalse(
-                        Path(str(recorded)).is_absolute(),
-                        f"closure file {recorded!r} is absolute",
-                    )
-                for entry in payload.get("meshExports") or ():
-                    out = str((entry or {}).get("out") or "")
-                    self.assertTrue(out, "a meshExports entry must name its out")
-                    self.assertFalse(
-                        Path(out).is_absolute(),
-                        f"meshExports out {out!r} is absolute; it is recorded "
-                        "relative to the artifact",
-                    )
-
-    def test_no_sidecar_carries_choreography(self) -> None:
-        # Choreography is the render module beside the document (<name>.step.js),
-        # loaded by the viewer and never by a build; a sidecar that still carries
-        # an `animation` section was written by a retired writer.
-        for sidecar_path in _sidecars():
-            payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
-            with self.subTest(sidecar=str(sidecar_path.relative_to(REPO_ROOT))):
-                self.assertNotIn("animation", payload)
+    def test_the_sidecar_reaches_into_no_source_tree(self) -> None:
+        # A generated file has zero dependencies on the machine that made it.
+        text = json.dumps(self.sidecar)
+        self.assertNotIn(str(Path(self._project.name).resolve()), text)
+        self.assertNotIn(str(REPO_ROOT), text)
 
 
 if __name__ == "__main__":
