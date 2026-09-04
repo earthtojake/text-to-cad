@@ -9,15 +9,12 @@ nacelles flow into the pancake tunnel, and the fin roots sit on a continuous
 surface.  Nothing in the primary surface is filleted, because nothing there is
 joined.
 
-Assembly tree is grouped BY SYSTEM, which is also how ``f14d.anim.js`` moves
+Assembly tree is grouped BY SYSTEM — ten sibling models under ``src/``,
+composed here by CALLING them — which is also how ``f14d.anim.js`` moves
 things: act 1 of the teardown addresses one system per ref.
 
-OCCURRENCE ORDER IS BY WHAT ACTUALLY BUILDS, not by the SYSTEMS list below.
-A system that is missing or that raises is skipped rather than failing the
-aircraft, so it takes no occurrence number and everything after it shifts up.
-Three of the thirteen produce no group today -- ``glove``, ``engines`` and
-``markings`` have no module yet -- so the built aircraft is these ten, and
-the animation module's occurrence refs are numbered against them:
+OCCURRENCE ORDER IS THE ``SYSTEMS`` LIST BELOW, and the animation module's
+occurrence refs are numbered against it:
 
     o1.1  airframe    the one-piece blended skin, cut and detailed
     o1.2  cockpit     tub, panels, seats, HUD, canopy, windscreen
@@ -30,12 +27,13 @@ the animation module's occurrence refs are numbered against them:
     o1.9  main_gear   legs, wheels, brakes, doors, bays
     o1.10 details     antennas, probes, lights, wicks, vents, panels
 
-    (no group: glove, engines, markings -- no module)
+Three systems the brief names -- glove, engines, markings -- have no model
+yet; add one as ``src/<name>.py`` and insert it here, renumbering
+``f14d.anim.js`` in the same commit. A system that fails to build fails the
+aircraft (nothing is skipped silently any more; the store keeps the last good
+result of every other system, so the fix rebuilds only the broken one).
 
-Adding any missing module RENUMBERS every occurrence after it, so
-``f14d.anim.js`` has to be renumbered in the same commit.  ``nozzles`` is the
-worked example: it silently dropped out of the aircraft for a while because its
-revolve raised ``TopoDS::Solid``, and restoring it moved five systems by one.
+Which skin cutters the airframe applies is decided in ``src/airframe.py``.
 
 The aircraft declares NO kinematics: nothing about it articulates, and the
 staged teardown is choreography, which lives whole in ``f14d.anim.js``.
@@ -43,94 +41,42 @@ staged teardown is choreography, which lives whole in ``f14d.anim.js``.
 
 from __future__ import annotations
 
-import sys
-
 from cadgen import build123d as bd
-from cadgen import step, track
+from cadgen import step
 
-# Order here IS the occurrence order (o1.1, o1.2, ...).
+from aft import aft
+from airframe import airframe
+from cockpit import cockpit
+from details import details
+from empennage import empennage
+from inlets import inlets
+from main_gear import main_gear
+from nose_gear import nose_gear
+from nozzles import nozzles
+from wings import wings
+
+# Order here IS the occurrence order (o1.1, o1.2, ...). Every entry is a
+# sibling model under src/; calling it inside the body builds it if stale (on
+# its own worker, in parallel with the rest) or loads it, and the aircraft
+# links its tree. Adding a system here renumbers everything after it, and
+# f14d.anim.js must be renumbered in the same commit.
 SYSTEMS = [
-    "airframe",
-    "cockpit",
-    "glove",
-    "wings",
-    "inlets",
-    "engines",
-    "nozzles",
-    "empennage",
-    "aft",
-    "nose_gear",
-    "main_gear",
-    "details",
-    "markings",
+    airframe,
+    cockpit,
+    wings,
+    inlets,
+    nozzles,
+    empennage,
+    aft,
+    nose_gear,
+    main_gear,
+    details,
 ]
-
-
-def _load(name):
-    """Import a part module at MODULE IMPORT time, not inside the model body.
-
-    Everything the model needs must exist by decoration time, so the part
-    modules are imported here rather than inside ``f14d()``.  Missing or
-    still-broken modules are skipped with a note rather than failing the whole
-    aircraft, so the assembly stays renderable while individual part builders
-    are still iterating.
-    """
-    try:
-        return __import__(f"lib.{name}", fromlist=["build"])
-    except ModuleNotFoundError as exc:
-        if name not in str(exc):
-            print(f"[f14d] skip {name}: {exc}", file=sys.stderr)
-        return None
-    except Exception as exc:  # noqa: BLE001
-        print(f"[f14d] skip {name}: import failed: {exc}", file=sys.stderr)
-        return None
-
-
-_MODULES = [(name, _load(name)) for name in SYSTEMS]
-
-# ---------------------------------------------------------------------------
-# Cosmetic skin cutters are DROPPED.  Measured against this skin, subtracting
-# the 41 shallow panel recesses published by `details` and `aft` did not finish
-# in 15 minutes, and a full 44-cutter build ran over seven hours without
-# completing; the 3 structural cutters (diverter slot, cockpit opening) cost
-# 348 s and are kept.  The skin is one B-spline surface of ~4,900 control
-# points, so every boolean tool forces a full-surface classification -- the cost
-# is per-tool, not per-unit-of-material-removed.
-#
-# Nothing visual is lost.  At 19 m rendered to 1920 px, 1 px is about 10 mm, so
-# a 4 mm groove is sub-pixel: panel lines read because the renderer's edge
-# overlay draws feature edges, not because the groove is resolvable.
-# ---------------------------------------------------------------------------
-COSMETIC_CUTTER_MODULES = ("details", "aft")
-
-for _name in COSMETIC_CUTTER_MODULES:
-    _mod = sys.modules.get(f"lib.{_name}")
-    if _mod is not None and hasattr(_mod, "skin_cutters"):
-        # The modules build their cutters lazily in skin_cutters(); replacing it
-        # before airframe.build() asks means the cosmetic ones are never built.
-        print(f"[f14d] dropping the cosmetic skin cutters from {_name}", file=sys.stderr)
-        _mod.skin_cutters = lambda: []
 
 
 @step(out="../STEP/f14d.step", kind="assembly", animation="f14d.anim.js")
 def f14d():
-    # Report the walk through the systems. This phase is ~85% of the build (10 minutes of a
-    # 12-minute run, measured), and without this it is the one stretch that says nothing at
-    # all -- the viewer and the CLI both sat on "Building geometry" for its whole duration.
-    #
-    # The systems are counted AFTER dropping the ones that failed to import, so the
-    # denominator is work that will actually run. Note the units are nowhere near equal:
-    # `airframe` alone is over half the phase (see the cutter note above), so 1/10 sits for
-    # minutes and the tail ticks past quickly. The count is true, not linear.
-    buildable = [(name, module) for name, module in _MODULES if module is not None]
-    groups = []
-    for name, module in track(buildable, label=lambda entry: entry[0]):
-        try:
-            groups.append(module.build())
-        except Exception as exc:  # noqa: BLE001
-            print(f"[f14d] skip {name}: build failed: {exc}", file=sys.stderr)
-    if not groups:
-        raise RuntimeError("no F-14 part modules built")
+    groups = [system() for system in SYSTEMS]
     return bd.Compound(children=groups, label="f14d_super_tomcat")
 
 

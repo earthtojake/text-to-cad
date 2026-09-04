@@ -11,16 +11,6 @@ from lib import geometry as G
 from lib.context import group
 from lib import palette as P
 
-# Modules that may define `skin_cutters()` -- solids to subtract from the skin.
-#
-# The skin is lofted with certain real openings FILLED, because a section taken
-# through them is two disconnected regions and cannot be lofted as one wire:
-# the boundary-layer diverter slot, and the cockpit opening under the canopy
-# bubble. Those features are cut back in here, which also gives them crisp
-# machined walls rather than a lofted approximation of a slot.
-CUTTER_MODULES = ("inlets", "cockpit", "aft", "nose_gear", "main_gear", "details")
-
-
 def stance(shape):
     """Lift a waterline-referenced shape onto the ground and set the rest
     attitude.
@@ -31,32 +21,13 @@ def stance(shape):
     return bd.Location((0, 0, G.WATERLINE), (0, G.GROUND_PITCH, 0)) * shape
 
 
-def _collect_cutters():
-    """Cutters published by already-imported part modules.
-
-    Looked up through ``sys.modules`` rather than imported.  Those modules
-    import ``stance`` from here, so importing them back would be circular; by
-    the time ``build()`` runs the assembly has already imported them all.
-    Each module exposes ``skin_cutters()`` (cached) instead of a module-level
-    list so that importing it builds no geometry.
-    """
-    out = []
-    for name in CUTTER_MODULES:
-        mod = sys.modules.get(f"lib.{name}")
-        if mod is None:
-            continue
-        skin_cutters = getattr(mod, "skin_cutters", None)
-        cutters = skin_cutters() if skin_cutters is not None else []
-        for c in cutters:
-            if c is not None:
-                out.append(c)
-    return out
-
-
-def build():
+def build(cutters=()):
+    """The skin, minus ``cutters`` — solids in the waterline frame, chosen by the
+    caller (the `airframe` model names them explicitly; see its docstring for
+    which are structural and which were dropped as too costly)."""
     skin = B.build_skin()
 
-    cutters = _collect_cutters()
+    cutters = [c for c in cutters if c is not None]
     if cutters:
         # ONE list operand, never pairwise: pairwise re-runs the whole
         # intersection network per tool and decays O(n^2).
