@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import tempfile
 import sys
 import unittest
 from pathlib import Path
@@ -22,7 +23,19 @@ from tests.python.support.paths import repo_path
 
 REPO = Path(repo_path("."))
 PART = "models/examples/src/cylindrical_spacer_sleeve.py"
-ROBOT = "models/juno/juno.urdf"
+# A self-contained robot: primitive visuals, no mesh files, so the test needs nothing
+# generated or LFS-fetched in the checkout.
+ROBOT_URDF = """<?xml version="1.0"?>
+<robot name="stream_contract">
+  <link name="base"><visual><geometry><box size="0.1 0.1 0.02"/></geometry></visual></link>
+  <link name="arm"><visual><geometry><cylinder radius="0.01" length="0.1"/></geometry></visual></link>
+  <joint name="shoulder" type="revolute">
+    <parent link="base"/><child link="arm"/>
+    <origin xyz="0 0 0.01"/><axis xyz="0 0 1"/>
+    <limit lower="-1.57" upper="1.57" effort="1" velocity="1"/>
+  </joint>
+</robot>
+"""
 
 
 def run(*args: str) -> subprocess.CompletedProcess:
@@ -81,7 +94,10 @@ class StdoutIsTheResultTests(unittest.TestCase):
         self.assertNotIn("\n  ", result.stdout, "payloads on stdout are compact")
 
     def test_validate_answers_on_stdout(self):
-        result = run("urdf", "validate", ROBOT)
+        with tempfile.TemporaryDirectory() as tmp:
+            robot = Path(tmp) / "stream_contract.urdf"
+            robot.write_text(ROBOT_URDF, encoding="utf-8")
+            result = run("urdf", "validate", str(robot))
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertTrue(result.stdout.strip())
 
