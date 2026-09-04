@@ -8,13 +8,14 @@ daemon.
 
 The frames here are deliberately the same shape the daemon sends its client
 (``{"stream": ..., "data": ...}`` then ``{"exit": ...}``), so the supervisor is a pure
-relay and the client's wire protocol is untouched.
+relay and the client's wire protocol is untouched. A third frame, ``{"event": ...}``,
+carries build-tree events (STORE.md §Lazy children): a child a model's body submits
+from inside this worker reports through the same channel as the worker's own output.
 
-Two request kinds:
-
-* ``run``    — a CLI tool, output streamed as frames. What the skill commands use.
-* ``invoke`` — a cadgen module's ``main``, result returned as one payload. What the CAD
-  Viewer needs, replacing its own warm-worker system.
+One request kind, ``run`` — a CLI tool, output streamed as frames. The store root
+arrives on every request (``store_root``) and is applied per job, so one daemon serves
+any number of isolated stores and a worker never inherits the root of whichever build
+spawned the daemon.
 
 Exits when stdin closes, so a supervisor that dies cannot leave a 274 MB OCP process
 behind.
@@ -38,24 +39,36 @@ from cadgen.daemon.server import _TOOL_IMPORTS, _evict_first_party_modules
 
 
 def _apply_request_env(request: dict) -> None:
-    """Apply the requesting CLIENT's cache-resolution environment for this job.
+    """Apply the requesting CLIENT's environment for this job.
 
     A worker inherits the environment of whichever build spawned the DAEMON, so
-    without this the first build's cache root became every later build's,
-    across projects. ``cache_paths.cache_root()`` documents ONE resolution rule
-    ($CADGEN_CACHE_DIR, else the platform convention, else ~/.cache/cadgen);
-    the daemon must not add a hidden second one. A var absent from the request
+    without this the first build's store became every later build's, across
+    projects. The store root is an explicit request field and wins; the
+    forwarded vars cover the rest of ``store.paths.store_root()``'s resolution
+    rule so the daemon adds no hidden second one. A var absent from the request
     is DELETED — unset for the client means unset for the job — which also
-    clears a var a previous job's model code exported at import time."""
+    clears a var a previous job's model code exported at import time.
+
+    ``root_id`` names the build tree this job belongs to; a child this job
+    submits inherits it through the environment so its events tag the same tree.
+    """
     env = request.get("env")
     if not isinstance(env, dict):
-        return
+        env = {}
     for name in FORWARDED_ENV_VARS:
         value = env.get(name)
         if isinstance(value, str):
             os.environ[name] = value
         else:
             os.environ.pop(name, None)
+    store_root = request.get("store_root")
+    if isinstance(store_root, str) and store_root:
+        os.environ["CADGEN_CACHE_DIR"] = store_root
+    root_id = request.get("root_id")
+    if isinstance(root_id, str) and root_id:
+        os.environ["CADGEN_ROOT_ID"] = root_id
+    else:
+        os.environ.pop("CADGEN_ROOT_ID", None)
 
 
 def _emit(frame: dict) -> None:
@@ -165,73 +178,6 @@ def _run(request: dict) -> int:
         _evict_first_party_modules()
 
 
-def _module_dispatch() -> dict:
-    """cadgen module name -> its in-process payload entrypoint.
-
-    An ALLOWLIST on purpose, ported from the viewer's own worker: `invoke` names a module
-    over a socket, and importing whatever it says would be both a wider surface and a
-    worse failure (an unknown name would raise deep inside an import instead of here).
-    Imported lazily so the OCP cost lands in this process, never in the supervisor.
-    """
-    from cadgen import (
-        dxf_export_target,
-        step_artifact_cli,
-        step_export_target,
-    )
-
-    return {
-        "cadgen.dxf_export_target": dxf_export_target.run_cli_payload,
-        "cadgen.step_artifact_cli": step_artifact_cli.run_cli_payload,
-        "cadgen.step_export_target": step_export_target.run_cli_payload,
-    }
-
-
-_DISPATCH: dict | None = None
-
-
-def _invoke(request: dict) -> dict:
-    """Run a cadgen module's payload entrypoint — the CAD Viewer's contract.
-
-    Returns the payload dict directly rather than parsing it back out of stdout: these
-    entrypoints exist precisely so a warm caller does not have to.
-    """
-    global _DISPATCH
-    module_name = str(request.get("module") or "")
-    args = [str(a) for a in request.get("args") or []]
-    repo_root = request.get("repo_root")
-    noise = io.StringIO()
-    try:
-        if _DISPATCH is None:
-            _DISPATCH = _module_dispatch()
-        run = _DISPATCH.get(module_name)
-        if run is None:
-            return {"ok": False, "error": f"Unknown cadgen module for worker: {module_name}"}
-        if isinstance(repo_root, str) and repo_root:
-            if not os.path.isdir(repo_root):
-                # Same contract as _run's cwd: a request naming a directory that
-                # is not there fails as a payload the caller can read, rather
-                # than running against whatever tempdir the worker is parked in.
-                return {"ok": False, "error": _missing_cwd_message(repo_root)}
-            os.chdir(repo_root)
-        # stderr is captured rather than streamed: the cold path reports a failure's
-        # text in the payload, and warm must match.
-        noise = io.StringIO()
-        with contextlib.redirect_stdout(noise), contextlib.redirect_stderr(noise):
-            return dict(run(args))
-    except SystemExit as exc:
-        # argparse exits rather than raising. Cold reports the usage text and the code,
-        # so warm does too -- otherwise the same bad call reads as "SystemExit: 2" in one
-        # path and a usage message in the other.
-        code = exc.code if isinstance(exc.code, int) else 1
-        message = noise.getvalue().strip() or f"cadgen {module_name} exited with code {code}"
-        return {"ok": False, "exitCode": code, "error": message}
-    except BaseException as exc:  # noqa: BLE001 - a failed build must not kill the worker
-        detail = noise.getvalue().strip()
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}" + (f"\n{detail}" if detail else "")}
-    finally:
-        _park()
-
-
 def serve() -> int:
     os.environ["CADGEN_DAEMON_CHILD"] = "1"
     # This process's stdout is not a console, it is the pool's FRAME CHANNEL, so
@@ -245,6 +191,11 @@ def serve() -> int:
         if reconfigure is not None:
             with contextlib.suppress(OSError, ValueError):
                 reconfigure(encoding="utf-8", errors="backslashreplace")
+    # Child-build events from this worker's jobs ride the frame channel; the
+    # supervisor relays them to the requesting client verbatim.
+    from cadgen.daemon import executors
+
+    executors.set_event_sink(lambda event: _emit({"event": event}))
     _emit({"ready": os.getpid()})
     for line in sys.stdin:
         line = line.strip()
@@ -258,9 +209,6 @@ def serve() -> int:
         kind = request.get("kind")
         if kind == "ping":
             _emit({"pong": os.getpid()})
-        elif kind == "invoke":
-            _apply_request_env(request)
-            _emit({"result": _invoke(request), "pid": os.getpid()})
         elif kind == "shutdown":
             return 0
         else:

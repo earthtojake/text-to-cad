@@ -57,13 +57,8 @@ class CompileResult:
     package: Path | None
     #: True when the package was already current, so nothing was compiled.
     skipped: bool
-    #: A peer process held this document's lock and the caller asked not to
-    #: wait. Nothing went wrong (``ok`` stays true) and nothing was compiled.
-    contended: bool = False
 
     def human_lines(self) -> list[str]:
-        if self.contended:
-            return [f"contended {_display(self.package)} (another run is compiling it)"]
         head = "current" if self.skipped else "compiled"
         return [f"{head} {_display(self.document or self.package)}"]
 

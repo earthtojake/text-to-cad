@@ -22,7 +22,7 @@ from .artifact_status import (
 from .backend import require_contained
 from .build_progress import ProgressRegistry, build_progress_snapshot
 from .compile_client import CompileClient
-from .store_paths import coordination_scope
+from .store_paths import build_scope
 
 __all__ = ["CLI_BUILD_HINT", "CadgenOps", "create_cadgen_ops"]
 
@@ -74,7 +74,7 @@ class CadgenOps:
             return {"state": ARTIFACT_STATE.READY}
 
         candidate = self._candidate(file_ref)
-        build_key = coordination_scope(candidate)
+        build_key = build_scope(candidate)
 
         snapshot = build_progress_snapshot(candidate, registry=self.registry)
         if snapshot is None and self.client.in_flight(build_key):
@@ -105,9 +105,9 @@ class CadgenOps:
             # buildProgressSnapshot did before them. So the flag was
             # unreachable, and an unreachable flag that flips the client
             # from BUILD to ATTACH is a trap for the next reader, not a
-            # safeguard. The real "a peer holds the lock" signal is
-            # `contended`, which build_artifact answers with `generating`
-            # and the client attaches to.
+            # safeguard. The real "another compile of this document is in
+            # flight" signal is `contended`, which build_artifact answers
+            # with `generating` and the client attaches to.
             #
             # busy/blocked stay in artifact_status.py: they are pinned there
             # by the ported spec, which supplies the snapshot directly.
@@ -133,7 +133,7 @@ class CadgenOps:
         if self._is_raw_step_file(candidate) and not verdict.get("generated"):
             imported = self.client.compile(candidate, force=force)
             if imported.get("ok") and imported.get("contended"):
-                # A peer holds the package lock and is building it. The client
+                # Every compile slot is busy with another document. The client
                 # treats this exactly like attaching to a CLI build.
                 return {"ok": True, "state": ARTIFACT_STATE.GENERATING, "contended": True}
             if imported.get("ok"):

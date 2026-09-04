@@ -28,13 +28,12 @@ __all__ = [
     "artifact_path_key",
     "cadgen_cache_root_dir",
     "component_object_present",
-    "coordination_scope",
+    "build_scope",
     "document_current",
     "record_for",
     "result_descriptor",
     "result_tree",
     "source_sidecar_path",
-    "store_locks_dir",
     "virtual_store_asset",
 ]
 
@@ -54,26 +53,20 @@ def cadgen_cache_root_dir() -> str:
     return str(store_root())
 
 
-def store_locks_dir() -> str:
-    from cadgen.store.paths import locks_dir
-
-    return str(locks_dir())
-
-
 def artifact_file_hash(file_path) -> str | None:
     """sha256 of the file's bytes, or ``None`` when it cannot be read."""
     return catalog.artifact_file_hash(Path(str(file_path)))
 
 
 def artifact_path_key(file_path) -> str:
-    """Model-PATH identity for the locks tier."""
+    """Model-PATH identity for progress records."""
     return catalog.artifact_path_key(Path(str(file_path)))
 
 
-def coordination_scope(file_path) -> str:
-    """``<store>/locks/<pathKey>`` -- a NAME, never created as a directory. Also
-    the server's identity key for one model's in-flight build."""
-    return str(catalog.coordination_scope(Path(str(file_path))))
+def build_scope(file_path) -> str:
+    """The model's build scope: a NAME derived from its path (``cadgen.catalog.build_scope``).
+    Also the server's identity key for one model's in-flight build."""
+    return catalog.build_scope(Path(str(file_path)))
 
 
 def record_for(file_path) -> dict | None:

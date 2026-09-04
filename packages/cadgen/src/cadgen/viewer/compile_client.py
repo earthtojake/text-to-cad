@@ -52,15 +52,15 @@ import threading
 import time
 import uuid
 
-from .store_paths import coordination_scope
+from .store_paths import build_scope
 
 __all__ = [
     "ACQUIRE_TIMEOUT_SECONDS",
     "CompileClient",
 ]
 
-# Same bound as the kernel lock timeout the worker passes, and the same client
-# behaviour on the far side: attach and poll.
+# How long a request waits for a compile slot before answering `contended`,
+# which the client handles by attaching and polling.
 ACQUIRE_TIMEOUT_SECONDS = 5.0
 
 # Kill a worker that has gone SILENT for this long. Idleness, not wall clock: a
@@ -270,7 +270,7 @@ class CompileClient:
         Returns the CompileResult shape on success, or ``{"ok": False, "error":
         ...}``. Never raises for a build failure: a failure is a value.
         """
-        build_key = coordination_scope(candidate)
+        build_key = build_scope(candidate)
 
         # Get-or-create in ONE critical section. Node got this atomicity free
         # from its event loop; a check, then a create, then a store under

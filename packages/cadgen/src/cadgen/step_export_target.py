@@ -146,15 +146,15 @@ def _resolve_spec_and_scene(
             door, document, reason=reason, source=spec.script_path or source_path, verb=verb
         )
         # An export runs the generator but writes the render package NOTHING -- its output
-        # is a STEP/STL/3MF/GLB file somewhere else entirely. Claiming the writer lock here
-        # made a fully-current model report `generating` with an empty bar for the whole
-        # length of the export.
+        # is a STEP/STL/3MF/GLB file somewhere else entirely. Reporting it as a build made
+        # a fully-current model show `generating` with an empty bar for the whole length
+        # of the export.
         scene = run_script_generator(
             spec,
             "step",
             logger=logger,
             force=True,
-            lock_intent="generate",
+            intent="generate",
         )
         if scene is None:
             raise RuntimeError(f"Generator did not produce a STEP scene: {spec.source_ref}")
@@ -435,14 +435,14 @@ def _resolve_mesh_package(
             source=spec.script_path or source_path,
             verb=verb,
         )
-        # See _resolve_spec_and_scene on lock_intent: an export must not claim
-        # the writer lock, or a fully-current model reports `generating`.
+        # See _resolve_spec_and_scene on intent: an export must not report as a
+        # build, or a fully-current model shows `generating`.
         scene = run_script_generator(
             spec,
             "step",
             logger=logger,
             force=True,
-            lock_intent="generate",
+            intent="generate",
         )
         if scene is None:
             raise RuntimeError(f"Generator did not produce a STEP scene: {spec.source_ref}")

@@ -47,7 +47,6 @@ def compile(  # noqa: A001 - the verb IS "compile"; the builtin is not used here
     *,
     force: bool = False,
     verbose: bool = False,
-    lock_timeout: float = 0.0,
 ) -> CompileResult:
     """Make TARGET's render package current; no-op when it already is.
 
@@ -59,9 +58,6 @@ def compile(  # noqa: A001 - the verb IS "compile"; the builtin is not used here
     target: the STEP/STP document to compile.
     force: recompile even when the package is already current.
     verbose: show detailed progress and timing on stderr.
-    lock_timeout: give up after SECONDS when another run holds this document's
-        lock, answering contended instead of compiling. 0 (the default) waits
-        for the peer.
     """
     from cadgen._internal.doors import document_target, require_current_document
     from cadgen.step_artifact_cli import build_step_artifact
@@ -74,7 +70,6 @@ def compile(  # noqa: A001 - the verb IS "compile"; the builtin is not used here
         source_path=None,
         force=force,
         verbose=verbose,
-        lock_timeout_s=lock_timeout,
     )
 
     def path_of(key: str) -> Path | None:
@@ -86,7 +81,6 @@ def compile(  # noqa: A001 - the verb IS "compile"; the builtin is not used here
         document=path_of("stepPath"),
         package=path_of("packagePath"),
         skipped=bool(payload.get("skipped")),
-        contended=bool(payload.get("contended")),
     )
 
 

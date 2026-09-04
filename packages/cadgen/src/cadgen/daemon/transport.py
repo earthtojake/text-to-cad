@@ -31,7 +31,6 @@ import os
 import secrets
 import stat
 import sys
-import tempfile
 from pathlib import Path
 
 # Bump when the wire format changes. It is part of the address, so mismatched peers never
@@ -51,12 +50,14 @@ def _family() -> str:
 
 
 def state_dir() -> Path:
-    """Where the address and the auth key live.
+    """Where the address, the auth key and the advisory progress records live.
 
-    Windows has no ``/tmp`` and no TMPDIR; gettempdir() answers correctly on every
-    platform, and the viewer registry already resolves its own directory the same way.
+    ONE derivation, owned by ``cadgen.coordination.paths`` (stdlib-only, imported by the
+    viewer too); this is the daemon's spelling of it.
     """
-    return Path(tempfile.gettempdir()) / "cadgen-daemon"
+    from cadgen.coordination.paths import state_dir as _state_dir
+
+    return _state_dir()
 
 
 def address_for(key: str) -> str:

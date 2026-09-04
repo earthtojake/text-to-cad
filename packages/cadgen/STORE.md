@@ -40,8 +40,10 @@ memo (bare), scope, blob. They do not appear in code or documentation.
   index/op/<sha256(op key)>           op-memo entries → object hash
   index/mesh/<key>                    tessellation entries → object hash
   index/dxf/<sha256(drawing)>         drawing freshness entries (the @dxf pipeline)
-  locks/                              advisory build coordination (not store contents)
 ```
+
+Nothing else lives under the root. A build's advisory progress record is
+process state, not content, and lives in the daemon's state directory (§7).
 
 There are exactly two ways a file is named, and that is the only distinction
 the store makes:
@@ -228,9 +230,8 @@ Each with the failure it prevents.
   current after a hand edit.
 - **No locks are needed for correctness.** Objects are idempotent, entries
   are temp+rename, the publish rule decides concurrent same-model outcomes,
-  pins isolate parents. The advisory `locks/` tier remains in this phase for
-  progress reporting and to keep two builders of one model from doing the
-  same kernel work twice; nothing reads it to decide freshness.
+  pins isolate parents. There is no lock layer (§7); two builders of one
+  model may do the same kernel work twice, and the publish rule keeps one.
 
 ## 6. Link or component
 
@@ -277,9 +278,17 @@ No serialization, no cancellation, no waiting on another build.
 - **Edit a parent while a child builds.** Unrelated: the child's record and
   tree are its own. The parent's next build calls the child, finds it
   current, and pins the new tree.
-- In this phase child builds run as subprocesses of the parent's build and
-  the parent waits for the child it called (it needs the geometry); it never
-  waits for a build it did not start.
+- **The only wait** is a parent forcing a child it submitted itself (§Lazy
+  children); it never waits for a build it did not start.
+- **No locks.** There is no lock layer: every store write is atomic
+  (temp + rename) and idempotent, the document is written to a temp file and
+  moved into place, the record cross-validates the outputs by sha (gate
+  clause 5), and the publish rule decides same-model outcomes. What remains
+  is an advisory progress record per model in the daemon's state directory
+  (`<tmp>/cadgen-daemon/progress/<key>.json`, not the store) that the CAD
+  Viewer reads for its progress badge and ages out; nothing reads it to
+  decide freshness. With `CADGEN_DAEMON=0` concurrent builds are unbrokered
+  — safe by the two invariants above, wasteful, and a debugging mode.
 
 ## 8. GC
 
@@ -292,9 +301,62 @@ is up, GC runs through it and respects live pins (a later phase).
 
 ## 9. The daemon
 
-The warm build daemon routes a top-level call by model (script path) and runs
-the same pipeline this document describes; it holds no store state of its
-own. Pins and extras are described in the daemon's own documentation.
+Every build goes through one interface, `cadgen.daemon.executors.submit(model)
+-> job`, with two executors that behave identically:
+
+- **Daemon executor (default).** Workers are persistent and warm. The routing
+  key is the model (its script path): a request for a model whose worker is
+  idle takes it; whose worker is busy binds a spare as an **extra** for that
+  one job (the extra returns to the spare set after); a model with no worker
+  binds a spare and a replacement starts in the background; no spare means a
+  spawn. Spares: `CADGEN_DAEMON_SPARES` (default 2). Requests that name no
+  model (`inspect`, `snapshot` on a document) borrow a spare without binding
+  it. Nothing waits on another build, nothing is capped, nothing counts
+  memory, no bound worker is idle-reaped; a worker is recycled after
+  `CADGEN_DAEMON_RECYCLE` jobs (default 1000) as a leak hedge, and the daemon
+  exits after `CADGEN_DAEMON_IDLE_TIMEOUT` seconds idle (default 3600).
+  Inside a worker, `submit` is the same client call back to the daemon, so a
+  parent's children land on their own workers while the parent's body runs.
+- **Transient executor (`CADGEN_DAEMON=0`).** A subprocess per job, alive for
+  this build only. Each imports build123d once, concurrently with its
+  siblings. It inherits the environment, so a test's `CADGEN_CACHE_DIR`
+  isolates its store; tests and CI run this way.
+
+The **store root is a field on every request** (`store_root`), applied per
+job in the worker, never inherited from whichever build spawned the daemon:
+one daemon serves any number of isolated stores. The daemon holds no store
+state of its own. `cadgen daemon status` reports each worker's `model`,
+`busy`, `jobs`, `extra`, plus `spares`, `imports` (cold spawns) and
+`concurrent` (extras bound).
+
+## 9a. Lazy children
+
+Inside a body, a child call returns at once with a `LazyCompound`
+(`cadgen.store.lazy`) — a `build123d.Compound` whose `.wrapped` is a property.
+The gate runs at the call: a stale child is submitted to the pool and the
+promise carries the job; a current child is a promise with no job. Geometry
+arrives on the first read of `.wrapped` — normally at the closing
+`Compound(children=[...])`, after every sibling has been submitted — so
+siblings build in parallel and the parent waits only for children it
+submitted itself. Deferred without forcing: `Pos/Rot/Location * child`,
+`.moved()`, `.label =`, `.color =`. Everything else (`.faces()`,
+`.bounding_box()`, booleans, `copy.copy`, `Compound(children=...)`) forces:
+a body that reads a child before placing the next forces it there, and
+parallelism follows the dependencies the author wrote. Forcing waits for the
+job, materializes the pinned tree (§6), applies the deferred placement, label
+and color, and tags the result exactly as an eager materialize would, so the
+link/component decision is unchanged. The same stale child called twice
+shares one job. A failed child raises `ChildBuildError` at the forcing site,
+naming the call site in the parent and carrying the worker's output.
+
+The top-level call renders the graph these calls reveal as a build tree on
+stderr (`cadgen.cli_tree`): a TTY gets one refreshed block — `submitted`,
+`building · <phase> n/total`, `current`, `✓ <time>`, finished subtrees folded
+to one line, current children counted on the parent's line; `--json` or a
+non-TTY gets one JSON line per model transition. Child events reach the root
+through the pool, tagged with the root request's id, identically for both
+executors. After publishing, the root runs its gate once more and says
+`already stale: …; rerun` if a child changed during the build.
 
 ## 10. Debugging
 

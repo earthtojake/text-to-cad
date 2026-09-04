@@ -1,91 +1,49 @@
-"""Where an artifact's coordination files live.
+"""Where a build's advisory progress record lives.
 
 One derivation, imported by BOTH the producer (cadgen) and the reader (the CAD Viewer's
-server), so the two can no longer disagree about which file to look at. Before this module
-the derivation existed twice -- ``cadgen._internal.generation_status.generation_lock_path``
-and a hand-written copy in ``cadgen/render_ops.py`` -- kept in sync only by a test
-that compared path strings.
+server), so the two cannot disagree about which file to look at.
 
-All three files are HIDDEN SIBLINGS of the artifact's output directory, so they live under
-the store's ``locks/`` tier as dot-named siblings of the coordination scope
-(``cadgen.catalog.coordination_scope``, model-path-keyed). For a scope
-``<cache>/locks/<pathkey>`` the files are::
+Records live in the daemon's state directory, not in the store: they describe a
+PROCESS (a run in flight), not content, and the store holds only content and the
+pointers to it (STORE.md §7). For a build scope ``<key>`` (``cadgen.catalog.build_scope``,
+derived from the model path) the files are::
 
-    <cache>/locks/.<pathkey>.generation.lock           writer sentinel
-    <cache>/locks/.<pathkey>.generator.lock            generator sentinel
-    <cache>/locks/.<pathkey>.generation.progress.json  status record
+    <state>/progress/<key>.json             the run rewriting the model's outputs
+    <state>/progress/<key>.generator.json   a run occupying its generator (an export)
 
-The names are fixed per output dir, which is what lets an arbitrary reader find them
-without being told anything but the directory.
-
-A fourth file exists on WINDOWS ONLY: ``<sentinel>.mutex``, the file the lock is actually
-taken on there, because Windows byte-range locks are mandatory and would otherwise make the
-sentinel unreadable to the Node builders that must read it. It is derived in
-``coordination.lock.mutex_path`` rather than here: nothing outside that module may open it,
-and a reader asking "is a build in flight?" calls ``probe()`` with the SENTINEL path either
-way. It carries no data at all -- one padding byte, never parsed.
+The names are fixed per scope, which is what lets an arbitrary reader find them without
+being told anything but the model. The records are advisory: a crashed run leaves its
+last write behind, and readers age it out (``cadgen.viewer.build_progress``).
 """
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
-# The writer sentinel's name is FROZEN. A bundled skill carrying an older cadgen and a
-# newer viewer (or the reverse) must still mutually exclude during a rollout, and that
-# only works while both derive the same path.
-#
-# One rollout gap is known and accepted, on Windows only: cadgen <= 0.4.11 locked this file
-# directly, and newer versions lock `<this>.mutex` (see coordination.lock.mutex_path), so an
-# old and a new producer building the same model concurrently do not exclude each other
-# there. Narrow enough to accept -- it needs two different cadgen installs writing one
-# directory at once, on Windows, where the old version's DXF builds could not complete at all
-# (#269) -- and unfixable without keeping the bug, since excluding an old peer means locking
-# the file it is trying to read. POSIX is unaffected: both lock the sentinel.
-WRITE_LOCK_SUFFIX = ".generation.lock"
-
-# Held by a run that occupies the model's generator but writes no package (an export, an
-# on-demand topology extraction). Separate from the writer sentinel so a reader can tell
-# "this model is being rewritten" from "this model's generator is busy" -- the former must
-# hide the artifact, the latter must not.
-GENERATOR_LOCK_SUFFIX = ".generator.lock"
-
-# The status record the CAD Viewer's backend reads beside the write sentinel. The name is
-# the cross-process contract: cadgen writes it, the viewer's stdlib backend derives the same
-# path independently, and the parity suite compares the two by value.
-STATUS_SUFFIX = ".generation.progress.json"
-
-# The GENERATOR run's status record, and the reason there are two. Generator runs and writer
-# runs take different sentinels ON PURPOSE, so they do not exclude each other -- which meant
-# that while they shared one record file, an export's record landed on top of a live build's
-# progress. `snapshot()` attributes progress only to the WRITE sentinel's holder, so the
-# export's run id did not match and the build's bar vanished mid-run; worse, the export's
-# terminal record carries no `stageMs`, so it also erased the phase weighting the next build
-# reads. Nothing consumes this file today -- it exists so a generator run has somewhere of
-# its own to report, and cannot reach the writer's record.
-GENERATOR_STATUS_SUFFIX = ".generator.progress.json"
+PROGRESS_SUFFIX = ".json"
+GENERATOR_PROGRESS_SUFFIX = ".generator.json"
 
 
-def _sibling(output_dir: Path | str, suffix: str) -> Path:
-    package = Path(output_dir)
-    return package.parent / f".{package.name}{suffix}"
+def state_dir() -> Path:
+    """The daemon's state directory: the address, the auth key, and these records.
+
+    Same derivation as ``cadgen.daemon.transport.state_dir`` (which imports this one).
+    ``tempfile.gettempdir()`` answers correctly on every platform.
+    """
+    return Path(tempfile.gettempdir()) / "cadgen-daemon"
 
 
-def write_lock_path(output_dir: Path | str) -> Path:
-    """The sentinel held for the duration of a run that MUTATES ``output_dir``."""
-    return _sibling(output_dir, WRITE_LOCK_SUFFIX)
+def progress_dir() -> Path:
+    return state_dir() / "progress"
 
 
-def generator_lock_path(output_dir: Path | str) -> Path:
-    """The sentinel held by a run that occupies the generator but writes no package."""
-    return _sibling(output_dir, GENERATOR_LOCK_SUFFIX)
+def progress_path(scope: str) -> Path:
+    """The record describing the most recent run that REWRITES the scope's model."""
+    return progress_dir() / f"{scope}{PROGRESS_SUFFIX}"
 
 
-def status_path(output_dir: Path | str) -> Path:
-    """The status/progress record describing the most recent WRITER run for ``output_dir``."""
-    return _sibling(output_dir, STATUS_SUFFIX)
-
-
-def generator_status_path(output_dir: Path | str) -> Path:
-    """The status record for a run that occupies ``output_dir``'s generator but writes no
-    package. Separate from :func:`status_path` so it cannot overwrite a live build's."""
-    return _sibling(output_dir, GENERATOR_STATUS_SUFFIX)
+def generator_progress_path(scope: str) -> Path:
+    """The record for a run that occupies the model's generator but rewrites nothing.
+    Separate from :func:`progress_path` so it cannot overwrite a live build's."""
+    return progress_dir() / f"{scope}{GENERATOR_PROGRESS_SUFFIX}"

@@ -292,7 +292,7 @@ def _emit(
     spec = _build_entry_spec(Path.cwd().resolve(), scene.step_path, scene, kind=kind)
     from dataclasses import replace as _replace
 
-    from cadgen.catalog import coordination_scope
+    from cadgen.catalog import build_scope
     from cadgen.cli_progress import cli_progress_line
     from cadgen.coordination import STEP_PACKAGE, artifact_build
 
@@ -300,21 +300,16 @@ def _emit(
     # content key does not exist until after it is written. That is exactly the
     # shape of a re-emit, and it is why the writer here is the canonical one.
     spec = _replace(spec, source="generated", script_path=None, step_path=scene.step_path)
-    # The write lock is required at the package mutation boundary — the package
-    # writer asserts it — and it is what makes a concurrent re-emit of the same
-    # output safe rather than two processes racing on one content key.
-    #
-    # Keyed by the MODEL PATH, never by the content-keyed package dir. The line above
-    # says why in this producer's own terms: a re-emit's content key does not exist
-    # until the document has been written, so a package-keyed lock is taken on an
-    # identity the run does not have yet and abandons the moment it does — two
-    # concurrent re-emits of one output would not exclude each other, and the progress
-    # record would land where no reader (the viewer polls locks/<pathkey>) looks.
+    # Progress keyed by the MODEL PATH, never by the content-keyed package dir: a
+    # re-emit's content key does not exist until the document has been written, so a
+    # package-keyed record would land where no reader (the viewer polls the model's
+    # build scope) looks. Two concurrent re-emits of one output both proceed; every
+    # store write is atomic and idempotent, so neither can tear the other.
     with cli_progress_line(
         spec.source_ref, logger=logger, fallback="Building..."
     ) as progress_sink, artifact_build(
         STEP_PACKAGE,
-        coordination_scope(spec.entry_path) if spec.entry_path else None,
+        build_scope(spec.entry_path) if spec.entry_path else None,
         force=True,
         sink=progress_sink,
     ):

@@ -8,13 +8,14 @@ the call saw.
 
 This module exists so BOTH dispatch paths drive the one existing pipeline
 (``cadgen.generation.generate_step_targets`` / ``generate_dxf_targets``) —
-locks, progress records, the no-op gate, incremental package build, ``.step``
+progress records, the no-op gate, incremental package build, ``.step``
 assembly — with zero forked logic.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -32,9 +33,6 @@ def _build_parser(prog: str) -> argparse.ArgumentParser:
     parser.add_argument("--mesh-angular-tolerance", type=float)
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--json", action="store_true", help="One JSON result line on stdout.")
-    from cadgen._internal.cli_locking import add_lock_timeout_argument
-
-    add_lock_timeout_argument(parser)
     return parser
 
 
@@ -49,6 +47,21 @@ def run_model_argv(argv: Sequence[str], *, prog: str = "python <model>.py") -> i
     script = Path(args.script).expanduser().resolve()
     if not script.is_file():
         parser.error(f"model script does not exist: {args.script}")
+
+    # Where this process's build-tree events go. A transient worker (CADGEN_EVENTS=1)
+    # writes them as lines its parent reads back; a daemon worker already relays them
+    # as frames; a root that reached here directly (`python -m cadgen.cli._run_model`,
+    # `cadgen step build`) renders the tree itself.
+    from cadgen.cli_tree import build_tree
+    from cadgen.daemon import executors
+
+    if os.environ.get("CADGEN_EVENTS") == "1" and not executors.sink_installed():
+        executors.install_line_sink()
+    with build_tree(json_lines=bool(args.json)):
+        return _run(args, script, parser, prog)
+
+
+def _run(args: argparse.Namespace, script: Path, parser: argparse.ArgumentParser, prog: str) -> int:
 
     from cadgen.catalog import StepImportOptions, source_from_path
 
@@ -91,7 +104,6 @@ def run_model_argv(argv: Sequence[str], *, prog: str = "python <model>.py") -> i
             force=bool(args.force),
             verbose=bool(args.verbose),
             json_output=bool(args.json),
-            lock_timeout_s=float(args.lock_timeout or 0.0),
         )
     except Exception as exc:  # noqa: BLE001 — the CLI boundary: report, do not traceback
         from cadgen._internal.cli_errors import report_cli_error
@@ -106,4 +118,17 @@ def main(argv: Sequence[str] | None = None, *, prog: str = "python <model>.py") 
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    code = main()
+    if os.environ.get("CADGEN_EVENTS") == "1":
+        # A transient worker (cadgen.daemon.executors): its parent is waiting on this
+        # exit, and tearing down an interpreter with OCP loaded costs ~0.3 s of
+        # destructors that free nothing anyone will use. Flush and leave.
+        import sys
+
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.flush()
+            except (OSError, ValueError):
+                pass
+        os._exit(int(code or 0))
+    raise SystemExit(code)

@@ -29,7 +29,6 @@ from cadgen.catalog import (
     source_from_path,
 )
 from cadgen.cli_logging import CliLogger
-from cadgen._internal.cli_locking import contended_payload, deadline_ms, lock_wait_notice
 from cadgen._internal.glb_topology import build_step_topology_index_manifest
 from cadgen._internal.glb_topology import (
     STEP_EDGE_VISIBILITY_CLASSES,
@@ -51,8 +50,6 @@ from cadgen.cli_progress import (
     _progress_status_text,
     cli_progress_line,
 )
-from cadgen.coordination.lock import exclusive
-from cadgen.coordination.paths import write_lock_path
 from cadgen.metadata import GeneratorMetadata
 from cadgen.render import (
     relative_to_file,
@@ -95,7 +92,6 @@ from cadgen._internal.generation_runner import (
     _spec_output_dir,
     _track_spec_generation,
     _write_dxf_payload,
-    _write_lock_without_reporting,
     _write_shape_step_payload,
     run_script_generator,
 )
@@ -1044,21 +1040,36 @@ def _generated_dxf_summary(spec: EntrySpec) -> str:
     return f"processed: {spec.source_ref}"
 
 
+def _tree_event(spec: EntrySpec, state: str, **extra: object) -> None:
+    """One model transition for the build tree (cadgen.cli_tree). Generated models only:
+    an imported document has no body and no children to show."""
+    model = _model_for_spec(spec)
+    if model is None:
+        return
+    from cadgen.daemon.executors import emit_event, model_event
+
+    emit_event(model_event(model, state, **extra))
+
+
+def _tree_progress_sink(spec: EntrySpec, inner: object | None) -> Callable[[ProgressEvent], None]:
+    """Fan a run's phase events out to the caller's sink AND the build tree."""
+
+    def sink(event: ProgressEvent) -> None:
+        if inner is not None:
+            inner(event)  # type: ignore[operator]
+        if event.phase == "done":
+            return
+        _tree_event(
+            spec, "building", phase=event.label or event.phase,
+            done=event.done if event.determinate else None,
+            total=event.total if event.determinate else None,
+        )
+
+    return sink
+
+
 class _SkippedGeneration:
-    """Marker: the lock holder ahead of us had already produced a current package."""
-
-    __slots__ = ("spec",)
-
-    def __init__(self, spec: EntrySpec) -> None:
-        self.spec = spec
-
-
-class _ContendedGeneration:
-    """Marker: a peer holds the lock and this run declined to wait for it.
-
-    Deliberately NOT :class:`_SkippedGeneration`. That one means the package IS current --
-    the peer finished and this run re-checked under the lock. This one means the build is
-    still in flight somewhere else, so nothing can be claimed about the package yet."""
+    """Marker: a concurrent run ahead of us had already produced a current result."""
 
     __slots__ = ("spec",)
 
@@ -1074,42 +1085,57 @@ def _run_with_spec_generation_status(
     skip_if_current: Callable[[EntrySpec], bool] | None = None,
     progress_sink: object | None = None,
     logger: CliLogger | None = None,
-    lock_timeout_s: float = 0.0,
 ) -> object:
-    """Run ``action`` while holding the model's build lock, reporting its progress.
+    """Run ``action`` under the model's progress record.
 
-    Delegates to :func:`cadgen.coordination.artifact_build`, which is the SAME primitive
-    ``cadgen.step_artifact_cli`` uses. That shared implementation is the point: the lock, the
-    status record and the post-lock currency re-check used to be assembled by hand at each
-    producer, and the two producers had drifted -- this one re-checked under the lock,
-    step_artifact_cli's did not, so a queued viewer build redid a peer's whole generator+mesh.
+    Delegates to :func:`cadgen.coordination.artifact_build`, the SAME primitive
+    ``cadgen.step_artifact_cli`` uses, so every producer reports the same way.
 
-    ``skip_if_current`` is re-evaluated AFTER the lock is acquired. The pre-lock fast path
-    cannot cover the concurrent case: it ran before the other build existed.
+    ``skip_if_current`` is re-evaluated when the run opens: a run that started behind a
+    concurrent build of this model no-ops once that build has published.
 
     ``action`` is called as ``action(spec, run)``; ``run`` is the progress reporter.
-
-    ``lock_timeout_s`` bounds the wait for a peer's lock, exactly as it does in
-    ``cadgen.step_artifact_cli``: 0 waits, and a positive value gives up and reports the peer
-    instead. Same flag, same default, same meaning -- see :mod:`cadgen._internal.cli_locking`.
     """
+    del logger
     kind = DRAWING_PACKAGE if model_format == "dxf" else STEP_PACKAGE
-    # No output dir means no lock, so there is nothing to wait on and no ref to name in a
-    # notice -- and a spec that never reaches a lock is not required to have one.
-    output_dir = _spec_output_dir(spec, model_format)
+    started = time.perf_counter()
     with artifact_build(
         kind,
-        output_dir,
+        _spec_output_dir(spec, model_format),
         is_current=(lambda: bool(skip_if_current(spec))) if skip_if_current is not None else None,
-        deadline_ms=deadline_ms(lock_timeout_s),
-        sink=progress_sink,
-        on_wait=lock_wait_notice(logger, spec.source_ref) if output_dir is not None else None,
+        sink=_tree_progress_sink(spec, progress_sink),
     ) as run:
-        if run.contended:
-            return _ContendedGeneration(spec)
         if run.skipped:
+            _tree_event(spec, "current")
             return _SkippedGeneration(spec)
-        return action(spec, run)
+        _tree_event(spec, "building", phase="generate")
+        try:
+            result = action(spec, run)
+        except BaseException:
+            _tree_event(spec, "failed", elapsed=time.perf_counter() - started)
+            raise
+    _tree_event(spec, "done", elapsed=time.perf_counter() - started, stale=_stale_after_build(spec))
+    return result
+
+
+def _stale_after_build(spec: EntrySpec) -> str | None:
+    """The already-stale-on-completion notice: after publishing, the gate runs once
+    more. A child edited during the build leaves the parent stale the moment it is done
+    -- the parent built against the child it pinned -- and the tree says so instead of
+    letting the next run be the first to notice."""
+    model = _model_for_spec(spec)
+    if model is None or spec.source != "generated":
+        return None
+    try:
+        from cadgen.store.gate import stale
+
+        verdict = stale(model)
+    except Exception:  # noqa: BLE001 - a notice never fails a build
+        return None
+    if not verdict.stale:
+        return None
+    reason = verdict.reason
+    return f"{reason}; changed during the build" if reason else "changed during the build"
 
 
 def _run_selected_specs(
@@ -1137,9 +1163,7 @@ def _run_selected_specs(
             with logger.timed(f"{done_status.lower()} {spec.source_ref}"):
                 result = action(spec, progress_sink)
         results.append(result)
-        if isinstance(result, _ContendedGeneration):
-            logger.info(f"another run is building {spec.cad_ref}; not waiting")
-        elif isinstance(result, _SkippedGeneration):
+        if isinstance(result, _SkippedGeneration):
             logger.info(f"{spec.cad_ref} was built by a concurrent run; skipped")
         elif success_message is not None:
             message_spec = result.spec if isinstance(result, GeneratedStepResult) else spec
@@ -1199,7 +1223,6 @@ def generate_step_targets(
     force: bool = False,
     verbose: bool = False,
     json_output: bool = False,
-    lock_timeout_s: float = 0.0,
 ) -> int:
     """Build render packages for ``targets``. Returns the process exit code.
 
@@ -1207,10 +1230,6 @@ def generate_step_targets(
     alone cannot say WHICH targets were rebuilt and which were already current, and the
     logger's prose goes to stderr by design -- so without this a caller reading the streams
     apart had no machine-readable result at all.
-
-    ``lock_timeout_s`` bounds the wait for a concurrent build of the same model. 0 waits,
-    which is what an agent that asked for a build wants; a positive value reports the peer
-    as ``contended`` and moves on.
     """
     tool_name = "cadgen"
     logger = CliLogger("cadgen", verbose=verbose)
@@ -1225,23 +1244,6 @@ def generate_step_targets(
                 "kind": spec.kind,
                 "outcome": outcome,
                 "packagePath": _display_path(spec.step_path),
-            }
-        )
-
-    def _emit_contended(spec: EntrySpec) -> None:
-        # The SAME payload the artifact CLIs answer with when a peer holds the lock, so a
-        # caller branching on `contended` does not have to learn a second spelling of it per
-        # CLI. `outcome` rides alongside, because --json promises one line per target and a
-        # reader should not have to special-case which key names the result.
-        reported.append(
-            {
-                **contended_payload(
-                    source_ref=spec.source_ref,
-                    cad_ref=spec.cad_ref,
-                    package_dir=None,
-                ),
-                "kind": spec.kind,
-                "outcome": "contended",
             }
         )
 
@@ -1302,6 +1304,7 @@ def generate_step_targets(
                 # without leaving the no-op path.
                 _produce_declared_mesh_exports(spec, logger=logger)
                 _emit(spec, "current")
+                _tree_event(spec, "current")
             current_refs = {spec.source_ref for spec in current_specs}
             selected_specs = [spec for spec in selected_specs if spec.source_ref not in current_refs]
             if not selected_specs:
@@ -1310,8 +1313,8 @@ def generate_step_targets(
                 return 0
     entries_by_step_path = _entries_by_step_path([*all_specs, *selected_specs])
 
-    # Same condition as the pre-lock fast path above, re-checked once the lock is held
-    # so a run that queued behind a concurrent build of this model no-ops instead of
+    # Same condition as the fast path above, re-checked when the run opens so a run
+    # that started behind a concurrent build of this model no-ops instead of
     # rebuilding it. --force and explicit extra outputs always do the work.
     def _built_by_a_peer(spec: EntrySpec) -> bool:
         if force:
@@ -1321,9 +1324,6 @@ def generate_step_targets(
         return _assembly_is_current(spec) and _assembly_glb_package_current(spec)
 
     def generate_step(spec: EntrySpec, progress_sink: object | None = None) -> object:
-        # The lock and the progress record are now one thing, keyed by the same package
-        # dir, so a CAD Viewer polling this model's artifact status picks up exactly the
-        # run that is holding the lock -- and cannot pick up a previous run's leftovers.
         def build(tracked_spec: EntrySpec, reporter: object) -> object:
             return _generate_step_outputs_for_cli(
                 tracked_spec,
@@ -1340,7 +1340,6 @@ def generate_step_targets(
             skip_if_current=_built_by_a_peer,
             progress_sink=progress_sink,
             logger=logger,
-            lock_timeout_s=lock_timeout_s,
         )
 
     results = _run_selected_specs(
@@ -1350,9 +1349,6 @@ def generate_step_targets(
         success_message=_generated_python_glb_summary,
     )
     for spec, result in zip(selected_specs, results):
-        if isinstance(result, _ContendedGeneration):
-            _emit_contended(spec)
-            continue
         _emit(spec, "skipped-peer" if isinstance(result, _SkippedGeneration) else "built")
     logger.total()
     _flush()
@@ -1413,8 +1409,8 @@ def generate_dxf_targets(
         current_refs = {spec.source_ref for spec in current_specs}
         selected_specs = [spec for spec in selected_specs if spec.source_ref not in current_refs]
     if selected_specs:
-        # Re-checked under the lock, like the STEP path: a run that queued behind a
-        # concurrent build of this drawing must not regenerate it.
+        # Re-checked when the run opens, like the STEP path: a run that started behind
+        # a concurrent build of this drawing must not regenerate it.
         def _built_by_a_peer(spec: EntrySpec) -> bool:
             if force or spec.script_path is None:
                 return False

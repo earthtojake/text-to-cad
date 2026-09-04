@@ -61,11 +61,6 @@ import uuid
 # cadgen already writes messages meant to be read by a person; a human string
 # and a diagnostic label are two fields, never one.
 
-# A peer holding the package's write lock makes our run answer `contended` after
-# this long rather than queueing behind an arbitrarily long peer build. The
-# client treats contended exactly like attaching to a peer's progress.
-IMPORT_LOCK_TIMEOUT_SECONDS = 5.0
-
 # The document suffixes the import path accepts. cadgen's own CLI doors apply
 # the same rule from ``cadgen._internal.doors``; this states it locally rather
 # than importing a private module, because the server has ALREADY established
@@ -147,12 +142,11 @@ def _compile(document_path: str, *, force: bool, request_id, channel: _FrameChan
         # cwd=dirname(candidate). For an imported STEP this reaches
         # _relative_to_base/_cad_ref_for_step, which produce the source_ref and
         # cad_ref display strings — the label the user watches during the build
-        # and the ref the contended payload carries. Never the served root.
+        # the user watches during the build. Never the served root.
         repo_root=document.parent,
         step=document,
         source_path=None,
         force=force,
-        lock_timeout_s=IMPORT_LOCK_TIMEOUT_SECONDS,
         sink=sink,
     )
 
@@ -166,7 +160,7 @@ def _compile(document_path: str, *, force: bool, request_id, channel: _FrameChan
         "document": path_of("stepPath"),
         "package": path_of("packagePath"),
         "skipped": bool(payload.get("skipped")),
-        "contended": bool(payload.get("contended")),
+        "contended": False,
     }
 
 

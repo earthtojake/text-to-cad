@@ -15,6 +15,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Callable
 
 from cadgen.daemon import transport
 
@@ -126,6 +127,37 @@ def compute_version_token(root: Path | None = None) -> str:
     return f"{__version__}:{newest}"
 
 
+def _request_payload(
+    tool: str,
+    argv: list[str],
+    cwd: str | None,
+    prog: str | None,
+    *,
+    store_root: str | None = None,
+    root_id: str | None = None,
+) -> dict:
+    from cadgen.store.paths import store_root as default_store_root
+
+    return {
+        "tool": str(tool),
+        # The name the caller is known by. Without it the daemon invented
+        # "scripts/<tool>", so `cadgen step gen --help` printed a different
+        # usage line warm than cold -- the same command answering to two names
+        # depending on whether a daemon happened to be running.
+        "prog": str(prog) if prog else None,
+        "argv": [str(arg) for arg in argv],
+        "cwd": str(cwd) if cwd else os.getcwd(),
+        "env": forwarded_env(),
+        # The store this job reads and writes: an explicit request field, never
+        # the worker's ambient environment, so one daemon serves isolated stores.
+        "store_root": str(store_root) if store_root else str(default_store_root()),
+        # The top-level request this job belongs to; child-build events carry it
+        # so the root's build tree can place them.
+        "root_id": str(root_id) if root_id else None,
+        "token": compute_version_token(),
+    }
+
+
 def run_via_daemon(
     tool: str, argv: list[str], cwd: str | None = None, prog: str | None = None
 ) -> int | None:
@@ -144,25 +176,44 @@ def run_via_daemon(
         # "-" conventionally reads a payload from stdin (e.g. snapshot --job -);
         # the daemon has no stdin channel, so run those inline.
         return None
-    payload = {
-        "tool": str(tool),
-        # The name the caller is known by. Without it the daemon invented
-        # "scripts/<tool>", so `cadgen step gen --help` printed a different
-        # usage line warm than cold -- the same command answering to two names
-        # depending on whether a daemon happened to be running.
-        "prog": str(prog) if prog else None,
-        "argv": argv,
-        "cwd": str(cwd) if cwd else os.getcwd(),
-        "env": forwarded_env(),
-        "token": compute_version_token(),
-    }
+    from cadgen.daemon.executors import emit_event
+
+    payload = _request_payload(tool, argv, cwd, prog, root_id=os.environ.get("CADGEN_ROOT_ID"))
+    return _run_with_retry(payload, on_event=emit_event)
+
+
+def run_nested(
+    tool: str,
+    argv: list[str],
+    cwd: str | None,
+    *,
+    prog: str | None = None,
+    store_root: str | None = None,
+    root_id: str | None = None,
+    on_stream: Callable[[str], None] | None = None,
+    on_event: Callable[[dict], None] | None = None,
+) -> int | None:
+    """A child build submitted from INSIDE a build (a worker or a client).
+
+    Unlike :func:`run_via_daemon` this ignores ``CADGEN_DAEMON_CHILD``: a worker
+    submitting a child is the pool's nesting, not recursion into itself. Stream
+    frames go to ``on_stream`` (captured for the error path), events to
+    ``on_event``. ``None`` still means "the daemon could not take it".
+    """
+    if os.environ.get("CADGEN_DAEMON") == "0" or not daemon_supported():
+        return None
+    payload = _request_payload(tool, argv, cwd, prog, store_root=store_root, root_id=root_id)
+    return _run_with_retry(payload, on_stream=on_stream, on_event=on_event)
+
+
+def _run_with_retry(payload: dict, *, on_stream=None, on_event=None) -> int | None:
     address = daemon_address()
     for attempt in range(2):
         conn = _connect_or_spawn(address)
         if conn is None:
             return None
         try:
-            outcome = _run_request(conn, payload)
+            outcome = _run_request(conn, payload, on_stream=on_stream, on_event=on_event)
         finally:
             try:
                 conn.close()
@@ -188,10 +239,10 @@ def _connect_or_spawn(address: str) -> transport.Channel | None:
         return _connect(address)
     except OSError:
         pass
-    if transport.address_is_stale(address):
-        # A dead POSIX daemon leaves its socket file behind and the next bind fails until
-        # it is gone. A named pipe has no such remains, so this is a no-op on Windows.
-        transport.clear_address(address)
+    # Never unlink the address here. Only the process that BOUND a socket may
+    # remove it: a client that swept a "stale" file could take a live daemon's
+    # address out from under it while another client was mid-spawn. The daemon
+    # sorts a leftover file out itself, bind-first (server.serve).
     process = _spawn_daemon(address)
     if process is None:
         return None
@@ -201,7 +252,12 @@ def _connect_or_spawn(address: str) -> transport.Channel | None:
             return _connect(address)
         except OSError:
             if process.poll() is not None:
-                return None
+                # It exited: either it failed, or it found a daemon already bound
+                # and stood down. One more connect tells the two apart.
+                try:
+                    return _connect(address)
+                except OSError:
+                    return None
             time.sleep(0.05)
     return None
 
@@ -338,9 +394,15 @@ def worker_died_message(payload: dict, death: dict) -> str:
     )
 
 
-def _run_request(channel: transport.Channel, payload: dict) -> int | object | None:
+def _run_request(
+    channel: transport.Channel, payload: dict, *, on_stream=None, on_event=None
+) -> int | object | None:
     """Send one request and stream the response; int exit code, ``_RESTART``, or
-    ``None`` on any protocol fault."""
+    ``None`` on any protocol fault.
+
+    Stream frames go to the process's own stdout/stderr unless ``on_stream`` is
+    given (a nested child build captures them); ``event`` frames — the build
+    tree's model transitions — go to ``on_event``."""
     if not _send_json(channel, payload):
         return None
     # Applies per frame, not to the whole request: a daemon that is streaming output keeps
@@ -365,84 +427,35 @@ def _run_request(channel: transport.Channel, payload: dict) -> int | object | No
             return None  # closed without an exit frame
         if message.get("restart"):
             return _RESTART
-        if message.get("cold"):
-            # Every warm worker is busy and the pool is capped, and the wait at the cap
-            # has already been spent. Returning None runs this invocation cold.
-            return None
         if "exit" in message:
             return int(message["exit"])
+        if "event" in message:
+            if on_event is not None and isinstance(message["event"], dict):
+                on_event(message["event"])
+            continue
         if "workerDied" in message:
             # The worker running this job is gone. The supervisor follows with the exit
             # frame; this is the one place the loss is explained, and it is never a
             # silent cold retry -- the caller's job may have run for half an hour.
-            sys.stderr.write(worker_died_message(payload, message["workerDied"] or {}))
-            sys.stderr.flush()
+            text = worker_died_message(payload, message["workerDied"] or {})
+            if on_stream is not None:
+                on_stream(text)
+            else:
+                sys.stderr.write(text)
+                sys.stderr.flush()
             continue
-        target = streams.get(message.get("stream"))
         data = message.get("data")
-        if target is None or not isinstance(data, str):
+        stream = message.get("stream")
+        if stream not in streams or not isinstance(data, str):
             return None
+        if on_stream is not None:
+            on_stream(data)
+            continue
+        target = streams[stream]
         target.write(data)
         target.flush()
 
 
-
-def invoke(module: str, args, repo_root: str) -> dict | None:
-    """Run a cadgen module in a warm worker and return its payload dict.
-
-    None means "not served" -- daemon unavailable, pool at capacity, or the caller is
-    already inside a worker -- and the caller should run cold. The CAD Viewer's bridge
-    uses this in place of the warm-worker system it used to own, so a terminal build and
-    a viewer build now share one set of warm processes.
-
-    Unlike run_via_daemon this does NOT gate on CADGEN_DAEMON: a long-lived
-    server is exactly the caller that should always prefer warm.
-    """
-    if os.environ.get("CADGEN_DAEMON_CHILD"):
-        return None
-    if not daemon_supported():
-        return None
-    payload = {
-        "kind": "invoke",
-        "module": str(module),
-        "args": [str(arg) for arg in args],
-        "repo_root": str(repo_root) if repo_root else os.getcwd(),
-        "env": forwarded_env(),
-        "token": compute_version_token(),
-    }
-    address = daemon_address()
-    for attempt in range(2):
-        conn = _connect_or_spawn(address)
-        if conn is None:
-            return None
-        try:
-            outcome = _run_invoke(conn, payload)
-        finally:
-            try:
-                conn.close()
-            except OSError:
-                pass
-        if outcome is _RESTART and attempt == 0:
-            continue  # stale daemon exited; respawn once and retry
-        return outcome if isinstance(outcome, dict) else None
-    return None
-
-
-def _run_invoke(channel: transport.Channel, payload: dict) -> dict | object | None:
-    """Send an invoke request and read its single result frame."""
-    if not _send_json(channel, payload):
-        return None
-    timeout = request_timeout() or None
-    while True:
-        message = _recv_json(channel, timeout)
-        if message is _TIMED_OUT or message is None:
-            return None
-        if message.get("restart"):
-            return _RESTART
-        if message.get("cold"):
-            return None
-        if "result" in message:
-            return message["result"] or {}
 
 
 def status() -> dict | None:

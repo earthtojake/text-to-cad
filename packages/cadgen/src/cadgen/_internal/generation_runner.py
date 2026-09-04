@@ -10,7 +10,6 @@ import sys
 from typing import Iterator
 from typing import Sequence
 
-from cadgen._internal.cli_locking import lock_wait_notice
 from cadgen._internal.source_hash import PythonSourceClosure
 from cadgen._internal.source_hash import PythonSourceHash
 from cadgen._internal.source_hash import capture_runtime_closure
@@ -19,7 +18,7 @@ from cadgen._internal.source_hash import python_source_hash
 from cadgen._internal.source_hash import record_discovered_inputs
 from cadgen._internal.source_hash import record_first_party_execution
 from cadgen._internal.step_scene import LoadedStepScene
-from cadgen.catalog import coordination_scope
+from cadgen.catalog import build_scope
 from cadgen.cli_logging import CliLogger
 from cadgen.cli_progress import cli_progress_line
 from cadgen.coordination import DRAWING_PACKAGE
@@ -29,8 +28,6 @@ from cadgen.coordination import STEP_PACKAGE
 from cadgen.coordination import generator_busy
 from cadgen.coordination import reporting_as
 from cadgen.coordination import resolve as resolve_progress
-from cadgen.coordination.lock import exclusive
-from cadgen.coordination.paths import write_lock_path
 from cadgen.render import relative_to_file
 from cadgen.step_export import build_build123d_step_scene
 
@@ -451,15 +448,15 @@ def run_script_generator(
     logger: CliLogger | None = None,
     force: bool = False,
     progress: object | None = None,
-    lock_intent: str = "write",
+    intent: str = "write",
     model_prints_to_stdout: bool = False,
 ) -> LoadedStepScene | None:
     """Run a model script's decorated entry (``@step``/``@dxf``) and return its scene.
 
-    ``lock_intent`` says whether this run will rewrite the model's render package
-    (``"write"``, the default) or merely occupy its generator (``"generate"`` -- an export,
-    a topology extraction, an interference check). See :func:`_track_spec_generation`:
-    getting this wrong makes an export look like a build to the CAD Viewer.
+    ``intent`` says whether this run will rewrite the model's outputs (``"write"``, the
+    default) or merely occupy its generator (``"generate"`` -- an export, a topology
+    extraction, an interference check). See :func:`_track_spec_generation`: getting this
+    wrong makes an export look like a build to the CAD Viewer.
 
     ``model_prints_to_stdout`` decides where the MODEL's own ``print()`` output
     lands. The CLI contract is "stdout carries the result; stderr carries
@@ -487,18 +484,16 @@ def run_script_generator(
     if spec.script_path is None or spec.generator_metadata is None:
         raise ValueError(f"{spec.source_ref} is not a generated Python CAD source")
     # A WRITER arrives with the BuildRun that already owns this model's status record and
-    # its progress line. An EXPORT arrives with neither: it takes the generator lock instead
-    # of the write lock, and until that lock carried a reporter, `cad export` ran the same
-    # multi-minute model build a write runs and said nothing on any surface. So the run the
-    # lock yields becomes the reporter when nobody above us is one.
+    # its progress line. An EXPORT arrives with neither, and until the generator run
+    # carried a reporter, `cad export` ran the same multi-minute model build a write runs
+    # and said nothing on any surface. So the generator run becomes the reporter when
+    # nobody above us is one.
     owns_reporting = progress is None
     with _generator_progress_line(spec, logger=logger, active=owns_reporting) as sink:
         with _track_spec_generation(
-            spec, model_format, intent=lock_intent, logger=logger, sink=sink
+            spec, model_format, intent=intent, sink=sink
         ) as generator_run:
             active = generator_run if owns_reporting else progress
-            # The phase opens INSIDE the lock: before this it opened first, so a run queued
-            # behind a peer reported "building geometry" for the whole time it was waiting.
             resolve_progress(active).phase(PHASE_GENERATE)
             redirect = (
                 contextlib.nullcontext()
@@ -540,19 +535,11 @@ def _run_script_generator_inner(
     force: bool = False,
     progress: object | None = None,
 ) -> LoadedStepScene | None:
-    # The one build memory ceiling (cadgen._internal.memory_guard): covers the
-    # model function AND the emit, cold CLI and warm worker alike, and names the
-    # stage the logger last opened when it trips.
-    from cadgen._internal.memory_guard import MemoryGuard, resolve_cap_bytes
-
-    with MemoryGuard(
-        resolve_cap_bytes(),
-        label=f"build of {spec.source_ref}",
-        describe_stage=logger.current_stage,
-    ):
-        return _run_script_generator_body(
-            spec, model_format, logger=logger, force=force, progress=progress
-        )
+    # No memory guard: unlimited memory is the operating assumption (STORE.md §9). A
+    # build that the OS kills is reported by the pool as a dead worker, with its exit.
+    return _run_script_generator_body(
+        spec, model_format, logger=logger, force=force, progress=progress
+    )
 
 
 def _run_script_generator_body(
@@ -612,7 +599,7 @@ def _run_script_generator_body(
         generator = getattr(module, entry_name, None)
         if not callable(generator):
             raise RuntimeError(f"{_display_path(spec.script_path)} does not define callable {entry_name}()")
-        # Bind the lock holder as the ambient reporter for the generator's own code. This is
+        # Bind the run as the ambient reporter for the generator's own code. This is
         # the in-process twin of `run_node_builder`, which lets a Node child describe its
         # work over a pipe: the entry function takes no arguments and so cannot be handed the run,
         # and without this the longest phase of most builds reports nothing at all. Silent
@@ -664,11 +651,15 @@ def _run_script_generator_body(
 
         for read_path in [*read_files, *declared.inputs]:
             executed_hashes.note(read_path)
+        # Every child the body called, with the tree it resolved to. Waits for
+        # any child job the body never forced (called and discarded): its
+        # result is still this build's dependency.
+        child_trees = frame.child_trees()
         store_closure = build_closure(
             spec.script_path,
             executed=executed_hashes.hashes,
             discovered_inputs=[*read_files, *declared.inputs],
-            children=[child for child, _tree in frame.children],
+            children=[child for child, _tree in child_trees],
         )
         source_closure = PythonSourceClosure(
             closure_hash=store_closure.hash, files=store_closure.files
@@ -687,7 +678,7 @@ def _run_script_generator_body(
         # Children pinned by the body's calls — recorded from the CALLS, never
         # derived from the tree's links (a modified child is still a dependency).
         generated_scene.store_children = [
-            {"model": str(child), "tree": tree} for child, tree in frame.children
+            {"model": str(child), "tree": tree} for child, tree in child_trees
         ]
     elif model_format == "dxf":
         from cadgen._internal.dxf_output import record_dxf_output
@@ -709,7 +700,7 @@ def _run_script_generator_body(
         # The product IS the .dxf (design/standalone-viewer.md Phase A): gen always
         # writes it — the sibling by default, `-o` renames — and the viewer parses
         # that file directly. No drawing package exists any more; the output record
-        # beside the lock sentinel is what makes an unchanged source a no-op.
+        # is what makes an unchanged source a no-op.
         output_path = spec.dxf_export_path if spec.dxf_export_path is not None else spec.dxf_path
         _write_dxf_payload(
             raw_payload, output_path=output_path, script_path=spec.script_path, logger=logger
@@ -769,17 +760,16 @@ def _run_artifact_jobs(
     return results
 
 
-def _spec_output_dir(spec: EntrySpec, model_format: str) -> Path | None:
-    """The coordination SCOPE for this spec's generator, if it has one.
+def _spec_output_dir(spec: EntrySpec, model_format: str) -> str | None:
+    """The progress SCOPE for this spec's generator, if it has one.
 
-    Model-path-keyed (cache root ``locks/`` tier), NOT the store package dir:
-    a rebuild changes the content hash — and therefore the package key — so
-    two runs of one model must exclude each other under an identity that is
-    known before any geometry is."""
+    Model-path-keyed, NOT the content-keyed result: a rebuild changes the content
+    hash, so a run's progress must be findable under an identity that is known
+    before any geometry is."""
     if model_format == "step" and spec.step_path is not None:
-        return coordination_scope(spec.entry_path)
+        return build_scope(spec.entry_path)
     if model_format == "dxf" and spec.script_path is not None:
-        return coordination_scope(spec.script_path)
+        return build_scope(spec.script_path)
     return None
 
 
@@ -788,44 +778,26 @@ def _track_spec_generation(
     model_format: str,
     *,
     intent: str = "write",
-    logger: CliLogger | None = None,
     sink: Callable[[ProgressEvent], None] | None = None,
 ) -> contextlib.AbstractContextManager[object]:
-    """Coordinate a generator run against the model's render package.
+    """Report a generator run under the model's progress scope.
 
-    ``intent`` picks the SENTINEL, and the distinction is the whole point of there being
-    two. A run that will rewrite the package takes the writer lock, which makes a reader
-    hide the artifact and show a build. A run that merely OCCUPIES the generator and
-    writes the package nothing -- an export, an on-demand topology extraction, an
-    interference check -- takes the generator lock instead. Taking the writer lock for
-    those made a fully-current model report `generating` with an empty bar for the whole
-    length of an export.
+    ``intent`` picks the RECORD. A run that will rewrite the model's outputs already has
+    its BuildRun from ``artifact_build`` and reports through that, so this yields None. A
+    run that merely OCCUPIES the generator -- an export, an on-demand topology extraction,
+    an interference check -- reports through ``generator_busy`` instead, whose record is a
+    separate file: reporting it as a build made a fully-current model show `generating`
+    with an empty bar for the whole length of an export.
 
-    The two sentinels are different files, so they do NOT exclude each other: a build and
-    an export of one model each run its generator, concurrently, in separate
-    processes. That is duplicated work rather than a hazard (no shared in-process state,
-    different outputs), and it is the price of letting a reader tell "being rewritten"
-    from "generator busy" -- see :func:`cadgen.coordination.generator_busy`.
+    Nothing here excludes anything. Two runs of one model proceed concurrently and the
+    publish rule decides whose result the record points at (STORE.md §7).
     """
-    output_dir = _spec_output_dir(spec, model_format)
-    if output_dir is None:
+    scope = _spec_output_dir(spec, model_format)
+    if scope is None or intent != "generate":
         return contextlib.nullcontext()
-    on_wait = lock_wait_notice(logger, spec.source_ref)
-    if intent == "generate":
-        # The kind decides which phase set the run reports over, so a drawing generator
-        # counts its own phases rather than a STEP package's.
-        kind = DRAWING_PACKAGE if model_format == "dxf" else STEP_PACKAGE
-        return generator_busy(kind, output_dir, on_wait=on_wait, sink=sink)
-    # A writer already has its BuildRun from artifact_build; this only needs the lock, and
-    # yields None so the caller's `progress or this` choice stays a simple one.
-    return _write_lock_without_reporting(write_lock_path(output_dir), on_wait=on_wait)
-
-
-@contextlib.contextmanager
-def _write_lock_without_reporting(
-    path: Path, *, on_wait: Callable[[float], None] | None
-) -> Iterator[None]:
-    with exclusive(path, on_wait=on_wait):
-        yield None
+    # The kind decides which phase set the run reports over, so a drawing generator
+    # counts its own phases rather than a STEP package's.
+    kind = DRAWING_PACKAGE if model_format == "dxf" else STEP_PACKAGE
+    return generator_busy(kind, scope, sink=sink)
 
 

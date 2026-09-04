@@ -1,12 +1,11 @@
 /**
  * The child half of the Node-builder progress protocol.
  *
- * A render-package builder runs as a Node child of the Python process that holds the
- * artifact's generation lock (`cadgen/_internal/node_runtime.py`). The child owns geometry
- * and GLB bytes; it owns NO coordination state -- it never derives a lock path, never writes
- * `.generation.progress.json`, and never decides that a build is current. All it does is
- * describe what it is doing, one JSON object per line on **stdout**, and the parent applies
- * that to the `BuildRun` that is actually holding the lock.
+ * A render-package builder runs as a Node child of the Python process that owns the
+ * build (`cadgen/_internal/node_runtime.py`). The child owns geometry and GLB bytes; it
+ * owns NO build state -- it never writes a progress record and never decides that a build
+ * is current. All it does is describe what it is doing, one JSON object per line on
+ * **stdout**, and the parent applies that to its `BuildRun`.
  *
  * Every builder speaks this, so it is written once here rather than hand-rolled per format.
  *

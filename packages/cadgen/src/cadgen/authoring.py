@@ -95,13 +95,21 @@ class BuildFrame:
 
     def __init__(self, script_path: Path | None) -> None:
         self.script_path = script_path
-        self.children: list[tuple[Path, str]] = []
+        # (child script, the LazyCompound the call returned) — one entry per CALL.
+        self.children: list[tuple[Path, Any]] = []
+        # The resolution map: child script -> the tree this build composes.
         self.pins: dict[Path, str] = {}
+        # One job per stale child per build, however many times it is called.
+        self.jobs: dict[Path, Any] = {}
+        # The root request this build belongs to (for the build tree's events).
+        self.root_id: str | None = os.environ.get("CADGEN_ROOT_ID") or None
 
     def pin(self, child: Path, tree: str) -> str:
-        pinned = self.pins.setdefault(child, tree)
-        self.children.append((child, pinned))
-        return pinned
+        return self.pins.setdefault(child, tree)
+
+    def child_trees(self) -> list[tuple[Path, str]]:
+        """Every child call with the tree it resolved to; waits for pending jobs."""
+        return [(child, lazy.tree_hash()) for child, lazy in self.children]
 
 
 def _same_file(left: Path, right: Path) -> bool:
@@ -491,50 +499,49 @@ def _maybe_hint_eager_imports(defn: ModelDef) -> None:
 
 
 def _compose_child(defn: ModelDef) -> Any:
-    """A parent's body called a child: make it current, pin it, hand back geometry.
+    """A parent's body called a child: submit it if stale, hand back a promise.
 
-    ``stale → build → materialize`` — the same three steps as the top level. A
-    stale child is built through the ONE pipeline (as a child process, so the
-    parent's already-imported modules are never evicted mid-body; with a daemon
-    up, the run is a job on the child's worker). The first tree a child
-    resolves to in this build is pinned; every later call composes that tree.
+    ``stale → submit → lazy`` — the same gate as the top level, but the call
+    returns at once with a :class:`cadgen.store.lazy.LazyCompound`: a stale
+    child's build is running on the pool (its own worker, or a transient
+    subprocess) while this body keeps calling its other children; a current
+    child is a promise with no job. Geometry arrives when the parent first reads
+    it — normally at the closing ``Compound(children=[...])`` — so siblings
+    build in parallel. The first tree a child resolves to in this build is
+    pinned (snapshot isolation); the same stale child called twice shares one
+    job; children are recorded from the CALLS, never from the geometry.
     """
     from cadgen.store.gate import stale
-    from cadgen.store.materialize import materialize
-    from cadgen.store.records import read_record
+    from cadgen.store.lazy import LazyCompound
 
     frame = current_frame()
-    pinned = frame.pins.get(defn.script_path) if frame is not None else None
-    if pinned is None:
-        if stale(defn.script_path).stale:
-            _build_child(defn)
-        record = read_record(defn.script_path)
-        tree = str((record or {}).get("tree") or "")
-        if not tree:
-            raise RuntimeError(
-                f"{defn.script_path.name} built but left no record; cannot compose it"
-            )
-        pinned = frame.pin(defn.script_path, tree) if frame is not None else tree
-    elif frame is not None:
-        frame.children.append((defn.script_path, pinned))
-    return materialize(pinned, label=defn.func.__name__)
+    child = defn.script_path
+    if frame is not None and any(_same_file(child, f.script_path) for f in _frames() if f.script_path is not None):
+        raise RuntimeError(
+            f"{child.name} is called while it is itself being built: a model may not depend on itself"
+        )
+    from cadgen.daemon.executors import emit_event, model_event, submit
+
+    parent = frame.script_path if frame is not None else None
+    job = None
+    if frame is not None and child in frame.jobs:
+        job = frame.jobs[child]
+    elif frame is None or child not in frame.pins:
+        if stale(child).stale:
+            job = submit(child, force=False, root_id=getattr(frame, "root_id", None), parent=parent)
+            if frame is not None:
+                frame.jobs[child] = job
+        else:
+            # No work: the tree summarizes current children on the parent's line.
+            emit_event(model_event(child, "current", parent=str(parent) if parent else None))
+    lazy = LazyCompound(child, job, frame=frame, label=defn.func.__name__)
+    if frame is not None:
+        frame.children.append((child, lazy))
+    return lazy
 
 
-def _build_child(defn: ModelDef) -> None:
-    """Build a child model through the pipeline in a child process."""
-    import subprocess
-
-    env = dict(os.environ)
-    completed = subprocess.run(
-        [sys.executable, "-m", "cadgen.cli._run_model", str(defn.script_path)],
-        cwd=str(defn.script_path.parent),
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
-        detail = (completed.stderr or completed.stdout or "").strip()
-        raise RuntimeError(f"child model {defn.script_path.name} failed to build:\n{detail}")
+def _frames() -> list[BuildFrame]:
+    return list(getattr(_BUILD_STATE, "frames", None) or [])
 
 
 def _build(defn: ModelDef) -> int:
@@ -542,31 +549,37 @@ def _build(defn: ModelDef) -> int:
     argv = sys.argv[1:]
     _maybe_hint_eager_imports(defn)
 
-    # Warm handoff BEFORE any heavy import. The daemon worker imports the module
-    # under a loader name (never __main__), so its `__main__` block does not run
-    # there; the runner executes the model body inside `building()`.
-    if os.environ.get("CADGEN_DAEMON") != "0" and not os.environ.get("CADGEN_DAEMON_CHILD"):
-        try:
-            from cadgen.daemon.client import run_via_daemon
-        except ModuleNotFoundError:
-            warm_exit: int | None = None
-        else:
-            warm_exit = run_via_daemon(
-                "run",
-                [str(defn.script_path), *argv],
-                os.getcwd(),
-                prog=f"python {defn.script_path.name}",
-            )
-        if warm_exit is not None:
-            return warm_exit
+    # This process is the ROOT of a build tree: it owns the terminal and renders the
+    # graph as child events come back through the pool (cadgen.cli_tree). Warm or
+    # cold, the tree is drawn here; the daemon relays its workers' events to us.
+    from cadgen.cli_tree import build_tree
 
-    # A cold @dxf run used to re-exec itself here with PYTHONHASHSEED=0, because
-    # ezdxf's emitted order depended on string hashing. The engine's emitter makes
-    # DXF bytes a function of the drawing's geometry instead
-    # (cadgen._internal.dxf_emit), so a cold run needs no interpreter restart and
-    # @dxf reaches the pipeline by exactly the route @step does.
-    from cadgen.cli._run_model import run_model_argv
+    with build_tree(json_lines="--json" in argv):
+        # Warm handoff BEFORE any heavy import. The daemon worker imports the module
+        # under a loader name (never __main__), so its `__main__` block does not run
+        # there; the runner executes the model body inside `building()`.
+        if os.environ.get("CADGEN_DAEMON") != "0" and not os.environ.get("CADGEN_DAEMON_CHILD"):
+            try:
+                from cadgen.daemon.client import run_via_daemon
+            except ModuleNotFoundError:
+                warm_exit: int | None = None
+            else:
+                warm_exit = run_via_daemon(
+                    "run",
+                    [str(defn.script_path), *argv],
+                    os.getcwd(),
+                    prog=f"python {defn.script_path.name}",
+                )
+            if warm_exit is not None:
+                return warm_exit
 
-    return run_model_argv(
-        [str(defn.script_path), *argv], prog=f"python {defn.script_path.name}"
-    )
+        # A cold @dxf run used to re-exec itself here with PYTHONHASHSEED=0, because
+        # ezdxf's emitted order depended on string hashing. The engine's emitter makes
+        # DXF bytes a function of the drawing's geometry instead
+        # (cadgen._internal.dxf_emit), so a cold run needs no interpreter restart and
+        # @dxf reaches the pipeline by exactly the route @step does.
+        from cadgen.cli._run_model import run_model_argv
+
+        return run_model_argv(
+            [str(defn.script_path), *argv], prog=f"python {defn.script_path.name}"
+        )

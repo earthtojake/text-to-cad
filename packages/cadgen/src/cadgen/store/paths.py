@@ -45,8 +45,3 @@ def index_dir(kind: str) -> Path:
         raise ValueError(f"unknown index kind {kind!r}; one of {INDEX_KINDS}")
     return store_root() / "index" / kind
 
-
-def locks_dir() -> Path:
-    """Coordination scopes for the lock layer that phase 2 deletes. Keyed by
-    model path; callers never create it as a directory."""
-    return store_root() / "locks"

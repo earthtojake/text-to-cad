@@ -248,10 +248,10 @@ def normalize_cad_ref(raw_ref: str) -> str | None:
 
 
 def artifact_path_key(entry_path: Path) -> str:
-    """The model-path identity for locks, progress and freshness records:
+    """The model-path identity for progress records and unbuilt views:
     sha256 of the resolved artifact path, truncated. Path-keyed on purpose —
-    a lock must exclude two builds of the same MODEL while the content hash
-    they will produce is still unknown.
+    a build's progress must be findable while the content hash it will produce
+    is still unknown.
 
     A path that cannot be resolved (an embedded NUL, a symlink loop) keys on
     its lexical absolute form rather than raising: the viewer server derives
@@ -367,14 +367,11 @@ def result_view_dir(entry_path: Path) -> Path:
     return view_dir_for(tree)
 
 
-def coordination_scope(entry_path: Path) -> Path:
-    """The lock/progress scope for builds of this model: a path-keyed name
-    under the store's ``locks/`` tier (phase 2 deletes the lock layer). Never
-    created as a directory — the coordination layer derives dot-named sibling
-    files from it."""
-    from cadgen.store.paths import locks_dir
-
-    return locks_dir() / artifact_path_key(entry_path)
+def build_scope(entry_path: Path) -> str:
+    """The progress scope for builds of this model: a path-keyed NAME (never a
+    directory). ``cadgen.coordination.paths`` derives the advisory progress
+    record from it; the CAD Viewer derives the same name to find that record."""
+    return artifact_path_key(entry_path)
 
 
 def _iter_python_sources(root: Path) -> tuple[CadSource, ...]:

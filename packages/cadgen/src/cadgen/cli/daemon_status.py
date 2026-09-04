@@ -35,25 +35,28 @@ def _age(started: float) -> str:
 def _render(status: dict) -> str:
     workers = status.get("workers") or []
     busy = sum(1 for w in workers if w.get("busy"))
+    bound = [w for w in workers if w.get("model")]
     lines = [
         f"CAD daemon running (pid {status.get('pid')}, up {_age(status.get('startedAt') or 0)})",
         f"  socket   {status.get('socket')}",
         f"  version  cadgen {status.get('version') or '?'}  token {status.get('token') or '?'}",
-        f"  workers  {len(workers)}/{status.get('maxWorkers')} ({busy} busy)",
+        f"  workers  {len(bound)} bound ({busy} busy), {status.get('spares', 0)} spare"
+        f"{f' (+{status.get(\"sparesPending\")} starting)' if status.get('sparesPending') else ''}",
     ]
-    for worker in workers:
+    for worker in bound:
         state = "busy" if worker.get("busy") else "idle"
-        # A worker serves ONE project for its whole life, so which project it holds is
-        # the first thing to know about it -- "3 workers" says nothing about whether the
-        # build you are waiting on has a warm one.
-        project = str(worker.get("project") or "")
-        line = f"    pid {worker.get('pid')}  {state}  {worker.get('jobsServed', 0)} jobs"
-        lines.append(f"{line}  {project}" if project else line)
+        # A worker is bound to ONE model, so which model it holds is the first thing
+        # to know about it -- "3 workers" says nothing about whether the build you are
+        # waiting on has a warm one. An extra is a second worker on a busy model.
+        extra = "  extra" if worker.get("extra") else ""
+        lines.append(
+            f"    pid {worker.get('pid')}  {state}  {worker.get('jobs', 0)} jobs{extra}  {worker.get('model')}"
+        )
     lines.append(
         f"  totals   {status.get('jobs', 0)} jobs, "
-        f"{status.get('coldOverflows', 0)} cold overflows, "
+        f"{status.get('imports', 0)} imports, "
+        f"{status.get('concurrent', 0)} concurrent (extras), "
         f"{status.get('recycles', 0)} recycles, "
-        f"{status.get('evictions', 0)} evictions, "
         f"{status.get('crashes', 0)} crashes"
     )
     return "\n".join(lines)

@@ -1,13 +1,11 @@
 """What an artifact kind has to supply to get coordination for free.
 
-Adding a coordinated artifact format should be a constant here, not a fifth hand-placed
-lock. Before this, four independent producers each decided for themselves whether to
-lock -- and one of them did not, which is how a cold ``cad inspect`` build became invisible
-to the viewer and raced a viewer-started build in the same directory.
+Adding a reported artifact format should be a constant here, not a fifth hand-placed
+progress implementation.
 
-A kind carries only what the coordination layer itself needs: a name for the status record
+A kind carries only what progress reporting itself needs: a name for the status record
 and the phase set its progress bar is weighted over. Freshness is deliberately NOT here --
-``artifact_build`` takes ``is_current`` as a callable, so coordination calls freshness and
+``artifact_build`` takes ``is_current`` as a callable, so reporting calls freshness and
 never decides what fresh means.
 """
 
@@ -54,8 +52,7 @@ PHASE_WRITE = "write"
 
 # A generated drawing: the product is the `.dxf` file itself (design/
 # standalone-viewer.md Phase A — the viewer parses it directly; no package, no
-# Node child). The lock still serializes concurrent gens of one drawing; the
-# phases are just the Python generator run and the file write.
+# Node child). The phases are just the Python generator run and the file write.
 DRAWING_PACKAGE = ArtifactKind(
     name="drawing-package",
     phases=(PHASE_GENERATE, PHASE_WRITE, PHASE_FINALIZE),
@@ -64,8 +61,8 @@ DRAWING_PACKAGE = ArtifactKind(
     },
 )
 
-# A snapshot render. Not a coordinated artifact -- it takes no lock and writes no status
-# record, because it produces an image, not a package another process might read half-built.
+# A snapshot render. Not a reported artifact -- it writes no status record, because it
+# produces an image, not an output another process might read half-built.
 # It is a kind anyway so its CLI reports through the same phase model as everything else;
 # before this it had a second, unrelated progress implementation of its own.
 #
@@ -83,12 +80,11 @@ SNAPSHOT = ArtifactKind(
 )
 
 # An export (STEP/STL/3MF/GLB/DXF) writes no package -- it occupies the model's GENERATOR
-# and writes a file elsewhere -- so it is coordinated with generator_busy() against the
-# model's own kind rather than being a kind of its own. Add one here when something needs
-# to coordinate a directory these two do not cover.
+# and writes a file elsewhere -- so it is reported with generator_busy() against the
+# model's own kind rather than being a kind of its own.
 
-# `inspect validate`. Not a coordinated artifact either -- it writes no package and
-# takes no lock -- but a check over a 2,500-occurrence assembly runs for many minutes,
+# `inspect validate`. Not a reported artifact either -- it writes no package -- but a
+# check over a 2,500-occurrence assembly runs for many minutes,
 # and it reports through the same phase model so the terminal line reads like a
 # build's. Resolving the input is deliberately not a phase here for the same reason
 # as SNAPSHOT: a stale document's rebuild paints its own line first.

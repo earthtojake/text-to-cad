@@ -44,9 +44,7 @@ class CliLogger:
             # Peak RSS so far rides every stage line: a build report then says
             # where memory went, not just where time went (the w16 engine's
             # overnight OOMs left logs with no memory numbers at all).
-            from cadgen._internal.memory_guard import format_gb, peak_rss_bytes
-
-            self.info(f"{label} completed in {format_elapsed(elapsed)} (peak rss {format_gb(peak_rss_bytes())})")
+            self.info(f"{label} completed in {format_elapsed(elapsed)}")
 
     def current_stage(self) -> str:
         """The innermost ``timed`` label still open, for the memory guard's message."""

@@ -1,10 +1,8 @@
 """THE artifact-status authority: freshness verdicts from pure file reads.
 
-What this module deliberately does NOT decide is "is a build in flight". That
-is kernel lock state (fcntl flock), and it must never be re-inferred from pids,
-heartbeats, or age windows — see ``cadgen/coordination/lock.py`` for the
-measured failure modes of that design. The caller supplies a snapshot
-(``build_progress.py``) and this module reads it.
+What this module deliberately does NOT decide is "is a build in flight". The
+caller supplies a snapshot (``build_progress.py``, which reads the advisory
+progress record) and this module reads it.
 
 Nothing here imports cadgen. Status is answered for a directory of models by an
 interpreter that may have no kernel installed at all, and every read degrades to

@@ -40,7 +40,6 @@ def run_cli_payload(argv: list[str]) -> dict:
     # rebuild only when stale regardless, and verbosity is the logger's business.
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--verbose", action="store_true")
-    parser.add_argument("--lock-timeout", type=float, default=None)
     args = parser.parse_args(argv)
     root = Path(args.repo_root).resolve() if args.repo_root else Path.cwd()
     source = Path(args.source_path)

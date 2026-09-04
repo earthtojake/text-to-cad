@@ -24,7 +24,6 @@ from cadgen.coordination import (
     PHASE_COMPONENTS,
     PHASE_FINALIZE,
     PHASE_PACKAGE,
-    require_write_lock,
     resolve as resolve_progress,
 )
 PACKAGE_KIND = "assembly-package"

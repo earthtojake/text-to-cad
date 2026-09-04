@@ -23,7 +23,7 @@ from cadgen._internal.generation import (
     relative_to_cwd,
     run_script_generator,
 )
-from cadgen.catalog import coordination_scope, result_view_dir
+from cadgen.catalog import build_scope, result_view_dir
 from cadgen._internal.step_scene import LoadedStepScene, load_step_scene_cached
 from cadgen.step_artifact_cli import infer_entry_kind
 from cadgen.step_targets import (
@@ -62,7 +62,7 @@ def ensure_step_topology_artifact(
     try:
         # Every CLI that needs a STEP package comes through here -- inspect, snapshot -- and
         # the rebuild below can be the same multi-minute generator `cad gen` runs. It used to
-        # take the lock and report to the VIEWER only, so a terminal caller watched a silent
+        # report to the VIEWER only, so a terminal caller watched a silent
         # process while an open viewer showed the phases. The progress line is built here, at
         # the one shared entry point, rather than asked of every caller.
         with _topology_progress_line(target, logger=logger) as sink:
@@ -158,21 +158,15 @@ def _ensure_step_topology_artifact(
         debug["cacheHit"] = False
 
     try:
-        # This rebuild REWRITES the render package, so it must hold the package's write
-        # lock for the whole span -- generator run AND emit. It previously held none: the
-        # generator took the lock internally and released it on return, and the package
-        # write that followed was completely uncoordinated. A viewer polling during that
-        # window read "no build in flight", found the package stale, and started a SECOND
-        # full build into the same directory.
+        # This rebuild REWRITES the render package, so it reports for the whole span --
+        # generator run AND emit -- and a viewer polling during the emit sees a build.
         #
-        # Locks and progress key by the MODEL PATH, never by the content-keyed package
-        # dir: a rebuild changes the content key mid-build, so the package dir does not
-        # identify the run, and readers (the viewer's progress poller, a peer CLI) derive
-        # the record from the model path they hold and could not know the new key in
-        # advance. This is also what makes the generator's own lock, taken through
-        # generation_runner._spec_output_dir, re-entrant with this one.
+        # Progress keys by the MODEL PATH, never by the content-keyed package dir: a
+        # rebuild changes the content key mid-build, so the package dir does not identify
+        # the run, and readers (the viewer's progress poller, a peer CLI) derive the record
+        # from the model path they hold and could not know the new key in advance.
         with artifact_build(
-            STEP_PACKAGE, coordination_scope(spec.entry_path), sink=sink
+            STEP_PACKAGE, build_scope(spec.entry_path), sink=sink
         ) as run:
             spec, scene = _scene_for_regeneration(
                 spec, logger=logger, force=force, progress=run
@@ -372,7 +366,7 @@ def _scene_for_regeneration(
             source=spec.script_path or spec.source_path,
             verb="inspecting",
         )
-        # The run holding the lock, so the generator reports its phase (and whatever the
+        # The run reporting, so the generator reports its phase (and whatever the
         # generator itself reports through cadgen.progress). Without it this call -- which
         # for a large assembly is the longest thing inspect does -- opened the build with no
         # `generate` phase at all: the bar jumped straight to `collecting parts`.
