@@ -62,7 +62,17 @@ from leaf import leaf
 def parent():
     pin = leaf()
     pin.faces()  # forces: the child's tree is PINNED here, before the long body
-    import time; time.sleep({sleep})
+    import os, time
+    if {sleep} > 0:
+        # Handshake with the test instead of racing its clock: say the pin is taken
+        # (`pinned` beside this script), then wait for `go` -- the test rebuilds the
+        # child in between. The same order on a slow runner and a fast one.
+        here = os.path.dirname(os.path.abspath(__file__))
+        open(os.path.join(here, "pinned"), "w").close()
+        go = os.path.join(here, "go")
+        deadline = time.monotonic() + 300
+        while not os.path.exists(go) and time.monotonic() < deadline:
+            time.sleep(0.05)
     return bd.Compound(children=[bd.Box(20, 20, 2), bd.Pos(0, 0, 5) * pin], label="parent")
 
 
@@ -135,28 +145,20 @@ class PublishRuleTest(unittest.TestCase):
         parent.write_text(PARENT.format(sleep=6.0), encoding="utf-8")
         self._run(leaf)  # the child is current when the parent starts
         running = self._start(parent)
-        # Wait until the parent's own body is in flight: the build tree reports
-        # `building` for it on stderr (the same event frames the daemon's job
-        # ledger reads; there is no progress record on disk).
-        deadline = time.monotonic() + 120
-        seen = ""
-        collected: list[str] = []
-        while time.monotonic() < deadline:
-            line = running.stderr.readline()
-            if not line:
+        # Wait until the parent's body holds the child's pin: it drops `pinned`
+        # beside its script once `leaf()` has been forced, then waits for `go`.
+        pinned = self.root / "pinned"
+        deadline = time.monotonic() + 300
+        while not pinned.exists() and time.monotonic() < deadline:
+            if running.poll() is not None:
                 break
-            collected.append(line)
-            if line.startswith("{"):
-                event = json.loads(line)
-                if event.get("model") == str(parent) and event.get("state") == "building":
-                    seen = "building"
-                    break
-        self.assertEqual(seen, "building", "the parent never reported building")
-        time.sleep(3.5)  # past the import and the child call, inside the body's sleep
+            time.sleep(0.05)
+        self.assertTrue(pinned.exists(), "the parent never reported its pin")
+        # Rebuild the child against the parent's back, then release the parent.
         leaf.write_text(LEAF.format(radius=3.0), encoding="utf-8")
         self._run(leaf)
-        out, rest = running.communicate(timeout=600)
-        err = "".join(collected) + rest
+        (self.root / "go").write_text("", encoding="utf-8")
+        out, err = running.communicate(timeout=600)
         self.assertEqual(running.returncode, 0, err)
         result = json.loads(out.strip().splitlines()[-1])
         self.assertEqual(result["outcome"], "built")
@@ -164,6 +166,8 @@ class PublishRuleTest(unittest.TestCase):
         done = [t for t in transitions if t["model"] == str(parent) and t["state"] == "done"]
         self.assertTrue(done, err)
         self.assertIn("stale", done[-1], "the tree did not say the parent is already stale")
+        # The notice is the gate's phrase, not a repr of the method that makes it.
+        self.assertIn("child result moved", done[-1]["stale"], done[-1])
         from cadgen.store.gate import stale
 
         self.assertTrue(stale(parent).stale, "the parent built against its pin and must read stale now")

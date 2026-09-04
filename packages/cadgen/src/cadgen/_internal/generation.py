@@ -1056,7 +1056,7 @@ def _stale_after_build(spec: EntrySpec) -> str | None:
         return None
     if not verdict.stale:
         return None
-    reason = verdict.reason
+    reason = verdict.reason()
     return f"{reason}; changed during the build" if reason else "changed during the build"
 
 
