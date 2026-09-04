@@ -129,7 +129,8 @@ class DaemonExecutor(unittest.TestCase):
         cls.work_tmp = temporary_directory(prefix="cadgen-roots-daemon-")
         cls.work = Path(cls.work_tmp.name)
         cls.socket_dir = tempfile.TemporaryDirectory(prefix="cadgen-roots-sock-")
-        cls.address = os.path.join(cls.socket_dir.name, "d.sock")
+        # Windows has no filesystem sockets: the daemon listens on a named pipe there.
+        cls.address = rf"\\.\pipe\cadgen-roots-{os.getpid()}" if os.name == "nt" else os.path.join(cls.socket_dir.name, "d.sock")
         cls.env = _base_env(cls.work)
         cls.env["CADGEN_DAEMON_SOCKET"] = cls.address
         cls.env["PYTHONPATH"] = _cadgen_src()
@@ -173,7 +174,17 @@ class DaemonExecutor(unittest.TestCase):
                 pass
         os.environ.pop("CADGEN_DAEMON_SOCKET", None)
         os.environ.pop("CADGEN_DAEMON_STATE_DIR", None)
-        cls.socket_dir.cleanup()
+        # Windows refuses to delete a file another process still has open, and a
+        # killed worker releases its handle on the daemon log a beat after the kill.
+        deadline = time.monotonic() + 15
+        while True:
+            try:
+                cls.socket_dir.cleanup()
+                break
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.2)
         cls.work_tmp.cleanup()
 
     def test_a_job_sees_its_own_pythonpath_and_the_next_one_does_not(self) -> None:
