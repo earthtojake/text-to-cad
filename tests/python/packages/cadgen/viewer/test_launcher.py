@@ -137,8 +137,12 @@ class ExplicitPort(LauncherFixture):
         child = self.launch(["--dist", dist, "--port", str(port), "--json"], cwd=root)
         stdout = self.wait_for_url_line(child)
 
-        self.assertIn(f"Starting CAD Viewer at http://127.0.0.1:{port}/ (serving ", stdout)
-        self.assertIn(f"CAD Viewer URL: http://127.0.0.1:{port}/", stdout)
+        # --json: stdout is the one JSON line, like every other --json verb; the
+        # narration (Starting… / CAD Viewer URL:) goes to stderr.
+        self.assertEqual(
+            [line for line in stdout.splitlines() if line.strip()],
+            [f'{{"url":"http://127.0.0.1:{port}/","port":{port},"action":"started"}}'],
+        )
         self.assertEqual(
             self.json_line(stdout),
             {"url": f"http://127.0.0.1:{port}/", "port": port, "action": "started"},
@@ -446,7 +450,7 @@ class ApiOnly(LauncherFixture):
         )
         stdout = self.wait_for_url_line(child)
         port = self.json_line(stdout)["port"]
-        self.assertIn("Starting CAD Viewer API at ", stdout)
+        # --json: the narration is on stderr; the JSON line proves the start.
 
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/__cad/server", timeout=5) as response:
             self.assertEqual(json.loads(response.read())["port"], port)

@@ -606,8 +606,12 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
 
     url = f"http://{host}:{port}/"
     started = "Starting CAD Viewer API" if args["api_only"] else "Starting CAD Viewer"
-    _out(f"{started} at {url} (serving {directory})\n")
-    _out(f"CAD Viewer URL: {url}\n")
+    # Like every other --json verb: stdout carries the one JSON line and nothing
+    # else; the narration goes to stderr. Without --json the narration is the
+    # stdout contract (the URL line is what launch scripts read).
+    say = _err if args["json"] else _out
+    say(f"{started} at {url} (serving {directory})\n")
+    say(f"CAD Viewer URL: {url}\n")
     if args["json"]:
         _out(f"{_compact_json({'url': url, 'port': port, 'action': 'started'})}\n")
 
