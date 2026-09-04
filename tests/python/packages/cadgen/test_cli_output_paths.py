@@ -22,11 +22,10 @@ class DecoratorPathRuleStaysAbsoluteTest(unittest.TestCase):
     """The repository-facing rule is NOT platform-conditional, on any platform."""
 
     def test_a_decorator_out_path_with_a_backslash_is_rejected_everywhere(self):
-        from cadgen.metadata import _decorator_string_kwarg
+        from cadgen.authoring import _checked_out
 
-        kwargs = {"out": ast.Constant(value=r"models\widget.step")}
         with self.assertRaisesRegex(ValueError, "POSIX"):
-            _decorator_string_kwarg(kwargs, "out", script_path=Path("widget.py"))
+            _checked_out(r"models\widget.step", where="@step")
 
 
 if __name__ == "__main__":

@@ -326,6 +326,9 @@ def _checked_out(out: Any, *, where: str) -> str | None:
         out = os.fspath(out)
     if not isinstance(out, str) or not out.strip():
         raise TypeError(f"{where} out= must be a non-empty path string (got {out!r})")
+    if "\\" in out:
+        # A declaration travels with the script to every platform: POSIX separators.
+        raise ValueError(f"{where} out= must use POSIX '/' separators (got {out!r})")
     return out.strip()
 
 

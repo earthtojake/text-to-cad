@@ -316,9 +316,11 @@ def imported_model(script_path: Path, function: str):
     stamp = _script_stamp(resolved)
     defn = registered_model(resolved, function)
     if defn is None or getattr(defn, "stamp", None) != stamp:
-        from cadgen._internal.generation_runner import _load_generator_module
+        from cadgen._internal.generation_runner import _load_generator_module, _without_bytecode_writes
 
-        _load_generator_module(resolved)
+        # Like the build's own load: no .pyc for the model or its helpers.
+        with _without_bytecode_writes():
+            _load_generator_module(resolved)
         defn = registered_model(resolved, function)
     if defn is None:
         raise InvalidModelScriptError(
