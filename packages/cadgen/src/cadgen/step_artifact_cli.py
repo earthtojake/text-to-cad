@@ -114,18 +114,20 @@ def _result_payload(
     skipped: bool = False,
 ) -> dict[str, object]:
     from cadgen.catalog import result_tree_for
+    from cadgen.store.trees import tree_kind_for
 
+    tree = result_tree_for(spec.entry_path)
     payload: dict[str, object] = {
         "ok": True,
         "stepPath": relative_to_cwd(spec.step_path),
         # The tree these bytes resolve to (index/document → tree): the result's
         # identity, never a directory — nothing of the sort exists in the store.
-        "tree": result_tree_for(spec.entry_path),
-        "entryKind": entry_kind,
+        "tree": tree,
+        # Off the tree when there is one (store.trees.tree_kind); the caller's
+        # authored kind only when the compile left none.
+        "entryKind": tree_kind_for(tree) or entry_kind,
         "sourceKind": source_kind,
         "stats": stats or {},
-        "sourceRef": spec.source_ref,
-        "cadPath": spec.cad_ref,
     }
     if step_hash:
         payload["stepHash"] = step_hash

@@ -1264,19 +1264,21 @@ def generate_step_targets(
 
     def _emit(spec: EntrySpec, outcome: str) -> None:
         from cadgen.store.records import current_tree
+        from cadgen.store.trees import tree_kind_for
 
         model = _model_for_spec(spec)
+        tree = current_tree(model) if model is not None else None
         reported.append(
             {
                 "ok": True,
-                "sourceRef": spec.source_ref,
-                "cadPath": spec.cad_ref,
-                "kind": spec.kind,
+                # Read off the tree (store.trees.tree_kind), the same answer
+                # inspect gives; the authored kind only steered the packaging.
+                "kind": tree_kind_for(tree) or spec.kind,
                 "outcome": outcome,
                 # The document the run wrote (None for a mesh-only model, which
                 # declares no STEP) and the hash of the result tree it came from.
                 "document": _display_path(spec.step_path) if spec.step_output else None,
-                "tree": current_tree(model) if model is not None else None,
+                "tree": tree,
             }
         )
 
@@ -1395,8 +1397,6 @@ def generate_dxf_targets(
         reported.append(
             {
                 "ok": True,
-                "sourceRef": spec.source_ref,
-                "cadPath": spec.cad_ref,
                 "kind": "drawing",
                 "outcome": outcome,
                 "document": _display_path(spec.dxf_path) if spec.dxf_path is not None else None,
