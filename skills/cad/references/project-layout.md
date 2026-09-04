@@ -27,15 +27,20 @@ Only OUTPUTS are organized by format. Code is not: a model script is not a
     README.md             #   the model catalog (see below)
     plate.py              #   one model per file: a part …
     plate_drawing.py      #   … a drawing …
-    frame.py              #   … a sub-assembly …
     assembly.py           #   … the root assembly
+    frame/                #   a SUB-ASSEMBLY: a folder holding a model of the same name …
+      frame.py            #     … and the parts only it uses
+      strut.py
+    purchased/            #   vendor parts you did not draw: read_step wrapper models
+      servo.py
     lib/                  #   shared code (plain modules — never models)
       __init__.py         #     one-line docstring; lib is a regular package
       holes.py            #     helpers
       bracket_shape.py    #     a factory two models build from
   STEP/                   # raw outputs ONLY (+ their sidecars) — and the one authored exception:
     plate.step
-    arm.step.js           #   the render module beside a document (choreography); authored, committed
+    assembly.step.js      #   the render module beside a document (choreography); authored, committed
+    frame/  purchased/    #   outputs mirror src/ folder for folder
     imported/             #   committed source files brought in from outside (see commit policy)
   DXF/  STL/  GLB/  3MF/  # other format folders: same shape, outputs + imported/
   tmp/                    # scratch: snapshots, debug renders (gitignored)
@@ -128,7 +133,8 @@ rerun the parent to pick the change up.
 
 **A sub-assembly is a model** with its own file and its own outputs
 (`frame.py` → `STEP/frame.step`), composed into the root exactly like a part.
-A helper that returns a group of placed parts belongs in a model file, not in
+A sub-assembly with parts of its own is a folder; see "Folders mirror the
+product tree". A helper that returns a group of placed parts belongs in a model file, not in
 `lib/`: as a model it has a record, builds once, links into every parent and
 gives you a STEP to inspect on its own; as a `lib/` function it re-runs inside
 every caller and any edit rebuilds them all.
@@ -149,11 +155,26 @@ result, and cannot see any of those, so a variant selected through them builds
 once and then reads as current under every other setting. A configuration is a
 factory argument in `lib/`; another configuration is another model file.
 
-## Many assemblies: one group per `src/<assembly>/`
+## Folders mirror the product tree
 
-A project that holds several unrelated assemblies — a demo corpus, a shop's
-library — puts each one in its own directory under `src/`, so one assembly's
-part models do not pile up beside another's:
+`src/` is the import root: every model imports siblings and folders from it
+(`from frame.frame import frame`, `from lib import holes`, `from
+purchased.servo import servo`), whatever folder the importing script sits in —
+because the project declares it with `PYTHONPATH=src` (cadgen never curates
+paths). Two kinds of folder follow.
+
+**A sub-assembly is a folder.** A folder that holds a model of its own name is
+a sub-assembly; the parts only it uses live beside that model, and a part two
+sub-assemblies share moves up to the level that owns both. The tree nests as
+deep as the product does (`base/clamp/`), and the format folders mirror it one
+to one (`STEP/base/clamp/clamp.step`), so the STEP tree reads like the product
+tree. `purchased/` is the one conventional folder: `read_step` wrapper models
+for vendor parts, importable from every level.
+
+**A group is an independent product.** A project that holds several unrelated
+assemblies — a demo corpus, a shop's library — puts each one in its own
+directory under `src/`, so one assembly's part models do not pile up beside
+another's:
 
 ```
 <project>/
@@ -174,25 +195,24 @@ part models do not pile up beside another's:
       gear_stage.step
 ```
 
-Three rules keep a group as simple as a flat project:
+Three rules keep the tree as simple as a flat project:
 
-1. **A group is self-contained.** Its root, its parts, its drawings and its
-   `lib/` all live in the one directory, and groups do not import each other
-   — by convention, not by mechanism. Inside a group `from wheel import wheel`
-   and `from lib import hub` work exactly as they do in a flat `src/`, because
-   the script's own directory is on the import path; a root shared by several
-   groups is declared with `PYTHONPATH=src`, never inferred by cadgen. Code two
-   groups both need is either a sign they are one group, or a helper each
-   group carries its own copy of; a shared `src/lib/` is for flat projects
-   only.
-2. **Outputs mirror the grouping.** Every model in `src/<group>/` declares
-   `out="../../STEP/<group>/<stem>.step"` (meshes: `../../STL/<group>/…`), so
-   the format folders stay browsable one assembly at a time and the CAD Viewer
-   opened at the project root shows one folder per assembly.
-3. **`src/<group>/*.py` are all models.** The flat rule still holds one level
-   down: every script directly in a group directory is a runnable model, and
-   `ls src/*/*.py` is the catalog. Standalone parts that belong to no
-   assembly stay directly under `src/` (or in a sibling project of their own).
+1. **Groups do not import each other.** A group's root, parts, sub-assembly
+   folders and drawings live under its one directory. `src/lib/` and
+   `src/purchased/` are the two folders every group may import; code two
+   groups both need lives there or is a sign they are one group. Imports are
+   spelled from `src/` (`from rover.wheel import wheel` inside the rover
+   group), never relative to the importing file.
+2. **Outputs mirror the folders.** Every model declares an `out=` that mirrors
+   its folder path under the format folder (`src/rover/wheel.py` →
+   `../../STEP/rover/wheel.step`, `src/tom/gripper/claw_left.py` →
+   `../../../STEP/tom/gripper/claw_left.step`; meshes likewise under `STL/`),
+   so the format folders stay browsable one assembly at a time and the CAD
+   Viewer opened at the project root shows one folder per assembly.
+3. **Every `.py` under `src/` outside `lib/` is a model.** The flat rule holds
+   at any depth: each script is runnable, and `find src -name '*.py' -not
+   -path '*/lib/*'` is the catalog. Standalone parts that belong to no
+   assembly stay directly under `src/`.
 
 The catalog README lists each group with its root; `python
 src/<group>/<group>.py` builds that assembly and whatever is stale beneath it.

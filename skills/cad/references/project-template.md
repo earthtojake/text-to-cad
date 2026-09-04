@@ -340,10 +340,25 @@ The `*` forms matter: ignoring the directory itself (`/STEP/`) would make the
 `imported/` negation dead — git never descends into an ignored directory. The
 `!/STEP/*.step.js` line keeps render modules (the authored choreography beside
 a document, `arm.step.js` beside `arm.step`) committed while everything
-generated around them stays ignored; a project with one group per
-`src/<assembly>/` adds `!/STEP/*/` , `/STEP/*/*` and `!/STEP/*/*.step.js` for
-the grouped folders. Pin any other file deliberately with its own negation
-line or `git add -f`.
+generated around them stays ignored. A project whose folders mirror the
+product tree (groups, sub-assembly folders, `purchased/`) needs the negations
+at every depth, because git never descends into an ignored directory:
+
+```gitignore
+/STEP/*
+!/STEP/imported/
+!/STEP/*.step.js
+!/STEP/*/
+/STEP/*/*
+!/STEP/*/*.step.js
+!/STEP/*/*/
+/STEP/*/*/*
+!/STEP/*/*/*.step.js
+```
+
+One `!/STEP/*/`, `/STEP/*/*`, `!/STEP/*/*.step.js` triple per nesting level
+(the same for `DXF/`, `STL/`, `GLB/`, `3MF/`). Pin any other file deliberately
+with its own negation line or `git add -f`.
 
 ## `.gitattributes`
 
