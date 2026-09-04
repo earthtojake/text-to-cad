@@ -144,6 +144,13 @@ a one-line model file. The template shows the pattern.
 `@step` declares a model whose outputs are meshes; it composes into
 assemblies like any part and writes no STEP.
 
+**The environment is not an input.** Nothing in `src/` or `lib/` reads a
+parameter from `os.environ` (or the working directory, the current time, a
+random source): the store tracks source by hash, constants by value and children by
+result, and cannot see any of those, so a variant selected through them builds
+once and then reads as current under every other setting. A configuration is a
+factory argument in `lib/`; another configuration is another model file.
+
 ## Many assemblies: one group per `src/<assembly>/`
 
 A project that holds several unrelated assemblies — a demo corpus, a shop's

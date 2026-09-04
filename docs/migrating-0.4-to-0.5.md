@@ -407,6 +407,12 @@ if __name__ == "__main__":
   sibling model module **to rebuild it under different constants** (re-exec,
   environment variables, monkeypatched globals) becomes a factory in `lib/`
   that takes those values as arguments, called by two ordinary models.
+- **The environment is not an input.** Model and `lib/` code reads no
+  parameter from `os.environ`, the working directory, the current time or a
+  random source: the gate tracks source by hash, constants by value and children by
+  result, and cannot see any of those, so a value that changes geometry
+  through them leaves a stale result reading as current. A configuration is a
+  factory argument; another configuration is another model.
 
 ### 4. Move articulation to kinematics + `.anim.js`
 
