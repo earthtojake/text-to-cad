@@ -267,7 +267,17 @@ class DaemonExecutor(_Executor):
                 pass
         os.environ.pop("CADGEN_DAEMON_SOCKET", None)
         os.environ.pop("CADGEN_DAEMON_STATE_DIR", None)
-        cls.socket_dir.cleanup()
+        # Windows refuses to delete a file another process still has open, and a
+        # killed worker releases its handle on the daemon log a beat after the kill.
+        deadline = time.monotonic() + 15
+        while True:
+            try:
+                cls.socket_dir.cleanup()
+                break
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.2)
         super().tearDownClass()
 
     def peak_running(self) -> int:
