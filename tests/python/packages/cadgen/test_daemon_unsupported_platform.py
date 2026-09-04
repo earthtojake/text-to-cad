@@ -18,8 +18,6 @@ cannot be reproduced.
 
 from __future__ import annotations
 
-import contextlib
-import io
 import unittest
 from unittest import mock
 
@@ -27,7 +25,6 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages", "cadgen", "src")
 
-from cadgen.cli import daemon_status  # noqa: E402
 from cadgen.daemon import client, transport  # noqa: E402
 
 
