@@ -131,6 +131,75 @@ class DoorFirstCall(unittest.TestCase):
         payload = json.loads(result.stdout.strip())
         self.assertEqual(self.runs["arm"]["kind"], payload["tokens"][0]["summary"]["kind"])
 
+    def test_a_document_is_read_without_opening_the_scripts_beside_it(self) -> None:
+        # A door is a reader. It used to scan every .py beside the document to learn
+        # which script wrote it, so one unrelated script with a non-literal out= --
+        # a real authoring mistake -- failed the inspection of a finished document.
+        broken = self.root / "src" / "broken.py"
+        broken.write_text(
+            textwrap.dedent(
+                """
+                from cadgen import step
+                from cadgen import build123d as bd
+                NAME = "broken"
+
+
+                @step(out=NAME + ".step")
+                def broken():
+                    return bd.Box(1, 1, 1)
+
+
+                if __name__ == "__main__":
+                    broken()
+                """
+            ).lstrip(),
+            encoding="utf-8",
+        )
+        try:
+            result = _run(
+                "-m", "cadgen.cli", "step", "inspect", "refs", "src/pin.step", "--facts",
+                cwd=self.root, cache=self.cache,
+            )
+        finally:
+            broken.unlink()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertNotIn("broken.py", result.stderr)
+        self.assertTrue(json.loads(result.stdout.strip())["ok"])
+
+    def test_a_part_resolves_bare_face_and_edge_refs_and_counts_its_faces(self) -> None:
+        # A part's selector tables live in its one component like any tree's; the
+        # composition step used to skip parts, leaving `#f1` unresolvable and the
+        # facts counting zero faces on a cylinder.
+        facts = _run(
+            "-m", "cadgen.cli", "step", "inspect", "refs", "src/pin.step", "--facts",
+            cwd=self.root, cache=self.cache,
+        )
+        self.assertEqual(0, facts.returncode, facts.stdout + facts.stderr)
+        summary = json.loads(facts.stdout.strip())["tokens"][0]["summary"]
+        self.assertEqual(3, summary["faceCount"], summary)
+        self.assertEqual(1, summary["leafOccurrenceCount"], summary)
+        for ref in ("src/pin.step#f1", "src/pin.step#e1", "src/pin.step#o1"):
+            result = _run("-m", "cadgen.cli", "step", "inspect", "refs", ref, cwd=self.root, cache=self.cache)
+            payload = json.loads(result.stdout.strip())
+            self.assertEqual("resolved", payload["tokens"][0]["selections"][0]["status"], (ref, payload))
+
+    def test_the_kernels_diagnostics_never_land_on_stdout(self) -> None:
+        # OCCT's readers print `**** ERR StepFile ...` to the C-level stdout. A CLI's
+        # stdout is its result; a malformed document must not corrupt it.
+        bad = self.root / "src" / "bad.step"
+        bad.write_text("ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n", encoding="utf-8")
+        try:
+            result = _run(
+                "-m", "cadgen.cli", "step", "inspect", "refs", "src/bad.step", "--facts",
+                cwd=self.root, cache=self.cache,
+            )
+        finally:
+            bad.unlink()
+        self.assertNotIn("ERR StepFile", result.stdout, result.stdout)
+        for line in result.stdout.splitlines():
+            if line.strip():
+                self.assertTrue(line.startswith("{"), result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
