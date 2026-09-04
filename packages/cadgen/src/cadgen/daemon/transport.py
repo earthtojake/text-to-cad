@@ -31,6 +31,7 @@ import os
 import secrets
 import stat
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -71,6 +72,18 @@ def address_for(key: str) -> str:
     if os.name == "nt":
         return rf"\\.\pipe\cadgen-daemon-v{PROTOCOL}-{key}"
     return str(state_dir() / f"cadgen-daemon-v{PROTOCOL}-{key}.sock")
+
+
+def private_address(key: str) -> str:
+    """An address for a broker that lives exactly as long as one process.
+
+    Not under :func:`state_dir`: a test's or a checkout's state directory can be deep
+    enough to push a Unix socket path past its ~104-byte ceiling, and nothing needs to
+    find this address on disk -- the process hands it to its children in their env.
+    """
+    if os.name == "nt":
+        return rf"\\.\pipe\cadgen-b{PROTOCOL}-{key}"
+    return str(Path(tempfile.gettempdir()) / f"cadgen-b{PROTOCOL}-{key}.sock")
 
 
 def _authkey_path(key: str) -> Path:

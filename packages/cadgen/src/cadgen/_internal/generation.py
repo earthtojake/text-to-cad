@@ -1108,12 +1108,18 @@ def _run_with_spec_generation_status(
         if run.skipped:
             _tree_event(spec, "current")
             return _SkippedGeneration(spec)
-        _tree_event(spec, "building", phase="generate")
-        try:
-            result = action(spec, run)
-        except BaseException:
-            _tree_event(spec, "failed", elapsed=time.perf_counter() - started)
-            raise
+        from cadgen.daemon import broker
+
+        # One running build per core: the body and its emit hold a job slot; the
+        # wait for a forced child gives it back (cadgen.store.lazy). `queued` shows
+        # in the tree only when the slot did not come at once.
+        with broker.held(spec.source_ref, on_queued=lambda: _tree_event(spec, "queued")):
+            _tree_event(spec, "building", phase="generate")
+            try:
+                result = action(spec, run)
+            except BaseException:
+                _tree_event(spec, "failed", elapsed=time.perf_counter() - started)
+                raise
     _tree_event(spec, "done", elapsed=time.perf_counter() - started, stale=_stale_after_build(spec))
     return result
 

@@ -326,8 +326,32 @@ The **store root is a field on every request** (`store_root`), applied per
 job in the worker, never inherited from whichever build spawned the daemon:
 one daemon serves any number of isolated stores. The daemon holds no store
 state of its own. `cadgen daemon status` reports each worker's `model`,
-`busy`, `jobs`, `extra`, plus `spares`, `imports` (cold spawns) and
-`concurrent` (extras bound).
+`busy`, `jobs`, `extra`, plus `spares`, `imports` (cold spawns),
+`concurrent` (extras bound) and `jobs running n/N, queued m, coalesced k`.
+
+Three static mechanisms bound the pool — none adaptive, none heuristic, no
+memory is ever measured (`cadgen.daemon.broker`):
+
+1. **Job slots — one running build per core.** A FIFO counting semaphore of
+   `N = os.cpu_count()` slots per executor (`CADGEN_JOBS` overrides; daemon-wide
+   for the daemon executor, per top-level build for the transient one, whose
+   root process runs a private broker its workers inherit). A job takes a slot
+   before its body runs and holds it through its emit; it **yields the slot
+   while it waits for a child it forced** and reacquires — queuing if it must —
+   when the child is done. A waiting parent therefore holds nothing, which is
+   why a 1-slot pool still builds a 3-level tree. Slots count kernel work only;
+   the gate check for a current model takes none. The tree shows `queued` when
+   a slot did not come at once.
+2. **In-flight coalescing.** A child submit carries its source's closure hash;
+   a submit for `(model, closure)` matching a job already in flight attaches to
+   that job instead of starting another. In flight only, identical source only,
+   never a lookup into the past — and never the model a top-level request named
+   (a second `python a.py` still runs, on an extra). Two parents needing one
+   stale child build it once.
+3. **Idle unbind — 10 minutes** (`CADGEN_DAEMON_IDLE_UNBIND`). A bound worker
+   idle that long returns to the spare set (spares beyond K exit); its model's
+   next build rebinds a spare — no import repaid — with a cold RAM op-memo tier.
+   Purely RAM: idle workers hold no slot and never block a new model.
 
 ## 9a. Lazy children
 

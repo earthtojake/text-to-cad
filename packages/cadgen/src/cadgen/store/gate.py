@@ -31,6 +31,9 @@ class Verdict:
     model: str
     stale: bool
     clauses: list[dict[str, Any]] = field(default_factory=list)
+    #: The source's closure hash as it is NOW (the script's own sha when there is no
+    #: record to name a closure): what in-flight coalescing keys on.
+    closure: str | None = None
 
     def reason(self) -> str:
         for clause in self.clauses:
@@ -67,6 +70,7 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
     if record is None:
         clauses.append({"clause": 1, "stale": True, "why": "no record"})
         verdict.stale = True
+        verdict.closure = _sha256_file(Path(key))
         return verdict
     clauses.append({"clause": 1, "stale": False})
 
@@ -80,6 +84,7 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
         now = recorded_hash
     else:
         now = current_closure_hash(Path(key), files) if files else None
+    verdict.closure = now or _sha256_file(Path(key))
     if not recorded_hash or now != recorded_hash:
         clauses.append(
             {

@@ -57,7 +57,7 @@ def run_model_argv(argv: Sequence[str], *, prog: str = "python <model>.py") -> i
 
     if os.environ.get("CADGEN_EVENTS") == "1" and not executors.sink_installed():
         executors.install_line_sink()
-    with build_tree(json_lines=bool(args.json)):
+    with build_tree(json_lines=bool(args.json)), executors.root_context():
         return _run(args, script, parser, prog)
 
 

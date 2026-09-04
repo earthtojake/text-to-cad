@@ -27,6 +27,7 @@ error if it fails; a successful child's chatter is not the parent's business.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import subprocess
@@ -144,11 +145,14 @@ def submit(
     force: bool = False,
     root_id: str | None = None,
     parent: Path | str | None = None,
+    closure: str | None = None,
 ) -> Job:
     """Start building ``model`` now and return without waiting.
 
     ``parent`` is the model whose body made the call; the build tree hangs the child's
-    line under it."""
+    line under it. ``closure`` is the child's current closure hash: a job already in
+    flight for the same ``(model, closure)`` is joined instead of duplicated (in-flight
+    coalescing, cadgen.daemon.broker)."""
     from cadgen.store.paths import store_root as default_store_root
 
     model = Path(model).resolve()
@@ -156,10 +160,34 @@ def submit(
     job = Job(model)
     emit_event(model_event(model, "submitted", parent=str(parent) if parent else None))
     if use_daemon():
-        _submit_daemon(job, root, force=force, root_id=root_id)
+        _submit_daemon(job, root, force=force, root_id=root_id, closure=closure)
     else:
-        _submit_transient(job, root, force=force, root_id=root_id)
+        _submit_transient(job, root, force=force, root_id=root_id, closure=closure)
     return job
+
+
+@contextlib.contextmanager
+def root_context():
+    """What a TOP-LEVEL transient build owns for its length: the private broker its
+    workers take job slots from and register in-flight jobs with. A no-op inside a
+    worker (its root, or the daemon, is the broker) and under the daemon executor."""
+    from cadgen.daemon import broker
+
+    if use_daemon() or broker.BROKER_ADDRESS_VAR in os.environ or os.environ.get("CADGEN_EVENTS") == "1":
+        yield None
+        return
+    private = broker.PrivateBroker()
+    previous = {k: os.environ.get(k) for k in private.env()}
+    os.environ.update(private.env())
+    try:
+        yield private
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        private.close()
 
 
 # --- transient executor -----------------------------------------------------------------
@@ -187,7 +215,20 @@ def worker_env(base: dict[str, str] | None = None) -> dict[str, str]:
     return env
 
 
-def _submit_transient(job: Job, store_root: Path, *, force: bool, root_id: str | None) -> None:
+def _submit_transient(
+    job: Job, store_root: Path, *, force: bool, root_id: str | None, closure: str | None = None
+) -> None:
+    from cadgen.daemon import broker
+
+    ticket = broker.claim_inflight(str(job.model), closure) if closure else None
+    if ticket is not None and ticket[0] == "attached":
+        # Identical source already building for this root: ride that job.
+        def follow() -> None:
+            job._finish(broker.wait_attached(ticket[1]))
+
+        threading.Thread(target=follow, name=f"cadgen-attach-{job.model.stem}", daemon=True).start()
+        return
+    claim = ticket[1] if ticket is not None else None
     env = worker_env()
     env["CADGEN_DAEMON"] = "0"
     env["CADGEN_CACHE_DIR"] = str(store_root)
@@ -210,6 +251,8 @@ def _submit_transient(job: Job, store_root: Path, *, force: bool, root_id: str |
         )
     except OSError as exc:
         job._say(f"could not start a worker for {job.model.name}: {exc}\n")
+        if claim is not None:
+            broker.report_done(claim, 1)
         job._finish(1)
         return
 
@@ -236,6 +279,8 @@ def _submit_transient(job: Job, store_root: Path, *, force: bool, root_id: str |
             reader.join(timeout=5.0)
         if code != 0:
             emit_event(model_event(job.model, "failed", exit=code))
+        if claim is not None:
+            broker.report_done(claim, code)
         job._finish(code)
 
     threading.Thread(target=finish, name=f"cadgen-job-{job.model.stem}", daemon=True).start()
@@ -259,7 +304,9 @@ EVENT_LINE_PREFIX = "CADGEN_EVENT "
 # --- daemon executor ---------------------------------------------------------------------
 
 
-def _submit_daemon(job: Job, store_root: Path, *, force: bool, root_id: str | None) -> None:
+def _submit_daemon(
+    job: Job, store_root: Path, *, force: bool, root_id: str | None, closure: str | None = None
+) -> None:
     from cadgen.daemon import client
 
     argv = [str(job.model)]
@@ -274,13 +321,14 @@ def _submit_daemon(job: Job, store_root: Path, *, force: bool, root_id: str | No
             prog=f"python {job.model.name}",
             store_root=str(store_root),
             root_id=root_id,
+            closure=closure,
             on_stream=job._say,
             on_event=emit_event,
         )
         if code is None:
             # The daemon could not take the job (spawn failure, unsupported
             # platform mid-flight): run it transiently rather than fail the parent.
-            _submit_transient(job, store_root, force=force, root_id=root_id)
+            _submit_transient(job, store_root, force=force, root_id=root_id, closure=closure)
             return
         if code != 0:
             emit_event(model_event(job.model, "failed", exit=code))

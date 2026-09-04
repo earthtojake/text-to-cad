@@ -527,8 +527,12 @@ def _compose_child(defn: ModelDef) -> Any:
     if frame is not None and child in frame.jobs:
         job = frame.jobs[child]
     elif frame is None or child not in frame.pins:
-        if stale(child).stale:
-            job = submit(child, force=False, root_id=getattr(frame, "root_id", None), parent=parent)
+        verdict = stale(child)
+        if verdict.stale:
+            job = submit(
+                child, force=False, root_id=getattr(frame, "root_id", None), parent=parent,
+                closure=verdict.closure,
+            )
             if frame is not None:
                 frame.jobs[child] = job
         else:

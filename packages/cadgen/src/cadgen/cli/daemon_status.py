@@ -36,13 +36,20 @@ def _render(status: dict) -> str:
     workers = status.get("workers") or []
     busy = sum(1 for w in workers if w.get("busy"))
     bound = [w for w in workers if w.get("model")]
+    pending = status.get("sparesPending") or 0
+    starting = f" (+{pending} starting)" if pending else ""
     lines = [
         f"CAD daemon running (pid {status.get('pid')}, up {_age(status.get('startedAt') or 0)})",
         f"  socket   {status.get('socket')}",
         f"  version  cadgen {status.get('version') or '?'}  token {status.get('token') or '?'}",
-        f"  workers  {len(bound)} bound ({busy} busy), {status.get('spares', 0)} spare"
-        f"{f' (+{status.get(\"sparesPending\")} starting)' if status.get('sparesPending') else ''}",
+        f"  workers  {len(bound)} bound ({busy} busy), {status.get('spares', 0)} spare{starting}",
     ]
+    jobs = status.get("jobsRunning") or {}
+    if jobs:
+        lines.append(
+            f"  jobs     running {jobs.get('running', 0)}/{jobs.get('limit', '?')}, "
+            f"queued {jobs.get('queued', 0)}, coalesced {jobs.get('coalesced', 0)}"
+        )
     for worker in bound:
         state = "busy" if worker.get("busy") else "idle"
         # A worker is bound to ONE model, so which model it holds is the first thing

@@ -135,6 +135,8 @@ def _request_payload(
     *,
     store_root: str | None = None,
     root_id: str | None = None,
+    closure: str | None = None,
+    coalesce: bool = False,
 ) -> dict:
     from cadgen.store.paths import store_root as default_store_root
 
@@ -154,6 +156,11 @@ def _request_payload(
         # The top-level request this job belongs to; child-build events carry it
         # so the root's build tree can place them.
         "root_id": str(root_id) if root_id else None,
+        # In-flight coalescing (cadgen.daemon.broker): a child submit carries its source's
+        # closure hash and may join a job already building the same thing. A top-level
+        # request never does -- the model the user asked for runs.
+        "closure": str(closure) if closure else None,
+        "coalesce": bool(coalesce and closure),
         "token": compute_version_token(),
     }
 
@@ -190,6 +197,7 @@ def run_nested(
     prog: str | None = None,
     store_root: str | None = None,
     root_id: str | None = None,
+    closure: str | None = None,
     on_stream: Callable[[str], None] | None = None,
     on_event: Callable[[dict], None] | None = None,
 ) -> int | None:
@@ -202,7 +210,9 @@ def run_nested(
     """
     if os.environ.get("CADGEN_DAEMON") == "0" or not daemon_supported():
         return None
-    payload = _request_payload(tool, argv, cwd, prog, store_root=store_root, root_id=root_id)
+    payload = _request_payload(
+        tool, argv, cwd, prog, store_root=store_root, root_id=root_id, closure=closure, coalesce=True
+    )
     return _run_with_retry(payload, on_stream=on_stream, on_event=on_event)
 
 

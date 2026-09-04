@@ -158,7 +158,15 @@ class LazyCompound(Compound):
             return self._lazy_tree
         job = self._lazy_job
         if job is not None:
-            code = job.wait()
+            if getattr(job, "done", True):
+                code = job.wait()
+            else:
+                # A waiting parent does no kernel work: give its job slot back for the
+                # wait and take one again after (cadgen.daemon.broker).
+                from cadgen.daemon.broker import yielded
+
+                with yielded():
+                    code = job.wait()
             if code != 0:
                 raise ChildBuildError(
                     f"child model {self._lazy_model.name} failed to build "

@@ -228,6 +228,64 @@ class Lifecycle(_PoolFixture):
         self.assertEqual(self.pool.snapshot()["workers"], [])
 
 
+class IdleUnbind(unittest.TestCase):
+    """A bound worker idle for ten minutes returns to spare; nothing else is ever unbound."""
+
+    def setUp(self) -> None:
+        patcher = mock.patch.object(pool_mod, "Worker", _StubWorker)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.now = [1000.0]
+        self.pool = pool_mod.Pool(clock=lambda: self.now[0])
+        self.addCleanup(self.pool.shutdown)
+
+    def test_a_bound_worker_idle_past_the_timer_becomes_a_spare(self):
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON_SPARES": "1", "CADGEN_DAEMON_IDLE_UNBIND": "600"}):
+            worker = self.pool.acquire("/m/a.py")
+            self.pool.release(worker)
+            _settle(self.pool)
+            self.now[0] += 599.0
+            self.pool.unbind_idle()
+            self.assertEqual(worker.model, "/m/a.py", "unbound before the timer")
+            self.now[0] += 2.0
+            self.pool.unbind_idle()
+        # The spare set already held K=1, so this one exits rather than growing it.
+        self.assertTrue(worker.killed or worker.model == "")
+        self.assertEqual(self.pool.snapshot()["unbinds"], 1)
+
+    def test_an_unbound_worker_is_rebound_without_a_spawn(self):
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON_SPARES": "1", "CADGEN_DAEMON_IDLE_UNBIND": "600"}):
+            worker = self.pool.acquire("/m/a.py")
+            self.pool.release(worker)
+            _settle(self.pool)
+            self.now[0] += 601.0
+            self.pool.unbind_idle()
+            snapshot = self.pool.snapshot()
+            # Unbound: either it is the spare now, or the spare set was already full and
+            # it left. Either way there is exactly K warm and nothing bound.
+            self.assertNotIn("/m/a.py", [w["model"] for w in snapshot["workers"]])
+            self.assertEqual(snapshot["spares"], 1, snapshot)
+            spare_pid = next(w["pid"] for w in snapshot["workers"] if not w["model"])
+            again = self.pool.acquire("/m/b.py")
+            self.assertEqual(again.pid, spare_pid, "a warm spare was available and a fresh worker was spawned instead")
+            self.assertEqual(again.model, "/m/b.py")
+            self.pool.release(again)
+
+    def test_busy_and_recently_used_workers_are_left_alone(self):
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON_SPARES": "0", "CADGEN_DAEMON_IDLE_UNBIND": "600"}):
+            busy = self.pool.acquire("/m/a.py")
+            idle = self.pool.acquire("/m/b.py")
+            self.pool.release(idle)
+            self.now[0] += 100.0
+            self.pool.unbind_idle()
+            self.assertEqual((busy.model, idle.model), ("/m/a.py", "/m/b.py"))
+            self.now[0] += 600.0
+            self.pool.unbind_idle()
+            self.assertEqual(busy.model, "/m/a.py", "a busy worker was unbound")
+            self.assertTrue(idle.model == "" or idle.killed, "the idle worker stayed bound")
+        self.pool.release(busy)
+
+
 class Status(_PoolFixture):
     def test_snapshot_reports_per_worker_model_busy_jobs_extra(self):
         with self._spares(0):

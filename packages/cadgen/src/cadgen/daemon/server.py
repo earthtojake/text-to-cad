@@ -72,9 +72,13 @@ _TOOL_IMPORTS = {
     "snapshot": "cadgen.cli.step_snapshot",
 }
 
+from cadgen.daemon import broker as broker_mod  # noqa: E402
 from cadgen.daemon import pool as pool_mod  # noqa: E402 - after _TOOL_IMPORTS, which worker.py reads
 
 _POOL = pool_mod.Pool()
+# Daemon-wide job slots and the in-flight registry (STORE.md §9). Workers reach it
+# over the daemon's own socket.
+_BROKER = broker_mod.Broker()
 
 
 class _DaemonShutdown(BaseException):
@@ -167,6 +171,7 @@ def _status_payload() -> dict:
 
     snapshot = _POOL.snapshot()
     snapshot.update({
+        "jobsRunning": _BROKER.snapshot(),
         "pid": os.getpid(),
         "socket": str(daemon_address()),
         "identity": daemon_identity(),
@@ -205,6 +210,12 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
     send_lock = threading.Lock()
     started = time.perf_counter()
 
+    if request.get("kind") in {"slot", "inflight"}:
+        # A worker asking for a job slot or registering a job in flight. Blocks for the
+        # lease's lifetime on this request thread.
+        _BROKER.handle(conn, request)
+        return
+
     tool = request.get("tool")
     argv = request.get("argv")
 
@@ -216,12 +227,25 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
 
     cwd = str(request.get("cwd") or "")
     model = _script_path(argv, cwd)
+    closure = str(request.get("closure") or "")
+    inflight = None
+    if model and closure and request.get("coalesce"):
+        inflight = _BROKER.claim(model, closure)
+        if inflight is not None:
+            # Identical source is already building: attach, relay its exit, run nothing.
+            _log(f"{tool} {model}: coalesced onto the job in flight")
+            inflight["done"].wait()
+            with contextlib.suppress(OSError), send_lock:
+                _send(conn, {"exit": inflight["exit"] if inflight["exit"] is not None else 1})
+            return
     try:
         worker = _POOL.acquire(model)
     except pool_mod.WorkerGone as exc:
         # A spawn that never announced itself. There is no worker to blame and nothing
         # to retry warm; the client sees the failure and can run cold.
         _log(f"{tool}: could not start a worker: {exc}")
+        if model and closure and request.get("coalesce"):
+            _BROKER.finish(model, closure, 1)
         with contextlib.suppress(OSError), send_lock:
             _send(conn, {"stream": "stderr", "data": f"cadgen-daemon: could not start a worker: {exc}\n"})
             _send(conn, {"exit": 1})
@@ -268,6 +292,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         watchdog.join(timeout=CLIENT_LIVENESS_INTERVAL_SECONDS + 1.0)
         # A killed worker is not reusable; release() drops it and the pool respawns.
         _POOL.release(worker, healthy=healthy and worker.alive())
+        if model and closure and request.get("coalesce"):
+            _BROKER.finish(model, closure, exit_code)
 
     _REQUESTS_SERVED[0] += 1
     _log(f"{tool} {argv!r} -> exit {exit_code} in {time.perf_counter() - started:.2f}s "
@@ -374,6 +400,7 @@ def serve() -> int:
             time.sleep(slice_seconds)
             if server.closed:
                 return
+            _POOL.unbind_idle()
             if any(thread.is_alive() for thread in list(_INFLIGHT)):
                 state["last_activity"] = time.monotonic()  # a long build is not idleness
                 continue

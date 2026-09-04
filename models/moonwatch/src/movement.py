@@ -8,30 +8,26 @@ import keyless_works
 import movement_base
 from cadgen import build123d as bd
 from cadgen import step
-from cadgen.compose import memo
 
 # Composition is by FUNCTION: importing a sibling model links it (import never
-# builds), and `memo` caches each child's geometry as a traced SCOPE keyed by
-# its own source closure — an edit that does not reach a child's files skips
-# that child's Python and kernel work entirely.
-_BASE = memo(movement_base.movement_base)
-_KEYLESS = memo(keyless_works.keyless_works)
-_CHRONO = memo(chrono_works.chrono_works)
+# builds), and calling it inside this body builds it if stale — on its own
+# worker, in parallel with its siblings — or loads it. An edit that does not
+# reach a child's files skips that child's Python and kernel work entirely.
 
 
 @step(out="../STEP/movement.step")
 def movement():
     children = []
 
-    base = _BASE()
+    base = movement_base.movement_base()
     base.label = "movement_base"
     children.append(base)
 
-    keyless = _KEYLESS()
+    keyless = keyless_works.keyless_works()
     keyless.label = "keyless_works"
     children.append(keyless)
 
-    chrono = _CHRONO()
+    chrono = chrono_works.chrono_works()
     chrono.label = "chronograph_works"
     children.append(chrono)
 

@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Iterator, TextIO
 
 STATE_SUBMITTED = "submitted"
+STATE_QUEUED = "queued"
 STATE_BUILDING = "building"
 STATE_CURRENT = "current"
 STATE_DONE = "done"
@@ -152,7 +153,7 @@ class BuildTree:
 
     def _apply(self, node: _Model, event: dict, state: str) -> bool:
         """Fold one event into the node; True when anything a reader sees changed."""
-        if node.terminal and state in {STATE_SUBMITTED, STATE_BUILDING}:
+        if node.terminal and state in {STATE_SUBMITTED, STATE_QUEUED, STATE_BUILDING}:
             return False  # a late event for a finished model
         if node.state in {STATE_DONE, STATE_FAILED} and state == STATE_CURRENT:
             # A second build of a finished model found it current (a diamond: two
@@ -170,6 +171,9 @@ class BuildTree:
             done, total = event.get("done"), event.get("total")
             node.done = int(done) if isinstance(done, (int, float)) else None
             node.total = int(total) if isinstance(total, (int, float)) and total else None
+        elif state == STATE_QUEUED:
+            node.state = STATE_QUEUED
+            node.seen = True
         elif state == STATE_SUBMITTED:
             if node.state == STATE_SUBMITTED:
                 pass
@@ -237,6 +241,8 @@ class BuildTree:
     def _status(self, node: _Model) -> str:
         if node.state == STATE_SUBMITTED:
             return "submitted"
+        if node.state == STATE_QUEUED:
+            return f"queued  {_fmt_seconds(node.duration())}"
         if node.state == STATE_BUILDING:
             text = "building"
             if node.phase:
@@ -304,7 +310,7 @@ class BuildTree:
 
     def _tick(self) -> None:
         while not self._stop.wait(_REDRAW_INTERVAL):
-            if any(m.state == STATE_BUILDING for m in list(self._models.values())):
+            if any(m.state in {STATE_BUILDING, STATE_QUEUED} for m in list(self._models.values())):
                 self._draw()
 
     def close(self) -> None:

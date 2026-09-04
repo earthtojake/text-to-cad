@@ -36,6 +36,7 @@ import time
 
 DEFAULT_SPARES = 2
 DEFAULT_RECYCLE_AFTER = 1000
+DEFAULT_IDLE_UNBIND_SECONDS = 600.0
 SPAWN_TIMEOUT_SECONDS = 120.0
 _USE_SEQUENCE = itertools.count()
 
@@ -58,6 +59,16 @@ def spare_count() -> int:
 def recycle_after() -> int:
     value = _env_int("CADGEN_DAEMON_RECYCLE")
     return max(1, value) if value is not None else DEFAULT_RECYCLE_AFTER
+
+
+def idle_unbind_seconds() -> float:
+    raw = os.environ.get("CADGEN_DAEMON_IDLE_UNBIND", "").strip()
+    if raw:
+        try:
+            return max(0.0, float(raw))
+        except ValueError:
+            pass
+    return DEFAULT_IDLE_UNBIND_SECONDS
 
 
 class WorkerGone(RuntimeError):
@@ -104,9 +115,13 @@ class Worker:
     """One warm subprocess. Owned by the pool; never shared between concurrent jobs."""
 
     def __init__(self) -> None:
+        from cadgen.daemon.client import daemon_address
         from cadgen.daemon.executors import worker_env
 
         env = worker_env()
+        # The broker a worker's jobs take slots from is the daemon itself; name the
+        # address explicitly so a worker never guesses it from its identity.
+        env["CADGEN_DAEMON_SOCKET"] = daemon_address()
         # Guards against a worker's own top-level call routing back into the daemon
         # as a fresh request; nested SUBMITS ignore this on purpose (client.run_nested).
         env["CADGEN_DAEMON_CHILD"] = "1"
@@ -223,11 +238,12 @@ class Worker:
 class Pool:
     """See the module docstring."""
 
-    def __init__(self) -> None:
+    def __init__(self, clock=time.monotonic) -> None:
         self._cv = threading.Condition()
+        self._clock = clock
         self._workers: list[Worker] = []
         self._spares_pending = 0
-        self._stats = {"jobs": 0, "imports": 0, "concurrent": 0, "crashes": 0, "recycles": 0}
+        self._stats = {"jobs": 0, "imports": 0, "concurrent": 0, "crashes": 0, "recycles": 0, "unbinds": 0}
         self._closed = False
 
     # --- spares -------------------------------------------------------------------
@@ -315,13 +331,33 @@ class Pool:
         return spare
 
     def _used_locked(self, worker: Worker) -> Worker:
-        worker.last_used = time.monotonic()
+        worker.last_used = self._clock()
         worker.use_seq = next(_USE_SEQUENCE)
         return worker
+
+    def unbind_idle(self) -> None:
+        """A bound worker idle for ``idle_unbind_seconds()`` returns to the spare set
+        (spares beyond K exit). Its model's next build rebinds a spare -- no import
+        repaid, a cold RAM op-memo tier. Purely RAM: idle workers hold no slot and
+        block nothing, so this is the only reason to touch them at all."""
+        limit = idle_unbind_seconds()
+        with self._cv:
+            now = self._clock()
+            for worker in list(self._workers):
+                if not worker.model or worker.busy or worker.extra:
+                    continue
+                if now - worker.last_used < limit:
+                    continue
+                self._stats["unbinds"] += 1
+                if len(self._spares_locked()) + self._spares_pending >= spare_count():
+                    self._drop_locked(worker)
+                else:
+                    worker.model = ""
 
     def release(self, worker: Worker, *, healthy: bool = True) -> None:
         with self._cv:
             worker.busy = False
+            worker.last_used = self._clock()
             worker.jobs_served += 1
             self._stats["jobs"] += 1
             if not healthy or not worker.alive():
