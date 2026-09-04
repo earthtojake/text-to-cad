@@ -174,7 +174,7 @@ def _absolutize_entry(entry: dict, *, root_path: str, scan_repo_root: str) -> di
         asset_path = _asset_path_from_catalog_url(scan_repo_root, entry["url"])
         nxt["url"] = local_asset_url_for_path(asset_path, _query_value(entry["url"], "v"))
         nxt["assetFile"] = absolute_file_ref(asset_path)
-    for key in ("poseUrl", "sourceUrl"):
+    for key in ("poseUrl", "sourceUrl", "renderModuleUrl"):
         # Store URLs are already in their served form: their file param is
         # store-relative by contract, never a root path to absolutize.
         if entry.get(key) and not _is_store_url(entry[key]):

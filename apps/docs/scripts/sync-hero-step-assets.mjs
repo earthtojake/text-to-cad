@@ -1,7 +1,8 @@
 // Refresh the hero showcase assets from the repo model. The hero renders the
 // planetary gear STEP the same way every cadgen-js client does — from the
 // TREE behind the document (assembly.json + exact-surface components) plus
-// its SIDECAR (<name>.step.json: kinematics + copied animation clips) — served
+// its SIDECAR (<name>.step.json: kinematics) and the RENDER MODULE beside it
+// (<name>.step.js: the authored choreography) — served
 // as plain static files so production (Vercel) needs no backend and no Git LFS.
 //
 // The tree lives in cadgen's store, keyed by the STEP file's bytes, and the
@@ -26,6 +27,7 @@ const repoRoot = path.resolve(docsRoot, "..", "..");
 const modelScript = "models/assemblies/src/planetary_gear_assembly/planetary_gear_assembly.py";
 const modelStep = path.join(repoRoot, "models/assemblies/STEP/planetary_gear_assembly/planetary_gear_assembly.step");
 const modelSidecar = `${modelStep}.json`;
+const modelRenderModule = `${modelStep}.js`;
 const heroDir = path.join(docsRoot, "public/hero");
 const heroTreeDir = path.join(heroDir, "planetary");
 const rebuildHint = `run: python ${modelScript}`;
@@ -38,6 +40,9 @@ if (!fs.existsSync(modelStep)) {
 }
 if (!fs.existsSync(modelSidecar)) {
   throw new Error(`Model sidecar missing: ${modelSidecar} — ${rebuildHint}`);
+}
+if (!fs.existsSync(modelRenderModule)) {
+  throw new Error(`Model render module missing: ${modelRenderModule} — it is authored beside the STEP and committed`);
 }
 
 // A view of the tree in a fresh temporary directory (ours to remove). An empty
@@ -80,7 +85,8 @@ try {
   }
 
   fs.copyFileSync(modelSidecar, path.join(heroDir, "planetary_gear_assembly.step.json"));
-  console.log(`Synced hero assets: ${copied} components + sidecar -> ${heroTreeDir}`);
+  fs.copyFileSync(modelRenderModule, path.join(heroDir, "planetary_gear_assembly.step.js"));
+  console.log(`Synced hero assets: ${copied} components + sidecar + render module -> ${heroTreeDir}`);
 } finally {
   fs.rmSync(viewDir, { recursive: true, force: true });
 }

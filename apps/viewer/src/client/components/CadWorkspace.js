@@ -1,5 +1,6 @@
 "use client";
 
+import * as THREE from "three";
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight, ArrowRight, Circle, Eraser, Minus, PaintBucket, PenTool, Square } from "lucide-react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -145,6 +146,7 @@ import {
   entryHasUrdf,
   entryMeshAssetSignature,
   entryPoseUrl,
+  entryRenderModuleUrl,
   entryUrdfAssetHash
 } from "cadgen-js/lib/entryAssets";
 import {
@@ -297,11 +299,8 @@ import {
 import {
   normalizeStepModuleParameterValues
 } from "cadgen-js/common/stepModule";
-import {
-  loadAnimationSource,
-  loadKinematicsModuleDefinition
-} from "cadgen-js/common/kinematicsModule";
-import { compileAnimationClips } from "cadgen-js/common/animationRuntime";
+import { loadKinematicsModuleDefinition } from "cadgen-js/common/kinematicsModule";
+import { loadRenderModule, validateRenderModuleClips } from "cadgen-js/common/renderModule";
 import {
   normalizeParameterValue,
   normalizeParameterValues
@@ -1202,8 +1201,9 @@ export default function CadWorkspace({
   const [stepModuleParameterValues, setStepModuleParameterValues] = useState({});
   const [stepModuleEnabled, setStepModuleEnabled] = useState(true);
   // The ANIMATION system, loaded and held entirely apart from the kinematics
-  // state above (design/pose-animation-split.md): same sidecar, two sections,
-  // and a model may ship either, both, or neither.
+  // state above: kinematics is the sidecar's, choreography is the render
+  // module beside the document (<name>.step.js), and a model may ship either,
+  // both, or neither.
   const [animationLoadState, setAnimationLoadState] = useState({
     url: "",
     status: "idle",
@@ -1447,13 +1447,14 @@ export default function CadWorkspace({
   const selectedStepModuleDefinition = stepModuleLoadState.url === selectedStepModuleUrl
     ? stepModuleLoadState.definition
     : null;
-  const selectedAnimationClips = animationLoadState.url === selectedStepModuleUrl
+  const selectedRenderModuleUrl = supportsSidecarParams ? entryRenderModuleUrl(selectedEntry) : "";
+  const selectedAnimationClips = animationLoadState.url === selectedRenderModuleUrl
     ? animationLoadState.clips
     : null;
-  const selectedAnimationStatus = selectedStepModuleUrl
-    ? (animationLoadState.url === selectedStepModuleUrl ? animationLoadState.status : "loading")
+  const selectedAnimationStatus = selectedRenderModuleUrl
+    ? (animationLoadState.url === selectedRenderModuleUrl ? animationLoadState.status : "loading")
     : "idle";
-  const selectedAnimationError = animationLoadState.url === selectedStepModuleUrl
+  const selectedAnimationLoadError = animationLoadState.url === selectedRenderModuleUrl
     ? animationLoadState.error
     : "";
   const selectedStepModuleStatus = selectedStepModuleUrl
@@ -1694,7 +1695,7 @@ export default function CadWorkspace({
       resetAnimationClock();
     };
 
-    if (!selectedStepModuleUrl) {
+    if (!selectedRenderModuleUrl) {
       setAnimationLoadState({ url: "", status: "idle", error: "", clips: null });
       resetAnimation();
       return () => {
@@ -1703,21 +1704,21 @@ export default function CadWorkspace({
     }
 
     setAnimationLoadState({
-      url: selectedStepModuleUrl,
+      url: selectedRenderModuleUrl,
       status: "loading",
       error: "",
       clips: null
     });
     resetAnimation();
 
-    loadAnimationSource(selectedStepModuleUrl)
-      .then((moduleSource) => compileAnimationClips(moduleSource))
-      .then((clips) => {
+    loadRenderModule(selectedRenderModuleUrl)
+      .then((renderModule) => {
         if (cancelled) {
           return;
         }
+        const clips = renderModule?.clips || {};
         setAnimationLoadState({
-          url: selectedStepModuleUrl,
+          url: selectedRenderModuleUrl,
           status: "ready",
           error: "",
           clips
@@ -1737,7 +1738,7 @@ export default function CadWorkspace({
           return;
         }
         setAnimationLoadState({
-          url: selectedStepModuleUrl,
+          url: selectedRenderModuleUrl,
           status: "error",
           error: error instanceof Error ? error.message : String(error),
           clips: null
@@ -2130,6 +2131,18 @@ export default function CadWorkspace({
   // THE content signal: "is there anything on screen?", answered once for every format.
   // Consumers (toolbar gates, CTA, preview mode, zoom pill, alert blocking) read this
   // instead of each one guessing which loaded object backs the viewport.
+  // The render module's clips are checked against the compiled tree once it is
+  // in hand: a target no part carries fails HERE, in the Status tab, not the
+  // first time playback reaches that frame.
+  const selectedAnimationValidationError = useMemo(() => {
+    if (!selectedAnimationClips || !Array.isArray(selectedMeshData?.parts) || !selectedMeshData.parts.length) {
+      return "";
+    }
+    return validateRenderModuleClips(THREE, selectedMeshData, selectedAnimationClips)
+      .map((problem) => `${problem.clip}: ${problem.error}`)
+      .join("\n");
+  }, [selectedAnimationClips, selectedMeshData]);
+  const selectedAnimationError = selectedAnimationLoadError || selectedAnimationValidationError;
   const selectedViewportContent = selectedMeshData;
 
   // THE parameter runtime: which store backs the selected entry's parameters, resolved
@@ -3124,7 +3137,7 @@ export default function CadWorkspace({
     ),
     hasStepAnimationPanel: Boolean(
       selectedAnimationClipList.length ||
-      (selectedStepModuleUrl && selectedAnimationStatus === "loading") ||
+      (selectedRenderModuleUrl && selectedAnimationStatus === "loading") ||
       selectedAnimationError
     ),
     hasFileStatus: selectedFileHasWarningOrErrorStatus,
@@ -3397,7 +3410,7 @@ export default function CadWorkspace({
     if (animationSlice) {
       const restoredAnimationState = restoreAnimationState(
         animationSlice,
-        animationLoadState.url === entryPoseUrl(entry) ? animationLoadState.clips : null
+        animationLoadState.url === entryRenderModuleUrl(entry) ? animationLoadState.clips : null
       );
       animationStateRef.current = restoredAnimationState;
       setAnimationState(restoredAnimationState);
