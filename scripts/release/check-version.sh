@@ -53,16 +53,19 @@ done
 
 cd "$REPO_ROOT"
 
+version="$(tr -d '[:space:]' < VERSION)"
+if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+  echo "VERSION must be a plain semver version like 1.2.3, got '$version'" >&2
+  exit 1
+fi
+echo "Canonical release version is valid: $version"
 if [ -n "$BASE_REF" ]; then
   "$SCRIPT_DIR/bump-version.sh" --check-incremented-from "$BASE_REF"
-else
-  "$SCRIPT_DIR/bump-version.sh" --check
 fi
 
 # Every skill that names cadgen must pin THIS version. The release PR stamps the
 # pins (pin-cadgen-requirements.sh) alongside VERSION; a bare `cadgen` line or a
 # pin at another version means the two moved separately.
-version="$(tr -d '[:space:]' < VERSION)"
 stale=0
 while IFS= read -r manifest; do
   if grep -Eq '^cadgen(\[[a-z0-9_,-]+\])?[[:space:]]*$' "$manifest"; then

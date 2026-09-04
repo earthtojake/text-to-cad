@@ -104,9 +104,9 @@ jobs:
           SET_VERSION: ${{ inputs.set_version }}
         run: |
           if [ -n "$SET_VERSION" ]; then
-            scripts/release/bump-version.sh --set-version "$SET_VERSION" --no-commit
+            scripts/release/bump-version.sh --set-version "$SET_VERSION"
           else
-            scripts/release/bump-version.sh "$BUMP" --no-commit
+            scripts/release/bump-version.sh "$BUMP"
           fi
           node scripts/release/sync-version.mjs
           scripts/release/pin-cadgen-requirements.sh
