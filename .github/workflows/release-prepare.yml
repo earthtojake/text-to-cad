@@ -160,7 +160,11 @@ jobs:
           git commit -m "Release $VERSION"
           git push --force-with-lease origin "$branch"
 
-          if pr_json="$(gh pr view "$branch" --repo "$GITHUB_REPOSITORY" --json number,url 2>/dev/null)"; then
+          # Only an OPEN pull request from this branch is ours to update: a closed or
+          # merged one with the same head name (a previous release, or a development
+          # branch that happened to be called release/X.Y.Z) cannot be re-based.
+          pr_json="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base "$TARGET" --state open --json number,url --jq '.[0] // empty')"
+          if [ -n "$pr_json" ]; then
             pr_number="$(printf '%s\n' "$pr_json" | jq -r '.number')"
             pr_url="$(printf '%s\n' "$pr_json" | jq -r '.url')"
             gh pr edit "$pr_number" \

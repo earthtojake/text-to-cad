@@ -471,9 +471,9 @@ done on 2026-09-04; `develop`'s protection is still in place until step 5.
 2. Retire the `main publish only` ruleset (it blocked updates, deletions and
    non-fast-forward pushes and required linear history, which would refuse
    every PR merge). Done: ruleset 17058028 deleted.
-3. Land the history: merge PR #273 once its required checks are green
-   (`gh pr merge 273 --merge`). Keep the merge commit; do not squash — the
-   source history is the point.
+3. Land the history: merge PR #273 once its required checks are green. Done
+   2026-09-04 as a squash (`gh pr merge 273 --squash`, `main` = 3eb1f9b8); the
+   granular source history is kept at `history/0.5.0-source`.
 4. Protect `main` the way `develop` was protected (done; the classic
    branch-protection API):
    ```bash
