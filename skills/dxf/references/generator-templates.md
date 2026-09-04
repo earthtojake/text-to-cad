@@ -1,11 +1,11 @@
-# DXF generator templates
+# DXF drawing templates
 
-Read this file when creating a new `<name>.py` drawing generator. Copy the
+Read this file when creating a new `<name>.py` drawing script. Copy the
 template for the workflow that applies and replace the TODO markers.
 
-Every template follows one contract: **the `@dxf` function returns build123d 2D
-geometry and the engine writes the DXF.** You never construct a document, name a
-file, or think about entities.
+Every template follows one contract: **the parameterless `@dxf` function
+returns build123d 2D geometry and the engine writes the DXF.** You never
+construct a document, name a file, or think about entities.
 
 - Return a **bare shape** for a single-operation drawing — it lands on the `CUT`
   layer.
@@ -17,11 +17,13 @@ file, or think about entities.
   rather than silently writing its XY shadow.
 - Validation runs during generation: cut layers must hold closed profiles, and
   open geometry belongs on a bend/engrave/reference-named layer.
+- Every script ends with `if __name__ == "__main__": <drawing>()` — the call
+  is what builds it.
 
 ## 1. Standalone drafting (DXF from scratch)
 
 For pure 2D outputs — gaskets, panels, templates, cut layouts — with no 3D model
-behind them. Keep meaningful dimensions as named parameters.
+behind them. Keep meaningful dimensions as named constants.
 
 ```python
 """Standalone 2D drawing: <description>."""
@@ -31,7 +33,7 @@ from __future__ import annotations
 from cadgen import build123d as bd
 from cadgen import dxf
 
-# TODO: named dimension parameters
+# TODO: named dimension constants
 WIDTH_MM = 40.0
 HEIGHT_MM = 20.0
 HOLE_D_MM = 4.5
@@ -81,10 +83,12 @@ toolchains consume geometry, and font rendering inside CAM is unreliable.
 
 ## 2. Flat pattern of a generated STEP part
 
-For a profile of a `$cad` model. The drawing imports the model's module and
-calls it — a decorated model function is a transparent callable, and importing a
-model never builds it. The imported module and its own imports are recorded as
-freshness inputs automatically, so editing the 3D part invalidates the drawing.
+For a profile of a `$cad` model. The drawing imports the model and calls it,
+exactly as an assembly composes a child: importing a model never builds it,
+and the call inside the drawing's build returns the part's geometry (building
+the part first if it is stale). The drawing's record pins the part's RESULT,
+so a geometry change in the part makes the drawing stale and a comment or
+refactor does not; a constant imported from the part is tracked by value.
 
 ```python
 """Flat-pattern DXF drawing for <name>; geometry reused from <name>.py."""
@@ -93,7 +97,7 @@ from __future__ import annotations
 
 from cadgen import dxf, flatten
 
-from <name> import <name>          # transparent callable; closure-tracked
+from <name> import <name>          # a child: tracked by its result; importing never builds
 
 THICKNESS_MM = 6.0                 # TODO: the profile face's height
 
@@ -184,3 +188,6 @@ if __name__ == "__main__":
   faces, so a filleted corner exports as an `ARC` and a hole as a `CIRCLE`, kerf
   included. If a drawing comes out as hundreds of short `LINE`s, something fell
   back to the sampled path — check the union inputs rather than accepting it.
+- **Why did it (not) rebuild?** `cadgen store why <drawing>.py` prints the
+  drawing's gate: its closure files, each part it called with the pinned and
+  current tree, and whether the `.dxf` on disk is the one it wrote.

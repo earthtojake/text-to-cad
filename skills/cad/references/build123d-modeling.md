@@ -160,7 +160,7 @@ glass.color = srgb("#38414D", 0.42)   # with alpha
 ```
 
 **Colour on a group compound is ignored.** Only *leaf* occurrences carry colour
-into the render package, so a colour set on a `Compound` that has children never
+into the model's tree, so a colour set on a `Compound` that has children never
 reaches the screen. It does reach the STEP file's XCAF label, which is why this
 looks like it worked if you only check the STEP. Colour every leaf.
 
@@ -169,7 +169,7 @@ looks like it worked if you only check the STEP. Colour every leaf.
 Colour alone cannot tell cast from machined from carbon: those differ in how
 they RESPOND to light, and by default every part takes the viewer theme's one
 roughness/metalness/clearcoat. A leaf shape may carry a `cad_material` dict to
-override those per part; the values ride the render package's occurrence and
+override those per part; the values ride the tree's occurrence and
 the viewer applies them over the theme, so the same model reads differently
 under every theme without re-authoring:
 
@@ -405,12 +405,15 @@ above the surface. Two independent modules shipped defects from this exact
 assumption. Default alignment IS centered; reserve `align=None` for when the
 raw datum is genuinely wanted.
 
-## `.located()` SETS the placement; `.moved()` composes with it
+## Place with `Location * shape` or `.moved()`, never `.located()`
 
+Two independent reasons, both silent.
+
+**`.located()` SETS the placement; `.moved()` composes with it.**
 `Shape.rotate()` returns a rotated copy. Placing that copy with
 `.located(Location(pos))` throws the rotation away: `located` assigns an
 ABSOLUTE location, so what lands at `pos` is the ORIGINAL orientation.
-`.moved()` is the one that composes.
+`.moved()` and the operator form compose.
 
 ```python
 box = Solid.make_box(1, 1, 1)          # x[0,1]
@@ -418,7 +421,8 @@ r   = box.rotate(Axis.Z, 90)           # x[-1,0]   rotation applied
 
 r.located(Location((5, 0, 0)))         # x[5,6]    rotation DISCARDED
 r.moved(Location((5, 0, 0)))           # x[4,5]    rotation kept
-box.located(Location((5, 0, 0), (0, 0, 90)))   # x[4,5]  one Location carrying both
+Location((5, 0, 0)) * r                # x[4,5]    the same, as an operator
+Pos(5, 0, 0) * Rot(0, 0, 90) * box     # x[4,5]    position and rotation, composed
 ```
 
 Nothing raises, and the bounding box moves the distance you asked for, so the
@@ -428,8 +432,16 @@ The failure mode is a sweep that reads as physics. Placing a part with
 `.rotate(...).located(...)` inside a loop over angles feeds `intersect()` the
 same unrotated shape every iteration, so a gear-mesh collision check returns an
 identical volume to 15 significant digits at every phase — a flat, plausible
-curve rather than an error. Reach for `.moved()` when a shape already carries a
-transform, or build one `Location(position, rotation)` and `.located()` that.
+curve rather than an error.
+
+**`.located()` deep-copies the geometry.** In an assembly body, a child model
+placed with `.moved()` or `Location * child` keeps its identity, so the
+parent's result LINKS to the child's tree (stored once, shared by every
+parent). `.located()` copies the underlying shape, which makes the parent own
+a duplicate of the child's geometry as its own component — the file still
+builds, the dependency is still tracked, but the link is gone and the
+component is written again. Reach for `.moved()` or the operator form; there
+is no case that needs `.located()`.
 
 ## Dense periodic spline profiles: kernel ops to avoid
 

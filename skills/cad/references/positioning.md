@@ -126,14 +126,22 @@ Use the frame method that matches native build123d joint inputs: `rigid_frame()`
 
 ## Child dependencies
 
-A child part is wired in one of two modes — **LINKED** (a generated child:
-import its model function and call it; the default) or **UNLINKED** (a
-document read via
-`cadgen.read_step`: imported parts, or a generated child the user explicitly
-asked to decouple). The modes, their staleness semantics, and the code live
-in "Composing on other parts" in `step-generation.md`. Positioning-wise the
-two are identical: a child is a shape; place it with the same frames and
-mates as authored geometry.
+A child part is wired in one of two modes — a **CHILD** (a model in this
+project: import its function and call it; the default) or an **INPUT** (a
+document read via `cadgen.read_step`: imported parts, or a generated part the
+user explicitly asked to decouple). The modes, what a rebuild tracks, and the
+code live in "Composing on other parts" in `step-generation.md`.
+Positioning-wise the two are identical: a child is a shape; place it with the
+same frames and mates as authored geometry.
+
+**Place a child with `Pos/Rot/Location * child` or `child.moved(loc)` — never
+`child.located(loc)`.** `located()` deep-copies the geometry, so the parent
+owns a duplicate component instead of linking to the child's tree, and it
+also discards any rotation the shape already carried (`build123d-modeling.md`).
+`AssemblyHelper` and build123d joints place through `connect_to()` and keep
+the link. A mirrored placement is not a placement at all — STEP cannot express
+a reflection — so a right-hand part is its own model built from the shared
+factory (`step-generation.md`, "Mirrored parts are their own models").
 
 ## Imported components
 

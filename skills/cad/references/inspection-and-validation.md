@@ -25,7 +25,7 @@ path/to/entry.step
 
 Targets are documents: an extensionless `<name>` resolves to `<name>.step`, and a `.py` model script is refused by name (run `python <model>.py`, then inspect the STEP it wrote).
 
-Selector-backed queries (`refs --facts`, planes, measures) on generated assemblies resolve from the render package's per-component `.surf` files on demand; there is no separate topology sidecar to build or invalidate.
+Selector-backed queries (`refs --facts`, planes, measures) resolve from the document's tree in the store — its per-component `.surf` objects — on demand; a document with no tree yet is compiled from its bytes first, generated or imported alike. There is no separate topology sidecar to build or invalidate, and a document is never refused for being behind its script.
 
 Selector refs are local to the STEP/CAD entry target passed to the command:
 

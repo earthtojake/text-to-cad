@@ -8,7 +8,7 @@ description: Project structure for multi-part CAD work - src/ for model scripts 
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 
 This skill is pure convention: cadgen itself is deliberately unopinionated (a
-model script's artifact defaults to its sibling; `out=` relocates it). Use
+model script's outputs default to its siblings; `out=` relocates them). Use
 this structure for anything bigger than a couple of loose models; skip it for
 one-off parts, where a flat folder is fine. Authoring the models themselves is
 the `$cad` skill; drawings are `$dxf`.
@@ -30,12 +30,15 @@ Only OUTPUTS are organized by format. Code is not: a model script is not a
 <project>/
   src/                    # AUTHORED code — the only thing you edit
     README.md             #   the model catalog (see below)
-    plate.py              #   one @step/@dxf model per file
-    plate_drawing.py
+    plate.py              #   one model per file: a part …
+    plate_drawing.py      #   … a drawing …
+    frame.py              #   … a sub-assembly …
+    assembly.py           #   … the root assembly
     lib/                  #   shared code (plain modules — never models)
       __init__.py         #     one-line docstring; lib is a regular package
-      holes.py
-  STEP/                   # raw outputs ONLY (+ their source sidecars)
+      holes.py            #     helpers
+      bracket_shape.py    #     a factory two models build from
+  STEP/                   # raw outputs ONLY (+ their sidecars)
     plate.step
     imported/             #   committed source files brought in from outside (see commit policy)
   DXF/  STL/  GLB/  3MF/  # other format folders: same shape, outputs + imported/
@@ -66,9 +69,10 @@ Two mechanical rules:
    `out=` resolves relative to the script, so the project relocates as a
    unit.
 2. **`src/` holds ONLY runnable model scripts.** Every `.py` directly under
-   `src/` is a model that ends with `if __name__ == "__main__": <model>()` —
-   run it to build it. Everything shared goes in
-   `src/lib/`. So `ls src/*.py` IS the model catalog. `src/lib/` is a regular
+   `src/` is a model — one parameterless decorated function — that ends with
+   `if __name__ == "__main__": <model>()`; run it to build it. Everything
+   shared goes in `src/lib/`: helpers, factories, and constants several models
+   read. So `ls src/*.py` IS the model catalog. `src/lib/` is a regular
    package, not a namespace one: it always contains an `__init__.py`, and a
    one-line docstring naming what the package holds is enough.
 
@@ -77,13 +81,20 @@ script's own directory — `src/` — on `sys.path`, so shared code and sibling
 models import directly, from any working directory:
 
 ```python
-from lib import fasteners
-from plate import WIDTH        # constants from another model; importing never builds
+from lib import fasteners            # a helper module: any edit to it rebuilds this model
+from plate import WIDTH              # a constant from another model: tracked by value
+from plate import plate              # another model: a child, tracked by its result
 ```
 
+Those three imports are the three kinds of dependency a model can have —
+**models by result, constants by value, functions by file** — and `cadgen
+store why src/<model>.py` shows which ones a model has and whether each is
+current. Importing a model never builds it; calling it inside your body does.
+
 Build from anywhere: `python src/plate.py`. Build-if-missing and rebuild are
-the same command — the freshness gate runs first, so unchanged models no-op.
-Regenerate a whole project mechanically:
+the same command — the freshness gate runs first, so an unchanged model is a
+no-op. There is no project-level build command: regenerate a whole project by
+running each script.
 
 ```bash
 for f in src/*.py; do python "$f"; done
@@ -93,6 +104,33 @@ The CAD Viewer opened at the project root catalogs the format folders'
 artifacts (scripts never appear); before anything is built, discovery is
 `src/`, not the viewer.
 
+## Assemblies pull their children
+
+A parent (`assembly.py`) imports its part and sub-assembly models and calls
+them in its body; each call builds that child if it is stale — in parallel
+with its siblings, on its own worker — or loads it from the store, and the
+parent's output LINKS to the child's result. So **running the root is the
+whole build**: `python src/assembly.py` rebuilds exactly what is stale beneath
+it and nothing else. Dependency is pull, not push: rebuilding a part on its
+own (`python src/plate.py`) does NOT rebuild the assemblies that use it —
+rerun the parent to pick the change up.
+
+**A sub-assembly is a model** with its own file and its own outputs
+(`frame.py` → `STEP/frame.step`), composed into the root exactly like a part.
+A helper that returns a group of placed parts belongs in a model file, not in
+`lib/`: as a model it has a record, builds once, links into every parent and
+gives you a STEP to inspect on its own; as a `lib/` function it re-runs inside
+every caller and any edit rebuilds them all.
+
+**A mirrored part is its own model.** STEP cannot express a reflection, so a
+right-hand part is not a mirrored placement of the left-hand one: put the
+shape in a `lib/` factory (`side_bracket(mirrored=False)`) and give each hand
+a one-line model file. The template shows the pattern.
+
+**A print-only part is a model too.** `@stl` (or `@glb`/`@threemf`) with no
+`@step` declares a model whose outputs are meshes; it composes into
+assemblies like any part and writes no STEP.
+
 ## Naming
 
 - Model script stem = artifact stem = a Python identifier (`plate.py` →
@@ -101,6 +139,7 @@ artifacts (scripts never appear); before anything is built, discovery is
   never into the stem — scripts must stay importable modules.
 - A drawing gets its own stem: `plate_drawing.py` → `DXF/plate_drawing.dxf`
   (one model per file).
+- A mirrored pair is two stems: `bracket_left.py`, `bracket_right.py`.
 - Never distinguish files by case alone (macOS filesystems are usually
   case-insensitive).
 - Files brought in from outside — vendor downloads, supplier files, anything
@@ -127,29 +166,26 @@ forever. Treat a rename as an edit PLUS a cleanup, done conservatively:
 
 ## Building many models
 
-A parent's children build in parallel on their own workers as the body
-calls them, so running the root is already the parallel build. Distinct
-models fan out safely too; two concurrent builds of one script both run and
-the store keeps the result whose sources are current (nothing corrupts):
+Running the root assembly already builds its children in parallel. Distinct
+roots fan out safely too: builds never wait on or cancel one another, and two
+concurrent runs of one script both complete, with the store keeping the result
+whose sources match the files as they are now (nothing corrupts).
 
 ```bash
 ls src/*.py | xargs -n1 -P4 python
 ```
 
-Two costs worth avoiding: parallel snapshot invocations each pay a headless
-browser — batch several views into one `--job` packet instead — and
-concurrent identical mesh exports of one document waste work (the shared
-freshness ledger makes them safe, not free).
+Running builds are limited to one per core (`CADGEN_JOBS` overrides); the
+rest queue, so a wide fan-out costs no wall time over the ideal. Two costs
+worth avoiding: parallel snapshot invocations each pay a headless browser —
+batch several views into one `--job` packet instead — and concurrent identical
+mesh exports of one document waste work (the shared ledger makes them safe,
+not free).
 
-The lock is also why several agents building ONE assembly entry at once report
-long wall times that are not build cost: each waits for the holder, then
-finds the result current or rebuilds only its own scope. Measured on a
-sixteen-module engine with six builders, a ten-minute run was eight and a half
-minutes of `waiting for another run to finish building`. Give each parallel
-builder its own entry instead — a small `@step` script that composes only its
-subsystem (with the others' modules stubbed or omitted) — verify there, and
-build the full assembly once when the subsystems land. Memo scopes make that
-final build pay only for what changed.
+Several agents building one assembly at once: give each its own entry — a
+small model that composes only its subsystem — verify there, and build the
+full assembly once when the subsystems land; the root then links the
+subsystems' results and rebuilds only what changed.
 
 ## `src/README.md` — the model catalog
 
@@ -159,12 +195,15 @@ what builds what without reading every script:
 ```markdown
 # <project> models
 
-| Script           | Artifact              | Description                   |
-|------------------|-----------------------|-------------------------------|
-| plate.py         | STEP/plate.step       | Mounting plate, param `hole_d`|
-| plate_drawing.py | DXF/plate_drawing.dxf | Plate flat pattern            |
+| Script           | Artifact              | Description                          |
+|------------------|-----------------------|--------------------------------------|
+| plate.py         | STEP/plate.step       | Mounting plate, `HOLE_D` corner holes|
+| plate_drawing.py | DXF/plate_drawing.dxf | Plate flat pattern                   |
+| frame.py         | STEP/frame.step       | Plate + two standoffs (sub-assembly) |
+| assembly.py      | STEP/assembly.step    | Frame + left/right brackets (root)   |
 
-Build: `python src/<script>` per row; unchanged models are no-ops.
+Build: `python src/assembly.py` builds the root and whatever is stale beneath
+it; `python src/<script>` per row for the rest; unchanged models are no-ops.
 Imported sources: STEP/imported/servo.step (committed, no script).
 ```
 
@@ -208,9 +247,10 @@ Note the `*` forms: ignoring the directory itself (`/STEP/`) would make the
 
 ## Scaffolding a new project
 
-Copy `references/project-template.md` — the full tree with a working example
-model, drawing, lib module, README, and .gitignore to create verbatim. Then
-verify the loop end to end: `python src/<first-model>.py`, snapshot it, and
-confirm the format folder gained the artifact. The template ends with the
-finished tree — what the project looks like after that first build, imported
-source and sidecar included — so there is nothing else to go and look at.
+Copy `references/project-template.md` — the full tree with a working part,
+drawing, mesh-only part, mirrored pair, two-level assembly, lib modules,
+README, and .gitignore to create verbatim. Then verify the loop end to end:
+`python src/assembly.py`, snapshot it, and confirm the format folders gained
+the artifacts. The template ends with the finished tree — what the project
+looks like after that first build, imported source and sidecar included — so
+there is nothing else to go and look at.

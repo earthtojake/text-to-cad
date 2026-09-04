@@ -1,14 +1,19 @@
 # Project scaffold template
 
 Create these files verbatim (rename `demo`/`plate` to the real project/part),
-then run `python src/plate.py` from the project root to verify the loop. The
-finished tree at the end shows the whole project after that first build.
+then run `python src/assembly.py` from the project root to verify the loop.
+The finished tree at the end shows the whole project after that first build.
 
 The project root, `demo/` below, is the workspace root when the workspace is
 bare, and otherwise sits inside the workspace's existing home for models —
 `<workspace>/models/demo/`, or `cad/`, `hardware/`, whatever it already uses;
 `models/` is only the conventional name. Everything under `demo/` is the same
 either way.
+
+The template is one of everything: a part (`plate`), a drawing of it
+(`plate_drawing`), a print-only mesh part (`standoff`), a mirrored pair built
+from one factory (`bracket_left`/`bracket_right`), a sub-assembly that places
+one child twice (`frame`), and the root assembly (`assembly`).
 
 ## `src/plate.py`
 
@@ -51,7 +56,7 @@ from cadgen import build123d as bd
 from cadgen import dxf
 
 from lib import holes
-from plate import DEPTH, WIDTH  # importing a model never builds it
+from plate import DEPTH, WIDTH  # constants from a model: tracked by value; importing never builds
 
 
 HOLE_D = 4.5
@@ -74,10 +79,158 @@ A `@dxf` function returns build123d 2D geometry and the engine writes the DXF �
 the same division of labor `@step` has. Return `{layer: shape}` instead when a
 drawing genuinely has more than one CAM operation. See the `$dxf` skill.
 
+## `src/standoff.py`
+
+```python
+"""Demo print-only part: a standoff that exists as a mesh, never a STEP."""
+
+from __future__ import annotations
+
+from cadgen import build123d as bd
+from cadgen import stl
+
+HEIGHT = 12.0
+OUTER_D = 8.0
+BORE_D = 3.4
+
+
+@stl(out="../STL/standoff.stl")
+def standoff():
+    return bd.Cylinder(OUTER_D / 2, HEIGHT) - bd.Cylinder(BORE_D / 2, HEIGHT)
+
+
+if __name__ == "__main__":
+    standoff()
+```
+
+`@stl` alone declares a model whose outputs are meshes: same store record,
+same no-op, and it composes into `frame` below like any part. Add `@step` above
+it later if a STEP is ever wanted; nothing else changes.
+
+## `src/bracket_left.py`
+
+```python
+"""Demo part: the left-hand side bracket."""
+
+from __future__ import annotations
+
+from cadgen import step
+
+from lib.bracket_shape import side_bracket
+
+
+@step(out="../STEP/bracket_left.step")
+def bracket_left():
+    return side_bracket()
+
+
+if __name__ == "__main__":
+    bracket_left()
+```
+
+## `src/bracket_right.py`
+
+```python
+"""Demo part: the right-hand side bracket — the left one's mirror image."""
+
+from __future__ import annotations
+
+from cadgen import step
+
+from lib.bracket_shape import side_bracket
+
+
+@step(out="../STEP/bracket_right.step")
+def bracket_right():
+    return side_bracket(mirrored=True)
+
+
+if __name__ == "__main__":
+    bracket_right()
+```
+
+STEP cannot express a reflection, so a mirrored part is its own model: the
+shape lives once, in the factory, and each hand is a one-line model with its
+own STEP, its own record and its own place in the assembly.
+
+## `src/frame.py`
+
+```python
+"""Demo sub-assembly: the plate carrying two standoffs."""
+
+from __future__ import annotations
+
+from cadgen import build123d as bd
+from cadgen import step
+
+from plate import THICKNESS, WIDTH, plate   # the model (by result) and two constants (by value)
+from standoff import standoff
+
+PITCH = WIDTH / 2
+
+
+@step(out="../STEP/frame.step")
+def frame():
+    base = plate()                                  # built if stale, else loaded; LINKED
+    base.label = "plate"
+    post = standoff()                               # a mesh-only child links like any other
+    left = bd.Pos(-PITCH / 2, 0.0, THICKNESS / 2) * post    # placed: one link …
+    left.label = "standoff_left"
+    right = bd.Pos(PITCH / 2, 0.0, THICKNESS / 2) * post    # … placed again: a second link, one tree
+    right.label = "standoff_right"
+    return bd.Compound(children=[base, left, right], label="frame")
+
+
+if __name__ == "__main__":
+    frame()
+```
+
+Place children with `Pos/Rot/Location * child` or `child.moved(loc)` — never
+`child.located(loc)`, which copies the geometry and turns the link into a
+duplicate component.
+
+## `src/assembly.py`
+
+```python
+"""Demo root assembly: the frame between its two brackets."""
+
+from __future__ import annotations
+
+from cadgen import build123d as bd
+from cadgen import step
+
+from bracket_left import bracket_left
+from bracket_right import bracket_right
+from frame import frame
+from plate import DEPTH, THICKNESS
+
+SPAN = DEPTH / 2 + 6.0
+
+
+@step(out="../STEP/assembly.step")
+def assembly():
+    core = frame()                                  # a sub-assembly: its tree, linked
+    core.label = "frame"
+    left = bd.Pos(0.0, -SPAN, THICKNESS) * bracket_left()
+    left.label = "bracket_left"
+    right = bd.Pos(0.0, SPAN, THICKNESS) * bracket_right()
+    right.label = "bracket_right"
+    return bd.Compound(children=[core, left, right], label="assembly")
+
+
+if __name__ == "__main__":
+    assembly()
+```
+
+Running `python src/assembly.py` builds every stale model beneath it — the
+brackets, the frame, and through the frame the plate and the standoff — in
+parallel, and links their results. Rebuilding a part alone does not rebuild
+this root; rerun it to pick up the change.
+
 ## `src/lib/__init__.py`
 
 ```python
-"""Shared helpers for the demo project's plate and its drawing."""
+"""Shared helpers for the demo project: hole patterns and the bracket factory."""
 ```
 
 `src/lib/` is a regular package, so this file is never omitted — one line naming
@@ -110,18 +263,49 @@ def corner_holes(body, width: float, depth: float, thickness: float, hole_d: flo
     return body
 ```
 
+## `src/lib/bracket_shape.py`
+
+```python
+"""The side-bracket factory: one shape, two hands (plain module: no @step here)."""
+
+from __future__ import annotations
+
+from cadgen import build123d as bd
+
+LENGTH = 40.0
+HEIGHT = 10.0
+THICKNESS = 6.0
+HOLE_D = 5.0
+
+
+def side_bracket(mirrored: bool = False) -> bd.Shape:
+    body = bd.Box(LENGTH, THICKNESS, HEIGHT)
+    body -= bd.Pos(LENGTH / 4, 0.0, 0.0) * bd.Rot(90, 0, 0) * bd.Cylinder(HOLE_D / 2, THICKNESS * 2)
+    return bd.mirror(body, about=bd.Plane.YZ) if mirrored else body
+```
+
+A helper in `lib/` is part of the SOURCE of every model that imports it: any
+edit here rebuilds both brackets (and, on their next run, the assemblies that
+use them). That is the right behaviour for a factory — and the reason shared
+code that is really a sub-assembly should be a model file instead.
+
 ## `src/README.md`
 
 ```markdown
 # demo models
 
-| Script           | Artifact              | Description                    |
-|------------------|-----------------------|--------------------------------|
-| plate.py         | STEP/plate.step       | Mounting plate, param `hole_d` |
-| plate_drawing.py | DXF/plate_drawing.dxf | Plate flat pattern             |
+| Script           | Artifact               | Description                           |
+|------------------|------------------------|---------------------------------------|
+| plate.py         | STEP/plate.step        | Mounting plate, `HOLE_D` corner holes |
+| plate_drawing.py | DXF/plate_drawing.dxf  | Plate flat pattern                    |
+| standoff.py      | STL/standoff.stl       | Print-only standoff (mesh only)       |
+| bracket_left.py  | STEP/bracket_left.step | Left side bracket                     |
+| bracket_right.py | STEP/bracket_right.step| Right side bracket (mirror image)     |
+| frame.py         | STEP/frame.step        | Plate + two standoffs (sub-assembly)  |
+| assembly.py      | STEP/assembly.step     | Frame + both brackets (root)          |
 
-Build everything: run each script (`python src/plate.py`,
-`python src/plate_drawing.py`); unchanged models are no-ops.
+Build: `python src/assembly.py` builds the root and whatever is stale beneath
+it; `python src/plate_drawing.py` for the drawing; unchanged models are no-ops.
 Imported sources: STEP/imported/servo.step (committed, no script).
 ```
 
@@ -131,7 +315,8 @@ produces it, so it is committed, and a model script that composes it reads it
 with `cadgen.read_step` anchored on the script's own location — scripts build
 from any working directory, so the path is
 `Path(__file__).parent / "../STEP/imported/servo.step"`, never a bare relative
-string (the `$cad` skill covers `read_step`).
+string (the `$cad` skill covers `read_step`, and how to wrap an import in a
+model of its own so assemblies can link to it).
 
 ## `.gitignore`
 
@@ -157,10 +342,11 @@ other file deliberately with its own negation line or `git add -f`.
 ## Verify
 
 ```bash
-python src/plate.py                      # builds STEP/plate.step (render package in the store)
-python src/plate.py                      # "current" — the no-op gate works
-python src/plate_drawing.py              # builds DXF/plate_drawing.dxf
-cadgen step snapshot STEP/plate.step tmp/plate.png
+python src/assembly.py                   # builds the root and, beneath it, frame, plate, standoff, both brackets
+python src/assembly.py                   # "current" — the no-op gate works
+python src/plate_drawing.py              # builds DXF/plate_drawing.dxf (the drawing is not under the root)
+cadgen store why src/frame.py            # the frame's record: its two children, pinned and current
+cadgen step snapshot STEP/assembly.step tmp/assembly.png
 ```
 
 ## The finished tree
@@ -175,22 +361,37 @@ demo/
     README.md
     plate.py
     plate_drawing.py
+    standoff.py
+    bracket_left.py
+    bracket_right.py
+    frame.py
+    assembly.py
     lib/
       __init__.py
       holes.py
+      bracket_shape.py
   STEP/
     plate.step                  # generated by src/plate.py — ignored
-    plate.step.json             #   its sidecar, generated with it — ignored
+    bracket_left.step
+    bracket_right.step
+    frame.step
+    assembly.step
     imported/
       servo.step                # brought in from outside — committed
+  STL/
+    standoff.stl                # generated by src/standoff.py — ignored
   DXF/
     plate_drawing.dxf           # generated by src/plate_drawing.py — ignored
   tmp/
-    plate.png                   # the snapshot: scratch — ignored
+    assembly.png                # the snapshot: scratch — ignored
 ```
+
+No model here declares kinematics, animation or a mesh export beside its
+STEP, so no `.step.json` sidecar is written; a model that does gets one
+beside its document, generated with it and ignored with it.
 
 `git status` in this tree shows exactly `.gitignore`, `src/` and
 `STEP/imported/servo.step`: authored code plus the one input code cannot
 regenerate. Everything else is rebuilt by running the scripts, so a fresh
-clone that runs `for f in src/*.py; do python "$f"; done` arrives at this same
-tree.
+clone that runs `python src/assembly.py && python src/plate_drawing.py`
+arrives at this same tree.
