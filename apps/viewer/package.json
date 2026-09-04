@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@babel/parser": "^7.29.7",
-    "@babel/traverse": "^7.29.7",
+    "@babel/traverse": "^8.0.4",
     "@tailwindcss/postcss": "^4.2.2",
     "@vitejs/plugin-react": "^4.7.0",
     "pngjs": "^7.0.0",
