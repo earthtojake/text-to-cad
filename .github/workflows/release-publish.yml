@@ -167,7 +167,7 @@ jobs:
       # exactly what was uploaded.
       - name: Upload the distribution as a workflow artifact
         if: steps.gate.outputs.should_publish == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cadgen-${{ steps.gate.outputs.version }}
           path: packages/cadgen/dist/*
