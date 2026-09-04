@@ -27,6 +27,7 @@ from __future__ import annotations
 from pathlib import Path
 
 __all__ = [
+    "CompileFailed",
     "ScriptTargetError",
     "announce_rebuild",
     "document_target",
@@ -37,6 +38,14 @@ __all__ = [
 
 class ScriptTargetError(ValueError):
     """A CLI door was handed a model script instead of a document."""
+
+
+class CompileFailed(RuntimeError):
+    """The compile job for a document's bytes did not produce a tree.
+
+    Its message is the compile's own error (the job's output), which is what a
+    door reports verbatim -- a door never adds a "regenerate" instruction.
+    """
 
 
 def document_tree(document: Path) -> str:
@@ -60,10 +69,10 @@ def document_tree(document: Path) -> str:
     job = submit_compile(document)
     if job.wait() != 0:
         said = job.output().rstrip()
-        raise RuntimeError(f"compiling {_display(document)} failed" + (f":\n{said}" if said else ""))
+        raise CompileFailed(f"compiling {_display(document)} failed" + (f":\n{said}" if said else ""))
     tree = result_tree_for(document)
     if not tree:
-        raise RuntimeError(f"no tree for {_display(document)} after its compile")
+        raise CompileFailed(f"no tree for {_display(document)} after its compile")
     return tree
 
 

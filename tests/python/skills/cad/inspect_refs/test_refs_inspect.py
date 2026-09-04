@@ -599,10 +599,10 @@ class InspectRefsTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         error = result["errors"][0]
         self.assertEqual("glb_regeneration_failed", error["code"])
-        self.assertIn("\nRegenerate STEP artifacts with the following command using the CAD skill:", error["message"])
-        self.assertNotIn("scripts.gen", error["message"])
-        self.assertIn("regenerateCommand", error)
-        self.assertEqual("python", error["regenerateCommand"])
+        # A door never tells the user to run anything: the message is the
+        # compile's own failure and nothing else travels beside it.
+        self.assertNotIn("Regenerate", error["message"])
+        self.assertNotIn("regenerateCommand", error)
 
     def test_legacy_cad_ref_mismatch_is_accepted_when_hash_matches(self) -> None:
         with self._mock_glb_topology({**_refs_manifest("other/ref"), "stepHash": "step-hash-123"}):
