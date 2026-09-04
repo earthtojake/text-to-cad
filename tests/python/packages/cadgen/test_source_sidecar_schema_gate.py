@@ -80,7 +80,7 @@ class SidecarSchemaGate(unittest.TestCase):
         with self.assertRaises(SidecarSchemaError) as caught:
             read_source_sidecar(self.document)
         message = str(caught.exception)
-        self.assertIn(f"unsupported sidecar schema 4 (expected {SOURCE_SIDECAR_SCHEMA_VERSION})", message)
+        self.assertIn(f"unsupported sidecar schema {SOURCE_SIDECAR_SCHEMA_VERSION - 1} (expected {SOURCE_SIDECAR_SCHEMA_VERSION})", message)
         self.assertIn("python hinge.py", message)
         self.assertIn("cadgen step build", message)
         # The error states the requirement and the remedy, never the history.
