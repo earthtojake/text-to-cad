@@ -161,8 +161,9 @@ class FollowUps(unittest.TestCase):
         completed = self.run_in(src, "broken.py")
         self.assertEqual(completed.returncode, 1)
         lines = [line for line in completed.stderr.splitlines() if line.strip()]
-        self.assertEqual(len(lines), 1, completed.stderr)
+        # The runner's shape: the FAILED line, then the model frames that led to it.
         self.assertTrue(lines[0].startswith("[python broken.py] FAILED: TypeError: @step out= must be a non-empty path string"), lines[0])
+        self.assertTrue(all(line.startswith("[python broken.py]") for line in lines), completed.stderr)
         self.assertNotIn("Traceback", completed.stderr)
         verbose = self.run_in(src, "broken.py", "--verbose")
         self.assertEqual(verbose.returncode, 1)

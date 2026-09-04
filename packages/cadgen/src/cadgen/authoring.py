@@ -243,6 +243,73 @@ def _register(defn: ModelDef) -> None:
     _REGISTRY[defn.ref] = defn
 
 
+def _declaring(func: Callable[..., Any]) -> "_Declaring":
+    """A context that reports a decoration-time failure the way the runner
+    reports a build failure -- one ``[python <file>.py] FAILED: …`` line on
+    stderr, the full traceback under ``--verbose``, exit 1 -- when the decorated
+    function's module is the script being run. Imported by a parent's build, the
+    exception propagates and the parent's runner reports it as the parent's
+    failure carrying the child's message."""
+    return _Declaring(getattr(func, "__module__", None), _script_path_of(func))
+
+
+def _declaring_here() -> "_Declaring":
+    """The same reporter for a decorator FACTORY (``@step(out=…)``), where no
+    function is known yet: the module is the first caller outside cadgen."""
+    frame = sys._getframe(1)
+    while frame is not None and str(frame.f_globals.get("__name__", "")).split(".")[0] == "cadgen":
+        frame = frame.f_back
+    if frame is None:
+        return _Declaring(None, None)
+    module = frame.f_globals.get("__name__")
+    file = frame.f_globals.get("__file__")
+    return _Declaring(module, Path(file).resolve() if file else None)
+
+
+class _Declaring:
+    def __init__(self, module: str | None, script: Path | None) -> None:
+        self.module = module
+        self.script = script
+
+    def __enter__(self) -> "_Declaring":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        if exc is None or isinstance(exc, (SystemExit, KeyboardInterrupt)):
+            return False
+        if self.module != "__main__" or self.script is None:
+            # Raised while another module imported this one. It propagates as an
+            # ordinary exception -- a parent's runner reports it as the parent's
+            # failure -- and, should it reach the top of a script run uncaught, the
+            # hook below prints it as that script's one-line failure.
+            exc.__cadgen_declaration__ = True  # type: ignore[attr-defined]
+            return False
+        from cadgen._internal.cli_errors import report_cli_error
+
+        report_cli_error(exc, tool=f"python {self.script.name}", verbose="--verbose" in sys.argv[1:])
+        raise SystemExit(1)
+
+
+def _report_uncaught_declaration(exc_type, exc, tb) -> None:
+    """``sys.excepthook``: a declaration failure that escaped to the top of a
+    script run (the script imported a model file whose decorator refused its
+    arguments) is reported like the runner reports a build failure, instead of
+    a traceback. Anything else goes to the previous hook."""
+    main = sys.modules.get("__main__")
+    file = getattr(main, "__file__", None) if main is not None else None
+    if getattr(exc, "__cadgen_declaration__", False) and file and "--verbose" not in sys.argv[1:]:
+        from cadgen._internal.cli_errors import report_cli_error
+
+        report_cli_error(exc, tool=f"python {Path(file).name}", verbose=False)
+        return
+    _PREVIOUS_EXCEPTHOOK(exc_type, exc, tb)
+
+
+_PREVIOUS_EXCEPTHOOK = sys.excepthook
+if sys.excepthook is not _report_uncaught_declaration:
+    sys.excepthook = _report_uncaught_declaration
+
+
 def _script_stamp(script_path: Path) -> tuple[int, int] | None:
     try:
         stat = Path(script_path).stat()
@@ -286,14 +353,21 @@ def _decorator(
     kinematics: object = None,
     step_output: bool = True,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    kinematics_def = (
-        normalize_kinematics(kinematics, where=f"@{fmt}") if kinematics is not None else None
-    )
-    out = _checked_out(out, where=f"@{fmt}")
-    mesh_tolerance = _checked_tolerance(mesh_tolerance, "mesh_tolerance", where=f"@{fmt}")
-    mesh_angular_tolerance = _checked_tolerance(mesh_angular_tolerance, "mesh_angular_tolerance", where=f"@{fmt}")
+    with _declaring_here():
+        kinematics_def = (
+            normalize_kinematics(kinematics, where=f"@{fmt}") if kinematics is not None else None
+        )
+        out = _checked_out(out, where=f"@{fmt}")
+        mesh_tolerance = _checked_tolerance(mesh_tolerance, "mesh_tolerance", where=f"@{fmt}")
+        mesh_angular_tolerance = _checked_tolerance(
+            mesh_angular_tolerance, "mesh_angular_tolerance", where=f"@{fmt}"
+        )
 
     def apply(func: Callable[..., Any]) -> Callable[..., Any]:
+        with _declaring(func):
+            return _apply(func)
+
+    def _apply(func: Callable[..., Any]) -> Callable[..., Any]:
         pending: tuple[MeshExportDecl, ...] = ()
         prior: ModelDef | None = getattr(func, "__cadgen_model__", None)
         if prior is not None:
@@ -392,7 +466,8 @@ def step(
     JavaScript: choreography is the render module beside the document
     (``<name>.step.js``), which the viewer loads by name and no build reads.
     """
-    _reject_unknown_kwargs("step", unsupported)
+    with _declaring_here():
+        _reject_unknown_kwargs("step", unsupported)
     decorator = _decorator(
         "step",
         out=out,
@@ -415,7 +490,8 @@ def dxf(
             "@dxf takes no kinematics=: a drawing is 2D geometry — kinematics "
             "lives on @step and the mesh decorators"
         )
-    _reject_unknown_kwargs("dxf", unsupported)
+    with _declaring_here():
+        _reject_unknown_kwargs("dxf", unsupported)
     decorator = _decorator(
         "dxf", out=out, mesh_tolerance=None, mesh_angular_tolerance=None
     )
@@ -458,19 +534,20 @@ def _mesh_export_decorator(deco_name: str, fmt: str):
         kinematics: object = None,
         **unsupported: Any,
     ):
-        _reject_unknown_kwargs(deco_name, unsupported)
-        out = _checked_out(out, where=f"@{deco_name}")
-        mesh_tolerance = _checked_tolerance(mesh_tolerance, "mesh_tolerance", where=f"@{deco_name}")
-        mesh_angular_tolerance = _checked_tolerance(
-            mesh_angular_tolerance, "mesh_angular_tolerance", where=f"@{deco_name}"
-        )
-        if out is not None and not out.lower().endswith(suffix):
-            raise ValueError(f"@{deco_name} out= must end with '{suffix}': {out!r}")
-        kinematics_def = (
-            normalize_kinematics(kinematics, where=f"@{deco_name}")
-            if kinematics is not None
-            else None
-        )
+        with _declaring_here():
+            _reject_unknown_kwargs(deco_name, unsupported)
+            out = _checked_out(out, where=f"@{deco_name}")
+            mesh_tolerance = _checked_tolerance(mesh_tolerance, "mesh_tolerance", where=f"@{deco_name}")
+            mesh_angular_tolerance = _checked_tolerance(
+                mesh_angular_tolerance, "mesh_angular_tolerance", where=f"@{deco_name}"
+            )
+            if out is not None and not out.lower().endswith(suffix):
+                raise ValueError(f"@{deco_name} out= must end with '{suffix}': {out!r}")
+            kinematics_def = (
+                normalize_kinematics(kinematics, where=f"@{deco_name}")
+                if kinematics is not None
+                else None
+            )
         decl = MeshExportDecl(
             fmt=fmt,
             out=out,
@@ -480,6 +557,10 @@ def _mesh_export_decorator(deco_name: str, fmt: str):
         )
 
         def attach(target: Callable[..., Any]) -> Callable[..., Any]:
+            with _declaring(target):
+                return _attach(target)
+
+        def _attach(target: Callable[..., Any]) -> Callable[..., Any]:
             existing_model: ModelDef | None = getattr(target, "__cadgen_model__", None)
             if existing_model is not None:
                 # Above @step: extend the registered model in place.
