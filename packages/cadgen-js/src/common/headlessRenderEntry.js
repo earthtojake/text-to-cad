@@ -16,9 +16,8 @@ import {
   sourceIsStep,
   stepParameterRuntime
 } from "./source.js";
-import { compileAnimationClips } from "./animationRuntime.js";
 import { resolveAnimationFrame } from "./animationClock.js";
-import { loadAnimationSource } from "./kinematicsModule.js";
+import { loadRenderModule } from "./renderModule.js";
 import {
   createHttpTessellationCacheProvider,
   setTessellationCacheProvider
@@ -61,10 +60,11 @@ async function capturePreparedSource(source, job) {
 // `job.animation` is the JOB PACKET's frame request ({clip, time}); the
 // `stepAnimation` it becomes is the SETTINGS key renderMeshScene routes to the
 // shared effects pass — the same `{clip, elapsedSec}` the viewer's Animation
-// tab hands its own pass. The choreography half loads on its own, through the
-// same two steps the viewer takes (loadAnimationSource -> compileAnimationClips):
-// the sidecar's kinematics section is never consulted here, so the two systems
-// stay independent end to end and meet only in the effect records.
+// tab hands its own pass. The choreography loads through the one render-module
+// loader the viewer uses (the `.step.js` beside the document, resolved by the
+// CLI as `resolved.renderModuleUrl`): the sidecar is never consulted here, so
+// the two systems stay independent end to end and meet only in the effect
+// records.
 async function loadStepAnimation(job, source) {
   const request = job.animation;
   if (request === undefined || request === null) {
@@ -76,15 +76,15 @@ async function loadStepAnimation(job, source) {
   if (String(job.mode || "view").toLowerCase() !== "view") {
     throw new Error("an animation frame supports only view mode");
   }
-  const sidecarUrl = String(job.resolved?.stepParameterUrl || "").trim();
-  if (!sidecarUrl) {
-    throw new Error("animation requires resolved.stepParameterUrl");
+  const renderModuleUrl = String(job.resolved?.renderModuleUrl || "").trim();
+  if (!renderModuleUrl) {
+    throw new Error("animation requires resolved.renderModuleUrl (the .step.js beside the document)");
   }
-  const moduleSource = await loadAnimationSource(sidecarUrl);
-  if (!moduleSource) {
-    throw new Error("model declares no animation, so there is no clip frame to render");
+  const renderModule = await loadRenderModule(renderModuleUrl);
+  if (!renderModule) {
+    throw new Error("the document has no render module beside it, so there is no clip frame to render");
   }
-  return resolveAnimationFrame(await compileAnimationClips(moduleSource), request);
+  return resolveAnimationFrame(renderModule.clips, request);
 }
 
 export async function runHeadlessRenderJob(job) {

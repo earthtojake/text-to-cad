@@ -113,7 +113,7 @@ test("loadSource rejects STEP parameter options for non-STEP sources", async () 
 // CLI cannot tell one from the other — the declared names live in the model's
 // kinematics block — so a name arrives as a bare string and is resolved here.
 const HINGE_SIDECAR = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   kinematics: {
     mates: [
       {
@@ -183,7 +183,7 @@ test("pose VALUES still pass straight through", async (t) => {
 test("refuses a pose name against a model that declares no poses", async (t) => {
   const sidecarUrl = "/__cad/sidecar/hinge.step.json";
   stubSidecarFetch(t, sidecarUrl, {
-    schemaVersion: 5,
+    schemaVersion: 6,
     kinematics: { ...HINGE_SIDECAR.kinematics, poses: {} }
   });
 
@@ -312,7 +312,7 @@ test("loadSource leaves no source scope behind", async (t) => {
 test("loadSource accepts sidecar kinematics for STEP sources", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({
-    schemaVersion: 5,
+    schemaVersion: 6,
     kinematics: {
       mates: [{ name: "drive", kind: "revolute", parent: "#base", child: "#rotor",
         axis: { origin: [0, 0, 0], dir: [0, 0, 1] }, limits: { value: [0, 360] } }]

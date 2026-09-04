@@ -1,11 +1,11 @@
-// Sidecar -> viewer runtime for the mates half of the split
-// (design/pose-animation-split.md). Replaces poseModule.js: the sidecar's
-// KINEMATICS section (typed mates, resolved axes, couplings, presets) becomes
-// a step-module definition — one number slider per DOF, an update pass that
+// Sidecar -> viewer runtime for the mates half. The sidecar's KINEMATICS
+// section (typed mates, resolved axes, couplings, presets) becomes a
+// step-module definition — one number slider per DOF, an update pass that
 // folds slider values through the shared FK evaluator into per-occurrence
 // matrix effects. Pure data in, arithmetic out: no authored JS is involved on
-// this path (choreography is the ANIMATION section, evaluated by
-// animationRuntime.js, and never touches this module).
+// this path. Choreography is the render module BESIDE the document
+// (`<name>.step.js`, renderModule.js) and never touches the sidecar or this
+// module; the two meet only in the effect records.
 
 import {
   kinematicsAtRest,
@@ -20,7 +20,7 @@ import { normalizeStepModuleDefinition } from "./stepModule.js";
 // source_sidecar.SOURCE_SIDECAR_SCHEMA_VERSION and the viewer's
 // packageContract.mjs; pinned across the three by
 // tests/python/global/test_render_contract_sync.py.
-export const SOURCE_SIDECAR_SCHEMA_VERSION = 5;
+export const SOURCE_SIDECAR_SCHEMA_VERSION = 6;
 
 function isObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -101,8 +101,7 @@ export function stepModuleFromKinematics(block) {
 
 // Reading sections out of a sidecar written to a different shape is how a
 // model silently loses its kinematics, so the schema is checked before any
-// section is touched. The viewer surfaces this as the step-module / animation
-// load error.
+// section is touched. The viewer surfaces this as the step-module load error.
 // The sidecar's own filename, whether the url is a plain path or the viewer's
 // `/__cad/asset?file=<path>` form (whose LAST path segment is "asset").
 function sidecarName(url) {
@@ -140,8 +139,7 @@ async function fetchSidecar(sidecarUrl) {
 
 /** Fetch the model's sidecar (<name>.step.json) and compile its
  * kinematics section into a normalized step-module definition. Models with no
- * kinematics resolve to null (nothing to pose). The animation section is NOT
- * read here — the two systems stay independent end to end. */
+ * kinematics resolve to null (nothing to pose). */
 export async function loadKinematicsModuleDefinition(sidecarUrl, { cadPath = "" } = {}) {
   const sidecar = await fetchSidecar(sidecarUrl);
   if (!sidecar) {
@@ -152,11 +150,4 @@ export async function loadKinematicsModuleDefinition(sidecarUrl, { cadPath = "" 
     return null;
   }
   return normalizeStepModuleDefinition(raw, { url: String(sidecarUrl).trim(), cadPath });
-}
-
-/** Fetch the sidecar's ANIMATION section: the copied .anim.js text, or "". */
-export async function loadAnimationSource(sidecarUrl) {
-  const sidecar = await fetchSidecar(sidecarUrl);
-  const clips = sidecar?.animation?.clips;
-  return typeof clips === "string" ? clips : "";
 }
