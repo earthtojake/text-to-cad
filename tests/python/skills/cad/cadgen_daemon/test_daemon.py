@@ -344,7 +344,10 @@ class CadgenDaemonTests(unittest.TestCase):
                 os.environ.pop("CADGEN_DAEMON_CHILD", None)
                 status = daemon_client.status() or {}
             for worker in status.get("workers") or []:
-                if worker.get("busy"):
+                # THIS job's worker, not any busy one: the class shares its daemon
+                # across tests, and a worker still finishing an earlier test's job
+                # can be recycled between the poll and the kill (ProcessLookupError).
+                if worker.get("busy") and str(worker.get("model") or "").endswith("box_sleepy.py"):
                     busy_pid = int(worker["pid"])
             time.sleep(0.2)
         self.assertIsNotNone(busy_pid, "no worker ever went busy on the sleeping model")
