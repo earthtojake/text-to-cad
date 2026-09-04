@@ -207,7 +207,7 @@ class FollowUps(unittest.TestCase):
         os.chmod(self.store, stat.S_IRUSR | stat.S_IXUSR)
         probe = self.store / ".probe"
         try:
-            probe.write_text("x")
+            probe.write_text("x", encoding="utf-8")
         except PermissionError:
             pass
         else:

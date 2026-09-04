@@ -112,7 +112,7 @@ class ModelsPerFile(unittest.TestCase):
         self.assertTrue((self.src / "bracket_right.step").is_file())
         records = list((self.store / "index/model").iterdir())
         self.assertEqual(len(records), 2)
-        models = sorted(json.loads(p.read_text())["model"] for p in records)
+        models = sorted(json.loads(p.read_text(encoding="utf-8"))["model"] for p in records)
         self.assertEqual(
             models,
             [f"{(self.src / 'family.py').resolve()}::bracket_left", f"{(self.src / 'family.py').resolve()}::bracket_right"],
