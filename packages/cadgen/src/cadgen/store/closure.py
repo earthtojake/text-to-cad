@@ -119,7 +119,7 @@ def module_constant_hashes(path: Path, names: Iterable[str]) -> dict[str, str] |
     the caller treats every name as a source edge / the record as stale.
 
     The import runs under the closure scan's own loader conventions (the
-    script's folder and project roots on ``sys.path``), under a private module
+    script's folder and the caller's ``PYTHONPATH`` on ``sys.path``), under a private module
     name so a long-lived process never serves a cached module."""
     import importlib.util
     from importlib.machinery import SourceFileLoader
@@ -203,14 +203,12 @@ def forget_model_files() -> None:
 
 
 def _search_roots(script: Path) -> list[Path]:
-    """Where a model's imports resolve: its own folder, then any ancestor that
-    is a project root (holds ``STEP/`` or ``robot_common/`` packages) — the
-    same roots the runner seeds onto ``sys.path``."""
-    roots = [script.parent]
-    for parent in script.parents:
-        if (parent / "STEP" / "__init__.py").is_file() or (parent / "robot_common" / "__init__.py").is_file():
-            roots.append(parent)
-    return roots
+    """Where a model's imports resolve: the same roots the runner seeds onto
+    ``sys.path`` — the script's own folder, then the caller's ``PYTHONPATH``
+    (``cadgen._internal.import_roots``). Nothing inferred from directory names."""
+    from cadgen._internal.import_roots import import_roots
+
+    return [Path(root) for root in import_roots(script)]
 
 
 def _resolve_module(name: str, roots: Iterable[Path]) -> Path | None:

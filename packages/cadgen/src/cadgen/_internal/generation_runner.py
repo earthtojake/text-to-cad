@@ -32,6 +32,7 @@ from cadgen.render import relative_to_file
 from cadgen.step_export import build_build123d_step_scene
 
 from cadgen._internal.generation_spec import EntrySpec, _display_path
+from cadgen._internal.import_roots import import_roots
 
 
 GIT_LFS_POINTER_PREFIX = b"version https://git-lfs.github.com/spec/v1\n"
@@ -64,14 +65,12 @@ def _load_generator_module(script_path: Path) -> object:
         ) from error
 
     module = importlib.util.module_from_spec(module_spec)
-    # Seed sys.path the way `python script.py` does: the script's own folder (plus any
-    # ancestor that is a package root — STEP/ or robot_common/) goes on sys.path and STAYS
-    # there for the whole build, so an import inside the model function or a helper it
-    # calls resolves exactly like one at module top. Resolution is independent of the
-    # process working directory. Deliberately NOT seeding the repo root or skills/cad/scripts:
-    # a generator must not depend on the repository's skills/ being importable (AGENTS.md
-    # skill isolation). The daemon worker restores sys.path when the job ends.
-    search_paths = _generator_search_paths(resolved_script_path)
+    # sys.path is exactly what `python script.py` gives: the script's own folder first,
+    # then the caller's PYTHONPATH (already on the path in a transient process; applied
+    # per job by the daemon worker). Seeded for the WHOLE build, so an import inside the
+    # model function or a helper it calls resolves like one at module top. cadgen adds no
+    # root of its own and infers none from directory names (see import_roots.py).
+    search_paths = import_roots(resolved_script_path)
     for candidate in reversed(search_paths):
         if candidate not in sys.path:
             sys.path.insert(0, candidate)
@@ -88,21 +87,6 @@ def _load_generator_module(script_path: Path) -> object:
     exec(source_code, module.__dict__)
 
     return module
-
-
-def _generator_search_paths(resolved_script_path: Path) -> list[str]:
-    """The import roots a generator may rely on: its own folder, plus any
-    ancestor that is a package root (holds a ``STEP/`` or ``robot_common/``
-    package). Seeded onto ``sys.path`` for the whole build (see
-    ``_load_generator_module``), as ``python script.py`` would."""
-    search_paths = [str(resolved_script_path.parent)]
-    for parent in resolved_script_path.parents:
-        if (
-            (parent / "STEP" / "__init__.py").is_file()
-            or (parent / "robot_common" / "__init__.py").is_file()
-        ):
-            search_paths.append(str(parent))
-    return search_paths
 
 
 @contextlib.contextmanager
@@ -155,7 +139,7 @@ def _purge_stale_bytecode(script_path: Path) -> None:
 
     resolved = script_path.resolve()
     parents = {resolved.parent}
-    for root in _generator_search_paths(resolved):
+    for root in import_roots(resolved):
         try:
             parents |= {f.parent for f in scope_capture.static_import_closure(resolved, root)}
         except Exception:  # noqa: BLE001 - a closure that cannot be traced still gets the script's own folder purged
