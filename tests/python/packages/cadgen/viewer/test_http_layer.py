@@ -236,7 +236,7 @@ class ArtifactBuildPayload(HttpLayerTestCase):
     event that changes this entry's URL, and one payload cannot honestly
     describe two moments.
 
-    An ``.stl`` is the subject on purpose — ``build_artifact`` answers "ready"
+    An ``.stl`` is the subject on purpose — ``build_artifact`` answers "rendered"
     for an unowned entry without touching the kernel, so this pins the payload
     shape rather than exercising a compile.
     """
@@ -253,7 +253,7 @@ class ArtifactBuildPayload(HttpLayerTestCase):
         )
         self.assertEqual(status, 200, body[:400])
         payload = json_module.loads(body)
-        self.assertEqual(payload["state"], "ready")
+        self.assertEqual(payload["state"], "rendered")
         entry = next(
             e for e in payload["catalog"]["entries"] if e["rootRelativeFile"] == "part.stl"
         )
