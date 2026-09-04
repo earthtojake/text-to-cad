@@ -28,7 +28,6 @@ from cadgen.render import relative_to_cwd
 class EntrySpec:
     source_ref: str
     cad_ref: str
-    kind: str
     source_path: Path
     display_name: str
     source: str
@@ -191,14 +190,12 @@ def list_entry_specs(root: Path | None = None) -> list[EntrySpec]:
 def _entry_spec_from_source(source: CadSource) -> EntrySpec:
     generator_metadata = source.generator_metadata
     script_path = source.script_path
-    kind = source.kind
     step_path = source.step_path
     display_path = step_path if step_path is not None else source.source_path
 
     return EntrySpec(
         source_ref=source.source_ref,
         cad_ref=source.cad_ref,
-        kind=kind,
         source_path=source.source_path,
         display_name=(
             generator_metadata.display_name

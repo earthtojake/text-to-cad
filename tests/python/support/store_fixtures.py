@@ -14,7 +14,6 @@ def build_view(
     *,
     package_dir: Path,
     root_name: str,
-    single_component: bool = False,
     force: bool = False,
     provenance: Mapping[str, Any] | None = None,
     progress: Any | None = None,
@@ -25,12 +24,9 @@ def build_view(
     from cadgen.store.build import build_tree_from_compound
     from cadgen.store.view import export_view
 
-    entry_kind = str((provenance or {}).get("entryKind") or ("part" if single_component else "assembly"))
     tree_hash, _tree, stats = build_tree_from_compound(
         compound,
         root_name=root_name,
-        entry_kind=entry_kind,
-        single_component=single_component,
         force=force,
         progress=progress,
     )

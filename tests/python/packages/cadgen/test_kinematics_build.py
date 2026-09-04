@@ -32,7 +32,7 @@ KINEMATICS = {{
     "poses": {{"open": {{"swing": 45}}}}{kinematics_extra},
 }}
 
-@step(kind="assembly", kinematics=KINEMATICS{extra})
+@step(kinematics=KINEMATICS{extra})
 def hinge():
     base = label_shape(bd.Box(20, 20, 4), "base")
     arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")
@@ -63,7 +63,7 @@ KINEMATICS = {
 def _group(label, parts):
     return bd.Compound(obj=list(parts), children=list(parts), label=label)
 
-@step(kind="assembly", kinematics=KINEMATICS)
+@step(kinematics=KINEMATICS)
 def grouped():
     base = _group("base_group", [
         label_shape(bd.Box(20, 20, 4), "base_plate"),

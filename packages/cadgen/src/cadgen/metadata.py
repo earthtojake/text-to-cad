@@ -17,7 +17,6 @@ class InvalidModelScriptError(ValueError):
 @dataclass(frozen=True)
 class GeneratorMetadata:
     script_path: Path
-    kind: str
     display_name: str | None
     generator_names: tuple[str, ...]
     # The decorator kind this model script declares: "step" (@step) or "dxf" (@dxf).
@@ -310,28 +309,12 @@ def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
         )
 
     out_target = _decorator_string_kwarg(call_kwargs, "out", script_path=script_path)
-    kind: str | None = None
     # A @dxf return carries no static metadata: the drawing IS its geometry, and
-    # what a layer map holds is only knowable at run time (design/dxf-build123d.md).
-    # @step still parses its return, because `kind` must be known before the build.
+    # what a layer map holds is only knowable at run time. A @step return is
+    # checked for SHAPE only (one bare value, never a dict): what it returns is
+    # the geometry, and no decorator argument describes or changes it.
     if fmt == "step":
-        kind = _decorator_string_kwarg(call_kwargs, "kind", script_path=script_path)
-        if kind is not None and kind not in {"part", "assembly"}:
-            raise ValueError(
-                f"{_display_path(script_path)} @step kind= must be 'part' or 'assembly'"
-            )
-        if kind is None:
-            try:
-                kind = _parse_step_return_metadata(script_path=script_path, function=function)
-            except ValueError as exc:
-                # A return shape the inference cannot read needs an explicit kind;
-                # a dict return or a bare None keeps its own pointed error.
-                if "must return one value" not in str(exc):
-                    raise
-                raise ValueError(
-                    f"{_display_path(script_path)} {function.name}() kind could not be "
-                    "inferred from its return; declare it explicitly: @step(kind=...)"
-                ) from exc
+        _check_step_return(script_path=script_path, function=function)
 
     mesh_exports = _match_mesh_export_decorators(
         function, decorator_names, module_aliases, script_path=script_path
@@ -343,7 +326,6 @@ def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
         )
     return GeneratorMetadata(
         script_path=script_path.resolve(),
-        kind=kind,
         display_name=display_name,
         generator_names=(function.name,),
         format=fmt,
@@ -359,106 +341,33 @@ def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
     )
 
 
-def _parse_step_return_metadata(
+def _check_step_return(
     *,
     script_path: Path,
     function: ast.FunctionDef,
-) -> str:
-    """Infer ``kind`` from the ONE thing a @step may return: a build123d shape.
+) -> None:
+    """A @step returns ONE build123d shape and nothing else.
 
     A dict return is refused here, statically, with the decorators that replaced
     the old ``{"shape": ..., "stl": ...}`` envelope named in the message; the
     runtime check in ``generation_runner`` says the same thing for a dict that
-    only appears at run time.
+    only appears at run time. Nothing else about the return is inferred: how the
+    build packages the geometry follows the shape it actually gets.
     """
-    return_node = _single_return_value(script_path=script_path, function=function)
-    if isinstance(return_node, ast.Dict):
-        raise ValueError(
-            f"{_display_path(script_path)} {function.name}() returns a dict; a @step "
-            "model returns a build123d shape and nothing else. Declare mesh exports "
-            "with @stl/@threemf/@glb stacked on the model and tolerances with "
-            "@step(mesh_tolerance=..., mesh_angular_tolerance=...)."
-        )
-    return _parse_bare_step_return(
-        script_path=script_path,
-        function=function,
-        return_node=return_node,
-        local_assignments=_function_local_assignments(function),
-    )
-
-
-def _parse_bare_step_return(
-    *,
-    script_path: Path,
-    function: ast.FunctionDef,
-    return_node: ast.expr,
-    local_assignments: dict[str, ast.expr] | None = None,
-) -> str:
-    if _is_compound_assembly_expression(
-        return_node,
-        local_assignments=local_assignments or {},
-    ):
-        return "assembly"
-    if isinstance(return_node, ast.Constant) and return_node.value is None:
-        raise ValueError(
-            f"{_display_path(script_path)} {function.name}() must return a build123d shape"
-        )
-    return "part"
-
-
-def _function_local_assignments(function: ast.FunctionDef) -> dict[str, ast.expr]:
-    assignments: dict[str, ast.expr] = {}
-    for statement in function.body:
-        if isinstance(statement, ast.Return):
-            break
-        target: ast.expr | None = None
-        value: ast.expr | None = None
-        if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
-            target = statement.targets[0]
-            value = statement.value
-        elif isinstance(statement, ast.AnnAssign) and isinstance(statement.value, ast.expr):
-            target = statement.target
-            value = statement.value
-        if isinstance(target, ast.Name) and value is not None:
-            assignments[target.id] = value
-    return assignments
-
-
-def _is_compound_assembly_expression(
-    expression: ast.expr,
-    *,
-    local_assignments: dict[str, ast.expr],
-    seen_names: set[str] | None = None,
-) -> bool:
-    if isinstance(expression, ast.Name):
-        seen_names = set(seen_names or set())
-        if expression.id in seen_names:
-            return False
-        target = local_assignments.get(expression.id)
-        if target is None:
-            return False
-        seen_names.add(expression.id)
-        return _is_compound_assembly_expression(
-            target,
-            local_assignments=local_assignments,
-            seen_names=seen_names,
-        )
-    if not isinstance(expression, ast.Call) or _call_tail_name(expression.func) != "Compound":
-        return False
-    if expression.args and _is_multi_item_sequence_expression(
-        expression.args[0],
-        local_assignments=local_assignments,
-    ):
-        return True
-    for keyword in expression.keywords:
-        if keyword.arg == "children" and _is_nonempty_expression(keyword.value):
-            return True
-        if keyword.arg == "obj" and _is_multi_item_sequence_expression(
-            keyword.value,
-            local_assignments=local_assignments,
-        ):
-            return True
-    return False
+    for node in ast.walk(function):
+        if not isinstance(node, ast.Return):
+            continue
+        if node.value is None or (isinstance(node.value, ast.Constant) and node.value.value is None):
+            raise ValueError(
+                f"{_display_path(script_path)} {function.name}() must return a build123d shape"
+            )
+        if isinstance(node.value, ast.Dict):
+            raise ValueError(
+                f"{_display_path(script_path)} {function.name}() returns a dict; a @step "
+                "model returns a build123d shape and nothing else. Declare mesh exports "
+                "with @stl/@threemf/@glb stacked on the model and tolerances with "
+                "@step(mesh_tolerance=..., mesh_angular_tolerance=...)."
+            )
 
 
 def _call_tail_name(function: ast.expr) -> str | None:
@@ -499,20 +408,6 @@ def _is_multi_item_sequence_expression(
     if isinstance(expression, (ast.List, ast.Tuple, ast.Set)):
         return len(expression.elts) > 1
     return False
-
-
-
-def _single_return_value(
-    *,
-    script_path: Path,
-    function: ast.FunctionDef,
-) -> ast.expr:
-    returns = [statement for statement in function.body if isinstance(statement, ast.Return)]
-    if len(returns) != 1 or returns[0].value is None:
-        raise ValueError(
-            f"{_display_path(script_path)} {function.name}() must return one value"
-        )
-    return returns[0].value
 
 
 

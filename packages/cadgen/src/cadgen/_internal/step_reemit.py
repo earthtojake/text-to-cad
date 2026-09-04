@@ -259,12 +259,10 @@ def _emit(
     from cadgen.step_artifact_cli import (
         _build_entry_spec,
         _entries_by_step_path_for_repo,
-        infer_entry_kind,
     )
 
     with logger.timed(f"load STEP {_display(document)}"):
         scene = load_step_scene(document)
-    kind = infer_entry_kind(document, scene)
     # The scene now DESCRIBES the output: the tree is keyed by the bytes we
     # are about to write, and the preloaded-scene contract pins the two paths
     # together. `step_hash` is the INPUT's and would misidentify the output.
@@ -276,7 +274,7 @@ def _emit(
     scene.animation_source = animation_source
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    spec = _build_entry_spec(Path.cwd().resolve(), scene.step_path, scene, kind=kind)
+    spec = _build_entry_spec(Path.cwd().resolve(), scene.step_path, scene)
     from dataclasses import replace as _replace
 
     from cadgen.catalog import build_scope

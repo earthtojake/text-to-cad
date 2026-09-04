@@ -31,7 +31,7 @@ KINEMATICS = {
 }
 
 
-@step(kind="assembly", kinematics=KINEMATICS)
+@step(kinematics=KINEMATICS)
 def child():
     base = label_shape(bd.Box(20, 20, 4), "child_base")
     arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "child_arm")
@@ -56,7 +56,7 @@ KINEMATICS = {
 }
 
 
-@step(kind="assembly", kinematics=KINEMATICS)
+@step(kinematics=KINEMATICS)
 def parent():
     sub = child.child()                        # composition: geometry only
     sub.label = "sub"

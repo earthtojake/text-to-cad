@@ -413,7 +413,6 @@ class InspectRefsTests(unittest.TestCase):
             )
             return StepTopologyArtifact(
                 cad_path=target.cad_path,
-                kind=target.kind,
                 source_path=target.source_path,
                 step_path=target.step_path,
                 artifact_path=__import__("cadgen.catalog", fromlist=["result_view_dir"]).result_view_dir(resolved_step_path),
@@ -640,10 +639,12 @@ class InspectRefsTests(unittest.TestCase):
         with mock.patch.object(
             step_targets,
             "resolve_cad_source_path",
-            return_value=("assembly", assembly_path),
+            return_value=("step", assembly_path),
         ), self._mock_glb_topology(
             {
                 **_refs_manifest(assembly_cad_ref),
+                # Kind is the tree's answer (entryKind), never the source's.
+                "entryKind": "assembly",
                 "sourceKind": "python",
                 "sourceHash": source_identity.source_hash,
                 "stepHash": cad_generation.step_file_hash(assembly_step_path),

@@ -510,7 +510,6 @@ def ensure_render_job_step_artifact(
 ) -> StepTopologyArtifact:
     target = ResolvedStepTarget(
         cad_path=cad_ref_for_step_path(reference_root, step_path),
-        kind="part",
         source_path=input_path,
         step_path=step_path,
     )

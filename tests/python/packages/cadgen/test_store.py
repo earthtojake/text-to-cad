@@ -539,7 +539,7 @@ class LinkOrComponent(StoreCase):
         from cadgen.store.materialize import materialize, reset_memo
 
         pin_tree, _tree, _stats = build_tree_from_compound(
-            Box(4, 4, 12), root_name="pin", entry_kind="part", single_component=True
+            Box(4, 4, 12), root_name="pin"
         )
         reset_memo()
         pin = materialize(pin_tree, label="pin")
@@ -560,7 +560,6 @@ class LinkOrComponent(StoreCase):
         arm_tree, arm, _stats = build_tree_from_compound(
             Compound(children=[bar, left, right, mirrored, cut, relocated], label="arm"),
             root_name="arm",
-            entry_kind="assembly",
         )
         self.assertEqual({l["name"] for l in arm["links"]}, {"pin_left", "pin_right"})
         self.assertEqual({l["tree"] for l in arm["links"]}, {pin_tree})
@@ -592,7 +591,7 @@ class LinkedRootPlacement(StoreCase):
         from cadgen.store.trees import flatten
 
         clamp_tree, clamp_raw, _ = build_tree_from_compound(
-            Box(2, 2, 2).moved(Location((0, 0, 10))), root_name="clamp", entry_kind="part", single_component=True
+            Box(2, 2, 2).moved(Location((0, 0, 10))), root_name="clamp"
         )
         self.assertEqual(clamp_raw["occurrences"][0]["transform"][3::4][:3], [0, 0, 10], "the root placement is the tree's")
 
@@ -600,7 +599,7 @@ class LinkedRootPlacement(StoreCase):
         placed = Location((5, 0, 0)) * materialize(clamp_tree, label="clamp")
         placed.label = "clamp"
         base_tree, base_raw, _ = build_tree_from_compound(
-            Compound(children=[placed], label="base"), root_name="base", entry_kind="assembly"
+            Compound(children=[placed], label="base"), root_name="base"
         )
         self.assertEqual(base_raw["links"][0]["transform"][3::4][:3], [5, 0, 0], "the link places the tree frame, not the placed root")
         flat = flatten(base_tree)
@@ -611,7 +610,7 @@ class LinkedRootPlacement(StoreCase):
         base = Location((0, 7, 0)) * materialize(base_tree, label="base")
         base.label = "base"
         tom_tree, _tom_raw, _ = build_tree_from_compound(
-            Compound(children=[base], label="tom"), root_name="tom", entry_kind="assembly"
+            Compound(children=[base], label="tom"), root_name="tom"
         )
         flat = flatten(tom_tree)
         self.assertEqual(flat["occurrences"][0]["transform"][3::4][:3], [5, 7, 10])

@@ -92,13 +92,14 @@ class MeshExportMetadataTest(unittest.TestCase):
     def test_variants_parse_but_ambiguous_duplicates_fail(self) -> None:
         # Same format at DISTINCT targets is a variant, not a duplicate.
         variants = self._parse(textwrap.dedent("""\
+            from cadgen import build123d as bd
             from cadgen import step, stl
 
-            @step(kind="part")
+            @step
             @stl(out="a_draft.stl", mesh_tolerance=8e-3)
             @stl(out="a_print.stl", mesh_tolerance=4e-4)
             def part():
-                return None
+                return bd.Box(1, 1, 1)
 
 
             if __name__ == "__main__":

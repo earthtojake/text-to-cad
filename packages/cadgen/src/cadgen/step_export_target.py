@@ -45,7 +45,7 @@ from cadgen._internal.generation import (
     run_script_generator,
 )
 from cadgen.metadata import normalize_mesh_numeric
-from cadgen.step_artifact_cli import _build_entry_spec, _cad_ref_for_step, infer_entry_kind
+from cadgen.step_artifact_cli import _build_entry_spec, _cad_ref_for_step
 from cadgen.step_export import export_build123d_step_file
 from cadgen._internal.step_scene import (
     LoadedStepScene,
@@ -104,8 +104,8 @@ def _resolve_spec_and_scene(
 ) -> ResolvedScene:
     """Build the entry spec + an in-memory scene for the model.
 
-    Imported model (no ``source_path``): load the existing STEP and classify it via
-    :func:`cadgen.step_artifact_cli.infer_entry_kind`.
+    Imported model (no ``source_path``): load the existing STEP; its tree's kind is
+    read off the tree once built, never classified up front.
 
     Generated model (``source_path`` given): the DOCUMENT on disk is the truth and is
     loaded exactly like an import, running no Python at all -- a door never rebuilds
@@ -172,7 +172,6 @@ def _resolve_spec_and_scene(
         repo_root,
         step_path,
         scene,
-        kind=infer_entry_kind(step_path, scene),
         mesh_tolerance=mesh_tolerance,
         mesh_angular_tolerance=mesh_angular_tolerance,
     )
@@ -247,8 +246,6 @@ def _build_export_package_from_scene(
         tree_hash, _tree, _stats = build_tree_from_compound(
             compound,
             root_name=spec.step_path.stem,
-            entry_kind=spec.kind,
-            single_component=spec.kind != "assembly",
         )
     export_view(tree_hash, package_dir)
 
@@ -440,7 +437,6 @@ def _resolve_mesh_package(
     spec = EntrySpec(
         source_ref=_relative_to_base(repo_root, step_path),
         cad_ref=_cad_ref_for_step(repo_root, step_path),
-        kind="part",
         source_path=step_path,
         display_name=step_path.stem,
         source="imported",

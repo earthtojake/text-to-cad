@@ -111,7 +111,6 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
             metadata = parse_generator_metadata(script_path)
 
         self.assertIsNotNone(metadata)
-        self.assertEqual("assembly", metadata.kind)
 
     def test_compound_with_literal_obj_sequence_is_discovered_as_assembly(self) -> None:
         with tempfile.TemporaryDirectory(prefix="cadgen-compound-") as tempdir:
@@ -136,16 +135,19 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
             metadata = parse_generator_metadata(script_path)
 
         self.assertIsNotNone(metadata)
-        self.assertEqual("assembly", metadata.kind)
 
-    def test_childless_compound_obj_sequence_is_runtime_assembly(self) -> None:
+    def test_a_compound_with_children_packages_as_occurrences(self) -> None:
+        # Packaging follows the shape and nothing else: a Compound placing
+        # children becomes occurrences, a single solid one component.
         import build123d
+        from cadgen.store.build import compound_has_children
 
         left = build123d.Box(1, 1, 1)
         right = build123d.Box(1, 1, 1)
         shape = build123d.Compound(obj=[left, right], label="compound_arm")
 
-        self.assertEqual("assembly", generation._shape_payload_entry_kind(shape, fallback="part"))
+        self.assertTrue(compound_has_children(shape))
+        self.assertFalse(compound_has_children(build123d.Box(1, 1, 1)))
 
     def test_labeled_childless_compound_does_not_warn_without_color(self) -> None:
         import build123d
@@ -267,7 +269,7 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
             {expected_color, expected_linear_color},
         )
 
-    def test_shape_payload_can_export_with_assembly_entry_kind(self) -> None:
+    def test_shape_payload_can_export_a_compound(self) -> None:
         import build123d
 
         with tempfile.TemporaryDirectory(prefix="cadgen-compound-") as tempdir:
@@ -295,76 +297,15 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
                     output_path=output_path,
                     script_path=script_path,
                     logger=generation.CliLogger("test"),
-                    entry_kind="assembly",
                 )
 
-        # gen_step builds the scene in memory (no STEP write); the entry kind is marked
-        # on the scene, and the pre-bake compound is stashed for the tree/STEP jobs.
+        # gen_step builds the scene in memory (no STEP write); the compound is
+        # stashed for the tree/STEP jobs, which package it by its own shape.
         self.assertIs(result, scene)
         self.assertEqual("python", build_scene.call_args.kwargs["source_kind"])
-        self.assertEqual("assembly", getattr(scene, "text_to_cad_entry_kind", None))
         self.assertEqual("shape", getattr(scene, "step_payload_kind", None))
         self.assertIs(shape, getattr(scene, "source_compound", None))
 
-    def test_effective_spec_follows_runtime_shape_entry_kind(self) -> None:
-        step_path = Path("/tmp/compound.step")
-        scene = LoadedStepScene(step_path=step_path, roots=[], prototype_shapes={})
-        scene.text_to_cad_entry_kind = "assembly"
-        spec = generation.EntrySpec(
-            source_ref="compound.py",
-            cad_ref="compound",
-            kind="part",
-            source_path=Path("/tmp/compound.py"),
-            display_name="compound",
-            source="generated",
-            step_path=step_path,
-            script_path=Path("/tmp/compound.py"),
-        )
-
-        effective = generation._effective_step_spec_for_scene(spec, scene)
-
-        self.assertEqual("assembly", effective.kind)
-        self.assertEqual("part", spec.kind)
-
-    def test_artifact_outputs_use_runtime_shape_entry_kind(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="cadgen-compound-") as tempdir:
-            step_path = Path(tempdir) / "compound.step"
-            script_path = Path(tempdir) / "compound.py"
-            scene = LoadedStepScene(step_path=step_path.resolve(), roots=[], prototype_shapes={})
-            scene.text_to_cad_entry_kind = "assembly"
-            scene.source_kind = "python"
-            scene.source_path = "compound.py"
-            scene.source_hash = "source-hash"
-            spec = generation.EntrySpec(
-                source_ref="compound.py",
-                cad_ref="compound",
-                kind="part",
-                source_path=script_path,
-                display_name="compound",
-                source="generated",
-                step_path=step_path,
-                script_path=script_path,
-            )
-            with (
-                mock.patch.object(generation, "_existing_topology_artifact_matches_spec_without_scene", return_value=False),
-                mock.patch.object(generation, "_existing_topology_artifact_matches_options", return_value=False),
-                mock.patch.object(generation, "_selector_options_for_part", return_value=generation.SelectorOptions()),
-                mock.patch.object(generation, "_run_artifact_jobs", return_value={}) as run_jobs,
-            ):
-                result = generation._generate_part_outputs(
-                    spec,
-                    entries_by_step_path={step_path.resolve(): spec},
-                    preloaded_scene=scene,
-                    require_step_file=False,
-                    force=True,
-                )
-
-            # The runtime compound is an assembly, so the effective spec adopts that kind
-            # (introspect-children emit) even though the authored spec said "part".
-            self.assertEqual("assembly", result.spec.kind)
-            # The tree is the render artifact; generation returns no selector bundle.
-            self.assertIsNone(result.selector_bundle)
-            run_jobs.assert_called_once()
 
 if __name__ == "__main__":
     unittest.main()

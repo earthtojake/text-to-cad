@@ -24,7 +24,6 @@ from cadgen._internal.generation import (
 )
 from cadgen.catalog import build_scope, result_view_dir
 from cadgen._internal.step_scene import LoadedStepScene, load_step_scene_cached
-from cadgen.step_artifact_cli import infer_entry_kind
 from cadgen.step_targets import (
     ResolvedStepTarget,
     StepTopologyArtifact,
@@ -228,7 +227,6 @@ def _entry_spec_for_target(
     return EntrySpec(
         source_ref=_relative_to_base(Path.cwd().resolve(), step_path),
         cad_ref=target.cad_path,
-        kind=target.kind if target.kind in {"part", "assembly"} else "part",
         source_path=step_path,
         display_name=step_path.stem,
         source="imported",
@@ -263,7 +261,6 @@ def _assembly_topology_artifact(
                 debug["selectorReextracted"] = False
             return StepTopologyArtifact(
                 cad_path=spec.cad_ref,
-                kind="assembly",
                 source_path=spec.source_path,
                 step_path=spec.step_path,
                 artifact_path=result_view_dir(spec.entry_path),
@@ -295,7 +292,6 @@ def _assembly_topology_artifact(
 
         return StepTopologyArtifact(
             cad_path=spec.cad_ref,
-            kind="assembly",
             source_path=spec.source_path,
             step_path=spec.step_path,
             artifact_path=result_view_dir(spec.entry_path),
@@ -329,7 +325,6 @@ def _assembly_topology_artifact(
 
     return StepTopologyArtifact(
         cad_path=spec.cad_ref,
-        kind="assembly",
         source_path=spec.source_path,
         step_path=spec.step_path,
         artifact_path=result_view_dir(spec.entry_path),
@@ -360,9 +355,6 @@ def _scene_for_regeneration(
     resolve_progress(progress).phase(PHASE_GENERATE)
     with (logger.timed(f"load STEP {spec.cad_ref}") if logger is not None else _null_context()):
         scene = load_step_scene_cached(spec.step_path)
-    inferred_kind = infer_entry_kind(spec.step_path, scene)
-    if inferred_kind != spec.kind:
-        spec = replace(spec, kind=inferred_kind)
     return spec, scene
 
 

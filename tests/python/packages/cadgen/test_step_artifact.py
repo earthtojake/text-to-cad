@@ -78,22 +78,5 @@ class BuildStepArtifactTests(unittest.TestCase):
         self.assertTrue(has_object(tree), payload)
         self.assertTrue(get_tree(tree).get("components"), payload)
 
-    def test_imported_step_build_accepts_kind_override(self) -> None:
-        imported_step = self._materialize_imported_step()
-
-        payload = step_artifact_cli.build_step_artifact(
-            repo_root=Path.cwd(),
-            step=imported_step,
-            kind="assembly",
-            force=True,
-        )
-
-        self.assertTrue(payload.get("ok"), payload)
-        # The override is accepted (it steers how the build packages its own
-        # geometry), but entryKind is read off the tree: one solid, one
-        # occurrence, so a part -- the same answer inspect and a model run give.
-        self.assertEqual("part", payload.get("entryKind"))
-
-
 if __name__ == "__main__":
     unittest.main()

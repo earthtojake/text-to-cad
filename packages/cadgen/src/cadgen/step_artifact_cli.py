@@ -45,32 +45,11 @@ def _cad_ref_for_step(repo_root: Path, step_path: Path) -> str:
     return relative[: -len(suffix)] if suffix else relative
 
 
-def _scene_has_assembly_structure(scene: LoadedStepScene) -> bool:
-    """True if the scene's product hierarchy has child relationships.
-
-    Multiple roots OR any root with children indicates assembly structure.
-    The check is deliberately shallow: any descendant implies a child of the
-    root, so a root with children already makes the model an assembly.
-    """
-    if len(scene.roots) > 1:
-        return True
-    return any(node.children for node in scene.roots)
-
-
-def infer_entry_kind(step_path: Path, scene: LoadedStepScene) -> str:
-    """Classify a STEP model as ``part`` or ``assembly``: a STEP whose product
-    hierarchy has child nodes reads as an assembly. Purely structural — a STEP
-    file carries no cadgen metadata of any kind."""
-    del step_path  # classification is structural; the file's bytes carry no metadata
-    return "assembly" if _scene_has_assembly_structure(scene) else "part"
-
-
 def _build_entry_spec(
     repo_root: Path,
     step_path: Path,
     scene: LoadedStepScene,
     *,
-    kind: str,
     mesh_tolerance: float | None = None,
     mesh_angular_tolerance: float | None = None,
 ) -> EntrySpec:
@@ -78,7 +57,6 @@ def _build_entry_spec(
     return EntrySpec(
         source_ref=_relative_to_base(repo_root, step_path),
         cad_ref=cad_ref,
-        kind=kind,
         source_path=step_path,
         display_name=step_path.stem,
         source="imported",
@@ -105,7 +83,6 @@ def _entries_by_step_path_for_repo(repo_root: Path, spec: EntrySpec) -> dict[Pat
 def _result_payload(
     spec: EntrySpec,
     *,
-    entry_kind: str,
     source_kind: str,
     step_hash: str | None = None,
     source_hash: str | None = None,
@@ -123,9 +100,8 @@ def _result_payload(
         # The tree these bytes resolve to (index/document → tree): the result's
         # identity, never a directory — nothing of the sort exists in the store.
         "tree": tree,
-        # Off the tree when there is one (store.trees.tree_kind); the caller's
-        # authored kind only when the compile left none.
-        "entryKind": tree_kind_for(tree) or entry_kind,
+        # Off the tree (store.trees.tree_kind) — the one place kind is decided.
+        "entryKind": tree_kind_for(tree) or "part",
         "sourceKind": source_kind,
         "stats": stats or {},
     }
@@ -147,7 +123,6 @@ def _generated_result_payload(spec: EntrySpec, scene: LoadedStepScene, stats: di
         step_hash = step_file_hash(spec.step_path)
     return _result_payload(
         spec,
-        entry_kind=spec.kind,
         source_kind=source_kind,
         step_hash=step_hash or None,
         source_hash=getattr(scene, "source_hash", None) if source_kind == "python" else None,
@@ -157,7 +132,6 @@ def _generated_result_payload(spec: EntrySpec, scene: LoadedStepScene, stats: di
 
 
 def _existing_result_payload(spec: EntrySpec, artifact: StepTopologyArtifact) -> dict[str, object]:
-    entry_kind = str(artifact.manifest.get("entryKind") or spec.kind)
     from cadgen._internal.source_sidecar import read_source_sidecar
 
     sidecar = read_source_sidecar(spec.entry_path) or {}
@@ -169,7 +143,6 @@ def _existing_result_payload(spec: EntrySpec, artifact: StepTopologyArtifact) ->
     stats = artifact.manifest.get("stats")
     return _result_payload(
         spec,
-        entry_kind=entry_kind,
         source_kind=source_kind,
         step_hash=step_hash or None,
         source_hash=source_hash or None,
@@ -209,7 +182,6 @@ def _current_artifact_for_spec(spec: EntrySpec) -> StepTopologyArtifact | None:
             return None
         return StepTopologyArtifact(
             cad_path=spec.cad_ref,
-            kind=spec.kind,
             source_path=spec.source_path,
             step_path=spec.step_path,
             artifact_path=package_dir,
@@ -252,7 +224,6 @@ def build_parser() -> argparse.ArgumentParser:
             "STEP/STP file (imported model)."
         ),
     )
-    parser.add_argument("--kind", choices=("part", "assembly"), help="Override inferred STEP entry kind.")
     parser.add_argument("--force", action="store_true", help="Regenerate even if a current artifact exists.")
     parser.add_argument("--mesh-tolerance", type=float, help="Override automatic mesh linear deflection.")
     parser.add_argument("--mesh-angular-tolerance", type=float, help="Override automatic mesh angular deflection.")
@@ -287,7 +258,6 @@ def build_step_artifact(
     repo_root: Path,
     step: Path,
     source_path: Path | None = None,
-    kind: str | None = None,
     force: bool = False,
     mesh_tolerance: float | None = None,
     mesh_angular_tolerance: float | None = None,
@@ -330,8 +300,6 @@ def build_step_artifact(
                 display_name=step_path.stem,
                 step_path=step_path,
             )
-        if kind is not None and kind != spec.kind:
-            raise ValueError(f"Requested --kind {kind!r} does not match generator kind {spec.kind!r}")
     elif not step_path.is_file():
         raise FileNotFoundError(f"STEP file does not exist: {step_path}")
     if step_path.suffix.lower() not in {".step", ".stp"}:
@@ -358,7 +326,6 @@ def build_step_artifact(
         existing_spec = EntrySpec(
             source_ref=_relative_to_base(repo_root, step_path),
             cad_ref=_cad_ref_for_step(repo_root, step_path),
-            kind=kind or "part",
             source_path=step_path,
             display_name=step_path.stem,
             source="imported",
@@ -463,12 +430,10 @@ def build_step_artifact(
                 progress.phase(PHASE_GENERATE)
                 with logger.timed(f"load STEP {relative_to_cwd(step_path)}"):
                     scene = load_step_scene(step_path)
-                kind_value = kind or infer_entry_kind(step_path, scene)
                 spec = _build_entry_spec(
                     repo_root,
                     step_path,
                     scene,
-                    kind=kind_value,
                     mesh_tolerance=mesh_tolerance,
                     mesh_angular_tolerance=mesh_angular_tolerance,
                 )
@@ -499,7 +464,6 @@ def run_cli_payload(argv: list[str] | None = None) -> dict[str, object]:
         repo_root=Path(args.repo_root),
         step=Path(args.step),
         source_path=Path(args.source_path) if args.source_path else None,
-        kind=args.kind,
         force=bool(args.force),
         mesh_tolerance=args.mesh_tolerance,
         mesh_angular_tolerance=args.mesh_angular_tolerance,

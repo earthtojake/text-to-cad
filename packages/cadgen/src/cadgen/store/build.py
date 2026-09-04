@@ -65,19 +65,55 @@ def _tagged_intact(node: Any) -> str | None:
         return None
 
 
+def compound_has_children(shape: Any) -> bool:
+    """Whether ``shape`` is a Compound placing children — the ONE fact packaging
+    turns on. A Compound with children becomes occurrences (one per child, links
+    where a child is an intact model result); anything else is one component.
+    Nothing but the shape itself decides this: no declaration, no inference from
+    source."""
+    try:
+        if tuple(getattr(shape, "children", ()) or ()):
+            return True
+    except TypeError:
+        pass
+    wrapped = getattr(shape, "wrapped", None)
+    if wrapped is None:
+        return False
+    try:
+        from OCP.TopAbs import TopAbs_COMPOUND
+        from OCP.TopoDS import TopoDS_Iterator
+
+        if wrapped.ShapeType() != TopAbs_COMPOUND:
+            return False
+        iterator = TopoDS_Iterator(wrapped)
+        count = 0
+        while iterator.More():
+            count += 1
+            if count > 1:
+                return True
+            iterator.Next()
+    except Exception:  # noqa: BLE001 - an odd wrapper packages as one component
+        return False
+    return False
+
+
 def build_tree_from_compound(
     compound: Any,
     *,
     root_name: str,
-    entry_kind: str,
-    single_component: bool = False,
     force: bool = False,
     progress: Any | None = None,
     extra: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Return ``(tree_hash, tree, stats)``. ``extra`` are content-pure fields
-    recorded on the tree (capabilities, edgeRendering) — never paths or times."""
+    recorded on the tree (capabilities, edgeRendering) — never paths or times.
+
+    Packaging follows the RETURN VALUE: a Compound with children is walked into
+    occurrences; a single shape is one component (``compound_has_children``).
+    The tree's ``entryKind`` is then read off the tree (``tree_kind``)."""
     from build123d import Location
+
+    single_component = not compound_has_children(compound)
 
     from cadgen._internal.component_package import (
         PAYLOAD_UNREADABLE,
@@ -279,7 +315,6 @@ def build_tree_from_compound(
     tree.update(
         {
             "label": root_name,
-            "entryKind": entry_kind,
             "units": "mm",
             "components": components,
             "occurrences": occurrences,
@@ -287,6 +322,9 @@ def build_tree_from_compound(
             "assembly": {"root": root},
         }
     )
+    from cadgen.store.trees import tree_kind
+
+    tree["entryKind"] = tree_kind(tree)
     bbox = _bbox_from_shape(compound)
     if bbox is not None:
         tree["bbox"] = bbox

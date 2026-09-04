@@ -30,7 +30,7 @@ from cadgen import label_shape, step
 from cadgen import build123d as bd
 
 
-@step(kind="assembly")
+@step
 def hinge():
     base = label_shape(bd.Box(20, 20, 4), "base")
     arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")

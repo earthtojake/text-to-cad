@@ -81,19 +81,22 @@ Rules the decorator enforces:
   its drawing or its assembly live in module constants (`WIDTH = 40.0`) that
   the siblings import.
 - **The return is a bare build123d `Shape` and nothing else** — a dict return
-  is refused. Kind (`part`/`assembly`) is inferred from the return (a labeled
-  `Compound` with children reads as an assembly) or declared with
-  `@step(kind="assembly")`.
+  is refused. The return IS the geometry: a `Compound` placing children is
+  packaged as occurrences (linked where a child is another model's result), a
+  single solid as one component. Nothing is declared or inferred about it —
+  `inspect` and the run both report `part`/`assembly` off the tree.
 - **Outputs are what the decorators declare.** `@step` writes the `.step`.
   Mesh outputs are `@stl`/`@threemf`/`@glb` stacked on the model, tolerances
   on the decorators (`supported-exports.md`). **A model may declare no STEP at
   all**: `@stl`/`@threemf`/`@glb` with no `@step` is a full model — same tree,
   record, build, no-op and composition — that writes its meshes and no
   `.step`, no sidecar. STEP is one output kind, not a requirement.
-- Options on `@step`: `out=`, `kind=`, `mesh_tolerance=`,
-  `mesh_angular_tolerance=`, `kinematics=`, `animation=` (`kinematics.md`).
-  Everything a model declares about itself lives in its decorators, and a
-  child's declarations never ride up into a parent.
+- Options on `@step`: `out=`, `mesh_tolerance=`, `mesh_angular_tolerance=`,
+  `kinematics=`, `animation=` (`kinematics.md`). **No decorator argument
+  changes the geometry a model produces**: they decide where the files land,
+  how they are written, and what the sidecar declares. Everything a model
+  declares about itself lives in its decorators, and a child's declarations
+  never ride up into a parent.
 
 **Imports:** `from cadgen import build123d as bd` is the canonical import — a
 lazy, transparent re-export (same names, same objects on first touch), so a
@@ -228,8 +231,7 @@ Inputs join the closure too: a `read_step` document and a declared `.anim.js`
 are hashed as build inputs.
 
 Two decorator arguments are read **statically** (parsed from the file before
-it runs) and must be literals: `out=` and the mesh tolerances (`kind=` too,
-when written). Everything else on a decorator — `kinematics=`, `animation=` —
+it runs) and must be literals: `out=` and the mesh tolerances. Everything else on a decorator — `kinematics=`, `animation=` —
 is ordinary Python evaluated at import, so a kinematics dict may be built or
 loaded there. A tolerance shared across a project is written as the same
 number in each decorator; the project README names the value.
@@ -304,7 +306,7 @@ from cadgen import read_step, step
 _HERE = Path(__file__).resolve().parent
 
 
-@step(kind="assembly")
+@step
 def rig():
     motor = read_step(_HERE / "imported" / "vendor_motor.step")   # recorded input
     ...
@@ -380,9 +382,9 @@ before reaching for `--force`.
 
 ## Generated assemblies
 
-Kind is inferred from the return value (a labeled `Compound` with children
-reads as an assembly) or declared with `@step(kind="assembly")`. Passing a
-generated assembly's exported `.step` to a tool treats it as a document and
+An assembly is a model whose return places children (a `Compound` of parts
+or of other models' results); the tree records that structure and `inspect`
+reports it as `assembly`. Passing a generated assembly's exported `.step` to a tool treats it as a document and
 loses source-level composition; work with the `.py` source. Prefer
 `cadgen.assembly.AssemblyHelper` so native labels, named mate frames, and
 source-level relationships are preserved before STEP export (see

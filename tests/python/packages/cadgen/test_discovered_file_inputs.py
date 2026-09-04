@@ -64,7 +64,7 @@ from cadgen import read_step, step
 HERE = Path(__file__).resolve().parent
 
 
-@step(kind="part")
+@step
 def wrapped():
     return read_step(HERE / "vendor.step")
 
@@ -213,7 +213,7 @@ class DiscoveredFileInputTests(unittest.TestCase):
             "plain.py",
             "from cadgen import build123d as bd\n"
             "from cadgen import step\n\n\n"
-            "@step(kind='part')\n"
+            "@step\n"
             "def plain():\n"
             "    return bd.Box(10, 10, 10)\n\n\n"
             "if __name__ == '__main__':\n"
@@ -238,7 +238,7 @@ KINEMATICS = {
 }
 
 
-@step(kind="assembly", kinematics=KINEMATICS, animation="hinge.anim.js")
+@step(kinematics=KINEMATICS, animation="hinge.anim.js")
 def hinge():
     base = label_shape(bd.Box(20, 20, 4), "base")
     arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")

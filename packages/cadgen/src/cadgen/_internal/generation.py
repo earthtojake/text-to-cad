@@ -72,7 +72,6 @@ from cadgen._internal.step_scene import (
 from cadgen._internal.generation_runner import (
     GIT_LFS_POINTER_PREFIX,
     _ArtifactJob,
-    _effective_step_spec_for_scene,
     _ensure_step_ready,
     _generator_progress_line,
     _load_generator_module,
@@ -82,10 +81,6 @@ from cadgen._internal.generation_runner import (
     _resolve_declared_kinematics,
     _run_artifact_jobs,
     _run_script_generator_inner,
-    _scene_entry_kind,
-    _shape_has_explicit_children,
-    _shape_is_multi_child_compound,
-    _shape_payload_entry_kind,
     _spec_output_dir,
     _track_spec_generation,
     _write_dxf_payload,
@@ -224,14 +219,14 @@ def _existing_topology_artifact_matches_spec_without_scene(spec: EntrySpec) -> b
     current). The pre-package monolith-GLB fallback that used to live here was
     unreachable — its validator gated on ``.is_file()`` and every artifact is a
     directory — and is deleted."""
-    if spec.step_path is None or spec.kind not in {"part", "assembly"}:
+    if spec.step_path is None:
         return False
     return bool(_package_descriptor_matches_spec(spec))
 
 
 def _existing_topology_artifact_matches_options(spec: EntrySpec, selector_options: SelectorOptions) -> bool:
     """As above, but against explicitly supplied selector options."""
-    if spec.step_path is None or spec.kind not in {"part", "assembly"}:
+    if spec.step_path is None:
         return False
     return bool(_package_descriptor_matches_spec(spec, selector_options))
 
@@ -241,7 +236,6 @@ def _assembly_provenance_manifest(
     *,
     selector_options: SelectorOptions,
     step_path: Path,
-    entry_kind: str,
 ) -> dict[str, object]:
     """The index-manifest provenance an assembly.json carries, mirroring
     the monolithic GLB's embedded STEP_topology index — but WITHOUT the expensive
@@ -275,7 +269,7 @@ def _assembly_provenance_manifest(
     )
     if step_hash:
         minimal["stepHash"] = step_hash
-    return build_step_topology_index_manifest(minimal, entry_kind=entry_kind)
+    return build_step_topology_index_manifest(minimal)
 
 
 def _source_sidecar_payload(scene: LoadedStepScene) -> dict[str, object] | None:
@@ -369,7 +363,7 @@ def _generate_part_outputs(
 ) -> GeneratedStepResult:
     logger = logger or CliLogger("cad")
     progress = resolve_progress(progress)
-    if spec.kind not in {"part", "assembly"} or spec.step_path is None:
+    if spec.step_path is None:
         return GeneratedStepResult(spec=spec, scene=None)
     if require_step_file:
         _ensure_step_ready(spec.step_path)
@@ -413,7 +407,6 @@ def _generate_part_outputs(
                 source_identity=python_source_hash(spec.script_path),
                 source_path=spec.script_path,
             )
-    spec = _effective_step_spec_for_scene(spec, scene)
     entries_by_step_path = {
         **entries_by_step_path,
         spec.step_path.resolve(): spec,
@@ -434,16 +427,14 @@ def _generate_part_outputs(
     artifact_results: dict[str, object] = {}
 
     # UNIFIED render artifact: every model — part or assembly, generated or imported — is
-    # a TREE (a store object keyed by content hash: assembly.json
-    # plus content-addressed components). An assembly introspects its
-    # placed children as occurrences; a part is one occurrence/one component. The
-    # part/assembly choice is the *authored* kind (spec.kind, from generator metadata or STEP
-    # inference) — never guessed from geometry — and is recorded as entryKind on the
-    # assembly.json. There is no monolithic GLB and no file-vs-dir split.
+    # a TREE (a store object keyed by content hash: assembly.json plus content-addressed
+    # components). Packaging follows the shape itself: a Compound placing children
+    # becomes occurrences (links where a child is an intact model result); anything
+    # else is one component. No declaration steers it and nothing is inferred from
+    # source — the tree's entryKind is read off the tree once built.
     source_compound = getattr(scene, "source_compound", None)
-    single_component = spec.kind != "assembly"
     package_provenance = _assembly_provenance_manifest(
-        scene, selector_options=selector_options, step_path=spec.step_path, entry_kind=spec.kind
+        scene, selector_options=selector_options, step_path=spec.step_path
     )
 
     def component_package_job() -> dict[str, object]:
@@ -480,8 +471,6 @@ def _generate_part_outputs(
             tree_hash, tree, stats = build_tree_from_compound(
                 shape,
                 root_name=spec.step_path.stem,
-                entry_kind=spec.kind,
-                single_component=single_component,
                 force=force,
                 progress=progress,
                 extra=tree_extra,
@@ -584,8 +573,10 @@ def _generate_part_outputs(
             for declared in spec.mesh_exports or ():
                 key = str(Path(declared.path).expanduser().resolve())
                 outputs.setdefault(key, {"sha256": "", "declared": declared.fmt})
+        from cadgen.store.trees import tree_kind
+
         record = {
-            "entryKind": spec.kind,
+            "entryKind": tree_kind(tree),
             "sourceKind": "step" if (not generated or reemit_source_hash) else "python",
             "tree": tree_hash,
             "closure": {"hash": closure_hash, "files": closure_files, "shas": closure_shas, "static": closure_static},
@@ -626,7 +617,7 @@ def _generate_part_outputs(
         # (a reader's one lookup; STORE.md §2). Code side: which model wrote each
         # output path (the badge's question, never a reader's).
         if tree_hash and record.get("stepHash"):
-            note_document_tree(str(record["stepHash"]), str(tree_hash), kind=str(spec.kind or "step"))
+            note_document_tree(str(record["stepHash"]), str(tree_hash))
         if generated:
             for output_path in outputs:
                 if Path(output_path) != model_path:
@@ -714,7 +705,6 @@ def _generate_step_outputs(
             # stdout channel here (and pinned by test).
             model_prints_to_stdout=True,
         )
-        spec = _effective_step_spec_for_scene(spec, preloaded_scene)
         if spec.step_path is not None:
             output_kwargs["entries_by_step_path"] = {
                 **entries_by_step_path,
@@ -986,7 +976,7 @@ def _validate_dxf_target(spec: EntrySpec) -> None:
 
 def _generated_output_summary(spec: EntrySpec) -> str:
     if spec.step_path is not None:
-        return f"wrote {spec.kind}: {_display_path(spec.step_path)}"
+        return f"wrote STEP: {_display_path(spec.step_path)}"
     return f"processed: {spec.source_ref}"
 
 
@@ -995,9 +985,9 @@ def _generated_python_glb_summary(spec: EntrySpec) -> str:
         # A mesh-only model: step_path is the logical document the store keys by,
         # never a file it wrote. Name what it did write.
         meshes = ", ".join(_display_path(Path(m.path)) for m in (spec.mesh_exports or ()))
-        return f"built {spec.kind}: {meshes or spec.source_ref}"
+        return f"wrote: {meshes or spec.source_ref}"
     if spec.step_path is not None:
-        return f"wrote {spec.kind}: {_display_path(spec.step_path)}"
+        return f"wrote STEP: {_display_path(spec.step_path)}"
     return f"processed: {spec.source_ref}"
 
 
@@ -1220,7 +1210,7 @@ def generate_step_targets(
                 "ok": True,
                 # Read off the tree (store.trees.tree_kind), the same answer
                 # inspect gives; the authored kind only steered the packaging.
-                "kind": tree_kind_for(tree) or spec.kind,
+                "kind": tree_kind_for(tree) or "part",
                 "outcome": outcome,
                 # The document the run wrote (None for a mesh-only model, which
                 # declares no STEP) and the hash of the result tree it came from.

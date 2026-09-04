@@ -35,7 +35,7 @@ import cadgen
 from cadgen import step
 
 
-@step(kind="assembly", kinematics={
+@step(kinematics={
     "mates": [cadgen.revolute("drive", parent="#left", child="#right",
                               origin=(20, 0, 0), direction=(0, 0, 1),
                               limits=(0, 360))],

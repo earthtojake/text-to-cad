@@ -109,7 +109,6 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
                     compound,
                     package_dir=package_dir,
                     root_name="synthetic",
-                    single_component=False,
                     provenance={"stepHash": step_hash, "sourceKind": "step"},
                 )
             write_record(

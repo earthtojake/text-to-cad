@@ -38,7 +38,6 @@ def _composed_index(package_dir: Path, *, step_path: Path, source_ref: str):
         raise _fail(f"{source_ref}: materialized tree (assembly.json) missing under {package_dir}")
     artifact = StepTopologyArtifact(
         cad_path=source_ref,
-        kind="assembly",
         source_path=step_path,
         step_path=step_path,
         artifact_path=package_dir,

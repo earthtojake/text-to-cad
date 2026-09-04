@@ -27,7 +27,6 @@ class StepArtifactsTests(unittest.TestCase):
 
             target = ResolvedStepTarget(
                 cad_path="part",
-                kind="part",
                 source_path=source_path,
                 step_path=step_path,
             )
@@ -52,7 +51,6 @@ class StepArtifactsTests(unittest.TestCase):
 
             target = ResolvedStepTarget(
                 cad_path="part",
-                kind="part",
                 source_path=step_path,
                 step_path=step_path,
             )
@@ -70,7 +68,6 @@ class StepArtifactsTests(unittest.TestCase):
             spec = generation.EntrySpec(
                 source_ref="part.step",
                 cad_ref="part",
-                kind="part",
                 source_path=step_path,
                 display_name="part",
                 source="imported",
@@ -98,7 +95,6 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
         return generation.EntrySpec(
             source_ref="part.py" if source == "generated" else "part.step",
             cad_ref="part",
-            kind="part",
             source_path=step_path,
             display_name="part",
             source=source,
@@ -108,7 +104,6 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
     def _fake_artifact(self, step_path: Path) -> StepTopologyArtifact:
         return StepTopologyArtifact(
             cad_path="part",
-            kind="part",
             source_path=step_path,
             step_path=step_path,
             artifact_path=step_path.parent / "package",
@@ -122,7 +117,7 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
             step_path = Path(temp) / "part.step"
             spec = self._spec(source="imported", step_path=step_path)
             fake_artifact = self._fake_artifact(step_path)
-            target = ResolvedStepTarget(cad_path="part", kind="part", source_path=step_path, step_path=step_path)
+            target = ResolvedStepTarget(cad_path="part", source_path=step_path, step_path=step_path)
 
             with (
                 mock.patch.object(step_artifacts, "_entry_spec_for_target", return_value=spec),
@@ -149,7 +144,7 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
             step_path = Path(temp) / "part.step"
             spec = self._spec(source="generated", step_path=step_path)
             fake_artifact = self._fake_artifact(step_path)
-            target = ResolvedStepTarget(cad_path="part", kind="part", source_path=step_path, step_path=step_path)
+            target = ResolvedStepTarget(cad_path="part", source_path=step_path, step_path=step_path)
 
             with (
                 mock.patch.object(step_artifacts, "_entry_spec_for_target", return_value=spec),
@@ -164,7 +159,7 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             step_path = Path(temp) / "asm.step"
             spec = self._spec(source="generated", step_path=step_path)
-            target = ResolvedStepTarget(cad_path="asm", kind="assembly", source_path=step_path, step_path=step_path)
+            target = ResolvedStepTarget(cad_path="asm", source_path=step_path, step_path=step_path)
             descriptor = {"kind": "component-glb-package"}
 
             with (
@@ -195,7 +190,6 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
             spec = generation.EntrySpec(
                 source_ref="part.py",
                 cad_ref="part",
-                kind="assembly",
                 source_path=script_path,
                 display_name="part",
                 source="generated",
@@ -203,7 +197,6 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
                 script_path=script_path,
                 generator_metadata=GeneratorMetadata(
                     script_path=script_path,
-                    kind="assembly",
                     display_name=None,
                     generator_names=("model",),
                     format="step",
@@ -215,7 +208,7 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
                 ),
             )
             target = ResolvedStepTarget(
-                cad_path="part", kind="assembly", source_path=script_path, step_path=step_path
+                cad_path="part", source_path=script_path, step_path=step_path
             )
             descriptor = {"kind": "component-glb-package"}
             entry_package_dir = step_artifacts.result_view_dir(spec.entry_path)
@@ -248,7 +241,7 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             step_path = Path(temp) / "asm.step"
             spec = self._spec(source="generated", step_path=step_path)
-            target = ResolvedStepTarget(cad_path="asm", kind="assembly", source_path=step_path, step_path=step_path)
+            target = ResolvedStepTarget(cad_path="asm", source_path=step_path, step_path=step_path)
             descriptor = {"kind": "assembly-package", "components": {"c0": {}}}
 
             with (

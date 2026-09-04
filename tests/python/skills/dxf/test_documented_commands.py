@@ -49,7 +49,7 @@ from cadgen import step
 THICKNESS = 3.0
 
 
-@step(kind="part")
+@step
 def bracket():
     with bd.BuildSketch() as profile:
         bd.Rectangle(40, 25)
@@ -74,7 +74,7 @@ from cadgen import step
 THICKNESS = 3.0
 
 
-@step(kind="part")
+@step
 def vendor_panel():
     with bd.BuildSketch() as profile:
         bd.Rectangle(60, 40)

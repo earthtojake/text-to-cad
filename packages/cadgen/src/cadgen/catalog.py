@@ -55,7 +55,6 @@ class StepImportOptions:
 class CadSource:
     source_ref: str
     cad_ref: str
-    kind: str
     source_path: Path
     source: str
     origin_path: Path
@@ -145,14 +144,13 @@ def iter_cad_sources(root: Path | None = None) -> tuple[CadSource, ...]:
 def source_from_path(
     path: Path,
     *,
-    step_kind: str = "part",
     step_options: StepImportOptions | None = None,
 ) -> CadSource | None:
     resolved = Path(path).expanduser().resolve()
     if resolved.suffix.lower() == ".py":
         return _read_python_source(resolved, allow_dxf_only=True)
     if resolved.suffix.lower() in STEP_SUFFIXES:
-        return _read_step_source(resolved, kind=step_kind, options=step_options)
+        return _read_step_source(resolved, options=step_options)
     return None
 
 
@@ -409,7 +407,6 @@ def _dxf_generator_source(resolved_script_path: Path, metadata: GeneratorMetadat
     return CadSource(
         source_ref=source_ref_from_path(resolved_script_path),
         cad_ref=cad_ref_from_dxf_path(dxf_path),
-        kind="dxf",
         source_path=resolved_script_path,
         source="generated",
         origin_path=resolved_script_path,
@@ -429,10 +426,6 @@ def _read_python_source(script_path: Path, *, allow_dxf_only: bool = False) -> C
         return None
     if metadata.format == "dxf":
         return _dxf_generator_source(resolved_script_path, metadata)
-    if metadata.kind not in {"part", "assembly"}:
-        raise CadSourceError(
-            f"{_display_path(resolved_script_path)} must declare a part or assembly @step model"
-        )
     from cadgen.metadata import resolve_model_output_path
 
     step_path = resolve_model_output_path(
@@ -441,7 +434,6 @@ def _read_python_source(script_path: Path, *, allow_dxf_only: bool = False) -> C
     return CadSource(
         source_ref=source_ref_from_path(resolved_script_path),
         cad_ref=cad_ref_from_step_path(step_path),
-        kind=metadata.kind,
         source_path=resolved_script_path,
         source="generated",
         origin_path=resolved_script_path,
@@ -460,20 +452,17 @@ def _iter_step_sources(root: Path, *, excluded_step_paths: set[Path]) -> tuple[C
         for step_path in _iter_paths(root, pattern):
             if step_path.resolve() in excluded_step_paths:
                 continue
-            sources.append(_read_step_source(step_path, kind="part"))
+            sources.append(_read_step_source(step_path))
     return tuple(sorted(sources, key=lambda source: source.source_ref))
 
 
 def _read_step_source(
     step_path: Path,
     *,
-    kind: str,
     options: StepImportOptions | None = None,
 ) -> CadSource:
     resolved_step_path = step_path.resolve()
     options = options or StepImportOptions()
-    if kind not in {"part", "assembly"}:
-        raise CadSourceError(f"{_display_path(resolved_step_path)} kind must be 'part' or 'assembly'")
     if resolved_step_path.suffix.lower() not in STEP_SUFFIXES:
         raise CadSourceError(f"{_display_path(resolved_step_path)} source must end in .step or .stp")
     if not resolved_step_path.is_file():
@@ -485,7 +474,6 @@ def _read_step_source(
     return CadSource(
         source_ref=source_ref_from_path(resolved_step_path),
         cad_ref=cad_ref,
-        kind=str(kind),
         source_path=resolved_step_path,
         source="imported",
         origin_path=resolved_step_path,

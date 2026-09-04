@@ -33,7 +33,6 @@ class EntryTarget:
 @dataclass(frozen=True)
 class ResolvedStepTarget:
     cad_path: str
-    kind: str
     source_path: Path
     step_path: Path
     # True when the caller explicitly targeted the Python generator (a `.py`
@@ -46,12 +45,18 @@ class ResolvedStepTarget:
 @dataclass(frozen=True)
 class StepTopologyArtifact:
     cad_path: str
-    kind: str
     source_path: Path
     step_path: Path
     artifact_path: Path
     manifest: dict[str, object]
     selector_bundle: SelectorBundle | None = None
+
+    @property
+    def kind(self) -> str:
+        """``part`` or ``assembly``, read off the tree's ``entryKind`` — the one
+        place kind is decided (``store.trees.tree_kind``)."""
+        value = str(self.manifest.get("entryKind") or "").strip().lower()
+        return value if value in {"part", "assembly"} else "part"
 
 
 class StepTopologyArtifactError(CadRefError):
@@ -258,7 +263,6 @@ def resolve_step_target(target: str) -> ResolvedStepTarget:
             raise _missing_document_error(raw_target)
         return ResolvedStepTarget(
             cad_path=cad_path,
-            kind="part",
             source_path=document,
             step_path=document,
             explicit_python=explicit_python,
@@ -272,25 +276,22 @@ def resolve_step_target(target: str) -> ResolvedStepTarget:
         if source is not None and resolved_step_path is not None and resolved_step_path.resolve() == raw_step_path.resolve():
             return ResolvedStepTarget(
                 cad_path=cad_path,
-                kind=source.kind,
                 source_path=source.source_path,
                 step_path=raw_step_path,
             )
         return ResolvedStepTarget(
             cad_path=cad_path,
-            kind="part",
             source_path=raw_step_path,
             step_path=raw_step_path,
         )
 
     lookup_cad_path = _lookup_cad_path(cad_path)
     source = find_source_by_cad_ref(lookup_cad_path)
-    if source is not None and source.kind in {"part", "assembly"}:
+    if source is not None and source.step_path is not None:
         if source.step_path is None:
             raise CadRefError(f"STEP file not found for ref '{cad_path}'.")
         return ResolvedStepTarget(
             cad_path=cad_path,
-            kind=source.kind,
             source_path=source.source_path,
             step_path=source.step_path.resolve(),
             explicit_python=explicit_python,
@@ -302,7 +303,6 @@ def resolve_step_target(target: str) -> ResolvedStepTarget:
     if direct_step_path is not None:
         return ResolvedStepTarget(
             cad_path=cad_path,
-            kind="part",
             source_path=direct_step_path,
             step_path=direct_step_path,
         )

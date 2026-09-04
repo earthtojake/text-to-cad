@@ -25,19 +25,15 @@ IDENTITY_TRANSFORM: tuple[float, ...] = (
 
 def find_step_path(cad_ref: str) -> Path | None:
     source = find_source_by_cad_ref(cad_ref)
-    if source is not None and source.kind in {"part", "assembly"}:
-        return source.step_path.resolve() if source.step_path is not None else None
+    if source is not None and source.step_path is not None:
+        return source.step_path.resolve()
     return None
 
 
 def resolve_cad_source_path(cad_ref: str) -> tuple[str, Path] | None:
     source = find_source_by_cad_ref(cad_ref)
-    if source is not None:
-        if source.kind == "assembly":
-            return "assembly", source.source_path
-        if source.kind == "part":
-            step_path = source.step_path
-            return ("part", step_path) if step_path is not None else None
+    if source is not None and source.step_path is not None:
+        return "step", source.step_path
     return None
 
 

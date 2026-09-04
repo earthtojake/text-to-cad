@@ -146,12 +146,14 @@ class CadGenerationTests(unittest.TestCase):
             shape,
             *,
             root_name,
-            entry_kind,
-            single_component=False,
             force=False,
             progress=None,
             extra=None,
         ):
+            from cadgen.store.build import compound_has_children
+
+            single_component = not compound_has_children(shape)
+            entry_kind = "part" if single_component else "assembly"
             from cadgen.store.objects import put_object
             from cadgen.store.trees import put_tree
 
@@ -221,7 +223,6 @@ class CadGenerationTests(unittest.TestCase):
             payload = build_step_artifact(
                 repo_root=self.temp_root,
                 step=step_path,
-                kind="assembly",
                 force=True,
             )
         self.assertTrue(payload["ok"])
@@ -232,7 +233,7 @@ class CadGenerationTests(unittest.TestCase):
         descriptor_path = package_dir / "assembly.json"
         self.assertTrue(
             descriptor_path.is_file(),
-            "imported STEP --kind assembly --force must write a tree (not a silent no-op)",
+            "imported STEP --force must write a tree (not a silent no-op)",
         )
         descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
         self.assertEqual("assembly-package", descriptor["kind"])
@@ -361,9 +362,9 @@ class CadGenerationTests(unittest.TestCase):
         instances: list[dict[str, object]],
         with_dxf: bool = False,
     ) -> Path:
-        # model() returns an inline multi-child Compound literal so the static AST
-        # classifier (which looks for Compound(children=...)) sees kind=assembly. The
-        # instance list controls the count/names of child boxes.
+        # model() returns an inline multi-child Compound literal, which the build
+        # packages as occurrences. The instance list controls the count/names of
+        # child boxes.
         instance_names = [str(inst.get("name", f"part_{idx}")) for idx, inst in enumerate(instances)]
         shape_expr = (
             "Compound("
@@ -405,7 +406,7 @@ class CadGenerationTests(unittest.TestCase):
         specs = [spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("flat")]
 
         self.assertEqual(1, len(specs))
-        self.assertEqual("part", specs[0].kind)
+        self.assertIsNotNone(specs[0].step_path)
         self.assertEqual(script_path, specs[0].source_path)
         self.assertFalse(specs[0].step_path.exists())
 
@@ -511,7 +512,7 @@ class CadGenerationTests(unittest.TestCase):
 
         spec = next(spec for spec in cad_generation.list_entry_specs() if spec.source_path == script_path)
 
-        self.assertEqual("dxf", spec.kind)
+        self.assertIsNotNone(spec.dxf_path)
         self.assertEqual(self.temp_root / "flat_drawing.dxf", spec.dxf_path)
         self.assertEqual(self._cad_ref("flat_drawing") + ".dxf", spec.cad_ref)
 
@@ -679,7 +680,7 @@ class CadGenerationTests(unittest.TestCase):
         scene = cad_generation.run_script_generator(spec, "step")
 
         # A @step run builds the render scene in memory and writes no STEP by default.
-        self.assertEqual("part", spec.kind)
+        self.assertIsNotNone(spec.step_path)
         self.assertIsNotNone(scene)
         self.assertFalse(script_path.with_suffix(".step").exists())
         self.assertEqual("python", scene.source_kind)
@@ -785,7 +786,7 @@ class CadGenerationTests(unittest.TestCase):
         specs = [spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("loose")]
 
         self.assertEqual(1, len(specs))
-        self.assertEqual("part", specs[0].kind)
+        self.assertIsNotNone(specs[0].step_path)
         self.assertEqual(self.temp_root / "loose.step", specs[0].step_path)
 
     def test_list_entry_specs_can_use_custom_root(self) -> None:
@@ -920,7 +921,7 @@ class CadGenerationTests(unittest.TestCase):
             )
         )
 
-    def test_step_generation_infers_assembly_target(self) -> None:
+    def test_step_generation_dispatches_the_assembly_target(self) -> None:
         self._write_step("imported-part")
         assembly_path = self._write_assembly_generator(
             "robot",
@@ -935,12 +936,12 @@ class CadGenerationTests(unittest.TestCase):
         calls: list[str] = []
 
         def fake_generate(spec, *, entries_by_step_path, **_extra):
-            calls.append(spec.kind)
+            calls.append(spec.script_path.resolve())
 
         with mock.patch.object(cad_generation, "_generate_step_outputs", side_effect=fake_generate):
             cad_generation.generate_step_targets([str(assembly_path)])
 
-        self.assertEqual(["assembly"], calls)
+        self.assertEqual([Path(assembly_path).resolve()], calls)
 
     def test_dxf_generation_rejects_source_without_dxf(self) -> None:
         script_path = self._generator_script("part")
@@ -1113,7 +1114,7 @@ class CadGenerationTests(unittest.TestCase):
         specs = cad_generation.list_entry_specs()
 
         spec = next(spec for spec in specs if spec.source_path == script_path)
-        self.assertEqual("dxf", spec.kind)
+        self.assertIsNotNone(spec.dxf_path)
         self.assertEqual(self.temp_root / "flat.dxf", spec.dxf_path)
 
     def test_imported_step_defaults_to_part(self) -> None:
@@ -1122,7 +1123,7 @@ class CadGenerationTests(unittest.TestCase):
         specs = [spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("imported")]
 
         self.assertEqual(1, len(specs))
-        self.assertEqual("part", specs[0].kind)
+        self.assertIsNotNone(specs[0].step_path)
 
     def test_imported_stp_defaults_to_part(self) -> None:
         self._write_step("imported-stp", suffix=".stp")
@@ -1130,7 +1131,7 @@ class CadGenerationTests(unittest.TestCase):
         specs = [spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("imported-stp")]
 
         self.assertEqual(1, len(specs))
-        self.assertEqual("part", specs[0].kind)
+        self.assertIsNotNone(specs[0].step_path)
 
     def test_imported_step_specifies_no_mesh_tolerances(self) -> None:
         # Nothing specified is ``None``, which is what lets the adaptive
@@ -1226,11 +1227,10 @@ class CadGenerationTests(unittest.TestCase):
 
 
 
-    def _spec(self, ref: str, kind: str, step_name: str) -> cad_generation.EntrySpec:
+    def _spec(self, ref: str, step_name: str) -> cad_generation.EntrySpec:
         return cad_generation.EntrySpec(
             source_ref=ref,
             cad_ref=ref,
-            kind=kind,
             source_path=self.temp_root / f"{ref}.py",
             display_name=ref,
             source="generated",

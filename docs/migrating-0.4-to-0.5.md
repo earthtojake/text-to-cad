@@ -203,18 +203,23 @@ Mechanically:
 | Argument | Meaning |
 | --- | --- |
 | `out=` | Output path. **Script-relative** (see the path note below). Default: sibling `<stem>.step`. |
-| `kind=` | `"part"` or `"assembly"`. Inferred from the return when omitted. |
 | `kinematics=` | The typed-mates dict. See step 4. |
 | `animation=` | Name of a `.anim.js` choreography module beside the script. See step 4. |
 | `mesh_tolerance=` | Chord tolerance for the tree's tessellation. Relative — see step 6. |
 | `mesh_angular_tolerance=` | Angular tolerance, radians. |
 
-`@dxf` takes **only `out=`**. It has no `kind=` (a drawing is 2D geometry), no
-`kinematics=` and no `animation=`; passing any of them is an error.
+`@dxf` takes **only `out=`**. It has no `kinematics=` and no `animation=` (a
+drawing is 2D geometry); passing either is an error.
+
+There is no `kind=`. v0.5 briefly accepted `kind="part"|"assembly"` and
+inferred one from the return statement; both are deleted. What a model
+returns IS the geometry — a `Compound` placing children is packaged as
+occurrences, a single solid as one component — and `inspect` reports
+`part`/`assembly` off the resulting tree. No decorator argument changes the
+geometry a model produces.
 
 Two decorator arguments are read **statically**, before the module runs, and
-must be literals: `out=` (a string) and the two tolerances (numbers) — plus
-`kind=` when you write it. A tolerance therefore cannot come from a constants
+must be literals: `out=` (a string) and the two tolerances (numbers). A tolerance therefore cannot come from a constants
 module; write the number in each decorator (a project README can name the
 shared value). `kinematics=` and `animation=` are ordinary Python evaluated
 when the module loads — a dict built at import, or loaded from a file, is fine

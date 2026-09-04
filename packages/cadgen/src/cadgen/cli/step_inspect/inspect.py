@@ -399,7 +399,7 @@ def _load_step_context(
 
     resolved_kind = _entry_kind_from_manifest(
         manifest,
-        fallback=_entry_kind_from_manifest(artifact.manifest, fallback=target.kind),
+        fallback=_entry_kind_from_manifest(artifact.manifest, fallback="part"),
     )
     return EntryContext(
         cad_path=target.cad_path,

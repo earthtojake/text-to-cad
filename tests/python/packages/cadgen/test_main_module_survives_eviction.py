@@ -87,7 +87,7 @@ _MODEL = textwrap.dedent(
     from cadgen import step
 
 
-    @step(out="pool_probe.step", kind="assembly")
+    @step(out="pool_probe.step")
     def pool_probe():
         parts = []
         for index in range(8):

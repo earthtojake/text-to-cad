@@ -42,7 +42,6 @@ class StandaloneDxfSourceTests(unittest.TestCase):
 
         assert metadata is not None
         self.assertEqual("dxf", metadata.format)
-        self.assertIsNone(metadata.kind)
 
     def test_metadata_ignores_deprecated_urdf_generators(self) -> None:
         # gen_urdf()/gen_sdf() are hard-deprecated: robot descriptions are
@@ -58,7 +57,7 @@ class StandaloneDxfSourceTests(unittest.TestCase):
             source = cad_catalog.source_from_path(script_path)
 
             assert source is not None
-            self.assertEqual("dxf", source.kind)
+            self.assertIsNotNone(source.dxf_path)
             self.assertIsNone(source.step_path)
             self.assertEqual(script_path.with_suffix(".dxf"), source.dxf_path)
 
@@ -71,7 +70,7 @@ class StandaloneDxfSourceTests(unittest.TestCase):
             sources = cad_catalog.iter_cad_sources(Path(root))
 
             self.assertEqual(1, len(sources))
-            self.assertEqual("dxf", sources[0].kind)
+            self.assertIsNotNone(sources[0].dxf_path)
             self.assertEqual(script_path, sources[0].script_path)
 
     def test_generate_dxf_targets_always_writes_the_sibling(self) -> None:

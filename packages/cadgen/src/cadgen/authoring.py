@@ -151,7 +151,6 @@ class ModelDef:
     fmt: str  # "step" | "dxf"
     script_path: Path
     out: str | None
-    kind: str | None
     mesh_tolerance: float | None
     mesh_angular_tolerance: float | None
     # Typed mates (kinematics= dict, validated at decoration); axis refs
@@ -244,15 +243,12 @@ def _decorator(
     fmt: str,
     *,
     out: str | None,
-    kind: str | None,
     mesh_tolerance: float | None,
     mesh_angular_tolerance: float | None,
     kinematics: object = None,
     animation: object = None,
     step_output: bool = True,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    if kind is not None and kind not in {"part", "assembly"}:
-        raise ValueError(f"@{fmt} kind must be 'part' or 'assembly', got {kind!r}")
     kinematics_def = (
         normalize_kinematics(kinematics, where=f"@{fmt}") if kinematics is not None else None
     )
@@ -283,7 +279,6 @@ def _decorator(
             fmt=fmt,
             script_path=script_path,
             out=out,
-            kind=kind,
             mesh_tolerance=mesh_tolerance,
             mesh_angular_tolerance=mesh_angular_tolerance,
             kinematics=kinematics_def,
@@ -336,7 +331,6 @@ def step(
     func: Callable[..., Any] | None = None,
     *,
     out: str | None = None,
-    kind: str | None = None,
     mesh_tolerance: float | None = None,
     mesh_angular_tolerance: float | None = None,
     kinematics: object = None,
@@ -357,7 +351,6 @@ def step(
     decorator = _decorator(
         "step",
         out=out,
-        kind=kind,
         mesh_tolerance=mesh_tolerance,
         mesh_angular_tolerance=mesh_angular_tolerance,
         kinematics=kinematics,
@@ -381,7 +374,7 @@ def dxf(
             )
     _reject_unknown_kwargs("dxf", unsupported)
     decorator = _decorator(
-        "dxf", out=out, kind=None, mesh_tolerance=None, mesh_angular_tolerance=None
+        "dxf", out=out, mesh_tolerance=None, mesh_angular_tolerance=None
     )
     return decorator(func) if func is not None else decorator
 
@@ -465,7 +458,7 @@ def _mesh_export_decorator(deco_name: str, fmt: str):
             # declarations; its .step is never written. A @step stacked above takes
             # the declarations over, so stacking order stays neutral.
             wrapper = _decorator(
-                "step", out=None, kind=None, mesh_tolerance=None,
+                "step", out=None, mesh_tolerance=None,
                 mesh_angular_tolerance=None, step_output=False,
             )(target)
             registered = _REGISTRY[_script_path_of(target)]

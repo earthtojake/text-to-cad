@@ -280,82 +280,14 @@ def _normalize_step_payload(
     )
 
 
-def _shape_payload_entry_kind(shape: object, *, fallback: str) -> str:
-    if fallback not in {"part", "assembly"}:
-        raise RuntimeError(f"Unsupported generated STEP kind: {fallback}")
-    if (
-        fallback == "assembly"
-        or _shape_has_explicit_children(shape)
-        or _shape_is_multi_child_compound(shape)
-    ):
-        return "assembly"
-    return "part"
-
-
-def _shape_has_explicit_children(shape: object) -> bool:
-    try:
-        from build123d import Shape as Build123dShape
-    except ImportError:  # build123d is optional for this heuristic; no build123d means no explicit children
-        return False
-    if not isinstance(shape, Build123dShape):
-        return False
-    try:
-        return bool(tuple(getattr(shape, "children", ()) or ()))
-    except TypeError:
-        return False
-
-
-def _shape_is_multi_child_compound(shape: object) -> bool:
-    try:
-        from OCP.TopAbs import TopAbs_COMPOUND
-        from OCP.TopoDS import TopoDS_Iterator
-        from build123d import Shape as Build123dShape
-    except ImportError:  # build123d/OCP optional; unavailable means the compound heuristic cannot run
-        return False
-    if not isinstance(shape, Build123dShape):
-        return False
-    wrapped = getattr(shape, "wrapped", None)
-    if wrapped is None:
-        return False
-    try:
-        if wrapped.ShapeType() != TopAbs_COMPOUND:
-            return False
-    except Exception:  # noqa: BLE001 - OCP ShapeType() can raise on unexpected wrapper contents
-        return False
-    iterator = TopoDS_Iterator(wrapped)
-    count = 0
-    while iterator.More():
-        count += 1
-        if count > 1:
-            return True
-        iterator.Next()
-    return False
-
-
 def _mark_scene_step_payload(
     scene: LoadedStepScene,
     *,
-    entry_kind: str,
     payload_kind: str,
 ) -> LoadedStepScene:
     if isinstance(scene, LoadedStepScene):
-        scene.text_to_cad_entry_kind = entry_kind
         scene.step_payload_kind = payload_kind
     return scene
-
-
-def _scene_entry_kind(scene: LoadedStepScene | None) -> str | None:
-    if scene is None:
-        return None
-    entry_kind = str(getattr(scene, "text_to_cad_entry_kind", "") or "").strip().lower()
-    return entry_kind if entry_kind in {"part", "assembly"} else None
-
-
-def _effective_step_spec_for_scene(spec: EntrySpec, scene: LoadedStepScene | None) -> EntrySpec:
-    entry_kind = _scene_entry_kind(scene)
-    if entry_kind is None or entry_kind == spec.kind:
-        return spec
-    return replace(spec, kind=entry_kind)
 
 
 def _write_shape_step_payload(
@@ -364,7 +296,6 @@ def _write_shape_step_payload(
     output_path: Path,
     script_path: Path,
     logger: CliLogger,
-    entry_kind: str,
 ) -> LoadedStepScene:
     shape = payload.get("shape")
     from build123d import Shape as Build123dShape
@@ -386,7 +317,7 @@ def _write_shape_step_payload(
         source_hash=source_identity.source_hash,
     )
     _mark_scene_python_backed(scene, source_identity=source_identity, source_path=script_path)
-    _mark_scene_step_payload(scene, entry_kind=entry_kind, payload_kind="shape")
+    _mark_scene_step_payload(scene, payload_kind="shape")
     # Stash the compound: the tree build introspects its located
     # children (occurrence transforms + dedup), and the STEP export serializes it.
     scene.source_compound = shape
@@ -704,7 +635,6 @@ def _run_script_generator_body(
             output_path=spec.step_path,
             script_path=spec.script_path,
             logger=logger,
-            entry_kind=_shape_payload_entry_kind(payload.get("shape"), fallback=spec.kind),
         )
         if declared.block:
             generated_scene.kinematics = declared.block

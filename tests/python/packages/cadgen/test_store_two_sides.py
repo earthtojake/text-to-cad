@@ -55,7 +55,7 @@ from cadgen import build123d as bd
 from pin import RADIUS, pin
 
 
-@step(out="arm.step", kind="assembly")
+@step(out="arm.step")
 def arm():
     bar = label_shape(bd.Box(40, 4 * RADIUS, 4), "bar")
     left = bd.Pos(-15, 0, 2) * pin()
@@ -76,7 +76,7 @@ from arm import arm
 from pin import pin
 
 
-@step(out="robot.step", kind="assembly")
+@step(out="robot.step")
 def robot():
     base = label_shape(bd.Box(60, 60, 3), "base")
     front = bd.Pos(0, 20, 5) * arm()
