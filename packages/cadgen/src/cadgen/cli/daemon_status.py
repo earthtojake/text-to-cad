@@ -60,7 +60,9 @@ def _render(status: dict) -> str:
             f"    pid {worker.get('pid')}  {state}  {worker.get('jobs', 0)} jobs{extra}  {worker.get('model')}"
         )
     lines.append(
-        f"  totals   {status.get('jobs', 0)} jobs, "
+        # `jobs` in the payload is the job LEDGER (a list, the viewer's progress feed);
+        # the pool's lifetime count is `jobsServed`.
+        f"  totals   {status.get('jobsServed', 0)} jobs, "
         f"{status.get('imports', 0)} imports, "
         f"{status.get('concurrent', 0)} concurrent (extras), "
         f"{status.get('recycles', 0)} recycles, "

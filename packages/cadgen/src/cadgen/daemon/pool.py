@@ -257,7 +257,7 @@ class Pool:
         self._clock = clock
         self._workers: list[Worker] = []
         self._spares_pending = 0
-        self._stats = {"jobs": 0, "imports": 0, "concurrent": 0, "crashes": 0, "recycles": 0, "unbinds": 0}
+        self._stats = {"jobsServed": 0, "imports": 0, "concurrent": 0, "crashes": 0, "recycles": 0, "unbinds": 0}
         self._closed = False
 
     # --- spares -------------------------------------------------------------------
@@ -373,7 +373,7 @@ class Pool:
             worker.busy = False
             worker.last_used = self._clock()
             worker.jobs_served += 1
-            self._stats["jobs"] += 1
+            self._stats["jobsServed"] += 1
             if not healthy or not worker.alive():
                 if not healthy:
                     self._stats["crashes"] += 1

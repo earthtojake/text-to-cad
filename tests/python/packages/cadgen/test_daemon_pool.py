@@ -295,10 +295,10 @@ class Status(_PoolFixture):
             snapshot = self.pool.snapshot()
         rows = {w["pid"]: w for w in snapshot["workers"]}
         self.assertEqual(rows[primary.pid], {"pid": primary.pid, "model": "/m/a.py", "busy": True, "extra": False, "jobs": 0})
-        for key in ("spares", "imports", "concurrent", "jobs", "recycles", "crashes"):
+        for key in ("spares", "imports", "concurrent", "jobsServed", "recycles", "crashes"):
             self.assertIn(key, snapshot)
         self.assertEqual(snapshot["concurrent"], 1)
-        self.assertEqual(snapshot["jobs"], 1)
+        self.assertEqual(snapshot["jobsServed"], 1)
         self.pool.release(primary)
 
 
