@@ -87,7 +87,7 @@ class StoreCase(unittest.TestCase):
 
     def record(self, script: Path, *, tree: str, children=(), output: Path | None = None) -> dict:
         from cadgen.store.closure import current_closure_hash
-        from cadgen.store.records import note_document, write_record
+        from cadgen.store.records import note_output, write_record
 
         files = [str(script)]
         outputs = {}
@@ -103,7 +103,7 @@ class StoreCase(unittest.TestCase):
         }
         write_record(script, record)
         if output is not None:
-            note_document(output, script)
+            note_output(output, script)
         return record
 
     def stale_clause(self, script: Path):
@@ -200,7 +200,7 @@ class ClosureBoundaryRule(StoreCase):
                 """
                 from cadgen import step
                 from arm import arm            # only the model function: a result edge
-                from plate import SIZE         # a constant from a model file: a source edge
+                from plate import SIZE         # a literal from a model file: a value edge
                 from lib import frame          # a plain module: a source edge
 
 
@@ -214,10 +214,114 @@ class ClosureBoundaryRule(StoreCase):
         closure = static_closure(robot)
         children = {p.name for p in closure.child_models}
         sources = {p.name for p in closure.source_files}
-        self.assertEqual(children, {"arm.py"})
-        self.assertIn("plate.py", sources)
+        self.assertEqual(children, {"arm.py", "plate.py"})
+        self.assertNotIn("plate.py", sources)
         self.assertIn("frame.py", sources)
         self.assertNotIn("arm.py", sources)
+        # Constants by value: the literal is tracked by its value hash, not the file.
+        self.assertEqual({"plate.py": {"SIZE"}}, {Path(k).name: set(v) for k, v in closure.constants.items()})
+
+    # --- constants by value, functions by file, models by result ----------------
+
+    def _mirror_over(self, handlebar_text: str, mirror_import: str = "from handlebar import MIRROR_MOUNT_LEFT") -> Path:
+        (self.root / "handlebar.py").write_text(textwrap.dedent(handlebar_text), encoding="utf-8")
+        mirror = self.root / "mirror.py"
+        mirror.write_text(
+            textwrap.dedent(
+                f"""
+                from cadgen import step
+                from cadgen import build123d as bd
+                {mirror_import}
+
+
+                @step
+                def mirror():
+                    return bd.Box(1, 1, 1)
+                """
+            ),
+            encoding="utf-8",
+        )
+        return mirror
+
+    HANDLEBAR = """
+        from cadgen import step
+        from cadgen import build123d as bd
+
+        _TOP = (-104.0, 0.0, 9.0)                          # computed, not a literal: by VALUE
+        MIRROR_MOUNT_LEFT = (_TOP[0] - 16.0, 40.0, _TOP[2] + 6.0)
+
+
+        @step
+        def handlebar():
+            return bd.Box(2, 2, 2)
+        """
+
+    def _record_with_constants(self, script: Path) -> None:
+        from cadgen.store.closure import build_closure
+        from cadgen.store.records import write_record
+
+        closure = build_closure(script, executed={})
+        write_record(
+            script,
+            {
+                "entryKind": "part",
+                "sourceKind": "python",
+                "tree": self.tree_for("mirror"),
+                "closure": {"hash": closure.hash, "files": list(closure.files), "static": False},
+                "constants": closure.constants,
+                "children": [],
+                "outputs": {},
+            },
+        )
+        self.assertEqual({"handlebar.py": {"MIRROR_MOUNT_LEFT"}}, {k: set(v) for k, v in closure.constants.items()})
+        self.assertNotIn("handlebar.py", closure.files)
+
+    def test_a_comment_edit_to_the_constants_module_leaves_the_importer_current(self) -> None:
+        mirror = self._mirror_over(self.HANDLEBAR)
+        self._record_with_constants(mirror)
+        self.assertIsNone(self.stale_clause(mirror))
+        handlebar = self.root / "handlebar.py"
+        handlebar.write_text(handlebar.read_text(encoding="utf-8") + "\n# a comment, and a new helper the importer never took\n", encoding="utf-8")
+        handlebar.write_text(handlebar.read_text(encoding="utf-8").replace("return bd.Box(2, 2, 2)", "return bd.Box(3, 3, 3)"), encoding="utf-8")
+        self.assertIsNone(self.stale_clause(mirror), "handlebar's own body is not mirror's source")
+
+    def test_changing_the_constant_value_makes_the_importer_stale(self) -> None:
+        from cadgen.store.gate import stale
+
+        mirror = self._mirror_over(self.HANDLEBAR)
+        self._record_with_constants(mirror)
+        handlebar = self.root / "handlebar.py"
+        handlebar.write_text(handlebar.read_text(encoding="utf-8").replace("_TOP[0] - 16.0", "_TOP[0] - 21.0"), encoding="utf-8")
+        self.assertEqual(2, self.stale_clause(mirror))
+        self.assertIn("constant changed: handlebar.py:MIRROR_MOUNT_LEFT", stale(mirror).reason())
+
+    def test_an_unhashable_constant_is_a_source_edge(self) -> None:
+        from cadgen.store.closure import static_closure
+
+        mirror = self._mirror_over(self.HANDLEBAR.replace("(_TOP[0] - 16.0, 40.0, _TOP[2] + 6.0)", "bd.Pos(-120.0, 40.0, 15.0)"))
+        closure = static_closure(mirror)
+        self.assertIn("handlebar.py", {p.name for p in closure.source_files})
+        self.assertEqual({}, closure.constants)
+
+    def test_a_helper_function_import_is_a_source_edge(self) -> None:
+        from cadgen.store.closure import static_closure
+
+        mirror = self._mirror_over(
+            self.HANDLEBAR + "\n\ndef mount_offset(side):\n    return MIRROR_MOUNT_LEFT\n",
+            mirror_import="from handlebar import MIRROR_MOUNT_LEFT, mount_offset",
+        )
+        closure = static_closure(mirror)
+        self.assertIn("handlebar.py", {p.name for p in closure.source_files})
+        self.assertEqual({}, closure.constants)
+
+    def test_the_record_carries_the_constants_block(self) -> None:
+        from cadgen.store.records import read_record
+
+        mirror = self._mirror_over(self.HANDLEBAR)
+        self._record_with_constants(mirror)
+        record = read_record(mirror) or {}
+        self.assertEqual(["MIRROR_MOUNT_LEFT"], list(record["constants"]["handlebar.py"]))
+        self.assertRegex(record["constants"]["handlebar.py"]["MIRROR_MOUNT_LEFT"], r"^[0-9a-f]{64}$")
 
     def test_relative_imports_inside_a_lib_package_are_in_the_closure(self) -> None:
         # lyra's `lib/digits.py` reaches `lib/chain.py` with `from .chain import ...`;

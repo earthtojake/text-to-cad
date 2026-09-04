@@ -9,7 +9,7 @@ import os
 import sys
 import sysconfig
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -119,6 +119,10 @@ class PythonSourceClosure:
 
     closure_hash: str
     files: tuple[str, ...]
+    # model file (relative to the script's folder) -> constant name -> value hash:
+    # literals imported from model files, tracked by value instead of by file
+    # (``cadgen.store.closure``).
+    constants: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 def _is_within(path: Path, root: Path) -> bool:

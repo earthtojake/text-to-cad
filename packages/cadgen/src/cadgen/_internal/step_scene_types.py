@@ -52,6 +52,8 @@ class LoadedStepScene:
     source_hash: str | None = None
     source_closure_hash: str | None = None
     source_closure_files: tuple[str, ...] = ()
+    # Literals imported from model files, tracked by value (record.constants).
+    source_closure_constants: dict[str, dict[str, str]] = field(default_factory=dict)
     # `cadgen step build IN OUT` only: the INPUT document's content hash (the
     # closure a re-emitted document is fresh against) and a digest of the
     # annotation it was given (kinematics declaration + bake point + animation

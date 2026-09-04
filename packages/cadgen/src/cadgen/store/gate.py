@@ -3,7 +3,8 @@
 ``stale(x)`` is true if any of:
 
 1. no record;
-2. ``sha256(closure.files as they are now) != closure.hash``;
+2. ``sha256(closure.files as they are now) != closure.hash``, or a constant the
+   model imported by value (``record.constants``) no longer hashes the same;
 3. for any recorded child: ``stale(child)`` **or** its current tree hash != the
    pinned hash;
 4. the tree object or any object it (transitively) references is missing;
@@ -21,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from cadgen.store.closure import current_closure_hash
+from cadgen.store.closure import changed_constant, current_closure_hash
 from cadgen.store.records import read_record
 from cadgen.store.trees import tree_complete
 
@@ -97,7 +98,14 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
         )
         verdict.stale = True
     else:
-        clauses.append({"clause": 2, "stale": False, "files": len(files)})
+        # Constants by value: a literal imported from a model file is compared as
+        # a value, not as that file's bytes (the file itself is not in the closure).
+        constant = changed_constant(Path(key), record.get("constants") or {})
+        if constant is not None:
+            clauses.append({"clause": 2, "stale": True, "why": f"constant changed: {constant}", "constant": constant})
+            verdict.stale = True
+        else:
+            clauses.append({"clause": 2, "stale": False, "files": len(files)})
 
     child_clauses: list[dict[str, Any]] = []
     for child in record.get("children") or []:

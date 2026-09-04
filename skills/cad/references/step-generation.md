@@ -141,9 +141,14 @@ The parent depends on the child by RESULT, not by source: its record pins the
 child's result hash, so a child edit that yields identical geometry leaves the
 parent current, and an edit that does not reach a child skips that child's
 Python and kernel work entirely (this is what makes big-assembly edits cost
-seconds instead of minutes). Import only the model function from a model
-file (`from widget import widget`); importing anything else from it (a
-constant, a helper) makes that file part of the parent's own source closure.
+seconds instead of minutes). From a model file, import the model function
+(`from widget import widget`) and, when you need them, its module-level
+literal constants (`from widget import WIDTH` where `WIDTH = 40.0`; numbers,
+strings, tuples/lists/dicts of those): the constant is tracked by VALUE, so a
+comment or body edit in `widget.py` leaves the importer current and only a
+changed value rebuilds it. Importing anything else (a helper function, a
+`bd.` object, an expression) makes that whole file part of the importer's own
+source closure — constants by value, functions by file, models by result.
 A decorated model function is just its geometry here — its own `out=`/export
 declarations fire only when it is the entry being built:
 

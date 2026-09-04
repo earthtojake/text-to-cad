@@ -7,11 +7,17 @@ statically by what the importer TAKES from a model file:
 - only model functions (``from arm import arm``; ``import arm`` + ``arm.arm()``)
   → a **result edge**: ``arm.py`` is excluded from this closure and the child
   is tracked by its pinned tree hash (``record.children``);
-- anything else (``from plate import WIDTH``) → a **source edge**: the file is
-  in the closure like any other.
+- a plainly hashable constant (``from plate import WIDTH`` — a number, str,
+  bool, None, or tuples/lists/dicts of those, however the module computed it)
+  → a **value edge**: the file stays out of the closure and the record carries
+  ``constants[<module>][<name>] = sha256(canonical repr)``; the gate imports
+  the module kernel-free and compares values;
+- anything else (a helper function, a build123d object, an expression) → a
+  **source edge**: the file is in the closure like any other.
 
-A non-model file (``lib/frame.py``) is in the closure of every model whose
-static import closure reaches it through non-model paths.
+Constants by value, functions by file, models by result. A non-model file
+(``lib/frame.py``) is in the closure of every model whose static import closure
+reaches it through non-model paths — its constants are tracked by file.
 
 **Hash at execution.** The closure hash a record carries is over the bytes that
 RAN: files are hashed when they are loaded/executed (the loader has the script's
@@ -29,9 +35,9 @@ import ast
 import functools
 import hashlib
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from cadgen._internal.source_hash import (
     _semantic_source_hash,
@@ -43,6 +49,8 @@ from cadgen._internal.source_hash import (
 class Closure:
     hash: str
     files: tuple[str, ...]  # relative to the model's folder, sorted
+    # model file (relative to the model's folder) -> constant name -> value hash
+    constants: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def as_json(self) -> dict:
         return {"hash": self.hash, "files": list(self.files)}
@@ -53,7 +61,113 @@ class StaticImports:
     """What a script statically imports, split by the boundary rule."""
 
     source_files: tuple[Path, ...]  # non-model files + model files taken as source
-    child_models: tuple[Path, ...]  # model files taken only through their model function
+    child_models: tuple[Path, ...]  # model files taken only through their model function or literals
+    constants: dict[str, dict[str, str]] = field(default_factory=dict)  # model path -> name -> hash
+
+
+# --- constants by value -----------------------------------------------------------
+
+
+def _canonical(value: object) -> str:
+    if isinstance(value, dict):
+        items = sorted(((_canonical(k), _canonical(v)) for k, v in value.items()))
+        return "{" + ",".join(f"{k}:{v}" for k, v in items) + "}"
+    if isinstance(value, (list, tuple, set, frozenset)):
+        parts = [_canonical(v) for v in value]
+        if isinstance(value, (set, frozenset)):
+            parts.sort()
+        return f"{type(value).__name__}[{','.join(parts)}]"
+    return f"{type(value).__name__}:{value!r}"
+
+
+_PLAIN_SCALARS = (bool, int, float, str, bytes, type(None))
+_KERNEL_PACKAGES = frozenset({"build123d", "OCP", "cadquery"})
+
+
+def _plain(value: object) -> bool:
+    if isinstance(value, _PLAIN_SCALARS):
+        return True
+    if isinstance(value, dict):
+        return all(_plain(k) and _plain(v) for k, v in value.items())
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return all(_plain(v) for v in value)
+    return False
+
+
+class _KernelImport(ImportError):
+    """Raised by the gate's import guard: this module pulls the CAD kernel."""
+
+
+class _KernelGuard:
+    """A meta-path finder that refuses a FIRST import of a kernel package."""
+
+    def find_spec(self, name: str, path=None, target=None):  # noqa: ANN001 - importlib protocol
+        if name.split(".")[0] in _KERNEL_PACKAGES and name not in sys.modules:
+            raise _KernelImport(name)
+        return None
+
+
+def module_constant_hashes(path: Path, names: Iterable[str]) -> dict[str, str] | None:
+    """Import the model file at ``path`` kernel-free and hash each of ``names``
+    whose value is plainly hashable (numbers, str, bool, None, tuples/lists/dicts
+    of those): ``sha256`` of the value's canonical repr. Names bound to anything
+    else — a helper, a build123d object — are absent (tracked by file). ``None``
+    when the module cannot be imported without pulling the kernel (or at all):
+    the caller treats every name as a source edge / the record as stale.
+
+    The import runs under the closure scan's own loader conventions (the
+    script's folder and project roots on ``sys.path``), under a private module
+    name so a long-lived process never serves a cached module."""
+    import importlib.util
+    from importlib.machinery import SourceFileLoader
+
+    resolved = Path(path).resolve()
+    roots = [str(r) for r in _search_roots(resolved)]
+    added = [r for r in roots if r not in sys.path]
+    sys.path[:0] = added
+    guard = _KernelGuard()
+    sys.meta_path.insert(0, guard)
+    try:
+        name = f"_cadgen_constants_{hashlib.sha256(str(resolved).encode('utf-8')).hexdigest()[:16]}"
+        loader = SourceFileLoader(name, str(resolved))
+        spec = importlib.util.spec_from_loader(name, loader)
+        if spec is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        # Compile the bytes on disk NOW — never the cached .pyc, whose mtime+size
+        # check misses an edit that keeps the file's size within the same second.
+        exec(compile(loader.get_data(str(resolved)), str(resolved), "exec"), module.__dict__)
+    except Exception:  # noqa: BLE001 - a kernel pull or any import failure: not by value
+        return None
+    finally:
+        sys.meta_path.remove(guard)
+        for r in added:
+            try:
+                sys.path.remove(r)
+            except ValueError:
+                pass
+    found: dict[str, str] = {}
+    for name in names:
+        if not hasattr(module, name):
+            continue
+        value = getattr(module, name)
+        if _plain(value):
+            found[name] = hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
+    return found
+
+
+def changed_constant(script: Path, constants: Mapping[str, Mapping[str, str]]) -> str | None:
+    """The first recorded constant whose literal value differs now, as
+    ``<module>:<NAME>`` — or None when every one still hashes the same. A module
+    gone, or a name no longer bound to a literal, counts as changed."""
+    base = Path(script).resolve().parent
+    for rel, names in sorted(constants.items()):
+        resolved = _resolve_relative(str(rel), base)
+        now = module_constant_hashes(resolved, names) if resolved is not None else None
+        for name, recorded in sorted(names.items()):
+            if now is None or now.get(name) != recorded:
+                return f"{rel}:{name}"
+    return None
 
 
 # --- model-file detection -------------------------------------------------------
@@ -128,6 +242,7 @@ def static_imports(script: Path) -> StaticImports:
     roots = _search_roots(script)
     sources: list[Path] = []
     children: list[Path] = []
+    constants: dict[str, dict[str, str]] = {}
     seen: set[Path] = set()
 
     def classify(target: Path, taken: set[str] | None) -> None:
@@ -138,14 +253,20 @@ def static_imports(script: Path) -> StaticImports:
         if model_fn is None:
             sources.append(target)
             return
-        # A model file: result edge iff every name taken from it is the model function.
-        if taken is not None and taken and taken <= {model_fn}:
+        if taken is None:  # star import: everything, by file
+            sources.append(target)
+            return
+        # A model file. Names beyond the model function are value edges when
+        # every one is a module-level literal (tracked by value hash); any other
+        # name — a helper, a bd object, an expression — makes the file a source edge.
+        # (`import arm` with only `arm.arm()` calls records {"arm"}; nothing taken
+        # statically at all is a result edge too.)
+        beyond = set(taken) - {model_fn}
+        literals = (module_constant_hashes(target, beyond) or {}) if beyond else {}
+        if set(literals) == beyond:
             children.append(target)
-        elif taken is not None and not taken:
-            # Imported but nothing taken statically (e.g. `import arm` and only
-            # `arm.arm()` calls, which _taken_names records as {"arm"}) — treat as
-            # a result edge only when the attribute set says so; otherwise source.
-            children.append(target)
+            if literals:
+                constants.setdefault(str(target), {}).update(literals)
         else:
             sources.append(target)
 
@@ -184,16 +305,17 @@ def static_imports(script: Path) -> StaticImports:
             names -= submodules
             if names and target is not None:
                 classify(target, names)
-    return StaticImports(tuple(sources), tuple(children))
+    return StaticImports(tuple(sources), tuple(children), constants)
 
 
 def static_closure(script: Path) -> StaticImports:
     """Transitive static closure stopping at model files. Model files reached
-    through a result edge are children (not descended into); source-edge model
-    files and every non-model file are descended into and collected."""
+    through a result or value edge are children (not descended into); source-edge
+    model files and every non-model file are descended into and collected."""
     script = Path(script).resolve()
     sources: set[Path] = set()
     children: set[Path] = set()
+    constants: dict[str, dict[str, str]] = {}
     stack = [script]
     visited: set[Path] = set()
     while stack:
@@ -204,11 +326,13 @@ def static_closure(script: Path) -> StaticImports:
         imports = static_imports(current)
         for child in imports.child_models:
             children.add(child)
+        for module, names in imports.constants.items():
+            constants.setdefault(module, {}).update(names)
         for source in imports.source_files:
             if source not in sources and source != script:
                 sources.add(source)
                 stack.append(source)
-    return StaticImports(tuple(sorted(sources)), tuple(sorted(children)))
+    return StaticImports(tuple(sorted(sources)), tuple(sorted(children)), constants)
 
 
 # --- hash at execution ----------------------------------------------------------
@@ -354,7 +478,12 @@ def build_closure(
             except OSError:
                 continue
         pairs.append((_relative(path, base), file_hash))
-    return Closure(hash=closure_hash(pairs), files=tuple(sorted(rel for rel, _ in pairs)))
+    constants = {_relative(Path(module), base): dict(names) for module, names in statics.constants.items()}
+    return Closure(
+        hash=closure_hash(pairs),
+        files=tuple(sorted(rel for rel, _ in pairs)),
+        constants=constants,
+    )
 
 
 def current_closure_hash(script: Path, files: Iterable[str]) -> str | None:
