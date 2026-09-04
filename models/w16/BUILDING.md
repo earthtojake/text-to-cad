@@ -115,14 +115,6 @@ red paint). Bank 2 is intact.
 - Keep helix sweeps, threads and dense patterns light; a real-looking part
   beats a heavy one.
 
-## Timing log (record-keeping, mandatory)
-
-After EVERY `python src/w16.py` you run, append one row to the "Full assembly"
-table in `PERFORMANCE.md`: what you changed since your previous build, the
-result (built / current / FAILED), the wall time (`time python src/w16.py`),
-and whether the log shows your module rebuilding or being served from cache.
-Do not do any performance work; just record.
-
 ## Memory discipline (mandatory — the machine ran out of memory once)
 
 Run ONE build at a time: never a `python src/w16.py` and a scratch model in

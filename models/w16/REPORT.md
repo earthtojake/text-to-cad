@@ -4,8 +4,7 @@ Unbranded quad-turbo 8.0 L W16, museum-sectioned on bank 1, built with the
 release/0.5.0 `cad` / `cad-project` / `cad-viewer` skills. Entry `src/w16.py` →
 `STEP/w16.step` (+ render package, sidecar with the `crank` / `explode` clips).
 Companion files: `TODO.md` (outstanding work), `GAUNTLET.md` (blind critic
-rounds), `BUGS.md` (repo defects, 12 entries), `PERFORMANCE.md` (every build
-timing), `BUILDING.md` (builder brief), `src/README.md` (module map).
+rounds), `BUGS.md` (repo defects, 12 entries), `BUILDING.md` (builder brief), `src/README.md` (module map).
 
 ## Architecture and the figures it rests on
 
