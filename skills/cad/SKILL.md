@@ -188,10 +188,20 @@ parallel, still the same store — and is the mode for tests and debugging.
 
 **Debugging notes.** Do not alternate `CADGEN_DAEMON=0` and daemon runs of one
 model while a daemon build of it is in flight (the two are unbrokered; each
-publishes what it built, and the publish rule keeps the newer source).
-`cadgen store gc` sweeps unreachable objects; **clearing the store
-(`rm -rf ~/.cache/cadgen`, or `$CADGEN_CACHE_DIR`) is always safe** — every
-model reads as stale and rebuilds, and no project file is touched.
+publishes what it built, and the publish rule keeps the newer source). **One
+project, one store.** A build under another `CADGEN_CACHE_DIR` (a temp store,
+a test) rewrites the same output files; the first store's records then see
+outputs whose bytes they did not write, so its gate reports the model stale
+(`output changed: …`) and every parent `child stale: …` — nothing is wrong,
+the two stores simply disagree, and the next build under either settles it.
+**Module bodies stay cheap.** A model file is imported on every rerun, before
+the gate: a module-level `read_step` (computing a layout from a vendor STEP at
+import) pays the kernel and the parse each time even when the model is
+current — call `read_step` inside the body or a function it calls; the
+`hint:` printed on such a run names the import site. `cadgen store gc` sweeps
+unreachable objects; **clearing the store (`rm -rf ~/.cache/cadgen`, or
+`$CADGEN_CACHE_DIR`) is always safe** — every model reads as stale and
+rebuilds, and no project file is touched.
 
 **The store** (`~/.cache/cadgen`, `CADGEN_CACHE_DIR` overrides) holds
 `objects/` — immutable, content-addressed components and trees — and `index/`
