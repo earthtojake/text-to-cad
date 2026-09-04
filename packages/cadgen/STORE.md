@@ -11,7 +11,7 @@ One word per concept; the code uses these words and no others.
 
 | term | meaning |
 |---|---|
-| **model** | a parameterless `@step` function (with any stacked `@stl/@glb/@3mf`); identity = its resolved script path; one per file |
+| **model** | a parameterless decorated function — `@step` (with any stacked `@stl/@glb/@threemf`), `@stl/@glb/@threemf` alone (mesh-only), or `@dxf` (a drawing); identity = its resolved script path; one per file; its outputs are what its decorators declare |
 | **parent / child** | models related by a call inside a body |
 | **build** | running a model's function and publishing its result |
 | **store** | the whole cache, `~/.cache/cadgen/`: `objects/` + `index/` |
@@ -188,8 +188,14 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   gate's clause 2 does not re-hash files for it.
 - `constants` is `{"<model file, relative to the script>": {"<NAME>":
   "<sha256 of the literal's canonical repr>"}}` — every literal the model
-  took from a model file by value. Empty for most models; the gate's clause
-  2 re-reads each literal (statically, nothing is imported) and compares.
+  took from a model file by value. Empty for most models. The gate's clause
+  2 re-hashes each value by importing the model file under a **kernel-guarded
+  loader** (`cadgen.store.closure.module_constant_hashes`: the script's own
+  roots on `sys.path`, a private module name, the bytes on disk compiled
+  fresh) — a model file whose import pulls the kernel, or fails, reads as
+  stale rather than as unchanged. This is why a model file's top level must
+  stay kernel-free (`from cadgen import build123d as bd`, no `bd.` in module
+  constants): the gate runs it.
 - A leaf has `children: []`. Roots and leaves have the same record. A record
   for an imported document (`sourceKind: "step"`) has the document's bytes as
   its closure.
@@ -363,8 +369,10 @@ No serialization, no cancellation, no waiting on another build.
 every object referenced (transitively, through links) from a record, plus the
 objects component/op/mesh entries point at, plus anything modified within the
 grace period (default 1 h — the window in which a build may still hold a pin
-to a child's previous tree). No age sweeps, no per-tier rules. When a daemon
-is up, GC runs through it and respects live pins (a later phase).
+to a child's previous tree). No age sweeps, no per-tier rules. GC does not
+consult the daemon: the grace period is the whole protection for a build in
+flight, so do not sweep with `--grace-hours 0` while anything is building.
+Nothing runs GC automatically.
 
 ## 9. The daemon
 
@@ -406,7 +414,17 @@ job in the worker, never inherited from whichever build spawned the daemon:
 one daemon serves any number of isolated stores. The daemon holds no store
 state of its own. `cadgen daemon status` reports each worker's `model`,
 `busy`, `jobs`, `extra`, plus `spares`, `imports` (cold spawns),
-`concurrent` (extras bound) and `jobs running n/N, queued m, coalesced k`.
+`concurrent` (extras bound) and `jobs running n/N, queued m, coalesced k`;
+`--json` adds the **job ledger** (`cadgen.daemon.jobs`): every job the
+daemon ran in the last 120 s with its state (`submitted` → `queued` →
+`building` [phase, done/total] → `done` | `failed`) and the output paths it
+declared, parsed statically from the script it names. The ledger is the CAD
+Viewer's only progress source, and it is process state, never a file.
+
+The CLI doors (`cadgen step inspect|snapshot|build`, `stl|3mf|glb build`)
+are themselves dispatched through the daemon when one is reachable, so they
+run on warm kernels; the subject-less commands (`store`, `doctor`, `daemon
+status`, the mesh and drawing snapshots) run in-process and never touch it.
 
 Three static mechanisms bound the pool — none adaptive, none heuristic, no
 memory is ever measured (`cadgen.daemon.broker`):
@@ -496,5 +514,12 @@ executors. After publishing, the root runs its gate once more and says
 - Put a path, a timestamp, or anything machine-specific into an object.
 - Derive a model's dependencies from its tree's links.
 - Add a version salt to a store name.
-- Add a lock that a reader consults to decide freshness.
-- Add a memory cap or an age-based eviction rule.
+- Add a lock that a reader consults to decide freshness — or any build lock
+  at all; the publish rule and pins are the whole concurrency story.
+- Let a door, the viewer, snapshot or any render path open `index/model` or
+  `index/output` (§2, property 2). A reader's one lookup is `sha256(bytes)` →
+  `index/document` → objects.
+- Make a reader refuse, or a door rebuild from source: a missing tree is a
+  compile job from the file's bytes; "behind its script" is `store why`'s.
+- Add a memory cap, a worker cap, or an age-based eviction rule.
+- Use a retired word (§1) in code or documentation.
