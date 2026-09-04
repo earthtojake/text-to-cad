@@ -109,10 +109,15 @@ def read_entry(kind: str, key: str) -> dict[str, Any] | None:
 
 def write_entry(kind: str, key: str, payload: dict[str, Any]) -> None:
     target = entry_path(kind, key)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f".{target.name}{temp_suffix()}")
-    tmp.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
-    replace_atomic(tmp, target)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp = target.with_name(f".{target.name}{temp_suffix()}")
+        tmp.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+        replace_atomic(tmp, target)
+    except PermissionError as exc:
+        from cadgen.store.paths import unwritable
+
+        raise unwritable(exc, target) from None
 
 
 def remove_entry(kind: str, key: str) -> None:

@@ -46,6 +46,18 @@ def store_root() -> Path:
     return Path.home() / ".cache" / "cadgen"
 
 
+class StoreUnwritableError(RuntimeError):
+    """The store's folder cannot be written. One sentence, no frames."""
+
+
+def unwritable(exc: OSError, target: Path | str) -> StoreUnwritableError:
+    root = store_root()
+    return StoreUnwritableError(
+        f"the store at {root} is not writable ({exc.strerror or type(exc).__name__} writing "
+        f"{Path(target).name}); point CADGEN_CACHE_DIR at a folder this user can write"
+    )
+
+
 def objects_dir() -> Path:
     return store_root() / "objects"
 
