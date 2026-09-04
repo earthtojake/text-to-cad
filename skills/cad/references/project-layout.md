@@ -28,8 +28,8 @@ Only OUTPUTS are organized by format. Code is not: a model script is not a
     plate.py              #   one model per file: a part …
     plate_drawing.py      #   … a drawing …
     assembly.py           #   … the root assembly
-    frame/                #   a SUB-ASSEMBLY: a folder holding a model of the same name …
-      frame.py            #     … and the parts only it uses
+    chassis/              #   a SUB-ASSEMBLY folder: its assembly model …
+      frame.py            #     … and the parts only it uses (never a module named `chassis`)
       strut.py
     purchased/            #   vendor parts you did not draw: read_step wrapper models
       servo.py
@@ -40,7 +40,7 @@ Only OUTPUTS are organized by format. Code is not: a model script is not a
   STEP/                   # raw outputs ONLY (+ their sidecars) — and the one authored exception:
     plate.step
     assembly.step.js      #   the render module beside a document (choreography); authored, committed
-    frame/  purchased/    #   outputs mirror src/ folder for folder
+    chassis/  purchased/  #   outputs mirror src/ folder for folder
     imported/             #   committed source files brought in from outside (see commit policy)
   DXF/  STL/  GLB/  3MF/  # other format folders: same shape, outputs + imported/
   tmp/                    # scratch: snapshots, debug renders (gitignored)
@@ -157,19 +157,26 @@ factory argument in `lib/`; another configuration is another model file.
 
 ## Folders mirror the product tree
 
-`src/` is the import root: every model imports siblings and folders from it
-(`from frame.frame import frame`, `from lib import holes`, `from
-purchased.servo import servo`), whatever folder the importing script sits in —
-because the project declares it with `PYTHONPATH=src` (cadgen never curates
-paths). Two kinds of folder follow.
+`src/` is the import root: every import is spelled from it (`from
+chassis.frame import frame`, `from lib import holes`, `from purchased.servo
+import servo`), whatever folder the importing script sits in — because the
+project declares it with `PYTHONPATH=src` (cadgen never curates paths). One
+naming rule makes that hold everywhere: **a folder never contains a module of
+its own name.** A build runs like `python script.py`, so the script's own
+folder comes first on the import path; from inside `frame/`, the name `frame`
+would resolve to `frame/frame.py` instead of the folder, and every spelled
+import into that folder fails with "'frame' is not a package". Name the folder
+for the subsystem (`chassis/`) and the model for the assembly it builds
+(`chassis/frame.py`). Two kinds of folder follow.
 
-**A sub-assembly is a folder.** A folder that holds a model of its own name is
-a sub-assembly; the parts only it uses live beside that model, and a part two
-sub-assemblies share moves up to the level that owns both. The tree nests as
-deep as the product does (`base/clamp/`), and the format folders mirror it one
-to one (`STEP/base/clamp/clamp.step`), so the STEP tree reads like the product
-tree. `purchased/` is the one conventional folder: `read_step` wrapper models
-for vendor parts, importable from every level.
+**A sub-assembly is a folder.** A folder that holds an assembly model — one
+that calls the parts beside it — is a sub-assembly; the parts only it uses live
+beside that model, and a part two sub-assemblies share moves up to the level
+that owns both. The tree nests as deep as the product does (`base/clamp/`),
+and the format folders mirror it one to one (`STEP/base/clamp/clamp.step`), so
+the STEP tree reads like the product tree. `purchased/` is the one conventional
+folder: `read_step` wrapper models for vendor parts, importable from every
+level.
 
 **A group is an independent product.** A project that holds several unrelated
 assemblies — a demo corpus, a shop's library — puts each one in its own
@@ -200,13 +207,14 @@ Three rules keep the tree as simple as a flat project:
 1. **Groups do not import each other.** A group's root, parts, sub-assembly
    folders and drawings live under its one directory. `src/lib/` and
    `src/purchased/` are the two folders every group may import; code two
-   groups both need lives there or is a sign they are one group. Imports are
-   spelled from `src/` (`from rover.wheel import wheel` inside the rover
-   group), never relative to the importing file.
+   groups both need lives there or is a sign they are one group. Every
+   import is spelled from `src/` (`from rover.wheel import wheel`, also
+   inside `rover/`), never relative to the importing file — which is why no
+   folder may hold a module of its own name.
 2. **Outputs mirror the folders.** Every model declares an `out=` that mirrors
    its folder path under the format folder (`src/rover/wheel.py` →
-   `../../STEP/rover/wheel.step`, `src/tom/gripper/claw_left.py` →
-   `../../../STEP/tom/gripper/claw_left.step`; meshes likewise under `STL/`),
+   `../../STEP/rover/wheel.step`, `src/tom/end_effector/claw_left.py` →
+   `../../../STEP/tom/end_effector/claw_left.step`; meshes likewise under `STL/`),
    so the format folders stay browsable one assembly at a time and the CAD
    Viewer opened at the project root shows one folder per assembly.
 3. **Every `.py` under `src/` outside `lib/` is a model.** The flat rule holds
