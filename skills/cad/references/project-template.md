@@ -345,6 +345,30 @@ generated around them stays ignored; a project with one group per
 the grouped folders. Pin any other file deliberately with its own negation
 line or `git add -f`.
 
+## `.gitattributes`
+
+```gitattributes
+# Imported sources are binaries you did not write: keep them out of plain git history.
+STEP/imported/** filter=lfs diff=lfs merge=lfs -text
+DXF/imported/**  filter=lfs diff=lfs merge=lfs -text
+STL/imported/**  filter=lfs diff=lfs merge=lfs -text
+GLB/imported/**  filter=lfs diff=lfs merge=lfs -text
+3MF/imported/**  filter=lfs diff=lfs merge=lfs -text
+
+# Authored text beside the documents stays plain git.
+*.step.js text
+*.step.json text
+```
+
+A per-project file at the project root, next to `.gitignore`. The `imported/`
+folders hold vendor STEPs, supplier DXFs and other files you did not author;
+tracking them with Git LFS keeps those binaries out of plain git history while
+the render modules and sidecars beside the documents stay diffable text. Run
+`git lfs install` once per machine. If a file under `imported/` is a few lines
+of text beginning `version https://git-lfs...`, it is an LFS pointer whose
+object was not fetched: `read_step` fails on it, and
+`git lfs checkout STEP/imported` (or the folder in question) is the fix.
+
 ## Verify
 
 ```bash
@@ -363,6 +387,7 @@ exemplar this structure needs:
 ```
 demo/
   .gitignore
+  .gitattributes
   src/                          # committed — the only thing anyone edits
     README.md
     plate.py
@@ -401,7 +426,7 @@ skill's kinematics reference). Nothing generates it and no build reads it; the
 viewer loads it by name, so it is authored like `src/` and committed like
 `imported/`.
 
-`git status` in this tree shows exactly `.gitignore`, `src/`,
+`git status` in this tree shows exactly `.gitignore`, `.gitattributes`, `src/`,
 `STEP/assembly.step.js` and `STEP/imported/servo.step`: authored code, the
 authored choreography, and the one input code cannot regenerate. Everything
 else is rebuilt by running the scripts, so a fresh clone that runs

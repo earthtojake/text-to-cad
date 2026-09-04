@@ -209,6 +209,8 @@ src/<group>/<group>.py` builds that assembly and whatever is stale beneath it.
   used as a SOURCE, whether rendered directly or composed into generated
   models downstream — keep their upstream names and live in the format
   folder's `imported/` subfolder (`STEP/imported/`, `DXF/imported/`, ...).
+  Track those folders with Git LFS; `project-template.md` has the
+  `.gitattributes` to copy.
 
 ## Renaming or retiring outputs
 
