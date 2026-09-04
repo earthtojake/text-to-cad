@@ -336,7 +336,7 @@ lines.
 Behaviours that differ from v0.4 and will bite:
 
 - **A run always writes its outputs.** There is no `--write`, and no way to
-  build "just the render package": running the model produces the files.
+  build "just the tree": running the model produces the files.
 - **Importing a model module never builds.** Only the call does. Inside another
   model's body, a call composes (next step); at top level, it builds.
 - **Every build is parallel.** Children build on a pool of warm workers; a

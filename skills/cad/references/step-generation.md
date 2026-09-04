@@ -238,9 +238,9 @@ input. The render module beside the document (`<name>.step.js`) is NOT one —
 it is the viewer's, and editing it never makes a model stale.
 
 Two decorator arguments are read **statically** (parsed from the file before
-it runs) and must be literals: `out=` and the mesh tolerances. Everything else on a decorator — `kinematics=`, `animation=` —
-is ordinary Python evaluated at import, so a kinematics dict may be built or
-loaded there. A tolerance shared across a project is written as the same
+it runs) and must be literals: `out=` and the mesh tolerances. Everything
+else on a decorator — `kinematics=` — is ordinary Python evaluated at import,
+so a kinematics dict may be built or loaded there. A tolerance shared across a project is written as the same
 number in each decorator; the project README names the value.
 
 ### Mirrored parts are their own models
