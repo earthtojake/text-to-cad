@@ -53,8 +53,8 @@ class EntrySpec:
 
     @property
     def entry_path(self) -> Path | None:
-        # The on-disk file the render package is keyed by. Library-first models
-        # (design/library-first-generation.md) key by the ARTIFACT: the package
+        # The on-disk file the tree is keyed by. Library-first models
+        # (design/library-first-generation.md) key by the ARTIFACT: the tree
         # must ride beside the .step wherever out= routed it,
         # so the viewer (artifacts-only catalog) finds it, and so provenance —
         # not filenames — links artifact to source. Imported STEP entries and
@@ -164,7 +164,7 @@ def _apply_step_options_to_spec(spec: EntrySpec, step_options: StepImportOptions
 
 
 def _spec_requests_extra_outputs(spec: EntrySpec) -> bool:
-    """True when the target asks for an on-demand output beyond the render package
+    """True when the target asks for an on-demand output beyond the tree
     (a re-emitted document: ``cadgen step build IN OUT`` sets ``step_export_path``;
     a model's own ``out=`` is its document, not an extra). Such an output must be produced
     even when the compose is current, so it defeats every no-op and reuse fast
@@ -277,7 +277,7 @@ def _selector_options_for_part(spec: EntrySpec, *, scene: LoadedStepScene | None
     the classes. Without a scene there is nothing to classify, so the default
     set stands. Mesh tolerances are absent on purpose — ``--mesh-tolerance``
     reaches the mesh EXPORT jobs (``MeshExportJob``), which have their own
-    content gate; a render package is tessellation-free.
+    content gate; a tree is tessellation-free.
     """
     edge_visibility_classes = normalize_step_edge_render_visibility_classes(None)
     if isinstance(scene, LoadedStepScene):

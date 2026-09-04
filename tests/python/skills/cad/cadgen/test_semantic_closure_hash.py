@@ -57,7 +57,7 @@ class SemanticClosureHashTests(unittest.TestCase):
     def test_matches_rejects_legacy_byte_recorded_hash(self) -> None:
         """A byte-recorded digest reports STALE and rebuilds — the fallback is gone.
 
-        There is one digest now. A descriptor written before comment-insensitive hashing
+        There is one digest now. An assembly.json written before comment-insensitive hashing
         reports stale exactly once, rebuilds, and re-records a semantic digest; the old
         dual-hash acceptance cost a second full-content re-read of every closure file on
         every miss and was the last data-compatibility path in the freshness stack.

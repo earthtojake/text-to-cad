@@ -162,6 +162,9 @@ def _run(request: dict) -> int:
         return 1
 
     previous_argv = sys.argv
+    # A build seeds the model's folder onto sys.path for its whole run (normal script
+    # semantics); the next job on this worker starts from the worker's own path again.
+    previous_sys_path = list(sys.path)
     out, err = _FrameWriter("stdout"), _FrameWriter("stderr")
     try:
         if not _enter(cwd, err):
@@ -187,6 +190,7 @@ def _run(request: dict) -> int:
         return 1
     finally:
         sys.argv = previous_argv
+        sys.path[:] = previous_sys_path
         _park()
         # Deterministic closure capture: the next job must see a clean first-party module
         # space or it records a different sourceClosureHash than a cold build would.

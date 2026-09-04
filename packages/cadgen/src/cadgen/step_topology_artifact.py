@@ -26,8 +26,6 @@ from cadgen.catalog import build_scope, result_view_dir
 from cadgen._internal.step_scene import LoadedStepScene, load_step_scene_cached
 from cadgen.step_artifact_cli import infer_entry_kind
 from cadgen.step_targets import (
-    REGENERATE_STEP_COMMAND,
-    REGENERATE_STEP_PROMPT,
     ResolvedStepTarget,
     StepTopologyArtifact,
     StepTopologyArtifactError,
@@ -123,7 +121,7 @@ def _ensure_step_topology_artifact(
         debug["source"] = spec.source
     resolved_artifact_path = artifact_path or result_view_dir(spec.entry_path)
 
-    # The canonical render artifact for a generated assembly is a component-GLB package
+    # The canonical render artifact for a generated assembly is a tree
     # directory, which carries no whole-assembly selector topology (faces/edges). inspect
     # needs that full manifest, so extract it on demand from the scene (the build-time
     # win is precisely that this 29.5s extraction is no longer in the build path).
@@ -146,22 +144,18 @@ def _ensure_step_topology_artifact(
                 cad_path=spec.cad_ref,
                 step_path=spec.step_path,
                 artifact_path=resolved_artifact_path,
-                regenerate_command=REGENERATE_STEP_COMMAND,
-                message=(
-                    f"Failed to extract assembly topology for {spec.cad_ref}: {exc}.\n"
-                    f"{REGENERATE_STEP_PROMPT}"
-                ),
+                message=f"reading the tree for {spec.cad_ref} failed: {exc}",
             ) from exc
 
     if debug is not None:
         debug["cacheHit"] = False
 
     try:
-        # This rebuild REWRITES the render package, so it reports for the whole span --
+        # This rebuild REWRITES the tree, so it reports for the whole span --
         # generator run AND emit -- and a viewer polling during the emit sees a build.
         #
-        # Progress keys by the MODEL PATH, never by the content-keyed package dir: a
-        # rebuild changes the content key mid-build, so the package dir does not identify
+        # Progress keys by the MODEL PATH, never by the content-keyed view directory: a
+        # rebuild changes the content key mid-build, so the view directory does not identify
         # the run, and readers (the viewer's progress poller, a peer CLI) derive the record
         # from the model path they hold and could not know the new key in advance.
         with artifact_build(
@@ -182,31 +176,31 @@ def _ensure_step_topology_artifact(
     except StepTopologyArtifactError:
         raise
     except Exception as exc:
+        from cadgen._internal.doors import CompileFailed
+
+        # The compile's own error IS the report; anything else names the step.
+        said = str(exc) if isinstance(exc, CompileFailed) else f"compiling {spec.cad_ref} failed: {exc}"
         raise StepTopologyArtifactError(
             code="glb_regeneration_failed",
             cad_path=spec.cad_ref,
             step_path=spec.step_path,
             artifact_path=resolved_artifact_path,
-            regenerate_command=REGENERATE_STEP_COMMAND,
-            message=(
-                f"Failed to compile {spec.cad_ref}: {exc}.\n"
-                f"{REGENERATE_STEP_PROMPT}"
-            ),
+            message=said,
         ) from exc
-    # The build just produced the render package (the ONLY artifact form); return its
-    # topology the same way the fast path above does — cheap descriptor for renders,
-    # on-demand selector extraction otherwise.
+    # The compile just produced the tree, so the view path resolved ABOVE -- from a
+    # lookup that answered "no tree" -- is stale: it names the never-created
+    # `unbuilt-*` placeholder. Ask again by the document's bytes. (This was the
+    # first-call failure: a door's first look at a new document compiled it and
+    # then checked the placeholder, reporting "no tree exists"; the second call
+    # found the tree on its fast path.)
+    resolved_artifact_path = artifact_path or result_view_dir(spec.entry_path)
     if not is_assembly_package(resolved_artifact_path):
         raise StepTopologyArtifactError(
             code="missing_glb",
             cad_path=spec.cad_ref,
             step_path=spec.step_path,
             artifact_path=resolved_artifact_path,
-            regenerate_command=REGENERATE_STEP_COMMAND,
-            message=(
-                f"Build finished but no tree exists for {spec.cad_ref}.\n"
-                f"{REGENERATE_STEP_PROMPT}"
-            ),
+            message=f"no tree exists for {spec.cad_ref} after its compile",
         )
     return _assembly_topology_artifact(
         spec,
@@ -225,16 +219,20 @@ def _entry_spec_for_target(
     # target is the document. The artifact resolver used to walk back to a
     # `.py` generator and re-run it here, which is how a render could contain a
     # build; a stale document is now refused at the door instead.
-    if not target.step_path.is_file():
+    # Resolved ONCE, here: every lookup below (the bytes hash memo, the view
+    # directory, the compile job) keys on this path, and a relative path from a
+    # symlinked cwd (macOS /tmp) must name the same document as its absolute form.
+    step_path = Path(target.step_path).expanduser().resolve()
+    if not step_path.is_file():
         raise FileNotFoundError(f"STEP file does not exist: {target.step_path}")
     return EntrySpec(
-        source_ref=_relative_to_base(Path.cwd().resolve(), target.step_path),
+        source_ref=_relative_to_base(Path.cwd().resolve(), step_path),
         cad_ref=target.cad_path,
         kind=target.kind if target.kind in {"part", "assembly"} else "part",
-        source_path=target.step_path,
-        display_name=target.step_path.stem,
+        source_path=step_path,
+        display_name=step_path.stem,
         source="imported",
-        step_path=target.step_path,
+        step_path=step_path,
         mesh_tolerance=mesh_tolerance,
         mesh_angular_tolerance=mesh_angular_tolerance,
     )
@@ -246,11 +244,11 @@ def _assembly_topology_artifact(
     require_selector: bool,
     debug: dict[str, object] | None = None,
 ) -> StepTopologyArtifact:
-    """The topology artifact for a component-GLB package, which carries no embedded
+    """The topology artifact for a tree, which carries no embedded
     whole-assembly topology.
 
-    When the caller does not need selectors (a plain render reads the package's render
-    meshes directly), return a cheap descriptor-only artifact. When selectors ARE needed
+    When the caller does not need selectors (a plain render reads the tree's render
+    meshes directly), return a cheap assembly.json-only artifact. When selectors ARE needed
     (inspect, selection-based renders), return a COMPOSED artifact: the component GLBs
     already carry each part's complete topology and the index merge in
     ``assembly_lookup`` places them per occurrence, so no whole-model extraction or
@@ -280,7 +278,7 @@ def _assembly_topology_artifact(
         # snapshot) funnel through
         # ``assembly_lookup.index_with_assembly_occurrences``, which merges
         # those tables into the index per occurrence. So the whole-model
-        # ``topology.glb`` sidecar is redundant: return the descriptor as the
+        # ``topology.glb`` sidecar is redundant: return the assembly.json as the
         # bundle manifest — its selector tables are empty, so the base index
         # is empty — and let composition supply every ref. This removes the
         # sidecar's entire lifecycle (the unconditional delete on package
@@ -305,7 +303,7 @@ def _assembly_topology_artifact(
             selector_bundle=SelectorBundle(manifest=descriptor),
         )
 
-    # No descriptor: the package is mid-write (the writer swaps assembly.json
+    # No assembly.json: the tree is mid-write (the writer swaps assembly.json
     # atomically under the generation lock) or vanished between the
     # is_assembly_package() check and here. Wait for the writer instead of
     # re-extracting a whole-model selector bundle in memory — deleting that
@@ -325,11 +323,7 @@ def _assembly_topology_artifact(
             cad_path=spec.cad_ref,
             step_path=spec.step_path,
             artifact_path=result_view_dir(spec.entry_path),
-            regenerate_command=REGENERATE_STEP_COMMAND,
-            message=(
-                f"The tree for {spec.cad_ref} did not appear "
-                f"(deleted mid-read?).\n{REGENERATE_STEP_PROMPT}"
-            ),
+            message=f"the tree for {spec.cad_ref} did not appear (deleted mid-read?)",
         )
     from cadgen.selector_types import SelectorBundle
 

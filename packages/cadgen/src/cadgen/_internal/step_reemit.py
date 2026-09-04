@@ -1,7 +1,7 @@
 """``cadgen step build IN OUT``: one document in, a NEW document out.
 
 The engine behind the STEP door's ``build`` verb. It re-emits an existing
-document in cadgen's own dialect — OCCT read -> content-keyed render package ->
+document in cadgen's own dialect — OCCT read -> content-keyed tree ->
 the canonical XCAF writer — so the OUTPUT's bytes are deterministic regardless
 of which kernel wrote the input, and optionally ANNOTATES it with kinematics
 that land in ``OUT``'s sidecar.
@@ -19,8 +19,9 @@ edit cheap:
 
 * BYTES depend on the input's content hash and the bake point. Unchanged ->
   nothing is re-emitted.
-* The ANNOTATION (the kinematics declaration) is a sidecar digest. Changed alone, with no bake, the sidecar is refreshed in
-  place against the package already on disk.
+* The ANNOTATION (the kinematics declaration) is a sidecar digest. Changed
+  alone, with no bake, the sidecar is refreshed in place against the tree
+  already on disk.
 
 Not for foreign metadata: PMI, GD&T and vendor extensions do not survive the
 round trip. That is the documented price of speaking one dialect.
@@ -131,7 +132,7 @@ def resolve_output(target: Path, out: Path) -> tuple[Path, Path]:
         raise _fail(
             f"OUT is the input document ({_display(document)}): `cadgen step build` "
             "writes a NEW document — give it a different path (to make an existing "
-            "document's render package current instead, that is what compile does)"
+            "document's tree current instead, that is what compile does)"
         )
     return document, destination
 
@@ -252,7 +253,7 @@ def _emit(
     with logger.timed(f"load STEP {_display(document)}"):
         scene = load_step_scene(document)
     kind = infer_entry_kind(document, scene)
-    # The scene now DESCRIBES the output: the package is keyed by the bytes we
+    # The scene now DESCRIBES the output: the tree is keyed by the bytes we
     # are about to write, and the preloaded-scene contract pins the two paths
     # together. `step_hash` is the INPUT's and would misidentify the output.
     scene.step_path = out.expanduser().resolve()
@@ -274,7 +275,7 @@ def _emit(
     # content key does not exist until after it is written. That is exactly the
     # shape of a re-emit, and it is why the writer here is the canonical one.
     spec = _replace(spec, source="generated", script_path=None, step_path=scene.step_path)
-    # Progress keyed by the MODEL PATH, never by the content-keyed package dir: a
+    # Progress keyed by the MODEL PATH, never by the content-keyed view directory: a
     # re-emit's content key does not exist until the document has been written, so a
     # package-keyed record would land where no reader (the viewer polls the model's
     # build scope) looks. Two concurrent re-emits of one output both proceed; every

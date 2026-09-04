@@ -83,7 +83,7 @@ class SelectorIndex:
     # their numeric ids, exactly as before labels existed.
     label_aliases: dict[str, Any] = field(default_factory=dict)
     # The instance tree's INTERIOR nodes -- subassemblies -- keyed by occurrence id, as
-    # the package descriptor records them (name, nodeType, and a transform where one is
+    # the assembly.json records them (name, nodeType, and a transform where one is
     # written). Rows above are leaves, because only a leaf owns geometry; this is the
     # rest of the tree, and it is what lets a command answer a group ref with the node's
     # own identity instead of an anonymous id. Filled in by

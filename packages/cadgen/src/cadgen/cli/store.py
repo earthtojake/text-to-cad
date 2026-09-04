@@ -2,6 +2,7 @@
 
     cadgen store info              what is in the store, by kind
     cadgen store why <model.py>    why the gate says stale (or current), clause by clause
+    cadgen store forget <target>…  drop one model's record or one document's tree entry
     cadgen store gc [--dry-run]    mark and sweep unreachable objects
 
 ``why`` is the debugging surface STORE.md describes: it prints the record, then
@@ -130,6 +131,19 @@ def _cmd_gc(dry_run: bool, grace_hours: float, as_json: bool) -> int:
     return 0
 
 
+def _cmd_forget(targets: Sequence[str], dry_run: bool, as_json: bool) -> int:
+    from cadgen.store.forget import describe, forget
+
+    reports = [forget(target, dry_run=dry_run) for target in targets]
+    if as_json:
+        print(json.dumps({"dryRun": dry_run, "targets": reports}, separators=(",", ":")))
+        return 0
+    for report in reports:
+        for line in describe(report):
+            print(line)
+    return 0
+
+
 def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=prog or DEFAULT_PROG, description="Inspect, explain and collect the cadgen store.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -138,6 +152,19 @@ def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
     why = sub.add_parser("why", help="why the gate says a model is stale (or current)")
     why.add_argument("model", help="a model script (or a generated .step; the store remembers which script wrote it)")
     why.add_argument("--json", action="store_true")
+    forget = sub.add_parser(
+        "forget",
+        help="drop one model's record, or one document's tree entry, so the next run or open redoes it",
+        description=(
+            "A surgical reset. A model script drops its record (the next run rebuilds it; children and parents "
+            "are untouched). A document (.step/.dxf/mesh) drops its bytes' tree entry so the next open or door "
+            "call compiles it again, and the record that wrote it. Objects are never deleted (that is gc); an "
+            "unknown target is 'nothing to forget'."
+        ),
+    )
+    forget.add_argument("targets", nargs="+", metavar="TARGET", help="a model script or a document path")
+    forget.add_argument("--dry-run", action="store_true", help="report what would be forgotten")
+    forget.add_argument("--json", action="store_true")
     gc = sub.add_parser("gc", help="mark and sweep unreachable objects")
     gc.add_argument("--dry-run", action="store_true")
     gc.add_argument("--grace-hours", type=float, default=1.0, help="keep objects touched within this window (default 1h)")
@@ -151,6 +178,8 @@ def main(argv: Sequence[str] | None = None, prog: str | None = None) -> int:
         return _cmd_info(bool(args.json))
     if args.command == "why":
         return _cmd_why(args.model, bool(args.json))
+    if args.command == "forget":
+        return _cmd_forget(list(args.targets), bool(args.dry_run), bool(args.json))
     if args.command == "gc":
         return _cmd_gc(bool(args.dry_run), float(args.grace_hours), bool(args.json))
     return 2

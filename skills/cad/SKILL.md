@@ -166,6 +166,12 @@ The essentials; `references/step-generation.md` has the code and the edge cases.
   value; importing anything else from a file (a helper function, a `bd.`
   object) makes that whole file part of your model's source, so any edit to it
   rebuilds you. Shared constants may live in a model file or in `lib/`.
+- **The environment is not an input.** Model and `lib/` code takes no
+  parameter from `os.environ`, the working directory, the current time or a
+  random source: the gate tracks source by hash, constants by value and children by
+  result, and cannot see any of those — a value that changes geometry through
+  them leaves a stale result reading as current. A configuration is a factory
+  argument; another configuration is another model.
 - **A mirrored part is its own model.** STEP cannot express a reflection, so
   a right-hand part is a separate model file calling the same factory with
   `mirror=True` (or mirroring the factory's result), not a mirrored child.
@@ -188,10 +194,27 @@ parallel, still the same store — and is the mode for tests and debugging.
 
 **Debugging notes.** Do not alternate `CADGEN_DAEMON=0` and daemon runs of one
 model while a daemon build of it is in flight (the two are unbrokered; each
-publishes what it built, and the publish rule keeps the newer source).
-`cadgen store gc` sweeps unreachable objects; **clearing the store
-(`rm -rf ~/.cache/cadgen`, or `$CADGEN_CACHE_DIR`) is always safe** — every
-model reads as stale and rebuilds, and no project file is touched.
+publishes what it built, and the publish rule keeps the newer source). **One
+project, one store.** A build under another `CADGEN_CACHE_DIR` (a temp store,
+a test) rewrites the same output files; the first store's records then see
+outputs whose bytes they did not write, so its gate reports the model stale
+(`output changed: …`) and every parent `child stale: …` — nothing is wrong,
+the two stores simply disagree, and the next build under either settles it.
+**Module bodies stay cheap.** A model file is imported on every rerun, before
+the gate: a module-level `read_step` (computing a layout from a vendor STEP at
+import) pays the kernel and the parse each time even when the model is
+current — call `read_step` inside the body or a function it calls; the
+`hint:` printed on such a run names the import site. **Resets, smallest
+first:** `python model.py --force` rebuilds one model now; `cadgen store
+forget <model.py>` drops its record so the *next* run rebuilds it (children
+untouched); `cadgen store forget <file.step>` drops the tree entry for that
+file's bytes so the next open or door call compiles it again; `cadgen store
+gc` sweeps unreachable objects; **clearing the store (`rm -rf
+~/.cache/cadgen`, or `$CADGEN_CACHE_DIR`) is always safe** — every model
+reads as stale and rebuilds, and no project file is touched. The gate has no
+cadgen-version clause, so a model built by a cadgen with a bug stays current
+after the fix: `forget` the affected models (or the parents that link them),
+or clear the store.
 
 **The store** (`~/.cache/cadgen`, `CADGEN_CACHE_DIR` overrides) holds
 `objects/` — immutable, content-addressed components and trees — and `index/`

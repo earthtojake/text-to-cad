@@ -63,7 +63,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # Generic / services
     "doctor": ("cadgen.cli.doctor", "print installed cadgen and verify a skill's pin"),
     # The store. `store why <model>` is the debugging surface STORE.md describes.
-    "store": ("cadgen.cli.store", "the store: info, why <model> (gate verdict), gc"),
+    "store": ("cadgen.cli.store", "the store: info, why <model> (gate verdict), forget <target>, gc"),
     "snapshot": ("cadgen.cli.snapshot", "render any supported input to an image"),
     "daemon": ("cadgen.daemon", "run the warm build daemon"),
     # The two-word entry is required, not cosmetic: dispatch matches argv[0:2] first, so

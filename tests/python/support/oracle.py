@@ -72,7 +72,7 @@ def artifact_path(entry_path: Path) -> Path:
 
     A cad-project routes its artifacts into a format folder
     (``@step(out="../STEP/x.step")``), so assuming the sibling default silently
-    resolves a package that was never built. Read the declaration statically:
+    resolves a tree that was never built. Read the declaration statically:
     importing the module would drag in the CAD kernel.
     """
     entry_path = Path(entry_path).resolve()

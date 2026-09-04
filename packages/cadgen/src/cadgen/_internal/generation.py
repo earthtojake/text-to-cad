@@ -130,9 +130,9 @@ def _edge_visibility_classes_match_manifest(
 
 
 def _manifest_records_edge_visibility_classes(manifest: Mapping[str, object]) -> bool:
-    """Well-formedness, not agreement: does this descriptor say what it was built with?
+    """Well-formedness, not agreement: does this assembly.json say what it was built with?
 
-    Every descriptor written by a current build does. One that does not is
+    Every assembly.json written by a current build does. One that does not is
     truncated or foreign, and reusing it would serve components whose edge
     classes nothing can name.
     """
@@ -149,9 +149,9 @@ def _manifest_source_sidecar(manifest: Mapping[str, object]) -> Mapping[str, obj
 
 def _artifact_source_kind_matches_spec(spec: EntrySpec, manifest: Mapping[str, object]) -> bool:
     # The generated-marker is the PROVENANCE RECORD every generated build writes
-    # (source_sidecar.py records tier): the descriptor itself is STEP-pure and
+    # (source_sidecar.py records tier): the assembly.json itself is STEP-pure and
     # carries no sourceKind. An imported spec whose bytes resolve to a generated
-    # model's package is fine — content keying already guarantees the package IS
+    # model's tree is fine — content keying already guarantees the tree IS
     # these bytes' render.
     generated = bool(_manifest_source_sidecar(manifest))
     if spec.source != "generated" and spec.step_path is not None and spec.step_path.is_file():
@@ -164,21 +164,21 @@ def _package_descriptor_matches_spec(
     spec: EntrySpec,
     selector_options: SelectorOptions | None = None,
 ) -> bool | None:
-    """Descriptor-based freshness for a component-GLB package directory.
+    """assembly.json-based freshness for a view directory.
 
-    Returns None when the entry's artifact is not a package (caller falls back
+    Returns None when the entry's artifact is not a tree (caller falls back
     to the monolith-GLB validator). Packages carry no embedded selector/edge
     views (selector topology is extracted on demand), so routing them through
     the monolith validator always failed and every build re-ran the generator plus
-    the full-scene mesh; validate against the package descriptor instead.
+    the full-scene mesh; validate against the assembly.json instead.
 
-    Content keying does most of the gating BY CONSTRUCTION: the package key is
-    ``<sha256(document)>-v<schemaVersion>``, so a package that resolves at all
+    Content keying does most of the gating BY CONSTRUCTION: the tree key is
+    ``<sha256(document)>-v<schemaVersion>``, so a tree that resolves at all
     has the right schema and belongs to exactly these bytes — the old
     schema-version, bake and stepHash gates all collapsed into the key. What
     remains is what the key cannot answer: provenance direction (sidecar vs
     spec), and — once a scene has been loaded and the caller can say what edge
-    classes it wants — whether the package was built with those classes. The
+    classes it wants — whether the tree was built with those classes. The
     source-closure gate stays the sanctioned asymmetry in the SAFE direction:
     generated outputs are detached from their code, so the viewer never checks
     source currency — here it survives purely as the explicit-build no-op
@@ -188,9 +188,9 @@ def _package_descriptor_matches_spec(
     Without ``selector_options`` the caller cannot say what it wants, and
     nothing can be inferred: the edge classes are a pure function of the STEP
     bytes, which the key already pins, so re-deriving an expectation from the
-    descriptor would only compare it against itself. All that is checkable
-    there is that the descriptor IS one — that it records the classes at all.
-    The mesh comparison that used to live here weighed the descriptor's
+    assembly.json would only compare it against itself. All that is checkable
+    there is that the assembly.json IS one — that it records the classes at all.
+    The mesh comparison that used to live here weighed the assembly.json's
     recorded deflection numbers against freshly resolved ones; no tessellator
     ever read either, so the only thing a mismatch could trigger was a rebuild
     that rewrote them.
@@ -217,9 +217,9 @@ def _package_descriptor_matches_spec(
 
 
 def _existing_topology_artifact_matches_spec_without_scene(spec: EntrySpec) -> bool:
-    """True when the entry's render package is current (no scene needed).
+    """True when the entry's tree is current (no scene needed).
 
-    The package descriptor is the ONLY artifact form, so this is a thin guard
+    The assembly.json is the ONLY artifact form, so this is a thin guard
     around :func:`_package_descriptor_matches_spec` (None -> no package -> not
     current). The pre-package monolith-GLB fallback that used to live here was
     unreachable — its validator gated on ``.is_file()`` and every artifact is a
@@ -243,13 +243,13 @@ def _assembly_provenance_manifest(
     step_path: Path,
     entry_kind: str,
 ) -> dict[str, object]:
-    """The index-manifest provenance an assembly package descriptor carries, mirroring
+    """The index-manifest provenance an assembly.json carries, mirroring
     the monolithic GLB's embedded STEP_topology index — but WITHOUT the expensive
     selector extraction. Sourced from the scene (sourceKind/closure), the edge-render
     options, and the STEP hash, so the build freshness gates can read it from
     assembly.json exactly as they read the monolithic manifest.
 
-    There is no ``mesh`` section. A render package stores surfaces, not
+    There is no ``mesh`` section. A tree stores surfaces, not
     triangles; the client tessellates from ``.surf`` with the JS tessellator's
     own relative tolerances. The deflection numbers this block used to carry
     reached no mesher, and the adaptive ``resolution`` beside them was the
@@ -262,7 +262,7 @@ def _assembly_provenance_manifest(
 
     # STEP-pure by contract: nothing here may derive from the Python source.
     # Source-derived state (provenance, pose, mates) rides the source sidecar
-    # (_source_sidecar_payload below) — the descriptor is the cache engine's
+    # (_source_sidecar_payload below) — the assembly.json is the cache engine's
     # world and keys on the STEP bytes alone.
     minimal: dict[str, object] = {
         "capabilities": step_topology_capabilities(selector_options.edge_visibility_classes),
@@ -283,7 +283,7 @@ def _source_sidecar_payload(scene: LoadedStepScene) -> dict[str, object] | None:
 
     Everything source-derived lands here: provenance (the no-op gate's
     closure) and the build timestamp — the one
-    volatile field, which moving here keeps the descriptor byte-stable across
+    volatile field, which moving here keeps the assembly.json byte-stable across
     identical rebuilds. The KINEMATICS section is injected later, once the
     staging package exists to resolve axis refs against.
     """
@@ -382,7 +382,7 @@ def _generate_part_outputs(
             )
 
     # Any on-demand output (mesh sidecar or --step export) must be produced even when the
-    # render package is current, so its presence defeats the reuse fast paths.
+    # tree is current, so its presence defeats the reuse fast paths.
     has_extra_outputs = _spec_requests_extra_outputs(spec)
     package_current = (
         spec.source != "generated"
@@ -436,12 +436,12 @@ def _generate_part_outputs(
     artifact_results: dict[str, object] = {}
 
     # UNIFIED render artifact: every model — part or assembly, generated or imported — is
-    # a component-GLB PACKAGE (a store directory keyed by content hash: assembly.json
-    # descriptor + content-addressed components). An assembly introspects its
+    # a TREE (a store object keyed by content hash: assembly.json
+    # plus content-addressed components). An assembly introspects its
     # placed children as occurrences; a part is one occurrence/one component. The
     # part/assembly choice is the *authored* kind (spec.kind, from generator metadata or STEP
     # inference) — never guessed from geometry — and is recorded as entryKind on the
-    # descriptor. There is no monolithic GLB and no file-vs-dir split.
+    # assembly.json. There is no monolithic GLB and no file-vs-dir split.
     source_compound = getattr(scene, "source_compound", None)
     single_component = spec.kind != "assembly"
     package_provenance = _assembly_provenance_manifest(
@@ -496,7 +496,7 @@ def _generate_part_outputs(
         if generated:
             kinematics_block = getattr(scene, "kinematics", None)
             if kinematics_block:
-                # Axis refs resolve against a package-shaped VIEW of the tree (the
+                # Axis refs resolve against a VIEW (assembly.json + components/) of the tree (the
                 # same composed selector index inspect uses); a bake pose rewrites
                 # the view's transforms, and the baked tree is stored as the result.
                 from cadgen._internal.kinematics_resolve import (
@@ -653,14 +653,14 @@ def _generate_part_outputs(
 
     if spec.step_export_path is not None:
         def step_export_job() -> Path:
-            # The STEP file is ASSEMBLED from the package's exact-shape blobs
+            # The STEP file is ASSEMBLED from the tree's exact-shape component objects
             # (design/step-document-architecture.md) — a save, not a
-            # recompute — so this job runs after the package job. Imported
+            # recompute — so this job runs after the tree job. Imported
             # sources already have the file; copy when a different path was
             # requested.
             target = spec.step_export_path
             target.parent.mkdir(parents=True, exist_ok=True)
-            # The package job already wrote the generated document to
+            # The tree job already wrote the generated document to
             # spec.step_path (the store key derives from those bytes); an
             # explicit target elsewhere is a byte copy of the same document.
             if spec.step_path is not None and spec.step_path.is_file() and spec.step_path.resolve() != target.resolve():
@@ -675,7 +675,7 @@ def _generate_part_outputs(
         jobs.append(_ArtifactJob("STEP", step_export_job))
 
     artifact_results.update(_run_artifact_jobs(jobs, logger=logger))
-    # The render artifact is the component-GLB package; whole-model selector topology is
+    # The render artifact is the tree; whole-model selector topology is
     # extracted on demand by ensure_step_topology_artifact (inspect/selection renders), so
     # generation no longer returns a selector bundle.
     return GeneratedStepResult(spec=spec, scene=scene, selector_bundle=None)
@@ -690,13 +690,13 @@ def _generate_step_outputs(
     progress: object | None = None,
 ) -> GeneratedStepResult:
     preloaded_scene: LoadedStepScene | None = None
-    # An on-demand output (mesh sidecar or --step export) must run even when the package is
+    # An on-demand output (mesh sidecar or --step export) must run even when the tree is
     # current, so its presence defeats the reuse fast path.
     has_extra_outputs = _spec_requests_extra_outputs(spec)
-    # Reuse fast path: skip the build when the component-GLB package is already present and
+    # Reuse fast path: skip the build when the tree is already present and
     # current and nothing forces a run. A generated model's freshness rides on its recorded
     # source closure; an imported/committed STEP's freshness rides on the STEP hash recorded in
-    # the package (verified inside the artifact-matches gate), so it needs no closure check.
+    # the tree (verified inside the artifact-matches gate), so it needs no closure check.
     if (
         not force
         and not has_extra_outputs
@@ -741,7 +741,7 @@ def _generate_step_outputs(
     else:
         # Imported/committed STEP target (kind supplied by the caller or inferred upstream):
         # _generate_part_outputs loads + meshes the on-disk STEP and emits the same flat
-        # component-GLB package. Without this branch the function fell off the end and silently
+        # tree. Without this branch the function fell off the end and silently
         # returned None — no package written — while the CLI still reported success.
         output_kwargs["require_step_file"] = True
     result = _generate_part_outputs(spec, **output_kwargs)
@@ -846,7 +846,7 @@ def _produce_declared_mesh_exports(
         return ()
     from cadgen.step_export_target import _color_hex
 
-    # The Node exporter reads a package-shaped directory: a temporary VIEW of the
+    # The Node exporter reads a view directory (assembly.json + components/): a temporary VIEW of the
     # tree, removed when the export is done (the store holds no result dirs).
     view_dir = export_view(tree_hash)
     try:
@@ -1245,7 +1245,7 @@ def generate_step_targets(
     verbose: bool = False,
     json_output: bool = False,
 ) -> int:
-    """Build render packages for ``targets``. Returns the process exit code.
+    """Build trees for ``targets``. Returns the process exit code.
 
     ``json_output`` additionally prints one JSON line per target to STDOUT. The exit code
     alone cannot say WHICH targets were rebuilt and which were already current, and the
@@ -1258,19 +1258,21 @@ def generate_step_targets(
 
     def _emit(spec: EntrySpec, outcome: str) -> None:
         from cadgen.store.records import current_tree
+        from cadgen.store.trees import tree_kind_for
 
         model = _model_for_spec(spec)
+        tree = current_tree(model) if model is not None else None
         reported.append(
             {
                 "ok": True,
-                "sourceRef": spec.source_ref,
-                "cadPath": spec.cad_ref,
-                "kind": spec.kind,
+                # Read off the tree (store.trees.tree_kind), the same answer
+                # inspect gives; the authored kind only steered the packaging.
+                "kind": tree_kind_for(tree) or spec.kind,
                 "outcome": outcome,
                 # The document the run wrote (None for a mesh-only model, which
                 # declares no STEP) and the hash of the result tree it came from.
                 "document": _display_path(spec.step_path) if spec.step_output else None,
-                "tree": current_tree(model) if model is not None else None,
+                "tree": tree,
             }
         )
 
@@ -1389,8 +1391,6 @@ def generate_dxf_targets(
         reported.append(
             {
                 "ok": True,
-                "sourceRef": spec.source_ref,
-                "cadPath": spec.cad_ref,
                 "kind": "drawing",
                 "outcome": outcome,
                 "document": _display_path(spec.dxf_path) if spec.dxf_path is not None else None,

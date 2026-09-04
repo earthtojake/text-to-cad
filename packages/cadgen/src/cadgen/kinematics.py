@@ -67,7 +67,7 @@ __all__ = [
 KINEMATICS_KEYS = ("mates", "couplings", "poses", "at")
 
 #: The keys that make up the sidecar's kinematics block (``at`` is consumed at
-#: build time and re-expressed as the baked descriptor plus ``bakedPose``).
+#: build time and re-expressed as the baked assembly.json plus ``bakedPose``).
 KINEMATICS_BLOCK_KEYS = ("mates", "couplings", "poses")
 
 _MATE_KINDS = {"revolute", "slider", "cylindrical", "fastened"}

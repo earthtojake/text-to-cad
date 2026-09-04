@@ -1,4 +1,4 @@
-"""Mesh export resolves the STORE render package before touching anything else.
+"""Mesh export resolves the STORE tree before touching anything else.
 
 The export fast path, exercised through the `cadgen stl|3mf|glb build` doors.
 Doors take DOCUMENTS (design/pose-animation-split.md, CLI/doors follow-on), so
@@ -108,7 +108,7 @@ class MeshExportStoreReuseTest(unittest.TestCase):
         # imports no model module and reads no source.
         for fmt in ("stl", "glb", "3mf"):
             current = self._export(fmt, "block.step", "--force")
-            # Straight to the tessellator: the package is already keyed by these
+            # Straight to the tessellator: the tree is already keyed by these
             # bytes, so there is nothing to run, load or extract.
             self.assertIn(f"tessellate + write {fmt}", current.stderr)
             self.assertNotIn("run step model", current.stderr)

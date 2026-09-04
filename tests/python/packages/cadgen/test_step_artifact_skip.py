@@ -2,7 +2,7 @@
 
 This is the module the CAD Viewer's build POST runs, and it is a DIFFERENT path from
 ``cadgen.generation`` (covered by test_concurrent_generation.py). Its "already current"
-fast path was dead: ``_current_artifact_for_spec`` routed a component-GLB package
+fast path was dead: ``_current_artifact_for_spec`` routed a tree
 DIRECTORY through ``validate_step_topology_artifact``, which gates on ``.is_file()`` and
 therefore always raised ``missing_glb``. Every viewer-triggered build re-ran ``model()``.
 
@@ -126,7 +126,7 @@ class StepArtifactSkipTest(unittest.TestCase):
         """No lock: both contenders run (STORE.md §7). Whether the loser redoes the
         winner's work is timing -- its run re-checks the gate when it opens -- so what is
         asserted is what the publish rule guarantees: both succeed, the generator ran at
-        most twice, and a third run finds the package current."""
+        most twice, and a third run finds the tree current."""
         script = [
             sys.executable, "-m", "cadgen.step_artifact_cli",
             "--repo-root", str(self.root),

@@ -14,9 +14,9 @@ Two callers share this module, and they offer different formats:
 
 Both accept an imported ``.step``/``.stp`` or a generated ``@step`` Python source;
 exports can never be stale: a model either passes the canonical freshness gate (closure
-included) and exports from its store render package, or it rebuilds from source.
+included) and exports from its store tree, or it rebuilds from source.
 
-Mesh formats tessellate from a render package — the STORE package when the model is
+Mesh formats tessellate from a tree — the STORE tree when the model is
 current (the fast path: no generator run, no STEP load, no extraction), else a one-shot
 temporary package extracted from the freshly built scene. Geometry is extracted at most
 once per run and one Node invocation serializes every requested format from one
@@ -147,7 +147,7 @@ def _resolve_spec_and_scene(
         announce_rebuild(
             door, document, reason="no document on disk", source=spec.script_path or source_path, verb=verb
         )
-        # An export runs the generator but writes the render package NOTHING -- its output
+        # An export runs the generator but writes the tree NOTHING -- its output
         # is a STEP/STL/3MF/GLB file somewhere else entirely. Reporting it as a build made
         # a fully-current model show `generating` with an empty bar for the whole length
         # of the export.
@@ -289,7 +289,7 @@ def _effective_export_tolerances(
 
 
 def _current_store_package(spec: EntrySpec) -> Path | None:
-    """The store render package for a CURRENT model, or None.
+    """The store tree for a CURRENT model, or None.
 
     This is the export fast path: when the canonical freshness gate — the same
     one `python <model>.py` and the artifact CLI use, closure included — says
@@ -309,7 +309,7 @@ def _current_store_package(spec: EntrySpec) -> Path | None:
 
 
 def _view_for_tree(tree_hash: str) -> Path:
-    """A package-shaped VIEW of a tree for the Node exporter (the store holds
+    """A view directory (assembly.json + components/) of a tree for the Node exporter (the store holds
     no result directories). Temporary; removed at interpreter exit."""
     import atexit
     import shutil
@@ -387,8 +387,8 @@ def _resolve_mesh_package(
 ) -> tuple[EntrySpec, Path | None, LoadedStepScene | None]:
     """Resolve what a mesh export tessellates from: ``(spec, package_dir, scene)``.
 
-    A CURRENT model resolves to its store render package — no generator run, no
-    STEP load, no extraction; the package already holds the exact surf geometry
+    A CURRENT model resolves to its store tree — no generator run, no
+    STEP load, no extraction; the tree already holds the exact surf geometry
     the exporter consumes. An imported model can only miss (content-hash keying
     cannot go stale), and a miss builds the shared store package via the
     ``cadgen step build`` path. Only a STALE generated model still pays for source:
@@ -756,7 +756,7 @@ def export_cad_target(
     in a single run.
 
     The shared engine entry behind the per-format doors (``cadgen.stl.build`` and
-    friends). Geometry comes from the document's store render package — no generator
+    friends). Geometry comes from the document's store tree — no generator
     run, no source, no extraction — and one Node invocation serializes every requested
     format from one tessellation, so all formats come from identical geometry.
     ``outputs`` pairs a format name with an explicit output path, or ``None`` for the

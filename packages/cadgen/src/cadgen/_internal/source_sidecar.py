@@ -1,16 +1,15 @@
 """The source sidecar: everything SOURCE-derived a generated model carries.
 
-The render package (in the user-level store, keyed by the document's content
+The tree (in the user-level store, keyed by the document's content
 hash) is a pure function of the STEP file's bytes plus schema versions — the
 cache engine's world, freely evictable. The model's DECLARATIONS live in ONE
 sidecar FILE BESIDE THE MODEL, ``<name>.step.json``: the KINEMATICS section
-(typed mates with axes resolved to world numbers, couplings, pose presets),
-the ANIMATION section (the .anim.js choreography text, COPIED — no path back
-to the source tree ever appears in a generated file), the MESH EXPORTS section
-(what the model's ``@stl``/``@glb``/``@threemf`` declarations resolved to, so
-a bare mesh door reads DECLARATIONS from the document instead of importing
-the model module), and assembly mates (authored in Python, not representable in
-STEP). NOTHING source-derived-as-identity — no paths, hashes, closures, or
+(typed mates with axes resolved to world numbers, couplings, pose presets) and
+the MESH EXPORTS section (what the model's ``@stl``/``@glb``/``@threemf``
+declarations resolved to, so a bare mesh door reads DECLARATIONS from the
+document instead of importing the model module). Choreography is NOT here: the
+render module beside the document (``<name>.step.js``) is authored, loaded by
+the viewer by name, and read by no build. NOTHING source-derived-as-identity — no paths, hashes, closures, or
 timestamps: a sidecar ships beside the artifact, and a generated file carries
 no tie back to its source. Provenance lives in the RECORDS tier below. The
 sidecar sits beside the model because declarations cannot be re-derived from
@@ -28,7 +27,7 @@ Imports write neither. The JS authority
 (``apps/viewer/server/artifact_status.py``) mirrors this: a sidecar at THIS schema
 is a fast yes, and the record decides everything else.
 
-Write ordering matters: the sidecar is written BEFORE the package lands at
+Write ordering matters: the sidecar is written BEFORE the tree lands at
 its content key, so a resolvable package never races a missing sidecar.
 Readers are lock-blind and tolerate a MISSING sidecar; a sidecar that is
 present must declare ``SOURCE_SIDECAR_SCHEMA_VERSION``, because reading
@@ -120,7 +119,7 @@ def model_is_generated(step_path: Path | str) -> bool:
 
 
 # The sections that WARRANT a sidecar. Provenance alone does not: it also
-# lives in the package descriptor, and a file per plain model is pure clutter.
+# lives in the assembly.json, and a file per plain model is pure clutter.
 _WARRANTING_SECTIONS = ("kinematics", "meshExports")
 
 

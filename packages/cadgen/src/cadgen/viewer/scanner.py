@@ -8,7 +8,7 @@ rewritten to the ``/__cad/asset?file=...`` form by the backend's absolutizer,
 
 The catalog is ARTIFACTS-ONLY. Model scripts are never entries: a model with no
 artifact simply does not appear until its script has been run, and
-artifact-to-source linkage is descriptor provenance rather than filenames. The
+artifact-to-source linkage is assembly.json provenance rather than filenames. The
 catalog publishes no provenance at all — never a ``sourceKind``, never a
 generator script name.
 
@@ -148,7 +148,7 @@ def path_relative(from_path: str, to_path: str) -> str:
 def real_path_or(value: str) -> str:
     """``realpathSync`` that resolves as much as exists.
 
-    A not-yet-created package directory under a symlinked parent still keys the
+    A not-yet-created view directory under a symlinked parent still keys the
     way ``Path.resolve()`` does.
     """
     try:
@@ -485,16 +485,19 @@ def _is_js_object(value) -> bool:
 
 
 def step_kind_from_topology(topology) -> str:
+    """``part`` or ``assembly`` for a catalog row: the TREE's answer, relayed.
+
+    The flattened descriptor's ``entryKind`` is written by ``store.trees``
+    from the tree itself (links or more than one own occurrence → assembly),
+    the one definition every reporter shares. Nothing is inferred here from
+    the descriptor's other fields — an ``assembly.root`` object says how the
+    occurrences nest, not how many there are.
+    """
     if not topology:
         return "part"
     index = topology.get("index") if _is_js_object(topology.get("index")) else topology
     if topology.get("entryKind") == "assembly" or (
         isinstance(index, dict) and index.get("entryKind") == "assembly"
-    ):
-        return "assembly"
-    assembly = index.get("assembly") if isinstance(index, dict) else None
-    if _is_js_object(assembly) and _is_js_object(
-        assembly.get("root") if isinstance(assembly, dict) else None
     ):
         return "assembly"
     return "part"
@@ -513,7 +516,7 @@ def read_step_catalog_metadata(descriptor, source_path=None) -> dict:
     """Catalog-facing facts from a document's flattened tree, or ``{}`` when
     there is no valid one.
 
-    ``descriptor`` is the flattened tree (``result_descriptor``). ``None``, a
+    ``assembly.json`` is the flattened tree (``result_descriptor``). ``None``, a
     non-dict, or a ``kind`` that is not ``assembly-package`` all answer ``{}``
     — and that is what suppresses ``sourceUrl``/``poseUrl`` even when the
     sidecar exists and declares kinematics.
@@ -523,7 +526,7 @@ def read_step_catalog_metadata(descriptor, source_path=None) -> dict:
     if descriptor.get("kind") != _STEP_PACKAGE_KIND:
         return {}
     # Everything SOURCE-derived rides the model-side sidecar
-    # (<name>.step.json); the store descriptor is STEP-pure.
+    # (<name>.step.json); the store assembly.json is STEP-pure.
     sidecar = None
     if source_path:
         parsed = _read_json(source_sidecar_path(source_path))

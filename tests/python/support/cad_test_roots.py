@@ -31,9 +31,9 @@ class IsolatedCadRoots:
         os.chdir(self.cad_root)
         testcase.addCleanup(lambda: os.chdir(previous_cwd))
 
-        # The package store is content-addressed and shared (~/.cache/cadgen unless
+        # The store is content-addressed and shared (~/.cache/cadgen unless
         # CADGEN_CACHE_DIR says otherwise): fixtures that produce identical document bytes
-        # share a package key, so a populated developer store satisfies builds a test expects
+        # share a tree key, so a populated developer store satisfies builds a test expects
         # to RUN, turns "built" into "reused", and breaks "must not exist yet" preconditions.
         # test-python.sh points the whole run at a fresh store; a direct `python -m unittest`
         # does not. Give this test a store of its own either way, and RESTORE the previous

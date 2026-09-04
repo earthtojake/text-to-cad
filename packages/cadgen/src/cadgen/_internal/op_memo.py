@@ -624,7 +624,7 @@ def _protect_inputs(op_name: str, args: tuple, kwargs: dict, *, is_classmethod: 
     what they consume). A model that feeds a solid to a boolean as a tool and
     ALSO emits that solid as its own part — the juno cores, cut out of their
     shells — therefore serialized different component bytes on a cold run than
-    on a warm one, and the package hash changed with the cache state.
+    on a warm one, and the tree hash changed with the cache state.
 
     - Booleans: the operands and tools run as exact copies
       (``BRepBuilderAPI_Copy``); ``self`` is passed as given because the op

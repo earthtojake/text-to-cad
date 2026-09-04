@@ -724,7 +724,7 @@ def extract_surface_component(
 
     Geometry and per-face colours only. The part-level colour is NOT in here:
     the surf is content-addressed by geometry, so two occurrences of one part
-    in different colours share one file, and the descriptor's occurrence is
+    in different colours share one file, and the assembly.json's occurrence is
     where colour rides (``component_package._occurrence_color``)."""
     bin_out = _Bin()
 

@@ -150,7 +150,7 @@ def step_snapshot_verb(door: str):
         An explicit OUT is written exactly there and is cleared first, so a
         failed render leaves no file at all; a directory gets a generated
         timestamped name inside it. Rendering is a read: nothing about the
-        model changes, though a STEP input whose render package is missing
+        model changes, though a STEP input whose tree is missing
         builds one.
 
         target: the model to render — a .step/.stp document (a model script

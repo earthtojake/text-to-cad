@@ -1,6 +1,6 @@
 """A project must survive being moved without a rebuild.
 
-The render packages live in the user-level store keyed by DOCUMENT content, so a
+The trees live in the user-level store keyed by DOCUMENT content, so a
 project move cannot invalidate them by construction: the moved .step hashes to
 the same key. What can still leak is a path — in a store descriptor, a component
 blob, or the model-side sidecar — and a leaked path survives the move and then
@@ -8,16 +8,16 @@ names a directory that only ever existed somewhere else.
 
 That is a design invariant with almost no enforcement. ONE ``relative_to_cwd()`` in a
 descriptor writer, or one ``str(path.resolve())``, would bake the builder's directory into
-the cache, and nothing would say so: the package still validates on the machine that wrote
+the cache, and nothing would say so: the tree still validates on the machine that wrote
 it. It surfaces later, as a silent full rebuild after a move, or as a stale-artifact error
 in the viewer on a colleague's checkout -- with the descriptor's own recorded path pointing
 at a directory that only ever existed somewhere else.
 
 So this asserts both halves, per package kind:
 
-* no file in the package mentions where it was built -- checked over BYTES, because the
+* no file in the tree mentions where it was built -- checked over BYTES, because the
   component GLBs and the topology manifests inside them are not text;
-* after moving and after renaming, every producer still reports the package current and the
+* after moving and after renaming, every producer still reports the tree current and the
   viewer's freshness validator still accepts it.
 """
 

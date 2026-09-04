@@ -112,8 +112,11 @@ or a default argument: each one resolves the attribute at import.
 Use **attribute style**. `from cadgen.build123d import Box` works but is eager:
 a from-import must bind the object, which forces the real import immediately.
 
-**Imports go at module top.** Import at module level; only *call* the imported
-code inside the function.
+**Imports: module top by preference, not by rule.** A model runs like
+`python script.py` — its folder stays on `sys.path` for the whole build — so an
+import inside the body or a helper resolves the same way, and the file it loads
+is hashed when it executes, so it is tracked either way. Module-top imports keep
+the graph visible up front; that is the only reason to prefer them.
 
 **Reading a vendor STEP.** Use `cadgen.read_step`, never
 `build123d.import_step`:
@@ -213,8 +216,13 @@ no `kinematics=`; passing either is an error. **No decorator takes
 `animation=`** — choreography is a file beside the document, not a
 declaration (step 4).
 
-Decorator arguments are read **statically** and must be literals — a tolerance
-cannot be imported from a constants module. Unknown keyword arguments are
+Two decorator arguments are read **statically**, before the module runs, and
+must be literals: `out=` (a string) and the two tolerances (numbers) — plus
+`kind=` when you write it. A tolerance therefore cannot come from a constants
+module; write the number in each decorator (a project README can name the
+shared value). `kinematics=` and `animation=` are ordinary Python evaluated
+when the module loads — a dict built at import, or loaded from a file, is fine
+and is what the kinematics reference shows. Unknown keyword arguments are
 rejected outright on every decorator.
 
 #### The one path-semantics exception
@@ -390,8 +398,20 @@ if __name__ == "__main__":
   placements) and nothing else; **mates never propagate up**. The v0.4
   `assembly_mates` promotion plumbing is deleted, and so is
   `AssemblyHelper.relations`.
-- **Dynamic imports** (`__import__`, `importlib`) of model modules are not
-  tracked. Import children explicitly.
+- **Dynamic imports** (`__import__`, `importlib`, and loading a sibling model
+  file by path with `importlib.util.spec_from_file_location`) of model modules
+  are not tracked. Import children explicitly. Two v0.4 habits hide here: a
+  script that loaded a sibling model file **to read one constant** becomes
+  `from sibling import CONSTANT` (tracked by value); a script that loaded a
+  sibling model module **to rebuild it under different constants** (re-exec,
+  environment variables, monkeypatched globals) becomes a factory in `lib/`
+  that takes those values as arguments, called by two ordinary models.
+- **The environment is not an input.** Model and `lib/` code reads no
+  parameter from `os.environ`, the working directory, the current time or a
+  random source: the gate tracks source by hash, constants by value and children by
+  result, and cannot see any of those, so a value that changes geometry
+  through them leaves a stale result reading as current. A configuration is a
+  factory argument; another configuration is another model.
 
 ### 4. Move articulation to kinematics + the render module (`<name>.step.js`)
 
@@ -671,6 +691,8 @@ expected, before reaching for `--force`.
 ```bash
 cadgen store why src/frame.py
 cadgen store info                # what the store holds, by kind
+cadgen store forget src/frame.py # drop one model's record; the next run rebuilds it
+cadgen store forget STEP/frame.step  # drop one document's tree entry; the next open recompiles it
 cadgen store gc --dry-run        # what a sweep would remove
 ```
 
@@ -738,7 +760,7 @@ directly. Every subcommand is also reachable as `python -m cadgen.cli <verb>`.
 | `python scripts/artifact ...` / `cadgen-step-artifact` | `cadgen step compile` (internal; every door compiles on demand) |
 | `python skills/cad/scripts/cadgen_daemon ...` | `cadgen daemon status` |
 | the viewer launcher (`npm run start --dir`, `server/main.py`) | `cadgen viewer`, `cadgen viewer list`, `cadgen viewer stop` |
-| `cadgen cache info\|gc` (intermediate 0.5) | `cadgen store info\|why\|gc` |
+| `cadgen cache info\|gc` (intermediate 0.5) | `cadgen store info\|why\|forget\|gc` |
 | DXF: `python skills/dxf/scripts/gen ...` | `python drawing.py` |
 | — | `cadgen step build IN OUT` (re-emit/annotate a document) |
 | — | `cadgen store why <model.py>` |
@@ -759,7 +781,7 @@ step build             write a new STEP from one, with kinematics
 step compile           make a STEP's tree current (internal)
 step inspect           inspect selector references in a STEP
 step snapshot          render a STEP model to an image
-store                  the store: info, why <model> (gate verdict), gc
+store                  the store: info, why <model> (gate verdict), forget <target>, gc
 viewer [list|stop]     serve the current directory in the CAD Viewer
 ```
 
@@ -949,7 +971,8 @@ index/component | op | mesh         component entries, the op memo, tessellation
 a source file, and a reader (door, viewer, snapshot) never opens a record.
 `index/model` and friends are the **code side**: what source produced what and
 what it depended on. Records are deletable without corrupting anything; a
-rebuild re-creates them. `cadgen store info` sizes it, `cadgen store gc`
+rebuild re-creates them. `cadgen store info` sizes it, `cadgen store forget`
+drops one model's record or one document's tree entry, `cadgen store gc`
 sweeps unreachable objects, and deleting the whole root is always safe. Nothing
 else is written anywhere — a build's progress is process state, read from the
 daemon.
@@ -1012,7 +1035,7 @@ positionals `TARGET OUT`; `--params` became `--kinematics`. → `cadgen <verb>
 --help` is always the current interface.
 
 **`cadgen cache` is not a command**
-The intermediate 0.5 name. → `cadgen store info|why|gc`.
+The intermediate 0.5 name. → `cadgen store info|why|forget|gc`.
 
 **A model did not rebuild after I edited a child**
 Expected: a parent pulls its children only when it is built. `cadgen store why
@@ -1051,7 +1074,10 @@ it from its bytes.
       is gone.
 - [ ] Every model script runs clean, a second run prints `current`, and
       `cadgen store why` agrees.
-- [ ] `cadgen step inspect validate` passes on each primary STEP.
+- [ ] `cadgen step inspect validate` passes on each STEP you author. Purchased
+      and vendor solids brought in with `read_step` are inputs, not your
+      geometry: validate them once to know what you have, and expect an
+      assembly that contains them to report their defects, not yours.
 - [ ] A snapshot of each primary STEP has been rendered and reviewed.
 - [ ] Tolerance flags have been re-derived from the new relative defaults, not
       copied.

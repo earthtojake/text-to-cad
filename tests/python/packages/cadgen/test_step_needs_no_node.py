@@ -1,4 +1,4 @@
-"""Building a STEP render package must never require Node.
+"""Building a STEP document's tree must never require Node.
 
 STEP is the core build path: it is what the CAD skill runs for every generated model, and
 it is pure OCP/build123d. The DXF package is the one that bakes its
@@ -97,7 +97,7 @@ class StepBuildsWithoutNodeTests(unittest.TestCase):
 
             candidate = result_view_dir(root / "block.step")
             packages = [candidate] if candidate.is_dir() else []
-            self.assertTrue(packages, f"No render package was written under {root}")
+            self.assertTrue(packages, f"No tree was written under {root}")
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -65,6 +65,10 @@ if __name__ == "__main__":
 - **`parent`/`child`** are occurrence refs: `#`-prefixed labels (canonical —
   label parts with `cadgen.label_shape`) or occurrence ids. They must resolve
   at build or the build fails; `cadgen step inspect refs` lists the leaves.
+  A label resolves **into linked children**: a part labelled inside a
+  sub-assembly you call (`#shoulder_yaw_servo` living in `base_link()`'s
+  tree) resolves to its occurrence under the link (`o1.1.1`), so an assembly
+  can mate parts of a sub-assembly it links without owning their geometry.
   A ref may name a SUBASSEMBLY as well as a part — a labelled group `Compound`
   is an occurrence in the instance tree, and mating it carries every part
   beneath it. That is how a rocker-bogie chain is three mates instead of three
