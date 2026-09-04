@@ -243,7 +243,7 @@ class LocalAssetBackend:
         The containment half is ``require_contained`` — the one the artifact
         routes share. The hidden-component half stays here, because it is a rule
         about bytes this backend would SERVE, not about what the server may
-        touch: a hidden ``.step`` is still a document the import path may
+        touch: a hidden ``.step`` is still a document the compile path may
         legitimately compile.
         """
         require_contained(self.root_path, candidate)

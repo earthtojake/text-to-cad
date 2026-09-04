@@ -7,7 +7,7 @@ decorator, verbs, and generated CLI together (design/format-doors.md).
 
 Two verbs make documents, and the difference is what lands on disk:
 
-* ``compile`` is a CACHE action — a document in, its render package in the
+* ``compile`` is a CACHE action — a document in, its tree in the
   store, the document untouched. It is INTERNAL: every door and the viewer
   compile a missing package on demand, so no skill teaches the command.
 * ``build`` writes a NEW document — ``IN.step OUT.step`` — re-emitted through
@@ -48,15 +48,15 @@ def compile(  # noqa: A001 - the verb IS "compile"; the builtin is not used here
     force: bool = False,
     verbose: bool = False,
 ) -> CompileResult:
-    """Make TARGET's render package current; no-op when it already is.
+    """Make TARGET's tree current; no-op when it already is.
 
-    A cache action, not a build: the package is keyed by the document's bytes,
-    so nothing new appears beside the model and repeating it is free. Every
-    door and the CAD Viewer compile a missing package on demand — this command
-    exists for tooling and CI, and no skill documentation teaches it.
+    A cache action, not a build: the tree is keyed by the document's bytes, so
+    nothing new appears beside the model and repeating it is free. Every door
+    and the CAD Viewer compile a missing tree on demand — this command exists
+    for tooling and CI, and no skill documentation teaches it.
 
     target: the STEP/STP document to compile.
-    force: recompile even when the package is already current.
+    force: recompile even when the tree is already current.
     verbose: show detailed progress and timing on stderr.
     """
     from cadgen._internal.doors import document_target

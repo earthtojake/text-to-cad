@@ -3,19 +3,15 @@ import test from "node:test";
 import {
   buildViewerMeshAlert
 } from "./viewerAlerts.js";
-import { RENDER_FORMAT } from "cadgen-js/lib/fileFormats.js";
-import { rebuildCommandForEntry } from "cadgen-js/lib/renderCapabilities.js";
 
-test("buildViewerMeshAlert reports missing sidecar meshes without rebuild commands", () => {
+test("buildViewerMeshAlert reports missing sidecar meshes", () => {
   assert.deepEqual(
     buildViewerMeshAlert({ file: "meshes/part.stl", kind: "stl" }, false, ""),
     {
       severity: "error",
       summary: "Mesh unavailable",
       title: "No mesh data is available",
-      message: "The selected entry is listed in the CAD catalog but no renderable mesh data could be loaded for it.",
-      resolution: "Confirm the STL exists in the repo and reload the page.",
-      command: ""
+      message: "The selected entry is listed in the CAD catalog but no renderable mesh data could be loaded for it."
     }
   );
 });
@@ -36,8 +32,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       compact: true,
       summary: "STEP artifact unavailable",
       title: "STEP artifact unavailable",
-      message: "Generated GLB metadata is missing its source path.",
-      command: rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/part.step")
+      message: "Generated GLB metadata is missing its source path."
     }
   );
 
@@ -69,8 +64,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       compact: true,
       summary: "STEP artifact missing",
       title: "STEP artifact missing",
-      message: "Generated GLB is missing.",
-      command: rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/stale.step")
+      message: "Generated GLB is missing."
     }
   );
 
@@ -92,8 +86,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       compact: true,
       summary: "STEP artifact missing",
       title: "STEP artifact missing",
-      message: "Generated GLB is missing.",
-      command: rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/renderable-stale.step")
+      message: "Generated GLB is missing."
     }
   );
 
@@ -113,9 +106,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       severity: "error",
       summary: "Mesh load failed",
       title: "Failed to load render mesh",
-      message: "GLB parser failed",
-      resolution: "Try reloading the page. If the problem persists, rebuild the render assets for this entry.",
-      command: rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/renderable-stale.step")
+      message: "GLB parser failed"
     }
   );
 
@@ -134,8 +125,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       compact: true,
       summary: "STEP artifact missing",
       title: "STEP artifact missing",
-      message: "Generated GLB is missing.",
-      command: rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/missing.step")
+      message: "Generated GLB is missing."
     }
   );
 
@@ -154,8 +144,7 @@ test("buildViewerMeshAlert reports STEP artifact errors only when no mesh render
       compact: true,
       summary: "STEP artifact missing",
       title: "STEP artifact missing",
-      message: "Generated GLB is missing.",
-      command: rebuildCommandForEntry(RENDER_FORMAT.STEP, "fun/missing.step")
+      message: "Generated GLB is missing."
     }
   );
 });
@@ -172,15 +161,13 @@ test("a DXF entry reports through the ordinary mesh alert", () => {
       severity: "error",
       summary: "Mesh load failed",
       title: "Failed to load render mesh",
-      message: "network failed",
-      resolution: "Try reloading the page. If the problem persists, rebuild the render assets for this entry.",
-      command: ""
+      message: "network failed"
     }
   );
 });
 
 
-test("a failed artifact build reports its own reason, not \"no mesh data\"", () => {
+test("a failed compile reports its own reason, not \"no mesh data\"", () => {
   // The generic card told the user only that nothing loaded. The reason -- which entity the
   // DXF builder rejected -- was already on the artifact record and simply never shown, so a
   // drawing that can never render looked identical to one needing a rebuild.
@@ -190,7 +177,7 @@ test("a failed artifact build reports its own reason, not \"no mesh data\"", () 
   const alert = buildViewerMeshAlert(entry, false, "", artifact);
 
   assert.equal(alert.severity, "error");
-  assert.equal(alert.title, "Render artifact build failed");
+  assert.equal(alert.title, "Compile failed");
   assert.match(alert.message, /Unsupported DXF entity HATCH/);
 });
 
@@ -202,12 +189,12 @@ test("an artifact error is not raised once a mesh is in hand", () => {
   assert.equal(buildViewerMeshAlert(entry, true, "", artifact), null);
 });
 
-test("an artifact error falls back to a message when the record carries none", () => {
+test("a failed compile with no reason still says it could not be compiled", () => {
   const entry = { file: "drawings/plate.dxf", kind: "dxf" };
 
   const alert = buildViewerMeshAlert(entry, false, "", { status: "failed", error: "" });
 
-  assert.equal(alert.title, "Render artifact build failed");
+  assert.equal(alert.title, "Compile failed");
   assert.ok(alert.message.length > 0);
 });
 
@@ -224,6 +211,32 @@ test("a meshless DXF is not an error, but a failed build still is", () => {
   assert.equal(buildViewerMeshAlert(layout, false, "bad DXF")?.summary, "Mesh load failed");
   // And a drawing whose BUILD failed reports the build failure, which outranks the mesh card.
   const failed = buildViewerMeshAlert(drawing, false, "", { status: "failed", error: "bad entity" });
-  assert.equal(failed?.summary, "Build failed");
+  assert.equal(failed?.summary, "Compile failed");
   assert.match(failed?.message, /bad entity/u);
+});
+
+test("buildViewerMeshAlert puts a failed compile's own reason under a plain title", () => {
+  assert.deepEqual(
+    buildViewerMeshAlert(
+      { file: "STEP/moonwatch.step", kind: "part" },
+      false,
+      "",
+      { status: "failed", error: "component be20a9eae6b94690 build failed: Unextractable: surface domain does not cover face UV" }
+    ),
+    {
+      severity: "error",
+      summary: "Compile failed",
+      title: "Compile failed",
+      message: "component be20a9eae6b94690 build failed: Unextractable: surface domain does not cover face UV"
+    }
+  );
+  assert.deepEqual(
+    buildViewerMeshAlert({ file: "STEP/moonwatch.step", kind: "part" }, false, "", { status: "failed", error: "" }),
+    {
+      severity: "error",
+      summary: "Compile failed",
+      title: "Compile failed",
+      message: "The document could not be compiled."
+    }
+  );
 });

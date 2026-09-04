@@ -1,6 +1,6 @@
-"""The viewer's import: a compile job in the pool, de-duplicated, errors as values.
+"""The viewer's document compile: a job in the pool, de-duplicated, errors as values.
 
-The private compile pool is gone; ``ImportCompiler`` submits ``submit_compile``
+The private compile pool is gone; ``DocumentCompiler`` submits ``submit_compile``
 jobs and waits. Driven by a fake ``submit`` so the outcomes are deterministic
 and fast: what these cover is the waiter's behaviour — one job per document,
 attached requests sharing the answer, a failed job's bare message — and the
@@ -20,7 +20,7 @@ from pathlib import Path
 
 from cadgen.viewer.backend import ForbiddenAssetError
 from cadgen.viewer.cadgen_ops import CadgenOps
-from cadgen.viewer.imports import ImportCompiler
+from cadgen.viewer.compiles import DocumentCompiler
 
 
 class _FakeJob:
@@ -63,7 +63,7 @@ class _FakeSubmit:
         return _FakeJob(0, "")
 
 
-class ImportTestCase(unittest.TestCase):
+class CompileTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -81,8 +81,8 @@ class ImportTestCase(unittest.TestCase):
         else:
             os.environ["CADGEN_CACHE_DIR"] = self._previous_cache
 
-    def compiler(self) -> ImportCompiler:
-        return ImportCompiler(submit=self.submit)
+    def compiler(self) -> DocumentCompiler:
+        return DocumentCompiler(submit=self.submit)
 
     def ops(self) -> CadgenOps:
         return CadgenOps(str(self.root), client=self.compiler())
@@ -93,7 +93,7 @@ class ImportTestCase(unittest.TestCase):
         return str(path)
 
 
-class ResultsAndErrorsAreValues(ImportTestCase):
+class ResultsAndErrorsAreValues(CompileTestCase):
     def test_a_successful_compile_answers_with_the_document(self):
         candidate = self.step("ok.step")
         result = self.compiler().compile(candidate)
@@ -121,7 +121,7 @@ class ResultsAndErrorsAreValues(ImportTestCase):
         self.assertEqual(result, {"ok": False, "error": "compiling silent.step failed"})
 
 
-class Deduplication(ImportTestCase):
+class Deduplication(CompileTestCase):
     def test_concurrent_requests_for_one_document_are_one_job_with_one_answer(self):
         candidate = self.step("slow.step")
         self.submit.gate = threading.Event()
@@ -159,34 +159,34 @@ def _scope(candidate: str) -> str:
     return build_scope(candidate)
 
 
-class OpsWiring(ImportTestCase):
+class OpsWiring(CompileTestCase):
     def test_an_unowned_entry_is_ready_without_a_job(self):
         ops = self.ops()
         self.assertEqual(ops.artifact_status("model.stl"), {"state": "rendered"})
         self.assertEqual(ops.build_artifact("model.stl"), {"ok": True, "state": "rendered"})
         self.assertEqual(self.submit.calls, [])
 
-    def test_a_foreign_step_is_offered_as_an_import_with_exactly_three_keys(self):
+    def test_a_document_with_no_tree_is_offered_a_compile_with_exactly_three_keys(self):
         # No `blocked`: it is set from a `busy` snapshot no producer can emit, and an
         # unreachable flag that flips the client from BUILD to ATTACH is a trap.
         ops = self.ops()
         self.step("ok.step")
         self.assertEqual(
             ops.artifact_status("ok.step"),
-            {"state": "not-compiled", "reason": "missing_glb", "stepImport": True},
+            {"state": "not-compiled", "reason": "missing_glb", "compile": True},
         )
 
-    def test_a_successful_import_is_ready_and_spreads_the_job_answer(self):
+    def test_a_successful_compile_is_rendered_and_spreads_the_job_answer(self):
         ops = self.ops()
         candidate = self.step("ok.step")
         result = ops.build_artifact("ok.step")
         self.assertEqual(
             result,
-            {"ok": True, "state": "rendered", "stepImport": True, "document": str(Path(candidate).resolve())},
+            {"ok": True, "state": "rendered", "compiled": True, "document": str(Path(candidate).resolve())},
         )
         self.assertNotIn("contended", result)
 
-    def test_a_failed_import_is_a_500_shaped_payload_with_the_bare_message(self):
+    def test_a_failed_compile_is_a_500_shaped_payload_with_the_bare_message(self):
         ops = self.ops()
         self.step("crash.step")
         result = ops.build_artifact("crash.step")
@@ -195,12 +195,12 @@ class OpsWiring(ImportTestCase):
             {
                 "ok": False,
                 "state": "failed",
-                "error": "STEP import failed: failed to read STEP file: not a STEP",
+                "error": "failed to read STEP file: not a STEP",
                 "errorType": "RuntimeError",
             },
         )
 
-    def test_an_in_flight_import_with_no_progress_record_yet_is_indeterminate_generating(self):
+    def test_an_in_flight_compile_with_no_progress_record_yet_is_indeterminate_generating(self):
         ops = self.ops()
         self.step("slow.step")
         self.submit.gate = threading.Event()
@@ -220,7 +220,7 @@ class OpsWiring(ImportTestCase):
             thread.join(timeout=5)
 
 
-class ContainmentHappensBeforeTheJob(ImportTestCase):
+class ContainmentHappensBeforeTheJob(CompileTestCase):
     def test_an_absolute_outside_ref_never_reaches_the_pool(self):
         outside = Path(self.tmp.name, "outside.step")
         outside.write_bytes(b"ISO-10303-21;outside")

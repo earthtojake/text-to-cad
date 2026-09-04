@@ -1,10 +1,7 @@
 import { entrySourceFormat } from "cadgen-js/lib/fileFormats.js";
 import {
   ASSET_KIND,
-  isArtifactManagedFormat,
-  rebuildCommandForEntry,
-  renderCapabilities,
-  renderFormatLabel
+  renderCapabilities
 } from "cadgen-js/lib/renderCapabilities.js";
 import {
   stepArtifactHasRenderableGlb,
@@ -13,9 +10,10 @@ import {
 import { failedStepArtifact } from "./stepArtifactStatus.js";
 import { fileKey } from "./sidebar.js";
 
-// The command to rebuild an entry by hand, shown on build-failure cards, comes
-// straight off the format's registry row: it acts on the document that is
-// there, so how that document came to exist does not change it.
+// A viewer alert is a TITLE and a DESCRIPTION (`message`), plus `severity` and the
+// short `summary` the sidebar and status tab key on. Nothing else: no resolution
+// paragraph, no rebuild command — the description says what went wrong, and the
+// document's own tooling is where a rebuild happens.
 export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = null) {
   const fileRef = fileKey(entry);
   if (!fileRef) {
@@ -23,32 +21,17 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
   }
 
   const sourceFormat = entrySourceFormat(entry);
-  const command = rebuildCommandForEntry(sourceFormat, fileRef);
-  // A format the viewer does not build is its own asset: there is nothing to rebuild, so
-  // the only useful advice is "is the file there?". That is `artifactManaged`, not a list
-  // of the three mesh formats — a fourth would have inherited the wrong advice.
-  const ownAsset = !isArtifactManagedFormat(sourceFormat);
-  const ownAssetResolution = `Confirm the ${renderFormatLabel(sourceFormat) || "source file"} exists in the repo and reload the page.`;
-  const reloadResolution = ownAsset
-    ? ownAssetResolution
-    : "Try reloading the page. If the problem persists, rebuild the render assets for this entry.";
-  const missingResolution = ownAsset
-    ? ownAssetResolution
-    : "Rebuild the CAD assets for this entry, then reload the page.";
 
-  // A failed render-artifact build is the REASON there is no mesh, so it outranks the
-  // generic "no mesh data" card — and it applies to every artifact-managed kind, not just
-  // STEP. A DXF whose build rejected an entity used to report only that nothing loaded,
-  // which told the user neither what was wrong nor that a rebuild would not help.
+  // A failed compile is the REASON there is no mesh, so it outranks the generic "no
+  // mesh data" card — and it applies to every compiled kind, not just STEP. The
+  // description is the compile job's own reason, verbatim.
   if (artifact?.status === "failed" && !hasMeshData) {
     const detail = String(artifact.error || "").trim();
     return {
       severity: "error",
-      summary: "Build failed",
-      title: "Render artifact build failed",
-      message: detail || "The render artifact for this entry could not be built.",
-      resolution: missingResolution,
-      command
+      summary: "Compile failed",
+      title: "Compile failed",
+      message: detail || "The document could not be compiled."
     };
   }
 
@@ -65,8 +48,7 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
         compact: true,
         summary,
         title: summary,
-        message: stepArtifactStatusMessage(stepArtifactError),
-        command
+        message: stepArtifactStatusMessage(stepArtifactError)
       };
     }
   }
@@ -76,9 +58,7 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
       severity: "error",
       summary: "Mesh load failed",
       title: "Failed to load render mesh",
-      message: loadError,
-      resolution: reloadResolution,
-      command
+      message: loadError
     };
   }
 
@@ -96,9 +76,7 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
       severity: "error",
       summary: "Mesh unavailable",
       title: "No mesh data is available",
-      message: "The selected entry is listed in the CAD catalog but no renderable mesh data could be loaded for it.",
-      resolution: missingResolution,
-      command
+      message: "The selected entry is listed in the CAD catalog but no renderable mesh data could be loaded for it."
     };
   }
 

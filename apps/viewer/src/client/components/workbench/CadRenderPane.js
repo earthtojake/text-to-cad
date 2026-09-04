@@ -660,11 +660,6 @@ export default function CadRenderPane({
                   {viewerAlert.message}
                 </p>
               ) : null}
-              {viewerAlert.resolution ? (
-                <p className="mt-1 line-clamp-2 min-w-0 max-w-full break-words text-xs leading-5 text-muted-foreground">
-                  {viewerAlert.resolution}
-                </p>
-              ) : null}
             </div>
           </div>
         </div>

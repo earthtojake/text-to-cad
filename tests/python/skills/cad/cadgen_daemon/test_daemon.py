@@ -240,6 +240,33 @@ class CadgenDaemonTests(unittest.TestCase):
                 return worker
         return None
 
+    def test_bz_a_failed_compile_leaves_its_reason_in_the_ledger(self) -> None:
+        """The viewer's "compile failed" box shows the job's own reason, which it
+        reads from the daemon's job ledger — so the ledger must keep the one line
+        that matters, not the CLI's re-run hint that happens to be printed last."""
+        bad = self.model_dir / "bad.step"
+        bad.write_bytes(b"this is not a STEP file\n")
+        env = {"CADGEN_DAEMON": "1", "CADGEN_DAEMON_SOCKET": str(self.address)}
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, env):
+            os.environ.pop("CADGEN_DAEMON_CHILD", None)
+            with redirect_stdout(out), redirect_stderr(err):
+                code = daemon_client.run_via_daemon(
+                    "step-compile", [str(bad)], cwd=str(self.model_dir), prog="cadgen step compile",
+                )
+            status = daemon_client.status() or {}
+        self.assertNotEqual(code, 0, out.getvalue() + err.getvalue())
+        jobs = [j for j in status.get("jobs") or [] if j.get("subject") == os.path.realpath(str(bad))]
+        self.assertTrue(jobs, status)
+        job = jobs[-1]
+        self.assertEqual("failed", job["state"], job)
+        reason = str(job.get("error") or "")
+        self.assertTrue(reason, job)
+        self.assertNotIn("re-run with --verbose", reason)
+        self.assertNotIn("[cadgen", reason)
+        # It is the failure line the CLI printed, bare.
+        self.assertIn(reason, err.getvalue() + out.getvalue())
+
     def test_c_version_token_mismatch_triggers_restart(self) -> None:
         frames = _raw_request(
             self.address,

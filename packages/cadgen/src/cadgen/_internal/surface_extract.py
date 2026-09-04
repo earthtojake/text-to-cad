@@ -175,13 +175,46 @@ def _translate_knots_to_window(
     shift = math.floor((w0 - first_knot) / period + eps)
     if not shift:
         return
-    delta = shift * period
+    _shift_knots(shift * period, nb_knots, knot, set_knot)
+
+
+def _shift_knots(delta: float, nb_knots, knot, set_knot) -> None:
+    """Translate every knot by ``delta``, keeping the sequence monotonic at
+    every intermediate step: walk from the end for a positive shift, from
+    the start for a negative one."""
     count = nb_knots()
-    # Keep knots monotonic at every intermediate step: walk from the end
-    # for a positive shift, from the start for a negative one.
     order = range(count, 0, -1) if delta > 0 else range(1, count + 1)
     for index in order:
         set_knot(index, knot(index) + delta)
+
+
+def _reframe_knots_to_window(nurbs, surface, u0: float, u1: float, v0: float, v1: float) -> None:
+    """Move a converted B-spline's knots back into the FACE's UV frame.
+
+    ``Geom_RectangularTrimmedSurface`` on a PERIODIC basis does not trim where
+    it is asked: it adjusts the requested window into the basis period
+    (``ElCLib::AdjustPeriodic``), so a face whose window straddles the clamped
+    seam — a STEP round trip re-anchors pcurves there (moonwatch: face u in
+    [-9.36, 14.65] on a 24.78-periodic surface came back trimmed over
+    [15.42, 39.42]) — converts to a B-spline whose knots sit a whole number of
+    periods from the face's own bounds. Evaluating that at the face's
+    parameters would extrapolate, and the coverage guard rightly refuses.
+    The surface is periodic, so translating the knots by those periods
+    changes nothing but the frame; the nearest whole period is the one."""
+    for periodic, period_of, w0, w1, first_knot, nb_knots, knot, set_knot in (
+        (surface.IsUPeriodic(), surface.UPeriod, u0, u1,
+         nurbs.UKnot(1), nurbs.NbUKnots, nurbs.UKnot, nurbs.SetUKnot),
+        (surface.IsVPeriodic(), surface.VPeriod, v0, v1,
+         nurbs.VKnot(1), nurbs.NbVKnots, nurbs.VKnot, nurbs.SetVKnot),
+    ):
+        if not periodic:
+            continue
+        period = period_of()
+        if not period:
+            continue
+        shift = round((w0 - first_knot) / period)
+        if shift:
+            _shift_knots(shift * period, nb_knots, knot, set_knot)
 
 
 class _Bin:
@@ -379,6 +412,7 @@ def _surface_payload(face, bin_out: _Bin) -> dict[str, Any]:
                 nurbs.SetUNotPeriodic()
             if nurbs.IsVPeriodic():
                 nurbs.SetVNotPeriodic()
+            _reframe_knots_to_window(nurbs, surface, u0, u1, v0, v1)
         except Exception as exc:
             raise Unextractable(f"NURBS conversion failed: {exc}") from exc
         return _nurbs_surface_payload(nurbs, bin_out)
@@ -399,6 +433,7 @@ def _surface_payload(face, bin_out: _Bin) -> dict[str, Any]:
             nurbs.SetUNotPeriodic()
         if nurbs.IsVPeriodic():
             nurbs.SetVNotPeriodic()
+        _reframe_knots_to_window(nurbs, surface, u0, u1, v0, v1)
     except Unextractable:
         raise
     except Exception as exc:

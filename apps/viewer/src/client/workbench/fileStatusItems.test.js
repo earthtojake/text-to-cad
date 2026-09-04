@@ -194,15 +194,14 @@ test("viewer alerts normalize to status items", () => {
     severity: "error",
     summary: "Mesh load failed",
     title: "Failed to load render mesh",
-    message: "404",
-    resolution: "Reload the page.",
-    command: "python -m cadgen.step_artifact_cli --repo-root . --step model.step"
+    message: "404"
   });
 
   assert.equal(item.level, FILE_STATUS_LEVELS.ERROR);
   assert.equal(item.title, "Failed to load render mesh");
-  assert.equal(item.details.find((detail) => detail.label === "Resolution")?.value, "Reload the page.");
-  assert.equal(item.details.find((detail) => detail.label === "Command")?.mono, true);
+  assert.equal(item.message, "404");
+  // A title and a description: the alert carries nothing else to list.
+  assert.deepEqual(item.details, []);
 });
 
 test("buildFileStatusItems combines producers and exposes the most intense level", () => {

@@ -102,6 +102,11 @@ def build_progress_snapshot(entry_path, *, jobs: list[dict] | None = None) -> di
         return {
             "writing": False,
             "busy": False,
-            "failed": {"runId": job.get("id"), "exit": job.get("exit"), "tool": job.get("tool")},
+            "failed": {
+                "runId": job.get("id"),
+                "exit": job.get("exit"),
+                "tool": job.get("tool"),
+                "error": str(job.get("error") or ""),
+            },
         }
     return None

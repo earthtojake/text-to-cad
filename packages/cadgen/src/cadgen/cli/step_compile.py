@@ -6,7 +6,7 @@ from the verb function's signature by
 parameter: this module only names which function the command is
 (design/format-doors.md).
 
-INTERNAL. Compiling a document into its render package is what every door and
+INTERNAL. Compiling a document into its tree is what every door and
 the CAD Viewer do on demand, so nothing a user reads should ever tell them to
 run this; it exists for tooling and CI. The user-facing pair is `python
 <script>` for source and `cadgen step build IN OUT` for an existing document.

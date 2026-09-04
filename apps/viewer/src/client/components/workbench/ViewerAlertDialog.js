@@ -7,9 +7,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "../ui/alert-dialog";
-import { Badge } from "../ui/badge";
-import ViewerAlertCommand from "./ViewerAlertCommand";
 
+// A title and a description. The severity colours the title; nothing else is
+// rendered — no badge, no resolution paragraph, no command block.
 export default function ViewerAlertDialog({
   viewerAlertOpen,
   viewerAlert,
@@ -29,21 +29,13 @@ export default function ViewerAlertDialog({
     >
       <AlertDialogContent className={compact ? "max-w-sm" : "max-w-md"}>
         <AlertDialogHeader>
-          <Badge
-            variant={isWarning ? "warning" : "destructive"}
-            className="mb-1"
-          >
-            {isWarning ? "Warning" : "Error"}
-          </Badge>
-          <AlertDialogTitle>{viewerAlert.title}</AlertDialogTitle>
-          <AlertDialogDescription className={compact ? "leading-5 whitespace-pre-line" : "space-y-3 leading-6"}>
-            <span className="block">{viewerAlert.message}</span>
-            {!compact && viewerAlert.resolution ? (
-              <span className="block text-muted-foreground/80">{viewerAlert.resolution}</span>
-            ) : null}
+          <AlertDialogTitle className={isWarning ? "text-warning-foreground" : "text-destructive"}>
+            {viewerAlert.title}
+          </AlertDialogTitle>
+          <AlertDialogDescription className="leading-6 whitespace-pre-line break-words">
+            {viewerAlert.message}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ViewerAlertCommand command={viewerAlert.command} />
         <AlertDialogFooter>
           <AlertDialogCancel aria-label="Close alert dialog">Close</AlertDialogCancel>
         </AlertDialogFooter>

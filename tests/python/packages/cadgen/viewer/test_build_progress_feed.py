@@ -102,7 +102,20 @@ class ProgressFeed(unittest.TestCase):
         self.jobs = [job(self.script, [str(self.document)], "failed", exit=1)]
         status = self.status()
         self.assertEqual(("failed", "build_failed"), (status["state"], status["reason"]))
-        self.assertEqual({"runId": "job-1", "exit": 1, "tool": "run"}, status["failed"])
+        self.assertEqual({"runId": "job-1", "exit": 1, "tool": "run", "error": ""}, status["failed"])
+        # No reason recorded: the generic sentence, and only then.
+        self.assertEqual("The last compile of this document failed.", status["error"])
+
+    def test_a_failed_job_reports_its_own_reason(self):
+        failed = job(self.script, [str(self.document)], "failed", exit=1, tool="step-compile")
+        failed["error"] = "component be20a9eae6b94690 build failed: Unextractable: surface domain does not cover face UV"
+        self.jobs = [failed]
+        status = self.status()
+        self.assertEqual("failed", status["state"])
+        # The description a person reads IS the job's last word — never "the last
+        # build of this document failed" when the ledger knows more.
+        self.assertEqual(failed["error"], status["error"])
+        self.assertEqual(failed["error"], status["failed"]["error"])
 
     def test_a_failed_job_over_a_published_tree_renders_and_says_so(self):
         seed_result(self.document)

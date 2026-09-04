@@ -453,5 +453,61 @@ class ClampedUvBoundsTest(unittest.TestCase):
         self.assertEqual(raw, clamped)
 
 
+class PeriodicSeamWindowTest(unittest.TestCase):
+    """A face whose UV window straddles a periodic surface's seam, anchored a
+    period BELOW the basis knots — what a STEP round trip does to pcurves
+    (moonwatch.step: face u in [-9.36, 14.65] on a 24.78-periodic B-spline).
+
+    The clamped copy cannot cover such a window after whole-period
+    translation, so the extractor trims and converts — but
+    Geom_RectangularTrimmedSurface on a periodic basis ADJUSTS the window into
+    the basis period, handing back knots over [15.42, 39.42] for a face that
+    addresses [-9.36, 14.65]. Before the reframe the coverage guard refused the
+    face and the whole component's compile died with it."""
+
+    def _periodic_nurbs(self):
+        from OCP.Geom import Geom_CylindricalSurface, Geom_RectangularTrimmedSurface
+        from OCP.GeomConvert import GeomConvert
+        from OCP.gp import gp_Ax3
+
+        cylinder = Geom_CylindricalSurface(gp_Ax3(), 5.0)
+        nurbs = GeomConvert.SurfaceToBSplineSurface_s(
+            Geom_RectangularTrimmedSurface(cylinder, 0.0, 2 * math.pi, 0.0, 10.0))
+        self.assertTrue(nurbs.IsUPeriodic())
+        return nurbs
+
+    def test_seam_straddling_window_is_covered_in_the_face_frame(self) -> None:
+        from unittest import mock
+
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+
+        from cadgen._internal import surface_extract
+
+        nurbs = self._periodic_nurbs()
+        face = BRepBuilderAPI_MakeFace(nurbs, 0.5, 1.5, 1.0, 9.0, 1e-6).Face()
+        # Six radians wide (under one turn), straddling u = 0 from below: the
+        # window the clamped copy cannot hold whichever period it is moved to.
+        window = (-3.0, 3.0, 1.0, 9.0)
+        fake_tools = mock.Mock()
+        fake_tools.UVBounds_s.return_value = window
+        bin_out = surface_extract._Bin()
+        with mock.patch.object(surface_extract, "BRepTools", fake_tools):
+            payload = surface_extract._surface_payload(face, bin_out)
+
+        # The guard that used to raise "surface domain [3.28, 9.28] does not
+        # cover face UV [-3.0, 3.0]".
+        surface_extract._assert_surface_covers_face(payload, *window, bin_out)
+
+        # And the reframed surface evaluates to the SAME points the periodic
+        # original does at the face's own parameters — a translation of the
+        # knots, not a move of the geometry.
+        rebuilt = _rebuild_bspline_surface(payload, bin_out.payload())
+        for u in (-2.9, -1.0, 0.0, 1.7, 2.9):
+            for v in (1.0, 5.0, 9.0):
+                expected = nurbs.Value(u, v)
+                actual = rebuilt.Value(u, v)
+                self.assertLess(expected.Distance(actual), 1e-6, (u, v))
+
+
 if __name__ == "__main__":
     unittest.main()

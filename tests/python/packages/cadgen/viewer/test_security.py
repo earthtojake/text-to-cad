@@ -624,7 +624,7 @@ class L_ArtifactRouteContainment(SecurityTestCase):
         self.assertEqual(status, 200, body[:400])
         payload = json.loads(body)
         self.assertEqual(payload["state"], "rendered")
-        self.assertNotIn("stepImport", payload)
+        self.assertNotIn("compile", payload)
 
 
 class StoreRouteConfinement(SecurityTestCase):

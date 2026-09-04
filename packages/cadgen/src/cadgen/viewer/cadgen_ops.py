@@ -2,10 +2,10 @@
 
 The viewer's render path runs no generators: it renders what exists. Generation
 belongs to model scripts and the doors. The one build-shaped thing the viewer
-does is importing a raw FOREIGN ``.step`` — making its tree current in the
-shared store, which is exactly the cache action — and that is a compile job in
-cadgen's pool (``imports``), so the kernel never loads into the long-lived
-server and a door importing the same file is the same job.
+does is compiling a document whose bytes have no tree — making its tree current
+in the shared store, which is exactly the cache action — and that is a compile
+job in cadgen's pool (``compiles``), so the kernel never loads into the
+long-lived server and a door compiling the same file is the same job.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from .artifact_status import (
 )
 from .backend import require_contained
 from .build_progress import build_progress_snapshot
-from .imports import ImportCompiler
+from .compiles import DocumentCompiler
 from .store_paths import build_scope
 
 __all__ = ["CadgenOps", "create_cadgen_ops"]
@@ -33,7 +33,7 @@ class CadgenOps:
         # a root spelled relatively would make that comparison depend on the
         # process's current directory.
         self.root_dir = os.path.abspath(str(root_dir or ""))
-        self.client = client if client is not None else ImportCompiler()
+        self.client = client if client is not None else DocumentCompiler()
 
     def shutdown(self) -> None:
         self.client.shutdown()
@@ -89,10 +89,10 @@ class CadgenOps:
 
         # The one buildable state: a document with no tree for its bytes. The
         # viewer never asks who wrote it — a compile job builds the tree from
-        # the bytes, generated or imported alike (STORE.md §2, §9).
+        # the bytes, whoever wrote them (STORE.md §2, §9).
         if verdict.get("rawStep"):
-            # The import offer is exactly Node's three keys. It deliberately
-            # does NOT carry `blocked` through from `status`.
+            # The compile offer is exactly three keys. It deliberately does
+            # NOT carry `blocked` through from `status`.
             #
             # `blocked` is set by artifact_status when the snapshot says
             # `busy`, and NOTHING in this backend can say that: every
@@ -110,7 +110,7 @@ class CadgenOps:
             return {
                 "state": ARTIFACT_STATE.NOT_COMPILED,
                 "reason": status.get("reason"),
-                "stepImport": True,
+                "compile": True,
             }
         return status
 
@@ -125,29 +125,28 @@ class CadgenOps:
             # A job in the pool: it waits for a slot there if it must, so this
             # request thread simply waits for the answer (a peer's request for
             # the same document attaches to the same job).
-            imported = self.client.compile(candidate, force=force)
-            if imported.get("ok"):
+            compiled = self.client.compile(candidate, force=force)
+            if compiled.get("ok"):
                 # The compile payload is spread LAST, so its own ok/document
                 # land on the wire and its ok wins.
                 return {
                     "ok": True,
                     "state": ARTIFACT_STATE.RENDERED,
-                    "stepImport": True,
-                    **imported,
+                    "compiled": True,
+                    **compiled,
                 }
-            # The human sentence carries the BARE message the compile reported —
-            # "STEP import failed: failed to read STEP file: ...", which is what
-            # the Node backend showed and what the import-failure card is
-            # written for. The exception class, when there was one, rides as its
-            # own field so a diagnostic can have it without the sentence
+            # `error` is the BARE reason the compile job reported — "failed to
+            # read STEP file: ..." — with no prefix: the client puts it under
+            # its own title. The exception class, when there was one, rides as
+            # its own field so a diagnostic can have it without the sentence
             # acquiring a "RuntimeError:" nobody asked for.
             failure = {
                 "ok": False,
                 "state": ARTIFACT_STATE.FAILED,
-                "error": f"STEP import failed: {imported.get('error') or 'unknown error'}",
+                "error": compiled.get("error") or "Compiling the document failed.",
             }
-            if imported.get("errorType"):
-                failure["errorType"] = imported["errorType"]
+            if compiled.get("errorType"):
+                failure["errorType"] = compiled["errorType"]
             return failure
         return {"ok": False, "state": ARTIFACT_STATE.FAILED, "error": f"Artifact source not found: {file_ref}"}
 

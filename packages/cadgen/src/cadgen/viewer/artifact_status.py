@@ -53,7 +53,7 @@ STEP_DESCRIPTOR_NAME = "assembly.json"
 # ``\Z``, never ``$``: Python's ``$`` also matches immediately BEFORE a trailing
 # newline, where JavaScript's does not. With ``$`` here, ``part.step\n`` owned a
 # status it must not own, so ``?file=<abs>.step%0A`` turned Node's "rendered" into
-# a not-compiled carrying an import offer for a document that does not exist.
+# a not-compiled carrying a compile offer for a document that does not exist.
 # Same trap ``tess_cache.py`` names and avoids with ``fullmatch``; these two are
 # the whole set of anchored patterns in the backend (``url_norm`` and
 # ``scanner`` anchor only at the START, where the two languages agree), and
@@ -218,7 +218,7 @@ def resolve_artifact_verdict(file_ref, root_dir) -> dict:
         return {"error": f"Artifact source not found: {file_ref}"}
     if owns_step_path(candidate):
         # rawStep is character-identical to the ownership test above, so it is
-        # always true here. Kept because the import gate reads it by name.
+        # always true here. Kept because the compile gate reads it by name.
         return {"format": "step", "candidate": candidate, "rawStep": True, **_validate_step(candidate)}
     return {"error": f"No render-artifact format owns this entry: {file_ref}"}
 
@@ -269,7 +269,14 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
     code = verdict.get("code")
     if isinstance(failed, dict):
         # No tree for these bytes and the latest job for the document failed.
-        return {"state": ARTIFACT_STATE.FAILED, "reason": "build_failed", "error": "the last build of this document failed", "failed": failed}
+        # The reason is the job's own last word (the ledger keeps it); the
+        # generic sentence is only for a ledger that has none.
+        return {
+            "state": ARTIFACT_STATE.FAILED,
+            "reason": "build_failed",
+            "error": str(failed.get("error") or "").strip() or "The last compile of this document failed.",
+            "failed": failed,
+        }
     if code in BUILDABLE_CODES:
         status = {"state": ARTIFACT_STATE.NOT_COMPILED, "reason": code}
         if snapshot.get("busy"):

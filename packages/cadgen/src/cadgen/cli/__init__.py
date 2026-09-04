@@ -36,10 +36,10 @@ import sys
 # itself — `python <model>.py` through the @step/@dxf decorators.
 _COMMANDS: dict[str, tuple[str, str]] = {
     # STEP. `build` writes a NEW document (IN OUT); `compile` only makes an
-    # existing document's render package current and is INTERNAL — every door
+    # existing document's tree current and is INTERNAL — every door
     # and the viewer compile on demand, so no skill documentation names it.
     "step build": ("cadgen.cli.step_build", "write a new STEP from one, with kinematics"),
-    "step compile": ("cadgen.cli.step_compile", "make a STEP's render package current"),
+    "step compile": ("cadgen.cli.step_compile", "make a STEP's tree current"),
     "step inspect": ("cadgen.cli.step_inspect", "inspect selector references in a STEP"),
     "step snapshot": ("cadgen.cli.step_snapshot", "render a STEP model to an image"),
     # Mesh formats — one door each: `build` writes the model's declared
