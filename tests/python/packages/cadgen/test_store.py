@@ -219,6 +219,50 @@ class ClosureBoundaryRule(StoreCase):
         self.assertIn("frame.py", sources)
         self.assertNotIn("arm.py", sources)
 
+    def test_relative_imports_inside_a_lib_package_are_in_the_closure(self) -> None:
+        # lyra's `lib/digits.py` reaches `lib/chain.py` with `from .chain import ...`;
+        # a tracer that only follows absolute imports leaves chain.py out of the
+        # closure, and an edit to it never rebuilds the finger.
+        from cadgen.store.closure import static_closure
+
+        lib = self.root / "lib"
+        lib.mkdir()
+        (lib / "__init__.py").write_text("", encoding="utf-8")
+        (lib / "chain.py").write_text("LENGTH = 40\n", encoding="utf-8")
+        (lib / "common.py").write_text("def attach(a, b):\n    return a\n", encoding="utf-8")
+        (lib / "palette.py").write_text("PEARL = (1, 1, 1)\n", encoding="utf-8")
+        (lib / "digits.py").write_text(
+            textwrap.dedent(
+                """
+                from .chain import LENGTH
+                from . import common
+                from .palette import *
+
+
+                def build_finger():
+                    return common.attach(LENGTH, PEARL)
+                """
+            ),
+            encoding="utf-8",
+        )
+        finger = self.root / "finger.py"
+        finger.write_text(
+            textwrap.dedent(
+                """
+                from cadgen import step
+                from lib.digits import build_finger
+
+
+                @step
+                def finger():
+                    return build_finger()
+                """
+            ),
+            encoding="utf-8",
+        )
+        sources = {p.name for p in static_closure(finger).source_files}
+        self.assertEqual(sources, {"digits.py", "chain.py", "common.py", "palette.py"})
+
 
 class HashAtExecution(StoreCase):
     def test_a_file_is_hashed_with_the_bytes_that_ran(self) -> None:

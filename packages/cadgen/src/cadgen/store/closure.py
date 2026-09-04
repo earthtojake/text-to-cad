@@ -157,22 +157,32 @@ def static_imports(script: Path) -> StaticImports:
                     continue
                 taken = _taken_names(tree, alias.asname or alias.name.split(".")[0])
                 classify(target, taken)
-        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            target = _resolve_module(node.module, roots)
-            if target is None:
-                continue
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                # `from .chain import X` / `from . import chain` inside a package:
+                # relative to the importing file's own directory, `level - 1` up.
+                base = script.parent
+                for _ in range(node.level - 1):
+                    base = base.parent
+                from_roots: list[Path] = [base]
+            else:
+                from_roots = roots
+            module = node.module or ""
+            prefix = f"{module}." if module else ""
+            target = _resolve_module(module, from_roots) if module else None
             names = {alias.name for alias in node.names}
             if "*" in names:
-                classify(target, None)  # star import: treat as source
+                if target is not None:
+                    classify(target, None)  # star import: treat as source
                 continue
             # `from pkg import module` resolves the submodule, not a name in pkg.
-            submodules = {n for n in names if _resolve_module(f"{node.module}.{n}", roots) is not None}
+            submodules = {n for n in names if _resolve_module(prefix + n, from_roots) is not None}
             for sub in submodules:
-                sub_target = _resolve_module(f"{node.module}.{sub}", roots)
+                sub_target = _resolve_module(prefix + sub, from_roots)
                 if sub_target is not None:
                     classify(sub_target, _taken_names(tree, sub))
             names -= submodules
-            if names:
+            if names and target is not None:
                 classify(target, names)
     return StaticImports(tuple(sources), tuple(children))
 
