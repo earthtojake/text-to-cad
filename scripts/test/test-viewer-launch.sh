@@ -177,10 +177,10 @@ if ! printf '%s' "$reuse_json" | grep -q "\"port\":$PORT"; then
   exit 1
 fi
 
-# End-to-end import FROM THE BUNDLE: a raw STEP in the served root goes
-# needs-build -> POST build (cadgen's compile entry point, called in the
-# server's own worker) -> ready with a real package. The fixture is
-# deliberately non-LFS (CI checks out without LFS).
+# End-to-end compile FROM THE BUNDLE: a raw STEP in the served root goes
+# not-compiled -> POST (cadgen's compile entry point, a job in the pool)
+# -> rendered with a real tree in the store. The fixture is deliberately
+# non-LFS (CI checks out without LFS).
 FIXTURE="$REPO_ROOT/models/examples/imported/import-smoke.step"
 if ! head -1 "$FIXTURE" | grep -q "ISO-10303-21"; then
   echo "FAIL: import fixture is not STEP text (LFS pointer?): $FIXTURE" >&2
@@ -189,28 +189,28 @@ fi
 cp "$FIXTURE" "$serve_root/smoke.step"
 step_url="http://$HOST:$PORT/__cad/artifact?file=smoke.step"
 status_json="$(curl -s -m 10 "$step_url")"
-if ! printf '%s' "$status_json" | grep -q '"needs-build"'; then
-  echo "FAIL: raw STEP did not report needs-build: $status_json" >&2
+if ! printf '%s' "$status_json" | grep -q '"not-compiled"'; then
+  echo "FAIL: raw STEP did not report not-compiled: $status_json" >&2
   exit 1
 fi
-if ! printf '%s' "$status_json" | grep -q '"stepImport":true'; then
-  echo "FAIL: raw STEP status did not offer the import: $status_json" >&2
+if ! printf '%s' "$status_json" | grep -q '"compile":true'; then
+  echo "FAIL: raw STEP status did not offer the compile: $status_json" >&2
   exit 1
 fi
-# The import pays one cold interpreter + OCP start; give it a real timeout.
+# The compile pays one cold interpreter + OCP start; give it a real timeout.
 build_json="$(curl -s -m 120 -X POST -H 'x-cadgen-viewer: 1' "$step_url")"
 if ! printf '%s' "$build_json" | grep -q '"ok":true'; then
-  echo "FAIL: cadgen step build did not succeed: $build_json" >&2
+  echo "FAIL: the compile did not succeed: $build_json" >&2
   exit 1
 fi
-# Store-primary: the package lands in the (isolated) store keyed by content.
-if ! ls "$CADGEN_CACHE_DIR"/packages/*/assembly.json > /dev/null 2>&1; then
-  echo "FAIL: import reported ok but wrote no package descriptor in the store" >&2
+# The tree lands in the (isolated) store, keyed by the document's bytes.
+if ! ls "$CADGEN_CACHE_DIR"/index/document/* > /dev/null 2>&1; then
+  echo "FAIL: compile reported ok but the store indexes no document" >&2
   exit 1
 fi
 status_json="$(curl -s -m 10 "$step_url")"
-if ! printf '%s' "$status_json" | grep -q '"ready"'; then
-  echo "FAIL: imported STEP did not settle ready: $status_json" >&2
+if ! printf '%s' "$status_json" | grep -q '"rendered"'; then
+  echo "FAIL: compiled STEP did not settle rendered: $status_json" >&2
   exit 1
 fi
 
