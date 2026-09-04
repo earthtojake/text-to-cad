@@ -173,16 +173,16 @@ class RefFileGuardTest(unittest.TestCase):
     user did not ask about.
     """
 
-    TARGET = "models/assemblies/STEP/motorcycle_shock_absorber/motorcycle_shock_absorber"
+    TARGET = "projects/STEP/shock_absorber/shock_absorber"
 
     def test_matching_prefixes_pass_in_every_spelling(self) -> None:
         for prefix in (
-            "motorcycle_shock_absorber",
-            "motorcycle_shock_absorber.py",
-            "motorcycle_shock_absorber.step",
-            "motorcycle_shock_absorber/motorcycle_shock_absorber",
-            "STEP/motorcycle_shock_absorber/motorcycle_shock_absorber",
-            "models/assemblies/STEP/motorcycle_shock_absorber/motorcycle_shock_absorber",
+            "shock_absorber",
+            "shock_absorber.py",
+            "shock_absorber.step",
+            "shock_absorber/shock_absorber",
+            "STEP/shock_absorber/shock_absorber",
+            "projects/STEP/shock_absorber/shock_absorber",
         ):
             with self.subTest(prefix=prefix):
                 ensure_ref_file_matches(prefix, self.TARGET)
@@ -195,7 +195,7 @@ class RefFileGuardTest(unittest.TestCase):
             ensure_ref_file_matches("other_part", self.TARGET)
         message = str(raised.exception)
         self.assertIn("other_part", message)
-        self.assertIn("motorcycle_shock_absorber", message)
+        self.assertIn("shock_absorber", message)
 
     def test_matching_is_segment_aligned_not_substring(self) -> None:
         # `absorber.py` is a substring of the target's filename but not a path segment;
@@ -203,7 +203,7 @@ class RefFileGuardTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             ensure_ref_file_matches("absorber", self.TARGET)
         with self.assertRaises(ValueError):
-            ensure_ref_file_matches("other/motorcycle_shock_absorber", self.TARGET)
+            ensure_ref_file_matches("other/shock_absorber", self.TARGET)
 
     def test_path_has_suffix_is_segment_aligned(self) -> None:
         self.assertTrue(path_has_suffix("a/b/plate.stl", "plate.stl"))
