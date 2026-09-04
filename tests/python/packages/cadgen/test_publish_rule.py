@@ -135,22 +135,28 @@ class PublishRuleTest(unittest.TestCase):
         parent.write_text(PARENT.format(sleep=6.0), encoding="utf-8")
         self._run(leaf)  # the child is current when the parent starts
         running = self._start(parent)
-        # Wait until the parent's own body is in flight: it reports `building`.
+        # Wait until the parent's own body is in flight: the build tree reports
+        # `building` for it on stderr (the same event frames the daemon's job
+        # ledger reads; there is no progress record on disk).
         deadline = time.monotonic() + 120
         seen = ""
+        collected: list[str] = []
         while time.monotonic() < deadline:
-            time.sleep(0.2)
-            snapshot = self.root / "state" / "progress"
-            if snapshot.is_dir() and any(
-                (json.loads(p.read_text(encoding="utf-8")).get("outcome") is None) for p in snapshot.glob("*.json")
-            ):
-                seen = "building"
+            line = running.stderr.readline()
+            if not line:
                 break
+            collected.append(line)
+            if line.startswith("{"):
+                event = json.loads(line)
+                if event.get("model") == str(parent) and event.get("state") == "building":
+                    seen = "building"
+                    break
         self.assertEqual(seen, "building", "the parent never reported building")
         time.sleep(3.5)  # past the import and the child call, inside the body's sleep
         leaf.write_text(LEAF.format(radius=3.0), encoding="utf-8")
         self._run(leaf)
-        out, err = running.communicate(timeout=600)
+        out, rest = running.communicate(timeout=600)
+        err = "".join(collected) + rest
         self.assertEqual(running.returncode, 0, err)
         result = json.loads(out.strip().splitlines()[-1])
         self.assertEqual(result["outcome"], "built")
