@@ -2,7 +2,7 @@
 
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 
-This skill is pure convention: cadgen itself is deliberately unopinionated (a
+This reference is pure convention: cadgen itself is deliberately unopinionated (a
 model script's outputs default to its siblings; `out=` relocates them). Use
 this structure for anything bigger than a couple of loose models; skip it for
 one-off parts, where a flat folder is fine. Authoring the models themselves is
