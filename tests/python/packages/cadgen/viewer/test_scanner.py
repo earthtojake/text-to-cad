@@ -213,14 +213,21 @@ class StepKind(ScannerTestCase):
         self.package("k.step", descriptor)
         return self.entry("k.step")["kind"]
 
-    def test_entry_kind_is_trimmed_and_lowercased(self):
+    def test_the_tree_decides_kind_not_the_entry_kind_text(self):
+        # One occurrence is a part whatever the seeded descriptor claimed: the
+        # flattened tree's entryKind comes from store.trees.tree_kind.
         self.assertEqual(
-            self._kind({"kind": "assembly-package", "entryKind": "  ASSEMBLY  "}), "assembly"
+            self._kind({"kind": "assembly-package", "entryKind": "  ASSEMBLY  "}), "part"
         )
 
-    def test_an_assembly_root_object_makes_it_an_assembly(self):
+    def test_two_occurrences_make_an_assembly(self):
         self.assertEqual(
-            self._kind({"kind": "assembly-package", "assembly": {"root": {}}}), "assembly"
+            self._kind({"kind": "assembly-package", "occurrences": [{'id': 'o1.1', 'name': 'a', 'component': 'c0', 'transform': [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]}, {'id': 'o1.2', 'name': 'b', 'component': 'c0', 'transform': [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 10, 0, 0, 1]}]}), "assembly"
+        )
+
+    def test_a_root_object_alone_does_not_make_an_assembly(self):
+        self.assertEqual(
+            self._kind({"kind": "assembly-package", "assembly": {"root": {}}}), "part"
         )
 
     def test_an_assembly_root_string_does_not(self):

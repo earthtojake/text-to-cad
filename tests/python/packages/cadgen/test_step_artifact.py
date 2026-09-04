@@ -89,7 +89,10 @@ class BuildStepArtifactTests(unittest.TestCase):
         )
 
         self.assertTrue(payload.get("ok"), payload)
-        self.assertEqual("assembly", payload.get("entryKind"))
+        # The override is accepted (it steers how the build packages its own
+        # geometry), but entryKind is read off the tree: one solid, one
+        # occurrence, so a part -- the same answer inspect and a model run give.
+        self.assertEqual("part", payload.get("entryKind"))
 
 
 if __name__ == "__main__":

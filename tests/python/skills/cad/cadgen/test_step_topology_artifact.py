@@ -37,7 +37,8 @@ class StepArtifactsTests(unittest.TestCase):
             # Imported, even with a same-stem script sitting right beside it.
             self.assertEqual(spec.source, "imported")
             self.assertIsNone(spec.script_path)
-            self.assertEqual(spec.step_path, step_path)
+            # Resolved once at the door (a temp dir under macOS's /var symlink).
+            self.assertEqual(spec.step_path, step_path.resolve())
 
     def test_a_missing_document_is_an_error_not_a_generator_hunt(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

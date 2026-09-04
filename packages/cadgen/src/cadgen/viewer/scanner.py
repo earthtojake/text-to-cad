@@ -483,16 +483,19 @@ def _is_js_object(value) -> bool:
 
 
 def step_kind_from_topology(topology) -> str:
+    """``part`` or ``assembly`` for a catalog row: the TREE's answer, relayed.
+
+    The flattened descriptor's ``entryKind`` is written by ``store.trees``
+    from the tree itself (links or more than one own occurrence → assembly),
+    the one definition every reporter shares. Nothing is inferred here from
+    the descriptor's other fields — an ``assembly.root`` object says how the
+    occurrences nest, not how many there are.
+    """
     if not topology:
         return "part"
     index = topology.get("index") if _is_js_object(topology.get("index")) else topology
     if topology.get("entryKind") == "assembly" or (
         isinstance(index, dict) and index.get("entryKind") == "assembly"
-    ):
-        return "assembly"
-    assembly = index.get("assembly") if isinstance(index, dict) else None
-    if _is_js_object(assembly) and _is_js_object(
-        assembly.get("root") if isinstance(assembly, dict) else None
     ):
         return "assembly"
     return "part"
