@@ -1,7 +1,7 @@
 """Verify the .anim.js clips against the built geometry.
 
   crank    sample the clip at 48 times (15 deg steps over 720 deg), evaluate
-           w16.anim.js headlessly (anim_eval.mjs, same matrix semantics as the
+           w16.step.js headlessly (anim_eval.mjs, same matrix semantics as the
            viewer), apply the resulting matrices to the parts and run the
            SAME collision table as lib.collide (piston-valve, rod-block,
            rod-crank, rod-rod, valve-valve, ...) on those positions.

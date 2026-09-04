@@ -323,6 +323,7 @@ model of its own so assemblies can link to it).
 ```gitignore
 /STEP/*
 !/STEP/imported/
+!/STEP/*.step.js
 /DXF/*
 !/DXF/imported/
 /STL/*
@@ -336,8 +337,13 @@ __pycache__/
 ```
 
 The `*` forms matter: ignoring the directory itself (`/STEP/`) would make the
-`imported/` negation dead — git never descends into an ignored directory. Pin any
-other file deliberately with its own negation line or `git add -f`.
+`imported/` negation dead — git never descends into an ignored directory. The
+`!/STEP/*.step.js` line keeps render modules (the authored choreography beside
+a document, `arm.step.js` beside `arm.step`) committed while everything
+generated around them stays ignored; a project with one group per
+`src/<assembly>/` adds `!/STEP/*/` , `/STEP/*/*` and `!/STEP/*/*.step.js` for
+the grouped folders. Pin any other file deliberately with its own negation
+line or `git add -f`.
 
 ## Verify
 
@@ -376,6 +382,7 @@ demo/
     bracket_right.step
     frame.step
     assembly.step
+    assembly.step.js            # the render module beside assembly.step — authored, committed
     imported/
       servo.step                # brought in from outside — committed
   STL/
@@ -386,12 +393,17 @@ demo/
     assembly.png                # the snapshot: scratch — ignored
 ```
 
-No model here declares kinematics, animation or a mesh export beside its
-STEP, so no `.step.json` sidecar is written; a model that does gets one
-beside its document, generated with it and ignored with it.
+No model here declares kinematics or a mesh export beside its STEP, so no
+`.step.json` sidecar is written; a model that does gets one beside its
+document, generated with it and ignored with it. `assembly.step.js` is the
+other file beside a document: the render module (choreography — see the cad
+skill's kinematics reference). Nothing generates it and no build reads it; the
+viewer loads it by name, so it is authored like `src/` and committed like
+`imported/`.
 
-`git status` in this tree shows exactly `.gitignore`, `src/` and
-`STEP/imported/servo.step`: authored code plus the one input code cannot
-regenerate. Everything else is rebuilt by running the scripts, so a fresh
-clone that runs `python src/assembly.py && python src/plate_drawing.py`
-arrives at this same tree.
+`git status` in this tree shows exactly `.gitignore`, `src/`,
+`STEP/assembly.step.js` and `STEP/imported/servo.step`: authored code, the
+authored choreography, and the one input code cannot regenerate. Everything
+else is rebuilt by running the scripts, so a fresh clone that runs
+`python src/assembly.py && python src/plate_drawing.py` arrives at this same
+tree.

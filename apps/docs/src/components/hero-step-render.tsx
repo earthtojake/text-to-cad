@@ -12,9 +12,8 @@ import {
   findAnimationClip,
   firstAnimationClipId,
 } from "cadgen-js/common/animationClock.js";
-import { compileAnimationClips } from "cadgen-js/common/animationRuntime.js";
 import { CAD_SCENE_SCALE, buildModel } from "cadgen-js/common/cadScene.js";
-import { loadAnimationSource } from "cadgen-js/common/kinematicsModule.js";
+import { loadRenderModule } from "cadgen-js/common/renderModule.js";
 import { renderModel } from "cadgen-js/common/renderModel.js";
 import {
   loadSource,
@@ -30,6 +29,9 @@ import { cloneThemePresetSettings } from "cadgen-js/common/themeSettings.js";
 // the same clip the viewer's Animation tab plays drives this scene.
 const HERO_PACKAGE_BASE_URL = "/hero/planetary";
 const HERO_SIDECAR_URL = "/hero/planetary_gear_assembly.step.json";
+// The render module beside the document (<name>.step.js): choreography,
+// authored in the model project and synced here as a plain file.
+const HERO_RENDER_MODULE_URL = "/hero/planetary_gear_assembly.step.js";
 const HERO_STEP_CAD_PATH = "models/assemblies/STEP/planetary_gear_assembly/planetary_gear_assembly.step";
 const HERO_STEP_DEMO_URL =
   "https://cad.fun/?file=fun%2Fplanetary_gear_assembly.step";
@@ -249,26 +251,26 @@ export function HeroStepRender() {
     const load = async () => {
       try {
         setStatus("loading step");
-        // The render package descriptor and the sidecar's animation text load
-        // in parallel; the clips compile through the same runtime the viewer
-        // uses (kinematics and animation stay independent end to end).
-        const [descriptor, animationSource] = await Promise.all([
+        // The tree's descriptor and the render module beside the document load
+        // in parallel; the clips come through the same loader the viewer uses
+        // (kinematics and animation stay independent end to end).
+        const [descriptor, renderModule] = await Promise.all([
           fetch(`${HERO_PACKAGE_BASE_URL}/assembly.json`, {
             cache: "no-store",
           }).then((response) => {
             if (!response.ok) {
-              throw new Error(`hero package descriptor: HTTP ${response.status}`);
+              throw new Error(`hero assembly.json: HTTP ${response.status}`);
             }
             return response.json();
           }),
-          loadAnimationSource(HERO_SIDECAR_URL),
+          loadRenderModule(HERO_RENDER_MODULE_URL),
         ]);
         const source = await loadSource({
           ...packageSourceFromBaseUrl(HERO_PACKAGE_BASE_URL, descriptor),
           stepParameterUrl: HERO_SIDECAR_URL,
           cadPath: HERO_STEP_CAD_PATH,
         });
-        const clips = await compileAnimationClips(animationSource);
+        const clips = (renderModule?.clips ?? {}) as Parameters<typeof findAnimationClip>[0];
         if (disposed) {
           return;
         }
@@ -276,7 +278,7 @@ export function HeroStepRender() {
           findAnimationClip(clips, HERO_CLIP_ID) ??
           findAnimationClip(clips, firstAnimationClipId(clips));
         if (!clip) {
-          throw new Error("hero sidecar declares no animation clips");
+          throw new Error("hero render module declares no animation clips");
         }
         clipDuration = animationClipDuration(clip);
 

@@ -67,7 +67,8 @@ class AttackFixture:
         self.write(".env", f"TOKEN={SECRET}\n")
         self.write("id_rsa", SECRET)
         self.write("model.py", f"# {SECRET}\n")
-        self.write("part.step.js", f"// {SECRET}\n")
+        self.write("loose.js", f"// {SECRET}\n")
+        self.write("part.anim.js", f"// {SECRET}\n")
         self.write(".dotfile.step", SECRET)
         self.write(".hidden/secret.step", SECRET)
         self.write("sub/.git/config.step", SECRET)
@@ -499,7 +500,7 @@ class J_HiddenPaths(SecurityTestCase):
 class K_NonServedContentUnderTheRoot(SecurityTestCase):
     def test_configs_secrets_and_scripts_are_never_streamed(self):
         root = self.fixture.root
-        for name in ("secrets.json", ".env", "id_rsa", "model.py", "part.step.js"):
+        for name in ("secrets.json", ".env", "id_rsa", "model.py", "loose.js", "part.anim.js"):
             with self.subTest(name=name):
                 status, _, body = self.fixture.asset(os.path.join(root, name))
                 self.assertDenied(status, body, {404})

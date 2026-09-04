@@ -1,4 +1,4 @@
-// gear_rack_gripper.anim.js — reference drive loop for the gear-rack robot
+// gear_rack_gripper.step.js — reference drive loop for the gear-rack robot
 // gripper (thang010146). The mechanism is a closed loop: a sliding piston
 // drives two conrods, the conrods crank two counter-rotating pinions, and the
 // pinions push two opposing rack jaws. Only the pinion->rack half is linear,

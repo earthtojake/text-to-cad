@@ -27,7 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 MODELS = REPO_ROOT / "models"
 
 # Keys that belong to the sidecar and must never appear in assembly.json.
-SIDECAR_ONLY_KEYS = ("kinematics", "animation")
+SIDECAR_ONLY_KEYS = ("kinematics",)
 
 
 def _sidecars() -> list[Path]:
@@ -89,21 +89,14 @@ class SidecarCarriesNoSourceTreePaths(unittest.TestCase):
                         "relative to the artifact",
                     )
 
-    def test_the_animation_section_is_copied_text_not_a_pointer(self) -> None:
+    def test_no_sidecar_carries_choreography(self) -> None:
+        # Choreography is the render module beside the document (<name>.step.js),
+        # loaded by the viewer and never by a build; a sidecar that still carries
+        # an `animation` section was written by a retired writer.
         for sidecar_path in _sidecars():
             payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
-            animation = payload.get("animation")
-            if not isinstance(animation, dict):
-                continue
             with self.subTest(sidecar=str(sidecar_path.relative_to(REPO_ROOT))):
-                self.assertEqual(
-                    {"clips"},
-                    set(animation),
-                    "the animation section is the module's TEXT under `clips` and "
-                    "nothing else — a path field here would be a reference back "
-                    "into the source tree",
-                )
-                self.assertIsInstance(animation["clips"], str)
+                self.assertNotIn("animation", payload)
 
 
 if __name__ == "__main__":

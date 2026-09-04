@@ -14,9 +14,9 @@ moonwatch/
   src/            authored code — the only thing you edit
     README.md     the model catalog + shared-code and articulation notes
     *.py          one @step model per file (9 of them)
-    moonwatch.anim.js   choreography module, beside its model script
     lib/          shared builders and the dimensional spec (never models)
   STEP/           generated artifacts + their .step.json sidecars (gitignored)
+    moonwatch.step.js   the render module beside moonwatch.step: choreography (authored, committed)
   render/         committed presentation JSON (themes + snapshot job template)
   tmp/            snapshots and scratch (gitignored)
 ```

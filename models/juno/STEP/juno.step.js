@@ -1,4 +1,4 @@
-// juno.anim.js — choreography for the juno humanoid STEP assembly.
+// juno.step.js — choreography for the juno humanoid STEP assembly.
 //
 // The STEP geometry is baked in the athletic ready stance (see juno.py /
 // lib/chain.py). This module recomputes full-chain FK each frame at

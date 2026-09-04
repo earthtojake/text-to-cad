@@ -80,7 +80,7 @@ Do these in order. Later steps assume earlier ones.
 - [ ] 1. Rewrite imports
 - [ ] 2. Convert the generator into a model
 - [ ] 3. Convert composition: children are models you call
-- [ ] 4. Move articulation to kinematics + `.anim.js`
+- [ ] 4. Move articulation to kinematics + the render module (`<name>.step.js`)
 - [ ] 5. Reshape the project layout, then delete v0.4 leftovers
 - [ ] 6. Rebuild
 - [ ] 7. Verify
@@ -207,12 +207,12 @@ Mechanically:
 | --- | --- |
 | `out=` | Output path. **Script-relative** (see the path note below). Default: sibling `<stem>.step`. |
 | `kinematics=` | The typed-mates dict. See step 4. |
-| `animation=` | Name of a `.anim.js` choreography module beside the script. See step 4. |
 | `mesh_tolerance=` | Chord tolerance for the tree's tessellation. Relative — see step 6. |
 | `mesh_angular_tolerance=` | Angular tolerance, radians. |
 
-`@dxf` takes **only `out=`**. It has no `kinematics=` and no `animation=` (a
-drawing is 2D geometry); passing either is an error.
+`@dxf` takes **only `out=`**. It has no `kinematics=` (a drawing is 2D
+geometry); passing it is an error. **No decorator takes `animation=`** —
+choreography is a file beside the document, not a declaration (step 4).
 
 There is no `kind=`. v0.5 briefly accepted `kind="part"|"assembly"` and
 inferred one from the return statement; both are deleted. What a model
@@ -240,8 +240,7 @@ The single deliberate exception is the **decorator's `out=`** — on `@step`,
 `@dxf`, `@stl`, `@glb` and `@threemf` alike — which resolves relative to the
 **script**. That is what makes a project relocatable: the declaration travels
 with the model and produces the same layout whatever directory you run from.
-`animation=` is likewise a name beside the script. There is **no per-run output
-override**: `-o`/`--output` does not exist. Where a file lands is a property of
+There is **no per-run output override**: `-o`/`--output` does not exist. Where a file lands is a property of
 the model, not of a run.
 
 ```python
@@ -290,8 +289,7 @@ if __name__ == "__main__":
   once at *distinct* `out=` targets for draft/print variants; two bare
   declarations of one format collide, as do two identical `out=` targets.
 - `@stl`/`@glb`/`@threemf` accept `out=`, `mesh_tolerance=`,
-  `mesh_angular_tolerance=` and their own `kinematics=`. They do **not** accept
-  `animation=`.
+  `mesh_angular_tolerance=` and their own `kinematics=`.
 - Mesh decorators on a `@dxf` drawing are an error.
 - **A model needs no `@step` at all.** `@stl`/`@glb`/`@threemf` alone make a
   **mesh-only model**: same tree, same record, same freshness; its outputs are
@@ -399,8 +397,8 @@ if __name__ == "__main__":
 
 - **Sub-assemblies are models** with their own file and outputs; a
   `lib/*.build()` helper that assembled a system becomes `src/<system>.py`.
-- **Sidecar boundary.** A child's kinematics, animation and mesh declarations
-  belong to that child alone. A parent receives geometry (tree, labels, colors,
+- **Sidecar boundary.** A child's kinematics and mesh declarations belong to
+  that child alone. A parent receives geometry (tree, labels, colors,
   placements) and nothing else; **mates never propagate up**. The v0.4
   `assembly_mates` promotion plumbing is deleted, and so is
   `AssemblyHelper.relations`.
@@ -419,7 +417,7 @@ if __name__ == "__main__":
   through them leaves a stale result reading as current. A configuration is a
   factory argument; another configuration is another model.
 
-### 4. Move articulation to kinematics + `.anim.js`
+### 4. Move articulation to kinematics + the render module (`<name>.step.js`)
 
 v0.4's `.params.js` sidecar — FK scripts, pose functions, demo modes — is gone,
 and so is GIF export. v0.5 splits what `.params.js` conflated into three
@@ -428,8 +426,13 @@ systems with different lifecycles:
 | System | Where it lives | Lifecycle |
 | --- | --- | --- |
 | Geometry | The model function's body and the factories it calls | Changing one rebuilds the model |
-| Kinematics | `kinematics=` on the decorator, pure data | Drives viewer sliders and posed exports; no rebuild, no Python at render time |
-| Animation | A plain `.anim.js` module named by `animation=` | Text copied into the sidecar; never invalidates a build |
+| Kinematics | `kinematics=` on the decorator, pure data | Drives viewer sliders and posed exports; a kinematics edit rewrites the sidecar, never the geometry |
+| Animation | `STEP/<name>.step.js`, a plain ES module beside the document | Loaded by the viewer by name; no build reads it — an edit is a reload |
+
+A note on the name: v0.4 also had a `<name>.step.js`, the JS *declarations
+sidecar*. That file and that meaning are gone. In v0.5 `<name>.step.js` is the
+**render module**: authored JavaScript the renderer loads beside the document
+(today: animation clips). Delete every v0.4 `.step.js` before creating one.
 
 #### Typed mates
 
@@ -456,7 +459,7 @@ KINEMATICS = {
 }
 
 
-@step(out="../STEP/arm.step", kinematics=KINEMATICS, animation="arm.anim.js")
+@step(out="../STEP/arm.step", kinematics=KINEMATICS)
 def arm(): ...
 ```
 
@@ -490,13 +493,13 @@ Rules that catch v0.4 conversions:
 - **Mates stay with the model that declares them.** A parent that links an
   articulated child gets its geometry, not its mates (step 3).
 
-#### The `.anim.js` contract
+#### The render module: `STEP/<name>.step.js`
 
-Choreography moves out of Python entirely, into a plain ES module beside the
-script:
+Choreography moves out of Python entirely — and out of the build. It is a plain
+ES module beside the **document** (not the script), named after it:
 
 ```js
-// arm.anim.js
+// STEP/arm.step.js — beside STEP/arm.step
 export const clips = {
   demo: {
     label: "Demo",
@@ -520,7 +523,16 @@ export const clips = {
   function of `t`, so scrub, loop and seek are free. No wall-clock, no state.
 - Animation is deliberately ignorant of mates. That independence is what
   guarantees a choreography edit can never invalidate a build.
-- The declared file must exist. A missing `animation=` target fails the build.
+- Nothing declares the file and no build reads it: drop it beside the
+  document and the viewer's Animation tab appears; the only export the
+  renderer understands today is `clips`, and an export it does not know is a
+  load error shown in the Status tab. Targets are checked at load against
+  the compiled tree.
+- It is **authored**, so it is **committed**: the project `.gitignore`
+  whitelists it (`!/STEP/*.step.js`, step 5).
+- Coming from a v0.4 `.params.js` demo mode or an early-0.5 `.anim.js`: move
+  the file to `STEP/<name>.step.js`, keep the `clips` export, and delete the
+  `animation=` argument — it is an unknown argument now.
 
 **GIF export is deleted.** Snapshot writes PNG stills only, and a `.gif` output
 path is refused. Motion review is interactive in the CAD Viewer. For still
@@ -534,9 +546,9 @@ cadgen step snapshot STEP/arm.step tmp/open.png --kinematics open   # a declared
 #### Annotating a STEP you did not generate
 
 A document with no model script gets kinematics from `cadgen step build IN OUT`,
-whose `--kinematics` takes the whole space as inline JSON or a `.json` path, and
-whose `--animation` copies a `.js` module's text into OUT's sidecar. `OUT` is
-required and is never `IN`. To make an import a first-class model instead, wrap
+whose `--kinematics` takes the whole space as inline JSON or a `.json` path.
+`OUT` is required and is never `IN`. Choreography needs no verb: put
+`OUT.js` beside `OUT` (`STEP/vendor.step.js` beside `STEP/vendor.step`). To make an import a first-class model instead, wrap
 it: a `@step` whose body is `return read_step(...)` gives the vendor file a
 record, a tree and a place in your assemblies.
 
@@ -552,13 +564,13 @@ convention below is what the tooling's examples assume.
     plate.py              #   one model per file
     plate_drawing.py
     frame.py              #   an assembly: calls plate() and standoff()
-    plate.anim.js         #   choreography sits beside its model
     lib/
       __init__.py         #   a regular package, never a namespace one
       holes.py            #   helpers, factories, shared constants
-  STEP/                   # raw outputs only (plus source sidecars)
+  STEP/                   # raw outputs only (plus source sidecars) — and the render module
     plate.step
     plate.step.json
+    plate.step.js         #   choreography beside its document: authored, committed
     imported/             #   vendor files keep their upstream names
   DXF/  STL/  GLB/  3MF/  # same shape: outputs + imported/
   tmp/                    # scratch
@@ -918,9 +930,9 @@ them.
 | Derived geometry | In-tree `__cadgen__/models/<entry>/` render packages | `~/.cache/cadgen/objects/` — content-addressed components and trees |
 | Freshness | Provenance embedded in the STEP text, later a `records/` tier | `~/.cache/cadgen/index/model/<sha256(script path)>` — the model's record |
 | Children | Inline geometry, `lib/` helpers, `compose.memo` | Sibling models, called; the parent's tree **links** their trees |
-| Declarations sidecar | `<name>.step.js` (a JS module) | `<name>.step.json`, schema 5, JSON |
+| Declarations sidecar | `<name>.step.js` (a JS module) | `<name>.step.json`, schema 6, JSON |
 | Pose/FK script | `<name>.params.js` | `kinematics=` on the decorator (data, in the sidecar) |
-| Animation | `.params.js` demo modes; GIF export | `<name>.anim.js`, text copied into the sidecar; PNG stills only |
+| Animation | `.params.js` demo modes; GIF export | `<name>.step.js` beside the document — the render module, loaded by the viewer, read by no build; PNG stills only |
 | Mesh outputs | `scripts/export --stl/--3mf/--glb` | `@stl`/`@threemf`/`@glb` decorators, or the format doors |
 
 ### The sidecar: `<name>.step.json`, schema 6
@@ -932,11 +944,12 @@ kinematics deletes the stale one. What a model declares about its outputs
 (`@stl`/`@glb`/`@threemf`) lives in its store record; the `meshExports`
 section that once copied it beside the STEP is gone (a mesh door tessellates
 the document's tree and writes the file it was asked for, no lookup).
+Choreography is not in it either: that is the render module beside the
+document (`<name>.step.js`, step 4).
 
 ```
 schemaVersion   6
 kinematics      typed mates with axes resolved to world numbers, couplings, pose presets
-animation       the .anim.js choreography TEXT, copied
 ```
 
 There is **no** `sourceKind`, `sourcePath`, `sourceHash`, `sourceClosure`, or
@@ -1012,8 +1025,9 @@ A v0.4 sidecar (or an intermediate `.step.source.json`) is still sitting next to
 the artifact. → Delete it and rebuild. Step 5.
 
 **Unexpected keyword argument on a decorator, or "must be a numeric literal"**
-You passed a retired name — `write=` instead of `out=`, `pose=`,
-`kinematics=`/`animation=` on `@dxf` — or a
+You passed a retired name — `write=` instead of `out=`, `pose=`, `animation=`
+on any decorator (choreography is the render module beside the document),
+`kinematics=` on `@dxf` — or a
 tolerance that is not a literal. → The decorator table in step 2.
 
 **"kinematics has unknown key(s) … the vocabulary is closed"**

@@ -18,7 +18,7 @@ DISPLAY_NAME = "Mars rover concept vehicle"
 #
 # Kinematics (typed mates) is declared on the @step decorator from KINEMATICS
 # below and travels in the model's sidecar; choreography lives in the sibling
-# mars_rover_concept.anim.js. Mate axes are built from the SAME derived
+# mars_rover_concept.step.js. Mate axes are built from the SAME derived
 # constants the geometry uses, so re-deriving the layout re-derives the pivots.
 
 # ---------------------------------------------------------------------------
@@ -1065,7 +1065,7 @@ def power_rtg() -> bd.Compound:
 # toggles, and the chassis heave/pitch/roll (which drove a MERGED feature over
 # sixteen groups — not one occurrence, so not one mate). Those are
 # presentation; the ones worth keeping are restated as clips in
-# mars_rover_concept.anim.js.
+# mars_rover_concept.step.js.
 # ---------------------------------------------------------------------------
 
 import cadgen  # noqa: E402  (light import; no kernel)
@@ -1250,8 +1250,7 @@ KINEMATICS = _rover_kinematics()
 # Assembly
 # ---------------------------------------------------------------------------
 
-@step(out="../../STEP/mars_rover_concept/mars_rover_concept.step", kinematics=KINEMATICS,
-      animation="mars_rover_concept.anim.js")
+@step(out="../../STEP/mars_rover_concept/mars_rover_concept.step", kinematics=KINEMATICS)
 def mars_rover_concept():
     # Top-level child order is the animation module's ref contract (#o1.N);
     # the mates address these same groups by LABEL, so only the .anim.js file

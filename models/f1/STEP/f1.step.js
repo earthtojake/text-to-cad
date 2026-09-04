@@ -1,4 +1,4 @@
-// f1.anim.js — choreography for the F1 concept car.
+// f1.step.js — choreography for the F1 concept car.
 //
 // Everything this car does is here rather than in a `kinematics=` block, and
 // that is a decision, not an omission: both of its mechanisms are CLOSED

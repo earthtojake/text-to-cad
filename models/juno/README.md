@@ -31,14 +31,14 @@ juno/
   src/
     juno.py                the full 28-occurrence assembly
     <link>.py     x28      one per URDF link: @step + @threemf
-    juno.anim.js           the seven animation clips
     lib/                   shared part builders + the chain spec
   STEP/  3MF/              generated outputs
+    juno.step.js           the render module beside juno.step: the seven animation clips (authored, committed)
   tmp/                     snapshots and scratch
 ```
 
-- `src/juno.py` — the assembly. `@step(out="../STEP/juno.step", kinematics=…,
-  animation="juno.anim.js")`. Joints are authored as
+- `src/juno.py` — the assembly. `@step(out="../STEP/juno.step", kinematics=…)`.
+  Joints are authored as
   `cadgen.assembly.AssemblyHelper` revolute frames driven by the pose angles
   in `src/lib/chain.py`, and the SAME spec is read back out to build the
   typed-mate kinematics (below), so the CAD, the mates and the URDF cannot
@@ -87,8 +87,9 @@ Check a pose: `cadgen step snapshot STEP/juno.step tmp/zero.png --kinematics zer
 
 ## Animation
 
-`src/juno.anim.js` holds the choreography, copied verbatim into the sidecar at
-build time. It knows nothing about the mates: it runs its own chain FK each
+`STEP/juno.step.js`, the render module beside the document, holds the
+choreography; the viewer loads it by name and no build reads it. It knows
+nothing about the mates: it runs its own chain FK each
 frame and applies, per link, the rigid delta from the baked athletic placement
 as one rotation about the model origin plus a translation. Seven clips:
 

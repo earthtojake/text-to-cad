@@ -4,7 +4,7 @@ Quad-turbo 8.0 L W16, sectioned museum cutaway with working kinematics.
 
 | Script   | Artifact        | Description                                                            |
 |----------|-----------------|------------------------------------------------------------------------|
-| w16.py   | STEP/w16.step   | Full engine assembly: the thirteen system models below, linked in occurrence order; carries `w16.anim.js` |
+| w16.py   | STEP/w16.step   | Full engine assembly: the thirteen system models below, linked in occurrence order; carries `w16.step.js` |
 | block.py | STEP/block.step | `o1.1` block casting + main caps + shells + block fasteners |
 | crank.py | STEP/crank.step | `o1.2` crankshaft, damper, flywheel |
 | pistons.py | STEP/pistons.step | `o1.3` 16 x piston/rings/pin/circlips/rod/cap/bolts/shells |

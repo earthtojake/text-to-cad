@@ -61,7 +61,7 @@ VIEWS = {
 }
 
 # Framing a TEARDOWN is not the same problem as framing the built jet, and the
-# CLI cannot drive one -- the staged separation lives in `src/f14d.anim.js` and
+# CLI cannot drive one -- the staged separation lives in `STEP/f14d.step.js` and
 # plays in the CAD Viewer's Animation tab (clips: `teardown`, `explodedHold`).
 # Kept here because the camera knowledge outlived the retired render/explode.py
 # that carried it: the separation is mostly on Z (skin up, gear and inlets

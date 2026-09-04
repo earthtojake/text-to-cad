@@ -1,5 +1,6 @@
 /STEP/*
 !/STEP/imported/
+!/STEP/*.step.js
 /DXF/*
 !/DXF/imported/
 /STL/*

@@ -4,13 +4,12 @@ The tree (in the user-level store, keyed by the document's content
 hash) is a pure function of the STEP file's bytes plus schema versions — the
 cache engine's world, freely evictable. The model's DECLARATIONS live in ONE
 sidecar FILE BESIDE THE MODEL, ``<name>.step.json``: the KINEMATICS section
-(typed mates with axes resolved to world numbers, couplings, pose presets),
-the ANIMATION section (the .anim.js choreography text, COPIED — no path back
-to the source tree ever appears in a generated file), the MESH EXPORTS section
-(what the model's ``@stl``/``@glb``/``@threemf`` declarations resolved to, so
-a bare mesh door reads DECLARATIONS from the document instead of importing
-the model module), and assembly mates (authored in Python, not representable in
-STEP). NOTHING source-derived-as-identity — no paths, hashes, closures, or
+(typed mates with axes resolved to world numbers, couplings, pose presets) and
+the MESH EXPORTS section (what the model's ``@stl``/``@glb``/``@threemf``
+declarations resolved to, so a bare mesh door reads DECLARATIONS from the
+document instead of importing the model module). Choreography is NOT here: the
+render module beside the document (``<name>.step.js``) is authored, loaded by
+the viewer by name, and read by no build. NOTHING source-derived-as-identity — no paths, hashes, closures, or
 timestamps: a sidecar ships beside the artifact, and a generated file carries
 no tie back to its source. Provenance lives in the RECORDS tier below. The
 sidecar sits beside the model because declarations cannot be re-derived from
@@ -50,15 +49,17 @@ from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
 # path from the artifact (:func:`source_sidecar_path`), or match the artifact
 # suffix too (`.step.json` / `.stp.json`).
 SOURCE_SIDECAR_SUFFIX = ".json"
-# 6: the meshExports section is gone — a mesh door tessellates the document's
-#    tree and writes the file it was asked for; what a model declares lives in
-#    its record. 5 moved provenance out of the sidecar.
+# 6: the animation and meshExports sections are gone. Choreography is the render
+#    module beside the document (`<name>.step.js`), loaded by the viewer and never
+#    by a build; a mesh door tessellates the document's tree and writes the file
+#    it was asked for, and what a model declares lives in its record. A sidecar
+#    is written for kinematics alone. 5 moved provenance OUT of the sidecar.
 SOURCE_SIDECAR_SCHEMA_VERSION = 6
 
 # What a sidecar may CONTAIN: declarations only. Anything source-derived-as-
 # provenance (paths, hashes, closures, timestamps) belongs to the provenance
 # record; a sidecar sits beside the artifact and ships with it.
-_SIDECAR_SECTIONS = ("schemaVersion", "kinematics", "animation")
+_SIDECAR_SECTIONS = ("schemaVersion", "kinematics")
 
 
 def source_sidecar_path(step_path: Path | str) -> Path:
@@ -118,13 +119,14 @@ def model_is_generated(step_path: Path | str) -> bool:
 
 # The sections that WARRANT a sidecar. Provenance alone does not: it also
 # lives in the assembly.json, and a file per plain model is pure clutter.
-_WARRANTING_SECTIONS = ("kinematics", "animation")
+_WARRANTING_SECTIONS = ("kinematics",)
 
 
 def sidecar_is_warranted(payload: Mapping[str, Any] | None) -> bool:
     """Whether this payload carries anything the model actually needs a
-    sidecar FOR. A sidecar is written only when strictly necessary: metadata
-    with no reader beside the artifact belongs in the record, not in a file."""
+    sidecar FOR. A sidecar is written only when strictly necessary — today,
+    kinematics: metadata with no reader beside the artifact belongs in the
+    record, not in a file."""
     if not payload:
         return False
     return any(payload.get(section) for section in _WARRANTING_SECTIONS)

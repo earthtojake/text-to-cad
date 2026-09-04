@@ -13,13 +13,15 @@ There are THREE systems with different lifecycles, deliberately independent:
   the export decorators. It drives the viewer's pose sliders — no rebuild, no
   Python at render time — and never moves the geometry a model writes. It
   lives in the model's sidecar (`<name>.step.json`, written beside the
-  artifact).
-- **Animation** is choreography in a plain `.js` module declared via
-  `@step(animation="<name>.anim.js")`, whose TEXT is copied into the same
-  sidecar. It targets occurrences directly and knows nothing about mates.
-  Editing kinematics or animation never changes the model's tree and never
-  dirties an export — but the `.anim.js` IS a build input: editing it makes
-  the model stale, and the next run refreshes the sidecar's copy.
+  artifact), the one thing a sidecar is written for.
+- **Animation** is choreography in the RENDER MODULE beside the document:
+  `STEP/<name>.step.js`, next to `<name>.step` and `<name>.step.json`. It is
+  authored and committed, discovered by name, loaded by the viewer and the
+  snapshot door, and read by NO build — no decorator names it, the sidecar
+  carries no copy, the gate has no clause for it. It targets occurrences
+  directly and knows nothing about mates. Editing it is a reload in the
+  viewer, never a rebuild; editing kinematics never changes the tree either,
+  but it does rewrite the sidecar, so a kinematics edit is a (cheap) run.
 
 ## Kinematics: typed mates
 
@@ -51,8 +53,7 @@ KINEMATICS = {
     "poses": {"open": {"jaw": 40}, "closed": {"jaw": 0}},
 }
 
-@step(out="../STEP/arm.step", kinematics=KINEMATICS,
-      animation="arm.anim.js")
+@step(out="../STEP/arm.step", kinematics=KINEMATICS)
 def arm(): ...
 
 
@@ -129,10 +130,18 @@ yours: a one-shot annotation or canonicalization of a vendor file. Re-running it
 is a no-op, editing only the kinematics refreshes the sidecar without
 re-emitting a byte, and vendor metadata (PMI, GD&T) does not survive the trip.
 
-## Animation: the .anim.js contract
+## Animation: the render module (`<name>.step.js`)
+
+A STEP document may carry ONE JavaScript module beside it, named after the
+document: `STEP/arm.step` → `STEP/arm.step.js`. It is the place for
+render-only behaviour — today choreography, as the `clips` export below;
+other render-only exports will join it, and an export the renderer does not
+know is a load ERROR, never ignored. It is an ES module with no imports,
+authored by you and COMMITTED even though it lives in a format folder (the
+project's `.gitignore` whitelists `*.step.js`; see the cad-project skill).
 
 ```js
-// arm.anim.js — beside the model script; TEXT is copied into the sidecar.
+// STEP/arm.step.js — beside arm.step; the viewer loads it by name.
 export const clips = {
   demo: {
     label: "Demo",
@@ -161,8 +170,15 @@ export const clips = {
   mates: animating a jointed part re-describes the motion (a few lines of
   ratio math). That independence is what guarantees choreography edits can
   never invalidate builds.
-- The declared file must exist (no convention discovery); a missing
-  `animation=` target fails the build loudly.
+- No build reads the file. Nothing declares it: drop it beside the document
+  and the viewer's Animation tab appears on the next load; delete it and the
+  tab goes. A model without one is simply a model without animation.
+- Targets are checked at LOAD, against the compiled tree: every clip's
+  `update(0, m)` runs once when the module loads, and a label or occurrence
+  id no part carries is reported in the viewer's Status tab and in
+  `snapshot --animation`'s error — not at the first frame that reaches it.
+- Mesh-only models (no `.step`) have no document to sit beside, and so no
+  render module; animation is a STEP-document concern.
 
 ## Reviewing motion
 
@@ -183,8 +199,8 @@ cadgen step snapshot STEP/arm.step tmp/open.png --kinematics open
 ```
 
 For still evidence of a CLIP, freeze one frame: `--animation` names a clip
-the model's `.anim.js` declares and `--time` the moment in seconds (default
-0). One frame, one clip, one time — there is no sequence output. The frame
+the document's render module (`STEP/arm.step.js`) declares and `--time` the
+moment in seconds (default 0). One frame, one clip, one time — there is no sequence output. The frame
 is composed exactly as the viewer composes it: `--kinematics` sets the base
 pose, and the clip's `update(t, m)` is evaluated at that time on top of it.
 A clip name the model does not declare fails with the clips it has:

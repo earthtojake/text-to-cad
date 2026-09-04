@@ -156,9 +156,6 @@ class ModelDef:
     # Typed mates (kinematics= dict, validated at decoration); axis refs
     # resolve at build and the block lands in the model's sidecar. STEP only.
     kinematics: KinematicsDef | None = None
-    # Script-relative path of the .anim.js choreography module; its TEXT is
-    # copied into the sidecar at build (never a path in generated files).
-    animation: str | None = None
     # Declared mesh serializations (@stl/@glb/@threemf). STEP models only.
     mesh_exports: tuple[MeshExportDecl, ...] = ()
     # False for a MESH-ONLY model (@stl/@glb/@threemf with no @step): the same
@@ -227,18 +224,6 @@ def _reject_unknown_kwargs(deco_name: str, kwargs: dict[str, Any]) -> None:
         raise TypeError(f"@{deco_name} got an unexpected keyword argument: {unexpected}")
 
 
-def _normalize_animation(animation: object, *, fmt: str) -> str | None:
-    if animation is None:
-        return None
-    text = str(animation).strip()
-    if not text.lower().endswith(".js"):
-        raise ValueError(
-            f"@{fmt} animation must name a .js module beside the script "
-            f"(e.g. animation='arm.anim.js'), got {animation!r}"
-        )
-    return text
-
-
 def _decorator(
     fmt: str,
     *,
@@ -246,13 +231,11 @@ def _decorator(
     mesh_tolerance: float | None,
     mesh_angular_tolerance: float | None,
     kinematics: object = None,
-    animation: object = None,
     step_output: bool = True,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     kinematics_def = (
         normalize_kinematics(kinematics, where=f"@{fmt}") if kinematics is not None else None
     )
-    animation_path = _normalize_animation(animation, fmt=fmt)
 
     def apply(func: Callable[..., Any]) -> Callable[..., Any]:
         pending: tuple[MeshExportDecl, ...] = ()
@@ -282,7 +265,6 @@ def _decorator(
             mesh_tolerance=mesh_tolerance,
             mesh_angular_tolerance=mesh_angular_tolerance,
             kinematics=kinematics_def,
-            animation=animation_path,
             mesh_exports=pending,
             step_output=step_output,
         )
@@ -334,7 +316,6 @@ def step(
     mesh_tolerance: float | None = None,
     mesh_angular_tolerance: float | None = None,
     kinematics: object = None,
-    animation: str | None = None,
     **unsupported: Any,
 ):
     """Declare a STEP model. Usable bare (``@step``) or configured (``@step(...)``).
@@ -342,10 +323,9 @@ def step(
     ``kinematics=`` takes the typed-mates dict (see ``cadgen.kinematics``). No
     decorator argument changes the geometry a model writes: the geometry is the
     function's return value; the arguments decide where the files land, how
-    they are written, and what the sidecar declares.
-    ``animation=`` names a ``.js`` choreography module beside the script whose
-    text is copied into the sidecar. STEP is the only format with animation —
-    mesh exports are static bakes.
+    they are written, and what the sidecar declares. No decorator names
+    JavaScript: choreography is the render module beside the document
+    (``<name>.step.js``), which the viewer loads by name and no build reads.
     """
     _reject_unknown_kwargs("step", unsupported)
     decorator = _decorator(
@@ -354,7 +334,6 @@ def step(
         mesh_tolerance=mesh_tolerance,
         mesh_angular_tolerance=mesh_angular_tolerance,
         kinematics=kinematics,
-        animation=animation,
     )
     return decorator(func) if func is not None else decorator
 
@@ -366,12 +345,11 @@ def dxf(
     **unsupported: Any,
 ):
     """Declare a DXF drawing. Usable bare (``@dxf``) or configured (``@dxf(...)``)."""
-    for elsewhere in ("kinematics", "animation"):
-        if elsewhere in unsupported:
-            raise TypeError(
-                f"@dxf takes no {elsewhere}=: a drawing is 2D geometry — kinematics "
-                "lives on @step and the mesh decorators, and animation is @step-only"
-            )
+    if "kinematics" in unsupported:
+        raise TypeError(
+            "@dxf takes no kinematics=: a drawing is 2D geometry — kinematics "
+            "lives on @step and the mesh decorators"
+        )
     _reject_unknown_kwargs("dxf", unsupported)
     decorator = _decorator(
         "dxf", out=out, mesh_tolerance=None, mesh_angular_tolerance=None
@@ -415,12 +393,6 @@ def _mesh_export_decorator(deco_name: str, fmt: str):
         kinematics: object = None,
         **unsupported: Any,
     ):
-        if "animation" in unsupported:
-            raise TypeError(
-                f"@{deco_name} takes no animation=: mesh exports are static "
-                "bakes with no sidecar — animation is a STEP-x-viewer concern "
-                "and lives on @step only"
-            )
         _reject_unknown_kwargs(deco_name, unsupported)
         if out is not None and not str(out).lower().endswith(suffix):
             raise ValueError(f"@{deco_name} out= must end with '{suffix}': {out!r}")

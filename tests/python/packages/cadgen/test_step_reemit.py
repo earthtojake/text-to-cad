@@ -110,16 +110,14 @@ class StepReemitTests(unittest.TestCase):
             step_namespace.build(self.root / "hinge.py", self.out)
 
     def test_the_annotation_lands_in_the_outputs_sidecar(self) -> None:
-        animation = self.root / "hinge.anim.js"
-        animation.write_text(ANIM_JS, encoding="utf-8")
-        result = self._build(kinematics=json.dumps(KINEMATICS), animation=animation)
+        result = self._build(kinematics=json.dumps(KINEMATICS))
         self.assertTrue(result.ok)
         self.assertTrue(self.out.is_file())
         self.assertFalse(result.skipped)
 
         sidecar = self._sidecar()
         self.assertEqual(6, sidecar["schemaVersion"])
-        # Declarations only (schema 6): no source tie of any kind in the file
+        # Declarations only: no source tie of any kind in the file
         # beside the artifact. The freshness identity — sourceKind "step", the
         # INPUT's content hash — lives in the provenance RECORD.
         self.assertNotIn("sourceKind", sidecar)
@@ -135,9 +133,9 @@ class StepReemitTests(unittest.TestCase):
         self.assertEqual("o1.1", mate["parentId"])
         self.assertEqual("o1.2", mate["childId"])
         self.assertEqual({"value": [0.0, 90.0]}, mate["limits"])
-        # The animation module's TEXT is copied; no path survives.
-        self.assertEqual({"clips": ANIM_JS}, sidecar["animation"])
-        self.assertNotIn("hinge.anim.js", json.dumps(sidecar))
+        # Choreography is not an annotation: the render module beside OUT is
+        # the viewer's, and the sidecar carries kinematics only.
+        self.assertNotIn("animation", sidecar)
 
     def test_the_output_is_ours_and_byte_deterministic(self) -> None:
         self._build(kinematics=json.dumps(KINEMATICS))
@@ -196,8 +194,8 @@ class StepReemitTests(unittest.TestCase):
         self._build(kinematics=str(spec))
         self.assertEqual("swing", self._sidecar()["kinematics"]["mates"][0]["name"])
 
-    def test_a_missing_animation_module_fails_loudly(self) -> None:
-        with self.assertRaisesRegex(ValueError, "--animation module not found"):
+    def test_animation_is_not_a_build_argument(self) -> None:
+        with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'animation'"):
             self._build(animation=self.root / "nope.anim.js")
 
 

@@ -28,11 +28,15 @@ __all__ = ["DocumentCompiler"]
 class _Compile:
     """One in-flight compile that other requests may attach to."""
 
-    __slots__ = ("done", "result")
+    __slots__ = ("done", "result", "waiters")
 
     def __init__(self) -> None:
         self.done = threading.Event()
         self.result: dict | None = None
+        # Requests attached to this compile besides its owner. Observable state
+        # (``DocumentCompiler.waiters``) for status and for tests that must know
+        # every concurrent request has arrived before letting the job finish.
+        self.waiters = 0
 
 
 def _failure(output: str, document: str) -> dict:
@@ -83,6 +87,8 @@ class DocumentCompiler:
             owner = entry is None
             if owner:
                 entry = self._in_flight[build_key] = _Compile()
+            else:
+                entry.waiters += 1
         assert entry is not None
 
         if not owner:
@@ -109,6 +115,13 @@ class DocumentCompiler:
     def in_flight(self, build_key: str) -> bool:
         with self._lock:
             return build_key in self._in_flight
+
+    def waiters(self, build_key: str) -> int:
+        """Requests attached to the in-flight compile of ``build_key`` besides
+        its owner; 0 when nothing is in flight."""
+        with self._lock:
+            entry = self._in_flight.get(build_key)
+            return entry.waiters if entry is not None else 0
 
     def _run(self, candidate: str, *, force: bool) -> dict:
         document = Path(candidate).resolve()

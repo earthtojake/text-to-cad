@@ -120,7 +120,6 @@ KINEMATICS = {
 @step(
     out="../STEP/gear_rack_gripper.step",
     kinematics=KINEMATICS,
-    animation="gear_rack_gripper.anim.js",
 )
 def gear_rack_gripper():
     return read_step(_SOURCE)

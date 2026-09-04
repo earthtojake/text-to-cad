@@ -292,8 +292,20 @@ class SidecarTruthiness(ScannerTestCase):
         self.assertIn("sourceUrl", entry)
         self.assertNotIn("poseUrl", entry)
 
-    def test_animation_alone_yields_a_pose_url(self):
-        self.assertIn("poseUrl", self._entry(json.dumps({"animation": {"t": "x"}})))
+    def test_an_animation_block_alone_yields_no_pose_url(self):
+        # A sidecar written before choreography left the build: the block is
+        # ignored, and only kinematics is an articulation mechanism.
+        entry = self._entry(json.dumps({"animation": {"clips": "x"}}))
+        self.assertIn("sourceUrl", entry)
+        self.assertNotIn("poseUrl", entry)
+
+    def test_a_render_module_beside_the_document_is_published_by_url(self):
+        self.write("s.step.js", "export const clips = {};\n")
+        entry = self._entry(None)
+        self.assertEqual(entry["renderModuleUrl"], "/s.step.js")
+
+    def test_no_render_module_no_url(self):
+        self.assertNotIn("renderModuleUrl", self._entry(None))
 
     def test_a_scalar_sidecar_is_not_a_sidecar(self):
         for text in ('"hello"', "5", "null", "true"):
@@ -489,7 +501,11 @@ class ServedAssetGate(unittest.TestCase):
         self.assertTrue(is_served_cad_asset("/root/PART.STEP.JSON"))
         self.assertTrue(is_served_cad_asset("/root/part.stp.json"))
         self.assertFalse(is_served_cad_asset("/root/random.js"))
-        self.assertFalse(is_served_cad_asset("/root/part.step.js"))
+        self.assertFalse(is_served_cad_asset("/root/part.anim.js"))
+        # The render module beside a document IS served, on its full pair of suffixes.
+        self.assertTrue(is_served_cad_asset("/root/part.step.js"))
+        self.assertTrue(is_served_cad_asset("/root/PART.STP.JS"))
+        self.assertFalse(is_served_cad_asset("/root/.hidden.step.js"))
         self.assertFalse(is_served_cad_asset("/root/secrets.json"))
         self.assertTrue(is_served_cad_asset("/root/part.step"))
         self.assertTrue(is_served_cad_asset("/root/part.SDF"))

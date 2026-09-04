@@ -18,7 +18,7 @@
 | power_unit.py | STEP/power_unit.step | `#o1.13` power unit |
 | drivetrain.py | STEP/drivetrain.step | `#o1.14` drivetrain |
 | rear_wing.py | STEP/rear_wing.step | `#o1.15` rear wing mainplane + endplates |
-| drs_flap.py | STEP/drs_flap.step | `#o1.16` DRS flap (rotates in `f1.anim.js`) |
+| drs_flap.py | STEP/drs_flap.step | `#o1.16` DRS flap (rotates in `f1.step.js`) |
 | drs_actuator.py | STEP/drs_actuator.step | `#o1.17` DRS actuator four-bar |
 | beam_wing.py | STEP/beam_wing.step | `#o1.18` beam wing |
 | suspension_front.py | STEP/suspension_front.step | `#o1.19` front suspension |
@@ -45,14 +45,14 @@ four-bar and the material palette; `lib/surfaces.py` is the shared surface
 vocabulary (airfoil family, blade family, body lofts) every part module builds
 from, so the car has ONE surface language.
 
-OCCURRENCE ORDER IS FROZEN — `f1.anim.js` addresses children as `#o1.N` in the
+OCCURRENCE ORDER IS FROZEN — `f1.step.js` addresses children as `#o1.N` in the
 order `assemble()` adds them — one sibling model per row. The table lives in `f1.py`'s docstring; do not
 reorder, insert or remove a child without updating both in the same change.
 
 No `kinematics=`: both of this car's mechanisms are CLOSED LOOPS (the DRS is a
 planar four-bar, the steering solves each wheel against a fixed-length track
 rod), and typed mates evaluate pure forward kinematics on a TREE. Both solves
-live in `f1.anim.js`, which is where the teardown belongs anyway. Clips:
+live in `f1.step.js`, which is where the teardown belongs anyway. Clips:
 `showcase` (the loop-closed timeline: car opens, engine stands alone, engine
 opens, both reassemble), `drs`, `steering`, `teardown`, `engine`.
 

@@ -93,6 +93,10 @@ def _build_fixture(root: str, cache: str) -> None:
     write("n_array_descriptor.step", "arrd\n")
     package("n_array_descriptor.step", None, raw="[1,2,3]")
     write("o_no_package.step", "nopkg\n")
+    # The render module beside a document: authored, discovered by name.
+    write("r_render_module.step", "render\n")
+    write("r_render_module.step.js", "export const clips = {};\n")
+    package("r_render_module.step", valid)
 
     # --- sidecar variants -------------------------------------------------
     for name, sidecar in (
@@ -213,6 +217,7 @@ def _shape(entries) -> list:
                 "hash" if entry.get("hash") else "",
                 "sourceUrl" if "sourceUrl" in entry else "",
                 "poseUrl" if "poseUrl" in entry else "",
+                "renderModuleUrl" if "renderModuleUrl" in entry else "",
                 sorted((entry.get("relations") or {}).keys()),
             ]
         )
@@ -281,7 +286,8 @@ class CatalogShapeSnapshot(unittest.TestCase):
         entries = scan_cad_directory(self.root)["entries"]
         self.assertGreater(len(entries), 100)
         self.assertGreaterEqual(sum(1 for e in entries if e["kind"] == "assembly"), 2)
-        self.assertGreaterEqual(sum(1 for e in entries if "poseUrl" in e), 4)
+        self.assertGreaterEqual(sum(1 for e in entries if "poseUrl" in e), 3)
+        self.assertGreaterEqual(sum(1 for e in entries if "renderModuleUrl" in e), 1)
         self.assertGreaterEqual(sum(1 for e in entries if "sourceUrl" in e), 6)
         self.assertGreaterEqual(sum(1 for e in entries if "relations" in e), 4)
         self.assertGreaterEqual(sum(1 for e in entries if e["hash"] == ""), 4)

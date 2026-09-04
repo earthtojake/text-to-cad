@@ -4,7 +4,7 @@ Stdlib-only. Each digit segment is approximated by a conservative capsule
 (segment + radius) in its link frame; a pose is collision-free when every
 thumb capsule clears every finger capsule. The named grip poses are tuned
 to small POSITIVE clearances (pads kiss at ~+0.7..0.8 mm, never overlap),
-and the animation key orders in `src/lyra.anim.js` are chosen so every
+and the animation key orders in `STEP/lyra.step.js` are chosen so every
 adjacent smoothstep blend stays clear:
 
 - pose tour: relaxed -> precision_pinch -> ok_sign -> point ->
@@ -130,7 +130,7 @@ def path_worst(pose_a, pose_b, steps: int = 120) -> tuple[float, str, str, float
     return worst
 
 
-# Animation key orders and ripple-wave constants mirrored from lyra.anim.js.
+# Animation key orders and ripple-wave constants mirrored from lyra.step.js.
 TOUR_KEYS = ("relaxed", "precision_pinch", "ok_sign", "point", "tripod_pinch", "fist")
 RIPPLE_ORDER = ("index", "middle", "ring", "pinky", "thumb")
 RIPPLE_CURL = {"mcp": 30.0, "pip": 40.0, "dip": 22.0, "thumbFlex": 12.0, "thumbMp": 30.0, "thumbIp": 30.0}

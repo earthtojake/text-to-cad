@@ -42,8 +42,14 @@ assert.ok(
   "Hero sidecar kinematics no longer compile into a step-module definition",
 );
 assert.ok(
-  typeof sidecar.animation?.clips === "string" && sidecar.animation.clips.includes("meshCycle"),
-  "Hero sidecar is missing the copied meshCycle animation clip",
+  !("animation" in sidecar),
+  "Hero sidecar still carries an animation section; choreography is the render module beside the document",
+);
+const heroRenderModulePath = path.join(docsRoot, "public/hero/planetary_gear_assembly.step.js");
+assert.ok(fs.existsSync(heroRenderModulePath), `Hero render module missing: ${heroRenderModulePath}`);
+assert.ok(
+  fs.readFileSync(heroRenderModulePath, "utf8").includes("meshCycle"),
+  "Hero render module does not declare the meshCycle clip",
 );
 
 console.log(`Hero STEP assets are current: ${components.length} components, kinematics + clips OK.`);

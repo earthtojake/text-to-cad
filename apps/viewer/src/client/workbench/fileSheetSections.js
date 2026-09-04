@@ -4,7 +4,8 @@ export const FILE_SHEET_SECTION_IDS = Object.freeze({
   STEP_MEASUREMENTS: "measurements",
   STEP_REFERENCE: "reference",
   // Two tabs, two independent systems: Pose drives the sidecar's mate graph
-  // (sliders per DOF + named presets), Animation plays the sidecar's clips.
+  // (sliders per DOF + named presets), Animation plays the clips of the render
+  // module beside the document (<name>.step.js).
   // A model may ship either, both, or neither, so they are gated separately.
   STEP_POSE: "pose",
   STEP_ANIMATION: "animation",

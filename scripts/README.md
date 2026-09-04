@@ -144,8 +144,6 @@ Use `scripts/github-workflows/deploy-vercel-app.sh` only from the `Deploy Docs`
 workflow; it configures Vercel Authentication for preview
 deployments only, deploys one Vercel project to production, and verifies its
 public URLs.
-`scripts/release/create-github-release.sh` remains as a manual all-in-one
-fallback, but the workflow path is preferred.
 
 ## CI
 

@@ -3,7 +3,6 @@ import { test } from "node:test";
 
 import {
   SOURCE_SIDECAR_SCHEMA_VERSION,
-  loadAnimationSource,
   loadKinematicsModuleDefinition
 } from "./kinematicsModule.js";
 
@@ -69,22 +68,6 @@ test("a sidecar declaring no schema at all is refused the same way", async (t) =
   );
 });
 
-test("the animation loader is gated on the same schema", async (t) => {
-  stubSidecar(t, { schemaVersion: SOURCE_SIDECAR_SCHEMA_VERSION - 1, animation: { clips: "export default {};" } });
-
-  await assert.rejects(
-    () => loadAnimationSource(SIDECAR_URL),
-    /unsupported sidecar schema 5 \(expected 6\)/
-  );
-});
-
-test("a current-schema sidecar with no animation section yields no clips", async (t) => {
-  stubSidecar(t, { schemaVersion: SOURCE_SIDECAR_SCHEMA_VERSION, kinematics: KINEMATICS });
-
-  assert.equal(await loadAnimationSource(SIDECAR_URL), "");
-});
-
 test("no sidecar url means nothing to load", async () => {
   assert.equal(await loadKinematicsModuleDefinition(""), null);
-  assert.equal(await loadAnimationSource(""), "");
 });

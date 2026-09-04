@@ -145,7 +145,6 @@ KINEMATICS = {
 @step(
     out="../STEP/adjustable_height_table_2.step",
     kinematics=KINEMATICS,
-    animation="adjustable_height_table_2.anim.js",
 )
 def adjustable_height_table_2():
     return read_step(_SOURCE)

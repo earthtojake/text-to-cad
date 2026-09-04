@@ -84,7 +84,6 @@ KINEMATICS = {
 @step(
     out="../STEP/flip_mechanism_180.step",
     kinematics=KINEMATICS,
-    animation="flip_mechanism_180.anim.js",
 )
 def flip_mechanism_180():
     return read_step(_SOURCE)

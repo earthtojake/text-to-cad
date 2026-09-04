@@ -1,4 +1,4 @@
-// flip_mechanism_180.anim.js — reference flip loop (thang010146).
+// flip_mechanism_180.step.js — reference flip loop (thang010146).
 // A toggle four-bar: the pink lower rocker drives the red/panel coupler out to
 // an over-center tangent pose, then the coupler returns on the OPPOSITE circle
 // branch with the panel flipped 180 degrees. Branch switching is exactly what

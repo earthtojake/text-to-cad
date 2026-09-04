@@ -17,7 +17,7 @@ Coordinates: RIGHT hand; wrist-flange mount face center = origin,
 Chain offsets, joint limits, and the baked "relaxed" pose live in
 src/lib/chain.py and are shared with the authored URDF/SRDF artifacts
 (lyra.urdf / lyra.srdf ledger comments) and the CAD Viewer animation
-module (src/lyra.anim.js); edit them there.
+module (STEP/lyra.step.js, beside the document); edit them there.
 """
 
 from __future__ import annotations
@@ -152,7 +152,7 @@ _MATES, _POSES = _mates_and_poses()
 KINEMATICS = {"mates": _MATES, "poses": _POSES}
 
 
-@step(out="../STEP/lyra.step", kinematics=KINEMATICS, animation="lyra.anim.js")
+@step(out="../STEP/lyra.step", kinematics=KINEMATICS)
 def lyra():
     return assemble()
 

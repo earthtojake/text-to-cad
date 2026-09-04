@@ -92,11 +92,13 @@ Rules the decorator enforces:
   record, build, no-op and composition — that writes its meshes and no
   `.step`, no sidecar. STEP is one output kind, not a requirement.
 - Options on `@step`: `out=`, `mesh_tolerance=`, `mesh_angular_tolerance=`,
-  `kinematics=`, `animation=` (`kinematics.md`). **No decorator argument
-  changes the geometry a model produces**: they decide where the files land,
-  how they are written, and what the sidecar declares. Everything a model
-  declares about itself lives in its decorators, and a child's declarations
-  never ride up into a parent.
+  `kinematics=` (`kinematics.md`). **No decorator argument changes the
+  geometry a model produces**: they decide where the files land, how they are
+  written, and what the sidecar declares. No decorator names JavaScript:
+  choreography is the render module beside the document
+  (`STEP/<name>.step.js`), which the viewer loads by name and no build reads.
+  Everything a model declares about itself lives in its decorators, and a
+  child's declarations never ride up into a parent.
 
 **Imports:** `from cadgen import build123d as bd` is the canonical import — a
 lazy, transparent re-export (same names, same objects on first touch), so a
@@ -230,8 +232,9 @@ What an importer TAKES from a model file decides how that file counts:
   belong in `lib/` (a plain module, in the closure of every model that
   reaches it), and shared constants may live in a model file or in `lib/`.
 
-Inputs join the closure too: a `read_step` document and a declared `.anim.js`
-are hashed as build inputs.
+Inputs join the closure too: a `read_step` document is hashed as a build
+input. The render module beside the document (`<name>.step.js`) is NOT one —
+it is the viewer's, and editing it never makes a model stale.
 
 Two decorator arguments are read **statically** (parsed from the file before
 it runs) and must be literals: `out=` and the mesh tolerances. Everything else on a decorator — `kinematics=`, `animation=` —

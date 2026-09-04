@@ -9,7 +9,7 @@ cased via the documented flip about X + MOVT_Z_OFFSET lift.
 Articulation is split the way cadgen splits it: typed mates in `KINEMATICS`
 below (the watch's real degrees of freedom — hands, going train, escapement,
 chronograph, crown, pushers — plus the gear ratios that tie them together),
-and choreography in `moonwatch.anim.js` (exploded reveals, the sinusoidal
+and choreography in `moonwatch.step.js` (exploded reveals, the sinusoidal
 balance swing and the escape wheel's per-beat snap, which are not linear
 gearings and so are not mates).
 """
@@ -198,8 +198,7 @@ KINEMATICS = {
 }
 
 
-@step(out="../STEP/moonwatch.step", kinematics=KINEMATICS,
-      animation="moonwatch.anim.js")
+@step(out="../STEP/moonwatch.step", kinematics=KINEMATICS)
 def moonwatch():
     children = []
 

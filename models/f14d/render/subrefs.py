@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emit the act-2 SUBS ref lists for src/f14d.anim.js from the built package.
+"""Emit the act-2 SUBS ref lists for STEP/f14d.step.js from the built package.
 
 The second act of the teardown separates parts INSIDE the wings and the aft
 section, and those are addressed by leaf occurrence id -- the animation handle
@@ -10,7 +10,7 @@ pattern and pasted into the SUBS table.
 
 REGENERATE AFTER ANY REBUILD THAT CHANGES LEAF COUNTS:
 
-    python render/subrefs.py > tmp/subrefs.txt   # then update SUBS in src/f14d.anim.js
+    python render/subrefs.py > tmp/subrefs.txt   # then update SUBS in STEP/f14d.step.js
 
 Anything mirrored port/stbd is split into two groups, because one ref moves
 every occurrence it matches by the SAME vector -- a single "wingtips" group
@@ -59,7 +59,7 @@ def main() -> int:
     if not assembly.is_file():
         raise SystemExit(f"no built package for {STEP.name}; run `python src/f14d.py` first")
     occurrences = json.loads(assembly.read_text())["occurrences"]
-    print("// ref values for the SUBS table in src/f14d.anim.js")
+    print("// ref values for the SUBS table in STEP/f14d.step.js")
     for name, prefix, patterns, side in GROUPS:
         ids = [
             o["id"]

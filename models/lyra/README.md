@@ -30,8 +30,7 @@ interpenetrates.
 - `src/` — the authored code. `src/README.md` is the model catalog.
   - `src/lyra.py` — the full-hand assembly (`@step`), baked in the `relaxed`
     pose. It also declares the 16-DOF `kinematics=` block (revolute mates +
-    the seven named poses, built straight from `lib/chain.py`) and
-    `animation="lyra.anim.js"`.
+    the seven named poses, built straight from `lib/chain.py`).
   - `src/<link>.py` — one model per URDF link (17). Each stacks
     `@threemf(out="../3MF/<link>.3mf")` on `@step(out="../STEP/<link>.step")`,
     so running the script emits both the STEP part and the mesh the URDF
@@ -44,8 +43,9 @@ interpenetrates.
     self-check (run `python -m lib.clearance` from `src/` after editing
     poses or animation key orders — it sweeps every named pose and every
     blend path).
-  - `src/lyra.anim.js` — the animation module. Its text is copied into the
-    STEP's sidecar at build time. Clips: `poseTour` (a finger-ripple wave,
+  - `STEP/lyra.step.js` — the render module beside the document: the
+    animation clips, loaded by the viewer by name (authored, committed; no
+    build reads it). Clips: `poseTour` (a finger-ripple wave,
     then relaxed -> precision pinch -> OK sign -> point -> tripod pinch ->
     fist; key order chosen so every blend is collision-free), `graspLoop`
     (power grasp), `pinchLoop` (pinch with pad double-tap), `rippleLoop`

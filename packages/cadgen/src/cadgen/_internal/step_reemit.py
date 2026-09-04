@@ -4,7 +4,7 @@ The engine behind the STEP door's ``build`` verb. It re-emits an existing
 document in cadgen's own dialect — OCCT read -> content-keyed tree ->
 the canonical XCAF writer — so the OUTPUT's bytes are deterministic regardless
 of which kernel wrote the input, and optionally ANNOTATES it with kinematics
-and animation that land in ``OUT``'s sidecar.
+that land in ``OUT``'s sidecar.
 
 This is deliberately the SAME pipeline a model script runs. The scene is loaded
 from ``IN``, re-pathed to ``OUT``, and handed to ``_generate_part_outputs`` as a
@@ -19,9 +19,8 @@ edit cheap:
 
 * BYTES depend on the input's content hash alone. Unchanged -> nothing is
   re-emitted. An annotation never moves geometry.
-* The ANNOTATION (the kinematics declaration and the animation text) is a
-  sidecar digest. Changed alone, the sidecar is refreshed in place against the
-  tree already on disk.
+* The ANNOTATION (the kinematics declaration) is a sidecar digest. Changed
+  alone, the sidecar is refreshed in place against the tree already on disk.
 
 Not for foreign metadata: PMI, GD&T and vendor extensions do not survive the
 round trip. That is the documented price of speaking one dialect.
@@ -89,33 +88,14 @@ def load_kinematics_space(raw: object, *, where: str) -> Any | None:
     return normalize_kinematics(parsed, where=where)
 
 
-def load_animation_text(animation: Path | None, *, where: str) -> str | None:
-    """The declared ``.js`` choreography module's TEXT, copied.
-
-    Same contract as ``@step(animation=...)``: the file must exist (there is no
-    convention discovery), and only its text travels — no generated file ever
-    references the source tree.
-    """
-    if animation is None:
-        return None
-    path = Path(animation).expanduser()
-    if path.suffix.lower() != ".js":
-        raise _fail(f"{where} --animation must name a .js module, got {animation}")
-    if not path.is_file():
-        raise _fail(f"{where} --animation module not found: {animation}")
-    return path.read_text(encoding="utf-8")
-
-
-def annotation_digest(kinematics_def: Any | None, animation_source: str | None) -> str:
+def annotation_digest(kinematics_def: Any | None) -> str:
     """A stable digest of what the author DECLARED for this document.
 
-    Digests the pre-resolution block (selector refs and all) plus the animation
-    text, so an annotation edit is detectable without re-resolving anything
-    against geometry.
+    Digests the pre-resolution block (selector refs and all), so an annotation
+    edit is detectable without re-resolving anything against geometry.
     """
     payload = {
         "kinematics": None if kinematics_def is None else kinematics_def.block,
-        "animation": animation_source,
     }
     body = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -150,7 +130,6 @@ def reemit_step_document(
     out: Path,
     *,
     kinematics_def: Any | None,
-    animation_source: str | None,
     force: bool,
     logger: CliLogger,
 ) -> dict[str, object]:
@@ -167,7 +146,7 @@ def reemit_step_document(
     input_hash = artifact_file_hash(document)
     if not input_hash:
         raise _fail(f"could not read {_display(document)}")
-    digest = annotation_digest(kinematics_def, animation_source)
+    digest = annotation_digest(kinematics_def)
 
     sidecar = read_source_provenance(out) or {}
     tree = result_tree_for(out)
@@ -193,7 +172,6 @@ def reemit_step_document(
         payload = dict(sidecar)
         payload["annotationHash"] = digest
         payload.pop("kinematics", None)
-        payload.pop("animation", None)
         if kinematics_def is not None:
             import shutil
 
@@ -211,8 +189,6 @@ def reemit_step_document(
             finally:
                 shutil.rmtree(view_dir, ignore_errors=True)
             payload["kinematics"] = resolved
-        if animation_source:
-            payload["animation"] = {"clips": animation_source}
         update_record(out, annotationHash=digest, kinematics=payload.get("kinematics"))
         write_source_sidecar(out, payload)
         return {
@@ -229,7 +205,6 @@ def reemit_step_document(
         input_hash=input_hash,
         digest=digest,
         kinematics_def=kinematics_def,
-        animation_source=animation_source,
         force=force,
         logger=logger,
     )
@@ -249,7 +224,6 @@ def _emit(
     input_hash: str,
     digest: str,
     kinematics_def: Any | None,
-    animation_source: str | None,
     force: bool,
     logger: CliLogger,
 ) -> None:
@@ -271,7 +245,6 @@ def _emit(
     scene.reemit_source_hash = input_hash
     scene.reemit_annotation_hash = digest
     scene.kinematics = None if kinematics_def is None else dict(kinematics_def.block)
-    scene.animation_source = animation_source
 
     out.parent.mkdir(parents=True, exist_ok=True)
     spec = _build_entry_spec(Path.cwd().resolve(), scene.step_path, scene)

@@ -1,11 +1,11 @@
-// The choreography half of the split (design/pose-animation-split.md):
-// evaluate the sidecar's animation section — the COPIED .anim.js text — and
-// drive raw per-occurrence transforms. Total independence by construction:
-// this module knows nothing of mates, DOFs, presets, or the Pose tab; it
-// targets occurrences by label and pushes matrices/styles through the same
-// effects records the viewer already composes.
+// The choreography half: evaluate the clips a document's render module
+// (`<name>.step.js`, loaded by renderModule.js) declares and drive raw
+// per-occurrence transforms. Total independence by construction: this module
+// knows nothing of mates, DOFs, presets, or the Pose tab; it targets
+// occurrences by label and pushes matrices/styles through the same effects
+// records the viewer already composes.
 //
-// Contract (the .anim.js side):
+// Contract (the render module's `clips` export):
 //   export const clips = {
 //     demo: { label?, duration, loop?, update(t, m) { ... } },
 //   };
@@ -33,22 +33,6 @@ function isObject(value) {
 }
 
 const DEG_TO_RAD = Math.PI / 180;
-
-// Compile the copied module text into live clips via a Blob import — the same
-// sandboxing (page realm, no source-tree access) the pose hatch used.
-export async function compileAnimationClips(moduleSource) {
-  const text = String(moduleSource || "").trim();
-  if (!text) {
-    return {};
-  }
-  const blobUrl = URL.createObjectURL(new Blob([text], { type: "text/javascript" }));
-  try {
-    const module = await import(/* webpackIgnore: true */ /* @vite-ignore */ blobUrl);
-    return normalizeAnimationClips(module?.clips);
-  } finally {
-    URL.revokeObjectURL(blobUrl);
-  }
-}
 
 export function normalizeAnimationClips(rawClips) {
   const clips = {};

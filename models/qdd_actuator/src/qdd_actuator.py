@@ -1016,8 +1016,7 @@ KINEMATICS = {
 }
 
 
-@step(out="../STEP/qdd_actuator.step", kinematics=KINEMATICS,
-      animation="qdd_actuator.anim.js")
+@step(out="../STEP/qdd_actuator.step", kinematics=KINEMATICS)
 def qdd_actuator():
     return build_actuator(explode=0.0)
 

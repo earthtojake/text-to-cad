@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urlparse
 from tests.python.support.paths import add_repo_path, repo_path
 
 
-def write_package(step_path, *, entry_kind="part", source_kind="step", kinematics=None, animation=None):
+def write_package(step_path, *, entry_kind="part", source_kind="step", kinematics=None, render_module=None):
     """Materialize the canonical render artifact for ``step_path``: a SELF-CONTAINED
     view directory (assembly.json + components/) inside the per-folder cache
     (``__cadgen__/models/<step-filename>/assembly.json``) whose content-addressed component
@@ -59,19 +59,17 @@ def write_package(step_path, *, entry_kind="part", source_kind="step", kinematic
             }
         )
     )
-    if kinematics or animation:
-        # Kinematics/animation (source-derived) ride the MODEL-SIDE sidecar,
-        # never assembly.json.
+    if kinematics:
+        # Kinematics (source-derived) rides the MODEL-SIDE sidecar, never
+        # assembly.json.
         from cadgen._internal.source_sidecar import SOURCE_SIDECAR_SCHEMA_VERSION
 
-        sidecar = {"schemaVersion": SOURCE_SIDECAR_SCHEMA_VERSION}
-        if kinematics:
-            sidecar["kinematics"] = kinematics
-        if animation:
-            sidecar["animation"] = animation
-        Path(f"{step_path}.json").write_text(
-            json.dumps(sidecar)
-        )
+        sidecar = {"schemaVersion": SOURCE_SIDECAR_SCHEMA_VERSION, "kinematics": kinematics}
+        Path(f"{step_path}.json").write_text(json.dumps(sidecar))
+    if render_module is not None:
+        # Choreography is the render module beside the document, authored and
+        # discovered by name: part.step -> part.step.js.
+        Path(f"{step_path}.js").write_text(render_module, encoding="utf-8")
     return pkg_dir
 
 add_repo_path("packages/cadgen/src")
@@ -1995,10 +1993,10 @@ class StepPoseParameterTests(unittest.TestCase):
         self.assertNotIn("stepParameterPath", resolved)
 
     def test_animation_never_gates_the_parameter_url(self) -> None:
-        # Choreography is sidecar-borne but INDEPENDENT: an animation section
-        # without kinematics gives pose values nothing to drive.
+        # Choreography is INDEPENDENT of kinematics: a render module beside the
+        # document without kinematics gives pose values nothing to drive.
         step_path = self._step(pose=False)
-        write_package(step_path, animation={"clips": "export const clips = {};"})
+        write_package(step_path, render_module="export const clips = {};")
         with self.assertRaisesRegex(SnapshotError, "declares no kinematics"):
             self._resolve(self._job(kinematics={"stroke": 1}))
 
@@ -2024,7 +2022,8 @@ class StepPoseParameterTests(unittest.TestCase):
 class StepAnimationFrameTests(unittest.TestCase):
     """The job's `animation` key freezes ONE frame of ONE clip: `{"clip": name,
     "time": seconds}`, spelled the same as the flag (`--animation CLIP --time
-    SECONDS`) and the sidecar section it reads. It is layered over `kinematics`
+    SECONDS`). The clips come from the render module beside the document
+    (`part.step.js`), never from the sidecar. It is layered over `kinematics`
     the way the viewer layers its Animation tab over the Pose tab — the two
     travel independently and meet only in the renderer's effect records."""
 
@@ -2046,11 +2045,7 @@ class StepAnimationFrameTests(unittest.TestCase):
     def _step(self, name="part.step", *, clips=CLIPS, kinematics=None):
         step_path = self.models / name
         step_path.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
-        write_package(
-            step_path,
-            kinematics=kinematics,
-            animation={"clips": clips} if clips is not None else None,
-        )
+        write_package(step_path, kinematics=kinematics, render_module=clips)
         return step_path
 
     def _job(self, **overrides):
@@ -2137,13 +2132,14 @@ class StepAnimationFrameTests(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, r"render job animation has unknown key\(s\): loop"):
             self._resolve(self._job(animation={"clip": "demo", "loop": False}))
 
-    def test_a_declared_clip_resolves_the_sidecar_url_and_normalizes_the_request(self) -> None:
-        # An animation-only model: no kinematics at all, and the frame still
-        # needs the sidecar, because that is where the copied .anim.js lives.
+    def test_a_declared_clip_resolves_the_render_module_url_and_normalizes_the_request(self) -> None:
+        # An animation-only model: no kinematics, no sidecar at all — the frame
+        # needs only the render module beside the document.
         self._step()
         packet = self._resolve(self._job(animation={"clip": "demo", "time": 2}))
         resolved_job = packet["jobs"][0]
-        self.assertIn(".step.json", str(resolved_job["resolved"]["stepParameterUrl"]))
+        self.assertIn("part.step.js", str(resolved_job["resolved"]["renderModuleUrl"]))
+        self.assertNotIn("stepParameterUrl", resolved_job["resolved"])
         self.assertEqual({"clip": "demo", "time": 2.0}, resolved_job["animation"])
 
     def test_an_unknown_clip_is_refused_with_the_declared_clips(self) -> None:
@@ -2170,11 +2166,11 @@ class StepAnimationFrameTests(unittest.TestCase):
         packet = self._resolve(self._job(animation={"clip": "anything"}))
         self.assertEqual({"clip": "anything", "time": 0.0}, packet["jobs"][0]["animation"])
 
-    def test_a_model_without_animation_has_no_frame_to_render(self) -> None:
+    def test_a_document_without_a_render_module_has_no_frame_to_render(self) -> None:
         self._step(clips=None)
-        with self.assertRaisesRegex(SnapshotError, "declares no animation") as caught:
+        with self.assertRaisesRegex(SnapshotError, "has no render module") as caught:
             self._resolve(self._job(animation={"clip": "demo"}))
-        self.assertIn("animation=", str(caught.exception))
+        self.assertIn("part.step.js", str(caught.exception))
 
     def test_a_frame_is_layered_over_kinematics_not_instead_of_it(self) -> None:
         """Both fields travel; neither gates the other — the same sidecar URL
@@ -2198,7 +2194,7 @@ class StepAnimationFrameTests(unittest.TestCase):
 
     def test_a_frame_requires_a_step_model(self) -> None:
         (self.models / "part.stl").write_bytes(b"solid part\nendsolid part\n")
-        with self.assertRaisesRegex(SnapshotError, "animation frame requires a STEP model"):
+        with self.assertRaisesRegex(SnapshotError, "animation frame requires a STEP document"):
             self._resolve(self._job(name="part.stl", animation={"clip": "demo"}))
 
 

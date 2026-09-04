@@ -1,4 +1,4 @@
-// lyra.anim.js — articulation choreography for the lyra dexterous hand.
+// lyra.step.js — articulation choreography for the lyra dexterous hand.
 //
 // The STEP geometry is baked in the "relaxed" pose (chain.BAKED_POSE_NAME).
 // Each clip recomputes full-chain FK at its target pose and applies, per link,

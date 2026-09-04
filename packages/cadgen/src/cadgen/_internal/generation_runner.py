@@ -167,47 +167,21 @@ def _purge_stale_bytecode(script_path: Path) -> None:
 @dataclass(frozen=True)
 class _DeclaredKinematics:
     """What the decorator declared, resolved for the build: the kinematics
-    block, the animation module's TEXT, and the files those declarations were
-    read from (``inputs``)."""
+    block. Choreography is not here — the render module beside the document
+    (``<name>.step.js``) is read by the viewer, never by a build, so an edit to
+    it is a reload and not a rebuild — and no declaration moves geometry."""
 
     block: dict | None
-    animation_source: str | None
-    inputs: tuple[Path, ...]
 
 
-def _resolve_declared_kinematics(defn: object, *, script_path: Path) -> _DeclaredKinematics:
-    """The model's kinematics block and animation module TEXT.
+def _resolve_declared_kinematics(defn: object) -> _DeclaredKinematics:
+    """The model's kinematics block.
 
     The block comes validated from the decoration-time normalizer; axis refs
-    resolve against real geometry later in the tree build. The animation
-    path is an authoring-time input only: its text is read HERE and copied
-    into the sidecar, so no generated file ever references the source tree.
-
-    The animation file is also a FRESHNESS INPUT, returned in ``inputs`` so the
-    caller folds it into the source closure exactly like a vendor STEP read
-    through ``cadgen.read_step``. The sidecar carries a COPY of the module's
-    text, and the documented way to ship an edited clip is to re-run the
-    model — which only works if the edit makes the model stale. Without this
-    the ``.anim.js`` sat outside the gate: the model stayed ``current``, the
-    stale copy shipped, and the viewer kept playing the old clip through any
-    number of reloads."""
+    resolve against real geometry later in the tree build."""
     kinematics_def = getattr(defn, "kinematics", None)
     block = dict(kinematics_def.block) if kinematics_def is not None else None
-    animation = getattr(defn, "animation", None)
-    animation_source: str | None = None
-    inputs: list[Path] = []
-    if animation:
-        candidate = Path(animation)
-        resolved = (candidate if candidate.is_absolute() else script_path.parent / candidate).resolve()
-        if not resolved.is_file():
-            raise FileNotFoundError(
-                f"{_display_path(script_path)} animation module not found: {animation} "
-                "(animation= names a .js file beside the script; the declared "
-                "file must exist — there is no convention discovery)"
-            )
-        animation_source = resolved.read_text(encoding="utf-8")
-        inputs.append(resolved)
-    return _DeclaredKinematics(block=block, animation_source=animation_source, inputs=tuple(inputs))
+    return _DeclaredKinematics(block=block)
 
 
 def _normalize_step_payload(
@@ -550,14 +524,8 @@ def _run_script_generator_body(
         payload = _normalize_step_payload(raw_payload, script_path=spec.script_path)
         if spec.step_path is None:
             raise RuntimeError(f"{spec.source_ref} has no configured STEP output")
-        # Kinematics + animation text (validated at decoration);
-        # they ride the scene into the sidecar exactly like provenance does.
-        # Resolved BEFORE the closure is captured, because the declared
-        # animation file is one of its inputs: the sidecar ships a copy of
-        # that file's text, so an edit to it must make the model stale.
-        declared = _resolve_declared_kinematics(
-            getattr(generator, "__cadgen_model__", None), script_path=spec.script_path
-        )
+        # Kinematics (validated at decoration) rides the scene into the sidecar.
+        declared = _resolve_declared_kinematics(getattr(generator, "__cadgen_model__", None))
         # Record paths relative to the model folder so the assembly.json stays
         # portable. The base is the GENERATOR's folder, never the output's:
         # with an explicit `--write <path>` the step_path moves to the output
@@ -569,7 +537,7 @@ def _run_script_generator_body(
         # that executed (hashed AT execution), and the data files the run declared.
         from cadgen.store.closure import build_closure
 
-        for read_path in [*read_files, *declared.inputs]:
+        for read_path in read_files:
             executed_hashes.note(read_path)
         # Every child the body called, with the tree it resolved to. Waits for
         # any child job the body never forced (called and discarded): its
@@ -578,7 +546,7 @@ def _run_script_generator_body(
         store_closure = build_closure(
             spec.script_path,
             executed=executed_hashes.hashes,
-            discovered_inputs=[*read_files, *declared.inputs],
+            discovered_inputs=read_files,
             children=[child for child, _tree in child_trees],
         )
         source_closure = PythonSourceClosure(
@@ -595,7 +563,6 @@ def _run_script_generator_body(
         )
         if declared.block:
             generated_scene.kinematics = declared.block
-        generated_scene.animation_source = declared.animation_source
         # Children pinned by the body's calls — recorded from the CALLS, never
         # derived from the tree's links (a modified child is still a dependency).
         generated_scene.store_children = [

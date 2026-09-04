@@ -1,5 +1,5 @@
-// moonwatch.anim.js — choreography for the moonwatch chronograph assembly.
-// Declared by `@step(animation="moonwatch.anim.js")`; the TEXT of this file is
+// moonwatch.step.js — choreography for the moonwatch chronograph assembly.
+// Declared by `@step(animation="moonwatch.step.js")`; the TEXT of this file is
 // copied into STEP/moonwatch.step.json at build.
 //
 // This is the half of the retired `moonwatch.params.js` sidecar that is NOT
