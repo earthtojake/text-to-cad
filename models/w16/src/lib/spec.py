@@ -32,6 +32,15 @@ import math
 from dataclasses import dataclass
 
 # ---------------------------------------------------------------------------
+# Presentation
+# ---------------------------------------------------------------------------
+
+# The museum section: bank-1 statics are cut for x > SECTION_X (see geo.py);
+# moving parts are never cut. Every system model reads this one flag, so the
+# whole engine is sectioned or whole together.
+SECTIONED = True
+
+# ---------------------------------------------------------------------------
 # Bottom end
 # ---------------------------------------------------------------------------
 

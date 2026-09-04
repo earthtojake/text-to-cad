@@ -6,7 +6,7 @@ Read this file when the user requests STL, 3MF, or native GLB output files from 
 
 STL, 3MF, and native GLB are mesh exports, not substitutes for STEP. Validate the primary CAD geometry first, then export the requested formats. Do not treat exported mesh renders as CAD validation; inspect and snapshot the primary model per the standard workflow.
 
-Native GLB exports are ordinary glTF 2.0 binary files for external tools: Y-up, with one material per distinct part/face color. Do not confuse them with the CAD Viewer render artifact — the render package directory in the user-level store (`~/.cache/cadgen/packages/<stepHash>-v<N>/`: an `assembly.json` descriptor plus a `components/` dir of content-addressed exact-geometry components) — which the model script builds and a mesh door never writes.
+Native GLB exports are ordinary glTF 2.0 binary files for external tools: Y-up, with one material per distinct part/face color. Do not confuse them with what the CAD Viewer renders from — the model's result tree in the store (`~/.cache/cadgen`: content-addressed exact-geometry components plus links to child trees), which every build writes and a mesh door never does.
 
 ## Declare the exports the model always has
 
@@ -28,7 +28,27 @@ if __name__ == "__main__":
     bracket()
 ```
 
-`python models/bracket.py` then writes the STEP **and** the declared meshes, and heals any of them that were deleted — no separate export step. The declarations are recorded in the document's sidecar, which is where the mesh doors read them from.
+`python models/bracket.py` then writes the STEP **and** the declared meshes, and rewrites any of them that were deleted or edited — no separate export step (a declared output is part of the model's freshness gate). The declarations are recorded in the document's sidecar, which is where the mesh doors read them from.
+
+## A model with no STEP
+
+A model's outputs are whatever its decorators declare, and STEP is one output kind, not the primary. A function decorated with `@stl`, `@glb` or `@threemf` alone — no `@step` — is a full model: the same tree and record in the store, the same build, the same parallel children, the same no-op when nothing changed, the same composition (`spacer()` inside another model's body links its tree like any child). It writes its declared meshes and no `.step` (and no sidecar). Use it for a print-only part or a render asset; there is no requirement to write a STEP. Review it with its format's snapshot door (`cadgen stl snapshot STL/spacer.stl tmp/spacer.png`); `cadgen store why spacer.py` explains its freshness exactly as for a STEP model.
+
+```python
+from cadgen import build123d as bd
+from cadgen import stl
+
+
+@stl(out="STL/spacer.stl", mesh_tolerance=4e-4)
+def spacer():
+    return bd.Cylinder(6, 3) - bd.Cylinder(2.5, 3)
+
+
+if __name__ == "__main__":
+    spacer()
+```
+
+Stacking order stays neutral: add `@step` above or below later and the same declarations ride along; the `.step` then joins the outputs.
 
 A decorator `out=` is the one intentional exception to native path semantics: on `@stl`, `@glb` and `@threemf` — exactly as on `@step` — a relative `out=` resolves relative to the SCRIPT, not the working directory. That is what makes a project relocatable: the declaration travels with the model and produces the same layout whatever directory the script is run from. Ad-hoc OUT arguments on the doors are cwd-relative instead, because they are one-shot and never persisted.
 
@@ -56,7 +76,7 @@ cadgen 3mf build STEP/model.step
 cadgen glb build STEP/model.step
 ```
 
-An output the model already has at the requested tolerances is reported `current` and not rewritten. `--force` re-exports it anyway; it never rebuilds the model itself — rerun `python <script>` for that. A document that has drifted from its script is refused by name rather than rebuilt.
+An output the model already has at the requested tolerances is reported `current` and not rewritten. `--force` re-exports it anyway; it never rebuilds the model itself — rerun `python <script>` for that. The door reads the document's tree by the file's content hash and compiles one from the bytes if the store has none; whether the document is behind its script is not the door's question (`cadgen store why`), so no document is ever refused.
 
 An imported STEP/STP file declares nothing, so give it an explicit OUT; its part/assembly kind is inferred automatically:
 

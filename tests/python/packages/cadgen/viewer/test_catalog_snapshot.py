@@ -35,7 +35,7 @@ from pathlib import Path
 
 from cadgen.viewer.backend import LocalAssetBackend
 from cadgen.viewer.scanner import scan_cad_directory
-from cadgen.viewer.store_paths import CACHE_SCHEMA_VERSION, store_packages_dir
+from tests.python.support.store_fixtures import seed_result
 
 # Characters NTFS refuses in a filename. POSIX writes every fixture name below;
 # Windows skips exactly the names its filesystem cannot represent, and the
@@ -51,7 +51,7 @@ def _name_can_exist_here(name: str) -> bool:
 
 
 def _build_fixture(root: str, cache: str) -> None:
-    os.makedirs(os.path.join(cache, "packages"), exist_ok=True)
+    os.makedirs(cache, exist_ok=True)
     os.environ["CADGEN_CACHE_DIR"] = cache
 
     def write(rel, text):
@@ -63,18 +63,14 @@ def _build_fixture(root: str, cache: str) -> None:
         return path
 
     def package(rel, descriptor, *, raw=None, as_dir=False):
-        digest = hashlib.sha256(Path(root, rel).read_bytes()).hexdigest()
-        package_dir = os.path.join(store_packages_dir(), f"{digest}-v{CACHE_SCHEMA_VERSION}")
-        os.makedirs(package_dir, exist_ok=True)
-        Path(package_dir, "c0.surf").write_bytes(b"SURF\x00")
-        target = os.path.join(package_dir, "assembly.json")
-        if as_dir:
-            os.makedirs(target, exist_ok=True)
+        """Seed ``root/<rel>``'s result. A descriptor that is not a result
+        (raw text, a directory, a foreign kind) seeds NOTHING: in the store a
+        result is a tree or it does not exist, so those rows read as unbuilt."""
+        if raw is not None or as_dir or not isinstance(descriptor, dict):
             return
-        Path(target).write_text(
-            raw if raw is not None else json.dumps(descriptor, separators=(",", ":")),
-            encoding="utf-8",
-        )
+        if descriptor.get("kind") != "assembly-package":
+            return
+        seed_result(Path(root, rel), descriptor)
 
     valid = {"kind": "assembly-package", "components": {"c0": {"surf": "c0.surf"}}}
 

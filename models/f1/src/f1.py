@@ -4,9 +4,11 @@ An original design. No team, livery, logo or sponsor marks. Three materials
 only: carbon, exposed metal, and one vermillion accent.
 
 Coordinates, package dimensions, suspension hardpoints, the DRS four-bar and
-the material palette all live in `f1_parts/spec.py`; the shared surface
-vocabulary (airfoil family, blade family, body lofts) lives in
-`f1_parts/lib.py`. Read those two before changing anything here.
+the material palette all live in `lib/spec.py`; the shared surface vocabulary
+(airfoil family, blade family, body lofts) lives in `lib/surfaces.py`. Read
+those two before changing anything here. Every child below is its own model
+file under `src/` (`front_wing.py`, `corner_fl.py`, ...), built from `lib/`
+and composed here by CALLING it.
 
 --------------------------------------------------------------------------
 OCCURRENCE ORDER IS FROZEN
@@ -32,76 +34,76 @@ module's occurrence table in the same change.
 """
 
 from __future__ import annotations
-from cadgen import step
-
 from cadgen import build123d as bd
-
+from cadgen import step
 from cadgen.assembly import AssemblyHelper
 
-from lib import (
-    cockpit,
-    details,
-    drivetrain,
-    engine_cover,
-    floor,
-    front_wing,
-    monocoque,
-    nose,
-    power_unit,
-    rear_wing,
-    sidepods,
-    suspension,
-    wheels,
-)
+from airbox import airbox
+from beam_wing import beam_wing
+from cockpit import cockpit
+from cooling import cooling
+from corner_fl import corner_fl
+from corner_fr import corner_fr
+from corner_rl import corner_rl
+from corner_rr import corner_rr
+from details import details
+from diffuser import diffuser
+from drivetrain import drivetrain
+from drs_actuator import drs_actuator
+from drs_flap import drs_flap
+from engine_cover import engine_cover
+from floor import floor
+from front_wing import front_wing
+from halo import halo
+from monocoque import monocoque
+from nose import nose
+from power_unit import power_unit
+from rear_wing import rear_wing
+from sidepod_left import sidepod_left
+from sidepod_right import sidepod_right
+from steering_rack import steering_rack
+from suspension_front import suspension_front
+from suspension_rear import suspension_rear
+from track_rod_left import track_rod_left
+from track_rod_right import track_rod_right
 
 
 def assemble() -> bd.Compound:
+    """Every child is a sibling MODEL under `src/`, added in the frozen order.
+
+    Calling a model inside this body submits its build (if stale) to the pool
+    and returns at once; the car links each child's tree, so a part edit is
+    picked up by rerunning this script and nothing else is rebuilt.
+    """
     asm = AssemblyHelper("f1_concept_car")
-
-    # --- front aero ------------------------------------------------------
-    asm.add(front_wing.build_front_wing(), "front_wing")
-    asm.add(nose.build_nose(), "nose")
-
-    # --- survival cell / cockpit -----------------------------------------
-    asm.add(monocoque.build_monocoque(), "monocoque")
-    asm.add(monocoque.build_halo(), "halo")
-    asm.add(cockpit.build_cockpit(), "cockpit")
-
-    # --- bodywork panels (these lift away in the strip-down) --------------
-    asm.add(sidepods.build_sidepod("left"), "sidepod_left")
-    asm.add(sidepods.build_sidepod("right"), "sidepod_right")
-    asm.add(engine_cover.build_engine_cover(), "engine_cover")
-    asm.add(engine_cover.build_airbox(), "airbox")
-    asm.add(floor.build_floor(), "floor")
-    asm.add(floor.build_diffuser(), "diffuser")
-
-    # --- power unit and drivetrain ---------------------------------------
-    asm.add(sidepods.build_cooling(), "cooling")
-    asm.add(power_unit.build_power_unit(), "power_unit")
-    asm.add(drivetrain.build_drivetrain(), "drivetrain")
-
-    # --- rear aero --------------------------------------------------------
-    asm.add(rear_wing.build_rear_wing(), "rear_wing")
-    asm.add(rear_wing.build_drs_flap(), "drs_flap")
-    asm.add(rear_wing.build_drs_actuator(), "drs_actuator")
-    asm.add(rear_wing.build_beam_wing(), "beam_wing")
-
-    # --- suspension -------------------------------------------------------
-    asm.add(suspension.build_suspension_front(), "suspension_front")
-    asm.add(suspension.build_suspension_rear(), "suspension_rear")
-
-    # --- corners (wheels, brakes, uprights) -------------------------------
-    asm.add(wheels.build_corner("fl"), "corner_fl")
-    asm.add(wheels.build_corner("fr"), "corner_fr")
-    asm.add(suspension.build_track_rod("left"), "track_rod_left")
-    asm.add(suspension.build_track_rod("right"), "track_rod_right")
-    asm.add(wheels.build_corner("rl"), "corner_rl")
-    asm.add(wheels.build_corner("rr"), "corner_rr")
-    asm.add(suspension.build_steering_rack(), "steering_rack")
-
-    # --- detail -----------------------------------------------------------
-    asm.add(details.build_details(), "details")
-
+    asm.add(front_wing(), "front_wing")
+    asm.add(nose(), "nose")
+    asm.add(monocoque(), "monocoque")
+    asm.add(halo(), "halo")
+    asm.add(cockpit(), "cockpit")
+    asm.add(sidepod_left(), "sidepod_left")
+    asm.add(sidepod_right(), "sidepod_right")
+    asm.add(engine_cover(), "engine_cover")
+    asm.add(airbox(), "airbox")
+    asm.add(floor(), "floor")
+    asm.add(diffuser(), "diffuser")
+    asm.add(cooling(), "cooling")
+    asm.add(power_unit(), "power_unit")
+    asm.add(drivetrain(), "drivetrain")
+    asm.add(rear_wing(), "rear_wing")
+    asm.add(drs_flap(), "drs_flap")
+    asm.add(drs_actuator(), "drs_actuator")
+    asm.add(beam_wing(), "beam_wing")
+    asm.add(suspension_front(), "suspension_front")
+    asm.add(suspension_rear(), "suspension_rear")
+    asm.add(corner_fl(), "corner_fl")
+    asm.add(corner_fr(), "corner_fr")
+    asm.add(track_rod_left(), "track_rod_left")
+    asm.add(track_rod_right(), "track_rod_right")
+    asm.add(corner_rl(), "corner_rl")
+    asm.add(corner_rr(), "corner_rr")
+    asm.add(steering_rack(), "steering_rack")
+    asm.add(details(), "details")
     return asm.build()
 
 

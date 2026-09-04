@@ -14,9 +14,12 @@ Read this whole file before touching a module. Then read `src/lib/spec.py`
   `references/build123d-modeling.md` (READ the traps section: `align=None`,
   `.located()` vs `.moved()`, multi-tool booleans, tangent booleans, fillets
   last, `Plane.rotated` is world-axes, colour is linear unless via `srgb()`).
-- Build the whole engine: `python src/w16.py` (unchanged modules are cached by
-  `memo`; a full cold build is ~90 s, your module's cost adds to it). Other
-  agents build concurrently; a "waiting for another run" line is normal.
+- Build the whole engine: `python src/w16.py`. Each system is its own model
+  (`src/<system>.py` wraps `lib/<system>.build`), so the engine builds only the
+  systems whose sources changed, in parallel, and links the rest from the
+  store; `python src/<system>.py` builds yours alone (the engine picks it up on
+  its next run). `cadgen store why src/w16.py` says which system is stale and
+  why. Other agents build concurrently; builds never wait on one another.
 - Never edit `spec.py`, `kin.py`, `geo.py`, `palette.py`, `castings.py`,
   `fasteners.py`, `collide.py`, `animgen.py`, `w16.py` without being told to.
   Add helpers inside your own module.
@@ -32,7 +35,8 @@ Read this whole file before touching a module. Then read `src/lib/spec.py`
   cam-cover joint at 386.
 - Every module authors geometry DIRECTLY in the engine frame and returns a
   flat list of labelled, coloured leaf solids (`palette.style(shape, label,
-  colour)`); groups are made by `w16.py`. Labels are unique, lower_snake,
+  colour)`); the system model `src/<system>.py` wraps that list as one
+  labelled group and `w16.py` links the groups. Labels are unique, lower_snake,
   `part:qualifier` (`turbo_housing:1_compressor`). Colour every leaf.
 
 ## Four surface languages — keep them distinct

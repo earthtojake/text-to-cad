@@ -24,6 +24,7 @@ exits on its own timer.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import multiprocessing.connection as mpc
@@ -32,6 +33,7 @@ import secrets
 import stat
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 # Bump when the wire format changes. It is part of the address, so mismatched peers never
@@ -51,12 +53,14 @@ def _family() -> str:
 
 
 def state_dir() -> Path:
-    """Where the address and the auth key live.
+    """Where the address, the auth key and the log live.
 
-    Windows has no ``/tmp`` and no TMPDIR; gettempdir() answers correctly on every
-    platform, and the viewer registry already resolves its own directory the same way.
+    ONE derivation, owned by ``cadgen.coordination.paths`` (stdlib-only, imported by the
+    viewer too); this is the daemon's spelling of it.
     """
-    return Path(tempfile.gettempdir()) / "cadgen-daemon"
+    from cadgen.coordination.paths import state_dir as _state_dir
+
+    return _state_dir()
 
 
 def address_for(key: str) -> str:
@@ -69,6 +73,18 @@ def address_for(key: str) -> str:
     if os.name == "nt":
         return rf"\\.\pipe\cadgen-daemon-v{PROTOCOL}-{key}"
     return str(state_dir() / f"cadgen-daemon-v{PROTOCOL}-{key}.sock")
+
+
+def private_address(key: str) -> str:
+    """An address for a broker that lives exactly as long as one process.
+
+    Not under :func:`state_dir`: a test's or a checkout's state directory can be deep
+    enough to push a Unix socket path past its ~104-byte ceiling, and nothing needs to
+    find this address on disk -- the process hands it to its children in their env.
+    """
+    if os.name == "nt":
+        return rf"\\.\pipe\cadgen-b{PROTOCOL}-{key}"
+    return str(Path(tempfile.gettempdir()) / f"cadgen-b{PROTOCOL}-{key}.sock")
 
 
 def _authkey_path(key: str) -> Path:
@@ -84,23 +100,118 @@ def read_authkey(key: str) -> bytes | None:
 
 
 def ensure_authkey(key: str) -> bytes:
-    """Create the shared secret if absent, and return it.
+    """Create the shared secret if absent, and return it -- atomically.
 
     Written before the listener exists, so a client that finds an address always finds a
-    key to go with it. 0600 on POSIX; on Windows the per-user temp directory is already
-    ACL'd to the owner, and the pipe itself is the real access control.
+    key to go with it. Twenty clients starting at once all call this; the key must be
+    created exactly once or the daemon and half its clients hold different secrets and
+    every handshake between them fails. So the secret is written to a private temp file
+    and LINKED into place: ``os.link`` is create-if-absent on every platform, the loser
+    of a race reads what the winner linked. 0600 on POSIX; on Windows the per-user temp
+    directory is already ACL'd to the owner, and the pipe itself is the real access
+    control.
     """
     path = _authkey_path(key)
     existing = read_authkey(key)
     if existing:
         return existing
     path.parent.mkdir(parents=True, exist_ok=True)
-    with os.fdopen(os.open(path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600), "wb") as handle:
-        secret = secrets.token_hex(_AUTHKEY_BYTES).encode("ascii")
+    secret = secrets.token_hex(_AUTHKEY_BYTES).encode("ascii")
+    temp = path.with_name(f"{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
+    with os.fdopen(os.open(temp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600), "wb") as handle:
         handle.write(secret)
+    try:
+        os.link(temp, path)
+    except FileExistsError:
+        # Someone else created it first; theirs is THE key.
+        for _ in range(200):
+            existing = read_authkey(key)
+            if existing:
+                secret = existing
+                break
+            time.sleep(0.005)
+    finally:
+        with contextlib.suppress(OSError):
+            temp.unlink()
     if os.name != "nt":
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        with contextlib.suppress(OSError):
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
     return secret
+
+
+class SingletonLock:
+    """An exclusive, non-blocking, process-lifetime lock on a small file.
+
+    The one lock cadgen keeps. It is not a build lock (STORE.md §No locks): it makes the
+    daemon a SINGLETON per identity, so two daemons starting at once cannot both bind, and
+    it elects the one client that spawns a daemon when none is running. The kernel releases
+    it when the holder dies -- no pid file, no liveness inference. POSIX ``flock``; Windows
+    ``msvcrt.locking`` on the first byte (mandatory there, which is fine for a file whose
+    only content is the lock).
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self._fd: int | None = None
+
+    def acquire(self) -> bool:
+        """True if this process now holds the lock; False if another process does."""
+        if self._fd is not None:
+            return True
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(self.path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+            return False
+        self._fd = fd
+        return True
+
+    @property
+    def held(self) -> bool:
+        return self._fd is not None
+
+    def release(self) -> None:
+        fd, self._fd = self._fd, None
+        if fd is None:
+            return
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                with contextlib.suppress(OSError):
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
+def _lock_name(address: str) -> str:
+    return hashlib.sha256(str(address).encode("utf-8")).hexdigest()[:16]
+
+
+def daemon_lock(address: str) -> SingletonLock:
+    """The lock a daemon holds for its whole life: one daemon per ADDRESS. Keyed by
+    the socket, not the identity, so a private socket (a test's, a pilot's) is a
+    private daemon even when it serves the same cadgen as the user's."""
+    return SingletonLock(state_dir() / f"cadgen-daemon-v{PROTOCOL}-{_lock_name(address)}.lock")
+
+
+def spawn_lock(address: str) -> SingletonLock:
+    """The lock the ONE spawning client holds while it starts the daemon for ``address``."""
+    return SingletonLock(state_dir() / f"cadgen-daemon-v{PROTOCOL}-{_lock_name(address)}.spawn.lock")
 
 
 def forget_authkey(key: str) -> None:
@@ -198,11 +309,19 @@ class Server:
         self._closed = False
 
     def accept(self) -> Channel | None:
-        """The next client, or None once the listener has been closed."""
-        try:
-            return Channel(self._listener.accept())
-        except (OSError, EOFError, mpc.AuthenticationError):
-            return None
+        """The next client, or None once the listener has been closed.
+
+        A client that fails the authkey handshake (a stale key, a stranger) is ITS
+        failure, not the listener's: the daemon keeps accepting. Before this, one bad
+        handshake read as "listener closed" and took the whole daemon down.
+        """
+        while True:
+            try:
+                return Channel(self._listener.accept())
+            except (OSError, EOFError, mpc.AuthenticationError):
+                if self._closed:
+                    return None
+                time.sleep(0.01)  # a rejected peer; never a busy loop on a broken listener
 
     def close(self) -> None:
         if self._closed:
@@ -241,6 +360,9 @@ __all__ = [
     "forget_authkey",
     "identity_digest",
     "keys_match",
+    "SingletonLock",
+    "daemon_lock",
+    "spawn_lock",
     "read_authkey",
     "state_dir",
     "supported",

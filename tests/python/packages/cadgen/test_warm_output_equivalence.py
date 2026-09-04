@@ -110,6 +110,9 @@ def _run(argv: list[str], cwd: pathlib.Path, **env_extra) -> tuple[int, str]:
     output = re.sub(re.escape(str(cwd)), "<CWD>", proc.stdout + proc.stderr)
     output = re.sub(r"/private/var/folders/\S+", "<TMP>", output)
     output = re.sub(r"/(?:var|tmp)/\S*tmp\S+", "<TMP>", output)
+    # The build tree's JSONL transitions carry wall-clock elapsed times and, warm, arrive
+    # relayed through the daemon; they narrate the build and are not its output.
+    output = "".join(line for line in output.splitlines(keepends=True) if not line.startswith('{"model":'))
     return proc.returncode, output
 
 
@@ -148,7 +151,7 @@ def _manifest(root: pathlib.Path) -> dict[str, str]:
 
     Lock and progress files are transient scaffolding, not output.
     """
-    from cadgen.catalog import render_package_dir
+    from cadgen.catalog import result_view_dir
 
     out: dict[str, str] = {}
     for artifact in sorted(root.rglob("*")):
@@ -158,7 +161,7 @@ def _manifest(root: pathlib.Path) -> dict[str, str]:
         if artifact.suffix in {".step", ".stp", ".dxf"} or rel.endswith(".step.json"):
             out[rel] = _digest(artifact)
         if artifact.suffix in {".step", ".stp"}:
-            package = render_package_dir(artifact)
+            package = result_view_dir(artifact)
             if package.is_dir():
                 for entry in sorted(package.rglob("*")):
                     if entry.is_file():

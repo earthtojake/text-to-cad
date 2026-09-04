@@ -74,12 +74,6 @@ class CadSource:
         return self.script_path if self.script_path is not None else self.step_path
 
     @property
-    def render_package_path(self) -> Path | None:
-        if self.kind == "dxf" or self.entry_path is None:
-            return None
-        return render_package_dir(self.entry_path)
-
-    @property
     def generated_paths(self) -> tuple[Path, ...]:
         # FILE outputs only — the store package dir is deliberately absent:
         # two same-content documents legally SHARE one content-keyed package,
@@ -254,10 +248,10 @@ def normalize_cad_ref(raw_ref: str) -> str | None:
 
 
 def artifact_path_key(entry_path: Path) -> str:
-    """The model-path identity for locks, progress and freshness records:
+    """The model-path identity for progress records and unbuilt views:
     sha256 of the resolved artifact path, truncated. Path-keyed on purpose —
-    a lock must exclude two builds of the same MODEL while the content hash
-    they will produce is still unknown.
+    a build's progress must be findable while the content hash it will produce
+    is still unknown.
 
     A path that cannot be resolved (an embedded NUL, a symlink loop) keys on
     its lexical absolute form rather than raising: the viewer server derives
@@ -333,39 +327,55 @@ def seed_artifact_hash(entry_path: Path, digest: str) -> None:
     _remember_artifact_hash(str(resolved), stat.st_mtime_ns, stat.st_size, digest)
 
 
-def package_dir_for_hash(step_hash: str) -> Path:
-    """The store-primary render-package directory for a document's content
-    hash: ``<cache>/packages/<hash>-v<CACHE_SCHEMA_VERSION>``. One package per
-    document, whichever producer built it; the version salt retires whole
-    generations on schema bumps (``cadgen cache gc`` sweeps the orphans)."""
-    from cadgen._internal.cache_paths import packages_dir
-    from cadgen._internal.cache_schema import CACHE_SCHEMA_VERSION
+def result_tree_for(entry_path: Path) -> str | None:
+    """The tree behind a CAD artifact on disk, or None — found by the file's BYTES.
 
-    return packages_dir() / f"{step_hash}-v{CACHE_SCHEMA_VERSION}"
+    ``index/document/<sha256(bytes)>`` → tree (STORE.md §2, the law): a reader
+    never opens a record to find an artifact. The same file copied anywhere
+    resolves to the same tree; a file the store has no tree for answers None
+    (a door then compiles it: ``cadgen._internal.doors.document_tree``). The
+    hash is memoized by (path, mtime_ns, size), so a status poll does not
+    re-read the file. The tree's flattened view (``cadgen.store.trees.flatten``)
+    is what every reader that used to open a package directory reads now."""
+    from cadgen.store.objects import has_object
+    from cadgen.store.records import tree_for_document_hash
 
-
-def render_package_dir(entry_path: Path) -> Path:
-    """The render package for a CAD artifact file, resolved by CONTENT: the
-    file's bytes are hashed (memoized) and looked up in the store. A missing
-    or unreadable file resolves to a deterministic never-created path, so
-    every existence-checking caller answers "no package" without special
-    cases. Producers never write here blindly — generation and import write
-    through :func:`package_dir_for_hash` with the hash they just produced."""
-    digest = artifact_file_hash(entry_path)
-    if digest is None:
-        from cadgen._internal.cache_paths import packages_dir
-
-        return packages_dir() / f"unbuilt-{artifact_path_key(entry_path)}"
-    return package_dir_for_hash(digest)
+    digest = artifact_file_hash(Path(entry_path))
+    if not digest:
+        return None
+    tree = tree_for_document_hash(digest)
+    return tree if tree and has_object(tree) else None
 
 
-def coordination_scope(entry_path: Path) -> Path:
-    """The lock/progress scope for builds of this model: a path-keyed name
-    under the cache root's ``locks/`` tier. Never created as a directory —
-    the coordination layer derives dot-named sibling files from it."""
-    from cadgen._internal.cache_paths import locks_dir
+def result_descriptor_for(entry_path: Path) -> dict | None:
+    """The flattened descriptor (legacy shape, component refs as object hashes)
+    behind a CAD artifact on disk, or None when it has no current tree."""
+    from cadgen.store.trees import flatten
 
-    return locks_dir() / artifact_path_key(entry_path)
+    tree = result_tree_for(entry_path)
+    return flatten(tree) if tree else None
+
+
+def result_view_dir(entry_path: Path) -> Path:
+    """A package-shaped VIEW (a per-process temporary directory) of the tree
+    behind a CAD artifact, for consumers that need files on disk — the Node
+    exporters, the selector-index composer, the snapshot page. When the artifact
+    has no current tree, a deterministic never-created path, so existence checks
+    answer "no result" without special cases. The store itself holds no result
+    directories (``cadgen.store.view``)."""
+    from cadgen.store.view import view_dir_for, views_root
+
+    tree = result_tree_for(entry_path)
+    if tree is None:
+        return views_root() / f"unbuilt-{artifact_path_key(entry_path)}"
+    return view_dir_for(tree)
+
+
+def build_scope(entry_path: Path) -> str:
+    """The progress scope for builds of this model: a path-keyed NAME (never a
+    directory). ``cadgen.coordination.paths`` derives the advisory progress
+    record from it; the CAD Viewer derives the same name to find that record."""
+    return artifact_path_key(entry_path)
 
 
 def _iter_python_sources(root: Path) -> tuple[CadSource, ...]:

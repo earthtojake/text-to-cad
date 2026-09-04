@@ -93,9 +93,9 @@ class StepBuildsWithoutNodeTests(unittest.TestCase):
             payload = json.loads(proc.stdout.strip().splitlines()[-1])
             self.assertTrue(payload.get("ok"))
 
-            from cadgen.catalog import render_package_dir
+            from cadgen.catalog import result_view_dir
 
-            candidate = render_package_dir(root / "block.step")
+            candidate = result_view_dir(root / "block.step")
             packages = [candidate] if candidate.is_dir() else []
             self.assertTrue(packages, f"No render package was written under {root}")
 

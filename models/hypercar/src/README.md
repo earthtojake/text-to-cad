@@ -2,17 +2,33 @@
 
 | Script          | Artifact           | Description                                    |
 |-----------------|--------------------|------------------------------------------------|
-| hypercar.py     | STEP/hypercar.step | Mid-engine hypercar, full assembly (13 systems) |
+| hypercar.py     | STEP/hypercar.step | Mid-engine hypercar, full assembly: the 13 system models below, linked in occurrence order |
+| body.py | STEP/body.step | `o1.1` painted panels, pillars, aero skins |
+| glazing.py | STEP/glazing.step | `o1.2` DLO glass + lamp lenses |
+| lighting.py | STEP/lighting.step | `o1.3` lamp internals + light signature |
+| chassis.py | STEP/chassis.step | `o1.4` monocoque tub, subframes, crash structures |
+| suspension_front.py | STEP/suspension_front.step | `o1.5` wishbones, uprights, pushrods, rockers, coilovers |
+| suspension_rear.py | STEP/suspension_rear.step | `o1.6` the same, rear |
+| wheels.py | STEP/wheels.step | `o1.7` rims, tyres |
+| brakes.py | STEP/brakes.step | `o1.8` discs, calipers, hubs |
+| powertrain.py | STEP/powertrain.step | `o1.9` engine, intake, exhaust, transaxle, driveshafts |
+| interior.py | STEP/interior.step | `o1.10` seats, wheel, dash, console, pedals, door cards |
+| aero.py | STEP/aero.step | `o1.11` splitter, diffuser, wing |
+| hinge.py | STEP/hinge.step | `o1.12` dihedral synchro-helix door mechanism |
+| details.py | STEP/details.step | `o1.13` mirrors, badges, filler, vents, fasteners |
 
-Build: `python src/hypercar.py`; unchanged models are no-ops. The build takes
-~50 s cold.
+Build: `python src/hypercar.py` builds the car and every stale system beneath
+it (in parallel, one worker each) and links their results; `python
+src/<system>.py` builds one system alone — the car does not pick it up until
+`hypercar.py` is rerun. Unchanged models are no-ops.
 
 ## Layout
 
-- `lib/` — the part builders, one module per system, plus `surfaces.py` (the
-  one master body surface every panel is cut from), `palette.py` (colours,
-  authored as sRGB hex) and `context.py` (the shared `group`/`style` helpers).
-  Plain modules: no `@step` lives here.
+- `lib/` — the part builders, one module per system (each `build()` returns
+  the system's labelled group; the model file of the same stem under `src/`
+  wraps it), plus `surfaces.py` (the one master body surface every panel is
+  cut from), `palette.py` (colours, authored as sRGB hex) and `context.py`
+  (the shared `group`/`style` helpers). Plain modules: no `@step` lives here.
 - `hypercar.anim.js` — choreography (the showcase tour, the door loop, the
   explode loop). Declared by `animation=` on the decorator; its text is copied
   into `STEP/hypercar.step.json`.

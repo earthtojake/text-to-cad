@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from dataclasses import replace
-import os
 from pathlib import Path
 from typing import Sequence
 
@@ -15,18 +14,14 @@ from cadgen._internal.step_scene import SelectorOptions
 from cadgen._internal.step_scene import adaptive_mesh_resolution_for_scene
 from cadgen.catalog import CadSource
 from cadgen.catalog import StepImportOptions
-from cadgen.catalog import cad_ref_from_dxf_path
-from cadgen.catalog import cad_ref_from_step_path
 from cadgen.catalog import find_source_by_path
 from cadgen.catalog import iter_cad_sources
 from cadgen.catalog import normalize_cad_ref
 from cadgen.catalog import normalize_source_ref
-from cadgen.catalog import render_package_dir
 from cadgen.cli_logging import CliLogger
 from cadgen.cli_progress import cli_progress_line
 from cadgen.metadata import GeneratorMetadata
 from cadgen.render import relative_to_cwd
-
 
 
 @dataclass(frozen=True)
@@ -42,7 +37,6 @@ class EntrySpec:
     generator_metadata: GeneratorMetadata | None = None
     dxf_path: Path | None = None
     step_export_path: Path | None = None
-    dxf_export_path: Path | None = None
     # ``None`` means "the caller specified nothing" — the adaptive resolver
     # supplies the value. A number is the caller's explicit choice, and
     # ``is not None`` IS the explicitness test; there is no separate flag and
@@ -53,6 +47,9 @@ class EntrySpec:
     # Declared mesh serializations, resolved to absolute paths. Tolerances
     # ``None`` inherit the model's policy at export time.
     mesh_exports: "tuple[ResolvedMeshExport, ...]" = ()
+    # False for a mesh-only model: ``step_path`` stays the LOGICAL document the
+    # store keys by, but it is never written and is not among the outputs.
+    step_output: bool = True
 
     @property
     def entry_path(self) -> Path | None:
@@ -130,12 +127,6 @@ class GeneratedStepResult:
     selector_bundle: SelectorBundle | None = None
 
 
-@dataclass(frozen=True)
-class _CliTargetSpec:
-    target: str
-    output_path: Path | None = None
-
-
 def _cli_progress_line(
     spec: EntrySpec,
     *,
@@ -158,72 +149,6 @@ def _display_path(path: Path) -> str:
         return resolved.as_posix()
 
 
-def _resolve_cli_output_path(
-    raw_output: str | Path | None,
-    *,
-    expected_suffixes: tuple[str, ...],
-    tool_name: str,
-    option_label: str = "--output",
-) -> Path | None:
-    if raw_output is None:
-        return None
-    value = str(raw_output).strip()
-    if not value:
-        raise ValueError(f"{tool_name} {option_label} must be a non-empty path")
-    # A backslash is the native separator on Windows and a legal FILENAME character on POSIX,
-    # so this guard has to be platform-specific. On POSIX it catches a Windows-shaped path
-    # typed on the wrong machine, which would otherwise silently create a file named
-    # ``C:\out.step`` in the working directory. On Windows it must not fire at all: this is a
-    # path the user typed for their own filesystem, and ``str(Path(...))`` produces
-    # backslashes there, so the absolute rule rejected EVERY native path given to --output or
-    # to a SOURCE=OUTPUT target.
-    #
-    # The same wording in ``cadgen.metadata`` is absolute on purpose and must stay that way:
-    # that one validates the ``out=`` path written into a checked-in ``@step`` decorator, which is
-    # read on every platform, so POSIX separators are the portable form there. One rule is
-    # about a user's disk, the other about a file in the repository.
-    if os.name != "nt" and "\\" in value:
-        raise ValueError(f"{tool_name} {option_label} must use POSIX '/' separators")
-    output_path = Path(value).expanduser()
-    resolved = output_path.resolve() if output_path.is_absolute() else (Path.cwd() / output_path).resolve()
-    if resolved.suffix.lower() not in expected_suffixes:
-        joined = " or ".join(expected_suffixes)
-        raise ValueError(f"{tool_name} {option_label} must end in {joined}")
-    return resolved
-
-
-def targets_include_output_pairs(targets: Sequence[str]) -> bool:
-    return any("=" in str(target or "") for target in targets)
-
-
-def _parse_cli_target_specs(
-    targets: Sequence[str],
-    *,
-    expected_suffixes: tuple[str, ...],
-    tool_name: str,
-) -> list[_CliTargetSpec]:
-    specs: list[_CliTargetSpec] = []
-    for target in targets:
-        target_text = str(target or "").strip()
-        if "=" not in target_text:
-            specs.append(_CliTargetSpec(target=target_text))
-            continue
-        raw_source, raw_output = target_text.split("=", 1)
-        source = raw_source.strip()
-        if not source:
-            raise ValueError(f"{tool_name} output pair must use SOURCE=OUTPUT")
-        output_path = _resolve_cli_output_path(
-            raw_output,
-            expected_suffixes=expected_suffixes,
-            tool_name=tool_name,
-            option_label="output pair",
-        )
-        if output_path is None:
-            raise ValueError(f"{tool_name} output pair must use SOURCE=OUTPUT")
-        specs.append(_CliTargetSpec(target=source, output_path=output_path))
-    return specs
-
-
 def _apply_step_options_to_spec(spec: EntrySpec, step_options: StepImportOptions) -> EntrySpec:
     if not step_options.has_metadata or spec.step_path is None:
         return spec
@@ -240,145 +165,11 @@ def _apply_step_options_to_spec(spec: EntrySpec, step_options: StepImportOptions
 
 def _spec_requests_extra_outputs(spec: EntrySpec) -> bool:
     """True when the target asks for an on-demand output beyond the render package
-    (an explicit ``out=`` on the model). An explicitly requested output must be produced
+    (a re-emitted document: ``cadgen step build IN OUT`` sets ``step_export_path``;
+    a model's own ``out=`` is its document, not an extra). Such an output must be produced
     even when the compose is current, so it defeats every no-op and reuse fast
     path."""
     return spec.step_export_path is not None
-
-
-def _spec_output_paths(spec: EntrySpec) -> tuple[Path, ...]:
-    paths: list[Path] = []
-    if spec.step_path is not None:
-        paths.append(spec.step_path)
-        paths.append(render_package_dir(spec.entry_path))
-    for path in (spec.dxf_path,):
-        if path is not None:
-            paths.append(path)
-    return tuple(path.resolve() for path in paths)
-
-
-def _validate_cli_output_override(
-    spec: EntrySpec,
-    *,
-    output_path: Path,
-    all_specs: Sequence[EntrySpec],
-    tool_name: str,
-) -> None:
-    resolved_output = output_path.resolve()
-    for candidate in all_specs:
-        if candidate.source_ref == spec.source_ref:
-            continue
-        if resolved_output in _spec_output_paths(candidate):
-            raise ValueError(
-                f"{tool_name} --output would overwrite another CAD output: "
-                f"{_display_path(output_path)} belongs to {candidate.source_ref}"
-            )
-
-
-def _validate_duplicate_cli_output_overrides(
-    output_paths: Sequence[Path | None],
-    *,
-    tool_name: str,
-) -> None:
-    seen: dict[Path, Path] = {}
-    for output_path in output_paths:
-        if output_path is None:
-            continue
-        resolved = output_path.resolve()
-        previous = seen.get(resolved)
-        if previous is not None:
-            raise ValueError(f"{tool_name} output path is used more than once: {_display_path(output_path)}")
-        seen[resolved] = output_path
-
-
-def _apply_step_output_overrides(
-    selected_specs: Sequence[EntrySpec],
-    *,
-    output_paths: Sequence[Path | None],
-    all_specs: Sequence[EntrySpec],
-    tool_name: str,
-) -> list[EntrySpec]:
-    if not any(output_path is not None for output_path in output_paths):
-        return list(selected_specs)
-    if len(output_paths) != len(selected_specs):
-        raise ValueError(f"{tool_name} output override count must match target count")
-    _validate_duplicate_cli_output_overrides(output_paths, tool_name=tool_name)
-    updated_specs: list[EntrySpec] = []
-    for spec, output_path in zip(selected_specs, output_paths, strict=True):
-        if output_path is None:
-            updated_specs.append(spec)
-            continue
-        if spec.source != "generated":
-            raise ValueError(f"{tool_name} output pairs can only be used with generated Python targets")
-        _validate_cli_output_override(spec, output_path=output_path, all_specs=all_specs, tool_name=tool_name)
-        updated_specs.append(
-            replace(
-                spec,
-                cad_ref=cad_ref_from_step_path(output_path),
-                display_name=_display_name_for_path(output_path),
-                step_path=output_path,
-                # A STEP output path is now a STEP *export* request (@step writes no STEP
-                # by default): write it on demand to the requested path.
-                step_export_path=output_path,
-            )
-        )
-    return updated_specs
-
-
-def _apply_dxf_output_overrides(
-    selected_specs: Sequence[EntrySpec],
-    *,
-    output_paths: Sequence[Path | None],
-    all_specs: Sequence[EntrySpec],
-    tool_name: str,
-) -> list[EntrySpec]:
-    if not any(output_path is not None for output_path in output_paths):
-        return list(selected_specs)
-    if len(output_paths) != len(selected_specs):
-        raise ValueError(f"{tool_name} output override count must match target count")
-    _validate_duplicate_cli_output_overrides(output_paths, tool_name=tool_name)
-    updated_specs: list[EntrySpec] = []
-    for spec, output_path in zip(selected_specs, output_paths, strict=True):
-        if output_path is None:
-            updated_specs.append(spec)
-            continue
-        if spec.source != "generated":
-            raise ValueError(f"{tool_name} output pairs can only be used with generated Python targets")
-        _validate_cli_output_override(spec, output_path=output_path, all_specs=all_specs, tool_name=tool_name)
-        updated_specs.append(
-            replace(
-                spec,
-                cad_ref=cad_ref_from_dxf_path(output_path),
-                display_name=_display_name_for_path(output_path),
-                # A DXF output path is a DXF *export* request (@dxf builds the drawing
-                # package by default): write it on demand to the requested path.
-                dxf_path=output_path,
-                dxf_export_path=output_path,
-            )
-        )
-    return updated_specs
-
-
-def _apply_dxf_output_override(
-    selected_specs: Sequence[EntrySpec],
-    *,
-    output_path: Path | None,
-    all_specs: Sequence[EntrySpec],
-    tool_name: str,
-) -> list[EntrySpec]:
-    if output_path is None:
-        return list(selected_specs)
-    if len(selected_specs) != 1:
-        raise ValueError(f"{tool_name} --output can only be used with exactly one target")
-    spec = selected_specs[0]
-    if spec.source != "generated":
-        raise ValueError(f"{tool_name} --output can only be used with generated Python targets")
-    return _apply_dxf_output_overrides(
-        selected_specs,
-        output_paths=[output_path],
-        all_specs=all_specs,
-        tool_name=tool_name,
-    )
 
 
 def _resolve_discovery_root(root: Path | str) -> Path:
@@ -427,6 +218,7 @@ def _entry_spec_from_source(source: CadSource) -> EntrySpec:
             script_path=script_path,
             step_path=step_path,
         ),
+        step_output=bool(getattr(generator_metadata, "step_output", True)),
     )
 
 

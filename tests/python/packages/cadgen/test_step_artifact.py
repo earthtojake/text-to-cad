@@ -68,11 +68,15 @@ class BuildStepArtifactTests(unittest.TestCase):
 
         self.assertTrue(payload.get("ok"), payload)
         self.assertEqual("part", payload.get("entryKind"))
-        package_path = Path(str(payload.get("packagePath")))
-        if not package_path.is_absolute():
-            package_path = Path.cwd() / package_path
-        self.assertTrue(package_path.is_dir(), payload)
-        self.assertTrue((package_path / "assembly.json").is_file(), payload)
+        # The payload names the RESULT — the tree these bytes compiled to — not a
+        # directory: nothing of the sort exists in the store.
+        from cadgen.store.objects import has_object
+        from cadgen.store.trees import get_tree
+
+        tree = str(payload.get("tree") or "")
+        self.assertTrue(tree, payload)
+        self.assertTrue(has_object(tree), payload)
+        self.assertTrue(get_tree(tree).get("components"), payload)
 
     def test_imported_step_build_accepts_kind_override(self) -> None:
         imported_step = self._materialize_imported_step()

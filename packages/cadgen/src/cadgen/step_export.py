@@ -906,11 +906,19 @@ def write_xcaf_doc_step_file(
     # time lives in the package descriptor, not the interchange file.
     header.SetTimeStamp(TCollection_HAsciiString("2000-01-01T00:00:00"))
 
-    with (logger.timed(f"write STEP file {output_path.name}") if logger is not None else nullcontext()):
+    # Atomic: OCCT writes in place, so write to a sibling temp file, canonicalize
+    # THAT, and rename it into place. A reader (the viewer, a concurrent build's
+    # gate) can then never observe a half-written document (STORE.md, precondition
+    # a of "No locks").
+    from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
+
+    final_path = output_path
+    output_path = output_path.with_name(f".{output_path.name}{temp_suffix()}")
+    with (logger.timed(f"write STEP file {final_path.name}") if logger is not None else nullcontext()):
         if writer.Write(os.fspath(output_path)) != IFSelect_ReturnStatus.IFSelect_RetDone:
-            raise RuntimeError(f"Failed to write STEP file: {output_path}")
+            raise RuntimeError(f"Failed to write STEP file: {final_path}")
     if not output_path.exists() or output_path.stat().st_size <= 0:
-        raise RuntimeError(f"STEP export did not create {output_path}")
+        raise RuntimeError(f"STEP export did not create {final_path}")
     if scan is not None:
         with (logger.timed("canonicalize style tail (in file)") if logger is not None else nullcontext()):
             canonicalized = _canonicalize_style_tail_in_file(output_path, scan)
@@ -939,7 +947,8 @@ def write_xcaf_doc_step_file(
                         # artifact, and a whole-file `wb` that dies midway leaves a
                         # half-written STEP where the tail rewrite above cannot.
                         write_bytes_atomic(output_path, canonical)
-    return step_file_hash(output_path)
+    replace_atomic(output_path, final_path)
+    return step_file_hash(final_path)
 
 
 def export_build123d_step_scene(

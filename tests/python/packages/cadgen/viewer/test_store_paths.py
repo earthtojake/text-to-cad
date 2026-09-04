@@ -1,10 +1,8 @@
-"""``cadgen.viewer.store_paths``: the server's string-typed view of cadgen's store layout.
+"""``cadgen.viewer.store_paths``: the server's string-typed view of cadgen's store.
 
-There used to be a parity suite here, comparing a local stdlib copy of the store
-layout against cadgen's over a matrix of environment states. The copy is gone --
-the adapter delegates to ``cadgen.catalog`` and friends -- so what remains to
-pin is the adapter's own contract: string results, per-call environment reads,
-and the content-keying properties the routes depend on.
+The adapter delegates to ``cadgen.catalog`` and ``cadgen.store``; what is pinned
+here is its own contract: string results, per-call environment reads, and the
+document -> record resolution the routes depend on.
 """
 
 from __future__ import annotations
@@ -15,8 +13,10 @@ import unittest
 from pathlib import Path
 
 from cadgen import catalog
-from cadgen._internal import cache_paths, source_sidecar
+from cadgen._internal import source_sidecar
 from cadgen.viewer import store_paths
+
+from tests.python.support.store_fixtures import seed_result
 
 
 class DelegatesToCadgen(unittest.TestCase):
@@ -42,125 +42,69 @@ class DelegatesToCadgen(unittest.TestCase):
             os.path.join(self.tmp.name, "alias", "sub", "gone.step"),
         ]
 
-    def test_the_tiers_are_cadgen_paths_as_strings(self) -> None:
-        self.assertEqual(store_paths.cadgen_cache_root_dir(), str(cache_paths.cache_root()))
-        self.assertEqual(store_paths.store_packages_dir(), str(cache_paths.packages_dir()))
-        self.assertEqual(store_paths.store_locks_dir(), str(cache_paths.locks_dir()))
-        self.assertEqual(store_paths.store_records_dir(), str(cache_paths.records_dir()))
-        for value in (
-            store_paths.cadgen_cache_root_dir(),
-            store_paths.store_packages_dir(),
-            store_paths.render_package_dir(self.probes[0]),
-        ):
-            self.assertIsInstance(value, str)
+    def test_the_roots_are_cadgen_paths_as_strings(self) -> None:
+        from cadgen.store.paths import store_root
+
+        self.assertEqual(store_paths.cadgen_cache_root_dir(), str(store_root()))
+        self.assertIsInstance(store_paths.build_scope(self.probes[0]), str)
 
     def test_every_key_matches_cadgen_for_real_aliased_and_missing_paths(self) -> None:
         for probe in self.probes:
             with self.subTest(probe=probe):
                 path = Path(probe)
+                self.assertEqual(store_paths.artifact_file_hash(probe), catalog.artifact_file_hash(path))
                 self.assertEqual(store_paths.artifact_path_key(probe), catalog.artifact_path_key(path))
-                self.assertEqual(store_paths.render_package_dir(probe), str(catalog.render_package_dir(path)))
-                self.assertEqual(store_paths.coordination_scope(probe), str(catalog.coordination_scope(path)))
-                self.assertEqual(
-                    store_paths.source_provenance_record_path(probe),
-                    str(source_sidecar.provenance_record_path(path)),
-                )
+                self.assertEqual(store_paths.build_scope(probe), catalog.build_scope(path))
                 self.assertEqual(
                     store_paths.source_sidecar_path(probe),
-                    str(source_sidecar.source_sidecar_path(path)),
+                    str(source_sidecar.source_sidecar_path(Path(os.path.abspath(probe)))),
                 )
-                self.assertEqual(store_paths.artifact_file_hash(probe), catalog.artifact_file_hash(path))
 
-    def test_the_constants_are_cadgens(self) -> None:
-        from cadgen._internal.cache_schema import CACHE_SCHEMA_VERSION
+    def test_an_unbuilt_document_has_no_tree(self) -> None:
+        self.assertIsNone(store_paths.result_tree(self.probes[0]))
+        self.assertIsNone(store_paths.result_descriptor("f" * 64))
 
-        self.assertEqual(store_paths.CACHE_SCHEMA_VERSION, CACHE_SCHEMA_VERSION)
-        self.assertEqual(store_paths.SOURCE_SIDECAR_SUFFIX, source_sidecar.SOURCE_SIDECAR_SUFFIX)
-        self.assertEqual(
-            store_paths.SOURCE_SIDECAR_SCHEMA_VERSION, source_sidecar.SOURCE_SIDECAR_SCHEMA_VERSION
-        )
-        self.assertEqual(
-            store_paths.package_dir_for_hash("f" * 64), str(catalog.package_dir_for_hash("f" * 64))
-        )
+    def test_a_seeded_document_resolves_to_its_tree_through_the_alias_too(self) -> None:
+        tree = seed_result(self.probes[0])
+        for probe in self.probes[:2]:
+            with self.subTest(probe=probe):
+                self.assertEqual(store_paths.result_tree(probe), tree)
+                descriptor = store_paths.result_descriptor(tree)
+                self.assertEqual(descriptor["kind"], "assembly-package")
+                (component,) = descriptor["components"].values()
+                self.assertTrue(component["surf"].startswith("components/"))
+                self.assertTrue(store_paths.component_object_present(component["surfObject"]))
+
+    def test_the_virtual_store_asset_serves_the_tree_and_its_components(self) -> None:
+        tree = seed_result(self.probes[0], surf=b"SURF\x00\x01")
+        body, content_type = store_paths.virtual_store_asset(f"{tree}/assembly.json")
+        self.assertEqual(content_type, "application/json")
+        self.assertIn(b'"kind": "assembly-package"', body)
+        descriptor = store_paths.result_descriptor(tree)
+        (component,) = descriptor["components"].values()
+        payload, content_type = store_paths.virtual_store_asset(f"{tree}/{component['surf']}")
+        self.assertEqual(Path(payload).read_bytes(), b"SURF\x00\x01")
+        self.assertEqual(content_type, "application/octet-stream")
+        for bad in ("", "/etc/hosts", f"{tree}/../x", f"{tree}/components/nope.surf", "zz/assembly.json"):
+            with self.subTest(bad=bad):
+                self.assertEqual(store_paths.virtual_store_asset(bad), (None, ""))
 
 
 class ReadPerCall(unittest.TestCase):
-    def test_the_cache_root_is_never_memoised(self):
-        # The suites set CADGEN_CACHE_DIR after the app is constructed and
-        # expect the very next call to observe it. A module-level constant
-        # would pass every other test in this file and fail this one.
+    """Never memoised: the suites flip ``CADGEN_CACHE_DIR`` after import."""
+
+    def test_the_root_follows_the_environment_on_every_call(self) -> None:
         previous = os.environ.get("CADGEN_CACHE_DIR")
         try:
             os.environ["CADGEN_CACHE_DIR"] = "/tmp/first"
-            self.assertEqual(store_paths.store_packages_dir(), os.path.join("/tmp/first", "packages"))
+            self.assertEqual(store_paths.cadgen_cache_root_dir(), "/tmp/first")
             os.environ["CADGEN_CACHE_DIR"] = "/tmp/second"
-            self.assertEqual(store_paths.store_packages_dir(), os.path.join("/tmp/second", "packages"))
+            self.assertEqual(store_paths.cadgen_cache_root_dir(), "/tmp/second")
         finally:
             if previous is None:
                 os.environ.pop("CADGEN_CACHE_DIR", None)
             else:
                 os.environ["CADGEN_CACHE_DIR"] = previous
-
-
-class ContentKeying(unittest.TestCase):
-    def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        previous = os.environ.get("CADGEN_CACHE_DIR")
-        os.environ["CADGEN_CACHE_DIR"] = os.path.join(self.tmp.name, "cache")
-        self.addCleanup(
-            lambda: os.environ.__setitem__("CADGEN_CACHE_DIR", previous)
-            if previous is not None
-            else os.environ.pop("CADGEN_CACHE_DIR", None)
-        )
-
-    def test_the_hash_memo_notices_a_content_change(self):
-        # The memo is keyed on (mtime_ns, size): a stale hit would need an edit
-        # preserving BOTH. Back-to-back same-size writes DO preserve both on
-        # Windows, whose file times advance in ~15ms ticks, so the edit is
-        # stamped forward explicitly -- the memo must honour mtime, not just size.
-        path = os.path.join(self.tmp.name, "a.step")
-        Path(path).write_bytes(b"one\n")
-        first = store_paths.artifact_file_hash(path)
-        stat = os.stat(path)
-        later = (stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000)
-        Path(path).write_bytes(b"two\n")
-        os.utime(path, ns=later)
-        second = store_paths.artifact_file_hash(path)
-        self.assertNotEqual(second, first)
-        # And a size change at an UNCHANGED mtime is noticed too.
-        Path(path).write_bytes(b"three\n")
-        os.utime(path, ns=later)
-        self.assertNotEqual(store_paths.artifact_file_hash(path), second)
-
-    def test_a_missing_file_hashes_to_none_rather_than_raising(self):
-        self.assertIsNone(store_paths.artifact_file_hash(os.path.join(self.tmp.name, "gone.step")))
-
-    def test_a_directory_named_like_a_step_hashes_to_none(self):
-        directory = os.path.join(self.tmp.name, "dir.step")
-        os.makedirs(directory)
-        self.assertIsNone(store_paths.artifact_file_hash(directory))
-
-    def test_a_path_that_cannot_be_resolved_still_keys_rather_than_raising(self):
-        # A request can name anything. An embedded NUL cannot be resolved by the
-        # filesystem; the server must answer "no package", not 500.
-        odd = os.path.join(self.tmp.name, "nul\x00.step")
-        key = store_paths.artifact_path_key(odd)
-        self.assertEqual(len(key), 24)
-        self.assertIsNone(store_paths.artifact_file_hash(odd))
-        self.assertTrue(os.path.basename(store_paths.render_package_dir(odd)).startswith("unbuilt-"))
-
-    def test_the_unbuilt_path_is_deterministic_and_never_created(self):
-        missing = os.path.join(self.tmp.name, "gone.step")
-        unbuilt = store_paths.render_package_dir(missing)
-        self.assertEqual(unbuilt, store_paths.render_package_dir(missing))
-        self.assertTrue(os.path.basename(unbuilt).startswith("unbuilt-"))
-        self.assertFalse(os.path.exists(unbuilt))
-
-    def test_the_path_key_is_24_hex_characters(self):
-        key = store_paths.artifact_path_key(os.path.join(self.tmp.name, "x.step"))
-        self.assertEqual(len(key), 24)
-        self.assertTrue(all(c in "0123456789abcdef" for c in key))
 
 
 if __name__ == "__main__":

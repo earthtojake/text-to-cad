@@ -4,7 +4,8 @@ Body panels are cut from one master surface (see ``lib/surfaces.py``), so
 highlight lines cross every shutline without a kink and every panel gap is a
 real constant-width gap.
 
-Assembly tree is grouped BY SYSTEM, which is also the occurrence order the
+Assembly tree is grouped BY SYSTEM — thirteen sibling models under ``src/``,
+composed here by CALLING them — which is also the occurrence order the
 ``hypercar.anim.js`` choreography targets:
 
     o1.1  body              painted panels, pillars, aero skins
@@ -28,27 +29,41 @@ import cadgen
 from cadgen import build123d as bd
 from cadgen import step
 
-from lib import aero, body, brakes, chassis, details, glazing, hinge
-from lib import interior, lighting, powertrain, suspension_front
-from lib import suspension_rear, wheels
+from aero import aero
+from body import body
+from brakes import brakes
+from chassis import chassis
+from details import details
+from glazing import glazing
+from hinge import hinge
+from interior import interior
+from lighting import lighting
+from powertrain import powertrain
+from suspension_front import suspension_front
+from suspension_rear import suspension_rear
+from wheels import wheels
+
+from lib import hinge as hinge_lib
 
 # Order here IS the occurrence order (o1.1, o1.2, ...) and the animation
 # module's refs depend on it -- do not reorder without updating
-# hypercar.anim.js.
+# hypercar.anim.js. Each entry is a sibling MODEL (src/<system>.py): calling it
+# inside the body builds it if stale, on its own worker, or loads it, and the
+# car links its tree.
 SYSTEMS = [
-    ("body", body),
-    ("glazing", glazing),
-    ("lighting", lighting),
-    ("chassis", chassis),
-    ("suspension_front", suspension_front),
-    ("suspension_rear", suspension_rear),
-    ("wheels", wheels),
-    ("brakes", brakes),
-    ("powertrain", powertrain),
-    ("interior", interior),
-    ("aero", aero),
-    ("hinge", hinge),
-    ("details", details),
+    body,
+    glazing,
+    lighting,
+    chassis,
+    suspension_front,
+    suspension_rear,
+    wheels,
+    brakes,
+    powertrain,
+    interior,
+    aero,
+    hinge,
+    details,
 ]
 
 
@@ -90,16 +105,16 @@ def _door_mates():
     mates = []
     for side in ("left", "right"):
         name = f"door_{side}"
-        sweep = hinge.DOOR_SWEEP_DEG * hinge.DOOR_SWEEP_SIGN[side]
+        sweep = hinge_lib.DOOR_SWEEP_DEG * hinge_lib.DOOR_SWEEP_SIGN[side]
         mates.append(cadgen.cylindrical(
             name,
             parent="#chassis",
             child=f"#door:{side}",
-            origin=hinge.HELIX_AXIS_ORIGIN[side],
-            direction=hinge.HELIX_AXIS_DIR[side],
+            origin=hinge_lib.HELIX_AXIS_ORIGIN[side],
+            direction=hinge_lib.HELIX_AXIS_DIR[side],
             limits={
                 "turn": (min(0.0, sweep), max(0.0, sweep)),
-                "travel": (0.0, hinge.CARRIER_TRAVEL),
+                "travel": (0.0, hinge_lib.CARRIER_TRAVEL),
             },
         ))
         for rider in DOOR_RIDERS:
@@ -118,8 +133,8 @@ KINEMATICS = {
             f"door_{side}.{dof}": value
             for side in ("left", "right")
             for dof, value in (
-                ("turn", hinge.DOOR_SWEEP_DEG * hinge.DOOR_SWEEP_SIGN[side]),
-                ("travel", hinge.CARRIER_TRAVEL),
+                ("turn", hinge_lib.DOOR_SWEEP_DEG * hinge_lib.DOOR_SWEEP_SIGN[side]),
+                ("travel", hinge_lib.CARRIER_TRAVEL),
             )
         }),
     ],
@@ -130,7 +145,7 @@ KINEMATICS = {
 @step(out="../STEP/hypercar.step", kinematics=KINEMATICS,
       animation="hypercar.anim.js")
 def hypercar():
-    groups = [module.build() for _name, module in SYSTEMS]
+    groups = [system() for system in SYSTEMS]      # thirteen builds, in parallel
     return bd.Compound(children=groups, label="mid_engine_hypercar")
 
 

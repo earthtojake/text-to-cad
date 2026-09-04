@@ -145,42 +145,45 @@ class CadGenerationTests(unittest.TestCase):
         def _fake(
             shape,
             *,
-            package_dir,
             root_name,
+            entry_kind,
             single_component=False,
             force=False,
-            provenance=None,
             progress=None,
+            extra=None,
         ):
+            from cadgen.store.objects import put_object
+            from cadgen.store.trees import put_tree
+
             calls.append(
                 {
                     "single_component": single_component,
                     "force": force,
-                    "provenance": provenance or {},
+                    "provenance": {"entryKind": entry_kind},
                     "root_name": root_name,
                 }
             )
-            package_dir.mkdir(parents=True, exist_ok=True)
-            (package_dir / "assembly.json").write_text(
-                json.dumps(
-                    {
-                        "kind": "assembly-package",
-                        "entryKind": (provenance or {}).get("entryKind", "part"),
-                        "occurrences": [],
-                        "components": {},
-                    }
-                ),
-                encoding="utf-8",
-            )
-            return {
+            surf = put_object(b"SURF\x00fake")
+            tree = {
+                "label": root_name,
+                "entryKind": entry_kind,
+                "units": "mm",
+                "components": {"c0": {"surf": surf, "brep": surf, "contentHash": "c0"}},
+                "occurrences": [{"id": "o1", "name": root_name, "component": "c0", "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]}],
+                "links": [],
+                "stats": {"occurrenceCount": 1, "linkCount": 0},
+            }
+            tree.update(extra or {})
+            stats = {
                 "occurrences": 1,
                 "unique_components": 1,
                 "components_built": 1,
                 "components_reused": 0,
             }
+            return put_tree(tree), tree, stats
 
         return (
-            mock.patch("cadgen._internal.component_package.build_package_from_compound", side_effect=_fake),
+            mock.patch("cadgen.store.build.build_tree_from_compound", side_effect=_fake),
             calls,
         )
 
@@ -206,7 +209,7 @@ class CadGenerationTests(unittest.TestCase):
         export_build123d_step_scene(assembly, step_path)
         self.assertTrue(step_path.is_file())
 
-        package_dir = cad_catalog.render_package_dir(step_path)
+        package_dir = cad_catalog.result_view_dir(step_path)
         self.assertFalse(
             (package_dir / "assembly.json").exists(),
             "precondition: the package must not exist before the build",
@@ -224,10 +227,12 @@ class CadGenerationTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual("assembly", payload["entryKind"])
 
+        # The view is laid out for the tree the build wrote, so resolve it again.
+        package_dir = cad_catalog.result_view_dir(step_path)
         descriptor_path = package_dir / "assembly.json"
         self.assertTrue(
             descriptor_path.is_file(),
-            "imported STEP --kind assembly --force must write assembly.json (not a silent no-op)",
+            "imported STEP --kind assembly --force must write a tree (not a silent no-op)",
         )
         descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
         self.assertEqual("assembly-package", descriptor["kind"])
@@ -707,15 +712,15 @@ class CadGenerationTests(unittest.TestCase):
 
         cad_generation.generate_dxf_targets([str(script_path)])
 
-        from cadgen._internal.dxf_output import dxf_export_record_path
+        from cadgen.store.records import read_record
 
-        record_dir = dxf_export_record_path(self.temp_root / "bare_dxf.dxf").parent
-        # No drawing package exists any more: the .dxf beside the source is the
-        # product, and only the output record remains, in the store's records/ tier.
-        self.assertTrue((self.temp_root / "bare_dxf.dxf").exists())
-        self.assertTrue(dxf_export_record_path(self.temp_root / "bare_dxf.dxf").exists())
-        self.assertFalse((record_dir / "preview.glb").exists())
-        self.assertFalse((record_dir / "drawing.json").exists())
+        # No drawing package exists: the .dxf beside the source is the product,
+        # and the drawing's MODEL record (tree: null) is what makes a rerun a no-op.
+        written = self.temp_root / "bare_dxf.dxf"
+        self.assertTrue(written.exists())
+        record = read_record(script_path) or {}
+        self.assertIsNone(record.get("tree"))
+        self.assertIn(str(written.resolve()), record.get("outputs") or {})
 
     def test_dxf_generation_always_writes_the_sibling(self) -> None:
         script_path = self._dxf_generator_script("flat")
@@ -723,9 +728,9 @@ class CadGenerationTests(unittest.TestCase):
         cad_generation.generate_dxf_targets([str(script_path)])
 
         self.assertTrue((self.temp_root / "flat_drawing.dxf").exists())
-        from cadgen._internal.dxf_output import dxf_export_record_path
+        from cadgen.store.records import read_record
 
-        self.assertTrue(dxf_export_record_path(self.temp_root / "flat_drawing.dxf").exists())
+        self.assertIsNotNone(read_record(script_path), "a drawing is a model: it has a record")
 
     def test_dxf_generation_skips_current_drawing_package(self) -> None:
         script_path = self._dxf_generator_script("flat")
@@ -849,37 +854,6 @@ class CadGenerationTests(unittest.TestCase):
 
         self.assertEqual([self._cad_ref("second"), self._cad_ref("first")], calls)
 
-    def test_current_target_with_explicit_exports_still_runs(self) -> None:
-        # A current compose must not swallow an explicitly requested export (the
-        # --write-step SOURCE=OUTPUT pair): the no-op fast path previously dropped
-        # such specs as current and wrote nothing.
-        script_path = self._generator_script("current_exports")
-        calls: list[object] = []
-
-        def fake_generate(spec, **kwargs):
-            calls.append(spec)
-            return cad_generation.GeneratedStepResult(spec=spec, scene=None)
-
-        with mock.patch.object(
-            cad_generation, "_assembly_is_current", return_value=True
-        ), mock.patch.object(
-            cad_generation, "_assembly_glb_package_current", return_value=True
-        ), mock.patch.object(
-            cad_generation, "_rebuild_stale_assembly_children"
-        ), mock.patch.object(
-            cad_generation, "_generate_step_outputs", side_effect=fake_generate
-        ):
-            # Baseline: with no export requests the current target no-ops.
-            cad_generation.generate_step_targets([str(script_path)])
-            self.assertEqual([], calls)
-
-            step_output = self.temp_root / "exports" / "current_exports.step"
-            cad_generation.generate_step_targets([f"{script_path}={step_output}"])
-
-        self.assertEqual(1, len(calls))
-        self.assertIsNotNone(calls[0].step_export_path)
-        self.assertTrue(str(calls[0].step_export_path).endswith("current_exports.step"))
-
     def test_step_generation_default_allows_missing_logical_step(self) -> None:
         # gen_step builds GLB render artifacts and never writes a text STEP, so the
         # logical .step path need not exist and the artifact pipeline must not require it.
@@ -946,53 +920,6 @@ class CadGenerationTests(unittest.TestCase):
             )
         )
 
-    def test_step_output_pairs_retarget_generated_sources(self) -> None:
-        first_path = self._generator_script("first")
-        second_path = self._generator_script("second")
-        first_output = self.temp_root / "custom" / "first-output.step"
-        second_output = self.temp_root / "custom" / "second-output.step"
-        calls: list[cad_generation.EntrySpec] = []
-
-        def fake_generate(spec, *, entries_by_step_path, preloaded_scene=None, force=False, **_extra):
-            self.assertIn(spec.step_path.resolve(), entries_by_step_path)
-            self.assertIsNotNone(preloaded_scene)
-            calls.append(spec)
-
-        with mock.patch.object(cad_generation, "_generate_part_outputs", side_effect=fake_generate):
-            cad_generation.generate_step_targets(
-                [f"{first_path}={first_output}", f"{second_path}={second_output}"],
-            )
-
-        self.assertEqual([first_output, second_output], [call.step_path for call in calls])
-        self.assertEqual([first_output, second_output], [call.step_export_path for call in calls])
-        self.assertFalse(first_path.with_suffix(".step").exists())
-        self.assertFalse(second_path.with_suffix(".step").exists())
-
-    def test_step_output_pairs_allow_mixed_plain_and_paired_targets(self) -> None:
-        first_path = self._generator_script("first")
-        second_path = self._generator_script("second")
-        second_output = self.temp_root / "custom" / "second-output.step"
-        calls: list[cad_generation.EntrySpec] = []
-
-        def fake_generate(spec, *, entries_by_step_path, preloaded_scene=None, force=False, **_extra):
-            calls.append(spec)
-
-        with mock.patch.object(cad_generation, "_generate_part_outputs", side_effect=fake_generate):
-            cad_generation.generate_step_targets([str(first_path), f"{second_path}={second_output}"])
-
-        self.assertEqual([first_path.with_suffix(".step"), second_output], [call.step_path for call in calls])
-        # A SOURCE=OUTPUT.step pair requests an on-demand STEP export to that path.
-        self.assertEqual([None, second_output], [call.step_export_path for call in calls])
-        self.assertFalse(second_path.with_suffix(".step").exists())
-
-    def test_step_output_pairs_reject_duplicate_output_paths(self) -> None:
-        first_path = self._generator_script("first")
-        second_path = self._generator_script("second")
-        output_path = self.temp_root / "shared.step"
-
-        with self.assertRaisesRegex(ValueError, "used more than once"):
-            cad_generation.generate_step_targets([f"{first_path}={output_path}", f"{second_path}={output_path}"])
-
     def test_step_generation_infers_assembly_target(self) -> None:
         self._write_step("imported-part")
         assembly_path = self._write_assembly_generator(
@@ -1020,68 +947,6 @@ class CadGenerationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "is not a @dxf model"):
             cad_generation.generate_dxf_targets([str(script_path)])
-
-    def test_dxf_output_override_retargets_single_generated_source(self) -> None:
-        script_path = self._dxf_generator_script("flat")
-        output_path = self.temp_root / "drawings" / "flat-output.dxf"
-
-        cad_generation.generate_dxf_targets([str(script_path)], output=str(output_path))
-
-        self.assertTrue(output_path.exists())
-        self.assertFalse((self.temp_root / "flat_drawing.dxf").exists())
-
-    def test_dxf_output_pair_retargets_generated_source(self) -> None:
-        first_path = self._dxf_generator_script("first")
-        second_path = self._dxf_generator_script("second")
-        first_output = self.temp_root / "drawings" / "first-output.dxf"
-        second_output = self.temp_root / "drawings" / "second-output.dxf"
-
-        cad_generation.generate_dxf_targets([f"{first_path}={first_output}", f"{second_path}={second_output}"])
-
-        self.assertTrue(first_output.exists())
-        self.assertTrue(second_output.exists())
-        self.assertFalse((self.temp_root / "first_drawing.dxf").exists())
-        self.assertFalse((self.temp_root / "second_drawing.dxf").exists())
-
-    def test_dxf_output_pair_allows_mixed_plain_and_paired_targets(self) -> None:
-        first_path = self._dxf_generator_script("first")
-        second_path = self._dxf_generator_script("second")
-        second_output = self.temp_root / "drawings" / "second-output.dxf"
-
-        cad_generation.generate_dxf_targets([str(first_path), f"{second_path}={second_output}"])
-
-        # The plain target writes its sibling; the paired target writes its named
-        # output instead of a sibling.
-        self.assertTrue((self.temp_root / "first_drawing.dxf").exists())
-        self.assertTrue(second_output.exists())
-        self.assertFalse((self.temp_root / "second_drawing.dxf").exists())
-
-    def test_dxf_output_override_rejects_pair_targets(self) -> None:
-        script_path = self._dxf_generator_script("flat")
-
-        with self.assertRaisesRegex(ValueError, "cannot be combined"):
-            cad_generation.generate_dxf_targets(
-                [f"{script_path}={self.temp_root / 'drawings' / 'flat-output.dxf'}"],
-                output=str(self.temp_root / "other.dxf"),
-            )
-
-    def test_dxf_output_pairs_reject_duplicate_output_paths(self) -> None:
-        first_path = self._dxf_generator_script("first")
-        second_path = self._dxf_generator_script("second")
-        output_path = self.temp_root / "shared.dxf"
-
-        with self.assertRaisesRegex(ValueError, "used more than once"):
-            cad_generation.generate_dxf_targets([f"{first_path}={output_path}", f"{second_path}={output_path}"])
-
-    def test_dxf_output_override_requires_single_target(self) -> None:
-        first_path = self._dxf_generator_script("first")
-        second_path = self._dxf_generator_script("second")
-
-        with self.assertRaisesRegex(ValueError, "--output can only be used with exactly one target"):
-            cad_generation.generate_dxf_targets(
-                [str(first_path), str(second_path)],
-                output=str(self.temp_root / "first-output.dxf"),
-            )
 
     def test_step_generator_does_not_run_sidecars(self) -> None:
         script_path = self._generator_script("flat", with_dxf=True, dxf_before_step=True)
@@ -1147,46 +1012,6 @@ class CadGenerationTests(unittest.TestCase):
         self.assertIs(scene, result.scene)
         self.assertIsNone(result.selector_bundle)
 
-    def test_python_generation_reuses_current_package_without_running_gen_step(self) -> None:
-        script_path = self._generator_script("flat")
-        spec = next(spec for spec in cad_generation.list_entry_specs() if spec.cad_ref == self._cad_ref("flat"))
-        artifact = mock.Mock()
-        artifact.manifest = {
-            "kind": "assembly-package",
-            
-            "_sourceSidecar": {"sourceKind": "python", "sourceHash": "old-python-source-hash"},
-            "edgeRendering": {
-                "visibilityClasses": ["feature", "tangent", "seam", "degenerate"],
-            },
-        }
-
-        with (
-            mock.patch(
-                "cadgen._internal.component_package.is_assembly_package",
-                return_value=True,
-            ),
-            mock.patch.object(
-                cad_generation,
-                "read_step_topology_manifest_from_glb",
-                return_value=artifact.manifest,
-            ),
-            mock.patch.object(cad_generation, "_assembly_glb_package_current", return_value=True),
-            mock.patch.object(cad_generation, "_generated_assembly_glb_closure_current", return_value=True),
-            mock.patch.object(
-                cad_generation,
-                "run_script_generator",
-                side_effect=AssertionError("current Python-backed package should be reused before gen_step"),
-            ),
-        ):
-            result = cad_generation._generate_step_outputs(
-                spec,
-                entries_by_step_path={spec.step_path.resolve(): spec},
-                force=False,
-            )
-
-        self.assertIsNone(result.scene)
-        self.assertIsNone(result.selector_bundle)
-        self.assertEqual(script_path.with_suffix(".step"), result.spec.step_path)
 
     def test_dxf_generators_are_separate_generation_specs(self) -> None:
         self._generator_script("flat", with_dxf=True)
@@ -1348,160 +1173,12 @@ class CadGenerationTests(unittest.TestCase):
         # whole-model selector bundle (selectors are extracted on demand by inspect).
         self.assertEqual(1, len(package_calls))
         self.assertTrue(package_calls[0]["single_component"])
-        self.assertTrue(cad_catalog.render_package_dir(step_path).is_dir())
+        self.assertTrue(cad_catalog.result_view_dir(step_path).is_dir())
         self.assertIsNone(result.selector_bundle)
 
-    def test_generate_part_outputs_reuses_current_topology_artifact(self) -> None:
-        step_path = self._write_step("current-topology")
-        _, selected_specs = cad_generation._selected_specs_for_targets(
-            [str(step_path)],
-            step_options=self._step_options(mesh_tolerance=0.3, mesh_angular_tolerance=0.2),
-        )
-        spec = selected_specs[0]
-        scene = self._fake_scene(step_path)
-        artifact = mock.Mock()
-        artifact.manifest = {
-            "kind": "assembly-package",
-            
-            "stepHash": hashlib.sha256(step_path.read_bytes()).hexdigest(),
-            "edgeRendering": {
-                "visibilityClasses": ["feature", "tangent", "seam", "degenerate"],
-            },
-        }
 
-        package_patch, package_calls = self._patch_package_build()
-        with mock.patch.object(cad_generation, "load_step_scene_cached", return_value=scene) as load_scene, mock.patch(
-            "cadgen._internal.component_package.is_assembly_package",
-            return_value=True,
-        ), mock.patch.object(
-            cad_generation,
-            "read_step_topology_manifest_from_glb",
-            return_value=artifact.manifest,
-        ) as validate_artifact, package_patch:
-            result = cad_generation._generate_part_outputs(
-                spec,
-                entries_by_step_path={spec.step_path.resolve(): spec},
-            )
 
-        # The current topology artifact is reused: no scene load, no remesh, no package build.
-        self.assertIsNone(result.scene)
-        self.assertIsNone(result.selector_bundle)
-        validate_artifact.assert_called_once()
-        load_scene.assert_not_called()
-        self.assertEqual(0, len(package_calls))
 
-    def test_generate_part_outputs_rebuilds_stale_step_topology_artifact(self) -> None:
-        step_path = self._write_step("stale-topology")
-        _, selected_specs = cad_generation._selected_specs_for_targets(
-            [str(step_path)],
-            step_options=self._step_options(mesh_tolerance=0.3, mesh_angular_tolerance=0.2),
-        )
-        spec = selected_specs[0]
-        scene = self._fake_scene(step_path)
-        artifact = mock.Mock()
-        artifact.manifest = {
-            "kind": "assembly-package",
-            # Stale by EDGE RENDERING: the descriptor does not say which edge
-            # visibility classes its components were built with, so nothing can
-            # match it. That is the only descriptor-level staleness left —
-            # hash staleness cannot exist under content keying (an edited file
-            # resolves to a different package key), and the mesh options the
-            # descriptor used to record reached no tessellator.
-        }
-
-        package_patch, package_calls = self._patch_package_build()
-        with mock.patch.object(cad_generation, "load_step_scene_cached", return_value=scene) as load_scene, mock.patch(
-            "cadgen._internal.component_package.is_assembly_package",
-            return_value=True,
-        ), mock.patch.object(
-            cad_generation,
-            "read_step_topology_manifest_from_glb",
-            return_value=artifact.manifest,
-        ) as validate_artifact, package_patch:
-            result = cad_generation._generate_part_outputs(
-                spec,
-                entries_by_step_path={spec.step_path.resolve(): spec},
-            )
-
-        self.assertIs(scene, result.scene)
-        self.assertIsNone(result.selector_bundle)
-        self.assertGreaterEqual(validate_artifact.call_count, 1)
-        load_scene.assert_called_once_with(step_path)
-        # No sidecar outputs requested: the whole-scene mesh is skipped and the
-        # package build meshes exactly the components it emits.
-        self.assertEqual(1, len(package_calls))
-
-    def test_generate_part_outputs_reuses_current_auto_topology_artifact_without_scene_load(self) -> None:
-        step_path = self._write_step("current-auto-topology")
-        _, selected_specs = cad_generation._selected_specs_for_targets([str(step_path)])
-        spec = selected_specs[0]
-        artifact = mock.Mock()
-        artifact.manifest = {
-            "kind": "assembly-package",
-            
-            "stepHash": hashlib.sha256(step_path.read_bytes()).hexdigest(),
-            "edgeRendering": {
-                "visibilityClasses": ["feature", "tangent", "seam", "degenerate"],
-            },
-        }
-
-        package_patch, package_calls = self._patch_package_build()
-        with mock.patch.object(cad_generation, "load_step_scene_cached") as load_scene, mock.patch(
-            "cadgen._internal.component_package.is_assembly_package",
-            return_value=True,
-        ), mock.patch.object(
-            cad_generation,
-            "read_step_topology_manifest_from_glb",
-            return_value=artifact.manifest,
-        ), package_patch:
-            result = cad_generation._generate_part_outputs(
-                spec,
-                entries_by_step_path={spec.step_path.resolve(): spec},
-            )
-
-        # The current auto-tolerance artifact is reused without even loading the scene.
-        self.assertIsNone(result.scene)
-        load_scene.assert_not_called()
-        self.assertEqual(0, len(package_calls))
-
-    def test_generate_part_outputs_force_ignores_current_topology_artifact(self) -> None:
-        step_path = self._write_step("force-topology")
-        _, selected_specs = cad_generation._selected_specs_for_targets(
-            [str(step_path)],
-            step_options=self._step_options(mesh_tolerance=0.3, mesh_angular_tolerance=0.2),
-        )
-        spec = selected_specs[0]
-        scene = self._fake_scene(step_path)
-        artifact = mock.Mock()
-        artifact.manifest = {
-            "kind": "assembly-package",
-            
-            "stepHash": hashlib.sha256(step_path.read_bytes()).hexdigest(),
-        }
-
-        package_patch, package_calls = self._patch_package_build()
-        with mock.patch.object(cad_generation, "load_step_scene_cached", return_value=scene), mock.patch(
-            "cadgen._internal.component_package.is_assembly_package",
-            return_value=True,
-        ), mock.patch.object(
-            cad_generation,
-            "read_step_topology_manifest_from_glb",
-            return_value=artifact.manifest,
-        ) as validate_artifact, package_patch:
-            result = cad_generation._generate_part_outputs(
-                spec,
-                entries_by_step_path={spec.step_path.resolve(): spec},
-                force=True,
-            )
-
-        self.assertIs(scene, result.scene)
-        self.assertIsNone(result.selector_bundle)
-        validate_artifact.assert_not_called()
-        # No sidecar outputs requested: even a forced rebuild skips the
-        # whole-scene mesh; the package build re-meshes every component.
-        # force propagates into the package build (content-addressed cache bypass).
-        self.assertEqual(1, len(package_calls))
-        self.assertTrue(package_calls[0]["force"])
 
     def test_generate_part_outputs_uses_preloaded_scene_without_reloading(self) -> None:
         step_path = self._write_step("preloaded")
@@ -1522,7 +1199,7 @@ class CadGenerationTests(unittest.TestCase):
 
         load_scene.assert_not_called()
         self.assertEqual(1, len(package_calls))
-        self.assertTrue(cad_catalog.render_package_dir(step_path).is_dir())
+        self.assertTrue(cad_catalog.result_view_dir(step_path).is_dir())
 
     # --- Incremental-regen freshness gate (D) --------------------------------
 
@@ -1544,63 +1221,10 @@ class CadGenerationTests(unittest.TestCase):
         return script, helper
 
     def _part_spec(self, script: Path) -> cad_generation.EntrySpec:
-        _all, selected, _outs = cad_generation._selected_specs_for_targets(
-            [str(script)],
-            expected_output_suffixes=(".step",),
-            tool_name="cadgen import",
-            include_output_paths=True,
-        )
+        _all, selected = cad_generation._selected_specs_for_targets([str(script)])
         return selected[0]
 
-    def test_generated_part_records_source_closure(self) -> None:
-        script, _helper = self._write_part_with_dependency("record")
-        cad_generation.generate_step_targets([str(script)])
-        spec = self._part_spec(script)
 
-        # The closure is source-derived. A PLAIN model warrants no sidecar
-        # file — its provenance rides the records tier, where every gate
-        # falls back to it.
-        from cadgen._internal.source_sidecar import (
-            read_source_provenance,
-            source_sidecar_path,
-        )
-
-        self.assertFalse(source_sidecar_path(spec.entry_path).exists())
-        provenance = read_source_provenance(spec.entry_path) or {}
-        self.assertTrue(provenance.get("sourceClosureHash"))
-        joined = " ".join(provenance.get("sourceClosureFiles") or [])
-        self.assertIn("record.py", joined)
-        self.assertIn("record_dims.py", joined)
-
-    def test_generated_child_is_stale_tracks_own_and_transitive_edits(self) -> None:
-        script, helper = self._write_part_with_dependency("stalecheck")
-        cad_generation.generate_step_targets([str(script)])
-        spec = self._part_spec(script)
-
-        self.assertFalse(cad_generation._generated_child_is_stale(spec, force=False))
-        self.assertTrue(cad_generation._generated_child_is_stale(spec, force=True))
-
-        original = script.read_text(encoding="utf-8")
-        # A comment-only edit is semantically invisible -> NOT stale.
-        script.write_text(original + "\n# tweak\n", encoding="utf-8")
-        self.assertFalse(cad_generation._generated_child_is_stale(spec, force=False))
-        # A semantic own-file edit IS detected.
-        script.write_text(original + "\n_EDIT_MARKER = 1\n", encoding="utf-8")
-        self.assertTrue(cad_generation._generated_child_is_stale(spec, force=False))
-        script.write_text(original, encoding="utf-8")
-        self.assertFalse(cad_generation._generated_child_is_stale(spec, force=False))
-
-        # Editing a transitive dependency (reached via import) is detected.
-        helper.write_text("WIDTH = 4.0\n", encoding="utf-8")
-        self.assertTrue(cad_generation._generated_child_is_stale(spec, force=False))
-        helper.write_text("WIDTH = 3.0\n", encoding="utf-8")
-        self.assertFalse(cad_generation._generated_child_is_stale(spec, force=False))
-
-        # A missing render artifact (the package directory) forces a rebuild — gen_step
-        # writes no STEP, so the render package, not the STEP, is the freshness anchor.
-        # The package is keyed by the entry filename (the generator), not the logical .step.
-        shutil.rmtree(cad_catalog.render_package_dir(spec.entry_path))
-        self.assertTrue(cad_generation._generated_child_is_stale(spec, force=False))
 
     def _spec(self, ref: str, kind: str, step_name: str) -> cad_generation.EntrySpec:
         return cad_generation.EntrySpec(
@@ -1613,149 +1237,6 @@ class CadGenerationTests(unittest.TestCase):
             script_path=self.temp_root / f"{ref}.py",
             step_path=self.temp_root / step_name,
         )
-
-    def test_rebuild_stale_assembly_children_rebuilds_only_stale_leaf_first(self) -> None:
-        assembly = self._spec("robot", "assembly", "robot.step")
-        leaf_a = self._spec("leaf_a", "part", "leaf_a.step")
-        leaf_b = self._spec("leaf_b", "part", "leaf_b.step")
-        all_specs = [assembly, leaf_a, leaf_b]  # parents listed before children
-
-        stale_refs = {"leaf_b"}
-
-        def fake_stale(spec, *, force):
-            return force or spec.source_ref in stale_refs
-
-        rebuilt: list[str] = []
-
-        def record_rebuild(child):
-            rebuilt.append(child.source_ref)
-
-        with (
-            mock.patch.object(cad_generation, "_generated_child_is_stale", side_effect=fake_stale),
-            mock.patch.object(cad_generation, "_rebuild_child_in_subprocess", side_effect=record_rebuild),
-        ):
-            result = cad_generation._rebuild_stale_assembly_children(
-                all_specs, [assembly], force=False, logger=None
-            )
-        # Only the stale leaf is rebuilt; the assembly target itself is not.
-        self.assertEqual(["leaf_b"], rebuilt)
-        self.assertEqual(["leaf_b"], result)
-
-        # force rebuilds every generated child. Independent leaves run in
-        # parallel, so the side-effect call order is not deterministic, but the
-        # returned refs follow the deterministic leaf-first (reversed) input order.
-        rebuilt.clear()
-        with (
-            mock.patch.object(cad_generation, "_generated_child_is_stale", side_effect=fake_stale),
-            mock.patch.object(cad_generation, "_rebuild_child_in_subprocess", side_effect=record_rebuild),
-        ):
-            result = cad_generation._rebuild_stale_assembly_children(
-                all_specs, [assembly], force=True, logger=None
-            )
-        self.assertEqual({"leaf_a", "leaf_b"}, set(rebuilt))
-        self.assertEqual(["leaf_b", "leaf_a"], result)
-
-    def test_rebuild_stale_assembly_children_noop_without_assembly_target(self) -> None:
-        leaf = self._spec("solo", "part", "solo.step")
-        with mock.patch.object(
-            cad_generation, "_rebuild_child_in_subprocess", side_effect=AssertionError("should not rebuild")
-        ):
-            result = cad_generation._rebuild_stale_assembly_children(
-                [leaf], [leaf], force=True, logger=None
-            )
-        self.assertEqual([], result)
-
-    # --- Assembly-level no-op skip -------------------------------------------
-
-    def test_is_current_tracks_source_closure(self) -> None:
-        step_path = self.temp_root / "asm.step"
-        dep = self.temp_root / "asm_src.py"
-        dep.write_text("X = 1\n", encoding="utf-8")
-        closure = cad_source_hash.closure_for_files(dep, [], base=self.temp_root)
-
-        spec = cad_generation.EntrySpec(
-            source_ref="asm",
-            cad_ref="asm",
-            kind="assembly",
-            source_path=self.temp_root / "asm.py",
-            display_name="asm",
-            source="generated",
-            script_path=self.temp_root / "asm.py",
-            step_path=step_path,
-        )
-        # gen_step writes no STEP — the package directory is the freshness anchor, so
-        # currency rides on the recorded source closure, not an on-disk STEP hash. The
-        # package is keyed by the entry filename (the generator), not the logical .step.
-        glb_path = cad_catalog.render_package_dir(spec.entry_path)
-        glb_path.mkdir(parents=True, exist_ok=True)
-        manifest = {
-            "_sourceSidecar": {
-                "sourceClosureHash": closure.closure_hash,
-                "sourceClosureFiles": list(closure.files),
-            },
-        }
-
-        with mock.patch.object(cad_generation, "read_step_topology_manifest_from_glb", return_value=manifest):
-            self.assertTrue(cad_generation._assembly_is_current(spec))
-
-            # A changed composition/source input invalidates the closure.
-            dep.write_text("X = 2\n", encoding="utf-8")
-            self.assertFalse(cad_generation._assembly_is_current(spec))
-            dep.write_text("X = 1\n", encoding="utf-8")
-            self.assertTrue(cad_generation._assembly_is_current(spec))
-
-            # A generated part is also a package and shares the closure gate.
-            part_spec = replace(spec, source_ref="p", cad_ref="p", kind="part")
-            self.assertTrue(cad_generation._assembly_is_current(part_spec))
-
-            # An imported model has no source closure and is not skippable via this gate.
-            imported_spec = replace(part_spec, source="imported")
-            self.assertFalse(cad_generation._assembly_is_current(imported_spec))
-
-    def test_generated_glb_closure_current_tracks_children(self) -> None:
-        # The GLB-reuse gate: a child STEP change must be detected via the recorded
-        # source closure even though the assembly STEP is never (re)written.
-        step_path = self.temp_root / "asm.step"
-        child_step = self.temp_root / "child.step"  # stand-in for a composed child STEP
-        child_step.write_text("child v1\n", encoding="utf-8")
-        closure = cad_source_hash.closure_for_files(child_step, [], base=self.temp_root)
-
-        spec = cad_generation.EntrySpec(
-            source_ref="asm",
-            cad_ref="asm",
-            kind="assembly",
-            source_path=self.temp_root / "asm.py",
-            display_name="asm",
-            source="generated",
-            script_path=self.temp_root / "asm.py",
-            step_path=step_path,
-        )
-        # The package directory is keyed by the entry filename (the generator), not the
-        # logical .step.
-        glb_path = cad_catalog.render_package_dir(spec.entry_path)
-        glb_path.mkdir(parents=True, exist_ok=True)  # package directory
-        manifest = {
-            "_sourceSidecar": {
-                "sourceClosureHash": closure.closure_hash,
-                "sourceClosureFiles": list(closure.files),
-            },
-        }
-        with mock.patch.object(cad_generation, "read_step_topology_manifest_from_glb", return_value=manifest):
-            self.assertTrue(cad_generation._generated_assembly_glb_closure_current(spec))
-            # A composed child STEP changing invalidates the GLB (unlike step_hash,
-            # this is detected even though asm.step itself was not rewritten).
-            child_step.write_text("child v2\n", encoding="utf-8")
-            self.assertFalse(cad_generation._generated_assembly_glb_closure_current(spec))
-
-            # A generated part is also a package and shares the closure gate.
-            child_step.write_text("child v1\n", encoding="utf-8")
-            part_spec = replace(spec, source_ref="p", cad_ref="p", kind="part")
-            self.assertTrue(cad_generation._generated_assembly_glb_closure_current(part_spec))
-
-        # An imported model carries no closure and is never blocked by this gate.
-        imported_spec = replace(spec, source="imported")
-        self.assertTrue(cad_generation._generated_assembly_glb_closure_current(imported_spec))
-
 
 if __name__ == "__main__":
     unittest.main()

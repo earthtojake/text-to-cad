@@ -8,13 +8,14 @@ the call saw.
 
 This module exists so BOTH dispatch paths drive the one existing pipeline
 (``cadgen.generation.generate_step_targets`` / ``generate_dxf_targets``) —
-locks, progress records, the no-op gate, incremental package build, ``.step``
+progress records, the no-op gate, incremental package build, ``.step``
 assembly — with zero forked logic.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -27,15 +28,11 @@ def _build_parser(prog: str) -> argparse.ArgumentParser:
         description="Build this CAD model (run by calling its @step/@dxf function).",
     )
     parser.add_argument("script", help="The decorated model script.")
-    parser.add_argument("-o", "--output", help="Override the model's output path.")
     parser.add_argument("--force", action="store_true", help="Rebuild even when current.")
     parser.add_argument("--mesh-tolerance", type=float)
     parser.add_argument("--mesh-angular-tolerance", type=float)
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--json", action="store_true", help="One JSON result line on stdout.")
-    from cadgen._internal.cli_locking import add_lock_timeout_argument
-
-    add_lock_timeout_argument(parser)
     return parser
 
 
@@ -51,6 +48,21 @@ def run_model_argv(argv: Sequence[str], *, prog: str = "python <model>.py") -> i
     if not script.is_file():
         parser.error(f"model script does not exist: {args.script}")
 
+    # Where this process's build-tree events go. A transient worker (CADGEN_EVENTS=1)
+    # writes them as lines its parent reads back; a daemon worker already relays them
+    # as frames; a root that reached here directly (`python -m cadgen.cli._run_model`,
+    # `cadgen step build`) renders the tree itself.
+    from cadgen.cli_tree import build_tree
+    from cadgen.daemon import executors
+
+    if os.environ.get("CADGEN_EVENTS") == "1" and not executors.sink_installed():
+        executors.install_line_sink()
+    with build_tree(json_lines=bool(args.json)), executors.root_context():
+        return _run(args, script, parser, prog)
+
+
+def _run(args: argparse.Namespace, script: Path, parser: argparse.ArgumentParser, prog: str) -> int:
+
     from cadgen.catalog import StepImportOptions, source_from_path
 
     def _numeric(value: object, field_name: str) -> float | None:
@@ -65,28 +77,25 @@ def run_model_argv(argv: Sequence[str], *, prog: str = "python <model>.py") -> i
         if source is None:
             raise ValueError(
                 f"{script.name} declares no CAD model — decorate one function with "
-                "@step or @dxf from cadgen"
+                "@step, @dxf, or a mesh decorator (@stl/@glb/@threemf) from cadgen"
             )
         if source.dxf_path is not None and source.step_path is None:
             from cadgen.generation import generate_dxf_targets
 
             return generate_dxf_targets(
                 [str(script)],
-                output=args.output,
                 force=bool(args.force),
                 verbose=bool(args.verbose),
+                json_output=bool(args.json),
             )
 
         from cadgen.generation import generate_step_targets
 
-        # Native spelling on BOTH halves of the pair. ``as_posix()`` here used to
-        # hand ``C:\...\model.py=C:/.../model.step`` to a parser that splits on
-        # the first "=", so one invocation printed a path two different ways. An
-        # explicit -o is passed through VERBATIM: it is the user's own text, and
-        # round-tripping it through Path would rewrite what they typed.
-        output = args.output if args.output else str(Path(source.step_path))
+        # The model's ``out=`` is the ONE spelling of where its document goes:
+        # there is no per-run override (the record is keyed by the script, and
+        # two documents for one model would be two truths).
         return generate_step_targets(
-            [f"{script}={output}"],
+            [str(script)],
             step_options=StepImportOptions(
                 mesh_tolerance=_numeric(args.mesh_tolerance, "mesh_tolerance"),
                 mesh_angular_tolerance=_numeric(
@@ -96,7 +105,6 @@ def run_model_argv(argv: Sequence[str], *, prog: str = "python <model>.py") -> i
             force=bool(args.force),
             verbose=bool(args.verbose),
             json_output=bool(args.json),
-            lock_timeout_s=float(args.lock_timeout or 0.0),
         )
     except Exception as exc:  # noqa: BLE001 — the CLI boundary: report, do not traceback
         from cadgen._internal.cli_errors import report_cli_error
@@ -111,4 +119,17 @@ def main(argv: Sequence[str] | None = None, *, prog: str = "python <model>.py") 
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    code = main()
+    if os.environ.get("CADGEN_EVENTS") == "1":
+        # A transient worker (cadgen.daemon.executors): its parent is waiting on this
+        # exit, and tearing down an interpreter with OCP loaded costs ~0.3 s of
+        # destructors that free nothing anyone will use. Flush and leave.
+        import sys
+
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.flush()
+            except (OSError, ValueError):
+                pass
+        os._exit(int(code or 0))
+    raise SystemExit(code)

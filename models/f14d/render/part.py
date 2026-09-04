@@ -6,8 +6,9 @@
     python render/part.py wings,empennage --views top
 
 Writes a throwaway `@step` model under `tmp/review/<name>/` that composes only
-the modules asked for, so a builder can iterate without waiting for the whole
-aeroplane and without their artifact cache colliding with anyone else's.  The
+the system MODELS asked for (`src/<name>.py`), so a builder can iterate without
+waiting for the whole aeroplane: a current system loads from the store, only
+the one being worked on rebuilds.  The
 airframe skin is included by default because a part judged out of context is
 judged wrong -- a perfect nozzle at the wrong scale relative to the nacelle
 still fails.
@@ -37,33 +38,15 @@ sys.path.insert(0, {src!r})
 
 from cadgen import build123d as bd, step
 
-MODULES = {mods!r}
-
-
-def _load(name):
-    try:
-        return __import__("lib." + name, fromlist=["build"])
-    except Exception as exc:  # noqa: BLE001
-        print("[review] skip %s: %s" % (name, exc), file=sys.stderr)
-        return None
-
-
-_LOADED = [(n, _load(n)) for n in MODULES]
+{imports}
 
 
 @step(out="{name}.step", kind="assembly")
 def {name}():
-    kids = []
-    for name, mod in _LOADED:
-        if mod is None:
-            continue
-        try:
-            kids.append(mod.build())
-        except Exception as exc:  # noqa: BLE001
-            print("[review] build failed %s: %s" % (name, exc), file=sys.stderr)
-    if not kids:
-        raise RuntimeError("nothing built")
-    return bd.Compound(children=kids, label="review")
+    # Each system is a sibling model of the project: current ones load from
+    # the store, stale ones build -- a review composition costs only what
+    # actually changed.
+    return bd.Compound(children=[{calls}], label="review")
 
 
 if __name__ == "__main__":
@@ -89,7 +72,9 @@ def main():
     d = PROJECT / "tmp" / "review" / name
     d.mkdir(parents=True, exist_ok=True)
     entry = d / f"{name}.py"
-    entry.write_text(TEMPLATE.format(src=str(SRC), mods=full, name=name))
+    imports = "\n".join(f"from {m} import {m}" for m in full)
+    calls = ", ".join(f"{m}()" for m in full)
+    entry.write_text(TEMPLATE.format(src=str(SRC), imports=imports, calls=calls, name=name))
 
     r = subprocess.run([PY, str(entry)],  # its __main__ builds the model
                        cwd=str(d), capture_output=True, text=True)

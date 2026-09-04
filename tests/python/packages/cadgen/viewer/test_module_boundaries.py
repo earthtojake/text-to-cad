@@ -7,8 +7,9 @@ must never happen is the CAD KERNEL loading into the server:
   build123d import at module scope anywhere in the package costs seconds and
   ~300MB before the first request.
 * The long-lived server must not hold a kernel it never uses. The one
-  kernel-bearing action -- importing a foreign STEP -- runs in a worker process
-  the server owns (``compile_worker``), and only that process may import it.
+  kernel-bearing action -- importing a foreign STEP -- is a compile job in
+  cadgen's pool (``imports`` submits and waits); no viewer module names the
+  build entry point.
 
 Both are checked twice: on the AST (so the offender is named by file and line)
 and on ``sys.modules`` after importing the package (so a kernel import that
@@ -77,7 +78,7 @@ class NoKernelInTheServer(unittest.TestCase):
         # meaningless in one direction and a false failure in the other.
         script = (
             "import sys\n"
-            "import cadgen.viewer.main, cadgen.viewer.compile_client, cadgen.viewer.compile_worker\n"
+            "import cadgen.viewer.main, cadgen.viewer.imports\n"
             "import cadgen.viewer.http_app, cadgen.viewer.cadgen_ops, cadgen.viewer.scanner\n"
             "import cadgen.viewer.artifact_status, cadgen.viewer.tess_cache, cadgen.viewer.registry\n"
             "loaded = sorted(m for m in sys.modules if m.split('.')[0] in "
@@ -90,14 +91,15 @@ class NoKernelInTheServer(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(completed.stdout.strip(), "[]", completed.stdout)
 
-    def test_the_worker_is_the_only_module_naming_the_build_entry_point(self) -> None:
-        # The kernel-bearing call has one home. A second call site would be a
-        # second place for the kernel to leak into the server process.
+    def test_no_module_names_the_build_entry_point(self) -> None:
+        # The kernel-bearing call has no home in the viewer at all: an import is a
+        # compile JOB in cadgen's pool (imports.py submits and waits). A call site
+        # here would be a place for the kernel to leak into the server process.
         callers = []
         for path in _python_sources():
             if "step_artifact_cli" in path.read_text(encoding="utf-8"):
                 callers.append(path.name)
-        self.assertEqual(callers, ["compile_worker.py"])
+        self.assertEqual(callers, [])
 
 
 class NoLookupPathManipulation(unittest.TestCase):

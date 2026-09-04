@@ -22,7 +22,7 @@ Semantics:
   composed freely.
 - **A top-level call builds.** Calling the decorated name when no build is in
   progress (``__main__``, a REPL, a test) runs the full pipeline — freshness
-  gate, locks/progress, incremental package build, ``.step``/``.dxf`` output —
+  gate, progress, incremental package build, ``.step``/``.dxf`` output —
   via the warm daemon when available, in-process otherwise. It returns
   ``None``: the caller is the build's initiator, and loading the shape back
   into it would force the kernel import the gate exists to avoid. A failed
@@ -31,15 +31,15 @@ Semantics:
 - **A call inside a build composes.** While a build is running (any model's,
   any thread of this process), calling a decorated name runs its body and
   returns the shape (or drawing) — this is how an assembly uses its children.
-  Nothing is written for the child; wrap the call in ``cadgen.compose.memo``
-  to cache it across builds.
+  A model called from inside another model's build is a CHILD: it is built (or
+  loaded from the store when current) and its tree is linked into the parent.
 - **One model per file.** Entry identity (refs, packages, closures) is keyed
   by the source file everywhere in the pipeline, so a file defines exactly one
   ``@step`` or ``@dxf`` model.
 
 Per-run flags ride ``sys.argv`` of the top-level call: ``--force``,
-``--verbose``, ``--json``, ``-o/--output``, ``--mesh-tolerance``,
-``--mesh-angular-tolerance``, ``--lock-timeout``. Durable configuration lives
+``--verbose``, ``--json``, ``--mesh-tolerance``,
+``--mesh-angular-tolerance``. Durable configuration lives
 in the decorator call. A model function takes no parameters: it is one
 configuration of one output. Parametric geometry lives in a plain factory the
 model calls; another configuration is another model.
@@ -85,18 +85,62 @@ __all__ = [
 _BUILD_STATE = threading.local()
 
 
+class BuildFrame:
+    """One model body in flight on this thread.
+
+    ``children`` is recorded from the CALLS the body makes — every child wrapper
+    entered — never from what the geometry became; ``pins`` is the resolution
+    map: the first tree a child resolved to is the tree every later call in this
+    build composes (snapshot isolation)."""
+
+    def __init__(self, script_path: Path | None) -> None:
+        self.script_path = script_path
+        # (child script, the LazyCompound the call returned) — one entry per CALL.
+        self.children: list[tuple[Path, Any]] = []
+        # The resolution map: child script -> the tree this build composes.
+        self.pins: dict[Path, str] = {}
+        # One job per stale child per build, however many times it is called.
+        self.jobs: dict[Path, Any] = {}
+        # The root request this build belongs to (for the build tree's events).
+        self.root_id: str | None = os.environ.get("CADGEN_ROOT_ID") or None
+
+    def pin(self, child: Path, tree: str) -> str:
+        return self.pins.setdefault(child, tree)
+
+    def child_trees(self) -> list[tuple[Path, str]]:
+        """Every child call with the tree it resolved to; waits for pending jobs."""
+        return [(child, lazy.tree_hash()) for child, lazy in self.children]
+
+
+def _same_file(left: Path, right: Path) -> bool:
+    try:
+        return Path(left).resolve() == Path(right).resolve()
+    except (OSError, RuntimeError):
+        return Path(left) == Path(right)
+
+
 def build_in_progress() -> bool:
-    return getattr(_BUILD_STATE, "depth", 0) > 0
+    return bool(getattr(_BUILD_STATE, "frames", None))
+
+
+def current_frame() -> BuildFrame | None:
+    frames = getattr(_BUILD_STATE, "frames", None)
+    return frames[-1] if frames else None
 
 
 @contextlib.contextmanager
-def building() -> Iterator[None]:
-    """Mark this thread as executing a model body (the pipeline's call site)."""
-    _BUILD_STATE.depth = getattr(_BUILD_STATE, "depth", 0) + 1
+def building(script_path: Path | None = None) -> Iterator[BuildFrame]:
+    """Mark this thread as executing a model body (the pipeline's call site).
+    Yields the frame that collects the body's child pins."""
+    frames = getattr(_BUILD_STATE, "frames", None)
+    if frames is None:
+        frames = _BUILD_STATE.frames = []
+    frame = BuildFrame(script_path)
+    frames.append(frame)
     try:
-        yield
+        yield frame
     finally:
-        _BUILD_STATE.depth -= 1
+        frames.pop()
 
 
 @dataclass(frozen=True)
@@ -122,6 +166,10 @@ class ModelDef:
     animation: str | None = None
     # Declared mesh serializations (@stl/@glb/@threemf). STEP models only.
     mesh_exports: tuple[MeshExportDecl, ...] = ()
+    # False for a MESH-ONLY model (@stl/@glb/@threemf with no @step): the same
+    # tree and record as any model, but the .step is not among its outputs and
+    # is never written. STEP is one output kind, not the primary.
+    step_output: bool = True
 
     @property
     def output_path(self) -> Path:
@@ -205,6 +253,7 @@ def _decorator(
     mesh_angular_tolerance: float | None,
     kinematics: object = None,
     animation: object = None,
+    step_output: bool = True,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     if kind is not None and kind not in {"part", "assembly"}:
         raise ValueError(f"@{fmt} kind must be 'part' or 'assembly', got {kind!r}")
@@ -215,20 +264,25 @@ def _decorator(
     animation_path = _normalize_animation(animation, fmt=fmt)
 
     def apply(func: Callable[..., Any]) -> Callable[..., Any]:
+        pending: tuple[MeshExportDecl, ...] = ()
+        prior: ModelDef | None = getattr(func, "__cadgen_model__", None)
+        if prior is not None:
+            prior = _REGISTRY.get(prior.script_path, prior)  # the registry is authoritative
+        if prior is not None and not prior.step_output:
+            # A mesh decorator BELOW this one already declared the function a
+            # mesh-only model (and handed back its wrapper). @step takes the RAW
+            # function and its declarations over (stacking order stays neutral);
+            # a drawing cannot.
+            if fmt != "step":
+                names = ", ".join(f"@{_MESH_FMT_DECORATOR[d.fmt]}" for d in prior.mesh_exports)
+                raise TypeError(
+                    f"{prior.script_path.name} stacks {names} on a @{fmt} drawing; "
+                    "STL/3MF/GLB derive from a @step model's geometry"
+                )
+            pending = prior.mesh_exports
+            func = prior.func
         _validate_signature(func, fmt=fmt)
         script_path = _script_path_of(func)
-        pending = tuple(getattr(func, "__cadgen_pending_mesh_exports__", ()))
-        if pending and fmt != "step":
-            names = ", ".join(f"@{_MESH_FMT_DECORATOR[d.fmt]}" for d in pending)
-            raise TypeError(
-                f"{script_path.name} stacks {names} on a @{fmt} drawing; "
-                "STL/3MF/GLB derive from a @step model's geometry"
-            )
-        if pending:
-            try:
-                delattr(func, "__cadgen_pending_mesh_exports__")
-            except AttributeError:
-                pass
         defn = ModelDef(
             func=func,
             fmt=fmt,
@@ -241,15 +295,29 @@ def _decorator(
             bake_pose=bake_pose,
             animation=animation_path,
             mesh_exports=pending,
+            step_output=step_output,
         )
         _register(defn)
         func.__cadgen_model__ = defn  # type: ignore[attr-defined]
 
         @functools.wraps(func)
         def model(*args: Any, **kwargs: Any) -> Any:
-            if build_in_progress():
-                # Composition: an assembly's body asked for this child's geometry.
-                return func(*args, **kwargs)
+            frame = current_frame()
+            if frame is not None:
+                if args or kwargs:
+                    raise TypeError(f"{func.__name__}() takes no arguments: a model is one configuration of one output.")
+                if frame.script_path is not None and _same_file(frame.script_path, script_path):
+                    # The pipeline building THIS model is asking for its body.
+                    return func()
+                if fmt == "dxf":
+                    # A drawing composes models, never the reverse: called inside
+                    # another build it is just its body (2D geometry), nothing to pin.
+                    return func()
+                # Composition: a parent's body asked for this child. Same rule as the
+                # top level — stale → build, then hand back its geometry — except the
+                # geometry is materialized from the child's tree and the call is
+                # pinned into the parent's record.
+                return _compose_child(_REGISTRY.get(script_path, defn))
             if args or kwargs:
                 raise TypeError(
                     f"{func.__name__}() takes no arguments: a model is one configuration "
@@ -342,10 +410,11 @@ def _validate_variant(existing, decl: MeshExportDecl, deco_name: str) -> None:
 
 
 def _mesh_export_decorator(deco_name: str, fmt: str):
-    """Factory for ``@stl``/``@glb``/``@threemf``: metadata-attachers, never
-    wrappers. Below ``@step`` they park a pending declaration on the raw
-    function; above it they extend the registered model. Both routes converge
-    in the loader import, so stacking order is behavior-neutral."""
+    """Factory for ``@stl``/``@glb``/``@threemf``. Above ``@step`` they extend
+    the registered model; alone (or below ``@step``) they declare a mesh-only
+    model that a later ``@step`` takes over. Both routes converge in the loader
+    import, so stacking order is behavior-neutral, and a model with no ``@step``
+    at all is still a model — one that writes no STEP."""
     from dataclasses import replace as _replace
 
     suffix = f".{fmt}"
@@ -398,12 +467,20 @@ def _mesh_export_decorator(deco_name: str, fmt: str):
                 _REGISTRY[updated.script_path] = updated
                 target.__cadgen_model__ = updated  # type: ignore[attr-defined]
                 return target
-            # Below @step: park a pending declaration for @step to consume.
-            pending = list(getattr(target, "__cadgen_pending_mesh_exports__", ()))
-            _validate_variant(pending, decl, deco_name)
-            pending.append(decl)
-            target.__cadgen_pending_mesh_exports__ = tuple(pending)  # type: ignore[attr-defined]
-            return target
+            # No @step (yet): a mesh decorator alone declares a MODEL — the same
+            # tree, record and job as any model — whose outputs are its mesh
+            # declarations; its .step is never written. A @step stacked above takes
+            # the declarations over, so stacking order stays neutral.
+            wrapper = _decorator(
+                "step", out=None, kind=None, mesh_tolerance=None,
+                mesh_angular_tolerance=None, step_output=False,
+            )(target)
+            registered = _REGISTRY[_script_path_of(target)]
+            updated = _replace(registered, mesh_exports=(decl,))
+            _REGISTRY[updated.script_path] = updated
+            wrapper.__cadgen_model__ = updated  # type: ignore[attr-defined]
+            target.__cadgen_model__ = updated  # type: ignore[attr-defined]
+            return wrapper
 
         return attach(func) if func is not None else attach
 
@@ -441,36 +518,98 @@ def _maybe_hint_eager_imports(defn: ModelDef) -> None:
     )
 
 
+def _compose_child(defn: ModelDef) -> Any:
+    """A parent's body called a child: submit it if stale, hand back a promise.
+
+    ``stale → submit → lazy`` — the same gate as the top level, but the call
+    returns at once with a :class:`cadgen.store.lazy.LazyCompound`: a stale
+    child's build is running on the pool (its own worker, or a transient
+    subprocess) while this body keeps calling its other children; a current
+    child is a promise with no job. Geometry arrives when the parent first reads
+    it — normally at the closing ``Compound(children=[...])`` — so siblings
+    build in parallel. The first tree a child resolves to in this build is
+    pinned (snapshot isolation); the same stale child called twice shares one
+    job; children are recorded from the CALLS, never from the geometry.
+    """
+    from cadgen.store.gate import stale
+    from cadgen.store.lazy import LazyCompound
+
+    frame = current_frame()
+    child = defn.script_path
+    if frame is not None and any(_same_file(child, f.script_path) for f in _frames() if f.script_path is not None):
+        raise RuntimeError(
+            f"{child.name} is called while it is itself being built: a model may not depend on itself"
+        )
+    from cadgen.daemon.executors import emit_event, model_event, submit
+
+    parent = frame.script_path if frame is not None else None
+    job = None
+    tree: str | None = frame.pins.get(child) if frame is not None else None
+    if frame is not None and child in frame.jobs:
+        job = frame.jobs[child]
+    elif tree is None:
+        verdict = stale(child)
+        if verdict.stale:
+            job = submit(
+                child, force=False, root_id=getattr(frame, "root_id", None), parent=parent,
+                closure=verdict.closure,
+            )
+            if frame is not None:
+                frame.jobs[child] = job
+        else:
+            # Current: pin its tree NOW, at the call. A rebuild of this child between
+            # here and the force must not change what this build composes.
+            from cadgen.store.records import read_record
+
+            tree = str((read_record(child) or {}).get("tree") or "") or None
+            # No work: the tree summarizes current children on the parent's line.
+            emit_event(model_event(child, "current", parent=str(parent) if parent else None))
+    lazy = LazyCompound(child, job, frame=frame, label=defn.func.__name__, tree=tree)
+    if frame is not None:
+        frame.children.append((child, lazy))
+    return lazy
+
+
+def _frames() -> list[BuildFrame]:
+    return list(getattr(_BUILD_STATE, "frames", None) or [])
+
+
 def _build(defn: ModelDef) -> int:
     """Run the pipeline for a top-level call of a model and return its exit code."""
     argv = sys.argv[1:]
     _maybe_hint_eager_imports(defn)
 
-    # Warm handoff BEFORE any heavy import. The daemon worker imports the module
-    # under a loader name (never __main__), so its `__main__` block does not run
-    # there; the runner executes the model body inside `building()`.
-    if os.environ.get("CADGEN_DAEMON") != "0" and not os.environ.get("CADGEN_DAEMON_CHILD"):
-        try:
-            from cadgen.daemon.client import run_via_daemon
-        except ModuleNotFoundError:
-            warm_exit: int | None = None
-        else:
-            warm_exit = run_via_daemon(
-                "run",
-                [str(defn.script_path), *argv],
-                os.getcwd(),
-                prog=f"python {defn.script_path.name}",
-            )
-        if warm_exit is not None:
-            return warm_exit
+    # This process is the ROOT of a build tree: it owns the terminal and renders the
+    # graph as child events come back through the pool (cadgen.cli_tree). Warm or
+    # cold, the tree is drawn here; the daemon relays its workers' events to us.
+    from cadgen.cli_tree import build_tree
 
-    # A cold @dxf run used to re-exec itself here with PYTHONHASHSEED=0, because
-    # ezdxf's emitted order depended on string hashing. The engine's emitter makes
-    # DXF bytes a function of the drawing's geometry instead
-    # (cadgen._internal.dxf_emit), so a cold run needs no interpreter restart and
-    # @dxf reaches the pipeline by exactly the route @step does.
-    from cadgen.cli._run_model import run_model_argv
+    with build_tree(json_lines="--json" in argv):
+        # Warm handoff BEFORE any heavy import. The daemon worker imports the module
+        # under a loader name (never __main__), so its `__main__` block does not run
+        # there; the runner executes the model body inside `building()`.
+        if os.environ.get("CADGEN_DAEMON") != "0" and not os.environ.get("CADGEN_DAEMON_CHILD"):
+            try:
+                from cadgen.daemon.client import run_via_daemon
+            except ModuleNotFoundError:
+                warm_exit: int | None = None
+            else:
+                warm_exit = run_via_daemon(
+                    "run",
+                    [str(defn.script_path), *argv],
+                    os.getcwd(),
+                    prog=f"python {defn.script_path.name}",
+                )
+            if warm_exit is not None:
+                return warm_exit
 
-    return run_model_argv(
-        [str(defn.script_path), *argv], prog=f"python {defn.script_path.name}"
-    )
+        # A cold @dxf run used to re-exec itself here with PYTHONHASHSEED=0, because
+        # ezdxf's emitted order depended on string hashing. The engine's emitter makes
+        # DXF bytes a function of the drawing's geometry instead
+        # (cadgen._internal.dxf_emit), so a cold run needs no interpreter restart and
+        # @dxf reaches the pipeline by exactly the route @step does.
+        from cadgen.cli._run_model import run_model_argv
+
+        return run_model_argv(
+            [str(defn.script_path), *argv], prog=f"python {defn.script_path.name}"
+        )

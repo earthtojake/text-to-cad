@@ -42,12 +42,13 @@ def mesh_build(
     this format, read from its sidecar. An explicit ``out`` is one ad-hoc
     export at that path. Either way the shared ledger gates the write.
     """
-    from cadgen._internal.doors import document_target, require_current_document
+    from cadgen._internal.doors import document_target
     from cadgen.cli_logging import CliLogger
     from cadgen.step_export_target import export_cad_target
 
+    # The door reads the tree behind the document's BYTES (a compile job when the
+    # store has none); it never refuses a document or runs its script.
     document = document_target(target, suffixes=STEP_SUFFIXES)
-    require_current_document(document)
     if out is None and kinematics is not None:
         raise ValueError(
             "kinematics= names the bake point for ONE explicit OUT; without an "

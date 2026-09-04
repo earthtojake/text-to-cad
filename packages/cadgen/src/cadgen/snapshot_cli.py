@@ -37,7 +37,7 @@ from typing import Any
 import cadgen.cad_ref_syntax as cad_ref_syntax
 import cadgen.lookup as lookup
 from cadgen.assets import browser_runtime_dir
-from cadgen.catalog import render_package_dir
+from cadgen.catalog import result_tree_for, result_view_dir
 from cadgen.step_targets import ResolvedStepTarget, StepTopologyArtifact, StepTopologyArtifactError
 
 from cadgen.cli_logging import CliLogger
@@ -863,12 +863,9 @@ def resolve_step_render_job(
     if job.get("animation") is not None:
         animation_request = normalize_animation_request(job["animation"], where="render job animation")
         job["animation"] = animation_request
-    # A render is a READ. A document whose sidecar closure no longer re-hashes
-    # is refused by naming the run rather than rebuilt here — putting a build
-    # inside a render is exactly the coupling documents-only inputs remove.
-    from cadgen._internal.doors import require_current_document
-
-    require_current_document(input_path)
+    # A render is a READ of the tree behind the document's bytes (compiled from
+    # them on demand below when the store has none). Whether the document's
+    # source has moved on is its model's business, never a render's.
     # Kinematics values drive the model's sidecar kinematics block.
     debug_enabled = bool(job.get("debug"))
     step_artifact_debug: dict[str, object] | None = {} if debug_enabled else None
@@ -887,11 +884,11 @@ def resolve_step_render_job(
         selector_index=artifact_selector_index(artifact),
     )
 
-    # The render package is content-keyed in the user-level store: the entry
-    # file's bytes are hashed and looked up (cadgen.catalog.render_package_dir).
-    package_dir = render_package_dir(source_path)
+    # The document's tree is found by its bytes (index/document → tree) and laid
+    # out as a temporary view directory for the renderer (cadgen.catalog.result_view_dir).
+    package_dir = result_view_dir(source_path)
     if not package_dir.is_dir():
-        raise SnapshotError(f"STEP/STP render input is missing its render package: {package_dir}")
+        raise SnapshotError(f"STEP/STP render input has no tree in the store: {package_dir}")
 
     mode = str(job.get("mode") or "view").strip().lower()
     if mode not in SUPPORTED_RENDER_MODES:
@@ -911,7 +908,9 @@ def resolve_step_render_job(
         "inputPath": str(input_path),
         "inputUrl": asset_url_for_path(input_path, root_path),
         "kind": kind,
-        "packagePath": str(package_dir),
+        # The hash of the tree this job renders: the geometry's identity in the
+        # result (cadgen.results.SnapshotFile.tree), never a directory.
+        "tree": result_tree_for(source_path) or "",
     }
     # Component-GLB package (the canonical render artifact for every STEP model): inline
     # the descriptor and pre-resolve one asset URL per unique component GLB so the renderer

@@ -80,7 +80,7 @@ class StepReemitTests(unittest.TestCase):
         from cadgen.generation import generate_step_targets
 
         code = generate_step_targets(
-            [f"{script}={script.with_suffix('.step').as_posix()}"],
+            [str(script)],
             step_options=StepImportOptions(),
             force=True,
             verbose=False,

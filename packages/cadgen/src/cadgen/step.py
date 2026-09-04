@@ -47,7 +47,6 @@ def compile(  # noqa: A001 - the verb IS "compile"; the builtin is not used here
     *,
     force: bool = False,
     verbose: bool = False,
-    lock_timeout: float = 0.0,
 ) -> CompileResult:
     """Make TARGET's render package current; no-op when it already is.
 
@@ -59,22 +58,19 @@ def compile(  # noqa: A001 - the verb IS "compile"; the builtin is not used here
     target: the STEP/STP document to compile.
     force: recompile even when the package is already current.
     verbose: show detailed progress and timing on stderr.
-    lock_timeout: give up after SECONDS when another run holds this document's
-        lock, answering contended instead of compiling. 0 (the default) waits
-        for the peer.
     """
-    from cadgen._internal.doors import document_target, require_current_document
+    from cadgen._internal.doors import document_target
     from cadgen.step_artifact_cli import build_step_artifact
 
+    # The document's BYTES are compiled, generated or imported alike; whether its
+    # source has moved on is its model's business, not this door's.
     document = document_target(target, suffixes=(".step", ".stp"))
-    require_current_document(document)
     payload = build_step_artifact(
         repo_root=Path.cwd(),
         step=document,
         source_path=None,
         force=force,
         verbose=verbose,
-        lock_timeout_s=lock_timeout,
     )
 
     def path_of(key: str) -> Path | None:
@@ -84,9 +80,8 @@ def compile(  # noqa: A001 - the verb IS "compile"; the builtin is not used here
     return CompileResult(
         ok=bool(payload.get("ok", True)),
         document=path_of("stepPath"),
-        package=path_of("packagePath"),
+        tree=str(payload.get("tree") or "") or None,
         skipped=bool(payload.get("skipped")),
-        contended=bool(payload.get("contended")),
     )
 
 
@@ -121,7 +116,6 @@ def build(
     force: re-emit even when the freshness gate says OUT is current.
     verbose: show detailed progress and timing on stderr.
     """
-    from cadgen._internal.doors import require_current_document
     from cadgen._internal.step_reemit import (
         load_animation_text,
         load_kinematics_space,
@@ -131,7 +125,6 @@ def build(
     from cadgen.cli_logging import CliLogger
 
     document, destination = resolve_output(target, out)
-    require_current_document(document)
     where = "cadgen step build"
     kinematics_def = load_kinematics_space(kinematics, where=where)
     animation_source = load_animation_text(animation, where=where)
@@ -146,7 +139,7 @@ def build(
     return BuildResult(
         ok=bool(payload.get("ok", True)),
         document=payload.get("document"),  # type: ignore[arg-type]
-        package=payload.get("package"),  # type: ignore[arg-type]
+        tree=payload.get("tree"),  # type: ignore[arg-type]
         skipped=bool(payload.get("skipped")),
         sidecar_only=bool(payload.get("sidecarOnly")),
     )

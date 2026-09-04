@@ -23,14 +23,14 @@ def write_package(step_path, *, entry_kind="part", source_kind="step", kinematic
     component-GLB PACKAGE directory inside the per-folder cache
     (``__cadgen__/models/<step-filename>/assembly.json``) whose content-addressed component
     GLBs live in the package's own ``components/<hash>.glb`` dir. Returns the package directory
-    path, mirroring ``cadgen.catalog.render_package_dir``."""
-    from cadgen.catalog import render_package_dir
+    path, mirroring ``cadgen.catalog.result_view_dir``."""
+    from cadgen.catalog import result_view_dir
 
     step_path = Path(step_path)
     if not step_path.is_file():
         step_path.parent.mkdir(parents=True, exist_ok=True)
         step_path.write_text(f"ISO-10303-21;\n{step_path.name}\n")
-    pkg_dir = render_package_dir(step_path)
+    pkg_dir = result_view_dir(step_path)
     comp_dir = pkg_dir / "components"
     pkg_dir.mkdir(parents=True, exist_ok=True)
     comp_dir.mkdir(parents=True, exist_ok=True)

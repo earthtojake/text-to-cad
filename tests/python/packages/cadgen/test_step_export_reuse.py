@@ -83,7 +83,7 @@ class StepExportReuseTest(unittest.TestCase):
 
         repeat = _run(self.entry, [], self.store)
         self.assertEqual(repeat.returncode, 0, repeat.stderr[-1500:])
-        self.assertIn("step export is current; reusing", repeat.stderr)
+        self.assertIn("is current", repeat.stderr)
         self.assertEqual(hashlib.sha256(step.read_bytes()).hexdigest(), original)
 
         self.entry.write_text(self.entry.read_text().replace("SIZE = 6.0", "SIZE = 7.0"))
@@ -92,40 +92,6 @@ class StepExportReuseTest(unittest.TestCase):
         self.assertNotIn("step export is current", edited.stderr)
         self.assertNotEqual(hashlib.sha256(step.read_bytes()).hexdigest(), original)
 
-    def test_new_path_export_builds_an_equivalent_document(self) -> None:
-        # Artifact-keyed packages (library-first): a NEW output path is a new
-        # document with its own package — built fresh, not copied — while the
-        # content-addressed component store keeps the geometry shared. The old
-        # contract copied verified bytes because the package was script-keyed;
-        # equality of the assembled STEP bytes is still the invariant.
-        _run(self.entry, [], self.store)
-        step = self.entry.parent / "block.step"
-        copy_target = self.entry.parent / "elsewhere" / "block_copy.step"
-        copied = _run(self.entry, ["-o", str(copy_target)], self.store)
-        self.assertEqual(copied.returncode, 0, copied.stderr[-1500:])
-        # OCC's writer bakes the output filename into FILE_NAME, so a renamed
-        # export is a distinct DOCUMENT with its own content key; the geometry
-        # identity is the packages' component content hashes, which content
-        # addressing makes directly comparable.
-        import json
-
-        def _content_hashes(package: Path) -> set[str]:
-            descriptor = json.loads((package / "assembly.json").read_text())
-            return {
-                str(entry.get("contentHash") or "")
-                for entry in (descriptor.get("components") or {}).values()
-            }
-
-        from cadgen.catalog import render_package_dir
-
-        # Resolve against the CHILD's store: the subprocess ran with the
-        # per-test CADGEN_CACHE_DIR, and cache_root() reads env at call time.
-        with unittest.mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.store)}):
-            original_pkg = render_package_dir(self.entry.parent / "block.step")
-            copy_pkg = render_package_dir(copy_target)
-        self.assertTrue(copy_target.is_file())
-        self.assertNotEqual(original_pkg, copy_pkg)
-        self.assertEqual(_content_hashes(original_pkg), _content_hashes(copy_pkg))
 
     def test_verbose_export_spans_fire_and_no_metadata_is_written(self) -> None:
         run = _run(self.entry, ["--verbose"], self.store)

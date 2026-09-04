@@ -75,7 +75,6 @@ function stepArtifactGenerationFileRefs(entry = null, artifact = entry?.artifact
   if (STEP_FILE_EXTENSION_RE.test(normalizeStepArtifactFileRef(artifact?.sourcePath))) {
     addStepFileRef(refs, artifact?.sourcePath);
   }
-  addFileRef(refs, artifact?.packagePath);
   return [...refs];
 }
 

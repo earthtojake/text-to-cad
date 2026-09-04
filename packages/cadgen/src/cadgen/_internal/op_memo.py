@@ -265,39 +265,30 @@ def _disk_enabled() -> bool:
     return os.environ.get("CADGEN_OP_MEMO_DISK", "1") != "0"
 
 
-def _disk_dir() -> str:
-    # Resolved per call so tests (and long-lived workers) honor env changes;
-    # the makedirs is a no-op syscall next to any kernel op. The base comes
-    # from the shared cache root (cache_paths, which also keeps honoring the
-    # relocated as one unit via CADGEN_CACHE_DIR); the salt subdirectory
-    # is this tier's generation scheme, which `cadgen cache gc` reads by name.
+def _op_index_key(key: tuple) -> str:
+    """The op-memo entry key: the op key plus the memo scheme and the kernel
+    version, so a changed scheme or build123d simply misses (no salted
+    directories to sweep)."""
     import build123d
 
-    from cadgen._internal.cache_paths import opmemo_base_dir
-
-    salt = f"v{_OP_MEMO_VERSION}-b123d{getattr(build123d, '__version__', 'unknown')}"
-    path = os.path.join(str(opmemo_base_dir()), salt)
-    os.makedirs(path, exist_ok=True)
-    return path
-
-
-def _disk_path(key: tuple) -> str:
-    digest = hashlib.sha256(repr(key).encode("utf-8")).hexdigest()
-    return os.path.join(_disk_dir(), f"{digest}.brep")
+    scheme = f"v{_OP_MEMO_VERSION}-b123d{getattr(build123d, '__version__', 'unknown')}"
+    return hashlib.sha256((scheme + "\0" + repr(key)).encode("utf-8")).hexdigest()
 
 
 def _disk_put(key: tuple, stored) -> None:
+    """The result bytes become an OBJECT (content-addressed); the entry under
+    ``index/op/<key>`` maps the op key to it plus the class/recipe header."""
     if not _disk_enabled() or not isinstance(stored, _StoredShape):
         return
     try:
-        import json
+        from cadgen.store.index import write_entry
+        from cadgen.store.objects import put_object
 
-        header = json.dumps({"cls": stored.cls_path, "recipe": stored.recipe}, separators=(",", ":"))
-        path = _disk_path(key)
-        tmp = f"{path}.{os.getpid()}.tmp"
-        with open(tmp, "wb") as fh:
-            fh.write(header.encode("utf-8") + b"\n" + stored.brep)
-        replace_atomic(tmp, path)
+        write_entry(
+            "op",
+            _op_index_key(key),
+            {"object": put_object(stored.brep), "cls": stored.cls_path, "recipe": stored.recipe},
+        )
     except Exception:
         _stats["errors"] += 1
 
@@ -318,18 +309,19 @@ def _disk_get(key: tuple):
     if not _disk_enabled():
         return None
     try:
-        import json
+        from cadgen.store.index import read_entry
+        from cadgen.store.objects import has_object, read_object
 
-        path = _disk_path(key)
-        if not os.path.exists(path):
+        entry = read_entry("op", _op_index_key(key))
+        if not entry:
             return None
-        with open(path, "rb") as fh:
-            header, _, brep = fh.read().partition(b"\n")
-        meta = json.loads(header.decode("utf-8"))
+        digest = str(entry.get("object") or "")
+        if not digest or not has_object(digest):
+            return None
         # Resolve the class now so a foreign entry fails here (falls back to
         # executing the op) rather than at thaw.
-        _resolve_shape_class(meta["cls"])
-        return _StoredShape(meta["cls"], brep, meta["recipe"])
+        _resolve_shape_class(entry["cls"])
+        return _StoredShape(entry["cls"], read_object(digest), entry["recipe"])
     except Exception:
         _stats["errors"] += 1
         return None

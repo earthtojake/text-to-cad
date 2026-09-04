@@ -21,9 +21,8 @@ from cadgen._internal.generation import (
     _generate_part_outputs,
     cli_progress_line,
     relative_to_cwd,
-    run_script_generator,
 )
-from cadgen.catalog import coordination_scope, render_package_dir
+from cadgen.catalog import build_scope, result_view_dir
 from cadgen._internal.step_scene import LoadedStepScene, load_step_scene_cached
 from cadgen.step_artifact_cli import infer_entry_kind
 from cadgen.step_targets import (
@@ -62,7 +61,7 @@ def ensure_step_topology_artifact(
     try:
         # Every CLI that needs a STEP package comes through here -- inspect, snapshot -- and
         # the rebuild below can be the same multi-minute generator `cad gen` runs. It used to
-        # take the lock and report to the VIEWER only, so a terminal caller watched a silent
+        # report to the VIEWER only, so a terminal caller watched a silent
         # process while an open viewer showed the phases. The progress line is built here, at
         # the one shared entry point, rather than asked of every caller.
         with _topology_progress_line(target, logger=logger) as sink:
@@ -122,7 +121,7 @@ def _ensure_step_topology_artifact(
     )
     if debug is not None:
         debug["source"] = spec.source
-    resolved_artifact_path = artifact_path or render_package_dir(spec.entry_path)
+    resolved_artifact_path = artifact_path or result_view_dir(spec.entry_path)
 
     # The canonical render artifact for a generated assembly is a component-GLB package
     # directory, which carries no whole-assembly selector topology (faces/edges). inspect
@@ -158,21 +157,15 @@ def _ensure_step_topology_artifact(
         debug["cacheHit"] = False
 
     try:
-        # This rebuild REWRITES the render package, so it must hold the package's write
-        # lock for the whole span -- generator run AND emit. It previously held none: the
-        # generator took the lock internally and released it on return, and the package
-        # write that followed was completely uncoordinated. A viewer polling during that
-        # window read "no build in flight", found the package stale, and started a SECOND
-        # full build into the same directory.
+        # This rebuild REWRITES the render package, so it reports for the whole span --
+        # generator run AND emit -- and a viewer polling during the emit sees a build.
         #
-        # Locks and progress key by the MODEL PATH, never by the content-keyed package
-        # dir: a rebuild changes the content key mid-build, so the package dir does not
-        # identify the run, and readers (the viewer's progress poller, a peer CLI) derive
-        # the record from the model path they hold and could not know the new key in
-        # advance. This is also what makes the generator's own lock, taken through
-        # generation_runner._spec_output_dir, re-entrant with this one.
+        # Progress keys by the MODEL PATH, never by the content-keyed package dir: a
+        # rebuild changes the content key mid-build, so the package dir does not identify
+        # the run, and readers (the viewer's progress poller, a peer CLI) derive the record
+        # from the model path they hold and could not know the new key in advance.
         with artifact_build(
-            STEP_PACKAGE, coordination_scope(spec.entry_path), sink=sink
+            STEP_PACKAGE, build_scope(spec.entry_path), sink=sink
         ) as run:
             spec, scene = _scene_for_regeneration(
                 spec, logger=logger, force=force, progress=run
@@ -264,7 +257,7 @@ def _assembly_topology_artifact(
     ``topology.glb`` sidecar is involved at all."""
     from cadgen._internal.component_package import read_package_descriptor
 
-    descriptor = read_package_descriptor(render_package_dir(spec.entry_path))
+    descriptor = read_package_descriptor(result_view_dir(spec.entry_path))
     if not require_selector:
         if descriptor is not None:
             if debug is not None:
@@ -275,7 +268,7 @@ def _assembly_topology_artifact(
                 kind="assembly",
                 source_path=spec.source_path,
                 step_path=spec.step_path,
-                artifact_path=render_package_dir(spec.entry_path),
+                artifact_path=result_view_dir(spec.entry_path),
                 manifest=descriptor,
                 selector_bundle=None,
             )
@@ -307,7 +300,7 @@ def _assembly_topology_artifact(
             kind="assembly",
             source_path=spec.source_path,
             step_path=spec.step_path,
-            artifact_path=render_package_dir(spec.entry_path),
+            artifact_path=result_view_dir(spec.entry_path),
             manifest=descriptor,
             selector_bundle=SelectorBundle(manifest=descriptor),
         )
@@ -325,13 +318,13 @@ def _assembly_topology_artifact(
     deadline = time.monotonic() + 5.0
     while descriptor is None and time.monotonic() < deadline:
         time.sleep(0.05)
-        descriptor = read_package_descriptor(render_package_dir(spec.entry_path))
+        descriptor = read_package_descriptor(result_view_dir(spec.entry_path))
     if descriptor is None:
         raise StepTopologyArtifactError(
             code="missing_glb",
             cad_path=spec.cad_ref,
             step_path=spec.step_path,
-            artifact_path=render_package_dir(spec.entry_path),
+            artifact_path=result_view_dir(spec.entry_path),
             regenerate_command=REGENERATE_STEP_COMMAND,
             message=(
                 f"Render package descriptor for {spec.cad_ref} did not appear "
@@ -345,7 +338,7 @@ def _assembly_topology_artifact(
         kind="assembly",
         source_path=spec.source_path,
         step_path=spec.step_path,
-        artifact_path=render_package_dir(spec.entry_path),
+        artifact_path=result_view_dir(spec.entry_path),
         manifest=descriptor,
         selector_bundle=SelectorBundle(manifest=descriptor) if require_selector else None,
     )
@@ -359,33 +352,16 @@ def _scene_for_regeneration(
     progress: object | None = None,
 ) -> tuple[EntrySpec, LoadedStepScene]:
     if spec.source == "generated":
-        from cadgen._internal.doors import announce_rebuild, document_staleness
+        # A door never runs the script. The document on disk is what inspect
+        # measures: its tree is made current from its BYTES (a compile job in the
+        # pool when the store has none), then it is read like any import below.
+        from cadgen._internal.doors import document_tree
 
-        document = spec.step_path
-        announce_rebuild(
-            "step inspect",
-            document,
-            reason=(
-                (document_staleness(document) if document.is_file() else "no document on disk")
-                or ("--force" if force else "its render package is missing or stale")
-            ),
-            source=spec.script_path or spec.source_path,
-            verb="inspecting",
-        )
-        # The run holding the lock, so the generator reports its phase (and whatever the
-        # generator itself reports through cadgen.progress). Without it this call -- which
-        # for a large assembly is the longest thing inspect does -- opened the build with no
-        # `generate` phase at all: the bar jumped straight to `collecting parts`.
-        scene = run_script_generator(
-            spec,
-            "step",
-            logger=logger,
-            force=force,
-            progress=progress,
-        )
-        if scene is None:
-            raise RuntimeError(f"Python generator did not produce a STEP scene: {spec.source_ref}")
-        return spec, scene
+        if not spec.step_path.is_file():
+            raise FileNotFoundError(
+                f"no document on disk for {spec.source_ref}: run python {spec.script_path or spec.source_path}"
+            )
+        document_tree(spec.step_path)
 
     resolve_progress(progress).phase(PHASE_GENERATE)
     with (logger.timed(f"load STEP {spec.cad_ref}") if logger is not None else _null_context()):

@@ -25,7 +25,7 @@ path/to/entry.step
 
 Targets are documents: an extensionless `<name>` resolves to `<name>.step`, and a `.py` model script is refused by name (run `python <model>.py`, then inspect the STEP it wrote).
 
-Selector-backed queries (`refs --facts`, planes, measures) on generated assemblies resolve from the render package's per-component `.surf` files on demand; there is no separate topology sidecar to build or invalidate.
+Selector-backed queries (`refs --facts`, planes, measures) resolve from the document's tree in the store — its per-component `.surf` objects — on demand; a document with no tree yet is compiled from its bytes first, generated or imported alike. There is no separate topology sidecar to build or invalidate, and a document is never refused for being behind its script.
 
 Selector refs are local to the STEP/CAD entry target passed to the command:
 
@@ -188,14 +188,11 @@ the test when it dominates runtime. Progress paints on stderr per shape;
 until the run completes, so a run that is killed (out of memory, a lost daemon
 worker) leaves the findings it reached.
 
-`validate` and `interfere` need the model's in-memory scene. A current
-document is loaded from disk and runs no Python; a stale one (its script or a
-helper it imports changed since the document was written) is rebuilt from its
-script first, and the door announces that on stderr before the rebuild starts:
-
-```text
-inspect validate: STEP/rig.step is stale (src/lib/palette.py changed after the document was written); rebuilding from src/rig.py before validating
-```
+`validate` and `interfere` measure the document ON DISK: it is loaded as
+written and runs no Python, even when its script has changed since — a door
+never rebuilds a model. Rerun the script first when you want the new geometry
+measured. A document the store has never seen (one edited or written by another
+tool) is compiled from its bytes on demand, like an import.
 
 ### `interfere`: do two parts occupy the same space?
 

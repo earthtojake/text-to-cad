@@ -80,7 +80,6 @@ class StepTopologyArtifactError(CadRefError):
             "message": str(self),
             "cadPath": self.cad_path,
             "stepPath": _display_path(self.step_path),
-            "packagePath": _display_path(self.artifact_path),
             "regenerateCommand": self.regenerate_command,
         }
 

@@ -32,7 +32,7 @@ from .cadgen_ops import create_cadgen_ops
 from .content_types import content_type_for_static_asset
 from .encoding import UriError, strict_decode_uri_component
 from .scanner import path_relative
-from .store_paths import store_packages_dir
+from .store_paths import virtual_store_asset
 from .tess_cache import read_tess_cache_batch, read_tess_cache_entry, write_tess_cache_entry
 
 __all__ = [
@@ -440,35 +440,30 @@ class CadApp:
         response.send_json(500 if result.get("ok") is False else 200, payload)
 
     def _handle_store_asset(self, request, response, query):
-        """Render-package assets, confined to the store's ``packages/`` tier.
+        """A tree served as if it were a directory: ``<tree>/assembly.json`` is
+        the flattened tree, ``<tree>/components/<object>.surf`` streams the
+        object. Nothing here touches a path the client names: the ``file``
+        param is parsed into (tree hash, object hash) and each is looked up by
+        HASH in the store, so ``file=/etc/hosts`` is simply not a tree.
 
-        Everything that fails here is 404, never 403: the containment failure is
-        folded into "there is no stat" rather than raised. Leading slashes are
-        STRIPPED because the client's resolvePackageAssetUrl emits
-        ``file=/<key>/components/c0.surf``; that also means ``file=/etc/hosts``
-        resolves under the tier and 404s rather than reading /etc/hosts.
+        Everything that fails is 404, never 403. Leading slashes are STRIPPED
+        because the client's resolvePackageAssetUrl emits
+        ``file=/<tree>/components/<object>.surf``.
         """
-        rel = str(query.get("file") or "").replace("\\", "/")
-        base = os.path.abspath(store_packages_dir())
-        candidate = os.path.abspath(os.path.join(base, rel.lstrip("/")))
-        contained = candidate == base or candidate.startswith(base + os.sep)
-        hidden = any(
-            part and part != ".." and part.startswith(".")
-            for part in path_relative(base, candidate).split(os.sep)
-        )
-        stat_result = None
-        if contained and not hidden:
-            try:
-                stat_result = os.stat(candidate)
-            except (OSError, ValueError):
-                stat_result = None
-        # One stat answers both existence and regular-ness; re-statting would
-        # open a window where the two disagree.
-        if stat_result is None or not stat.S_ISREG(stat_result.st_mode):
+        rel = str(query.get("file") or "").replace("\\", "/").lstrip("/")
+        payload, content_type = virtual_store_asset(rel)
+        if payload is None:
             response.send_json(404, {"error": "Not found"})
             return
-        content_type = self.backend.content_type_for_path(candidate) or "application/octet-stream"
-        response.stream_file(candidate, stat_result, content_type)
+        if isinstance(payload, bytes):
+            response.send_bytes(200, payload, content_type)
+            return
+        try:
+            stat_result = os.stat(payload)
+        except (OSError, ValueError):
+            response.send_json(404, {"error": "Not found"})
+            return
+        response.stream_file(str(payload), stat_result, content_type)
 
     def _handle_asset(self, request, response, query):
         candidate = self.backend.asset_path_for_file_ref(query.get("file") or "")

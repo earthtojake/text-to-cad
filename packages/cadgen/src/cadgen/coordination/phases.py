@@ -100,10 +100,7 @@ class ProgressEvent:
         return min(1.0, max(0.0, self.done / float(self.total)))
 
     def progress_payload(self) -> dict[str, object]:
-        """The phase block of a status record (camelCase -- it is read by the viewer).
-
-        Identity, outcome and stage times are the RECORD's business, not the event's; see
-        :func:`cadgen.coordination.record.build_record`."""
+        """This frame as a plain dict (camelCase -- the shape the viewer's client reads)."""
         return {
             "phase": self.phase,
             "label": self.label,

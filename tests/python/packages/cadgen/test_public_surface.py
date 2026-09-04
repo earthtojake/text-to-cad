@@ -113,7 +113,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
 # Commands not yet re-homed under the schema. This set only shrinks.
 UNCLASSIFIED = {
     "doctor",
-    "cache",
+    "store",
     "daemon",
     "daemon status",
     # The viewer launcher owns its parser: the launch contract (reuse-or-start,

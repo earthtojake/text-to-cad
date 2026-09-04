@@ -1,11 +1,11 @@
 """Artifact operations for a STATIC visualization tool.
 
 The viewer's render path runs no generators: it renders what exists. Generation
-and export belong to model scripts and the CLIs. The one build-shaped thing the
-viewer does is importing a raw FOREIGN ``.step`` — making its render package
-current in the shared store, which is exactly the cache action — and that goes
-through ``compile_client``, which calls cadgen's compile entry point in a
-private worker so the kernel never loads into the long-lived server.
+belongs to model scripts and the doors. The one build-shaped thing the viewer
+does is importing a raw FOREIGN ``.step`` — making its tree current in the
+shared store, which is exactly the cache action — and that is a compile job in
+cadgen's pool (``imports``), so the kernel never loads into the long-lived
+server and a door importing the same file is the same job.
 """
 
 from __future__ import annotations
@@ -20,26 +20,20 @@ from .artifact_status import (
     resolve_artifact_verdict,
 )
 from .backend import require_contained
-from .build_progress import ProgressRegistry, build_progress_snapshot
-from .compile_client import CompileClient
-from .store_paths import render_package_dir
+from .build_progress import build_progress_snapshot
+from .imports import ImportCompiler
+from .store_paths import build_scope
 
-__all__ = ["CLI_BUILD_HINT", "CadgenOps", "create_cadgen_ops"]
-
-CLI_BUILD_HINT = (
-    "The viewer is a static visualization tool and does not run generators. "
-    "Build this model by running its script: python <source>."
-)
+__all__ = ["CadgenOps", "create_cadgen_ops"]
 
 
 class CadgenOps:
-    def __init__(self, root_dir: str, *, registry=None, client=None) -> None:
+    def __init__(self, root_dir: str, *, client=None) -> None:
         # Resolved once. Containment compares this against every candidate, and
         # a root spelled relatively would make that comparison depend on the
         # process's current directory.
         self.root_dir = os.path.abspath(str(root_dir or ""))
-        self.registry = registry if registry is not None else ProgressRegistry()
-        self.client = client if client is not None else CompileClient(registry=self.registry)
+        self.client = client if client is not None else ImportCompiler()
 
     def shutdown(self) -> None:
         self.client.shutdown()
@@ -74,14 +68,15 @@ class CadgenOps:
             return {"state": ARTIFACT_STATE.READY}
 
         candidate = self._candidate(file_ref)
-        package_dir = render_package_dir(candidate)
+        build_key = build_scope(candidate)
 
-        snapshot = build_progress_snapshot(candidate, registry=self.registry)
-        if snapshot is None and self.client.in_flight(package_dir):
-            # Our worker is starting up but has not reported a phase yet. An
-            # indeterminate generating badge beats showing nothing, and it is
-            # what the client's attach loop needs in order to have something to
-            # attach TO.
+        # The daemon's job ledger: any job with this document among its outputs,
+        # whoever submitted it (a CLI build, a parent's child build, our compile).
+        snapshot = build_progress_snapshot(candidate)
+        if snapshot is None and self.client.in_flight(build_key):
+            # Our own compile before the daemon lists it (or with no daemon at
+            # all): an indeterminate generating badge beats showing nothing, and
+            # it is what the client's attach loop needs to attach TO.
             snapshot = {"writing": True, "busy": False, "runId": None, "progress": None}
 
         # Resolved once and threaded through both uses below.
@@ -92,9 +87,10 @@ class CadgenOps:
         if status.get("state") != ARTIFACT_STATE.NEEDS_BUILD:
             return status
 
-        # The ONLY buildable state the viewer supports is importing a raw
-        # foreign STEP. Everything else renders what exists or names the CLI.
-        if verdict.get("rawStep") and not verdict.get("generated"):
+        # The one buildable state: a document with no tree for its bytes. The
+        # viewer never asks who wrote it — a compile job builds the tree from
+        # the bytes, generated or imported alike (STORE.md §2, §9).
+        if verdict.get("rawStep"):
             # The import offer is exactly Node's three keys. It deliberately
             # does NOT carry `blocked` through from `status`.
             #
@@ -105,9 +101,9 @@ class CadgenOps:
             # buildProgressSnapshot did before them. So the flag was
             # unreachable, and an unreachable flag that flips the client
             # from BUILD to ATTACH is a trap for the next reader, not a
-            # safeguard. The real "a peer holds the lock" signal is
-            # `contended`, which build_artifact answers with `generating`
-            # and the client attaches to.
+            # safeguard. A compile already in flight for this document shows
+            # as `generating` above (its progress record, or our own
+            # in-flight entry), which the client attaches to.
             #
             # busy/blocked stay in artifact_status.py: they are pinned there
             # by the ported spec, which supplies the snapshot directly.
@@ -116,11 +112,7 @@ class CadgenOps:
                 "reason": status.get("reason"),
                 "stepImport": True,
             }
-
-        # No stale-render limbo exists under content keying: an edited file
-        # resolves to a different key (needs-build above), and a resolved
-        # package is by construction the render of exactly these bytes.
-        return {"state": ARTIFACT_STATE.ERROR, "error": CLI_BUILD_HINT}
+        return status
 
     # --- build ------------------------------------------------------------
 
@@ -129,16 +121,14 @@ class CadgenOps:
             return {"ok": True, "state": ARTIFACT_STATE.READY}
 
         candidate = self._candidate(file_ref)
-        verdict = resolve_artifact_verdict(file_ref, self.root_dir)
-        if self._is_raw_step_file(candidate) and not verdict.get("generated"):
+        if self._is_raw_step_file(candidate):
+            # A job in the pool: it waits for a slot there if it must, so this
+            # request thread simply waits for the answer (a peer's request for
+            # the same document attaches to the same job).
             imported = self.client.compile(candidate, force=force)
-            if imported.get("ok") and imported.get("contended"):
-                # A peer holds the package lock and is building it. The client
-                # treats this exactly like attaching to a CLI build.
-                return {"ok": True, "state": ARTIFACT_STATE.GENERATING, "contended": True}
             if imported.get("ok"):
-                # The compile payload is spread LAST, so its own ok/document/
-                # package/skipped/contended land on the wire and its ok wins.
+                # The compile payload is spread LAST, so its own ok/document
+                # land on the wire and its ok wins.
                 return {
                     "ok": True,
                     "state": ARTIFACT_STATE.READY,
@@ -159,7 +149,7 @@ class CadgenOps:
             if imported.get("errorType"):
                 failure["errorType"] = imported["errorType"]
             return failure
-        return {"ok": False, "state": ARTIFACT_STATE.ERROR, "error": CLI_BUILD_HINT}
+        return {"ok": False, "state": ARTIFACT_STATE.ERROR, "error": f"Artifact source not found: {file_ref}"}
 
     @staticmethod
     def _is_raw_step_file(candidate: str) -> bool:

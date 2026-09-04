@@ -1,7 +1,10 @@
 # lyra models
 
 The hand assembly plus one model per URDF link. Every link model emits both a
-STEP part and the 3MF mesh `lyra.urdf` references.
+STEP part and the 3MF mesh `lyra.urdf` references, and `lyra.py` composes
+those same models by CALLING them: a stale link builds on its own worker, a
+current one loads, and the hand links its tree. Rebuilding a link alone leaves
+the hand to be rerun.
 
 | Script                 | Artifact                                       | Description                          |
 |------------------------|------------------------------------------------|--------------------------------------|

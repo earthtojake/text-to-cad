@@ -92,25 +92,34 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
             )
 
             from cadgen._internal.step_hash import step_file_hash
-            from cadgen._internal.component_package import build_package_from_compound
+            from tests.python.support.store_fixtures import build_view
             from cadgen._internal.step_scene_mesh import scene_to_build123d_compound
             from cadgen._internal.step_scene_package import scene_from_render_package
-            from cadgen.catalog import render_package_dir
+            from cadgen.catalog import result_view_dir
             from cadgen.coordination import artifact_build
             from cadgen.coordination.kinds import STEP_PACKAGE
 
             compound = scene_to_build123d_compound(scene)
-            package_dir = render_package_dir(step_path)
+            package_dir = result_view_dir(step_path)
             step_hash = step_file_hash(step_path)
+            from cadgen.store.records import write_record
+
             with artifact_build(STEP_PACKAGE, package_dir):
-                build_package_from_compound(
+                built = build_view(
                     compound,
                     package_dir=package_dir,
                     root_name="synthetic",
                     single_component=False,
                     provenance={"stepHash": step_hash, "sourceKind": "step"},
                 )
+            write_record(
+                step_path,
+                {"sourceKind": "step", "entryKind": "assembly", "tree": built["tree"], "closure": {"hash": step_hash, "files": [], "static": True}, "children": [], "outputs": {}, "stepHash": step_hash},
+            )
 
+            from cadgen.store.records import note_document_tree
+
+            note_document_tree(step_hash, built["tree"])  # the artifact side: these bytes -> this tree
             restored = scene_from_render_package(step_path, step_hash=step_hash)
             self.assertIsNotNone(restored)
             assert restored is not None

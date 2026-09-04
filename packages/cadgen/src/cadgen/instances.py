@@ -54,7 +54,7 @@ def compound_from_instances(
         )
     compound = Compound(occt_compound, label=name)
     # Occurrence-metadata tree consumed by the render packager (see
-    # cadgen._internal.component_package.build_package_from_compound); a plain
+    # cadgen.store.build.build_tree_from_compound); a plain
     # build123d compound has no such attribute and falls back to the child walk.
     compound._occurrence_tree = {"id": "o1", "name": name, "children": occurrence_children}
     return compound

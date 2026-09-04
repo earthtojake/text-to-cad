@@ -1,38 +1,34 @@
-"""Warm-process daemon server for the CAD skill CLIs.
+"""Warm-process daemon supervisor for the CAD skill CLIs.
 
-One long-lived process imports cadgen / OCP / build123d ONCE and then services
+The supervisor owns a socket and a pool of warm workers (``cadgen.daemon.pool``),
+each a subprocess that imported cadgen / OCP / build123d once. It services
 directly-run @step/@dxf model scripts ("run") plus ``cadgen step build`` /
-``cadgen stl|3mf|glb build`` / ``cadgen step inspect`` / ``cadgen snapshot`` invocations over
-a per-worktree unix socket, so sessions skip the multi-second interpreter+OCP
-startup on every call. The daemon runs with ``CADGEN_DAEMON_CHILD=1`` so the launcher shim
-never recurses into it.
+``cadgen stl|3mf|glb build`` / ``cadgen step inspect`` / ``cadgen snapshot``
+invocations over a per-install unix socket (named pipe on Windows), so every
+call skips the multi-second interpreter+OCP startup. The supervisor itself never
+imports OCP: no amount of model badness can take it down.
 
 Protocol — one JSON request per connection, JSON-lines response:
 
   request : {"tool": <a key of _TOOL_IMPORTS below>,
-             "argv": [...], "cwd": "...",
-             "token": <client version token>}
-  response: {"stream": "stdout"|"stderr", "data": "..."} chunks, then
-            {"exit": <int>} — or {"restart": true} when the client's version
-            token differs from the daemon's startup token, after which the
-            daemon exits so the client can respawn a fresh one.
+             "argv": [...], "cwd": "...", "prog": "...",
+             "store_root": "...", "root_id": "..." | null,
+             "env": {...}, "token": <client version token>}
+  response: {"stream": "stdout"|"stderr", "data": "..."} chunks and
+            {"event": {...}} build-tree events, then {"exit": <int>} — or
+            {"restart": true} when the client's version token differs from the
+            daemon's startup token, after which the daemon finishes the jobs it
+            is running and exits so the client can respawn a fresh one.
 
-Requests are handled strictly sequentially: OCP is single-threaded, and the cold
-per-invocation CLIs this replaces were serialized anyway. Warm-process
-determinism rides on cadgen's pre-run first-party module eviction (see
-``cadgen._internal.generation.run_script_generator``); the daemon additionally
-drops first-party modules after each request so model code never lingers
-between requests. Python-level stdout/stderr are streamed to the client;
-C-level OCP prints and daemon lifecycle logs land in the log file next to the
-socket.
+Routing: a request that names a model script goes to THAT model's worker
+(STORE.md §9). A busy worker means an extra, never a wait; a model with no
+worker binds a spare; no spare means a spawn. Requests that name no script
+borrow a spare for one job. Nothing here caps, counts memory or queues.
 """
 
 from __future__ import annotations
 
 import contextlib
-import importlib
-import inspect
-import io
 import json
 import os
 import signal
@@ -40,27 +36,25 @@ import sys
 import threading
 import time
 import traceback
-from pathlib import Path
 
 from cadgen.daemon import transport
+from cadgen.daemon.jobs import JobLedger
 from cadgen.daemon.client import (
     compute_version_token,
     daemon_address,
     daemon_identity,
 )
 
-# No sys.path setup: every tool the daemon serves is an ordinary cadgen module now, so it
-# imports from the same distribution this file was loaded from. The block that used to
-# mirror each launcher's lookup paths existed only because the parsers lived in the skill.
-
-DEFAULT_IDLE_TIMEOUT_SECONDS = 600.0
+DEFAULT_IDLE_TIMEOUT_SECONDS = 3600.0
 REQUEST_READ_TIMEOUT_SECONDS = 30.0
 CLIENT_LIVENESS_INTERVAL_SECONDS = 0.5
+# A worker that produces NO frame for this long mid-job is treated as wedged. Generous:
+# a large model can legitimately be silent for many minutes inside one OCCT boolean.
+WORKER_SILENCE_TIMEOUT_SECONDS = 3600.0
 
-# Parser modules are imported directly rather than through a skill's launcher, so the
-# daemon skips that launcher's CADGEN_DAEMON shim -- which would otherwise route straight
-# back here. They are ordinary cadgen modules now, so this no longer depends on a skill's
-# sys.path being set up first.
+# Parser modules are imported by the WORKERS, never by this process. They are ordinary
+# cadgen modules, so a worker imports them from the same distribution this file was
+# loaded from.
 _TOOL_IMPORTS = {
     # "run" is the @step/@dxf decorator's warm-dispatch target (a directly
     # executed model script hands its argv here) — internal, not a user CLI.
@@ -78,79 +72,20 @@ _TOOL_IMPORTS = {
     "inspect": "cadgen.cli.step_inspect.cli",
     "snapshot": "cadgen.cli.step_snapshot",
 }
-_TOOL_MAINS: dict[str, object] = {}
 
+from cadgen.daemon import broker as broker_mod  # noqa: E402
 from cadgen.daemon import pool as pool_mod  # noqa: E402 - after _TOOL_IMPORTS, which worker.py reads
 
 _POOL = pool_mod.Pool()
+# Daemon-wide job slots and the in-flight registry (STORE.md §9). Workers reach it
+# over the daemon's own socket.
+_BROKER = broker_mod.Broker()
 
 
 class _DaemonShutdown(BaseException):
     """Raised from the SIGTERM/SIGINT handler. A BaseException subclass distinct
     from SystemExit so a signal arriving mid-request cannot be mistaken for the
     running tool's own exit and swallowed by the per-request catches."""
-
-
-class _StreamProxy(io.TextIOBase):
-    """``sys.stdout``/``sys.stderr`` stand-in whose destination swaps per request.
-
-    Installed BEFORE the tool modules are imported so def-time default bindings
-    (e.g. snapshot's ``run_render_cli(stdout=sys.stdout, ...)``) capture the
-    proxy and keep routing to the current request's client stream instead of
-    the daemon log."""
-
-    def __init__(self, fallback) -> None:
-        self._fallback = fallback
-        self._target = fallback
-
-    def set_target(self, target) -> None:
-        self._target = target
-
-    def reset(self) -> None:
-        self._target = self._fallback
-
-    @property
-    def encoding(self) -> str:  # TextIOBase declares encoding read-only
-        return getattr(self._target, "encoding", None) or "utf-8"
-
-    def writable(self) -> bool:
-        return True
-
-    def write(self, data) -> int:
-        return self._target.write(data)
-
-    def flush(self) -> None:
-        flush = getattr(self._target, "flush", None)
-        if callable(flush):
-            flush()
-
-    def isatty(self) -> bool:
-        return False
-
-
-class _ChunkWriter:
-    """File-like sink that forwards writes to the client as protocol frames.
-
-    Shares ``send_lock`` with the liveness watchdog so job output and probe
-    frames cannot interleave on the channel."""
-
-    def __init__(self, conn: transport.Channel, stream: str, send_lock: threading.Lock) -> None:
-        self._conn = conn
-        self._stream = stream
-        self._send_lock = send_lock
-
-    def write(self, data) -> int:
-        text = data if isinstance(data, str) else str(data)
-        if text:
-            with self._send_lock:
-                _send(self._conn, {"stream": self._stream, "data": text})
-        return len(text)
-
-    def flush(self) -> None:
-        pass
-
-    def isatty(self) -> bool:
-        return False
 
 
 def _send(conn: transport.Channel, frame: dict) -> None:
@@ -168,30 +103,11 @@ def _idle_timeout() -> float:
         return DEFAULT_IDLE_TIMEOUT_SECONDS
 
 
-def _tool_main(tool: str):
-    main = _TOOL_MAINS.get(tool)
-    if main is None:
-        main = getattr(importlib.import_module(_TOOL_IMPORTS[tool]), "main")
-        _TOOL_MAINS[tool] = main
-    return main
-
-
-def _warm_imports() -> None:
-    """Pay the heavy import cost before the socket exists — the client treats
-    socket presence as readiness."""
-    importlib.import_module("cadgen.generation")
-    for tool in _TOOL_IMPORTS:
-        try:
-            _tool_main(tool)
-        except Exception:  # noqa: BLE001 — surfaces per-request instead
-            _log(f"warm import failed for {tool}:\n{traceback.format_exc()}")
-
-
 def _evict_first_party_modules() -> None:
-    # Same warm-process hygiene the viewer worker relies on: generation already
+    # Warm-process hygiene, run by each WORKER after a job: generation already
     # evicts first-party modules PRE-run for deterministic closure capture; this
-    # post-request pass keeps model modules from lingering in the daemon between
-    # requests (inspect/snapshot paths included).
+    # post-request pass keeps model modules from lingering between requests
+    # (inspect/snapshot paths included).
     try:
         from cadgen._internal.source_hash import evict_first_party_modules
     except Exception:  # noqa: BLE001
@@ -219,16 +135,6 @@ def _read_request(conn: transport.Channel) -> dict | None:
     return request if isinstance(request, dict) else None
 
 
-def _exit_code(exc: SystemExit, err: _ChunkWriter) -> int:
-    code = exc.code
-    if code is None:
-        return 0
-    if isinstance(code, int):
-        return code
-    err.write(f"{code}\n")
-    return 1
-
-
 def _watch_client(
     conn: transport.Channel,
     send_lock: threading.Lock,
@@ -243,10 +149,8 @@ def _watch_client(
     SEND: the channel raises as soon as the peer is gone. An empty stdout chunk is a no-op
     for every client, so it doubles as the liveness probe.
 
-    The single-process daemon had to exit outright here, because the orphaned build was
-    running inside it and there was no smaller thing to stop. With a pool there is: kill
-    the one worker, leave the supervisor and every other job alone. The pool replaces it
-    on the next acquire.
+    Killing the one worker leaves the supervisor and every other job alone; the pool
+    binds a fresh worker to that model on its next request.
     """
     while not done.wait(CLIENT_LIVENESS_INTERVAL_SECONDS):
         try:
@@ -260,137 +164,74 @@ def _watch_client(
             return
 
 
-def worker_died_message(exc: pool_mod.WorkerGone, *, job: str) -> str:
-    """The invoke-path (CAD Viewer) wording for a worker lost mid-job. The CLI path
-    composes its own in the client, where the rerun can be spelled out."""
-    return (
-        f"the warm cadgen worker running {job} died mid-job ({exc}) -- most likely out of "
-        "memory, or a crash in the geometry kernel. The job was not retried; rerun it cold "
-        "with CADGEN_DAEMON=0 to see the failure directly."
-    )
-
-
 def _status_payload() -> dict:
-    """What the supervisor knows that nothing else can: which workers exist and their
-    state. A socket file on disk proves none of it."""
+    """What the supervisor knows that nothing else can: which workers exist, which
+    model each is bound to, and what it is doing. A socket file on disk proves none
+    of it."""
     from cadgen import __version__
 
     snapshot = _POOL.snapshot()
     snapshot.update({
+        "jobsRunning": _BROKER.snapshot(),
+        # Every job, whoever asked: state, phase n/total and declared outputs
+        # (cadgen.daemon.jobs). The CAD Viewer's progress feed.
+        "jobs": _JOBS.snapshot(),
         "pid": os.getpid(),
         "socket": str(daemon_address()),
+        "identity": daemon_identity(),
         "version": __version__,
         "token": compute_version_token(),
         "startedAt": _STARTED_AT,
-        "jobs": _JOBS_SERVED[0],
+        "requests": _REQUESTS_SERVED[0],
+        "inflight": sum(1 for thread in list(_INFLIGHT) if thread.is_alive()),
     })
     return snapshot
 
 
-def _script_project(candidates, base: object) -> str:
-    """The project a request's code belongs to: its model script's directory.
+def _script_path(candidates, base: object) -> str:
+    """The model a request is about: the absolute path of the script it names.
 
     ROUTING LIVES HERE, not in the client: the protocol is unchanged, and a
-    client cannot be trusted to answer "which project is this" consistently
-    across the four front doors that reach the daemon.
+    client cannot be trusted to answer "which model is this" consistently
+    across the front doors that reach the daemon. The script is the only
+    argument that names code the worker will EXECUTE, and a model's identity is
+    its script path (STORE.md §Identity), so the worker is bound to exactly that.
 
-    The model script is the only argument that names code the worker will
-    EXECUTE, so its parent directory is the project. cwd is not: every one of
-    ``cadgen step build models/juno/src/head.py`` and
-    ``cadgen step build models/moonwatch/src/movement_base.py`` run from a repo
-    root reports the same cwd, which is exactly how one warm worker came to
-    serve every project on the machine.
-
-    "" when no argument names a ``.py`` file; the caller decides the fallback.
+    "" when no argument names a ``.py`` file: the request has no model subject
+    and borrows a spare without binding it.
     """
     for candidate in candidates or ():
         text = str(candidate)
         if text.startswith("-") or not text.endswith(".py"):
             continue
         root = str(base or "")
-        absolute = os.path.abspath(os.path.join(root, text) if root else text)
-        return os.path.dirname(absolute)
+        return os.path.realpath(os.path.join(root, text) if root else text)
     return ""
 
 
-def _handle_invoke(conn, request: dict, send_lock: threading.Lock, started: float) -> None:
-    """The CAD Viewer's contract: run a cadgen module and return its payload.
+def _document_path(candidates, base: object) -> str:
+    """The imported document a compile job names (``.step``/``.stp``), or "".
 
-    Same pool, same workers as the CLI path -- which is the point. The viewer used to
-    carry its own warm-worker system for exactly this, so a terminal build and a viewer
-    build each paid their own OCP import and neither could reuse the other's.
-    """
-    module = str(request.get("module") or "")
-    args = [str(a) for a in request.get("args") or []]
-    # The project: the model script this invoke targets, else the first
-    # path-shaped argument's directory (a viewer invoke that names an artifact
-    # rather than a script), which is what routed these before.
-    project = _script_project(args, request.get("repo_root"))
-    if not project:
-        for arg in args:
-            if "/" in arg or "\\" in arg:
-                project = os.path.dirname(os.path.abspath(arg))
-                break
-    worker = _POOL.acquire(project)
-    if worker is None:
-        with send_lock:
-            _send(conn, {"cold": True})
-        return
-    healthy = True
-    try:
-        worker.send({
-            "kind": "invoke",
-            "module": module,
-            "args": args,
-            "repo_root": request.get("repo_root"),
-            "env": request.get("env"),
-        })
-        result = None
-        for frame in worker.frames():
-            if "result" in frame:
-                result = frame["result"]
-        with send_lock:
-            _send(conn, {"result": result or {}})
-    except pool_mod.WorkerGone as exc:
-        healthy = False
-        with contextlib.suppress(OSError):
-            with send_lock:
-                _send(conn, {"result": {
-                    "ok": False,
-                    "error": worker_died_message(exc, job=f"{module} {' '.join(args)}".strip()),
-                }})
-    except OSError:
-        pass  # client vanished; the worker is fine
-    finally:
-        _POOL.release(worker, healthy=healthy and worker.alive())
-    _log(f"invoke {module} in {time.perf_counter() - started:.2f}s (worker {worker.pid})")
+    A coalescing key only: a document binds no worker (the request borrows a
+    spare), but two requests compiling the same bytes are one job."""
+    for candidate in candidates or ():
+        text = str(candidate)
+        if text.startswith("-") or not text.lower().endswith((".step", ".stp")):
+            continue
+        root = str(base or "")
+        return os.path.realpath(os.path.join(root, text) if root else text)
+    return ""
 
 
-def _handle_request(
-    conn: transport.Channel,
-    request: dict,
-    stdout_proxy: _StreamProxy,
-    stderr_proxy: _StreamProxy,
-) -> None:
-    """Relay one job to a warm worker and stream its frames back to the client.
-
-    The supervisor no longer runs tools itself. It used to, which is why it could hold
-    exactly one job: a tool needs os.chdir and sys.argv, and those are process globals.
-    Each worker is its own process with its own globals, so jobs run concurrently without
-    any of that reasoning -- and a segfaulting model costs one worker, not the daemon.
-
-    The proxies are vestigial here (nothing in this process writes tool output any more)
-    and are kept only so the signature matches what serve() passes.
-    """
-    del stdout_proxy, stderr_proxy
+def _handle_request(conn: transport.Channel, request: dict) -> None:
+    """Relay one job to a warm worker and stream its frames back to the client."""
     send_lock = threading.Lock()
     started = time.perf_counter()
-    if request.get("kind") == "status":
-        with send_lock:
-            _send(conn, {"status": _status_payload()})
-        return
-    if request.get("kind") == "invoke":
-        _handle_invoke(conn, request, send_lock, started)
+
+    if request.get("kind") in {"slot", "inflight"}:
+        # A worker asking for a job slot or registering a job in flight. Blocks for the
+        # lease's lifetime on this request thread.
+        _BROKER.handle(conn, request)
         return
 
     tool = request.get("tool")
@@ -402,17 +243,38 @@ def _handle_request(
             _send(conn, {"exit": 1})
         return
 
-    # The project this job belongs to, so a worker only ever executes one
-    # project's code. Verbs that name no model script (inspect/snapshot on a
-    # STEP) execute none, and keep routing on cwd as they always did.
     cwd = str(request.get("cwd") or "")
-    worker = _POOL.acquire(_script_project(argv, cwd) or cwd)
-    if worker is None:
-        # Capped, and nothing freed up within the wait. acquire() has already spent that
-        # budget, so this really is the point where running cold beats waiting longer.
-        _log(f"{tool}: pool at capacity; client runs cold")
-        with send_lock:
-            _send(conn, {"cold": True})
+    model = _script_path(argv, cwd)
+    # What in-flight coalescing keys on: the model, or for a compile job the imported
+    # document (which binds no worker -- it borrows a spare -- but two compiles of one
+    # file are still one job).
+    subject = model or _document_path(argv, cwd)
+    closure = str(request.get("closure") or "")
+    job = _JOBS.adopt(_JOBS.start(tool=tool, subject=subject, argv=argv), subject=subject, tool=tool, argv=argv)
+    inflight = None
+    if subject and closure and request.get("coalesce"):
+        inflight = _BROKER.claim(subject, closure)
+        if inflight is not None:
+            # Identical source is already building: attach, relay its exit, run nothing.
+            _log(f"{tool} {model}: coalesced onto the job in flight")
+            inflight["done"].wait()
+            code = inflight["exit"] if inflight["exit"] is not None else 1
+            _JOBS.finish(job, code)
+            with contextlib.suppress(OSError), send_lock:
+                _send(conn, {"exit": code})
+            return
+    try:
+        worker = _POOL.acquire(model)
+    except pool_mod.WorkerGone as exc:
+        # A spawn that never announced itself. There is no worker to blame and nothing
+        # to retry warm; the client sees the failure and can run cold.
+        _log(f"{tool}: could not start a worker: {exc}")
+        _JOBS.finish(job, 1)
+        if subject and closure and request.get("coalesce"):
+            _BROKER.finish(subject, closure, 1)
+        with contextlib.suppress(OSError), send_lock:
+            _send(conn, {"stream": "stderr", "data": f"cadgen-daemon: could not start a worker: {exc}\n"})
+            _send(conn, {"exit": 1})
         return
 
     exit_code, healthy = 1, True
@@ -429,11 +291,14 @@ def _handle_request(
             "argv": [str(a) for a in argv],
             "cwd": request.get("cwd"),
             "env": request.get("env"),
+            "store_root": request.get("store_root"),
+            "root_id": request.get("root_id"),
         })
-        for frame in worker.frames():
+        for frame in worker.frames(silence_timeout=WORKER_SILENCE_TIMEOUT_SECONDS):
             if "exit" in frame:
                 exit_code = int(frame.get("exit") or 0)
                 break
+            _JOBS.observe(frame)
             with send_lock:
                 _send(conn, frame)
     except pool_mod.WorkerGone as exc:
@@ -443,34 +308,43 @@ def _handle_request(
         # worker that is gone.
         healthy = False
         _log(f"{tool}: worker {worker.pid} died mid-job: {exc}")
-        with send_lock:
+        with contextlib.suppress(OSError), send_lock:
             _send(conn, {"workerDied": {"pid": worker.pid, "detail": str(exc),
                                         "exitStatus": exc.exit_status}})
     except OSError:
-        # The CLIENT went away mid-job. The worker is fine; stop relaying.
-        healthy = True
+        # The CLIENT went away mid-job: a relay send failed before the watchdog's probe
+        # did. Same answer as the watchdog's -- the orphaned job's worker is killed, never
+        # released back to the pool mid-job (it would take the next request on a stdin
+        # that is still inside this one).
+        if worker.alive():
+            _log(f"{tool}: client disconnected mid-request; killing worker {worker.pid}")
+            worker.kill()
+        healthy = False
     finally:
         watchdog_done.set()
         watchdog.join(timeout=CLIENT_LIVENESS_INTERVAL_SECONDS + 1.0)
         # A killed worker is not reusable; release() drops it and the pool respawns.
         _POOL.release(worker, healthy=healthy and worker.alive())
+        _JOBS.finish(job, exit_code)
+        if subject and closure and request.get("coalesce"):
+            _BROKER.finish(subject, closure, exit_code)
 
-    _JOBS_SERVED[0] += 1
+    _REQUESTS_SERVED[0] += 1
     _log(f"{tool} {argv!r} -> exit {exit_code} in {time.perf_counter() - started:.2f}s "
-         f"(worker {worker.pid})")
-    with contextlib.suppress(OSError):
-        with send_lock:
-            _send(conn, {"exit": exit_code})
+         f"(worker {worker.pid}{' extra' if worker.extra else ''})")
+    with contextlib.suppress(OSError), send_lock:
+        _send(conn, {"exit": exit_code})
 
 
 _INFLIGHT: set[threading.Thread] = set()
+_JOBS = JobLedger()
 _STARTED_AT = time.time()
-_JOBS_SERVED = [0]
+_REQUESTS_SERVED = [0]
 
 
-def _serve_connection(conn, request, stdout_proxy, stderr_proxy) -> None:
+def _serve_connection(conn, request) -> None:
     try:
-        _handle_request(conn, request, stdout_proxy, stderr_proxy)
+        _handle_request(conn, request)
     except Exception:  # noqa: BLE001 - a job must never kill the supervisor
         _log("unhandled error serving a job:\n" + traceback.format_exc())
     finally:
@@ -479,23 +353,66 @@ def _serve_connection(conn, request, stdout_proxy, stderr_proxy) -> None:
             conn.close()
 
 
+def _drain_inflight(reason: str) -> None:
+    """Let the jobs already running finish before this process exits.
+
+    A token mismatch means a NEW daemon is wanted, not that the builds in flight are
+    wrong: they run the code they started with and their clients are waiting on them.
+    """
+    threads = [thread for thread in list(_INFLIGHT) if thread.is_alive()]
+    if not threads:
+        return
+    _log(f"{reason}; finishing {len(threads)} job(s) in flight before exiting")
+    for thread in threads:
+        thread.join()
+
+
+_DAEMON_LOCK: transport.SingletonLock | None = None
+
+
+def _bind(address: str, authkey: bytes) -> transport.Server | None:
+    """One daemon per identity, decided by a lock -- never by probing or sweeping.
+
+    Probing a leftover socket was a race: twenty clients starting at once spawn twenty
+    daemons, the losers' probes against a backlog-8 listener are REFUSED, each reads
+    refusal as "stale file", unlinks the winner's live socket and binds its own -- four
+    daemons "serving" one path, the earlier ones orphaned with their workers. So the
+    decision is a process-lifetime exclusive lock (transport.SingletonLock, released by
+    the kernel when the holder dies): the loser stands down at once, touching nothing;
+    the winner is by construction the only daemon, so a socket file it finds is dead
+    and may be removed before binding.
+    """
+    global _DAEMON_LOCK
+    lock = transport.daemon_lock(address)
+    if not lock.acquire():
+        _log(f"another daemon holds the lock for {address}; standing down")
+        return None
+    _DAEMON_LOCK = lock  # held for the daemon's whole life
+    if transport.address_is_stale(address):
+        transport.clear_address(address)
+    try:
+        return transport.Server(address, authkey, backlog=128)
+    except OSError as exc:
+        _log(f"cannot bind {address}: {exc}")
+        lock.release()
+        _DAEMON_LOCK = None
+        return None
+
+
 def serve() -> int:
     os.environ["CADGEN_DAEMON_CHILD"] = "1"
     address = daemon_address()
     token = compute_version_token()
-    stdout_proxy = _StreamProxy(sys.stdout)
-    stderr_proxy = _StreamProxy(sys.stderr)
-    sys.stdout = stdout_proxy
-    sys.stderr = stderr_proxy
-    _warm_imports()
-    if transport.address_is_stale(address):
-        transport.clear_address(address)
     authkey = transport.ensure_authkey(daemon_identity())
-    try:
-        server = transport.Server(address, authkey, backlog=8)
-    except OSError as exc:
-        _log(f"cannot bind {address}: {exc}")
-        return 1
+    server = _bind(address, authkey)
+    if server is None:
+        return 0
+    bound = {"address": True}
+
+    def _release_address() -> None:
+        if bound["address"]:
+            bound["address"] = False
+            transport.clear_address(address)
 
     def _shutdown_handler(*_args) -> None:
         raise _DaemonShutdown
@@ -504,6 +421,9 @@ def serve() -> int:
         signal.signal(signum, _shutdown_handler)
     idle_timeout = _idle_timeout()
     _log(f"pid {os.getpid()} serving {address} (token {token}, idle timeout {idle_timeout:.0f}s)")
+    # The spares import build123d now, in the background, so the first requests find a
+    # warm worker rather than paying the import on their own clock.
+    _POOL.ensure_spares()
 
     # accept() cannot take a timeout the way a socket could, so idleness is watched from
     # the side: the watchdog closes the listener, which makes the pending accept return.
@@ -516,6 +436,7 @@ def serve() -> int:
             time.sleep(slice_seconds)
             if server.closed:
                 return
+            _POOL.unbind_idle()
             if any(thread.is_alive() for thread in list(_INFLIGHT)):
                 state["last_activity"] = time.monotonic()  # a long build is not idleness
                 continue
@@ -531,7 +452,6 @@ def serve() -> int:
             conn = server.accept()
             if conn is None:
                 if state["idle_exit"]:
-                    _POOL.reap_idle()
                     _log("idle timeout; exiting")
                 return 0
             state["last_activity"] = time.monotonic()
@@ -539,22 +459,28 @@ def serve() -> int:
                 request = _read_request(conn)
                 if request is None:
                     continue
+                if request.get("kind") == "status":
+                    # Answered BEFORE the token check: asking what is warm must never
+                    # make the daemon exit, whichever cadgen the asker is running.
+                    with contextlib.suppress(OSError):
+                        _send(conn, {"status": _status_payload()})
+                    continue
                 if request.get("token") != token:
-                    # Close BEFORE replying so the client's respawn cannot race this
-                    # daemon's cleanup and lose the fresh daemon's address.
+                    # Close and release the address BEFORE replying so the client's
+                    # respawn cannot race this daemon's cleanup and lose the fresh
+                    # daemon's address; then finish what is running.
                     server.close()
-                    transport.clear_address(address)
+                    _release_address()
                     with contextlib.suppress(OSError):
                         _send(conn, {"restart": True})
-                    _log("version token changed; restarting")
+                    conn.close()
+                    conn = None
+                    _drain_inflight("version token changed")
+                    _log("version token changed; exiting")
                     return 0
                 # One thread per job so a second client is served rather than queued.
-                # The supervisor itself stays trivial -- it never imports OCP, so no
-                # amount of model badness can take it down.
                 worker_thread = threading.Thread(
-                    target=_serve_connection,
-                    args=(conn, request, stdout_proxy, stderr_proxy),
-                    daemon=True,
+                    target=_serve_connection, args=(conn, request), daemon=True
                 )
                 _INFLIGHT.add(worker_thread)
                 worker_thread.start()
@@ -565,14 +491,14 @@ def serve() -> int:
                 if conn is not None:
                     with contextlib.suppress(OSError):
                         conn.close()
-            _POOL.reap_idle()
+            _POOL.reap_dead()
     except _DaemonShutdown:
         _log("signal received; exiting")
         return 0
     finally:
         _POOL.shutdown()
         server.close()
-        transport.clear_address(address)
+        _release_address()
 
 
 USAGE = """\

@@ -124,7 +124,7 @@ class StoreRoundTrip(TessCacheTestCase):
     def test_the_write_leaves_no_temp_file_behind(self):
         write_tess_cache_entry(self.route(f"{GOOD_KEY}.tess"), b"payload")
         names = os.listdir(tessellation_cache_dir())
-        self.assertEqual(names, [f"{GOOD_KEY}.tess"])
+        self.assertEqual(names, [GOOD_KEY], "an index entry is keyed by the cache key itself")
 
     def test_disabling_the_cache_turns_off_both_directions_and_creates_no_directory(self):
         os.environ["CADGEN_MESH_CACHE"] = "0"

@@ -84,9 +84,8 @@ class SidecarBoundaryTests(unittest.TestCase):
         from cadgen.catalog import StepImportOptions
         from cadgen.generation import generate_step_targets
 
-        out = script.with_suffix(".step")
         return generate_step_targets(
-            [f"{script}={out.as_posix()}"],
+            [str(script)],
             step_options=StepImportOptions(),
             force=True,
             verbose=False,

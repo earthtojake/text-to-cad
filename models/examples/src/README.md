@@ -13,7 +13,8 @@ ls models/examples/src/*.py | xargs -n1 -P4 python   # the whole corpus
 
 Unchanged models are no-ops, so "build if missing" and "rebuild" are the same
 command. Shared helper modules live in `src/lib/` (`part_common`,
-`simple_model_library`, `mx_switch_socket`, `clamp_plate_profile`) — plain
+`simple_model_library`, `mx_switch_socket`, `clamp_plate_profile`,
+`research_humanoid_lib`) — plain
 modules, never models. Because the scripts sit directly in `src/`,
 `from lib import ...` and `import <sibling_model>` both resolve with no path
 setup.
@@ -59,7 +60,9 @@ permissively licensed `.dxf` files no script here regenerates.
 | `radial_engine_cylinder.py` | `STEP/radial_engine_cylinder.step` | Radial-engine-style cylinder model |
 | `rectangular_calibration_block.py` | `STEP/rectangular_calibration_block.step` | Rectangular calibration block model |
 | `rectangular_clamp_block.py` | `STEP/rectangular_clamp_block.step` | Rectangular clamp block with a split slot and two transverse screw holes |
-| `research_humanoid.py` | `STEP/research_humanoid.step` | Production-realistic, adult-scale humanoid research platform |
+| `research_humanoid.py` | `STEP/research_humanoid.step` | Production-realistic, adult-scale humanoid research platform; links the two hand models below |
+| `research_humanoid_hand_left.py` | `STEP/research_humanoid_hand_left.step` | Its left 15-axis dexterous hand, a sub-assembly model (`lib/research_humanoid_lib.build_hand`) |
+| `research_humanoid_hand_right.py` | `STEP/research_humanoid_hand_right.step` | The right hand — a mirror image, so its own model from the same factory |
 | `retainer_plate.py` | `STEP/retainer_plate.step` | Retainer plate with elongated slot, two circular holes, and chamfered perimeter |
 | `shaft_collar.py` | `STEP/shaft_collar.step` | Shaft collar with a central bore, radial set-screw hole, and chamfered faces |
 | `small_enclosure_cover.py` | `STEP/small_enclosure_cover.step` | Small enclosure cover with raised rim, corner screw holes, and shallow recessed center |

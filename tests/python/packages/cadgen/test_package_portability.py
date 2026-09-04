@@ -120,29 +120,42 @@ def _model_artifacts(root: Path) -> list[Path]:
 
 
 def package_files(root: Path) -> list[Path]:
-    """Every persisted build output for the models in ``root``: the store
-    packages their artifacts resolve to, plus the model-side sidecars."""
-    from cadgen.catalog import render_package_dir
+    """Every persisted build output: the objects every record's tree reaches
+    (components and trees — a moved project is a set of new records over the
+    same objects, so those objects are what a move must leave untouched), plus
+    the model-side sidecars under ``root``. Op-memo objects are deliberately
+    not compared: they are a kernel cache, not a result."""
+    import json
+
+    from cadgen.store.index import iter_entries
+    from cadgen.store.objects import object_path
+    from cadgen.store.trees import tree_objects
 
     out: list[Path] = []
     for artifact in _model_artifacts(root):
         sidecar = Path(f"{artifact}.step.json")
         if sidecar.is_file():
             out.append(sidecar)
-        package = render_package_dir(artifact)
-        if package.is_dir():
-            out.extend(path for path in sorted(package.rglob("*")) if path.is_file())
+    reachable: set[str] = set()
+    for _key, entry in iter_entries("model"):
+        try:
+            tree = str(json.loads(entry.read_text(encoding="utf-8")).get("tree") or "")
+        except (OSError, ValueError):
+            continue
+        if tree:
+            reachable |= tree_objects(tree) | {tree}
+    out.extend(sorted(object_path(digest) for digest in reachable))
     return out
 
 
 def is_run_state(path: Path) -> bool:
-    """The generation lock and the status record: this machine's view of a build in flight.
+    """The progress record: this machine's view of a build in flight.
 
-    They live in the same directory as the package but are not part of it -- the lock is a
-    kernel-owned sentinel and the record is progress UI, carrying a pid and a hostname that
-    mean nothing anywhere else. Every run rewrites the record, including a run that decides
-    to do nothing, so they are excluded from the "nothing was rebuilt" comparison."""
-    return path.name.endswith((".generation.lock", ".generation.progress.json"))
+    It lives in the daemon's state directory (``progress/<key>.json``), never in the
+    package, and is progress UI carrying a pid and a hostname that mean nothing anywhere
+    else. Every run rewrites it, including a run that decides to do nothing, so it is
+    excluded from the "nothing was rebuilt" comparison."""
+    return path.parent.name == "progress" and path.suffix == ".json"
 
 
 def package_content_files(root: Path) -> list[Path]:
@@ -154,10 +167,10 @@ def mtimes(root: Path) -> dict[str, int]:
     package files keyed store-relative. A rebuild changes these; a move
     followed by a no-op does not. Stronger than reading a producer's own
     "current" wording, which is exactly the claim under test."""
-    from cadgen._internal.cache_paths import packages_dir
+    from cadgen.store.paths import objects_dir
 
     out: dict[str, int] = {}
-    store = packages_dir()
+    store = objects_dir()
     for path in package_content_files(root):
         try:
             key = f"<store>/{path.relative_to(store).as_posix()}"
@@ -189,11 +202,11 @@ class PackagePortabilityTest(unittest.TestCase):
     def _build(cls, root: Path) -> None:
         from cadgen.generation import generate_step_targets
 
-        # An imported STEP: exported from the part, then given its own render package, which
-        # is the one descriptor whose source is a .step file rather than a generator. Kept out
-        # of the no-op pass below because an explicit export ALWAYS writes its file -- that is
-        # the documented contract, not a freshness miss.
-        generate_step_targets([f"{root / 'widget.py'}={root / 'imported.step'}"])
+        # An imported STEP: the part's document COPIED under another name, so the
+        # store has no memory of a model writing it -- a vendor file. Same bytes,
+        # same tree: every reader finds it by the bytes alone (STORE.md §2).
+        generate_step_targets([str(root / "widget.py")])
+        shutil.copyfile(root / "widget.step", root / "imported.step")
         cls._noop_pass(root)
 
     @staticmethod
@@ -202,10 +215,7 @@ class PackagePortabilityTest(unittest.TestCase):
         from cadgen.generation import generate_dxf_targets, generate_step_targets
         from cadgen.step_artifact_cli import build_step_artifact
 
-        generate_step_targets([
-            f"{root / 'widget.py'}={root / 'widget.step'}",
-            f"{root / 'rig.py'}={root / 'rig.step'}",
-        ])
+        generate_step_targets([str(root / "widget.py"), str(root / "rig.py")])
         build_step_artifact(repo_root=root, step=root / "imported.step")
         if HAS_NODE:
             generate_dxf_targets([str(root / "sheet.py")])
@@ -219,12 +229,12 @@ class PackagePortabilityTest(unittest.TestCase):
 
     def test_every_package_kind_was_actually_built(self) -> None:
         # Guards the tests below from passing vacuously on an empty tree: every
-        # document resolves to a store package by its content hash.
-        from cadgen.catalog import render_package_dir
+        # document resolves to a tree in the store.
+        from cadgen.catalog import result_tree_for
 
         for name in ("widget.step", "rig.step", "imported.step"):
             with self.subTest(entry=name):
-                self.assertTrue(render_package_dir(self.root / name).is_dir())
+                self.assertIsNotNone(result_tree_for(self.root / name))
 
     def test_the_model_folder_is_pristine(self) -> None:
         # The store-primary exit gate: a model folder holds sources, documents
@@ -290,35 +300,6 @@ class PackagePortabilityTest(unittest.TestCase):
                         value,
                         "a recorded path must be posix so it survives crossing platforms",
                     )
-
-    def test_the_only_machine_specific_files_are_the_transient_run_state(self) -> None:
-        """The status record names a pid and a host, and that is allowed -- it describes a
-        RUN, not the artifact. What is not allowed is any of it reaching the package's own
-        content, which is what the rest of this class checks. Pinned so the record cannot
-        quietly grow a path field and become part of the cache. Run state lives in the
-        store's locks/ tier now, keyed by model path."""
-        from cadgen.catalog import artifact_path_key
-        from cadgen._internal.cache_paths import locks_dir
-
-        keys = {
-            artifact_path_key(self.root / name)
-            for name in ("widget.step", "rig.step", "imported.step", "sheet.py")
-        }
-        run_state = [
-            path for path in sorted(locks_dir().rglob("*"))
-            if path.is_file() and is_run_state(path)
-            and any(key in path.name for key in keys)
-        ]
-        self.assertTrue(run_state, "no lock/status files were written at all")
-        for path in run_state:
-            if not path.name.endswith(".json"):
-                continue
-            record = json.loads(path.read_text(encoding="utf-8"))
-            with self.subTest(record=path.name):
-                self.assertEqual({"pid", "host"}, {"pid", "host"} & set(record))
-                for key, value in record.items():
-                    if isinstance(value, str):
-                        self.assertNotIn(os.sep, value, f"{key} in the status record looks like a path")
 
     def test_moving_the_project_rebuilds_nothing(self) -> None:
         moved = self.root.parent / "moved-elsewhere" / "project"
@@ -418,12 +399,12 @@ class DescriptorIsIndependentOfTheWorkingDirectoryTest(unittest.TestCase):
     """
 
     def _descriptor_built_from(self, cwd: Path, project: Path) -> dict:
-        from cadgen.catalog import render_package_dir
+        from cadgen.catalog import result_view_dir
         from cadgen.generation import generate_step_targets
 
         step = project / "widget.step"
         if step.exists():
-            shutil.rmtree(render_package_dir(step), ignore_errors=True)
+            shutil.rmtree(result_view_dir(step), ignore_errors=True)
             step.unlink()
         previous = Path.cwd()
         os.chdir(cwd)
@@ -432,7 +413,7 @@ class DescriptorIsIndependentOfTheWorkingDirectoryTest(unittest.TestCase):
         finally:
             os.chdir(previous)
         descriptor = json.loads(
-            (render_package_dir(step) / "assembly.json").read_text(encoding="utf-8")
+            (result_view_dir(step) / "assembly.json").read_text(encoding="utf-8")
         )
         # The descriptor is a pure function of the STEP bytes — no timestamp
         # to excuse (generatedAt rides the source sidecar now).

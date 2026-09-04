@@ -1,10 +1,8 @@
 """THE artifact-status authority: freshness verdicts from pure file reads.
 
-What this module deliberately does NOT decide is "is a build in flight". That
-is kernel lock state (fcntl flock), and it must never be re-inferred from pids,
-heartbeats, or age windows — see ``cadgen/coordination/lock.py`` for the
-measured failure modes of that design. The caller supplies a snapshot
-(``build_progress.py``) and this module reads it.
+What this module deliberately does NOT decide is "is a build in flight". The
+caller supplies a snapshot (``build_progress.py``: the daemon's job ledger,
+matched to the document by declared output path) and this module reads it.
 
 Nothing here imports cadgen. Status is answered for a directory of models by an
 interpreter that may have no kernel installed at all, and every read degrades to
@@ -21,7 +19,11 @@ Freshness semantics:
   these bytes — the old schema, bake, and per-poll digest gates all collapsed
   into content keying, and that digest re-hash was the one full-file read every
   status poll used to pay;
-* generated outputs are DETACHED from their source code: no source checks, ever.
+* generated outputs are DETACHED from their source code: no source checks, ever;
+* the viewer never learns whether a document was generated. Nothing here opens a
+  record, a script or a closure (STORE.md §2, the law): status is artifact-side —
+  not compiled / compiling / rendered / failed — and "is this document behind its
+  source" is ``cadgen store why``'s question.
 """
 
 from __future__ import annotations
@@ -31,18 +33,12 @@ import os
 import re
 
 from .backend import require_contained
-from .store_paths import (
-    SOURCE_SIDECAR_SCHEMA_VERSION,
-    render_package_dir,
-    source_provenance_record_path,
-    source_sidecar_path,
-)
+from .store_paths import component_object_present, result_descriptor, result_tree
 
 __all__ = [
     "ARTIFACT_STATE",
     "BUILDABLE_CODES",
     "artifact_status",
-    "is_generated_document",
     "owns_artifact_path",
     "owns_dxf_path",
     "owns_step_path",
@@ -111,39 +107,6 @@ def _read_json(file_path):
     return parsed if isinstance(parsed, dict) else None
 
 
-def is_generated_document(step_path) -> bool:
-    """Was this document GENERATED (a declaration owns it) or IMPORTED?
-
-    This answers EXACTLY ONE question, and it is not a display question: may the
-    viewer compile this document? Nothing about how a file came to exist reaches
-    the catalog, the file explorer, or any status card — a generated model and
-    an imported one are the same kind of thing to look at.
-
-    The gate exists because the compile door is not neutral about generated
-    documents: it calls ``require_current_document``, which re-hashes a
-    generated model's recorded source closure and REFUSES a document that is
-    stale relative to its script. Routing generated documents through it would
-    make the viewer's ability to render depend on source code it must never
-    consult — the tie that "generated outputs are detached" forbids. Imports are
-    foreign files with no closure to check, so the door is safe for exactly the
-    documents this predicate says no to.
-
-    The AUTHORITY is the provenance record, which every generated build writes.
-    That tier is evictable (``cadgen cache gc`` sweeps it), so "no record" is a
-    routine state and costs one offer to compile a document the door may then
-    refuse as stale, until the next build re-records it. A model-side sidecar at
-    THIS schema is a fast yes on top of that; a file at any other schema is not
-    a sidecar this viewer reads, so classification treats it as absent and falls
-    through to the record. Loud refusal on a wrong-schema sidecar belongs to the
-    RENDER path, not here.
-    """
-    sidecar = _read_json(source_sidecar_path(step_path))
-    if sidecar is not None and sidecar.get("schemaVersion") == SOURCE_SIDECAR_SCHEMA_VERSION:
-        return True
-    record = _read_json(source_provenance_record_path(step_path))
-    return bool(record is not None and str(record.get("sourceKind") or "").strip())
-
-
 def owns_step_path(file_path) -> bool:
     return bool(_STEP_ENTRY_RE.search(str(file_path or "")))
 
@@ -209,55 +172,44 @@ def _component_values(descriptor):
 
 
 def _validate_step(step_path: str) -> dict:
-    """The package freshness verdict.
-
-    ``generated`` is decided BEFORE the package gates and carried on every
-    verdict including the failures. The import path reads
-    ``rawStep and not generated``, and the case where that decision matters most
-    is precisely a document with NO package — which would otherwise return
-    before the classification ran, leaving it undefined and offering to import a
-    model whose real fix is rerunning its script.
-    """
-    generated = is_generated_document(step_path)
-    package_dir = render_package_dir(step_path)
-    if not os.path.isdir(package_dir):
-        return {"ok": False, "code": "missing_glb", "packageDir": package_dir, "generated": generated}
-    descriptor = _read_json(os.path.join(package_dir, STEP_DESCRIPTOR_NAME))
+    """The package freshness verdict: a tree for these bytes, complete, or why not."""
+    tree = result_tree(step_path)
+    if tree is None:
+        # No result for THESE bytes: never built, or its objects collected (the
+        # lookup is by the bytes themselves, so an edited document simply misses).
+        return {"ok": False, "code": "missing_glb", "tree": None}
+    descriptor = result_descriptor(tree)
     if descriptor is None:
         return {
             "ok": False,
             "code": "missing_step_topology",
-            "packageDir": package_dir,
-            "generated": generated,
+            "tree": tree,
         }
     if descriptor.get("kind") != STEP_PACKAGE_KIND:
         return {
             "ok": False,
             "code": "unsupported_step_topology",
-            "packageDir": package_dir,
+            "tree": tree,
             "descriptor": descriptor,
-            "generated": generated,
         }
     components = _component_values(descriptor)
     if not components:
         return {
             "ok": False,
             "code": "missing_glb",
-            "packageDir": package_dir,
+            "tree": tree,
             "descriptor": descriptor,
-            "generated": generated,
         }
     for component in components:
-        surf = str((component or {}).get("surf") or "") if isinstance(component, dict) else ""
-        if not surf or not os.path.exists(os.path.join(package_dir, surf)):
+        surf = str((component or {}).get("surfObject") or "") if isinstance(component, dict) else ""
+        if not surf or not component_object_present(surf):
             return {
                 "ok": False,
                 "code": "missing_glb",
-                "packageDir": package_dir,
+                "tree": tree,
                 "descriptor": descriptor,
-                "generated": generated,
             }
-    return {"ok": True, "packageDir": package_dir, "descriptor": descriptor, "generated": generated}
+    return {"ok": True, "tree": tree, "descriptor": descriptor}
 
 
 def resolve_artifact_verdict(file_ref, root_dir) -> dict:
@@ -274,14 +226,14 @@ def resolve_artifact_verdict(file_ref, root_dir) -> dict:
 def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
     """The ``GET /__cad/artifact`` state machine.
 
-    ``snapshot`` is the build view — ``{writing, busy, runId, progress}`` — or
-    ``None`` when there is none. Key PRESENCE is the contract: an absent
-    ``runId`` or ``progress`` must be absent, never ``None``.
+    ``snapshot`` is the build view from the daemon's job ledger
+    (``build_progress``) — ``{writing, busy, runId, progress}`` while a job with
+    this document among its outputs runs, ``{failed: {...}}`` when the latest
+    one failed — or ``None`` when there is none. Key PRESENCE is the contract:
+    an absent ``runId`` or ``progress`` must be absent, never ``None``.
 
-    ``verdict`` lets a caller that already resolved one pass it in. The route
-    needs the verdict again to decide whether to offer an import, and resolving
-    twice per poll meant re-reading the sidecar and the provenance record on
-    every 400ms tick of every build.
+    ``verdict`` lets a caller that already resolved one pass it in: the route
+    needs it again to decide whether to offer a compile.
     """
     if verdict is None:
         verdict = resolve_artifact_verdict(file_ref, root_dir)
@@ -299,8 +251,13 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
             status["progress"] = snapshot["progress"]
         return status
 
+    failed = snapshot.get("failed")
     if verdict.get("ok"):
         status = {"state": ARTIFACT_STATE.READY}
+        if isinstance(failed, dict):
+            # The tree renders; the latest build of this document failed. Both
+            # facts, the render first.
+            status["failed"] = failed
         if snapshot.get("busy"):
             status["busy"] = True
             if snapshot.get("runId"):
@@ -310,6 +267,9 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
         return status
 
     code = verdict.get("code")
+    if isinstance(failed, dict):
+        # No tree for these bytes and the latest job for the document failed.
+        return {"state": ARTIFACT_STATE.ERROR, "reason": "build_failed", "error": "the last build of this document failed", "failed": failed}
     if code in BUILDABLE_CODES:
         status = {"state": ARTIFACT_STATE.NEEDS_BUILD, "reason": code}
         if snapshot.get("busy"):

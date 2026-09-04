@@ -1,10 +1,8 @@
 """The freshness verdict, the state machine, and where progress is read from.
 
 Ports ``artifactStatus.test.mjs`` and ``buildProgress.test.mjs``, and adds the
-case neither could have: a record published at the PACKAGES tier must be
-visible. That is the defect this step fixes — ``cadgen step compile`` publishes
-there, the old reader looked only in ``locks/``, and so the viewer's own import
-never showed a bar.
+fixtures over the store: a document's result is a tree plus a record, and the
+verdict reads them (STORE.md).
 """
 
 from __future__ import annotations
@@ -19,19 +17,14 @@ from pathlib import Path
 from cadgen.viewer import store_paths
 from cadgen.viewer.artifact_status import (
     artifact_status,
-    is_generated_document,
     owns_artifact_path,
     owns_dxf_path,
     owns_step_path,
     resolve_artifact_verdict,
 )
 from cadgen.viewer.backend import ForbiddenAssetError
-from cadgen.viewer.build_progress import (
-    PROGRESS_FRESHNESS_MS,
-    ProgressRegistry,
-    build_progress_snapshot,
-    status_record_path,
-)
+
+from tests.python.support.store_fixtures import seed_result
 
 STEP_BYTES = b"ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n"
 
@@ -47,12 +40,20 @@ class _Tree:
         self.cache.mkdir()
         self._previous = os.environ.get("CADGEN_CACHE_DIR")
         os.environ["CADGEN_CACHE_DIR"] = str(self.cache)
+        # Progress records live in the daemon's state dir, not the store; give this
+        # tree its own so a peer record from another run cannot leak in.
+        self._previous_state = os.environ.get("CADGEN_DAEMON_STATE_DIR")
+        os.environ["CADGEN_DAEMON_STATE_DIR"] = str(Path(self.tmp.name, "state"))
 
     def close(self) -> None:
         if self._previous is None:
             os.environ.pop("CADGEN_CACHE_DIR", None)
         else:
             os.environ["CADGEN_CACHE_DIR"] = self._previous
+        if self._previous_state is None:
+            os.environ.pop("CADGEN_DAEMON_STATE_DIR", None)
+        else:
+            os.environ["CADGEN_DAEMON_STATE_DIR"] = self._previous_state
         self.tmp.cleanup()
 
     def step(self, name="model.step", body=STEP_BYTES) -> str:
@@ -61,38 +62,17 @@ class _Tree:
         return str(path)
 
     def package(self, step_path, *, kind="assembly-package", components=("c0.surf",), write_payloads=True):
-        package_dir = Path(store_paths.render_package_dir(step_path))
-        package_dir.mkdir(parents=True, exist_ok=True)
-        descriptor = {
-            "kind": kind,
-            "components": {f"k{i}": {"surf": name} for i, name in enumerate(components)},
-        }
-        (package_dir / "assembly.json").write_text(json.dumps(descriptor), encoding="utf-8")
-        if write_payloads:
-            for name in components:
-                target = package_dir / name
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(b"SURF\x00")
-        return package_dir
+        """Seed the document's result: a tree (one component per name) and a
+        record keyed by the document itself. Returns the tree hash."""
+        import hashlib
 
-    def record(self, output_dir, **fields):
-        path = Path(status_record_path(str(output_dir)))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "schemaVersion": 3,
-            "runId": "run-1",
-            "outcome": None,
-            "updatedAt": round(time.time() * 1000),
-            "phase": "components",
-            "label": "Meshing components",
-            "done": 3,
-            "total": 10,
-            "determinate": True,
-        }
-        payload.update(fields)
-        path.write_text(json.dumps(payload), encoding="utf-8")
-        return path
+        descriptor = {"kind": kind, "components": {f"k{i}": {} for i, _name in enumerate(components)}}
+        tree = seed_result(step_path, descriptor, surf=b"SURF\x00")
+        if not write_payloads:
+            from cadgen.store.objects import object_path
 
+            object_path(hashlib.sha256(b"SURF\x00").hexdigest()).unlink()
+        return tree
 
 class ArtifactStatusTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -185,7 +165,8 @@ class Verdicts(ArtifactStatusTestCase):
         step = self.tree.step()
         self.tree.package(step)
         Path(step).write_bytes(STEP_BYTES + b"\n")
-        # Content keying IS the digest gate: different bytes, different key.
+        # The record lists the document's sha (gate clause 5): different bytes,
+        # no result for them.
         self.assertEqual(
             artifact_status(step, str(self.tree.root)),
             {"state": "needs-build", "reason": "missing_glb"},
@@ -212,111 +193,20 @@ class Verdicts(ArtifactStatusTestCase):
             {"state": "error", "error": f"No render-artifact format owns this entry: {path}"},
         )
 
-    def test_the_gate_order_missing_then_descriptor_then_kind_then_components(self):
+    def test_the_gate_order_missing_then_components_then_ready(self):
         step = self.tree.step()
-        package_dir = Path(store_paths.render_package_dir(step))
-
         self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
 
-        package_dir.mkdir(parents=True)
-        self.assertEqual(
-            artifact_status(step, str(self.tree.root))["reason"], "missing_step_topology"
-        )
-
-        (package_dir / "assembly.json").write_text('{"kind":"other"}', encoding="utf-8")
-        self.assertEqual(
-            artifact_status(step, str(self.tree.root))["reason"], "unsupported_step_topology"
-        )
-
-        (package_dir / "assembly.json").write_text(
-            '{"kind":"assembly-package","components":{}}', encoding="utf-8"
-        )
+        self.tree.package(step, components=())
         self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
+
+        self.tree.package(step)
+        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "ready"})
 
     def test_a_component_whose_surf_payload_is_absent_is_missing_glb(self):
         step = self.tree.step()
         self.tree.package(step, write_payloads=False)
         self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
-
-    def test_a_package_at_an_older_schema_key_stops_resolving(self):
-        # The schema gate lives in the package KEY, not in a descriptor field.
-        step = self.tree.step()
-        package_dir = self.tree.package(step)
-        stale = package_dir.with_name(
-            package_dir.name.replace(
-                f"-v{store_paths.CACHE_SCHEMA_VERSION}",
-                f"-v{store_paths.CACHE_SCHEMA_VERSION - 1}",
-            )
-        )
-        package_dir.rename(stale)
-        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
-
-
-class GeneratedClassification(ArtifactStatusTestCase):
-    def test_an_imported_step_with_no_sidecar_and_no_record_is_not_generated(self):
-        self.assertFalse(is_generated_document(self.tree.step()))
-
-    def test_a_sidecar_at_the_current_schema_is_a_fast_yes(self):
-        step = self.tree.step()
-        Path(store_paths.source_sidecar_path(step)).write_text(
-            json.dumps({"schemaVersion": store_paths.SOURCE_SIDECAR_SCHEMA_VERSION}),
-            encoding="utf-8",
-        )
-        self.assertTrue(is_generated_document(step))
-
-    def test_a_sidecar_at_another_schema_is_not_a_marker_and_the_record_decides(self):
-        step = self.tree.step()
-        Path(store_paths.source_sidecar_path(step)).write_text(
-            json.dumps({"schemaVersion": 4}), encoding="utf-8"
-        )
-        self.assertFalse(is_generated_document(step))
-
-        record = Path(store_paths.source_provenance_record_path(step))
-        record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text(json.dumps({"sourceKind": "python"}), encoding="utf-8")
-        self.assertTrue(is_generated_document(step))
-
-    def test_an_evicted_truncated_or_kindless_record_degrades_to_imported(self):
-        step = self.tree.step()
-        record = Path(store_paths.source_provenance_record_path(step))
-        record.parent.mkdir(parents=True, exist_ok=True)
-        for body in ("{ truncated", "{}", '{"sourceKind":"   "}', "[]", "null"):
-            record.write_text(body, encoding="utf-8")
-            # Never raises: the records tier is evictable, so a missing or
-            # broken marker is a routine state, not a fault.
-            self.assertFalse(is_generated_document(step), body)
-
-    def test_classification_rides_on_a_failing_verdict_too(self):
-        # The case where it matters most is a document with NO package: that is
-        # exactly when the import path asks whether to offer a compile.
-        step = self.tree.step()
-        record = Path(store_paths.source_provenance_record_path(step))
-        record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text(json.dumps({"sourceKind": "python"}), encoding="utf-8")
-        verdict = resolve_artifact_verdict(step, str(self.tree.root))
-        self.assertFalse(verdict["ok"])
-        self.assertEqual(verdict["code"], "missing_glb")
-        self.assertTrue(verdict["generated"])
-        self.assertTrue(verdict["rawStep"])
-
-    def test_provenance_is_path_keyed_while_packages_are_content_keyed(self):
-        one = self.tree.step("one.step")
-        two = self.tree.step("two.step")
-        self.assertEqual(
-            store_paths.render_package_dir(one), store_paths.render_package_dir(two)
-        )
-        record = Path(store_paths.source_provenance_record_path(one))
-        record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text(json.dumps({"sourceKind": "python"}), encoding="utf-8")
-        self.assertTrue(is_generated_document(one))
-        self.assertFalse(is_generated_document(two))
-
-    def test_classification_never_reaches_a_client_payload(self):
-        step = self.tree.step()
-        self.tree.package(step)
-        status = artifact_status(step, str(self.tree.root))
-        self.assertNotIn("generated", status)
-        self.assertNotIn("sourceKind", status)
 
 
 class SnapshotShapes(ArtifactStatusTestCase):
@@ -363,124 +253,6 @@ class SnapshotShapes(ArtifactStatusTestCase):
         )
 
 
-class ProgressReader(ArtifactStatusTestCase):
-    def test_a_fresh_record_becomes_a_writing_snapshot_with_phase_fields_on_top(self):
-        step = self.tree.step()
-        self.tree.record(store_paths.coordination_scope(step))
-        snapshot = build_progress_snapshot(step)
-        self.assertTrue(snapshot["writing"])
-        self.assertFalse(snapshot["busy"])
-        self.assertEqual(snapshot["runId"], "run-1")
-        progress = snapshot["progress"]
-        for key in ("phase", "label", "done", "total", "determinate"):
-            self.assertIn(key, progress, key)
-
-    def test_a_record_at_the_PACKAGES_tier_is_visible(self):
-        # THE REGRESSION TEST FOR THIS STEP. `cadgen step compile` publishes at
-        # status_path(render_package_dir(...)), not the locks tier — so reading
-        # only locks/ meant the viewer's own import never reported a phase.
-        step = self.tree.step()
-        self.assertIsNone(build_progress_snapshot(step))
-        self.tree.record(store_paths.render_package_dir(step), runId="pkg-run")
-        snapshot = build_progress_snapshot(step)
-        self.assertIsNotNone(snapshot, "a packages-tier record must be read")
-        self.assertEqual(snapshot["runId"], "pkg-run")
-
-    def test_the_fresher_of_the_two_tiers_wins(self):
-        step = self.tree.step()
-        now = round(time.time() * 1000)
-        self.tree.record(store_paths.coordination_scope(step), runId="older", updatedAt=now - 5000)
-        self.tree.record(store_paths.render_package_dir(step), runId="newer", updatedAt=now)
-        self.assertEqual(build_progress_snapshot(step)["runId"], "newer")
-
-    def test_a_terminal_or_stale_or_absent_record_yields_nothing(self):
-        step = self.tree.step()
-        scope = store_paths.coordination_scope(step)
-        self.assertIsNone(build_progress_snapshot(step))
-
-        self.tree.record(scope, outcome="done")
-        self.assertIsNone(build_progress_snapshot(step), "a finished run is not in flight")
-
-        self.tree.record(
-            scope, updatedAt=round(time.time() * 1000) - PROGRESS_FRESHNESS_MS - 1000
-        )
-        self.assertIsNone(build_progress_snapshot(step), "a killed producer's badge ages out")
-
-    def test_the_reader_is_schema_blind(self):
-        # buildProgress.test.mjs wrote schemaVersion 1 and expected a snapshot.
-        # The viewer cannot know a peer's run id before reading the record, so
-        # staleness is gated on outcome plus the window, not on attribution.
-        step = self.tree.step()
-        self.tree.record(store_paths.coordination_scope(step), schemaVersion=1)
-        self.assertIsNotNone(build_progress_snapshot(step))
-
-    def test_a_non_string_run_id_becomes_none(self):
-        step = self.tree.step()
-        self.tree.record(store_paths.coordination_scope(step), runId=17)
-        self.assertIsNone(build_progress_snapshot(step)["runId"])
-
-    def test_no_producer_can_emit_busy(self):
-        """The invariant behind dropping ``blocked`` from the import offer.
-
-        ``busy`` is what makes ``artifact_status`` set ``blocked``, and
-        ``blocked`` flips the client from BUILD to ATTACH. No snapshot producer
-        in this backend can set it: every snapshot comes from
-        ``_snapshot_from_record`` or the synthetic in-flight one, and both
-        hardcode it false — as the Node ``buildProgressSnapshot`` did. So
-        carrying the flag out of ``CadgenOps`` protected nothing and misled a
-        reader about what could reach the client. If a real producer ever
-        appears, this test fails first and the offer can be reconsidered
-        deliberately.
-        """
-        step = self.tree.step()
-        registry = ProgressRegistry()
-
-        self.tree.record(store_paths.coordination_scope(step))
-        self.assertIs(build_progress_snapshot(step)["busy"], False)
-
-        self.tree.record(store_paths.render_package_dir(step), runId="pkg-run")
-        self.assertIs(build_progress_snapshot(step)["busy"], False)
-
-        registry.publish(store_paths.render_package_dir(step), "live", {"phase": "components"})
-        self.assertIs(build_progress_snapshot(step, registry=registry)["busy"], False)
-
-
-class InProcessRegistry(ArtifactStatusTestCase):
-    def test_our_own_build_is_served_from_memory_not_from_disk(self):
-        step = self.tree.step()
-        package_dir = store_paths.render_package_dir(step)
-        registry = ProgressRegistry()
-        registry.publish(package_dir, "live-run", {"phase": "components", "done": 4, "total": 9})
-        snapshot = build_progress_snapshot(step, registry=registry)
-        self.assertEqual(snapshot["runId"], "live-run")
-        self.assertEqual(snapshot["progress"]["done"], 4)
-
-    def test_the_live_channel_beats_a_peer_record(self):
-        step = self.tree.step()
-        self.tree.record(store_paths.coordination_scope(step), runId="from-disk")
-        registry = ProgressRegistry()
-        registry.publish(store_paths.render_package_dir(step), "in-process", {"phase": "package"})
-        self.assertEqual(build_progress_snapshot(step, registry=registry)["runId"], "in-process")
-
-    def test_clearing_falls_back_to_the_file_tiers(self):
-        step = self.tree.step()
-        package_dir = store_paths.render_package_dir(step)
-        registry = ProgressRegistry()
-        registry.publish(package_dir, "live", {"phase": "package"})
-        registry.clear(package_dir)
-        self.assertIsNone(build_progress_snapshot(step, registry=registry))
-
-    def test_no_freshness_window_applies_to_the_live_channel(self):
-        # The entry exists only while a worker we own is running, and is cleared
-        # in a finally. The window is for producers we cannot observe.
-        step = self.tree.step()
-        registry = ProgressRegistry()
-        registry.publish(store_paths.render_package_dir(step), "live", {"phase": "generate"})
-        snapshot = build_progress_snapshot(step, registry=registry)
-        self.assertIsNotNone(snapshot)
-        self.assertGreater(snapshot["progress"]["updatedAt"], 0)
-
-
 class InvalidUtf8(ArtifactStatusTestCase):
     """A byte that is not UTF-8 must not change the answer the client acts on.
 
@@ -503,40 +275,6 @@ class InvalidUtf8(ArtifactStatusTestCase):
         self.assertIn(marker, body, "precondition: the fixture carries the marker")
         path.write_bytes(body.replace(marker, self.BAD))
 
-    def test_a_descriptor_with_one_bad_byte_stays_ready(self):
-        # THE STATE CHANGE: ready -> needs-build. The viewer offered to rebuild
-        # a package that was already complete on disk.
-        step = self.tree.step()
-        package_dir = self.tree.package(step)
-        descriptor = package_dir / "assembly.json"
-        descriptor.write_bytes(
-            json.dumps(
-                {
-                    "kind": "assembly-package",
-                    "name": "NAME_HERE",
-                    "components": {"k0": {"surf": "c0.surf"}},
-                }
-            ).encode("utf-8")
-        )
-        self._corrupt(descriptor)
-        self.assertEqual(
-            artifact_status(step, str(self.tree.root)),
-            {"state": "ready"},
-            "an undecodable byte inside the descriptor must not read as NO descriptor",
-        )
-
-    def test_a_progress_record_with_one_bad_byte_stays_in_flight(self):
-        # THE OTHER STATE CHANGE: generating -> ready. The record is written by
-        # a peer build WHILE it runs, so a read can land on a torn multi-byte
-        # character; the client stopped attaching and called the model finished
-        # in the middle of someone else's build.
-        step = self.tree.step()
-        record = self.tree.record(store_paths.coordination_scope(step), label="NAME_HERE")
-        self._corrupt(record)
-        snapshot = build_progress_snapshot(step)
-        self.assertIsNotNone(snapshot, "an undecodable byte must not read as no build in flight")
-        self.assertTrue(snapshot["writing"])
-        self.assertEqual(snapshot["runId"], "run-1")
 
     def test_no_backend_reader_opens_a_text_file_strictly(self):
         """The sweep, as a rule rather than three cases.

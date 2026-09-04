@@ -170,12 +170,9 @@ def reemit_step_document(
     do), annotation-only (rewrite the sidecar beside bytes that already match),
     or emit.
     """
-    from cadgen.catalog import artifact_file_hash, render_package_dir
-    from cadgen._internal.source_sidecar import (
-        read_source_provenance,
-        write_source_provenance_record,
-        write_source_sidecar,
-    )
+    from cadgen.catalog import artifact_file_hash, result_tree_for
+    from cadgen._internal.source_sidecar import read_source_provenance, write_source_sidecar
+    from cadgen.store.records import update_record
 
     input_hash = artifact_file_hash(document)
     if not input_hash:
@@ -184,11 +181,11 @@ def reemit_step_document(
     at = None if kinematics_def is None else kinematics_def.at
 
     sidecar = read_source_provenance(out) or {}
-    package_dir = render_package_dir(out)
+    tree = result_tree_for(out)
     bytes_current = (
         not force
         and out.is_file()
-        and (package_dir / "assembly.json").is_file()
+        and tree is not None
         and str(sidecar.get("sourceKind") or "") == "step"
         and str(sidecar.get("sourceHash") or "") == input_hash
         and _same_pose((sidecar.get("kinematics") or {}).get("bakedPose"), at)
@@ -197,36 +194,43 @@ def reemit_step_document(
         return {
             "ok": True,
             "document": out,
-            "package": package_dir,
+            "tree": tree,
             "skipped": True,
             "sidecarOnly": False,
         }
     if bytes_current and at is None:
         # The ANNOTATION changed but the bytes cannot have: no bake point, same
-        # input. Re-resolve the declaration against the package already on disk
-        # and rewrite the sidecar — no OCCT, no emit, no new content key.
+        # input. Re-resolve the declaration against a view of the tree already in
+        # the store and rewrite the sidecar — no OCCT, no emit, no new tree.
         payload = dict(sidecar)
         payload["annotationHash"] = digest
         payload.pop("kinematics", None)
         payload.pop("animation", None)
         if kinematics_def is not None:
-            from cadgen._internal.kinematics_resolve import resolve_kinematics_block
+            import shutil
 
-            resolved, _ids = resolve_kinematics_block(
-                kinematics_def.block,
-                package_dir=package_dir,
-                step_path=out,
-                source_ref=_display(out),
-            )
+            from cadgen._internal.kinematics_resolve import resolve_kinematics_block
+            from cadgen.store.view import export_view
+
+            view_dir = export_view(tree)
+            try:
+                resolved, _ids = resolve_kinematics_block(
+                    kinematics_def.block,
+                    package_dir=view_dir,
+                    step_path=out,
+                    source_ref=_display(out),
+                )
+            finally:
+                shutil.rmtree(view_dir, ignore_errors=True)
             payload["kinematics"] = resolved
         if animation_source:
             payload["animation"] = {"clips": animation_source}
-        write_source_provenance_record(out, payload)
+        update_record(out, annotationHash=digest, kinematics=payload.get("kinematics"))
         write_source_sidecar(out, payload)
         return {
             "ok": True,
             "document": out,
-            "package": package_dir,
+            "tree": tree,
             "skipped": False,
             "sidecarOnly": True,
         }
@@ -244,7 +248,7 @@ def reemit_step_document(
     return {
         "ok": out.is_file(),
         "document": out,
-        "package": render_package_dir(out),
+        "tree": result_tree_for(out),
         "skipped": False,
         "sidecarOnly": False,
     }
@@ -288,7 +292,7 @@ def _emit(
     spec = _build_entry_spec(Path.cwd().resolve(), scene.step_path, scene, kind=kind)
     from dataclasses import replace as _replace
 
-    from cadgen.catalog import coordination_scope
+    from cadgen.catalog import build_scope
     from cadgen.cli_progress import cli_progress_line
     from cadgen.coordination import STEP_PACKAGE, artifact_build
 
@@ -296,21 +300,16 @@ def _emit(
     # content key does not exist until after it is written. That is exactly the
     # shape of a re-emit, and it is why the writer here is the canonical one.
     spec = _replace(spec, source="generated", script_path=None, step_path=scene.step_path)
-    # The write lock is required at the package mutation boundary — the package
-    # writer asserts it — and it is what makes a concurrent re-emit of the same
-    # output safe rather than two processes racing on one content key.
-    #
-    # Keyed by the MODEL PATH, never by the content-keyed package dir. The line above
-    # says why in this producer's own terms: a re-emit's content key does not exist
-    # until the document has been written, so a package-keyed lock is taken on an
-    # identity the run does not have yet and abandons the moment it does — two
-    # concurrent re-emits of one output would not exclude each other, and the progress
-    # record would land where no reader (the viewer polls locks/<pathkey>) looks.
+    # Progress keyed by the MODEL PATH, never by the content-keyed package dir: a
+    # re-emit's content key does not exist until the document has been written, so a
+    # package-keyed record would land where no reader (the viewer polls the model's
+    # build scope) looks. Two concurrent re-emits of one output both proceed; every
+    # store write is atomic and idempotent, so neither can tear the other.
     with cli_progress_line(
         spec.source_ref, logger=logger, fallback="Building..."
     ) as progress_sink, artifact_build(
         STEP_PACKAGE,
-        coordination_scope(spec.entry_path) if spec.entry_path else None,
+        build_scope(spec.entry_path) if spec.entry_path else None,
         force=True,
         sink=progress_sink,
     ):

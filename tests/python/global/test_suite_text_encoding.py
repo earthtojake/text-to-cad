@@ -40,10 +40,8 @@ METHODS = ("read_text", "write_text")
 PENDING = {
     "tests/python/global/test_render_contract_sync.py",
     "tests/python/packages/cadgen/test_kinematics_build.py",
-    "tests/python/packages/cadgen/test_scope_system.py",
     "tests/python/packages/cadgen/test_step_export_reuse.py",
     "tests/python/packages/cadgen/test_step_write_determinism.py",
-    "tests/python/skills/cad/cadgen/test_package_freshness.py",
     "tests/python/skills/cad/inspect_refs/test_refs_inspect.py",
     "tests/python/skills/cad/snapshot/test_cli.py",
     "tests/python/skills/dxf/test_snapshot_cli.py",

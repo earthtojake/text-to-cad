@@ -96,18 +96,17 @@ class KinematicsBuildTests(unittest.TestCase):
         from cadgen.catalog import StepImportOptions
         from cadgen.generation import generate_step_targets
 
-        out = script.with_suffix(".step")
         return generate_step_targets(
-            [f"{script}={out.as_posix()}"],
+            [str(script)],
             step_options=StepImportOptions(),
             force=True,
             verbose=False,
         )
 
     def _descriptor(self, script: Path) -> dict:
-        from cadgen.catalog import render_package_dir
+        from cadgen.catalog import result_view_dir
 
-        package = render_package_dir(script.with_suffix(".step"))
+        package = result_view_dir(script.with_suffix(".step"))
         return json.loads((package / "assembly.json").read_text())
 
     def _sidecar(self, script: Path) -> dict:
@@ -319,4 +318,4 @@ class PosedMeshExportTests(unittest.TestCase):
             capture_output=True, text=True, timeout=600,
         )
         self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
-        self.assertNotIn("wrote STL", second.stdout)
+        self.assertNotIn("wrote STL", second.stderr)

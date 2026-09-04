@@ -31,9 +31,11 @@ each `lib/` module owns, and the assembly's declared kinematics. Read it first.
   in the BIKE frame.
 - 19 part entries under `src/`, each an individually buildable STEP.
 - `src/motorbike.py` — full assembly: 23 labeled children (46 rendered parts)
-  composed at identity, with native build123d joints recording the placement
-  relationships AND a `kinematics=` block of typed mates for the viewer.
-  Occurrence order is frozen; see its header.
+  composed at identity by CALLING the 19 part models (20 of the children are
+  links to those models' geometry; the three right-hand signals/mirror are
+  mirror images the assembly builds itself), with native build123d joints
+  recording the placement relationships AND a `kinematics=` block of typed
+  mates for the viewer. Occurrence order is frozen; see its header.
 
 ## Coordinates
 

@@ -217,8 +217,8 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
                 cad_path="part", kind="assembly", source_path=script_path, step_path=step_path
             )
             descriptor = {"kind": "component-glb-package"}
-            entry_package_dir = step_artifacts.render_package_dir(spec.entry_path)
-            step_package_dir = step_artifacts.render_package_dir(spec.step_path)
+            entry_package_dir = step_artifacts.result_view_dir(spec.entry_path)
+            step_package_dir = step_artifacts.result_view_dir(spec.step_path)
             self.assertEqual(entry_package_dir, step_package_dir)
 
             def fake_read_package_descriptor(path: Path) -> dict[str, object] | None:

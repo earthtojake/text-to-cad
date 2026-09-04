@@ -98,19 +98,25 @@ only launching cares about the cwd.)
 To review a directory outside the current root, just `cd` there and launch
 again — reuse-or-start makes the second launch cheap and correct.
 
-## Generation is the CAD skill's job; imports compile in the Viewer
+## Generation is the CAD skill's job; documents compile in the Viewer
 
 The Viewer is a static visualization tool: it renders artifacts that already
 exist. Generated models must be built first by running their model script (see
-the CAD skill); the Viewer will not build them.
+the CAD skill); the Viewer never runs a script and never learns whether a
+document has one.
 
-Raw `.step`/`.stp` files ARE importable from the Viewer: an unimported STEP
-reports `needs-build` and the in-Viewer import writes the standard render
-package. The Viewer calls cadgen's compile entry point directly, in a worker it
-owns, so progress and errors come back as data — the import reports live
-progress frames while it compiles. When an agent is doing the work there is
-nothing to run first: every cadgen door makes the package it needs on demand,
-so just use the file and return the link.
+A `.step`/`.stp` document's status in the Viewer is one of four, decided from
+the file's bytes and the store alone: **not compiled** (the store has no tree
+for these bytes — the Viewer offers to compile, and compiles on open),
+**compiling · <phase> n/total** (a job in cadgen's build pool is producing a
+tree whose outputs include this document — the Viewer's own compile, a
+`python model.py` in a terminal, or a parent's child build alike),
+**rendered**, or **failed** (the last job for it failed; the message is shown).
+A compile is a job submitted to the same pool every cadgen door uses, so
+progress and errors come back as data. There is no "stale vs source" state:
+whether a document is behind its script is `cadgen store why`'s question, not
+the Viewer's. When an agent is doing the work there is nothing to run first:
+just use the file and return the link.
 
 ## Links
 
@@ -119,12 +125,12 @@ so just use the file and return the link.
   alike. The catalog lists artifacts and names them exactly as they read on
   disk: `moonwatch.step` is `moonwatch.step` in the tab, the breadcrumb, the
   catalog row and the file picker, whether it was generated or imported.
-  Generated-ness is package provenance — it drives status badges, rebuild
-  behaviour and freshness gates, and never the displayed name; the model
-  script is not shown anywhere in the UI. A generated model's render artifacts
-  must already be built (run the model script); the Viewer will not build them
-  on open. If the resolved path is missing, do not return the link; report the
-  problem and point to the correct path.
+  The Viewer never learns whether a document was generated: its status is
+  artifact-side only (not compiled / compiling / rendered / failed), and the
+  model script is not shown anywhere in the UI. A generated model's document
+  must already exist (run the model script); a document the store has no tree
+  for is compiled from its bytes on open. If the resolved path is missing, do
+  not return the link; report the problem and point to the correct path.
 - Return one Viewer URL per requested file.
 - Start the Viewer once and pick one workspace root for the session. Every link is
   the same origin plus `?file=<path relative to that root>`, so all of them share one

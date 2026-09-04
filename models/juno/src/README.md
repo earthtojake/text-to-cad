@@ -2,7 +2,10 @@
 
 `juno.py` is the full robot; the other 28 scripts each build ONE URDF link in
 its own part-local frame, exporting both a STEP part and the millimetre 3MF
-mesh that `../juno.urdf` references.
+mesh that `../juno.urdf` references. The robot composes those same models by
+CALLING them — a stale link builds on its own worker, a current one loads,
+and the robot links its tree — so the assembly and the URDF meshes can never
+disagree, and rebuilding a link alone leaves the robot to be rerun.
 
 | Script | Artifact | Description |
 |---|---|---|

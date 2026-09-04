@@ -27,31 +27,41 @@ from cadgen import build123d as bd
 from cadgen import step
 from cadgen.assembly import AssemblyHelper
 
+from index_distal import index_distal
+from index_middle import index_middle
+from index_proximal import index_proximal
+from middle_distal import middle_distal
+from middle_middle import middle_middle
+from middle_proximal import middle_proximal
+from palm import palm
+from pinky_distal import pinky_distal
+from pinky_middle import pinky_middle
+from pinky_proximal import pinky_proximal
+from ring_distal import ring_distal
+from ring_middle import ring_middle
+from ring_proximal import ring_proximal
+from thumb_base import thumb_base
+from thumb_distal import thumb_distal
+from thumb_metacarpal import thumb_metacarpal
+from thumb_proximal import thumb_proximal
+
 from lib import chain
-from lib.digits import (
-    build_finger_distal,
-    build_finger_middle,
-    build_finger_proximal,
-    build_thumb_base,
-    build_thumb_distal,
-    build_thumb_metacarpal,
-    build_thumb_proximal,
-)
 from lib.common import revolute_attach
-from lib.palm import build_palm
 
-
-def _builders():
-    builders = {}
-    for finger in chain.FINGERS:
-        builders[f"{finger}_proximal"] = lambda f=finger: build_finger_proximal(f)
-        builders[f"{finger}_middle"] = lambda f=finger: build_finger_middle(f)
-        builders[f"{finger}_distal"] = lambda f=finger: build_finger_distal(f)
-    builders["thumb_base"] = build_thumb_base
-    builders["thumb_metacarpal"] = build_thumb_metacarpal
-    builders["thumb_proximal"] = build_thumb_proximal
-    builders["thumb_distal"] = build_thumb_distal
-    return builders
+# Every link is a sibling MODEL (one script per URDF link, part-local frame),
+# keyed by the chain's link name. Calling one inside the body builds it if
+# stale — on its own worker, alongside the rest — or loads it, and the hand
+# links its tree. Rebuilding a link alone does not rebuild the hand: rerun
+# this script.
+LINKS = {
+    "palm": palm,
+    "index_proximal": index_proximal, "index_middle": index_middle, "index_distal": index_distal,
+    "middle_proximal": middle_proximal, "middle_middle": middle_middle, "middle_distal": middle_distal,
+    "ring_proximal": ring_proximal, "ring_middle": ring_middle, "ring_distal": ring_distal,
+    "pinky_proximal": pinky_proximal, "pinky_middle": pinky_middle, "pinky_distal": pinky_distal,
+    "thumb_base": thumb_base, "thumb_metacarpal": thumb_metacarpal,
+    "thumb_proximal": thumb_proximal, "thumb_distal": thumb_distal,
+}
 
 
 def _xref_for(axis) -> tuple:
@@ -67,12 +77,11 @@ def assemble() -> bd.Compound:
     distal — the animation module relies on this order.
     """
     asm = AssemblyHelper(chain.ROBOT_NAME)
-    builders = _builders()
     pose = chain.named_poses_deg()[chain.BAKED_POSE_NAME]
 
-    parts = {"palm": asm.add(build_palm(), "palm")}
+    parts = {"palm": asm.add(LINKS["palm"](), "palm")}
     for joint in chain.all_joints():
-        child = asm.add(builders[joint["child"]](), joint["child"])
+        child = asm.add(LINKS[joint["child"]](), joint["child"])
         axis = joint["axis"]
         xref = _xref_for(axis)
         revolute_attach(

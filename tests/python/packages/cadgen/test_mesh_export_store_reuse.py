@@ -90,10 +90,12 @@ class MeshExportStoreReuseTest(unittest.TestCase):
         return proc
 
     def _package_dirs(self) -> set[str]:
-        packages = self.store / "packages"
-        if not packages.is_dir():
+        """The records in the store: an export of an imported document writes
+        exactly one (keyed by the document), and a second export none."""
+        records = self.store / "index" / "model"
+        if not records.is_dir():
             return set()
-        return {p.name for p in packages.iterdir() if p.is_dir()}
+        return {p.name for p in records.iterdir() if p.is_file()}
 
     def test_a_current_document_exports_from_its_store_package(self) -> None:
         entry = _write_model(self.root, size=6.0)
@@ -114,7 +116,10 @@ class MeshExportStoreReuseTest(unittest.TestCase):
             self.assertNotIn("load STEP", current.stderr)
             self.assertTrue(step_file.with_suffix(f".{fmt}").is_file(), fmt)
 
-    def test_a_stale_document_teaches_the_run_instead_of_rebuilding(self) -> None:
+    def test_a_stale_document_is_read_as_written_by_the_door(self) -> None:
+        # A door asks one question -- does the store have a tree for this file's
+        # bytes? -- and never runs the script. The source moving on is the model's
+        # business: the door reads the document as written and rebuilds nothing.
         entry = _write_model(self.root, size=6.0)
         self.assertEqual(0, self._run([entry.name], self.root).returncode)
         step_file = self.root / "block.step"
@@ -122,14 +127,13 @@ class MeshExportStoreReuseTest(unittest.TestCase):
         stl_before = step_file.with_suffix(".stl").read_bytes()
 
         _write_model(self.root, size=9.0)
-        stale = self._door("stl", "block.step")
-        self.assertEqual(1, stale.returncode)
-        self.assertIn("stale relative to its source", stale.stderr)
-        self.assertIn("python block.py", stale.stderr)
+        door = self._door("stl", "block.step")
+        self.assertEqual(0, door.returncode, door.stderr)
+        self.assertNotIn("stale", door.stderr)
+        self.assertNotIn("run step model", door.stderr)
         # Nothing was rebuilt, re-exported, or otherwise touched.
         self.assertEqual(step_before, step_file.read_bytes())
         self.assertEqual(stl_before, step_file.with_suffix(".stl").read_bytes())
-        self.assertNotIn("run step model", stale.stderr)
 
     def test_a_bare_door_needs_declarations_in_the_sidecar(self) -> None:
         # An imported document declares nothing, so there is no variant set to

@@ -28,20 +28,14 @@ _DRAWING_PRELUDE = [
 
 
 def _closure(root: Path, name: str) -> list[str]:
-    # The closure is recorded in the drawing's OUTPUT RECORD now — the drawing
-    # package died with design/standalone-viewer.md Phase A.
-    from cadgen._internal.dxf_output import dxf_export_record_path
+    # A drawing is a model in the graph: its closure is in its model record
+    # (STORE.md §3), keyed by the script like any @step model's.
+    from cadgen.store.records import read_record
 
-    from cadgen._internal.source_hash import closure_hash_matches
-
-    record_path = dxf_export_record_path(root / f"{name}.dxf")
-    closures = json.loads(record_path.read_text(encoding="utf-8"))["closures"]
-    # Content-keyed records are shared by every source producing these bytes
-    # (other tests included); pick the closure that verifies for THIS root.
-    for closure_hash, files in closures.items():
-        if closure_hash_matches(closure_hash, files, base=root):
-            return sorted(files)
-    raise AssertionError(f"no closure in {record_path} verifies for {root}")
+    record = read_record(root / f"{name}.py")
+    if not record:
+        raise AssertionError(f"no record for {name}.py under {root}")
+    return sorted((record.get("closure") or {}).get("files") or [])
 
 
 class ClosureCaptureTests(unittest.TestCase):

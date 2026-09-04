@@ -64,11 +64,10 @@ def build_turn_signal(position, side):
     return [body, lens]
 
 
-def build_mirror(side):
+def build_mirror(side, base):
     """Round bar-end mirror: raked stalk + head, glass facing back toward the
-    rider. ``side`` +1 rider-left, -1 rider-right."""
-    top = S.steer_point(S.STEM_TOP_T)
-    base = (top[0] - 16.0, side * 235.0, top[2] + 6.0)
+    rider. ``side`` +1 rider-left, -1 rider-right; ``base`` is the bar-end
+    mount point, which the handlebar model owns (``handlebar.MIRROR_MOUNT_*``)."""
     x, y, z = base
     head_center = (x + 28.0, y + side * 57.0, z + 117.0)
     stalk = L.tube(

@@ -1,7 +1,8 @@
 """Full watch assembly: case + dial/hands + movement + bracelet.
 
-Children are sibling models, composed by FUNCTION (import links, `memo`
-caches). Each child already authors its parts in the WATCH frame (see
+Children are sibling models, composed by FUNCTION: calling a child inside
+this body builds it if stale (on its own worker, in parallel with its
+siblings) or loads it. Each child already authors its parts in the WATCH frame (see
 `lib/spec.py`), so placements are identity — except the movement, which is
 cased via the documented flip about X + MOVT_Z_OFFSET lift.
 
@@ -20,19 +21,9 @@ import dial
 import movement
 from cadgen import build123d as bd
 from cadgen import step
-from cadgen.compose import memo
 
 from lib import materials
 from lib import spec as S
-
-# Composition seam: `child_entry()` (path-addressed) is retired; a child is
-# now its imported model FUNCTION wrapped in `memo`, a cached scope keyed by
-# the child's source closure. An edit that does not reach a child's files
-# skips that child's Python and kernel work entirely.
-_CASE = memo(case.case)
-_DIAL = memo(dial.dial)
-_BRACELET = memo(bracelet.bracelet)
-_MOVEMENT = memo(movement.movement)
 
 
 # ---------------------------------------------------------------------------
@@ -212,19 +203,19 @@ KINEMATICS = {
 def moonwatch():
     children = []
 
-    case_parts = _CASE()
+    case_parts = case.case()
     case_parts.label = "case"
     children.append(case_parts)
 
-    dial_parts = _DIAL()
+    dial_parts = dial.dial()
     dial_parts.label = "dial_and_hands"
     children.append(dial_parts)
 
-    bracelet_parts = _BRACELET()
+    bracelet_parts = bracelet.bracelet()
     bracelet_parts.label = "bracelet"
     children.append(bracelet_parts)
 
-    movement_parts = _MOVEMENT()
+    movement_parts = movement.movement()
     movement_parts.label = "movement"
     # cased: local (x, y, z) -> watch (x, -y, MOVT_Z_OFFSET - z)
     movement_parts.locate(

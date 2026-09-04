@@ -9,9 +9,10 @@ bundled in at build time; the JS *source* lives in its own packages and never
 ships as source).
 
 **PURPOSE** — the engine and its command surface: model execution, the
-content-keyed cache, document assembly, kinematics, exports, validation,
-inspection, snapshots, the warm daemon, and the CAD Viewer (`cadgen viewer`:
-a local HTTP server over the built client, one directory per instance).
+store, document assembly, kinematics, exports, validation, inspection,
+snapshots, the warm daemon and its build pool, and the CAD Viewer
+(`cadgen viewer`: a local HTTP server over the built client, one directory per
+instance).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily,
 never at namespace-import time) and the *built outputs* of `cadgen-js`.
@@ -19,7 +20,7 @@ Never app code, never `cadgen-js` source at runtime.
 
 **DEPENDED ON BY** — every skill (as a pinned installed distribution). The
 CAD Viewer is not a dependent but a part: `cadgen.viewer` serves the client and
-compiles foreign STEP imports in a worker process it owns.
+submits a document's compile as a job to the same build pool every door uses.
 
 ## The design laws
 
@@ -33,34 +34,44 @@ A generated file (STEP, DXF, STL, GLB, 3MF) and its sidecar
 
 *Pressure-test*: a generated file must be fully renderable — viewer,
 snapshot, inspect — by reading ONLY the generated file(s), the sidecar, and
-the cache. Never the source. A missing cache regenerates from the generated
-file's own bytes (`cadgen step compile` semantics), never from source.
-Deleting every `.py` in a project must not change what renders.
+the store's artifact side. Never the source. A file whose bytes have no tree
+in the store is compiled from those bytes (`cadgen step compile` semantics),
+never from source. Deleting every `.py` in a project must not change what
+renders.
 
 - Nothing a renderer reads references the source tree: the sidecar's
   kinematics are resolved numbers and labels, its animation is COPIED
-  module text.
-- The sidecar's closure fields exist for the source-side no-op gate only.
-  Staleness at any door is a teaching error naming `python <script>` —
-  nothing auto-rebuilds.
+  module text; a tree and its components carry no path, script or record key
+  ([`STORE.md`](STORE.md) §2, the two-sides law).
+- A door never refuses a document and never auto-rebuilds: whether a
+  document is behind its script is the model's record's question, answered
+  by `cadgen store why` and the build tree, never by a render path.
 - Source scripts are PROGRAMS: run, never passed to CLIs, never parsed by
   renderers.
 
-### 2. The cache contains only format-derived build and render artifacts
+### 2. The store contains only derived results
 
-`~/.cache/cadgen` holds data derivable from a file's bytes — render
-packages, tessellations, freshness records — and nothing else.
+`~/.cache/cadgen` is the store: content-addressed objects (a model's result
+tree and the components it is made of) and input-addressed index entries
+(the per-model record, the document → tree map, op-memo and tessellation
+entries) — data derivable from sources and documents, and nothing else. Its
+layout, formats, gate, two-sides law and invariants are the contract in
+[`STORE.md`](STORE.md); read it before touching anything that writes to or
+reads from the store. Where this document and `STORE.md` disagree, `STORE.md`
+is right and this one is stale.
 
-*Pressure-test*: everything in the cache is (a) a pure function of some
-file's bytes plus schema versions, (b) safely deletable at any time, and
-(c) rebuildable from generated files alone. If losing a cache entry would
-lose information, that information is in the wrong place.
+*Pressure-test*: everything in the store is (a) a pure function of some
+source or document, (b) safely deletable at any time, and (c) rebuildable
+by running the models again. If losing a store entry would lose information,
+that information is in the wrong place.
 
-**The cache is what the bytes imply; the sidecar is what the author meant.**
+**The store is what the sources imply; the sidecar is what the author meant.**
 
-There is no automatic GC: `cadgen cache gc` is the only sweeper, and every
-tier is content-addressed and best-effort, so deletion never needs
-coordination — a racing reader re-misses and rebuilds.
+There is no automatic GC: `cadgen store gc` is the only sweeper, and every
+object is immutable and idempotently written, so deletion never needs
+coordination — a racing reader re-misses and rebuilds. There are no locks:
+atomic writes, pins and the publish rule (`STORE.md` §5, §7) decide every
+concurrent outcome, and no reader ever waits on a build.
 
 ### 3. One sidecar per artifact, and it belongs to that artifact alone
 
@@ -110,8 +121,11 @@ it is the space (`{mates, couplings, poses, at}`); on CONSUMING surfaces
 
 ### 7. Documents-only CLIs; scripts are programs
 
-`python model.py` is the one source door: it gates, builds, writes the
-document + sidecar, and heals declared exports. Every CLI takes documents.
+`python model.py` is the one source door: it gates, builds, writes every
+output the decorators declare (`.step`, meshes, sidecar — STEP is one output
+kind, not a required one), and rewrites declared exports that drifted. Every
+CLI takes documents, resolves them by their bytes, and compiles a missing
+tree from those bytes as a job in the build pool — never from a script.
 
 ### 8. No backwards compatibility
 
@@ -132,12 +146,13 @@ path.
 ### 11–14. Runtime laws (shared with cadgen-js)
 
 Kinematics is pure data and choreography is pure JS, fully independent
-(11). Clients render from file + sidecar + cache and never read source or
-trigger builds (12). Correctness never depends on a cache hit (13).
-Composition: importing links, `cadgen.compose.memo` caches; a model must
-never `read_step` its own output (14). The bundled runtime under
-`_runtime/` is the JS half of these; the laws' JS statements live with the
-cadgen-js source.
+(11). Clients render from file + sidecar + the store's artifact side and never
+read source, a record, or trigger builds (12). Correctness never depends on a
+store hit (13). Composition: importing binds, calling links — a parent
+depends on a child by its RESULT (the pinned tree), on a constant by its
+VALUE, on a helper by its FILE — and a model must never `read_step` its own
+output (14). The bundled runtime under `_runtime/` is the JS half of these;
+the laws' JS statements live with the cadgen-js source.
 
 ### 15. The package ships alone
 
@@ -157,23 +172,33 @@ to its source, a repo script, or a repo workflow does not.
 src/cadgen/
   <format>.py            # public namespaces: step, stl, threemf, glb, dxf,
                          #   urdf, srdf, sdf — each binds its verbs
-  authoring.py           # @step/@dxf/@stl/@glb/@threemf decorators
+  authoring.py           # @step/@dxf/@stl/@glb/@threemf decorators; a call
+                         #   builds at top level and composes (a lazy child)
+                         #   inside a body; a model's outputs are what they
+                         #   declare — a mesh decorator alone is a model that
+                         #   writes no STEP
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
-  compose.py             # memo — the traced, cached composition scope
   step_scene.py          # read_step and scene loading (recorded inputs)
   assembly.py            # AssemblyHelper — positioning through native joints, labels
   results.py             # the typed Results every verb returns (stdlib-only)
+  store/                 # the store (STORE.md): objects, index, records, trees,
+                         #   closure, gate, materialize, publish, lazy, gc, view
   cli/                   # generated command shells, one per <format> <verb>
-  daemon/                # warm worker pool (supervisor never imports OCP)
-  _internal/             # the engine: generation pipeline, package builder,
+  cli_tree.py            # the build tree on stderr / JSONL events
+  daemon/                # the build pool: executors (daemon + transient),
+                         #   broker (job slots, coalescing), pool (workers,
+                         #   spares, extras), jobs (the ledger), server,
+                         #   worker, client, transport
+  _internal/             # the engine: generation pipeline, tree builder,
                          #   FK (kinematics_fk/resolve), mesh_export ledger,
-                         #   cli_from_function, doors (documents-only gate),
-                         #   source_sidecar, step_assemble/step_reemit,
-                         #   caches (op memo, scope store, cache_paths)
+                         #   cli_from_function, doors (documents by bytes),
+                         #   source_sidecar, step_assemble/step_reemit
   viewer/                # the CAD Viewer's server: launcher (main),
-                         #   routes (http_app), catalog (scanner), freshness
-                         #   authority (artifact_status), compile worker
+                         #   routes (http_app), catalog (scanner), status
+                         #   (artifact_status: not compiled / compiling /
+                         #   rendered / failed), build_progress (the daemon's
+                         #   job ledger, read over its socket)
   _runtime/              # BUILT JS (browser snapshot renderer, node
                          #   builders, the viewer client) — generated, never
                          #   edited here
@@ -182,10 +207,10 @@ src/cadgen/
 Verbs by format: `step` compile · build · snapshot · inspect;
 `stl`/`3mf`/`glb` build · snapshot; `dxf` snapshot; `urdf`/`sdf`
 validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
-`cadgen cache|daemon|doctor` are status commands, and `cadgen viewer
+`cadgen store|daemon|doctor` are status commands, and `cadgen viewer
 [list|stop]` the CAD Viewer's launcher and instance manager — all deliberately
 outside the mirror pattern. `cadgen step compile` is internal tooling: skills never
-teach it — doors compile missing packages on demand.
+teach it — doors compile a document's missing tree on demand.
 
 Developed in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad);
 that repo's contributor guide carries the development workflow (tests,

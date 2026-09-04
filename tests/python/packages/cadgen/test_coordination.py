@@ -1,24 +1,16 @@
-"""The coordination primitives: locking, probing, run attribution, freshness re-check.
+"""Progress reporting: a run narrates its phases to the sinks it is given.
 
-Everything here drives the real modules. Where the claim is about cross-process behaviour
-it uses real subprocesses and real ``fcntl`` -- a mocked lock proves nothing about a
-protocol whose entire job is to survive being observed by another process.
+There is no lock and no record on disk. What remains is the narration: phases and
+counts reach the sink as they happen, a terminal ``done`` frame closes a run that
+returns, a run that raises sends none, a current artifact is skipped and says so,
+and a run with no scope still answers freshness while narrating nowhere. Readers in
+other processes get the same narration from the daemon's job ledger
+(``test_daemon_jobs.py``).
 """
 
 from __future__ import annotations
 
-import errno
-import json
-import os
-import subprocess
-import sys
-import tempfile
-import threading
-import time
 import unittest
-import warnings
-from pathlib import Path
-from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
@@ -26,400 +18,60 @@ add_repo_path("packages/cadgen/src")
 
 from cadgen.coordination import (  # noqa: E402
     STEP_PACKAGE,
-    Contended,
     artifact_build,
     generator_busy,
-    require_write_lock,
-    snapshot,
 )
-from cadgen.coordination import record as record_mod  # noqa: E402
-from cadgen.coordination.lock import exclusive, probe  # noqa: E402
-from cadgen.coordination.paths import status_path, write_lock_path  # noqa: E402
-from cadgen.coordination.phases import PHASE_COMPONENTS  # noqa: E402
-
-_CADGEN_SRC = str(Path(__file__).resolve().parents[4] / "packages" / "cadgen" / "src")
-
-# Holds the write lock for a while so the parent can observe it from outside.
-_HOLDER = """
-import sys, time
-sys.path.insert(0, {src!r})
-from cadgen.coordination import STEP_PACKAGE, artifact_build
-with artifact_build(STEP_PACKAGE, {out!r}, is_current=lambda: False) as run:
-    run.phase("components", total=4)
-    run.advance()
-    print("HELD", flush=True)
-    time.sleep({hold})
-"""
+from cadgen.coordination.phases import PHASE_COMPONENTS, PHASE_DONE  # noqa: E402
 
 
-class CoordinationTestCase(unittest.TestCase):
-    def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory(prefix="cadcoord-")
-        self.addCleanup(self._tmp.cleanup)
-        self.root = Path(self._tmp.name)
-        self.out = self.root / "locks" / "widget-scope"
+class RunNarration(unittest.TestCase):
+    def test_phases_and_counts_reach_the_sink_then_a_terminal_done(self):
+        frames = []
+        with artifact_build(STEP_PACKAGE, "widget-scope", is_current=lambda: False, sink=frames.append) as run:
+            run.phase(PHASE_COMPONENTS, total=4)
+            run.advance(2)
+        self.assertEqual([PHASE_COMPONENTS, PHASE_COMPONENTS, PHASE_DONE], [f.phase for f in frames][-3:])
+        self.assertEqual((2, 4), (frames[-2].done, frames[-2].total))
+        self.assertTrue(frames[-1].finished)
+        self.assertTrue(run.run_id)
 
-    def _spawn_holder(self, hold=3.0):
-        proc = subprocess.Popen(
-            [sys.executable, "-c", _HOLDER.format(src=_CADGEN_SRC, out=str(self.out), hold=hold)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-
-        def _reap():
-            proc.kill()
-            proc.wait(timeout=30)
-            if proc.stdout is not None:
-                proc.stdout.close()
-
-        self.addCleanup(_reap)
-        self.assertEqual("HELD", (proc.stdout.readline() or "").strip(), "holder never started")
-        return proc
-
-
-class SnapshotTest(CoordinationTestCase):
-    def test_idle_when_nothing_has_ever_run(self):
-        snap = snapshot(self.out)
-        self.assertEqual("idle", snap.state)
-        self.assertIsNone(snap.progress)
-
-    def test_probing_does_not_create_the_sentinel(self):
-        snapshot(self.out)
-        self.assertFalse(
-            write_lock_path(self.out).exists(),
-            "a status read must not materialise files for a never-built artifact",
-        )
-
-    def test_reports_writing_while_a_peer_holds_the_lock(self):
-        self._spawn_holder()
-        snap = snapshot(self.out)
-        self.assertEqual("writing", snap.state)
-        self.assertIsNotNone(snap.run_id)
-        self.assertIsNotNone(snap.progress, "a live run's progress must be visible")
-        self.assertEqual(PHASE_COMPONENTS, snap.progress["phase"])
-
-    def test_generator_busy_does_not_read_as_a_build(self):
-        with generator_busy(STEP_PACKAGE, self.out):
-            snap = snapshot(self.out)
-        # An export occupies the generator but rewrites nothing, so the artifact on disk is
-        # still whatever it was -- reporting `writing` here would hide a renderable model.
-        self.assertEqual("busy", snap.state)
-
-
-class GeneratorRecordIsolationTest(CoordinationTestCase):
-    """The two sentinels do NOT exclude each other, so a generator run and a writer run
-    overlap by design. They must not share a record file: while they did, an export landed
-    on top of a live build's progress and the viewer's bar vanished mid-build."""
-
-    def test_a_generator_run_does_not_touch_the_writers_record(self):
-        with exclusive(write_lock_path(self.out)) as write_run:
-            record_mod.write_record(
-                status_path(self.out),
-                record_mod.build_record(
-                    run_id=write_run,
-                    kind="step-package",
-                    intent="write",
-                    started_at_ms=0.0,
-                    outcome=None,
-                    progress={"phase": "components", "done": 7, "total": 9, "determinate": True},
-                ),
-            )
-            with generator_busy(STEP_PACKAGE, self.out):
-                snap = snapshot(self.out)
-            self.assertEqual("writing", snap.state, "the writer still holds its sentinel")
-            self.assertIsNotNone(
-                snap.progress, "an overlapping export must not erase the build's bar"
-            )
-            self.assertEqual("components", snap.progress["phase"])
-
-    def test_a_generator_run_does_not_overwrite_the_writers_record(self):
-        # An export leaves a terminal record of its own. While it shared the writer's file,
-        # that record replaced the build's -- erasing what the build reported it had done.
-        with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
-            run.phase(PHASE_COMPONENTS, total=2)
-            run.advance()
-        recorded = record_mod.read_record(status_path(self.out))["stageMs"]
-        self.assertTrue(recorded, "a successful build records what its phases cost")
-
-        with generator_busy(STEP_PACKAGE, self.out):
-            pass
-        self.assertEqual(
-            recorded,
-            record_mod.read_record(status_path(self.out))["stageMs"],
-            "an export must not overwrite the build's own record",
-        )
-
-
-class RunAttributionTest(CoordinationTestCase):
-    def test_a_dead_runs_record_is_not_shown_as_the_live_runs_progress(self):
-        # Simulate a SIGKILLed build: a non-terminal record left behind forever.
-        status_path(self.out).parent.mkdir(parents=True, exist_ok=True)
-        record_mod.write_record(
-            status_path(self.out),
-            record_mod.build_record(
-                run_id="deadbeef",
-                kind="step-package",
-                intent="write",
-                started_at_ms=0.0,
-                outcome=None,
-                progress={"phase": "components", "done": 31, "total": 50, "determinate": True},
-            ),
-        )
-        with exclusive(write_lock_path(self.out)) as run_id:
-            self.assertIsNotNone(run_id)
-            snap = snapshot(self.out)
-            self.assertEqual("writing", snap.state)
-            self.assertIsNone(
-                snap.progress,
-                "the corpse of a killed run must not be rendered as this run's position",
-            )
-
-    def test_stage_ms_is_absent_after_a_failed_run(self):
+    def test_a_failed_run_sends_no_terminal_frame(self):
+        frames = []
         with self.assertRaises(RuntimeError):
-            with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
-                run.phase(PHASE_COMPONENTS, total=2)
-                run.advance()
+            with artifact_build(STEP_PACKAGE, "widget-scope", is_current=lambda: False, sink=frames.append) as run:
+                run.phase(PHASE_COMPONENTS, total=4)
                 raise RuntimeError("boom")
-        payload = record_mod.read_record(status_path(self.out))
-        self.assertEqual("failed", payload["outcome"])
-        self.assertIsNone(
-            payload["stageMs"],
-            "partial times from a failed run are not durations anyone should print",
-        )
+        self.assertFalse(any(f.finished for f in frames))
 
-    def test_stage_ms_is_recorded_after_a_successful_run(self):
-        with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
-            run.phase(PHASE_COMPONENTS, total=2)
-            run.advance()
-        payload = record_mod.read_record(status_path(self.out))
-        self.assertEqual("done", payload["outcome"])
-        self.assertIsInstance(payload["stageMs"], dict)
+    def test_a_current_artifact_is_skipped_and_says_so(self):
+        with artifact_build(STEP_PACKAGE, "widget-scope", is_current=lambda: True) as run:
+            self.assertTrue(run.skipped)
 
-    def test_a_run_records_every_phase_it_entered(self):
-        """stageMs is a record of what THIS run cost, phase by phase.
+    def test_force_ignores_is_current(self):
+        with artifact_build(STEP_PACKAGE, "widget-scope", is_current=lambda: True, force=True) as run:
+            self.assertFalse(run.skipped)
 
-        Nothing reads it back to predict the next build any more -- each phase reports itself
-        -- but the CLI prints a phase's duration as it closes, so the times have to be there
-        for every phase the run actually entered.
-        """
-        with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
-            run.phase("generate")
-            time.sleep(0.05)
+    def test_no_scope_means_no_narration_but_freshness_is_still_answered(self):
+        with artifact_build(STEP_PACKAGE, None, is_current=lambda: True) as run:
+            self.assertTrue(run.skipped)
+            self.assertIsNone(run.run_id)
+
+    def test_each_run_has_its_own_id(self):
+        with artifact_build(STEP_PACKAGE, "widget-scope") as first:
+            pass
+        with artifact_build(STEP_PACKAGE, "widget-scope") as second:
+            pass
+        self.assertNotEqual(first.run_id, second.run_id)
+
+    def test_an_export_narrates_through_the_same_phases(self):
+        frames = []
+        with generator_busy(STEP_PACKAGE, "widget-scope", sink=frames.append) as run:
+            self.assertIsNotNone(run)
             run.phase(PHASE_COMPONENTS, total=1)
             run.advance()
-        recorded = record_mod.read_record(status_path(self.out))["stageMs"]
-        self.assertEqual({"generate", "components"}, set(recorded))
-        self.assertGreater(recorded["generate"], 0)
-
-    def test_a_finished_run_reports_no_progress(self):
-        with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
-            run.phase(PHASE_COMPONENTS, total=2)
-        self.assertEqual("idle", snapshot(self.out).state)
-        self.assertIsNone(snapshot(self.out).progress)
-
-
-class WriteLockGuardTest(CoordinationTestCase):
-    """require_write_lock is the backstop that makes D1 unrepeatable.
-
-    The lock used to be taken at call sites, so whether a package write was coordinated
-    depended on which producer you arrived through -- and ensure_step_topology_artifact
-    arrived through one that took none, making a cold `cad inspect` build invisible to the
-    viewer and letting it race a viewer build into the same directory. The assertion lives
-    at the mutation boundary so a future producer cannot reintroduce that.
-    """
-
-    def setUp(self):
-        super().setUp()
-        self._prev = os.environ.get("CADGEN_STRICT_LOCKS")
-        os.environ["CADGEN_STRICT_LOCKS"] = "1"
-
-    def tearDown(self):
-        if self._prev is None:
-            os.environ.pop("CADGEN_STRICT_LOCKS", None)
-        else:
-            os.environ["CADGEN_STRICT_LOCKS"] = self._prev
-
-    def test_holding_the_lock_satisfies_the_guard(self):
-        with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False):
-            self.assertTrue(require_write_lock(self.out))
-
-    def test_writing_without_the_lock_raises_under_strict_mode(self):
-        with self.assertRaises(RuntimeError):
-            require_write_lock(self.out)
-
-    def test_any_held_generation_lock_satisfies_the_guard(self):
-        # Locks key by MODEL path while writers are handed the content-keyed
-        # store dir, so the boundary asserts "this thread holds a generation
-        # write lock" — the failure it guards is the wholly-uncoordinated
-        # producer, not a cross-model mixup (a thread builds one model at a
-        # time).
-        other = self.root / "other.py"
-        with artifact_build(STEP_PACKAGE, other, is_current=lambda: False):
-            self.assertTrue(require_write_lock(self.out))
-
-    def test_production_only_warns(self):
-        os.environ.pop("CADGEN_STRICT_LOCKS", None)
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            self.assertFalse(require_write_lock(self.out))
-        self.assertTrue(any(issubclass(w.category, RuntimeWarning) for w in caught))
-
-
-class DegradedLockTest(CoordinationTestCase):
-    """A filesystem that refuses advisory locks must not fail the build -- on EITHER side.
-
-    Python's policy has always been "a missing lock must never be the reason a user's build
-    fails", and `artifact_build` honours it by minting a run id and carrying on. But that id
-    is never stamped into the sentinel, because nothing was locked to stamp it under, so the
-    Node builders compared it against an empty sentinel and threw -- reporting
-    a lock violation for a filesystem that simply cannot lock. The run now carries the fact
-    across the boundary so the child can tell the two apart.
-    """
-
-    def _no_locks(self):
-        """`exclusive()` degrades on ENOLCK/EOPNOTSUPP: NFS, some SMB mounts, some binds."""
-
-        def refuse(handle, path, **kwargs):
-            raise OSError(errno.ENOLCK, "no locks available")
-
-        return mock.patch("cadgen.coordination.lock._acquire", refuse)
-
-    def test_a_degraded_run_says_so_and_still_builds(self):
-        with self._no_locks():
-            with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
-                self.assertTrue(run.degraded)
-                # Still a usable run: progress needs an id to attribute records to.
-                self.assertTrue(run.run_id)
-                # ...and that id is NOT in the sentinel, which is the whole problem.
-                self.assertEqual(b"", write_lock_path(self.out).read_bytes())
-
-    def test_a_normal_run_is_not_degraded(self):
-        with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: False) as run:
-            self.assertFalse(run.degraded)
-            stamped = write_lock_path(self.out).read_bytes()[:32].decode("ascii").strip()
-            self.assertEqual(run.run_id, stamped)
-
-
-class ProbeConcurrencyTest(CoordinationTestCase):
-    def test_concurrent_probes_do_not_report_a_phantom_build(self):
-        """flock conflicts per open file description, not per process.
-
-        The previous reader probed with LOCK_EX, so two concurrent probes of an UNHELD
-        sentinel conflicted with EACH OTHER and one reported a build in flight. Measured at
-        ~6% false positives with four threads.
-        """
-        lock = write_lock_path(self.out)
-        lock.parent.mkdir(parents=True, exist_ok=True)
-        lock.touch()
-
-        false_positives = []
-        lock_guard = threading.Lock()
-
-        def worker():
-            hits = sum(1 for _ in range(2000) if probe(lock).held)
-            with lock_guard:
-                false_positives.append(hits)
-
-        threads = [threading.Thread(target=worker) for _ in range(4)]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
-
-        self.assertEqual(
-            0,
-            sum(false_positives),
-            "a shared-mode probe must never conflict with another probe",
-        )
-
-
-class PostLockFreshnessTest(CoordinationTestCase):
-    def test_is_current_is_evaluated_under_the_lock(self):
-        order = []
-
-        with artifact_build(
-            STEP_PACKAGE,
-            self.out,
-            is_current=lambda: (order.append("check"), False)[1],
-        ) as run:
-            order.append("body")
-            self.assertFalse(run.skipped)
-        self.assertEqual(["check", "body"], order)
-
-    def test_a_current_artifact_skips_the_body(self):
-        ran = []
-        with artifact_build(STEP_PACKAGE, self.out, is_current=lambda: True) as run:
-            if not run.skipped:
-                ran.append("body")
-        self.assertEqual([], ran)
-        self.assertEqual("skipped", record_mod.read_record(status_path(self.out))["outcome"])
-
-    def test_force_bypasses_the_currency_check_but_not_the_lock(self):
-        checked = []
-        with artifact_build(
-            STEP_PACKAGE, self.out, is_current=lambda: checked.append(1) or True, force=True
-        ) as run:
-            self.assertFalse(run.skipped)
-        self.assertEqual([], checked, "force must not consult is_current at all")
-
-
-class BoundedWaitTest(CoordinationTestCase):
-    def test_deadline_reports_contended_instead_of_blocking(self):
-        self._spawn_holder(hold=10.0)
-        started = time.monotonic()
-        with artifact_build(
-            STEP_PACKAGE, self.out, is_current=lambda: False, deadline_ms=300
-        ) as run:
-            self.assertTrue(run.contended, "a peer holds the lock; this run got nothing")
-            self.assertIsNone(run.run_id, "a contended run never became a run")
-        self.assertLess(
-            time.monotonic() - started, 5.0, "a bounded wait must not block for the full run"
-        )
-
-    def test_an_acquired_run_is_not_contended(self):
-        with artifact_build(
-            STEP_PACKAGE, self.out, is_current=lambda: False, deadline_ms=5000
-        ) as run:
-            self.assertFalse(run.contended)
-            self.assertIsNotNone(run.run_id)
-
-    def test_exclusive_still_raises_contended_for_lower_level_callers(self):
-        # artifact_build turns a lost race into run.contended; the primitive underneath it
-        # keeps raising, so a caller with no BuildRun to inspect still cannot miss it.
-        self._spawn_holder(hold=10.0)
-        with self.assertRaises(Contended):
-            with exclusive(write_lock_path(self.out), deadline_ms=300):
-                pass
-
-    def test_a_contended_run_writes_no_record(self):
-        # The peer owns the record. A run that never took the lock must not touch it --
-        # overwriting it is exactly how a live build's bar used to disappear.
-        self._spawn_holder(hold=10.0)
-        before = status_path(self.out).read_bytes() if status_path(self.out).exists() else None
-        with artifact_build(
-            STEP_PACKAGE, self.out, is_current=lambda: False, deadline_ms=300
-        ) as run:
-            self.assertTrue(run.contended)
-        after = status_path(self.out).read_bytes() if status_path(self.out).exists() else None
-        self.assertEqual(before, after)
-
-    def test_a_blocked_acquire_reports_that_it_is_waiting(self):
-        # Without this a contended acquire emits nothing at all for as long as the peer
-        # holds the lock, which is indistinguishable from a hung process.
-        self._spawn_holder(hold=1.5)
-        waits = []
-        with artifact_build(
-            STEP_PACKAGE, self.out, is_current=lambda: False, on_wait=waits.append
-        ) as run:
-            self.assertFalse(run.contended, "no deadline: it must wait the peer out")
-        self.assertTrue(waits, "a wait long enough to notice must be reported")
-        self.assertGreater(waits[0], 0.0)
-
-    def test_reentrant_acquire_in_one_thread_does_not_deadlock(self):
-        with exclusive(write_lock_path(self.out)) as outer:
-            with exclusive(write_lock_path(self.out)) as inner:
-                self.assertEqual(outer, inner)
+        self.assertEqual(PHASE_DONE, frames[-1].phase)
+        with generator_busy(STEP_PACKAGE, None) as none:
+            self.assertIsNone(none)
 
 
 if __name__ == "__main__":

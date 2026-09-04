@@ -27,11 +27,6 @@ run_suite() {
 
 cd "$REPO_ROOT"
 
-# Turn the render-package write-lock assertion into a hard failure for tests. In
-# production require_write_lock() only warns -- a missing lock must never be the reason a
-# user's build fails -- so CI is the only place the contract is actually enforced.
-export CADGEN_STRICT_LOCKS=1
-
 # Isolate the shared caches (component store + op-memo disk tier) from the
 # developer's real ~/.cache/cadgen: tests assert exact built/reused counts and
 # byte-level outputs, and a populated user store would satisfy builds the test

@@ -6,9 +6,9 @@ exports, or animation clips.
 
 There are THREE systems with different lifecycles, deliberately independent:
 
-- **Geometry parameters** are the model function's signature
-  (`def bracket(width: float = 10.0)`). Changing one re-runs Python and
-  rebuilds the artifact. They are not live in the viewer.
+- **Geometry** is the module's constants and the factory the parameterless
+  model calls with them (`WIDTH = 10.0` … `return _bracket(WIDTH)`). Changing
+  one re-runs Python and rebuilds the outputs. They are not live in the viewer.
 - **Kinematics** is typed mates declared as PURE DATA via `kinematics=` on
   the export decorators. It drives the viewer's pose sliders and bakes posed
   exports — no rebuild, no Python at render time. It lives in the model's
@@ -16,7 +16,7 @@ There are THREE systems with different lifecycles, deliberately independent:
 - **Animation** is choreography in a plain `.js` module declared via
   `@step(animation="<name>.anim.js")`, whose TEXT is copied into the same
   sidecar. It targets occurrences directly and knows nothing about mates.
-  Editing kinematics or animation never re-keys a render package and never
+  Editing kinematics or animation never changes the model's tree and never
   dirties an export — but the `.anim.js` IS a build input: editing it makes
   the model stale, and the next run refreshes the sidecar's copy.
 

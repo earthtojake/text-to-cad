@@ -4,9 +4,26 @@ Quad-turbo 8.0 L W16, sectioned museum cutaway with working kinematics.
 
 | Script   | Artifact        | Description                                                            |
 |----------|-----------------|------------------------------------------------------------------------|
-| w16.py   | STEP/w16.step   | Full engine assembly, grouped by system; carries `w16.anim.js`         |
+| w16.py   | STEP/w16.step   | Full engine assembly: the thirteen system models below, linked in occurrence order; carries `w16.anim.js` |
+| block.py | STEP/block.step | `o1.1` block casting + main caps + shells + block fasteners |
+| crank.py | STEP/crank.step | `o1.2` crankshaft, damper, flywheel |
+| pistons.py | STEP/pistons.step | `o1.3` 16 x piston/rings/pin/circlips/rod/cap/bolts/shells |
+| heads.py | STEP/heads.step | `o1.4` two heads, plugs, core plugs, head bolts |
+| valvetrain.py | STEP/valvetrain.step | `o1.5` 64 valves + springs + retainers + followers + HLAs |
+| cams.py | STEP/cams.step | `o1.6` four camshafts + caps |
+| camdrive.py | STEP/camdrive.step | `o1.7` sprockets, chains, guides, tensioners |
+| covers.py | STEP/covers.step | `o1.8` cam covers, coils, plug wells, breathers |
+| oil_system.py | STEP/oil_system.step | `o1.9` dry-sump pan, windage tray, pumps, filter |
+| turbos.py | STEP/turbos.step | `o1.10` four turbochargers |
+| exhaust.py | STEP/exhaust.step | `o1.11` 16 primaries, collectors, downpipes, shields |
+| induction.py | STEP/induction.step | `o1.12` intercoolers, plenums, throttles, charge pipes, fuel rails |
+| ancillaries.py | STEP/ancillaries.step | `o1.13` alternator, water pumps, belt, coolant manifolds, bell housing |
 
-Build: `python src/w16.py` (unchanged models are no-ops). Imported sources: none.
+Build: `python src/w16.py` builds the root and every stale system beneath it
+(in parallel, one worker per system) and links their results; `python
+src/<system>.py` builds one system alone — the engine does not pick it up
+until `w16.py` is rerun. Unchanged models are no-ops. The museum section is
+one flag, `lib/spec.py:SECTIONED`, read by every system. Imported sources: none.
 
 ## Settled architecture (sources in `lib/spec.py`)
 

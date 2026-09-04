@@ -214,64 +214,40 @@ def remove_source_sidecar(step_path: Path | str) -> None:
     """Imports must never leave a stale generated-marker behind (e.g. a
     re-import over a model that used to be generated)."""
     source_sidecar_path(step_path).unlink(missing_ok=True)
-    provenance_record_path(step_path).unlink(missing_ok=True)
-
-
-# ---------------------------------------------------------------------------
-# The provenance RECORD: the freshness gates' path-keyed memory of a build's
-# source (kind, path, hash, closure). Every generated build writes one, in the
-# evictable records tier — eviction costs one rebuild, never correctness. It
-# exists so a PLAIN model (no sidecar warranted) still no-ops on rerun and is
-# still refused by the doors when it drifts from its script.
-
-_PROVENANCE_FIELDS = (
-    "generatedAt",
-    "schemaVersion",
-    "sourceKind",
-    "sourcePath",
-    "sourceHash",
-    "sourceClosureFiles",
-    "sourceClosureHash",
-    "annotationHash",
-)
-
-
-def provenance_record_path(step_path: Path | str) -> Path:
-    from cadgen.catalog import artifact_path_key
-    from cadgen._internal.cache_paths import records_dir
-
-    return records_dir() / f"{artifact_path_key(Path(step_path))}.source.json"
-
-
-def write_source_provenance_record(step_path: Path | str, payload: Mapping[str, Any]) -> None:
-    body = {key: payload[key] for key in _PROVENANCE_FIELDS if key in payload}
-    body.setdefault("schemaVersion", SOURCE_SIDECAR_SCHEMA_VERSION)
-    try:
-        existing = json.loads(provenance_record_path(step_path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        existing = None
-    if isinstance(existing, dict):
-        if {k: v for k, v in existing.items() if k != "generatedAt"} == {
-            k: v for k, v in body.items() if k != "generatedAt"
-        }:
-            return
-    target = provenance_record_path(step_path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temp = target.with_name(f".{target.name}{temp_suffix()}")
-    temp.write_text(json.dumps(body, sort_keys=True), encoding="utf-8")
-    replace_atomic(temp, target)
 
 
 def read_source_provenance(step_path: Path | str) -> dict[str, Any] | None:
-    """The document's source provenance, from the records tier — the ONE home
-    of source-derived identity; sidecars carry declarations only.
+    """The document's source provenance, read from the STORE RECORD of the model
+    behind it (``cadgen.store.records``): sourceKind, the script path relative
+    to the document, and the closure. ``None`` for a document with no record.
 
-    ``None`` means the document has no record: an import, or an evicted one
-    (the records tier is swept by ``cadgen cache gc``). Both cost the same one
-    rebuild, which re-records — never an error.
-    """
-    try:
-        payload = json.loads(provenance_record_path(step_path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    The provenance record file this used to read is gone; the model record is
+    the one freshness memory (STORE.md)."""
+    from cadgen.store.records import record_for_document, source_for_document
+
+    document = Path(step_path)
+    record = record_for_document(document)
+    if record is None:
         return None
-    return payload if isinstance(payload, dict) else None
+    source = source_for_document(document)
+    payload: dict[str, Any] = {
+        "sourceKind": str(record.get("sourceKind") or "python"),
+        "sourceClosureHash": str((record.get("closure") or {}).get("hash") or ""),
+        "sourceClosureFiles": list((record.get("closure") or {}).get("files") or []),
+        "tree": str(record.get("tree") or ""),
+    }
+    for key in ("sourceHash", "annotationHash", "kinematics", "stepHash"):
+        if record.get(key) is not None:
+            payload[key] = record[key]
+    try:
+        document_resolved = document.expanduser().resolve()
+    except (OSError, RuntimeError):
+        document_resolved = document
+    if str(source) != str(document_resolved):
+        import os
+
+        try:
+            payload["sourcePath"] = os.path.relpath(str(source), str(document_resolved.parent))
+        except ValueError:
+            payload["sourcePath"] = str(source)
+    return payload

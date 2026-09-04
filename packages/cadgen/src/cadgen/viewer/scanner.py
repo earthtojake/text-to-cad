@@ -49,9 +49,10 @@ from .encoding import encode_uri_component, encode_url_path, file_version
 from .natural_sort import sort_catalog_entries
 from .store_paths import (
     SOURCE_SIDECAR_NAMES,
-    render_package_dir,
+    artifact_path_key,
+    result_descriptor,
+    result_tree,
     source_sidecar_path,
-    store_packages_dir,
 )
 
 __all__ = [
@@ -238,24 +239,17 @@ def _sha256_file(file_path, stat_result=None) -> str:
     return hexdigest
 
 
-def _store_asset_url(package_dir: str, descriptor_stats) -> str:
-    """``/__cad/store?file=<packages-relative>[&v=<token>]``.
+def _store_asset_url(tree: str) -> str:
+    """``/__cad/store?file=<tree>``.
 
-    Raw ``encodeURIComponent``, not form encoding: the client's
-    ``resolvePackageAssetUrl`` rewrites this same ``file`` param for sub-assets,
-    and the value carries NO leading slash (the store route strips them, but the
-    catalog must not emit one).
+    The tree hash stands where a directory used to: the client's
+    ``resolvePackageAssetUrl`` appends ``/assembly.json`` and
+    ``/components/<cid>.surf`` to this same ``file`` param, and the store route
+    resolves both by hash. The value carries NO leading slash (the route strips
+    them, but the catalog must not emit one). No ``?v=`` token: a tree is
+    content-addressed, so its hash IS the version.
     """
-    rel = to_posix_path(path_relative(store_packages_dir(), package_dir))
-    base = f"/__cad/store?file={encode_uri_component(rel)}"
-    if descriptor_stats is None:
-        return base
-    token = file_version(descriptor_stats.st_size, descriptor_stats.st_mtime_ns)
-    return f"{base}&v={encode_uri_component(token)}"
-
-
-def _package_descriptor_stats(package_dir: str):
-    return _file_stats(os.path.join(package_dir, _STEP_DESCRIPTOR_NAME))
+    return f"/__cad/store?file={encode_uri_component(tree)}"
 
 
 def asset_for_path(repo_root, file_path) -> dict | None:
@@ -513,19 +507,15 @@ def _read_json(file_path):
         return None
 
 
-def read_step_catalog_metadata(package_dir: str, source_path=None) -> dict:
-    """Catalog-facing package facts, or ``{}`` when there is no valid package.
+def read_step_catalog_metadata(descriptor, source_path=None) -> dict:
+    """Catalog-facing facts from a document's flattened tree, or ``{}`` when
+    there is no valid one.
 
-    ``assembly.json`` IS the index manifest. A missing descriptor, one that is
-    not a regular file (a DIRECTORY named ``assembly.json`` counts as missing),
-    one that fails to parse, or one whose ``kind`` is not
-    ``assembly-package`` all answer ``{}`` — and that is what suppresses
-    ``sourceUrl``/``poseUrl`` even when the sidecar exists and declares
-    kinematics.
+    ``descriptor`` is the flattened tree (``result_descriptor``). ``None``, a
+    non-dict, or a ``kind`` that is not ``assembly-package`` all answer ``{}``
+    — and that is what suppresses ``sourceUrl``/``poseUrl`` even when the
+    sidecar exists and declares kinematics.
     """
-    if _package_descriptor_stats(package_dir) is None:
-        return {}
-    descriptor = _read_json(os.path.join(package_dir, _STEP_DESCRIPTOR_NAME))
     if not descriptor or not isinstance(descriptor, dict):
         return {}
     if descriptor.get("kind") != _STEP_PACKAGE_KIND:
@@ -554,10 +544,11 @@ def read_step_catalog_metadata(package_dir: str, source_path=None) -> dict:
 
 
 def _create_step_entry(repo_root, root_path, source_path, extension) -> dict:
-    package_dir = render_package_dir(source_path)
-    metadata = read_step_catalog_metadata(package_dir, source_path)
+    tree = result_tree(source_path)
+    descriptor = result_descriptor(tree) if tree else None
+    metadata = read_step_catalog_metadata(descriptor, source_path)
     topology = metadata.get("topology")
-    descriptor_stats = _package_descriptor_stats(package_dir)
+    descriptor_body = json.dumps(descriptor) if metadata else ""
     # `metadata.kinematics || metadata.animation || null`: an EMPTY object is
     # truthy in JS, so an empty `kinematics: {}` block still yields a poseUrl.
     # Python's `or` would drop it.
@@ -567,13 +558,11 @@ def _create_step_entry(repo_root, root_path, source_path, extension) -> dict:
     entry = {
         "file": repo_relative_path(root_path, source_path),
         "kind": step_kind_from_topology(topology),
-        "url": _store_asset_url(package_dir, descriptor_stats),
-        "hash": (
-            _sha256_file(os.path.join(package_dir, _STEP_DESCRIPTOR_NAME), descriptor_stats)
-            if descriptor_stats is not None
-            else ""
-        ),
-        "bytes": int(descriptor_stats.st_size) if descriptor_stats is not None else 0,
+        # The tree hash identifies the render; an unbuilt document still gets a
+        # deterministic URL the store route answers 404 for.
+        "url": _store_asset_url(tree or f"unbuilt-{artifact_path_key(source_path)}"),
+        "hash": tree if metadata else "",
+        "bytes": len(descriptor_body.encode("utf-8")),
     }
     if metadata.get("hasSourceSidecar"):
         # The model-side sidecar lives in the root and is served by the ordinary

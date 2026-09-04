@@ -7,12 +7,6 @@ from pathlib import Path
 from typing import Callable
 
 from cadgen.cli_logging import CliLogger
-from cadgen._internal.cli_locking import (
-    add_lock_timeout_argument,
-    contended_payload,
-    deadline_ms,
-    lock_wait_notice,
-)
 from cadgen._internal.generation import (
     EntrySpec,
     cli_progress_line,
@@ -26,7 +20,7 @@ from cadgen._internal.generation import (
 )
 from cadgen.coordination import PHASE_GENERATE, STEP_PACKAGE, ProgressEvent, artifact_build
 from cadgen.metadata import normalize_mesh_numeric
-from cadgen.catalog import coordination_scope, render_package_dir
+from cadgen.catalog import build_scope, result_view_dir
 from cadgen.render import relative_to_cwd
 from cadgen._internal.step_scene import LoadedStepScene, load_step_scene, step_file_hash
 from cadgen.catalog import iter_cad_sources, source_from_path
@@ -113,17 +107,20 @@ def _result_payload(
     *,
     entry_kind: str,
     source_kind: str,
-    artifact_path: Path,
     step_hash: str | None = None,
     source_hash: str | None = None,
     stats: dict[str, object] | None = None,
     load_elapsed_ms: float | None = None,
     skipped: bool = False,
 ) -> dict[str, object]:
+    from cadgen.catalog import result_tree_for
+
     payload: dict[str, object] = {
         "ok": True,
         "stepPath": relative_to_cwd(spec.step_path),
-        "packagePath": relative_to_cwd(artifact_path),
+        # The tree these bytes resolve to (index/document → tree): the result's
+        # identity, never a directory — nothing of the sort exists in the store.
+        "tree": result_tree_for(spec.entry_path),
         "entryKind": entry_kind,
         "sourceKind": source_kind,
         "stats": stats or {},
@@ -142,7 +139,6 @@ def _result_payload(
 
 
 def _generated_result_payload(spec: EntrySpec, scene: LoadedStepScene, stats: dict[str, object] | None = None) -> dict[str, object]:
-    artifact_path = render_package_dir(spec.entry_path)
     source_kind = str(getattr(scene, "source_kind", "step") or "step").strip().lower()
     step_hash = str(getattr(scene, "step_hash", "") or "").strip()
     if not step_hash and spec.step_path is not None and spec.step_path.is_file():
@@ -153,7 +149,6 @@ def _generated_result_payload(spec: EntrySpec, scene: LoadedStepScene, stats: di
         source_kind=source_kind,
         step_hash=step_hash or None,
         source_hash=getattr(scene, "source_hash", None) if source_kind == "python" else None,
-        artifact_path=artifact_path,
         stats=stats,
         load_elapsed_ms=scene.load_elapsed * 1000.0,
     )
@@ -176,7 +171,6 @@ def _existing_result_payload(spec: EntrySpec, artifact: StepTopologyArtifact) ->
         source_kind=source_kind,
         step_hash=step_hash or None,
         source_hash=source_hash or None,
-        artifact_path=artifact.artifact_path,
         stats=stats if isinstance(stats, dict) else {},
         skipped=True,
     )
@@ -185,7 +179,7 @@ def _existing_result_payload(spec: EntrySpec, artifact: StepTopologyArtifact) ->
 def _current_artifact_for_spec(spec: EntrySpec) -> StepTopologyArtifact | None:
     if not _existing_topology_artifact_matches_spec_without_scene(spec):
         return None
-    package_dir = render_package_dir(spec.entry_path)
+    package_dir = result_view_dir(spec.entry_path)
     # A component-GLB package is a DIRECTORY, and validate_step_topology_artifact() gates on
     # `.is_file()` (step_targets.py) -- so routing a package through it always raised
     # missing_glb, this whole fast path returned None, and EVERY build re-ran the generator.
@@ -261,7 +255,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mesh-tolerance", type=float, help="Override automatic mesh linear deflection.")
     parser.add_argument("--mesh-angular-tolerance", type=float, help="Override automatic mesh angular deflection.")
     parser.add_argument("--verbose", action="store_true", help="Show detailed timing on stderr.")
-    add_lock_timeout_argument(parser)
     return parser
 
 
@@ -298,7 +291,6 @@ def build_step_artifact(
     mesh_angular_tolerance: float | None = None,
     verbose: bool = False,
     logger: CliLogger | None = None,
-    lock_timeout_s: float = 0.0,
     sink: Callable[[ProgressEvent], None] | None = None,
 ) -> dict[str, object]:
     """Build the GLB/topology artifact for one STEP/.step.py and RETURN the result
@@ -310,12 +302,6 @@ def build_step_artifact(
     in-process and only the render package is written — the logical ``step``
     path never needs to exist on disk (STEP is exported on demand elsewhere).
     Without ``source_path``, ``step`` must be an existing imported STEP/STP file.
-
-    ``lock_timeout_s`` bounds the wait for a peer's generation lock. 0 waits (the CLI
-    default: an agent asking for a build wants the build). A caller that must not block —
-    the CAD Viewer's request path, which shares ONE serial warm worker across every model —
-    passes a short one and gets ``{"ok": True, "contended": True}`` back, so it can report
-    the peer's run instead of occupying the worker until the peer finishes.
 
     ``sink`` receives every :class:`ProgressEvent` alongside the CLI's own line, so an
     in-process caller can watch the build as DATA rather than reading back the status
@@ -378,9 +364,9 @@ def build_step_artifact(
             mesh_tolerance=mesh_tolerance,
             mesh_angular_tolerance=mesh_angular_tolerance,
         )
-    # Cheap pre-lock exit for the overwhelmingly common "nothing to do" call, so an
-    # already-current model never pays for a lock acquisition. It is NOT the real gate --
-    # see the is_current= re-check below, which is the one that has to be right.
+    # Cheap early exit for the overwhelmingly common "nothing to do" call. It is NOT
+    # the real gate -- see the is_current= re-check below, which is the one that has
+    # to be right.
     if not force:
         existing_artifact = _current_artifact_for_spec(existing_spec)
         if existing_artifact is not None:
@@ -390,30 +376,16 @@ def build_step_artifact(
                 logger=logger,
             )
 
-    # The lock covers the WHOLE build, not just the generator run. run_script_generator
-    # takes this same lock internally (re-entrantly, so the nesting is a no-op), but it
-    # releases on return — leaving the meshing, which is the long part, unlocked. A viewer
-    # polling artifact status during that window would read "no build in flight", find the
-    # package stale, and start a second one.
+    # The progress record covers the WHOLE build, not just the generator run: the
+    # meshing is the long part, and a viewer polling during it must see a build.
     #
-    # is_current is re-evaluated UNDER the lock. The pre-lock check above cannot cover the
-    # concurrent case: it ran before the peer's build existed, so a process that queued
-    # behind one used to wake up and redo the full generator+mesh the holder had just
-    # finished. Measured before this: two processes 0.3s apart on a cold package both ran
-    # the generator, the second for a further 2.5s after waiting 2.67s for the lock.
-    #
-    # Coordination keys by the MODEL PATH, never by the content-keyed package dir. A
-    # rebuild changes the document's content key mid-build, so a package-keyed lock does
-    # not exclude two runs of one model, and no reader could know the new key in advance:
-    # the viewer's progress reader derives its record path from the model path it is
-    # polling (apps/viewer/server/store_paths.py coordination_scope). Keying the build here
-    # by the package dir put the progress record in packages/ under the content hash while
-    # the viewer watched locks/ under the path key, so every poll of a viewer-started
-    # import found nothing and the overlay fell back to a bare indeterminate bar.
-    # `package_dir` stays because the RESULT payloads name the package; only the
-    # coordination identity is path-keyed.
-    package_dir = render_package_dir(existing_spec.entry_path) if existing_spec.entry_path else None
-    scope = coordination_scope(existing_spec.entry_path) if existing_spec.entry_path else None
+    # Progress keys by the MODEL PATH, never by the content-keyed package dir. A rebuild
+    # changes the document's content key mid-build, and no reader could know the new key
+    # in advance: the viewer's progress reader derives its record from the model path it
+    # is polling (cadgen.viewer.store_paths.build_scope). `package_dir` stays because the
+    # RESULT payloads name the package; only the progress identity is path-keyed.
+    package_dir = result_view_dir(existing_spec.entry_path) if existing_spec.entry_path else None
+    scope = build_scope(existing_spec.entry_path) if existing_spec.entry_path else None
     # This builds exactly what a model-script run builds, and reported nothing while doing it:
     # the sidecar went to the viewer and a terminal caller watched a silent process.
     with cli_progress_line(
@@ -423,24 +395,12 @@ def build_step_artifact(
         scope,
         is_current=lambda: _current_artifact_for_spec(existing_spec) is not None,
         force=force,
-        deadline_ms=deadline_ms(lock_timeout_s),
-        on_wait=lock_wait_notice(logger, existing_spec.source_ref),
         # The caller's sink runs ALONGSIDE the CLI line, never instead of it: a
         # terminal watching this build still gets its bar when the viewer is
         # also listening. A caller's sink must not be able to fail the build, so
         # it is guarded here rather than trusted.
         sink=_fan_out_sink(progress_sink, sink),
     ) as progress:
-        if progress.contended:
-            # A peer holds this model's lock and the caller asked not to wait it out. Not
-            # an error: the model IS being built, just not by us.
-            logger.info(f"another run is building {existing_spec.source_ref}; not waiting")
-            return contended_payload(
-                source_ref=existing_spec.source_ref,
-                cad_ref=existing_spec.cad_ref,
-                package_dir=package_dir,
-                stepPath=relative_to_cwd(existing_spec.step_path),
-            )
         if progress.skipped:
             artifact = _current_artifact_for_spec(existing_spec)
             if artifact is not None:
@@ -449,62 +409,76 @@ def build_step_artifact(
                     existing_spec,
                     logger=logger,
                 )
-        if from_generator:
-            from cadgen._internal.doors import announce_rebuild, document_staleness
+        import contextlib
 
-            document = existing_spec.step_path
-            announce_rebuild(
-                "step compile",
-                document,
-                reason=(
-                    (document_staleness(document) if document.is_file() else "no document on disk")
-                    or ("--force" if force else "its render package is missing or stale")
-                ),
-                source=existing_spec.script_path or existing_spec.source_path,
-                verb="compiling its render package",
-            )
-            scene = run_script_generator(
-                existing_spec,
-                "step",
-                logger=logger,
+        with contextlib.ExitStack() as slot:
+            if from_generator:
+                from cadgen._internal.doors import announce_rebuild
+                from cadgen.store.gate import stale
+
+                document = existing_spec.step_path
+                verdict = stale(existing_spec.script_path) if existing_spec.script_path else None
+                announce_rebuild(
+                    "step compile",
+                    document,
+                    reason=(
+                        "--force" if force
+                        else "no document on disk" if not document.is_file()
+                        else verdict.reason() if verdict is not None and verdict.stale
+                        else "its render package is missing or stale"
+                    ),
+                    source=existing_spec.script_path or existing_spec.source_path,
+                    verb="compiling its render package",
+                )
+                scene = run_script_generator(
+                    existing_spec,
+                    "step",
+                    logger=logger,
+                    force=force,
+                    progress=progress,
+                )
+                if scene is None:
+                    raise RuntimeError(f"Python generator did not produce a STEP scene: {existing_spec.source_ref}")
+                # The generation pipeline's contract: a generated model's build
+                # ALWAYS produces its STEP file (assembled from the package —
+                # design/step-document-architecture.md), no matter which front
+                # door asked (a model-script run, `cadgen step build`, inspect).
+                import dataclasses
+
+                spec = existing_spec
+                if spec.step_export_path is None and spec.step_path is not None:
+                    spec = dataclasses.replace(spec, step_export_path=spec.step_path)
+            else:
+                from cadgen.daemon import broker
+
+                # An imported document's compile is a JOB (STORE.md §9): its kernel
+                # work -- the read and the component emit -- holds a job slot the way
+                # a model body does. (A generated document's run takes its own slot
+                # inside run_script_generator.)
+                slot.enter_context(broker.held(existing_spec.source_ref))
+                # _generate_part_outputs reports this phase itself when it does the loading;
+                # here the scene is preloaded, so the parse would otherwise go unreported.
+                progress.phase(PHASE_GENERATE)
+                with logger.timed(f"load STEP {relative_to_cwd(step_path)}"):
+                    scene = load_step_scene(step_path)
+                kind_value = kind or infer_entry_kind(step_path, scene)
+                spec = _build_entry_spec(
+                    repo_root,
+                    step_path,
+                    scene,
+                    kind=kind_value,
+                    mesh_tolerance=mesh_tolerance,
+                    mesh_angular_tolerance=mesh_angular_tolerance,
+                )
+            result = _generate_part_outputs(
+                spec,
+                entries_by_step_path=_entries_by_step_path_for_repo(repo_root, spec),
+                preloaded_scene=scene,
+                require_step_file=not from_generator,
                 force=force,
+                logger=logger,
                 progress=progress,
             )
-            if scene is None:
-                raise RuntimeError(f"Python generator did not produce a STEP scene: {existing_spec.source_ref}")
-            # The generation pipeline's contract: a generated model's build
-            # ALWAYS produces its STEP file (assembled from the package —
-            # design/step-document-architecture.md), no matter which front
-            # door asked (a model-script run, `cadgen step build`, inspect).
-            import dataclasses
-
-            spec = existing_spec
-            if spec.step_export_path is None and spec.step_path is not None:
-                spec = dataclasses.replace(spec, step_export_path=spec.step_path)
-        else:
-            # _generate_part_outputs reports this phase itself when it does the loading;
-            # here the scene is preloaded, so the parse would otherwise go unreported.
-            progress.phase(PHASE_GENERATE)
-            with logger.timed(f"load STEP {relative_to_cwd(step_path)}"):
-                scene = load_step_scene(step_path)
-            kind_value = kind or infer_entry_kind(step_path, scene)
-            spec = _build_entry_spec(
-                repo_root,
-                step_path,
-                scene,
-                kind=kind_value,
-                mesh_tolerance=mesh_tolerance,
-                mesh_angular_tolerance=mesh_angular_tolerance,
-            )
-        result = _generate_part_outputs(
-            spec,
-            entries_by_step_path=_entries_by_step_path_for_repo(repo_root, spec),
-            preloaded_scene=scene,
-            require_step_file=not from_generator,
-            force=force,
-            logger=logger,
-            progress=progress,
-        )
     stats = result.selector_bundle.manifest.get("stats") if result.selector_bundle is not None else {}
     return _with_declared_exports(
         _generated_result_payload(spec, scene, stats if isinstance(stats, dict) else {}),
@@ -528,7 +502,6 @@ def run_cli_payload(argv: list[str] | None = None) -> dict[str, object]:
         mesh_tolerance=args.mesh_tolerance,
         mesh_angular_tolerance=args.mesh_angular_tolerance,
         logger=logger,
-        lock_timeout_s=float(args.lock_timeout or 0.0),
     )
     logger.total()
     return payload

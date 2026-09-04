@@ -1,17 +1,11 @@
-"""Run a Node builder as a child of the Python process that holds the artifact lock.
+"""Run a Node builder as a child of the Python process that owns the build.
 
 The DXF (3D preview) and mesh-export builders are JavaScript: the DXF preview mesher is
 ~3,400 LOC of already-shipped JS, and the mesh exporters share the viewport's own
-tessellations. But
-**Node cannot hold the coordination lock**. Verified on this repo's interpreter (v22.22.0):
-``fs.flock``, ``fs.promises.flock`` and ``O_EXLOCK`` are all absent, and an ``O_EXCL``
-lockfile is invisible to :func:`cadgen.coordination.snapshot`, which asks the kernel -- a
-reader would report ``idle`` over a live Node build and start a duplicate.
+tessellations. The split is:
 
-So the split is:
-
-* **Python owns** the lock, the run id, the status record, the freshness re-check and the
-  child's lifetime.
+* **Python owns** the run id, the status record, the freshness re-check and the child's
+  lifetime.
 * **Node owns** geometry and GLB bytes.
 
 Node reports its progress back over **NDJSON on stdout** (:func:`run_node_builder` below);
@@ -20,11 +14,10 @@ place the Python producer's own diagnostics do.
 
 Two invariants this module exists to hold:
 
-1. **Lock release and child death are coupled.** ``run_node_builder`` kills and reaps the
-   child in a ``finally``. A lock outliving its writer -- an orphaned Node process still
-   writing into a package no one holds a lock over -- is the single failure mode the whole
-   "a thin Python process owns the child" design was chosen to prevent, and is why the
-   server request thread was rejected as the lock holder.
+1. **Run end and child death are coupled.** ``run_node_builder`` kills and reaps the
+   child in a ``finally``. An orphaned Node process still writing into an output after
+   its run has reported done is the single failure mode the whole "a thin Python process
+   owns the child" design was chosen to prevent.
 2. **Bare specifiers resolve through the exports map.** The published skill runtime ships
    ``packages/cadgen-js`` as SOURCE with no ``node_modules`` beside the entry, so the
    child is spawned with ``NODE_PATH=<packages dir>``: a ``NODE_PATH`` entry is treated as a
@@ -275,10 +268,9 @@ def run_node_builder(
     """Spawn ``node <script> <args...>``, stream its NDJSON progress into ``run``, and return
     the payload it reported.
 
-    ``run`` is the :class:`~cadgen.coordination.BuildRun` yielded by ``artifact_build`` --
-    i.e. the object that is holding the write lock. The child never touches the lock, the run
-    id, or the status record; it only describes what it is doing, and this function
-    translates that onto the holder.
+    ``run`` is the :class:`~cadgen.coordination.BuildRun` yielded by ``artifact_build``.
+    The child never touches the run id or the status record; it only describes what it is
+    doing, and this function translates that onto the run.
 
     **Protocol** -- one JSON object per stdout line:
 
@@ -301,8 +293,8 @@ def run_node_builder(
     ``result`` is TERMINAL: reading stops there. The child is then given a short grace period
     to exit on its own and killed if it does not, and in every path -- success, protocol
     error, exception raised by ``run``, ``KeyboardInterrupt`` -- a still-live child is killed
-    and reaped before this function returns. That coupling is the point: the caller releases
-    the lock immediately after, and no Node process may outlive it.
+    and reaped before this function returns. That coupling is the point: the run reports
+    done immediately after, and no Node process may outlive it.
 
     Raises :class:`NodeBuilderError` on a non-zero exit or a missing ``result`` line, and
     :class:`NodeUnavailable` when no node binary can be found.
@@ -399,7 +391,7 @@ def run_node_builder(
                 proc.wait(timeout=_EXIT_GRACE_S)
             except subprocess.TimeoutExpired:
                 # It reported its result and then refused to leave. We have what we need and
-                # the lock is about to be released, so the child does not get to outlive it.
+                # the run is about to report done, so the child does not get to outlive it.
                 proc.kill()
                 proc.wait()
                 killed_after_result = True
