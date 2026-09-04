@@ -258,6 +258,18 @@ constant behind an `out=` makes the model stale. The module top must still stay
 kernel-free: what a door pays to learn a model's declarations is one import of
 the file.
 
+### Models inside a package
+
+A model file may live inside a Python package (folders with `__init__.py`).
+cadgen runs it under its dotted name, so relative imports (`from .parts.washer
+import washer`) resolve whenever cadgen loads the model: as a child of another
+model, or when you run it as a module (`python -m pkg.stack`). Running the file
+by path (`python pkg/stack.py`) is Python's own limit, not cadgen's: Python
+executes it as `__main__` with no package, so a relative import fails before
+cadgen is involved; use `-m` or absolute imports for a file you run directly.
+`PYTHONPATH` still declares any import root beyond the script's own folder;
+cadgen adds nothing of its own.
+
 ### Mirrored parts are their own models
 
 STEP cannot express a reflection, so a right-hand part is not a mirrored

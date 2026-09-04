@@ -128,12 +128,23 @@ class FollowUps(unittest.TestCase):
         (pkg / "stack_rel.py").write_text(STACK_REL, encoding="utf-8")
         return pkg
 
-    def test_a_relative_import_inside_a_package_builds_by_path(self) -> None:
+    def test_a_child_inside_a_package_builds_by_path_in_the_worker(self) -> None:
+        # `python pkg/stack_rel.py` cannot work for ANY Python file with a relative
+        # import (Python runs it as __main__ with no package); cadgen's own loader
+        # is what runs a child, and it keeps the package context.
         pkg = self._package()
-        completed = self.run_in(pkg, "stack_rel.py")
+        top = pkg.parent / "top.py"
+        top.write_text(
+            "from cadgen import build123d as bd\nfrom cadgen import step\nfrom pkg.stack_rel import stack_rel\n\n\n"
+            "@step\ndef top():\n    return bd.Compound(children=[stack_rel()], label='top')\n\n\n"
+            "if __name__ == '__main__':\n    top()\n",
+            encoding="utf-8",
+        )
+        completed = self.run_in(pkg.parent, "top.py")
         self.assertEqual(completed.returncode, 0, completed.stderr[-3000:])
-        self.assertTrue((pkg / "stack_rel.step").is_file())
-        self.assertTrue((pkg / "parts" / "washer.step").is_file(), "the child built beneath the parent")
+        self.assertTrue((pkg.parent / "top.step").is_file())
+        self.assertTrue((pkg / "stack_rel.step").is_file(), "the child inside the package built in its worker")
+        self.assertTrue((pkg / "parts" / "washer.step").is_file(), "and its relative import resolved")
 
     def test_a_relative_import_inside_a_package_builds_under_dash_m(self) -> None:
         pkg = self._package()

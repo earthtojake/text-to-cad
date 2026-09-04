@@ -37,12 +37,37 @@ from cadgen._internal.import_roots import import_roots
 
 GIT_LFS_POINTER_PREFIX = b"version https://git-lfs.github.com/spec/v1\n"
 
+def package_context(script_path: Path) -> tuple[str | None, Path | None]:
+    """``(package, root)`` when ``script_path`` lives inside a package: every
+    ancestor up to ``root``'s child carries an ``__init__.py``, so the module's
+    dotted name is ``pkg.sub.script`` and relative imports (``from .parts import
+    washer``) resolve exactly as under ``python -m pkg.sub.script``. ``(None,
+    None)`` for a plain script."""
+    resolved = Path(script_path).resolve()
+    parts: list[str] = []
+    folder = resolved.parent
+    while (folder / "__init__.py").is_file():
+        parts.append(folder.name)
+        if folder.parent == folder:
+            break
+        folder = folder.parent
+    if not parts:
+        return None, None
+    return ".".join(reversed(parts)), folder
+
+
 def _load_generator_module(script_path: Path) -> object:
     resolved_script_path = script_path.resolve()
-    module_name = (
-        "_cad_tool_"
-        + _display_path(resolved_script_path).replace("/", "_").replace("\\", "_").replace("-", "_").replace(".", "_")
-    )
+    package, package_root = package_context(resolved_script_path)
+    if package is not None:
+        # Inside a package the module keeps its real dotted name and package, and
+        # the package's root joins sys.path -- what `python -m pkg.script` gives.
+        module_name = f"{package}.{resolved_script_path.stem}"
+    else:
+        module_name = (
+            "_cad_tool_"
+            + _display_path(resolved_script_path).replace("/", "_").replace("\\", "_").replace("-", "_").replace(".", "_")
+        )
     module_spec = importlib.util.spec_from_file_location(module_name, resolved_script_path)
     if module_spec is None or module_spec.loader is None:
         raise RuntimeError(f"Failed to load generator module from {_display_path(resolved_script_path)}")
@@ -71,6 +96,8 @@ def _load_generator_module(script_path: Path) -> object:
     # model function or a helper it calls resolves like one at module top. cadgen adds no
     # root of its own and infers none from directory names (see import_roots.py).
     search_paths = import_roots(resolved_script_path)
+    if package_root is not None:
+        search_paths = [*search_paths, str(package_root)]
     for candidate in reversed(search_paths):
         if candidate not in sys.path:
             sys.path.insert(0, candidate)
@@ -83,6 +110,10 @@ def _load_generator_module(script_path: Path) -> object:
     from cadgen._internal.source_hash import evict_foreign_first_party_modules
 
     evict_foreign_first_party_modules(search_paths)
+    if package is not None:
+        # The parent packages must exist for a relative import to resolve.
+        importlib.import_module(package)
+        module.__package__ = package
     sys.modules[module_name] = module
     exec(source_code, module.__dict__)
 
