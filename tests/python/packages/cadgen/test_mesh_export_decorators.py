@@ -191,7 +191,7 @@ class MeshExportProductionTest(unittest.TestCase):
         first = self._run("src/widget.py")
         for rel in ("STEP/widget.step", "STL/widget.stl", "STEP/widget.glb", "3MF/widget.3mf"):
             self.assertTrue((self.project / rel).is_file(), rel)
-        self.assertIn("wrote STL", first.stdout)
+        self.assertIn("wrote STL", first.stderr)
 
         # True no-op: nothing rewritten.
         second = self._run("src/widget.py")
@@ -200,8 +200,8 @@ class MeshExportProductionTest(unittest.TestCase):
         # Healing is per-export: delete one, only it comes back.
         (self.project / "STL" / "widget.stl").unlink()
         heal = self._run("src/widget.py")
-        self.assertIn("wrote STL", heal.stdout)
-        self.assertNotIn("wrote GLB", heal.stdout)
+        self.assertIn("wrote STL", heal.stderr)
+        self.assertNotIn("wrote GLB", heal.stderr)
 
         # DOOR parity: a bare `cadgen stl build` on the DOCUMENT reads the
         # declared variants out of its sidecar and the shared ledger makes it
@@ -246,7 +246,7 @@ class MeshExportProductionTest(unittest.TestCase):
         first = self._run("src/blank.py")
         for rel in ("STL/blank.stl", "3MF/blank.3mf", "src/blank.glb"):
             self.assertTrue((self.project / rel).is_file(), rel)
-        self.assertIn("wrote STL", first.stdout)
+        self.assertIn("wrote STL", first.stderr)
         for rel in ("src/blank.step", "STEP/blank.step", "src/blank.step.json"):
             self.assertFalse((self.project / rel).exists(), f"{rel} must not be written")
 
@@ -264,8 +264,8 @@ class MeshExportProductionTest(unittest.TestCase):
         self.assertNotIn("wrote", second.stdout)
         (self.project / "STL" / "blank.stl").unlink()
         heal = self._run("src/blank.py")
-        self.assertIn("wrote STL", heal.stdout)
-        self.assertNotIn("wrote GLB", heal.stdout)
+        self.assertIn("wrote STL", heal.stderr)
+        self.assertNotIn("wrote GLB", heal.stderr)
 
     def test_a_bare_door_produces_every_declared_variant(self) -> None:
         # `OUT` omitted means the DECLARATIONS, plural: two @stl variants of one

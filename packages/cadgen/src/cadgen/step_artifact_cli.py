@@ -107,17 +107,20 @@ def _result_payload(
     *,
     entry_kind: str,
     source_kind: str,
-    artifact_path: Path,
     step_hash: str | None = None,
     source_hash: str | None = None,
     stats: dict[str, object] | None = None,
     load_elapsed_ms: float | None = None,
     skipped: bool = False,
 ) -> dict[str, object]:
+    from cadgen.catalog import result_tree_for
+
     payload: dict[str, object] = {
         "ok": True,
         "stepPath": relative_to_cwd(spec.step_path),
-        "packagePath": relative_to_cwd(artifact_path),
+        # The tree these bytes resolve to (index/document → tree): the result's
+        # identity, never a directory — nothing of the sort exists in the store.
+        "tree": result_tree_for(spec.entry_path),
         "entryKind": entry_kind,
         "sourceKind": source_kind,
         "stats": stats or {},
@@ -136,7 +139,6 @@ def _result_payload(
 
 
 def _generated_result_payload(spec: EntrySpec, scene: LoadedStepScene, stats: dict[str, object] | None = None) -> dict[str, object]:
-    artifact_path = result_view_dir(spec.entry_path)
     source_kind = str(getattr(scene, "source_kind", "step") or "step").strip().lower()
     step_hash = str(getattr(scene, "step_hash", "") or "").strip()
     if not step_hash and spec.step_path is not None and spec.step_path.is_file():
@@ -147,7 +149,6 @@ def _generated_result_payload(spec: EntrySpec, scene: LoadedStepScene, stats: di
         source_kind=source_kind,
         step_hash=step_hash or None,
         source_hash=getattr(scene, "source_hash", None) if source_kind == "python" else None,
-        artifact_path=artifact_path,
         stats=stats,
         load_elapsed_ms=scene.load_elapsed * 1000.0,
     )
@@ -170,7 +171,6 @@ def _existing_result_payload(spec: EntrySpec, artifact: StepTopologyArtifact) ->
         source_kind=source_kind,
         step_hash=step_hash or None,
         source_hash=source_hash or None,
-        artifact_path=artifact.artifact_path,
         stats=stats if isinstance(stats, dict) else {},
         skipped=True,
     )

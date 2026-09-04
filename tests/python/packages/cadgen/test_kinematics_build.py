@@ -318,4 +318,4 @@ class PosedMeshExportTests(unittest.TestCase):
             capture_output=True, text=True, timeout=600,
         )
         self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
-        self.assertNotIn("wrote STL", second.stdout)
+        self.assertNotIn("wrote STL", second.stderr)

@@ -80,7 +80,7 @@ def compile(  # noqa: A001 - the verb IS "compile"; the builtin is not used here
     return CompileResult(
         ok=bool(payload.get("ok", True)),
         document=path_of("stepPath"),
-        package=path_of("packagePath"),
+        tree=str(payload.get("tree") or "") or None,
         skipped=bool(payload.get("skipped")),
     )
 
@@ -139,7 +139,7 @@ def build(
     return BuildResult(
         ok=bool(payload.get("ok", True)),
         document=payload.get("document"),  # type: ignore[arg-type]
-        package=payload.get("package"),  # type: ignore[arg-type]
+        tree=payload.get("tree"),  # type: ignore[arg-type]
         skipped=bool(payload.get("skipped")),
         sidecar_only=bool(payload.get("sidecarOnly")),
     )

@@ -65,7 +65,6 @@ test("stepFileStatusItems marks missing STEP artifacts as errors", () => {
         error: "missing_glb",
         stale: false,
         stepPath: "models/tom/STEP/tom.step",
-        packagePath: "models/tom/STEP/__cadgen__/models/tom.step",
         artifactHash: "",
         currentHash: "new-hash",
         message: "Render package is missing."
@@ -80,7 +79,6 @@ test("stepFileStatusItems marks missing STEP artifacts as errors", () => {
   assert.equal(items[0].title, "STEP artifact missing");
   assert.equal(items[0].message, "Generated GLB is missing.");
   assert.equal(items[0].details.find((item) => item.label === "Code")?.value, "missing_glb");
-  assert.equal(items[0].details.find((item) => item.label === "Render package")?.value, "tom/STEP/__cadgen__/models/tom.step");
 });
 
 test("stepFileStatusItems reads artifact warnings from current-file status", () => {
@@ -94,7 +92,6 @@ test("stepFileStatusItems reads artifact warnings from current-file status", () 
         ok: false,
         error: "missing_glb",
         stepPath: "models/tom/STEP/tom.step",
-        packagePath: "models/tom/STEP/__cadgen__/models/tom.step"
       },
       step: {
         ok: true,
@@ -109,7 +106,6 @@ test("stepFileStatusItems reads artifact warnings from current-file status", () 
 
   assert.equal(items.length, 1);
   assert.equal(items[0].title, "STEP artifact missing");
-  assert.equal(items[0].details.find((item) => item.label === "Render package")?.value, "tom/STEP/__cadgen__/models/tom.step");
 });
 
 test("stepFileStatusItems keeps renderable STEP artifact issues as warnings", () => {
@@ -333,7 +329,6 @@ test("formatFileStatusItemForAgent copies status items with details", () => {
         ok: false,
         error: "missing_glb",
         stepPath: "models/step/parts/part.step",
-        packagePath: "models/step/parts/pkg/part.step",
         artifactHash: "old-hash",
         currentHash: "new-hash"
       }
@@ -353,7 +348,6 @@ test("formatFileStatusItemForAgent copies status items with details", () => {
     "Details:",
     "- Code: missing_glb",
     "- STEP file: step/parts/part.step",
-    "- Render package: step/parts/pkg/part.step",
     "- Artifact hash: old-hash",
     "- Current hash: new-hash"
   ].join("\n"));

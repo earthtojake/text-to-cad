@@ -37,7 +37,7 @@ from typing import Any
 import cadgen.cad_ref_syntax as cad_ref_syntax
 import cadgen.lookup as lookup
 from cadgen.assets import browser_runtime_dir
-from cadgen.catalog import result_view_dir
+from cadgen.catalog import result_tree_for, result_view_dir
 from cadgen.step_targets import ResolvedStepTarget, StepTopologyArtifact, StepTopologyArtifactError
 
 from cadgen.cli_logging import CliLogger
@@ -884,11 +884,11 @@ def resolve_step_render_job(
         selector_index=artifact_selector_index(artifact),
     )
 
-    # The render package is content-keyed in the user-level store: the entry
-    # file's bytes are hashed and looked up (cadgen.catalog.result_view_dir).
+    # The document's tree is found by its bytes (index/document → tree) and laid
+    # out as a temporary view directory for the renderer (cadgen.catalog.result_view_dir).
     package_dir = result_view_dir(source_path)
     if not package_dir.is_dir():
-        raise SnapshotError(f"STEP/STP render input is missing its render package: {package_dir}")
+        raise SnapshotError(f"STEP/STP render input has no tree in the store: {package_dir}")
 
     mode = str(job.get("mode") or "view").strip().lower()
     if mode not in SUPPORTED_RENDER_MODES:
@@ -908,7 +908,9 @@ def resolve_step_render_job(
         "inputPath": str(input_path),
         "inputUrl": asset_url_for_path(input_path, root_path),
         "kind": kind,
-        "packagePath": str(package_dir),
+        # The hash of the tree this job renders: the geometry's identity in the
+        # result (cadgen.results.SnapshotFile.tree), never a directory.
+        "tree": result_tree_for(source_path) or "",
     }
     # Component-GLB package (the canonical render artifact for every STEP model): inline
     # the descriptor and pre-resolve one asset URL per unique component GLB so the renderer

@@ -182,7 +182,7 @@ def _absolutize_entry(entry: dict, *, root_path: str, scan_repo_root: str) -> di
             nxt[key] = local_asset_url_for_path(asset_path, _query_value(entry[key], "v"))
     if entry.get("artifact"):
         nxt["artifact"] = _absolutize_keyed(
-            entry["artifact"], scan_repo_root, ("stepPath", "packagePath", "sourcePath", "cadPath")
+            entry["artifact"], scan_repo_root, ("stepPath", "sourcePath", "cadPath")
         )
     relations = entry.get("relations")
     if isinstance(relations, dict):

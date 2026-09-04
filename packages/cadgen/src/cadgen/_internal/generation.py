@@ -882,7 +882,9 @@ def _produce_declared_mesh_exports(
             pose_values=job.pose_values,
         )
         if announce:
-            print(f"[cadgen] wrote {job.fmt.upper()}: {_display_path(job.out)}")
+            # stderr: stdout is the result channel (`outcome document`), and a
+            # `[cadgen]`-prefixed line is the logger's voice, not a result.
+            print(f"[cadgen] wrote {job.fmt.upper()}: {_display_path(job.out)}", file=sys.stderr)
     return tuple(job.out for job in jobs)
 
 
@@ -1246,6 +1248,9 @@ def generate_step_targets(
     reported: list[dict[str, object]] = []
 
     def _emit(spec: EntrySpec, outcome: str) -> None:
+        from cadgen.store.records import current_tree
+
+        model = _model_for_spec(spec)
         reported.append(
             {
                 "ok": True,
@@ -1253,7 +1258,10 @@ def generate_step_targets(
                 "cadPath": spec.cad_ref,
                 "kind": spec.kind,
                 "outcome": outcome,
-                "packagePath": _display_path(spec.step_path),
+                # The document the run wrote (None for a mesh-only model, which
+                # declares no STEP) and the hash of the result tree it came from.
+                "document": _display_path(spec.step_path) if spec.step_output else None,
+                "tree": current_tree(model) if model is not None else None,
             }
         )
 
@@ -1261,13 +1269,13 @@ def generate_step_targets(
         # STDOUT IS THE RESULT, on every CLI. `gen` used to print nothing there at all --
         # its only output was the logger's prose on stderr -- so a caller reading the two
         # streams apart got an exit code and nothing else, while export, snapshot, validate
-        # and inspect all answered on stdout. One line per target, `outcome path`, upgraded
-        # to JSON by --json.
+        # and inspect all answered on stdout. One line per target, `outcome document`
+        # (`outcome <tree hash>` for a model with no document), upgraded to JSON by --json.
         for entry in reported:
             if json_output:
                 print(json.dumps(entry, separators=(",", ":")))
             else:
-                print(f"{entry['outcome']} {entry['packagePath']}")
+                print(f"{entry['outcome']} {entry['document'] or entry['tree']}")
     all_specs, selected_specs = _selected_specs_for_targets(targets, step_options=step_options)
     for spec in selected_specs:
         _validate_step_target(spec, tool_name=tool_name)
@@ -1358,8 +1366,35 @@ def generate_dxf_targets(
     *,
     force: bool = False,
     verbose: bool = False,
+    json_output: bool = False,
 ) -> int:
+    """Build drawings. A drawing is a model (STORE.md §3), so its run answers on
+    stdout exactly as a STEP model's does: one `outcome document` line per
+    target, upgraded to JSON by ``json_output`` (``tree`` is null — a drawing
+    has no geometry tree)."""
     from cadgen.store.gate import stale
+
+    reported: list[dict[str, object]] = []
+
+    def _emit(spec: EntrySpec, outcome: str) -> None:
+        reported.append(
+            {
+                "ok": True,
+                "sourceRef": spec.source_ref,
+                "cadPath": spec.cad_ref,
+                "kind": "drawing",
+                "outcome": outcome,
+                "document": _display_path(spec.dxf_path) if spec.dxf_path is not None else None,
+                "tree": None,
+            }
+        )
+
+    def _flush() -> None:
+        for entry in reported:
+            if json_output:
+                print(json.dumps(entry, separators=(",", ":")))
+            else:
+                print(f"{entry['outcome']} {entry['document']}")
 
     def dxf_output_current(script_path: Path, output_path: Path | None) -> bool:
         # The ONE gate every model answers to (STORE.md §4): the drawing's record,
@@ -1392,6 +1427,7 @@ def generate_dxf_targets(
         ]
         for spec in current_specs:
             logger.info(f"{spec.cad_ref} is current; skipped regeneration")
+            _emit(spec, "current")
         current_refs = {spec.source_ref for spec in current_specs}
         selected_specs = [spec for spec in selected_specs if spec.source_ref not in current_refs]
     if selected_specs:
@@ -1402,7 +1438,7 @@ def generate_dxf_targets(
                 return False
             return dxf_output_current(spec.script_path, _effective_output(spec))
 
-        _run_selected_specs(
+        results = _run_selected_specs(
             selected_specs,
             action=lambda spec, progress_sink=None: _run_with_spec_generation_status(
                 spec,
@@ -1421,5 +1457,8 @@ def generate_dxf_targets(
             logger=logger,
             success_message=_generated_dxf_summary,
         )
+        for spec, result in zip(selected_specs, results):
+            _emit(spec, "skipped-peer" if isinstance(result, _SkippedGeneration) else "built")
     logger.total()
+    _flush()
     return 0

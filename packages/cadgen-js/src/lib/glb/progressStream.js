@@ -15,7 +15,7 @@
  *
  * reportPhase("sample", 96);
  * for (const slice of slices) { …; reportAdvance(1, `slice ${i}/96`); }
- * reportResult({ ok: true, packagePath, triangles });
+ * reportResult({ ok: true, document, triangles });
  * ```
  *
  * Rules:

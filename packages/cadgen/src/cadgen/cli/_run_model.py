@@ -86,6 +86,7 @@ def _run(args: argparse.Namespace, script: Path, parser: argparse.ArgumentParser
                 [str(script)],
                 force=bool(args.force),
                 verbose=bool(args.verbose),
+                json_output=bool(args.json),
             )
 
         from cadgen.generation import generate_step_targets

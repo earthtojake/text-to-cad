@@ -262,7 +262,6 @@ export function stepFileStatusItems({
       details: [
         detail("Code", artifact.error),
         pathDetail("STEP file", artifact.stepPath || artifact.sourcePath || entry?.file, viewerServerInfo, entry?.file),
-        pathDetail("Render package", artifact.packagePath, viewerServerInfo, entry?.file),
         pathDetail("CAD path", artifact.cadPath, viewerServerInfo, entry?.file),
         detail("Artifact hash", artifact.artifactHash, { mono: true }),
         detail("Current hash", artifact.currentHash, { mono: true }),

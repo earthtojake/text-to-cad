@@ -194,7 +194,7 @@ def reemit_step_document(
         return {
             "ok": True,
             "document": out,
-            "package": tree,
+            "tree": tree,
             "skipped": True,
             "sidecarOnly": False,
         }
@@ -230,7 +230,7 @@ def reemit_step_document(
         return {
             "ok": True,
             "document": out,
-            "package": tree,
+            "tree": tree,
             "skipped": False,
             "sidecarOnly": True,
         }
@@ -248,7 +248,7 @@ def reemit_step_document(
     return {
         "ok": out.is_file(),
         "document": out,
-        "package": result_tree_for(out),
+        "tree": result_tree_for(out),
         "skipped": False,
         "sidecarOnly": False,
     }

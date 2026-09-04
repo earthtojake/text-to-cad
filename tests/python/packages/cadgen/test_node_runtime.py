@@ -140,11 +140,11 @@ reportResult({ ok: true });
 
     def test_result_line_becomes_the_return_value(self):
         script = self.script(
-            'reportResult({ ok: true, packagePath: "a/b.dxf", triangles: 42 });\n'
+            'reportResult({ ok: true, document: "a/b.dxf", triangles: 42 });\n'
         )
         payload = run_node_builder(script, run=Recorder())
         self.assertEqual(
-            {"ok": True, "packagePath": "a/b.dxf", "triangles": 42}, payload
+            {"ok": True, "document": "a/b.dxf", "triangles": 42}, payload
         )
         # `type` is protocol framing, not payload: it must not leak into the CLI's JSON line.
         self.assertNotIn("type", payload)
@@ -334,7 +334,7 @@ class ArtifactBuildIntegrationTest(NodeRuntimeTestCase):
 reportPhase("generate", 4);
 for (let i = 1; i <= 4; i += 1) reportAdvance(1, `slice ${i}/4`);
 reportPhase("write");
-reportResult({ ok: true, packagePath: process.argv[2] });
+reportResult({ ok: true, document: process.argv[2] });
 """
         )
 
@@ -344,7 +344,7 @@ reportResult({ ok: true, packagePath: process.argv[2] });
         ) as run:
             payload = run_node_builder(script, [str(package_dir)], run=run)
 
-        self.assertEqual(str(package_dir), payload["packagePath"])
+        self.assertEqual(str(package_dir), payload["document"])
 
         phases = [event.phase for event in events]
         self.assertIn("generate", phases)

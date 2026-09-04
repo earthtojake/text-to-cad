@@ -1476,24 +1476,20 @@ def _output_kind(output: Mapping[str, object], path: Path) -> str:
 
 
 def _job_source_identity(job: object) -> tuple[str, str]:
-    """(input path, document content hash) for one resolved packet job.
+    """(input path, tree hash) for one resolved packet job.
 
-    The hash is the render-package store key — the DOCUMENT identity — parsed
-    from the resolved ``packagePath`` (``<contentHash>-v<schema>``). Nothing in
-    a result named which geometry it rendered, so a stale render was
-    indistinguishable from a fresh one; the provenance exists at resolve time
-    and only needed surfacing.
+    The tree hash is the geometry's identity, carried on the resolved job as
+    ``tree`` by the STEP resolver. Nothing in a result used to name which
+    geometry it rendered, so a render of an older tree was indistinguishable
+    from a fresh one; the identity exists at resolve time and only needed
+    surfacing. Inputs that render without a tree (meshes, drawings, robots)
+    carry an empty string.
     """
     if not is_plain_object(job):
         return "", ""
     resolved = job.get("resolved") if is_plain_object(job.get("resolved")) else {}
     input_text = str(job.get("input") or resolved.get("inputPath") or "")
-    package_path = str(resolved.get("packagePath") or "")
-    document_hash = ""
-    if package_path:
-        name = Path(package_path).name
-        document_hash = name.rsplit("-v", 1)[0] if "-v" in name else name
-    return input_text, document_hash
+    return input_text, str(resolved.get("tree") or "")
 
 
 def snapshot_result(
@@ -1544,7 +1540,7 @@ def snapshot_result(
                         output.get("viewLabel") or output.get("label") or output.get("camera") or ""
                     ),
                     input=input_text,
-                    documentHash=document_hash,
+                    tree=document_hash,
                 )
             )
         parts.extend(part for part in (job_result.get("parts") or []) if is_plain_object(part))

@@ -42,25 +42,26 @@ def _display(path: Path | None) -> str:
 
 @dataclass(frozen=True)
 class CompileResult:
-    """The outcome of compiling one document into its render package.
+    """The outcome of compiling one document into its tree.
 
-    ``cadgen step compile`` is a CACHE action: bytes in, package in the store,
+    ``cadgen step compile`` is a STORE action: bytes in, a tree in the store,
     the document itself untouched. It is deliberately not a `build` — nothing
     new appears on disk beside the model — and it is INTERNAL: the doors and
-    the viewer compile a missing package on demand, so no skill teaches it.
+    the viewer compile a document's missing tree on demand, so no skill
+    teaches it.
     """
 
     ok: bool
-    #: The document that was compiled. Its bytes are the package's key.
+    #: The document that was compiled. Its bytes are the tree's key.
     document: Path | None
-    #: The store package directory holding the compiled geometry.
-    package: Path | None
-    #: True when the package was already current, so nothing was compiled.
+    #: The hash of the tree describing the compiled geometry.
+    tree: str | None
+    #: True when the tree already existed, so nothing was compiled.
     skipped: bool
 
     def human_lines(self) -> list[str]:
         head = "current" if self.skipped else "compiled"
-        return [f"{head} {_display(self.document or self.package)}"]
+        return [f"{head} {_display(self.document) if self.document else (self.tree or '')}"]
 
 
 @dataclass(frozen=True)
@@ -68,7 +69,7 @@ class BuildResult:
     """The outcome of writing one NEW document.
 
     ``cadgen step build IN OUT`` re-emits an existing document in cadgen's own
-    dialect (OCCT read -> content-keyed package -> the canonical XCAF writer),
+    dialect (OCCT read -> tree in the store -> the canonical XCAF writer),
     optionally annotating it with kinematics and animation. Unlike ``compile``,
     something new lands on disk — which is what earns the name.
     """
@@ -76,8 +77,8 @@ class BuildResult:
     ok: bool
     #: The document this build WROTE.
     document: Path | None
-    #: The store package directory holding the written document's geometry.
-    package: Path | None
+    #: The hash of the tree the written document's geometry came from.
+    tree: str | None
     #: True when the freshness gate said the output was already current.
     skipped: bool
     #: Declared artifacts produced (or healed) by THIS run. Outputs the ledger
@@ -92,7 +93,7 @@ class BuildResult:
         if self.sidecar_only:
             return [f"annotated {_display(self.document)} (bytes unchanged)"]
         head = "current" if self.skipped else "built"
-        lines = [f"{head} {_display(self.document or self.package)}"]
+        lines = [f"{head} {_display(self.document) if self.document else (self.tree or '')}"]
         lines += [f"wrote {path.suffix.lstrip('.').upper()}: {_display(path)}" for path in self.exports]
         return lines
 
@@ -142,9 +143,11 @@ class SnapshotFile:
     #: renders of one path are otherwise indistinguishable in the result, so a
     #: stale render reads the same as a fresh one.
     input: str = ""
-    #: The rendered document's content hash (the render-package store key).
-    #: Empty for inputs that render without a store package.
-    documentHash: str = ""
+    #: The hash of the tree this file rendered — the geometry's identity, so
+    #: two renders of one path are distinguishable when the tree changed
+    #: between them. Empty for inputs that render without a tree (meshes,
+    #: drawings, robot descriptions).
+    tree: str = ""
 
 
 @dataclass(frozen=True)

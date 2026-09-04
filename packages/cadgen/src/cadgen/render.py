@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def relative_to_cwd(path: Path) -> str:
-    # Display/label + CLI-payload helper (the payload packagePath/stepPath are overwritten by the
+    # Display/label + CLI-payload helper (the payload stepPath is overwritten by the
     # viewer; the persisted descriptor's model-folder-relative paths come from relative_to_file,
     # not this). Anchored on the live cwd, not a frozen import-time root.
     resolved = path.resolve()
