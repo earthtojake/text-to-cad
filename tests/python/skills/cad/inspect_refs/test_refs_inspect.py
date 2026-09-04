@@ -359,7 +359,7 @@ class InspectRefsTests(unittest.TestCase):
         self.temp_root = Path(tempdir.name)
         self.relative_dir = self.temp_root.relative_to(Path.cwd()).as_posix()
         self.lookup_ref = f"{self.relative_dir}/sample"
-        self.cad_ref = self.lookup_ref
+        self.cad_ref = f"{self.relative_dir}/sample.step"
         self.step_path = self.temp_root / "sample.step"
         # Unique per test: content keying would otherwise resolve same-bytes
         # fixtures from earlier tests to one shared store package.
@@ -422,7 +422,6 @@ class InspectRefsTests(unittest.TestCase):
 
         stack = contextlib.ExitStack()
         with stack:
-            stack.enter_context(mock.patch.object(step_targets, "find_step_path", return_value=resolved_step_path))
             stack.enter_context(
                 mock.patch("cadgen.step_topology_artifact.ensure_step_topology_artifact", side_effect=fake_ensure)
             )
@@ -456,34 +455,12 @@ class InspectRefsTests(unittest.TestCase):
         self.assertEqual("assembly", token["summary"]["kind"])
         self.assertEqual("assembly", token["entryFacts"]["kind"])
 
-    def test_python_backed_glb_only_entry_inspects_without_step_file(self) -> None:
-        self.step_path.unlink()
-        script_path = self.step_path.with_suffix(".py")
-        script_path.write_text(
-            "from cadgen import step\n@step\ndef model():\n    return object()\n",
-            encoding="utf-8",
-        )
-        source_identity = python_source_hash(script_path)
-        manifest = {
-            **_summary_manifest(self.cad_ref),
-            "sourceKind": "python",
-            "sourceHash": source_identity.source_hash,
-        }
-
-        with self._mock_glb_topology(manifest, include_selector=False):
-            result = refs_inspect.inspect_cad_refs(self.cad_ref)
-
-        self.assertTrue(result["ok"])
-        token = result["tokens"][0]
-        self.assertEqual(refs_inspect._display_path(self.step_path), token["document"])
-        self.assertEqual(1, token["summary"]["occurrenceCount"])
-
     def test_context_provider_can_supply_in_memory_entry_context(self) -> None:
         requested_profiles = []
 
         def provider(cad_path, profile):
             requested_profiles.append(profile)
-            if cad_path != self.cad_ref:
+            if cad_path != self.lookup_ref:  # the identity a document path normalizes to
                 return None
             manifest = _summary_manifest(cad_path)
             return refs_inspect.EntryContext(
@@ -636,11 +613,7 @@ class InspectRefsTests(unittest.TestCase):
         assembly_step_path.write_text("ISO-10303-21; END-ISO-10303-21;\n", encoding="utf-8")
         source_identity = python_source_hash(assembly_path)
 
-        with mock.patch.object(
-            step_targets,
-            "resolve_cad_source_path",
-            return_value=("step", assembly_path),
-        ), self._mock_glb_topology(
+        with self._mock_glb_topology(
             {
                 **_refs_manifest(assembly_cad_ref),
                 # Kind is the tree's answer (entryKind), never the source's.
@@ -651,7 +624,7 @@ class InspectRefsTests(unittest.TestCase):
             },
             step_path=assembly_step_path,
         ):
-            result = refs_inspect.inspect_cad_refs(assembly_cad_ref, "#o1.2.f1", detail=True)
+            result = refs_inspect.inspect_cad_refs(f"{assembly_cad_ref}.step", "#o1.2.f1", detail=True)
 
         self.assertTrue(result["ok"])
         selection = result["tokens"][0]["selections"][0]

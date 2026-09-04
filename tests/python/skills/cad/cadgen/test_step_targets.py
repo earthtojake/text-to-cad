@@ -78,8 +78,10 @@ class EntryTargetAbsolutePathTests(unittest.TestCase):
         resolved = resolve_step_target(str(document))
         self.assertEqual(resolved.step_path, document)
         self.assertEqual(resolved.cad_path, "widget")
-        # The extensionless form of the same target names the same document.
-        self.assertEqual(resolve_step_target(str(outside / "widget")).step_path, document)
+        # A door takes the document with its extension: a bare stem names nothing.
+        with self.assertRaises(CadRefError) as caught:
+            resolve_step_target(str(outside / "widget"))
+        self.assertIn("not a STEP document path", str(caught.exception))
 
     def test_a_missing_absolute_target_reports_the_file_not_the_cwd(self) -> None:
         missing = Path(self._outside.name).resolve() / "nope.step"

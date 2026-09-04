@@ -157,15 +157,6 @@ def source_from_path(
     return None
 
 
-def source_by_cad_ref(root: Path | None = None) -> dict[str, CadSource]:
-    return {source.cad_ref: source for source in iter_cad_sources(root)}
-
-
-def find_source_by_cad_ref(cad_ref: str, root: Path | None = None) -> CadSource | None:
-    normalized = normalize_cad_ref(cad_ref)
-    return source_by_cad_ref(root).get(normalized or "")
-
-
 def find_source_by_source_ref(source_ref: str, root: Path | None = None) -> CadSource | None:
     normalized = normalize_source_ref(source_ref)
     if not normalized:
