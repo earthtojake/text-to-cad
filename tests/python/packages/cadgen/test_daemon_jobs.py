@@ -17,7 +17,7 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cadgen/src")
 
-from cadgen.daemon.jobs import JobLedger, declared_outputs  # noqa: E402
+from cadgen.daemon.jobs import JobLedger, declared_outputs, failure_message  # noqa: E402
 
 MODEL = """
 from cadgen import step, stl
@@ -120,6 +120,49 @@ class Lifecycle(unittest.TestCase):
     def test_a_transition_for_an_unknown_finished_job_is_ignored(self):
         self.ledger.observe(self._event(self.model, "done"))
         self.assertEqual([], self.ledger.snapshot())
+
+
+class FailureMessageTest(unittest.TestCase):
+    """The one line the ledger keeps about a failed job — what a reader shows as
+    the reason, so the viewer never has to say only that "the last build failed"."""
+
+    def test_the_cli_failed_line_wins_over_its_own_hint(self) -> None:
+        output = (
+            "[step-artifact] compile started\n"
+            "[cadgen step compile] FAILED: RuntimeError: component be20 build failed: Unextractable: domain\n"
+            "[cadgen step compile]   raised in cadgen/store/build.py:259\n"
+            "[cadgen step compile] re-run with --verbose for the full traceback\n"
+        )
+        self.assertEqual(
+            ("component be20 build failed: Unextractable: domain", "RuntimeError"),
+            failure_message(output),
+        )
+
+    def test_a_verbose_traceback_ends_in_the_exception_line(self) -> None:
+        output = (
+            "Traceback (most recent call last):\n"
+            '  File "x.py", line 1, in <module>\n'
+            "    raise RuntimeError('failed to read STEP file: not a STEP')\n"
+            "RuntimeError: failed to read STEP file: not a STEP\n"
+        )
+        self.assertEqual(("failed to read STEP file: not a STEP", "RuntimeError"), failure_message(output))
+
+    def test_anything_else_is_the_last_line_that_is_not_the_hint(self) -> None:
+        self.assertEqual(("and then died", None), failure_message("the worker said something\nand then died\n"))
+        self.assertEqual(("", None), failure_message(""))
+        self.assertEqual(
+            ("something broke", None),
+            failure_message("something broke\n[cadgen step compile] re-run with --verbose for the full traceback\n"),
+        )
+
+    def test_finish_records_the_reason_on_a_failed_job_only(self) -> None:
+        ledger = JobLedger()
+        job = ledger.start(tool="step-compile", subject="/tmp/x.step")
+        ledger.finish(job, 1, error="failed to read STEP file: not a STEP")
+        self.assertEqual("failed to read STEP file: not a STEP", ledger.snapshot()[0]["error"])
+        ok = ledger.start(tool="step-compile", subject="/tmp/y.step")
+        ledger.finish(ok, 0, error="ignored on success")
+        self.assertIsNone([j for j in ledger.snapshot() if j["id"] == ok["id"]][0]["error"])
 
 
 if __name__ == "__main__":

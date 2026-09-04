@@ -6,7 +6,8 @@ job's DECLARED OUTPUT PATHS as metadata (the ``out=`` document and the declared
 meshes for a model script, parsed statically; the document itself for a
 compile). Readers match jobs to files by those paths and never by source state:
 the CAD Viewer shows ``compiling · <phase> n/total`` for any job whose outputs
-include the document it displays, ``failed`` for a failed one, and nothing else
+include the document it displays, ``failed`` with the failure's own reason for a
+failed one, and nothing else
 (``cadgen.viewer.build_progress``). Finished jobs stay listed for
 :data:`RETAIN_SECONDS` so a failure is still visible after the job is gone.
 
@@ -20,15 +21,46 @@ from __future__ import annotations
 
 import itertools
 import os
+import re
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
-__all__ = ["JobLedger", "RETAIN_SECONDS", "declared_outputs"]
+__all__ = ["JobLedger", "RETAIN_SECONDS", "declared_outputs", "failure_message"]
 
 RETAIN_SECONDS = 120.0
 _RUNNING = ("submitted", "queued", "building")
+
+# The two shapes a failed job's stderr ends in: the CLI's own failure line
+# (``[cadgen step compile] FAILED: RuntimeError: ...``) or, under --verbose, a raw
+# traceback whose last line is ``RuntimeError: ...``.
+_CLI_FAILED = re.compile(r"^\[[^\]]+\]\s+FAILED:\s+(?:[\w.]+\.)?(?P<type>\w+)\s*:\s*(?P<message>.+)$")
+_EXCEPTION_LINE = re.compile(r"^(?:[\w.]+\.)?(?P<type>\w+(?:Error|Exception))\s*:\s*(?P<message>.+)$")
+_CLI_NOISE = re.compile(r"^\[[^\]]+\]\s+(?:re-run with --verbose|\s)")
+
+
+def failure_message(output: str) -> tuple[str, str | None]:
+    """The one line a person reads about a failed job, and the exception class.
+
+    Reads a job's stderr from the end: the CLI's ``[tool] FAILED: Type: message``
+    line first, then a traceback's final ``Type: message``, then the last line
+    that is not the CLI's own hint or frame listing. Returns ``("", None)`` for
+    silence. Pure text; nothing here knows what ran.
+    """
+    lines = [line.rstrip() for line in str(output or "").splitlines() if line.strip()]
+    for line in reversed(lines):
+        match = _CLI_FAILED.match(line.strip())
+        if match:
+            return match.group("message").strip(), match.group("type")
+    for line in reversed(lines):
+        match = _EXCEPTION_LINE.match(line.strip())
+        if match:
+            return match.group("message").strip(), match.group("type")
+    for line in reversed(lines):
+        if not _CLI_NOISE.match(line):
+            return line.strip(), None
+    return "", None
 
 
 def _real(path: str | os.PathLike[str]) -> str:
@@ -104,6 +136,7 @@ class JobLedger:
             "updatedAt": now,
             "finishedAt": None,
             "exit": None,
+            "error": None,
         }
         with self._guard:
             self._jobs[job["id"]] = job
@@ -130,7 +163,7 @@ class JobLedger:
                     "id": f"job-{next(self._ids)}", "tool": "run", "subject": model,
                     "outputs": declared_outputs(model, "run"), "argv": [], "state": "submitted",
                     "phase": None, "done": None, "total": None, "startedAt": now,
-                    "updatedAt": now, "finishedAt": None, "exit": None,
+                    "updatedAt": now, "finishedAt": None, "exit": None, "error": None,
                 }
                 self._jobs[job["id"]] = job
             if state in ("submitted", "queued"):
@@ -147,6 +180,8 @@ class JobLedger:
             elif state == "failed":
                 job["state"] = "failed"
                 job["exit"] = event.get("exit", job["exit"])
+                if event.get("error"):
+                    job["error"] = str(event["error"])
                 job["finishedAt"] = now
             job["updatedAt"] = now
 
@@ -161,12 +196,16 @@ class JobLedger:
                 return existing
         return job
 
-    def finish(self, job: dict[str, Any], exit_code: int) -> None:
+    def finish(self, job: dict[str, Any], exit_code: int, *, error: str | None = None) -> None:
+        """Close the job. ``error`` is the failure's one-line reason (see
+        :func:`failure_message`), kept so a reader can say WHY, not just that."""
         now = self._clock()
         with self._guard:
             if job["state"] in _RUNNING:
                 job["state"] = "done" if exit_code == 0 else "failed"
             job["exit"] = int(exit_code)
+            if exit_code != 0 and error:
+                job["error"] = str(error)
             job["finishedAt"] = job["finishedAt"] or now
             job["updatedAt"] = now
             self._sweep(now)

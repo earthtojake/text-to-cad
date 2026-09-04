@@ -28,6 +28,7 @@ borrow a spare for one job. Nothing here caps, counts memory or queues.
 
 from __future__ import annotations
 
+import collections
 import contextlib
 import json
 import os
@@ -38,7 +39,7 @@ import time
 import traceback
 
 from cadgen.daemon import transport
-from cadgen.daemon.jobs import JobLedger
+from cadgen.daemon.jobs import JobLedger, failure_message
 from cadgen.daemon.client import (
     compute_version_token,
     daemon_address,
@@ -278,6 +279,9 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         return
 
     exit_code, healthy = 1, True
+    # The tail of the job's stderr: on failure its last FAILED/exception line is the
+    # reason the ledger records, so a reader (the CAD Viewer) can say why.
+    stderr_tail: collections.deque[str] = collections.deque(maxlen=80)
     watchdog_done = threading.Event()
     watchdog = threading.Thread(
         target=_watch_client, args=(conn, send_lock, watchdog_done, tool, worker), daemon=True
@@ -298,6 +302,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             if "exit" in frame:
                 exit_code = int(frame.get("exit") or 0)
                 break
+            if frame.get("stream") == "stderr":
+                stderr_tail.append(str(frame.get("data") or ""))
             _JOBS.observe(frame)
             with send_lock:
                 _send(conn, frame)
@@ -325,7 +331,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         watchdog.join(timeout=CLIENT_LIVENESS_INTERVAL_SECONDS + 1.0)
         # A killed worker is not reusable; release() drops it and the pool respawns.
         _POOL.release(worker, healthy=healthy and worker.alive())
-        _JOBS.finish(job, exit_code)
+        reason = failure_message("".join(stderr_tail))[0] if exit_code != 0 else None
+        _JOBS.finish(job, exit_code, error=reason or None)
         if subject and closure and request.get("coalesce"):
             _BROKER.finish(subject, closure, exit_code)
 
