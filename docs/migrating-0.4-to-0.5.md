@@ -9,12 +9,12 @@ required — no other document, no tool.
 v0.5 ships **zero** backwards compatibility. Deliberately:
 
 - No shims, no aliases, no deprecated keyword arguments.
-- No codemod. `cadgen.migrate` was deleted; nothing rewrites your sources.
-- **No teaching errors.** This is the part that surprises people. A v0.5 tool
-  handed a v0.4-shaped call reports only what its *current* contract requires.
-  A retired flag is an unrecognized argument. A retired job key is an unknown
-  key. A `gen_step()` file is a file that declares no model. None of those
-  errors will mention 0.4, migration, or what the thing used to be called.
+- No codemod. Nothing rewrites your sources.
+- **No teaching errors.** A v0.5 tool handed a v0.4-shaped call reports only
+  what its *current* contract requires. A retired flag is an unrecognized
+  argument. A retired job key is an unknown key. A `gen_step()` file is a file
+  that declares no model. None of those errors will mention 0.4, migration, or
+  what the thing used to be called.
 
 So: when something fails during this migration, the error tells you what v0.5
 wants, not what you did. Read it as a spec, not as a diagnosis. That is the
@@ -27,12 +27,15 @@ debugging anything.
 
 ### The one-paragraph summary
 
-A v0.5 model is a plain `.py` file that decorates one function with `@step` or
-`@dxf`, and you build it by running it: `python model.py`. There is no
-generation CLI. Artifacts land beside the script (or wherever `out=` says);
-everything derived lands in `~/.cache/cadgen`, keyed by content. A model that
-declares kinematics, animation, or mesh exports also writes one JSON sidecar
-next to its artifact. Generated files carry no trace of their source.
+A v0.5 **model** is a plain `.py` file that decorates one **parameterless**
+function with `@step`, `@dxf`, or a mesh decorator, and you build it by
+**calling it**: the file ends with `if __name__ == "__main__": model()` and you
+run `python model.py`. There is no generation CLI. A model's outputs are exactly
+what its decorators declare — a STEP, a DXF, an STL, any mix — written where
+`out=` says; everything derived lands in a content-addressed **store** under
+`~/.cache/cadgen`. An assembly is a model that imports its part models and calls
+them; the children build in parallel and the parent **links** their results.
+Generated files carry no trace of their source.
 
 ## Prerequisites
 
@@ -57,28 +60,28 @@ next to its artifact. Generated files carry no trace of their source.
 2. **Confirm what you actually have.**
 
    ```bash
-   cadgen doctor            # prints the installed cadgen
+   cadgen doctor            # prints the installed cadgen and checks a pin
    ```
 
    v0.4 installed one console script, `cadgen-step-artifact`. v0.5 installs
    `cadgen`. If `cadgen` is missing, the install did not take.
 
-3. **Commit or stash your work.** This migration deletes generated files.
+3. **Commit your work.** This migration deletes generated files.
 
-4. **Keep a v0.4 build around if you care about geometry equivalence.** Before
-   you delete anything, note the component content hashes of the old package so
-   you can compare after (see "Verify the geometry did not move", below). If
-   you do not care, skip it — snapshots are usually enough.
+4. **Keep a v0.4 build around if you care about geometry equivalence.** Note
+   the occurrence, face and edge counts and the bounds of each primary STEP
+   (`inspect refs --facts`, see step 7) so you can compare after. If you do not
+   care, skip it — snapshots are usually enough.
 
 ## Migration checklist
 
 Do these in order. Later steps assume earlier ones.
 
 - [ ] 1. Rewrite imports
-- [ ] 2. Convert the generator into a decorated model
-- [ ] 3. Move articulation to kinematics + `.anim.js`
-- [ ] 4. Reshape the project layout
-- [ ] 5. Delete v0.4 artifacts, sidecars, and caches
+- [ ] 2. Convert the generator into a model
+- [ ] 3. Convert composition: children are models you call
+- [ ] 4. Move articulation to kinematics + `.anim.js`
+- [ ] 5. Reshape the project layout, then delete v0.4 leftovers
 - [ ] 6. Rebuild
 - [ ] 7. Verify
 
@@ -97,20 +100,20 @@ import build123d as bd              from cadgen import step
 `cadgen.build123d` is a lazy, transparent re-export: `bd.Box` **is**
 build123d's `Box` — same object, so `isinstance`, subclassing and `except`
 clauses behave identically. The laziness is the point. A model script's module
-body must stay cheap so the decorator can run the freshness gate and hand off
-to the warm daemon *before* anything pays the ~2.5s kernel import. A current
-model's re-run then never wakes the kernel at all.
+body must stay cheap so the call can run the freshness gate and hand off to the
+warm daemon *before* anything pays the ~2.5 s kernel import. A current model's
+re-run then never wakes the kernel at all.
 
-Raw `import build123d` still works and is not an error — it just costs ~2.5s on
-every re-run, and the decorator prints a hint on stderr when it sees the kernel
-already imported.
+Raw `import build123d` still works and is not an error — it just costs ~2.5 s
+on every re-run, and the call prints a hint on stderr when it sees the kernel
+already imported. The same goes for `bd.<anything>` in a module-level constant
+or a default argument: each one resolves the attribute at import.
 
 Use **attribute style**. `from cadgen.build123d import Box` works but is eager:
 a from-import must bind the object, which forces the real import immediately.
 
-**Imports go at module top.** `sys.path` does not survive into the model
-function — the pipeline restores it after loading the module. Import at module
-level; only *call* the imported code inside the function.
+**Imports go at module top.** Import at module level; only *call* the imported
+code inside the function.
 
 **Reading a vendor STEP.** Use `cadgen.read_step`, never
 `build123d.import_step`:
@@ -124,15 +127,11 @@ motor = import_step("imported/motor.step")  motor = read_step(_HERE / "imported"
 
 The returned shape is identical (the root itself, not a wrapper, with
 per-occurrence and prototype STEP colors applied), and it is served from the
-content-keyed package store, so a warm read costs tens of milliseconds instead
-of a full text-STEP re-parse.
-
-**The recording is the real reason.** Freshness used to follow a model's Python
-import reach, which is observable — modules announce themselves. A file read as
-*data* announces nothing, so in v0.4 a model built from a vendor STEP kept
-reporting itself current after that STEP was replaced, and only `--force` got
-the truth back. `read_step` declares the file: its path and content hash join
-the model's closure, and the next run's gate re-hashes it.
+store, so a warm read costs tens of milliseconds instead of a full text-STEP
+re-parse. `read_step` also **declares the file**: its content hash joins the
+model's closure, so replacing the vendor STEP makes the model stale. A file
+read as data by `import_step` announces nothing, and in v0.4 such a model kept
+reporting itself current.
 
 **The flatten projection helpers are gone.** v0.4's `cadgen.flatten` sampled
 wires into point lists, unioned polygons in shapely, and emitted polylines.
@@ -151,15 +150,14 @@ with `AttributeError` at the point of emission:
 | `cadgen.step_scene.import_step` | `cadgen.read_step` (see above) |
 
 `flatten.flat_pattern(part, coordinate=..., kerf=...)` is the one-call form:
-selection + flatten + union + optional kerf offset. Know its limit — it selects
-the planar faces at ONE coordinate, so it unfolds a flat plate but **not a
-folded bracket**. Unfolding a multi-panel part is now the caller's job: select
-each panel's faces with `flatten.planar_faces(...)` per plane, flatten each
-with its own placement (distributing that bend's allowance yourself), and fuse
-with `flatten.union_faces(...)`. A worked multi-plane example lives in the dxf
-skill's `references/generator-templates.md`.
+selection + flatten + union + optional kerf offset. It selects the planar faces
+at ONE coordinate, so it unfolds a flat plate but **not a folded bracket**.
+Unfolding a multi-panel part is the caller's job: select each panel's faces with
+`flatten.planar_faces(...)` per plane, flatten each with its own placement, and
+fuse with `flatten.union_faces(...)`. A worked multi-plane example lives in the
+dxf skill's `references/generator-templates.md`.
 
-### 2. Convert the generator into a decorated model
+### 2. Convert the generator into a model
 
 This is the structural change. A v0.4 source had a magic `gen_step()` /
 `gen_dxf()` function and usually a `<name>.step.py` / `<name>.dxf.py` filename.
@@ -169,27 +167,34 @@ v0.5 reads neither.
 # bracket.step.py (0.4)              # bracket.py (0.5)
 from build123d import Box            from cadgen import build123d as bd
                                      from cadgen import step
-def gen_step():
-    return Box(10, 10, 10)           @step()
-                                     def bracket(width: float = 10.0):
-                                         return bd.Box(width, 10, 10)
+
+def gen_step():                      @step(out="../STEP/bracket.step")
+    return Box(10, 10, 10)           def bracket():
+                                         return bd.Box(10, 10, 10)
+
+
+                                     if __name__ == "__main__":
+                                         bracket()
 ```
 
 Mechanically:
 
-1. **Rename the file to a plain `.py`.** `bracket.step.py` → `bracket.py`. The
-   artifact still defaults to the sibling `<stem>.step`, so the STEP path does
-   not move.
-2. **Name the function after the file and decorate it** with `@step()` (or
-   `@dxf()`). Both work bare (`@step`) or configured (`@step(...)`).
-3. **Give every parameter a default.** The pipeline calls the function with no
-   arguments; a parameter without a default is rejected at decoration. Promote
-   module-level constants to defaulted parameters when you want them tunable.
-4. **Move everything the model needs ABOVE the decorated function.** Decoration
-   is what runs the build, so anything below it never executes.
-5. **One `@step` or `@dxf` model per file.** A source defining two must be
-   split. Entry identity — refs, packages, closures — is keyed by the source
-   file everywhere in the pipeline.
+1. **Rename the file to a plain `.py`.** `bracket.step.py` → `bracket.py`.
+2. **Name the function after the file and decorate it** with `@step` (or
+   `@dxf`, or a mesh decorator). Both bare (`@step`) and configured
+   (`@step(...)`) forms work.
+3. **Remove every parameter.** A model takes **no arguments** — a parameter of
+   any kind, defaulted or not, is rejected. Parametric geometry is a plain
+   factory function the model calls; another configuration is another model
+   (another file). See "Mirrored parts" in step 3.
+4. **Return the bare shape.** The v0.4 envelope dict (`{"shape": ..., "stl":
+   ...}`) is gone; a `@step` function returns one build123d `Shape`. Mesh
+   outputs are decorators (below).
+5. **End the file with the call.** `if __name__ == "__main__": bracket()`.
+   Decorating no longer runs anything; **calling the model is the build.**
+   Without the guard, `python bracket.py` does nothing.
+6. **One model per file.** A source defining two must be split. A model's
+   identity — its record, its freshness, its worker — is the script path.
 
 #### Decorator arguments
 
@@ -199,18 +204,17 @@ Mechanically:
 | --- | --- |
 | `out=` | Output path. **Script-relative** (see the path note below). Default: sibling `<stem>.step`. |
 | `kind=` | `"part"` or `"assembly"`. Inferred from the return when omitted. |
-| `kinematics=` | The typed-mates dict. See step 3. |
-| `animation=` | Name of a `.js` choreography module beside the script. See step 3. |
-| `mesh_tolerance=` | Chord tolerance for the render package. Relative — see step 6. |
+| `kinematics=` | The typed-mates dict. See step 4. |
+| `animation=` | Name of a `.anim.js` choreography module beside the script. See step 4. |
+| `mesh_tolerance=` | Chord tolerance for the tree's tessellation. Relative — see step 6. |
 | `mesh_angular_tolerance=` | Angular tolerance, radians. |
 
 `@dxf` takes **only `out=`**. It has no `kind=` (a drawing is 2D geometry), no
 `kinematics=` and no `animation=`; passing any of them is an error.
 
-Unknown keyword arguments are rejected outright on both decorators.
-
-> **`write=` is now `out=`.** If your sources came off an intermediate 0.5
-> development snapshot that used `write=`, rename it. There is no alias.
+Decorator arguments are read **statically** and must be literals — a tolerance
+cannot be imported from a constants module. Unknown keyword arguments are
+rejected outright on every decorator.
 
 #### The one path-semantics exception
 
@@ -223,8 +227,9 @@ The single deliberate exception is the **decorator's `out=`** — on `@step`,
 `@dxf`, `@stl`, `@glb` and `@threemf` alike — which resolves relative to the
 **script**. That is what makes a project relocatable: the declaration travels
 with the model and produces the same layout whatever directory you run from.
-`animation=` is likewise a name beside the script. Ad-hoc `OUT` arguments on
-the CLI doors are cwd-relative, because they are one-shot and never persisted.
+`animation=` is likewise a name beside the script. There is **no per-run output
+override**: `-o`/`--output` does not exist. Where a file lands is a property of
+the model, not of a run.
 
 ```python
 @step(out="../STEP/bracket.step")   # ../STEP relative to THIS FILE
@@ -233,16 +238,12 @@ def bracket(): ...
 
 #### What the function returns
 
-A `@step` function returns a build123d `Shape`, or an envelope dict whose only
-fields are `shape`, `stl`, `3mf`, `mesh_tolerance` and `mesh_angular_tolerance`.
-Prefer returning the bare shape and declaring mesh outputs as decorators
-(below) — that is the shape the rest of the toolchain reads.
+A `@step` function returns a build123d `Shape` — nothing else. A `@dxf` function
+returns build123d 2D geometry: a bare shape goes to the `CUT` layer, or a
+`{layer: shape}` dict gives named layers (`CUT` / `ENGRAVE` / `SCORE`). The
+engine writes the file; you never call an exporter.
 
-A `@dxf` function returns build123d 2D geometry: a bare shape goes to the `CUT`
-layer, or a `{layer: shape}` dict gives named layers (`CUT` / `ENGRAVE` /
-`SCORE`). The engine writes the DXF bytes; you never call an exporter.
-
-#### Mesh exports become stacked decorators
+#### Mesh exports are decorators — and STEP is optional
 
 v0.4 produced meshes with a separate `scripts/export` run. v0.5 declares them
 on the model, and every build produces them:
@@ -263,11 +264,15 @@ from cadgen import glb, step, stl, threemf
 @glb
 def bracket():
     return bd.Box(40, 20, 6)
+
+
+if __name__ == "__main__":
+    bracket()
 ```
 
 - The 3MF decorator is spelled `@threemf` (identifiers cannot start with a
   digit); the CLI door is `3mf`.
-- Stacking order above or below `@step` is behaviour-neutral.
+- Stacking order is behaviour-neutral.
 - Bare (`@glb`) means the sibling default. Declare the same format more than
   once at *distinct* `out=` targets for draft/print variants; two bare
   declarations of one format collide, as do two identical `out=` targets.
@@ -275,9 +280,12 @@ def bracket():
   `mesh_angular_tolerance=` and their own `kinematics=`. They do **not** accept
   `animation=` — mesh exports are static bakes.
 - Mesh decorators on a `@dxf` drawing are an error.
+- **A model needs no `@step` at all.** `@stl`/`@glb`/`@threemf` alone make a
+  **mesh-only model**: same tree, same record, same freshness; its outputs are
+  the meshes. A model's outputs are exactly what its decorators declare.
 
-`python bracket.py` now writes the STEP **and** the declared meshes, and heals
-any of them that were deleted. No separate export step.
+`python bracket.py` writes every declared output and heals any that were
+deleted. No separate export step.
 
 #### Running the model
 
@@ -289,34 +297,104 @@ Flags ride the script's argv:
 
 | Flag | Effect |
 | --- | --- |
-| `-o`, `--output PATH` | Override the model's output path for this run. |
 | `--force` | Rebuild even when the gate says current. |
 | `--mesh-tolerance FLOAT` | Override chord tolerance for this run. |
 | `--mesh-angular-tolerance FLOAT` | Override angular tolerance, radians. |
 | `--verbose` | Stage timing and full tracebacks on stderr. |
 | `--json` | One JSON result line on stdout. |
 
-Two behaviours that differ from v0.4 and will bite:
+There is no `-o`, no `--write`, no `--lock-timeout`.
 
-- **A run always writes the artifact.** In v0.4, `scripts/gen` built only the
-  render package unless you passed `--write`. There is no `--write` in v0.5 and
-  no way to build "just the package" from a script — running the model produces
-  the file.
-- **A direct run ends the process.** Decoration raises `SystemExit` with the
-  pipeline's exit code, so trailing module code after the decorated function
-  does not run. This is true on both the warm and cold paths, deliberately, so
-  the two never disagree.
-- **Importing a model module never builds.** Composition imports the module and
-  calls the function to get the shape:
+What a run says: **stdout** carries one result line — `built STEP/bracket.step`
+or `current STEP/bracket.step` (a mesh-only model prints its tree hash; a
+drawing prints its `.dxf`). With `--json` that line carries `outcome`
+(`built` | `current`), `document` (the written STEP's path, `null` for a
+mesh-only model) and `tree` (the result's hash in the store). `packagePath` is
+gone. **stderr** carries the build tree — every model
+the run touched, collapsing as each finishes — and the `[cadgen] wrote ...`
+lines.
+
+Behaviours that differ from v0.4 and will bite:
+
+- **A run always writes its outputs.** There is no `--write`, and no way to
+  build "just the render package": running the model produces the files.
+- **Importing a model module never builds.** Only the call does. Inside another
+  model's body, a call composes (next step); at top level, it builds.
+- **Every build is parallel.** Children build on a pool of warm workers; a
+  build never waits on or cancels another build, and two runs of the same model
+  can overlap — the store's publish rule decides what lands.
+
+### 3. Convert composition: children are models you call
+
+In v0.4 an assembly built its parts inline, through `lib/` helpers, or with
+`cadgen.compose.memo`. In v0.5 **a child is a model**: a sibling file with its
+own decorator and outputs. The parent imports it and **calls** it:
+
+```python
+# frame.py
+from cadgen import build123d as bd
+from cadgen import step
+
+from plate import plate          # importing links; never builds
+from standoff import standoff
+
+
+@step(out="../STEP/frame.step")
+def frame():
+    p = plate()                                  # submits plate's build, returns at once
+    left = bd.Pos(-30, 0, 5) * standoff()        # placements are deferred too
+    right = bd.Pos(30, 0, 5) * standoff()        # a second call: same result, one build
+    return bd.Compound(children=[p, left, right], label="frame")
+
+
+if __name__ == "__main__":
+    frame()
+```
+
+- **`compose.memo` is deleted.** `cadgen.compose` does not exist. Every
+  `memo(helper, ...)` call site becomes a model file for that child, imported
+  and called. The cache it provided is the store: a current child is served
+  from its tree in milliseconds.
+- **Calls are lazy and parallel.** Inside a body a call submits the child's
+  build to the pool and returns a compound whose geometry is read on first use;
+  `Pos * child`, `Rot * child`, `Location * child`, `.moved()`, `.label` and
+  `.color` are deferred. Anything else forces it. Children therefore build in
+  parallel, and the parent **links** each child's tree instead of copying its
+  geometry — an intact child costs the parent no components.
+- **Place with `Pos/Rot/Location *` or `.moved(loc)`, never `.located(loc)`.**
+  `located()` deep-copies the geometry, which turns a link into the parent's
+  own components (still correct, just no longer shared).
+- **A rebuilt part does not update its assemblies until they are rebuilt.**
+  `python src/plate.py` publishes plate's new tree; `frame` still pins the old
+  one and reads as stale until `python src/frame.py` runs. Pull semantics.
+  `cadgen store why src/frame.py` shows the pinned-vs-current pair.
+- **Models by result, constants by value, functions by file.** Importing a
+  sibling's *model* is a result edge (its tree hash); importing a *constant*
+  from a model file is tracked by value; importing a *function* or any name
+  from a non-model file (`lib/`) puts that file in the closure — any edit
+  rebuilds. Shared constants can live in a model file or in `lib/`.
+- **Mirrored parts are their own model.** STEP cannot express a reflection, so
+  a right-hand part built by mirroring a left-hand model becomes the parent's
+  own geometry. Write a factory in `lib/` and two one-line models:
 
   ```python
-  from widget import widget as build_widget   # importing links; never builds
+  # lib/bracket_shape.py                 # bracket_left.py            # bracket_right.py
+  def build(side: str):                  @step(out="../STEP/bracket_left.step")
+      sign = 1 if side == "left" else -1 def bracket_left():
+      ...                                    return bracket_shape.build("left")
   ```
 
-  For an expensive child, wrap it with `cadgen.compose.memo` — importing links,
-  `memo` caches.
+- **Sub-assemblies are models** with their own file and outputs; a
+  `lib/*.build()` helper that assembled a system becomes `src/<system>.py`.
+- **Sidecar boundary.** A child's kinematics, animation and mesh declarations
+  belong to that child alone. A parent receives geometry (tree, labels, colors,
+  placements) and nothing else; **mates never propagate up**. The v0.4
+  `assembly_mates` promotion plumbing is deleted, and so is
+  `AssemblyHelper.relations`.
+- **Dynamic imports** (`__import__`, `importlib`) of model modules are not
+  tracked. Import children explicitly.
 
-### 3. Move articulation to kinematics + `.anim.js`
+### 4. Move articulation to kinematics + `.anim.js`
 
 v0.4's `.params.js` sidecar — FK scripts, pose functions, demo modes — is gone,
 and so is GIF export. v0.5 splits what `.params.js` conflated into three
@@ -324,7 +402,7 @@ systems with different lifecycles:
 
 | System | Where it lives | Lifecycle |
 | --- | --- | --- |
-| Geometry parameters | The model function's signature | Changing one re-runs Python and rebuilds the artifact |
+| Geometry | The model function's body and the factories it calls | Changing one rebuilds the model |
 | Kinematics | `kinematics=` on the decorator, pure data | Drives viewer sliders and posed exports; no rebuild, no Python at render time |
 | Animation | A plain `.anim.js` module named by `animation=` | Text copied into the sidecar; never invalidates a build |
 
@@ -367,8 +445,7 @@ Rules that catch v0.4 conversions:
   and `fastened` (0-DOF rigid attachment). `fastened` is needed exactly when
   occurrences are *siblings* in the instance tree — a pin that must orbit with
   its carrier. Instance-tree children ride for free.
-- **`fastened` mates contribute no DOF.** They are excluded from the DOF list,
-  take no `limits`, and take no axis.
+- **`fastened` mates contribute no DOF.** They take no `limits` and no axis.
 - **Limits are required** on every non-`fastened` mate: `(lo, hi)` for
   single-DOF kinds, a `{"turn": ..., "travel": ...}` dict for `cylindrical`.
 - **`parent`/`child` are occurrence refs** — `#`-prefixed labels (canonical;
@@ -378,13 +455,14 @@ Rules that catch v0.4 conversions:
   (`origin=(x,y,z), direction=(x,y,z)`) — never both. Refs resolve once at
   build into world numbers; the viewer does arithmetic, never topology.
 - **The mate graph is a tree**: one parent mate per occurrence, no cycles.
-  Closed-loop linkages are out of scope by design — they need a solver, and
-  cadgen evaluates pure forward kinematics.
+  Closed-loop linkages are out of scope by design.
 - **Couplings gear real mate DOFs**, not other couplings. No chaining.
 - **`pose=` does not exist.** The bake point is the dict's own `"at"` key:
   `kinematics={**KINEMATICS, "at": "closed"}`. It takes a preset name or a
   `{dof: value}` dict, and never survives into the sidecar block — the written
   artifact is its own q=0.
+- **Mates stay with the model that declares them.** A parent that links an
+  articulated child gets its geometry, not its mates (step 3).
 
 #### The `.anim.js` contract
 
@@ -409,17 +487,14 @@ export const clips = {
 
 - `m.get(target)` takes a label (canonical) or occurrence-id refs, comma-listed;
   each id covers its whole subtree. Unknown targets **throw** — a typo never
-  silently animates nothing. Labels here match rendered parts only, unlike a
-  mate ref; to animate a whole group, name its occurrence id.
+  silently animates nothing.
 - Handles: `.rotate(axis, degrees, origin=[0,0,0])`, `.translate(vec)`,
   `.opacity(0..1)`, `.visible(bool)`. Successive transforms **premultiply**.
 - Every frame starts from rest and `update(t)` rebuilds the state — a pure
   function of `t`, so scrub, loop and seek are free. No wall-clock, no state.
-- Animation is deliberately ignorant of mates. Animating a jointed part
-  re-describes the motion in ratio math. That independence is what guarantees a
-  choreography edit can never invalidate a build.
-- The declared file must exist. There is no convention discovery; a missing
-  `animation=` target fails the build.
+- Animation is deliberately ignorant of mates. That independence is what
+  guarantees a choreography edit can never invalidate a build.
+- The declared file must exist. A missing `animation=` target fails the build.
 
 **GIF export is deleted.** Snapshot writes PNG stills only, and a `.gif` output
 path is refused. Motion review is interactive in the CAD Viewer. For still
@@ -435,24 +510,26 @@ cadgen step snapshot STEP/arm.step tmp/open.png --kinematics open   # a declared
 A document with no model script gets kinematics from `cadgen step build IN OUT`,
 whose `--kinematics` takes the whole space as inline JSON or a `.json` path, and
 whose `--animation` copies a `.js` module's text into OUT's sidecar. `OUT` is
-required, and is what distinguishes `build` from the internal `compile`.
+required and is never `IN`. To make an import a first-class model instead, wrap
+it: a `@step` whose body is `return read_step(...)` gives the vendor file a
+record, a tree and a place in your assemblies.
 
-### 4. Reshape the project layout
+### 5. Reshape the project layout, then delete v0.4 leftovers
 
 v0.5 is unopinionated in *code* — `out=` puts an artifact anywhere. The
-convention below is the recommended shape for a project with more than a couple
-of models, and it is what the rest of the tooling's examples assume.
+convention below is what the tooling's examples assume.
 
 ```
 <project>/
   src/                    # authored code — the only thing you edit
     README.md             #   model catalog
-    plate.py              #   one @step/@dxf model per file
+    plate.py              #   one model per file
     plate_drawing.py
+    frame.py              #   an assembly: calls plate() and standoff()
     plate.anim.js         #   choreography sits beside its model
     lib/
       __init__.py         #   a regular package, never a namespace one
-      holes.py
+      holes.py            #   helpers, factories, shared constants
   STEP/                   # raw outputs only (plus source sidecars)
     plate.step
     plate.step.json
@@ -461,19 +538,16 @@ of models, and it is what the rest of the tooling's examples assume.
   tmp/                    # scratch
 ```
 
-- **`imported/` is a subfolder of each format folder** — `STEP/imported/`,
-  `DXF/imported/` — not a top-level directory.
-- **Every `.py` directly under `src/` is a runnable model.** Shared code goes in
-  `src/lib/`. So `ls src/*.py` is the catalog. Imports need no setup, because
-  Python puts the script's own directory on `sys.path`.
-- **Model script stem = artifact stem = a Python identifier.** `plate.py` →
-  `STEP/plate.step`. Part numbers, revisions and spaces go on the artifact via
-  `out="../STEP/PN-10432_revB.step"`, never in the stem. Never distinguish two
-  files by case alone.
-- **Where the project sits:** in a workspace that is more than CAD, put the
-  project inside the directory that holds the workspace's models (`models/`, for
-  example), never loose at the root. In an empty or bare workspace, the CAD
-  project *is* the workspace — lay `src/` and the format folders out at the root.
+- **`imported/` is a subfolder of each format folder**, not a top-level
+  directory.
+- **Every `.py` directly under `src/` is a model.** Shared code goes in
+  `src/lib/`. So `ls src/*.py` is the catalog. A model may share its stem with
+  the `lib/` module it wraps — alias the import.
+- **Model script stem = artifact stem = a Python identifier.** Part numbers,
+  revisions and spaces go on the artifact via `out=`, never in the stem.
+- **Build a project with a per-script loop.** There is no Makefile, no
+  directory sweep and no `cadgen build`: `for m in src/*.py; do python $m;
+  done`, or run the root assembly, which pulls everything beneath it.
 
 **Commit policy.** Authored `src/` is always committed. Format folders are not,
 with two deliberate exceptions: `imported/` sources, and pinned byte-for-byte
@@ -497,16 +571,12 @@ __pycache__/
 The `*` forms are load-bearing. Ignoring `/STEP/` outright would make the
 `imported/` negation dead, because git never descends into an ignored directory.
 
-### 5. Delete v0.4 artifacts, sidecars, and caches
-
-**Do this before debugging anything.** Stale v0.4 droppings produce failures
-that point at the wrong thing.
-
-Three kinds of leftovers:
+**Now delete the v0.4 leftovers — before debugging anything.** Stale droppings
+produce failures that point at the wrong thing.
 
 1. **In-tree package directories.** v0.4 kept render packages beside the
-   sources in a per-folder `__cadgen__/models/<entry>/` directory. v0.5 has no
-   in-tree packages at all. Delete every `__cadgen__` directory in the project:
+   sources in a per-folder `__cadgen__/models/<entry>/` directory. v0.5 keeps
+   nothing in the tree:
 
    ```bash
    find . -type d -name __cadgen__ -prune -print   # look first
@@ -516,39 +586,35 @@ Three kinds of leftovers:
 2. **v0.4 sidecars.** Delete `<name>.step.js` / `<name>.stp.js` step-module
    sidecars, every `<name>.params.js`, and any `<name>.step.source.json` left
    over from an intermediate 0.5 snapshot. v0.5 writes exactly one sidecar
-   shape, `<name>.step.json` at schema 5, and refuses anything else it finds at
-   that name (see the schema section below).
+   shape, `<name>.step.json` at schema 5, and refuses anything else at that
+   name (see the schema section below).
 
-3. **The old cache.** v0.5's store is `~/.cache/cadgen`, content-hash keyed and
-   store-primary. Everything in it is derived; deleting any of it costs a
-   rebuild, never correctness.
+3. **The old cache.** v0.4's `~/.cache/cadgen` layout (`packages/`,
+   `components/`, `opmemo/`, `records/`) is simply abandoned — nothing reads it
+   and nothing migrates it. Delete the directory; v0.5 creates its store on the
+   first build:
 
    ```bash
-   cadgen cache info                 # per-tier sizes; prints the cache root
-   cadgen cache gc --dry-run         # what a sweep would free
-   cadgen cache gc                   # sweep entries older than 30 days + dead generations
-   cadgen cache gc --all             # delete everything, current generations included
+   rm -rf ~/.cache/cadgen          # or $CADGEN_CACHE_DIR if you set one
    ```
 
-   `--all` is the clean-slate option for a migration. There is no automatic or
-   background GC; this command is the only sweeper.
+   Clearing the store is always safe, in any version: every model reads as
+   stale and rebuilds; no project file is touched.
 
 Also delete the **generated STEP/mesh files themselves** if you want a clean
-comparison. They will be rewritten in step 6. Note that a v0.4-generated
-`.step` file has cadgen provenance properties (`cadgen:sourcePath`,
-`cadgen:sourceHash`) embedded *inside* the STEP text — v0.5 writes none, so an
-old artifact is not byte-comparable with a new one even when the geometry is
-identical.
+comparison. A v0.4-generated `.step` has cadgen provenance properties embedded
+*inside* the STEP text — v0.5 writes none, so an old artifact is never
+byte-comparable with a new one even when the geometry is identical.
 
 ### 6. Rebuild
 
 ```bash
 python src/plate.py
-python src/plate_drawing.py
+python src/frame.py        # builds plate and standoff too, in parallel, then links them
 ```
 
-Run each model script explicitly. Do not sweep directories — there is no
-directory-wide generation in v0.5.
+Run each model script explicitly, or the roots. A second run of a current model
+prints `current ...` and never touches the kernel.
 
 #### Rethink your tolerance flags — do not copy them
 
@@ -562,37 +628,45 @@ This is the easiest thing to get silently wrong.
 A v0.4 value carried over unchanged means something entirely different. On a
 200 mm part, `--mesh-tolerance 0.02` used to mean 0.02 mm; in v0.5 it means
 0.02 × 200 = 4 mm — vastly coarser. Drop your old numbers and start from the
-new defaults, tightening only where a curved part visibly needs it.
+new defaults, tightening only where a curved part visibly needs it. Tolerances
+declared on a root do not reach its children; declare them on every model that
+needs them.
 
-The upside of the change: there is now **one** JS tessellator for both render
-and export. The OCCT mesh path is deleted. An exported STL/3MF/GLB is the same
-tessellation the viewer draws, watertight, colored, with boundary vertices on
-the exact STEP edge curves, and byte-deterministic across repeated exports.
-Because the tolerance is relative, it is scale-free: one number behaves the
-same on a 5 mm screw and a 2 m frame.
+There is now **one** JS tessellator for both render and export; the OCCT mesh
+path is deleted. An exported STL/3MF/GLB is the same tessellation the viewer
+draws, watertight, colored, and byte-deterministic across repeated exports.
 
-#### Warm builds (optional)
+#### The daemon and the pool
 
-`cadgen daemon status` shows the warm build daemon's workers. You do not need
-to start it — the client starts it for you, and `cadgen daemon` takes no
-arguments by design. Workers have **project affinity**: a worker is bound to
-one project (the directory holding the model script) for its whole life, so two
-builds of the same project serialize while different projects fan out in
-parallel. That is a correctness property, not just a performance one — all
-projects share top-level module names like `lib`, so a worker reused across
-projects could build one against another's helpers.
-
-Set `CADGEN_DAEMON=0` to keep builds cold. Nothing in this migration requires
-the daemon.
+Every build runs on a pool of warm worker processes, one bound per model, with
+a job limit of one per core (`CADGEN_JOBS` overrides). You start nothing — the
+first call spawns the daemon. `cadgen daemon status` shows its workers and the
+jobs in flight. There are **no locks**: `--lock-timeout`, "contended" and
+"skipped" outcomes are gone; a build never waits on another and never cancels
+one. `CADGEN_DAEMON=0` runs the same parallel build on transient workers that
+exit with the run (useful for tests; those builds are invisible to a running
+viewer). Do not mix the two modes on one model.
 
 ### 7. Verify
+
+**Freshness.** `cadgen store why <model.py>` is the one freshness door. It
+prints the gate's verdict clause by clause and why — which closure file
+changed, which child's result moved, which output is missing — and exits 1
+when stale. Reach for it whenever a model did or did not rebuild when you
+expected, before reaching for `--force`.
+
+```bash
+cadgen store why src/frame.py
+cadgen store info                # what the store holds, by kind
+cadgen store gc --dry-run        # what a sweep would remove
+```
 
 **Inspect.** The baseline check, then targeted questions:
 
 ```bash
 cadgen step inspect refs STEP/plate.step --facts --planes --positioning
 cadgen step inspect validate STEP/plate.step
-cadgen step inspect measure STEP/plate.step --from '#o1.1' --to '#o1.2'
+cadgen step inspect measure STEP/frame.step --from '#o1.2' --to '#o1.3' --axis x
 ```
 
 `refs --facts` reports counts and bounds, and its `ok` field covers ref
@@ -606,46 +680,27 @@ cadgen step snapshot STEP/plate.step tmp/review.png
 ```
 
 The path you name is the path you get, cleared before the render and written
-atomically after it, so a missing file is the failure signal — there is never a
-stale image to mistake for output. A directory argument gets a generated
-timestamped name inside it.
+atomically after it, so a missing file is the failure signal.
 
-**Verify the geometry did not move.** Content addressing makes "same geometry"
-checkable. Compare component content hashes against the pre-migration package:
+**Verify the geometry did not move.** Compare `inspect refs --facts` of the
+v0.4 build you kept with the new one: identical occurrence, face and edge
+counts and bounds mean the migration moved nothing. Between two v0.5 builds the
+check is sharper — `python src/plate.py --json` prints the `tree` hash, and an
+identical tree is identical geometry.
 
-```bash
-python src/plate.py --force
-python - <<'EOF'
-import json, pathlib
-from cadgen.catalog import render_package_dir
-d = json.loads((render_package_dir(pathlib.Path("STEP/plate.step")) / "assembly.json").read_text())
-print(sorted(e["contentHash"] for e in d["components"].values()))
-EOF
-```
-
-Identical hash lists mean identical geometry. Written DXF bytes are pure
-drawing content with no identity comments, so a rename changes nothing there.
-
-**View.** The CAD Viewer's backend is stdlib-only Python. Launch the bundled
-server from the directory to serve — there is no directory flag, the cwd IS
-the served directory:
+**View.** The CAD Viewer is `cadgen viewer`, run from the directory to serve:
 
 ```bash
-cd /absolute/path/to/project && python <viewer>/server/main.py --host 127.0.0.1 --json
+cd /absolute/path/to/project && cadgen viewer
+cadgen viewer list      # every running viewer and what it serves
+cadgen viewer stop --port 3245
 ```
 
-It serves one directory, fixed at start, and reuses a live instance already
-serving the same directory at the same version rather than starting a second.
-cadgen is a **soft** dependency: importing a foreign STEP spawns a cadgen
-build, but viewing works without cadgen installed. Everything renders from
-three inputs — the artifact file, its `.step.json` sidecar, and the cache. The
-viewer never reads your source and never rebuilds on source changes.
-
-Coupled DOFs get **driven sliders**: when exactly one coupling gears a DOF with
-a nonzero ratio, that DOF's Pose slider reads the effective value, is labelled
-as driven by the coupling, and dragging it moves the coupling — so sliding one
-gear turns the whole train. A DOF geared by two couplings stays independent;
-that inverse is underdetermined and the viewer refuses to guess a split.
+The client build ships in the wheel; there is no separate viewer install or
+launcher. A document's badge shows compile state only — **not compiled**,
+**compiling**, **rendered**, **failed** — and a document with no tree is
+compiled when you open it. The viewer never reads your source and never says
+"stale": whether a document is behind its script is `store why`'s question.
 
 ---
 
@@ -659,64 +714,61 @@ directly. Every subcommand is also reachable as `python -m cadgen.cli <verb>`.
 | --- | --- |
 | `python scripts/gen MODEL.step.py` | `python model.py` |
 | `python scripts/gen MODEL.step.py --write` | `python model.py` (a run always writes) |
-| `python scripts/gen ... --write PATH` | `python model.py -o PATH`, or `out=` on the decorator |
+| `python scripts/gen ... --write PATH` | `out=` on the decorator (there is no per-run override) |
 | `python scripts/gen ... --force` | `python model.py --force` |
 | `python scripts/gen ... --json` / `--verbose` | `python model.py --json` / `--verbose` |
 | `python scripts/gen ... --mesh-tolerance` | same flag — **but the units changed**, see step 6 |
 | `python scripts/export TARGET --stl/--3mf/--glb` | `@stl`/`@threemf`/`@glb` on the model, or `cadgen stl\|3mf\|glb build DOC [OUT]` |
+| `cadgen.compose.memo(helper, ...)` | a child model, imported and called |
 | `python scripts/inspect refs\|measure\|align\|frame\|diff\|validate` | `cadgen step inspect <inspection> ...` |
 | `python scripts/snapshot ...` | `cadgen step snapshot`, `cadgen stl\|3mf\|glb snapshot`, `cadgen dxf snapshot`, `cadgen urdf\|sdf snapshot`, or polymorphic `cadgen snapshot` |
-| `python scripts/artifact ...` | `cadgen step compile` (internal; every door compiles on demand) |
-| `cadgen-step-artifact` | `cadgen step compile` |
-| `python skills/cad/scripts/cadgen_daemon ...` | `cadgen daemon`, `cadgen daemon status` |
+| `python scripts/artifact ...` / `cadgen-step-artifact` | `cadgen step compile` (internal; every door compiles on demand) |
+| `python skills/cad/scripts/cadgen_daemon ...` | `cadgen daemon status` |
+| the viewer launcher (`npm run start --dir`, `server/main.py`) | `cadgen viewer`, `cadgen viewer list`, `cadgen viewer stop` |
+| `cadgen cache info\|gc` (intermediate 0.5) | `cadgen store info\|why\|gc` |
 | DXF: `python skills/dxf/scripts/gen ...` | `python drawing.py` |
 | — | `cadgen step build IN OUT` (re-emit/annotate a document) |
-| — | `cadgen cache info` / `cadgen cache gc` |
+| — | `cadgen store why <model.py>` |
 | — | `cadgen doctor` |
 
-The full v0.5 command set:
+The full v0.5 command set is `cadgen --help`:
 
 ```
-step build      write a new STEP from one, with kinematics
-step compile    make a STEP's render package current (internal)
-step inspect    inspect selector references in a STEP
-step snapshot   render a STEP model to an image
-stl|3mf|glb build      write a model's mesh output(s)
-stl|3mf|glb snapshot   render a mesh to an image
-dxf snapshot    render a DXF to an image
-urdf|sdf|srdf validate  validate a robot description
-urdf|sdf snapshot       render a robot description to an image
-snapshot        render any supported input to an image
-cache           inspect or gc the user-level caches (info/gc)
-doctor          print installed cadgen and verify a skill's pin
-daemon          run the warm build daemon
-daemon status   show the warm daemon's workers
+3mf|glb|stl build      write a model's mesh output(s)
+3mf|glb|stl snapshot   render a mesh to an image
+daemon status          show the warm daemon's workers
+doctor                 print installed cadgen and verify a skill's pin
+dxf snapshot           render a DXF to an image
+sdf|urdf snapshot      render a robot description to an image
+sdf|urdf|srdf validate validate a robot description
+snapshot               render any supported input to an image
+step build             write a new STEP from one, with kinematics
+step compile           make a STEP's tree current (internal)
+step inspect           inspect selector references in a STEP
+step snapshot          render a STEP model to an image
+store                  the store: info, why <model> (gate verdict), gc
+viewer [list|stop]     serve the current directory in the CAD Viewer
 ```
 
-Notable absences: there is no `cadgen gen`, no `cadgen export`, and no
-`cadgen dxf build` — a drawing's file *is* the product, made by running its
-script.
+Notable absences: there is no `cadgen gen`, no `cadgen export`, no `cadgen
+build`, and no `cadgen dxf build` — a drawing's file *is* the product, made by
+running its script.
 
 ### Doors take documents; scripts are run
 
-Every `cadgen` verb above takes a `.step` / `.stl` / `.dxf` **file**. Hand one a
-`.py` and it refuses by name. This is the inverse of v0.4, where `scripts/gen`,
-`scripts/export` and `scripts/inspect` all accepted a `.step.py` generator and
-would build it for you. In v0.5:
-
-- `python <script>` is the only source door.
-- A document that has drifted from its script is **refused**, not silently
-  rebuilt. Rerun the script.
-- Nothing needs a separate cache or import step — each door makes what it needs
-  on demand.
+Every `cadgen` verb above takes a `.step` / `.stl` / `.dxf` **file** — a
+document. `python <script>` is the only source door. A door finds a document's
+tree by the hash of the file's bytes; when there is none (a vendor STEP, a file
+copied in from elsewhere, a store you just cleared) it **compiles the file** as
+a pool job and proceeds. A door never refuses a document and never runs a
+script: it does not know, or ask, whether the file is behind its source. That
+question belongs to `cadgen store why`.
 
 ## Selector refs
 
 **Good news: the ref grammar only widened.** No ref a v0.4 project wrote stops
-parsing in v0.5. Unrecognized text still falls through as opaque rather than
-raising. You do not have to rewrite refs — this section is here so you know what
-is now *available*, and so two refs that used to error and now work do not
-surprise you.
+parsing in v0.5. You do not have to rewrite refs — this section is here so you
+know what is now *available*.
 
 A ref is one token: `[<file-prefix>]#<selector>[,<selector>...]`. No spaces —
 the token stops at whitespace.
@@ -738,29 +790,19 @@ Entity kinds are exactly `s` (shape), `f` (face), `e` (edge), `v` (vertex).
 > `label` never appears. `#servo_end_plate.f45` names face 45 of the part
 > labelled `servo_end_plate`.
 
-Points worth knowing:
-
 - **Comma lists inherit context.** Whichever naming scheme came last seeds the
   bare entities after it: `#o1.2,f3,f4` means `o1.2`, `o1.2.f3`, `o1.2.f4`.
 - **Duplicate labels never resolve bare.** A label matching two occurrences
-  raises and lists the numbered aliases (`_1`, `_2`, in occurrence-tree order)
-  to use instead.
+  raises and lists the numbered aliases (`_1`, `_2`, in occurrence-tree order).
 - **Numeric forms win.** A part named `f12` or `o1.4` gets no alias and is
   reachable only by its numeric id.
-- **Occurrence-group refs have no special syntax.** A group is just an
-  occurrence ref naming an interior node of the instance tree — `#o1.4`. This
-  is the one behavioural change: in v0.4 an interior node was an error
-  ("unknown part/subassembly occurrence selector"); in v0.5 it expands to its
-  subtree leaves in tree order. Same spelling, previously rejected, now works.
-  An unknown group ref raises with a near-miss hint naming the deepest real
-  ancestor and its children.
+- **Occurrence-group refs have no special syntax.** A group is an occurrence
+  ref naming an interior node of the instance tree — `#o1.4`. In v0.4 that was
+  an error; in v0.5 it expands to its subtree leaves in tree order.
 
 **File prefixes are a guard, not a resolver.** An empty prefix (`#o1.2`) is
-accepted everywhere unconditionally — the file is whatever the separate target
-argument says. A *non-empty* prefix must name the file the command was already
-pointed at, or it is an error; it never selects a different file. And you cannot
-fold the file into the target: a target argument containing `#` is refused,
-because selector refs require an explicit target argument.
+accepted everywhere. A *non-empty* prefix must name the file the command was
+already pointed at, or it is an error; it never selects a different file.
 
 ```bash
 cadgen step inspect refs STEP/bracket.step '#o1.2.f19'      # always fine
@@ -769,24 +811,18 @@ cadgen step inspect refs STEP/bracket.step 'other#o1.2'     # error
 ```
 
 **What is emitted.** The toolchain accepts many spellings and prints exactly
-one: numeric, leading `#`, no file prefix. Labels are resolved to numeric ids
-before any selector reaches a render job or JSON output; `inspect --detail`
-reports a label only as a separate `labelRef` field. On a single-occurrence
-document the occurrence prefix is dropped from the display form (`#f45`), while
-an assembly prints the full path (`#o1.12.f19`). The CAD Viewer is the one
-place that emits file-prefixed refs.
+one: numeric, leading `#`, no file prefix. On a single-occurrence document the
+occurrence prefix is dropped from the display form (`#f45`), while an assembly
+prints the full path (`#o1.12.f19`). The CAD Viewer is the one place that emits
+file-prefixed refs.
 
 **Surfaces differ slightly.** `inspect refs`/`frame`/`measure`/`align` require
 the leading `#`; `inspect validate`/`interfere --refs` and snapshot's
 `--focus`/`--hide` accept it optionally. `inspect diff` takes no refs at all.
-Snapshot selection accepts **occurrence refs only** — a face or edge selector is
-refused there.
+Snapshot selection accepts **occurrence refs only**.
 
 **Stop writing `.step.py` targets.** `path/to/entry.step.py` was a documented
-target form in v0.4 and is no longer part of the contract. Path-shaped targets
-still often resolve to the sibling `.step` in practice, so this may not fail
-loudly — treat it as something to clean up rather than something that will
-announce itself.
+target form in v0.4 and is no longer part of the contract.
 
 ## Snapshot job schema
 
@@ -809,11 +845,9 @@ The accepted job keys are: `input` (required), `mode`, `outputs`, `theme`,
 layered over `kinematics`), `jointValues`, `sizeProfile`, `width`, `height`,
 `scale`, `sceneScale`, `debug`, `timeoutSeconds`.
 
-Also removed: the `params` key (it is `kinematics` now — `params` is reserved
-and rejected), and `workspaceRoot` / `rootDir` (pass a relative or absolute
-`input` path instead). `.gif` output paths are refused.
-
-Other behaviour worth knowing:
+Also removed: the `params` key (it is `kinematics` now), and `workspaceRoot` /
+`rootDir` (pass a relative or absolute `input` path instead). `.gif` output
+paths are refused.
 
 - `mode` is `view` (default), `section` or `list`. Mesh inputs allow only
   `view` and `list`.
@@ -824,15 +858,12 @@ Other behaviour worth knowing:
   `height`, `sizeProfile`, `camera`, `label`, `viewLabel`, `dataUrl`, `text`.
 - A packet may be a single job object, a bare array of jobs, or
   `{"jobs": [...]}`.
-- `--job PATH` reads a JSON file; `--job -` reads stdin. `--job` does **not**
-  accept inline JSON. The rich option flags (`--camera`, `--theme`,
-  `--display`, `--kinematics`, `--animation`, `--joint-values`) each take a
-  name, inline JSON, or a path; `--time SECONDS` is the moment for
+- `--job PATH` reads a JSON file; `--job -` reads stdin. The rich option flags
+  (`--camera`, `--theme`, `--display`, `--kinematics`, `--animation`) each
+  take a name, inline JSON, or a path; `--time SECONDS` is the moment for
   `--animation` and is refused without it.
 
 ### Themes and display are two separate options
-
-v0.5 splits what v0.4 mixed, mirroring the viewer's two tabs:
 
 - **`--theme`** selects the visual world: `materials`, `background`, `floor`,
   `environment`, `lighting`, `colorMode`, `projection`, `modeColors`. Ids:
@@ -842,20 +873,11 @@ v0.5 splits what v0.4 mixed, mirroring the viewer's two tabs:
   `exploded`, `edges`.
 
 The snapshot default theme is `snapshot` — Workbench Light with the ground grid
-and origin axis removed, because in a still image those read as geometry rather
-than as orientation. Pass `--theme workbench-light` for the viewer's own look.
-Projection is a theme trait honoured by every format, so a snapshot frames the
-way the viewport does.
-
-Display `mode` collapses a large alias table to seven canonical values:
-`solid`, `rendered`, `transparent`, `hidden_edges`, `hidden_lines_removed`,
-`unshaded`, `wireframe`. The two topology modes (`hidden_edges`,
-`hidden_lines_removed`) need CAD topology, so mesh inputs refuse them.
-
-Mesh, DXF and robot snapshot doors do not *have* `--focus`, `--hide`,
-`--display`, `--kinematics` or `--mode section` — a mesh has no occurrences,
-CAD edges or kinematics, so those options are absent from the command rather
-than refused by it.
+and origin axis removed. Pass `--theme workbench-light` for the viewer's own
+look. Display `mode` has seven canonical values: `solid`, `rendered`,
+`transparent`, `hidden_edges`, `hidden_lines_removed`, `unshaded`,
+`wireframe`; the two topology modes need CAD topology, so mesh inputs refuse
+them.
 
 ## Artifact and schema reference
 
@@ -863,22 +885,21 @@ than refused by it.
 
 | Thing | v0.4 | v0.5 |
 | --- | --- | --- |
-| Model source | `<name>.step.py` / `<name>.dxf.py` with `gen_step()`/`gen_dxf()` | `<name>.py` with one `@step`/`@dxf` function |
-| Primary artifact | Written only with `--write` | Always written by a run; sibling `<stem>.step` or `out=` |
-| Render package | In-tree `__cadgen__/models/<entry>/` | `~/.cache/cadgen/packages/<stepHash>-v<N>/` |
+| Model source | `<name>.step.py` / `<name>.dxf.py` with `gen_step()`/`gen_dxf()` | `<name>.py` with one parameterless decorated function, called under `__main__` |
+| Primary artifact | Written only with `--write` | Whatever the decorators declare, always written by a run; STEP is not required |
+| Derived geometry | In-tree `__cadgen__/models/<entry>/` render packages | `~/.cache/cadgen/objects/` — content-addressed components and trees |
+| Freshness | Provenance embedded in the STEP text, later a `records/` tier | `~/.cache/cadgen/index/model/<sha256(script path)>` — the model's record |
+| Children | Inline geometry, `lib/` helpers, `compose.memo` | Sibling models, called; the parent's tree **links** their trees |
 | Declarations sidecar | `<name>.step.js` (a JS module) | `<name>.step.json`, schema 5, JSON |
 | Pose/FK script | `<name>.params.js` | `kinematics=` on the decorator (data, in the sidecar) |
 | Animation | `.params.js` demo modes; GIF export | `<name>.anim.js`, text copied into the sidecar; PNG stills only |
-| Provenance | Embedded in the STEP text as `cadgen:sourcePath` / `cadgen:sourceHash` | `~/.cache/cadgen/records/<key>.source.json` |
 | Mesh outputs | `scripts/export --stl/--3mf/--glb` | `@stl`/`@threemf`/`@glb` decorators, or the format doors |
 
 ### The sidecar: `<name>.step.json`, schema 5
 
 A sidecar carries **declarations only**, and exists **only when the model needs
-one** — that is, when it declares kinematics, animation, or mesh exports. A
-plain model that is geometry and nothing else writes no sidecar at all.
-
-Its complete section list:
+one** — when it declares kinematics, animation, or mesh exports. A plain model
+that is geometry and nothing else writes no sidecar at all.
 
 ```
 schemaVersion   5
@@ -887,144 +908,135 @@ animation       the .anim.js choreography TEXT, copied
 meshExports     what the @stl/@glb/@threemf declarations resolved to
 ```
 
-That is the whole file. There is **no** `sourceKind`, `sourcePath`,
-`sourceHash`, `sourceClosure`, or timestamp — nothing source-derived-as-identity.
-That is a design law: a generated file carries no tie back to its source. The
-sidecar sits beside the artifact because declarations cannot be re-derived from
-the STEP bytes; evicting the store must never lose your kinematics.
-
-A model that *drops* its kinematics loses the file — the writer removes a
-sidecar that is no longer warranted.
+There is **no** `sourceKind`, `sourcePath`, `sourceHash`, `sourceClosure`, or
+timestamp — a generated file carries no tie back to its source. A model that
+*drops* its kinematics loses the file. A sidecar belongs to the model that
+declares it: a parent's sidecar never carries a child's mates.
 
 **A v0.4 sidecar is not read.** A sidecar that is present must declare schema 5;
-anything else is an error naming the schema found, the schema expected, and the
-fix — rebuild the model, or re-annotate the document with `cadgen step build`.
-A *missing* sidecar is fine and means "an import, or a plain model". So the
-migration for sidecars is exactly: **delete the old ones and rebuild from
-source.** There is nothing to convert by hand.
+anything else is an error naming the schema found and the fix — rebuild the
+model, or re-annotate the document with `cadgen step build`. A *missing*
+sidecar is fine. The migration for sidecars is exactly: **delete the old ones
+and rebuild from source.**
 
-### Provenance moved to the records tier
+### The store
 
-Everything source-derived — `sourceKind`, `sourcePath`, `sourceHash`,
-`sourceClosureFiles`, `sourceClosureHash`, `annotationHash`, `generatedAt` —
-lives in an evictable record:
+Everything derived lives in one root — `$CADGEN_CACHE_DIR` if set, else the
+platform cache dir (`~/.cache/cadgen` on Linux and macOS) — with two sides:
 
 ```
-~/.cache/cadgen/records/<sha256(resolved artifact path)[:24]>.source.json
+objects/ab/cdef…                    immutable, content-addressed: components and trees
+index/document/<sha256(file bytes)> a file's bytes → its tree (what every door reads)
+index/model/<sha256(script path)>   the model's record: tree, closure, children pins, outputs
+index/output/<sha256(output path)>  which script wrote the file at this path
+index/component | op | mesh         component entries, the op memo, tessellations
 ```
 
-Every generated build writes one; every freshness gate reads one. It exists so
-a *plain* model with no sidecar still no-ops on rerun and is still refused by
-the doors when it drifts from its script. Eviction costs one rebuild, never
-correctness — an evicted record simply reads as an import until the next build
-re-records it. Imports write neither a sidecar nor a record.
-
-### Storage layout
-
-The cache root, one rule, honoured by both Python and JS:
-
-1. `$CADGEN_CACHE_DIR` if set.
-2. `$XDG_CACHE_HOME/cadgen` on POSIX if set; `%LOCALAPPDATA%\cadgen` on Windows
-   if set.
-3. `~/.cache/cadgen` otherwise.
-
-| Tier | Contents |
-| --- | --- |
-| `packages/` | One self-contained render package per document, keyed by the document's content hash |
-| `components/` | Exact-geometry component store; components hardlink in from packages |
-| `opmemo/` | Kernel-op memo, one subdirectory per salt generation |
-| `meshes/` | Shared tessellation cache |
-| `records/` | Per-model provenance/freshness records |
-
-Everything under the root is content-addressed and best-effort. Deleting any
-entry, or the whole root, costs a rebuild and never correctness.
+`objects/` and `index/document` are the **artifact side**: no object references
+a source file, and a reader (door, viewer, snapshot) never opens a record.
+`index/model` and friends are the **code side**: what source produced what and
+what it depended on. Records are deletable without corrupting anything; a
+rebuild re-creates them. `cadgen store info` sizes it, `cadgen store gc`
+sweeps unreachable objects, and deleting the whole root is always safe. Nothing
+else is written anywhere — a build's progress is process state, read from the
+daemon.
 
 ## Troubleshooting a half-migrated project
 
 Remember: these errors describe the v0.5 contract. None of them will mention
-0.4. Below is what each one means *for a migration*.
+0.4.
 
 **"declares no CAD model" / "decorate one function with `@step` or `@dxf`"**
 You ran a file that still has a bare `gen_step()`/`gen_dxf()` function, or you
-renamed the file but forgot the decorator. cadgen no longer detects the magic
-function names at all — they are ordinary functions to it. → Step 2.
+renamed the file but forgot the decorator. → Step 2.
 
-**"defines more than one CAD model"**
-The file has two decorated functions. One model per file is a hard rule, because
-entry identity is keyed by the source file. → Split it into two files.
+**Running the script prints nothing and writes nothing**
+The file has no `if __name__ == "__main__": model()`. Decorating declares; the
+call builds. → Step 2.
 
-**"parameters must all have defaults"**
-A converted `gen_step()` gained parameters without defaults. The pipeline calls
-the model function with no arguments. → Give every parameter a default.
+**"takes no parameters"**
+A converted `gen_step()` kept parameters — with or without defaults. A model
+takes no arguments; parametric geometry is a factory the model calls, another
+configuration is another model. → Step 2, and "Mirrored parts" in step 3.
+
+**"takes no arguments"** at a call site
+Something calls a model with arguments. Models are called bare; the factory
+takes the arguments. → Step 3.
+
+**A dict came back from the model / "bare shape"**
+The v0.4 envelope. Return the shape; declare meshes as decorators. → Step 2.
+
+**`ModuleNotFoundError: cadgen.compose`**
+`memo` is gone. Each memoized helper becomes a child model, imported and
+called. → Step 3.
+
+**`AttributeError: ... has no attribute 'relations'` / `assembly_mates`**
+The mates-promotion plumbing is deleted; a parent never receives a child's
+mates. Declare the mates on the model that owns the parts, or on the parent for
+its own occurrences. → Step 3.
 
 **"unsupported sidecar schema … (expected 5)"**
 A v0.4 sidecar (or an intermediate `.step.source.json`) is still sitting next to
-the artifact. Nothing reads it. → Delete it and rebuild. Step 5.
+the artifact. → Delete it and rebuild. Step 5.
 
-**Unexpected keyword argument on a decorator**
-You passed a v0.4-era or intermediate name — `write=` instead of `out=`,
-`pose=` instead of the kinematics dict's `"at"` key, `params=`, or `kinematics=`
-/ `animation=` on `@dxf`. The decorators reject unknown kwargs outright rather
-than ignoring them. → Check the decorator argument table in step 2.
+**Unexpected keyword argument on a decorator, or "must be a numeric literal"**
+You passed a retired name — `write=` instead of `out=`, `pose=` instead of the
+kinematics dict's `"at"` key, `kinematics=`/`animation=` on `@dxf` — or a
+tolerance that is not a literal. → The decorator table in step 2.
 
 **"kinematics has unknown key(s) … the vocabulary is closed"**
 Your kinematics dict has something other than `mates`, `couplings`, `poses`,
-`at`. Note `animation` is its own `@step` kwarg, never a kinematics key. → Step 3.
+`at`. → Step 4.
 
-**"`default=` was dropped"**
-A mate carried a rest value. Zero is always the artifact as written. → Declare a
-`poses` preset, or bake with `{..., "at": <preset>}`.
+**Unrecognized argument `-o` / `--output` / `--lock-timeout` on a model run**
+There is no per-run output override and no lock layer. `out=` on the decorator
+places the file. → Step 2.
 
 **Unrecognized argument on a `cadgen` command**
 A retired snapshot flag. `--input`/`-i` and `--output`/`-o` became the two
-positionals `TARGET OUT`; `--params` became `--kinematics`; `--params-path` went
-away with the `.params.js` mechanism. These now fail as ordinary unknown
-arguments with no migration hint. → Consult `cadgen <verb> --help`, which is
-always the current interface.
+positionals `TARGET OUT`; `--params` became `--kinematics`. → `cadgen <verb>
+--help` is always the current interface.
 
-**Unknown job key, or "move it into `selection`"**
-Top-level `focus`/`hide`/`refs`, or `params`, or `workspaceRoot`/`rootDir` in a
-snapshot job. → See the snapshot job schema section.
+**`cadgen cache` is not a command**
+The intermediate 0.5 name. → `cadgen store info|why|gc`.
 
-**A `.py` handed to a door is refused by name**
-Correct and intended. Doors take documents. → `python <script>` first, then run
-the door on the file it wrote.
+**A model did not rebuild after I edited a child**
+Expected: a parent pulls its children only when it is built. `cadgen store why
+<parent.py>` shows the child pinned at the old tree. → Rebuild the parent.
 
-**"has drifted from its script"**
-The `.step` on disk no longer matches what its model script would produce. v0.5
-refuses rather than silently rebuilding under you. → Rerun `python <script>`.
+**An assembly copied a part's geometry instead of linking it**
+The part was reflected, `located()`, or otherwise modified after the call.
+→ Place with `Pos/Rot/Location *` or `.moved()`; make a mirrored part its own
+model. Step 3.
 
-**A model reports itself current after you replaced a vendor STEP**
-You are still using `build123d.import_step`, which reads the file as data and
-announces nothing to the freshness gate. → Switch to `cadgen.read_step`, which
-records the file's path and content hash into the model's closure. Step 1.
+**Mesh export fails with `ERR_MODULE_NOT_FOUND 'three'`** (source checkouts only)
+The checkout's `packages/cadgen-js/node_modules` is missing; cadgen names the
+fix. Installed wheels never see this.
 
 **Meshes came out far coarser (or finer) than in v0.4**
-You carried a tolerance number across. `--mesh-tolerance` is relative now. →
-Step 6.
+You carried a tolerance number across. `--mesh-tolerance` is relative now.
+→ Step 6.
 
-**A model builds but the trailing code in the file never runs**
-Expected. A direct run ends the process at decoration with the pipeline's exit
-code. → Move the work above the decorated function, or into it.
-
-**`sys.path` manipulation inside the model function has no effect**
-The pipeline restores `sys.path` after loading the module. → Import at module
-top; only *call* the imported code inside the function.
-
-**Two builds of the same project seem to serialize**
-Daemon worker affinity: one worker per project, for correctness — projects share
-top-level module names like `lib`. → Expected. `CADGEN_DAEMON=0` disables warm
-builds entirely.
+**The viewer shows a document as "not compiled" after a build**
+The build ran with `CADGEN_DAEMON=0`, which the viewer cannot see, or the
+viewer was opened on a different store root. Open the file: the viewer compiles
+it from its bytes.
 
 ## Migration complete when
 
-- [ ] Every model is a plain `.py` with exactly one `@step`/`@dxf` function.
-- [ ] No `gen_step`/`gen_dxf` remains; no `.step.py`/`.dxf.py` filenames remain.
+- [ ] Every model is a plain `.py` with exactly one parameterless decorated
+      function, ending in `if __name__ == "__main__": model()`.
+- [ ] No `gen_step`/`gen_dxf` remains; no `.step.py`/`.dxf.py` filenames
+      remain; no `compose.memo`, `-o`, or envelope dict remains.
 - [ ] All build123d access goes through `from cadgen import build123d as bd`.
 - [ ] All vendor STEP reads go through `cadgen.read_step`.
+- [ ] Every assembly imports and calls its part models; mirrored parts are their
+      own models; placement uses `Pos/Rot/Location *` or `.moved()`.
 - [ ] No `__cadgen__` directory, `.step.js`, `.params.js`, or
-      `.step.source.json` remains anywhere in the project.
-- [ ] Every model script runs clean, and a second run is a fast no-op.
+      `.step.source.json` remains anywhere in the project; the old cache root
+      is gone.
+- [ ] Every model script runs clean, a second run prints `current`, and
+      `cadgen store why` agrees.
 - [ ] `cadgen step inspect validate` passes on each primary STEP.
 - [ ] A snapshot of each primary STEP has been rendered and reviewed.
 - [ ] Tolerance flags have been re-derived from the new relative defaults, not
