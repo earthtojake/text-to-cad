@@ -1,11 +1,11 @@
 """Artifact operations for a STATIC visualization tool.
 
 The viewer's render path runs no generators: it renders what exists. Generation
-and export belong to model scripts and the CLIs. The one build-shaped thing the
-viewer does is importing a raw FOREIGN ``.step`` — making its render package
-current in the shared store, which is exactly the cache action — and that goes
-through ``compile_client``, which calls cadgen's compile entry point in a
-private worker so the kernel never loads into the long-lived server.
+belongs to model scripts and the doors. The one build-shaped thing the viewer
+does is importing a raw FOREIGN ``.step`` — making its tree current in the
+shared store, which is exactly the cache action — and that is a compile job in
+cadgen's pool (``imports``), so the kernel never loads into the long-lived
+server and a door importing the same file is the same job.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from .artifact_status import (
 )
 from .backend import require_contained
 from .build_progress import ProgressRegistry, build_progress_snapshot
-from .compile_client import CompileClient
+from .imports import ImportCompiler
 from .store_paths import build_scope
 
 __all__ = ["CLI_BUILD_HINT", "CadgenOps", "create_cadgen_ops"]
@@ -39,7 +39,7 @@ class CadgenOps:
         # process's current directory.
         self.root_dir = os.path.abspath(str(root_dir or ""))
         self.registry = registry if registry is not None else ProgressRegistry()
-        self.client = client if client is not None else CompileClient(registry=self.registry)
+        self.client = client if client is not None else ImportCompiler()
 
     def shutdown(self) -> None:
         self.client.shutdown()
@@ -105,9 +105,9 @@ class CadgenOps:
             # buildProgressSnapshot did before them. So the flag was
             # unreachable, and an unreachable flag that flips the client
             # from BUILD to ATTACH is a trap for the next reader, not a
-            # safeguard. The real "another compile of this document is in
-            # flight" signal is `contended`, which build_artifact answers
-            # with `generating` and the client attaches to.
+            # safeguard. A compile already in flight for this document shows
+            # as `generating` above (its progress record, or our own
+            # in-flight entry), which the client attaches to.
             #
             # busy/blocked stay in artifact_status.py: they are pinned there
             # by the ported spec, which supplies the snapshot directly.
@@ -131,14 +131,13 @@ class CadgenOps:
         candidate = self._candidate(file_ref)
         verdict = resolve_artifact_verdict(file_ref, self.root_dir)
         if self._is_raw_step_file(candidate) and not verdict.get("generated"):
+            # A job in the pool: it waits for a slot there if it must, so this
+            # request thread simply waits for the answer (a peer's request for
+            # the same document attaches to the same job).
             imported = self.client.compile(candidate, force=force)
-            if imported.get("ok") and imported.get("contended"):
-                # Every compile slot is busy with another document. The client
-                # treats this exactly like attaching to a CLI build.
-                return {"ok": True, "state": ARTIFACT_STATE.GENERATING, "contended": True}
             if imported.get("ok"):
-                # The compile payload is spread LAST, so its own ok/document/
-                # package/skipped/contended land on the wire and its ok wins.
+                # The compile payload is spread LAST, so its own ok/document
+                # land on the wire and its ok wins.
                 return {
                     "ok": True,
                     "state": ARTIFACT_STATE.READY,
