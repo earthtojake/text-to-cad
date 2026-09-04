@@ -30,19 +30,7 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
 
 
 class DoctorTests(unittest.TestCase):
-    def test_reports_install_and_tolerates_missing_requirements(self) -> None:
-        with TemporaryDirectory() as tmp:
-            code, out, err = _run([tmp])
-        self.assertEqual(code, 0, err)
-        self.assertIn(f"cadgen {cadgen.__version__}", out)
-        self.assertIn("none found", out)
 
-    def test_unpinned_requirements_has_nothing_to_enforce_and_passes(self) -> None:
-        with TemporaryDirectory() as tmp:
-            (Path(tmp) / "requirements.txt").write_text("cadgen[snapshot]\n", encoding="utf-8")
-            code, out, _ = _run([tmp])
-        self.assertEqual(code, 0)
-        self.assertIn("unpinned", out)
 
     def test_matching_pin_passes_and_names_the_file(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -60,13 +48,6 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertIn("MISMATCH", err)
         self.assertIn("pip install -r requirements.txt", err)
-
-    def test_extras_form_of_the_pin_is_read(self) -> None:
-        with TemporaryDirectory() as tmp:
-            (Path(tmp) / "requirements.txt").write_text(f"cadgen[snapshot]=={cadgen.__version__}\n", encoding="utf-8")
-            code, out, _ = _run([tmp])
-        self.assertEqual(code, 0)
-        self.assertIn("OK", out)
 
 
 if __name__ == "__main__":

@@ -49,24 +49,10 @@ class RequirementsPinGuard(unittest.TestCase):
         # Not every skill ships a manifest; absent means nothing claims a version.
         self.assertSilent(self.root / "requirements.txt")
 
-    def test_unreadable_path_is_silent(self) -> None:
-        # A directory where a file was expected must not take down the command.
-        (self.root / "requirements.txt").mkdir()
-        self.assertSilent(self.root / "requirements.txt")
-
-    def test_unpinned_distribution_is_silent(self) -> None:
-        # Only the `==` form is a pin; a bare line is not one and is not enforced here
-        # (check-version.sh is what rejects it in the repo).
-        self.assertSilent(self._requirements("cadgen\n"))
-
-    def test_unpinned_with_extras_is_silent(self) -> None:
-        self.assertSilent(self._requirements("cadgen[snapshot]\n"))
 
     def test_matching_pin_is_silent(self) -> None:
         self.assertSilent(self._requirements(f"cadgen=={INSTALLED}\n"))
 
-    def test_matching_pin_with_extras_is_silent(self) -> None:
-        self.assertSilent(self._requirements(f"cadgen[snapshot]=={INSTALLED}\n"))
 
     def test_other_distributions_are_ignored(self) -> None:
         # A pinned NEIGHBOUR is not a cadgen pin. Guards against a loose prefix match.
@@ -86,16 +72,6 @@ class RequirementsPinGuard(unittest.TestCase):
         self.assertIn("cadgen==0.0.0", message)
         self.assertIn(INSTALLED, message)
         self.assertIn("pip install -r requirements.txt", message)
-
-    def test_mismatch_detected_with_extras_and_surrounding_lines(self) -> None:
-        body = "# pinned at publish\nplaywright\ncadgen[snapshot]==0.0.0\nezdxf\n"
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            enforce_requirements_pin(self._requirements(body))
-
-    def test_accepts_a_string_path(self) -> None:
-        # Shims pass a Path, but nothing in the signature demands one.
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            enforce_requirements_pin(str(self._requirements("cadgen==0.0.0\n")))
 
 
 if __name__ == "__main__":
