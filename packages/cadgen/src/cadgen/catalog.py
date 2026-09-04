@@ -328,19 +328,23 @@ def seed_artifact_hash(entry_path: Path, digest: str) -> None:
 
 
 def result_tree_for(entry_path: Path) -> str | None:
-    """The current tree hash behind a CAD artifact on disk, or None.
+    """The tree behind a CAD artifact on disk, or None — found by the file's BYTES.
 
-    A generated document maps to its model through the sidecar; an imported
-    document is its own source (``cadgen.store.records.record_for_document``).
-    The tree's flattened view (``cadgen.store.trees.flatten``) is what every
-    reader that used to open a package directory reads now."""
-    from cadgen.store.records import record_for_document
+    ``index/document/<sha256(bytes)>`` → tree (STORE.md §2, the law): a reader
+    never opens a record to find an artifact. The same file copied anywhere
+    resolves to the same tree; a file the store has no tree for answers None
+    (a door then compiles it: ``cadgen._internal.doors.document_tree``). The
+    hash is memoized by (path, mtime_ns, size), so a status poll does not
+    re-read the file. The tree's flattened view (``cadgen.store.trees.flatten``)
+    is what every reader that used to open a package directory reads now."""
+    from cadgen.store.objects import has_object
+    from cadgen.store.records import tree_for_document_hash
 
-    record = record_for_document(Path(entry_path))
-    if record is None:
+    digest = artifact_file_hash(Path(entry_path))
+    if not digest:
         return None
-    tree = str(record.get("tree") or "").strip()
-    return tree or None
+    tree = tree_for_document_hash(digest)
+    return tree if tree and has_object(tree) else None
 
 
 def result_descriptor_for(entry_path: Path) -> dict | None:

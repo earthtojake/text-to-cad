@@ -35,15 +35,45 @@ memo (bare), scope, blob. They do not appear in code or documentation.
 ```
 ~/.cache/cadgen/                      (CADGEN_CACHE_DIR overrides; else the platform cache dir)
   objects/ab/cdef…                    immutable, content-addressed, sharded like git
+  index/document/<sha256(file bytes)> ARTIFACT side: {tree, kind, meshes} for a file's bytes
   index/model/<sha256(script path)>   records (input-addressed, mutable, atomic)
+  index/output/<sha256(output path)>  {model}: which script wrote the file at this path
   index/component/<cid>               component entries → {surf, brep} object hashes
   index/op/<sha256(op key)>           op-memo entries → object hash
   index/mesh/<key>                    tessellation entries → object hash
-  index/dxf/<sha256(drawing)>         drawing freshness entries (the @dxf pipeline)
 ```
 
 Nothing else lives under the root. A build's advisory progress record is
 process state, not content, and lives in the daemon's state directory (§7).
+
+### The two sides of the store — a law
+
+`objects/` is the **artifact side**: what geometry exists. `index/model`,
+`index/output`, `index/op`, `index/mesh`, `index/component` are the **code
+side**: what source produced it, what it depended on, what may be reused.
+`index/document` is the one artifact-side index: `sha256(file bytes)` → the
+tree describing those bytes (plus a mesh ledger for the bare mesh doors,
+keyed by format × tolerances × pose). Three properties, each enforced by a
+test:
+
+1. **No object references source.** No tree or component carries a path, a
+   script name, a closure or source hash, or a record key. The same bytes
+   anywhere on disk are the same tree.
+2. **A reader never consults a record.** A door (`inspect`, `snapshot`,
+   `stl|3mf|glb build`, `step build` on a document), the viewer's catalog and
+   render, and the mesh ledger find a tree in ONE lookup — hash the file's
+   bytes, read `index/document`, read objects — and never open `index/model`
+   or `index/output`. A miss is a compile job, never a refusal. The viewer's
+   badge is the one reader of records ("which model wrote this, is it
+   current"), on its own explicit path (`viewer.store_paths.record_for`).
+3. **Records are deletable.** `rm -rf index/model index/output` loses no
+   artifact: every reader still works from objects; a rebuild re-creates the
+   records without rebuilding a tree whose objects exist.
+
+`index/document` is written whenever a tree is published for a document — by
+a model's build for its `.step`, by a compile job for the file it compiled.
+`index/output` is written beside it for the badge, `store why` and
+provenance; nothing on a render path reads it.
 
 There are exactly two ways a file is named, and that is the only distinction
 the store makes:
@@ -144,11 +174,19 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   frame and discovered inputs (`read_step` documents, the `.anim.js`). The
   boundary is decided statically by what the importer TAKES from a model
   file: only model functions (`from arm import arm`) → a result edge, file
-  excluded, the child tracked by its pin; anything else (`from plate import
-  WIDTH`) → a source edge, file included. Hit and miss runs record identical
+  excluded, the child tracked by its pin; a module-level literal (`from plate
+  import WIDTH` where `WIDTH = 40.0` — numbers, str, bool, None, tuples/
+  lists/dicts of those) → a value edge, file excluded, the value tracked in
+  `constants`; anything else (a helper function, a `bd.` object, an
+  expression) → a source edge, file included. **Constants by value,
+  functions by file, models by result.** Hit and miss runs record identical
   closures by construction. `closure.static: true` marks a record whose
   inputs are not files (a document re-emitted by `cadgen step build`); the
   gate's clause 2 does not re-hash files for it.
+- `constants` is `{"<model file, relative to the script>": {"<NAME>":
+  "<sha256 of the literal's canonical repr>"}}` — every literal the model
+  took from a model file by value. Empty for most models; the gate's clause
+  2 re-reads each literal (statically, nothing is imported) and compares.
 - A leaf has `children: []`. Roots and leaves have the same record. A record
   for an imported document (`sourceKind: "step"`) has the document's bytes as
   its closure.
@@ -174,9 +212,13 @@ of:
 
 1. **No record.** Protects against reading a result that was never built or
    whose record was collected.
-2. **`sha256(closure.files as they are now) != closure.hash`.** Protects
-   against a source edit; the hash is a semantic hash of each file's Python
+2. **`sha256(closure.files as they are now) != closure.hash`, or a constant
+   in `constants` no longer hashes to its recorded value.** Protects against
+   a source edit; the hash is a semantic hash of each file's Python
    (comments and formatting do not count), computed at execution time (§5).
+   A literal imported from a model file is compared as a value: a comment,
+   a body edit or a new helper in that file leaves the importer current; a
+   changed value (or the name no longer bound to a literal) makes it stale.
 3. **Any recorded child is stale, or its current tree hash differs from the
    pinned hash.** Protects against a child whose RESULT changed — and lets a
    child edit that yields identical geometry leave the parent current.
@@ -211,10 +253,17 @@ Each with the failure it prevents.
   child dropping out of the dependency edge, so an edit to it would not reach
   the parent.
 - **Closure boundary rule.** A model file reached only through its model
-  function is a result edge (pin); anything else taken from it is a source
-  edge (file in the closure). Prevents both false-current (a constant imported
-  from a model file changing unnoticed) and false-stale (a child's internal
-  edit rebuilding every parent).
+  function is a result edge (pin); a module-level literal taken from it is a
+  value edge (`constants`); anything else taken from it is a source edge
+  (file in the closure). Constants by value, functions by file, models by
+  result. Prevents both false-current (a constant imported from a model file
+  changing unnoticed) and false-stale (a child's internal edit — or a comment
+  beside a shared constant — rebuilding every parent).
+- **The two sides (§2, the law).** No object references source; no reader
+  consults a record; records are deletable. Prevents: a moved or copied
+  document rendering differently from its twin, a render path going stale or
+  refusing because of a record's state, and a store-side cleanup destroying
+  anything a user can see.
 - **Pins and snapshot isolation.** A parent materializes the tree it pinned
   when the child was resolved, even if the child is rebuilt mid-parent-build.
   Prevents: a parent's result mixing two versions of one child.
@@ -229,10 +278,11 @@ Each with the failure it prevents.
   resolved script path, so after a move every model reads as unbuilt (clause
   1); its first build runs the body once, finds every component and tree
   already present (nothing is re-extracted or rewritten; the tree hash comes
-  out identical), writes a new record and re-notes its documents in
-  `index/document`. Until that first build, a moved GENERATED document has no
-  document entry and reads as an import (its own source); an actually imported
-  document gets a new record at its new path pointing at the same tree. The
+  out identical), writes a new record and re-notes its outputs in
+  `index/output`. The moved documents themselves never stopped rendering:
+  `index/document` is keyed by their bytes, so every door and the viewer
+  find the same tree at the new path before any rebuild; only the badge
+  (which model wrote this, is it current) waits for the first build. The
   records at the old path become unreachable and GC collects them. Prevents:
   two projects at different paths sharing one record and one overwriting the
   other's outputs list; and a path or timestamp changing a hash.
@@ -367,9 +417,10 @@ memory is ever measured (`cadgen.daemon.broker`):
    the build pipeline takes one around a model body and its emit. **Doors take
    none and never run a body**: `inspect`, `snapshot` and the mesh doors
    (`stl|3mf|glb build`) ask one question of a document — does the store have a
-   tree for this file's bytes (`doors.document_tree`)? Yes → read it; a source
-   that has moved on is the model's record's business, not the door's, so no
-   document is ever refused. No → the door (or the CAD Viewer) submits a
+   tree for this file's bytes (`doors.document_tree`: `sha256(bytes)` →
+   `index/document` → tree; no record is opened, §2 the law)? Yes → read it; a
+   source that has moved on is the model's record's business, not the door's,
+   so no document is ever refused. No → the door (or the CAD Viewer) submits a
    **compile job** to the pool (`executors.submit_compile`) that builds a tree
    from the bytes, generated or imported alike — the one door operation that is
    a job: it runs on a spare, holds a slot through its read and emit, coalesces

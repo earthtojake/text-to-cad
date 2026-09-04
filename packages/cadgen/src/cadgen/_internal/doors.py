@@ -43,25 +43,17 @@ class ScriptTargetError(ValueError):
 def document_tree(document: Path) -> str:
     """The tree for THIS document's bytes — a door's one question (STORE.md §9).
 
-    Yes, the store has one → it is used (a record whose ``stepHash`` is the
-    file's hash: the model's when it wrote this file, or the document's own
-    from an earlier compile). Source changes are the model's record's business,
-    never the door's: a document is never refused and no body ever runs here.
-    No → a **compile job** in the pool builds a tree from the file's bytes,
-    exactly as for an imported STEP, whether or not the file has a script.
+    Yes, the store has one — ``index/document/<sha256(bytes)>`` → tree (STORE.md
+    §2, the law: artifact → artifact; no record is opened) → it is used. Source
+    changes are the model's record's business, never the door's: a document is
+    never refused and no body ever runs here. No → a **compile job** in the pool
+    builds a tree from the file's bytes, exactly as for an imported STEP,
+    whether or not the file has a script, and the lookup is repeated.
     """
-    from cadgen._internal.step_hash import step_file_hash
-    from cadgen.store.records import read_record, record_for_document
+    from cadgen.catalog import result_tree_for
 
     document = Path(document).expanduser().resolve()
-    digest = step_file_hash(document)
-
-    def _matching(record: dict | None) -> str | None:
-        if not record or str(record.get("stepHash") or "") != digest:
-            return None
-        return str(record.get("tree") or "").strip() or None
-
-    tree = _matching(record_for_document(document)) or _matching(read_record(document))
+    tree = result_tree_for(document)
     if tree:
         return tree
     from cadgen.daemon.executors import submit_compile
@@ -70,7 +62,7 @@ def document_tree(document: Path) -> str:
     if job.wait() != 0:
         said = job.output().rstrip()
         raise RuntimeError(f"compiling {_display(document)} failed" + (f":\n{said}" if said else ""))
-    tree = _matching(read_record(document)) or _matching(record_for_document(document))
+    tree = result_tree_for(document)
     if not tree:
         raise RuntimeError(f"no tree for {_display(document)} after its compile")
     return tree

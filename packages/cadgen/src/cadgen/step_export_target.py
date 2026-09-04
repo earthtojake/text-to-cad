@@ -190,7 +190,9 @@ def _display_name_for(path: Path) -> str:
 # @stl/@glb/@threemf declarations (cadgen._internal.mesh_export).
 from cadgen._internal.mesh_export import (  # noqa: E402
     MeshExportJob,
+    document_mesh_current,
     mesh_export_current,
+    record_document_mesh,
     record_mesh_export,
     run_mesh_exporter,
 )
@@ -478,28 +480,25 @@ def _export_mesh_jobs(
         document_hash = (
             artifact_file_hash(spec.entry_path) if spec.entry_path is not None else None
         )
-        if spec.source == "generated" and spec.script_path is not None:
-            model = spec.script_path
-        else:
-            # A document at a bare door: the store remembers which script wrote
-            # it (a generated document) or it is its own source (an import).
-            from cadgen.store.records import source_for_document
+        # A script run (`@stl` beside `@step`) ledgers on the MODEL's record; a
+        # document at a bare door ledgers on the DOCUMENT's own index entry, by
+        # its bytes — never by which script wrote it (STORE.md §2, the law: a
+        # reader never opens a record).
+        model = spec.script_path if spec.source == "generated" and spec.script_path is not None else None
 
-            model = source_for_document(spec.entry_path) if spec.entry_path is not None else None
-        pending = [
-            job
-            for job in jobs
-            if force
-            or model is None
-            or not mesh_export_current(
-                job.out,
-                model=model,
-                document_hash=document_hash,
+        def _current(job: "MeshExportJob") -> bool:
+            if not document_hash:
+                return False
+            variant = dict(
                 mesh_tolerance=job.mesh_tolerance,
                 mesh_angular_tolerance=job.mesh_angular_tolerance,
                 pose_values=job.pose_values,
             )
-        ]
+            if model is not None:
+                return mesh_export_current(job.out, model=model, document_hash=document_hash, **variant)
+            return document_mesh_current(job.out, document_hash=document_hash, fmt=job.fmt, **variant)
+
+        pending = [job for job in jobs if force or not _current(job)]
         if not pending:
             return frozenset()
         for job in pending:
@@ -507,17 +506,18 @@ def _export_mesh_jobs(
         run_mesh_exporter(
             package_dir, pending, name=name, default_color=default_color, logger=logger
         )
-        if document_hash and model is not None:
+        if document_hash:
             for job in pending:
-                record_mesh_export(
-                    job.out,
-                    model=model,
-                    document_hash=document_hash,
+                variant = dict(
                     fmt=job.fmt,
                     mesh_tolerance=job.mesh_tolerance,
                     mesh_angular_tolerance=job.mesh_angular_tolerance,
                     pose_values=job.pose_values,
                 )
+                if model is not None:
+                    record_mesh_export(job.out, model=model, document_hash=document_hash, **variant)
+                else:
+                    record_document_mesh(job.out, document_hash=document_hash, **variant)
         return frozenset(job.out for job in pending)
     import tempfile
 

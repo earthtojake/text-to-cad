@@ -169,6 +169,68 @@ def record_mesh_export(
         pass
 
 
+def mesh_variant_key(
+    fmt: str,
+    mesh_tolerance: float | None,
+    mesh_angular_tolerance: float | None,
+    pose_values: dict | None = None,
+) -> str:
+    """One mesh variant of a document — format × chord × angle × pose — the key
+    of the ARTIFACT-side ledger (``index/document/<sha256(bytes)>.meshes``)."""
+    return "|".join(
+        (
+            str(fmt),
+            _tolerance_token(mesh_tolerance),
+            _tolerance_token(mesh_angular_tolerance),
+            pose_token(pose_values),
+        )
+    )
+
+
+def record_document_mesh(
+    output_path: Path,
+    *,
+    document_hash: str,
+    fmt: str,
+    mesh_tolerance: float | None,
+    mesh_angular_tolerance: float | None,
+    pose_values: dict | None = None,
+) -> None:
+    """A bare door's ledger: the mesh cut from THESE bytes at this variant has
+    this sha. Artifact → artifact (STORE.md §2, the law) — no record is opened,
+    so the same bytes anywhere satisfy the same door. Best-effort."""
+    try:
+        from cadgen.store.records import note_document_mesh
+
+        digest = _sha256_of(Path(output_path))
+        if digest:
+            key = mesh_variant_key(fmt, mesh_tolerance, mesh_angular_tolerance, pose_values)
+            note_document_mesh(str(document_hash), key, digest)
+    except Exception:  # noqa: BLE001 - a failed ledger only costs a re-export
+        pass
+
+
+def document_mesh_current(
+    output_path: Path,
+    *,
+    document_hash: str | None,
+    fmt: str,
+    mesh_tolerance: float | None,
+    mesh_angular_tolerance: float | None,
+    pose_values: dict | None = None,
+) -> bool:
+    """Whether the mesh on disk is THE export of these document bytes at this
+    variant: the document entry's ledger names its sha and the bytes verify."""
+    from cadgen.store.records import document_mesh_sha
+
+    path = Path(output_path)
+    if not document_hash or not path.is_file():
+        return False
+    key = mesh_variant_key(fmt, mesh_tolerance, mesh_angular_tolerance, pose_values)
+    expected = document_mesh_sha(str(document_hash), key)
+    return bool(expected) and _sha256_of(path) == expected
+
+
 def mesh_export_current(
     output_path: Path,
     *,

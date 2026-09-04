@@ -152,7 +152,7 @@ class RenderContractSyncTest(unittest.TestCase):
         # End to end: cadgen writes the record, the viewer's status authority
         # reads it back as generated. Nothing here depends on a sidecar — that
         # is the whole point, since a plain generated model writes none.
-        from cadgen.store.records import note_document, write_record
+        from cadgen.store.records import note_output, write_record
         from cadgen.viewer import artifact_status
 
         with tempfile.TemporaryDirectory() as workspace:
@@ -167,7 +167,7 @@ class RenderContractSyncTest(unittest.TestCase):
                     script,
                     {"sourceKind": "python", "tree": "", "closure": {"hash": "", "files": []}, "children": [], "outputs": {}},
                 )
-                note_document(artifact, script)
+                note_output(artifact, script)
                 self.assertFalse(
                     artifact.with_name(f"{artifact.name}.json").exists(),
                     "fixture must be a PLAIN generated model (no sidecar)",

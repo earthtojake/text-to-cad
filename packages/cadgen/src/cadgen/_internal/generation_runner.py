@@ -421,7 +421,7 @@ def _write_drawing_record(
     import hashlib
 
     from cadgen.store.publish import decide
-    from cadgen.store.records import note_document, write_record
+    from cadgen.store.records import note_output, write_record
 
     model_path = Path(spec.script_path).resolve()
     written = Path(output_path).resolve()
@@ -432,6 +432,7 @@ def _write_drawing_record(
         "sourceKind": "python",
         "tree": None,
         "closure": {"hash": closure_hash, "files": closure_files, "static": False},
+        "constants": dict(getattr(source_closure, "constants", None) or {}),
         "children": [{"model": str(child), "tree": tree} for child, tree in child_trees],
         "outputs": {str(written): {"sha256": hashlib.sha256(written.read_bytes()).hexdigest()}},
         "stepHash": "",
@@ -440,7 +441,7 @@ def _write_drawing_record(
     if not decision.publish_outputs:
         return
     write_record(model_path, record)
-    note_document(written, model_path)
+    note_output(written, model_path)
 
 
 def _write_dxf_payload(
@@ -693,7 +694,9 @@ def _run_script_generator_body(
             children=[child for child, _tree in child_trees],
         )
         source_closure = PythonSourceClosure(
-            closure_hash=store_closure.hash, files=store_closure.files
+            closure_hash=store_closure.hash,
+            files=store_closure.files,
+            constants=store_closure.constants,
         )
         generated_scene = _write_shape_step_payload(
             payload,
@@ -741,6 +744,7 @@ def _run_script_generator_body(
     if generated_scene is not None and source_closure is not None:
         generated_scene.source_closure_hash = source_closure.closure_hash
         generated_scene.source_closure_files = source_closure.files
+        generated_scene.source_closure_constants = dict(source_closure.constants)
     if model_format == "dxf":
         written = spec.dxf_export_path if spec.dxf_export_path is not None else spec.dxf_path
         if written is not None and not written.exists():

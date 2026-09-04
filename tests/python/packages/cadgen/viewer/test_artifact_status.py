@@ -83,13 +83,13 @@ class _Tree:
 
     def generated_record(self, step_path, script_name="src/plate.py", body=None):
         """A record for a MODEL that wrote ``step_path`` (a generated document)."""
-        from cadgen.store.records import note_document, write_record
+        from cadgen.store.records import note_output, write_record
 
         script = self.root / script_name
         script.parent.mkdir(parents=True, exist_ok=True)
         script.write_text("", encoding="utf-8")
         write_record(script, body or {"sourceKind": "python", "tree": "", "closure": {"hash": "", "files": []}, "children": [], "outputs": {}})
-        note_document(step_path, script)
+        note_output(step_path, script)
         return script
 
     def record(self, output_dir, **fields):

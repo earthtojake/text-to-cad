@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import contextlib
 import importlib.util
 import json
@@ -214,11 +213,15 @@ def _package_descriptor_matches_spec(
     manifest = result_descriptor_for(spec.entry_path)
     if not isinstance(manifest, dict):
         return None
-    from cadgen._internal.source_sidecar import read_source_provenance
+    if spec.source == "generated":
+        # Only a SCRIPT run asks whether this tree is its own model's (the
+        # provenance record). A document at a door asks nothing of records:
+        # a tree for its bytes is its render (STORE.md §2, the law).
+        from cadgen._internal.source_sidecar import read_source_provenance
 
-    provenance = read_source_provenance(spec.entry_path)
-    if provenance is not None:
-        manifest["_sourceSidecar"] = provenance
+        provenance = read_source_provenance(spec.entry_path)
+        if provenance is not None:
+            manifest["_sourceSidecar"] = provenance
     if not _artifact_source_kind_matches_spec(spec, manifest):
         return False
     if selector_options is None:
@@ -610,6 +613,8 @@ def _generate_part_outputs(
             "sourceKind": "step" if (not generated or reemit_source_hash) else "python",
             "tree": tree_hash,
             "closure": {"hash": closure_hash, "files": closure_files, "static": closure_static},
+            # Literals imported from model files, tracked by VALUE (gate clause 2).
+            "constants": dict(getattr(scene, "source_closure_constants", None) or {}) if generated else {},
             "children": list(getattr(scene, "store_children", None) or []),
             "outputs": outputs,
             # The bytes of the document this tree describes -- a door's one question
@@ -639,12 +644,17 @@ def _generate_part_outputs(
                 stats["published"] = False
                 return stats
         write_record(model_path, record)
-        if generated:
-            from cadgen.store.records import note_document
+        from cadgen.store.records import note_document_tree, note_output
 
+        # Artifact side: the bytes of the document this tree describes → the tree
+        # (a reader's one lookup; STORE.md §2). Code side: which model wrote each
+        # output path (the badge's question, never a reader's).
+        if tree_hash and record.get("stepHash"):
+            note_document_tree(str(record["stepHash"]), str(tree_hash), kind=str(spec.kind or "step"))
+        if generated:
             for output_path in outputs:
                 if Path(output_path) != model_path:
-                    note_document(output_path, model_path)
+                    note_output(output_path, model_path)
         stats["published"] = True
         return stats
 
@@ -1227,20 +1237,20 @@ def _generated_assembly_glb_closure_current(spec: EntrySpec) -> bool:
 
 def _assembly_glb_package_current(spec: EntrySpec) -> bool:
     """Whether the spec's current tree exists with every object present (gate
-    clause 4) — for an imported document, whether it has a record at all."""
+    clause 4). A document at a door is answered from objects alone: the tree
+    for its bytes, complete — no record is consulted (STORE.md §2, the law)."""
     if spec.step_path is None:
         return False
+    if spec.source != "generated":
+        from cadgen.catalog import result_tree_for
+        from cadgen.store.trees import tree_complete
+
+        tree = result_tree_for(spec.entry_path) if spec.entry_path is not None else None
+        return bool(tree) and tree_complete(tree)
     from cadgen.store.gate import stale
 
     model = _model_for_spec(spec)
-    if model is None:
-        return False
-    verdict = stale(model)
-    if spec.source == "generated":
-        return not verdict.stale
-    clause4 = next((c for c in verdict.clauses if c.get("clause") == 4), None)
-    clause1 = next((c for c in verdict.clauses if c.get("clause") == 1), None)
-    return bool(clause1 and not clause1.get("stale") and clause4 and not clause4.get("stale"))
+    return model is not None and not stale(model).stale
 
 
 def generate_step_targets(
@@ -1472,47 +1482,3 @@ def generate_dxf_targets(
         )
     logger.total()
     return 0
-
-
-def run_tool_cli(
-    argv: Sequence[str] | None,
-    *,
-    prog: str,
-    description: str,
-    action: Callable[..., int],
-    target_help: str | None = None,
-    output_help: str | None = None,
-) -> int:
-    parser = argparse.ArgumentParser(prog=prog, description=description)
-    parser.add_argument(
-        "targets",
-        nargs="+",
-        help=target_help or "Explicit Python generator or STEP/STP file path to generate.",
-    )
-    if output_help is not None:
-        parser.add_argument("-o", "--output", metavar="PATH", help=output_help)
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Show detailed progress and timing information.",
-    )
-    args = parser.parse_args(list(argv) if argv is not None else None)
-    if output_help is not None:
-        if args.output is not None:
-            if targets_include_output_pairs(args.targets):
-                parser.error("--output cannot be combined with SOURCE=OUTPUT targets")
-            if len(args.targets) != 1:
-                parser.error("--output can only be used with exactly one target")
-        return action(args.targets, output=args.output, verbose=bool(args.verbose))
-    return action(args.targets, verbose=bool(args.verbose))
-
-
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="CAD generation support library.")
-    parser.parse_args(list(argv) if argv is not None else None)
-    parser.error("cadgen.generation is a library module.")
-    return 2
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

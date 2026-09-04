@@ -18,7 +18,9 @@ from pathlib import Path
 # (sync-tested). It is part of the MESH index key, not a store salt.
 MESH_TESSELLATION_VERSION = 1
 
-INDEX_KINDS = ("model", "document", "component", "op", "mesh")
+# "document" is the ARTIFACT side (sha256 of a file's bytes → its tree); every
+# other kind is the code/dependency side. STORE.md §2, the law.
+INDEX_KINDS = ("model", "document", "output", "component", "op", "mesh")
 
 
 def store_root() -> Path:

@@ -58,7 +58,7 @@ def seed_result(
     /``kind``/``entryKind`` in the flat shape; components named there get the
     same ``surf`` bytes unless the entry already names an object."""
     from cadgen.store.objects import put_object
-    from cadgen.store.records import note_document, write_record
+    from cadgen.store.records import note_document_tree, note_output, write_record
     from cadgen.store.trees import put_tree
 
     document = Path(document)
@@ -117,8 +117,12 @@ def seed_result(
     if sidecar:
         record.update(sidecar)
     write_record(owner, record)
+    # Artifact side: these bytes → this tree (what every reader consults).
+    # Code side: which model wrote the path (the badge's question only).
+    if sha:
+        note_document_tree(sha, tree_hash, kind=str(tree.get("kind") or kind))
     if model is not None:
-        note_document(document, owner)
+        note_output(document, owner)
     return tree_hash
 
 
