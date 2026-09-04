@@ -293,7 +293,7 @@ class ClosureBoundaryRule(StoreCase):
         handlebar = self.root / "handlebar.py"
         handlebar.write_text(handlebar.read_text(encoding="utf-8").replace("_TOP[0] - 16.0", "_TOP[0] - 21.0"), encoding="utf-8")
         self.assertEqual(2, self.stale_clause(mirror))
-        self.assertIn("constant changed: handlebar.py:MIRROR_MOUNT_LEFT", stale(mirror).reason())
+        self.assertIn("constant changed: MIRROR_MOUNT_LEFT in handlebar.py", stale(mirror).reason())
 
     def test_an_unhashable_constant_is_a_source_edge(self) -> None:
         from cadgen.store.closure import static_closure

@@ -344,7 +344,7 @@ clause by clause and why:
 
 ```text
 model   /abs/src/frame.py
-verdict STALE  (3)
+verdict STALE  (child result moved: standoff.py)
   [ok] 1 record present
   [ok] 2 closure 1 files unchanged
   [x] 3 children (2)

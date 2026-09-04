@@ -20,7 +20,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from cadgen.store.closure import changed_constant, current_closure_hash
 from cadgen.store.records import read_record
@@ -37,9 +37,26 @@ class Verdict:
     closure: str | None = None
 
     def reason(self) -> str:
+        """The first stale clause as a phrase: ``no record``, ``closure changed: <file>``,
+        ``constant changed: <NAME> in <file>``, ``child stale: <child.py>``,
+        ``child result moved: <child.py>``, ``tree or components missing``,
+        ``never written: <path>`` / ``output missing: <path>`` / ``output changed: <path>``."""
         for clause in self.clauses:
-            if clause.get("stale"):
-                return str(clause.get("why") or clause.get("clause"))
+            if not clause.get("stale"):
+                continue
+            number = clause.get("clause")
+            if number == 3:
+                for child in clause.get("children") or []:
+                    if child.get("stale"):
+                        name = Path(str(child.get("model") or "")).name or "?"
+                        return f"{child.get('why') or 'child stale'}: {name}"
+            if number == 5:
+                for output in clause.get("outputs") or []:
+                    if output.get("stale"):
+                        why = str(output.get("why") or "output changed")
+                        label = {"missing": "output missing", "changed": "output changed"}.get(why, why)
+                        return f"{label}: {output.get('path')}"
+            return str(clause.get("why") or f"clause {number}")
         return "current"
 
 
@@ -91,7 +108,7 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
             {
                 "clause": 2,
                 "stale": True,
-                "why": "a closure file is missing" if now is None else "source changed",
+                "why": _closure_why(Path(key), closure, now),
                 "recorded": recorded_hash,
                 "current": now,
             }
@@ -102,7 +119,8 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
         # a value, not as that file's bytes (the file itself is not in the closure).
         constant = changed_constant(Path(key), record.get("constants") or {})
         if constant is not None:
-            clauses.append({"clause": 2, "stale": True, "why": f"constant changed: {constant}", "constant": constant})
+            rel, _, name = str(constant).rpartition(":")
+            clauses.append({"clause": 2, "stale": True, "why": f"constant changed: {name} in {rel}", "constant": constant})
             verdict.stale = True
         else:
             clauses.append({"clause": 2, "stale": False, "files": len(files)})
@@ -123,7 +141,7 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
                 "model": child_model,
                 "stale": child_stale,
                 "why": (
-                    "child is stale" if child_verdict is None or child_verdict.stale
+                    "child stale" if child_verdict is None or child_verdict.stale
                     else "child result moved" if moved else None
                 ),
                 "pinned": pinned,
@@ -140,7 +158,7 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
     else:
         tree = str(record.get("tree") or "")
         complete = bool(tree) and tree_complete(tree)
-    clauses.append({"clause": 4, "stale": not complete, "why": None if complete else "tree or component object missing", "tree": tree or None})
+    clauses.append({"clause": 4, "stale": not complete, "why": None if complete else "tree or components missing", "tree": tree or None})
     if not complete:
         verdict.stale = True
 
@@ -155,6 +173,17 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
             verdict.stale = True
     clauses.append({"clause": 5, "stale": any(c["stale"] for c in output_clauses), "outputs": output_clauses})
     return verdict
+
+
+def _closure_why(script: Path, closure: Mapping[str, Any], now: str | None) -> str:
+    """Clause 2's phrase: name the files that moved when the record can say."""
+    from cadgen.store.closure import changed_closure_files
+
+    changed = changed_closure_files(script, closure.get("shas") or {})
+    if now is None:
+        missing = [rel for rel in changed if not (Path(script).resolve().parent / rel).exists()]
+        return f"closure file missing: {', '.join(missing or changed)}" if (missing or changed) else "closure file missing"
+    return f"closure changed: {', '.join(changed)}" if changed else "closure changed"
 
 
 def is_current(model: Path | str) -> bool:

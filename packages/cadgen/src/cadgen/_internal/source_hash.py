@@ -123,6 +123,9 @@ class PythonSourceClosure:
     # literals imported from model files, tracked by value instead of by file
     # (``cadgen.store.closure``).
     constants: dict[str, dict[str, str]] = field(default_factory=dict)
+    # relative path -> that file's content hash, so a stale verdict can NAME the
+    # file that changed instead of only reporting that the digest moved.
+    file_hashes: dict[str, str] = field(default_factory=dict)
 
 
 def _is_within(path: Path, root: Path) -> bool:
@@ -613,6 +616,7 @@ def closure_for_files(script_path: Path, files: object, *, base: Path) -> Python
     return PythonSourceClosure(
         closure_hash=_closure_hash_for_pairs(pairs),
         files=tuple(sorted(rel for rel, _ in pairs)),
+        file_hashes=dict(pairs),
     )
 
 

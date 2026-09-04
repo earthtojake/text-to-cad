@@ -568,6 +568,7 @@ def _generate_part_outputs(
         # The record. Publish rule: never replace a current record with a stale one.
         closure_hash = str(getattr(scene, "source_closure_hash", "") or "")
         closure_files = list(getattr(scene, "source_closure_files", ()) or ())
+        closure_shas = dict(getattr(scene, "source_closure_file_hashes", None) or {})
         closure_static = False
         reemit_source_hash = getattr(scene, "reemit_source_hash", None)
         if not generated:
@@ -576,6 +577,7 @@ def _generate_part_outputs(
 
             step_hash = str(getattr(scene, "step_hash", "") or "") or step_file_hash(spec.step_path)
             closure_files = [spec.step_path.name]
+            closure_shas = {spec.step_path.name: step_hash}
             closure_hash = _closure_hash([(spec.step_path.name, step_hash)])
         elif reemit_source_hash and not closure_hash:
             # A re-emitted document (`cadgen step build IN OUT`): its source is
@@ -607,7 +609,7 @@ def _generate_part_outputs(
             "entryKind": spec.kind,
             "sourceKind": "step" if (not generated or reemit_source_hash) else "python",
             "tree": tree_hash,
-            "closure": {"hash": closure_hash, "files": closure_files, "static": closure_static},
+            "closure": {"hash": closure_hash, "files": closure_files, "shas": closure_shas, "static": closure_static},
             # Literals imported from model files, tracked by VALUE (gate clause 2).
             "constants": dict(getattr(scene, "source_closure_constants", None) or {}) if generated else {},
             "children": list(getattr(scene, "store_children", None) or []),

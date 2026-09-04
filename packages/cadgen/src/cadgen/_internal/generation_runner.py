@@ -431,7 +431,12 @@ def _write_drawing_record(
         "entryKind": "drawing",
         "sourceKind": "python",
         "tree": None,
-        "closure": {"hash": closure_hash, "files": closure_files, "static": False},
+        "closure": {
+            "hash": closure_hash,
+            "files": closure_files,
+            "shas": dict(getattr(source_closure, "file_hashes", None) or {}),
+            "static": False,
+        },
         "constants": dict(getattr(source_closure, "constants", None) or {}),
         "children": [{"model": str(child), "tree": tree} for child, tree in child_trees],
         "outputs": {str(written): {"sha256": hashlib.sha256(written.read_bytes()).hexdigest()}},
@@ -744,6 +749,7 @@ def _run_script_generator_body(
     if generated_scene is not None and source_closure is not None:
         generated_scene.source_closure_hash = source_closure.closure_hash
         generated_scene.source_closure_files = source_closure.files
+        generated_scene.source_closure_file_hashes = dict(getattr(source_closure, "file_hashes", None) or {})
         generated_scene.source_closure_constants = dict(source_closure.constants)
     if model_format == "dxf":
         written = spec.dxf_path

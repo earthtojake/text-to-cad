@@ -486,6 +486,23 @@ def build_closure(
     )
 
 
+def changed_closure_files(script: Path, shas: Mapping[str, str]) -> list[str]:
+    """The recorded closure files whose content hash differs now (a missing file
+    counts), in recorded order. Empty when nothing moved -- or when the record
+    carries no per-file hashes, in which case the caller can only say "changed"."""
+    base = Path(script).resolve().parent
+    changed: list[str] = []
+    for rel, recorded in shas.items():
+        resolved = _resolve_relative(str(rel), base)
+        try:
+            now = _semantic_source_hash(resolved) if resolved is not None else None
+        except OSError:
+            now = None
+        if now != recorded:
+            changed.append(str(rel))
+    return changed
+
+
 def current_closure_hash(script: Path, files: Iterable[str]) -> str | None:
     """Re-hash a recorded file list as it is on disk now; None if a file is gone."""
     base = Path(script).resolve().parent

@@ -497,7 +497,12 @@ executors. After publishing, the root runs its gate once more and says
 - Which record: `index/model/<sha256(resolved script path)>` —
   `cadgen store why <model.py>` prints it, the gate's verdict clause by
   clause (with each child's pinned vs current tree), the closure files and
-  the tree's links.
+  the tree's links. The verdict line names the first stale clause as a
+  phrase: `no record`, `closure changed: <file>` (the record keeps each
+  closure file's hash under `closure.shas`), `constant changed: <NAME> in
+  <file>`, `child stale: <child.py>`, `child result moved: <child.py>`,
+  `tree or components missing`, `never written: <path>`, `output missing:
+  <path>`, `output changed: <path>`.
 - Resolve a tree: `cadgen.store.trees.get_tree(hash)`; flattened with
   `flatten(hash)`. Components: `tree["components"]`, each with its `surf` and
   `brep` object hashes under `objects/ab/cdef…`.
