@@ -97,9 +97,9 @@ class ReadPerCall(unittest.TestCase):
         previous = os.environ.get("CADGEN_CACHE_DIR")
         try:
             os.environ["CADGEN_CACHE_DIR"] = "/tmp/first"
-            self.assertEqual(store_paths.cadgen_cache_root_dir(), "/tmp/first")
+            self.assertEqual(Path(store_paths.cadgen_cache_root_dir()), Path("/tmp/first"))
             os.environ["CADGEN_CACHE_DIR"] = "/tmp/second"
-            self.assertEqual(store_paths.cadgen_cache_root_dir(), "/tmp/second")
+            self.assertEqual(Path(store_paths.cadgen_cache_root_dir()), Path("/tmp/second"))
         finally:
             if previous is None:
                 os.environ.pop("CADGEN_CACHE_DIR", None)

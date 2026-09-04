@@ -91,7 +91,7 @@ class TransientExecutor(unittest.TestCase):
         self.assertEqual(job.wait(timeout=300), 0, job.output())
         states = [(e["model"], e["state"]) for e in self.events]
         self.assertEqual(states[0], (str(model), "submitted"))
-        self.assertEqual(self.events[0]["parent"], "/models/parent.py")
+        self.assertEqual(Path(self.events[0]["parent"]), Path("/models/parent.py"))
         self.assertIn((str(model), "building"), states)
         self.assertEqual(states[-1], (str(model), "done"))
         roots = {e.get("root") for e in self.events[1:]}
