@@ -13,7 +13,7 @@ set -euo pipefail
 # code 0).
 #
 # So: build the wheel, list it, and require the paths to be present. The viewer client
-# is NOT committed (scripts/bundle/skills/bundle-cadgen-runtime.sh --viewer writes it
+# is NOT committed (scripts/bundle/cadgen-runtime.sh --viewer writes it
 # right before the build), so this is the only gate proving it made the wheel.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -127,7 +127,7 @@ if [ -n "$missing" ]; then
   echo "globs behave differently across setuptools versions; if whole directories are" >&2
   echo "absent, switch to include-package-data + a MANIFEST.in with:" >&2
   echo "  graft src/cadgen/_runtime" >&2
-  echo "Assets are built by: scripts/bundle/bundle-skill.sh cadgen-runtime" >&2
+  echo "Assets are built by: scripts/bundle/bundle.sh" >&2
   exit 1
 fi
 

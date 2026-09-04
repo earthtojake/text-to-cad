@@ -27,7 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 VIEWER_DIR = REPO_ROOT / "apps" / "viewer"
 # The resolver lives with the viewer client's bundle stage: the cadgen runtime
 # bundler builds the client into the wheel (--viewer), so it owns the choice.
-VIEWER_BUNDLER = REPO_ROOT / "scripts" / "bundle" / "skills" / "bundle-cadgen-runtime.sh"
+VIEWER_BUNDLER = REPO_ROOT / "scripts" / "bundle" / "cadgen-runtime.sh"
 CADJS_RUNNER = REPO_ROOT / "packages" / "cadgen-js" / "scripts" / "run-tests.mjs"
 TEST_RUNNERS = (
     CADJS_RUNNER,

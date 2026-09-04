@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # Builds the self-contained headless render runtime (render.html + snapshot-render.js)
-# that a skill's snapshot CLI drives with Playwright.
+# into the packaged runtime (packages/cadgen/src/cadgen/_runtime/browser). Sourced by
+# scripts/bundle/cadgen-runtime.sh.
 #
-# Shared because two skills now render: the CAD skill renders STEP models and meshes, and
-# the DXF skill renders a drawing's baked flat pattern. Both drive the SAME browser bundle,
-# built from the same cadgen-js entrypoint the CAD Viewer uses, so the picture a snapshot
-# produces matches the viewport. A skill may not import another skill's files, so each gets
-# its own generated copy rather than reaching across.
+# The snapshot CLI drives this bundle in a Playwright page. It is built from the same
+# cadgen-js entrypoint the CAD Viewer uses, so the picture a snapshot produces matches the
+# viewport; STEP models, meshes and drawings all render through it.
 #
 # Callers set SNAPSHOT_RUNTIME_BUILD_DEPS_DIR (npm scratch) before sourcing, or accept the
 # default. Everything else is passed per call.

@@ -1,22 +1,17 @@
 #!/usr/bin/env bash
-# Shared helpers for shipping cadgen's Node builders inside a skill runtime.
+# Shared helpers for bundling cadgen's Node builders into the packaged runtime
+# (packages/cadgen/src/cadgen/_runtime/node). Sourced by scripts/bundle/cadgen-runtime.sh.
 #
-# cadgen builds the DXF render package and the mesh exports by spawning a Node child
-# (packages/cadgen/src/cadgen/_internal/node_runtime.py). The builders themselves live in
-# packages/cadgen-js/bin and import three and meshoptimizer -- a dependency GRAPH,
-# not just a file. A published skill ships no node_modules (design
-# §4.5, "Node the binary is available; the dependency graph is not"), so the builders are
-# esbuild-bundled into ONE self-contained --platform=node file each, exactly as
-# scripts/bundle/lib/snapshot_runtime.sh does for snapshot-render.js.
-#
-# The outputs land in cadgen's packaged runtime, which is the path
-# `node_builder_script()` already derives (node_package_root() is cadgen's own
-# parents[4] -- packages/ in the dev checkout, <skill>/scripts/packages/ in a vendored
-# runtime). Nothing in the Python side changes, and the dev checkout keeps resolving the
-# real packages/cadgen-js/bin sources through the cadgen symlink.
+# cadgen bakes the DXF mesh and the mesh exports by spawning a Node child
+# (packages/cadgen/src/cadgen/_internal/node_runtime.py). The builders live in
+# packages/cadgen-js/bin and import three and meshoptimizer -- a dependency GRAPH, not just
+# a file -- and the wheel ships no node_modules, so each builder is esbuild-bundled into ONE
+# self-contained --platform=node file, exactly as snapshot_runtime.sh does for the browser
+# bundle. cadgen.assets resolves the result inside the distribution; a checkout resolves
+# the real packages/cadgen-js sources instead.
 #
 # Source it after setting BUNDLE_REPO_ROOT, then call bundle_node_builders /
-# check_node_builders with the entry files the skill's builders need.
+# check_node_builders with the builder entry files.
 #
 # shellcheck shell=bash
 

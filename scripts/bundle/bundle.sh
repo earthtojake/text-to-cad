@@ -5,18 +5,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 MODE="write"
-SKILL_ARGS=()
+RUNTIME_ARGS=()
 
 usage() {
   cat <<'EOF'
 Usage:
   scripts/bundle/bundle.sh [--check] [--clean]
 
-Universal generated-runtime bundle wrapper.
+The one bundle entry point: stamps derived version metadata from VERSION, then builds
+cadgen's packaged runtime (packages/cadgen/src/cadgen/_runtime) with
+scripts/bundle/cadgen-runtime.sh.
 
 Options:
-  --check     Bundle into tmp/ and fail if checked-in outputs are stale.
-  --clean     Remove temporary bundle/check directories first.
+  --check     Build into tmp/ and fail if the committed outputs are stale.
+  --clean     Remove temporary build/check directories first.
   -h, --help  Show this help.
 EOF
 }
@@ -25,10 +27,10 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --check)
       MODE="check"
-      SKILL_ARGS+=("--check")
+      RUNTIME_ARGS+=("--check")
       ;;
     --clean)
-      SKILL_ARGS+=("--clean")
+      RUNTIME_ARGS+=("--clean")
       ;;
     -h|--help)
       usage
@@ -48,21 +50,14 @@ cd "$REPO_ROOT"
 if [ "$MODE" = "check" ]; then
   echo "Checking derived version metadata..."
   node "$REPO_ROOT/scripts/release/sync-version.mjs" --check
+  echo "Checking the packaged runtime..."
 else
   echo "Syncing derived version metadata..."
   node "$REPO_ROOT/scripts/release/sync-version.mjs"
+  echo "Building the packaged runtime..."
 fi
 
-if [ "$MODE" = "check" ]; then
-  echo "Checking bundle-capable skill outputs..."
-else
-  echo "Bundling skill outputs..."
-fi
-if [ "${#SKILL_ARGS[@]}" -gt 0 ]; then
-  "$SCRIPT_DIR/bundle-skill.sh" --all "${SKILL_ARGS[@]}"
-else
-  "$SCRIPT_DIR/bundle-skill.sh" --all
-fi
+"$SCRIPT_DIR/cadgen-runtime.sh" "${RUNTIME_ARGS[@]+"${RUNTIME_ARGS[@]}"}"
 
 if [ "$MODE" = "check" ]; then
   echo "All bundle outputs are up to date."
