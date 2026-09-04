@@ -78,7 +78,11 @@ Two mechanical rules:
 
 Because scripts sit directly in `src/`, imports need no setup: python puts the
 script's own directory — `src/` — on `sys.path`, so shared code and sibling
-models import directly, from any working directory:
+models import directly, from any working directory. A model may share its stem
+with the `lib/` module it wraps (`src/body.py` over `lib/body.py`); the two are
+different modules (`body` and `lib.body`), so alias the import — `from lib
+import body as body_lib` — rather than let the module name shadow the model
+function you are about to define:
 
 ```python
 from lib import fasteners            # a helper module: any edit to it rebuilds this model
