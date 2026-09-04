@@ -29,7 +29,6 @@ __all__ = [
     "cadgen_cache_root_dir",
     "component_object_present",
     "build_scope",
-    "document_current",
     "record_for",
     "result_descriptor",
     "result_tree",
@@ -76,22 +75,8 @@ def record_for(file_path) -> dict | None:
     return record_for_document(Path(str(file_path)))
 
 
-def document_current(file_path) -> bool:
-    """Gate clause 5 for the one output the viewer shows: the document's bytes
-    are the ones its record listed. A record that lists no such output has
-    nothing to contradict."""
-    record = record_for(file_path)
-    if record is None:
-        return False
-    outputs = record.get("outputs") or {}
-    entry = outputs.get(str(Path(str(file_path)).resolve())) if isinstance(outputs, dict) else None
-    if not isinstance(entry, dict) or not entry.get("sha256"):
-        return True
-    return artifact_file_hash(file_path) == entry.get("sha256")
-
-
 def result_tree(file_path) -> str | None:
-    """The tree hash a document's record points at, or ``None`` (no record, or
+    """The tree for a document's BYTES (``index/document``), or ``None`` (never built, or
     the tree object is gone)."""
     return catalog.result_tree_for(Path(str(file_path)))
 

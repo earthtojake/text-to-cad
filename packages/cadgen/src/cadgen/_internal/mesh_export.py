@@ -167,6 +167,15 @@ def record_mesh_export(
         write_record(model, record)
     except Exception:  # noqa: BLE001 - a failed record only costs a re-export
         pass
+    # The artifact-side ledger too, so a bare door on these same bytes is a no-op.
+    record_document_mesh(
+        output_path,
+        document_hash=document_hash,
+        fmt=fmt,
+        mesh_tolerance=mesh_tolerance,
+        mesh_angular_tolerance=mesh_angular_tolerance,
+        pose_values=pose_values,
+    )
 
 
 def mesh_variant_key(

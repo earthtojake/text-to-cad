@@ -494,9 +494,14 @@ def _export_mesh_jobs(
                 mesh_angular_tolerance=job.mesh_angular_tolerance,
                 pose_values=job.pose_values,
             )
-            if model is not None:
-                return mesh_export_current(job.out, model=model, document_hash=document_hash, **variant)
-            return document_mesh_current(job.out, document_hash=document_hash, fmt=job.fmt, **variant)
+            by_document = document_mesh_current(job.out, document_hash=document_hash, fmt=job.fmt, **variant)
+            if model is None:
+                return by_document
+            # A script run also honours what a bare door already cut from these
+            # bytes (and notes it in its record so clause 5 sees the output).
+            if by_document and not mesh_export_current(job.out, model=model, document_hash=document_hash, **variant):
+                record_mesh_export(job.out, model=model, document_hash=document_hash, fmt=job.fmt, **variant)
+            return by_document or mesh_export_current(job.out, model=model, document_hash=document_hash, **variant)
 
         pending = [job for job in jobs if force or not _current(job)]
         if not pending:
@@ -514,6 +519,8 @@ def _export_mesh_jobs(
                     mesh_angular_tolerance=job.mesh_angular_tolerance,
                     pose_values=job.pose_values,
                 )
+                # A script run ledgers on its record (which also notes the document
+                # entry); a bare door ledgers on the document entry alone.
                 if model is not None:
                     record_mesh_export(job.out, model=model, document_hash=document_hash, **variant)
                 else:

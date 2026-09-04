@@ -32,7 +32,6 @@ from .backend import require_contained
 from .store_paths import (
     SOURCE_SIDECAR_SCHEMA_VERSION,
     component_object_present,
-    document_current,
     record_for,
     result_descriptor,
     result_tree,
@@ -221,9 +220,9 @@ def _validate_step(step_path: str) -> dict:
     """
     generated = is_generated_document(step_path)
     tree = result_tree(step_path)
-    if tree is None or not document_current(step_path):
-        # No result for THESE bytes: never built, its objects collected, or the
-        # document edited since its record was written.
+    if tree is None:
+        # No result for THESE bytes: never built, or its objects collected (the
+        # lookup is by the bytes themselves, so an edited document simply misses).
         return {"ok": False, "code": "missing_glb", "tree": None, "generated": generated}
     descriptor = result_descriptor(tree)
     if descriptor is None:

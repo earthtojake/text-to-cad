@@ -52,8 +52,9 @@ process state, not content, and lives in the daemon's state directory (§7).
 `index/output`, `index/op`, `index/mesh`, `index/component` are the **code
 side**: what source produced it, what it depended on, what may be reused.
 `index/document` is the one artifact-side index: `sha256(file bytes)` → the
-tree describing those bytes (plus a mesh ledger for the bare mesh doors,
-keyed by format × tolerances × pose). Three properties, each enforced by a
+tree describing those bytes (plus a mesh ledger keyed by format × tolerances
+× pose — the bare mesh doors read and write it, and a script run notes its
+declared meshes there too, so the two front doors never redo each other's work). Three properties, each enforced by a
 test:
 
 1. **No object references source.** No tree or component carries a path, a

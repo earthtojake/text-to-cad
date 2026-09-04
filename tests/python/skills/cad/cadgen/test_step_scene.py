@@ -117,6 +117,9 @@ class StepSceneSelectorArtifactTests(unittest.TestCase):
                 {"sourceKind": "step", "entryKind": "assembly", "tree": built["tree"], "closure": {"hash": step_hash, "files": [], "static": True}, "children": [], "outputs": {}, "stepHash": step_hash},
             )
 
+            from cadgen.store.records import note_document_tree
+
+            note_document_tree(step_hash, built["tree"])  # the artifact side: these bytes -> this tree
             restored = scene_from_render_package(step_path, step_hash=step_hash)
             self.assertIsNotNone(restored)
             assert restored is not None
