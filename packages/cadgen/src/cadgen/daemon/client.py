@@ -53,12 +53,20 @@ _TIMED_OUT = object()
 # cache for every other project on the machine until the daemon recycled).
 # They travel with every request and the worker applies them per JOB —
 # a name absent here means "unset for this job" (see worker._apply_request_env).
-FORWARDED_ENV_VARS = ("CADGEN_CACHE_DIR", "XDG_CACHE_HOME", "LOCALAPPDATA")
+# PYTHONPATH rides along too: it is how a project declares an import root beyond the
+# script's own folder (``PYTHONPATH=src``), and a build must resolve imports exactly as
+# ``python script.py`` run by the client would. Entries are absolutized against the
+# client's cwd, because the worker runs elsewhere.
+FORWARDED_ENV_VARS = ("CADGEN_CACHE_DIR", "XDG_CACHE_HOME", "LOCALAPPDATA", "PYTHONPATH")
 
 
 def forwarded_env() -> dict[str, str]:
-    """The requesting process's cache-resolution environment, for the payload."""
-    return {name: os.environ[name] for name in FORWARDED_ENV_VARS if name in os.environ}
+    """The requesting process's environment that a job must see, for the payload."""
+    env = {name: os.environ[name] for name in FORWARDED_ENV_VARS if name in os.environ}
+    if "PYTHONPATH" in env:
+        entries = [os.path.abspath(e) for e in env["PYTHONPATH"].split(os.pathsep) if e]
+        env["PYTHONPATH"] = os.pathsep.join(entries)
+    return env
 
 
 def daemon_supported() -> bool:

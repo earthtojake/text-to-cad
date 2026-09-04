@@ -192,8 +192,8 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   "<sha256 of the literal's canonical repr>"}}` — every literal the model
   took from a model file by value. Empty for most models. The gate's clause
   2 re-hashes each value by importing the model file under a **kernel-guarded
-  loader** (`cadgen.store.closure.module_constant_hashes`: the script's own
-  roots on `sys.path`, a private module name, the bytes on disk compiled
+  loader** (`cadgen.store.closure.module_constant_hashes`: the script's folder
+  and the caller's `PYTHONPATH` on `sys.path`, a private module name, the bytes on disk compiled
   fresh) — a model file whose import pulls the kernel, or fails, reads as
   stale rather than as unchanged. This is why a model file's top level must
   stay kernel-free (`from cadgen import build123d as bd`, no `bd.` in module

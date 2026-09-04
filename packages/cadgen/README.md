@@ -127,6 +127,15 @@ kind, not a required one), and rewrites declared exports that drifted. Every
 CLI takes documents, resolves them by their bytes, and compiles a missing
 tree from those bytes as a job in the build pool — never from a script.
 
+A script is a program, and cadgen runs it wherever it lives. The import path
+inside a build is exactly `python script.py`'s — the script's own folder, then
+the caller's `PYTHONPATH` — and nothing cadgen adds or infers from directory
+names. Project layout (`src/`, `lib/`, format folders) is a convention of the
+skills, never a fact cadgen knows; a project that wants an import root beyond
+the script's folder declares it the standard Python way (`PYTHONPATH=src`).
+*Pressure-test*: move a project's folders around and rebuild; cadgen must not
+care, only the project's imports may.
+
 ### 8. No backwards compatibility
 
 Hard cutovers only. Every retired surface fails loudly with a teaching
