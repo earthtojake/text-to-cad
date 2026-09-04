@@ -26,6 +26,7 @@ needs a vendor STEP under `STEP/imported/`; both fixtures are provided here.
 from __future__ import annotations
 
 import ast
+import concurrent.futures
 import os
 import re
 import shutil
@@ -209,9 +210,18 @@ class DocumentedModelsBuild(unittest.TestCase):
             target = self.project / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(source, encoding="utf-8")
+        # The documented models are independent of one another (the one child they
+        # compose, link_pin, is written above), so their cold builds run side by side;
+        # each is its own process with its own kernel import, and the store settles
+        # concurrent builds by the publish rule.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            first_runs = dict(zip((relative for _, relative, _ in blocks.models),
+                                  pool.map(self.run_script, (relative for _, relative, _ in blocks.models))))
+            second_runs = dict(zip((relative for _, relative, _ in blocks.models),
+                                   pool.map(self.run_script, (relative for _, relative, _ in blocks.models))))
         for document, relative, source in blocks.models:
             with self.subTest(document=document, model=relative):
-                first = self.run_script(relative)
+                first = first_runs[relative]
                 self.assertTrue(first.stdout.startswith("built "), f"{relative} did not report a build:\n{first.stdout}")
                 script_dir = (self.project / relative).parent
                 # Declarations only: an `out=` quoted in a trailing comment is prose.
@@ -226,7 +236,7 @@ class DocumentedModelsBuild(unittest.TestCase):
                     output = (script_dir / out).resolve()
                     self.assertTrue(output.is_file(), f"{relative} declared {out} but did not write it")
                     self.assertGreater(output.stat().st_size, 0)
-                second = self.run_script(relative)
+                second = second_runs[relative]
                 self.assertTrue(second.stdout.startswith("current "), f"{relative} was not a no-op on rerun:\n{second.stdout}")
 
     def test_fragments_parse(self) -> None:

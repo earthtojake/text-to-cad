@@ -46,6 +46,16 @@ run_python_unittest() {
   # dotted component only, so the several test_cli.py files here all fail as
   # `_FailedTest.test_cli`. unittest_files.py loads each file under its full dotted
   # path relative to the repo root and names an import failure by that path + file.
+  #
+  # Each test FILE runs in its own interpreter with its own fresh store, CADGEN_TEST_JOBS
+  # at a time (default: the machine's cores). Modules cannot see one another's builds,
+  # and a module that spawns workers or a daemon does not hold the rest of the suite.
   PYTHONPATH="$python_path${PYTHONPATH:+:$PYTHONPATH}" \
-    "$PYTHON_BIN" "$SCRIPT_DIR/unittest_files.py" --top "$REPO_ROOT" "${test_files[@]}"
+    "$PYTHON_BIN" "$SCRIPT_DIR/unittest_files.py" --top "$REPO_ROOT" \
+      --jobs "${CADGEN_TEST_JOBS:-$(test_jobs)}" "${test_files[@]}"
+}
+
+test_jobs() {
+  # The core count, portably; one job when it cannot be read.
+  "$PYTHON_BIN" -c 'import os; print(os.cpu_count() or 1)' 2>/dev/null || echo 1
 }

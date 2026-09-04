@@ -178,7 +178,7 @@ class SnapshotCliTests(unittest.TestCase):
     def test_shortcut_job_shape_stays_owned_by_python_cli(self) -> None:
         job = job_from_argv(
             [
-                "models/examples/STEP/cylindrical_cap.step",
+                "parts/STEP/cylindrical_cap.step",
                 "tmp/cap.png",
                 "--display",
                 "wireframe",
@@ -190,7 +190,7 @@ class SnapshotCliTests(unittest.TestCase):
         # TARGET and OUT are both Path parameters on the generated parser, so
         # they reach the job in the NATIVE spelling; build the expectations the
         # same way rather than hardcoding the POSIX separator.
-        self.assertEqual(job["input"], str(Path("models/examples/STEP/cylindrical_cap.step")))
+        self.assertEqual(job["input"], str(Path("parts/STEP/cylindrical_cap.step")))
         self.assertNotIn("workspaceRoot", job)
         self.assertNotIn("rootDir", job)
         self.assertEqual(job["outputs"][0]["path"], str(Path("tmp/cap.png")))
@@ -259,7 +259,7 @@ class SnapshotCliTests(unittest.TestCase):
         ]:
             job = job_from_argv(
                 [
-                    "models/examples/STEP/cylindrical_cap.step",
+                    "parts/STEP/cylindrical_cap.step",
                     "tmp/cap.png",
                     "--display",
                     raw_mode,
@@ -270,7 +270,7 @@ class SnapshotCliTests(unittest.TestCase):
     def test_display_json_accepts_exploded_settings(self) -> None:
         job = job_from_argv(
             [
-                "models/examples/STEP/cylindrical_cap.step",
+                "parts/STEP/cylindrical_cap.step",
                 "tmp/cap.png",
                 "--display",
                 '{"projection":"perspective","mode":"rendered","exploded":{"enabled":true,"amount":0.7}}',
@@ -288,7 +288,7 @@ class SnapshotCliTests(unittest.TestCase):
     def _display_job(self, display_json: str):
         return job_from_argv(
             [
-                "models/examples/STEP/cylindrical_cap.step",
+                "parts/STEP/cylindrical_cap.step",
                 "tmp/cap.png",
                 "--display",
                 display_json,
@@ -330,7 +330,7 @@ class SnapshotCliTests(unittest.TestCase):
     def test_edge_settings_belong_to_display_json(self) -> None:
         job = job_from_argv(
             [
-                "models/examples/STEP/cylindrical_cap.step",
+                "parts/STEP/cylindrical_cap.step",
                 "tmp/cap.png",
                 "--display",
                 '{"edges":{"enabled":false,"color":"#123456"}}',
@@ -341,7 +341,7 @@ class SnapshotCliTests(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "unsupported keys: edges"):
             job_from_argv(
                 [
-                    "models/examples/STEP/cylindrical_cap.step",
+                    "parts/STEP/cylindrical_cap.step",
                     "tmp/cap.png",
                     "--theme",
                     '{"edges":{"enabled":false}}',
@@ -355,7 +355,7 @@ class SnapshotCliTests(unittest.TestCase):
         # --theme without hand-stripping keys first.
         job = job_from_argv(
             [
-                "models/examples/STEP/cylindrical_cap.step",
+                "parts/STEP/cylindrical_cap.step",
                 "tmp/cap.png",
                 "--theme",
                 json.dumps(
@@ -378,7 +378,7 @@ class SnapshotCliTests(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "Unsupported display mode"):
             job_from_argv(
                 [
-                    "models/examples/STEP/cylindrical_cap.step",
+                    "parts/STEP/cylindrical_cap.step",
                     "tmp/cap.png",
                     "--display",
                     "mist",
@@ -389,7 +389,7 @@ class SnapshotCliTests(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "Unsupported display mode"):
             job_from_argv(
                 [
-                    "models/examples/STEP/cylindrical_cap.step",
+                    "parts/STEP/cylindrical_cap.step",
                     "tmp/cap.png",
                     "--display",
                     "exploded",
@@ -743,7 +743,7 @@ class SnapshotCliTests(unittest.TestCase):
     def test_debug_shortcut_flag_sets_job_debug_field(self) -> None:
         job = job_from_argv(
             [
-                "models/examples/STEP/cylindrical_cap.step",
+                "parts/STEP/cylindrical_cap.step",
                 "tmp/cap.png",
                 "--debug",
             ]

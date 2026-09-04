@@ -22,7 +22,69 @@ from pathlib import Path
 from tests.python.support.paths import repo_path
 
 REPO = Path(repo_path("."))
-PART = "models/examples/src/cylindrical_spacer_sleeve.py"
+
+# The fixtures are the test's own: a box part and a rectangle drawing written into a
+# temporary project, so the run reads nothing under models/ and leaves nothing there.
+PART_SOURCE = """\
+from cadgen import step
+from cadgen import build123d as bd
+
+
+@step(out="../STEP/part.step")
+def part():
+    return bd.Box(10.0, 6.0, 2.0)
+
+
+if __name__ == "__main__":
+    part()
+"""
+
+DRAWING_SOURCE = """\
+from cadgen import dxf
+from cadgen import build123d as bd
+
+
+@dxf(out="../DXF/plate.dxf")
+def plate():
+    return bd.Rectangle(30.0, 20.0)
+
+
+if __name__ == "__main__":
+    plate()
+"""
+
+_PROJECT: tempfile.TemporaryDirectory | None = None
+PART = ""
+DRAWING = ""
+
+
+_PREVIOUS_STORE: str | None = None
+
+
+def setUpModule() -> None:
+    global _PROJECT, PART, DRAWING, _PREVIOUS_STORE
+    _PROJECT = tempfile.TemporaryDirectory(prefix="stream-contract-")
+    root = Path(_PROJECT.name)
+    (root / "src").mkdir()
+    (root / "STEP").mkdir()
+    (root / "DXF").mkdir()
+    (root / "store").mkdir()
+    (root / "src" / "part.py").write_text(PART_SOURCE, encoding="utf-8")
+    (root / "src" / "plate.py").write_text(DRAWING_SOURCE, encoding="utf-8")
+    PART = str(root / "src" / "part.py")
+    DRAWING = str(root / "src" / "plate.py")
+    # The builds below must never touch the developer's store, runner or not.
+    _PREVIOUS_STORE = os.environ.get("CADGEN_CACHE_DIR")
+    os.environ["CADGEN_CACHE_DIR"] = str(root / "store")
+
+
+def tearDownModule() -> None:
+    if _PREVIOUS_STORE is None:
+        os.environ.pop("CADGEN_CACHE_DIR", None)
+    else:
+        os.environ["CADGEN_CACHE_DIR"] = _PREVIOUS_STORE
+    if _PROJECT is not None:
+        _PROJECT.cleanup()
 # A self-contained robot: primitive visuals, no mesh files, so the test needs nothing
 # generated or LFS-fetched in the checkout.
 ROBOT_URDF = """<?xml version="1.0"?>
@@ -64,7 +126,7 @@ def run_script(script: str, *args: str) -> subprocess.CompletedProcess:
     )
     env["CADGEN_DAEMON"] = "0"
     return subprocess.run(
-        [sys.executable, str(REPO / script), *args],
+        [sys.executable, script, *args],
         cwd=REPO, capture_output=True, text=True, check=False, env=env,
     )
 
@@ -107,7 +169,7 @@ class StderrIsEverythingElseTests(unittest.TestCase):
         # The logger prefixes every line it owns. Finding one on stdout means narration and
         # result have been mixed, and `2>/dev/null` no longer yields something parseable.
         # Library-first: the model script is the build entrypoint for STEP and DXF alike.
-        for kind, target in (("step", PART), ("dxf", "models/drawings/src/gasket_plate.py")):
+        for kind, target in (("step", PART), ("dxf", DRAWING)):
             with self.subTest(kind=kind):
                 result = run_script(target)
                 self.assertNotIn("[cadgen]", result.stdout)
