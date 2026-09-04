@@ -26,6 +26,15 @@ from cadgen.store.trees import flatten
 
 TREE_TAG = "__cadgen_tree__"
 PARTNER_TAG = "__cadgen_tree_shape__"
+# The materialized compound's OWN location, as a row-major 4x4. A part whose model
+# returned a placed shape (``Pos(0, 0, 10) * body``, ``body.moved(...)``) has that
+# placement as its tree's root occurrence transform, and materialize reproduces it
+# as the compound's location. A parent that places the child composes onto it, so
+# the placed compound's location is ``placement * root``; the packager divides the
+# root back out when it records the LINK, because the child's tree applies the root
+# itself when the link is expanded. Without this the root placement was applied
+# twice in every parent that linked such a part.
+ROOT_LOC_TAG = "__cadgen_tree_root_loc__"
 
 
 class _Partner:
@@ -161,4 +170,13 @@ def materialize(tree_hash: str, *, label: str | None = None) -> Any:
     # wrapper's attributes.
     setattr(compound, TREE_TAG, tree_hash)
     setattr(compound, PARTNER_TAG, _Partner(compound.wrapped))
+    setattr(compound, ROOT_LOC_TAG, _matrix_from_location(getattr(compound, "location", None)))
     return compound
+
+
+def _matrix_from_location(location: Any) -> list[float]:
+    from cadgen._internal.component_package import _transform_from_location
+
+    if location is None:
+        return [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+    return [float(v) for v in _transform_from_location(location)]

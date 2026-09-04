@@ -47,7 +47,7 @@ from build123d import Compound
 from build123d.topology.shape_core import downcast
 from OCP.BRepBuilderAPI import BRepBuilderAPI_Copy
 
-from cadgen.store.materialize import PARTNER_TAG, TREE_TAG, _Partner, materialize
+from cadgen.store.materialize import PARTNER_TAG, ROOT_LOC_TAG, TREE_TAG, _Partner, materialize
 
 
 class ChildBuildError(RuntimeError):
@@ -207,6 +207,10 @@ class LazyCompound(Compound):
                 self.color = compound.color
             setattr(self, TREE_TAG, tree)
             setattr(self, PARTNER_TAG, _Partner(compound.wrapped))
+            # The child's own root placement rides along too: this shape is
+            # ``placement * root`` and the packager divides the root back out of
+            # the link it records (materialize.ROOT_LOC_TAG).
+            setattr(self, ROOT_LOC_TAG, getattr(compound, ROOT_LOC_TAG, None))
             # Reads that descend (a parent inspecting the child's parts) see the
             # materialized structure; a link is written before any descent. The
             # children are transplanted, not re-attached: anytree's attach hook

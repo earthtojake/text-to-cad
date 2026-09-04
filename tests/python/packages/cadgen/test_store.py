@@ -527,6 +527,52 @@ class LinkOrComponent(StoreCase):
         )
 
 
+class LinkedRootPlacement(StoreCase):
+    """Kernel-backed: a part whose model returned a PLACED shape links at its
+    placement exactly once. tom-cad's base clamp is returned as
+    ``bracket.moved(Rx90 + lift)``; base_link placed it and the clamp landed
+    right in base_link's own STEP (written from the live compound) but a
+    quarter-turn off in tom, which materialized base_link from its tree — the
+    link transform had absorbed the clamp's root placement and the tree applied
+    it again on expansion."""
+
+    def test_a_placed_part_lands_once_when_linked_and_again_two_levels_up(self) -> None:
+        from build123d import Box, Compound, Location
+
+        from cadgen.store.build import build_tree_from_compound
+        from cadgen.store.materialize import materialize, reset_memo
+        from cadgen.store.trees import flatten
+
+        clamp_tree, clamp_raw, _ = build_tree_from_compound(
+            Box(2, 2, 2).moved(Location((0, 0, 10))), root_name="clamp", entry_kind="part", single_component=True
+        )
+        self.assertEqual(clamp_raw["occurrences"][0]["transform"][3::4][:3], [0, 0, 10], "the root placement is the tree's")
+
+        reset_memo()
+        placed = Location((5, 0, 0)) * materialize(clamp_tree, label="clamp")
+        placed.label = "clamp"
+        base_tree, base_raw, _ = build_tree_from_compound(
+            Compound(children=[placed], label="base"), root_name="base", entry_kind="assembly"
+        )
+        self.assertEqual(base_raw["links"][0]["transform"][3::4][:3], [5, 0, 0], "the link places the tree frame, not the placed root")
+        flat = flatten(base_tree)
+        self.assertEqual(flat["occurrences"][0]["transform"][3::4][:3], [5, 0, 10], "expanded once: placement * root")
+
+        # Two levels: a parent that links the sub-assembly sees the same clamp.
+        reset_memo()
+        base = Location((0, 7, 0)) * materialize(base_tree, label="base")
+        base.label = "base"
+        tom_tree, _tom_raw, _ = build_tree_from_compound(
+            Compound(children=[base], label="tom"), root_name="tom", entry_kind="assembly"
+        )
+        flat = flatten(tom_tree)
+        self.assertEqual(flat["occurrences"][0]["transform"][3::4][:3], [5, 7, 10])
+        # And the materialized geometry agrees with the flattened numbers.
+        reset_memo()
+        centre = materialize(tom_tree, label="tom").bounding_box().center()
+        self.assertEqual([round(centre.X, 6), round(centre.Y, 6), round(centre.Z, 6)], [5.0, 7.0, 10.0])
+
+
 class StoreCli(StoreCase):
     def run_cli(self, argv):
         import io

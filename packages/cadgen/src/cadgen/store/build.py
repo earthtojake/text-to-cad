@@ -31,7 +31,7 @@ from typing import Any
 from cadgen.coordination import PHASE_COMPONENTS, PHASE_FINALIZE, PHASE_PACKAGE
 from cadgen.coordination import resolve as resolve_progress
 from cadgen.store.index import read_entry, write_entry
-from cadgen.store.materialize import PARTNER_TAG, TREE_TAG
+from cadgen.store.materialize import PARTNER_TAG, ROOT_LOC_TAG, TREE_TAG, _location_from_matrix
 from cadgen.store.objects import has_object, put_object_from_file
 from cadgen.store.trees import put_tree
 
@@ -142,6 +142,13 @@ def build_tree_from_compound(
 
     def _add_link(node: Any, world_loc: Any, occ_id: str, tree_hash: str) -> dict[str, Any]:
         name = str(getattr(node, "label", "") or occ_id)
+        # The link places the child's TREE FRAME. The node's location is
+        # ``placement * root`` when the child's own root occurrence is placed
+        # (a part returned as ``Pos(...) * body``), and the tree re-applies that
+        # root on expansion, so divide it out here or it lands twice.
+        root_matrix = getattr(node, ROOT_LOC_TAG, None)
+        if root_matrix is not None:
+            world_loc = world_loc * _location_from_matrix(list(root_matrix)).inverse()
         link: dict[str, Any] = {
             "id": occ_id,
             "name": name,
