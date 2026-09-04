@@ -232,7 +232,7 @@ geometry a model produces.
 Two decorator arguments are read **statically**, before the module runs, and
 must be literals: `out=` (a string) and the two tolerances (numbers). A tolerance therefore cannot come from a constants
 module; write the number in each decorator (a project README can name the
-shared value). `kinematics=` and `animation=` are ordinary Python evaluated
+shared value). `kinematics=` is ordinary Python evaluated
 when the module loads — a dict built at import, or loaded from a file, is fine
 and is what the kinematics reference shows. Unknown keyword arguments are
 rejected outright on every decorator.
