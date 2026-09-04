@@ -51,9 +51,12 @@ class Closure:
     files: tuple[str, ...]  # relative to the model's folder, sorted
     # model file (relative to the model's folder) -> constant name -> value hash
     constants: dict[str, dict[str, str]] = field(default_factory=dict)
+    # relative path -> that file's hash as taken for this closure, so a stale
+    # verdict can NAME the file that moved (lazily executed files included).
+    shas: dict[str, str] = field(default_factory=dict)
 
     def as_json(self) -> dict:
-        return {"hash": self.hash, "files": list(self.files)}
+        return {"hash": self.hash, "files": list(self.files), "shas": dict(self.shas)}
 
 
 @dataclass(frozen=True)
@@ -483,6 +486,7 @@ def build_closure(
         hash=closure_hash(pairs),
         files=tuple(sorted(rel for rel, _ in pairs)),
         constants=constants,
+        shas={rel: file_hash for rel, file_hash in sorted(pairs)},
     )
 
 

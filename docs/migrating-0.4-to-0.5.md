@@ -112,8 +112,11 @@ or a default argument: each one resolves the attribute at import.
 Use **attribute style**. `from cadgen.build123d import Box` works but is eager:
 a from-import must bind the object, which forces the real import immediately.
 
-**Imports go at module top.** Import at module level; only *call* the imported
-code inside the function.
+**Imports: module top by preference, not by rule.** A model runs like
+`python script.py` — its folder stays on `sys.path` for the whole build — so an
+import inside the body or a helper resolves the same way, and the file it loads
+is hashed when it executes, so it is tracked either way. Module-top imports keep
+the graph visible up front; that is the only reason to prefer them.
 
 **Reading a vendor STEP.** Use `cadgen.read_step`, never
 `build123d.import_step`:
