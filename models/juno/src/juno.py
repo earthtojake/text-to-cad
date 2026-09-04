@@ -52,23 +52,60 @@ from cadgen import build123d as bd
 from cadgen import step
 from cadgen.assembly import AssemblyHelper
 
+from ankle_link_left import ankle_link_left
+from ankle_link_right import ankle_link_right
+from bicep_left import bicep_left
+from bicep_right import bicep_right
+from foot_left import foot_left
+from foot_right import foot_right
+from forearm_left import forearm_left
+from forearm_right import forearm_right
+from hand_left import hand_left
+from hand_right import hand_right
+from head import head
+from hip_bracket_left import hip_bracket_left
+from hip_bracket_right import hip_bracket_right
+from hip_carrier_left import hip_carrier_left
+from hip_carrier_right import hip_carrier_right
+from neck_collar import neck_collar
+from pelvis import pelvis
+from shin_left import shin_left
+from shin_right import shin_right
+from shoulder_pod_left import shoulder_pod_left
+from shoulder_pod_right import shoulder_pod_right
+from thigh_left import thigh_left
+from thigh_right import thigh_right
+from torso import torso
+from wrist_carrier_left import wrist_carrier_left
+from wrist_carrier_right import wrist_carrier_right
+from yaw_housing_left import yaw_housing_left
+from yaw_housing_right import yaw_housing_right
+
 from lib import chain
-from lib.arms import build_bicep, build_forearm
-from lib.hand import build_hand
-from lib.head import build_head
-from lib.joints import (
-    build_ankle_link,
-    build_hip_bracket,
-    build_hip_carrier,
-    build_neck_collar,
-    build_shoulder_pod,
-    build_wrist_carrier,
-    build_yaw_housing,
-)
 from lib.juno_lib import revolute_attach
-from lib.legs import build_foot, build_shin, build_thigh
-from lib.pelvis import build_pelvis
-from lib.torso import build_torso
+
+# Every link is a sibling MODEL (one script per URDF link, part-local frame).
+# Calling one inside the body builds it if stale — on its own worker, in
+# parallel with the other 27 — or loads it, and the robot links its tree.
+# Rebuilding a link alone does not rebuild the robot: rerun this script.
+LINKS = {
+    "left": {
+        "hip_bracket": hip_bracket_left, "hip_carrier": hip_carrier_left,
+        "thigh": thigh_left, "shin": shin_left, "ankle_link": ankle_link_left,
+        "foot": foot_left, "shoulder_pod": shoulder_pod_left,
+        "yaw_housing": yaw_housing_left, "bicep": bicep_left,
+        "forearm": forearm_left, "wrist_carrier": wrist_carrier_left,
+        "hand": hand_left,
+    },
+    "right": {
+        "hip_bracket": hip_bracket_right, "hip_carrier": hip_carrier_right,
+        "thigh": thigh_right, "shin": shin_right, "ankle_link": ankle_link_right,
+        "foot": foot_right, "shoulder_pod": shoulder_pod_right,
+        "yaw_housing": yaw_housing_right, "bicep": bicep_right,
+        "forearm": forearm_right, "wrist_carrier": wrist_carrier_right,
+        "hand": hand_right,
+    },
+}
 
 # ----------------------------------------------------------- pose (degrees)
 # Athletic ready stance: knees bent, feet flat, arms relaxed forward.
@@ -137,87 +174,88 @@ KINEMATICS = _kinematics()
 def assemble() -> bd.Compound:
     asm = AssemblyHelper("juno")
 
-    pelvis = asm.add(build_pelvis(), "pelvis")
-    torso = asm.add(build_torso(), "torso")
+    pelvis_link = asm.add(pelvis(), "pelvis")
+    torso_link = asm.add(torso(), "torso")
     revolute_attach(
-        asm, pelvis, torso, "waist_yaw",
+        asm, pelvis_link, torso_link, "waist_yaw",
         chain.WAIST_YAW_ORIGIN_MM, Z, X, (0, 0, 0), Z, X, WAIST_YAW_DEG,
     )
 
-    collar = asm.add(build_neck_collar(), "neck_collar")
+    collar = asm.add(neck_collar(), "neck_collar")
     revolute_attach(
-        asm, torso, collar, "neck_yaw",
+        asm, torso_link, collar, "neck_yaw",
         chain.NECK_YAW_ORIGIN_MM, Z, X, (0, 0, 0), Z, X, NECK_YAW_DEG,
     )
-    head = asm.add(build_head(), "head")
+    head_link = asm.add(head(), "head")
     revolute_attach(
-        asm, collar, head, "neck_pitch",
+        asm, collar, head_link, "neck_pitch",
         chain.NECK_PITCH_ORIGIN_MM, Y, X, (0, 0, 0), Y, X, NECK_PITCH_DEG,
     )
 
     for side in ("left", "right"):
         s = _s(side)
+        link = LINKS[side]
 
         # ---- leg chain (6 DOF)
-        bracket = asm.add(build_hip_bracket(side), f"hip_bracket_{side}")
+        bracket = asm.add(link["hip_bracket"](), f"hip_bracket_{side}")
         revolute_attach(
-            asm, pelvis, bracket, f"hip_yaw_{side}",
+            asm, pelvis_link, bracket, f"hip_yaw_{side}",
             (0, s * HIP_Y, chain.HIP_YAW_DROP_Z_MM), Z, X, (0, 0, 0), Z, X, HIP_YAW_DEG,
         )
-        carrier = asm.add(build_hip_carrier(side), f"hip_carrier_{side}")
+        carrier = asm.add(link["hip_carrier"](), f"hip_carrier_{side}")
         revolute_attach(
             asm, bracket, carrier, f"hip_roll_{side}",
             chain.HIP_ROLL_ORIGIN_MM, X, Y, (0, 0, 0), X, Y, s * HIP_ROLL_ABDUCT_DEG,
         )
-        thigh = asm.add(build_thigh(side), f"thigh_{side}")
+        thigh = asm.add(link["thigh"](), f"thigh_{side}")
         revolute_attach(
             asm, carrier, thigh, f"hip_pitch_{side}",
             chain.HIP_PITCH_ORIGIN_MM, Y, X, (0, 0, 0), Y, X, HIP_PITCH_DEG,
         )
-        shin = asm.add(build_shin(side), f"shin_{side}")
+        shin = asm.add(link["shin"](), f"shin_{side}")
         revolute_attach(
             asm, thigh, shin, f"knee_{side}",
             chain.KNEE_ORIGIN_MM, Y, X, (0, 0, 0), Y, X, KNEE_DEG,
         )
-        ankle = asm.add(build_ankle_link(side), f"ankle_link_{side}")
+        ankle = asm.add(link["ankle_link"](), f"ankle_link_{side}")
         revolute_attach(
             asm, shin, ankle, f"ankle_pitch_{side}",
             chain.ANKLE_PITCH_ORIGIN_MM, Y, X, (0, 0, 0), Y, X, ANKLE_PITCH_DEG,
         )
-        foot = asm.add(build_foot(side), f"foot_{side}")
+        foot = asm.add(link["foot"](), f"foot_{side}")
         revolute_attach(
             asm, ankle, foot, f"ankle_roll_{side}",
             chain.ANKLE_ROLL_ORIGIN_MM, X, Y, (0, 0, 0), X, Y, -s * HIP_ROLL_ABDUCT_DEG,
         )
 
         # ---- arm chain (6 DOF)
-        pod = asm.add(build_shoulder_pod(side), f"shoulder_pod_{side}")
+        pod = asm.add(link["shoulder_pod"](), f"shoulder_pod_{side}")
         revolute_attach(
-            asm, torso, pod, f"shoulder_pitch_{side}",
+            asm, torso_link, pod, f"shoulder_pitch_{side}",
             (0, s * SHOULDER_Y, chain.SHOULDER_PITCH_RAISE_Z_MM), Y, X, (0, 0, 0), Y, X, SHOULDER_PITCH_DEG,
         )
-        housing = asm.add(build_yaw_housing(side), f"yaw_housing_{side}")
+        housing = asm.add(link["yaw_housing"](), f"yaw_housing_{side}")
         revolute_attach(
             asm, pod, housing, f"shoulder_roll_{side}",
             (0, s * chain.SHOULDER_ROLL_Y_MM, chain.SHOULDER_ROLL_Z_MM), X, Y,
             (0, 0, 0), X, Y, s * SHOULDER_ROLL_ABDUCT_DEG,
         )
-        bicep = asm.add(build_bicep(side), f"bicep_{side}")
+        bicep = asm.add(link["bicep"](), f"bicep_{side}")
         revolute_attach(
             asm, housing, bicep, f"shoulder_yaw_{side}",
             chain.SHOULDER_YAW_ORIGIN_MM, Z, X, (0, 0, 0), Z, X, -s * SHOULDER_YAW_INTERNAL_DEG,
         )
-        forearm = asm.add(build_forearm(side), f"forearm_{side}")
+        forearm = asm.add(link["forearm"](), f"forearm_{side}")
         revolute_attach(
             asm, bicep, forearm, f"elbow_{side}",
             chain.ELBOW_ORIGIN_MM, Y, X, (0, 0, 0), Y, X, ELBOW_DEG,
         )
-        wrist = asm.add(build_wrist_carrier(side), f"wrist_carrier_{side}")
+        wrist = asm.add(link["wrist_carrier"](), f"wrist_carrier_{side}")
         revolute_attach(
             asm, forearm, wrist, f"wrist_roll_{side}",
             chain.WRIST_ROLL_ORIGIN_MM, Z, X, (0, 0, 0), Z, X, WRIST_ROLL_DEG,
         )
-        hand = asm.add(build_hand(side), f"hand_{side}")
+        hand = asm.add(link["hand"](), f"hand_{side}")
         revolute_attach(
             asm, wrist, hand, f"wrist_pitch_{side}",
             chain.WRIST_PITCH_ORIGIN_MM, Y, X, (0, 0, 0), Y, X, WRIST_PITCH_DEG,
