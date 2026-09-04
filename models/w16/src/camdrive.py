@@ -14,7 +14,8 @@ from lib import camdrive as camdrive_lib
 from lib import spec as S
 
 
-@step(out="../STEP/camdrive.step")
+@step(out="../STEP/camdrive.step",
+      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def camdrive():
     parts = camdrive_lib.build(S.SECTIONED)
     if not parts:

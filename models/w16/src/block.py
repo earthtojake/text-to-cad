@@ -14,7 +14,8 @@ from lib import block as block_lib
 from lib import spec as S
 
 
-@step(out="../STEP/block.step")
+@step(out="../STEP/block.step",
+      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def block():
     parts = block_lib.build(S.SECTIONED)
     if not parts:

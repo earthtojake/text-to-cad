@@ -14,7 +14,8 @@ from lib import valvetrain as valvetrain_lib
 from lib import spec as S
 
 
-@step(out="../STEP/valvetrain.step")
+@step(out="../STEP/valvetrain.step",
+      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def valvetrain():
     parts = valvetrain_lib.build()
     if not parts:

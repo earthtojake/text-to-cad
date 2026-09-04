@@ -14,7 +14,8 @@ from lib import turbos as turbos_lib
 from lib import spec as S
 
 
-@step(out="../STEP/turbos.step")
+@step(out="../STEP/turbos.step",
+      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def turbos():
     parts = turbos_lib.build(S.SECTIONED)
     if not parts:

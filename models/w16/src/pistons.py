@@ -14,7 +14,8 @@ from lib import pistons as pistons_lib
 from lib import spec as S
 
 
-@step(out="../STEP/pistons.step")
+@step(out="../STEP/pistons.step",
+      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def pistons():
     parts = pistons_lib.build()
     if not parts:

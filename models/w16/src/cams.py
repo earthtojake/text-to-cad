@@ -14,7 +14,8 @@ from lib import cams as cams_lib
 from lib import spec as S
 
 
-@step(out="../STEP/cams.step")
+@step(out="../STEP/cams.step",
+      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def cams():
     parts = cams_lib.build(S.SECTIONED)
     if not parts:

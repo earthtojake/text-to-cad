@@ -14,7 +14,8 @@ from lib import oil_system as oil_system_lib
 from lib import spec as S
 
 
-@step(out="../STEP/oil_system.step")
+@step(out="../STEP/oil_system.step",
+      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def oil_system():
     parts = oil_system_lib.build(S.SECTIONED)
     if not parts:

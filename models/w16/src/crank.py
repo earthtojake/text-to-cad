@@ -14,7 +14,8 @@ from lib import bottom_end as bottom_end_lib
 from lib import spec as S
 
 
-@step(out="../STEP/crank.step")
+@step(out="../STEP/crank.step",
+      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def crank():
     parts = bottom_end_lib.build(S.SECTIONED)
     if not parts:

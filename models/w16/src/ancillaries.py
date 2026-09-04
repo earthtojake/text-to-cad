@@ -14,7 +14,8 @@ from lib import ancillaries as ancillaries_lib
 from lib import spec as S
 
 
-@step(out="../STEP/ancillaries.step")
+@step(out="../STEP/ancillaries.step",
+      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def ancillaries():
     parts = ancillaries_lib.build(S.SECTIONED)
     if not parts:

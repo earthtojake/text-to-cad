@@ -39,6 +39,14 @@ one flag, `lib/spec.py:SECTIONED`, read by every system. Imported sources: none.
   cannot serve two rows of buckets), all intake valves parallel and all exhaust
   valves parallel across both rows.
 
+## Mesh tolerances
+
+Every model here — `w16.py` and the thirteen system models — declares the same
+`mesh_tolerance=0.0006, mesh_angular_tolerance=0.3`, so a system rendered on its
+own tessellates exactly as it does inside the engine. Decorator arguments must be
+literals (cadgen reads them statically), so the value is repeated in each file
+rather than imported from `lib/spec.py`; change all fourteen together.
+
 ## `lib/` — shared code, no models
 
 | Module            | Role                                                             |

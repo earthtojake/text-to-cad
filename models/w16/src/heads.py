@@ -14,7 +14,8 @@ from lib import heads as heads_lib
 from lib import spec as S
 
 
-@step(out="../STEP/heads.step")
+@step(out="../STEP/heads.step",
+      mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def heads():
     parts = heads_lib.build(S.SECTIONED)
     if not parts:
