@@ -1,6 +1,6 @@
 """Job slots and coalescing end to end, on both executors.
 
-The same fixture -- a parent fanning out to 20 leaves, and the 3-level link tree -- is
+The same fixture -- a parent fanning out to more leaves than slots, and the 3-level link tree -- is
 built once on a private daemon started with ``CADGEN_JOBS=2`` and once on the transient
 executor with the same limit. Running never exceeds the limit (the broker's peak says so),
 a 1-slot pool still finishes the 3-level tree (yield/reacquire), and two parents that
@@ -124,7 +124,7 @@ if __name__ == "__main__":
 
 PARENT_B = PARENT_A.replace("parent_a", "parent_b").replace("bd.Box(10, 10, 1)", "bd.Box(12, 12, 1)")
 
-LEAVES = 20
+LEAVES = 6  # more than the limit so the broker must queue; small so the build stays cheap
 
 
 def _write_fixture(src: Path) -> None:
@@ -191,14 +191,14 @@ class _Executor(unittest.TestCase):
     def _events(self, stderr: str) -> list[dict]:
         return [json.loads(line) for line in stderr.splitlines() if line.startswith("{")]
 
-    def test_a_fanout_of_twenty_leaves_never_exceeds_the_limit(self):
+    def test_a_fanout_of_leaves_never_exceeds_the_limit(self):
         code, out, err = self._run("fanout.py")
         self.assertEqual(code, 0, err)
         self.assertIn('"outcome":"built"', out)
         events = self._events(err)
         built = {Path(e["model"]).stem for e in events if e["state"] == "done"}
         self.assertTrue({f"leaf_{i:02d}" for i in range(LEAVES)} <= built, sorted(built))
-        self.assertIn("queued", {e["state"] for e in events}, "twenty leaves on two slots must queue")
+        self.assertIn("queued", {e["state"] for e in events}, "more leaves than slots must queue")
         peak = self.peak_running()
         self.assertLessEqual(peak, self.LIMIT, f"running exceeded the limit: peak {peak}")
         self.assertGreaterEqual(peak, 1)
