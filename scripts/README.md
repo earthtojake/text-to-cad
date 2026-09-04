@@ -40,8 +40,12 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
   by `test.yml` and `release-publish.yml`.
 - `test-js.sh` — `packages/cadgen-js` and `apps/viewer` client suites.
 - `test-python.sh [--keep-going]` — the cadgen package suite, then every skill's
-  suite, each against a temporary store. `--keep-going` runs all suites and
-  reports every failure.
+  suite. Each test FILE runs in its own interpreter against its own temporary
+  store, `CADGEN_TEST_JOBS` at a time (default: the core count; CI sets 4).
+  `--keep-going` runs all suites and reports every failure.
+- `time-python.sh [N]` — times every Python test module on its own and prints
+  them sorted by wall clock (results under `tmp/timing/`); `time_module.py` is
+  its helper. Manual only: the first step of a bloat check.
 - `test-global.sh` — `tests/python/global`, the repo-wide policy suite.
 - `test-docs.sh` — `npm --prefix apps/docs run check`, pulling the hero assets
   first. Called by `test.yml` and `release-publish.yml`.
@@ -51,7 +55,8 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 - `test-viewer-launch.sh` — launches `cadgen viewer` against the built client and
   checks it answers. Called by `test.yml`.
 - `common.sh`, `unittest_files.py` — shared runner pieces (interpreter
-  resolution, fail-closed unittest loading). Sourced by the runners.
+  resolution, fail-closed unittest loading, the per-file parallel run). Sourced
+  by the runners.
 
 `release/` — the version and the release identity.
 
