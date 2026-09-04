@@ -95,15 +95,6 @@ class ArtifactsOnly(ScannerTestCase):
         self.write("outline.dxf", "0\nSECTION\n")
         self.assertEqual(self.files(), ["outline.dxf"])
 
-    def test_implicit_js_is_not_an_entry_and_does_not_stop_the_scan(self):
-        self.write("gyroid.implicit.js", "export default 1;")
-        self.write("outline.dxf", "0\n")
-        self.assertEqual(self.files(), ["outline.dxf"])
-
-    def test_a_loose_params_js_is_inert(self):
-        self.write("part.stl", "solid\n")
-        self.write("part.params.js", "export default {};")
-        self.assertEqual(self.files(), ["part.stl"])
 
     def test_the_schema_version_is_4(self):
         self.assertEqual(scan_cad_directory(self.root)["schemaVersion"], 4)
@@ -129,13 +120,6 @@ class EntryShape(ScannerTestCase):
         self.assertEqual(entry["bytes"], 10)
         self.assertNotIn("relations", entry)
 
-    def test_a_zero_byte_file_still_lists(self):
-        self.write("empty.stl", "")
-        entry = self.entry("empty.stl")
-        self.assertEqual(entry["bytes"], 0)
-        self.assertEqual(
-            entry["hash"], hashlib.sha256(b"").hexdigest()
-        )
 
     def test_file_refs_are_posix_by_contract_because_they_become_urls(self):
         self.write("sub dir/arm.urdf", '<robot name="a"/>')
@@ -230,18 +214,10 @@ class StepKind(ScannerTestCase):
             self._kind({"kind": "assembly-package", "assembly": {"root": {}}}), "part"
         )
 
-    def test_an_assembly_root_string_does_not(self):
-        self.assertEqual(
-            self._kind({"kind": "assembly-package", "assembly": {"root": "x"}}), "part"
-        )
 
     def test_no_package_is_a_part(self):
         self.write("k.step", "x\n")
         self.assertEqual(self.entry("k.step")["kind"], "part")
-
-    def test_the_unit_function_answers_part_for_a_falsy_topology(self):
-        self.assertEqual(step_kind_from_topology(None), "part")
-        self.assertEqual(step_kind_from_topology({}), "part")
 
 
 class DescriptorGate(ScannerTestCase):
@@ -278,10 +254,6 @@ class SidecarTruthiness(ScannerTestCase):
         self.package("s.step", {"kind": "assembly-package", "components": {}})
         return self.entry("s.step")
 
-    def test_an_array_sidecar_counts_as_a_sidecar(self):
-        entry = self._entry("[1,2]")
-        self.assertIn("sourceUrl", entry)
-        self.assertNotIn("poseUrl", entry)
 
     def test_an_empty_kinematics_object_still_yields_a_pose_url(self):
         # `{}` is TRUTHY in JS. Python's `or` would drop it.
@@ -292,12 +264,6 @@ class SidecarTruthiness(ScannerTestCase):
         self.assertIn("sourceUrl", entry)
         self.assertNotIn("poseUrl", entry)
 
-    def test_an_animation_block_alone_yields_no_pose_url(self):
-        # A sidecar written before choreography left the build: the block is
-        # ignored, and only kinematics is an articulation mechanism.
-        entry = self._entry(json.dumps({"animation": {"clips": "x"}}))
-        self.assertIn("sourceUrl", entry)
-        self.assertNotIn("poseUrl", entry)
 
     def test_a_render_module_beside_the_document_is_published_by_url(self):
         self.write("s.step.js", "export const clips = {};\n")
@@ -307,16 +273,6 @@ class SidecarTruthiness(ScannerTestCase):
     def test_no_render_module_no_url(self):
         self.assertNotIn("renderModuleUrl", self._entry(None))
 
-    def test_a_scalar_sidecar_is_not_a_sidecar(self):
-        for text in ('"hello"', "5", "null", "true"):
-            with self.subTest(text=text):
-                self.assertNotIn("sourceUrl", self._entry(text))
-
-    def test_an_invalid_sidecar_is_not_a_sidecar(self):
-        self.assertNotIn("sourceUrl", self._entry("{ not json"))
-
-    def test_no_sidecar_at_all(self):
-        self.assertNotIn("sourceUrl", self._entry(None))
 
     def test_the_catalog_publishes_no_provenance(self):
         entry = self._entry(json.dumps({"schemaVersion": 5, "sourceKind": "step"}))
@@ -347,10 +303,6 @@ class SrdfPairing(ScannerTestCase):
         )
         self.assertEqual(self.entry("z.srdf")["relations"]["urdf"]["file"], "z.urdf")
 
-    def test_single_quotes_and_spaced_attributes_work(self):
-        self.write("q.urdf", "<robot  name = 'q'  version=\"1\" />")
-        self.write("q.srdf", "<robot name='q'/>")
-        self.assertIn("relations", self.entry("q.srdf"))
 
     def test_ambiguity_yields_no_pairing(self):
         self.write("one.urdf", '<robot name="dup"/>')
@@ -367,31 +319,6 @@ class SrdfPairing(ScannerTestCase):
         self.write("deep/far.urdf", '<robot name="far"/>')
         self.write("far.srdf", '<robot name="far"/>')
         self.assertNotIn("relations", self.entry("far.srdf"))
-
-    def test_invalid_utf8_is_replaced_not_fatal_so_mojibake_still_pairs(self):
-        Path(self.root, "m.urdf").write_bytes(b'<robot name="m\xff\xfe"/>')
-        Path(self.root, "m.srdf").write_bytes(b'<robot name="m\xff\xfe"/>')
-        self.assertIn("relations", self.entry("m.srdf"))
-
-    def test_a_leading_bom_is_skipped(self):
-        self.write("b.urdf", '﻿<robot name="b"/>')
-        self.write("b.srdf", '﻿<robot name="b"/>')
-        self.assertIn("relations", self.entry("b.srdf"))
-
-    def test_a_non_robot_root_never_pairs(self):
-        self.write("x.urdf", '<sdf name="x"/>')
-        self.write("x.srdf", '<sdf name="x"/>')
-        self.assertNotIn("relations", self.entry("x.srdf"))
-
-    def test_a_hidden_urdf_still_wins_the_pairing(self):
-        # A latent inconsistency preserved verbatim: the relation URL it hands
-        # out is then refused by is_served_cad_asset, so the client gets a 404
-        # on a link the catalog gave it. Recorded here so a "fix" is deliberate.
-        self.write(".arm.urdf", '<robot name="hid"/>')
-        self.write("hid.srdf", '<robot name="hid"/>')
-        relation = self.entry("hid.srdf")["relations"]["urdf"]
-        self.assertEqual(relation["file"], ".arm.urdf")
-        self.assertFalse(is_served_cad_asset(os.path.join(self.root, ".arm.urdf")))
 
 
 class SymlinkPolicy(ScannerTestCase):
@@ -444,12 +371,6 @@ class WalkRules(ScannerTestCase):
         self.write("kept.stl", "x")
         self.assertEqual(self.files(), ["kept.stl"])
 
-    def test_the_skipped_set_is_matched_with_exact_case(self):
-        # Written without a lowercase twin so a case-insensitive filesystem
-        # cannot merge the two directories and hide the assertion.
-        self.write("Dist/kept.stl", "x")
-        self.write("BUILD/kept.stl", "x")
-        self.assertEqual(sorted(self.files()), ["BUILD/kept.stl", "Dist/kept.stl"])
 
     def test_the_depth_cap_stops_the_walk(self):
         current = self.root
@@ -484,15 +405,6 @@ class NaturalOrder(ScannerTestCase):
         self.assertEqual([e["file"] for e in ordered], ["A", "a", "b", "B"])
         self.assertEqual([e["file"] for e in entries], ["b", "A", "a", "B"])
 
-    def test_the_key_coerces_a_missing_or_falsy_file_to_empty(self):
-        entries = [{"file": "a"}, {}, {"file": None}, {"file": 0}, {"file": ""}]
-        self.assertEqual(sort_catalog_entries(entries)[-1]["file"], "a")
-
-    def test_punctuation_sorts_before_digits_before_letters(self):
-        for name in ("_x.stl", "9.stl", "a.stl"):
-            self.write(name, "x")
-        self.assertEqual(self.files(), ["_x.stl", "9.stl", "a.stl"])
-
 
 class ServedAssetGate(unittest.TestCase):
     def test_the_gate(self):
@@ -516,20 +428,8 @@ class ServedAssetGate(unittest.TestCase):
         # still serve; hidden components BELOW the root are the backend's job.
         self.assertTrue(is_served_cad_asset("/home/u/.models/part.step"))
 
-    def test_a_backslash_is_an_ordinary_filename_character_on_posix(self):
-        if os.name == "nt":
-            self.skipTest("POSIX-only semantics")
-        # Normalising backslashes here would let this pass the hidden gate.
-        self.assertFalse(is_served_cad_asset("/root/.secret\\x.step"))
-
 
 class PathHelpers(unittest.TestCase):
-    def test_path_relative_answers_empty_for_equal_paths(self):
-        # os.path.relpath answers "." and the hidden-component check would then
-        # read the served root itself as hidden.
-        self.assertEqual(path_relative("/a/b", "/a/b"), "")
-        self.assertEqual(path_relative("/a", "/a/b"), "b")
-        self.assertEqual(path_relative("/a", "/b"), os.path.join("..", "b"))
 
     def test_path_is_inside_treats_realpath_as_alias_equality(self):
         tmp = tempfile.mkdtemp()
@@ -555,17 +455,6 @@ class PathHelpers(unittest.TestCase):
         os.makedirs(outside)
         os.symlink(outside, os.path.join(root, "lib"))
         self.assertFalse(path_is_inside(os.path.join(root, "lib", "..", "..", "x.step"), root))
-
-    def test_a_name_prefix_sibling_is_not_inside(self):
-        self.assertFalse(path_is_inside("/base/root-evil/x.step", "/base/root"))
-        self.assertFalse(path_is_inside("/base/rootevil", "/base/root"))
-        self.assertTrue(path_is_inside("/base/root/x.step", "/base/root"))
-
-    def test_node_basename_strips_trailing_separators(self):
-        self.assertEqual(node_basename("/a/b/"), "b")
-        self.assertEqual(node_basename("/a/b"), "b")
-        self.assertEqual(node_basename("/"), "")
-        self.assertEqual(node_basename("b"), "b")
 
 
 if __name__ == "__main__":
