@@ -1,4 +1,4 @@
-# Keep CAD exchange files and generated render/topology assets out of normal git object history.
+# Keep CAD exchange files and meshes out of normal git object history.
 # assets/ holds the README demo gifs (17-26 MB each). Installers clone without git-lfs and get
 # pointer files, which is harmless for README decoration and for the models/ fixture corpus
 # (nothing installs it) and fatal for anything a skill runs: scripts/github-workflows/
@@ -18,11 +18,6 @@ assets/**/*.md !filter !diff !merge text
 *.mp4 filter=lfs diff=lfs merge=lfs -text
 # Hero showcase assets deploy to Vercel as plain static files: never LFS.
 apps/docs/public/hero/** !filter !diff !merge -text
-.*.step.glb filter=lfs diff=lfs merge=lfs -text
-.*.stp.glb filter=lfs diff=lfs merge=lfs -text
-**/.*.step/**/*.glb filter=lfs diff=lfs merge=lfs -text
-**/.*.step/topology.bin filter=lfs diff=lfs merge=lfs -text
-**/.*.step/topology.json filter=lfs diff=lfs merge=lfs -text
 # Tiny plain-text STEP used by the viewer launch smoke's end-to-end import
 # (CI checks out without LFS, so this one fixture must be real text).
 models/examples/imported/import-smoke.step !filter !diff !merge text
