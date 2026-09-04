@@ -18,7 +18,6 @@ models/
 ├── f1/ f14d/ hypercar/ moonwatch/ motorbike/ qdd_actuator/
 ├── falcon_heavy/     SpaceX public-source reconstruction
 ├── juno/ lyra/       authored robot description packages (URDF/SRDF)
-└── elrobot/ lekiwi/ openarm/ so101/     imported robot fixtures
 ```
 
 **Each cad-project has the same shape**, the one the `$cad-project` skill
@@ -135,10 +134,6 @@ Robot descriptions imported from elsewhere, with their supporting meshes. These
 are NOT cad-projects — there is no `src/`, nothing regenerates them, and each
 keeps its own mix of URDF/SRDF, mesh, and other file types side by side.
 
-- `elrobot/`: ELRobot follower URDF/SRDF plus STL meshes.
-- `lekiwi/`: LeKiwi URDF/SRDF plus STL meshes for mobile-base and arm parts.
-- `openarm/`: OpenArm bimanual URDF/SRDF fixture.
-- `so101/`: SO-101 URDF/SRDF/SDF plus STL meshes.
 
 The larger `mechbench/` and `mechbench2/` external datasets are intentionally
 not included in this committed fixture tree.

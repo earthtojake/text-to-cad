@@ -49,15 +49,15 @@ function parseArgs(argv) {
 // into a gate that fails on fixture 1 for a reason that has nothing to do with the change
 // under test. assertFixturesExist() below now fails loudly on that instead.
 const FIXTURES = [
-  { format: "stl", file: "examples/STL/miniature_spiral_staircase_highres.stl", parts: false },
-  { format: "3mf", file: "examples/3MF/miniature_spiral_staircase_highres.3mf", parts: false },
-  { format: "glb", file: "examples/GLB/miniature_spiral_staircase_highres.glb", parts: false },
+  { format: "stl", file: "assemblies/STL/miniature_spiral_staircase/miniature_spiral_staircase_highres.stl", parts: false },
+  { format: "3mf", file: "assemblies/3MF/miniature_spiral_staircase/miniature_spiral_staircase_highres.3mf", parts: false },
+  { format: "glb", file: "assemblies/GLB/miniature_spiral_staircase/miniature_spiral_staircase_highres.glb", parts: false },
   { format: "step", file: "examples/STEP/cam_follower_roller.step", parts: true },
-  { format: "dxf", file: "examples/DXF/imported/alu_extrusion_profile.dxf", parts: false },
+  { format: "dxf", file: "drawings/DXF/imported/alu_extrusion_profile.dxf", parts: false },
   // The robot family had no fixture here at all, which is how it kept missing features
-  // nobody was looking at. Needs `git lfs checkout models/so101` first, like the
-  // mesh and DXF fixtures.
-  { format: "urdf", file: "so101/so101.urdf", parts: false }
+  // nobody was looking at. Build juno first (`python models/juno/src/juno.py`) so its
+  // meshes exist, like the mesh fixtures.
+  { format: "urdf", file: "juno/juno.urdf", parts: false }
 ];
 
 // Select, pan and draw act on the VIEWPORT, so every format gets them. They were off for

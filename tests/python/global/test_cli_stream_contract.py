@@ -22,7 +22,7 @@ from tests.python.support.paths import repo_path
 
 REPO = Path(repo_path("."))
 PART = "models/examples/src/cylindrical_spacer_sleeve.py"
-ROBOT = "models/so101/so101.urdf"
+ROBOT = "models/juno/juno.urdf"
 
 
 def run(*args: str) -> subprocess.CompletedProcess:
