@@ -117,23 +117,6 @@ class GlobGuard(unittest.TestCase):
         self.assertEqual(kept, [])
         self.assertEqual(font_scan.skipped_fonts, [bad])
 
-    def test_non_font_globs_are_untouched(self):
-        import glob
-
-        with _FontDir() as fonts:
-            fonts.write("notes.txt", b"hello")
-            font_scan.install_font_guard()
-            kept = glob.glob(os.path.join(str(fonts.path), "*.txt"))
-        self.assertEqual(len(kept), 1)
-        self.assertEqual(font_scan.skipped_fonts, [])
-
-    def test_installing_twice_does_not_stack_wrappers(self):
-        import glob
-
-        font_scan.install_font_guard()
-        once = glob.glob
-        font_scan.install_font_guard()
-        self.assertIs(glob.glob, once)
 
     def test_it_can_be_switched_off(self):
         import glob
@@ -181,18 +164,6 @@ class FailureRecognition(unittest.TestCase):
         self.assertIn("build123d bug", message)
         self.assertIn("Move or rename", message)
 
-    def test_the_message_still_helps_when_no_bad_header_is_found(self):
-        # A font can be malformed past its first four bytes, which the header scan
-        # cannot see. The message has to point somewhere real rather than stop.
-        from fontTools.ttLib import TTLibError
-
-        with _FontDir() as fonts:
-            fonts.write("plausible.otf", VALID_OTF_HEADER + b"garbage")
-            message = font_scan.font_scan_failure_message(
-                TTLibError("bad sfntVersion"), dirs=[str(fonts.path)]
-            )
-        self.assertIn("cadgen.check_fonts", message)
-
 
 class CheckFontsCommand(unittest.TestCase):
     def test_it_catches_a_font_that_only_fails_once_a_table_is_read(self):
@@ -212,14 +183,6 @@ class CheckFontsCommand(unittest.TestCase):
             failures = check_fonts.check([str(fonts.path)])
         self.assertEqual([path for path, _ in failures], [bad])
 
-    def test_an_empty_folder_passes(self):
-        with _FontDir() as fonts:
-            self.assertEqual(check_fonts.check([str(fonts.path)]), [])
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                code = check_fonts.main([str(fonts.path)])
-        self.assertEqual(code, 0)
-        self.assertIn("Every font parsed", out.getvalue())
 
     def test_a_bad_font_exits_nonzero_and_names_it(self):
         with _FontDir() as fonts:

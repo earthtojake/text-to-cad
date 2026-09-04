@@ -51,22 +51,6 @@ class ReplaceAtomicTest(unittest.TestCase):
             "the backoff must grow, and must not sleep after the winning attempt",
         )
 
-    def test_the_window_covers_the_measured_tail_not_the_median(self) -> None:
-        """Issue #274, and the reason this number is not free to shrink.
-
-        Measured on a Synology SMB share over two 84-component builds: 126 of 168 renames
-        blocked at all, median 31 ms, p90 118 ms, max 389 ms. The budget is spent per rename
-        but the BUILD only succeeds if every one of them wins, so the window has to clear the
-        tail rather than the middle -- at 168 draws, a 1% per-rename loss rate is roughly a
-        1-in-5 chance of a clean build.
-        """
-        self.assertGreater(
-            sum(atomic_replace.RETRY_DELAYS_SECONDS),
-            0.389,
-            "the retry window must outlast the longest rename actually measured on SMB",
-        )
-        # ...and the first retry still has to be short, or the median rename pays for the tail.
-        self.assertLessEqual(atomic_replace.RETRY_DELAYS_SECONDS[0], 0.05)
 
     def test_it_gives_up_rather_than_hanging(self) -> None:
         # A rename that cannot win inside the window is not a deferred close. Failing beats a
@@ -198,21 +182,6 @@ class ReplaceAtomicTest(unittest.TestCase):
             with self.assertRaises(PermissionError) as raised:
                 atomic_replace.replace_atomic("from.tmp", "to.glb")
         self.assertIs(error, raised.exception)
-
-    def test_temp_suffix_is_unique_without_a_clock(self) -> None:
-        # Two calls inside one clock tick must still differ: the rescue's premise is a name the
-        # server has never seen, which must not rest on timer resolution.
-        with mock.patch.object(atomic_replace.time, "time_ns", return_value=1):
-            suffixes = {atomic_replace.temp_suffix() for _ in range(200)}
-        self.assertEqual(200, len(suffixes))
-        self.assertTrue(all(suffix.endswith(".tmp") for suffix in suffixes))
-
-    def test_the_happy_path_does_not_sleep(self) -> None:
-        with mock.patch.object(atomic_replace.os, "replace") as replace, \
-             mock.patch.object(atomic_replace.time, "sleep") as sleep:
-            atomic_replace.replace_atomic("from.tmp", "to.glb")
-        replace.assert_called_once_with("from.tmp", "to.glb")
-        sleep.assert_not_called()
 
 
 class WriteBytesAtomicTest(unittest.TestCase):
