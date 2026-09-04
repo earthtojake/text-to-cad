@@ -249,11 +249,14 @@ Inputs join the closure too: a `read_step` document is hashed as a build
 input. The render module beside the document (`<name>.step.js`) is NOT one —
 it is the viewer's, and editing it never makes a model stale.
 
-Two decorator arguments are read **statically** (parsed from the file before
-it runs) and must be literals: `out=` and the mesh tolerances. Everything
-else on a decorator — `kinematics=` — is ordinary Python evaluated at import,
-so a kinematics dict may be built or loaded there. A tolerance shared across a project is written as the same
-number in each decorator; the project README names the value.
+Every decorator argument is ordinary Python, evaluated when the module is
+imported: `out=f"{FOLDER}/{NAME}.step"`, `mesh_tolerance=TOL` with `TOL` from
+`lib/`, a path built from a constant — all fine, and nothing is read off the
+source text. The values feeding them are tracked like any other input (a
+`lib/` module by file, a model-file constant by value), so changing the
+constant behind an `out=` makes the model stale. The module top must still stay
+kernel-free: what a door pays to learn a model's declarations is one import of
+the file.
 
 ### Mirrored parts are their own models
 

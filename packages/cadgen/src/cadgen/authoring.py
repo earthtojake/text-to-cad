@@ -61,7 +61,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from cadgen.kinematics import KinematicsDef, normalize_kinematics
-from cadgen.metadata import MeshExportDecl, resolve_model_output_path
+from cadgen.metadata import MeshExportDecl, normalize_mesh_numeric, resolve_model_output_path
 from cadgen.store.index import model_ref
 
 __all__ = [
@@ -168,6 +168,9 @@ class ModelDef:
     # tree and record as any model, but the .step is not among its outputs and
     # is never written. STEP is one output kind, not the primary.
     step_output: bool = True
+    # (mtime_ns, size) of the script when this definition was registered: the
+    # metadata reader reuses the entry while the file on disk is those bytes.
+    stamp: tuple[int, int] | None = None
 
     @property
     def name(self) -> str:
@@ -240,6 +243,34 @@ def _register(defn: ModelDef) -> None:
     _REGISTRY[defn.ref] = defn
 
 
+def _script_stamp(script_path: Path) -> tuple[int, int] | None:
+    try:
+        stat = Path(script_path).stat()
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
+
+
+def _checked_out(out: Any, *, where: str) -> str | None:
+    """``out=`` is any Python expression that evaluates to a non-empty path string."""
+    if out is None:
+        return None
+    if isinstance(out, os.PathLike):
+        out = os.fspath(out)
+    if not isinstance(out, str) or not out.strip():
+        raise TypeError(f"{where} out= must be a non-empty path string (got {out!r})")
+    return out.strip()
+
+
+def _checked_tolerance(value: Any, field_name: str, *, where: str) -> float | None:
+    if value is None:
+        return None
+    try:
+        return normalize_mesh_numeric(value, field_name=field_name)
+    except ValueError as exc:
+        raise TypeError(f"{where} {exc}") from exc
+
+
 def _reject_unknown_kwargs(deco_name: str, kwargs: dict[str, Any]) -> None:
     if kwargs:
         unexpected = ", ".join(sorted(kwargs))
@@ -258,6 +289,9 @@ def _decorator(
     kinematics_def = (
         normalize_kinematics(kinematics, where=f"@{fmt}") if kinematics is not None else None
     )
+    out = _checked_out(out, where=f"@{fmt}")
+    mesh_tolerance = _checked_tolerance(mesh_tolerance, "mesh_tolerance", where=f"@{fmt}")
+    mesh_angular_tolerance = _checked_tolerance(mesh_angular_tolerance, "mesh_angular_tolerance", where=f"@{fmt}")
 
     def apply(func: Callable[..., Any]) -> Callable[..., Any]:
         pending: tuple[MeshExportDecl, ...] = ()
@@ -271,7 +305,7 @@ def _decorator(
             # a drawing cannot.
             if fmt != "step":
                 names = ", ".join(f"@{_MESH_FMT_DECORATOR[d.fmt]}" for d in prior.mesh_exports)
-                raise TypeError(
+                raise ValueError(
                     f"{prior.script_path.name} stacks {names} on a @{fmt} drawing; "
                     "STL/3MF/GLB derive from a @step model's geometry"
                 )
@@ -289,6 +323,7 @@ def _decorator(
             kinematics=kinematics_def,
             mesh_exports=pending,
             step_output=step_output,
+            stamp=_script_stamp(script_path),
         )
         _register(defn)
         func.__cadgen_model__ = defn  # type: ignore[attr-defined]
@@ -396,12 +431,12 @@ def _validate_variant(existing, decl: MeshExportDecl, deco_name: str) -> None:
     targets collide outright."""
     if decl.out is None:
         if any(d.fmt == decl.fmt and d.out is None for d in existing):
-            raise TypeError(
+            raise ValueError(
                 f"bare @{deco_name} is declared more than once; at most one "
                 "declaration per format may omit out= (the sibling default)"
             )
     elif any(d.fmt == decl.fmt and d.out == decl.out for d in existing):
-        raise TypeError(f"@{deco_name} is declared twice for the same target {decl.out!r}")
+        raise ValueError(f"@{deco_name} is declared twice for the same target {decl.out!r}")
 
 
 def _mesh_export_decorator(deco_name: str, fmt: str):
@@ -424,7 +459,12 @@ def _mesh_export_decorator(deco_name: str, fmt: str):
         **unsupported: Any,
     ):
         _reject_unknown_kwargs(deco_name, unsupported)
-        if out is not None and not str(out).lower().endswith(suffix):
+        out = _checked_out(out, where=f"@{deco_name}")
+        mesh_tolerance = _checked_tolerance(mesh_tolerance, "mesh_tolerance", where=f"@{deco_name}")
+        mesh_angular_tolerance = _checked_tolerance(
+            mesh_angular_tolerance, "mesh_angular_tolerance", where=f"@{deco_name}"
+        )
+        if out is not None and not out.lower().endswith(suffix):
             raise ValueError(f"@{deco_name} out= must end with '{suffix}': {out!r}")
         kinematics_def = (
             normalize_kinematics(kinematics, where=f"@{deco_name}")
@@ -444,13 +484,15 @@ def _mesh_export_decorator(deco_name: str, fmt: str):
             if existing_model is not None:
                 # Above @step: extend the registered model in place.
                 if existing_model.fmt != "step":
-                    raise TypeError(
+                    raise ValueError(
                         f"@{deco_name} declares a mesh export of a @step model; "
                         f"{existing_model.script_path.name} is a @{existing_model.fmt} drawing"
                     )
                 _validate_variant(existing_model.mesh_exports, decl, deco_name)
+                # Decorators apply bottom-up; keeping source (top-down) order means
+                # the declaration nearest the top of the file is listed first.
                 updated = _replace(
-                    existing_model, mesh_exports=(*existing_model.mesh_exports, decl)
+                    existing_model, mesh_exports=(decl, *existing_model.mesh_exports)
                 )
                 _REGISTRY[updated.ref] = updated
                 target.__cadgen_model__ = updated  # type: ignore[attr-defined]

@@ -232,13 +232,12 @@ occurrences, a single solid as one component — and `inspect` reports
 `part`/`assembly` off the resulting tree. No decorator argument changes the
 geometry a model produces.
 
-Two decorator arguments are read **statically**, before the module runs, and
-must be literals: `out=` (a string) and the two tolerances (numbers). A tolerance therefore cannot come from a constants
-module; write the number in each decorator (a project README can name the
-shared value). `kinematics=` is ordinary Python evaluated
-when the module loads — a dict built at import, or loaded from a file, is fine
-and is what the kinematics reference shows. Unknown keyword arguments are
-rejected outright on every decorator.
+Every decorator argument — `out=`, the two tolerances, `kinematics=` — is
+ordinary Python evaluated when the module loads: an f-string, `NAME + ".step"`,
+a constant imported from `lib/`, a dict built at import. Nothing is parsed off
+the source text, and the values behind an argument are tracked like any other
+input. Unknown keyword arguments are rejected outright on every decorator; a
+bad value (an empty `out=`, a non-numeric tolerance) is refused at import.
 
 #### The one path-semantics exception
 
@@ -1035,11 +1034,11 @@ its own occurrences. → Step 3.
 A v0.4 sidecar (or an intermediate `.step.source.json`) is still sitting next to
 the artifact. → Delete it and rebuild. Step 5.
 
-**Unexpected keyword argument on a decorator, or "must be a numeric literal"**
+**Unexpected keyword argument on a decorator, or "out= must be a non-empty path string"**
 You passed a retired name — `write=` instead of `out=`, `pose=`, `animation=`
 on any decorator (choreography is the render module beside the document),
-`kinematics=` on `@dxf` — or a
-tolerance that is not a literal. → The decorator table in step 2.
+`kinematics=` on `@dxf` — or a value of the wrong kind. → The decorator table
+in step 2.
 
 **"kinematics has unknown key(s) … the vocabulary is closed"**
 Your kinematics dict has something other than `mates`, `couplings`, `poses`
