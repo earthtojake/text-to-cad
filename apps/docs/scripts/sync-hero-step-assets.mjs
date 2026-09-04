@@ -8,7 +8,7 @@
 // cadgen's law, so this script asks cadgen for the directory instead of
 // restating the hash. Run it after rebuilding the model:
 //
-//   python models/examples/src/planetary_gear_assembly.py
+//   python models/assemblies/src/planetary_gear_assembly/planetary_gear_assembly.py
 //   node apps/docs/scripts/sync-hero-step-assets.mjs
 
 import { execFileSync } from "node:child_process";
@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const docsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = path.resolve(docsRoot, "..", "..");
-const modelStep = path.join(repoRoot, "models/examples/STEP/planetary_gear_assembly.step");
+const modelStep = path.join(repoRoot, "models/assemblies/STEP/planetary_gear_assembly/planetary_gear_assembly.step");
 const modelSidecar = `${modelStep}.json`;
 const heroDir = path.join(docsRoot, "public/hero");
 const heroPackageDir = path.join(heroDir, "planetary");
@@ -36,7 +36,7 @@ const packageDir = execFileSync(
 
 if (!fs.existsSync(path.join(packageDir, "assembly.json"))) {
   throw new Error(
-    `No render package for ${modelStep} at ${packageDir} — run: python models/examples/src/planetary_gear_assembly.py`,
+    `No render package for ${modelStep} at ${packageDir} — run: python models/assemblies/src/planetary_gear_assembly/planetary_gear_assembly.py`,
   );
 }
 if (!fs.existsSync(modelSidecar)) {

@@ -22,7 +22,7 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cadgen/src")
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-PLANETARY = REPO_ROOT / "models/examples/src/planetary_gear_assembly.py"
+PLANETARY = REPO_ROOT / "models/assemblies/src/planetary_gear_assembly/planetary_gear_assembly.py"
 
 
 class OracleSmokeTest(unittest.TestCase):

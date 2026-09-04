@@ -591,7 +591,7 @@ class ChildrenByResult(StoreCase):
         src = self.root / "src"
         src.mkdir()
         for name in ("link_pin.py", "link_arm.py"):
-            shutil.copyfile(REPO / "models/examples/src" / name, src / name)
+            shutil.copyfile(REPO / "models/assemblies/src/link_robot" / name, src / name)
         (self.root / "STEP").mkdir()
         pin, arm = src / "link_pin.py", src / "link_arm.py"
 

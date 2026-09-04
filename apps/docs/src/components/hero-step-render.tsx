@@ -30,7 +30,7 @@ import { cloneThemePresetSettings } from "cadgen-js/common/themeSettings.js";
 // the same clip the viewer's Animation tab plays drives this scene.
 const HERO_PACKAGE_BASE_URL = "/hero/planetary";
 const HERO_SIDECAR_URL = "/hero/planetary_gear_assembly.step.json";
-const HERO_STEP_CAD_PATH = "models/examples/STEP/planetary_gear_assembly.step";
+const HERO_STEP_CAD_PATH = "models/assemblies/STEP/planetary_gear_assembly/planetary_gear_assembly.step";
 const HERO_STEP_DEMO_URL =
   "https://cad.fun/?file=fun%2Fplanetary_gear_assembly.step";
 const HERO_STEP_LABEL = "PLANETARY_GEAR_ASSEMBLY.STEP";

@@ -91,7 +91,7 @@ class StderrIsEverythingElseTests(unittest.TestCase):
         # The logger prefixes every line it owns. Finding one on stdout means narration and
         # result have been mixed, and `2>/dev/null` no longer yields something parseable.
         # Library-first: the model script is the build entrypoint for STEP and DXF alike.
-        for kind, target in (("step", PART), ("dxf", "models/examples/src/gasket_plate.py")):
+        for kind, target in (("step", PART), ("dxf", "models/drawings/src/gasket_plate.py")):
             with self.subTest(kind=kind):
                 result = run_script(target)
                 self.assertNotIn("[cadgen]", result.stdout)

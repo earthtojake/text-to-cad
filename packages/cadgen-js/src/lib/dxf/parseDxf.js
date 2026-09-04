@@ -614,7 +614,7 @@ function parsePolylineEntity(records, vertexGroups) {
  *  then optional gradient data. Code 75 (hatch style) opens that tail and code 98 counts the
  *  seed points -- and a seed point is written as another 10/20 pair. Reading to the end of the
  *  entity therefore appends the seed to the last boundary path, and a seed may sit ANYWHERE:
- *  in models/examples/DXF/imported/alu_extrusion_profile.dxf one sits 62 m off a 1.8 m sheet, which inflated the
+ *  in models/drawings/DXF/imported/alu_extrusion_profile.dxf one sits 62 m off a 1.8 m sheet, which inflated the
  *  drawing's bounds ~35x and left auto-fit framing the whole drawing as a speck. */
 const HATCH_BOUNDARY_END_CODES = new Set([75, 98]);
 

@@ -119,9 +119,11 @@ live under `scripts/`.
 
 Write test, sample, and durable CAD/robot-description artifacts under `models/`;
 do not create ad hoc artifact directories elsewhere. When you need a scratch
-project, create it under the fixture bucket it belongs in (a demo part or
-assembly belongs in the `models/examples/` cad-project — script in `src/`,
-artifact declared into a format folder), for example:
+project, create it under the fixture bucket it belongs in: a standalone part
+goes in the `models/examples/` cad-project, an assembly gets its own group in
+`models/assemblies/` (`src/<assembly>/`, outputs in `STEP/<assembly>/`), a
+drawing goes in `models/drawings/` — script in `src/`, artifact declared into a
+format folder. For example:
 
 ```bash
 $EDITOR models/examples/src/my_test.py     # @step(out="../STEP/my_test.step")

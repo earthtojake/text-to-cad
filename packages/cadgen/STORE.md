@@ -153,16 +153,16 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
 ```json
 {
   "kind": "record",
-  "model": "/abs/models/examples/src/link_robot.py",
+  "model": "/abs/models/assemblies/src/link_robot/link_robot.py",
   "entryKind": "assembly",
   "sourceKind": "python",
   "tree": "64429167…",
-  "closure": {"hash": "e341ac84…", "files": ["/abs/models/examples/src/link_robot.py"], "static": false},
+  "closure": {"hash": "e341ac84…", "files": ["/abs/models/assemblies/src/link_robot/link_robot.py"], "static": false},
   "children": [
-    {"model": "/abs/models/examples/src/link_arm.py", "tree": "c161092b…"},
-    {"model": "/abs/models/examples/src/link_pin.py", "tree": "265aee57…"}
+    {"model": "/abs/models/assemblies/src/link_robot/link_arm.py", "tree": "c161092b…"},
+    {"model": "/abs/models/assemblies/src/link_robot/link_pin.py", "tree": "265aee57…"}
   ],
-  "outputs": {"/abs/models/examples/STEP/link_robot.step": {"sha256": "823699b0…"}},
+  "outputs": {"/abs/models/assemblies/STEP/link_robot/link_robot.step": {"sha256": "823699b0…"}},
   "stepHash": "823699b0…"
 }
 ```
