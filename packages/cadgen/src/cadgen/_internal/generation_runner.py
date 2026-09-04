@@ -207,17 +207,16 @@ def _teach_function_level_import(error: ModuleNotFoundError, script_path: Path) 
 @dataclass(frozen=True)
 class _DeclaredKinematics:
     """What the decorator declared, resolved for the build: the kinematics
-    block, the bake pose, the animation module's TEXT, and the files those
-    declarations were read from (``inputs``)."""
+    block, the animation module's TEXT, and the files those declarations were
+    read from (``inputs``)."""
 
     block: dict | None
-    bake_pose: dict | None
     animation_source: str | None
     inputs: tuple[Path, ...]
 
 
 def _resolve_declared_kinematics(defn: object, *, script_path: Path) -> _DeclaredKinematics:
-    """The model's kinematics block, bake pose, and animation module TEXT.
+    """The model's kinematics block and animation module TEXT.
 
     The block comes validated from the decoration-time normalizer; axis refs
     resolve against real geometry later in the tree build. The animation
@@ -234,7 +233,6 @@ def _resolve_declared_kinematics(defn: object, *, script_path: Path) -> _Declare
     number of reloads."""
     kinematics_def = getattr(defn, "kinematics", None)
     block = dict(kinematics_def.block) if kinematics_def is not None else None
-    bake_pose = dict(getattr(defn, "bake_pose", None) or {}) or None
     animation = getattr(defn, "animation", None)
     animation_source: str | None = None
     inputs: list[Path] = []
@@ -249,9 +247,7 @@ def _resolve_declared_kinematics(defn: object, *, script_path: Path) -> _Declare
             )
         animation_source = resolved.read_text(encoding="utf-8")
         inputs.append(resolved)
-    return _DeclaredKinematics(
-        block=block, bake_pose=bake_pose, animation_source=animation_source, inputs=tuple(inputs)
-    )
+    return _DeclaredKinematics(block=block, animation_source=animation_source, inputs=tuple(inputs))
 
 
 def _normalize_step_payload(
@@ -391,7 +387,7 @@ def _write_shape_step_payload(
     )
     _mark_scene_python_backed(scene, source_identity=source_identity, source_path=script_path)
     _mark_scene_step_payload(scene, entry_kind=entry_kind, payload_kind="shape")
-    # Stash the pre-bake compound: the component-package emit job introspects its located
+    # Stash the compound: the tree build introspects its located
     # children (occurrence transforms + dedup), and the STEP export serializes it.
     scene.source_compound = shape
     logger.debug(f"built render scene (no STEP written): {_display_path(output_path)}")
@@ -667,7 +663,7 @@ def _run_script_generator_body(
         payload = _normalize_step_payload(raw_payload, script_path=spec.script_path)
         if spec.step_path is None:
             raise RuntimeError(f"{spec.source_ref} has no configured STEP output")
-        # Kinematics + bake pose + animation text (validated at decoration);
+        # Kinematics + animation text (validated at decoration);
         # they ride the scene into the sidecar exactly like provenance does.
         # Resolved BEFORE the closure is captured, because the declared
         # animation file is one of its inputs: the sidecar ships a copy of
@@ -712,7 +708,6 @@ def _run_script_generator_body(
         )
         if declared.block:
             generated_scene.kinematics = declared.block
-            generated_scene.bake_pose = declared.bake_pose
         generated_scene.animation_source = declared.animation_source
         # Children pinned by the body's calls — recorded from the CALLS, never
         # derived from the tree's links (a modified child is still a dependency).

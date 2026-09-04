@@ -84,16 +84,6 @@ An imported STEP/STP file declares nothing, so give it an explicit OUT; its part
 cadgen stl build path/to/imported.step meshes/imported.stl
 ```
 
-### One variant at a bake point
-
-For an ad-hoc export at a kinematic configuration, `--kinematics` names the point — a declared preset name or `{dof: value}` JSON, resolved against the document's own kinematics:
-
-```bash
-cadgen stl build STEP/gripper.step meshes/gripper_open.stl --kinematics open
-```
-
-It applies to an explicit OUT only: without one, each declared variant is produced at the bake point its own declaration recorded.
-
 A mesh door never writes a `.step` file. A generated model's STEP is the OUTPUT of `python <model>.py`; an imported model's STEP is already the file on disk.
 
 ## Rendering a mesh file

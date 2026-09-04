@@ -125,43 +125,6 @@ def export_view(tree_hash: str, dest: Path | None = None) -> Path:
     return root
 
 
-def ingest_view(view_dir: Path, *, base_tree: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Read a view's (possibly rewritten) ``assembly.json`` back into a tree.
-
-    Used after a kinematics bake rewrites placements in the view. The result is
-    a fully INLINE tree (links expanded): a baked pose may move a leaf inside a
-    child, so the child is no longer intact and cannot be linked. Component refs
-    map back to the object hashes the view carried (``surfObject``/``brepObject``).
-    """
-    from cadgen.store.trees import put_tree
-
-    descriptor = json.loads((Path(view_dir) / DESCRIPTOR_NAME).read_text(encoding="utf-8"))
-    components: dict[str, Any] = {}
-    for cid, entry in (descriptor.get("components") or {}).items():
-        entry = dict(entry)
-        for key in ("surf", "brep"):
-            digest = str(entry.pop(f"{key}Object", "") or "")
-            if not digest:
-                resolved = component_object_for_ref(str(entry.get(key) or ""), descriptor)
-                digest = resolved[0] if resolved else ""
-            entry[key] = digest
-        components[cid] = entry
-    tree = {
-        key: value
-        for key, value in base_tree.items()
-        if key not in {"kind", "components", "occurrences", "links", "assembly", "stats", "bbox", "tree"}
-    }
-    tree["components"] = components
-    tree["occurrences"] = list(descriptor.get("occurrences") or [])
-    tree["links"] = []
-    if isinstance(descriptor.get("assembly"), dict):
-        tree["assembly"] = descriptor["assembly"]
-    if descriptor.get("bbox") is not None:
-        tree["bbox"] = descriptor["bbox"]
-    tree["stats"] = {"occurrenceCount": len(tree["occurrences"]), "linkCount": 0}
-    return put_tree(tree), tree
-
-
 def virtual_path(rel: str) -> tuple[bytes | Path | None, str]:
     """Resolve ``<tree>`` (or ``<tree>/assembly.json``) and ``<tree>/components/<cid>.<suffix>``.
 

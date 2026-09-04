@@ -22,7 +22,6 @@ def build(
     target: Path,
     out: Path | None = None,
     *,
-    kinematics: str | dict | None = None,
     mesh_tolerance: float | None = None,
     mesh_angular_tolerance: float | None = None,
     force: bool = False,
@@ -32,10 +31,7 @@ def build(
 
     target: the STEP/STP document to export.
     out: destination .glb path. Omitted, the document's declared @glb variants
-        are produced instead — every one of them, each at the bake point its
-        declaration recorded.
-    kinematics: bake point for an explicit OUT — a declared preset name or
-        {dof: value} JSON, resolved against the document's kinematics.
+        are produced instead — every one of them.
     mesh_tolerance: chord deflection RELATIVE to each component's bounding
         diagonal, overriding what the document declares.
     mesh_angular_tolerance: max normal spread across a triangle edge in
@@ -50,7 +46,6 @@ def build(
         "glb",
         target,
         out,
-        kinematics=kinematics,
         mesh_tolerance=mesh_tolerance,
         mesh_angular_tolerance=mesh_angular_tolerance,
         force=force,

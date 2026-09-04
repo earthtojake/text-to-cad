@@ -33,21 +33,14 @@ MESH_FORMAT_SUFFIX = {"stl": ".stl", "3mf": ".3mf", "glb": ".glb"}
 
 @dataclass(frozen=True)
 class MeshExportJob:
-    """One output the exporter must write: format, destination, the
-    tolerances it tessellates at (``None`` = the tessellator's defaults), and
-    the export-at-pose placement.
-
-    ``pose_deltas`` maps occurrence id -> flat-16 row-major world delta
-    (cadgen's FK evaluator expands mate subtrees); ``pose_values`` is the
-    {dof: value} bake the deltas came from, which keys the freshness ledger —
-    a posed variant must never satisfy a rest export's gate or vice versa."""
+    """One output the exporter must write: format, destination, and the
+    tolerances it tessellates at (``None`` = the tessellator's defaults). The
+    geometry is the document's tree as stored; a mesh never moves it."""
 
     fmt: str
     out: Path
     mesh_tolerance: float | None = None
     mesh_angular_tolerance: float | None = None
-    pose_deltas: dict | None = None
-    pose_values: dict | None = None
 
 
 def run_mesh_exporter(
@@ -85,8 +78,6 @@ def run_mesh_exporter(
             argv += ["--chord-tolerance", repr(float(job.mesh_tolerance))]
         if job.mesh_angular_tolerance is not None:
             argv += ["--angle-tolerance", repr(float(job.mesh_angular_tolerance))]
-        if job.pose_deltas:
-            argv += ["--pose-deltas", json.dumps(job.pose_deltas, sort_keys=True)]
     if default_color is not None:
         argv += ["--default-color", default_color]
     label = "+".join(job.fmt for job in jobs)
@@ -111,15 +102,6 @@ def _tolerance_token(value: float | None) -> str:
     return "default" if value is None else repr(float(value))
 
 
-def pose_token(pose_values: dict | None) -> str:
-    """The ledger's pose discriminator: canonical JSON of the bake values, or
-    ``rest``. Part of the record entry so a posed export and a rest export of
-    the same document at the same tolerances never satisfy each other."""
-    if not pose_values:
-        return "rest"
-    return json.dumps({str(k): float(v) for k, v in pose_values.items()}, sort_keys=True)
-
-
 def _sha256_of(path: Path) -> str | None:
     import hashlib
 
@@ -141,7 +123,6 @@ def record_mesh_export(
     fmt: str,
     mesh_tolerance: float | None,
     mesh_angular_tolerance: float | None,
-    pose_values: dict | None = None,
 ) -> None:
     """Record a written mesh as one of the MODEL's outputs (STORE.md: mesh
     exports live in the model record, gated by clause 5). Best-effort."""
@@ -161,7 +142,6 @@ def record_mesh_export(
             "document": str(document_hash),
             "chord": _tolerance_token(mesh_tolerance),
             "angle": _tolerance_token(mesh_angular_tolerance),
-            "pose": pose_token(pose_values),
         }
         record["outputs"] = outputs
         write_record(model, record)
@@ -174,7 +154,6 @@ def record_mesh_export(
         fmt=fmt,
         mesh_tolerance=mesh_tolerance,
         mesh_angular_tolerance=mesh_angular_tolerance,
-        pose_values=pose_values,
     )
 
 
@@ -182,16 +161,14 @@ def mesh_variant_key(
     fmt: str,
     mesh_tolerance: float | None,
     mesh_angular_tolerance: float | None,
-    pose_values: dict | None = None,
 ) -> str:
-    """One mesh variant of a document — format × chord × angle × pose — the key
-    of the ARTIFACT-side ledger (``index/document/<sha256(bytes)>.meshes``)."""
+    """One mesh variant of a document — format × chord × angle — the key of the
+    ARTIFACT-side ledger (``index/document/<sha256(bytes)>.meshes``)."""
     return "|".join(
         (
             str(fmt),
             _tolerance_token(mesh_tolerance),
             _tolerance_token(mesh_angular_tolerance),
-            pose_token(pose_values),
         )
     )
 
@@ -203,7 +180,6 @@ def record_document_mesh(
     fmt: str,
     mesh_tolerance: float | None,
     mesh_angular_tolerance: float | None,
-    pose_values: dict | None = None,
 ) -> None:
     """A bare door's ledger: the mesh cut from THESE bytes at this variant has
     this sha. Artifact → artifact (STORE.md §2, the law) — no record is opened,
@@ -213,7 +189,7 @@ def record_document_mesh(
 
         digest = _sha256_of(Path(output_path))
         if digest:
-            key = mesh_variant_key(fmt, mesh_tolerance, mesh_angular_tolerance, pose_values)
+            key = mesh_variant_key(fmt, mesh_tolerance, mesh_angular_tolerance)
             note_document_mesh(str(document_hash), key, digest)
     except Exception:  # noqa: BLE001 - a failed ledger only costs a re-export
         pass
@@ -226,7 +202,6 @@ def document_mesh_current(
     fmt: str,
     mesh_tolerance: float | None,
     mesh_angular_tolerance: float | None,
-    pose_values: dict | None = None,
 ) -> bool:
     """Whether the mesh on disk is THE export of these document bytes at this
     variant: the document entry's ledger names its sha and the bytes verify."""
@@ -235,7 +210,7 @@ def document_mesh_current(
     path = Path(output_path)
     if not document_hash or not path.is_file():
         return False
-    key = mesh_variant_key(fmt, mesh_tolerance, mesh_angular_tolerance, pose_values)
+    key = mesh_variant_key(fmt, mesh_tolerance, mesh_angular_tolerance)
     expected = document_mesh_sha(str(document_hash), key)
     return bool(expected) and _sha256_of(path) == expected
 
@@ -247,11 +222,10 @@ def mesh_export_current(
     document_hash: str | None,
     mesh_tolerance: float | None,
     mesh_angular_tolerance: float | None,
-    pose_values: dict | None = None,
 ) -> bool:
     """Whether the mesh on disk is the CURRENT export of this model's document
-    at these tolerances and this pose: the model record lists it with matching
-    document hash, tolerance pair, pose token — and its bytes verify."""
+    at these tolerances: the model record lists it with matching document hash
+    and tolerance pair — and its bytes verify."""
     from cadgen.store.records import read_record
 
     path = Path(output_path)
@@ -267,6 +241,5 @@ def mesh_export_current(
         entry.get("document") == str(document_hash)
         and entry.get("chord") == _tolerance_token(mesh_tolerance)
         and entry.get("angle") == _tolerance_token(mesh_angular_tolerance)
-        and entry.get("pose") == pose_token(pose_values)
         and _sha256_of(path) == entry.get("sha256")
     )

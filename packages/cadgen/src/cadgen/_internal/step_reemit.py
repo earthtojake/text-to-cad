@@ -17,11 +17,11 @@ content hash as its closure instead of a Python provenance block.
 Freshness has two independent halves, which is what makes a kinematics-only
 edit cheap:
 
-* BYTES depend on the input's content hash and the bake point. Unchanged ->
-  nothing is re-emitted.
+* BYTES depend on the input's content hash alone. Unchanged -> nothing is
+  re-emitted. An annotation never moves geometry.
 * The ANNOTATION (the kinematics declaration and the animation text) is a
-  sidecar digest. Changed alone, with no bake, the sidecar is refreshed in
-  place against the tree already on disk.
+  sidecar digest. Changed alone, the sidecar is refreshed in place against the
+  tree already on disk.
 
 Not for foreign metadata: PMI, GD&T and vendor extensions do not survive the
 round trip. That is the documented price of speaking one dialect.
@@ -55,7 +55,7 @@ def load_kinematics_space(raw: object, *, where: str) -> Any | None:
 
     ``step build`` declares kinematics for a document that has no model script,
     so its ``--kinematics`` takes the same dict the decorator does —
-    ``{mates, couplings, poses, at}`` — spelled as inline JSON or named as a
+    ``{mates, couplings, poses}`` — spelled as inline JSON or named as a
     ``.json`` file. Both go through :func:`cadgen.kinematics.normalize_kinematics`,
     the one validator, so the JSON and Python spellings cannot drift.
     """
@@ -109,26 +109,16 @@ def load_animation_text(animation: Path | None, *, where: str) -> str | None:
 def annotation_digest(kinematics_def: Any | None, animation_source: str | None) -> str:
     """A stable digest of what the author DECLARED for this document.
 
-    Digests the pre-resolution block (selector refs and all) plus the bake point
-    and the animation text, so an annotation edit is detectable without
-    re-resolving anything against geometry.
+    Digests the pre-resolution block (selector refs and all) plus the animation
+    text, so an annotation edit is detectable without re-resolving anything
+    against geometry.
     """
     payload = {
         "kinematics": None if kinematics_def is None else kinematics_def.block,
-        "at": None if kinematics_def is None else kinematics_def.at,
         "animation": animation_source,
     }
     body = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
-
-
-def _same_pose(left: object, right: object) -> bool:
-    def norm(value: object) -> dict[str, float]:
-        if not isinstance(value, dict) or not value:
-            return {}
-        return {str(k): float(v) for k, v in value.items()}
-
-    return norm(left) == norm(right)
 
 
 def resolve_output(target: Path, out: Path) -> tuple[Path, Path]:
@@ -178,7 +168,6 @@ def reemit_step_document(
     if not input_hash:
         raise _fail(f"could not read {_display(document)}")
     digest = annotation_digest(kinematics_def, animation_source)
-    at = None if kinematics_def is None else kinematics_def.at
 
     sidecar = read_source_provenance(out) or {}
     tree = result_tree_for(out)
@@ -188,7 +177,6 @@ def reemit_step_document(
         and tree is not None
         and str(sidecar.get("sourceKind") or "") == "step"
         and str(sidecar.get("sourceHash") or "") == input_hash
-        and _same_pose((sidecar.get("kinematics") or {}).get("bakedPose"), at)
     )
     if bytes_current and str(sidecar.get("annotationHash") or "") == digest:
         return {
@@ -198,9 +186,9 @@ def reemit_step_document(
             "skipped": True,
             "sidecarOnly": False,
         }
-    if bytes_current and at is None:
-        # The ANNOTATION changed but the bytes cannot have: no bake point, same
-        # input. Re-resolve the declaration against a view of the tree already in
+    if bytes_current:
+        # The ANNOTATION changed but the bytes cannot have: same input, and an
+        # annotation never moves geometry. Re-resolve the declaration against a view of the tree already in
         # the store and rewrite the sidecar — no OCCT, no emit, no new tree.
         payload = dict(sidecar)
         payload["annotationHash"] = digest
@@ -285,7 +273,6 @@ def _emit(
     scene.reemit_source_hash = input_hash
     scene.reemit_annotation_hash = digest
     scene.kinematics = None if kinematics_def is None else dict(kinematics_def.block)
-    scene.bake_pose = None if kinematics_def is None else kinematics_def.at
     scene.animation_source = animation_source
 
     out.parent.mkdir(parents=True, exist_ok=True)

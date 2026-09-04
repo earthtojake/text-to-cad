@@ -50,11 +50,9 @@ class MeshExportDecl:
     out: str | None = None
     mesh_tolerance: float | None = None
     mesh_angular_tolerance: float | None = None
-    # Runtime-only (never parsed from AST): the declaration's OWN kinematics
-    # and the resolved {dof: value} bake pose. Each mesh declaration stands
-    # alone — it never reads @step's kinematics.
+    # Runtime-only (never parsed from AST): the declaration's OWN kinematics.
+    # Each mesh declaration stands alone — it never reads @step's kinematics.
     kinematics: object | None = None
-    bake_pose: dict | None = None
 
 
 

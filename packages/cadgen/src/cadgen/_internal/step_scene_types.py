@@ -43,11 +43,9 @@ class LoadedStepScene:
     source_path: str | None = None
     # Typed-mates kinematics block from kinematics= (JSON-ready dict; axis
     # refs resolved to numbers during the tree build, then written into the
-    # model's sidecar), the resolved {dof: value} bake pose the artifact is
-    # written at, and the .anim.js choreography TEXT (copied at build; no path
-    # survives into generated files).
+    # model's sidecar) and the .anim.js choreography TEXT (copied at build; no
+    # path survives into generated files).
     kinematics: dict[str, Any] | None = None
-    bake_pose: dict[str, float] | None = None
     animation_source: str | None = None
     source_hash: str | None = None
     source_closure_hash: str | None = None
@@ -57,8 +55,7 @@ class LoadedStepScene:
     source_closure_constants: dict[str, dict[str, str]] = field(default_factory=dict)
     # `cadgen step build IN OUT` only: the INPUT document's content hash (the
     # closure a re-emitted document is fresh against) and a digest of the
-    # annotation it was given (kinematics declaration + bake point + animation
-    # text). Set on a scene loaded from IN and re-pathed to OUT; their presence
+    # annotation it was given (kinematics declaration + animation text). Set on a scene loaded from IN and re-pathed to OUT; their presence
     # is what tells the sidecar writer this is a re-emit rather than an import.
     reemit_source_hash: str | None = None
     reemit_annotation_hash: str | None = None

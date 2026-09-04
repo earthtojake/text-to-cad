@@ -9,11 +9,8 @@ The engine is unchanged: :func:`cadgen.step_export_target.export_cad_target`
 is the one entry, so a door and a model-script run cannot produce different
 bytes (design/format-doors.md).
 
-The doors take DOCUMENTS. A bare door reads the model's declared variants from
-the document's SIDECAR — never from source, never from the Python registry —
-and an explicit OUT is one ad-hoc export, optionally at a ``kinematics=`` bake
-point resolved against that same sidecar (design/pose-animation-split.md,
-CLI/doors follow-on).
+The doors take DOCUMENTS: the mesh is the document's tree, tessellated. A door
+never moves geometry — a posed export is authored geometry or another model.
 """
 
 from __future__ import annotations
@@ -30,7 +27,6 @@ def mesh_build(
     target: Path,
     out: Path | None,
     *,
-    kinematics: str | dict | None,
     mesh_tolerance: float | None,
     mesh_angular_tolerance: float | None,
     force: bool,
@@ -49,16 +45,9 @@ def mesh_build(
     # The door reads the tree behind the document's BYTES (a compile job when the
     # store has none); it never refuses a document or runs its script.
     document = document_target(target, suffixes=STEP_SUFFIXES)
-    if out is None and kinematics is not None:
-        raise ValueError(
-            "kinematics= names the bake point for ONE explicit OUT; without an "
-            "OUT the door produces the document's DECLARED variants, each at "
-            "the bake point its declaration recorded"
-        )
     payload = export_cad_target(
         document,
         [(fmt, None if out is None else Path(out).expanduser())],
-        kinematics=kinematics,
         mesh_tolerance=mesh_tolerance,
         mesh_angular_tolerance=mesh_angular_tolerance,
         force=force,

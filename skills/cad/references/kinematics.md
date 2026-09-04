@@ -10,9 +10,10 @@ There are THREE systems with different lifecycles, deliberately independent:
   model calls with them (`WIDTH = 10.0` … `return _bracket(WIDTH)`). Changing
   one re-runs Python and rebuilds the outputs. They are not live in the viewer.
 - **Kinematics** is typed mates declared as PURE DATA via `kinematics=` on
-  the export decorators. It drives the viewer's pose sliders and bakes posed
-  exports — no rebuild, no Python at render time. It lives in the model's
-  sidecar (`<name>.step.json`, written beside the artifact).
+  the export decorators. It drives the viewer's pose sliders — no rebuild, no
+  Python at render time — and never moves the geometry a model writes. It
+  lives in the model's sidecar (`<name>.step.json`, written beside the
+  artifact).
 - **Animation** is choreography in a plain `.js` module declared via
   `@step(animation="<name>.anim.js")`, whose TEXT is copied into the same
   sidecar. It targets occurrences directly and knows nothing about mates.
@@ -22,10 +23,9 @@ There are THREE systems with different lifecycles, deliberately independent:
 
 ## Kinematics: typed mates
 
-One `kinematics=` dict, closed keys `mates` / `couplings` / `poses` / `at`, on
-any of `@step`/`@stl`/`@glb`/`@threemf`. Each decorator's declaration stands
-alone (share a module-level dict; there is no cross-decorator inheritance).
-`at` is the bake point and is covered below; the other three are the space.
+One `kinematics=` dict, closed keys `mates` / `couplings` / `poses`, on any of
+`@step`/`@stl`/`@glb`/`@threemf`. Each decorator's declaration stands alone
+(share a module-level dict; there is no cross-decorator inheritance).
 
 ```python
 import cadgen
@@ -78,8 +78,10 @@ if __name__ == "__main__":
   literals (`origin=(x, y, z), direction=(x, y, z)`). Refs resolve ONCE at
   build into world numbers; the viewer does arithmetic, never topology.
 - **ZERO IS THE ARTIFACT AS WRITTEN.** Every DOF's rest value is 0 — the
-  placement the author built (or the baked pose, below). There is no
-  `default=`; a presentation pose is a preset or a bake.
+  placement the author built. There is no `default=`; a presentation pose is a
+  preset. A model that must be WRITTEN at another configuration is authored
+  at that configuration (or is another model): no decorator argument moves
+  geometry.
 - **`couple(name, {dof: ratio})`** declares a virtual DOF gearing real ones
   linearly and ADDITIVELY (setting `curl=x` adds `50*x` degrees to `mcp`).
   Exact gear trains are ratio arithmetic, not code.
@@ -95,32 +97,8 @@ if __name__ == "__main__":
   as a concept.
 - The mate graph is a TREE: one parent mate per occurrence, no cycles.
   Closed-loop linkages (four-bars) are out of scope by design — they need a
-  solver; cadgen evaluates pure forward kinematics, identically in Python
-  and the viewer, so a slider position and an exported bake agree to the bit.
-
-## Export at a bake point
-
-EVERYTHING SAYS KINEMATICS: the bake point is the kinematics dict's own `"at"`
-key — a preset name or `{dof: value}` — so a declaration stays one object.
-
-```python
-@step(out="gripper.step", kinematics={**KINEMATICS, "at": "closed"})
-@stl(out="gripper_open.stl", kinematics={**KINEMATICS, "at": "open"})
-@stl(out="gripper_closed.stl", kinematics={**KINEMATICS, "at": "closed"})
-```
-
-The written artifact is its own q=0: a baked STEP's sidecar shifts limits and
-re-zeroes presets to describe the file as written. Mesh bakes are transient —
-stl/glb/3mf never have sidecars or animation. The mesh freshness ledger keys
-on the bake point, so posed and rest variants never satisfy each other's no-op
-gates.
-
-For a ONE-OFF mesh at a configuration the model does not declare, the mesh
-doors take the same argument name for the point:
-
-```bash
-cadgen stl build STEP/gripper.step tmp/gripper_open.stl --kinematics open
-```
+  solver; the viewer evaluates pure forward kinematics from the sidecar's
+  numbers at render time.
 
 ## Annotating a STEP you did not generate
 

@@ -157,10 +157,6 @@ class ModelDef:
     # Typed mates (kinematics= dict, validated at decoration); axis refs
     # resolve at build and the block lands in the model's sidecar. STEP only.
     kinematics: KinematicsDef | None = None
-    # The kinematics dict's "at" bake point resolved to {dof: value}: the
-    # artifact is WRITTEN at this configuration (and is therefore its own q=0).
-    # None = authored rest.
-    bake_pose: dict[str, float] | None = None
     # Script-relative path of the .anim.js choreography module; its TEXT is
     # copied into the sidecar at build (never a path in generated files).
     animation: str | None = None
@@ -260,7 +256,6 @@ def _decorator(
     kinematics_def = (
         normalize_kinematics(kinematics, where=f"@{fmt}") if kinematics is not None else None
     )
-    bake_pose = None if kinematics_def is None else kinematics_def.at
     animation_path = _normalize_animation(animation, fmt=fmt)
 
     def apply(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -292,7 +287,6 @@ def _decorator(
             mesh_tolerance=mesh_tolerance,
             mesh_angular_tolerance=mesh_angular_tolerance,
             kinematics=kinematics_def,
-            bake_pose=bake_pose,
             animation=animation_path,
             mesh_exports=pending,
             step_output=step_output,
@@ -351,9 +345,10 @@ def step(
 ):
     """Declare a STEP model. Usable bare (``@step``) or configured (``@step(...)``).
 
-    ``kinematics=`` takes the typed-mates dict (see ``cadgen.kinematics``),
-    whose ``"at"`` key names the configuration to BAKE the artifact at (a
-    preset name or ``{dof: value}``; the written artifact is its own q=0).
+    ``kinematics=`` takes the typed-mates dict (see ``cadgen.kinematics``). No
+    decorator argument changes the geometry a model writes: the geometry is the
+    function's return value; the arguments decide where the files land, how
+    they are written, and what the sidecar declares.
     ``animation=`` names a ``.js`` choreography module beside the script whose
     text is copied into the sidecar. STEP is the only format with animation —
     mesh exports are static bakes.
@@ -382,8 +377,7 @@ def dxf(
         if elsewhere in unsupported:
             raise TypeError(
                 f"@dxf takes no {elsewhere}=: a drawing is 2D geometry — kinematics "
-                "and its 'at' bake point live on @step and the mesh decorators, "
-                "and animation is @step-only"
+                "lives on @step and the mesh decorators, and animation is @step-only"
             )
     _reject_unknown_kwargs("dxf", unsupported)
     decorator = _decorator(
@@ -448,7 +442,6 @@ def _mesh_export_decorator(deco_name: str, fmt: str):
             mesh_tolerance=mesh_tolerance,
             mesh_angular_tolerance=mesh_angular_tolerance,
             kinematics=kinematics_def,
-            bake_pose=None if kinematics_def is None else kinematics_def.at,
         )
 
         def attach(target: Callable[..., Any]) -> Callable[..., Any]:

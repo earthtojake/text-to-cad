@@ -9,7 +9,7 @@ follow-on).
 
 What is pinned here is the contract a caller depends on: OUT is required and
 never IN, the annotation resolves against real geometry, and freshness splits in
-two — bytes key on the input hash and the bake point, the annotation on its own
+two — bytes key on the input hash alone, the annotation on its own
 digest — which is what lets a kinematics-only edit refresh the sidecar without
 re-emitting.
 """
@@ -164,22 +164,10 @@ class StepReemitTests(unittest.TestCase):
         result = self._build(kinematics=json.dumps(widened))
 
         self.assertTrue(result.sidecar_only)
-        self.assertEqual(before, self.out.read_bytes(), "bytes cannot change: no bake, same input")
+        self.assertEqual(before, self.out.read_bytes(), "bytes cannot change: same input")
         sidecar = self._sidecar()
         self.assertEqual({"value": [0.0, 120.0]}, sidecar["kinematics"]["mates"][0]["limits"])
         self.assertIn("wide", sidecar["kinematics"]["poses"])
-
-    def test_an_at_bake_point_moves_the_bytes(self) -> None:
-        self._build(kinematics=json.dumps(KINEMATICS))
-        at_rest = self.out.read_bytes()
-        baked = json.loads(json.dumps(KINEMATICS))
-        baked["at"] = "open"
-        result = self._build(kinematics=json.dumps(baked))
-        self.assertFalse(result.skipped)
-        self.assertFalse(result.sidecar_only)
-        self.assertNotEqual(at_rest, self.out.read_bytes(), "the bake is IN the bytes")
-        # The artifact as written is its own q=0.
-        self.assertEqual({"swing": 45.0}, self._sidecar()["kinematics"]["bakedPose"])
 
     def test_the_json_and_python_kinematics_spellings_agree(self) -> None:
         import cadgen

@@ -101,20 +101,6 @@ class DoorArguments(unittest.TestCase):
             self.assertEqual(0, stl_build.main([str(self.document), "meshes/sample.stl"]))
         self.assertEqual([("stl", Path("meshes/sample.stl"))], export.call_args.args[1])
 
-    def test_a_bake_point_needs_an_explicit_out(self):
-        # `kinematics=` names the configuration for ONE artifact. Without an
-        # OUT the door produces the declared variants, each at the bake point
-        # its own declaration recorded, so a run-level point would be ambiguous.
-        with _engine(), contextlib.redirect_stderr(io.StringIO()):
-            self.assertEqual(1, stl_build.main([str(self.document), "--kinematics", "open"]))
-
-    def test_a_bake_point_reaches_the_engine(self):
-        with _engine() as export:
-            self.assertEqual(
-                0, stl_build.main([str(self.document), "posed.stl", "--kinematics", "open"])
-            )
-        self.assertEqual("open", export.call_args.kwargs["kinematics"])
-
     def test_a_model_script_is_refused_by_naming_the_run(self):
         stderr = io.StringIO()
         with _engine(), contextlib.redirect_stderr(stderr):
@@ -151,7 +137,7 @@ class DoorArguments(unittest.TestCase):
         kwargs = export.call_args.kwargs
         self.assertIsNone(kwargs["mesh_tolerance"])
         self.assertIsNone(kwargs["mesh_angular_tolerance"])
-        self.assertIsNone(kwargs["kinematics"])
+        self.assertNotIn("kinematics", kwargs)
         self.assertFalse(kwargs["force"])
         self.assertFalse(kwargs["verbose"])
 

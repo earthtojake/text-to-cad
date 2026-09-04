@@ -68,23 +68,6 @@ function identityTransform(transform) {
   return IDENTITY.every((value, index) => transform[index] === value);
 }
 
-// Row-major flat-16 multiply: (a * b), used to premultiply a pose delta onto
-// an occurrence's absolute transform. Only the first 12 rows matter to the
-// point/normal math; the fourth row rides along for shape.
-function multiplyTransform16(a, b) {
-  const out = new Array(16).fill(0);
-  for (let row = 0; row < 4; row += 1) {
-    for (let col = 0; col < 4; col += 1) {
-      let sum = 0;
-      for (let k = 0; k < 4; k += 1) {
-        sum += (a[row * 4 + k] ?? (row === 3 && k === 3 ? 1 : 0)) * (b[k * 4 + col] ?? (k === 3 && col === 3 ? 1 : 0));
-      }
-      out[row * 4 + col] = sum;
-    }
-  }
-  return out;
-}
-
 /**
  * Bake a package into color-grouped triangle soup.
  *
@@ -96,13 +79,6 @@ function multiplyTransform16(a, b) {
  */
 export function buildPackageMeshPrimitives(descriptor, componentTessellations, options = {}) {
   const defaultColor = options.defaultColor || DEFAULT_COLOR_HEX;
-  // Optional export-at-pose deltas: {occurrenceId: flat-16 row-major world
-  // delta}, premultiplied onto the occurrence's absolute transform. The
-  // caller (cadgen's FK evaluator) expands mate subtrees, so this stays a
-  // dumb per-occurrence lookup.
-  const poseDeltas = options.poseDeltas && typeof options.poseDeltas === "object"
-    ? options.poseDeltas
-    : null;
   const componentColors = new Map(
     Object.entries(descriptor.components || {}).map(([cid, entry]) => [
       cid,
@@ -128,11 +104,7 @@ export function buildPackageMeshPrimitives(descriptor, componentTessellations, o
     const partColor = linearRgbToHex(tessellation.partColor) || null;
     const fallback = occurrenceColor || componentColor || partColor || defaultColor;
 
-    let transform = Array.isArray(occurrence.transform) ? occurrence.transform : null;
-    const delta = poseDeltas ? poseDeltas[String(occurrence.id || "")] : null;
-    if (Array.isArray(delta)) {
-      transform = multiplyTransform16(delta, transform || [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
-    }
+    const transform = Array.isArray(occurrence.transform) ? occurrence.transform : null;
     const identity = transform === null || identityTransform(transform);
     const mirrored = !identity && determinant3(transform) < 0;
     const nm = identity ? null : normalMatrix3(transform);

@@ -1,12 +1,10 @@
-"""kinematics= end to end: declaration -> resolved sidecar -> baked artifact.
+"""kinematics= end to end: declaration -> resolved sidecar.
 
 The decoration-time vocabulary is pinned in test_kinematics_def; this covers
 the BUILD half (design/pose-animation-split.md): mate refs validate against
 real occurrences, axis selector refs resolve to world numbers, the block lands
-in the ``.step.json`` sidecar (schema 4) with the animation module's text
-COPIED in, and the kinematics dict's ``"at"`` key bakes the artifact —
-descriptor transforms move, and the sidecar re-zeroes so the artifact as
-written is q=0.
+in the ``.step.json`` sidecar with the animation module's text COPIED in. No
+declaration moves geometry: the tree is the model's return value as stored.
 """
 
 from __future__ import annotations
@@ -204,42 +202,6 @@ class KinematicsBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(FileNotFoundError, "animation module not found"):
             self._build(script)
 
-    def test_at_bakes_the_artifact_and_rezeroes_the_sidecar(self) -> None:
-        rest = self._write("rest.py")
-        # The bake point lives INSIDE the kinematics dict: everything says
-        # kinematics, so there is no pose= kwarg beside it to keep in step.
-        posed = self._write("posed.py", kinematics_extra=', "at": "open"')
-        self.assertEqual(0, self._build(rest))
-        self.assertEqual(0, self._build(posed))
-
-        def arm_transform(script: Path) -> list[float]:
-            for occurrence in self._descriptor(script)["occurrences"]:
-                if "arm" in str(occurrence.get("name", "")):
-                    return [round(float(v), 6) for v in occurrence["transform"]]
-            raise AssertionError("no arm occurrence")
-
-        at_rest = arm_transform(rest)
-        at_pose = arm_transform(posed)
-        self.assertNotEqual(at_rest, at_pose)
-        # 45 degrees about +Z through (0, 0, 6): the rotation block is exact.
-        half = round(math.sqrt(0.5), 6)
-        self.assertEqual(at_pose[0], half)
-        self.assertEqual(round(at_pose[1] + half, 6), 0.0)
-
-        block = self._sidecar(posed)["kinematics"]
-        self.assertEqual(block["bakedPose"], {"swing": 45.0})
-        # The artifact as written is q=0: limits shift, presets re-zero.
-        self.assertEqual(block["mates"][0]["limits"], {"value": [-45.0, 45.0]})
-        self.assertEqual(block["poses"], {"open": {"swing": 0.0}})
-
-        # And the two STEP files genuinely differ: the pose is IN the bytes.
-        posed_bytes = posed.with_suffix(".step").read_bytes()
-        self.assertNotEqual(rest.with_suffix(".step").read_bytes(), posed_bytes)
-
-        # Byte determinism: the same pose in produces the same artifact out.
-        self.assertEqual(0, self._build(posed))
-        self.assertEqual(posed_bytes, posed.with_suffix(".step").read_bytes())
-
     def test_the_root_exposes_no_pose_surface(self) -> None:
         import cadgen
 
@@ -249,73 +211,3 @@ class KinematicsBuildTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-POSED_MESH_MODEL = """
-import cadgen
-from cadgen import label_shape, step, stl
-from cadgen import build123d as bd
-
-KINEMATICS = {
-    "mates": [
-        cadgen.revolute("swing", parent="#base", child="#arm",
-                        origin=(0, 0, 6), direction=(0, 0, 1), limits=(0, 90)),
-    ],
-    "poses": {"open": {"swing": 45}},
-}
-
-@step(kind="assembly")
-@stl(out="latch_rest.stl")
-@stl(out="latch_open.stl", kinematics={**KINEMATICS, "at": "open"})
-def latch():
-    base = label_shape(bd.Box(20, 20, 4), "base")
-    arm = label_shape(bd.Pos(10, 0, 6) * bd.Box(16, 4, 4), "arm")
-    return bd.Compound(children=[base, arm])
-
-
-if __name__ == "__main__":
-    latch()
-"""
-
-
-class PosedMeshExportTests(unittest.TestCase):
-    """A mesh declaration's OWN kinematics + "at" bake, independent of @step."""
-
-    def setUp(self) -> None:
-        self._roots = IsolatedCadRoots(self, prefix="cadkinmesh-")
-        self._tempdir = self._roots.temporary_cad_directory(prefix="tmp-cadkinmesh-")
-        self.root = Path(self._tempdir.name)
-
-    def tearDown(self) -> None:
-        self._tempdir.cleanup()
-
-    def test_a_posed_stl_variant_differs_and_gates_on_its_pose(self) -> None:
-        import os
-        import subprocess
-        import sys
-
-        script = self.root / "latch.py"
-        script.write_text(POSED_MESH_MODEL, encoding="utf-8")
-        env = dict(os.environ)
-        env.update({
-            "CADGEN_DAEMON": "0",
-            "CADGEN_COMPONENT_WORKERS": "1",
-            "PYTHONPATH": str(Path(__file__).resolve().parents[4] / "packages/cadgen/src"),
-        })
-        first = subprocess.run(
-            [sys.executable, str(script)], cwd=str(self.root), env=env,
-            capture_output=True, text=True, timeout=600,
-        )
-        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
-        rest = (self.root / "latch_rest.stl").read_bytes()
-        posed = (self.root / "latch_open.stl").read_bytes()
-        self.assertEqual(len(rest), len(posed), "same tessellation, different placement")
-        self.assertNotEqual(rest, posed, "the pose must be IN the bytes")
-
-        # The ledger keys on the pose too: a second run rewrites neither.
-        second = subprocess.run(
-            [sys.executable, str(script)], cwd=str(self.root), env=env,
-            capture_output=True, text=True, timeout=600,
-        )
-        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
-        self.assertNotIn("wrote STL", second.stderr)

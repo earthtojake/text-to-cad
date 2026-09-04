@@ -492,7 +492,6 @@ def _export_mesh_jobs(
             variant = dict(
                 mesh_tolerance=job.mesh_tolerance,
                 mesh_angular_tolerance=job.mesh_angular_tolerance,
-                pose_values=job.pose_values,
             )
             by_document = document_mesh_current(job.out, document_hash=document_hash, fmt=job.fmt, **variant)
             if model is None:
@@ -517,7 +516,6 @@ def _export_mesh_jobs(
                     fmt=job.fmt,
                     mesh_tolerance=job.mesh_tolerance,
                     mesh_angular_tolerance=job.mesh_angular_tolerance,
-                    pose_values=job.pose_values,
                 )
                 # A script run ledgers on its record (which also notes the document
                 # entry); a bare door ledgers on the document entry alone.
@@ -689,63 +687,11 @@ def _no_declarations_error(step_path: Path, fmt: str) -> ValueError:
     )
 
 
-def _bake_point_values(
-    kinematics: object, step_path: Path, *, where: str
-) -> "dict[str, float] | None":
-    """An ad-hoc ``kinematics=`` bake point, resolved against the DOCUMENT.
-
-    The point is a preset NAME or a ``{dof: value}`` mapping — the same two
-    spellings snapshot's ``--kinematics`` takes — and it is validated against
-    the kinematics block in the document's own sidecar, which is the only
-    declaration a door can see.
-    """
-    if kinematics is None:
-        return None
-    from cadgen._internal.source_sidecar import read_source_sidecar
-    from cadgen.kinematics import resolve_kinematics_at
-
-    block = (read_source_sidecar(step_path) or {}).get("kinematics")
-    if not isinstance(block, dict) or not block.get("mates"):
-        raise ValueError(
-            f"{step_path.name} declares no kinematics, so there is no bake point "
-            "to name: declare kinematics= on the model and run python <script>"
-        )
-    point: object = kinematics
-    if isinstance(point, str):
-        text = point.strip()
-        if text.startswith("{"):
-            point = json.loads(text)
-        elif not text:
-            return None
-    return resolve_kinematics_at(block, point, where=where)
-
-
-def _sidecar_pose_deltas(
-    pose_values: "dict[str, float]", *, step_path: Path, package_dir: Path | None
-) -> "dict[str, list[float]] | None":
-    """FK deltas for a bake point, evaluated from the SIDECAR's block.
-
-    The sidecar's mates are already axis-resolved (world numbers) and carry the
-    ``parentId``/``childId`` the subtree expansion needs, so a door evaluates
-    forward kinematics with no selector index and no OCCT at all.
-    """
-    if not pose_values or package_dir is None:
-        return None
-    from cadgen._internal.kinematics_resolve import resolved_block_pose_deltas
-    from cadgen._internal.source_sidecar import read_source_sidecar
-
-    block = (read_source_sidecar(step_path) or {}).get("kinematics")
-    if not isinstance(block, dict):
-        return None
-    return resolved_block_pose_deltas(block, pose_values, package_dir=package_dir)
-
-
 def export_cad_target(
     target: str | Path,
     outputs: "list[tuple[str, str | Path | None]]",
     *,
     repo_root: Path | None = None,
-    kinematics: object = None,
     mesh_tolerance: float | None = None,
     mesh_angular_tolerance: float | None = None,
     force: bool = False,
@@ -760,9 +706,9 @@ def export_cad_target(
     run, no source, no extraction — and one Node invocation serializes every requested
     format from one tessellation, so all formats come from identical geometry.
     ``outputs`` pairs a format name with an explicit output path, or ``None`` for the
-    DOCUMENT's declarations (all variants, read from its sidecar). ``kinematics`` is an
-    ad-hoc bake point for an explicit OUT, resolved against the document's own
-    kinematics block. ``force`` re-exports past the ledger.
+    DOCUMENT's declarations (all variants, read from its sidecar). ``force``
+    re-exports past the ledger. Nothing here moves geometry: a mesh is the
+    document's tree, tessellated.
 
     Writes no ``.step`` and no beside-source artifacts; a document missing its render
     package compiles one into the SHARED store (content keyed — the same package every
@@ -803,31 +749,22 @@ def export_cad_target(
 
     resolved: list[MeshExportJob] = []
     seen: dict[Path, str] = {}
-    ad_hoc_pose = _bake_point_values(kinematics, step_path, where="kinematics=")
 
     def _add(
         fmt: str,
         out: Path,
         chord: float | None,
         angle: float | None,
-        pose_values: "dict[str, float] | None" = None,
     ) -> None:
         if out in seen:
             raise ValueError(f"{seen[out]} and {fmt} resolve to the same output path: {out}")
         seen[out] = fmt
-        pose_deltas = (
-            _sidecar_pose_deltas(pose_values, step_path=step_path, package_dir=package_dir)
-            if pose_values
-            else None
-        )
         resolved.append(
             MeshExportJob(
                 fmt=fmt,
                 out=out,
                 mesh_tolerance=chord,
                 mesh_angular_tolerance=angle,
-                pose_deltas=pose_deltas,
-                pose_values=pose_values,
             )
         )
 
@@ -847,7 +784,7 @@ def export_cad_target(
                     if mesh_angular_tolerance is not None
                     else decl.mesh_angular_tolerance
                 )
-                _add(fmt, decl.path, chord, angle, decl.at)
+                _add(fmt, decl.path, chord, angle)
             continue
         out = _resolve_export_output(fmt, raw, logical_step=spec.step_path, spec=spec)
         chord, angle = _effective_export_tolerances(
@@ -856,7 +793,7 @@ def export_cad_target(
             cli_mesh_tolerance=mesh_tolerance,
             cli_mesh_angular_tolerance=mesh_angular_tolerance,
         )
-        _add(fmt, out, chord, angle, ad_hoc_pose)
+        _add(fmt, out, chord, angle)
 
     written = _export_mesh_jobs(spec, package_dir, scene, resolved, logger=logger, force=force)
     files = [

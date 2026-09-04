@@ -1,37 +1,21 @@
-"""Build-time kinematics resolution: refs -> numbers, pose -> baked package.
+"""Build-time kinematics resolution: refs -> numbers.
 
-Two jobs, both against the freshly built (staging) tree, before the
-STEP is assembled from it:
+One job, against the freshly built tree, before the sidecar is written:
+every mate's parent/child occurrence ref must name a real occurrence, and every
+``axis={"ref": ...}`` selector becomes world-at-rest ``{"origin", "dir"}``
+numbers via the same composed selector index inspect uses. The sidecar carries
+only numbers — the viewer does arithmetic, never topology.
 
-1. RESOLVE: every mate's parent/child occurrence ref must name a real
-   occurrence, and every ``axis={"ref": ...}`` selector becomes world-at-rest
-   ``{"origin", "dir"}`` numbers via the same composed selector index inspect
-   uses. The sidecar carries only numbers — the viewer does arithmetic, never
-   topology.
-
-2. BAKE (``pose=`` on the decorator): apply the FK deltas to the assembly.json's
-   absolute occurrence transforms so the artifact is WRITTEN at the pose and
-   is therefore its own q=0. Mate axes ride their parent chain, and declared
-   limits/defaults/presets shift by the baked values so the sidecar describes
-   the artifact as written.
+Nothing here moves geometry. A kinematics declaration describes how the
+written tree articulates; the tree itself is the model's return value and is
+stored exactly as returned.
 """
 
 from __future__ import annotations
 
 import copy
-import json
 from pathlib import Path
 from typing import Any, Mapping
-
-from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
-from cadgen._internal.kinematics_fk import (
-    kinematics_deltas,
-    matmul4,
-    matrix_from_rows12,
-    parent_chain_deltas,
-    transform_point,
-    transform_vector,
-)
 
 
 def _fail(message: str) -> ValueError:
@@ -159,7 +143,7 @@ def resolve_kinematics_block(
     block: Mapping[str, Any], *, package_dir: Path, step_path: Path, source_ref: str
 ) -> tuple[dict[str, Any], dict[str, str]]:
     """Validated declaration -> sidecar-ready block (axes as numbers), plus the
-    mate-ref -> occurrence-id map the bake step reuses."""
+    mate-ref -> occurrence-id map."""
     index, descriptor = _composed_index(package_dir, step_path=step_path, source_ref=source_ref)
     tree = _instance_tree_ids(descriptor)
     resolved = copy.deepcopy(dict(block))
@@ -183,225 +167,3 @@ def resolve_kinematics_block(
         if "ref" in axis:
             mate["axis"] = _axis_from_ref(index, str(axis["ref"]), mate=name, source_ref=source_ref)
     return resolved, occurrence_ids
-
-
-def _descriptor_nodes(descriptor: Mapping[str, Any]):
-    # The assembly.json's occurrence list is FLAT: leaves only, the instance tree
-    # encoded in dotted ids (o1.2.3 is inside o1.2). Walk defensively through
-    # any children arrays too, should a nested form ever appear.
-    stack = list(descriptor.get("occurrences") or [])
-    while stack:
-        node = stack.pop()
-        yield node
-        stack.extend(node.get("children") or [])
-
-
-def _subtree_ids(descriptor: Mapping[str, Any], occurrence_id: str) -> set[str]:
-    """Every occurrence AT or BELOW an id — dotted-prefix containment, so a
-    mate on a group occurrence carries all of its leaves."""
-    prefix = f"{occurrence_id}."
-    ids = {
-        str(node.get("id"))
-        for node in _descriptor_nodes(descriptor)
-        if str(node.get("id")) == occurrence_id or str(node.get("id")).startswith(prefix)
-    }
-    if not ids:
-        raise _fail(f"occurrence {occurrence_id} vanished from the tree during bake")
-    return ids
-
-
-def _premultiply_transform16(transform: list[float], delta: list[list[float]]) -> list[float]:
-    matrix = [
-        transform[0:4],
-        transform[4:8],
-        transform[8:12],
-        transform[12:16],
-    ]
-    baked = matmul4(delta, matrix)
-    return [value for row in baked for value in row]
-
-
-def bake_pose_into_package(
-    resolved_block: dict[str, Any],
-    bake_pose: Mapping[str, float],
-    *,
-    package_dir: Path,
-    occurrence_ids: Mapping[str, str],
-) -> dict[str, Any]:
-    """Write the pose into the assembly.json and re-zero the block.
-
-    assembly.json occurrence transforms are ABSOLUTE, so a mate's world delta
-    premultiplies every transform in its child's subtree (deeper mates carry
-    their own composed delta and simply override within their subtree). The
-    returned block describes the artifact AS WRITTEN: axes carried by their
-    parent chains, limits/defaults/presets shifted by the baked values.
-    """
-    from cadgen._internal.component_package import read_package_descriptor
-    from cadgen._internal.kinematics_fk import effective_dof_values
-
-    descriptor = read_package_descriptor(package_dir)
-    if not isinstance(descriptor, dict):
-        raise _fail(f"materialized tree (assembly.json) missing under {package_dir} during bake")
-
-    chains = parent_chain_deltas(resolved_block, bake_pose)
-    delta_by_id_4x4 = _delta_by_occurrence(resolved_block, bake_pose, descriptor=descriptor, occurrence_ids=occurrence_ids)
-
-    for node in _descriptor_nodes(descriptor):
-        delta = delta_by_id_4x4.get(str(node.get("id")))
-        transform = node.get("transform")
-        if delta is None or not isinstance(transform, list) or len(transform) != 16:
-            continue
-        node["transform"] = _premultiply_transform16([float(v) for v in transform], delta)
-
-    target = package_dir / "assembly.json"
-    temp = target.with_name(f".{target.name}{temp_suffix()}")
-    temp.write_text(json.dumps(descriptor, sort_keys=True), encoding="utf-8")
-    replace_atomic(temp, target)
-
-    # Re-zero the block: the artifact as written is q=0, so every declared
-    # range and preset shifts by however far the bake moved each DOF.
-    baked = copy.deepcopy(resolved_block)
-    shift = effective_dof_values(resolved_block, bake_pose)
-    for mate in baked.get("mates", []):
-        chain = chains.get(str(mate["name"]))
-        if chain is not None:
-            axis = mate["axis"]
-            axis["origin"] = transform_point(chain, tuple(axis["origin"]))
-            axis["dir"] = transform_vector(chain, tuple(axis["dir"]))
-        dofs = (
-            [(f"{mate['name']}.{sub}", sub) for sub in ("turn", "travel")]
-            if mate.get("kind") == "cylindrical"
-            else [(str(mate["name"]), "value")]
-        )
-        limits = mate.get("limits") or {}
-        for dof_id, key in dofs:
-            moved = shift.get(dof_id, 0.0)
-            if moved and key in limits:
-                limits[key] = [limits[key][0] - moved, limits[key][1] - moved]
-    for preset in (baked.get("poses") or {}).values():
-        for dof in list(preset):
-            preset[dof] = float(preset[dof]) - shift.get(dof, 0.0)
-    baked["bakedPose"] = {dof: float(value) for dof, value in dict(bake_pose).items()}
-    return baked
-
-
-def _delta_by_occurrence(
-    resolved_block: Mapping[str, Any],
-    pose_values: Mapping[str, float],
-    *,
-    descriptor: Mapping[str, Any],
-    occurrence_ids: Mapping[str, str],
-) -> dict[str, list[list[float]]]:
-    """Mate-tree deltas expanded to per-occurrence-id 4x4s, innermost mate
-    winning within its subtree (tree order makes the deeper assignment last)."""
-    deltas = kinematics_deltas(resolved_block, pose_values)
-    delta_by_id: dict[str, list[list[float]]] = {}
-    for ref, delta in deltas.items():
-        for occurrence_id in _subtree_ids(descriptor, occurrence_ids[ref]):
-            delta_by_id[occurrence_id] = delta
-    return delta_by_id
-
-
-def mesh_pose_deltas(
-    kinematics_def: Any,
-    pose_values: Mapping[str, float],
-    *,
-    package_dir: Path,
-    step_path: Path,
-    source_ref: str,
-) -> dict[str, list[float]]:
-    """Everything a posed MESH export needs, in one call against the FINAL
-    package: resolve the declaration's refs, evaluate FK at the pose, and
-    return {occurrence id: flat-16 row-major delta} for the Node exporter.
-    Nothing is written — a mesh bake is transient (no sidecar, ever)."""
-    from cadgen._internal.component_package import read_package_descriptor
-
-    block = dict(getattr(kinematics_def, "block", kinematics_def))
-    resolved_block, occurrence_ids = resolve_kinematics_block(
-        block, package_dir=package_dir, step_path=step_path, source_ref=source_ref
-    )
-    descriptor = read_package_descriptor(package_dir)
-    if not isinstance(descriptor, dict):
-        raise _fail(f"{source_ref}: materialized tree (assembly.json) missing under {package_dir}")
-    return {
-        occurrence_id: [value for row in delta for value in row]
-        for occurrence_id, delta in _delta_by_occurrence(
-            resolved_block, pose_values, descriptor=descriptor, occurrence_ids=occurrence_ids
-        ).items()
-    }
-
-
-def resolved_block_pose_deltas(
-    block: Mapping[str, Any],
-    pose_values: Mapping[str, float],
-    *,
-    package_dir: Path,
-) -> dict[str, list[float]]:
-    """FK deltas from an ALREADY-RESOLVED block — the sidecar's kinematics.
-
-    The mesh DOORS' path. A sidecar block carries world-number axes and the
-    ``parentId``/``childId`` this expansion needs, so a door evaluates forward
-    kinematics with no selector index, no topology and no OCCT: it reads the
-    assembly.json for the occurrence tree and folds. Nothing is written —
-    a mesh bake is transient (no sidecar, ever).
-    """
-    from cadgen._internal.component_package import read_package_descriptor
-
-    descriptor = read_package_descriptor(package_dir)
-    if not isinstance(descriptor, dict):
-        raise _fail(f"materialized tree (assembly.json) missing under {package_dir}")
-    occurrence_ids: dict[str, str] = {}
-    for mate in block.get("mates", []):
-        for ref_key, id_key in (("parent", "parentId"), ("child", "childId")):
-            ref = str(mate.get(ref_key) or "")
-            occurrence_id = str(mate.get(id_key) or "")
-            if not ref or not occurrence_id:
-                raise _fail(
-                    f"mate {mate.get('name')!r} in the sidecar carries no resolved "
-                    f"{id_key}; rebuild the document by running its model script"
-                )
-            occurrence_ids[ref] = occurrence_id
-    return {
-        occurrence_id: [value for row in delta for value in row]
-        for occurrence_id, delta in _delta_by_occurrence(
-            block, pose_values, descriptor=descriptor, occurrence_ids=occurrence_ids
-        ).items()
-    }
-
-
-def runtime_mesh_declarations(script_path: Path) -> dict[tuple[str, Path], tuple[Any, dict | None]]:
-    """The RUNTIME mesh declarations' kinematics, keyed by (fmt, resolved out
-    path). The AST metadata cannot evaluate a kinematics= dict, so posed mesh
-    exports read the registry — importing the model module (registration only;
-    import never builds) if this process has not loaded it yet."""
-    from cadgen.authoring import registered_model
-    from cadgen.metadata import resolve_model_output_path
-
-    script = Path(script_path).resolve()
-    model = registered_model(script)
-    if model is None:
-        from cadgen._internal.generation_runner import _load_generator_module
-        from cadgen._internal.source_hash import evict_first_party_modules
-
-        # Same clean first-party module space the generation path starts from.
-        # This load happens when the STEP is already current and only declared
-        # mesh exports need refreshing, so it is the ONE module load that skips
-        # generation — and without the eviction it inherits whatever project a
-        # warm worker built last. Every cad-project keeps shared code in
-        # `src/lib/`, so a stale `lib` from another project makes this model's
-        # own helpers unimportable (or, worse, importable and wrong).
-        evict_first_party_modules()
-        _load_generator_module(script)
-        model = registered_model(script)
-    if model is None:
-        return {}
-    declarations: dict[tuple[str, Path], tuple[Any, dict | None]] = {}
-    for decl in model.mesh_exports:
-        if decl.kinematics is None:
-            continue
-        if decl.out is not None:
-            path = resolve_model_output_path(script, fmt=decl.fmt, explicit_out=decl.out)
-        else:
-            path = model.output_path.with_suffix(f".{decl.fmt}")
-        declarations[(decl.fmt, path.expanduser().resolve())] = (decl.kinematics, decl.bake_pose)
-    return declarations

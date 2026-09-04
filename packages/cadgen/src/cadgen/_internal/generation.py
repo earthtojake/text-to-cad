@@ -175,7 +175,7 @@ def _package_descriptor_matches_spec(
     Content keying does most of the gating BY CONSTRUCTION: the tree key is
     ``<sha256(document)>-v<schemaVersion>``, so a tree that resolves at all
     has the right schema and belongs to exactly these bytes — the old
-    schema-version, bake and stepHash gates all collapsed into the key. What
+    schema-version and stepHash gates all collapsed into the key. What
     remains is what the key cannot answer: provenance direction (sidecar vs
     spec), and — once a scene has been loaded and the caller can say what edge
     classes it wants — whether the tree was built with those classes. The
@@ -333,16 +333,10 @@ def _mesh_exports_sidecar_section(spec: EntrySpec) -> list[dict[str, object]]:
     a model module), so it records the declarations here and the bare mesh
     doors read them back off the DOCUMENT. ``out`` is relative to the artifact
     so the pair travels together; the tolerances are the EFFECTIVE pair the run
-    wrote at, ``null`` meaning the tessellator default; ``at`` is the resolved
-    bake point or ``null``.
+    wrote at, ``null`` meaning the tessellator default.
     """
     if not spec.mesh_exports or spec.step_path is None:
         return []
-    posed: dict = {}
-    if spec.script_path is not None:
-        from cadgen._internal.kinematics_resolve import runtime_mesh_declarations
-
-        posed = runtime_mesh_declarations(spec.script_path)
     base = spec.step_path.parent.resolve()
     entries: list[dict[str, object]] = []
     for declared in spec.mesh_exports:
@@ -352,14 +346,12 @@ def _mesh_exports_sidecar_section(spec: EntrySpec) -> list[dict[str, object]]:
             if declared.mesh_angular_tolerance is not None
             else spec.mesh_angular_tolerance
         )
-        _, pose_values = posed.get((declared.fmt, declared.path), (None, None))
         entries.append(
             {
                 "fmt": declared.fmt,
                 "out": Path(os.path.relpath(declared.path, base)).as_posix(),
                 "meshTolerance": chord,
                 "meshAngularTolerance": angle,
-                "at": {str(k): float(v) for k, v in pose_values.items()} if pose_values else None,
             }
         )
     return entries
@@ -503,13 +495,10 @@ def _generate_part_outputs(
             kinematics_block = getattr(scene, "kinematics", None)
             if kinematics_block:
                 # Axis refs resolve against a VIEW (assembly.json + components/) of the tree (the
-                # same composed selector index inspect uses); a bake pose rewrites
-                # the view's transforms, and the baked tree is stored as the result.
-                from cadgen._internal.kinematics_resolve import (
-                    bake_pose_into_package,
-                    resolve_kinematics_block,
-                )
-                from cadgen.store.view import export_view, ingest_view
+                # same composed selector index inspect uses). Nothing here moves
+                # geometry: the tree is the result exactly as the model returned it.
+                from cadgen._internal.kinematics_resolve import resolve_kinematics_block
+                from cadgen.store.view import export_view
 
                 view_dir = export_view(tree_hash)
                 try:
@@ -520,16 +509,6 @@ def _generate_part_outputs(
                             step_path=spec.step_path,
                             source_ref=str(spec.source_ref),
                         )
-                    bake_values = getattr(scene, "bake_pose", None)
-                    if bake_values:
-                        resolved_block = bake_pose_into_package(
-                            resolved_block,
-                            bake_values,
-                            package_dir=view_dir,
-                            occurrence_ids=occurrence_ids,
-                        )
-                        tree_hash, tree = ingest_view(view_dir, base_tree=tree)
-                        stats["tree"] = tree_hash
                 finally:
                     shutil.rmtree(view_dir, ignore_errors=True)
                 sidecar_payload["kinematics"] = resolved_block
@@ -807,13 +786,6 @@ def _produce_declared_mesh_exports(
         document_hash = tree_hash
     if document_hash is None or tree_hash is None or model is None:
         return ()
-    # Posed declarations live only in the RUNTIME registry (a kinematics= dict
-    # is not statically evaluable), keyed by (fmt, resolved path).
-    posed_declarations: dict = {}
-    if spec.script_path is not None:
-        from cadgen._internal.kinematics_resolve import runtime_mesh_declarations
-
-        posed_declarations = runtime_mesh_declarations(spec.script_path)
     pending: list[MeshExportJob] = []
     for declared in spec.mesh_exports:
         chord = declared.mesh_tolerance if declared.mesh_tolerance is not None else spec.mesh_tolerance
@@ -822,30 +794,21 @@ def _produce_declared_mesh_exports(
             if declared.mesh_angular_tolerance is not None
             else spec.mesh_angular_tolerance
         )
-        kinematics_def, pose_values = posed_declarations.get(
-            (declared.fmt, declared.path), (None, None)
-        )
         if mesh_export_current(
             declared.path,
             model=model,
             document_hash=document_hash,
             mesh_tolerance=chord,
             mesh_angular_tolerance=angle,
-            pose_values=pose_values,
         ):
             continue
         declared.path.parent.mkdir(parents=True, exist_ok=True)
         pending.append(
-            (
-                kinematics_def,
-                MeshExportJob(
-                    fmt=declared.fmt,
-                    out=declared.path,
-                    mesh_tolerance=chord,
-                    mesh_angular_tolerance=angle,
-                    pose_deltas=None,
-                    pose_values=pose_values,
-                ),
+            MeshExportJob(
+                fmt=declared.fmt,
+                out=declared.path,
+                mesh_tolerance=chord,
+                mesh_angular_tolerance=angle,
             )
         )
     if not pending:
@@ -856,22 +819,7 @@ def _produce_declared_mesh_exports(
     # tree, removed when the export is done (the store holds no result dirs).
     view_dir = export_view(tree_hash)
     try:
-        jobs: list[MeshExportJob] = []
-        for kinematics_def, job in pending:
-            if kinematics_def is not None and job.pose_values:
-                from cadgen._internal.kinematics_resolve import mesh_pose_deltas
-
-                job = replace(
-                    job,
-                    pose_deltas=mesh_pose_deltas(
-                        kinematics_def,
-                        job.pose_values,
-                        package_dir=view_dir,
-                        step_path=spec.step_path,
-                        source_ref=str(spec.source_ref),
-                    ),
-                )
-            jobs.append(job)
+        jobs = list(pending)
         run_mesh_exporter(
             view_dir,
             jobs,
@@ -889,7 +837,6 @@ def _produce_declared_mesh_exports(
             fmt=job.fmt,
             mesh_tolerance=job.mesh_tolerance,
             mesh_angular_tolerance=job.mesh_angular_tolerance,
-            pose_values=job.pose_values,
         )
         if announce:
             # stderr: stdout is the result channel (`outcome document`), and a

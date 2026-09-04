@@ -110,7 +110,7 @@ def build(
     target: the STEP/STP document to read.
     out: the STEP/STP document to write. Required, and never TARGET itself.
     kinematics: the kinematics SPACE this document declares — inline JSON or a
-        .json path, with the same {mates, couplings, poses, at} vocabulary the
+        .json path, with the same {mates, couplings, poses} vocabulary the
         decorator takes.
     animation: a .js choreography module whose TEXT is copied into the sidecar.
     force: re-emit even when the freshness gate says OUT is current.

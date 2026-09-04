@@ -79,14 +79,6 @@ function parseArgs(argv) {
       (pairTolerances.length ? pairTolerances[pairTolerances.length - 1] : defaults).chord = value;
     } else if (token === "--angle-tolerance") {
       (pairTolerances.length ? pairTolerances[pairTolerances.length - 1] : defaults).angle = value;
-    } else if (token === "--pose-deltas") {
-      // Per-pair export-at-pose deltas (JSON: {occurrenceId: flat-16 delta});
-      // binds to the most recent --format/--out pair only — a pose is a
-      // property of ONE declared output, never a run default.
-      if (!pairTolerances.length) {
-        throw new Error("--pose-deltas must follow a --format/--out pair");
-      }
-      pairTolerances[pairTolerances.length - 1].pose = value;
     } else {
       args[token.slice(2)] = value;
     }
@@ -137,20 +129,13 @@ const jobs = formats.map((rawFormat, index) => {
   const options = { ...DEFAULT_OPTIONS };
   if (chord !== undefined) options.chordTolerance = Number(chord);
   if (angle !== undefined) options.angleTolerance = Number(angle);
-  let poseDeltas = null;
-  if (pairTolerances[index].pose !== undefined) {
-    poseDeltas = JSON.parse(String(pairTolerances[index].pose));
-  }
   return {
     format: String(rawFormat).toLowerCase(),
     out: String(outs[index]),
     options,
-    poseDeltas,
     // Tessellation-group identity: jobs sharing an effective pair share one
-    // tessellation of the package (a pose only re-places occurrences, so it
-    // shares its pair's tessellation and differs only at primitive build).
+    // tessellation of the tree and one primitive build.
     groupKey: `${options.chordTolerance}:${options.angleTolerance}`,
-    poseKey: poseDeltas ? JSON.stringify(poseDeltas) : "",
   };
 });
 for (const job of jobs) {
@@ -194,19 +179,13 @@ try {
         tessellationForComponent(packageDir, cid, componentEntries[cid], group.options),
       );
     }
-    // Primitives are per (tolerance group x pose): unposed jobs share one
-    // build, each distinct pose re-places the same tessellation.
-    const meshByPose = new Map();
+    // Primitives are per tolerance group: every job in the group shares one
+    // tessellation and one primitive build of the tree as stored.
+    const mesh = buildPackageMeshPrimitives(descriptor, tessellations, {
+      ...(defaultColor ? { defaultColor: defaultColor.toLowerCase() } : {}),
+    });
+    if (!mesh.triangleCount) throw new Error("tree produced no triangles");
     for (const { job, index } of group.members) {
-      let mesh = meshByPose.get(job.poseKey);
-      if (!mesh) {
-        mesh = buildPackageMeshPrimitives(descriptor, tessellations, {
-          ...(defaultColor ? { defaultColor: defaultColor.toLowerCase() } : {}),
-          ...(job.poseDeltas ? { poseDeltas: job.poseDeltas } : {}),
-        });
-        if (!mesh.triangleCount) throw new Error("package produced no triangles");
-        meshByPose.set(job.poseKey, mesh);
-      }
       const { body } = packageMeshToFormat(mesh, job.format, { name });
       fs.mkdirSync(path.dirname(job.out), { recursive: true });
       const temp = `${job.out}.${process.pid}.tmp`;

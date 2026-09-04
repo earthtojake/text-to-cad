@@ -4,7 +4,7 @@ Everything checkable without geometry is checked at decoration time and pinned
 here: the closed key vocabulary, constructor-only entries, unique DOF names,
 the FK-tree rules (one parent per occurrence, no cycles — closed loops are an
 explicit deferral), coupling targets, pose presets over declared DOFs, and the
-"at" bake point. Axis selector refs resolve at build time and are only syntax
+Axis selector refs resolve at build time and are only syntax
 here.
 """
 
@@ -163,33 +163,23 @@ class NormalizeTests(unittest.TestCase):
             normalize_kinematics({"poses": {}}, where="@step")
 
 
-class BakePointTests(unittest.TestCase):
-    """`at` is the bake point, INSIDE the one kinematics space: everything says
-    kinematics, so there is no second kwarg beside the dict to keep in step."""
+class NoBakePointTests(unittest.TestCase):
+    """The kinematics dict describes how the written geometry articulates; it
+    never moves that geometry. The bake point that once did (`"at"`) is gone,
+    and a stray key is an unknown key like any other — no teaching error."""
 
-    def test_a_preset_name_resolves_to_its_values(self) -> None:
-        defn = normalize_kinematics(_arm_block(at="open"), where="@stl")
-        self.assertEqual(defn.at, {"elbow": 40.0})
-        # `at` selects the bake point; it never rides into the sidecar block,
-        # because the artifact as written is its own q=0.
-        self.assertNotIn("at", defn.block)
+    def test_at_is_an_unknown_key(self) -> None:
+        with self.assertRaisesRegex(ValueError, r"unknown key\(s\) \['at'\]"):
+            normalize_kinematics(_arm_block(at="open"), where="@stl")
 
-    def test_a_value_dict_is_validated_against_declared_dofs(self) -> None:
-        defn = normalize_kinematics(_arm_block(at={"elbow": 90, "curl": 0.5}), where="@stl")
-        self.assertEqual(defn.at, {"elbow": 90.0, "curl": 0.5})
-        with self.assertRaisesRegex(ValueError, "unknown DOF 'wrist'"):
-            normalize_kinematics(_arm_block(at={"wrist": 1}), where="@stl")
-
-    def test_an_unknown_preset_teaches_the_declared_ones(self) -> None:
-        with self.assertRaisesRegex(ValueError, "not a declared preset; poses: closed, open"):
-            normalize_kinematics(_arm_block(at="wide"), where="@glb")
-
-    def test_no_at_is_authored_rest(self) -> None:
-        self.assertIsNone(normalize_kinematics(_arm_block(), where="@step").at)
-
-    def test_the_retired_pose_key_teaches_the_fold(self) -> None:
-        with self.assertRaisesRegex(ValueError, "'at': 'closed'"):
+    def test_pose_is_an_unknown_key(self) -> None:
+        with self.assertRaisesRegex(ValueError, r"unknown key\(s\) \['pose'\]"):
             normalize_kinematics(_arm_block(pose="open"), where="@step")
+
+    def test_a_declaration_carries_no_pose(self) -> None:
+        defn = normalize_kinematics(_arm_block(), where="@step")
+        self.assertFalse(hasattr(defn, "at"))
+        self.assertEqual(set(defn.block) & {"at", "bakedPose"}, set())
 
 
 class JsonSpellingTests(unittest.TestCase):

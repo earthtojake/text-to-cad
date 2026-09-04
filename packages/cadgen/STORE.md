@@ -211,8 +211,8 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   is (re)generated from that tree, and no `.step` (and no sidecar) is written
   — `outputs` simply lists no document and `stepHash` is empty.
 - `outputs` may carry per-output facts a door needs (`declared`, the
-  tessellation `chord`/`angle`, the baked `pose`); those are the door's, the
-  store only keeps them beside the sha.
+  tessellation `chord`/`angle`); those are the door's, the store only keeps
+  them beside the sha.
 
 ## 4. The gate
 

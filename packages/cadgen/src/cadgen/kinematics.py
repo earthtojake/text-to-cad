@@ -16,12 +16,6 @@ dict whose shape mirrors the sidecar's kinematics section exactly
     @step(out="../STEP/arm.step", kinematics=KINEMATICS)
     def arm(): ...
 
-EVERYTHING SAYS KINEMATICS. The bake point is the dict's own ``"at"`` key —
-a preset name or ``{dof: value}`` — so one argument name spans the decorator,
-the doors and the snapshot flag::
-
-    @step(out="gripper.step", kinematics={**KINEMATICS, "at": "closed"})
-
 Semantics: AUTHORED PLACEMENT IS q=0. A mate declares the one axis its DOF
 moves about (a selector ref resolved to numbers at build time, or literal
 origin/direction) and measures displacement from wherever the author built the
@@ -59,16 +53,14 @@ __all__ = [
     "kinematics_dof_ids",
 ]
 
-# The closed section vocabulary of the kinematics dict. ``mates``/``couplings``/
-# ``poses`` are the sidecar's kinematics block; ``at`` is authoring-only — it
-# selects the BAKE point and never survives into the block, because the artifact
-# as written is its own q=0. A new capability adds a key HERE and a sidecar
-# schema bump, never a new sidecar file.
-KINEMATICS_KEYS = ("mates", "couplings", "poses", "at")
+# The closed section vocabulary of the kinematics dict: the sidecar's kinematics
+# block, verbatim. A declaration never changes the geometry a model writes — it
+# describes how the written geometry articulates. A new capability adds a key
+# HERE and a sidecar schema bump, never a new sidecar file.
+KINEMATICS_KEYS = ("mates", "couplings", "poses")
 
-#: The keys that make up the sidecar's kinematics block (``at`` is consumed at
-#: build time and re-expressed as the baked assembly.json plus ``bakedPose``).
-KINEMATICS_BLOCK_KEYS = ("mates", "couplings", "poses")
+#: The keys that make up the sidecar's kinematics block.
+KINEMATICS_BLOCK_KEYS = KINEMATICS_KEYS
 
 _MATE_KINDS = {"revolute", "slider", "cylindrical", "fastened"}
 # Sub-DOF names of a cylindrical mate: "<name>.turn" rotates, "<name>.travel"
@@ -224,8 +216,7 @@ def _mate(
         # moment a panel opened — the ambiguity is designed out.
         raise _fail(
             f"mate {mate_name!r}: default= was dropped — 0 is always the "
-            "artifact as written; declare a preset under poses or bake the "
-            "artifact with kinematics={..., 'at': <preset>} instead"
+            "artifact as written; declare a preset under poses instead"
         )
     if kind == "fastened":
         if axis is not None or origin is not None or direction is not None:
@@ -350,40 +341,13 @@ class KinematicsDef:
     """The validated declaration, carried on a ModelDef / mesh declaration.
 
     ``block`` is JSON-ready except that mate axes may still be selector refs;
-    the build resolves those to numbers before anything serializes. ``at`` is
-    the resolved ``{dof: value}`` bake point the declaration's ``"at"`` key
-    named, or ``None`` for authored rest.
+    the build resolves those to numbers before anything serializes.
     """
 
     block: dict[str, Any]
-    at: dict[str, float] | None = None
 
     def dof_ids(self) -> tuple[str, ...]:
         return kinematics_dof_ids(self.block)
-
-    def at_values(self, at: object, *, where: str) -> dict[str, float]:
-        """Resolve an ``"at"`` bake point (preset name or value dict) to
-        concrete DOF values, validated against this declaration."""
-        return resolve_kinematics_at(self.block, at, where=where)
-
-
-def resolve_kinematics_at(
-    block: Mapping[str, Any], at: object, *, where: str
-) -> dict[str, float]:
-    """One rule for every ``at`` spelling — the decorator's ``"at"`` key, a mesh
-    door's ``kinematics=``, snapshot's ``--kinematics``: a declared preset NAME
-    or a ``{dof: value}`` dict, checked against the DOFs this block declares."""
-    poses = block.get("poses") or {}
-    if isinstance(at, str):
-        if at not in poses:
-            known = ", ".join(sorted(poses)) or "(none declared)"
-            raise _fail(f"{where} 'at' names {at!r}, which is not a declared preset; poses: {known}")
-        return dict(poses[at])
-    if isinstance(at, Mapping):
-        return _validated_pose_values(block, at, where=where)
-    raise _fail(
-        f"{where} 'at' must be a preset name or a {{dof: value}} dict, got {type(at).__name__}"
-    )
 
 
 def kinematics_dof_ids(block: Mapping[str, Any]) -> tuple[str, ...]:
@@ -422,19 +386,13 @@ def normalize_kinematics(value: object, *, where: str) -> KinematicsDef:
     Checks everything checkable without geometry: the closed key vocabulary,
     constructor-built mates/couplings, unique DOF names, string-level tree
     rules (one parent mate per child, no cycles — closed loops are an explicit
-    deferral), coupling targets, pose presets over declared DOFs, and the
-    ``"at"`` bake point against those same DOFs. Selector refs (occurrence
-    labels, axis refs) resolve at build time.
+    deferral), coupling targets, and pose presets over declared DOFs. Selector
+    refs (occurrence labels, axis refs) resolve at build time.
     """
     if isinstance(value, KinematicsDef):
         return value
     if not isinstance(value, Mapping):
         raise _fail(f"{where} kinematics must be a dict with keys {list(KINEMATICS_KEYS)}, got {type(value).__name__}")
-    if "pose" in value:
-        raise _fail(
-            f"{where} kinematics has no 'pose' key: pose= folded into the "
-            "kinematics dict: kinematics={**K, 'at': 'closed'}"
-        )
     unknown = set(value) - set(KINEMATICS_KEYS)
     if unknown:
         raise _fail(
@@ -554,8 +512,4 @@ def normalize_kinematics(value: object, *, where: str) -> KinematicsDef:
             str(name): _validated_pose_values(block, values, where=f"{where} poses[{name!r}]")
             for name, values in raw_poses.items()
         }
-    # ``at`` is the BAKE point. It lives inside the one kinematics space rather
-    # than beside it, so a declaration is a single object at every surface.
-    raw_at = value.get("at")
-    at = None if raw_at is None else resolve_kinematics_at(block, raw_at, where=f"{where} kinematics")
-    return KinematicsDef(block=block, at=at)
+    return KinematicsDef(block=block)

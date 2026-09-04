@@ -27,7 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 MODELS = REPO_ROOT / "models"
 
 # Keys that belong to the sidecar and must never appear in assembly.json.
-SIDECAR_ONLY_KEYS = ("kinematics", "animation", "bakedPose")
+SIDECAR_ONLY_KEYS = ("kinematics", "animation")
 
 
 def _sidecars() -> list[Path]:

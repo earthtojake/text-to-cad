@@ -283,7 +283,7 @@ if __name__ == "__main__":
   declarations of one format collide, as do two identical `out=` targets.
 - `@stl`/`@glb`/`@threemf` accept `out=`, `mesh_tolerance=`,
   `mesh_angular_tolerance=` and their own `kinematics=`. They do **not** accept
-  `animation=` — mesh exports are static bakes.
+  `animation=`.
 - Mesh decorators on a `@dxf` drawing are an error.
 - **A model needs no `@step` at all.** `@stl`/`@glb`/`@threemf` alone make a
   **mesh-only model**: same tree, same record, same freshness; its outputs are
@@ -450,7 +450,7 @@ Rules that catch v0.4 conversions:
 
 - **Authored placement is q=0.** Every DOF's rest value is 0 — the placement
   you built. There is no `default=` on a mate; passing one is an error. A
-  presentation pose is a `poses` preset or a bake.
+  presentation pose is a `poses` preset.
 - **Mate kinds** are `revolute` (degrees), `slider` (model units),
   `cylindrical` (sub-DOFs `<name>.turn` and `<name>.travel` about one axis),
   and `fastened` (0-DOF rigid attachment). `fastened` is needed exactly when
@@ -468,10 +468,11 @@ Rules that catch v0.4 conversions:
 - **The mate graph is a tree**: one parent mate per occurrence, no cycles.
   Closed-loop linkages are out of scope by design.
 - **Couplings gear real mate DOFs**, not other couplings. No chaining.
-- **`pose=` does not exist.** The bake point is the dict's own `"at"` key:
-  `kinematics={**KINEMATICS, "at": "closed"}`. It takes a preset name or a
-  `{dof: value}` dict, and never survives into the sidecar block — the written
-  artifact is its own q=0.
+- **`pose=` does not exist, and neither does a bake point.** v0.5 briefly had
+  an `"at"` key in the kinematics dict that wrote the artifact transformed to a
+  pose; it is deleted. No decorator argument changes geometry: a model that
+  must be written at a configuration is authored there, or is another model.
+  Presets stay for the viewer and `snapshot --kinematics`.
 - **Mates stay with the model that declares them.** A parent that links an
   articulated child gets its geometry, not its mates (step 3).
 
@@ -991,13 +992,13 @@ A v0.4 sidecar (or an intermediate `.step.source.json`) is still sitting next to
 the artifact. → Delete it and rebuild. Step 5.
 
 **Unexpected keyword argument on a decorator, or "must be a numeric literal"**
-You passed a retired name — `write=` instead of `out=`, `pose=` instead of the
-kinematics dict's `"at"` key, `kinematics=`/`animation=` on `@dxf` — or a
+You passed a retired name — `write=` instead of `out=`, `pose=`,
+`kinematics=`/`animation=` on `@dxf` — or a
 tolerance that is not a literal. → The decorator table in step 2.
 
 **"kinematics has unknown key(s) … the vocabulary is closed"**
-Your kinematics dict has something other than `mates`, `couplings`, `poses`,
-`at`. → Step 4.
+Your kinematics dict has something other than `mates`, `couplings`, `poses`
+(`at`, the deleted bake point, is one). → Step 4.
 
 **Unrecognized argument `-o` / `--output` / `--lock-timeout` on a model run**
 There is no per-run output override and no lock layer. `out=` on the decorator
