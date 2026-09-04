@@ -20,9 +20,10 @@ for an empty shape and answer with nothing. A build123d path not anticipated
 here therefore degrades to "forced early": correct geometry, less overlap, never
 wrong output.
 
-Forcing: wait for the job (if any), read the child's record, pin the tree the
-FIRST call resolved to (snapshot isolation: every later call in this build
-composes that tree), materialize it, apply the placement with
+Forcing: wait for the job (if any), then use the pinned tree — a current child was
+pinned at the CALL (the wrapper read its record then), a stale child's tree is the
+one its job produced; the first tree a child resolves to in a build is what every
+later call composes (snapshot isolation). Materialize it, apply the placement with
 ``TopoDS_Shape.Moved`` (which shares the TShape, so the packager still sees the
 child intact and writes a link), and tag the result exactly as
 :func:`cadgen.store.materialize.materialize` does.
@@ -56,7 +57,7 @@ class ChildBuildError(RuntimeError):
 class LazyCompound(Compound):
     """See the module docstring."""
 
-    def __init__(self, model: Path, job: Any, *, frame: Any, label: str) -> None:
+    def __init__(self, model: Path, job: Any, *, frame: Any, label: str, tree: str | None = None) -> None:
         self._lazy_shape = None
         self._lazy_forcing = False
         Compound.__init__(self, None, label=label)
@@ -65,7 +66,13 @@ class LazyCompound(Compound):
         self._lazy_frame = frame
         self._lazy_label = label
         self._lazy_placement = None
-        self._lazy_tree: str | None = None
+        # A CURRENT child is pinned AT THE CALL: the caller read its record and hands the
+        # tree in, so a rebuild of that child between this call and the force cannot change
+        # what this build composes. A stale child's pin is its job's result, fixed when the
+        # job was submitted; it is read when forced.
+        self._lazy_tree: str | None = (
+            (frame.pin(self._lazy_model, tree) if frame is not None else tree) if tree else None
+        )
         # Where the parent called the child: the line a failure is reported at.
         self._lazy_call_site = _call_site()
 

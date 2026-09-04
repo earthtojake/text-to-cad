@@ -524,9 +524,10 @@ def _compose_child(defn: ModelDef) -> Any:
 
     parent = frame.script_path if frame is not None else None
     job = None
+    tree: str | None = frame.pins.get(child) if frame is not None else None
     if frame is not None and child in frame.jobs:
         job = frame.jobs[child]
-    elif frame is None or child not in frame.pins:
+    elif tree is None:
         verdict = stale(child)
         if verdict.stale:
             job = submit(
@@ -536,9 +537,14 @@ def _compose_child(defn: ModelDef) -> Any:
             if frame is not None:
                 frame.jobs[child] = job
         else:
+            # Current: pin its tree NOW, at the call. A rebuild of this child between
+            # here and the force must not change what this build composes.
+            from cadgen.store.records import read_record
+
+            tree = str((read_record(child) or {}).get("tree") or "") or None
             # No work: the tree summarizes current children on the parent's line.
             emit_event(model_event(child, "current", parent=str(parent) if parent else None))
-    lazy = LazyCompound(child, job, frame=frame, label=defn.func.__name__)
+    lazy = LazyCompound(child, job, frame=frame, label=defn.func.__name__, tree=tree)
     if frame is not None:
         frame.children.append((child, lazy))
     return lazy

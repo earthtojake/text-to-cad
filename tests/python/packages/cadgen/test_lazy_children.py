@@ -126,6 +126,17 @@ class Deferral(LazyFixture):
             second = self.lazy(None)
             self.assertEqual(second.tree_hash(), "t-child", "the pin did not isolate the build")
 
+    def test_a_current_child_is_pinned_at_the_call_not_at_the_force(self):
+        # The wrapper reads a current child's record when it is CALLED and hands the tree
+        # in. The child is then rebuilt (a newer record appears) before the parent forces
+        # it: the parent still composes the tree it pinned at the call.
+        child = LazyCompound(self.model, None, frame=self.frame, label="child", tree="t-at-call")
+        self.assertEqual(self.frame.pins[self.model], "t-at-call")
+        with mock.patch.object(lazy_mod, "_read_record", lambda model: {"tree": "t-rebuilt"}):
+            child.solids()  # forces
+        self.assertEqual(self.materialized, [("t-at-call", "child")])
+        self.assertEqual(child.tree_hash(), "t-at-call")
+
     def test_copy_forces(self):
         import copy
 
