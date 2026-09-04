@@ -237,7 +237,7 @@ def _planet_center(index: int) -> tuple[float, float]:
 # mate DOFs; 3.5 sun revolutions (1260 deg) returns the carrier to 360 deg and
 # every gear to an equivalent tooth phase. Presentation (cutaway styles,
 # orbit-guide overlay) retired with the pose framework; choreography lives in
-# planetary_gear_assembly.anim.js, copied into the sidecar at build.
+# STEP/planetary_gear_assembly/planetary_gear_assembly.step.js, the render module beside the document.
 # ---------------------------------------------------------------------------
 
 import cadgen
@@ -281,8 +281,7 @@ def _planetary_kinematics():
     }
 
 
-@step(out="../../STEP/planetary_gear_assembly/planetary_gear_assembly.step", kind="assembly", kinematics=_planetary_kinematics(),
-      animation="planetary_gear_assembly.anim.js")
+@step(out="../../STEP/planetary_gear_assembly/planetary_gear_assembly.step", kind="assembly", kinematics=_planetary_kinematics())
 @stl(out="../../STL/planetary_gear_assembly/planetary_gear_assembly.stl")
 @threemf(out="../../3MF/planetary_gear_assembly/planetary_gear_assembly.3mf")
 @glb(out="../../GLB/planetary_gear_assembly/planetary_gear_assembly.glb")

@@ -9,7 +9,7 @@ disagree, and rebuilding a link alone leaves the robot to be rerun.
 
 | Script | Artifact | Description |
 |---|---|---|
-| juno.py | STEP/juno.step | Full 28-occurrence humanoid assembly, 27 revolute mates + 5 pose presets, `juno.anim.js` choreography |
+| juno.py | STEP/juno.step | Full 28-occurrence humanoid assembly, 27 revolute mates + 5 pose presets, `juno.step.js` choreography |
 | pelvis.py | STEP/pelvis.step + 3MF/pelvis.3mf | Pelvis link (waist-yaw center at the origin) |
 | torso.py | STEP/torso.step + 3MF/torso.3mf | Torso link |
 | neck_collar.py | STEP/neck_collar.step + 3MF/neck_collar.3mf | Neck collar link |
@@ -35,5 +35,5 @@ chain/pose/limit spec mirrored by `../juno.urdf` and `../juno.srdf`;
 `juno_lib.py` is the shared style/geometry vocabulary). Nothing in `lib/` is
 a model — it carries no `@step`.
 
-`juno.anim.js` sits beside `juno.py` and is copied verbatim into
-`STEP/juno.step.json` at build time.
+`STEP/juno.step.js` sits beside `STEP/juno.step` — the render module the
+viewer loads by name. Authored and committed; no build reads it.

@@ -23,7 +23,7 @@ models/
 
 **Each cad-project has the same shape**, the one the `$cad-project` skill
 defines: authored code in `src/` (one `@step` or `@dxf` model per file, shared
-modules in `src/lib/`, `.anim.js` choreography beside the script it belongs to),
+modules in `src/lib/`), `.step.js` render modules beside the documents they animate (authored, committed),
 raw artifacts in format folders (`STEP/`, `DXF/`, `3MF/`, `GLB/`, `STL/`),
 committed inputs no script regenerates in `<FORMAT>/imported/`, scratch in
 `tmp/`, and a `.gitignore` that keeps the artifacts out of the repo. A fresh
@@ -55,7 +55,7 @@ regenerates by running the scripts.
 - [examples/](examples/src/README.md): every part, assembly and 2D drawing that
   is a single self-contained model script, as one cad-project. `@step` and
   `@dxf` scripts sit directly under `examples/src/` (shared helpers in
-  `src/lib/`, `.anim.js` choreography beside the scripts they belong to), and
+  `src/lib/`, `.step.js` render modules beside the documents they animate), and
   every artifact lands in a root-level format folder. Two models
   (`planetary_gear_assembly`, `mars_rover_concept`) carry typed mates and
   animation clips; a handful declare STL/3MF/GLB exports so the mesh doors have
@@ -72,14 +72,14 @@ Models that need a **folder of their own** rather than a single loose script.
   [thang010146](https://www.youtube.com/@thang010146/videos) YouTube channel.
   Its content is `STEP/imported/` — annotated mechanism STEPs, each a
   `cadgen.read_step` of the vendor document re-exported with kinematics
-  (`.step.json` sidecar) and its authored `.anim.js` clip.
+  (`.step.json` sidecar) and its authored `.step.js` render module beside it.
 - [f1/](f1/src/README.md): open-wheel F1 car — a modular `lib/` build over one
   shared surface vocabulary, plus `f1_stage.appearance.json`, the authored
   presentation stage. Its DRS four-bar and rack-and-track-rod steering are
-  CLOSED loops, so both solves live in `f1.anim.js` rather than in typed mates.
+  CLOSED loops, so both solves live in `f1.step.js` rather than in typed mates.
 - [f14d/](f14d/src/README.md): Grumman F-14D Super Tomcat — one lofted airframe
   skin with ten systems grouped on top of it, a staged teardown in
-  `f14d.anim.js`, and a `render/` suite of presentation configs and review
+  `f14d.step.js`, and a `render/` suite of presentation configs and review
   tooling.
 - [hypercar/](hypercar/src/README.md): mid-engine hypercar — modular `lib/`
   build with a `render/` presentation theme.
@@ -95,7 +95,7 @@ Models that need a **folder of their own** rather than a single loose script.
 - [qdd_actuator/](qdd_actuator/src/README.md): quasi-direct-drive actuator —
   one virtual `drive` DOF gears the rotor, carrier, both ball cages and the
   three planets through the 4.5:1 planetary reduction, with the exploded
-  teardown in `qdd_actuator.anim.js`.
+  teardown in `qdd_actuator.step.js`.
 
 ### SpaceX reconstruction package
 

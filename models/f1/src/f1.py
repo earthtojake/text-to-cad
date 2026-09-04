@@ -13,7 +13,7 @@ and composed here by CALLING it.
 --------------------------------------------------------------------------
 OCCURRENCE ORDER IS FROZEN
 --------------------------------------------------------------------------
-The animation module (`f1.anim.js`) addresses children as `#o1.N` in the
+The animation module (`f1.step.js`) addresses children as `#o1.N` in the
 order below. Do not reorder, insert or remove a child without updating the
 module's occurrence table in the same change.
 
@@ -112,7 +112,7 @@ def assemble() -> bd.Compound:
 # track rod, and typed mates evaluate pure forward kinematics on a TREE — a
 # loop needs a solver. Both solves therefore live in the animation module,
 # which is Turing-complete by design and is where the teardown belongs anyway.
-@step(out="../STEP/f1.step", animation="f1.anim.js")
+@step(out="../STEP/f1.step")
 def f1():
     return assemble()
 

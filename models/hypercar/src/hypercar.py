@@ -6,7 +6,7 @@ real constant-width gap.
 
 Assembly tree is grouped BY SYSTEM — thirteen sibling models under ``src/``,
 composed here by CALLING them — which is also the occurrence order the
-``hypercar.anim.js`` choreography targets:
+``hypercar.step.js`` choreography targets:
 
     o1.1  body              painted panels, pillars, aero skins
     o1.2  glazing           DLO glass + lamp lenses
@@ -47,7 +47,7 @@ from lib import hinge as hinge_lib
 
 # Order here IS the occurrence order (o1.1, o1.2, ...) and the animation
 # module's refs depend on it -- do not reorder without updating
-# hypercar.anim.js. Each entry is a sibling MODEL (src/<system>.py): calling it
+# hypercar.step.js. Each entry is a sibling MODEL (src/<system>.py): calling it
 # inside the body builds it if stale, on its own worker, or loads it, and the
 # car links its tree.
 SYSTEMS = [
@@ -83,7 +83,7 @@ SYSTEMS = [
 # other system groups) and so do not ride for free.
 #
 # Choreography (explode sequences, the tour) is NOT here: it is
-# hypercar.anim.js, declared below.
+# hypercar.step.js, declared below.
 # ---------------------------------------------------------------------------
 
 DOOR_RIDERS = [
@@ -142,8 +142,7 @@ KINEMATICS = {
 }
 
 
-@step(out="../STEP/hypercar.step", kinematics=KINEMATICS,
-      animation="hypercar.anim.js")
+@step(out="../STEP/hypercar.step", kinematics=KINEMATICS)
 def hypercar():
     groups = [system() for system in SYSTEMS]      # thirteen builds, in parallel
     return bd.Compound(children=groups, label="mid_engine_hypercar")

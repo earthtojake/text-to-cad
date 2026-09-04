@@ -264,7 +264,7 @@ def assemble() -> bd.Compound:
     return asm.build()
 
 
-@step(out="../STEP/juno.step", kinematics=KINEMATICS, animation="juno.anim.js")
+@step(out="../STEP/juno.step", kinematics=KINEMATICS)
 def juno():
     return assemble()
 

@@ -1,6 +1,6 @@
-"""Generate src/w16.anim.js from lib/spec + lib/kin.
+"""Generate STEP/w16.step.js (the render module beside the engine's STEP) from lib/spec + lib/kin.
 
-The .anim.js must re-describe the motion on its own (it knows nothing about
+The render module must re-describe the motion on its own (it knows nothing about
 mates or Python), so this bakes every constant it needs: the cylinder table,
 pin angles, valve axes, follower pivots and the nonlinear follower-angle
 tables, cam axes, chain layouts. Run from src/:  python -m lib.animgen
@@ -15,7 +15,7 @@ from pathlib import Path
 from lib import kin, spec as S
 from lib.valvetrain import valve_tag
 
-OUT = Path(__file__).resolve().parent.parent / "w16.anim.js"
+OUT = Path(__file__).resolve().parent.parent.parent / "STEP" / "w16.step.js"
 
 CRANK_SECONDS = 6.0        # one 720 deg cycle
 

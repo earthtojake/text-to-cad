@@ -1,4 +1,4 @@
-// qdd_actuator.anim.js — choreography for the QDD actuator.
+// qdd_actuator.step.js — choreography for the QDD actuator.
 //
 // Two clips: the drive train running at its 4.5:1 reduction, and the same
 // cycle while the stack separates into its documented exploded stations.

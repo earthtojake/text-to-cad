@@ -1,4 +1,4 @@
-// adjustable_height_table_2.anim.js — reference lift loop for the scissor
+// adjustable_height_table_2.step.js — reference lift loop for the scissor
 // table (thang010146). The scissor is a closed loop with rolling contacts, so
 // the solve lives here; the kinematics block carries the individual joints and
 // the solved presets (`mid`, `raised`).

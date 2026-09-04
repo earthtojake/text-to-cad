@@ -29,9 +29,9 @@ src/<system>.py` builds one system alone — the car does not pick it up until
   wraps it), plus `surfaces.py` (the one master body surface every panel is
   cut from), `palette.py` (colours, authored as sRGB hex) and `context.py`
   (the shared `group`/`style` helpers). Plain modules: no `@step` lives here.
-- `hypercar.anim.js` — choreography (the showcase tour, the door loop, the
-  explode loop). Declared by `animation=` on the decorator; its text is copied
-  into `STEP/hypercar.step.json`.
+- `../STEP/hypercar.step.js` — the render module beside the document:
+  choreography (the showcase tour, the door loop, the explode loop). Authored
+  and committed; the viewer loads it by name and no build reads it.
 - `../render/` — authored presentation config for beauty renders, kept at the
   project root because it is neither code nor an artifact:
 
@@ -44,7 +44,7 @@ src/<system>.py` builds one system alone — the car does not pick it up until
 ## Assembly order
 
 The order of `SYSTEMS` in `hypercar.py` IS the occurrence order, and
-`hypercar.anim.js` targets those ids — do not reorder without updating it.
+`hypercar.step.js` targets those ids — do not reorder without updating it.
 
     o1.1 body   o1.2 glazing   o1.3 lighting   o1.4 chassis
     o1.5 suspension_front   o1.6 suspension_rear   o1.7 wheels   o1.8 brakes

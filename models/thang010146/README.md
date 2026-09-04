@@ -10,12 +10,12 @@ in `STEP/`, vendor documents in `STEP/imported/`.
 
 ```
 thang010146/
-  src/                    # authored: one @step wrapper + its clip per mechanism
+  src/                    # authored: one @step wrapper per mechanism
     README.md             #   the model catalog
     gear_rack_gripper.py
-    gear_rack_gripper.anim.js
   STEP/
     gear_rack_gripper.step        # generated (gitignored) + its .step.json sidecar
+    gear_rack_gripper.step.js     # the render module beside it: the clip (authored, committed)
     imported/
       gear_rack_gripper.step      # the VENDOR document (committed; no code makes it)
   tmp/                    # snapshots and other review renders (gitignored)
