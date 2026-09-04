@@ -258,6 +258,13 @@ def _connect_or_spawn(address: str) -> transport.Channel | None:
     process = None
     try:
         if spawner:
+            # Double-check under the lock: a client whose first connect predates the
+            # daemon's bind can take the election just after the previous spawner
+            # released it. If the daemon answers now, there is nothing to spawn.
+            try:
+                return _connect(address)
+            except OSError:
+                pass
             process = _spawn_daemon(address)
             if process is None:
                 return None
