@@ -211,7 +211,7 @@ directory as the geometry it derives from, named `<name>.py`.
 Flags (a model script runs itself; there is no generation CLI):
 
 - `--force` — regenerate even when the recorded output is current.
-- `--verbose`, `--json`, `--lock-timeout SECONDS`.
+- `--verbose`, `--json`.
 
 One script, one drawing: run each script you want built. Do not put output paths
 in the `@dxf` function's return value; `out=` on the decorator is the only

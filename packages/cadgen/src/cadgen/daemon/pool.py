@@ -81,7 +81,7 @@ _NTSTATUS_NAMES = {
 def describe_exit(status: int | None) -> str:
     """A worker's death in words: the signal that killed it, or its exit code."""
     if status is None:
-        return "closed its pipe without exiting"
+        return "closed its output while still running"
     if status < 0:
         import signal
 
@@ -104,7 +104,9 @@ class Worker:
     """One warm subprocess. Owned by the pool; never shared between concurrent jobs."""
 
     def __init__(self) -> None:
-        env = dict(os.environ)
+        from cadgen.daemon.executors import worker_env
+
+        env = worker_env()
         # Guards against a worker's own top-level call routing back into the daemon
         # as a fresh request; nested SUBMITS ignore this on purpose (client.run_nested).
         env["CADGEN_DAEMON_CHILD"] = "1"

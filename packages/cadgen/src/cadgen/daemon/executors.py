@@ -165,8 +165,30 @@ def submit(
 # --- transient executor -----------------------------------------------------------------
 
 
+def worker_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """The environment a worker process starts with: this cadgen, findable from any cwd.
+
+    A worker runs ``python -m cadgen...`` from the MODEL's directory, so a relative
+    ``PYTHONPATH`` entry (``packages/cadgen/src`` from a checkout root, the shape every
+    test runner uses) would resolve against that directory and the worker would import
+    whatever cadgen the interpreter has installed instead -- a different version, a
+    different store layout, silently. Absolutize every entry and put this cadgen's
+    source root first.
+    """
+    env = dict(os.environ if base is None else base)
+    import cadgen
+
+    own = str(Path(cadgen.__file__).resolve().parents[1])
+    entries = [own]
+    for entry in env.get("PYTHONPATH", "").split(os.pathsep):
+        if entry and os.path.abspath(entry) not in entries:
+            entries.append(os.path.abspath(entry))
+    env["PYTHONPATH"] = os.pathsep.join(entries)
+    return env
+
+
 def _submit_transient(job: Job, store_root: Path, *, force: bool, root_id: str | None) -> None:
-    env = dict(os.environ)
+    env = worker_env()
     env["CADGEN_DAEMON"] = "0"
     env["CADGEN_CACHE_DIR"] = str(store_root)
     env["CADGEN_EVENTS"] = "1"  # the child writes events as JSON lines on stderr

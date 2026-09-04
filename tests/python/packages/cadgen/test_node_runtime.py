@@ -3,7 +3,7 @@
 Every test here spawns a REAL node child running a REAL script that imports the REAL
 ``cadgen-js/glb/progressStream.js`` helper through ``NODE_PATH``. That is deliberate: the
 three things this module actually promises -- that bare specifiers resolve through the
-exports map, that NDJSON reaches the lock holder, and that no child outlives the lock -- are
+exports map, that NDJSON reaches the run, and that no child outlives it -- are
 all properties of a separate process, and a mocked ``Popen`` proves none of them.
 """
 
@@ -220,7 +220,7 @@ process.exit(3);
 
     def test_a_child_that_reports_and_then_refuses_to_exit_is_killed(self):
         # The result is terminal by contract, so reading stops there. A builder that keeps
-        # running past it would otherwise outlive the lock its parent is about to release.
+        # running past it would otherwise outlive the run its parent is about to finish.
         script = self.script(
             """
 reportResult({ ok: true, pid: process.pid });
@@ -235,7 +235,7 @@ setTimeout(() => {}, 600000);
 
     def test_a_child_is_killed_when_dispatch_raises(self):
         # An exception on the Python side (here: the run object failing) must not leave an
-        # orphan writing into a package whose lock is being released on the way out.
+        # orphan writing into a package whose run is finishing on the way out.
         script = self.script(
             """
 reportAdvance(1, `pid=${process.pid}`);
@@ -324,10 +324,11 @@ class DiscoveryTest(NodeRuntimeTestCase):
 
 
 class ArtifactBuildIntegrationTest(NodeRuntimeTestCase):
-    """The real thing: a real lock, a real status record, a real Node child."""
+    """The real thing: a real status record, a real Node child."""
 
     def test_child_progress_flows_through_a_real_build_run(self):
         package_dir = self.root / "__cadgen__" / "widget.dxf"
+        scope = "widget-drawing-" + str(os.getpid())
         script = self.script(
             """
 reportPhase("generate", 4);
@@ -339,7 +340,7 @@ reportResult({ ok: true, packagePath: process.argv[2] });
 
         events = []
         with artifact_build(
-            DRAWING_PACKAGE, package_dir, is_current=lambda: False, sink=events.append
+            DRAWING_PACKAGE, scope, is_current=lambda: False, sink=events.append
         ) as run:
             payload = run_node_builder(script, [str(package_dir)], run=run)
 

@@ -18,6 +18,7 @@ last write behind, and readers age it out (``cadgen.viewer.build_progress``).
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -29,8 +30,12 @@ def state_dir() -> Path:
     """The daemon's state directory: the address, the auth key, and these records.
 
     Same derivation as ``cadgen.daemon.transport.state_dir`` (which imports this one).
-    ``tempfile.gettempdir()`` answers correctly on every platform.
+    ``CADGEN_DAEMON_STATE_DIR`` overrides it (tests isolate their records that way);
+    otherwise ``tempfile.gettempdir()``, which answers correctly on every platform.
     """
+    override = os.environ.get("CADGEN_DAEMON_STATE_DIR", "").strip()
+    if override:
+        return Path(override)
     return Path(tempfile.gettempdir()) / "cadgen-daemon"
 
 

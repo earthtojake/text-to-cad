@@ -277,7 +277,11 @@ def _detach_kwargs() -> dict:
 
 
 def _spawn_daemon(address: str) -> subprocess.Popen | None:
-    env = dict(os.environ)
+    from cadgen.daemon.executors import worker_env
+
+    # The daemon and its workers must import THIS cadgen from whatever directory they
+    # run in; a relative PYTHONPATH entry would otherwise pick the installed one.
+    env = worker_env()
     env["CADGEN_DAEMON_CHILD"] = "1"
     env.setdefault("CADGEN_DAEMON_SOCKET", str(address))
     try:

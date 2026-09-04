@@ -312,20 +312,20 @@ class PackagePortabilityTest(unittest.TestCase):
         RUN, not the artifact. What is not allowed is any of it reaching the package's own
         content, which is what the rest of this class checks. Pinned so the record cannot
         quietly grow a path field and become part of the cache. Run state lives in the
-        store's locks/ tier now, keyed by model path."""
+        daemon's state directory, never under the store, keyed by model path."""
         from cadgen.catalog import artifact_path_key
-        from cadgen._internal.cache_paths import locks_dir
+        from cadgen.coordination.paths import progress_dir
 
         keys = {
             artifact_path_key(self.root / name)
             for name in ("widget.step", "rig.step", "imported.step", "sheet.py")
         }
         run_state = [
-            path for path in sorted(locks_dir().rglob("*"))
+            path for path in sorted(progress_dir().rglob("*"))
             if path.is_file() and is_run_state(path)
             and any(key in path.name for key in keys)
         ]
-        self.assertTrue(run_state, "no lock/status files were written at all")
+        self.assertTrue(run_state, "no status records were written at all")
         for path in run_state:
             if not path.name.endswith(".json"):
                 continue

@@ -117,6 +117,7 @@ class ServerRelaysTheDeath(unittest.TestCase):
 
     class _DyingWorker:
         pid = 777
+        extra = False
 
         def __init__(self) -> None:
             self.sent: list[dict] = []
@@ -124,7 +125,7 @@ class ServerRelaysTheDeath(unittest.TestCase):
         def send(self, request: dict) -> None:
             self.sent.append(request)
 
-        def frames(self):
+        def frames(self, **_kwargs):
             yield {"stream": "stdout", "data": "partial "}
             raise pool_mod.WorkerGone(
                 "worker 777 was killed by SIGKILL (signal 9)", exit_status=-9
@@ -150,7 +151,7 @@ class ServerRelaysTheDeath(unittest.TestCase):
         with mock.patch.object(server, "_POOL", pool), \
                 mock.patch.object(server, "_log", logged.append), \
                 mock.patch.object(server, "CLIENT_LIVENESS_INTERVAL_SECONDS", 60.0):
-            server._handle_request(conn, request, mock.Mock(), mock.Mock())
+            server._handle_request(conn, request)
         kinds = [next(iter(frame)) for frame in conn.frames if frame != {"stream": "stdout", "data": ""}]
         self.assertEqual(kinds, ["stream", "workerDied", "exit"])
         died = next(frame["workerDied"] for frame in conn.frames if "workerDied" in frame)
@@ -160,16 +161,6 @@ class ServerRelaysTheDeath(unittest.TestCase):
         self.assertEqual(conn.frames[-1], {"exit": 1})
         pool.release.assert_called_once_with(worker, healthy=False)
         self.assertTrue(any("died mid-job" in line for line in logged), logged)
-
-    def test_the_invoke_path_says_the_same_thing_in_its_payload(self):
-        exc = pool_mod.WorkerGone("worker 5 exited with code 137", exit_status=137)
-        text = server.worker_died_message(exc, job="cadgen.step_artifact_cli --step a.step")
-        self.assertIn("died mid-job", text)
-        self.assertIn("exited with code 137", text)
-        self.assertIn("CADGEN_DAEMON=0", text)
-        self.assertIn("not retried", text)
-
-
 class DescribeExit(unittest.TestCase):
     def test_signal_code_and_open_pipe_are_told_apart(self):
         import signal

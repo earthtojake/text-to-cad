@@ -47,12 +47,20 @@ class _Tree:
         self.cache.mkdir()
         self._previous = os.environ.get("CADGEN_CACHE_DIR")
         os.environ["CADGEN_CACHE_DIR"] = str(self.cache)
+        # Progress records live in the daemon's state dir, not the store; give this
+        # tree its own so a peer record from another run cannot leak in.
+        self._previous_state = os.environ.get("CADGEN_DAEMON_STATE_DIR")
+        os.environ["CADGEN_DAEMON_STATE_DIR"] = str(Path(self.tmp.name, "state"))
 
     def close(self) -> None:
         if self._previous is None:
             os.environ.pop("CADGEN_CACHE_DIR", None)
         else:
             os.environ["CADGEN_CACHE_DIR"] = self._previous
+        if self._previous_state is None:
+            os.environ.pop("CADGEN_DAEMON_STATE_DIR", None)
+        else:
+            os.environ["CADGEN_DAEMON_STATE_DIR"] = self._previous_state
         self.tmp.cleanup()
 
     def step(self, name="model.step", body=STEP_BYTES) -> str:
@@ -347,7 +355,7 @@ class SnapshotShapes(ArtifactStatusTestCase):
 class ProgressReader(ArtifactStatusTestCase):
     def test_a_fresh_record_becomes_a_writing_snapshot_with_phase_fields_on_top(self):
         step = self.tree.step()
-        self.tree.record(store_paths.coordination_scope(step))
+        self.tree.record(store_paths.build_scope(step))
         snapshot = build_progress_snapshot(step)
         self.assertTrue(snapshot["writing"])
         self.assertFalse(snapshot["busy"])
@@ -360,7 +368,7 @@ class ProgressReader(ArtifactStatusTestCase):
 
     def test_a_terminal_or_stale_or_absent_record_yields_nothing(self):
         step = self.tree.step()
-        scope = store_paths.coordination_scope(step)
+        scope = store_paths.build_scope(step)
         self.assertIsNone(build_progress_snapshot(step))
 
         self.tree.record(scope, outcome="done")
@@ -376,12 +384,12 @@ class ProgressReader(ArtifactStatusTestCase):
         # The viewer cannot know a peer's run id before reading the record, so
         # staleness is gated on outcome plus the window, not on attribution.
         step = self.tree.step()
-        self.tree.record(store_paths.coordination_scope(step), schemaVersion=1)
+        self.tree.record(store_paths.build_scope(step), schemaVersion=1)
         self.assertIsNotNone(build_progress_snapshot(step))
 
     def test_a_non_string_run_id_becomes_none(self):
         step = self.tree.step()
-        self.tree.record(store_paths.coordination_scope(step), runId=17)
+        self.tree.record(store_paths.build_scope(step), runId=17)
         self.assertIsNone(build_progress_snapshot(step)["runId"])
 
     def test_no_producer_can_emit_busy(self):
@@ -400,17 +408,17 @@ class ProgressReader(ArtifactStatusTestCase):
         step = self.tree.step()
         registry = ProgressRegistry()
 
-        self.tree.record(store_paths.coordination_scope(step))
+        self.tree.record(store_paths.build_scope(step))
         self.assertIs(build_progress_snapshot(step)["busy"], False)
 
-        registry.publish(store_paths.coordination_scope(step), "live", {"phase": "components"})
+        registry.publish(store_paths.build_scope(step), "live", {"phase": "components"})
         self.assertIs(build_progress_snapshot(step, registry=registry)["busy"], False)
 
 
 class InProcessRegistry(ArtifactStatusTestCase):
     def test_our_own_build_is_served_from_memory_not_from_disk(self):
         step = self.tree.step()
-        package_dir = store_paths.coordination_scope(step)
+        package_dir = store_paths.build_scope(step)
         registry = ProgressRegistry()
         registry.publish(package_dir, "live-run", {"phase": "components", "done": 4, "total": 9})
         snapshot = build_progress_snapshot(step, registry=registry)
@@ -419,14 +427,14 @@ class InProcessRegistry(ArtifactStatusTestCase):
 
     def test_the_live_channel_beats_a_peer_record(self):
         step = self.tree.step()
-        self.tree.record(store_paths.coordination_scope(step), runId="from-disk")
+        self.tree.record(store_paths.build_scope(step), runId="from-disk")
         registry = ProgressRegistry()
-        registry.publish(store_paths.coordination_scope(step), "in-process", {"phase": "package"})
+        registry.publish(store_paths.build_scope(step), "in-process", {"phase": "package"})
         self.assertEqual(build_progress_snapshot(step, registry=registry)["runId"], "in-process")
 
     def test_clearing_falls_back_to_the_file_tiers(self):
         step = self.tree.step()
-        package_dir = store_paths.coordination_scope(step)
+        package_dir = store_paths.build_scope(step)
         registry = ProgressRegistry()
         registry.publish(package_dir, "live", {"phase": "package"})
         registry.clear(package_dir)
@@ -437,7 +445,7 @@ class InProcessRegistry(ArtifactStatusTestCase):
         # in a finally. The window is for producers we cannot observe.
         step = self.tree.step()
         registry = ProgressRegistry()
-        registry.publish(store_paths.coordination_scope(step), "live", {"phase": "generate"})
+        registry.publish(store_paths.build_scope(step), "live", {"phase": "generate"})
         snapshot = build_progress_snapshot(step, registry=registry)
         self.assertIsNotNone(snapshot)
         self.assertGreater(snapshot["progress"]["updatedAt"], 0)
@@ -472,7 +480,7 @@ class InvalidUtf8(ArtifactStatusTestCase):
         # character; the client stopped attaching and called the model finished
         # in the middle of someone else's build.
         step = self.tree.step()
-        record = self.tree.record(store_paths.coordination_scope(step), label="NAME_HERE")
+        record = self.tree.record(store_paths.build_scope(step), label="NAME_HERE")
         self._corrupt(record)
         snapshot = build_progress_snapshot(step)
         self.assertIsNotNone(snapshot, "an undecodable byte must not read as no build in flight")

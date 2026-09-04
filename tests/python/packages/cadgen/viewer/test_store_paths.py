@@ -43,11 +43,10 @@ class DelegatesToCadgen(unittest.TestCase):
         ]
 
     def test_the_roots_are_cadgen_paths_as_strings(self) -> None:
-        from cadgen.store.paths import locks_dir, store_root
+        from cadgen.store.paths import store_root
 
         self.assertEqual(store_paths.cadgen_cache_root_dir(), str(store_root()))
-        self.assertEqual(store_paths.store_locks_dir(), str(locks_dir()))
-        self.assertIsInstance(store_paths.coordination_scope(self.probes[0]), str)
+        self.assertIsInstance(store_paths.build_scope(self.probes[0]), str)
 
     def test_every_key_matches_cadgen_for_real_aliased_and_missing_paths(self) -> None:
         for probe in self.probes:
@@ -55,7 +54,7 @@ class DelegatesToCadgen(unittest.TestCase):
                 path = Path(probe)
                 self.assertEqual(store_paths.artifact_file_hash(probe), catalog.artifact_file_hash(path))
                 self.assertEqual(store_paths.artifact_path_key(probe), catalog.artifact_path_key(path))
-                self.assertEqual(store_paths.coordination_scope(probe), str(catalog.coordination_scope(path)))
+                self.assertEqual(store_paths.build_scope(probe), catalog.build_scope(path))
                 self.assertEqual(
                     store_paths.source_sidecar_path(probe),
                     str(source_sidecar.source_sidecar_path(Path(os.path.abspath(probe)))),

@@ -28,8 +28,6 @@ from build123d import Box, Compound, Pos, Rot  # noqa: E402
 
 from cadgen import assembly_lookup, lookup  # noqa: E402
 from cadgen._internal import component_package  # noqa: E402
-from cadgen.coordination.lock import exclusive  # noqa: E402
-from cadgen.coordination.paths import write_lock_path  # noqa: E402
 
 
 def _demo_compound() -> Compound:
@@ -68,10 +66,7 @@ class AssemblyOccurrenceRefsTest(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name)
         self.package_dir = self.root / "__cadgen__" / "models" / "demo.py"
-        with exclusive(write_lock_path(self.package_dir)):
-            build_view(
-                _demo_compound(), package_dir=self.package_dir, root_name="demo"
-            )
+        build_view(_demo_compound(), package_dir=self.package_dir, root_name="demo")
         descriptor = component_package.read_package_descriptor(self.package_dir)
         self.assertIsInstance(descriptor, dict, "fixture package has no descriptor")
         self.descriptor = descriptor
@@ -605,10 +600,7 @@ class AssemblyGroupNodesTest(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory(prefix="assembly-groups-")
         self.addCleanup(self._tmp.cleanup)
         self.package_dir = Path(self._tmp.name) / "__cadgen__" / "models" / "nested.py"
-        with exclusive(write_lock_path(self.package_dir)):
-            build_view(
-                _nested_compound(), package_dir=self.package_dir, root_name="nested"
-            )
+        build_view(_nested_compound(), package_dir=self.package_dir, root_name="nested")
         self.descriptor = component_package.read_package_descriptor(self.package_dir)
         self.assertIsInstance(self.descriptor, dict, "fixture package has no descriptor")
 

@@ -305,30 +305,26 @@ CADGEN_DAEMON=0 python part.py      # force a cold in-process run
   OCP itself, so a model that crashes the CAD kernel costs one worker rather than the
   daemon. The first call spawns a worker (paying the import once); later calls run in a
   warm one and stream the CLI's stdout/stderr and exit code back unchanged.
-- **Parallel builds are supported.** A burst spawns workers up to a cap, and a second
-  burst reuses the first's workers, so repeated parallel work converges to warm.
-- **Same-model builds serialize** on a per-model lock; a caller that declines to
-  wait reports `contended` in its result rather than building twice.
+- **One worker per model.** A request lands on the worker bound to its model
+  script; a busy worker means a second one (an *extra*) runs the job now; a model
+  with no worker takes a warm spare (`CADGEN_DAEMON_SPARES`, default 2, refilled in
+  the background). Nothing waits on another build and nothing is capped.
+- **Children build in parallel.** Inside a body, each child call submits that child
+  to the daemon and returns a promise; siblings build on their own workers while the
+  body continues, and the parent waits only when it first reads the geometry —
+  normally at the closing `Compound(children=[...])`.
+- **Same-model builds both run**; the store keeps the result whose sources are
+  current. There is no lock, no `contended`, and no `--lock-timeout`.
 - **A worker that dies mid-job says so.** When the process running your job is
   killed (out of memory, a kernel crash) the client reports the death and how it
   died, names the job, and prints the exact `CADGEN_DAEMON=0 ...` rerun. Nothing
   is retried silently: a half-hour job re-running unannounced is worse than the
   failure it would hide.
-- **A build has a memory ceiling.** One process's peak resident size is watched
-  during the model function and the emit; past the cap the build aborts with one
-  line naming the stage it was in, instead of the OS killing whatever it likes.
-  Default: half the machine's memory budget (the cgroup limit in a container, else
-  physical RAM), never below 4 GB — a 2,500-part engine builds in ~4 GB.
-  `CADGEN_MAX_RSS_GB=<gigabytes>` raises it; `0` disables. With `--verbose`, every
-  stage line also reports peak RSS, so a report says where memory went.
-- **The cap follows the machine**: the smaller of what memory allows (half of RAM, or the
-  cgroup limit inside a container, divided by ~300 MB a warm worker holds) and what the
-  cores allow (`cores - 2`), never more than 32. `CADGEN_DAEMON_MAX_WORKERS` overrides.
-- **At the cap a caller waits briefly**, then runs cold if nothing frees up —
-  `CADGEN_DAEMON_WAIT`, default 2s; 0 gives up immediately. Jobs are usually short next
-  to an OCP import, so most waits end in a warm worker.
-- `cadgen daemon status` reports `waits` and `coldOverflows`. Overflows climbing during
-  normal work means the machine is genuinely saturated, not that the cap is too small.
+- **No memory ceiling and no worker cap.** Unlimited memory is the operating
+  assumption; a build the OS kills is reported as a dead worker with its exit status.
+- `cadgen daemon status` reports each worker's model, whether it is busy, its job
+  count and whether it is an extra, plus `spares`, `imports` (cold spawns) and
+  `concurrent` (extras bound).
 - Directly-run model scripts and the `cadgen` commands share the same warm processes.
   (The CAD Viewer runs no Python and never builds; it only reflects CLI builds via their
   progress records.)
@@ -338,8 +334,8 @@ CADGEN_DAEMON=0 python part.py      # force a cold in-process run
   socket holds daemon lifecycle and C-level OCP noise. `CADGEN_DAEMON_SOCKET` overrides.
 - **Staleness:** the daemon records a version token at startup; when a client's token
   differs — cadgen changed — it exits and the client transparently respawns a fresh one.
-- **Idle exit:** workers reap down to one after 5 minutes idle; the daemon exits after 10
-  minutes without a request (`CADGEN_DAEMON_IDLE_TIMEOUT` overrides).
+- **Idle exit:** bound workers stay warm for the daemon's life; the daemon exits after
+  an hour without a request (`CADGEN_DAEMON_IDLE_TIMEOUT` overrides).
 - On any daemon spawn or protocol problem the run silently falls back to a cold
   in-process build. Cold and warm builds write identical bytes for both formats —
   drawing determinism is engineered in the DXF emitter rather than bought with a

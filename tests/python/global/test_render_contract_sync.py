@@ -74,8 +74,8 @@ class RenderContractSyncTest(unittest.TestCase):
         # THE equality the build badge depends on: the file a producer publishes its
         # progress into and the file the viewer polls must be one file. They are derived
         # on opposite sides of a process boundary — cadgen from
-        # coordination.paths.status_path(coordination_scope(model)), the viewer from
-        # store_paths.coordination_scope(model) — from the MODEL path, never the
+        # coordination.paths.progress_path(build_scope(model)), the viewer from
+        # store_paths.build_scope(model) — from the MODEL path, never the
         # package dir, because a rebuild changes the content key mid-build.
         #
         # When they disagreed the whole chain still worked and the user saw nothing: the
@@ -87,7 +87,7 @@ class RenderContractSyncTest(unittest.TestCase):
         # The reader is driven with NO registry, which is the peer path: a build this
         # server did not start (a `cadgen step compile` in a terminal, another viewer)
         # has no in-process channel and can only be seen through its record.
-        from cadgen.catalog import coordination_scope
+        from cadgen.catalog import build_scope
         from cadgen.coordination import PHASE_COMPONENTS, STEP_PACKAGE, artifact_build
 
         with tempfile.TemporaryDirectory() as workspace:
@@ -109,10 +109,10 @@ class RenderContractSyncTest(unittest.TestCase):
                 f"sys.stdout.write(json.dumps(build_progress_snapshot({str(artifact)!r})))"
             )
             with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(cache_dir)}):
-                with artifact_build(STEP_PACKAGE, coordination_scope(artifact)) as run:
+                with artifact_build(STEP_PACKAGE, build_scope(artifact)) as run:
                     run.phase(PHASE_COMPONENTS, total=37, detail="c0ffee")
                     run.advance(3)
-                    # Read from OUTSIDE the process holding the lock, exactly as the
+                    # Read from OUTSIDE the process running the build, exactly as the
                     # viewer's poll does.
                     result = subprocess.run(
                         [sys.executable, "-c", script],

@@ -123,31 +123,32 @@ class BuildTree:
                 return
             node = self._models.get(model)
             fresh = node is None
+            parent = event.get("parent") if isinstance(event.get("parent"), str) else None
             if node is None:
-                parent = event.get("parent") if isinstance(event.get("parent"), str) else None
-                node = _Model(model, parent)
+                node = _Model(model, None)
                 self._models[model] = node
                 self._order.append(model)
-                if parent is not None:
-                    parent_node = self._models.get(parent)
-                    if parent_node is None:
-                        parent_node = _Model(parent, None)
-                        parent_node.state = STATE_BUILDING
-                        self._models[parent] = parent_node
-                        self._order.insert(0, parent)
-                    if model not in parent_node.children:
-                        parent_node.children.append(model)
-            elif node.parent is None and isinstance(event.get("parent"), str):
-                node.parent = event["parent"]
-                parent_node = self._models.get(node.parent)
-                if parent_node is not None and model not in parent_node.children:
-                    parent_node.children.append(model)
+            if parent is not None and node.parent is None and parent != model:
+                self._attach(node, parent)
             changed = self._apply(node, event, state) or fresh
             if changed:
                 if self._json or not self._tty:
                     self._write_line(node)
                 else:
                     self._draw(force=True)
+
+    def _attach(self, node: _Model, parent: str) -> None:
+        """Hang ``node`` under ``parent``, inventing the parent's line if its own
+        process has not reported yet (a child's events can outrun its parent's)."""
+        node.parent = parent
+        parent_node = self._models.get(parent)
+        if parent_node is None:
+            parent_node = _Model(parent, None)
+            parent_node.state = STATE_BUILDING
+            self._models[parent] = parent_node
+            self._order.insert(0, parent)
+        if node.model not in parent_node.children:
+            parent_node.children.append(node.model)
 
     def _apply(self, node: _Model, event: dict, state: str) -> bool:
         """Fold one event into the node; True when anything a reader sees changed."""

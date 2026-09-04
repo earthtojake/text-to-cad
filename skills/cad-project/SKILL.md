@@ -127,10 +127,10 @@ forever. Treat a rename as an edit PLUS a cleanup, done conservatively:
 
 ## Building many models
 
-Parallelize ACROSS models, never within one. Each build holds a per-model
-lock — two concurrent builds of the same script serialize (the loser reports
-`contended`, nothing corrupts) — while distinct models fan out safely,
-because the warm daemon caps its own worker pool to the machine:
+A parent's children build in parallel on their own workers as the body
+calls them, so running the root is already the parallel build. Distinct
+models fan out safely too; two concurrent builds of one script both run and
+the store keeps the result whose sources are current (nothing corrupts):
 
 ```bash
 ls src/*.py | xargs -n1 -P4 python

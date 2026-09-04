@@ -1,16 +1,7 @@
-"""The pool's dispatch rule, which is the whole reason it exists.
+"""The pool's dispatch rule: a worker per model, an extra when it is busy, spares in reserve.
 
-0. A worker serves ONE project for its whole life. Two projects never share a process,
-   because cad-projects share top-level module names and a reused worker builds the
-   second project against the first one's `lib`.
-1. A free worker -> use it. Sequential work must never grow the pool.
-2. All busy, below the cap -> spawn and wait. That caller pays roughly one OCP import,
-   but the worker persists, so a burst CONVERGES to warm instead of paying per burst.
-3. At the cap -> run cold. Queueing behind a full pool is what made the single-process
-   daemon worse than no daemon for parallel work; a bounded queue would reintroduce it.
-
-Asserted on worker identity and on outputs, never on timing: a test that fails when the
-machine is busy teaches people to rerun it rather than read it.
+Nothing waits on another build and nothing is refused: the rule is bookkeeping, so it is
+asserted against stub workers on identity and state, never on timing.
 """
 
 from __future__ import annotations
@@ -18,9 +9,8 @@ from __future__ import annotations
 import concurrent.futures
 import os
 import pathlib
-import shutil
 import sys
-import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -33,19 +23,19 @@ class _StubWorker:
     """Stands in for a subprocess: the dispatch rule is about bookkeeping, not OCP."""
 
     _next_pid = 1000
+    spawned = 0
 
     def __init__(self) -> None:
         _StubWorker._next_pid += 1
+        _StubWorker.spawned += 1
         self.pid = _StubWorker._next_pid
         self.busy = False
+        self.extra = False
+        self.model = ""
         self.jobs_served = 0
         self.last_used = 0.0
-        # The real Worker stamps itself from the same counter: recency ORDER is
-        # the sequence, not the clock, because time.monotonic() is ~16 ms coarse
-        # on Windows and a burst of acquire/release cycles tied on it.
         self.use_seq = next(pool_mod._USE_SEQUENCE)
         self.killed = False
-        self.project = ""
         self._alive = True
 
     def alive(self) -> bool:
@@ -56,264 +46,181 @@ class _StubWorker:
         self._alive = False
 
 
+def _settle(pool: pool_mod.Pool, timeout: float = 5.0) -> None:
+    """Wait for the background spare refill to land."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if pool.snapshot()["sparesPending"] == 0:
+            return
+        time.sleep(0.01)
+    raise AssertionError("spare refill never settled")
+
+
 class _PoolFixture(unittest.TestCase):
     def setUp(self) -> None:
         patcher = mock.patch.object(pool_mod, "Worker", _StubWorker)
         patcher.start()
         self.addCleanup(patcher.stop)
+        _StubWorker.spawned = 0
         self.pool = pool_mod.Pool()
         self.addCleanup(self.pool.shutdown)
 
-    def _cap(self, size: int):
-        return mock.patch.dict(os.environ, {"CADGEN_DAEMON_MAX_WORKERS": str(size)})
+    def _spares(self, count: int):
+        return mock.patch.dict(os.environ, {"CADGEN_DAEMON_SPARES": str(count)})
 
 
-class DispatchRule(_PoolFixture):
-    def test_sequential_work_reuses_one_worker(self):
-        seen = set()
-        with self._cap(4):
-            for _ in range(5):
-                worker = self.pool.acquire()
-                self.assertIsNotNone(worker)
-                seen.add(worker.pid)
-                self.pool.release(worker)
-        self.assertEqual(len(seen), 1, "sequential jobs must not grow the pool")
+class Binding(_PoolFixture):
+    def test_a_model_binds_a_worker_and_keeps_it(self):
+        with self._spares(0):
+            first = self.pool.acquire("/m/a.py")
+            self.pool.release(first)
+            again = self.pool.acquire("/m/a.py")
+        self.assertIs(first, again, "sequential builds of one model must reuse its worker")
+        self.assertEqual(first.model, "/m/a.py")
+        self.assertFalse(first.extra)
+        self.pool.release(again)
+        self.assertEqual(again.jobs_served, 2)
 
-    def test_a_burst_below_the_cap_spawns_one_worker_each(self):
-        with self._cap(4):
-            held = [self.pool.acquire() for _ in range(3)]
-        self.assertEqual(len({w.pid for w in held}), 3)
+    def test_two_models_never_share_a_worker(self):
+        with self._spares(0):
+            a = self.pool.acquire("/m/a.py")
+            self.pool.release(a)
+            b = self.pool.acquire("/m/b.py")
+        self.assertIsNot(a, b)
+        self.assertEqual({a.model, b.model}, {"/m/a.py", "/m/b.py"})
+        self.pool.release(b)
+
+    def test_a_busy_model_gets_an_extra_and_nobody_waits(self):
+        with self._spares(0):
+            primary = self.pool.acquire("/m/a.py")
+            extra = self.pool.acquire("/m/a.py")
+        self.assertIsNot(primary, extra)
+        self.assertTrue(extra.extra)
+        self.assertEqual(extra.model, "/m/a.py")
+        self.assertEqual(self.pool.snapshot()["concurrent"], 1)
+        self.pool.release(extra)
+        self.pool.release(primary)
+
+    def test_an_extra_returns_to_the_spare_set_when_its_job_ends(self):
+        with self._spares(1):
+            primary = self.pool.acquire("/m/a.py")
+            _settle(self.pool)
+            extra = self.pool.acquire("/m/a.py")
+            _settle(self.pool)
+            self.pool.release(extra)
+            _settle(self.pool)
+            snapshot = self.pool.snapshot()
+        spares = [w for w in snapshot["workers"] if not w["model"]]
+        self.assertEqual(len(spares), 1, snapshot)
+        self.assertTrue(extra.killed or extra.model == "", "the extra neither returned nor left")
+        self.pool.release(primary)
+
+    def test_a_request_with_no_model_borrows_a_spare_without_binding_it(self):
+        with self._spares(0):
+            worker = self.pool.acquire("")
+            self.assertEqual(worker.model, "")
+            self.pool.release(worker)
+            _settle(self.pool)
+        bound = [w for w in self.pool.snapshot()["workers"] if w["model"]]
+        self.assertEqual(bound, [], "a subject-less job bound a worker")
+
+    def test_nothing_is_capped(self):
+        with self._spares(0):
+            held = [self.pool.acquire(f"/m/{i}.py") for i in range(40)]
+        self.assertEqual(len({w.pid for w in held}), 40)
         for worker in held:
             self.pool.release(worker)
 
-    def test_at_the_cap_the_caller_is_told_to_run_cold(self):
-        with self._cap(2):
-            first, second = self.pool.acquire(), self.pool.acquire()
-            self.assertIsNotNone(first)
-            self.assertIsNotNone(second)
-            # Third caller: no queueing, no fifth worker -- run cold.
-            self.assertIsNone(self.pool.acquire())
-        self.assertEqual(self.pool.snapshot()["coldOverflows"], 1)
-        for worker in (first, second):
-            self.pool.release(worker)
-
-    def test_a_burst_converges_and_stops_spawning(self):
-        with self._cap(3):
-            first = [self.pool.acquire() for _ in range(3)]
-            pids = {w.pid for w in first}
-            for worker in first:
-                self.pool.release(worker)
-            second = [self.pool.acquire() for _ in range(3)]
-            self.assertEqual({w.pid for w in second}, pids, "a warm burst must not respawn")
-            for worker in second:
-                self.pool.release(worker)
-
     def test_concurrent_acquire_never_hands_one_worker_to_two_callers(self):
-        with self._cap(4):
-            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-                got = list(pool.map(lambda _: self.pool.acquire(), range(8)))
-        live = [w for w in got if w is not None]
-        self.assertEqual(len({w.pid for w in live}), len(live), "a worker was handed out twice")
-        self.assertLessEqual(len(live), 4)
-        for worker in live:
+        with self._spares(0):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                got = list(executor.map(lambda i: self.pool.acquire(f"/m/{i % 3}.py"), range(24)))
+        self.assertEqual(len({w.pid for w in got}), len(got), "a worker was handed out twice")
+        for worker in got:
             self.pool.release(worker)
 
 
-class ProjectBinding(_PoolFixture):
-    """One worker, one project, for the worker's whole life.
+class Spares(_PoolFixture):
+    def test_ensure_spares_fills_to_k_in_the_background(self):
+        with self._spares(2):
+            self.pool.ensure_spares()
+            _settle(self.pool)
+            self.assertEqual(self.pool.snapshot()["spares"], 2)
+            self.assertEqual(self.pool.snapshot()["imports"], 2)
 
-    The rule this class defends is not a performance heuristic. Every cad-project keeps
-    its shared code in `src/lib/`, so two projects on one worker collide on the module
-    name `lib`; the loader's evictions scrub that between builds, and a scrub that misses
-    builds the second project against the first one's helpers and reports success.
-    """
+    def test_binding_a_spare_starts_a_replacement(self):
+        with self._spares(2):
+            self.pool.ensure_spares()
+            _settle(self.pool)
+            before = _StubWorker.spawned
+            worker = self.pool.acquire("/m/a.py")
+            _settle(self.pool)
+            snapshot = self.pool.snapshot()
+        self.assertEqual(worker.model, "/m/a.py")
+        self.assertEqual(snapshot["spares"], 2, "the spare set was not refilled")
+        self.assertEqual(_StubWorker.spawned, before + 1, "exactly one replacement")
+        self.pool.release(worker)
 
-    def test_bound_worker_serves_its_project(self):
-        with self._cap(4):
-            a = self.pool.acquire("/models/tom/src")
-            b = self.pool.acquire("/models/gripper/src")
-            self.pool.release(a)
-            self.pool.release(b)
-            again = self.pool.acquire("/models/gripper/src")
-            self.assertIs(again, b, "the worker bound to this project must win")
-            self.pool.release(again)
+    def test_a_model_with_no_worker_takes_a_spare_not_a_spawn(self):
+        with self._spares(1):
+            self.pool.ensure_spares()
+            _settle(self.pool)
+            spare_pid = next(w["pid"] for w in self.pool.snapshot()["workers"] if not w["model"])
+            worker = self.pool.acquire("/m/a.py")
+        self.assertEqual(worker.pid, spare_pid, "a warm spare was available and not used")
+        self.pool.release(worker)
 
-    def test_two_projects_never_share_a_worker(self):
-        # The whole point. Interleaved, released between each, with room in the pool for
-        # reuse to look attractive -- the exact shape that put one worker on every
-        # project when routing keyed on cwd.
-        with self._cap(4):
-            by_project: dict[str, set[int]] = {}
-            for _ in range(6):
-                for project in ("/models/juno/src", "/models/moonwatch/src"):
-                    worker = self.pool.acquire(project)
-                    self.assertIsNotNone(worker)
-                    self.assertEqual(worker.project, project)
-                    by_project.setdefault(project, set()).add(worker.pid)
-                    self.pool.release(worker)
-        juno, moonwatch = by_project["/models/juno/src"], by_project["/models/moonwatch/src"]
-        self.assertEqual(len(juno), 1, "one project must converge on one warm worker")
-        self.assertEqual(len(moonwatch), 1)
-        self.assertFalse(juno & moonwatch, "a worker served two projects")
-
-    def test_busy_project_is_waited_for_not_fanned_out(self):
-        import threading
-        import time as _time
-
-        with self._cap(4):
-            session = self.pool.acquire("/models/tom/src")
-
-            def release_soon():
-                _time.sleep(0.1)
-                self.pool.release(session)
-
-            threading.Thread(target=release_soon, daemon=True).start()
-            second = self.pool.acquire("/models/tom/src")
-            self.assertIs(second, session,
-                          "per-project requests serialize through the one worker")
-            self.pool.release(second)
-
-    def test_admission_budget_bounds_resident_workers(self):
-        with self._cap(4):
-            for index in range(30):
-                worker = self.pool.acquire(f"/models/m{index}/src")
-                self.assertIsNotNone(worker)
-                self.pool.release(worker)
-            resident = self.pool.snapshot()["workers"]
-        # 30 projects, never more than 4 resident: the cap admits projects rather than
-        # recycling one process through all of them.
-        self.assertLessEqual(len(resident), 4, "30 projects must not mean 30 live workers")
-        self.assertGreater(self.pool.snapshot()["evictions"], 0)
-
-    def _evict_lru_of_three_projects(self):
-        with self._cap(2):
-            a = self.pool.acquire("/models/a/src")
-            b = self.pool.acquire("/models/b/src")
-            self.pool.release(a)
-            self.pool.release(b)
-            a2 = self.pool.acquire("/models/a/src")  # refresh a's recency
-            self.pool.release(a2)
-            c = self.pool.acquire("/models/c/src")
-        return a, b, c
-
-    def test_a_new_project_evicts_the_lru_and_respawns(self):
-        a, b, c = self._evict_lru_of_three_projects()
-        self.assertTrue(b.killed, "the LRU project's worker must be evicted, not rebound")
-        self.assertNotIn(c.pid, {a.pid, b.pid}, "a new project gets a FRESH process")
-        self.assertEqual(c.project, "/models/c/src")
-        self.assertEqual(self.pool.snapshot()["evictions"], 1)
-        self.pool.release(c)
-
-    def test_the_lru_choice_does_not_depend_on_the_clock_resolution(self):
-        """Recency is an ORDER, and the pool must not read it off a coarse clock.
-
-        time.monotonic() advances in ~16 ms steps on Windows, so the sequence
-        above -- three acquire/release cycles with no work between them -- landed
-        entirely inside one tick, every worker carried the same timestamp, and
-        min() broke the tie by list position: it evicted the worker whose use had
-        just been REFRESHED and kept the actually-least-recent one. Freezing the
-        clock is the same condition with the resolution taken to its limit, so
-        this reproduces on every platform instead of only one.
-        """
-        with mock.patch.object(pool_mod.time, "monotonic", lambda: 1234.0):
-            a, b, c = self._evict_lru_of_three_projects()
-        self.assertTrue(b.killed, "a tied clock must not decide which project is evicted")
-        self.assertFalse(a.killed, "the refreshed project's worker is the one to KEEP")
-        self.assertNotIn(c.pid, {a.pid, b.pid})
-        self.pool.release(c)
-
-    def test_a_cap_of_one_respawns_per_project_and_never_reuses(self):
-        # The single-worker variant of the interleaved repro: with no room to hold both,
-        # each alternation must evict and respawn. Reuse here would be the bug.
-        seen: list[tuple[str, int]] = []
-        with self._cap(1):
-            for _ in range(3):
-                for project in ("/models/juno/src", "/models/moonwatch/src"):
-                    worker = self.pool.acquire(project)
-                    self.assertIsNotNone(worker)
-                    self.assertEqual(worker.project, project)
-                    seen.append((project, worker.pid))
-                    self.pool.release(worker)
-        pids_by_project: dict[str, set[int]] = {}
-        for project, pid in seen:
-            pids_by_project.setdefault(project, set()).add(pid)
-        self.assertFalse(
-            pids_by_project["/models/juno/src"] & pids_by_project["/models/moonwatch/src"],
-            "a cap of one must respawn per project, never hand one process to both",
-        )
-        self.assertEqual(len(self.pool.snapshot()["workers"]), 1)
-        self.assertEqual(self.pool.snapshot()["evictions"], 5)
-
-    def test_no_project_behaves_as_before(self):
-        with self._cap(4):
-            a = self.pool.acquire()
-            self.pool.release(a)
-            b = self.pool.acquire()
-            self.assertIs(a, b)
-            self.pool.release(b)
-
-    def test_a_project_less_request_borrows_without_binding(self):
-        # `inspect`/`snapshot` on a STEP execute no model code, so they may run anywhere
-        # -- but they must not steal a worker's identity on the way through.
-        with self._cap(2):
-            owned = self.pool.acquire("/models/tom/src")
-            self.pool.release(owned)
-            borrowed = self.pool.acquire()
-            self.assertIs(borrowed, owned)
-            self.assertEqual(borrowed.project, "/models/tom/src", "binding was overwritten")
-            self.pool.release(borrowed)
-            again = self.pool.acquire("/models/tom/src")
-            self.assertIs(again, owned)
-            self.pool.release(again)
+    def test_the_spare_set_never_exceeds_k(self):
+        with self._spares(1):
+            self.pool.ensure_spares()
+            _settle(self.pool)
+            primary = self.pool.acquire("/m/a.py")
+            _settle(self.pool)
+            extras = [self.pool.acquire("/m/a.py") for _ in range(3)]
+            _settle(self.pool)
+            for extra in extras:
+                self.pool.release(extra)
+            _settle(self.pool)
+            self.assertLessEqual(self.pool.snapshot()["spares"], 1)
+        self.pool.release(primary)
 
 
-class WorkerLifecycle(_PoolFixture):
-    def test_an_unhealthy_worker_is_dropped_not_reused(self):
-        with self._cap(4):
-            worker = self.pool.acquire()
+class Lifecycle(_PoolFixture):
+    def test_a_crashed_worker_is_dropped_and_its_model_rebinds_fresh(self):
+        with self._spares(0):
+            worker = self.pool.acquire("/m/a.py")
+            worker._alive = False
             self.pool.release(worker, healthy=False)
-            self.assertTrue(worker.killed)
-            replacement = self.pool.acquire()
-            self.assertNotEqual(replacement.pid, worker.pid)
-            self.pool.release(replacement)
+            replacement = self.pool.acquire("/m/a.py")
+        self.assertIsNot(worker, replacement)
+        self.assertEqual(self.pool.snapshot()["crashes"], 1)
+        self.pool.release(replacement)
 
-    def test_a_worker_that_died_is_never_handed_out(self):
-        with self._cap(4):
-            worker = self.pool.acquire()
-            self.pool.release(worker)
-            worker._alive = False  # e.g. an OCP segfault between jobs
-            replacement = self.pool.acquire()
-            self.assertNotEqual(replacement.pid, worker.pid)
-            self.pool.release(replacement)
-
-    def test_a_worker_is_recycled_after_its_job_budget(self):
-        # OCP's memory grows over a long session, so a worker is not immortal.
-        with self._cap(4), mock.patch.dict(os.environ, {"CADGEN_DAEMON_RECYCLE": "2"}):
-            first = self.pool.acquire()
+    def test_a_worker_is_recycled_after_n_jobs(self):
+        with self._spares(0), mock.patch.dict(os.environ, {"CADGEN_DAEMON_RECYCLE": "2"}):
+            first = self.pool.acquire("/m/a.py")
             self.pool.release(first)
-            again = self.pool.acquire()
-            self.assertEqual(again.pid, first.pid, "recycled too early")
-            self.pool.release(again)  # second job reaches the budget
-            self.assertTrue(first.killed)
-            third = self.pool.acquire()
-            self.assertNotEqual(third.pid, first.pid)
-            self.pool.release(third)
+            same = self.pool.acquire("/m/a.py")
+            self.assertIs(first, same)
+            self.pool.release(same)  # second job: recycled
+            fresh = self.pool.acquire("/m/a.py")
+        self.assertIsNot(first, fresh)
+        self.assertTrue(first.killed)
         self.assertEqual(self.pool.snapshot()["recycles"], 1)
+        self.pool.release(fresh)
 
-    def test_idle_workers_are_reaped_down_to_one(self):
-        with self._cap(4):
-            held = [self.pool.acquire() for _ in range(3)]
-            for worker in held:
-                self.pool.release(worker)
-            for worker in held:
-                worker.last_used = -pool_mod.DEFAULT_WORKER_IDLE_SECONDS * 2
-            self.pool.reap_idle()
-        self.assertEqual(len(self.pool.snapshot()["workers"]), 1, "a finished burst must return memory")
+    def test_bound_workers_are_never_idle_reaped(self):
+        with self._spares(0):
+            worker = self.pool.acquire("/m/a.py")
+            self.pool.release(worker)
+            worker.last_used = 0.0  # ages ago
+            self.pool.reap_dead()
+        self.assertFalse(worker.killed)
+        self.assertEqual(len(self.pool.snapshot()["workers"]), 1)
 
-    def test_shutdown_kills_every_worker(self):
-        # An orphaned 274 MB OCP process per session is how this feature gets disabled.
-        with self._cap(4):
-            held = [self.pool.acquire() for _ in range(3)]
+    def test_shutdown_kills_everything(self):
+        with self._spares(0):
+            held = [self.pool.acquire(f"/m/{i}.py") for i in range(3)]
             for worker in held:
                 self.pool.release(worker)
         self.pool.shutdown()
@@ -321,116 +228,21 @@ class WorkerLifecycle(_PoolFixture):
         self.assertEqual(self.pool.snapshot()["workers"], [])
 
 
-class Sizing(unittest.TestCase):
-    def test_the_cap_is_configurable(self):
-        with mock.patch.dict(os.environ, {"CADGEN_DAEMON_MAX_WORKERS": "7"}):
-            self.assertEqual(pool_mod.max_workers(), 7)
-
-    def test_the_default_leaves_the_machine_room(self):
-        import os as _os
-
-        with mock.patch.dict(os.environ, {"CADGEN_DAEMON_MAX_WORKERS": ""}):
-            cap = pool_mod.max_workers()
-        # The cap follows the machine now rather than a constant, so the property is that
-        # it leaves headroom -- at least one worker, never more cores than the box has
-        # spare, and never past the ceiling. Which bound binds is per-machine and is
-        # covered against simulated hardware in test_daemon_pool_sizing.
-        self.assertGreaterEqual(cap, 1)
-        self.assertLessEqual(cap, pool_mod.MAX_WORKERS_CEILING)
-        self.assertLessEqual(cap, max(1, (_os.cpu_count() or 4) - 2))
-
-    def test_a_nonsense_cap_falls_back_rather_than_crashing(self):
-        with mock.patch.dict(os.environ, {"CADGEN_DAEMON_MAX_WORKERS": "banana"}):
-            self.assertGreaterEqual(pool_mod.max_workers(), 1)
-
-
-class RealWorkerProcess(unittest.TestCase):
-    """One end-to-end check that the stub above is not lying about the real thing."""
-
-    def test_a_real_worker_starts_answers_and_dies_with_its_pool(self):
-        pool = pool_mod.Pool()
-        try:
-            with mock.patch.dict(os.environ, {"CADGEN_DAEMON_MAX_WORKERS": "1"}):
-                worker = pool.acquire()
-            self.assertIsNotNone(worker, "could not start a real worker")
-            self.assertTrue(worker.alive())
-            worker.send({"kind": "ping"})
-            frames = list(worker.frames())
-            self.assertEqual(frames[-1].get("pong"), worker.pid)
-            pool.release(worker)
-        finally:
-            pool.shutdown()
-        self.assertFalse(worker.alive(), "shutdown left a worker running")
+class Status(_PoolFixture):
+    def test_snapshot_reports_per_worker_model_busy_jobs_extra(self):
+        with self._spares(0):
+            primary = self.pool.acquire("/m/a.py")
+            extra = self.pool.acquire("/m/a.py")
+            self.pool.release(extra)
+            snapshot = self.pool.snapshot()
+        rows = {w["pid"]: w for w in snapshot["workers"]}
+        self.assertEqual(rows[primary.pid], {"pid": primary.pid, "model": "/m/a.py", "busy": True, "extra": False, "jobs": 0})
+        for key in ("spares", "imports", "concurrent", "jobs", "recycles", "crashes"):
+            self.assertIn(key, snapshot)
+        self.assertEqual(snapshot["concurrent"], 1)
+        self.assertEqual(snapshot["jobs"], 1)
+        self.pool.release(primary)
 
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class DaemonStatusCommand(unittest.TestCase):
-    """`cadgen daemon status` — warm compute you can see.
-
-    It asks the supervisor rather than looking at the filesystem: a socket file outlives
-    a killed daemon, and only the supervisor knows which workers are busy.
-    """
-
-    def test_no_daemon_reports_that_plainly_without_starting_one(self):
-        import io
-        import contextlib as _ctx
-
-        from cadgen.cli import daemon_status
-
-        buffer = io.StringIO()
-        # Pin the supported platform: where the daemon cannot run at all the command says
-        # so instead, and promising "one starts on the next build" there would be false.
-        # That branch has its own coverage in test_daemon_unsupported_platform.
-        with mock.patch("cadgen.daemon.client.status", return_value=None) as asked, \
-                mock.patch("cadgen.daemon.client.daemon_supported", return_value=True), \
-                _ctx.redirect_stdout(buffer):
-            self.assertEqual(daemon_status.main([]), 0)
-        asked.assert_called_once()
-        self.assertIn("No CAD daemon is running", buffer.getvalue())
-
-    def test_a_running_daemon_is_rendered_with_its_workers(self):
-        import io
-        import contextlib as _ctx
-
-        from cadgen.cli import daemon_status
-
-        payload = {
-            "pid": 99, "socket": "/tmp/x.sock", "version": "1.2.3", "token": "t",
-            "maxWorkers": 4, "startedAt": 0, "jobs": 7, "coldOverflows": 2,
-            "recycles": 1, "crashes": 0,
-            "workers": [{"pid": 100, "busy": True, "jobsServed": 5}],
-        }
-        buffer = io.StringIO()
-        with mock.patch("cadgen.daemon.client.status", return_value=payload), \
-                _ctx.redirect_stdout(buffer):
-            daemon_status.main([])
-        rendered = buffer.getvalue()
-        self.assertIn("pid 99", rendered)
-        self.assertIn("1/4 (1 busy)", rendered)
-        self.assertIn("pid 100  busy  5 jobs", rendered)
-        self.assertIn("2 cold overflows", rendered)
-
-    def test_json_output_is_the_raw_payload(self):
-        import io
-        import json as _json
-        import contextlib as _ctx
-
-        from cadgen.cli import daemon_status
-
-        payload = {"pid": 5, "workers": []}
-        buffer = io.StringIO()
-        with mock.patch("cadgen.daemon.client.status", return_value=payload), \
-                _ctx.redirect_stdout(buffer):
-            daemon_status.main(["--json"])
-        self.assertEqual(_json.loads(buffer.getvalue()), payload)
-
-    def test_the_two_word_command_beats_the_one_word_daemon(self):
-        # Same dispatch trap as `viewer list`: without the two-word entry, `daemon status`
-        # would run the daemon itself with "status" as a stray argument.
-        from cadgen.cli import _COMMANDS
-
-        self.assertEqual(_COMMANDS["daemon status"][0], "cadgen.cli.daemon_status")
-        self.assertEqual(_COMMANDS["daemon"][0], "cadgen.daemon")

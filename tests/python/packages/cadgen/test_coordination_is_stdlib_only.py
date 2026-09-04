@@ -1,6 +1,6 @@
 """``cadgen.coordination`` must stay stdlib-only and instant to import.
 
-Every CLI front door imports it (locks, status records) before deciding whether a
+Every CLI front door imports it (status records) before deciding whether a
 daemon can serve the request, so dragging OCP/build123d/ezdxf into it would put a
 multi-second import in front of every command -- including the no-op ones the
 coordination layer exists to make cheap.
@@ -30,7 +30,7 @@ print(json.dumps({{
     "heavy": sorted(m for m in ("OCP", "build123d", "ezdxf", "numpy") if m in sys.modules),
     "has_api": all(
         hasattr(cadgen.coordination, name)
-        for name in ("artifact_build", "generator_busy", "snapshot", "Contended")
+        for name in ("artifact_build", "generator_busy", "progress_path", "BuildRun")
     ),
 }}))
 """

@@ -31,6 +31,7 @@ import os
 import secrets
 import stat
 import sys
+import time
 from pathlib import Path
 
 # Bump when the wire format changes. It is part of the address, so mismatched peers never
@@ -199,11 +200,19 @@ class Server:
         self._closed = False
 
     def accept(self) -> Channel | None:
-        """The next client, or None once the listener has been closed."""
-        try:
-            return Channel(self._listener.accept())
-        except (OSError, EOFError, mpc.AuthenticationError):
-            return None
+        """The next client, or None once the listener has been closed.
+
+        A client that fails the authkey handshake (a stale key, a stranger) is ITS
+        failure, not the listener's: the daemon keeps accepting. Before this, one bad
+        handshake read as "listener closed" and took the whole daemon down.
+        """
+        while True:
+            try:
+                return Channel(self._listener.accept())
+            except (OSError, EOFError, mpc.AuthenticationError):
+                if self._closed:
+                    return None
+                time.sleep(0.01)  # a rejected peer; never a busy loop on a broken listener
 
     def close(self) -> None:
         if self._closed:

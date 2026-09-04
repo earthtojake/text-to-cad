@@ -304,7 +304,7 @@ class DocumentedCommandForms(_DrawingHarness):
         """
         usage = self.run_drawing("gasket.py", "--help").stdout
         documented = set(re.findall(r"`(--[a-z-]+)", SKILL.read_text(encoding="utf-8")))
-        model_flags = {flag for flag in documented if flag in {"--force", "--verbose", "--json", "--lock-timeout"}}
+        model_flags = {flag for flag in documented if flag in {"--force", "--verbose", "--json"}}
         for flag in model_flags:
             self.assertIn(flag, usage, f"SKILL.md documents {flag}, the parser does not accept it")
         for retired in ("--validate",):

@@ -136,6 +136,21 @@ def _tool_main(tool: str):
     return getattr(importlib.import_module(_TOOL_IMPORTS[tool]), "main")
 
 
+def _warm_imports() -> None:
+    """Pay every import a job will need BEFORE announcing readiness.
+
+    A spare exists to make a model's first build import-free, and "imported build123d"
+    is only half of that: the pipeline behind each tool (generation, the STEP writer,
+    the packagers) is another few hundred milliseconds a fresh worker paid on its first
+    job. Spares fill in the background, so the cost lands where nobody is waiting.
+    """
+    with contextlib.suppress(Exception):
+        importlib.import_module("cadgen.generation")
+    for tool in _TOOL_IMPORTS:
+        with contextlib.suppress(Exception):
+            _tool_main(tool)
+
+
 def _run(request: dict) -> int:
     tool = request.get("tool")
     argv = [str(a) for a in request.get("argv") or []]
@@ -196,6 +211,7 @@ def serve() -> int:
     from cadgen.daemon import executors
 
     executors.set_event_sink(lambda event: _emit({"event": event}))
+    _warm_imports()
     _emit({"ready": os.getpid()})
     for line in sys.stdin:
         line = line.strip()

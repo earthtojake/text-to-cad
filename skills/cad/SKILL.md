@@ -107,7 +107,7 @@ freshness gate and warm-daemon handoff run before any kernel import is paid.
 Raw `import build123d` still works but costs ~2.5s per re-run. Per-run flags
 ride the script's argv: `--force` (this model only; its children still go
 through the freshness gate), `--json`, `--verbose`, `--mesh-tolerance`,
-`--mesh-angular-tolerance`, `--lock-timeout SECONDS`.
+`--mesh-angular-tolerance`.
 
 Rules the decorator enforces: importing a model module never builds; a model
 file without a `__main__` call never builds either — always end the script with
@@ -175,7 +175,7 @@ Silent generators are unaffected.
 [cadgen] re-run with --verbose for the full traceback
 ```
 
-**A build waits for a concurrent build of the same model** rather than racing it, and says so on stderr (`waiting for another run to finish building ...`), repeating while it waits. Pass `--lock-timeout SECONDS` to give up instead and report `{"ok":true,"contended":true}`. With `--json`, each target's `outcome` is `built`, `current`, `skipped-peer` (the peer finished and its package is current), or `contended` (the peer is still building and this run declined to wait).
+**Concurrent builds of one model both run**; nothing waits and nothing locks. Each publishes its result and the store keeps the one whose sources match the files as they are now, so the disk ends at the newer source. With `--json`, each target's `outcome` is `built`, `current`, or `skipped-peer` (a concurrent run finished first and its result is current). A parent's children build in parallel as its body calls them; the build tree on stderr shows each model's state (`submitted`, `building · phase`, `current`, `✓ time`) and `--json` or a non-TTY gets one JSON line per transition instead.
 
 Target paths resolve from the command's current working directory, not from the skill directory. Run commands from the workspace that owns the artifacts and pass cwd-relative target paths so project CAD files never resolve accidentally under the skill directory. By default a model's STEP is its sibling with the same stem; the artifact→source link is recorded in the store's record for the model, so relocating outputs with `out=` is safe.
 
