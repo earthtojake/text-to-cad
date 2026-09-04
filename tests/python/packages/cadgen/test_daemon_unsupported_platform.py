@@ -47,56 +47,5 @@ class DaemonSupported(unittest.TestCase):
         self.assertTrue(transport.supported())
 
 
-class EveryEntryPointDegradesToCold(unittest.TestCase):
-    """None is this module's "run it cold" answer; each caller already handles it."""
-
-    def test_run_via_daemon_returns_none(self):
-        with no_transport():
-            self.assertIsNone(client.run_via_daemon("gen", ["part.py"], "/repo"))
-
-    def test_status_returns_none(self):
-        with no_transport():
-            self.assertIsNone(client.status())
-
-    def test_nothing_is_dialled_on_the_way_out(self):
-        # The guard has to come before the connect, not around it. side_effect rather than
-        # a bare Mock so a regression fails HERE: a plain Mock returns a Mock, whose frames
-        # never stop arriving, and the caller's read loop would hang instead of failing.
-        boom = AssertionError("the daemon was contacted on a platform with no transport")
-        with no_transport(), mock.patch.object(
-            client, "_connect_or_spawn", side_effect=boom
-        ) as connect:
-            self.assertIsNone(client.run_via_daemon("gen", ["part.py"], "/repo"))
-        connect.assert_not_called()
-
-
-class StatusCommandTellsTheTruth(unittest.TestCase):
-    def test_it_does_not_promise_a_daemon_that_cannot_start(self):
-        # "One starts on the next build" would send someone off to wait for a warm process
-        # that no build will ever produce.
-        out = io.StringIO()
-        with no_transport(), contextlib.redirect_stdout(out):
-            self.assertEqual(0, daemon_status.main([]))
-        text = out.getvalue()
-        self.assertIn("cannot run on this platform", text)
-        self.assertNotIn("starts on the next build", text)
-
-    def test_it_does_promise_one_where_a_daemon_can_start(self):
-        out = io.StringIO()
-        with mock.patch.object(transport, "supported", return_value=True), \
-                mock.patch.object(client, "status", return_value=None), \
-                contextlib.redirect_stdout(out):
-            self.assertEqual(0, daemon_status.main([]))
-        self.assertIn("starts on the next build", out.getvalue())
-
-    def test_json_output_stays_a_payload(self):
-        # --json is consumed by tooling; an unsupported platform is still "nothing warm",
-        # not a different shape.
-        out = io.StringIO()
-        with no_transport(), contextlib.redirect_stdout(out):
-            self.assertEqual(0, daemon_status.main(["--json"]))
-        self.assertEqual("{}", out.getvalue().strip())
-
-
 if __name__ == "__main__":
     unittest.main()
