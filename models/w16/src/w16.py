@@ -1,6 +1,9 @@
 """Quad-turbo 8.0 L W16 — full sectioned assembly.
 
-Groups (occurrence order = explode order; the anim targets these ids):
+Thirteen system models, each its own file under `src/` with its own STEP,
+composed here by CALLING them (occurrence order = explode order; the anim
+targets these ids). Rebuilding a system alone does not rebuild the engine —
+rerun this script to pick it up. The section flag is `lib/spec.py:SECTIONED`.
     o1.1  block          block + main caps + shells
     o1.2  crank          crankshaft, damper, flywheel
     o1.3  pistons        16 x piston/rings/pin/circlips/rod/cap/bolts/shells
@@ -20,55 +23,44 @@ from __future__ import annotations
 
 from cadgen import build123d as bd
 from cadgen import step
-from cadgen.compose import memo
 
-from lib import ancillaries, block, bottom_end, camdrive, cams, covers, exhaust, heads, induction, oil_system, pistons, turbos, valvetrain
-
-SECTIONED = True
-
-_BLOCK = memo(block.build)
-_BOTTOM = memo(bottom_end.build)
-_PISTONS = memo(pistons.build)
-_HEADS = memo(heads.build)
-_VALVES = memo(valvetrain.build)
-_CAMS = memo(cams.build)
-_CAMDRIVE = memo(camdrive.build)
-_COVERS = memo(covers.build)
-_OIL = memo(oil_system.build)
-_TURBOS = memo(turbos.build)
-_EXHAUST = memo(exhaust.build)
-_INDUCTION = memo(induction.build)
-_ANCILLARIES = memo(ancillaries.build)
-
-
-def group(label, children):
-    """A labelled sub-assembly node; an EMPTY group has a null TopoDS and would
-    crash the assembly, so a stub module contributes nothing instead."""
-    kids = [c for c in children if c is not None]
-    if not kids:
-        return None
-    return bd.Compound(children=kids, label=label)
+from ancillaries import ancillaries
+from block import block
+from camdrive import camdrive
+from cams import cams
+from covers import covers
+from crank import crank
+from exhaust import exhaust
+from heads import heads
+from induction import induction
+from oil_system import oil_system
+from pistons import pistons
+from turbos import turbos
+from valvetrain import valvetrain
 
 
 @step(out="../STEP/w16.step", kind="assembly", animation="w16.anim.js",
       mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def w16():
-    groups = [
-        group("block", _BLOCK(SECTIONED)),
-        group("crank", _BOTTOM(SECTIONED)),
-        group("pistons", _PISTONS()),
-        group("heads", _HEADS(SECTIONED)),
-        group("valvetrain", _VALVES()),
-        group("cams", _CAMS(SECTIONED)),
-        group("camdrive", _CAMDRIVE(SECTIONED)),
-        group("covers", _COVERS(SECTIONED)),
-        group("oil_system", _OIL(SECTIONED)),
-        group("turbos", _TURBOS(SECTIONED)),
-        group("exhaust", _EXHAUST(SECTIONED)),
-        group("induction", _INDUCTION(SECTIONED)),
-        group("ancillaries", _ANCILLARIES(SECTIONED)),
+    # Each call submits that system's build to the pool and returns at once;
+    # the Compound below is where the assembly first reads geometry, so the
+    # thirteen systems build in parallel and the assembly LINKS their trees.
+    systems = [
+        block(),
+        crank(),
+        pistons(),
+        heads(),
+        valvetrain(),
+        cams(),
+        camdrive(),
+        covers(),
+        oil_system(),
+        turbos(),
+        exhaust(),
+        induction(),
+        ancillaries(),
     ]
-    return bd.Compound(children=[g for g in groups if g is not None], label="w16")
+    return bd.Compound(children=systems, label="w16")
 
 
 if __name__ == "__main__":

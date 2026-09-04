@@ -585,8 +585,11 @@ def web(points: Sequence, thickness: float, height: float):
 # Foundry / shop marks
 # ---------------------------------------------------------------------------
 
-def _slab(plane: bd.Plane, span: float, thickness: float,
-          align_z=bd.Align.CENTER):
+def _slab(plane: bd.Plane, span: float, thickness: float, align_z=None):
+    # `align_z` defaults inside the body: a `bd.` default argument resolves at
+    # import and drags the kernel in before the freshness gate can run.
+    if align_z is None:
+        align_z = bd.Align.CENTER
     box = bd.Box(span, span, thickness,
                  align=(bd.Align.CENTER, bd.Align.CENTER, align_z))
     return box.moved(plane.location)
