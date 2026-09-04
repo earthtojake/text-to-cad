@@ -135,6 +135,53 @@ a one-line model file. The template shows the pattern.
 `@step` declares a model whose outputs are meshes; it composes into
 assemblies like any part and writes no STEP.
 
+## Many assemblies: one group per `src/<assembly>/`
+
+A project that holds several unrelated assemblies — a demo corpus, a shop's
+library — puts each one in its own directory under `src/`, so one assembly's
+part models do not pile up beside another's:
+
+```
+<project>/
+  src/
+    README.md                         # catalog: one row per group
+    rover/                            #   a GROUP: one assembly and everything it owns
+      rover.py                        #     the root model (stem = the group's name)
+      wheel.py  suspension.py         #     its part and sub-assembly models
+      lib/                            #     helpers only this group uses
+        __init__.py
+        hub.py
+    gear_stage/
+      gear_stage.py
+  STEP/
+    rover/                            # the group's outputs, one folder per group
+      rover.step  wheel.step  suspension.step
+    gear_stage/
+      gear_stage.step
+```
+
+Three rules keep a group as simple as a flat project:
+
+1. **A group is self-contained.** Its root, its parts, its drawings and its
+   `lib/` all live in the one directory, and nothing imports across groups.
+   Python puts the script's own directory on `sys.path`, so inside a group
+   `from wheel import wheel` and `from lib import hub` work exactly as they
+   do in a flat `src/` — and that is also why a cross-group import cannot
+   work without path setup, which no model script does. Code two groups both
+   need is either a sign they are one group, or a helper each group carries
+   its own copy of; a shared `src/lib/` is for flat projects only.
+2. **Outputs mirror the grouping.** Every model in `src/<group>/` declares
+   `out="../../STEP/<group>/<stem>.step"` (meshes: `../../STL/<group>/…`), so
+   the format folders stay browsable one assembly at a time and the CAD Viewer
+   opened at the project root shows one folder per assembly.
+3. **`src/<group>/*.py` are all models.** The flat rule still holds one level
+   down: every script directly in a group directory is a runnable model, and
+   `ls src/*/*.py` is the catalog. Standalone parts that belong to no
+   assembly stay directly under `src/` (or in a sibling project of their own).
+
+The catalog README lists each group with its root; `python
+src/<group>/<group>.py` builds that assembly and whatever is stale beneath it.
+
 ## Naming
 
 - Model script stem = artifact stem = a Python identifier (`plate.py` →
