@@ -20,7 +20,7 @@ import { normalizeStepModuleDefinition } from "./stepModule.js";
 // source_sidecar.SOURCE_SIDECAR_SCHEMA_VERSION and the viewer's
 // packageContract.mjs; pinned across the three by
 // tests/python/global/test_render_contract_sync.py.
-export const SOURCE_SIDECAR_SCHEMA_VERSION = 5;
+export const SOURCE_SIDECAR_SCHEMA_VERSION = 6;
 
 function isObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
