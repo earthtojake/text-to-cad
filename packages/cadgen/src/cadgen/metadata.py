@@ -76,17 +76,26 @@ def normalize_mesh_numeric(value: object, *, field_name: str) -> float | None:
     return normalized
 
 
-def resolve_model_output_path(script_path: Path, *, fmt: str, explicit_out: str | None = None) -> Path:
+def resolve_model_output_path(
+    script_path: Path, *, fmt: str, explicit_out: str | None = None, function: str | None = None
+) -> Path:
     """Where a model's primary artifact goes. cadgen is deliberately
-    UNOPINIONATED about layout (design/library-first-generation.md): an explicit
-    ``out=`` resolves relative to the script's own folder (absolute allowed);
-    otherwise the artifact is the sibling ``<stem>.<fmt>``. Project structure
-    conventions live in the cad skill's project-layout reference as guidance, not in code."""
+    UNOPINIONATED about layout: an explicit ``out=`` resolves relative to the
+    script's own folder (absolute allowed); otherwise the artifact is the sibling
+    ``<function>.<fmt>`` -- the model's own name, which for the one-model-per-file
+    convention is the file's stem. Project structure conventions live in the cad
+    skill's project-layout reference as guidance, not in code."""
     script = Path(script_path).resolve()
     if explicit_out:
         target = Path(explicit_out)
         return (target if target.is_absolute() else script.parent / target).resolve()
-    return (script.parent / f"{script.stem}.{fmt}").resolve()
+    # A file's sole model writes `<file>.<fmt>` (what `python bracket.py` is expected
+    # to leave beside it, whatever the function is called); models SHARING a file
+    # each write `<function>.<fmt>`, so two models never collide on one default.
+    stem = script.stem
+    if function and function != stem and len(model_function_names(script)) > 1:
+        stem = function
+    return (script.parent / f"{stem}.{fmt}").resolve()
 
 
 _MESH_DECORATOR_NAMES = ("stl", "glb", "threemf")
@@ -253,7 +262,49 @@ def _decorator_numeric_kwarg(
     return normalize_mesh_numeric(value, field_name=key)
 
 
-def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
+_FUNCTION_NAMES_CACHE: dict[str, tuple[tuple[int, int], tuple[str, ...]]] = {}
+
+
+def model_function_names(script_path: Path | str) -> tuple[str, ...]:
+    """The decorated model functions a script declares, in file order. Cached
+    on (mtime, size); ``()`` for a script that declares none or cannot be read."""
+    script = Path(script_path)
+    try:
+        stat = script.stat()
+    except OSError:
+        return ()
+    stamp = (stat.st_mtime_ns, stat.st_size)
+    key = str(script)
+    cached = _FUNCTION_NAMES_CACHE.get(key)
+    if cached is not None and cached[0] == stamp:
+        return cached[1]
+    try:
+        tree = ast.parse(script.read_text(), filename=str(script))
+    except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+        return ()
+    decorator_names, module_aliases = _cadgen_decorator_aliases(tree)
+    names = tuple(
+        node.name
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and _match_model_decorator(node, decorator_names, module_aliases) is not None
+    )
+    _FUNCTION_NAMES_CACHE[key] = (stamp, names)
+    return names
+
+
+def parse_all_generator_metadata(script_path: Path) -> tuple[GeneratorMetadata, ...]:
+    """Every model a script declares, one GeneratorMetadata each, in file order."""
+    return tuple(
+        parse_generator_metadata(script_path, function=name) for name in model_function_names(script_path)
+    )
+
+
+def parse_generator_metadata(script_path: Path, function: str | None = None) -> GeneratorMetadata | None:
+    """The model ``function`` declares in ``script_path`` -- or the file's sole
+    model when ``function`` is None. A file may hold several models (each its own
+    record, output and job); asking for "the" model of such a file names none, so
+    it is an error: spell the model as ``script.py::function``."""
     try:
         tree = ast.parse(script_path.read_text(), filename=str(script_path))
     except (FileNotFoundError, SyntaxError, UnicodeDecodeError) as exc:
@@ -284,11 +335,19 @@ def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
 
     if not decorated:
         return None
-    if len(decorated) > 1:
+    if function is not None:
+        chosen = [entry for entry in decorated if entry[0].name == function]
+        if not chosen:
+            declared = ", ".join(f"{fn.name}()" for fn, _, _, _ in decorated)
+            raise InvalidModelScriptError(
+                f"{_display_path(script_path)} declares no model {function}() (it declares {declared})"
+            )
+        decorated = chosen
+    elif len(decorated) > 1:
         joined = ", ".join(f"{fn.name}()" for fn, _, _, _ in decorated)
         raise InvalidModelScriptError(
-            f"{_display_path(script_path)} defines more than one CAD model ({joined}); "
-            "a model file defines exactly one @step or @dxf entry (or one mesh decorator alone)"
+            f"{_display_path(script_path)} declares several models ({joined}); name one as "
+            f"{_display_path(script_path)}::{decorated[0][0].name}"
         )
 
     function, fmt, call_kwargs, mesh_only = decorated[0]

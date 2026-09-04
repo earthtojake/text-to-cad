@@ -40,8 +40,12 @@ from typing import Any, Callable
 class Job:
     """A submitted build: ``wait()`` for its exit code, ``output()`` for what it said."""
 
-    def __init__(self, model: Path) -> None:
-        self.model = Path(model)
+    def __init__(self, model: Path | str) -> None:
+        from cadgen.store.index import split_model_ref
+
+        # The model's identity (``script::fn``); the script it lives in; the function.
+        self.model = str(model)
+        self.script, self.function = split_model_ref(self.model)
         self._done = threading.Event()
         self._code: int | None = None
         self._chunks: list[str] = []
@@ -58,7 +62,7 @@ class Job:
 
     def wait(self, timeout: float | None = None) -> int:
         if not self._done.wait(timeout):
-            raise TimeoutError(f"build of {self.model.name} did not finish in {timeout}s")
+            raise TimeoutError(f"build of {self.script.name} did not finish in {timeout}s")
         return int(self._code or 0)
 
     @property
@@ -68,6 +72,16 @@ class Job:
     def output(self) -> str:
         with self._lock:
             return "".join(self._chunks)
+
+    def target_argv(self) -> list[str]:
+        """How the runner is told which model: the script, plus ``--model fn``
+        when the file holds more than one."""
+        from cadgen.metadata import model_function_names
+
+        argv = [str(self.script)]
+        if self.function and len(model_function_names(self.script)) > 1:
+            argv += ["--model", self.function]
+        return argv
 
 
 # --- events -------------------------------------------------------------------------
@@ -108,7 +122,14 @@ def emit_event(event: dict) -> None:
 
 
 def model_event(model: Path | str, state: str, **extra: Any) -> dict:
-    payload: dict[str, Any] = {"model": str(model), "state": state}
+    """One build-tree transition. ``model`` (and a ``parent`` in ``extra``) are
+    named the way a person reads them: the script path, plus ``::fn`` only when
+    the file holds several models (cadgen.store.index.display_model)."""
+    from cadgen.store.index import display_model
+
+    payload: dict[str, Any] = {"model": display_model(model), "state": state}
+    if extra.get("parent"):
+        extra["parent"] = display_model(extra["parent"])
     payload.update({k: v for k, v in extra.items() if v is not None})
     return payload
 
@@ -139,7 +160,7 @@ def use_daemon() -> bool:
 
 
 def submit(
-    model: Path,
+    model: Path | str,
     *,
     store_root: Path | None = None,
     force: bool = False,
@@ -155,7 +176,9 @@ def submit(
     coalescing, cadgen.daemon.broker)."""
     from cadgen.store.paths import store_root as default_store_root
 
-    model = Path(model).resolve()
+    from cadgen.store.index import resolve_model_ref
+
+    model = resolve_model_ref(model)
     root = Path(store_root) if store_root is not None else default_store_root()
     job = Job(model)
     emit_event(model_event(model, "submitted", parent=str(parent) if parent else None))
@@ -279,7 +302,7 @@ def _submit_transient(
         def follow() -> None:
             job._finish(broker.wait_attached(ticket[1]))
 
-        threading.Thread(target=follow, name=f"cadgen-attach-{job.model.stem}", daemon=True).start()
+        threading.Thread(target=follow, name=f"cadgen-attach-{job.script.stem}", daemon=True).start()
         return
     claim = ticket[1] if ticket is not None else None
     env = worker_env()
@@ -288,13 +311,13 @@ def _submit_transient(
     env["CADGEN_EVENTS"] = "1"  # the child writes events as JSON lines on stderr
     if root_id:
         env["CADGEN_ROOT_ID"] = root_id
-    argv = list(command) if command else [sys.executable, "-m", "cadgen.cli._run_model", str(job.model)]
+    argv = list(command) if command else [sys.executable, "-m", "cadgen.cli._run_model", *job.target_argv()]
     if force and not command:
         argv.append("--force")
     try:
         process = subprocess.Popen(
             argv,
-            cwd=str(job.model.parent),
+            cwd=str(job.script.parent),
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -303,7 +326,7 @@ def _submit_transient(
             errors="backslashreplace",
         )
     except OSError as exc:
-        job._say(f"could not start a worker for {job.model.name}: {exc}\n")
+        job._say(f"could not start a worker for {job.script.name}: {exc}\n")
         if claim is not None:
             broker.report_done(claim, 1)
         job._finish(1)
@@ -336,7 +359,7 @@ def _submit_transient(
             broker.report_done(claim, code)
         job._finish(code)
 
-    threading.Thread(target=finish, name=f"cadgen-job-{job.model.stem}", daemon=True).start()
+    threading.Thread(target=finish, name=f"cadgen-job-{job.script.stem}", daemon=True).start()
 
 
 def _event_line(line: str) -> dict | None:
@@ -371,7 +394,7 @@ def _submit_daemon(
     from cadgen.daemon import client
 
     if argv is None:
-        argv = [str(job.model)]
+        argv = job.target_argv()
         if force:
             argv.append("--force")
     fallback = None
@@ -382,8 +405,8 @@ def _submit_daemon(
         code = client.run_nested(
             tool,
             argv,
-            str(job.model.parent),
-            prog=prog or f"python {job.model.name}",
+            str(job.script.parent),
+            prog=prog or f"python {job.script.name}",
             store_root=str(store_root),
             root_id=root_id,
             closure=closure,
@@ -399,4 +422,4 @@ def _submit_daemon(
             emit_event(model_event(job.model, "failed", exit=code))
         job._finish(code)
 
-    threading.Thread(target=run, name=f"cadgen-job-{job.model.stem}", daemon=True).start()
+    threading.Thread(target=run, name=f"cadgen-job-{job.script.stem}", daemon=True).start()

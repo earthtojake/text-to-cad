@@ -50,9 +50,21 @@ Rules the decorator enforces:
   and record), otherwise loaded from the store, and either way its result is
   linked into the parent's. Composition is ordinary Python; there is nothing
   to cache by hand and no composition API.
-- **One model per file.** The file is the model; records, closures and the
-  daemon's routing key off it. A second decorated function in the same file
-  is refused.
+- **One model per file is the recommendation, not a rule.** A model's identity
+  is `script.py::function`; a file holding one model is named by its path alone
+  (`python plate.py`, `store why plate.py`). Several decorated functions in one
+  file are allowed — a small variant family — and each is its own record,
+  output (a sole model writes `<file>.<fmt>`; models sharing a file write
+  `<function>.<fmt>`) and job, built by its
+  own call under `__main__`; name one as `plate.py::plate_wide` in `store why`
+  and `store forget`. They share the file's closure: editing any of them makes
+  all of them stale, so a family that changes independently belongs in
+  separate files.
+- **Calling a model from plain Python returns its geometry.** Outside a build,
+  `plate()` builds (or finds current) and returns the model's tree as a
+  `Compound` — what a parent composing it would get — so a script, a notebook
+  or a REPL can read bounds, faces or volumes straight off a model. A drawing
+  returns `None`.
 - **A model takes no parameters.** It is one configuration of one set of
   outputs, so there is nothing for an argument to select; the decorator
   refuses a parameter list. Parametric geometry is a plain factory the model

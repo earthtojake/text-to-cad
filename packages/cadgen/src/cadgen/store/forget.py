@@ -23,8 +23,8 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from cadgen.store.index import model_key, read_entry, remove_entry
-from cadgen.store.records import read_record, remove_record
+from cadgen.store.index import MODEL_REF_SEP, model_ref, path_key, read_entry, remove_entry, split_model_ref
+from cadgen.store.records import read_record, records_for_script, remove_record
 
 
 def _resolved(target: str | Path) -> Path:
@@ -43,21 +43,35 @@ def _sha256(path: Path) -> str | None:
 
 
 def forget(target: str | Path, *, dry_run: bool = False) -> dict[str, Any]:
-    """Forget ``target``; report what was (or would be) dropped."""
-    resolved = _resolved(target)
+    """Forget ``target``; report what was (or would be) dropped. A script drops
+    the record of every model it holds; ``script.py::fn`` drops one."""
+    script, function = split_model_ref(str(target))
+    resolved = script if function is not None else _resolved(target)
     report: dict[str, Any] = {"target": str(target), "path": str(resolved), "dryRun": bool(dry_run), "forgot": []}
     forgot: list[dict[str, Any]] = report["forgot"]
 
-    def drop_record(model: Path) -> None:
+    def drop_record(model: str | Path) -> None:
         record = read_record(model)
         if record is None:
             return
-        forgot.append({"kind": "record", "model": str(model), "tree": record.get("tree")})
+        forgot.append({"kind": "record", "model": str(record.get("model") or model), "tree": record.get("tree")})
         if not dry_run:
-            remove_record(model)
+            remove_record(str(record.get("model") or model))
 
     if resolved.suffix.lower() == ".py":
-        drop_record(resolved)
+        if function is not None:
+            drop_record(model_ref(resolved, function))
+            return report
+        from cadgen.metadata import model_function_names
+
+        names = model_function_names(resolved)
+        if names:
+            for name in names:
+                drop_record(model_ref(resolved, name))
+        else:
+            # The script is gone or declares nothing: whatever records name it.
+            for ref, _record in records_for_script(resolved):
+                drop_record(ref)
         return report
 
     digest = _sha256(resolved) if resolved.is_file() else None
@@ -68,13 +82,13 @@ def forget(target: str | Path, *, dry_run: bool = False) -> dict[str, Any]:
             if not dry_run:
                 remove_entry("document", digest)
 
-    output_entry = read_entry("output", model_key(resolved)) or {}
+    output_entry = read_entry("output", path_key(resolved)) or {}
     recorded_model = str(output_entry.get("model") or "").strip()
     if recorded_model:
-        drop_record(Path(recorded_model))
+        drop_record(recorded_model)
         forgot.append({"kind": "output", "path": str(resolved), "model": recorded_model})
         if not dry_run:
-            remove_entry("output", model_key(resolved))
+            remove_entry("output", path_key(resolved))
     return report
 
 

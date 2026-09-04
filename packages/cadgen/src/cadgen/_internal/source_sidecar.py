@@ -171,7 +171,9 @@ def read_source_provenance(step_path: Path | str) -> dict[str, Any] | None:
     record = record_for_document(document)
     if record is None:
         return None
-    source = source_for_document(document)
+    from cadgen.store.index import split_model_ref
+
+    source, _function = split_model_ref(source_for_document(document))
     payload: dict[str, Any] = {
         "sourceKind": str(record.get("sourceKind") or "python"),
         "sourceClosureHash": str((record.get("closure") or {}).get("hash") or ""),

@@ -57,11 +57,12 @@ class ChildBuildError(RuntimeError):
 class LazyCompound(Compound):
     """See the module docstring."""
 
-    def __init__(self, model: Path, job: Any, *, frame: Any, label: str, tree: str | None = None) -> None:
+    def __init__(self, model: Path | str, job: Any, *, frame: Any, label: str, tree: str | None = None) -> None:
         self._lazy_shape = None
         self._lazy_forcing = False
         Compound.__init__(self, None, label=label)
-        self._lazy_model = Path(model)
+        # The child's identity: its model ref (``script::fn``; see store.index).
+        self._lazy_model = str(model)
         self._lazy_job = job
         self._lazy_frame = frame
         self._lazy_label = label
@@ -151,8 +152,15 @@ class LazyCompound(Compound):
     # --- forcing -----------------------------------------------------------------
 
     @property
-    def model(self) -> Path:
+    def model(self) -> str:
         return self._lazy_model
+
+    @property
+    def model_name(self) -> str:
+        from cadgen.store.index import split_model_ref
+
+        script, function = split_model_ref(self._lazy_model)
+        return f"{script.name}::{function}" if function and function != script.stem else script.name
 
     @property
     def pending(self) -> bool:
@@ -176,14 +184,14 @@ class LazyCompound(Compound):
                     code = job.wait()
             if code != 0:
                 raise ChildBuildError(
-                    f"child model {self._lazy_model.name} failed to build "
+                    f"child model {self.model_name} failed to build "
                     f"(called at {self._lazy_call_site}):\n{job.output().rstrip()}"
                 )
         record = _read_record(self._lazy_model) or {}
         tree = str(record.get("tree") or "")
         if not tree:
             raise ChildBuildError(
-                f"child model {self._lazy_model.name} built but left no record "
+                f"child model {self.model_name} built but left no record "
                 f"(called at {self._lazy_call_site})"
             )
         frame = self._lazy_frame
@@ -192,7 +200,7 @@ class LazyCompound(Compound):
 
     def _force(self) -> None:
         if self._lazy_forcing:
-            raise RuntimeError(f"child model {self._lazy_model.name} forced re-entrantly")
+            raise RuntimeError(f"child model {self.model_name} forced re-entrantly")
         self._lazy_forcing = True
         try:
             tree = self.tree_hash()
@@ -229,6 +237,12 @@ def _read_record(model: Path) -> dict | None:
     from cadgen.store.records import read_record
 
     return read_record(model)
+
+
+def materialize_model(tree: str, *, label: str) -> Compound:
+    """The geometry a model's tree stands for, as a plain Compound: what a
+    top-level call returns after its build (cadgen.authoring)."""
+    return _materialize_tree(tree, label)
 
 
 def _materialize_tree(tree: str, label: str) -> Compound:

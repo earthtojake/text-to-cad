@@ -435,7 +435,7 @@ def _generate_part_outputs(
             )
         stats["tree"] = tree_hash
 
-        model_path = spec.script_path if generated and spec.script_path is not None else spec.entry_path
+        model_path = _model_for_spec(spec)
         outputs: dict[str, object] = {}
 
         if generated:
@@ -578,8 +578,7 @@ def _generate_part_outputs(
             note_document_tree(str(record["stepHash"]), str(tree_hash))
         if generated:
             for output_path in outputs:
-                if Path(output_path) != model_path:
-                    note_output(output_path, model_path)
+                note_output(output_path, model_path)
         stats["published"] = True
         return stats
 
@@ -869,12 +868,18 @@ def _selected_specs_for_targets(
     step_options = step_options or StepImportOptions()
     explicit_specs: list[EntrySpec] = []
     unresolved_targets: list[str] = []
+    from cadgen.store.index import MODEL_REF_SEP
+
     for target in targets:
         target_text = str(target or "").strip()
+        # ``script.py::fn`` names one model of a file holding several.
+        function: str | None = None
+        if MODEL_REF_SEP in target_text:
+            target_text, _, function = target_text.rpartition(MODEL_REF_SEP)
         target_path = Path(target_text)
         resolved = target_path.resolve() if target_path.is_absolute() else (Path.cwd() / target_path).resolve()
         source = (
-            source_from_path(resolved, step_options=step_options)
+            source_from_path(resolved, function=function or None, step_options=step_options)
             if resolved.exists()
             else None
         )
@@ -1093,11 +1098,15 @@ def _run_selected_specs(
     return results
 
 
-def _model_for_spec(spec: EntrySpec) -> Path | None:
-    """The store identity of a spec: its script (generated) or its document (imported)."""
+def _model_for_spec(spec: EntrySpec) -> str | None:
+    """The store identity of a spec: ``script::fn`` (generated) or its document's
+    path (imported) -- cadgen.store.index.model_ref."""
+    from cadgen.store.index import model_ref
+
     if spec.source == "generated" and spec.script_path is not None:
-        return spec.script_path
-    return spec.entry_path
+        function = getattr(spec.generator_metadata, "entry_function", None)
+        return model_ref(spec.script_path, function)
+    return str(spec.entry_path) if spec.entry_path is not None else None
 
 
 def _assembly_is_current(spec: EntrySpec) -> bool:

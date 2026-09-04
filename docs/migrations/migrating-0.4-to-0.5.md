@@ -204,8 +204,11 @@ Mechanically:
 5. **End the file with the call.** `if __name__ == "__main__": bracket()`.
    Decorating no longer runs anything; **calling the model is the build.**
    Without the guard, `python bracket.py` does nothing.
-6. **One model per file.** A source defining two must be split. A model's
-   identity — its record, its freshness, its worker — is the script path.
+6. **A model's identity is the script plus the function** (`plate.py::plate`).
+   One model per file is the recommendation: a file holding one is named by
+   its path alone everywhere and writes `<file>.<fmt>`. A file may hold several (a
+   variant family); each is its own record, output (`<function>.<fmt>`) and job,
+   and all share the file's closure.
 
 #### Decorator arguments
 
@@ -1078,8 +1081,8 @@ it from its bytes.
 
 ## Migration complete when
 
-- [ ] Every model is a plain `.py` with exactly one parameterless decorated
-      function, ending in `if __name__ == "__main__": model()`.
+- [ ] Every model is a parameterless decorated function in a plain `.py`,
+      called under `if __name__ == "__main__":`.
 - [ ] No `gen_step`/`gen_dxf` remains; no `.step.py`/`.dxf.py` filenames
       remain; no `compose.memo`, `-o`, or envelope dict remains.
 - [ ] All build123d access goes through `from cadgen import build123d as bd`.

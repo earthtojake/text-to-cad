@@ -39,23 +39,60 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from cadgen.store.index import model_key, read_entry, remove_entry, write_entry
+from cadgen.store.index import (
+    iter_entries,
+    model_key,
+    path_key,
+    read_entry,
+    remove_entry,
+    resolve_model_ref,
+    split_model_ref,
+    write_entry,
+)
 
 RECORD_KIND = "record"
 
 
 def read_record(model: Path | str) -> dict[str, Any] | None:
     data = read_entry("model", model_key(model))
+    if data is None:
+        # A bare script path whose file is gone (or no longer parses) cannot name
+        # its function: find the record by the script it recorded, when exactly one.
+        script, function = split_model_ref(model)
+        if function is None and script.suffix.lower() == ".py" and not script.is_file():
+            found = records_for_script(script)
+            data = found[0][1] if len(found) == 1 else None
     if data is None or data.get("kind") != RECORD_KIND:
         return None
     return data
 
 
+def records_for_script(script: Path | str) -> list[tuple[str, dict[str, Any]]]:
+    """Every record whose model lives in ``script``: ``(model ref, record)`` pairs,
+    in file order of the index."""
+    import json
+
+    resolved = _resolved(script)
+    found: list[tuple[str, dict[str, Any]]] = []
+    for _key, entry_file in iter_entries("model"):
+        try:
+            data = json.loads(entry_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and data.get("kind") == RECORD_KIND and data.get("script") == resolved:
+            found.append((str(data.get("model") or resolved), data))
+    return found
+
+
 def write_record(model: Path | str, payload: dict[str, Any]) -> None:
     body = dict(payload)
     body["kind"] = RECORD_KIND
-    body["model"] = _resolved(model)
-    write_entry("model", model_key(model), body)
+    ref = resolve_model_ref(model)
+    script, function = split_model_ref(ref)
+    body["model"] = ref
+    body["script"] = str(script)
+    body["function"] = function
+    write_entry("model", model_key(ref), body)
 
 
 def remove_record(model: Path | str) -> None:
@@ -137,37 +174,34 @@ def note_output(output_path: Path | str, model: Path | str) -> None:
     """Code-side memory: ``model`` wrote the file at ``output_path``. For
     ``store why`` and provenance — never for the viewer, and never for finding
     or rendering an artifact (that is ``note_document_tree``). Idempotent; atomic."""
-    write_entry("output", model_key(output_path), {"model": _resolved(model)})
+    write_entry("output", path_key(output_path), {"model": resolve_model_ref(model)})
 
 
 def forget_output(output_path: Path | str) -> None:
-    remove_entry("output", model_key(output_path))
+    remove_entry("output", path_key(output_path))
 
 
-def model_for_output(output_path: Path | str) -> Path | None:
-    """The model the store remembers writing ``output_path`` (when that script
-    still exists), else None. MODEL-SIDE: ``store why`` / provenance."""
-    entry = read_entry("output", model_key(output_path)) or {}
+def model_for_output(output_path: Path | str) -> str | None:
+    """The model (``script::fn``) the store remembers writing ``output_path``,
+    when that script still exists, else None. MODEL-SIDE: ``store why`` / provenance."""
+    entry = read_entry("output", path_key(output_path)) or {}
     recorded = str(entry.get("model") or "").strip()
     if recorded:
-        candidate = Path(recorded)
-        if candidate.is_file():
-            return candidate
+        script, _function = split_model_ref(recorded)
+        if script.is_file():
+            return recorded
     return None
 
 
-def source_for_document(document: Path | str) -> Path:
+def source_for_document(document: Path | str) -> str:
     """MODEL-SIDE (``store why``, provenance — never the viewer or a render path): the
-    script the store remembers writing ``document``, else the document itself
+    model the store remembers writing ``document``, else the document itself
     (an imported source keys its own record on its path)."""
     document = Path(document)
     model = model_for_output(document)
     if model is not None:
         return model
-    try:
-        return document.expanduser().resolve()
-    except (OSError, ValueError, RuntimeError):
-        return document
+    return _resolved(document)
 
 
 def record_for_document(document: Path | str) -> dict[str, Any] | None:

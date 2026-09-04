@@ -11,7 +11,7 @@ One word per concept; the code uses these words and no others.
 
 | term | meaning |
 |---|---|
-| **model** | a parameterless decorated function — `@step` (with any stacked `@stl/@glb/@threemf`), `@stl/@glb/@threemf` alone (mesh-only), or `@dxf` (a drawing); identity = its resolved script path; one per file; its outputs are what its decorators declare |
+| **model** | a parameterless decorated function — `@step` (with any stacked `@stl/@glb/@threemf`), `@stl/@glb/@threemf` alone (mesh-only), or `@dxf` (a drawing); identity = its resolved script path plus the function's name, spelled `script.py::function`; a file usually holds one (then the bare path names it and its default output is `<file>.<fmt>`) and may hold several (each writing `<function>.<fmt>`), which share the file's closure; its outputs are what its decorators declare |
 | **parent / child** | models related by a call inside a body |
 | **build** | running a model's function and publishing its result |
 | **store** | the whole cache, `~/.cache/cadgen/`: `objects/` + `index/` |
@@ -36,7 +36,7 @@ memo (bare), scope, blob. They do not appear in code or documentation.
 ~/.cache/cadgen/                      (CADGEN_CACHE_DIR overrides; else the platform cache dir)
   objects/ab/cdef…                    immutable, content-addressed, sharded like git
   index/document/<sha256(file bytes)> ARTIFACT side: {tree, kind, meshes} for a file's bytes
-  index/model/<sha256(script path)>   records (input-addressed, mutable, atomic)
+  index/model/<sha256(script::function)>  records (input-addressed, mutable, atomic)
   index/output/<sha256(output path)>  {model}: which script wrote the file at this path
   index/component/<cid>               component entries → {surf, brep} object hashes
   index/op/<sha256(op key)>           op-memo entries → object hash
@@ -146,21 +146,26 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
 
 ### Record
 
-The mutable per-model entry, `index/model/<sha256(resolved script path)>`.
+The mutable per-model entry, `index/model/<sha256(model ref)>` where the model
+ref is `<resolved script path>::<function name>` — the script and the decorated
+function, because a file may hold several models (each its own record, output
+and job). An imported document's record is keyed on its own path (no function).
 A real one (`link_robot`: a base, two placements of `link_arm`, one of
 `link_pin`):
 
 ```json
 {
   "kind": "record",
-  "model": "/abs/models/assemblies/src/link_robot/link_robot.py",
+  "model": "/abs/models/assemblies/src/link_robot/link_robot.py::link_robot",
+  "script": "/abs/models/assemblies/src/link_robot/link_robot.py",
+  "function": "link_robot",
   "entryKind": "assembly",
   "sourceKind": "python",
   "tree": "64429167…",
   "closure": {"hash": "e341ac84…", "files": ["/abs/models/assemblies/src/link_robot/link_robot.py"], "static": false},
   "children": [
-    {"model": "/abs/models/assemblies/src/link_robot/link_arm.py", "tree": "c161092b…"},
-    {"model": "/abs/models/assemblies/src/link_robot/link_pin.py", "tree": "265aee57…"}
+    {"model": "/abs/models/assemblies/src/link_robot/link_arm.py::link_arm", "tree": "c161092b…"},
+    {"model": "/abs/models/assemblies/src/link_robot/link_pin.py::link_pin", "tree": "265aee57…"}
   ],
   "outputs": {"/abs/models/assemblies/STEP/link_robot/link_robot.step": {"sha256": "823699b0…"}},
   "stepHash": "823699b0…"
@@ -288,7 +293,7 @@ Each with the failure it prevents.
   recorded relative to the script, trees hold geometry, names and placements
   only, and component ids are content hashes — so a moved or copied project
   hashes to the same closures and the same trees. Records ARE keyed by the
-  resolved script path, so after a move every model reads as unbuilt (clause
+  resolved script path (and function), so after a move every model reads as unbuilt (clause
   1); its first build runs the body once, finds every component and tree
   already present (nothing is re-extracted or rewritten; the tree hash comes
   out identical), writes a new record and re-notes its outputs in
@@ -384,7 +389,8 @@ Every build goes through one interface, `cadgen.daemon.executors.submit(model)
 -> job`, with two executors that behave identically:
 
 - **Daemon executor (default).** Workers are persistent and warm. The routing
-  key is the model (its script path): a request for a model whose worker is
+  key is the model (`script::function` — two models in one file are two
+  subjects, two workers): a request for a model whose worker is
   idle takes it; whose worker is busy binds a spare as an **extra** for that
   one job (the extra returns to the spare set after); a model with no worker
   binds a spare and a replacement starts in the background; no spare means a
@@ -498,8 +504,9 @@ executors. After publishing, the root runs its gate once more and says
 
 ## 10. Debugging
 
-- Which record: `index/model/<sha256(resolved script path)>` —
-  `cadgen store why <model.py>` prints it, the gate's verdict clause by
+- Which record: `index/model/<sha256(script::function)>` —
+  `cadgen store why <model.py>` prints it (every model of the file; name one
+  as `model.py::function`), the gate's verdict clause by
   clause (with each child's pinned vs current tree), the closure files and
   the tree's links. The verdict line names the first stale clause as a
   phrase: `no record`, `closure changed: <file>` (the record keeps each

@@ -268,7 +268,9 @@ def _write_drawing_record(
     from cadgen.store.publish import decide
     from cadgen.store.records import note_output, write_record
 
-    model_path = Path(spec.script_path).resolve()
+    from cadgen.store.index import model_ref
+
+    model_path = model_ref(spec.script_path, getattr(spec.generator_metadata, "entry_function", None))
     written = Path(output_path).resolve()
     closure_files = list(source_closure.files)
     closure_hash = str(source_closure.closure_hash)
@@ -498,7 +500,7 @@ def _run_script_generator_body(
             logger.timed(f"run {model_format} model {spec.source_ref}"),
             reporting_as(progress),
             ExecutionHashes() as executed_hashes,
-            building(spec.script_path) as frame,
+            building(spec.script_path, entry_name) as frame,
         ):
             executed_hashes.note(spec.script_path)
             raw_payload = generator()
