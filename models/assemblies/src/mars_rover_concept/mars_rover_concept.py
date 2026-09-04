@@ -1250,7 +1250,7 @@ KINEMATICS = _rover_kinematics()
 # Assembly
 # ---------------------------------------------------------------------------
 
-@step(out="../../STEP/mars_rover_concept/mars_rover_concept.step", kind="assembly", kinematics=KINEMATICS,
+@step(out="../../STEP/mars_rover_concept/mars_rover_concept.step", kinematics=KINEMATICS,
       animation="mars_rover_concept.anim.js")
 def mars_rover_concept():
     # Top-level child order is the animation module's ref contract (#o1.N);

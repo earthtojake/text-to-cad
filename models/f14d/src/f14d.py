@@ -74,7 +74,7 @@ SYSTEMS = [
 ]
 
 
-@step(out="../STEP/f14d.step", kind="assembly", animation="f14d.anim.js")
+@step(out="../STEP/f14d.step", animation="f14d.anim.js")
 def f14d():
     groups = [system() for system in SYSTEMS]
     return bd.Compound(children=groups, label="f14d_super_tomcat")

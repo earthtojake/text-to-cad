@@ -39,7 +39,7 @@ from turbos import turbos
 from valvetrain import valvetrain
 
 
-@step(out="../STEP/w16.step", kind="assembly", animation="w16.anim.js",
+@step(out="../STEP/w16.step", animation="w16.anim.js",
       mesh_tolerance=0.0006, mesh_angular_tolerance=0.3)
 def w16():
     # Each call submits that system's build to the pool and returns at once;

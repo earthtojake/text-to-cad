@@ -281,7 +281,7 @@ def _planetary_kinematics():
     }
 
 
-@step(out="../../STEP/planetary_gear_assembly/planetary_gear_assembly.step", kind="assembly", kinematics=_planetary_kinematics(),
+@step(out="../../STEP/planetary_gear_assembly/planetary_gear_assembly.step", kinematics=_planetary_kinematics(),
       animation="planetary_gear_assembly.anim.js")
 @stl(out="../../STL/planetary_gear_assembly/planetary_gear_assembly.stl")
 @threemf(out="../../3MF/planetary_gear_assembly/planetary_gear_assembly.3mf")
