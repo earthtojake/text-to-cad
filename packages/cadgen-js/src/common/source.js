@@ -183,7 +183,7 @@ async function fetchComponentGlbBuffer(url, cid) {
 async function loadPackageMeshData(packageInfo) {
   const descriptor = isObject(packageInfo.descriptor) ? packageInfo.descriptor : null;
   if (!descriptor) {
-    throw new Error("Assembly package render job is missing its descriptor");
+    throw new Error("Assembly render job is missing its tree (assembly.json)");
   }
   const componentUrls = isObject(packageInfo.componentUrls) ? packageInfo.componentUrls : {};
   const components = isObject(descriptor.components) ? descriptor.components : {};
@@ -367,7 +367,7 @@ export function packageSourceFromBaseUrl(baseUrl, descriptor) {
   }
   const components = isObject(descriptor?.components) ? descriptor.components : null;
   if (!components) {
-    throw new Error(`Render package descriptor at ${base}/assembly.json has no components`);
+    throw new Error(`Tree at ${base}/assembly.json has no components`);
   }
   const componentUrls = {};
   for (const [cid, entry] of Object.entries(components)) {

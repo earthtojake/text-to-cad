@@ -355,7 +355,7 @@ function boundsForTransformedBox(box, matrix) {
 export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid) {
   const occurrences = Array.isArray(descriptor?.occurrences) ? descriptor.occurrences : [];
   if (!occurrences.length) {
-    throw new Error("Assembly package descriptor has no occurrences");
+    throw new Error("Assembly tree has no occurrences");
   }
 
   const placements = [];
@@ -570,7 +570,7 @@ function buildPackageAssemblyRoot(descriptor, parts) {
   // whenever the entry is not a single-component part).
   const descriptorRoot = descriptor?.assembly?.root;
   if (!descriptorRoot || typeof descriptorRoot !== "object") {
-    throw new Error("Assembly package descriptor has no assembly.root hierarchy");
+    throw new Error("Assembly tree has no assembly.root hierarchy");
   }
   return enrichPackageAssemblyNode(descriptorRoot, partById);
 }

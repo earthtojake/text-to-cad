@@ -401,7 +401,7 @@ def _generate_part_outputs(
         and package_current
         and _existing_topology_artifact_matches_spec_without_scene(spec)
     ):
-        logger.debug(f"reused current GLB/topology: {_display_path(spec.step_path)}")
+        logger.debug(f"reused current tree: {_display_path(spec.step_path)}")
         return GeneratedStepResult(spec=spec, scene=None)
 
     if preloaded_scene is not None:
@@ -434,7 +434,7 @@ def _generate_part_outputs(
         and _existing_topology_artifact_matches_options(spec, selector_options)
         and _generated_assembly_glb_closure_current(spec)
     ):
-        logger.debug(f"reused current GLB/topology: {_display_path(spec.step_path)}")
+        logger.debug(f"reused current tree: {_display_path(spec.step_path)}")
         return GeneratedStepResult(spec=spec, scene=scene)
 
     jobs: list[_ArtifactJob] = []
@@ -709,7 +709,7 @@ def _generate_step_outputs(
         and (spec.source != "generated" or _generated_assembly_glb_closure_current(spec))
     ):
         if logger is not None:
-            logger.debug(f"reused current GLB/topology: {_display_path(spec.step_path)}")
+            logger.debug(f"reused current tree: {_display_path(spec.step_path)}")
         # Declared mesh exports are content-gated, not build-gated: a current
         # model with a deleted/stale STL heals it here from the store package
         # without a rebuild.
@@ -1043,7 +1043,7 @@ def _generated_output_summary(spec: EntrySpec) -> str:
 
 def _generated_python_glb_summary(spec: EntrySpec) -> str:
     if spec.step_path is not None:
-        return f"generated {spec.kind} GLB/topology artifact: {_display_path(spec.step_path)}"
+        return f"wrote {spec.kind}: {_display_path(spec.step_path)}"
     return f"processed: {spec.source_ref}"
 
 
@@ -1312,7 +1312,7 @@ def generate_step_targets(
                         f"{_display_path(spec.step_export_path)}"
                     )
                 else:
-                    logger.info(f"{spec.cad_ref} is current; skipped recompose")
+                    logger.info(f"{spec.cad_ref} is current; not rebuilt")
                 # A current model can still owe declared mesh exports (deleted
                 # file, changed declaration): heal them from the store package
                 # without leaving the no-op path.
@@ -1434,7 +1434,7 @@ def generate_dxf_targets(
             and dxf_output_current(spec.script_path, _effective_output(spec))
         ]
         for spec in current_specs:
-            logger.info(f"{spec.cad_ref} is current; skipped regeneration")
+            logger.info(f"{spec.cad_ref} is current; not rebuilt")
             _emit(spec, "current")
         current_refs = {spec.source_ref for spec in current_specs}
         selected_specs = [spec for spec in selected_specs if spec.source_ref not in current_refs]

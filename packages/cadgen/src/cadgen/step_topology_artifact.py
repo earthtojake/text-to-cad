@@ -189,7 +189,7 @@ def _ensure_step_topology_artifact(
             artifact_path=resolved_artifact_path,
             regenerate_command=REGENERATE_STEP_COMMAND,
             message=(
-                f"Failed to regenerate GLB/topology artifact for {spec.cad_ref}: {exc}.\n"
+                f"Failed to compile {spec.cad_ref}: {exc}.\n"
                 f"{REGENERATE_STEP_PROMPT}"
             ),
         ) from exc
@@ -204,7 +204,7 @@ def _ensure_step_topology_artifact(
             artifact_path=resolved_artifact_path,
             regenerate_command=REGENERATE_STEP_COMMAND,
             message=(
-                f"Build finished but no render package exists for {spec.cad_ref}.\n"
+                f"Build finished but no tree exists for {spec.cad_ref}.\n"
                 f"{REGENERATE_STEP_PROMPT}"
             ),
         )
@@ -327,8 +327,8 @@ def _assembly_topology_artifact(
             artifact_path=result_view_dir(spec.entry_path),
             regenerate_command=REGENERATE_STEP_COMMAND,
             message=(
-                f"Render package descriptor for {spec.cad_ref} did not appear "
-                f"(package deleted mid-read?).\n{REGENERATE_STEP_PROMPT}"
+                f"The tree for {spec.cad_ref} did not appear "
+                f"(deleted mid-read?).\n{REGENERATE_STEP_PROMPT}"
             ),
         )
     from cadgen.selector_types import SelectorBundle

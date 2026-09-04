@@ -388,7 +388,7 @@ def asset_url_for_store_path(file_path: Path) -> str:
     resolved_path = Path(file_path).resolve()
     base = views_root().resolve()
     if not path_is_inside_or_equal(resolved_path, base):
-        raise SnapshotError(f"Store asset must be inside the package store: {file_path}")
+        raise SnapshotError(f"Store asset must be inside the store: {file_path}")
     relative_path = resolved_path.relative_to(base).as_posix()
     base_url = f"{STORE_ASSET_ROUTE_PREFIX}{encode_path_param(relative_path)}"
     try:

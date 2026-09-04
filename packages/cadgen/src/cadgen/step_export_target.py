@@ -410,7 +410,7 @@ def _resolve_mesh_package(
             )
         package_dir = _current_store_package(spec)
         if package_dir is not None:
-            logger.debug(f"reusing current render package: {package_dir.name}")
+            logger.debug(f"reusing current tree: {package_dir.name}")
             return spec, package_dir, None
         # No tree for the document's bytes: a door never runs the script. The
         # document on disk is compiled from its bytes, like an import (a job in
@@ -529,7 +529,7 @@ def _export_mesh_jobs(
     import tempfile
 
     if scene is None:
-        raise RuntimeError(f"no render package and no scene to extract for {name}")
+        raise RuntimeError(f"no tree in the store and no scene to extract for {name}")
     for job in jobs:
         job.out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="cadgen-mesh-export-") as tmp:

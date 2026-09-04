@@ -51,7 +51,7 @@ def _composed_index(package_dir: Path, *, step_path: Path, source_ref: str):
 
     descriptor = read_package_descriptor(package_dir)
     if not isinstance(descriptor, dict):
-        raise _fail(f"{source_ref}: package descriptor missing under {package_dir}")
+        raise _fail(f"{source_ref}: materialized tree (assembly.json) missing under {package_dir}")
     artifact = StepTopologyArtifact(
         cad_path=source_ref,
         kind="assembly",
@@ -206,7 +206,7 @@ def _subtree_ids(descriptor: Mapping[str, Any], occurrence_id: str) -> set[str]:
         if str(node.get("id")) == occurrence_id or str(node.get("id")).startswith(prefix)
     }
     if not ids:
-        raise _fail(f"occurrence {occurrence_id} vanished from the descriptor during bake")
+        raise _fail(f"occurrence {occurrence_id} vanished from the tree during bake")
     return ids
 
 
@@ -241,7 +241,7 @@ def bake_pose_into_package(
 
     descriptor = read_package_descriptor(package_dir)
     if not isinstance(descriptor, dict):
-        raise _fail(f"package descriptor missing under {package_dir} during bake")
+        raise _fail(f"materialized tree (assembly.json) missing under {package_dir} during bake")
 
     chains = parent_chain_deltas(resolved_block, bake_pose)
     delta_by_id_4x4 = _delta_by_occurrence(resolved_block, bake_pose, descriptor=descriptor, occurrence_ids=occurrence_ids)
@@ -322,7 +322,7 @@ def mesh_pose_deltas(
     )
     descriptor = read_package_descriptor(package_dir)
     if not isinstance(descriptor, dict):
-        raise _fail(f"{source_ref}: package descriptor missing under {package_dir}")
+        raise _fail(f"{source_ref}: materialized tree (assembly.json) missing under {package_dir}")
     return {
         occurrence_id: [value for row in delta for value in row]
         for occurrence_id, delta in _delta_by_occurrence(
@@ -349,7 +349,7 @@ def resolved_block_pose_deltas(
 
     descriptor = read_package_descriptor(package_dir)
     if not isinstance(descriptor, dict):
-        raise _fail(f"package descriptor missing under {package_dir}")
+        raise _fail(f"materialized tree (assembly.json) missing under {package_dir}")
     occurrence_ids: dict[str, str] = {}
     for mate in block.get("mates", []):
         for ref_key, id_key in (("parent", "parentId"), ("child", "childId")):

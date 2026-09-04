@@ -193,7 +193,7 @@ def _current_artifact_for_spec(spec: EntrySpec) -> StepTopologyArtifact | None:
         # _package_descriptor_matches_spec (above) compares kind/stepHash/mesh options but
         # NOT the generator's source closure, so it alone would serve a stale package after
         # an edited generator. These are the same two predicates the CLI's currency gate
-        # uses (generation.py's "is current; skipped recompose" path), so the two entry
+        # uses (generation.py's "is current; not rebuilt" path), so the two entry
         # points cannot disagree about what "current" means:
         #   closure  -- generated models re-hash the recorded import reach; imported ones
         #               return True and rely on the stepHash gate above.
@@ -237,7 +237,7 @@ def _with_declared_exports(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m cadgen.step_artifact_cli",
-        description="Build the CAD Viewer render package for one STEP/STP file or @step model script.",
+        description="Compile one STEP/STP file or @step model script into the store (its tree and components).",
     )
     parser.add_argument("--repo-root", required=True, help="Repository/workspace root for relative STEP metadata.")
     parser.add_argument("--step", required=True, help="STEP/STP source file to process.")
@@ -245,7 +245,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--source-path",
         help=(
             "Python @step source for a generated model. Selects generator mode: the build "
-            "runs the generator in-process and writes only the render package; the logical "
+            "runs the generator in-process and writes only the tree; the logical "
             "--step path need not exist on disk. Without it, --step must be an existing "
             "STEP/STP file (imported model)."
         ),
@@ -425,10 +425,10 @@ def build_step_artifact(
                         "--force" if force
                         else "no document on disk" if not document.is_file()
                         else verdict.reason() if verdict is not None and verdict.stale
-                        else "its render package is missing or stale"
+                        else "its tree is missing or stale"
                     ),
                     source=existing_spec.script_path or existing_spec.source_path,
-                    verb="compiling its render package",
+                    verb="compiling its tree",
                 )
                 scene = run_script_generator(
                     existing_spec,

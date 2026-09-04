@@ -65,7 +65,7 @@ def assemble_compound_from_package(package_dir: Path):
 
     descriptor = read_package_descriptor(package_dir)
     if descriptor is None:
-        raise FileNotFoundError(f"no package descriptor under {package_dir}")
+        raise FileNotFoundError(f"no assembly.json (materialized tree) under {package_dir}")
     shapes = _load_component_shapes(package_dir, descriptor)
     components = descriptor.get("components") or {}
 
