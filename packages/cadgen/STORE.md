@@ -174,7 +174,9 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
 - `closure.files` is the model's static import closure (AST, transitive,
   first-party, absolute and relative imports alike — a `lib/` package's
   `from .chain import X` counts) **stopping at model files**, plus files executed in its own
-  frame and discovered inputs (`read_step` documents, the `.anim.js`). The
+  frame and discovered inputs (`read_step` documents). The render module
+  beside a document (`<name>.step.js`, choreography) is not an input: no build
+  reads it, so editing it never makes a model stale. The
   boundary is decided statically by what the importer TAKES from a model
   file: only model functions (`from arm import arm`) → a result edge, file
   excluded, the child tracked by its pin; a module-level literal (`from plate

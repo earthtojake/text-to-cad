@@ -284,3 +284,60 @@ class DocumentationTeachesTheContract(unittest.TestCase):
             "Never `read_step` your own output",
         ):
             self.assertIn(phrase, reference, f"step-generation.md lost: {phrase!r}")
+
+
+_JS_BLOCK = re.compile(r"```js\n(.*?)```", re.S)
+
+
+class DocumentedRenderModule(unittest.TestCase):
+    """The render module the kinematics reference shows is a real one.
+
+    `STEP/<name>.step.js` is authored from what the skill shows, so the sample
+    must be exactly what the loader accepts: the CLI's pre-flight reads its
+    clip ids, and the shared loader (cadgen-js renderModule.js) compiles it in
+    Node the same way the viewer and the snapshot page do in the browser.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        text = repo_path("skills/cad/references/kinematics.md").read_text(encoding="utf-8")
+        blocks = [block for block in _JS_BLOCK.findall(text) if "export const clips" in block]
+        assert blocks, "kinematics.md shows no render module block"
+        cls.module_text = blocks[0]
+
+    def test_the_documented_module_names_the_render_module_beside_the_document(self) -> None:
+        self.assertIn("STEP/arm.step.js", self.module_text.splitlines()[0])
+
+    def test_the_cli_preflight_reads_the_documented_clips(self) -> None:
+        from cadgen._internal.render_module import declared_clip_ids
+
+        self.assertEqual(["demo"], declared_clip_ids(self.module_text))
+
+    def test_the_shared_loader_compiles_the_documented_module(self) -> None:
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("node is not installed")
+        loader = repo_path("packages/cadgen-js/src/common/renderModule.js")
+        script = textwrap.dedent(
+            f"""
+            import {{ compileRenderModule, importRenderModule }} from {str(loader.as_uri())!r};
+            const text = process.argv[1];
+            const namespace = await importRenderModule(text, {{ name: "arm.step.js" }});
+            const compiled = compileRenderModule(namespace, {{ name: "arm.step.js" }});
+            console.log(JSON.stringify(Object.keys(compiled.clips)));
+            """
+        )
+        completed = subprocess.run(
+            [node, "--input-type=module", "-e", script, self.module_text],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual('["demo"]', completed.stdout.strip())
+
+    def test_no_reference_teaches_the_retired_declaration(self) -> None:
+        for path in sorted(repo_path("skills/cad/references").glob("*.md")):
+            text = path.read_text(encoding="utf-8")
+            for word in ('animation="', ".anim.js"):
+                self.assertNotIn(word, text, f"{path.name} still teaches {word!r}")

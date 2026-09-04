@@ -295,7 +295,7 @@ Load these files only when their trigger applies:
 - `references/inspection-and-validation.md` — validation sequence, selector refs, facts, planes, measurements, alignment, diff, frame, and validation reporting.
 - `references/snapshot-review.md` — mandatory snapshot policy, packet sizing, targeted views, and converting visual findings into geometry checks.
 - `references/positioning.md` — part-local datums and origins, assembly transforms, build123d joints, CLI alignment validation, and positioning reports.
-- `references/kinematics.md` — articulating, posing, or animating a STEP model: typed mates (`kinematics=` on the decorators — mates, couplings, pose presets, export-at-pose), and the `.anim.js` choreography contract.
+- `references/kinematics.md` — articulating, posing, or animating a STEP model: typed mates (`kinematics=` on the decorators — mates, couplings, pose presets, export-at-pose), and the render module beside the document (`<name>.step.js`: the choreography contract, loaded by the viewer, read by no build).
 - `references/supported-exports.md` — STL/3MF/native GLB outputs: declared exports, mesh-only models, and the `cadgen stl|3mf|glb build` doors.
 - `references/repair-loop.md` — diagnosis and repair procedures.
 - `references/migrations.md` — the tooling disagreeing with a model you believe is correct: recognizing a project authored against an older cadgen, and where the migration guides live.
