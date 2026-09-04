@@ -1039,7 +1039,7 @@ def _validate_dxf_target(spec: EntrySpec) -> None:
 
 def _generated_output_summary(spec: EntrySpec) -> str:
     if spec.step_path is not None:
-        return f"generated {spec.kind} STEP: {_display_path(spec.step_path)}"
+        return f"wrote {spec.kind}: {_display_path(spec.step_path)}"
     return f"processed: {spec.source_ref}"
 
 
@@ -1057,7 +1057,7 @@ def _generated_python_glb_summary(spec: EntrySpec) -> str:
 def _generated_dxf_summary(spec: EntrySpec) -> str:
     output = spec.dxf_path
     if output is not None:
-        return f"generated DXF: {_display_path(output)}"
+        return f"wrote DXF: {_display_path(output)}"
     return f"processed: {spec.source_ref}"
 
 
