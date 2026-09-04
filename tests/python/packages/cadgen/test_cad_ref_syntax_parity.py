@@ -180,7 +180,8 @@ class RefFileGuardTest(unittest.TestCase):
             "motorcycle_shock_absorber",
             "motorcycle_shock_absorber.py",
             "motorcycle_shock_absorber.step",
-            "STEP/motorcycle_shock_absorber",
+            "motorcycle_shock_absorber/motorcycle_shock_absorber",
+            "STEP/motorcycle_shock_absorber/motorcycle_shock_absorber",
             "models/assemblies/STEP/motorcycle_shock_absorber/motorcycle_shock_absorber",
         ):
             with self.subTest(prefix=prefix):
