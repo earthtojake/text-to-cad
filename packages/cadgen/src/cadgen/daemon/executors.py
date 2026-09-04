@@ -223,13 +223,14 @@ def submit_compile(
     root_id: str | None = None,
     parent: Path | str | None = None,
 ) -> Job:
-    """Compile an IMPORTED document (a foreign ``.step`` with no tree) as a job.
+    """Compile a document whose bytes have no tree, as a job.
 
     The one door operation that is a job (STORE.md §9): doors read the store and
-    never run a body, but a document nobody generated has to be read by the kernel
-    once. That read goes through the pool like a build — a slot, the tree, and
-    coalescing with anyone compiling the same bytes (the CAD Viewer, another door)
-    — on a daemon spare or a transient subprocess, never in the caller."""
+    never run a body, but a document with no tree — a vendor STEP, or one built
+    into another store — has to be read by the kernel once. That read goes through
+    the pool like a build — a slot, the tree, and coalescing with anyone compiling
+    the same bytes (the CAD Viewer, another door) — on a daemon spare or a
+    transient subprocess, never in the caller."""
     import hashlib
 
     from cadgen.store.paths import store_root as default_store_root

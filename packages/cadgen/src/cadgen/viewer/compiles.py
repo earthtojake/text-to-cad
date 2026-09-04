@@ -1,13 +1,13 @@
-"""Imported-document compiles for the CAD Viewer: jobs in cadgen's pool.
+"""Document compiles for the CAD Viewer: jobs in cadgen's pool.
 
-The viewer renders what exists. Its one build-shaped action is importing a raw
-FOREIGN ``.step`` — making the document's tree current in the shared store — and
-that is a compile JOB submitted to the pool (``cadgen.daemon.executors.
-submit_compile``): the same job a door submits when handed an imported document
-with no tree. It runs on a daemon spare (or a transient subprocess under
-``CADGEN_DAEMON=0``), takes a job slot, coalesces with a door compiling the same
-bytes and shows in the build tree. Nothing here loads the kernel; the server
-never does.
+The viewer renders what exists. Its one build-shaped action is compiling a
+document whose BYTES have no tree yet — a vendor ``.step`` dropped into the
+directory, or a generated one built into another store — and that is a compile
+JOB submitted to the pool (``cadgen.daemon.executors.submit_compile``): the same
+job a door submits when handed such a document. It runs on a daemon spare (or a
+transient subprocess under ``CADGEN_DAEMON=0``), takes a job slot, coalesces
+with a door compiling the same bytes and shows in the build tree. Nothing here
+loads the kernel; the server never does.
 
 Concurrent viewer requests for one document attach to the first: one job, one
 answer for all of them. Progress reaches the status endpoint through the
@@ -18,20 +18,14 @@ the producer, this is a waiter.
 from __future__ import annotations
 
 import os
-import re
 import threading
 from pathlib import Path
 
 from .store_paths import build_scope
 
-__all__ = ["ImportCompiler"]
+__all__ = ["DocumentCompiler"]
 
-# The last thing a failed compile says, when it is a Python exception line:
-# "RuntimeError: failed to read STEP file: ..." -> the bare message plus its class.
-_ERROR_LINE = re.compile(r"^(?:[\w.]+\.)?(?P<type>\w+(?:Error|Exception))\s*:\s*(?P<message>.+)$")
-
-
-class _Import:
+class _Compile:
     """One in-flight compile that other requests may attach to."""
 
     __slots__ = ("done", "result")
@@ -42,17 +36,16 @@ class _Import:
 
 
 def _failure(output: str, document: str) -> dict:
-    """A failed job's answer: the BARE message a person reads, the exception class
-    riding alongside as ``errorType`` for a diagnostic, never in the sentence."""
-    lines = [line.strip() for line in output.splitlines() if line.strip()]
-    for line in reversed(lines):
-        match = _ERROR_LINE.match(line)
-        if match:
-            return {"ok": False, "error": match.group("message"), "errorType": match.group("type")}
-    return {
-        "ok": False,
-        "error": lines[-1] if lines else f"compiling {os.path.basename(document)} failed",
-    }
+    """A failed job's answer: the BARE message a person reads (the job's own
+    ``FAILED:`` line or its exception's, never the CLI's re-run hint), the
+    exception class riding alongside as ``errorType`` for a diagnostic."""
+    from cadgen.daemon.jobs import failure_message
+
+    message, error_type = failure_message(output)
+    answer: dict = {"ok": False, "error": message or f"compiling {os.path.basename(document)} failed"}
+    if error_type:
+        answer["errorType"] = error_type
+    return answer
 
 
 def _submit(document: Path, *, force: bool):
@@ -61,15 +54,15 @@ def _submit(document: Path, *, force: bool):
     return submit_compile(document, force=force)
 
 
-class ImportCompiler:
-    """Compile imported documents through the pool; one job per document at a time."""
+class DocumentCompiler:
+    """Compile documents through the pool; one job per document at a time."""
 
     def __init__(self, *, submit=None) -> None:
         # `submit(document, force=) -> Job` (wait() -> exit code, output() -> text).
         # Injected by tests; the real one is the pool's submit_compile.
         self._submit = submit or _submit
         self._lock = threading.Lock()
-        self._in_flight: dict[str, _Import] = {}
+        self._in_flight: dict[str, _Compile] = {}
 
     def shutdown(self) -> None:
         """Nothing to own: the jobs belong to the pool, which outlives the viewer."""
@@ -89,7 +82,7 @@ class ImportCompiler:
             entry = self._in_flight.get(build_key)
             owner = entry is None
             if owner:
-                entry = self._in_flight[build_key] = _Import()
+                entry = self._in_flight[build_key] = _Compile()
         assert entry is not None
 
         if not owner:

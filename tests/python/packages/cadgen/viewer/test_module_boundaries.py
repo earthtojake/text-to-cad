@@ -8,7 +8,7 @@ must never happen is the CAD KERNEL loading into the server:
   ~300MB before the first request.
 * The long-lived server must not hold a kernel it never uses. The one
   kernel-bearing action -- importing a foreign STEP -- is a compile job in
-  cadgen's pool (``imports`` submits and waits); no viewer module names the
+  cadgen's pool (``compiles`` submits and waits); no viewer module names the
   build entry point.
 
 Both are checked twice: on the AST (so the offender is named by file and line)
@@ -78,7 +78,7 @@ class NoKernelInTheServer(unittest.TestCase):
         # meaningless in one direction and a false failure in the other.
         script = (
             "import sys\n"
-            "import cadgen.viewer.main, cadgen.viewer.imports\n"
+            "import cadgen.viewer.main, cadgen.viewer.compiles\n"
             "import cadgen.viewer.http_app, cadgen.viewer.cadgen_ops, cadgen.viewer.scanner\n"
             "import cadgen.viewer.artifact_status, cadgen.viewer.tess_cache, cadgen.viewer.registry\n"
             "loaded = sorted(m for m in sys.modules if m.split('.')[0] in "
@@ -93,7 +93,7 @@ class NoKernelInTheServer(unittest.TestCase):
 
     def test_no_module_names_the_build_entry_point(self) -> None:
         # The kernel-bearing call has no home in the viewer at all: an import is a
-        # compile JOB in cadgen's pool (imports.py submits and waits). A call site
+        # compile JOB in cadgen's pool (compiles.py submits and waits). A call site
         # here would be a place for the kernel to leak into the server process.
         callers = []
         for path in _python_sources():

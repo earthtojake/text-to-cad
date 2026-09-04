@@ -655,7 +655,7 @@ def _generate_part_outputs(
         stats["published"] = True
         return stats
 
-    jobs.append(_ArtifactJob("GLB package", component_package_job))
+    jobs.append(_ArtifactJob("tree", component_package_job))
 
     if spec.step_export_path is not None:
         def step_export_job() -> Path:
