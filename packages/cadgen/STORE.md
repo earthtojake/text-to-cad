@@ -322,6 +322,17 @@ Every build goes through one interface, `cadgen.daemon.executors.submit(model)
   siblings. It inherits the environment, so a test's `CADGEN_CACHE_DIR`
   isolates its store; tests and CI run this way.
 
+**One daemon per identity, by lock.** The daemon takes a process-lifetime
+exclusive lock (`cadgen.daemon.transport.SingletonLock`: `flock` on POSIX,
+`msvcrt.locking` on Windows, released by the kernel when the holder dies)
+before it binds; a second daemon starting for the same identity stands down at
+once, touching nothing; the winner is by construction alone, so a socket file it
+finds is dead and may be removed. Clients elect one spawner the same way and
+the rest wait for the address; the authkey is created once via a linked temp
+file. This is the one lock cadgen keeps — a singleton for the daemon, never a
+build lock (§7): twenty clients starting at once used to start twenty daemons
+that unlinked each other's live sockets.
+
 The **store root is a field on every request** (`store_root`), applied per
 job in the worker, never inherited from whichever build spawned the daemon:
 one daemon serves any number of isolated stores. The daemon holds no store
@@ -339,9 +350,12 @@ memory is ever measured (`cadgen.daemon.broker`):
    before its body runs and holds it through its emit; it **yields the slot
    while it waits for a child it forced** and reacquires — queuing if it must —
    when the child is done. A waiting parent therefore holds nothing, which is
-   why a 1-slot pool still builds a 3-level tree. Slots count kernel work only;
-   the gate check for a current model takes none. The tree shows `queued` when
-   a slot did not come at once.
+   why a 1-slot pool still builds a 3-level tree. Slots count kernel work only:
+   the build pipeline takes one around a model body and its emit; `inspect`,
+   `snapshot`, `doctor`, `store why` and the gate check for a current model take
+   none. An export or topology extraction that re-runs a body does NOT take one
+   today (`run_script_generator` is called directly there) — a known gap, listed
+   for the review gate. The tree shows `queued` when a slot did not come at once.
 2. **In-flight coalescing.** A child submit carries its source's closure hash;
    a submit for `(model, closure)` matching a job already in flight attaches to
    that job instead of starting another. In flight only, identical source only,
@@ -369,8 +383,11 @@ a body that reads a child before placing the next forces it there, and
 parallelism follows the dependencies the author wrote. Forcing waits for the
 job, materializes the pinned tree (§6), applies the deferred placement, label
 and color, and tags the result exactly as an eager materialize would, so the
-link/component decision is unchanged. The same stale child called twice
-shares one job. A failed child raises `ChildBuildError` at the forcing site,
+link/component decision is unchanged. **Pins are taken at the call**: a
+current child's record is read when the parent calls it and its tree is pinned
+then, so a rebuild of that child between the call and the force cannot change
+what this build composes; a stale child's pin is its job's result, fixed when
+the job was submitted. The same stale child called twice shares one job. A failed child raises `ChildBuildError` at the forcing site,
 naming the call site in the parent and carrying the worker's output.
 
 The top-level call renders the graph these calls reveal as a build tree on
