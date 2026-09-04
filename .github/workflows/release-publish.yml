@@ -208,9 +208,10 @@ jobs:
 
   tag-release:
     name: Tag and GitHub Release
+    # The tag records what was published; a docs deploy failing must not leave a
+    # PyPI release untagged (Deploy Docs can be re-run on its own).
     needs:
       - publish
-      - deploy-docs
     if: ${{ needs.publish.outputs.should_publish == 'true' && needs.publish.outputs.is_main == 'true' }}
     runs-on: ubuntu-latest
 

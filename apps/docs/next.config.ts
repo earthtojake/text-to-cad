@@ -22,6 +22,10 @@ const threeExample = (subpath: string) =>
 // locally by moving packages/cadgen-js/node_modules aside before building.
 const cadJsBareImports = {
   meshoptimizer: docsMeshoptimizer,
+  // The GLB reader loads the decoder on demand through the package's `./decoder`
+  // export; Turbopack's alias table bypasses the exports map, so point straight at
+  // the file that export names.
+  "meshoptimizer/decoder": `${docsMeshoptimizer}/meshopt_decoder.mjs`,
   "three/examples/jsm/loaders/GLTFLoader.js": threeExample(
     "loaders/GLTFLoader.js",
   ),
