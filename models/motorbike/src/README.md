@@ -8,7 +8,7 @@ geometry instead of copying it. Rebuild the assembly to pick up a child's edit.
 
 | Script               | Artifact                  | Description                                              |
 |----------------------|---------------------------|----------------------------------------------------------|
-| motorbike.py         | STEP/motorbike.step       | Full assembly: 23 children / 46 parts, typed mates below  |
+| motorbike.py         | STEP/motorbike.step       | Full assembly: 25 linked children (23 models), typed mates below |
 | frame.py             | STEP/frame.step           | Welded underbone frame + steel floor pan (the fixed root) |
 | center_stand.py      | STEP/center_stand.step    | Center stand, folded-up pose under the floor pan          |
 | front_fork.py        | STEP/front_fork.step      | Telescopic fork + chrome axle on the steering axis        |
@@ -26,8 +26,10 @@ geometry instead of copying it. Rebuild the assembly to pick up a child's edit.
 | seat.py              | STEP/seat.step            | Brown saddle                                              |
 | headlight.py         | STEP/headlight.step       | Chrome shell + clear dome lens                            |
 | tail_light.py        | STEP/tail_light.step      | Housing + red lens                                        |
-| turn_signal.py       | STEP/turn_signal.step     | Front-left amber signal; the assembly links it 2x (rear-left is `Pos * turn_signal()`) and builds the right-hand mirror images itself |
-| mirror.py            | STEP/mirror.step          | Left bar-end mirror at `handlebar.MIRROR_MOUNT_LEFT` (a source edge: editing handlebar.py rebuilds it); the assembly links it and builds the right one |
+| turn_signal_left.py  | STEP/turn_signal_left.step | Front-left amber signal; the assembly links it 2x (rear-left is `Pos * turn_signal_left()`) |
+| turn_signal_right.py | STEP/turn_signal_right.step | Its mirror image (same `lib/trim.py` factory, right side); linked 2x the same way |
+| mirror_left.py       | STEP/mirror_left.step     | Left bar-end mirror at `handlebar.MIRROR_MOUNT_LEFT` (a constant from a model file: tracked by value) |
+| mirror_right.py      | STEP/mirror_right.step    | Its mirror image at `handlebar.MIRROR_MOUNT_RIGHT` — its own model, because STEP cannot express a reflection |
 
 Build: `python src/<script>` per row; unchanged models are no-ops. Build them
 all with `ls src/*.py | xargs -n1 -P4 python` (parallel ACROSS models, never
@@ -50,8 +52,9 @@ Every builder authors geometry DIRECTLY in the bike frame from `lib/spec.py`,
 so a part entry and the assembly place identical geometry and the assembly
 composes its children at identity. No builder restates a shared dimension.
 The one hardpoint outside `lib/spec.py` is the pair of bar-end mirror mounts,
-which `handlebar.py` owns; `mirror.py` and `motorbike.py` import them from the
-model file, so an edit to `handlebar.py` makes both stale.
+which `handlebar.py` owns; `mirror_left.py`, `mirror_right.py` and
+`motorbike.py` import them from the model file. A constant imported from a
+model file is tracked by VALUE, so only a changed mount makes the mirrors stale.
 
 Imports need no setup — `src/` is on `sys.path` because the script lives there:
 

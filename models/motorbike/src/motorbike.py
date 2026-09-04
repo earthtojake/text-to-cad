@@ -13,10 +13,11 @@ build123d joints on world-coincident datum frames:
 - rear spin: engine output hub <-> rear wheel (revolute)
 - everything else: rigid mounts at named, parameterized datums.
 
-Two children are instanced: `turn_signal()` is the front-left signal and, PLACED
-with `Pos`, the rear-left one (both links). The right-hand signals and mirror
-are the models' mirror images — new geometry, not a placement — so the
-assembly builds them from the same `lib/trim.py` helpers and owns them.
+Two children are instanced twice: `turn_signal_left()` is the front-left signal
+and, PLACED with `Pos`, the rear-left one; `turn_signal_right()` the same on the
+right. The right-hand signals and mirror are the left models' mirror images —
+new geometry, not a placement — so each is its own model built from the same
+`lib/trim.py` factory, and the assembly links all four signals and both mirrors.
 
 OCCURRENCE ORDER IS FROZEN — top to bottom below.
 """
@@ -39,18 +40,19 @@ from front_wheel import front_wheel
 from handlebar import MIRROR_MOUNT_LEFT, MIRROR_MOUNT_RIGHT, handlebar
 from headlight import headlight
 from leg_shield import leg_shield
-from mirror import mirror
+from mirror_left import mirror_left
+from mirror_right import mirror_right
 from rear_fender import rear_fender
 from rear_shock import rear_shock
 from rear_wheel import rear_wheel
 from seat import seat
 from steering_cover import steering_cover
 from tail_light import tail_light
-from turn_signal import turn_signal
+from turn_signal_left import turn_signal_left
+from turn_signal_right import turn_signal_right
 from under_seat_body import under_seat_body
 
 from lib import spec as S
-from lib import trim as T
 
 
 def _revolute_mate(asm, fixed_part, moving_part, point, direction,
@@ -137,9 +139,8 @@ def motorbike():
     fender_front = asm.add(front_fender(), "front_fender")
     wheel_front = asm.add(front_wheel(), "front_wheel")
     lamp = asm.add(headlight(), "headlight")
-    signal_fl = asm.add(turn_signal(), "turn_signal", "front_left")
-    signal_fr = asm.add(bd.Compound(children=T.build_turn_signal((fx, -fy, fz), -1.0)),
-                        "turn_signal", "front_right")
+    signal_fl = asm.add(turn_signal_left(), "turn_signal", "front_left")
+    signal_fr = asm.add(turn_signal_right(), "turn_signal", "front_right")
 
     # --- powertrain ---------------------------------------------------------
     motor = asm.add(engine(), "engine")
@@ -152,13 +153,12 @@ def motorbike():
     fender_rear = asm.add(rear_fender(), "rear_fender")
     saddle = asm.add(seat(), "seat")
     lamp_rear = asm.add(tail_light(), "tail_light")
-    signal_rl = asm.add(bd.Pos(rx - fx, ry - fy, rz - fz) * turn_signal(),
+    signal_rl = asm.add(bd.Pos(rx - fx, ry - fy, rz - fz) * turn_signal_left(),
                         "turn_signal", "rear_left")
-    signal_rr = asm.add(bd.Compound(children=T.build_turn_signal((rx, -ry, rz), -1.0)),
+    signal_rr = asm.add(bd.Pos(rx - fx, -(ry - fy), rz - fz) * turn_signal_right(),
                         "turn_signal", "rear_right")
-    mirror_l = asm.add(mirror(), "mirror", "left")
-    mirror_r = asm.add(bd.Compound(children=T.build_mirror(-1.0, MIRROR_MOUNT_RIGHT)),
-                       "mirror", "right")
+    mirror_l = asm.add(mirror_left(), "mirror", "left")
+    mirror_r = asm.add(mirror_right(), "mirror", "right")
     stand = asm.add(center_stand(), "center_stand")
 
     # --- joints: motion ------------------------------------------------------
@@ -254,11 +254,11 @@ def motorbike():
     asm.connect(rr_mount, rr_eye, relation="rigid", label="rear_right_signal")
 
     bar_left = asm.rigid_frame(bars, "mirror_mount_left", bd.Location(MIRROR_MOUNT_LEFT))
-    mirror_left = asm.rigid_frame(mirror_l, "bar_mount", bd.Location(MIRROR_MOUNT_LEFT))
-    asm.connect(bar_left, mirror_left, relation="rigid", label="mirror_left_mount")
+    mirror_left_mount = asm.rigid_frame(mirror_l, "bar_mount", bd.Location(MIRROR_MOUNT_LEFT))
+    asm.connect(bar_left, mirror_left_mount, relation="rigid", label="mirror_left_mount")
     bar_right = asm.rigid_frame(bars, "mirror_mount_right", bd.Location(MIRROR_MOUNT_RIGHT))
-    mirror_right = asm.rigid_frame(mirror_r, "bar_mount", bd.Location(MIRROR_MOUNT_RIGHT))
-    asm.connect(bar_right, mirror_right, relation="rigid", label="mirror_right_mount")
+    mirror_right_mount = asm.rigid_frame(mirror_r, "bar_mount", bd.Location(MIRROR_MOUNT_RIGHT))
+    asm.connect(bar_right, mirror_right_mount, relation="rigid", label="mirror_right_mount")
 
     return asm.build()
 
