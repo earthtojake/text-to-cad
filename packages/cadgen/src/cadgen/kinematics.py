@@ -443,7 +443,10 @@ def normalize_kinematics(value: object, *, where: str) -> KinematicsDef:
         raise _fail(f"{where} kinematics['poses'] must be a dict of {{name: {{dof: value}}}}")
 
     if not mates and not couplings:
-        raise _fail(f"{where} kinematics declares no mates; drop the kwarg or declare at least one mate")
+        raise _fail(
+            f"{where} kinematics declares no mates: a pose is a set of joint values and a joint is what a mate "
+            "declares, so poses alone declare nothing -- add a mate or drop the kwarg"
+        )
 
     # Unique DOF names across mates and couplings.
     seen: set[str] = set()
