@@ -173,7 +173,7 @@ class ProcessWiring(unittest.TestCase):
         self.assertFalse(executors.sink_installed())
         self.assertNotIn("CADGEN_ROOT_ID", os.environ)
         line = _lines(out)[0]
-        self.assertEqual(line["model"], "/m/a.py")
+        self.assertEqual(line["model"], os.path.abspath("/m/a.py"))
         self.assertEqual(tree._root_id, root)
 
     def test_a_worker_with_a_sink_already_installed_gets_no_tree(self):
