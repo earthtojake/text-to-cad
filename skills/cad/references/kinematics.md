@@ -23,6 +23,10 @@ There are THREE systems with different lifecycles, deliberately independent:
 
 ## Kinematics: typed mates
 
+Kinematics is the ONE thing a model writes a sidecar for, and it never moves
+geometry: the declaration describes how the written tree articulates, the
+viewer poses it at render time. A model that declares none has no sidecar.
+
 One `kinematics=` dict, closed keys `mates` / `couplings` / `poses`, on any of
 `@step`/`@stl`/`@glb`/`@threemf`. Each decorator's declaration stands alone
 (share a module-level dict; there is no cross-decorator inheritance).

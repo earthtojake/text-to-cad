@@ -127,6 +127,19 @@ The rules, each enforced by the decorator or the build:
   — is a full model with the same tree, record, build and no-op, whose outputs
   are the meshes and which writes no `.step` and no sidecar. Use it for
   print-only parts and render assets. `references/supported-exports.md`.
+- **Decorator arguments never change the geometry.** They decide where the
+  files land (`out=`), how they are written (`mesh_tolerance=`,
+  `mesh_angular_tolerance=`) and what the sidecar declares (`kinematics=`).
+  The geometry is the return value and nothing else: a `Compound` placing
+  children is packaged as occurrences, a single solid as one component, and
+  `part`/`assembly` is read off the tree. There is no `kind=` and no bake
+  point — a posed or differently configured export is authored geometry, or
+  another model.
+- **A sidecar only when strictly necessary.** `<name>.step.json` is written
+  only when the model declares `kinematics=`; a model that declares none has
+  no sidecar, and a rebuild that dropped the declaration deletes the stale
+  file. What a model declares about its outputs lives in its record, not in
+  a file beside the geometry.
 - **One model per file.** The file is the model's identity.
 - **Composition is a call.** Import a sibling model and call it inside your
   body (`from arm import arm` … `arm()`); it returns the child's geometry.

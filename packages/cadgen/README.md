@@ -75,10 +75,10 @@ concurrent outcome, and no reader ever waits on a build.
 
 ### 3. One sidecar per artifact, and it belongs to that artifact alone
 
-`part.step` gets `part.step.json` — schema-versioned sections (closure,
-kinematics, animation, meshExports). New capability = new section + schema
-bump, never a second sidecar file. Model-side, beside the artifact, so it
-travels with the file it describes.
+`part.step` gets `part.step.json` — schema-versioned sections (kinematics,
+animation). New capability = new section + schema bump, never a second sidecar
+file. Model-side, beside the artifact, so it travels with the file it
+describes — and it exists only when law 17 says it must.
 
 A sidecar describes the model that declared it — never its parent, never its
 children. A parent composing a child receives GEOMETRY (tree, labels, colors,
@@ -165,6 +165,42 @@ nothing outside the package.
 actionable for someone who only ran `pip install cadgen`. Naming a bundled
 thing ("the cadgen-js runtime bundled at build time") passes; a repo path
 to its source, a repo script, or a repo workflow does not.
+
+### 16. Decorator inputs never change the geometry
+
+A `@step`/`@dxf`/`@stl`/`@glb`/`@threemf` decorator's arguments never change
+the geometry a model produces. They decide where the files land (`out=`),
+how they are written (the mesh tolerances), and what the sidecar declares
+(`kinematics=`). The geometry is the function's return value and nothing
+else: a `Compound` placing children is packaged as occurrences, a single
+solid as one component, and `part`/`assembly` is read off the resulting tree.
+A posed or differently configured export is authored geometry, or another
+model.
+
+Two features were deleted for violating this: the kinematics bake point
+(`kinematics={..., "at": pose}`), which transformed the tree through its mates
+before writing it, and `kind="part"|"assembly"`, whose only effect was to steer
+whether the build packaged the return as one component or as occurrences.
+*Pressure-test*: strip every argument off a model's decorators and rebuild;
+the tree hash must not change.
+
+### 17. A sidecar only when strictly necessary
+
+Never write a JSON sidecar unless something beside the artifact has to read
+it. Today the only legitimate content is kinematics declared by the model;
+a model that declares none writes no sidecar, and a rebuild of a model that
+dropped its declaration deletes the stale file. Metadata with no reader
+beside the artifact — what a model declares about its own outputs, where a
+build came from, when it ran — belongs in the store record, never in a
+file next to the geometry.
+
+Two sections were deleted for violating this: `meshExports`, a copy of the
+mesh decorators' declarations that only a door read back (a door now
+tessellates the document's tree and writes the file it was asked for), and
+the animation text copied from the `.anim.js` module (animation is a render
+module beside the STEP, read live by the viewer).
+*Pressure-test*: build a part that declares meshes and no kinematics; no
+`.step.json` may appear beside it.
 
 ## The shape of the package
 

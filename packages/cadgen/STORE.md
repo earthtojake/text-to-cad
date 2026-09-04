@@ -527,4 +527,10 @@ executors. After publishing, the root runs its gate once more and says
 - Make a reader refuse, or a door rebuild from source: a missing tree is a
   compile job from the file's bytes; "behind its script" is `store why`'s.
 - Add a memory cap, a worker cap, or an age-based eviction rule.
+- Let a decorator argument change the geometry a model produces: arguments
+  place files, tune how they are written, and declare kinematics; the tree
+  is the return value as returned (README law 16).
+- Write a sidecar for anything but kinematics, or copy into it what only a
+  record needs (README law 17): a mesh door tessellates the document's tree
+  and never reads a declaration back.
 - Use a retired word (§1) in code or documentation.
