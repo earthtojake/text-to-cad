@@ -151,9 +151,9 @@ def node_builder_script(name: str) -> Path:
             f"cadgen is running from a source checkout ({builders.parent}) whose "
             f"node_modules is missing: {missing}. The live builders import 'three' and "
             "friends from it, so every mesh export and DXF preview fails until it exists. "
-            "In a lightweight worktree, symlink packages/cadgen-js/node_modules (and "
-            "apps/viewer/node_modules) from the primary checkout, or run `npm install` "
-            "there -- see CONTRIBUTING.md, 'Viewer Development In This Repo'."
+            "In a lightweight worktree, symlink packages/cadgen-js/node_modules from the "
+            "primary checkout, or run `npm install` there -- see CONTRIBUTING.md, "
+            "'Viewer Development In This Repo'."
         )
     path = builders / str(name)
     if not path.is_file():
