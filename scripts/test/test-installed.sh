@@ -13,7 +13,7 @@
 # reinstalling half a gigabyte -- but the wheel's own cadgen must WIN over the repo's
 # editable one, or this would silently test the source tree again. See _link_repo_deps.
 #
-# Usage: scripts/test/test-installed.sh [--keep]
+# Usage: scripts/test/test-installed.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,9 +22,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # hardcoding one here fails there and only there.
 # shellcheck source=scripts/test/common.sh
 source "$SCRIPT_DIR/common.sh"
-
-KEEP=0
-[ "${1:-}" = "--keep" ] && KEEP=1
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1 && [ ! -x "$PYTHON_BIN" ]; then
   echo "No usable Python ($PYTHON_BIN). Set PYTHON_BIN to an interpreter with the CAD deps." >&2
@@ -40,9 +37,8 @@ if ! "$PYTHON_BIN" -c "import OCP, build123d" >/dev/null 2>&1; then
 fi
 
 WORK="$(mktemp -d)"
-cleanup() { [ "$KEEP" -eq 1 ] || rm -rf "$WORK"; }
+cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
-[ "$KEEP" -eq 1 ] && echo "Keeping $WORK"
 
 VENV="$WORK/venv"
 EMPTY="$WORK/empty"
@@ -53,7 +49,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 step() { printf '\n== %s\n' "$*"; }
 
 step "Build the wheel"
-"$REPO_ROOT/scripts/bundle/bundle-skill.sh" cadgen-runtime >/dev/null
+"$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" >/dev/null
 "$PYTHON_BIN" -m build --wheel --outdir "$DIST" "$REPO_ROOT/packages/cadgen" >"$WORK/build.log" 2>&1 \
   || { cat "$WORK/build.log" >&2; fail "wheel build"; }
 WHEEL="$(find "$DIST" -name '*.whl' -type f | head -n 1)"

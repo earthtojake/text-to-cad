@@ -51,7 +51,7 @@ class NodeBuilderBundleTests(unittest.TestCase):
                 self.assertTrue(
                     path.is_file(),
                     f"Missing Node builder {path.relative_to(REPO_ROOT)}. Run "
-                    "scripts/bundle/bundle-skill.sh cadgen-runtime and commit the output.",
+                    "scripts/bundle/bundle.sh and commit the output.",
                 )
 
     def test_builders_are_real_files_not_symlinks(self) -> None:
@@ -111,7 +111,7 @@ class NodeBuilderBundleTests(unittest.TestCase):
     def test_the_bundle_declares_the_builder_directory_as_a_generated_output(self) -> None:
         # check-builds.sh derives the paths it guards from --print-outputs, so a builder
         # directory that is not declared there is a builder directory nothing checks.
-        script = REPO_ROOT / "scripts" / "bundle" / "skills" / "bundle-cadgen-runtime.sh"
+        script = REPO_ROOT / "scripts" / "bundle" / "cadgen-runtime.sh"
         self.assertIn("NODE_DIR", script.read_text(encoding="utf-8"))
 
     def test_no_skill_vendors_a_builder_any_more(self) -> None:

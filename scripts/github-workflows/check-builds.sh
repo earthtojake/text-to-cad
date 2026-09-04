@@ -41,10 +41,10 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-# Ask the bundle scripts which paths they generate rather than repeating them
+# Ask the runtime bundler which paths it generates rather than repeating them
 # here, so this check cannot fall behind a new or renamed bundle output.
 generated_paths() {
-  "$REPO_ROOT/scripts/bundle/bundle-skill.sh" --all --print-outputs
+  "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --print-outputs
 }
 
 check_generated_path() {

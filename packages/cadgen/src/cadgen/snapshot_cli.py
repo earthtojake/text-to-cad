@@ -1097,7 +1097,7 @@ def resolve_drawing_render_job(
 
 
 # The snapshot mesher: DXF text on stdin -> one GLB. Bundled into _runtime/node
-# by bundle-cadgen-runtime.sh; the name is pinned by test_node_builder_bundles.
+# by scripts/bundle/cadgen-runtime.sh; the name is pinned by test_node_builder_bundles.
 DXF_MESH_BUILDER = "dxf-mesh.mjs"
 
 
