@@ -71,6 +71,17 @@ class JsonLines(unittest.TestCase):
         tree.close()
         self.assertEqual([l["state"] for l in _lines(out)], ["done"])
 
+    def test_queued_sits_between_submitted_and_building(self):
+        tree, out = _tree()
+        tree.handle({"model": ARM, "state": "submitted", "parent": ROBOT})
+        tree.handle({"model": ARM, "state": "queued"})
+        self.assertIn("queued", tree._render()[1])
+        tree.handle({"model": ARM, "state": "building", "phase": "generate"})
+        tree.handle({"model": ARM, "state": "done", "elapsed": 0.2})
+        tree.handle({"model": ARM, "state": "queued"})  # late; a finished model never regresses
+        tree.close()
+        self.assertEqual([l["state"] for l in _lines(out)], ["submitted", "queued", "building", "done"])
+
     def test_a_failure_carries_the_exit_code(self):
         tree, out = _tree()
         tree.handle({"model": ARM, "state": "building"})

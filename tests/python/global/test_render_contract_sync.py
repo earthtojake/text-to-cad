@@ -102,13 +102,24 @@ class RenderContractSyncTest(unittest.TestCase):
                 if k not in {"CADGEN_CACHE_DIR", "XDG_CACHE_HOME", "LOCALAPPDATA"}
             }
             env["CADGEN_CACHE_DIR"] = str(cache_dir)
+            # The record lives in the daemon's state dir: name it for BOTH sides, so the
+            # equality under test is the path derivation, not each process's temp dir.
+            state_dir = Path(workspace) / "state"
+            env["CADGEN_DAEMON_STATE_DIR"] = str(state_dir)
+            # The reader must import THIS cadgen, not whatever the interpreter has installed.
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(ROOT / "packages" / "cadgen" / "src")]
+                + [p for p in env.get("PYTHONPATH", "").split(os.pathsep) if p]
+            )
 
             script = (
                 "import json, sys;"
                 "from cadgen.viewer.build_progress import build_progress_snapshot;"
                 f"sys.stdout.write(json.dumps(build_progress_snapshot({str(artifact)!r})))"
             )
-            with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(cache_dir)}):
+            with mock.patch.dict(
+                os.environ, {"CADGEN_CACHE_DIR": str(cache_dir), "CADGEN_DAEMON_STATE_DIR": str(state_dir)}
+            ):
                 with artifact_build(STEP_PACKAGE, build_scope(artifact)) as run:
                     run.phase(PHASE_COMPONENTS, total=37, detail="c0ffee")
                     run.advance(3)

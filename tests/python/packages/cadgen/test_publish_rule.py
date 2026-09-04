@@ -142,7 +142,7 @@ class PublishRuleTest(unittest.TestCase):
             time.sleep(0.2)
             snapshot = self.root / "state" / "progress"
             if snapshot.is_dir() and any(
-                (json.loads(p.read_text()).get("outcome") is None) for p in snapshot.glob("*.json")
+                (json.loads(p.read_text(encoding="utf-8")).get("outcome") is None) for p in snapshot.glob("*.json")
             ):
                 seen = "building"
                 break
