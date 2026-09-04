@@ -20,7 +20,7 @@
   "dependencies": {
     "meshoptimizer": "^1.2.0",
     "three": "0.185.1",
-    "three-mesh-bvh": "0.8.0"
+    "three-mesh-bvh": "0.9.14"
   },
   "devDependencies": {
     "playwright": "^1.52.0"
