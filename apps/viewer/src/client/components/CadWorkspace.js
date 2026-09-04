@@ -1354,7 +1354,7 @@ export default function CadWorkspace({
       freshnessKey: `${catalogSelectedEntry?.hash || ""}:${manifestRevision}`,
     }
   );
-  const selectedArtifactGenerating = selectedArtifact.status === "generating";
+  const selectedArtifactGenerating = selectedArtifact.status === "compiling";
   // The in-flight build's own report of where it is (null until it reports, and for
   // every loading state that is not an artifact build). Only meaningful while
   // generating — a stale frame must not outlive the build that produced it.
@@ -1381,7 +1381,7 @@ export default function CadWorkspace({
   );
   const selectedEntry = useMemo(
     () => {
-      const base = !catalogSelectedEntry || selectedArtifact.status === "ready"
+      const base = !catalogSelectedEntry || selectedArtifact.status === "rendered"
         ? catalogSelectedEntry
         : entryWithoutRenderAssets(catalogSelectedEntry);
       if (!base) {
@@ -1393,7 +1393,7 @@ export default function CadWorkspace({
     [catalogSelectedEntry, selectedArtifact.status, fileRefPrefixByPath]
   );
   // Cache states never become user-facing "issues"; only a fatal build/source failure does.
-  const selectedStepSourceStatus = selectedArtifact.status === "error"
+  const selectedStepSourceStatus = selectedArtifact.status === "failed"
     ? {
         artifact: {
           ok: false,
@@ -2446,7 +2446,7 @@ export default function CadWorkspace({
   // otherwise spin forever behind its own error.
   const artifactBlocksRender =
     isArtifactManagedFormat(effectiveRenderFormat) &&
-    selectedArtifact.status === "error";
+    selectedArtifact.status === "failed";
   const meshViewerLoading =
     !!selectedEntry &&
     // A DRAWING has no flat pattern and bakes nothing, so "no mesh yet" is its finished state,

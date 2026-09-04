@@ -229,7 +229,7 @@ class TwoSidesLaw(unittest.TestCase):
             verdict = artifact_status.resolve_artifact_verdict(str(self.robot_step), str(self.root))
             self.assertTrue(verdict.get("ok"), verdict)
             self.assertNotIn("generated", verdict)
-            self.assertEqual("ready", artifact_status.artifact_status(str(self.robot_step), str(self.root))["state"])
+            self.assertEqual("rendered", artifact_status.artifact_status(str(self.robot_step), str(self.root))["state"])
             payload = export_cad_target(self.robot_step, [("stl", out)], repo_root=self.root)
             self.assertTrue(out.is_file(), payload)
             # A second export at the same variant is satisfied by the ARTIFACT-side ledger.

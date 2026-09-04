@@ -151,7 +151,7 @@ class Containment(ArtifactStatusTestCase):
         # Containment raises; a file that simply is not there must not.
         self.assertEqual(
             artifact_status("absent.step", str(self.tree.root)),
-            {"state": "error", "error": "Artifact source not found: absent.step"},
+            {"state": "failed", "error": "Artifact source not found: absent.step"},
         )
 
 
@@ -159,7 +159,7 @@ class Verdicts(ArtifactStatusTestCase):
     def test_a_fresh_package_is_ready(self):
         step = self.tree.step()
         self.tree.package(step)
-        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "ready"})
+        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "rendered"})
 
     def test_editing_the_file_unresolves_the_package(self):
         step = self.tree.step()
@@ -169,7 +169,7 @@ class Verdicts(ArtifactStatusTestCase):
         # no result for them.
         self.assertEqual(
             artifact_status(step, str(self.tree.root)),
-            {"state": "needs-build", "reason": "missing_glb"},
+            {"state": "not-compiled", "reason": "missing_glb"},
         )
 
     def test_restoring_the_bytes_makes_it_ready_again_with_nothing_rebuilt(self):
@@ -177,12 +177,12 @@ class Verdicts(ArtifactStatusTestCase):
         self.tree.package(step)
         Path(step).write_bytes(STEP_BYTES + b"\n")
         Path(step).write_bytes(STEP_BYTES)
-        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "ready"})
+        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "rendered"})
 
     def test_a_missing_candidate_is_an_error_naming_the_raw_ref(self):
         self.assertEqual(
             artifact_status("nope.step", str(self.tree.root)),
-            {"state": "error", "error": "Artifact source not found: nope.step"},
+            {"state": "failed", "error": "Artifact source not found: nope.step"},
         )
 
     def test_an_unowned_format_is_an_error(self):
@@ -190,7 +190,7 @@ class Verdicts(ArtifactStatusTestCase):
         path.write_text("x = 1", encoding="utf-8")
         self.assertEqual(
             artifact_status(str(path), str(self.tree.root)),
-            {"state": "error", "error": f"No render-artifact format owns this entry: {path}"},
+            {"state": "failed", "error": f"No render-artifact format owns this entry: {path}"},
         )
 
     def test_the_gate_order_missing_then_components_then_ready(self):
@@ -201,7 +201,7 @@ class Verdicts(ArtifactStatusTestCase):
         self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
 
         self.tree.package(step)
-        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "ready"})
+        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "rendered"})
 
     def test_a_component_whose_surf_payload_is_absent_is_missing_glb(self):
         step = self.tree.step()
@@ -219,7 +219,7 @@ class SnapshotShapes(ArtifactStatusTestCase):
             snapshot={"writing": True, "busy": False, "runId": "r1", "progress": {"phase": "x"}},
         )
         self.assertEqual(
-            status, {"state": "generating", "runId": "r1", "progress": {"phase": "x"}}
+            status, {"state": "compiling", "runId": "r1", "progress": {"phase": "x"}}
         )
 
     def test_absent_run_id_and_progress_are_ABSENT_not_null(self):
@@ -229,7 +229,7 @@ class SnapshotShapes(ArtifactStatusTestCase):
             str(self.tree.root),
             snapshot={"writing": True, "busy": False, "runId": None, "progress": None},
         )
-        self.assertEqual(status, {"state": "generating"})
+        self.assertEqual(status, {"state": "compiling"})
 
     def test_busy_over_an_ok_package_is_ready_plus_busy(self):
         step = self.tree.step()
@@ -239,7 +239,7 @@ class SnapshotShapes(ArtifactStatusTestCase):
             str(self.tree.root),
             snapshot={"writing": False, "busy": True, "runId": "r2", "progress": None},
         )
-        self.assertEqual(status, {"state": "ready", "busy": True, "runId": "r2"})
+        self.assertEqual(status, {"state": "rendered", "busy": True, "runId": "r2"})
 
     def test_busy_over_an_unbuilt_package_is_needs_build_plus_blocked(self):
         step = self.tree.step()
@@ -249,7 +249,7 @@ class SnapshotShapes(ArtifactStatusTestCase):
             snapshot={"writing": False, "busy": True, "runId": None, "progress": None},
         )
         self.assertEqual(
-            status, {"state": "needs-build", "reason": "missing_glb", "blocked": True}
+            status, {"state": "not-compiled", "reason": "missing_glb", "blocked": True}
         )
 
 

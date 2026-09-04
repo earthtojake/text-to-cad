@@ -12,7 +12,7 @@ import {
 } from "./artifactResolution.js";
 
 test("a ready artifact needs no work", () => {
-  assert.equal(artifactActionFor({ state: "ready" }), ARTIFACT_ACTION_READY);
+  assert.equal(artifactActionFor({ state: "rendered" }), ARTIFACT_ACTION_READY);
 });
 
 test("an absent state is treated as ready, so a fresh model never flashes", () => {
@@ -21,11 +21,11 @@ test("an absent state is treated as ready, so a fresh model never flashes", () =
 });
 
 test("an errored artifact surfaces the error", () => {
-  assert.equal(artifactActionFor({ state: "error" }), ARTIFACT_ACTION_ERROR);
+  assert.equal(artifactActionFor({ state: "failed" }), ARTIFACT_ACTION_ERROR);
 });
 
 test("needs-build is the ONLY state that starts a build", () => {
-  assert.equal(artifactActionFor({ state: "needs-build" }), ARTIFACT_ACTION_BUILD);
+  assert.equal(artifactActionFor({ state: "not-compiled" }), ARTIFACT_ACTION_BUILD);
 });
 
 test("a build already running is attached to, never duplicated", () => {
@@ -33,14 +33,14 @@ test("a build already running is attached to, never duplicated", () => {
   // opening a model during a long `cad gen` waited out that build and then ran a second
   // full one.
   assert.equal(
-    artifactActionFor({ state: "generating", runId: "abc" }),
+    artifactActionFor({ state: "compiling", runId: "abc" }),
     ARTIFACT_ACTION_ATTACH
   );
 });
 
 test("a blocked needs-build waits instead of POSTing into a held lock", () => {
   assert.equal(
-    artifactActionFor({ state: "needs-build", blocked: true }),
+    artifactActionFor({ state: "not-compiled", blocked: true }),
     ARTIFACT_ACTION_ATTACH
   );
 });
@@ -77,12 +77,12 @@ test("a server that reports no runId leaves the shown run alone", () => {
 });
 
 test("advisory flag: busy only (the stale advisory died with content keying)", () => {
-  assert.equal(artifactAdvisoryFor({ state: "ready" }), null);
+  assert.equal(artifactAdvisoryFor({ state: "rendered" }), null);
   assert.equal(artifactAdvisoryFor(undefined), null);
   assert.deepEqual(
-    artifactAdvisoryFor({ state: "ready", busy: true, runId: "run-9" }),
+    artifactAdvisoryFor({ state: "rendered", busy: true, runId: "run-9" }),
     { busy: true, runId: "run-9" }
   );
   // Truthy non-boolean values do not count: the flag is written as a boolean.
-  assert.equal(artifactAdvisoryFor({ state: "ready", busy: "yes" }), null);
+  assert.equal(artifactAdvisoryFor({ state: "rendered", busy: "yes" }), null);
 });

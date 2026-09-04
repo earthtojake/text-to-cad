@@ -185,7 +185,7 @@ test("a failed artifact build reports its own reason, not \"no mesh data\"", () 
   // DXF builder rejected -- was already on the artifact record and simply never shown, so a
   // drawing that can never render looked identical to one needing a rebuild.
   const entry = { file: "drawings/plate.dxf", kind: "dxf" };
-  const artifact = { status: "error", error: "dxf-artifact.mjs failed (exit 1): Unsupported DXF entity HATCH" };
+  const artifact = { status: "failed", error: "dxf-artifact.mjs failed (exit 1): Unsupported DXF entity HATCH" };
 
   const alert = buildViewerMeshAlert(entry, false, "", artifact);
 
@@ -197,7 +197,7 @@ test("a failed artifact build reports its own reason, not \"no mesh data\"", () 
 test("an artifact error is not raised once a mesh is in hand", () => {
   // A stale error alongside a rendered mesh would be noise: the entry is on screen.
   const entry = { file: "drawings/plate.dxf", kind: "dxf" };
-  const artifact = { status: "error", error: "boom" };
+  const artifact = { status: "failed", error: "boom" };
 
   assert.equal(buildViewerMeshAlert(entry, true, "", artifact), null);
 });
@@ -205,7 +205,7 @@ test("an artifact error is not raised once a mesh is in hand", () => {
 test("an artifact error falls back to a message when the record carries none", () => {
   const entry = { file: "drawings/plate.dxf", kind: "dxf" };
 
-  const alert = buildViewerMeshAlert(entry, false, "", { status: "error", error: "" });
+  const alert = buildViewerMeshAlert(entry, false, "", { status: "failed", error: "" });
 
   assert.equal(alert.title, "Render artifact build failed");
   assert.ok(alert.message.length > 0);
@@ -223,7 +223,7 @@ test("a meshless DXF is not an error, but a failed build still is", () => {
   // A parse/load failure still reports.
   assert.equal(buildViewerMeshAlert(layout, false, "bad DXF")?.summary, "Mesh load failed");
   // And a drawing whose BUILD failed reports the build failure, which outranks the mesh card.
-  const failed = buildViewerMeshAlert(drawing, false, "", { status: "error", error: "bad entity" });
+  const failed = buildViewerMeshAlert(drawing, false, "", { status: "failed", error: "bad entity" });
   assert.equal(failed?.summary, "Build failed");
   assert.match(failed?.message, /bad entity/u);
 });

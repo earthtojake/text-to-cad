@@ -606,7 +606,7 @@ class L_ArtifactRouteContainment(SecurityTestCase):
         """
         status, _, body = self.artifact(os.path.join(self.fixture.root, "ok.step"))
         self.assertEqual(status, 200, body[:400])
-        self.assertIn(json.loads(body)["state"], {"needs-build", "error", "ready"})
+        self.assertIn(json.loads(body)["state"], {"not-compiled", "error", "ready"})
 
     def test_a_relative_in_root_ref_is_still_accepted(self):
         status, _, body = self.artifact("ok.step")
@@ -617,13 +617,13 @@ class L_ArtifactRouteContainment(SecurityTestCase):
 
         Python's ``$`` also matches immediately before a trailing newline, so
         ``ok.step\n`` used to claim STEP ownership and be answered with a
-        needs-build import offer for a document that does not exist. Node
+        not-compiled import offer for a document that does not exist. Node
         answered ``ready``, because JavaScript's ``$`` does not match there.
         """
         status, _, body = self.artifact(os.path.join(self.fixture.root, "ok.step") + "\n")
         self.assertEqual(status, 200, body[:400])
         payload = json.loads(body)
-        self.assertEqual(payload["state"], "ready")
+        self.assertEqual(payload["state"], "rendered")
         self.assertNotIn("stepImport", payload)
 
 

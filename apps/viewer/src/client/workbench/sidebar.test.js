@@ -122,7 +122,7 @@ test("entryIconStatus marks buildable STEP artifacts as generating in production
       loading: false,
       pending: true,
       sourceFormat: "step",
-      statusLabel: "artifact generates on open"
+      statusLabel: "compiles on open"
     }
   );
 
@@ -140,7 +140,7 @@ test("entryIconStatus marks buildable STEP artifacts as generating in production
       loading: true,
       pending: true,
       sourceFormat: "step",
-      statusLabel: "generating artifact"
+      statusLabel: "compiling"
     }
   );
 
@@ -171,7 +171,7 @@ test("entryIconStatus marks buildable STEP artifacts as generating in production
       loading: true,
       pending: true,
       sourceFormat: "step",
-      statusLabel: "generating artifact"
+      statusLabel: "compiling"
     }
   );
 
@@ -245,7 +245,7 @@ test("entryIconStatus marks buildable STEP artifacts as generating in production
       loading: false,
       pending: false,
       sourceFormat: "step",
-      statusLabel: "artifact generates on open"
+      statusLabel: "compiles on open"
     }
   );
 
@@ -269,7 +269,7 @@ test("entryIconStatus marks buildable STEP artifacts as generating in production
       loading: false,
       pending: true,
       sourceFormat: "step",
-      statusLabel: "artifact generates on open"
+      statusLabel: "compiles on open"
     }
   );
 });
@@ -297,7 +297,7 @@ test("entryIconStatus treats active generator runs as loading and suppresses art
       loading: true,
       pending: true,
       sourceFormat: "step",
-      statusLabel: "generating artifact"
+      statusLabel: "compiling"
     }
   );
 

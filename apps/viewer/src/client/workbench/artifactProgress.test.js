@@ -43,7 +43,7 @@ test("normalizeArtifactProgress keeps a well-formed payload", () => {
 });
 
 test("normalizeArtifactProgress returns null for anything unrenderable", () => {
-  for (const raw of [null, undefined, "generating", 42, {}, { phase: "" }, { phase: "   " }]) {
+  for (const raw of [null, undefined, "compiling", 42, {}, { phase: "" }, { phase: "   " }]) {
     assert.equal(normalizeArtifactProgress(raw), null);
   }
 });

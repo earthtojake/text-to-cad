@@ -73,7 +73,7 @@ class ProgressFeed(unittest.TestCase):
     def test_a_cli_build_started_outside_the_viewer_shows_as_compiling_with_its_phase(self):
         self.jobs = [job(self.script, [str(self.document)], "building", phase="Meshing components", done=3, total=9)]
         status = self.status()
-        self.assertEqual("generating", status["state"])
+        self.assertEqual("compiling", status["state"])
         self.assertEqual("job-1", status["runId"])
         self.assertEqual(("Meshing components", 3, 9, True), (status["progress"]["phase"], status["progress"]["done"], status["progress"]["total"], status["progress"]["determinate"]))
 
@@ -84,31 +84,31 @@ class ProgressFeed(unittest.TestCase):
             job(self.script, [str(self.document)], "submitted", id="job-2", started=2.0),
         ]
         status = self.status()
-        self.assertEqual(("generating", "job-2"), (status["state"], status["runId"]))
+        self.assertEqual(("compiling", "job-2"), (status["state"], status["runId"]))
         self.assertEqual("submitted", status["progress"]["phase"])
         self.assertFalse(status["progress"]["determinate"])
 
     def test_the_viewers_own_compile_shows_the_same_way(self):
         self.jobs = [job(str(self.document), [str(self.document)], "building", tool="step-compile", phase="compile")]
         status = self.status()
-        self.assertEqual(("generating", "compile"), (status["state"], status["progress"]["phase"]))
+        self.assertEqual(("compiling", "compile"), (status["state"], status["progress"]["phase"]))
 
     def test_a_published_tree_is_ready_even_with_an_older_finished_job_listed(self):
         seed_result(self.document)
         self.jobs = [job(self.script, [str(self.document)], "done", exit=0)]
-        self.assertEqual({"state": "ready"}, self.status())
+        self.assertEqual({"state": "rendered"}, self.status())
 
     def test_a_failed_job_with_no_tree_is_failed(self):
         self.jobs = [job(self.script, [str(self.document)], "failed", exit=1)]
         status = self.status()
-        self.assertEqual(("error", "build_failed"), (status["state"], status["reason"]))
+        self.assertEqual(("failed", "build_failed"), (status["state"], status["reason"]))
         self.assertEqual({"runId": "job-1", "exit": 1, "tool": "run"}, status["failed"])
 
     def test_a_failed_job_over_a_published_tree_renders_and_says_so(self):
         seed_result(self.document)
         self.jobs = [job(self.script, [str(self.document)], "failed", exit=1)]
         status = self.status()
-        self.assertEqual("ready", status["state"])
+        self.assertEqual("rendered", status["state"])
         self.assertEqual(1, status["failed"]["exit"])
 
     def test_a_later_success_clears_an_earlier_failure(self):
@@ -117,11 +117,11 @@ class ProgressFeed(unittest.TestCase):
             job(self.script, [str(self.document)], "failed", id="job-1", exit=1, started=1.0),
             job(self.script, [str(self.document)], "done", id="job-2", exit=0, started=2.0),
         ]
-        self.assertEqual({"state": "ready"}, self.status())
+        self.assertEqual({"state": "rendered"}, self.status())
 
     def test_a_job_for_another_document_is_not_this_documents_build(self):
         self.jobs = [job(str(self.root / "src" / "other.py"), [str(self.root / "STEP" / "other.step")], "building")]
-        self.assertEqual("needs-build", self.status()["state"])
+        self.assertEqual("not-compiled", self.status()["state"])
 
     def test_no_daemon_means_no_feed(self):
         with mock.patch("cadgen.daemon.client.status", return_value=None):
@@ -134,7 +134,7 @@ class ProgressFeed(unittest.TestCase):
             self.document, jobs=[job(self.script, [str(self.document)], "building", phase="p", done=1, total=2)]
         )
         self.assertEqual({"writing": True, "busy": False, "runId": "job-1"}, {k: running[k] for k in ("writing", "busy", "runId")})
-        self.assertEqual("generating", artifact_status(str(self.document), str(self.root), snapshot=running)["state"])
+        self.assertEqual("compiling", artifact_status(str(self.document), str(self.root), snapshot=running)["state"])
 
 
 if __name__ == "__main__":

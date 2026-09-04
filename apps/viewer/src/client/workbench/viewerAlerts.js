@@ -40,7 +40,7 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
   // generic "no mesh data" card — and it applies to every artifact-managed kind, not just
   // STEP. A DXF whose build rejected an entity used to report only that nothing loaded,
   // which told the user neither what was wrong nor that a rebuild would not help.
-  if (artifact?.status === "error" && !hasMeshData) {
+  if (artifact?.status === "failed" && !hasMeshData) {
     const detail = String(artifact.error || "").trim();
     return {
       severity: "error",

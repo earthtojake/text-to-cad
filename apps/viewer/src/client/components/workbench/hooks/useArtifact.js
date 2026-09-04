@@ -22,7 +22,7 @@ import {
 // cache is NOT surfaced as an issue: the hook simply triggers a build and reports `generating`.
 //
 // Optimistic-ready: a freshly-selected entry starts `ready` so a fresh model renders immediately with
-// no flash; only when the freshness check comes back `needs-build` do we flip to `generating` (and
+// no flash; only when the freshness check comes back `needs-build` do we flip to `compiling` (and
 // the caller hides the now-known-stale render assets) and POST a build. Direct-render entries
 // (`enabled: false`) never hit the network and stay `ready`.
 //
@@ -32,7 +32,7 @@ import {
 // The poll is strictly read-only — it never triggers a build of its own — so the single POST stays
 // the only writer no matter how long it runs.
 //
-// ATTACH vs BUILD. Only `needs-build` POSTs. When the server reports `generating`, some other
+// ATTACH vs BUILD. Only `not-compiled` POSTs. When the server reports `compiling`, some other
 // process already holds this model's lock — a `cad gen` in a terminal, another tab — and we watch
 // its run instead, re-resolving when it ends. Previously every non-ready state POSTed, so opening a
 // model during a long CLI build meant waiting out that build and then paying for a full duplicate
@@ -40,7 +40,7 @@ import {
 // reported ratio is monotonic only within a single run and carrying it across a handoff is what
 // made the bar jump backwards.
 
-const READY = { status: "ready", error: "", progress: null, advisory: null };
+const READY = { status: "rendered", error: "", progress: null, advisory: null };
 
 function isAbortError(error) {
   return error?.name === "AbortError" || /abort/i.test(String(error?.message || ""));
@@ -49,7 +49,7 @@ function isAbortError(error) {
 export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {}) {
   const activeRef = String(enabled ? fileRef || "" : "").trim();
   const key = activeRef ? `${activeRef}:${freshnessKey}` : "";
-  const [state, setState] = useState({ key: "", status: "ready", error: "", progress: null });
+  const [state, setState] = useState({ key: "", status: "rendered", error: "", progress: null });
   const requestSeqRef = useRef(0);
 
   useEffect(() => {
@@ -118,7 +118,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
       }
       // ATTACHED to a peer's build (we did not POST, so nothing else will tell us it
       // finished): keep polling until the run leaves `generating`, then re-resolve.
-      if (attached && isCurrent() && !controller.signal.aborted && reported && reported !== "generating") {
+      if (attached && isCurrent() && !controller.signal.aborted && reported && reported !== "compiling") {
         stopPolling();
         resolve();
         return;
@@ -131,7 +131,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
     const showGenerating = (status) => {
       shownRunId = status?.runId ? String(status.runId) : null;
       settle({
-        status: "generating",
+        status: "compiling",
         error: "",
         progress: normalizeArtifactProgress(status?.progress)
       });
@@ -151,7 +151,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
           return;
         }
         if (action === ARTIFACT_ACTION_ERROR) {
-          settle({ status: "error", error: String(status?.error || status?.reason || "Render artifact is unavailable.") });
+          settle({ status: "failed", error: String(status?.error || status?.reason || "The document could not be compiled.") });
           return;
         }
         if (action === ARTIFACT_ACTION_ATTACH) {
@@ -162,7 +162,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
           pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);
           return;
         }
-        // needs-build -> we own the build. The POST is one long-lived request that resolves
+        // not-compiled -> we own the compile. The POST is one long-lived request that resolves
         // only when the build finishes, so its position comes from the concurrent status
         // poll below.
         attached = false;
@@ -173,7 +173,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
         if (!isCurrent()) {
           return;
         }
-        if (result?.ok && result.state === "generating") {
+        if (result?.ok && result.state === "compiling") {
           // The server handed us off to a peer that took the lock first. Attach to it
           // rather than reporting a failure.
           attached = true;
@@ -181,13 +181,13 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
           pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);
           return;
         }
-        settle(result?.ok && result.state === "ready"
+        settle(result?.ok && result.state === "rendered"
           ? { ...READY, advisory: artifactAdvisoryFor(result) }
-          : { status: "error", error: String(result?.error || "Failed to generate the render artifact.") });
+          : { status: "failed", error: String(result?.error || "Compiling the document failed.") });
       } catch (error) {
         stopPolling();
         if (isCurrent() && !isAbortError(error) && !controller.signal.aborted) {
-          settle({ status: "error", error: error instanceof Error ? error.message : String(error) });
+          settle({ status: "failed", error: error instanceof Error ? error.message : String(error) });
         }
       }
     }

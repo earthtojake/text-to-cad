@@ -52,8 +52,8 @@ STEP_DESCRIPTOR_NAME = "assembly.json"
 #
 # ``\Z``, never ``$``: Python's ``$`` also matches immediately BEFORE a trailing
 # newline, where JavaScript's does not. With ``$`` here, ``part.step\n`` owned a
-# status it must not own, so ``?file=<abs>.step%0A`` turned Node's "ready" into
-# a needs-build carrying an import offer for a document that does not exist.
+# status it must not own, so ``?file=<abs>.step%0A`` turned Node's "rendered" into
+# a not-compiled carrying an import offer for a document that does not exist.
 # Same trap ``tess_cache.py`` names and avoids with ``fullmatch``; these two are
 # the whole set of anchored patterns in the backend (``url_norm`` and
 # ``scanner`` anchor only at the START, where the two languages agree), and
@@ -62,10 +62,10 @@ _STEP_ENTRY_RE = re.compile(r"\.(step|stp)\Z", re.IGNORECASE)
 
 
 class ARTIFACT_STATE:  # noqa: N801 - a namespace of wire constants, not a class
-    READY = "ready"
-    GENERATING = "generating"
-    NEEDS_BUILD = "needs-build"
-    ERROR = "error"
+    RENDERED = "rendered"
+    COMPILING = "compiling"
+    NOT_COMPILED = "not-compiled"
+    FAILED = "failed"
 
 
 # Codes the client may build on. ``missing_source_path`` and
@@ -94,7 +94,7 @@ def _read_json(file_path):
     substitutes U+FFFD rather than throwing. Strictness here was not a matter of
     taste: ``UnicodeDecodeError`` is a ``ValueError``, so one bad byte anywhere
     in a marker was swallowed as "absent" and the CLIENT'S STATE CHANGED — a
-    ready model reported needs-build, offering to rebuild something already
+    rendered model reported not-compiled, offering to rebuild something already
     built. Node replaced the byte, parsed the JSON around it and answered ready.
     ``scanner.py`` already reads the same files with ``errors="replace"``, so
     strictness also put this backend in disagreement with itself about one file.
@@ -238,13 +238,13 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
     if verdict is None:
         verdict = resolve_artifact_verdict(file_ref, root_dir)
     if verdict.get("error"):
-        return {"state": ARTIFACT_STATE.ERROR, "error": verdict["error"]}
+        return {"state": ARTIFACT_STATE.FAILED, "error": verdict["error"]}
 
     snapshot = snapshot or {}
     # Checked BEFORE verdict.ok, so a build in flight over a currently
-    # resolvable package reports generating rather than ready.
+    # resolvable package reports compiling rather than rendered.
     if snapshot.get("writing"):
-        status = {"state": ARTIFACT_STATE.GENERATING}
+        status = {"state": ARTIFACT_STATE.COMPILING}
         if snapshot.get("runId"):
             status["runId"] = snapshot["runId"]
         if snapshot.get("progress") is not None:
@@ -253,7 +253,7 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
 
     failed = snapshot.get("failed")
     if verdict.get("ok"):
-        status = {"state": ARTIFACT_STATE.READY}
+        status = {"state": ARTIFACT_STATE.RENDERED}
         if isinstance(failed, dict):
             # The tree renders; the latest build of this document failed. Both
             # facts, the render first.
@@ -269,12 +269,12 @@ def artifact_status(file_ref, root_dir, *, snapshot=None, verdict=None) -> dict:
     code = verdict.get("code")
     if isinstance(failed, dict):
         # No tree for these bytes and the latest job for the document failed.
-        return {"state": ARTIFACT_STATE.ERROR, "reason": "build_failed", "error": "the last build of this document failed", "failed": failed}
+        return {"state": ARTIFACT_STATE.FAILED, "reason": "build_failed", "error": "the last build of this document failed", "failed": failed}
     if code in BUILDABLE_CODES:
-        status = {"state": ARTIFACT_STATE.NEEDS_BUILD, "reason": code}
+        status = {"state": ARTIFACT_STATE.NOT_COMPILED, "reason": code}
         if snapshot.get("busy"):
             status["blocked"] = True
         return status
 
     # error and reason carry the same bare code string.
-    return {"state": ARTIFACT_STATE.ERROR, "reason": code, "error": code}
+    return {"state": ARTIFACT_STATE.FAILED, "reason": code, "error": code}

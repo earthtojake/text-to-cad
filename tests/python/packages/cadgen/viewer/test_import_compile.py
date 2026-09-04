@@ -162,8 +162,8 @@ def _scope(candidate: str) -> str:
 class OpsWiring(ImportTestCase):
     def test_an_unowned_entry_is_ready_without_a_job(self):
         ops = self.ops()
-        self.assertEqual(ops.artifact_status("model.stl"), {"state": "ready"})
-        self.assertEqual(ops.build_artifact("model.stl"), {"ok": True, "state": "ready"})
+        self.assertEqual(ops.artifact_status("model.stl"), {"state": "rendered"})
+        self.assertEqual(ops.build_artifact("model.stl"), {"ok": True, "state": "rendered"})
         self.assertEqual(self.submit.calls, [])
 
     def test_a_foreign_step_is_offered_as_an_import_with_exactly_three_keys(self):
@@ -173,7 +173,7 @@ class OpsWiring(ImportTestCase):
         self.step("ok.step")
         self.assertEqual(
             ops.artifact_status("ok.step"),
-            {"state": "needs-build", "reason": "missing_glb", "stepImport": True},
+            {"state": "not-compiled", "reason": "missing_glb", "stepImport": True},
         )
 
     def test_a_successful_import_is_ready_and_spreads_the_job_answer(self):
@@ -182,7 +182,7 @@ class OpsWiring(ImportTestCase):
         result = ops.build_artifact("ok.step")
         self.assertEqual(
             result,
-            {"ok": True, "state": "ready", "stepImport": True, "document": str(Path(candidate).resolve())},
+            {"ok": True, "state": "rendered", "stepImport": True, "document": str(Path(candidate).resolve())},
         )
         self.assertNotIn("contended", result)
 
@@ -194,7 +194,7 @@ class OpsWiring(ImportTestCase):
             result,
             {
                 "ok": False,
-                "state": "error",
+                "state": "failed",
                 "error": "STEP import failed: failed to read STEP file: not a STEP",
                 "errorType": "RuntimeError",
             },
@@ -211,10 +211,10 @@ class OpsWiring(ImportTestCase):
             status = None
             while time.monotonic() < deadline:
                 status = ops.artifact_status("slow.step")
-                if status.get("state") == "generating":
+                if status.get("state") == "compiling":
                     break
                 time.sleep(0.02)
-            self.assertEqual((status or {}).get("state"), "generating", status)
+            self.assertEqual((status or {}).get("state"), "compiling", status)
         finally:
             self.submit.gate.set()
             thread.join(timeout=5)

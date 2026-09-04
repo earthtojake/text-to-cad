@@ -74,16 +74,16 @@ export function entryIconStatus(entry, {
   });
   const loading = artifactGenerating || assetLoading;
   const statusLabel = artifactGenerating
-    ? "generating artifact"
+    ? "compiling"
     : assetLoading
       ? "loading"
     : artifactWarning
       ? (artifactErrorCode === "missing_glb" ? "artifacts missing" : "artifact warning")
       : artifactBuildable
-        ? "artifact generates on open"
+        ? "compiles on open"
         : pending
           ? "pending"
-          : "ready";
+          : "rendered";
 
   return {
     artifactBuildable,

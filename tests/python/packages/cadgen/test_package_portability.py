@@ -315,7 +315,7 @@ class PackagePortabilityTest(unittest.TestCase):
 
         for name, root_arg, source_arg in self._validators(moved):
             with self.subTest(entry=name):
-                self.assertEqual("ready", viewer_artifact_status(source_arg, root_arg)["state"])
+                self.assertEqual("rendered", viewer_artifact_status(source_arg, root_arg)["state"])
 
     def test_renaming_the_project_folder_rebuilds_nothing(self) -> None:
         # The folder name is part of every path a descriptor could have recorded, so this is

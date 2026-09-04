@@ -197,8 +197,8 @@ export async function refreshCadCatalog({ markRefreshing = !currentSnapshot.cata
   return refreshInFlight;
 }
 
-// Unified render-artifact client API. GET reports freshness ({ state: "ready" | "needs-build" |
-// "error", ... }); a direct-render entry is always "ready". (Replaced the STEP-specific
+// Unified render-artifact client API. GET reports compile state ({ state: "rendered" | "not-compiled" |
+// "compiling" | "failed", ... }); a direct-render entry is always "rendered". (Replaced the STEP-specific
 // requestStepSourceStatus + requestStepArtifactGeneration.)
 export async function requestArtifactStatus(fileRef, { signal } = {}) {
   if (typeof window === "undefined") {
@@ -225,7 +225,7 @@ export async function requestArtifactStatus(fileRef, { signal } = {}) {
 }
 
 // POST (re)builds the artifact and publishes the refreshed catalog; resolves to
-// { ok, state: "ready" | "error", ... }.
+// { ok, state: "rendered" | "failed", ... }.
 export async function requestArtifact(fileRef, { force = false, signal } = {}) {
   if (typeof window === "undefined") {
     return null;

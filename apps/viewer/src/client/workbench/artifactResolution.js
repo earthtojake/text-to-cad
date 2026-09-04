@@ -4,38 +4,37 @@
 // whether to START a build or WATCH someone else's, and getting that wrong is expensive
 // (a duplicate multi-minute OCP build) but invisible in a rendered component.
 
-export const ARTIFACT_ACTION_READY = "ready";
-export const ARTIFACT_ACTION_ERROR = "error";
+export const ARTIFACT_ACTION_READY = "rendered";
+export const ARTIFACT_ACTION_ERROR = "failed";
 export const ARTIFACT_ACTION_ATTACH = "attach";
 export const ARTIFACT_ACTION_BUILD = "build";
 
 /**
  * What the client should do about a status payload from `GET /__cad/artifact`.
  *
- * Only `needs-build` starts a build. `generating` means another process already holds
- * this model's lock — a `cad gen` in a terminal, another viewer tab — so we attach to
- * that run and watch it. POSTing there is what used to make the user wait out the peer's
- * build and then pay for a full duplicate rebuild.
+ * Only `not-compiled` starts a compile. `compiling` means a job for this document is
+ * already in cadgen's pool — a `python model.py` in a terminal, another viewer tab — so we
+ * attach to that job and watch it. POSTing there would only queue a duplicate.
  *
- * `blocked` is the server saying the artifact is stale AND its generator is occupied, so
- * a build would only queue behind the peer: attach rather than POST into a lock.
+ * `blocked` is the server saying the document has no tree AND a job for it is already
+ * running: attach rather than POST a second one.
  */
 export function artifactActionFor(status) {
-  const state = String(status?.state || "ready");
+  const state = String(status?.state || "rendered");
   if (state === ARTIFACT_ACTION_READY) {
     return ARTIFACT_ACTION_READY;
   }
   if (state === ARTIFACT_ACTION_ERROR) {
     return ARTIFACT_ACTION_ERROR;
   }
-  if (state === "generating" || status?.blocked) {
+  if (state === "compiling" || status?.blocked) {
     return ARTIFACT_ACTION_ATTACH;
   }
   return ARTIFACT_ACTION_BUILD;
 }
 
 /**
- * The advisory flag a `ready` status may carry: `busy`, when another process
+ * The advisory flag a `rendered` status may carry: `busy`, when another process
  * currently holds the model's generator. It changes nothing about what the
  * client DOES — the model renders — it is an honest badge for the file sheet.
  * (The old `stale` advisory died with content keying: an edited file resolves

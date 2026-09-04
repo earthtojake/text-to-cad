@@ -65,7 +65,7 @@ class CadgenOps:
         if not owns_artifact_path(file_ref):
             # Not ours to have an opinion about: no candidate resolution, no
             # disk read, no kernel.
-            return {"state": ARTIFACT_STATE.READY}
+            return {"state": ARTIFACT_STATE.RENDERED}
 
         candidate = self._candidate(file_ref)
         build_key = build_scope(candidate)
@@ -75,7 +75,7 @@ class CadgenOps:
         snapshot = build_progress_snapshot(candidate)
         if snapshot is None and self.client.in_flight(build_key):
             # Our own compile before the daemon lists it (or with no daemon at
-            # all): an indeterminate generating badge beats showing nothing, and
+            # all): an indeterminate compiling badge beats showing nothing, and
             # it is what the client's attach loop needs to attach TO.
             snapshot = {"writing": True, "busy": False, "runId": None, "progress": None}
 
@@ -84,7 +84,7 @@ class CadgenOps:
         status = compute_artifact_status(
             file_ref, self.root_dir, snapshot=snapshot, verdict=verdict
         )
-        if status.get("state") != ARTIFACT_STATE.NEEDS_BUILD:
+        if status.get("state") != ARTIFACT_STATE.NOT_COMPILED:
             return status
 
         # The one buildable state: a document with no tree for its bytes. The
@@ -102,13 +102,13 @@ class CadgenOps:
             # unreachable, and an unreachable flag that flips the client
             # from BUILD to ATTACH is a trap for the next reader, not a
             # safeguard. A compile already in flight for this document shows
-            # as `generating` above (its progress record, or our own
+            # as `compiling` above (its progress record, or our own
             # in-flight entry), which the client attaches to.
             #
             # busy/blocked stay in artifact_status.py: they are pinned there
             # by the ported spec, which supplies the snapshot directly.
             return {
-                "state": ARTIFACT_STATE.NEEDS_BUILD,
+                "state": ARTIFACT_STATE.NOT_COMPILED,
                 "reason": status.get("reason"),
                 "stepImport": True,
             }
@@ -118,7 +118,7 @@ class CadgenOps:
 
     def build_artifact(self, file_ref, *, force: bool = False) -> dict:
         if not owns_artifact_path(file_ref):
-            return {"ok": True, "state": ARTIFACT_STATE.READY}
+            return {"ok": True, "state": ARTIFACT_STATE.RENDERED}
 
         candidate = self._candidate(file_ref)
         if self._is_raw_step_file(candidate):
@@ -131,7 +131,7 @@ class CadgenOps:
                 # land on the wire and its ok wins.
                 return {
                     "ok": True,
-                    "state": ARTIFACT_STATE.READY,
+                    "state": ARTIFACT_STATE.RENDERED,
                     "stepImport": True,
                     **imported,
                 }
@@ -143,13 +143,13 @@ class CadgenOps:
             # acquiring a "RuntimeError:" nobody asked for.
             failure = {
                 "ok": False,
-                "state": ARTIFACT_STATE.ERROR,
+                "state": ARTIFACT_STATE.FAILED,
                 "error": f"STEP import failed: {imported.get('error') or 'unknown error'}",
             }
             if imported.get("errorType"):
                 failure["errorType"] = imported["errorType"]
             return failure
-        return {"ok": False, "state": ARTIFACT_STATE.ERROR, "error": f"Artifact source not found: {file_ref}"}
+        return {"ok": False, "state": ARTIFACT_STATE.FAILED, "error": f"Artifact source not found: {file_ref}"}
 
     @staticmethod
     def _is_raw_step_file(candidate: str) -> bool:
