@@ -231,8 +231,10 @@ src/<group>/<group>.py` builds that assembly and whatever is stale beneath it.
   `STEP/plate.step`). Industry/exchange names (part numbers, revisions,
   spaces) go on the ARTIFACT via `out=` ("../STEP/PN-10432_revB.step"),
   never into the stem — scripts must stay importable modules.
-- A drawing gets its own stem: `plate_drawing.py` → `DXF/plate_drawing.dxf`
-  (one model per file).
+- A drawing gets its own stem: `plate_drawing.py` → `DXF/plate_drawing.dxf`.
+- Every `.py` under `src/` outside `lib/` is a model file; a file may hold
+  several models (then each writes `<function>.<fmt>` beside it), sharing one closure —
+  keep them to small variant families.
 - A mirrored pair is two stems: `bracket_left.py`, `bracket_right.py`.
 - Never distinguish files by case alone (macOS filesystems are usually
   case-insensitive).

@@ -140,7 +140,13 @@ The rules, each enforced by the decorator or the build:
   no sidecar, and a rebuild that dropped the declaration deletes the stale
   file. What a model declares about its outputs lives in its record, not in
   a file beside the geometry.
-- **One model per file.** The file is the model's identity.
+- **One model per file, as a rule of thumb.** A model's identity is its file
+  plus its function (`plate.py::plate`); a file holding one model is named by
+  its path alone. A file MAY hold several (a small family of variants): each is
+  its own record, output and job (a sole model writes `<file>.step`; models sharing a
+  file write `<function>.step`), but
+  they share the file's closure, so editing one rebuilds them all — which is
+  why one per file is the recommendation.
 - **Composition is a call.** Import a sibling model and call it inside your
   body (`from arm import arm` … `arm()`); it returns the child's geometry.
   `references/step-generation.md` has the whole composition contract.

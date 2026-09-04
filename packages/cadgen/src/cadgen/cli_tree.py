@@ -55,7 +55,10 @@ class _Model:
 
     def __init__(self, model: str, parent: str | None) -> None:
         self.model = model
-        self.name = Path(model).stem
+        # ``/abs/file.py::fn`` names one model of a file holding several; a bare
+        # path is the file's sole model, named by its stem.
+        script, _sep, function = str(model).rpartition("::")
+        self.name = function if _sep and function else Path(model).stem
         self.state = STATE_SUBMITTED
         self.phase = ""
         self.done: int | None = None

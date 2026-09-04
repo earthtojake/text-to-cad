@@ -201,12 +201,20 @@ def _script_path(candidates, base: object) -> str:
     "" when no argument names a ``.py`` file: the request has no model subject
     and borrows a spare without binding it.
     """
-    for candidate in candidates or ():
-        text = str(candidate)
+    items = [str(c) for c in (candidates or ())]
+    for index, text in enumerate(items):
         if text.startswith("-") or not text.endswith(".py"):
             continue
         root = str(base or "")
-        return os.path.realpath(os.path.join(root, text) if root else text)
+        script = os.path.realpath(os.path.join(root, text) if root else text)
+        # A file holding several models names the one this request builds
+        # (``--model fn``): each model is its own subject -- its own worker, its
+        # own in-flight coalescing -- exactly as if it lived in its own file.
+        if "--model" in items:
+            at = items.index("--model")
+            if at + 1 < len(items):
+                return f"{script}::{items[at + 1]}"
+        return script
     return ""
 
 

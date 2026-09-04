@@ -19,11 +19,14 @@ Targets take native path semantics, like every other cadgen path argument: a rel
 Accepted target forms:
 
 ```text
-path/to/entry
-path/to/entry.step
+path/to/document.step
+path/to/document.stp
 ```
 
-Targets are documents: an extensionless `<name>` resolves to `<name>.step`, and a `.py` model script is refused by name (run `python <model>.py`, then inspect the STEP it wrote).
+Targets are documents, spelled with their extension: a bare `<name>` and a `.py`
+model script are refused (run `python <model>.py`, then inspect the STEP it
+wrote). A door never opens the scripts beside a document to learn which one
+wrote it.
 
 Selector-backed queries (`refs --facts`, planes, measures) resolve from the document's tree in the store — its per-component `.surf` objects — on demand; a document with no tree yet is compiled from its bytes first, generated or imported alike. There is no separate topology sidecar to build or invalidate, and a document is never refused for being behind its script.
 

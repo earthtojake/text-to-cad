@@ -50,9 +50,21 @@ Rules the decorator enforces:
   and record), otherwise loaded from the store, and either way its result is
   linked into the parent's. Composition is ordinary Python; there is nothing
   to cache by hand and no composition API.
-- **One model per file.** The file is the model; records, closures and the
-  daemon's routing key off it. A second decorated function in the same file
-  is refused.
+- **One model per file is the recommendation, not a rule.** A model's identity
+  is `script.py::function`; a file holding one model is named by its path alone
+  (`python plate.py`, `store why plate.py`). Several decorated functions in one
+  file are allowed — a small variant family — and each is its own record,
+  output (a sole model writes `<file>.<fmt>`; models sharing a file write
+  `<function>.<fmt>`) and job, built by its
+  own call under `__main__`; name one as `plate.py::plate_wide` in `store why`
+  and `store forget`. They share the file's closure: editing any of them makes
+  all of them stale, so a family that changes independently belongs in
+  separate files.
+- **Calling a model from plain Python returns its geometry.** Outside a build,
+  `plate()` builds (or finds current) and returns the model's tree as a
+  `Compound` — what a parent composing it would get — so a script, a notebook
+  or a REPL can read bounds, faces or volumes straight off a model. A drawing
+  returns `None`.
 - **A model takes no parameters.** It is one configuration of one set of
   outputs, so there is nothing for an argument to select; the decorator
   refuses a parameter list. Parametric geometry is a plain factory the model
@@ -237,11 +249,26 @@ Inputs join the closure too: a `read_step` document is hashed as a build
 input. The render module beside the document (`<name>.step.js`) is NOT one —
 it is the viewer's, and editing it never makes a model stale.
 
-Two decorator arguments are read **statically** (parsed from the file before
-it runs) and must be literals: `out=` and the mesh tolerances. Everything
-else on a decorator — `kinematics=` — is ordinary Python evaluated at import,
-so a kinematics dict may be built or loaded there. A tolerance shared across a project is written as the same
-number in each decorator; the project README names the value.
+Every decorator argument is ordinary Python, evaluated when the module is
+imported: `out=f"{FOLDER}/{NAME}.step"`, `mesh_tolerance=TOL` with `TOL` from
+`lib/`, a path built from a constant — all fine, and nothing is read off the
+source text. The values feeding them are tracked like any other input (a
+`lib/` module by file, a model-file constant by value), so changing the
+constant behind an `out=` makes the model stale. The module top must still stay
+kernel-free: what a door pays to learn a model's declarations is one import of
+the file.
+
+### Models inside a package
+
+A model file may live inside a Python package (folders with `__init__.py`).
+cadgen runs it under its dotted name, so relative imports (`from .parts.washer
+import washer`) resolve whenever cadgen loads the model: as a child of another
+model, or when you run it as a module (`python -m pkg.stack`). Running the file
+by path (`python pkg/stack.py`) is Python's own limit, not cadgen's: Python
+executes it as `__main__` with no package, so a relative import fails before
+cadgen is involved; use `-m` or absolute imports for a file you run directly.
+`PYTHONPATH` still declares any import root beyond the script's own folder;
+cadgen adds nothing of its own.
 
 ### Mirrored parts are their own models
 

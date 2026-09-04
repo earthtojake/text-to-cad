@@ -742,7 +742,7 @@ class ChildrenByResult(StoreCase):
         from cadgen.store.records import read_record
 
         record = read_record(arm)
-        self.assertEqual([Path(c["model"]).name for c in record["children"]], ["link_pin.py"])
+        self.assertEqual([Path(c["model"]).name for c in record["children"]], ["link_pin.py::link_pin"])
         self.assertEqual(record["children"][0]["tree"], read_record(pin)["tree"])
 
 

@@ -26,7 +26,15 @@ INDEX_KINDS = ("model", "document", "output", "component", "op", "mesh")
 def store_root() -> Path:
     override = os.environ.get("CADGEN_CACHE_DIR", "").strip()
     if override:
-        return Path(override)
+        # Absolutized ONCE, against the cwd of the process that first reads it,
+        # and written back so every later reader -- this process after a chdir,
+        # a worker it spawns -- sees the same folder. A relative value is otherwise
+        # a different store from every directory.
+        root = Path(override).expanduser()
+        if not root.is_absolute():
+            root = (Path.cwd() / root).resolve()
+            os.environ["CADGEN_CACHE_DIR"] = str(root)
+        return root
     if os.name == "nt":
         local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
         if local_app_data:
@@ -36,6 +44,18 @@ def store_root() -> Path:
         if xdg_cache_home:
             return Path(xdg_cache_home) / "cadgen"
     return Path.home() / ".cache" / "cadgen"
+
+
+class StoreUnwritableError(RuntimeError):
+    """The store's folder cannot be written. One sentence, no frames."""
+
+
+def unwritable(exc: OSError, target: Path | str) -> StoreUnwritableError:
+    root = store_root()
+    return StoreUnwritableError(
+        f"the store at {root} is not writable ({exc.strerror or type(exc).__name__} writing "
+        f"{Path(target).name}); point CADGEN_CACHE_DIR at a folder this user can write"
+    )
 
 
 def objects_dir() -> Path:

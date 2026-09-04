@@ -142,26 +142,26 @@ class MeshExportMetadataTest(unittest.TestCase):
             return None
 
         from cadgen.authoring import _REGISTRY, registered_model
+        from cadgen.store.index import model_ref
 
         this_file = Path(__file__).resolve()
-        self.addCleanup(_REGISTRY.pop, this_file, None)
+        self.addCleanup(_REGISTRY.pop, model_ref(this_file, "below"), None)
+        self.addCleanup(_REGISTRY.pop, model_ref(this_file, "above"), None)
 
         stl_deco(out="a.stl")(below)
         step_deco(below)
-        model = registered_model(this_file)
+        model = registered_model(this_file, "below")
         self.assertIsNotNone(model)
         self.assertEqual({d.fmt for d in model.mesh_exports}, {"stl"})
 
-        # One model per file is a hard rule; clear the entry to model the
-        # above-@step order as if in a fresh file.
-        _REGISTRY.pop(this_file, None)
-
+        # A file may hold several models: the other stacking order registers a
+        # second one beside the first, each under its own name.
         def above():
             return None
 
         step_deco(above)
         stl_deco(out="b.stl")(above)
-        model = registered_model(this_file)
+        model = registered_model(this_file, "above")
         self.assertEqual({d.fmt for d in model.mesh_exports}, {"stl"})
 
 

@@ -98,6 +98,9 @@ if __name__ == "__main__":
   value (from a preset or `--kinematics`) is never overwritten, and a DOF geared
   by two couplings stays independent: that inverse is underdetermined, so the
   viewer refuses it rather than guessing a split.
+- A declaration needs at least one mate (or coupling): a pose is a set of joint
+  values and a joint is what a mate declares, so `poses` alone declare nothing
+  and are refused. A part with no joints declares no `kinematics=`.
 - **`poses`** are named `{dof: value}` presets — all that remains of "pose"
   as a concept.
 - The mate graph is a TREE: one parent mate per occurrence, no cycles.

@@ -131,7 +131,7 @@ class Deferral(LazyFixture):
         # in. The child is then rebuilt (a newer record appears) before the parent forces
         # it: the parent still composes the tree it pinned at the call.
         child = LazyCompound(self.model, None, frame=self.frame, label="child", tree="t-at-call")
-        self.assertEqual(self.frame.pins[self.model], "t-at-call")
+        self.assertEqual(self.frame.pins[str(self.model)], "t-at-call")
         with mock.patch.object(lazy_mod, "_read_record", lambda model: {"tree": "t-rebuilt"}):
             child.solids()  # forces
         self.assertEqual(self.materialized, [("t-at-call", "child")])

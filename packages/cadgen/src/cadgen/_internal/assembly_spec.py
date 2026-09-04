@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cadgen.catalog import find_source_by_cad_ref
 
 
 STEP_SUFFIXES = (".step", ".stp")
@@ -21,20 +20,6 @@ IDENTITY_TRANSFORM: tuple[float, ...] = (
     0.0, 0.0, 1.0, 0.0,
     0.0, 0.0, 0.0, 1.0,
 )
-
-
-def find_step_path(cad_ref: str) -> Path | None:
-    source = find_source_by_cad_ref(cad_ref)
-    if source is not None and source.step_path is not None:
-        return source.step_path.resolve()
-    return None
-
-
-def resolve_cad_source_path(cad_ref: str) -> tuple[str, Path] | None:
-    source = find_source_by_cad_ref(cad_ref)
-    if source is not None and source.step_path is not None:
-        return "step", source.step_path
-    return None
 
 
 def multiply_transforms(left: tuple[float, ...], right: tuple[float, ...]) -> tuple[float, ...]:

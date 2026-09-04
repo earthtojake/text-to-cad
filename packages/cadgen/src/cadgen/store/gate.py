@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from cadgen.store.closure import changed_constant, current_closure_hash
+from cadgen.store.index import resolve_model_ref, split_model_ref
 from cadgen.store.records import read_record
 from cadgen.store.trees import tree_complete
 
@@ -73,10 +74,8 @@ def _sha256_file(path: Path) -> str | None:
 
 def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdict:
     memo = memo if memo is not None else {}
-    try:
-        key = str(Path(model).expanduser().resolve())
-    except (OSError, RuntimeError):
-        key = str(model)
+    key = resolve_model_ref(model)
+    script, _function = split_model_ref(key)
     cached = memo.get(key)
     if cached is not None:
         return cached
@@ -88,7 +87,7 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
     if record is None:
         clauses.append({"clause": 1, "stale": True, "why": "no record"})
         verdict.stale = True
-        verdict.closure = _sha256_file(Path(key))
+        verdict.closure = _sha256_file(script)
         return verdict
     clauses.append({"clause": 1, "stale": False})
 
@@ -101,14 +100,14 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
         # by the door that owns it). The hash stands as recorded.
         now = recorded_hash
     else:
-        now = current_closure_hash(Path(key), files) if files else None
-    verdict.closure = now or _sha256_file(Path(key))
+        now = current_closure_hash(script, files) if files else None
+    verdict.closure = now or _sha256_file(script)
     if not recorded_hash or now != recorded_hash:
         clauses.append(
             {
                 "clause": 2,
                 "stale": True,
-                "why": _closure_why(Path(key), closure, now),
+                "why": _closure_why(script, closure, now),
                 "recorded": recorded_hash,
                 "current": now,
             }
@@ -117,7 +116,7 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
     else:
         # Constants by value: a literal imported from a model file is compared as
         # a value, not as that file's bytes (the file itself is not in the closure).
-        constant = changed_constant(Path(key), record.get("constants") or {})
+        constant = changed_constant(script, record.get("constants") or {})
         if constant is not None:
             rel, _, name = str(constant).rpartition(":")
             clauses.append({"clause": 2, "stale": True, "why": f"constant changed: {name} in {rel}", "constant": constant})

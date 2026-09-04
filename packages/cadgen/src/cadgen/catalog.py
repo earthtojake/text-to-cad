@@ -144,23 +144,17 @@ def iter_cad_sources(root: Path | None = None) -> tuple[CadSource, ...]:
 def source_from_path(
     path: Path,
     *,
+    function: str | None = None,
     step_options: StepImportOptions | None = None,
 ) -> CadSource | None:
+    """The source behind ``path``: a model script (``function`` names one model of a
+    file holding several; a file holding one needs no name) or a STEP document."""
     resolved = Path(path).expanduser().resolve()
     if resolved.suffix.lower() == ".py":
-        return _read_python_source(resolved, allow_dxf_only=True)
+        return _read_python_source(resolved, function=function, allow_dxf_only=True)
     if resolved.suffix.lower() in STEP_SUFFIXES:
         return _read_step_source(resolved, options=step_options)
     return None
-
-
-def source_by_cad_ref(root: Path | None = None) -> dict[str, CadSource]:
-    return {source.cad_ref: source for source in iter_cad_sources(root)}
-
-
-def find_source_by_cad_ref(cad_ref: str, root: Path | None = None) -> CadSource | None:
-    normalized = normalize_cad_ref(cad_ref)
-    return source_by_cad_ref(root).get(normalized or "")
 
 
 def find_source_by_source_ref(source_ref: str, root: Path | None = None) -> CadSource | None:
@@ -380,11 +374,16 @@ def _iter_python_sources(root: Path) -> tuple[CadSource, ...]:
     from cadgen.metadata import InvalidModelScriptError
 
     sources: list[CadSource] = []
+    from cadgen.metadata import model_function_names
+
     for script_path in _iter_paths(root, "*.py"):
         if not _looks_like_generator_script(script_path):
             continue
         try:
-            source = _read_python_source(script_path)
+            found = [
+                _read_python_source(script_path, function=name)
+                for name in (model_function_names(script_path) or (None,))
+            ]
         except (CadSourceError, InvalidModelScriptError, RuntimeError) as exc:
             # Directory discovery is resilient: an unparseable script or a
             # malformed model DECLARATION must not abort catalog-wide operations
@@ -393,19 +392,28 @@ def _iter_python_sources(root: Path) -> tuple[CadSource, ...]:
             # authored model that cannot build must fail loudly everywhere.
             print(f"[cadgen] skipping invalid CAD source: {exc}", file=sys.stderr)
             continue
-        if source is not None:
-            sources.append(source)
+        sources.extend(source for source in found if source is not None)
     return tuple(sources)
+
+
+def _model_source_ref(script_path: Path, metadata: GeneratorMetadata) -> str:
+    """The entry identity string: the script, plus ``::fn`` when it holds several models."""
+    from cadgen.metadata import model_function_names
+
+    base = source_ref_from_path(script_path)
+    if metadata.entry_function and len(model_function_names(script_path)) > 1:
+        return f"{base}::{metadata.entry_function}"
+    return base
 
 
 def _dxf_generator_source(resolved_script_path: Path, metadata: GeneratorMetadata) -> CadSource:
     from cadgen.metadata import resolve_model_output_path
 
     dxf_path = resolve_model_output_path(
-        resolved_script_path, fmt="dxf", explicit_out=metadata.out_target
+        resolved_script_path, fmt="dxf", explicit_out=metadata.out_target, function=metadata.entry_function
     )
     return CadSource(
-        source_ref=source_ref_from_path(resolved_script_path),
+        source_ref=_model_source_ref(resolved_script_path, metadata),
         cad_ref=cad_ref_from_dxf_path(dxf_path),
         source_path=resolved_script_path,
         source="generated",
@@ -419,9 +427,11 @@ def _dxf_generator_source(resolved_script_path: Path, metadata: GeneratorMetadat
     )
 
 
-def _read_python_source(script_path: Path, *, allow_dxf_only: bool = False) -> CadSource | None:
+def _read_python_source(
+    script_path: Path, *, function: str | None = None, allow_dxf_only: bool = False
+) -> CadSource | None:
     resolved_script_path = script_path.resolve()
-    metadata = parse_generator_metadata(resolved_script_path)
+    metadata = parse_generator_metadata(resolved_script_path, function)
     if metadata is None:
         return None
     if metadata.format == "dxf":
@@ -429,10 +439,10 @@ def _read_python_source(script_path: Path, *, allow_dxf_only: bool = False) -> C
     from cadgen.metadata import resolve_model_output_path
 
     step_path = resolve_model_output_path(
-        resolved_script_path, fmt="step", explicit_out=metadata.out_target
+        resolved_script_path, fmt="step", explicit_out=metadata.out_target, function=metadata.entry_function
     )
     return CadSource(
-        source_ref=source_ref_from_path(resolved_script_path),
+        source_ref=_model_source_ref(resolved_script_path, metadata),
         cad_ref=cad_ref_from_step_path(step_path),
         source_path=resolved_script_path,
         source="generated",

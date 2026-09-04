@@ -536,7 +536,8 @@ class CadGenerationTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        with self.assertRaisesRegex(ValueError, "exactly one @step or @dxf"):
+        # A file may hold several models; asking for "the" model of one names none.
+        with self.assertRaisesRegex(ValueError, "declares several models"):
             cad_catalog.source_from_path(script_path)
 
     def test_explicit_dxf_generator_target_rejects_gen_step(self) -> None:
@@ -559,25 +560,22 @@ class CadGenerationTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        with self.assertRaisesRegex(ValueError, "exactly one @step or @dxf"):
+        # A file may hold several models; asking for "the" model of one names none.
+        with self.assertRaisesRegex(ValueError, "declares several models"):
             cad_catalog.source_from_path(script_path)
 
     def test_directory_discovery_skips_invalid_generator_sources(self) -> None:
-        # An unmigrated source (gen_dxf beside gen_step) is skipped with a warning
-        # instead of aborting the whole catalog, so unrelated targets keep working.
+        # A source that cannot be read (here: a syntax error) is skipped with a
+        # warning instead of aborting the whole catalog, so unrelated targets keep
+        # working.
         invalid_path = self.temp_root / "unmigrated.py"
         invalid_path.write_text(
             "\n".join(
                 [
                     "from cadgen import step",
                     "@step",
-                    "def model():",
+                    "def model(:",
                     "    return object()",
-                    "",
-                    "from cadgen import dxf",
-                    "@dxf",
-                    "def drawing():",
-                    "    return {'document': object()}",
                     "",
                 ]
             ),

@@ -237,7 +237,7 @@ class StandaloneDxfSourceTests(unittest.TestCase):
             self.assertEqual(0, cad_generation.generate_dxf_targets([str(pattern_path)]))
             record = read_record(pattern_path) or {}
             children = record.get("children") or []
-            self.assertEqual([Path(c["model"]).name for c in children], ["bracket.py"])
+            self.assertEqual([Path(c["model"]).name for c in children], ["bracket.py::bracket"])
             self.assertEqual(children[0]["tree"], (read_record(bracket_path) or {}).get("tree"))
             self.assertFalse(stale(pattern_path).stale)
             first = pattern_path.with_suffix(".dxf").read_bytes()

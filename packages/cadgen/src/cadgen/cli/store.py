@@ -46,7 +46,9 @@ def _cmd_info(as_json: bool) -> int:
             object_bytes += path.stat().st_size
         except OSError:
             pass
-    counts = {kind: sum(1 for _ in iter_entries(kind)) for kind in ("model", "component", "op", "mesh")}
+    from cadgen.store.paths import INDEX_KINDS
+
+    counts = {kind: sum(1 for _ in iter_entries(kind)) for kind in INDEX_KINDS}
     payload = {
         "root": str(store_root()),
         "objects": {"count": objects, "bytes": object_bytes},
@@ -57,21 +59,48 @@ def _cmd_info(as_json: bool) -> int:
         return 0
     print(f"store  {payload['root']}")
     print(f"objects  {objects} ({_human(object_bytes)})")
+    labels = {
+        "model": "records",
+        "document": "document entries (bytes -> tree)",
+        "output": "output entries (path -> model)",
+        "component": "component entries",
+        "op": "op-memo entries",
+        "mesh": "mesh entries",
+    }
     for kind, count in counts.items():
-        label = {"model": "records", "component": "component entries", "op": "op-memo entries", "mesh": "mesh entries"}[kind]
-        print(f"index/{kind:<10} {count} {label}")
+        print(f"index/{kind:<10} {count} {labels[kind]}")
     return 0
 
 
-def _resolve_model(target: str) -> Path:
+def _resolve_models(target: str) -> list[str]:
+    """The model identities a ``why`` target names: one for ``script.py::fn`` or a
+    document, every model of the file for a bare script."""
+    from cadgen.store.index import MODEL_REF_SEP, model_ref, split_model_ref
+
+    if MODEL_REF_SEP in target:
+        script, function = split_model_ref(target)
+        return [model_ref(script, function)]
     path = Path(target).expanduser()
     if path.suffix.lower() in {".step", ".stp"}:
-        return source_for_document(path)
-    return path.resolve()
+        return [source_for_document(path)]
+    resolved = path.resolve()
+    if resolved.suffix.lower() == ".py":
+        from cadgen.metadata import model_function_names
+
+        names = model_function_names(resolved)
+        if names:
+            return [model_ref(resolved, name) for name in names]
+    return [str(resolved)]
 
 
 def _cmd_why(target: str, as_json: bool) -> int:
-    model = _resolve_model(target)
+    code = 0
+    for model in _resolve_models(target):
+        code = max(code, _why_one(model, as_json))
+    return code
+
+
+def _why_one(model: str, as_json: bool) -> int:
     verdict = stale(model)
     record = read_record(model)
     tree = get_tree(str(record.get("tree"))) if record and record.get("tree") else None
@@ -150,7 +179,7 @@ def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
     info = sub.add_parser("info", help="what is in the store, by kind")
     info.add_argument("--json", action="store_true")
     why = sub.add_parser("why", help="why the gate says a model is stale (or current)")
-    why.add_argument("model", help="a model script (or a generated .step; the store remembers which script wrote it)")
+    why.add_argument("model", help="a model script, script.py::function for one model of a file holding several, or a generated .step (the store remembers which model wrote it)")
     why.add_argument("--json", action="store_true")
     forget = sub.add_parser(
         "forget",

@@ -76,17 +76,26 @@ def normalize_mesh_numeric(value: object, *, field_name: str) -> float | None:
     return normalized
 
 
-def resolve_model_output_path(script_path: Path, *, fmt: str, explicit_out: str | None = None) -> Path:
+def resolve_model_output_path(
+    script_path: Path, *, fmt: str, explicit_out: str | None = None, function: str | None = None
+) -> Path:
     """Where a model's primary artifact goes. cadgen is deliberately
-    UNOPINIONATED about layout (design/library-first-generation.md): an explicit
-    ``out=`` resolves relative to the script's own folder (absolute allowed);
-    otherwise the artifact is the sibling ``<stem>.<fmt>``. Project structure
-    conventions live in the cad skill's project-layout reference as guidance, not in code."""
+    UNOPINIONATED about layout: an explicit ``out=`` resolves relative to the
+    script's own folder (absolute allowed); otherwise the artifact is the sibling
+    ``<function>.<fmt>`` -- the model's own name, which for the one-model-per-file
+    convention is the file's stem. Project structure conventions live in the cad
+    skill's project-layout reference as guidance, not in code."""
     script = Path(script_path).resolve()
     if explicit_out:
         target = Path(explicit_out)
         return (target if target.is_absolute() else script.parent / target).resolve()
-    return (script.parent / f"{script.stem}.{fmt}").resolve()
+    # A file's sole model writes `<file>.<fmt>` (what `python bracket.py` is expected
+    # to leave beside it, whatever the function is called); models SHARING a file
+    # each write `<function>.<fmt>`, so two models never collide on one default.
+    stem = script.stem
+    if function and function != stem and len(model_function_names(script)) > 1:
+        stem = function
+    return (script.parent / f"{stem}.{fmt}").resolve()
 
 
 _MESH_DECORATOR_NAMES = ("stl", "glb", "threemf")
@@ -109,73 +118,6 @@ def _cadgen_decorator_aliases(tree: ast.Module) -> tuple[dict[str, str], set[str
                 if alias.name == "cadgen":
                     module_aliases.add(alias.asname or "cadgen")
     return names, module_aliases
-
-
-def _match_mesh_export_decorators(
-    function: ast.FunctionDef,
-    names: dict[str, str],
-    module_aliases: set[str],
-    *,
-    script_path: Path,
-) -> "tuple[MeshExportDecl, ...]":
-    """The function's stacked ``@stl``/``@glb``/``@threemf`` declarations.
-
-    AST scanning sees the whole ``decorator_list``, so stacking order (above
-    or below ``@step``) is irrelevant here by construction. Duplicate formats
-    fail loudly."""
-    declarations: list[MeshExportDecl] = []
-    for decorator in function.decorator_list:
-        call_kwargs: dict[str, ast.expr] = {}
-        target = decorator
-        if isinstance(decorator, ast.Call):
-            target = decorator.func
-            for keyword in decorator.keywords:
-                if keyword.arg is not None:
-                    call_kwargs[keyword.arg] = keyword.value
-        deco_name: str | None = None
-        if isinstance(target, ast.Name):
-            resolved = names.get(target.id)
-            if resolved in _MESH_DECORATOR_NAMES:
-                deco_name = resolved
-        elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
-            if target.value.id in module_aliases and target.attr in _MESH_DECORATOR_NAMES:
-                deco_name = target.attr
-        if deco_name is None:
-            continue
-        fmt = _MESH_DECORATOR_FMT[deco_name]
-        out = _decorator_string_kwarg(call_kwargs, "out", script_path=script_path)
-        # Variants are allowed: the same format may be declared repeatedly at
-        # different destinations (e.g. a draft and a print-quality STL). Only
-        # ambiguous duplicates fail: two bare declarations collide at the
-        # sibling default, and two identical out= targets collide outright.
-        if out is None and any(d.fmt == fmt and d.out is None for d in declarations):
-            raise ValueError(
-                f"{_display_path(script_path)} declares bare @{deco_name} more than once; "
-                "at most one declaration per format may omit out= (the sibling default)"
-            )
-        if out is not None and any(d.fmt == fmt and d.out == out for d in declarations):
-            raise ValueError(
-                f"{_display_path(script_path)} declares @{deco_name} twice for the same "
-                f"target {out!r}"
-            )
-        if out is not None and not out.lower().endswith(f".{fmt}" if fmt != "3mf" else ".3mf"):
-            raise ValueError(
-                f"{_display_path(script_path)} @{deco_name} out= must end with "
-                f"'.{fmt}': {out!r}"
-            )
-        declarations.append(
-            MeshExportDecl(
-                fmt=fmt,
-                out=out,
-                mesh_tolerance=_decorator_numeric_kwarg(
-                    call_kwargs, "mesh_tolerance", script_path=script_path
-                ),
-                mesh_angular_tolerance=_decorator_numeric_kwarg(
-                    call_kwargs, "mesh_angular_tolerance", script_path=script_path
-                ),
-            )
-        )
-    return tuple(declarations)
 
 
 def _match_model_decorator(
@@ -221,39 +163,49 @@ def _match_model_decorator(
     return None
 
 
-def _decorator_string_kwarg(
-    kwargs: dict[str, ast.expr], key: str, *, script_path: Path
-) -> str | None:
-    node = kwargs.get(key)
-    if node is None:
-        return None
-    if not isinstance(node, ast.Constant) or not isinstance(node.value, str) or not node.value.strip():
-        raise ValueError(
-            f"{_display_path(script_path)} @step/@dxf {key}= must be a non-empty string literal"
-        )
-    if "\\" in node.value:
-        raise ValueError(
-            f"{_display_path(script_path)} @step/@dxf {key}= must use POSIX '/' separators"
-        )
-    return node.value.strip()
+_FUNCTION_NAMES_CACHE: dict[str, tuple[tuple[int, int], tuple[str, ...]]] = {}
 
 
-def _decorator_numeric_kwarg(
-    kwargs: dict[str, ast.expr], key: str, *, script_path: Path
-) -> float | None:
-    node = kwargs.get(key)
-    if node is None:
-        return None
+def model_function_names(script_path: Path | str) -> tuple[str, ...]:
+    """The decorated model functions a script declares, in file order. Cached
+    on (mtime, size); ``()`` for a script that declares none or cannot be read."""
+    script = Path(script_path)
     try:
-        value = ast.literal_eval(node)
-    except (ValueError, SyntaxError) as exc:
-        raise ValueError(
-            f"{_display_path(script_path)} @step {key}= must be a numeric literal"
-        ) from exc
-    return normalize_mesh_numeric(value, field_name=key)
+        stat = script.stat()
+    except OSError:
+        return ()
+    stamp = (stat.st_mtime_ns, stat.st_size)
+    key = str(script)
+    cached = _FUNCTION_NAMES_CACHE.get(key)
+    if cached is not None and cached[0] == stamp:
+        return cached[1]
+    try:
+        tree = ast.parse(script.read_text(), filename=str(script))
+    except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+        return ()
+    decorator_names, module_aliases = _cadgen_decorator_aliases(tree)
+    names = tuple(
+        node.name
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and _match_model_decorator(node, decorator_names, module_aliases) is not None
+    )
+    _FUNCTION_NAMES_CACHE[key] = (stamp, names)
+    return names
 
 
-def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
+def parse_all_generator_metadata(script_path: Path) -> tuple[GeneratorMetadata, ...]:
+    """Every model a script declares, one GeneratorMetadata each, in file order."""
+    return tuple(
+        parse_generator_metadata(script_path, function=name) for name in model_function_names(script_path)
+    )
+
+
+def parse_generator_metadata(script_path: Path, function: str | None = None) -> GeneratorMetadata | None:
+    """The model ``function`` declares in ``script_path`` -- or the file's sole
+    model when ``function`` is None. A file may hold several models (each its own
+    record, output and job); asking for "the" model of such a file names none, so
+    it is an error: spell the model as ``script.py::function``."""
     try:
         tree = ast.parse(script_path.read_text(), filename=str(script_path))
     except (FileNotFoundError, SyntaxError, UnicodeDecodeError) as exc:
@@ -284,14 +236,22 @@ def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
 
     if not decorated:
         return None
-    if len(decorated) > 1:
+    if function is not None:
+        chosen = [entry for entry in decorated if entry[0].name == function]
+        if not chosen:
+            declared = ", ".join(f"{fn.name}()" for fn, _, _, _ in decorated)
+            raise InvalidModelScriptError(
+                f"{_display_path(script_path)} declares no model {function}() (it declares {declared})"
+            )
+        decorated = chosen
+    elif len(decorated) > 1:
         joined = ", ".join(f"{fn.name}()" for fn, _, _, _ in decorated)
         raise InvalidModelScriptError(
-            f"{_display_path(script_path)} defines more than one CAD model ({joined}); "
-            "a model file defines exactly one @step or @dxf entry (or one mesh decorator alone)"
+            f"{_display_path(script_path)} declares several models ({joined}); name one as "
+            f"{_display_path(script_path)}::{decorated[0][0].name}"
         )
 
-    function, fmt, call_kwargs, mesh_only = decorated[0]
+    function, fmt, _call_kwargs, mesh_only = decorated[0]
     params = [
         *function.args.posonlyargs,
         *function.args.args,
@@ -308,7 +268,6 @@ def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
             "values this model uses; a different configuration is a different model."
         )
 
-    out_target = _decorator_string_kwarg(call_kwargs, "out", script_path=script_path)
     # A @dxf return carries no static metadata: the drawing IS its geometry, and
     # what a layer map holds is only knowable at run time. A @step return is
     # checked for SHAPE only (one bare value, never a dict): what it returns is
@@ -316,29 +275,58 @@ def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
     if fmt == "step":
         _check_step_return(script_path=script_path, function=function)
 
-    mesh_exports = _match_mesh_export_decorators(
-        function, decorator_names, module_aliases, script_path=script_path
-    )
-    if fmt == "dxf" and mesh_exports:
-        raise ValueError(
-            f"{_display_path(script_path)} stacks a mesh export decorator on a @dxf "
-            "drawing; STL/3MF/GLB derive from a @step model's geometry"
-        )
+    # The decorator's ARGUMENTS are ordinary Python, evaluated when the module is
+    # imported: `out=NAME + ".step"`, an f-string, a constant from lib/. Nothing
+    # is read off the source text; the imported model declares them.
+    defn = imported_model(script_path, function.name)
     return GeneratorMetadata(
         script_path=script_path.resolve(),
         display_name=display_name,
         generator_names=(function.name,),
-        format=fmt,
-        mesh_tolerance=_decorator_numeric_kwarg(call_kwargs, "mesh_tolerance", script_path=script_path),
-        mesh_angular_tolerance=_decorator_numeric_kwarg(
-            call_kwargs, "mesh_angular_tolerance", script_path=script_path
-        ),
+        format=defn.fmt,
+        mesh_tolerance=defn.mesh_tolerance,
+        mesh_angular_tolerance=defn.mesh_angular_tolerance,
         entry_function=function.name,
-        out_target=out_target,
+        out_target=defn.out,
         is_decorated=True,
-        mesh_exports=mesh_exports,
-        step_output=not mesh_only,
+        mesh_exports=tuple(defn.mesh_exports),
+        step_output=bool(defn.step_output),
     )
+
+
+def _script_stamp(script_path: Path) -> tuple[int, int] | None:
+    try:
+        stat = Path(script_path).stat()
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
+
+
+def imported_model(script_path: Path, function: str):
+    """The ModelDef ``function`` registered when ``script_path`` was imported.
+
+    The registry entry is reused when it was made from the bytes now on disk
+    (same mtime and size); otherwise the module is imported by path -- under a
+    loader name, so its ``__main__`` block does not run -- and read again. The
+    module top must stay kernel-free, as the cad skill requires: this import is
+    what every door pays to learn a model's declarations."""
+    from cadgen.authoring import registered_model
+
+    resolved = Path(script_path).resolve()
+    stamp = _script_stamp(resolved)
+    defn = registered_model(resolved, function)
+    if defn is None or getattr(defn, "stamp", None) != stamp:
+        from cadgen._internal.generation_runner import _load_generator_module, _without_bytecode_writes
+
+        # Like the build's own load: no .pyc for the model or its helpers.
+        with _without_bytecode_writes():
+            _load_generator_module(resolved)
+        defn = registered_model(resolved, function)
+    if defn is None:
+        raise InvalidModelScriptError(
+            f"{_display_path(resolved)} declares {function}() but importing it registered no such model"
+        )
+    return defn
 
 
 def _check_step_return(

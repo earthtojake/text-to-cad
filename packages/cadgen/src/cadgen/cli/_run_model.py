@@ -28,6 +28,11 @@ def _build_parser(prog: str) -> argparse.ArgumentParser:
         description="Build this CAD model (run by calling its @step/@dxf function).",
     )
     parser.add_argument("script", help="The decorated model script.")
+    parser.add_argument(
+        "--model",
+        metavar="FUNCTION",
+        help="Which model of a script holding several to build (its decorated function's name).",
+    )
     parser.add_argument("--force", action="store_true", help="Rebuild even when current.")
     parser.add_argument("--mesh-tolerance", type=float)
     parser.add_argument("--mesh-angular-tolerance", type=float)
@@ -73,7 +78,11 @@ def _run(args: argparse.Namespace, script: Path, parser: argparse.ArgumentParser
         return None
 
     try:
-        source = source_from_path(script)
+        function = getattr(args, "model", None)
+        source = source_from_path(script, function=function)
+        # The pipeline's target: the script, or ``script::fn`` for one model of a
+        # file holding several (cadgen.store.index.model_ref).
+        target = f"{script}::{function}" if function else str(script)
         if source is None:
             raise ValueError(
                 f"{script.name} declares no CAD model — decorate one function with "
@@ -83,7 +92,7 @@ def _run(args: argparse.Namespace, script: Path, parser: argparse.ArgumentParser
             from cadgen.generation import generate_dxf_targets
 
             return generate_dxf_targets(
-                [str(script)],
+                [target],
                 force=bool(args.force),
                 verbose=bool(args.verbose),
                 json_output=bool(args.json),
@@ -95,7 +104,7 @@ def _run(args: argparse.Namespace, script: Path, parser: argparse.ArgumentParser
         # there is no per-run override (the record is keyed by the script, and
         # two documents for one model would be two truths).
         return generate_step_targets(
-            [str(script)],
+            [target],
             step_options=StepImportOptions(
                 mesh_tolerance=_numeric(args.mesh_tolerance, "mesh_tolerance"),
                 mesh_angular_tolerance=_numeric(

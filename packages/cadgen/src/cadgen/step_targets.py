@@ -3,9 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from cadgen._internal.assembly_spec import find_step_path, resolve_cad_source_path
 from cadgen.cad_ref_syntax import normalize_cad_path, parse_cad_tokens
-from cadgen.catalog import find_source_by_cad_ref
 from cadgen.selector_types import SelectorBundle
 
 
@@ -39,7 +37,6 @@ class ResolvedStepTarget:
     # path), as opposed to a `.step`/`.stp` file or a logical cad path. An
     # explicit generator target must keep resolving to the generator entry even
     # when a same-stem exported `.step` file exists beside it.
-    explicit_python: bool = False
 
 
 @dataclass(frozen=True)
@@ -113,28 +110,6 @@ def entry_target_from_target(target: str) -> EntryTarget:
     return EntryTarget(normalized)
 
 
-def _is_path_shaped(raw_target: str) -> bool:
-    """Does this target name a filesystem location rather than a logical cad path?
-
-    Rooted, ``~``-spelled, or reaching upward. Everything else is already a
-    cwd-relative cad path and is left ALONE: resolving it would rewrite the
-    identity of any target that crosses a symlink, and this repo's development
-    layout is built out of symlinks.
-
-    ROOTED, not ``is_absolute()``. On Windows a path with a root and no drive
-    ("/models/x") is drive-RELATIVE, so ``is_absolute()`` is False; ``resolve()``
-    anchors it to the current drive, which is what it means there.
-    """
-    if not raw_target:
-        return False
-    if raw_target.startswith("~"):
-        return True
-    path = Path(raw_target)
-    if path.is_absolute() or path.root or path.drive:
-        return True
-    return ".." in raw_target.replace("\\", "/").split("/")
-
-
 def _native_path(raw_target: str) -> Path:
     """A target resolved the way every other cadgen path argument resolves.
 
@@ -167,53 +142,22 @@ def _path_identity(path: Path) -> str:
         return resolved.name
 
 
+def _is_path_shaped(raw_target: str) -> bool:
+    """Rooted, ``~``-spelled, drive-lettered or reaching upward: a filesystem
+    location rather than a cwd-relative name."""
+    text = raw_target.replace("\\", "/")
+    return (
+        text.startswith(("/", "~", "../", "./"))
+        or text in {"..", "."}
+        or Path(raw_target).is_absolute()
+        or (len(text) > 1 and text[1] == ":")
+    )
+
+
 def _target_identity(raw_target: str) -> str:
     if not _is_path_shaped(raw_target):
         return raw_target
     return _path_identity(Path(raw_target))
-
-
-def _names_a_foreign_path(raw_target: str) -> bool:
-    """A path-shaped target that resolves OUTSIDE the cwd.
-
-    Such a target names exactly one file and there is no cad-path namespace
-    behind it: its identity is a bare name, and this workspace's catalog only
-    ever scans the cwd, so consulting it could only ever match an unrelated
-    same-named entry. Resolution for these goes straight to the filesystem.
-    """
-    if not _is_path_shaped(raw_target):
-        return False
-    resolved = _native_path(raw_target)
-    try:
-        resolved.relative_to(Path.cwd().resolve())
-    except ValueError:
-        return True
-    return False
-
-
-def _path_target_document(raw_target: str) -> Path | None:
-    """The STEP document a path-shaped target names, wherever it lives.
-
-    The path itself when it carries a document suffix, else the document beside
-    the stem it names (a generator suffix is stripped first, so ``/x/foo.py``
-    asks about ``/x/foo.step`` exactly as the logical ``foo`` does). Unlike
-    :func:`_direct_step_path` this is anchored to the target, not to the cwd,
-    which is what lets an absolute target work from anywhere.
-    """
-    resolved = _native_path(raw_target)
-    if resolved.suffix.lower() in STEP_SUFFIXES:
-        return resolved if resolved.is_file() else None
-    stem = resolved
-    name = resolved.name
-    for suffix in (".step.py", ".stp.py", ".py"):
-        if name.lower().endswith(suffix):
-            stem = resolved.with_name(name[: -len(suffix)])
-            break
-    for suffix in STEP_SUFFIXES:
-        candidate = stem.with_name(stem.name + suffix)
-        if candidate.is_file():
-            return candidate
-    return None
 
 
 def _missing_document_error(raw_target: str) -> CadRefError:
@@ -221,99 +165,29 @@ def _missing_document_error(raw_target: str) -> CadRefError:
 
 
 def step_path_from_target(target: str) -> Path:
+    """The document a door target names. A door takes the DOCUMENT -- a ``.step``
+    or ``.stp`` path, with its extension, wherever it lives -- and nothing else:
+    no bare stem, no script. It never opens the scripts beside a document to learn
+    which one wrote it."""
     raw_target = str(target or "").strip()
-    if _names_a_foreign_path(raw_target):
-        document = _path_target_document(raw_target)
-        if document is None:
-            raise _missing_document_error(raw_target)
+    document = _raw_step_path(raw_target)
+    if document is not None:
         return document
-
-    raw_step_path = _raw_step_path(raw_target)
-    if raw_step_path is not None:
-        return raw_step_path
-
-    entry_target = entry_target_from_target(target)
-    lookup_cad_path = _lookup_cad_path(entry_target.cad_path)
-    step_path = find_step_path(lookup_cad_path)
-    if step_path is not None:
-        return step_path
-
-    direct_step_path = _direct_step_path(entry_target.cad_path)
-    if direct_step_path is not None:
-        return direct_step_path
-
-    if _is_path_shaped(raw_target):
+    if Path(raw_target).expanduser().suffix.lower() in STEP_SUFFIXES:
         raise _missing_document_error(raw_target)
-    raise CadRefError(f"STEP file not found for target '{target}'.")
+    raise CadRefError(
+        f"not a STEP document path: {raw_target or target!r} -- a door takes the document itself "
+        "(a .step or .stp path with its extension)"
+    )
 
 
 def resolve_step_target(target: str) -> ResolvedStepTarget:
-    entry_target = entry_target_from_target(target)
-    cad_path = entry_target.cad_path
-    raw_target = str(target or "").strip()
-    explicit_python = raw_target.lower().endswith(".py")
-
-    if _names_a_foreign_path(raw_target):
-        # Resolved straight from the filesystem, catalog untouched: see
-        # _names_a_foreign_path for why a bare-name identity must never be
-        # looked up in a catalog it cannot belong to.
-        document = _path_target_document(raw_target)
-        if document is None:
-            raise _missing_document_error(raw_target)
-        return ResolvedStepTarget(
-            cad_path=cad_path,
-            source_path=document,
-            step_path=document,
-            explicit_python=explicit_python,
-        )
-
-    raw_step_path = _raw_step_path(raw_target)
-    if raw_step_path is not None:
-        # A document path names the document. A door is a reader: it never opens
-        # the scripts beside a document to learn which one wrote it, so a broken
-        # or unrelated sibling script cannot fail the read (and the answer does
-        # not change when the script is gone).
-        return ResolvedStepTarget(
-            cad_path=cad_path,
-            source_path=raw_step_path,
-            step_path=raw_step_path,
-        )
-
-    lookup_cad_path = _lookup_cad_path(cad_path)
-    source = find_source_by_cad_ref(lookup_cad_path)
-    if source is not None and source.step_path is not None:
-        if source.step_path is None:
-            raise CadRefError(f"STEP file not found for ref '{cad_path}'.")
-        return ResolvedStepTarget(
-            cad_path=cad_path,
-            source_path=source.source_path,
-            step_path=source.step_path.resolve(),
-            explicit_python=explicit_python,
-        )
-    if source is not None:
-        raise CadRefError(f"CAD target '{cad_path}' is not STEP-backed.")
-
-    direct_step_path = _direct_step_path(cad_path)
-    if direct_step_path is not None:
-        return ResolvedStepTarget(
-            cad_path=cad_path,
-            source_path=direct_step_path,
-            step_path=direct_step_path,
-        )
-
-    if _is_path_shaped(raw_target):
-        # A path names a file, so the answer is about that file, not about a
-        # cad path the caller never typed.
-        raise _missing_document_error(raw_target)
-    raise CadRefError(f"CAD STEP ref not found for '{cad_path}'.")
-
-
-def _direct_step_path(cad_path: str) -> Path | None:
-    for suffix in STEP_SUFFIXES:
-        candidate = (Path.cwd().resolve() / f"{cad_path}{suffix}").resolve()
-        if candidate.is_file():
-            return candidate
-    return None
+    document = step_path_from_target(target)
+    return ResolvedStepTarget(
+        cad_path=entry_target_from_target(target).cad_path,
+        source_path=document,
+        step_path=document,
+    )
 
 
 def _raw_step_path(target: str) -> Path | None:
@@ -324,17 +198,6 @@ def _raw_step_path(target: str) -> Path | None:
         return None
     resolved = path.resolve() if path.is_absolute() else (Path.cwd().resolve() / path).resolve()
     return resolved if resolved.is_file() else None
-
-
-def _cad_path_lookup_candidates(cad_path: str) -> tuple[str, ...]:
-    return (cad_path,) if cad_path else ()
-
-
-def _lookup_cad_path(cad_path: str) -> str:
-    for candidate in _cad_path_lookup_candidates(cad_path):
-        if resolve_cad_source_path(candidate) is not None:
-            return candidate
-    return cad_path
 
 
 def _display_path(path: Path) -> str:

@@ -39,13 +39,22 @@ def has_object(digest: str) -> bool:
         return False
 
 
+def _mkdir(folder: Path) -> None:
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except PermissionError as exc:
+        from cadgen.store.paths import unwritable
+
+        raise unwritable(exc, folder) from None
+
+
 def put_object(data: bytes) -> str:
     """Store ``data``; return its hash. Idempotent and atomic."""
     digest = object_hash(data)
     target = object_path(digest)
     if target.is_file():
         return digest
-    target.parent.mkdir(parents=True, exist_ok=True)
+    _mkdir(target.parent)
     tmp = target.with_name(f".{target.name}{temp_suffix()}")
     with open(tmp, "wb") as handle:
         handle.write(data)
@@ -64,7 +73,7 @@ def put_object_from_file(path: Path) -> str:
     target = object_path(hexdigest)
     if target.is_file():
         return hexdigest
-    target.parent.mkdir(parents=True, exist_ok=True)
+    _mkdir(target.parent)
     tmp = target.with_name(f".{target.name}{temp_suffix()}")
     shutil.copyfile(path, tmp)
     replace_atomic(tmp, target)
