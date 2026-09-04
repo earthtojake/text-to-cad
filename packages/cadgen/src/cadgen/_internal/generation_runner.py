@@ -64,13 +64,13 @@ def _load_generator_module(script_path: Path) -> object:
         ) from error
 
     module = importlib.util.module_from_spec(module_spec)
-    original_sys_path = list(sys.path)
-    # Seed sys.path so the generator's module-top imports (its sibling/shared packages such as
-    # robot_common / STEP) resolve. Derive everything from the generator script's OWN location —
-    # its folder, plus any ancestor that is a project root (contains a STEP/ or robot_common/
-    # package) — so resolution is independent of the process working directory. Deliberately NOT
-    # seeding the repo root or skills/cad/scripts: a generator must not depend on the repository's
-    # skills/ being importable (AGENTS.md skill isolation).
+    # Seed sys.path the way `python script.py` does: the script's own folder (plus any
+    # ancestor that is a package root — STEP/ or robot_common/) goes on sys.path and STAYS
+    # there for the whole build, so an import inside the model function or a helper it
+    # calls resolves exactly like one at module top. Resolution is independent of the
+    # process working directory. Deliberately NOT seeding the repo root or skills/cad/scripts:
+    # a generator must not depend on the repository's skills/ being importable (AGENTS.md
+    # skill isolation). The daemon worker restores sys.path when the job ends.
     search_paths = _generator_search_paths(resolved_script_path)
     for candidate in reversed(search_paths):
         if candidate not in sys.path:
@@ -84,21 +84,17 @@ def _load_generator_module(script_path: Path) -> object:
     from cadgen._internal.source_hash import evict_foreign_first_party_modules
 
     evict_foreign_first_party_modules(search_paths)
-    try:
-        sys.modules[module_name] = module
-        exec(source_code, module.__dict__)
-    finally:
-        sys.path[:] = original_sys_path
+    sys.modules[module_name] = module
+    exec(source_code, module.__dict__)
 
     return module
 
 
 def _generator_search_paths(resolved_script_path: Path) -> list[str]:
-    """The import roots a generator's module body may rely on: its own folder,
-    plus any ancestor that is a project root (holds a ``STEP/`` or
-    ``robot_common/`` package). Seeded onto ``sys.path`` for the module body
-    ONLY (see ``_load_generator_module``); named again by the teaching error a
-    function-level import of one of these roots' modules raises."""
+    """The import roots a generator may rely on: its own folder, plus any
+    ancestor that is a package root (holds a ``STEP/`` or ``robot_common/``
+    package). Seeded onto ``sys.path`` for the whole build (see
+    ``_load_generator_module``), as ``python script.py`` would."""
     search_paths = [str(resolved_script_path.parent)]
     for parent in resolved_script_path.parents:
         if (
@@ -166,42 +162,6 @@ def _purge_stale_bytecode(script_path: Path) -> None:
             continue
     for parent in parents:
         shutil.rmtree(parent / "__pycache__", ignore_errors=True)
-
-
-def _sibling_module_root(name: str | None, script_path: Path) -> str | None:
-    """The generator search root that WOULD have satisfied ``import name``, or
-    None when the missing module is not a first-party sibling at all."""
-    if not name:
-        return None
-    top = name.partition(".")[0]
-    for root in _generator_search_paths(script_path.resolve()):
-        base = Path(root) / top
-        if base.is_dir() or base.with_suffix(".py").is_file():
-            return root
-    return None
-
-
-def _teach_function_level_import(error: ModuleNotFoundError, script_path: Path) -> None:
-    """Turn ``ModuleNotFoundError: No module named 'lib'`` raised INSIDE the model
-    function into the rule it broke.
-
-    The loader seeds the generator's folder onto ``sys.path`` for the module
-    body and restores it afterwards, so a ``from lib import fasteners`` at the
-    top of a helper module works while the same line inside a function, run
-    later by the pipeline, does not -- and the bare error names neither the
-    rule nor the fix. Only a module that a search root would have satisfied is
-    re-raised this way; a genuinely missing third-party package keeps its own
-    error."""
-    root = _sibling_module_root(getattr(error, "name", None), script_path)
-    if root is None:
-        return
-    raise RuntimeError(
-        f"{_display_path(script_path)}: `import {error.name}` ran inside the model function, "
-        f"where {_display_path(Path(root))} is no longer on sys.path. The pipeline seeds the "
-        "generator's folder (and its package roots) onto sys.path only while the module body "
-        "loads, then restores it before calling the model. Move the import to module top level "
-        "-- in the model script and in every helper module it imports."
-    ) from error
 
 
 @dataclass(frozen=True)
@@ -656,11 +616,7 @@ def _run_script_generator_body(
             building(spec.script_path) as frame,
         ):
             executed_hashes.note(spec.script_path)
-            try:
-                raw_payload = generator()
-            except ModuleNotFoundError as error:
-                _teach_function_level_import(error, spec.script_path)
-                raise
+            raw_payload = generator()
 
     source_closure: PythonSourceClosure | None = None
     if model_format == "step":
@@ -702,6 +658,7 @@ def _run_script_generator_body(
             closure_hash=store_closure.hash,
             files=store_closure.files,
             constants=store_closure.constants,
+            file_hashes=store_closure.shas,
         )
         generated_scene = _write_shape_step_payload(
             payload,
