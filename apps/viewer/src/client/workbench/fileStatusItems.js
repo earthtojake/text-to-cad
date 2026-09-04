@@ -372,11 +372,7 @@ export function viewerAlertFileStatusItem(viewerAlert = null) {
     code: "viewer_alert",
     title: cleanText(viewerAlert.title) || cleanText(viewerAlert.summary) || "Viewer issue",
     message: cleanText(viewerAlert.message) || cleanText(viewerAlert.summary),
-    details: [
-      detail("Summary", viewerAlert.summary),
-      detail("Resolution", viewerAlert.resolution),
-      detail("Command", viewerAlert.command, { mono: true })
-    ].filter(Boolean)
+    details: []
   });
 }
 
