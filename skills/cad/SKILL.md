@@ -198,10 +198,17 @@ the two stores simply disagree, and the next build under either settles it.
 the gate: a module-level `read_step` (computing a layout from a vendor STEP at
 import) pays the kernel and the parse each time even when the model is
 current — call `read_step` inside the body or a function it calls; the
-`hint:` printed on such a run names the import site. `cadgen store gc` sweeps
-unreachable objects; **clearing the store (`rm -rf ~/.cache/cadgen`, or
-`$CADGEN_CACHE_DIR`) is always safe** — every model reads as stale and
-rebuilds, and no project file is touched.
+`hint:` printed on such a run names the import site. **Resets, smallest
+first:** `python model.py --force` rebuilds one model now; `cadgen store
+forget <model.py>` drops its record so the *next* run rebuilds it (children
+untouched); `cadgen store forget <file.step>` drops the tree entry for that
+file's bytes so the next open or door call compiles it again; `cadgen store
+gc` sweeps unreachable objects; **clearing the store (`rm -rf
+~/.cache/cadgen`, or `$CADGEN_CACHE_DIR`) is always safe** — every model
+reads as stale and rebuilds, and no project file is touched. The gate has no
+cadgen-version clause, so a model built by a cadgen with a bug stays current
+after the fix: `forget` the affected models (or the parents that link them),
+or clear the store.
 
 **The store** (`~/.cache/cadgen`, `CADGEN_CACHE_DIR` overrides) holds
 `objects/` — immutable, content-addressed components and trees — and `index/`

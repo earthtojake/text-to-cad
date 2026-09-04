@@ -672,6 +672,8 @@ expected, before reaching for `--force`.
 ```bash
 cadgen store why src/frame.py
 cadgen store info                # what the store holds, by kind
+cadgen store forget src/frame.py # drop one model's record; the next run rebuilds it
+cadgen store forget STEP/frame.step  # drop one document's tree entry; the next open recompiles it
 cadgen store gc --dry-run        # what a sweep would remove
 ```
 
@@ -739,7 +741,7 @@ directly. Every subcommand is also reachable as `python -m cadgen.cli <verb>`.
 | `python scripts/artifact ...` / `cadgen-step-artifact` | `cadgen step compile` (internal; every door compiles on demand) |
 | `python skills/cad/scripts/cadgen_daemon ...` | `cadgen daemon status` |
 | the viewer launcher (`npm run start --dir`, `server/main.py`) | `cadgen viewer`, `cadgen viewer list`, `cadgen viewer stop` |
-| `cadgen cache info\|gc` (intermediate 0.5) | `cadgen store info\|why\|gc` |
+| `cadgen cache info\|gc` (intermediate 0.5) | `cadgen store info\|why\|forget\|gc` |
 | DXF: `python skills/dxf/scripts/gen ...` | `python drawing.py` |
 | — | `cadgen step build IN OUT` (re-emit/annotate a document) |
 | — | `cadgen store why <model.py>` |
@@ -760,7 +762,7 @@ step build             write a new STEP from one, with kinematics
 step compile           make a STEP's tree current (internal)
 step inspect           inspect selector references in a STEP
 step snapshot          render a STEP model to an image
-store                  the store: info, why <model> (gate verdict), gc
+store                  the store: info, why <model> (gate verdict), forget <target>, gc
 viewer [list|stop]     serve the current directory in the CAD Viewer
 ```
 
@@ -950,7 +952,8 @@ index/component | op | mesh         component entries, the op memo, tessellation
 a source file, and a reader (door, viewer, snapshot) never opens a record.
 `index/model` and friends are the **code side**: what source produced what and
 what it depended on. Records are deletable without corrupting anything; a
-rebuild re-creates them. `cadgen store info` sizes it, `cadgen store gc`
+rebuild re-creates them. `cadgen store info` sizes it, `cadgen store forget`
+drops one model's record or one document's tree entry, `cadgen store gc`
 sweeps unreachable objects, and deleting the whole root is always safe. Nothing
 else is written anywhere — a build's progress is process state, read from the
 daemon.
@@ -1012,7 +1015,7 @@ positionals `TARGET OUT`; `--params` became `--kinematics`. → `cadgen <verb>
 --help` is always the current interface.
 
 **`cadgen cache` is not a command**
-The intermediate 0.5 name. → `cadgen store info|why|gc`.
+The intermediate 0.5 name. → `cadgen store info|why|forget|gc`.
 
 **A model did not rebuild after I edited a child**
 Expected: a parent pulls its children only when it is built. `cadgen store why
