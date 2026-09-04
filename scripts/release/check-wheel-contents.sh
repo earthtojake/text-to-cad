@@ -48,7 +48,7 @@ REQUIRED=(
   "cadgen/viewer/__init__.py"
   "cadgen/viewer/__main__.py"
   "cadgen/viewer/main.py"
-  "cadgen/viewer/compile_worker.py"
+  "cadgen/viewer/compiles.py"
   "cadgen/viewer/collation.json"
   "cadgen/authoring.py"
   "cadgen/build123d.py"
