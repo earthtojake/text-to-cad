@@ -239,7 +239,9 @@ of:
 
 Mesh tolerances and argv flags are not inputs. Imported STEPs are inputs (a
 `read_step` file is in the closure), not models. `--force` rebuilds the named
-model only; its children go through the gate as usual.
+model only; its children go through the gate as usual. `cadgen store forget
+<model.py>` drops the record instead, so the next run — not this one — rebuilds
+it (§10, Resets).
 
 ## 5. Invariants
 
@@ -508,9 +510,19 @@ executors. After publishing, the root runs its gate once more and says
   `brep` object hashes under `objects/ab/cdef…`.
 - `cadgen store info` sizes the store. `cadgen store gc --dry-run` lists what
   a sweep would remove.
-- Clearing the store is always safe: delete `~/.cache/cadgen` (or the
-  `CADGEN_CACHE_DIR` directory). Every model reads as stale and rebuilds; no
-  project file is touched.
+- **Resets, smallest first.** `python model.py --force` rebuilds one model
+  now. `cadgen store forget <model.py>` drops that model's record (the next
+  run rebuilds it; children untouched, parents see the moved pin then);
+  `cadgen store forget <document>` drops the `index/document` entry for the
+  file's bytes and the record that wrote it, so the next open or door call
+  compiles it again. `forget` never deletes objects — `cadgen store gc` does,
+  for whatever no record reaches any more. Clearing the store is always safe:
+  delete `~/.cache/cadgen` (or the `CADGEN_CACHE_DIR` directory); every model
+  reads as stale and rebuilds; no project file is touched.
+- The gate has no cadgen-version clause: a record built by a cadgen with a
+  bug stays current after the fix, and so does every parent tree that linked
+  what it built. Recover with `forget` on the affected models (or the parents
+  that link them), or clear the store.
 
 ## 11. Never
 
