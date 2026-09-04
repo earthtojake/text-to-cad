@@ -52,7 +52,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-from cadgen.assets import node_builders_dir
+from cadgen.assets import dev_node_modules_missing, node_builders_dir
 
 __all__ = [
     "NODE_ENV_VARS",
@@ -144,7 +144,18 @@ def node_builder_script(name: str) -> Path:
     this format at all -- so it raises with the path it looked at rather than degrading to
     a build that silently writes no preview.
     """
-    path = node_builders_dir() / str(name)
+    builders = node_builders_dir()
+    missing = dev_node_modules_missing(builders)
+    if missing is not None:
+        raise NodeBuilderError(
+            f"cadgen is running from a source checkout ({builders.parent}) whose "
+            f"node_modules is missing: {missing}. The live builders import 'three' and "
+            "friends from it, so every mesh export and DXF preview fails until it exists. "
+            "In a lightweight worktree, symlink packages/cadgen-js/node_modules (and "
+            "apps/viewer/node_modules) from the primary checkout, or run `npm install` "
+            "there -- see CONTRIBUTING.md, 'Viewer Development In This Repo'."
+        )
+    path = builders / str(name)
     if not path.is_file():
         raise NodeBuilderError(
             f"Node builder is missing: {path}. This cadgen installation is incomplete; "

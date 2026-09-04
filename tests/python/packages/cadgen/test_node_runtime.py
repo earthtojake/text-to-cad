@@ -422,3 +422,49 @@ class BuilderErrorMessageTests(unittest.TestCase):
 
     def test_no_stderr_reports_nothing_rather_than_inventing_a_cause(self) -> None:
         self.assertEqual("", node_runtime.first_builder_error([]))
+
+
+class SourceCheckoutWithoutNodeModules(unittest.TestCase):
+    """A checkout's live builders import `three` from packages/cadgen-js/node_modules; a
+    fresh worktree has none, and the failure must be cadgen's own sentence, not the
+    child's ERR_MODULE_NOT_FOUND."""
+
+    def _fake_checkout(self, *, with_node_modules: bool) -> Path:
+        root = Path(tempfile.mkdtemp(prefix="cadgen-checkout-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        builders = root / "packages" / "cadgen-js" / "bin"
+        builders.mkdir(parents=True)
+        (builders / "mesh-export.mjs").write_text("// builder\n", encoding="utf-8")
+        if with_node_modules:
+            (root / "packages" / "cadgen-js" / "node_modules" / "three").mkdir(parents=True)
+        return builders
+
+    def test_a_dev_checkout_without_node_modules_is_refused_with_the_fix(self) -> None:
+        from cadgen import assets
+
+        builders = self._fake_checkout(with_node_modules=False)
+        with mock.patch.object(assets, "_dev_builders_dir", return_value=builders), \
+             mock.patch.object(node_runtime, "node_builders_dir", return_value=builders):
+            with self.assertRaises(node_runtime.NodeBuilderError) as caught:
+                node_runtime.node_builder_script("mesh-export.mjs")
+        message = str(caught.exception)
+        self.assertIn("node_modules", message)
+        self.assertIn("CONTRIBUTING.md", message)
+        self.assertIn(str(builders.parent / "node_modules"), message)
+
+    def test_a_dev_checkout_with_node_modules_resolves_the_builder(self) -> None:
+        from cadgen import assets
+
+        builders = self._fake_checkout(with_node_modules=True)
+        with mock.patch.object(assets, "_dev_builders_dir", return_value=builders), \
+             mock.patch.object(node_runtime, "node_builders_dir", return_value=builders):
+            self.assertEqual(node_runtime.node_builder_script("mesh-export.mjs"), builders / "mesh-export.mjs")
+
+    def test_the_packaged_builders_need_no_node_modules(self) -> None:
+        from cadgen import assets
+
+        builders = self._fake_checkout(with_node_modules=False)
+        # The packaged copy is not the dev dir: no check, no refusal.
+        with mock.patch.object(assets, "_dev_builders_dir", return_value=None), \
+             mock.patch.object(node_runtime, "node_builders_dir", return_value=builders):
+            self.assertEqual(node_runtime.node_builder_script("mesh-export.mjs"), builders / "mesh-export.mjs")

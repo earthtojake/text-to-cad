@@ -82,6 +82,22 @@ def _dev_viewer_dist_dir() -> Path | None:
     return None
 
 
+def dev_node_modules_missing(builders_dir: Path) -> Path | None:
+    """The ``node_modules`` a source checkout's builders need but do not have, or None.
+
+    Only the DEV path (``packages/cadgen-js/bin`` in a checkout) resolves bare imports
+    such as ``three`` through a real ``node_modules``; the packaged builders are esbuilt
+    self-contained and need none. A fresh worktree has no ``node_modules`` at all, and
+    without this check every mesh export dies in the child with an opaque
+    ``ERR_MODULE_NOT_FOUND 'three'``.
+    """
+    dev = _dev_builders_dir()
+    if dev is None or Path(builders_dir).resolve() != dev.resolve():
+        return None
+    node_modules = dev.parent / "node_modules"
+    return None if node_modules.is_dir() else node_modules
+
+
 def node_builders_dir() -> Path:
     """Directory holding the esbuilt Node builders (``dxf-mesh.mjs`` and friends).
 

@@ -203,6 +203,18 @@ PYTHONPATH=<worktree>/packages/cadgen/src \
 <main>/.venv/bin/python -m cadgen.viewer --host 127.0.0.1 --json
 ```
 
+Mesh exports (`@stl`/`@3mf`/`@glb`) and DXF previews run the checkout's live
+`packages/cadgen-js/bin` builders in Node, which import `three` and friends
+from `packages/cadgen-js/node_modules`. A fresh worktree has none, and cadgen
+refuses with an error naming this paragraph rather than letting the child die
+with `ERR_MODULE_NOT_FOUND`. Symlink both `node_modules` directories from the
+primary checkout (they are gitignored) or `npm install` in each package:
+
+```bash
+ln -s <main>/packages/cadgen-js/node_modules <worktree>/packages/cadgen-js/node_modules
+ln -s <main>/apps/viewer/node_modules <worktree>/apps/viewer/node_modules
+```
+
 For `npm run dev`, set `VIEWER_PYTHON` the same way — it defaults to `python3`,
 which is usually wrong here: on macOS `python3` is still 3.9, BELOW the
 server's floor and refused at startup with a message naming the version and
