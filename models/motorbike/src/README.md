@@ -1,7 +1,10 @@
 # motorbike models
 
 Every `.py` directly under `src/` is a model: run it to build it. Shared code
-lives in `src/lib/` and is never a model.
+lives in `src/lib/` and is never a model. The assembly composes its children
+by CALLING the sibling models (`frame()`, `seat()`, …): a stale child builds on
+its own worker, a current one loads, and the assembly links to the child's
+geometry instead of copying it. Rebuild the assembly to pick up a child's edit.
 
 | Script               | Artifact                  | Description                                              |
 |----------------------|---------------------------|----------------------------------------------------------|
@@ -9,7 +12,7 @@ lives in `src/lib/` and is never a model.
 | frame.py             | STEP/frame.step           | Welded underbone frame + steel floor pan (the fixed root) |
 | center_stand.py      | STEP/center_stand.step    | Center stand, folded-up pose under the floor pan          |
 | front_fork.py        | STEP/front_fork.step      | Telescopic fork + chrome axle on the steering axis        |
-| handlebar.py         | STEP/handlebar.step       | Bar, stem collar, grips and levers                        |
+| handlebar.py         | STEP/handlebar.step       | Bar, stem collar, grips and levers; owns `MIRROR_MOUNT_*` |
 | front_fender.py      | STEP/front_fender.step    | Cream arc band over the front tire                        |
 | front_wheel.py       | STEP/front_wheel.step     | Tire + five-spoke cast rim + brake disc                   |
 | rear_wheel.py        | STEP/rear_wheel.step      | Tire + five-spoke cast rim + drum hub                     |
@@ -23,8 +26,8 @@ lives in `src/lib/` and is never a model.
 | seat.py              | STEP/seat.step            | Brown saddle                                              |
 | headlight.py         | STEP/headlight.step       | Chrome shell + clear dome lens                            |
 | tail_light.py        | STEP/tail_light.step      | Housing + red lens                                        |
-| turn_signal.py       | STEP/turn_signal.step     | One amber signal; the assembly instances it 4x            |
-| mirror.py            | STEP/mirror.step          | One round bar-end mirror; the assembly instances it 2x    |
+| turn_signal.py       | STEP/turn_signal.step     | Front-left amber signal; the assembly links it 2x (rear-left is `Pos * turn_signal()`) and builds the right-hand mirror images itself |
+| mirror.py            | STEP/mirror.step          | Left bar-end mirror at `handlebar.MIRROR_MOUNT_LEFT` (a source edge: editing handlebar.py rebuilds it); the assembly links it and builds the right one |
 
 Build: `python src/<script>` per row; unchanged models are no-ops. Build them
 all with `ls src/*.py | xargs -n1 -P4 python` (parallel ACROSS models, never
@@ -41,11 +44,14 @@ within one). No imported sources — every artifact is generated.
 | `lib/frontend.py`| `build_front_fork` / `build_handlebar` / `build_front_fender`        |
 | `lib/drivetrain.py`| `build_engine` / `build_exhaust` / `build_rear_shock`              |
 | `lib/bodywork.py`| leg shield, steering cover, under-seat body, rear fender, seat       |
-| `lib/trim.py`   | headlight, tail light, turn signal, mirror                            |
+| `lib/trim.py`   | headlight, tail light, turn signal, mirror (`build_mirror(side, base)`) |
 
 Every builder authors geometry DIRECTLY in the bike frame from `lib/spec.py`,
 so a part entry and the assembly place identical geometry and the assembly
 composes its children at identity. No builder restates a shared dimension.
+The one hardpoint outside `lib/spec.py` is the pair of bar-end mirror mounts,
+which `handlebar.py` owns; `mirror.py` and `motorbike.py` import them from the
+model file, so an edit to `handlebar.py` makes both stale.
 
 Imports need no setup — `src/` is on `sys.path` because the script lives there:
 

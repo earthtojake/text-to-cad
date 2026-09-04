@@ -1,15 +1,22 @@
-"""Full motorbike assembly: every individual part entry composed in place.
+"""Full motorbike assembly: every part model composed by CALLING it.
 
-Children are authored in the BIKE frame by the shared builder modules (the
-f1/moonwatch package pattern), so the assembly composes at identity and still
-records the functional relationships as native build123d joints on
-world-coincident datum frames:
+Children are sibling models: calling one inside this body builds it if stale
+(on its own worker, in parallel with its siblings) or loads it, and the
+assembly LINKS to the child's geometry rather than copying it. Every child
+authors its parts in the BIKE frame (see `lib/spec.py`), so the assembly
+composes at identity and still records the functional relationships as native
+build123d joints on world-coincident datum frames:
 
 - steering: frame head tube <-> fork (revolute, raked axis through the axle)
 - front spin: fork axle <-> front wheel (revolute)
 - engine swing: frame pivot plates <-> engine (revolute)
 - rear spin: engine output hub <-> rear wheel (revolute)
 - everything else: rigid mounts at named, parameterized datums.
+
+Two children are instanced: `turn_signal()` is the front-left signal and, PLACED
+with `Pos`, the rear-left one (both links). The right-hand signals and mirror
+are the models' mirror images — new geometry, not a placement — so the
+assembly builds them from the same `lib/trim.py` helpers and owns them.
 
 OCCURRENCE ORDER IS FROZEN — top to bottom below.
 """
@@ -22,21 +29,28 @@ from cadgen import step
 
 from cadgen.assembly import AssemblyHelper
 
-from lib import bodywork as BODY
-from lib import chassis as CH
-from lib import drivetrain as DT
-from lib import frontend as FE
-from lib import lib as L
+from center_stand import center_stand
+from engine import engine
+from exhaust import exhaust
+from frame import frame
+from front_fender import front_fender
+from front_fork import front_fork
+from front_wheel import front_wheel
+from handlebar import MIRROR_MOUNT_LEFT, MIRROR_MOUNT_RIGHT, handlebar
+from headlight import headlight
+from leg_shield import leg_shield
+from mirror import mirror
+from rear_fender import rear_fender
+from rear_shock import rear_shock
+from rear_wheel import rear_wheel
+from seat import seat
+from steering_cover import steering_cover
+from tail_light import tail_light
+from turn_signal import turn_signal
+from under_seat_body import under_seat_body
+
 from lib import spec as S
 from lib import trim as T
-from lib import wheels as WH
-
-
-def _part(built):
-    """Builders return one shape or a list of shapes; asm.add wants a shape."""
-    if isinstance(built, list):
-        return L.paint_compound(built, "part")
-    return built
 
 
 def _revolute_mate(asm, fixed_part, moving_part, point, direction,
@@ -109,43 +123,43 @@ KINEMATICS = {
 @step(out="../STEP/motorbike.step", kinematics=KINEMATICS)
 def motorbike():
     asm = AssemblyHelper("motorbike")
+    fx, fy, fz = S.FRONT_SIGNAL_POS
+    rx, ry, rz = S.REAR_SIGNAL_POS
 
     # --- fixed root + front body ------------------------------------------
-    frame = asm.add(_part(CH.build_frame()), "frame")
-    steering_cover = asm.add(_part(BODY.build_steering_cover()), "steering_cover")
-    leg_shield = asm.add(_part(BODY.build_leg_shield()), "leg_shield")
+    chassis = asm.add(frame(), "frame")
+    shroud = asm.add(steering_cover(), "steering_cover")
+    shield = asm.add(leg_shield(), "leg_shield")
 
     # --- steering front end -------------------------------------------------
-    fork = asm.add(_part(FE.build_front_fork()), "front_fork")
-    handlebar = asm.add(_part(FE.build_handlebar()), "handlebar")
-    front_fender = asm.add(_part(FE.build_front_fender()), "front_fender")
-    front_wheel = asm.add(_part(WH.build_front_wheel()), "front_wheel")
-    headlight = asm.add(_part(T.build_headlight()), "headlight")
-    fx, fy, fz = S.FRONT_SIGNAL_POS
-    signal_fl = asm.add(_part(T.build_turn_signal((fx, fy, fz), 1.0)),
-                        "turn_signal", "front_left")
-    signal_fr = asm.add(_part(T.build_turn_signal((fx, -fy, fz), -1.0)),
+    fork = asm.add(front_fork(), "front_fork")
+    bars = asm.add(handlebar(), "handlebar")
+    fender_front = asm.add(front_fender(), "front_fender")
+    wheel_front = asm.add(front_wheel(), "front_wheel")
+    lamp = asm.add(headlight(), "headlight")
+    signal_fl = asm.add(turn_signal(), "turn_signal", "front_left")
+    signal_fr = asm.add(bd.Compound(children=T.build_turn_signal((fx, -fy, fz), -1.0)),
                         "turn_signal", "front_right")
 
     # --- powertrain ---------------------------------------------------------
-    engine = asm.add(_part(DT.build_engine()), "engine")
-    exhaust = asm.add(_part(DT.build_exhaust()), "exhaust")
-    rear_shock = asm.add(_part(DT.build_rear_shock()), "rear_shock")
-    rear_wheel = asm.add(_part(WH.build_rear_wheel()), "rear_wheel")
+    motor = asm.add(engine(), "engine")
+    pipe = asm.add(exhaust(), "exhaust")
+    shock = asm.add(rear_shock(), "rear_shock")
+    wheel_rear = asm.add(rear_wheel(), "rear_wheel")
 
     # --- rear body + trim ---------------------------------------------------
-    under_seat = asm.add(_part(BODY.build_under_seat_body()), "under_seat_body")
-    rear_fender = asm.add(_part(BODY.build_rear_fender()), "rear_fender")
-    seat = asm.add(_part(BODY.build_seat()), "seat")
-    tail_light = asm.add(_part(T.build_tail_light()), "tail_light")
-    rx, ry, rz = S.REAR_SIGNAL_POS
-    signal_rl = asm.add(_part(T.build_turn_signal((rx, ry, rz), 1.0)),
+    body = asm.add(under_seat_body(), "under_seat_body")
+    fender_rear = asm.add(rear_fender(), "rear_fender")
+    saddle = asm.add(seat(), "seat")
+    lamp_rear = asm.add(tail_light(), "tail_light")
+    signal_rl = asm.add(bd.Pos(rx - fx, ry - fy, rz - fz) * turn_signal(),
                         "turn_signal", "rear_left")
-    signal_rr = asm.add(_part(T.build_turn_signal((rx, -ry, rz), -1.0)),
+    signal_rr = asm.add(bd.Compound(children=T.build_turn_signal((rx, -ry, rz), -1.0)),
                         "turn_signal", "rear_right")
-    mirror_l = asm.add(_part(T.build_mirror(1.0)), "mirror", "left")
-    mirror_r = asm.add(_part(T.build_mirror(-1.0)), "mirror", "right")
-    stand = asm.add(_part(CH.build_center_stand()), "center_stand")
+    mirror_l = asm.add(mirror(), "mirror", "left")
+    mirror_r = asm.add(bd.Compound(children=T.build_mirror(-1.0, MIRROR_MOUNT_RIGHT)),
+                       "mirror", "right")
+    stand = asm.add(center_stand(), "center_stand")
 
     # --- joints: motion ------------------------------------------------------
     # Order matters: connect_to() repositions the moving part, and a part that
@@ -153,102 +167,97 @@ def motorbike():
     # revolute (its axis relativization picks up the located state). So each
     # spin hub connects to its carrier while the carrier is still pristine,
     # before that carrier is itself moved by its parent relation.
-    _revolute_mate(asm, fork, front_wheel, S.FRONT_AXLE, (0, 1, 0),
+    _revolute_mate(asm, fork, wheel_front, S.FRONT_AXLE, (0, 1, 0),
                    "front_axle_hub", "front_axle", "front_wheel_spin")
-    _revolute_mate(asm, engine, rear_wheel, S.REAR_AXLE, (0, 1, 0),
+    _revolute_mate(asm, motor, wheel_rear, S.REAR_AXLE, (0, 1, 0),
                    "rear_axle_hub", "rear_axle", "rear_wheel_spin")
     steer_mid = S.steer_point((S.HEAD_TUBE_BOT_T + S.HEAD_TUBE_TOP_T) / 2)
-    _revolute_mate(asm, frame, fork, steer_mid, S.STEER_DIR,
+    _revolute_mate(asm, chassis, fork, steer_mid, S.STEER_DIR,
                    "head_tube_axis", "steering_axis", "steering")
-    _revolute_mate(asm, frame, engine, S.ENGINE_PIVOT, (0, 1, 0),
+    _revolute_mate(asm, chassis, motor, S.ENGINE_PIVOT, (0, 1, 0),
                    "engine_pivot", "swing_pivot", "engine_swing")
-    _revolute_mate(asm, frame, stand, (S.STAND_PIVOT[0], 0.0, S.STAND_PIVOT[2]),
+    _revolute_mate(asm, chassis, stand, (S.STAND_PIVOT[0], 0.0, S.STAND_PIVOT[2]),
                    (0, 1, 0), "stand_bracket", "pivot_tubes", "center_stand_pivot")
 
     # --- joints: rigid mounts ------------------------------------------------
     stem_top = S.steer_point(S.STEM_TOP_T)
     stem = asm.rigid_frame(fork, "stem_clamp", bd.Location(stem_top))
-    bar_stem = asm.rigid_frame(handlebar, "stem", bd.Location(stem_top))
+    bar_stem = asm.rigid_frame(bars, "stem", bd.Location(stem_top))
     asm.connect(stem, bar_stem, relation="rigid", label="handlebar_clamp")
 
     fender_at = S.steer_point(150.0)
     fork_leg = asm.rigid_frame(fork, "fork_leg_mount", bd.Location(fender_at))
-    fender_mount = asm.rigid_frame(front_fender, "fork_mount", bd.Location(fender_at))
+    fender_mount = asm.rigid_frame(fender_front, "fork_mount", bd.Location(fender_at))
     asm.connect(fork_leg, fender_mount, relation="rigid", label="front_fender_mount")
 
     shroud_at = S.steer_point(S.HEAD_TUBE_TOP_T)
-    head_shroud = asm.rigid_frame(frame, "head_shroud", bd.Location(shroud_at))
-    cover_mount = asm.rigid_frame(steering_cover, "head_tube_mount", bd.Location(shroud_at))
+    head_shroud = asm.rigid_frame(chassis, "head_shroud", bd.Location(shroud_at))
+    cover_mount = asm.rigid_frame(shroud, "head_tube_mount", bd.Location(shroud_at))
     asm.connect(head_shroud, cover_mount, relation="rigid", label="steering_cover_mount")
 
     apron_at = bd.Location((S.LEG_SHIELD_SECTIONS[2][0], 0.0, S.LEG_SHIELD_SECTIONS[2][1]))
-    apron = asm.rigid_frame(frame, "apron_mount", apron_at)
-    shield_mount = asm.rigid_frame(leg_shield, "frame_mount", apron_at)
+    apron = asm.rigid_frame(chassis, "apron_mount", apron_at)
+    shield_mount = asm.rigid_frame(shield, "frame_mount", apron_at)
     asm.connect(apron, shield_mount, relation="rigid", label="leg_shield_mount")
 
     lamp_at = bd.Location(S.HEADLIGHT_CENTER)
-    shield_lamp = asm.rigid_frame(leg_shield, "headlight_mount", lamp_at)
-    lamp_mount = asm.rigid_frame(headlight, "apron_mount", lamp_at)
+    shield_lamp = asm.rigid_frame(shield, "headlight_mount", lamp_at)
+    lamp_mount = asm.rigid_frame(lamp, "apron_mount", lamp_at)
     asm.connect(shield_lamp, lamp_mount, relation="rigid", label="headlight_mount")
 
-    fl_mount = asm.rigid_frame(leg_shield, "signal_mount_left", bd.Location((fx, fy, fz)))
+    fl_mount = asm.rigid_frame(shield, "signal_mount_left", bd.Location((fx, fy, fz)))
     fl_eye = asm.rigid_frame(signal_fl, "apron_mount", bd.Location((fx, fy, fz)))
     asm.connect(fl_mount, fl_eye, relation="rigid", label="front_left_signal")
-    fr_mount = asm.rigid_frame(leg_shield, "signal_mount_right", bd.Location((fx, -fy, fz)))
+    fr_mount = asm.rigid_frame(shield, "signal_mount_right", bd.Location((fx, -fy, fz)))
     fr_eye = asm.rigid_frame(signal_fr, "apron_mount", bd.Location((fx, -fy, fz)))
     asm.connect(fr_mount, fr_eye, relation="rigid", label="front_right_signal")
 
     flange_at = bd.Location(S.EXHAUST_FLANGE)
-    head_port = asm.rigid_frame(engine, "exhaust_port", flange_at)
-    pipe_flange = asm.rigid_frame(exhaust, "head_flange", flange_at)
+    head_port = asm.rigid_frame(motor, "exhaust_port", flange_at)
+    pipe_flange = asm.rigid_frame(pipe, "head_flange", flange_at)
     asm.connect(head_port, pipe_flange, relation="rigid", label="exhaust_mount")
 
     upper_at = bd.Location(S.SHOCK_UPPER)
-    frame_shock = asm.rigid_frame(frame, "shock_upper_lug", upper_at)
-    shock_upper = asm.rigid_frame(rear_shock, "upper_eye", upper_at)
+    frame_shock = asm.rigid_frame(chassis, "shock_upper_lug", upper_at)
+    shock_upper = asm.rigid_frame(shock, "upper_eye", upper_at)
     asm.connect(frame_shock, shock_upper, relation="coaxial", label="shock_upper_mount")
     lower_at = bd.Location(S.SHOCK_LOWER)
-    engine_shock = asm.rigid_frame(engine, "shock_lower_boss", lower_at)
-    shock_lower = asm.rigid_frame(rear_shock, "lower_eye", lower_at)
+    engine_shock = asm.rigid_frame(motor, "shock_lower_boss", lower_at)
+    shock_lower = asm.rigid_frame(shock, "lower_eye", lower_at)
     asm.connect(engine_shock, shock_lower, relation="coaxial", label="shock_lower_mount")
 
     seat_frame_at = bd.Location((-480.0, 0.0, 560.0))
-    frame_seat = asm.rigid_frame(frame, "seat_frame_mount", seat_frame_at)
-    body_mount = asm.rigid_frame(under_seat, "frame_mount", seat_frame_at)
+    frame_seat = asm.rigid_frame(chassis, "seat_frame_mount", seat_frame_at)
+    body_mount = asm.rigid_frame(body, "frame_mount", seat_frame_at)
     asm.connect(frame_seat, body_mount, relation="rigid", label="under_body_mount")
 
     seat_rail_at = bd.Location((-550.0, 0.0, 705.0))
-    body_seat = asm.rigid_frame(under_seat, "seat_rail", seat_rail_at)
-    seat_mount = asm.rigid_frame(seat, "body_mount", seat_rail_at)
+    body_seat = asm.rigid_frame(body, "seat_rail", seat_rail_at)
+    seat_mount = asm.rigid_frame(saddle, "body_mount", seat_rail_at)
     asm.connect(body_seat, seat_mount, relation="rigid", label="seat_mount")
 
     fender_at2 = bd.Location((S.REAR_AXLE[0], 0.0, S.REAR_AXLE[2] + 245.0))
-    body_fender = asm.rigid_frame(under_seat, "rear_fender_mount", fender_at2)
-    rfender_mount = asm.rigid_frame(rear_fender, "body_mount", fender_at2)
+    body_fender = asm.rigid_frame(body, "rear_fender_mount", fender_at2)
+    rfender_mount = asm.rigid_frame(fender_rear, "body_mount", fender_at2)
     asm.connect(body_fender, rfender_mount, relation="rigid", label="rear_fender_mount")
 
     tail_at = bd.Location(S.TAILLIGHT_CENTER)
-    body_tail = asm.rigid_frame(under_seat, "tail_light_mount", tail_at)
-    tail_mount = asm.rigid_frame(tail_light, "body_mount", tail_at)
+    body_tail = asm.rigid_frame(body, "tail_light_mount", tail_at)
+    tail_mount = asm.rigid_frame(lamp_rear, "body_mount", tail_at)
     asm.connect(body_tail, tail_mount, relation="rigid", label="tail_light_mount")
 
-    rl_mount = asm.rigid_frame(under_seat, "signal_mount_left", bd.Location((rx, ry, rz)))
+    rl_mount = asm.rigid_frame(body, "signal_mount_left", bd.Location((rx, ry, rz)))
     rl_eye = asm.rigid_frame(signal_rl, "body_mount", bd.Location((rx, ry, rz)))
     asm.connect(rl_mount, rl_eye, relation="rigid", label="rear_left_signal")
-    rr_mount = asm.rigid_frame(under_seat, "signal_mount_right", bd.Location((rx, -ry, rz)))
+    rr_mount = asm.rigid_frame(body, "signal_mount_right", bd.Location((rx, -ry, rz)))
     rr_eye = asm.rigid_frame(signal_rr, "body_mount", bd.Location((rx, -ry, rz)))
     asm.connect(rr_mount, rr_eye, relation="rigid", label="rear_right_signal")
 
-    bar_l = S.steer_point(S.STEM_TOP_T)
-    bar_left = asm.rigid_frame(handlebar, "mirror_mount_left",
-                               bd.Location((bar_l[0] - 16.0, 235.0, bar_l[2] + 6.0)))
-    mirror_left = asm.rigid_frame(mirror_l, "bar_mount",
-                                  bd.Location((bar_l[0] - 16.0, 235.0, bar_l[2] + 6.0)))
+    bar_left = asm.rigid_frame(bars, "mirror_mount_left", bd.Location(MIRROR_MOUNT_LEFT))
+    mirror_left = asm.rigid_frame(mirror_l, "bar_mount", bd.Location(MIRROR_MOUNT_LEFT))
     asm.connect(bar_left, mirror_left, relation="rigid", label="mirror_left_mount")
-    bar_right = asm.rigid_frame(handlebar, "mirror_mount_right",
-                                bd.Location((bar_l[0] - 16.0, -235.0, bar_l[2] + 6.0)))
-    mirror_right = asm.rigid_frame(mirror_r, "bar_mount",
-                                   bd.Location((bar_l[0] - 16.0, -235.0, bar_l[2] + 6.0)))
+    bar_right = asm.rigid_frame(bars, "mirror_mount_right", bd.Location(MIRROR_MOUNT_RIGHT))
+    mirror_right = asm.rigid_frame(mirror_r, "bar_mount", bd.Location(MIRROR_MOUNT_RIGHT))
     asm.connect(bar_right, mirror_right, relation="rigid", label="mirror_right_mount")
 
     return asm.build()
