@@ -380,7 +380,7 @@ def path_is_inside_or_equal(child: Path, parent: Path) -> bool:
 def encode_path_param(value: str) -> str:
     return "/".join(quote(part) for part in value.replace(os.sep, "/").split("/"))
 def asset_url_for_store_path(file_path: Path) -> str:
-    """Asset URL for a file in the render-package store (outside any render
+    """Asset URL for a file in the store (outside any render
     root): served by the ``/__store_asset/`` route, confined to the store's
     ``packages/`` tier. Same mtime/size version key as root assets."""
     from cadgen.store.view import views_root

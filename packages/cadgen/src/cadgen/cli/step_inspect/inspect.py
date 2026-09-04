@@ -307,8 +307,8 @@ def _group_occurrence_row(group_id: str, context: EntryContext) -> dict[str, obj
     of the leaves it covers — a group's frame question is "where is this branch", and the
     branch is exactly its parts.
 
-    ``transform`` is copied from the descriptor's node when the node records one, and
-    OMITTED otherwise. No descriptor writes a subassembly transform today: group
+    ``transform`` is copied from the assembly.json's node when the node records one, and
+    OMITTED otherwise. No assembly.json writes a subassembly transform today: group
     placement is baked into each leaf's absolute transform, so there is nothing to read
     and nothing safe to derive. A frame that reported a made-up matrix would be worse
     than one that reports the branch's real extent and no matrix.

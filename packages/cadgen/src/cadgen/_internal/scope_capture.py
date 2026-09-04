@@ -1,33 +1,32 @@
-"""Per-scope dependency capture for the trace substrate (W1,
-design/production-architecture.md).
+"""Dependency capture for a model's closure.
 
-A SCOPE is one traced call — a child entry's ``@step`` entry or a
-``@cadgen.memo`` function. Its closure (the files whose content decides
-whether a cached result is valid) is the union of three channels:
+The closure of a model (the files whose content decides whether its record is
+current) is the union of three channels this module provides:
 
-1. **Static import closure** of the scope's defining file: every first-party
-   file reachable through ``import``/``from … import`` statements, resolved
-   recursively with a stat-keyed cache. This channel is what makes per-scope
-   capture SOUND in a warm process: audit ``exec`` events only fire when a
-   module body actually executes, so a child imported after a sibling already
-   loaded ``_spec`` would otherwise record a closure missing ``_spec`` — and
-   a ``_spec`` edit would then hit stale. Static resolution sees the import
-   statement whether or not the import re-executed.
+1. **Static import closure** of the model's file: every first-party file
+   reachable through ``import``/``from … import`` statements, resolved
+   recursively with a stat-keyed cache. This is what keeps the closure SOUND in
+   a warm process: audit ``exec`` events only fire when a module body actually
+   executes, so a model imported after a sibling already loaded ``_spec`` would
+   otherwise record a closure missing ``_spec`` — and a ``_spec`` edit would
+   then read as current. Static resolution sees the import statement whether or
+   not the import re-executed.
 2. **Dynamic execution capture**: first-party files whose module bodies ran
-   inside the scope window (``record_first_party_execution``), which catches
-   dynamic loads static analysis cannot see (``importlib`` path loads).
-3. **Noted data reads**: non-Python inputs under the scope root, reported
+   during the build (``record_first_party_execution``), which catches dynamic
+   loads static analysis cannot see (``importlib`` path loads).
+3. **Noted data reads**: non-Python inputs under the model root, reported
    explicitly by cadgen's own loaders via :func:`note_scope_read` (C++ file
    opens inside OCCT are invisible to Python audit events, so loaders must
    self-report) plus an ``open`` audit hook that catches Python-level reads.
 
-A scope that reads something this module cannot track (an oversized or
-unresolvable input) is UNTRACKABLE and must never be cached.
+A build that reads something this module cannot track (an oversized or
+unresolvable input) is UNTRACKABLE and its record must never be published.
 
 Closure hashing and validation reuse ``source_hash``'s semantic machinery:
 ``.py`` files hash comment-insensitively by AST, data files by bytes, and
-paths are stored relative to the scope root so entries validate across
-checkouts with identical layout.
+paths are stored relative to the model root so records validate across
+checkouts with identical layout. The ``scope`` in this module's identifiers is
+the recording window of one build, not a store concept.
 """
 
 from __future__ import annotations

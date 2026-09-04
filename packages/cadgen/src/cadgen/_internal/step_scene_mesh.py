@@ -152,7 +152,7 @@ def scene_to_build123d_compound(scene: LoadedStepScene, *, label: str | None = N
 
 
 def import_step(step_path: Path, *, label: str | None = None) -> Any:
-    """``build123d.import_step`` backed by the content-keyed render-package store.
+    """``build123d.import_step`` backed by the store.
 
     Returns a shape topologically identical to ``import_step`` — including the root
     itself, not a wrapper around it — but
@@ -298,7 +298,7 @@ def adaptive_mesh_resolution_from_hints(hints: dict[str, Any]) -> AdaptiveMeshRe
 
     The profile is the ONE thing this resolver still decides, and it decides it
     for edge rendering: ``_edge_visibility_classes_for_resolution`` turns
-    profile + hints into the visibility classes the package is built with, so a
+    profile + hints into the visibility classes the tree is built with, so a
     scene that lands on ``coarse-assembly`` renders feature edges only. It
     decides nothing about tessellation — the one tessellator is JS
     (``packages/cadgen-js/src/lib/surf/tessellate.js``) and takes relative

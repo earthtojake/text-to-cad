@@ -235,7 +235,7 @@ setTimeout(() => {}, 600000);
 
     def test_a_child_is_killed_when_dispatch_raises(self):
         # An exception on the Python side (here: the run object failing) must not leave an
-        # orphan writing into a package whose run is finishing on the way out.
+        # orphan writing into a tree whose run is finishing on the way out.
         script = self.script(
             """
 reportAdvance(1, `pid=${process.pid}`);

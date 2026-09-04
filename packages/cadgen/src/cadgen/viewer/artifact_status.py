@@ -12,10 +12,10 @@ because that is a refusal rather than a missing file.
 
 Freshness semantics:
 
-* a package must exist, parse, declare the exact kind, and have every component
+* a tree must exist, parse, declare the exact kind, and have every component
   payload on disk;
-* nothing else is gated. The package KEY is ``<sha256(document)>-v<schema>``, so
-  a package that resolved at all has the right schema and belongs to exactly
+* nothing else is gated. The tree KEY is ``<sha256(document)>-v<schema>``, so
+  a tree that resolved at all has the right schema and belongs to exactly
   these bytes — the old schema, bake, and per-poll digest gates all collapsed
   into content keying, and that digest re-hash was the one full-file read every
   status poll used to pay;
@@ -158,7 +158,7 @@ def resolve_candidate(file_ref, root_dir) -> str | None:
 
 
 def _component_values(descriptor):
-    """``Object.values(descriptor.components)`` semantics.
+    """``Object.values(assembly.json.components)`` semantics.
 
     A JS array is ``typeof "object"`` too, so a list is accepted here exactly as
     the JS accepted it. cadgen never emits one; matching costs one branch.
@@ -172,7 +172,7 @@ def _component_values(descriptor):
 
 
 def _validate_step(step_path: str) -> dict:
-    """The package freshness verdict: a tree for these bytes, complete, or why not."""
+    """The tree freshness verdict: a tree for these bytes, complete, or why not."""
     tree = result_tree(step_path)
     if tree is None:
         # No result for THESE bytes: never built, or its objects collected (the

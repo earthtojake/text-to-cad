@@ -299,7 +299,7 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
                 )
 
         # gen_step builds the scene in memory (no STEP write); the entry kind is marked
-        # on the scene, and the pre-bake compound is stashed for the package/STEP jobs.
+        # on the scene, and the pre-bake compound is stashed for the tree/STEP jobs.
         self.assertIs(result, scene)
         self.assertEqual("python", build_scene.call_args.kwargs["source_kind"])
         self.assertEqual("assembly", getattr(scene, "text_to_cad_entry_kind", None))
@@ -362,7 +362,7 @@ class CompoundAssemblyGenerationTests(unittest.TestCase):
             # The runtime compound is an assembly, so the effective spec adopts that kind
             # (introspect-children emit) even though the authored spec said "part".
             self.assertEqual("assembly", result.spec.kind)
-            # The package is the render artifact; generation returns no selector bundle.
+            # The tree is the render artifact; generation returns no selector bundle.
             self.assertIsNone(result.selector_bundle)
             run_jobs.assert_called_once()
 

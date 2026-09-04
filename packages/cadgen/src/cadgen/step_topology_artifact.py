@@ -121,7 +121,7 @@ def _ensure_step_topology_artifact(
         debug["source"] = spec.source
     resolved_artifact_path = artifact_path or result_view_dir(spec.entry_path)
 
-    # The canonical render artifact for a generated assembly is a component-GLB package
+    # The canonical render artifact for a generated assembly is a tree
     # directory, which carries no whole-assembly selector topology (faces/edges). inspect
     # needs that full manifest, so extract it on demand from the scene (the build-time
     # win is precisely that this 29.5s extraction is no longer in the build path).
@@ -151,11 +151,11 @@ def _ensure_step_topology_artifact(
         debug["cacheHit"] = False
 
     try:
-        # This rebuild REWRITES the render package, so it reports for the whole span --
+        # This rebuild REWRITES the tree, so it reports for the whole span --
         # generator run AND emit -- and a viewer polling during the emit sees a build.
         #
-        # Progress keys by the MODEL PATH, never by the content-keyed package dir: a
-        # rebuild changes the content key mid-build, so the package dir does not identify
+        # Progress keys by the MODEL PATH, never by the content-keyed view directory: a
+        # rebuild changes the content key mid-build, so the view directory does not identify
         # the run, and readers (the viewer's progress poller, a peer CLI) derive the record
         # from the model path they hold and could not know the new key in advance.
         with artifact_build(
@@ -244,11 +244,11 @@ def _assembly_topology_artifact(
     require_selector: bool,
     debug: dict[str, object] | None = None,
 ) -> StepTopologyArtifact:
-    """The topology artifact for a component-GLB package, which carries no embedded
+    """The topology artifact for a tree, which carries no embedded
     whole-assembly topology.
 
-    When the caller does not need selectors (a plain render reads the package's render
-    meshes directly), return a cheap descriptor-only artifact. When selectors ARE needed
+    When the caller does not need selectors (a plain render reads the tree's render
+    meshes directly), return a cheap assembly.json-only artifact. When selectors ARE needed
     (inspect, selection-based renders), return a COMPOSED artifact: the component GLBs
     already carry each part's complete topology and the index merge in
     ``assembly_lookup`` places them per occurrence, so no whole-model extraction or
@@ -278,7 +278,7 @@ def _assembly_topology_artifact(
         # snapshot) funnel through
         # ``assembly_lookup.index_with_assembly_occurrences``, which merges
         # those tables into the index per occurrence. So the whole-model
-        # ``topology.glb`` sidecar is redundant: return the descriptor as the
+        # ``topology.glb`` sidecar is redundant: return the assembly.json as the
         # bundle manifest — its selector tables are empty, so the base index
         # is empty — and let composition supply every ref. This removes the
         # sidecar's entire lifecycle (the unconditional delete on package
@@ -303,7 +303,7 @@ def _assembly_topology_artifact(
             selector_bundle=SelectorBundle(manifest=descriptor),
         )
 
-    # No descriptor: the package is mid-write (the writer swaps assembly.json
+    # No assembly.json: the tree is mid-write (the writer swaps assembly.json
     # atomically under the generation lock) or vanished between the
     # is_assembly_package() check and here. Wait for the writer instead of
     # re-extracting a whole-model selector bundle in memory — deleting that

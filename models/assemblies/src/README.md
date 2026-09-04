@@ -37,6 +37,10 @@ One script per group: the assembly is composed inside one model body.
 | `mars_rover_concept/mars_rover_concept.py` | `STEP/mars_rover_concept/mars_rover_concept.step` | Mars rover concept on terrain, mated + animated |
 | `mechanical_iris_aperture/mechanical_iris_aperture.py` | `STEP/mechanical_iris_aperture/mechanical_iris_aperture.step` | Labeled mechanical iris aperture assembly |
 | `miniature_spiral_staircase/miniature_spiral_staircase.py` | `STEP/miniature_spiral_staircase/miniature_spiral_staircase.step + STL/miniature_spiral_staircase/miniature_spiral_staircase_highres.stl, 3MF/miniature_spiral_staircase/miniature_spiral_staircase_highres.3mf, GLB/miniature_spiral_staircase/miniature_spiral_staircase_highres.glb` | Labeled miniature spiral staircase STEP compound |
+| `motorcycle_fidgets/motorcycle_helmet_fidget.py` | `STEP/motorcycle_fidgets/motorcycle_helmet_fidget.step` | Motorcycle helmet fidget with a Cherry MX switch socket; the group shares `lib/mx_switch_socket.py` |
+| `motorcycle_fidgets/motorcycle_seat_fidget.py` | `STEP/motorcycle_fidgets/motorcycle_seat_fidget.step` | Motorcycle pillion (backseat) fidget with a Cherry MX switch socket; the group shares `lib/mx_switch_socket.py` |
+| `motorcycle_fidgets/motorcycle_shock_fidget.py` | `STEP/motorcycle_fidgets/motorcycle_shock_fidget.step` | Motorcycle shock absorber fidget with a Cherry MX switch socket; the group shares `lib/mx_switch_socket.py` |
+| `motorcycle_fidgets/motorcycle_wheel_fidget.py` | `STEP/motorcycle_fidgets/motorcycle_wheel_fidget.step` | Motorcycle wheel fidget with a Cherry MX switch socket; the group shares `lib/mx_switch_socket.py` |
 | `motorcycle_shock_absorber/motorcycle_shock_absorber.py` | `STEP/motorcycle_shock_absorber/motorcycle_shock_absorber.step` | Motorcycle rear shock absorber (coilover damper) assembly |
 | `pelican_riding_bicycle/pelican_riding_bicycle.py` | `STEP/pelican_riding_bicycle/pelican_riding_bicycle.step` | Pelican riding a bicycle (organic + mechanical mix) |
 | `photo_coffee_cup/photo_coffee_cup.py` | `STEP/photo_coffee_cup/photo_coffee_cup.step` | Photo-inspired takeaway coffee cup model |

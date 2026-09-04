@@ -13,9 +13,9 @@ ColorRGBA = tuple[float, float, float, float]
 
 @dataclass(frozen=True)
 class SelectorOptions:
-    """How a build extracts a package's topology.
+    """How a build extracts a tree's topology.
 
-    Carries no mesh tolerance. A render package is tessellation-free — it
+    Carries no mesh tolerance. A tree is tessellation-free — it
     stores surfaces (``.surf``) and the client meshes them — so the only
     option here with a consequence is which edge classes get built.
     ``--mesh-tolerance`` belongs to the mesh EXPORT path (``MeshExportJob``),
@@ -42,7 +42,7 @@ class LoadedStepScene:
     source_kind: str = "step"
     source_path: str | None = None
     # Typed-mates kinematics block from kinematics= (JSON-ready dict; axis
-    # refs resolved to numbers during the package build, then written into the
+    # refs resolved to numbers during the tree build, then written into the
     # model's sidecar), the resolved {dof: value} bake pose the artifact is
     # written at, and the .anim.js choreography TEXT (copied at build; no path
     # survives into generated files).
@@ -79,7 +79,7 @@ class AdaptiveMeshResolution:
     its own relative tolerances. What survives here is the classification —
     ``profile`` plus the ``hints`` it was computed from — because
     ``_edge_visibility_classes_for_resolution`` turns the pair into the edge
-    classes a package actually renders. The absolute deflection numbers this
+    classes a tree actually renders. The absolute deflection numbers this
     once carried reached no mesher and are gone.
     """
 

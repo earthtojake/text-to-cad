@@ -6,7 +6,7 @@ Regression suite for the planetary-pilot color loss (2026-08-30):
 while generators author per-occurrence colors — every such model's .step was
 written colorless, so any import of it was colorless too. Colors are baked
 into the STEP; everything source-derived (pose, mates, provenance) lives in
-the package's source sidecar and is deliberately NOT in the file, so importing
+the tree's source sidecar and is deliberately NOT in the file, so importing
 a bare generated .step yields a plain imported package (renders, no pose) and
 running the model script restores the rest.
 """

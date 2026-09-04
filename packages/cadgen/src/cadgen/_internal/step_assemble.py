@@ -1,11 +1,11 @@
-"""STEP assembly from a package's exact-shape blobs.
+"""STEP assembly from a tree's exact-shape component objects.
 
-The package is the document of record (design/step-document-architecture.md):
+The tree is the document of record (design/step-document-architecture.md):
 ``components/<cid>.brep`` holds each part's exact geometry and the
-descriptor holds the tree, placements, labels, colors, and mates. Writing
+assembly.json holds the tree, placements, labels, colors, and mates. Writing
 the STEP file is therefore a pure ASSEMBLY step — read blobs once, place
 occurrences (sharing each component's TShape, exactly like the original
-build did), rebuild the nested compound from the descriptor's assembly
+build did), rebuild the nested compound from the assembly.json's assembly
 tree, and hand the result to the existing XCAF writer. A ``@step`` entry never
 runs here; this is the FreeCAD save path, not a recompute.
 """
@@ -60,7 +60,7 @@ def _color_from_entry(entry: Mapping[str, Any]):
 
 def assemble_compound_from_package(package_dir: Path):
     """Reconstruct the model compound (placed occurrences, labels, colors,
-    nested assembly grouping, mates) purely from the package."""
+    nested assembly grouping, mates) purely from the tree."""
     from build123d import Compound
 
     descriptor = read_package_descriptor(package_dir)
@@ -79,7 +79,7 @@ def assemble_compound_from_package(package_dir: Path):
         child = base.moved(_location_from_matrix(occurrence.get("transform")))
         child.label = str(occurrence.get("name") or occurrence.get("id") or "")
         # Occurrence color first: generators author per-occurrence colors and
-        # the descriptor records them there; the component entry's color is the
+        # the assembly.json records them there; the component entry's color is the
         # shared-part fallback. Reading only the component entry silently wrote
         # colorless STEP files for every model whose colors were per-occurrence
         # (the planetary pilot), which then imported colorless everywhere.
@@ -90,7 +90,7 @@ def assemble_compound_from_package(package_dir: Path):
 
     # Nested grouping: transforms are ABSOLUTE, so group nodes are plain
     # Compounds at identity carrying only structure + names for the XCAF
-    # product tree. Fall back to a flat compound when the descriptor
+    # product tree. Fall back to a flat compound when the assembly.json
     # predates the assembly tree.
     def _build_node(node: Mapping[str, Any]):
         node_type = str(node.get("nodeType") or "")
@@ -118,7 +118,7 @@ def assemble_compound_from_package(package_dir: Path):
             compound = Compound(children=children)
     compound.label = str(descriptor.get("rootName") or getattr(compound, "label", "") or "model")
     # No mates here: they are source-derived and live in the model-side
-    # sidecar, which a package (keyed by content, model-blind) cannot name.
+    # sidecar, which a tree (keyed by content, model-blind) cannot name.
     # Scene loads attach them from the sidecar (step_scene_package); the one
     # write-path caller assembles STEP bytes, which never carry mates.
     return compound, descriptor
@@ -130,7 +130,7 @@ def assemble_step_from_package(
     *,
     logger: Any | None = None,
 ) -> str:
-    """Write ``step_path`` from the package. Returns the written file's hash
+    """Write ``step_path`` from the tree. Returns the written file's hash
     (the same value the export record and the render-side freshness gate
     key on)."""
     from cadgen.step_export import export_build123d_step_file

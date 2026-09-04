@@ -24,7 +24,7 @@ class PythonSourceHash:
     back to an absolute path when the model was not underneath it. Nothing ever read it, and
     a cwd-dependent-or-absolute path sitting one attribute away from a value that IS written
     into descriptors is a trap: the next writer to want "the source path" would have reached
-    for it and quietly made the cache depend on the directory the build ran from. Descriptor
+    for it and quietly made the cache depend on the directory the build ran from. assembly.json
     paths come from :func:`cadgen.render.relative_to_file`, anchored on the model folder --
     see ``tests/python/packages/cadgen/test_package_portability.py``.
     """
@@ -476,9 +476,9 @@ def _execution_audit_hook(event: str, args: tuple) -> None:
 def note_executed_files(paths) -> None:
     """Fold files into the active execution capture as if they had executed.
 
-    A cached scope hit SKIPS executing its files, but they remain freshness
-    inputs of every enclosing closure — without this, a package whose child
-    scope hit records a closure missing that child's files, and the package
+    A cached child result SKIPS executing its files, but they remain freshness
+    inputs of every enclosing closure — without this, a model whose child
+    result hit records a closure missing that child's files, and the model
     freshness gate goes blind to edits of them."""
     capture = _ACTIVE_EXECUTION_CAPTURE
     if capture is None:
@@ -571,7 +571,7 @@ def _relative_to_base(path: Path, base: Path) -> str:
     """A closure file's path relative to the model folder ``base`` (the directory that holds the
     generator source / logical STEP). Uses ``os.path.relpath`` so a sibling or parent file gets a
     clean ``../`` ref instead of an absolute or repo-root-anchored path — this keeps the closure
-    (and the descriptor that records it) location-independent: the same model produces the same
+    (and the assembly.json that records it) location-independent: the same model produces the same
     closure regardless of where the repository lives on disk.
 
     On Windows, ``relpath`` RAISES for paths on different drives (a model on ``D:`` importing a
@@ -688,7 +688,7 @@ def closure_hash_matches(recorded_hash: object, relative_files: object, *, base:
     The legacy byte-digest fallback is deliberately gone. It existed so descriptors
     written before comment-insensitive hashing kept validating without a mass rebuild,
     but it cost a second full-content re-read of every closure file on every miss and it
-    was the last data-compatibility path in the freshness stack. A descriptor recording a
+    was the last data-compatibility path in the freshness stack. An assembly.json recording a
     byte digest now reports stale exactly once, rebuilds, and re-records a semantic
     digest — self-correcting, lazy (only for an entry someone opens), and against a
     gitignored derived cache.

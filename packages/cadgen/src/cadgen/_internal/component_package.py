@@ -1,11 +1,11 @@
-"""Component extraction helpers and the view-directory descriptor reader.
+"""Component extraction helpers and the view-directory assembly.json reader.
 
 A model's result is a TREE in the store (``cadgen.store.build`` emits it):
 one content-addressed component per unique part (exact ``.brep`` + ``.surf``
 render bytes) plus occurrences -> component + world transform. This module
 holds the per-component extraction (content hashing, surf/brep workers, the
-worker pool) that build uses, and the descriptor reader consumers apply to a
-VIEW directory (``cadgen.store.view``) when they need the package shape.
+worker pool) that build uses, and the assembly.json reader consumers apply to a
+VIEW directory (``cadgen.store.view``) when they need the tree shape.
 """
 
 from __future__ import annotations
@@ -29,14 +29,14 @@ from cadgen.coordination import (
 PACKAGE_KIND = "assembly-package"
 # Self-contained content-addressed packages: each model's components live INSIDE its own package
 # at <store>/packages/<stepHash>-v<N>/components/<geomHash>.glb, referenced by the
-# descriptor via the flat relative ref components/<geomHash>.glb. Within-model dedup (repeated
+# assembly.json via the flat relative ref components/<geomHash>.glb. Within-model dedup (repeated
 # parts share one cid) is preserved; components are not shared ACROSS packages, so each
-# package directory is a complete, relocatable unit.
+# view directory is a complete, relocatable unit.
 COMPONENT_DIRNAME = "components"
 DESCRIPTOR_NAME = "assembly.json"
 # Source-provenance keys stripped from a component GLB's embedded STEP_TOPOLOGY so the
 # component is a pure function of geometry+tolerances (content-addressable). All of this
-# is model-level and lives on the descriptor (assembly.json) or the source sidecar
+# is model-level and lives in assembly.json or the source sidecar
 # (the .step.json sidecar), not the reusable leaf.
 COMPONENT_PROVENANCE_KEYS = (
     "sourceKind",
@@ -51,15 +51,15 @@ COMPONENT_PROVENANCE_KEYS = (
     "generatedAt",
 )
 def is_assembly_package(path: Path) -> bool:
-    """True when ``path`` is a component-package directory (has assembly.json)."""
+    """True when ``path`` is a view directory (has assembly.json)."""
     return path.is_dir() and (path / DESCRIPTOR_NAME).is_file()
 
 
 def read_package_descriptor(path: Path) -> dict[str, Any] | None:
-    """Load a package descriptor from a package dir (or its assembly.json path).
+    """Load an assembly.json from a view directory (or its assembly.json path).
 
-    Returns None for anything that is not a package directory with a readable
-    descriptor (missing, partial, or a stray file at the package path)."""
+    Returns None for anything that is not a view directory with a readable
+    assembly.json (missing, partial, or a stray file at the tree path)."""
     if path.is_dir():
         descriptor_path = path / DESCRIPTOR_NAME
     elif path.name == DESCRIPTOR_NAME:
@@ -77,7 +77,7 @@ def read_package_descriptor(path: Path) -> dict[str, Any] | None:
 
 def _component_id(source_hash: str) -> str:
     # The cid is the first 64 bits of the content hash, not an accident of slicing:
-    # a package build holds dozens of components, so the birthday bound at 2^32
+    # a tree build holds dozens of components, so the birthday bound at 2^32
     # distinct shapes is unreachable by ~9 orders of magnitude, and the hash is
     # salted by CACHE_SCHEMA_VERSION (see _content_hash_and_bytes) so an extractor
     # change re-keys every cid at once. A collision would only merge two dedup
@@ -95,7 +95,7 @@ def _content_hash_and_bytes(shape: Any) -> tuple[str, bytes]:
     emits makes every cached component wrong while its geometry — and therefore
     an unsalted digest — is unchanged. The build reuses any ``<cid>.glb`` already
     on disk, so without the salt an extractor fix would leave every existing
-    package serving the old tables behind a descriptor that claims to be current.
+    tree serving the old tables behind an assembly.json that claims to be current.
 
     Two occurrences of the same part share an underlying ``TShape`` (``.moved()``
     only swaps the location), so stripping the location and serializing yields an
@@ -136,7 +136,7 @@ def _transform_from_location(location: Any) -> list[float]:
 
 def _bbox_from_shape(shape: Any) -> dict[str, list[float]] | None:
     """The world-frame axis-aligned bounding box of a composed shape, as the
-    ``{"min": [...], "max": [...]}`` the descriptor records so a cheap whole-entry
+    ``{"min": [...], "max": [...]}`` the assembly.json records so a cheap whole-entry
     inspect summary does not have to re-mesh + extract full topology.
 
     Computed from the geometric representation (``useTriangulation=False``) so it
@@ -177,7 +177,7 @@ def _occurrence_material(child: Any) -> dict[str, float] | None:
     """Optional per-occurrence PBR overrides authored as a plain
     ``cad_material`` dict attribute on the source shape (keys from
     ``_MATERIAL_KEYS``, values clamped to [0, 1]). Colors alone cannot
-    express brushed-vs-polished finishing; these ride the descriptor so the
+    express brushed-vs-polished finishing; these ride the assembly.json so the
     viewer can override its theme material per part."""
     material = getattr(child, "cad_material", None)
     if not isinstance(material, dict):
@@ -248,9 +248,9 @@ def _shape_brep_bytes(shape: Any) -> bytes:
         stream,
         False,  # theWithTriangles
         False,  # theWithNormals
-        # PINNED, not _CURRENT: these blobs are content-addressed — their
+        # PINNED, not _CURRENT: these component objects are content-addressed — their
         # bytes ARE the cid. A floating _CURRENT would let a future OCP
-        # upgrade silently re-serialize every blob and re-key every cid as a
+        # upgrade silently re-serialize every component object and re-key every cid as a
         # dependency-update side effect. Bumping this must stay a deliberate
         # act — treat it like a schema version bump.
         BinTools_FormatVersion.BinTools_FormatVersion_VERSION_4,
@@ -348,10 +348,10 @@ def _component_build_worker_count(missing_count: int) -> int:
     return parallel_worker_count(missing_count, env_var="CADGEN_COMPONENT_WORKERS")
 
 
-# Where a package build spends its wall clock, gated behind an env var so the
+# Where a tree build spends its wall clock, gated behind an env var so the
 # hot path pays nothing when nobody is looking. Set CADGEN_PACKAGE_TIMING to a
 # file path and every build appends one JSON line: the per-stage seconds plus
-# the component counts they moved. This exists because the package write is the
+# the component counts they moved. This exists because the tree write is the
 # dominant cost of an edit-path rebuild and "107 s in build_tree_from_compound"
 # is not an actionable number -- serialize+hash, the missing scan, worker spawn,
 # and the extractions themselves each want a different fix.
@@ -432,12 +432,12 @@ def _write_component_artifacts_atomic(
     step-document-architecture.md): ``<cid>.brep`` — the exact shape, the
     same location-stripped BinTools bytes that computed the cid — and
     ``<cid>.surf`` — the render view. Surface extraction is READING; the
-    blob is a plain write when the hashing payload is already in hand.
+    component object is a plain write when the hashing payload is already in hand.
     The surf goes in place LAST so its existence signals a complete set.
 
     No colour goes into the surf: the cid is geometry-only, so a colour there
     would let two occurrences of one part with different colours share one
-    file and one of them render wrong. The descriptor's occurrence carries
+    file and one of them render wrong. The assembly.json's occurrence carries
     colour (``_occurrence_color``) and the viewer applies it per record."""
     from cadgen._internal.surface_extract import extract_surface_component
 

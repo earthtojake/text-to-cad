@@ -27,12 +27,12 @@ from tests.python.support.tmp_root import temporary_directory
 # else: the deflection numbers it used to carry reached no tessellator and are
 # gone. The profile is load-bearing because
 # generation_spec._edge_visibility_classes_for_resolution turns it into the
-# edge classes a package renders, so these tests assert profiles and hints.
+# edge classes a tree renders, so these tests assert profiles and hints.
 
 
 class StepSceneSelectorArtifactTests(unittest.TestCase):
     def test_load_step_scene_cached_reads_the_render_package(self) -> None:
-        # The render package IS the warm-load store: once an entry is built,
+        # The tree IS the warm-load store: once an entry is built,
         # loading its scene must not touch the text-STEP parser again.
         with temporary_directory(prefix="cad-step-scene-package-") as temp_dir:
             temp_root = Path(temp_dir)

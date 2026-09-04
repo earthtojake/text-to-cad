@@ -1,13 +1,13 @@
-"""Reconstruct a loaded STEP scene from its render package.
+"""Reconstruct a loaded STEP scene from its tree.
 
-The render package (store-primary, content-keyed) already stores everything a
-scene holds: each unique prototype as an exact ``components/<cid>.brep`` blob
+The tree (store-primary, content-keyed) already stores everything a
+scene holds: each unique prototype as an exact ``components/<cid>.brep`` object
 (the same BinTools serialization the old scene cache wrote), the occurrence
 tree with names/transforms/colors in ``assembly.json``, and per-face colors in
-each component's ``.surf`` index. So the package IS the warm-load cache —
+each component's ``.surf`` index. So the tree IS the warm-load cache —
 there is no second geometry store. ``load_step_scene_cached`` keeps its name
-and contract (warm loads skip the text-STEP parse) but now reads the package;
-a STEP with no current package pays one full parse, and the package the entry
+and contract (warm loads skip the text-STEP parse) but now reads the tree;
+a STEP with no current tree pays one full parse, and the tree the entry
 build then writes makes the next load warm.
 """
 
@@ -44,7 +44,7 @@ def _shape_from_brep(path: Path) -> Any | None:
     shape = TopoDS_Shape()
     try:
         BinTools.Read_s(shape, io.BytesIO(payload))
-    except Exception:  # noqa: BLE001 - unreadable blob -> reparse the STEP instead
+    except Exception:  # noqa: BLE001 - unreadable component object -> reparse the STEP instead
         return None
     return None if shape.IsNull() else shape
 
@@ -96,10 +96,10 @@ def _path_from_occurrence_id(occurrence_id: str) -> tuple[int, ...]:
 
 
 def scene_from_render_package(step_path: Path, *, step_hash: str) -> LoadedStepScene | None:
-    """A LoadedStepScene rebuilt from the entry's render package, or None when
-    the package is absent or unreadable — every miss falls back to the
+    """A LoadedStepScene rebuilt from the entry's tree, or None when
+    the tree is absent or unreadable — every miss falls back to the
     text-STEP parse. Content keying answers schema and hash by construction:
-    a package that resolves for these bytes is current-scheme and theirs."""
+    a tree that resolves for these bytes is current-scheme and theirs."""
     from cadgen.catalog import result_descriptor_for
     from cadgen.store.objects import object_path
 
@@ -211,7 +211,7 @@ def scene_from_render_package(step_path: Path, *, step_hash: str) -> LoadedStepS
 
 
 def load_step_scene_cached(step_path: Path) -> LoadedStepScene:
-    """Load a STEP scene, warm from its render package when one is current."""
+    """Load a STEP scene, warm from its tree when one is current."""
     resolved_step_path = step_path.expanduser().resolve()
     if not resolved_step_path.exists():
         raise FileNotFoundError(f"STEP file does not exist: {resolved_step_path}")

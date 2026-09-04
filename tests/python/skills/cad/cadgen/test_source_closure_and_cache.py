@@ -134,7 +134,7 @@ class ReadStepCachedTests(unittest.TestCase):
             self.assertEqual(_face_count(raw.wrapped), _face_count(cold.wrapped))
             self.assertAlmostEqual(raw.volume, cold.volume, places=4)
 
-            # Once the entry is built, its render package IS the warm store:
+            # Once the entry is built, its tree IS the warm store:
             # read_step must reconstruct from it without re-parsing the text.
             from cadgen.step_artifact_cli import build_step_artifact
 

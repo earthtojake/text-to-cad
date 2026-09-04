@@ -128,7 +128,7 @@ class CadGenerationTests(unittest.TestCase):
 
     def _fake_scene(self, step_path: Path) -> types.SimpleNamespace:
         """A minimal stand-in scene carrying a sentinel ``source_compound`` so the
-        unified package emit skips its ``import_step`` fallback (the package build
+        unified tree emit skips its ``import_step`` fallback (the tree build
         itself is patched by ``_patch_package_build``)."""
         return types.SimpleNamespace(
             step_path=step_path.expanduser().resolve(),
@@ -189,7 +189,7 @@ class CadGenerationTests(unittest.TestCase):
 
     def test_imported_step_assembly_force_writes_component_package(self) -> None:
         """Regression: an imported/committed STEP built with force must actually emit
-        the component-GLB package. ``_generate_step_outputs`` previously routed only
+        the tree. ``_generate_step_outputs`` previously routed only
         ``source == "generated"`` specs into the build pipeline and fell off the end for an
         imported/committed STEP — silently returning None (no package written) while the
         caller still reported success. Model-script runs no longer accept direct STEP targets,
@@ -212,7 +212,7 @@ class CadGenerationTests(unittest.TestCase):
         package_dir = cad_catalog.result_view_dir(step_path)
         self.assertFalse(
             (package_dir / "assembly.json").exists(),
-            "precondition: the package must not exist before the build",
+            "precondition: the tree must not exist before the build",
         )
 
         from cadgen.step_artifact_cli import build_step_artifact
@@ -238,10 +238,10 @@ class CadGenerationTests(unittest.TestCase):
         self.assertEqual("assembly-package", descriptor["kind"])
         self.assertEqual("assembly", descriptor.get("entryKind"))
         components = descriptor["components"]
-        self.assertTrue(components, "the package must reference at least one component")
+        self.assertTrue(components, "the tree must reference at least one component")
         for entry in components.values():
             ref = str(entry["surf"])
-            # Self-contained, flat refs into the package's own components/ dir.
+            # Self-contained, flat refs into the tree's own components/ dir.
             self.assertTrue(ref.startswith("components/"), ref)
             self.assertNotIn("..", ref)
             self.assertTrue((package_dir / ref).is_file(), f"missing component GLB {ref}")
@@ -889,7 +889,7 @@ class CadGenerationTests(unittest.TestCase):
         _, direct_specs = cad_generation._selected_specs_for_targets([str(direct_path)])
 
         # Generated-vs-imported rides the merged-in source sidecar
-        # (_sourceSidecar), never a descriptor field. A GENERATED spec still
+        # (_sourceSidecar), never an assembly.json field. A GENERATED spec still
         # requires its sidecar (a sidecar-less package means the model was
         # never generated here); an IMPORTED spec accepts any resolved
         # package — content keying guarantees it is these bytes' render.
@@ -994,7 +994,7 @@ class CadGenerationTests(unittest.TestCase):
             source_path=cad_generation.relative_to_cwd(script_path),
         )
 
-        # A current model reuses its package: the topology options match, the package is
+        # A current model reuses its tree: the topology options match, the tree is
         # complete, and its source closure is unchanged -> no remesh.
         with (
             mock.patch.object(cad_generation, "_existing_topology_artifact_matches_options", return_value=True),
@@ -1169,7 +1169,7 @@ class CadGenerationTests(unittest.TestCase):
             result = cad_generation._generate_part_outputs(spec, entries_by_step_path={spec.step_path.resolve(): spec})
 
         load_scene.assert_called_once_with(step_path)
-        # A part emits a single-component package directory; the build path returns no
+        # A part emits a single-component view directory; the build path returns no
         # whole-model selector bundle (selectors are extracted on demand by inspect).
         self.assertEqual(1, len(package_calls))
         self.assertTrue(package_calls[0]["single_component"])

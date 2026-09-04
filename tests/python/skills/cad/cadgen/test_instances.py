@@ -11,7 +11,7 @@ from tests.python.support.store_fixtures import build_view as _RAW_BUILD_PACKAGE
 
 
 def _build_package(compound, **kwargs):
-    """Drive the package writer directly, as every real producer does."""
+    """Drive the tree writer directly, as every real producer does."""
     return _RAW_BUILD_PACKAGE(compound, **kwargs)
 
 

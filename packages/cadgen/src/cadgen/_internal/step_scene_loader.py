@@ -443,7 +443,7 @@ def load_step_scene(step_path: Path) -> LoadedStepScene:
     if not resolved_step_path.exists():
         raise FileNotFoundError(f"STEP file does not exist: {resolved_step_path}")
     # OCCT reads the file in C++, invisible to Python audit events; report it
-    # to any active scope recording so imported STEP data is a freshness input.
+    # to any active closure recording so imported STEP data is a freshness input.
     from cadgen._internal.scope_capture import note_scope_read
 
     note_scope_read(resolved_step_path)

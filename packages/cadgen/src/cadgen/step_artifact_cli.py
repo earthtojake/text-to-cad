@@ -182,13 +182,13 @@ def _current_artifact_for_spec(spec: EntrySpec) -> StepTopologyArtifact | None:
     if not _existing_topology_artifact_matches_spec_without_scene(spec):
         return None
     package_dir = result_view_dir(spec.entry_path)
-    # A component-GLB package is a DIRECTORY, and validate_step_topology_artifact() gates on
-    # `.is_file()` (step_targets.py) -- so routing a package through it always raised
+    # A tree is a DIRECTORY, and validate_step_topology_artifact() gates on
+    # `.is_file()` (step_targets.py) -- so routing a tree through it always raised
     # missing_glb, this whole fast path returned None, and EVERY build re-ran the generator.
-    # The descriptor comparison above (_package_descriptor_matches_spec) IS the package's
+    # The assembly.json comparison above (_package_descriptor_matches_spec) IS the tree's
     # freshness gate; there is nothing further to validate. Packages carry no whole-assembly
     # selector topology either -- it is extracted on demand -- so require_selector cannot be
-    # satisfied from the package and must not be asked of it.
+    # satisfied from the tree and must not be asked of it.
     from cadgen._internal.component_package import is_assembly_package, read_package_descriptor
 
     if is_assembly_package(package_dir):
@@ -199,7 +199,7 @@ def _current_artifact_for_spec(spec: EntrySpec) -> StepTopologyArtifact | None:
         # points cannot disagree about what "current" means:
         #   closure  -- generated models re-hash the recorded import reach; imported ones
         #               return True and rely on the stepHash gate above.
-        #   package  -- the descriptor's referenced components are all present on disk.
+        #   package  -- the assembly.json's referenced components are all present on disk.
         if not (
             _generated_assembly_glb_closure_current(spec) and _assembly_glb_package_current(spec)
         ):
@@ -215,7 +215,7 @@ def _current_artifact_for_spec(spec: EntrySpec) -> StepTopologyArtifact | None:
             artifact_path=package_dir,
             manifest=manifest,
         )
-    # No package directory -> nothing current (the package IS the only artifact form).
+    # No view directory -> nothing current (the tree IS the only artifact form).
     return None
 
 
@@ -301,7 +301,7 @@ def build_step_artifact(
     it raises on error (the CLI shell owns argv parsing + JSON stdout).
 
     Passing ``source_path`` selects GENERATOR mode: the @step source runs
-    in-process and only the render package is written — the logical ``step``
+    in-process and only the tree is written — the logical ``step``
     path never needs to exist on disk (STEP is exported on demand elsewhere).
     Without ``source_path``, ``step`` must be an existing imported STEP/STP file.
 
@@ -381,11 +381,11 @@ def build_step_artifact(
     # The progress record covers the WHOLE build, not just the generator run: the
     # meshing is the long part, and a viewer polling during it must see a build.
     #
-    # Progress keys by the MODEL PATH, never by the content-keyed package dir. A rebuild
+    # Progress keys by the MODEL PATH, never by the content-keyed view directory. A rebuild
     # changes the document's content key mid-build, and no reader could know the new key
     # in advance: the viewer's progress reader derives its record from the model path it
     # is polling (cadgen.viewer.store_paths.build_scope). `package_dir` stays because the
-    # RESULT payloads name the package; only the progress identity is path-keyed.
+    # RESULT payloads name the tree; only the progress identity is path-keyed.
     package_dir = result_view_dir(existing_spec.entry_path) if existing_spec.entry_path else None
     scope = build_scope(existing_spec.entry_path) if existing_spec.entry_path else None
     # This builds exactly what a model-script run builds, and reported nothing while doing it:
@@ -442,7 +442,7 @@ def build_step_artifact(
                 if scene is None:
                     raise RuntimeError(f"Python generator did not produce a STEP scene: {existing_spec.source_ref}")
                 # The generation pipeline's contract: a generated model's build
-                # ALWAYS produces its STEP file (assembled from the package —
+                # ALWAYS produces its STEP file (assembled from the tree —
                 # design/step-document-architecture.md), no matter which front
                 # door asked (a model-script run, `cadgen step build`, inspect).
                 import dataclasses

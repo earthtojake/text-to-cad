@@ -77,7 +77,7 @@ class StepArtifactsTests(unittest.TestCase):
                 step_path=step_path,
             )
             # An imported spec accepts ANY resolved package — content keying
-            # already guarantees the package is these bytes' render, so no
+            # already guarantees the tree is these bytes' render, so no
             # stepHash presence check remains.
             self.assertTrue(
                 generation._artifact_source_kind_matches_spec(
@@ -116,7 +116,7 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
         )
 
     def test_part_without_package_regenerates_and_reports_it(self) -> None:
-        # No render package -> nothing to cache-hit (the package IS the only
+        # No tree -> nothing to cache-hit (the tree IS the only
         # artifact form): the entry regenerates and the debug record says so.
         with tempfile.TemporaryDirectory() as temp:
             step_path = Path(temp) / "part.step"
@@ -183,7 +183,7 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
     def test_assembly_descriptor_lookup_hits_for_both_entry_forms(self) -> None:
         # A generated model's package is keyed by the STEP file it produces, so
         # entry_path (<name>.py) and step_path (<name>.step) resolve to the
-        # SAME package dir — a descriptor lookup by either form always hits.
+        # SAME view directory — an assembly.json lookup by either form always hits.
         # (Before the re-key these were two namespaces and step_path lookups
         # missed, forcing a full selector re-extraction on every call.)
         with tempfile.TemporaryDirectory() as temp:
@@ -241,7 +241,7 @@ class EnsureStepTopologyArtifactDebugTests(unittest.TestCase):
             self.assertFalse(debug["selectorReextracted"])
 
     def test_assembly_mid_write_descriptor_is_retried_not_reextracted(self) -> None:
-        # A descriptor that is momentarily absent (the writer swaps
+        # An assembly.json that is momentarily absent (the writer swaps
         # assembly.json atomically) is RE-READ, never re-extracted: the OCP
         # whole-model selector extractor is gone, so waiting for the writer is
         # the only pre-composition behaviour left.

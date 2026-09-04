@@ -339,7 +339,7 @@ class DormantPathsTest(unittest.TestCase):
     """Vertices, and geometry that cannot be placed.
 
     No model in this repo carries vertices -- every component bundle reports vertexCount 0 -- so
-    the vertex rebasing is dead code that will wake up the first time a package has one. That is
+    the vertex rebasing is dead code that will wake up the first time a tree has one. That is
     exactly when nobody will be looking at it, so it is driven here with a synthetic component.
     """
 

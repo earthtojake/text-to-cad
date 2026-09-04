@@ -20,9 +20,9 @@ from tests.python.support.paths import add_repo_path, repo_path
 
 def write_package(step_path, *, entry_kind="part", source_kind="step", kinematics=None, animation=None):
     """Materialize the canonical render artifact for ``step_path``: a SELF-CONTAINED
-    component-GLB PACKAGE directory inside the per-folder cache
+    view directory (assembly.json + components/) inside the per-folder cache
     (``__cadgen__/models/<step-filename>/assembly.json``) whose content-addressed component
-    GLBs live in the package's own ``components/<hash>.glb`` dir. Returns the package directory
+    GLBs live in the tree's own ``components/<hash>.glb`` dir. Returns the view directory
     path, mirroring ``cadgen.catalog.result_view_dir``."""
     from cadgen.catalog import result_view_dir
 
@@ -61,7 +61,7 @@ def write_package(step_path, *, entry_kind="part", source_kind="step", kinematic
     )
     if kinematics or animation:
         # Kinematics/animation (source-derived) ride the MODEL-SIDE sidecar,
-        # never the descriptor.
+        # never assembly.json.
         from cadgen._internal.source_sidecar import SOURCE_SIDECAR_SCHEMA_VERSION
 
         sidecar = {"schemaVersion": SOURCE_SIDECAR_SCHEMA_VERSION}
@@ -615,9 +615,9 @@ class SnapshotCliTests(unittest.TestCase):
         input_url = urlparse(job["resolved"]["inputUrl"])
         self.assertEqual(input_url.path, "/__render_asset/part.step")
         self.assertRegex(parse_qs(input_url.query)["v"][0], r"^[0-9a-f]{16}$")
-        # The render artifact is a SELF-CONTAINED component-GLB package, so the resolved job
-        # carries a package descriptor with per-component asset URLs (no monolithic glbUrl).
-        # Each component URL points into the package's own components/ dir inside __cadgen__.
+        # The render artifact is a SELF-CONTAINED tree, so the resolved job
+        # carries an assembly.json with per-component asset URLs (no monolithic glbUrl).
+        # Each component URL points into the tree's own components/ dir inside __cadgen__.
         self.assertNotIn("glbUrl", job["resolved"])
         package = job["resolved"]["package"]
         self.assertEqual(package["descriptor"]["kind"], "assembly-package")

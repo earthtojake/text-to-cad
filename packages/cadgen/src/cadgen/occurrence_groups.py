@@ -1,7 +1,7 @@
 """What a GROUP occurrence ref means, for every command that accepts one.
 
 ONE document, TWO occurrence namespaces (see :mod:`cadgen.assembly_lookup`): the
-descriptor's instance tree, and the flat selector index whose rows are that tree's
+assembly.json's instance tree, and the flat selector index whose rows are that tree's
 LEAVES, because only a leaf owns geometry. A subassembly node -- ``#o1.1``, the very
 kind of ref a kinematics mate names and poses without complaint -- carries no row, so
 every command that resolved refs against rows alone refused it as "unknown".

@@ -530,7 +530,7 @@ class L_ArtifactRouteContainment(SecurityTestCase):
 
     Hop 1 was never the leak; hops 2-4 were, which is why this tests the WHOLE
     chain. A test that stopped at "the POST is 403" would still pass if the
-    refusal landed after the compile had already published the package.
+    refusal landed after the compile had already published the tree.
     """
 
     def artifact(self, file_param, *, method="GET"):
