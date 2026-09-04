@@ -37,4 +37,4 @@ reading once the old artifacts are gone.
 - **cadgen 0.4 → 0.5** — generator functions became decorated model scripts, the
   generation CLI was removed, sidecars and provenance moved, snapshot job JSON
   was re-keyed, and mesh tolerance became relative.
-  https://github.com/earthtojake/text-to-cad/blob/main/docs/migrating-0.4-to-0.5.md
+  https://github.com/earthtojake/text-to-cad/blob/main/docs/migrations/migrating-0.4-to-0.5.md
