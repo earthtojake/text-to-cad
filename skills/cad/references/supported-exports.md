@@ -30,6 +30,26 @@ if __name__ == "__main__":
 
 `python models/bracket.py` then writes the STEP **and** the declared meshes, and heals any of them that were deleted — no separate export step. The declarations are recorded in the document's sidecar, which is where the mesh doors read them from.
 
+## A model with no STEP
+
+A model's outputs are whatever its decorators declare, and STEP is one output kind, not the primary. A function decorated with `@stl`, `@glb` or `@threemf` alone — no `@step` — is a full model: the same tree and record in the store, the same build, the same no-op when nothing changed, the same composition (`bracket()` inside another model's body). It writes its declared meshes and no `.step` (and no sidecar). Use it for a print-only part or a render asset; there is no requirement to write a STEP.
+
+```python
+from cadgen import build123d as bd
+from cadgen import stl
+
+
+@stl(out="STL/spacer.stl", mesh_tolerance=4e-4)
+def spacer():
+    return bd.Cylinder(6, 3) - bd.Cylinder(2.5, 3)
+
+
+if __name__ == "__main__":
+    spacer()
+```
+
+Stacking order stays neutral: add `@step` above or below later and the same declarations ride along; the `.step` then joins the outputs.
+
 A decorator `out=` is the one intentional exception to native path semantics: on `@stl`, `@glb` and `@threemf` — exactly as on `@step` — a relative `out=` resolves relative to the SCRIPT, not the working directory. That is what makes a project relocatable: the declaration travels with the model and produces the same layout whatever directory the script is run from. Ad-hoc OUT arguments on the doors are cwd-relative instead, because they are one-shot and never persisted.
 
 Declare the same format more than once at distinct targets for draft/print variants:

@@ -32,6 +32,9 @@ class GeneratorMetadata:
     # Declared mesh serializations (@stl/@glb/@threemf stacked on the @step
     # function). Statically parsed like out=; resolved to paths at spec time.
     mesh_exports: "tuple[MeshExportDecl, ...]" = ()
+    # False for a MESH-ONLY model (mesh decorators, no @step): a model like any
+    # other whose .step is not among its outputs and is never written.
+    step_output: bool = True
 
 
 @dataclass(frozen=True)
@@ -182,8 +185,12 @@ def _match_model_decorator(
     function: ast.FunctionDef,
     names: dict[str, str],
     module_aliases: set[str],
-) -> tuple[str, dict[str, ast.expr]] | None:
-    """(fmt, decorator kwargs) when the function carries a cadgen @step/@dxf."""
+) -> tuple[str, dict[str, ast.expr], bool] | None:
+    """(fmt, decorator kwargs, mesh_only) when the function carries a cadgen model
+    decorator. ``@step``/``@dxf`` name the format; mesh decorators alone
+    (``@stl``/``@glb``/``@threemf`` with no ``@step``) declare a MESH-ONLY model:
+    format "step" — the same tree and record — whose .step is never written."""
+    mesh_only = False
     for decorator in function.decorator_list:
         call_kwargs: dict[str, ast.expr] = {}
         target = decorator
@@ -203,11 +210,17 @@ def _match_model_decorator(
             resolved = names.get(target.id)
             if resolved in {"step", "dxf"}:
                 fmt = resolved
+            elif resolved in _MESH_DECORATOR_NAMES:
+                mesh_only = True
         elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
             if target.value.id in module_aliases and target.attr in {"step", "dxf"}:
                 fmt = target.attr
+            elif target.value.id in module_aliases and target.attr in _MESH_DECORATOR_NAMES:
+                mesh_only = True
         if fmt is not None:
-            return fmt, call_kwargs
+            return fmt, call_kwargs, False
+    if mesh_only:
+        return "step", {}, True
     return None
 
 
@@ -264,24 +277,24 @@ def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
                 display_name = value.value.strip()
 
     decorator_names, module_aliases = _cadgen_decorator_aliases(tree)
-    decorated: list[tuple[ast.FunctionDef, str, dict[str, ast.expr]]] = []
+    decorated: list[tuple[ast.FunctionDef, str, dict[str, ast.expr], bool]] = []
     for node in tree.body:
         if not isinstance(node, ast.FunctionDef):
             continue
         match = _match_model_decorator(node, decorator_names, module_aliases)
         if match is not None:
-            decorated.append((node, match[0], match[1]))
+            decorated.append((node, match[0], match[1], match[2]))
 
     if not decorated:
         return None
     if len(decorated) > 1:
-        joined = ", ".join(f"{fn.name}()" for fn, _, _ in decorated)
+        joined = ", ".join(f"{fn.name}()" for fn, _, _, _ in decorated)
         raise InvalidModelScriptError(
             f"{_display_path(script_path)} defines more than one CAD model ({joined}); "
-            "a model file defines exactly one @step or @dxf entry"
+            "a model file defines exactly one @step or @dxf entry (or one mesh decorator alone)"
         )
 
-    function, fmt, call_kwargs = decorated[0]
+    function, fmt, call_kwargs, mesh_only = decorated[0]
     params = [
         *function.args.posonlyargs,
         *function.args.args,
@@ -344,6 +357,7 @@ def parse_generator_metadata(script_path: Path) -> GeneratorMetadata | None:
         out_target=out_target,
         is_decorated=True,
         mesh_exports=mesh_exports,
+        step_output=not mesh_only,
     )
 
 

@@ -18,7 +18,7 @@ from pathlib import Path
 # (sync-tested). It is part of the MESH index key, not a store salt.
 MESH_TESSELLATION_VERSION = 1
 
-INDEX_KINDS = ("model", "document", "component", "op", "mesh", "dxf")
+INDEX_KINDS = ("model", "document", "component", "op", "mesh")
 
 
 def store_root() -> Path:

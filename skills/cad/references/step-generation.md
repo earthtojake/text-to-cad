@@ -37,7 +37,10 @@ sibling `<stem>.step`; relocate it durably with `@step(out="path/to/out.step")`
 output, and the store's record of it is keyed by the script.
 Do not put output paths in the model's return value. Mesh formats are declared
 on the model with `@stl`/`@threemf`/`@glb`, or written by the matching
-`cadgen <format> build` door (see `supported-exports.md`).
+`cadgen <format> build` door (see `supported-exports.md`). A model may declare
+only mesh outputs: `@stl`/`@threemf`/`@glb` with no `@step` is a full model
+(same tree, record and build) that writes no STEP — there is no requirement
+to write one.
 
 Rules the decorator enforces:
 

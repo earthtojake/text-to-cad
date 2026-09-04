@@ -543,28 +543,34 @@ def _generate_part_outputs(
                 finally:
                     shutil.rmtree(view_dir, ignore_errors=True)
                 sidecar_payload["kinematics"] = resolved_block
-            write_source_sidecar(spec.entry_path, sidecar_payload)
+            if spec.step_output:
+                write_source_sidecar(spec.entry_path, sidecar_payload)
 
-            from cadgen.store.materialize import materialize
-            from cadgen.step_export import export_build123d_step_file
+                from cadgen.store.materialize import materialize
+                from cadgen.step_export import export_build123d_step_file
 
-            spec.step_path.parent.mkdir(parents=True, exist_ok=True)
-            with logger.timed("tree: assemble STEP"):
-                exported_hash = export_build123d_step_file(
-                    materialize(tree_hash, label=spec.step_path.stem), spec.step_path, logger=logger
-                )
-            from cadgen.catalog import seed_artifact_hash
+                spec.step_path.parent.mkdir(parents=True, exist_ok=True)
+                with logger.timed("tree: assemble STEP"):
+                    exported_hash = export_build123d_step_file(
+                        materialize(tree_hash, label=spec.step_path.stem), spec.step_path, logger=logger
+                    )
+                from cadgen.catalog import seed_artifact_hash
 
-            seed_artifact_hash(spec.step_path, exported_hash)
-            hashes = getattr(scene, "exported_step_sha256", None) or {}
-            hashes[str(spec.step_path.expanduser().resolve())] = exported_hash
-            scene.exported_step_sha256 = hashes
-            outputs[str(spec.step_path.expanduser().resolve())] = {"sha256": exported_hash}
-            from cadgen._internal.source_sidecar import source_sidecar_path
+                seed_artifact_hash(spec.step_path, exported_hash)
+                hashes = getattr(scene, "exported_step_sha256", None) or {}
+                hashes[str(spec.step_path.expanduser().resolve())] = exported_hash
+                scene.exported_step_sha256 = hashes
+                outputs[str(spec.step_path.expanduser().resolve())] = {"sha256": exported_hash}
+                from cadgen._internal.source_sidecar import source_sidecar_path
 
-            sidecar_file = source_sidecar_path(spec.entry_path)
-            if sidecar_file.is_file():
-                outputs[str(sidecar_file.resolve())] = {"sha256": _sha256_of(sidecar_file)}
+                sidecar_file = source_sidecar_path(spec.entry_path)
+                if sidecar_file.is_file():
+                    outputs[str(sidecar_file.resolve())] = {"sha256": _sha256_of(sidecar_file)}
+            else:
+                # A mesh-only model: the tree and record are the model's like any
+                # other; its outputs are the declared meshes, produced from the tree
+                # below. No STEP, no sidecar -- STEP is one output kind, not the primary.
+                remove_source_sidecar(spec.entry_path)
         else:
             # Imported document: the source IS the file; no sidecar, no generated marker.
             remove_source_sidecar(spec.entry_path)
@@ -781,9 +787,17 @@ def _produce_declared_mesh_exports(
     from cadgen.catalog import result_tree_for
     from cadgen.store.view import export_view
 
-    document_hash = artifact_file_hash(spec.entry_path)
-    tree_hash = result_tree_for(spec.entry_path)
     model = _model_for_spec(spec)
+    if spec.step_output:
+        document_hash = artifact_file_hash(spec.entry_path)
+        tree_hash = result_tree_for(spec.entry_path)
+    else:
+        # A mesh-only model writes no document: its tree IS the geometry the
+        # meshes are cut from, so the ledger keys on that.
+        from cadgen.store.records import current_tree
+
+        tree_hash = current_tree(model) if model is not None else None
+        document_hash = tree_hash
     if document_hash is None or tree_hash is None or model is None:
         return ()
     # Posed declarations live only in the RUNTIME registry (a kinematics= dict
@@ -1375,7 +1389,15 @@ def generate_dxf_targets(
     force: bool = False,
     verbose: bool = False,
 ) -> int:
-    from cadgen._internal.dxf_output import dxf_output_current
+    from cadgen.store.gate import stale
+
+    def dxf_output_current(script_path: Path, output_path: Path | None) -> bool:
+        # The ONE gate every model answers to (STORE.md §4): the drawing's record,
+        # its closure, its pinned children and its .dxf output.
+        if output_path is None:
+            return False
+        verdict = stale(script_path)
+        return not verdict.stale
 
     tool_name = "dxf"
     logger = CliLogger("cadgen", verbose=verbose)

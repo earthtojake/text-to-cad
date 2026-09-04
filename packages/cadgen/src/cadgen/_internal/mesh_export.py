@@ -6,8 +6,8 @@ build` — funnels through :func:`run_mesh_exporter`, so the front doors cannot
 drift: one Node invocation, one tessellation per distinct tolerance pair,
 formats serialized from it (design/unified-tessellation.md).
 
-Freshness rides content-keyed records in the cache's ``records/`` tier,
-mirroring the DXF pattern (``dxf_output.py``): a record is keyed by the
+Freshness rides content-keyed records in the store's ``index/mesh`` tier: a
+record is keyed by the
 WRITTEN file's bytes and names the source documents (by content hash) and the
 effective tolerances that produced it. Both front doors read and write the
 same ledger, so a CLI export satisfies a declaration's gate and vice versa.

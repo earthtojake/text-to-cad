@@ -79,6 +79,16 @@ class MeshExportMetadataTest(unittest.TestCase):
             self.assertIsNone(declared["glb"].out)
             self.assertEqual(declared["3mf"].mesh_tolerance, 5e-3)
 
+    def test_a_mesh_decorator_alone_declares_a_model_with_no_step_output(self) -> None:
+        # No @step at all: still a model (format "step" -- the same tree and
+        # record), whose .step is not among its outputs.
+        metadata = self._parse(MODEL.replace('@step(out="../STEP/widget.step")\n', ""))
+        self.assertEqual("step", metadata.format)
+        self.assertFalse(metadata.step_output)
+        self.assertIsNone(metadata.out_target)
+        self.assertEqual({d.fmt for d in metadata.mesh_exports}, {"stl", "glb", "3mf"})
+        self.assertTrue(self._parse(MODEL).step_output)
+
     def test_variants_parse_but_ambiguous_duplicates_fail(self) -> None:
         # Same format at DISTINCT targets is a variant, not a duplicate.
         variants = self._parse(textwrap.dedent("""\
@@ -224,6 +234,38 @@ class MeshExportProductionTest(unittest.TestCase):
         self._run("-c", door, "STEP/widget.step", "--force")
         self.assertEqual(glb_before, (self.project / "STEP" / "widget.glb").read_bytes())
         self.assertEqual(step_before, (self.project / "STEP" / "widget.step").read_bytes())
+
+    def test_a_mesh_only_model_builds_its_meshes_and_no_step(self) -> None:
+        # Regression: @stl with no @step used to be a SILENT NO-OP (the pending
+        # declaration never registered; the static parser said "no model"). It is
+        # a model -- tree, record, job -- whose outputs are its meshes; no .step.
+        from unittest import mock
+
+        source = MODEL.replace('@step(out="../STEP/widget.step")\n', "").replace("widget", "blank")
+        (self.project / "src" / "blank.py").write_text(source, encoding="utf-8")
+        first = self._run("src/blank.py")
+        for rel in ("STL/blank.stl", "3MF/blank.3mf", "src/blank.glb"):
+            self.assertTrue((self.project / rel).is_file(), rel)
+        self.assertIn("wrote STL", first.stdout)
+        for rel in ("src/blank.step", "STEP/blank.step", "src/blank.step.json"):
+            self.assertFalse((self.project / rel).exists(), f"{rel} must not be written")
+
+        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.project / "store")}):
+            from cadgen.store.gate import stale
+            from cadgen.store.records import read_record
+
+            record = read_record(self.project / "src" / "blank.py") or {}
+            self.assertTrue(record.get("tree"), "a mesh-only model has a tree like any model")
+            self.assertFalse(any(p.endswith(".step") for p in record.get("outputs") or {}))
+            self.assertFalse(stale(self.project / "src" / "blank.py").stale)
+
+        # True no-op on rerun, and healing per export like any declared output.
+        second = self._run("src/blank.py")
+        self.assertNotIn("wrote", second.stdout)
+        (self.project / "STL" / "blank.stl").unlink()
+        heal = self._run("src/blank.py")
+        self.assertIn("wrote STL", heal.stdout)
+        self.assertNotIn("wrote GLB", heal.stdout)
 
     def test_a_bare_door_produces_every_declared_variant(self) -> None:
         # `OUT` omitted means the DECLARATIONS, plural: two @stl variants of one

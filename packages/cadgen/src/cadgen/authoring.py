@@ -166,6 +166,10 @@ class ModelDef:
     animation: str | None = None
     # Declared mesh serializations (@stl/@glb/@threemf). STEP models only.
     mesh_exports: tuple[MeshExportDecl, ...] = ()
+    # False for a MESH-ONLY model (@stl/@glb/@threemf with no @step): the same
+    # tree and record as any model, but the .step is not among its outputs and
+    # is never written. STEP is one output kind, not the primary.
+    step_output: bool = True
 
     @property
     def output_path(self) -> Path:
@@ -249,6 +253,7 @@ def _decorator(
     mesh_angular_tolerance: float | None,
     kinematics: object = None,
     animation: object = None,
+    step_output: bool = True,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     if kind is not None and kind not in {"part", "assembly"}:
         raise ValueError(f"@{fmt} kind must be 'part' or 'assembly', got {kind!r}")
@@ -259,20 +264,25 @@ def _decorator(
     animation_path = _normalize_animation(animation, fmt=fmt)
 
     def apply(func: Callable[..., Any]) -> Callable[..., Any]:
+        pending: tuple[MeshExportDecl, ...] = ()
+        prior: ModelDef | None = getattr(func, "__cadgen_model__", None)
+        if prior is not None:
+            prior = _REGISTRY.get(prior.script_path, prior)  # the registry is authoritative
+        if prior is not None and not prior.step_output:
+            # A mesh decorator BELOW this one already declared the function a
+            # mesh-only model (and handed back its wrapper). @step takes the RAW
+            # function and its declarations over (stacking order stays neutral);
+            # a drawing cannot.
+            if fmt != "step":
+                names = ", ".join(f"@{_MESH_FMT_DECORATOR[d.fmt]}" for d in prior.mesh_exports)
+                raise TypeError(
+                    f"{prior.script_path.name} stacks {names} on a @{fmt} drawing; "
+                    "STL/3MF/GLB derive from a @step model's geometry"
+                )
+            pending = prior.mesh_exports
+            func = prior.func
         _validate_signature(func, fmt=fmt)
         script_path = _script_path_of(func)
-        pending = tuple(getattr(func, "__cadgen_pending_mesh_exports__", ()))
-        if pending and fmt != "step":
-            names = ", ".join(f"@{_MESH_FMT_DECORATOR[d.fmt]}" for d in pending)
-            raise TypeError(
-                f"{script_path.name} stacks {names} on a @{fmt} drawing; "
-                "STL/3MF/GLB derive from a @step model's geometry"
-            )
-        if pending:
-            try:
-                delattr(func, "__cadgen_pending_mesh_exports__")
-            except AttributeError:
-                pass
         defn = ModelDef(
             func=func,
             fmt=fmt,
@@ -285,6 +295,7 @@ def _decorator(
             bake_pose=bake_pose,
             animation=animation_path,
             mesh_exports=pending,
+            step_output=step_output,
         )
         _register(defn)
         func.__cadgen_model__ = defn  # type: ignore[attr-defined]
@@ -299,8 +310,8 @@ def _decorator(
                     # The pipeline building THIS model is asking for its body.
                     return func()
                 if fmt == "dxf":
-                    # A drawing is not a model in the graph: nothing pins or
-                    # records it. Called inside a build it is just its body.
+                    # A drawing composes models, never the reverse: called inside
+                    # another build it is just its body (2D geometry), nothing to pin.
                     return func()
                 # Composition: a parent's body asked for this child. Same rule as the
                 # top level — stale → build, then hand back its geometry — except the
@@ -399,10 +410,11 @@ def _validate_variant(existing, decl: MeshExportDecl, deco_name: str) -> None:
 
 
 def _mesh_export_decorator(deco_name: str, fmt: str):
-    """Factory for ``@stl``/``@glb``/``@threemf``: metadata-attachers, never
-    wrappers. Below ``@step`` they park a pending declaration on the raw
-    function; above it they extend the registered model. Both routes converge
-    in the loader import, so stacking order is behavior-neutral."""
+    """Factory for ``@stl``/``@glb``/``@threemf``. Above ``@step`` they extend
+    the registered model; alone (or below ``@step``) they declare a mesh-only
+    model that a later ``@step`` takes over. Both routes converge in the loader
+    import, so stacking order is behavior-neutral, and a model with no ``@step``
+    at all is still a model — one that writes no STEP."""
     from dataclasses import replace as _replace
 
     suffix = f".{fmt}"
@@ -455,12 +467,20 @@ def _mesh_export_decorator(deco_name: str, fmt: str):
                 _REGISTRY[updated.script_path] = updated
                 target.__cadgen_model__ = updated  # type: ignore[attr-defined]
                 return target
-            # Below @step: park a pending declaration for @step to consume.
-            pending = list(getattr(target, "__cadgen_pending_mesh_exports__", ()))
-            _validate_variant(pending, decl, deco_name)
-            pending.append(decl)
-            target.__cadgen_pending_mesh_exports__ = tuple(pending)  # type: ignore[attr-defined]
-            return target
+            # No @step (yet): a mesh decorator alone declares a MODEL — the same
+            # tree, record and job as any model — whose outputs are its mesh
+            # declarations; its .step is never written. A @step stacked above takes
+            # the declarations over, so stacking order stays neutral.
+            wrapper = _decorator(
+                "step", out=None, kind=None, mesh_tolerance=None,
+                mesh_angular_tolerance=None, step_output=False,
+            )(target)
+            registered = _REGISTRY[_script_path_of(target)]
+            updated = _replace(registered, mesh_exports=(decl,))
+            _REGISTRY[updated.script_path] = updated
+            wrapper.__cadgen_model__ = updated  # type: ignore[attr-defined]
+            target.__cadgen_model__ = updated  # type: ignore[attr-defined]
+            return wrapper
 
         return attach(func) if func is not None else attach
 

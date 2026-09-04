@@ -126,9 +126,13 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
             verdict.stale = True
     clauses.append({"clause": 3, "stale": any(c["stale"] for c in child_clauses), "children": child_clauses})
 
-    tree = str(record.get("tree") or "")
-    complete = bool(tree) and tree_complete(tree)
-    clauses.append({"clause": 4, "stale": not complete, "why": None if complete else "tree or component object missing", "tree": tree})
+    if "tree" in record and record.get("tree") is None:
+        # A drawing (@dxf): its output is the .dxf and it has no tree. Vacuous.
+        tree, complete = "", True
+    else:
+        tree = str(record.get("tree") or "")
+        complete = bool(tree) and tree_complete(tree)
+    clauses.append({"clause": 4, "stale": not complete, "why": None if complete else "tree or component object missing", "tree": tree or None})
     if not complete:
         verdict.stale = True
 

@@ -86,9 +86,14 @@ class StandaloneDxfSourceTests(unittest.TestCase):
             output_path = script_path.with_suffix(".dxf")
             self.assertTrue(output_path.exists())
             self.assertGreater(output_path.stat().st_size, 0)
-            from cadgen._internal.dxf_output import dxf_export_record_path
+            from cadgen.store.records import read_record
 
-            self.assertTrue(dxf_export_record_path(script_path.with_suffix('.dxf')).exists())
+            # A drawing is a model in the graph: the same record as a @step model,
+            # with the .dxf as its output and no tree.
+            record = read_record(script_path) or {}
+            self.assertIsNone(record.get("tree"))
+            self.assertEqual(record.get("entryKind"), "drawing")
+            self.assertIn(str(output_path.resolve()), record.get("outputs") or {})
             self.assertFalse((Path(root) / "__cadgen__").exists())
 
     def test_unchanged_source_is_a_no_op_and_output_is_deterministic(self) -> None:
@@ -153,18 +158,17 @@ class StandaloneDxfSourceTests(unittest.TestCase):
                 cad_generation.generate_dxf_targets([str(script_path)])
             self.assertFalse(script_path.with_suffix(".dxf").exists())
 
-    def test_the_two_authorities_answer_different_questions_by_design(self) -> None:
-        # The CLI's no-op gate (cadgen._internal.dxf_output) reads the output
-        # record to decide whether an EXPLICIT run can skip work. The viewer has
-        # no gate at all any more: scripts are not catalog entries, the .dxf
-        # renders directly, and detached outputs mean a source edit flips the
-        # CLI gate while the drawing on disk keeps rendering untouched.
-        from cadgen._internal.dxf_output import dxf_output_current
+    def test_the_gate_and_the_viewer_answer_different_questions_by_design(self) -> None:
+        # THE gate (cadgen.store.gate, the one every model answers to) decides
+        # whether an explicit run can skip work. The viewer has no gate at all:
+        # the .dxf renders directly, so a source edit flips the gate while the
+        # drawing on disk keeps rendering untouched.
+        from cadgen.store.gate import stale
 
         with temporary_directory(prefix="dxf-skill") as root:
             script_path = _write_standalone_source(Path(root))
             cad_generation.generate_dxf_targets([str(script_path)])
-            self.assertTrue(dxf_output_current(script_path))
+            self.assertFalse(stale(script_path).stale)
             sibling = script_path.with_suffix(".dxf")
             rendered = sibling.read_bytes()
 
@@ -172,14 +176,78 @@ class StandaloneDxfSourceTests(unittest.TestCase):
                 STANDALONE_DXF_SOURCE.replace("bd.Rectangle(40, 20)", "bd.Rectangle(60, 20)") + "\n",
                 encoding="utf-8",
             )
-            self.assertFalse(dxf_output_current(script_path))
+            self.assertTrue(stale(script_path).stale)
             self.assertEqual(rendered, sibling.read_bytes(), "a source edit must not touch the drawing")
 
-            # An explicit run regenerates (the CLI gate is why it is not a
-            # no-op), after which the gate is current again.
+            # An explicit run regenerates (the gate is why it is not a no-op),
+            # after which the gate is current again.
             cad_generation.generate_dxf_targets([str(script_path)])
-            self.assertTrue(dxf_output_current(script_path))
+            self.assertFalse(stale(script_path).stale)
             self.assertNotEqual(rendered, sibling.read_bytes())
+
+    def test_a_drawing_pins_the_model_it_composes(self) -> None:
+        # A drawing is a model in the graph: calling `bracket()` in its body pins
+        # bracket's tree in the drawing's record (gate clause 3), so the flat
+        # pattern goes stale when bracket's GEOMETRY changes — no `--force`.
+        import os
+        from unittest import mock
+
+        from cadgen.store.gate import stale
+        from cadgen.store.records import read_record
+
+        bracket = textwrap.dedent(
+            '''
+            from cadgen import build123d as bd
+            from cadgen import step
+
+
+            @step
+            def bracket():
+                return bd.Box({width}, 20, 6)
+
+
+            if __name__ == "__main__":
+                bracket()
+            '''
+        ).strip()
+        pattern = textwrap.dedent(
+            '''
+            from cadgen import build123d as bd
+            from cadgen import dxf
+            from bracket import bracket
+
+
+            @dxf
+            def pattern():
+                size = bracket().bounding_box().size
+                with bd.BuildSketch() as flat:
+                    bd.Rectangle(size.X + 10, size.Y + 10)
+                return flat.sketch
+
+
+            if __name__ == "__main__":
+                pattern()
+            '''
+        ).strip()
+        with temporary_directory(prefix="dxf-skill") as root, mock.patch.dict(os.environ, {"CADGEN_DAEMON": "0"}):
+            bracket_path = Path(root) / "bracket.py"
+            bracket_path.write_text(bracket.format(width=40) + "\n", encoding="utf-8")
+            pattern_path = Path(root) / "pattern.py"
+            pattern_path.write_text(pattern + "\n", encoding="utf-8")
+
+            self.assertEqual(0, cad_generation.generate_dxf_targets([str(pattern_path)]))
+            record = read_record(pattern_path) or {}
+            children = record.get("children") or []
+            self.assertEqual([Path(c["model"]).name for c in children], ["bracket.py"])
+            self.assertEqual(children[0]["tree"], (read_record(bracket_path) or {}).get("tree"))
+            self.assertFalse(stale(pattern_path).stale)
+            first = pattern_path.with_suffix(".dxf").read_bytes()
+
+            # The child's geometry changes; the drawing's own source did not.
+            bracket_path.write_text(bracket.format(width=60) + "\n", encoding="utf-8")
+            self.assertEqual(0, cad_generation.generate_dxf_targets([str(pattern_path)]))
+            self.assertNotEqual(first, pattern_path.with_suffix(".dxf").read_bytes())
+            self.assertFalse(stale(pattern_path).stale)
 
 
 if __name__ == "__main__":

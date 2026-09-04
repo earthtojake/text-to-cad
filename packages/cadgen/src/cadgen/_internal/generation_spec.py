@@ -52,6 +52,9 @@ class EntrySpec:
     # Declared mesh serializations, resolved to absolute paths. Tolerances
     # ``None`` inherit the model's policy at export time.
     mesh_exports: "tuple[ResolvedMeshExport, ...]" = ()
+    # False for a mesh-only model: ``step_path`` stays the LOGICAL document the
+    # store keys by, but it is never written and is not among the outputs.
+    step_output: bool = True
 
     @property
     def entry_path(self) -> Path | None:
@@ -425,6 +428,7 @@ def _entry_spec_from_source(source: CadSource) -> EntrySpec:
             script_path=script_path,
             step_path=step_path,
         ),
+        step_output=bool(getattr(generator_metadata, "step_output", True)),
     )
 
 

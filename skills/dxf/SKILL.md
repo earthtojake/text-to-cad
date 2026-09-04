@@ -35,9 +35,11 @@ The build product IS the `.dxf` file: **every run writes the sibling
 `<name>.dxf`** (the same contract a `@step` model has: source in, exchange file
 out; `-o` renames it). There is no drawing package —
 the CAD Viewer parses and meshes the `.dxf` itself, so the file you hand a
-cutting service and the file the viewer renders are one and the same. The only
-thing kept in the user-level cache is a small record that makes an unchanged
-source a no-op. `--force` overrides it.
+cutting service and the file the viewer renders are one and the same. A drawing
+is a model in cadgen's graph like a `@step` part: the store keeps its record
+(its source closure, the part models its body called, the `.dxf` it wrote),
+which is what makes an unchanged source a no-op and a changed part — `bracket()`
+called inside the drawing — a rebuild. `--force` overrides it.
 
 ## The contract
 

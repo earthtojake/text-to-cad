@@ -152,6 +152,17 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
 - A leaf has `children: []`. Roots and leaves have the same record. A record
   for an imported document (`sourceKind: "step"`) has the document's bytes as
   its closure.
+- A **drawing** (`@dxf`) is a model like any other: the same wrapper, record,
+  gate and job. `entryKind: "drawing"`, `tree: null` (gate clause 4 is
+  vacuous), its `.dxf` as the one output, and `children` pinned from the
+  models its body called — a flat pattern of `bracket()` goes stale when
+  bracket's geometry changes. The viewer and `dxf snapshot` read the `.dxf`
+  file directly; there is no drawing-specific freshness anywhere.
+- A model's **outputs are whatever its decorators declare**. STEP is one
+  output kind, not the primary: a model declared by `@stl`/`@glb`/`@threemf`
+  alone has the same tree and record as any model, every stale declared mesh
+  is (re)generated from that tree, and no `.step` (and no sidecar) is written
+  — `outputs` simply lists no document and `stepHash` is empty.
 - `outputs` may carry per-output facts a door needs (`declared`, the
   tessellation `chord`/`angle`, the baked `pose`); those are the door's, the
   store only keeps them beside the sha.

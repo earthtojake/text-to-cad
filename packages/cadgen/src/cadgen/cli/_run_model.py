@@ -77,7 +77,7 @@ def _run(args: argparse.Namespace, script: Path, parser: argparse.ArgumentParser
         if source is None:
             raise ValueError(
                 f"{script.name} declares no CAD model — decorate one function with "
-                "@step or @dxf from cadgen"
+                "@step, @dxf, or a mesh decorator (@stl/@glb/@threemf) from cadgen"
             )
         if source.dxf_path is not None and source.step_path is None:
             from cadgen.generation import generate_dxf_targets

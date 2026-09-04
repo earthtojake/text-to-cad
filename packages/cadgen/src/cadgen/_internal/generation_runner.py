@@ -412,6 +412,37 @@ def _mark_scene_python_backed(
     return scene
 
 
+def _write_drawing_record(
+    spec: EntrySpec, output_path: Path, *, source_closure, child_trees
+) -> None:
+    """The drawing's model record: ``tree: null``, its ``.dxf`` as the one output,
+    children pinned from the body's calls. Published under the same rule as a
+    @step record (never replace a current record with a stale one)."""
+    import hashlib
+
+    from cadgen.store.publish import decide
+    from cadgen.store.records import note_document, write_record
+
+    model_path = Path(spec.script_path).resolve()
+    written = Path(output_path).resolve()
+    closure_files = list(source_closure.files)
+    closure_hash = str(source_closure.closure_hash)
+    record = {
+        "entryKind": "drawing",
+        "sourceKind": "python",
+        "tree": None,
+        "closure": {"hash": closure_hash, "files": closure_files, "static": False},
+        "children": [{"model": str(child), "tree": tree} for child, tree in child_trees],
+        "outputs": {str(written): {"sha256": hashlib.sha256(written.read_bytes()).hexdigest()}},
+        "stepHash": "",
+    }
+    decision = decide(model_path, ran_closure_hash=closure_hash, ran_files=closure_files)
+    if not decision.publish_outputs:
+        return
+    write_record(model_path, record)
+    note_document(written, model_path)
+
+
 def _write_dxf_payload(
     result: object,
     *,
@@ -681,15 +712,11 @@ def _run_script_generator_body(
             {"model": str(child), "tree": tree} for child, tree in child_trees
         ]
     elif model_format == "dxf":
-        from cadgen._internal.dxf_output import record_dxf_output
-
         if spec.dxf_path is None:
             raise RuntimeError(f"{spec.source_ref} has no configured DXF output")
-        # Mirror the STEP path: capture the generator's closure (relative to the model
-        # folder) — the freshness input both the CLI's no-op gate and the viewer's
-        # staleness gate read through the output record. Code reuse is the
-        # freshness link: a drawing that path-loads its .step.py records it (and
-        # its imports) here. Non-Python inputs are intentionally NOT tracked.
+        # The same closure a @step model records (relative to the model folder).
+        # Code reuse is a freshness link: a drawing that imports a helper records it
+        # (and its imports) here. Non-Python inputs are intentionally NOT tracked.
         source_closure = capture_runtime_closure(
             modules_before_load,
             spec.script_path,
@@ -697,15 +724,20 @@ def _run_script_generator_body(
             executed_files=executed_files,
             discovered_inputs=read_files,
         )
-        # The product IS the .dxf (design/standalone-viewer.md Phase A): gen always
-        # writes it — the sibling by default, `-o` renames — and the viewer parses
-        # that file directly. No drawing package exists any more; the output record
-        # is what makes an unchanged source a no-op.
+        # The product IS the .dxf: the run always writes it — the sibling by
+        # default, `-o` renames — and the viewer parses that file directly.
         output_path = spec.dxf_export_path if spec.dxf_export_path is not None else spec.dxf_path
         _write_dxf_payload(
             raw_payload, output_path=output_path, script_path=spec.script_path, logger=logger
         )
-        record_dxf_output(spec.script_path, output_path, source_closure=source_closure)
+        # A drawing is a model in the graph (STORE.md §3): the same record, gate and
+        # pins as a @step model, with the .dxf as its output and NO tree (gate
+        # clause 4 is vacuous). The children its body composed -- a flat pattern of
+        # `bracket()` -- are pinned from the calls, so a child's new geometry makes
+        # the drawing stale like any parent.
+        _write_drawing_record(
+            spec, output_path, source_closure=source_closure, child_trees=frame.child_trees()
+        )
     if generated_scene is not None and source_closure is not None:
         generated_scene.source_closure_hash = source_closure.closure_hash
         generated_scene.source_closure_files = source_closure.files

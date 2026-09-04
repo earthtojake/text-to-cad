@@ -712,15 +712,15 @@ class CadGenerationTests(unittest.TestCase):
 
         cad_generation.generate_dxf_targets([str(script_path)])
 
-        from cadgen._internal.dxf_output import dxf_export_record_path
+        from cadgen.store.records import read_record
 
-        record_dir = dxf_export_record_path(self.temp_root / "bare_dxf.dxf").parent
-        # No drawing package exists any more: the .dxf beside the source is the
-        # product, and only the output record remains, in the store's records/ tier.
-        self.assertTrue((self.temp_root / "bare_dxf.dxf").exists())
-        self.assertTrue(dxf_export_record_path(self.temp_root / "bare_dxf.dxf").exists())
-        self.assertFalse((record_dir / "preview.glb").exists())
-        self.assertFalse((record_dir / "drawing.json").exists())
+        # No drawing package exists: the .dxf beside the source is the product,
+        # and the drawing's MODEL record (tree: null) is what makes a rerun a no-op.
+        written = self.temp_root / "bare_dxf.dxf"
+        self.assertTrue(written.exists())
+        record = read_record(script_path) or {}
+        self.assertIsNone(record.get("tree"))
+        self.assertIn(str(written.resolve()), record.get("outputs") or {})
 
     def test_dxf_generation_always_writes_the_sibling(self) -> None:
         script_path = self._dxf_generator_script("flat")
@@ -728,9 +728,9 @@ class CadGenerationTests(unittest.TestCase):
         cad_generation.generate_dxf_targets([str(script_path)])
 
         self.assertTrue((self.temp_root / "flat_drawing.dxf").exists())
-        from cadgen._internal.dxf_output import dxf_export_record_path
+        from cadgen.store.records import read_record
 
-        self.assertTrue(dxf_export_record_path(self.temp_root / "flat_drawing.dxf").exists())
+        self.assertIsNotNone(read_record(script_path), "a drawing is a model: it has a record")
 
     def test_dxf_generation_skips_current_drawing_package(self) -> None:
         script_path = self._dxf_generator_script("flat")

@@ -161,7 +161,9 @@ to its source, a repo script, or a repo workflow does not.
 src/cadgen/
   <format>.py            # public namespaces: step, stl, threemf, glb, dxf,
                          #   urdf, srdf, sdf — each binds its verbs
-  authoring.py           # @step/@dxf/@stl/@glb/@threemf decorators
+  authoring.py           # @step/@dxf/@stl/@glb/@threemf decorators; a model's
+                         #   outputs are what they declare — a mesh decorator
+                         #   alone is a model that writes no STEP
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
   compose.py             # memo — the traced, cached composition scope
