@@ -338,35 +338,36 @@ def _drain_inflight(reason: str) -> None:
         thread.join()
 
 
-def _bind(address: str, authkey: bytes) -> transport.Server | None:
-    """Bind first; only then decide what a leftover address means.
+_DAEMON_LOCK: transport.SingletonLock | None = None
 
-    Sweeping a "stale" file before binding is a race: two daemons starting at once
-    both see the other's fresh socket as stale and one deletes the other's. So the
-    rule is that a process may only unlink a socket it BOUND, and a bind failure
-    is investigated by connecting: a live daemon answers (we stand down and let the
-    client use it); a dead one's file is the only thing left to remove.
+
+def _bind(address: str, authkey: bytes) -> transport.Server | None:
+    """One daemon per identity, decided by a lock -- never by probing or sweeping.
+
+    Probing a leftover socket was a race: twenty clients starting at once spawn twenty
+    daemons, the losers' probes against a backlog-8 listener are REFUSED, each reads
+    refusal as "stale file", unlinks the winner's live socket and binds its own -- four
+    daemons "serving" one path, the earlier ones orphaned with their workers. So the
+    decision is a process-lifetime exclusive lock (transport.SingletonLock, released by
+    the kernel when the holder dies): the loser stands down at once, touching nothing;
+    the winner is by construction the only daemon, so a socket file it finds is dead
+    and may be removed before binding.
     """
-    try:
-        return transport.Server(address, authkey, backlog=8)
-    except OSError as first:
-        try:
-            probe = transport.connect(address, authkey)
-        except OSError:
-            probe = None
-        if probe is not None:
-            probe.close()
-            _log(f"another daemon is serving {address}; standing down")
-            return None
-        if not transport.address_is_stale(address):
-            _log(f"cannot bind {address}: {first}")
-            return None
+    global _DAEMON_LOCK
+    lock = transport.daemon_lock(daemon_identity())
+    if not lock.acquire():
+        _log(f"another daemon holds the lock for {address}; standing down")
+        return None
+    _DAEMON_LOCK = lock  # held for the daemon's whole life
+    if transport.address_is_stale(address):
         transport.clear_address(address)
-        try:
-            return transport.Server(address, authkey, backlog=8)
-        except OSError as second:
-            _log(f"cannot bind {address}: {second}")
-            return None
+    try:
+        return transport.Server(address, authkey, backlog=128)
+    except OSError as exc:
+        _log(f"cannot bind {address}: {exc}")
+        lock.release()
+        _DAEMON_LOCK = None
+        return None
 
 
 def serve() -> int:

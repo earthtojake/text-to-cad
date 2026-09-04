@@ -249,27 +249,35 @@ def _connect_or_spawn(address: str) -> transport.Channel | None:
         return _connect(address)
     except OSError:
         pass
-    # Never unlink the address here. Only the process that BOUND a socket may
-    # remove it: a client that swept a "stale" file could take a live daemon's
-    # address out from under it while another client was mid-spawn. The daemon
-    # sorts a leftover file out itself, bind-first (server.serve).
-    process = _spawn_daemon(address)
-    if process is None:
+    # Never unlink the address here. Only the daemon that holds the singleton lock
+    # may remove a leftover socket (server._bind). And only ONE client spawns: the
+    # first to take the spawn lock starts the daemon; the others just wait for the
+    # address to answer. Twenty concurrent clients used to start twenty daemons.
+    election = transport.spawn_lock(daemon_identity())
+    spawner = election.acquire()
+    process = None
+    try:
+        if spawner:
+            process = _spawn_daemon(address)
+            if process is None:
+                return None
+        deadline = time.monotonic() + SPAWN_WAIT_SECONDS
+        while time.monotonic() < deadline:
+            try:
+                return _connect(address)
+            except OSError:
+                if process is not None and process.poll() is not None:
+                    # Our daemon exited: it failed, or it stood down because one is
+                    # already bound. One more connect tells the two apart.
+                    try:
+                        return _connect(address)
+                    except OSError:
+                        return None
+                time.sleep(0.05)
         return None
-    deadline = time.monotonic() + SPAWN_WAIT_SECONDS
-    while time.monotonic() < deadline:
-        try:
-            return _connect(address)
-        except OSError:
-            if process.poll() is not None:
-                # It exited: either it failed, or it found a daemon already bound
-                # and stood down. One more connect tells the two apart.
-                try:
-                    return _connect(address)
-                except OSError:
-                    return None
-            time.sleep(0.05)
-    return None
+    finally:
+        if spawner:
+            election.release()
 
 
 def _detach_kwargs() -> dict:

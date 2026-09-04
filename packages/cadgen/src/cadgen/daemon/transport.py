@@ -24,6 +24,7 @@ exits on its own timer.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import multiprocessing.connection as mpc
@@ -99,23 +100,112 @@ def read_authkey(key: str) -> bytes | None:
 
 
 def ensure_authkey(key: str) -> bytes:
-    """Create the shared secret if absent, and return it.
+    """Create the shared secret if absent, and return it -- atomically.
 
     Written before the listener exists, so a client that finds an address always finds a
-    key to go with it. 0600 on POSIX; on Windows the per-user temp directory is already
-    ACL'd to the owner, and the pipe itself is the real access control.
+    key to go with it. Twenty clients starting at once all call this; the key must be
+    created exactly once or the daemon and half its clients hold different secrets and
+    every handshake between them fails. So the secret is written to a private temp file
+    and LINKED into place: ``os.link`` is create-if-absent on every platform, the loser
+    of a race reads what the winner linked. 0600 on POSIX; on Windows the per-user temp
+    directory is already ACL'd to the owner, and the pipe itself is the real access
+    control.
     """
     path = _authkey_path(key)
     existing = read_authkey(key)
     if existing:
         return existing
     path.parent.mkdir(parents=True, exist_ok=True)
-    with os.fdopen(os.open(path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600), "wb") as handle:
-        secret = secrets.token_hex(_AUTHKEY_BYTES).encode("ascii")
+    secret = secrets.token_hex(_AUTHKEY_BYTES).encode("ascii")
+    temp = path.with_name(f"{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
+    with os.fdopen(os.open(temp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600), "wb") as handle:
         handle.write(secret)
+    try:
+        os.link(temp, path)
+    except FileExistsError:
+        # Someone else created it first; theirs is THE key.
+        for _ in range(200):
+            existing = read_authkey(key)
+            if existing:
+                secret = existing
+                break
+            time.sleep(0.005)
+    finally:
+        with contextlib.suppress(OSError):
+            temp.unlink()
     if os.name != "nt":
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        with contextlib.suppress(OSError):
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
     return secret
+
+
+class SingletonLock:
+    """An exclusive, non-blocking, process-lifetime lock on a small file.
+
+    The one lock cadgen keeps. It is not a build lock (STORE.md §No locks): it makes the
+    daemon a SINGLETON per identity, so two daemons starting at once cannot both bind, and
+    it elects the one client that spawns a daemon when none is running. The kernel releases
+    it when the holder dies -- no pid file, no liveness inference. POSIX ``flock``; Windows
+    ``msvcrt.locking`` on the first byte (mandatory there, which is fine for a file whose
+    only content is the lock).
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self._fd: int | None = None
+
+    def acquire(self) -> bool:
+        """True if this process now holds the lock; False if another process does."""
+        if self._fd is not None:
+            return True
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(self.path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
+            return False
+        self._fd = fd
+        return True
+
+    @property
+    def held(self) -> bool:
+        return self._fd is not None
+
+    def release(self) -> None:
+        fd, self._fd = self._fd, None
+        if fd is None:
+            return
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                with contextlib.suppress(OSError):
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
+def daemon_lock(key: str) -> SingletonLock:
+    """The lock a daemon holds for its whole life: one daemon per identity."""
+    return SingletonLock(state_dir() / f"cadgen-daemon-v{PROTOCOL}-{key}.lock")
+
+
+def spawn_lock(key: str) -> SingletonLock:
+    """The lock the ONE spawning client holds while it starts a daemon."""
+    return SingletonLock(state_dir() / f"cadgen-daemon-v{PROTOCOL}-{key}.spawn.lock")
 
 
 def forget_authkey(key: str) -> None:
@@ -264,6 +354,9 @@ __all__ = [
     "forget_authkey",
     "identity_digest",
     "keys_match",
+    "SingletonLock",
+    "daemon_lock",
+    "spawn_lock",
     "read_authkey",
     "state_dir",
     "supported",
