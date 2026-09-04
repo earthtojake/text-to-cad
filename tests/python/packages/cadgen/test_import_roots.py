@@ -12,7 +12,6 @@ import time
 import unittest
 from pathlib import Path
 
-from tests.python.support.processes import wait_for_exit
 from tests.python.support.paths import REPO_ROOT, add_repo_path
 from tests.python.support.tmp_root import temporary_directory
 
@@ -168,19 +167,24 @@ class DaemonExecutor(unittest.TestCase):
                 cls.server.wait(timeout=15)
             except subprocess.TimeoutExpired:
                 cls.server.kill()
-        pids = []
         for worker in status.get("workers") or []:
             try:
                 os.kill(int(worker["pid"]), 9)
-                pids.append(int(worker["pid"]))
             except (OSError, ValueError, TypeError):
                 pass
-        # The workers are the daemon's children, not ours: wait for the pids to
-        # go, or the directory they logged into cannot be removed on Windows.
-        wait_for_exit(pids)
         os.environ.pop("CADGEN_DAEMON_SOCKET", None)
         os.environ.pop("CADGEN_DAEMON_STATE_DIR", None)
-        cls.socket_dir.cleanup()
+        # Windows refuses to delete a file another process still has open, and a
+        # killed worker releases its handle on the daemon log a beat after the kill.
+        deadline = time.monotonic() + 15
+        while True:
+            try:
+                cls.socket_dir.cleanup()
+                break
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.2)
         cls.work_tmp.cleanup()
 
     def test_a_job_sees_its_own_pythonpath_and_the_next_one_does_not(self) -> None:
