@@ -413,15 +413,19 @@ def build_step_artifact(
 
         with contextlib.ExitStack() as slot:
             if from_generator:
-                from cadgen._internal.doors import announce_rebuild, document_staleness
+                from cadgen._internal.doors import announce_rebuild
+                from cadgen.store.gate import stale
 
                 document = existing_spec.step_path
+                verdict = stale(existing_spec.script_path) if existing_spec.script_path else None
                 announce_rebuild(
                     "step compile",
                     document,
                     reason=(
-                        (document_staleness(document) if document.is_file() else "no document on disk")
-                        or ("--force" if force else "its render package is missing or stale")
+                        "--force" if force
+                        else "no document on disk" if not document.is_file()
+                        else verdict.reason() if verdict is not None and verdict.stale
+                        else "its render package is missing or stale"
                     ),
                     source=existing_spec.script_path or existing_spec.source_path,
                     verb="compiling its render package",

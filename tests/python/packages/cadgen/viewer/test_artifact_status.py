@@ -17,7 +17,6 @@ from pathlib import Path
 from cadgen.viewer import store_paths
 from cadgen.viewer.artifact_status import (
     artifact_status,
-    is_generated_document,
     owns_artifact_path,
     owns_dxf_path,
     owns_step_path,
@@ -80,17 +79,6 @@ class _Tree:
 
             object_path(hashlib.sha256(b"SURF\x00").hexdigest()).unlink()
         return tree
-
-    def generated_record(self, step_path, script_name="src/plate.py", body=None):
-        """A record for a MODEL that wrote ``step_path`` (a generated document)."""
-        from cadgen.store.records import note_output, write_record
-
-        script = self.root / script_name
-        script.parent.mkdir(parents=True, exist_ok=True)
-        script.write_text("", encoding="utf-8")
-        write_record(script, body or {"sourceKind": "python", "tree": "", "closure": {"hash": "", "files": []}, "children": [], "outputs": {}})
-        note_output(step_path, script)
-        return script
 
     def record(self, output_dir, **fields):
         path = Path(status_record_path(str(output_dir)))
@@ -246,68 +234,6 @@ class Verdicts(ArtifactStatusTestCase):
         self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
 
 
-
-class GeneratedClassification(ArtifactStatusTestCase):
-    def test_an_imported_step_with_no_sidecar_and_no_record_is_not_generated(self):
-        self.assertFalse(is_generated_document(self.tree.step()))
-
-    def test_a_sidecar_at_the_current_schema_is_a_fast_yes(self):
-        step = self.tree.step()
-        Path(store_paths.source_sidecar_path(step)).write_text(
-            json.dumps({"schemaVersion": store_paths.SOURCE_SIDECAR_SCHEMA_VERSION}),
-            encoding="utf-8",
-        )
-        self.assertTrue(is_generated_document(step))
-
-    def test_a_sidecar_at_another_schema_is_not_a_marker_and_the_record_decides(self):
-        step = self.tree.step()
-        Path(store_paths.source_sidecar_path(step)).write_text(
-            json.dumps({"schemaVersion": 4}), encoding="utf-8"
-        )
-        self.assertFalse(is_generated_document(step))
-
-        self.tree.generated_record(step)
-        self.assertTrue(is_generated_document(step))
-
-    def test_an_evicted_truncated_or_kindless_record_degrades_to_imported(self):
-        from cadgen.store.index import entry_path, model_key
-
-        step = self.tree.step()
-        record = entry_path("model", model_key(step))
-        record.parent.mkdir(parents=True, exist_ok=True)
-        for body in ("{ truncated", "{}", '{"sourceKind":"   "}', "[]", "null"):
-            record.write_text(body, encoding="utf-8")
-            # Never raises: the index is evictable, so a missing or broken
-            # record is a routine state, not a fault.
-            self.assertFalse(is_generated_document(step), body)
-
-    def test_classification_rides_on_a_failing_verdict_too(self):
-        # The case where it matters most is a document with NO package: that is
-        # exactly when the import path asks whether to offer a compile.
-        step = self.tree.step()
-        self.tree.generated_record(step)
-        verdict = resolve_artifact_verdict(step, str(self.tree.root))
-        self.assertFalse(verdict["ok"])
-        self.assertEqual(verdict["code"], "missing_glb")
-        self.assertTrue(verdict["generated"])
-        self.assertTrue(verdict["rawStep"])
-
-    def test_records_are_keyed_by_path_while_results_are_shared_by_content(self):
-        one = self.tree.step("one.step")
-        two = self.tree.step("two.step")
-        self.assertEqual(self.tree.package(one), self.tree.package(two), "same bytes, one tree")
-        self.tree.generated_record(one)
-        self.assertTrue(is_generated_document(one))
-        self.assertFalse(is_generated_document(two))
-
-    def test_classification_never_reaches_a_client_payload(self):
-        step = self.tree.step()
-        self.tree.package(step)
-        status = artifact_status(step, str(self.tree.root))
-        self.assertNotIn("generated", status)
-        self.assertNotIn("sourceKind", status)
-
-
 class SnapshotShapes(ArtifactStatusTestCase):
     def test_writing_beats_a_resolvable_package(self):
         step = self.tree.step()
@@ -363,7 +289,6 @@ class ProgressReader(ArtifactStatusTestCase):
         progress = snapshot["progress"]
         for key in ("phase", "label", "done", "total", "determinate"):
             self.assertIn(key, progress, key)
-
 
 
     def test_a_terminal_or_stale_or_absent_record_yields_nothing(self):

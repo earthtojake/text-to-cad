@@ -6,8 +6,9 @@ real link trio (a pin, an arm placing the pin twice, a robot placing the arm
 twice and the pin once) built through the real pipeline:
 
 1. no object references source;
-2. no reader consults a record — the doors, the viewer's catalog and render
-   path, and the mesh ledger find a tree through ``index/document`` alone;
+2. no reader consults a record — the doors, the viewer (catalog, render
+   path AND status), and the mesh ledger find a tree through ``index/document``
+   alone; the viewer has no exception;
 3. records are deletable — ``rm -rf index/model index/output`` loses no
    artifact, and the rebuild re-creates the records without a new object.
 """
@@ -209,7 +210,7 @@ class TwoSidesLaw(unittest.TestCase):
         from cadgen._internal import doors
         from cadgen.step_artifact_cli import build_step_artifact
         from cadgen.step_export_target import export_cad_target
-        from cadgen.viewer import scanner, store_paths
+        from cadgen.viewer import artifact_status, scanner, store_paths
 
         expected = self._document_trees()
         self.assertTrue(all(expected.values()), expected)
@@ -224,6 +225,11 @@ class TwoSidesLaw(unittest.TestCase):
                 self.assertIsInstance(store_paths.result_descriptor(tree), dict)
             listed = scanner.scan_cad_directory(str(self.root))
             self.assertIn("robot.step", json.dumps(listed))
+            # The viewer's status — the badge included — is artifact-side only.
+            verdict = artifact_status.resolve_artifact_verdict(str(self.robot_step), str(self.root))
+            self.assertTrue(verdict.get("ok"), verdict)
+            self.assertNotIn("generated", verdict)
+            self.assertEqual("ready", artifact_status.artifact_status(str(self.robot_step), str(self.root))["state"])
             payload = export_cad_target(self.robot_step, [("stl", out)], repo_root=self.root)
             self.assertTrue(out.is_file(), payload)
             # A second export at the same variant is satisfied by the ARTIFACT-side ledger.

@@ -148,37 +148,6 @@ class RenderContractSyncTest(unittest.TestCase):
             self.assertEqual(snapshot["progress"]["done"], 3)
             self.assertEqual(snapshot["progress"]["detail"], "c0ffee")
 
-    def test_viewer_classifier_reads_a_record_cadgen_wrote(self) -> None:
-        # End to end: cadgen writes the record, the viewer's status authority
-        # reads it back as generated. Nothing here depends on a sidecar — that
-        # is the whole point, since a plain generated model writes none.
-        from cadgen.store.records import note_output, write_record
-        from cadgen.viewer import artifact_status
-
-        with tempfile.TemporaryDirectory() as workspace:
-            cache_dir = Path(workspace) / "store"
-            artifact = Path(workspace) / "plate.step"
-            artifact.write_text("ISO-10303-21;\n", encoding="utf-8")
-            script = Path(workspace) / "src" / "plate.py"
-            script.parent.mkdir()
-            script.write_text("", encoding="utf-8")
-            with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(cache_dir)}):
-                write_record(
-                    script,
-                    {"sourceKind": "python", "tree": "", "closure": {"hash": "", "files": []}, "children": [], "outputs": {}},
-                )
-                note_output(artifact, script)
-                self.assertFalse(
-                    artifact.with_name(f"{artifact.name}.json").exists(),
-                    "fixture must be a PLAIN generated model (no sidecar)",
-                )
-                verdict = artifact_status.resolve_artifact_verdict(str(artifact), workspace)
-            self.assertTrue(
-                verdict.get("generated"),
-                "the viewer read cadgen's own provenance record and still "
-                f"classified the model as imported: {verdict}",
-            )
-
     def test_component_blob_format_is_pinned_not_current(self) -> None:
         # Component blobs are content-addressed: their serialized bytes ARE the
         # cid. A floating BinTools_FormatVersion_CURRENT would let an OCP

@@ -60,9 +60,8 @@ class DelegatesToCadgen(unittest.TestCase):
                     str(source_sidecar.source_sidecar_path(Path(os.path.abspath(probe)))),
                 )
 
-    def test_an_unbuilt_document_has_no_tree_and_no_record(self) -> None:
+    def test_an_unbuilt_document_has_no_tree(self) -> None:
         self.assertIsNone(store_paths.result_tree(self.probes[0]))
-        self.assertIsNone(store_paths.record_for(self.probes[0]))
         self.assertIsNone(store_paths.result_descriptor("f" * 64))
 
     def test_a_seeded_document_resolves_to_its_tree_through_the_alias_too(self) -> None:

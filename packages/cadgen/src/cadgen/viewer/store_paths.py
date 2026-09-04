@@ -29,7 +29,6 @@ __all__ = [
     "cadgen_cache_root_dir",
     "component_object_present",
     "build_scope",
-    "record_for",
     "result_descriptor",
     "result_tree",
     "source_sidecar_path",
@@ -66,13 +65,6 @@ def build_scope(file_path) -> str:
     """The model's build scope: a NAME derived from its path (``cadgen.catalog.build_scope``).
     Also the server's identity key for one model's in-flight build."""
     return catalog.build_scope(Path(str(file_path)))
-
-
-def record_for(file_path) -> dict | None:
-    """The model record behind a document (``STORE.md`` §records), or ``None``."""
-    from cadgen.store.records import record_for_document
-
-    return record_for_document(Path(str(file_path)))
 
 
 def result_tree(file_path) -> str | None:

@@ -119,9 +119,9 @@ so just use the file and return the link.
   alike. The catalog lists artifacts and names them exactly as they read on
   disk: `moonwatch.step` is `moonwatch.step` in the tab, the breadcrumb, the
   catalog row and the file picker, whether it was generated or imported.
-  Generated-ness is package provenance — it drives status badges, rebuild
-  behaviour and freshness gates, and never the displayed name; the model
-  script is not shown anywhere in the UI. A generated model's render artifacts
+  The Viewer never learns whether a document was generated: its status is
+  artifact-side only (not compiled / compiling / rendered / failed), and the
+  model script is not shown anywhere in the UI. A generated model's render artifacts
   must already be built (run the model script); the Viewer will not build them
   on open. If the resolved path is missing, do not return the link; report the
   problem and point to the correct path.

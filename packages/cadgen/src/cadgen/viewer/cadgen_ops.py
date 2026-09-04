@@ -24,12 +24,7 @@ from .build_progress import ProgressRegistry, build_progress_snapshot
 from .imports import ImportCompiler
 from .store_paths import build_scope
 
-__all__ = ["CLI_BUILD_HINT", "CadgenOps", "create_cadgen_ops"]
-
-CLI_BUILD_HINT = (
-    "The viewer is a static visualization tool and does not run generators. "
-    "Build this model by running its script: python <source>."
-)
+__all__ = ["CadgenOps", "create_cadgen_ops"]
 
 
 class CadgenOps:
@@ -92,9 +87,10 @@ class CadgenOps:
         if status.get("state") != ARTIFACT_STATE.NEEDS_BUILD:
             return status
 
-        # The ONLY buildable state the viewer supports is importing a raw
-        # foreign STEP. Everything else renders what exists or names the CLI.
-        if verdict.get("rawStep") and not verdict.get("generated"):
+        # The one buildable state: a document with no tree for its bytes. The
+        # viewer never asks who wrote it — a compile job builds the tree from
+        # the bytes, generated or imported alike (STORE.md §2, §9).
+        if verdict.get("rawStep"):
             # The import offer is exactly Node's three keys. It deliberately
             # does NOT carry `blocked` through from `status`.
             #
@@ -116,11 +112,7 @@ class CadgenOps:
                 "reason": status.get("reason"),
                 "stepImport": True,
             }
-
-        # No stale-render limbo exists under content keying: an edited file
-        # resolves to a different key (needs-build above), and a resolved
-        # package is by construction the render of exactly these bytes.
-        return {"state": ARTIFACT_STATE.ERROR, "error": CLI_BUILD_HINT}
+        return status
 
     # --- build ------------------------------------------------------------
 
@@ -129,8 +121,7 @@ class CadgenOps:
             return {"ok": True, "state": ARTIFACT_STATE.READY}
 
         candidate = self._candidate(file_ref)
-        verdict = resolve_artifact_verdict(file_ref, self.root_dir)
-        if self._is_raw_step_file(candidate) and not verdict.get("generated"):
+        if self._is_raw_step_file(candidate):
             # A job in the pool: it waits for a slot there if it must, so this
             # request thread simply waits for the answer (a peer's request for
             # the same document attaches to the same job).
@@ -158,7 +149,7 @@ class CadgenOps:
             if imported.get("errorType"):
                 failure["errorType"] = imported["errorType"]
             return failure
-        return {"ok": False, "state": ARTIFACT_STATE.ERROR, "error": CLI_BUILD_HINT}
+        return {"ok": False, "state": ARTIFACT_STATE.ERROR, "error": f"Artifact source not found: {file_ref}"}
 
     @staticmethod
     def _is_raw_step_file(candidate: str) -> bool:

@@ -4,8 +4,7 @@
 They load the document on disk — current or not — and run no Python: a door asks
 one question (does the store have a tree for these bytes?) and a source that has
 moved on since the document was written is the model's business, not the door's
-(STORE.md §9). ``document_staleness`` still answers that question for the viewer's
-badge, so the reason it gives is pinned here too.
+(STORE.md §9); ``cadgen store why`` answers that question, never a door.
 
 Real fixture, real script run: the document is built cold in a subprocess, then
 the door is called in-process with stderr captured.
@@ -122,23 +121,3 @@ class DoorReadsTheDocumentTests(unittest.TestCase):
         self.assertTrue(report["ok"], report)
         self.assertNotIn("is stale", err + interfere_err)
         self.assertNotIn("rebuilding", err + interfere_err)
-
-    def test_document_staleness_still_names_the_reason_for_the_badge(self):
-        from cadgen._internal.doors import document_staleness
-
-        self.assertIsNone(document_staleness(self.document))
-        self._make_stale()
-        self.assertEqual(
-            document_staleness(self.document),
-            "lib/size.py changed after the document was written",
-        )
-
-    def test_a_missing_closure_file_is_named(self):
-        from cadgen._internal.doors import document_staleness
-
-        (self.project / "lib" / "size.py").unlink()
-        self.assertEqual(document_staleness(self.document), "closure file missing: lib/size.py")
-
-
-if __name__ == "__main__":
-    unittest.main()

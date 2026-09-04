@@ -20,7 +20,7 @@ from pathlib import Path
 
 from cadgen.viewer.backend import ForbiddenAssetError
 from cadgen.viewer.build_progress import ProgressRegistry
-from cadgen.viewer.cadgen_ops import CLI_BUILD_HINT, CadgenOps
+from cadgen.viewer.cadgen_ops import CadgenOps
 from cadgen.viewer.imports import ImportCompiler
 
 
@@ -186,20 +186,6 @@ class OpsWiring(ImportTestCase):
             {"ok": True, "state": "ready", "stepImport": True, "document": str(Path(candidate).resolve())},
         )
         self.assertNotIn("contended", result)
-
-    def test_a_generated_document_is_never_compiled_by_the_viewer(self):
-        from cadgen.viewer import store_paths
-
-        ops = self.ops()
-        candidate = self.step("gen.step")
-        sidecar = Path(store_paths.source_sidecar_path(candidate))
-        sidecar.write_text(
-            json.dumps({"schemaVersion": store_paths.SOURCE_SIDECAR_SCHEMA_VERSION}),
-            encoding="utf-8",
-        )
-        self.assertEqual(ops.artifact_status("gen.step"), {"state": "error", "error": CLI_BUILD_HINT})
-        self.assertEqual(ops.build_artifact("gen.step")["error"], CLI_BUILD_HINT)
-        self.assertEqual(self.submit.calls, [])
 
     def test_a_failed_import_is_a_500_shaped_payload_with_the_bare_message(self):
         ops = self.ops()

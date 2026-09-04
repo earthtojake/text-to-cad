@@ -30,8 +30,8 @@ Two sides, two index kinds (STORE.md §2, the law):
   compiled. The same bytes anywhere on disk resolve to the same tree; a file
   with no entry is compiled, never refused, and no record is opened.
 - ``index/output/<sha256(output PATH)>`` → ``{"model": …}``. CODE-SIDE
-  dependency memory: which model wrote the file at this path. Read only by
-  the badge, ``store why`` and provenance — never by a render path.
+  dependency memory: which model wrote the file at this path. Read by
+  ``store why`` and provenance — never by the viewer or a render path.
 """
 
 from __future__ import annotations
@@ -134,9 +134,9 @@ def document_mesh_sha(document_hash: str, variant_key: str) -> str | None:
 
 
 def note_output(output_path: Path | str, model: Path | str) -> None:
-    """Code-side memory: ``model`` wrote the file at ``output_path``. For the
-    badge, ``store why`` and provenance — never for finding or rendering an
-    artifact (that is ``note_document_tree``). Idempotent; atomic."""
+    """Code-side memory: ``model`` wrote the file at ``output_path``. For
+    ``store why`` and provenance — never for the viewer, and never for finding
+    or rendering an artifact (that is ``note_document_tree``). Idempotent; atomic."""
     write_entry("output", model_key(output_path), {"model": _resolved(model)})
 
 
@@ -146,7 +146,7 @@ def forget_output(output_path: Path | str) -> None:
 
 def model_for_output(output_path: Path | str) -> Path | None:
     """The model the store remembers writing ``output_path`` (when that script
-    still exists), else None. MODEL-SIDE: badge / ``store why`` / provenance."""
+    still exists), else None. MODEL-SIDE: ``store why`` / provenance."""
     entry = read_entry("output", model_key(output_path)) or {}
     recorded = str(entry.get("model") or "").strip()
     if recorded:
@@ -157,7 +157,7 @@ def model_for_output(output_path: Path | str) -> Path | None:
 
 
 def source_for_document(document: Path | str) -> Path:
-    """MODEL-SIDE (badge, ``store why``, provenance — never a render path): the
+    """MODEL-SIDE (``store why``, provenance — never the viewer or a render path): the
     script the store remembers writing ``document``, else the document itself
     (an imported source keys its own record on its path)."""
     document = Path(document)

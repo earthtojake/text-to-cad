@@ -64,17 +64,19 @@ test:
    `stl|3mf|glb build`, `step build` on a document), the viewer's catalog and
    render, and the mesh ledger find a tree in ONE lookup — hash the file's
    bytes, read `index/document`, read objects — and never open `index/model`
-   or `index/output`. A miss is a compile job, never a refusal. The viewer's
-   badge is the one reader of records ("which model wrote this, is it
-   current"), on its own explicit path (`viewer.store_paths.record_for`).
+   or `index/output`. A miss is a compile job, never a refusal. The viewer
+   reads no record at all — no exception: its status is artifact-side (not
+   compiled / compiling / rendered / failed) and it never learns which model
+   wrote a document. "Is this document behind its source" is `cadgen store
+   why`'s and the build tree's question.
 3. **Records are deletable.** `rm -rf index/model index/output` loses no
    artifact: every reader still works from objects; a rebuild re-creates the
    records without rebuilding a tree whose objects exist.
 
 `index/document` is written whenever a tree is published for a document — by
 a model's build for its `.step`, by a compile job for the file it compiled.
-`index/output` is written beside it for the badge, `store why` and
-provenance; nothing on a render path reads it.
+`index/output` is written beside it for `store why` and provenance;
+nothing in the viewer or on a render path reads it.
 
 There are exactly two ways a file is named, and that is the only distinction
 the store makes:
@@ -282,8 +284,8 @@ Each with the failure it prevents.
   out identical), writes a new record and re-notes its outputs in
   `index/output`. The moved documents themselves never stopped rendering:
   `index/document` is keyed by their bytes, so every door and the viewer
-  find the same tree at the new path before any rebuild; only the badge
-  (which model wrote this, is it current) waits for the first build. The
+  find the same tree at the new path before any rebuild; only `store why`
+  reads the moved model as unbuilt until then. The
   records at the old path become unreachable and GC collects them. Prevents:
   two projects at different paths sharing one record and one overwriting the
   other's outputs list; and a path or timestamp changing a hash.
