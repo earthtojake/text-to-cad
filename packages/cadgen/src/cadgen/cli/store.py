@@ -46,7 +46,9 @@ def _cmd_info(as_json: bool) -> int:
             object_bytes += path.stat().st_size
         except OSError:
             pass
-    counts = {kind: sum(1 for _ in iter_entries(kind)) for kind in ("model", "component", "op", "mesh")}
+    from cadgen.store.paths import INDEX_KINDS
+
+    counts = {kind: sum(1 for _ in iter_entries(kind)) for kind in INDEX_KINDS}
     payload = {
         "root": str(store_root()),
         "objects": {"count": objects, "bytes": object_bytes},
@@ -57,9 +59,16 @@ def _cmd_info(as_json: bool) -> int:
         return 0
     print(f"store  {payload['root']}")
     print(f"objects  {objects} ({_human(object_bytes)})")
+    labels = {
+        "model": "records",
+        "document": "document entries (bytes -> tree)",
+        "output": "output entries (path -> model)",
+        "component": "component entries",
+        "op": "op-memo entries",
+        "mesh": "mesh entries",
+    }
     for kind, count in counts.items():
-        label = {"model": "records", "component": "component entries", "op": "op-memo entries", "mesh": "mesh entries"}[kind]
-        print(f"index/{kind:<10} {count} {label}")
+        print(f"index/{kind:<10} {count} {labels[kind]}")
     return 0
 
 
