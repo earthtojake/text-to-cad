@@ -118,7 +118,7 @@ def inspect_cad_refs(
             except CadRefError as exc:
                 error = cad_ref_error_payload(exc)
                 error.setdefault("line", parsed.line)
-                error.setdefault("cadPath", parsed.cad_path)
+                error.setdefault("document", parsed.cad_path)
                 error.setdefault("selector", None)
                 error.setdefault("kind", "input")
                 errors.append(error)
@@ -126,8 +126,7 @@ def inspect_cad_refs(
                     {
                         "line": parsed.line,
                         "token": parsed.token,
-                        "cadPath": parsed.cad_path,
-                        "stepPath": "",
+                        "document": parsed.cad_path,
                         "summary": {},
                         "selections": [],
                         "warnings": [],
@@ -139,9 +138,7 @@ def inspect_cad_refs(
         token_result: dict[str, object] = {
             "line": parsed.line,
             "token": parsed.token,
-            "cadPath": parsed.cad_path,
-            "stepPath": _display_path(context.step_path) if context.step_path is not None else "",
-            "stepHash": context.manifest.get("stepHash"),
+            "document": _display_path(context.step_path) if context.step_path is not None else parsed.cad_path,
             "summary": _entry_summary(context),
             "selections": [],
             "warnings": [],
@@ -179,7 +176,7 @@ def inspect_cad_refs(
                         errors.append(
                             {
                                 "line": parsed.line,
-                                "cadPath": parsed.cad_path,
+                                "document": parsed.cad_path,
                                 "selector": raw_selector,
                                 **selection_error,
                             }
@@ -817,8 +814,7 @@ def _selection_positioning_payload(selection: TargetSelection) -> dict[str, obje
 
 def _selection_result_payload(selection: TargetSelection) -> dict[str, object]:
     payload: dict[str, object] = {
-        "cadPath": selection.context.cad_path,
-        "stepPath": _display_path(selection.context.step_path) if selection.context.step_path is not None else "",
+        "document": _display_path(selection.context.step_path) if selection.context.step_path is not None else selection.context.cad_path,
         "selectorType": selection.selector_type,
         "normalizedSelector": selection.normalized_selector,
         "displaySelector": selection.display_selector,
@@ -1056,16 +1052,14 @@ def diff_entry_targets(
     result: dict[str, object] = {
         "ok": True,
         "left": {
-            "cadPath": left_context.cad_path,
+            "document": _display_path(left_context.step_path) if left_context.step_path is not None else left_context.cad_path,
             "kind": left_context.kind,
-            "stepPath": _display_path(left_context.step_path) if left_context.step_path is not None else "",
             "summary": _entry_summary(left_context),
             "entryFacts": _entry_facts(left_context),
         },
         "right": {
-            "cadPath": right_context.cad_path,
+            "document": _display_path(right_context.step_path) if right_context.step_path is not None else right_context.cad_path,
             "kind": right_context.kind,
-            "stepPath": _display_path(right_context.step_path) if right_context.step_path is not None else "",
             "summary": _entry_summary(right_context),
             "entryFacts": _entry_facts(right_context),
         },

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import contextlib
 from functools import lru_cache
 import os
 from pathlib import Path
+import sys
 import time
-from typing import Any
+from typing import Any, Iterator
 
 from OCP.BinXCAFDrivers import BinXCAFDrivers
 from OCP.IFSelect import IFSelect_RetDone
@@ -272,10 +274,10 @@ def _load_occurrence_tree(
         mode = getattr(reader, mode_name, None)
         if callable(mode):
             mode(True)
-    read_status = reader.ReadFile(str(step_path))
-    if int(read_status) != int(IFSelect_RetDone):
-        return (*_load_fallback_occurrence_tree(step_path), None)
-    if not reader.Transfer(doc):
+    with kernel_messages_on_stderr():
+        read_status = reader.ReadFile(str(step_path))
+        transferred = int(read_status) == int(IFSelect_RetDone) and reader.Transfer(doc)
+    if not transferred:
         return (*_load_fallback_occurrence_tree(step_path), None)
 
     loaded = _load_occurrence_tree_from_xcaf_doc(step_path, doc)
@@ -407,14 +409,42 @@ def load_step_scene_from_xcaf_doc(
     )
 
 
+@contextlib.contextmanager
+def kernel_messages_on_stderr() -> Iterator[None]:
+    """Route the CAD kernel's diagnostics to stderr while a STEP is read.
+
+    OCCT's readers print their parse diagnostics (``**** ERR StepFile ...``) to
+    the C-level stdout, which is where a CLI's result belongs: a malformed
+    document would otherwise corrupt the JSON on stdout. The redirect is at the
+    file-descriptor level because the kernel does not write through Python's
+    ``sys.stdout``.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    try:
+        saved = os.dup(1)
+    except OSError:
+        yield
+        return
+    try:
+        os.dup2(2, 1)
+        yield
+    finally:
+        sys.stdout.flush()
+        os.dup2(saved, 1)
+        os.close(saved)
+
+
 def _load_fallback_occurrence_tree(
     step_path: Path,
 ) -> tuple[list[OccurrenceNode], dict[int, Any], dict[int, str | None], dict[int, ColorRGBA], dict[int, dict[int, ColorRGBA]]]:
     reader = STEPControl_Reader()
-    status = reader.ReadFile(str(step_path))
+    with kernel_messages_on_stderr():
+        status = reader.ReadFile(str(step_path))
+        if status == IFSelect_RetDone:
+            reader.TransferRoots()
     if status != IFSelect_RetDone:
         raise RuntimeError(f"failed to read STEP file: {step_path}")
-    reader.TransferRoots()
     shape = reader.OneShape()
     if shape.IsNull():
         raise RuntimeError(f"STEP file produced no shape: {step_path}")

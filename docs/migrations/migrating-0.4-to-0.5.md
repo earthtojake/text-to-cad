@@ -232,7 +232,7 @@ geometry a model produces.
 Two decorator arguments are read **statically**, before the module runs, and
 must be literals: `out=` (a string) and the two tolerances (numbers). A tolerance therefore cannot come from a constants
 module; write the number in each decorator (a project README can name the
-shared value). `kinematics=` and `animation=` are ordinary Python evaluated
+shared value). `kinematics=` is ordinary Python evaluated
 when the module loads — a dict built at import, or loaded from a file, is fine
 and is what the kinematics reference shows. Unknown keyword arguments are
 rejected outright on every decorator.
@@ -336,7 +336,7 @@ lines.
 Behaviours that differ from v0.4 and will bite:
 
 - **A run always writes its outputs.** There is no `--write`, and no way to
-  build "just the render package": running the model produces the files.
+  build "just the tree": running the model produces the files.
 - **Importing a model module never builds.** Only the call does. Inside another
   model's body, a call composes (next step); at top level, it builds.
 - **Every build is parallel.** Children build on a pool of warm workers; a

@@ -86,8 +86,7 @@ class StepTopologyArtifactError(CadRefError):
         return {
             "code": self.code,
             "message": str(self),
-            "cadPath": self.cad_path,
-            "stepPath": _display_path(self.step_path),
+            "document": _display_path(self.step_path),
         }
 
 
@@ -270,15 +269,10 @@ def resolve_step_target(target: str) -> ResolvedStepTarget:
 
     raw_step_path = _raw_step_path(raw_target)
     if raw_step_path is not None:
-        lookup_cad_path = _lookup_cad_path(cad_path)
-        source = find_source_by_cad_ref(lookup_cad_path)
-        resolved_step_path = source.step_path if source is not None else None
-        if source is not None and resolved_step_path is not None and resolved_step_path.resolve() == raw_step_path.resolve():
-            return ResolvedStepTarget(
-                cad_path=cad_path,
-                source_path=source.source_path,
-                step_path=raw_step_path,
-            )
+        # A document path names the document. A door is a reader: it never opens
+        # the scripts beside a document to learn which one wrote it, so a broken
+        # or unrelated sibling script cannot fail the read (and the answer does
+        # not change when the script is gone).
         return ResolvedStepTarget(
             cad_path=cad_path,
             source_path=raw_step_path,

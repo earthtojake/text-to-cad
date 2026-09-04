@@ -114,11 +114,16 @@ class AssemblyOccurrenceRefsTest(unittest.TestCase):
             "`inspect refs --facts` reported occurrenceCount 1 for a whole assembly",
         )
 
-    def test_a_non_assembly_artifact_is_returned_untouched(self) -> None:
-        """The guardrail. Part entries are the common path and must not notice this change."""
+    def test_a_part_artifact_is_composed_like_any_tree(self) -> None:
+        """A tree's selector tables live in its components, a part's single component
+        included: skipping parts left them with the empty base index, so no face or
+        edge resolved on a part and its facts counted zero faces. Only a missing
+        artifact returns the index untouched."""
         flat = self._flat_index()
         part = _FakeArtifact(kind="part", artifact_path=self.package_dir)
-        self.assertIs(flat, assembly_lookup.index_with_assembly_occurrences(flat, part))
+        composed = assembly_lookup.index_with_assembly_occurrences(flat, part)
+        self.assertIsNot(flat, composed)
+        self.assertTrue(composed.occurrence_by_id, "the part's occurrences were not composed from its tree")
         self.assertIs(flat, assembly_lookup.index_with_assembly_occurrences(flat, None))
 
     def test_a_missing_package_directory_is_not_an_error(self) -> None:

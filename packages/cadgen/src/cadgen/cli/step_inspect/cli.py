@@ -360,8 +360,8 @@ _SUBCOMMANDS: dict[str, tuple] = {
     "diff": (
         _diff_call,
         lambda args: {
-            "left": {"cadPath": _safe_cad_path(args.left)},
-            "right": {"cadPath": _safe_cad_path(args.right)},
+            "left": {"document": _safe_cad_path(args.left)},
+            "right": {"document": _safe_cad_path(args.right)},
         },
         (),
         lambda: _format_diff_text,
@@ -546,7 +546,7 @@ def _format_refs_text(result: dict[str, object], *, quiet: bool, verbose: bool) 
         if not isinstance(token, dict):
             continue
         summary = token.get("summary") if isinstance(token.get("summary"), dict) else {}
-        headline = f"{token.get('cadPath')} faces={summary.get('faceCount')} edges={summary.get('edgeCount')}"
+        headline = f"{token.get('document')} faces={summary.get('faceCount')} edges={summary.get('edgeCount')}"
         lines.append(headline)
         if quiet:
             continue
@@ -749,7 +749,7 @@ def _format_frame_text(result: dict[str, object], *, quiet: bool, verbose: bool)
     if not result.get("ok"):
         return _format_errors(result)
     frame = result.get("frame") if isinstance(result.get("frame"), dict) else {}
-    head = str(result.get("copyText", result.get("cadPath")))
+    head = str(result.get("copyText", result.get("document")))
     if result.get("occurrenceKind") == "group":
         # A subassembly node carries no transform of its own -- group placement lives in
         # each leaf's absolute transform -- so report the branch's extent, which is the
