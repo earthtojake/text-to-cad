@@ -38,7 +38,7 @@ Semantics:
   ``@step`` or ``@dxf`` model.
 
 Per-run flags ride ``sys.argv`` of the top-level call: ``--force``,
-``--verbose``, ``--json``, ``-o/--output``, ``--mesh-tolerance``,
+``--verbose``, ``--json``, ``--mesh-tolerance``,
 ``--mesh-angular-tolerance``. Durable configuration lives
 in the decorator call. A model function takes no parameters: it is one
 configuration of one output. Parametric geometry lives in a plain factory the

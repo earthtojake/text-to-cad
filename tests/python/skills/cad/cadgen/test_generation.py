@@ -854,35 +854,6 @@ class CadGenerationTests(unittest.TestCase):
 
         self.assertEqual([self._cad_ref("second"), self._cad_ref("first")], calls)
 
-    def test_current_target_with_explicit_exports_still_runs(self) -> None:
-        # A current compose must not swallow an explicitly requested export (the
-        # --write-step SOURCE=OUTPUT pair): the no-op fast path previously dropped
-        # such specs as current and wrote nothing.
-        script_path = self._generator_script("current_exports")
-        calls: list[object] = []
-
-        def fake_generate(spec, **kwargs):
-            calls.append(spec)
-            return cad_generation.GeneratedStepResult(spec=spec, scene=None)
-
-        with mock.patch.object(
-            cad_generation, "_assembly_is_current", return_value=True
-        ), mock.patch.object(
-            cad_generation, "_assembly_glb_package_current", return_value=True
-        ), mock.patch.object(
-            cad_generation, "_generate_step_outputs", side_effect=fake_generate
-        ):
-            # Baseline: with no export requests the current target no-ops.
-            cad_generation.generate_step_targets([str(script_path)])
-            self.assertEqual([], calls)
-
-            step_output = self.temp_root / "exports" / "current_exports.step"
-            cad_generation.generate_step_targets([f"{script_path}={step_output}"])
-
-        self.assertEqual(1, len(calls))
-        self.assertIsNotNone(calls[0].step_export_path)
-        self.assertTrue(str(calls[0].step_export_path).endswith("current_exports.step"))
-
     def test_step_generation_default_allows_missing_logical_step(self) -> None:
         # gen_step builds GLB render artifacts and never writes a text STEP, so the
         # logical .step path need not exist and the artifact pipeline must not require it.
@@ -949,53 +920,6 @@ class CadGenerationTests(unittest.TestCase):
             )
         )
 
-    def test_step_output_pairs_retarget_generated_sources(self) -> None:
-        first_path = self._generator_script("first")
-        second_path = self._generator_script("second")
-        first_output = self.temp_root / "custom" / "first-output.step"
-        second_output = self.temp_root / "custom" / "second-output.step"
-        calls: list[cad_generation.EntrySpec] = []
-
-        def fake_generate(spec, *, entries_by_step_path, preloaded_scene=None, force=False, **_extra):
-            self.assertIn(spec.step_path.resolve(), entries_by_step_path)
-            self.assertIsNotNone(preloaded_scene)
-            calls.append(spec)
-
-        with mock.patch.object(cad_generation, "_generate_part_outputs", side_effect=fake_generate):
-            cad_generation.generate_step_targets(
-                [f"{first_path}={first_output}", f"{second_path}={second_output}"],
-            )
-
-        self.assertEqual([first_output, second_output], [call.step_path for call in calls])
-        self.assertEqual([first_output, second_output], [call.step_export_path for call in calls])
-        self.assertFalse(first_path.with_suffix(".step").exists())
-        self.assertFalse(second_path.with_suffix(".step").exists())
-
-    def test_step_output_pairs_allow_mixed_plain_and_paired_targets(self) -> None:
-        first_path = self._generator_script("first")
-        second_path = self._generator_script("second")
-        second_output = self.temp_root / "custom" / "second-output.step"
-        calls: list[cad_generation.EntrySpec] = []
-
-        def fake_generate(spec, *, entries_by_step_path, preloaded_scene=None, force=False, **_extra):
-            calls.append(spec)
-
-        with mock.patch.object(cad_generation, "_generate_part_outputs", side_effect=fake_generate):
-            cad_generation.generate_step_targets([str(first_path), f"{second_path}={second_output}"])
-
-        self.assertEqual([first_path.with_suffix(".step"), second_output], [call.step_path for call in calls])
-        # A SOURCE=OUTPUT.step pair requests an on-demand STEP export to that path.
-        self.assertEqual([None, second_output], [call.step_export_path for call in calls])
-        self.assertFalse(second_path.with_suffix(".step").exists())
-
-    def test_step_output_pairs_reject_duplicate_output_paths(self) -> None:
-        first_path = self._generator_script("first")
-        second_path = self._generator_script("second")
-        output_path = self.temp_root / "shared.step"
-
-        with self.assertRaisesRegex(ValueError, "used more than once"):
-            cad_generation.generate_step_targets([f"{first_path}={output_path}", f"{second_path}={output_path}"])
-
     def test_step_generation_infers_assembly_target(self) -> None:
         self._write_step("imported-part")
         assembly_path = self._write_assembly_generator(
@@ -1023,68 +947,6 @@ class CadGenerationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "is not a @dxf model"):
             cad_generation.generate_dxf_targets([str(script_path)])
-
-    def test_dxf_output_override_retargets_single_generated_source(self) -> None:
-        script_path = self._dxf_generator_script("flat")
-        output_path = self.temp_root / "drawings" / "flat-output.dxf"
-
-        cad_generation.generate_dxf_targets([str(script_path)], output=str(output_path))
-
-        self.assertTrue(output_path.exists())
-        self.assertFalse((self.temp_root / "flat_drawing.dxf").exists())
-
-    def test_dxf_output_pair_retargets_generated_source(self) -> None:
-        first_path = self._dxf_generator_script("first")
-        second_path = self._dxf_generator_script("second")
-        first_output = self.temp_root / "drawings" / "first-output.dxf"
-        second_output = self.temp_root / "drawings" / "second-output.dxf"
-
-        cad_generation.generate_dxf_targets([f"{first_path}={first_output}", f"{second_path}={second_output}"])
-
-        self.assertTrue(first_output.exists())
-        self.assertTrue(second_output.exists())
-        self.assertFalse((self.temp_root / "first_drawing.dxf").exists())
-        self.assertFalse((self.temp_root / "second_drawing.dxf").exists())
-
-    def test_dxf_output_pair_allows_mixed_plain_and_paired_targets(self) -> None:
-        first_path = self._dxf_generator_script("first")
-        second_path = self._dxf_generator_script("second")
-        second_output = self.temp_root / "drawings" / "second-output.dxf"
-
-        cad_generation.generate_dxf_targets([str(first_path), f"{second_path}={second_output}"])
-
-        # The plain target writes its sibling; the paired target writes its named
-        # output instead of a sibling.
-        self.assertTrue((self.temp_root / "first_drawing.dxf").exists())
-        self.assertTrue(second_output.exists())
-        self.assertFalse((self.temp_root / "second_drawing.dxf").exists())
-
-    def test_dxf_output_override_rejects_pair_targets(self) -> None:
-        script_path = self._dxf_generator_script("flat")
-
-        with self.assertRaisesRegex(ValueError, "cannot be combined"):
-            cad_generation.generate_dxf_targets(
-                [f"{script_path}={self.temp_root / 'drawings' / 'flat-output.dxf'}"],
-                output=str(self.temp_root / "other.dxf"),
-            )
-
-    def test_dxf_output_pairs_reject_duplicate_output_paths(self) -> None:
-        first_path = self._dxf_generator_script("first")
-        second_path = self._dxf_generator_script("second")
-        output_path = self.temp_root / "shared.dxf"
-
-        with self.assertRaisesRegex(ValueError, "used more than once"):
-            cad_generation.generate_dxf_targets([f"{first_path}={output_path}", f"{second_path}={output_path}"])
-
-    def test_dxf_output_override_requires_single_target(self) -> None:
-        first_path = self._dxf_generator_script("first")
-        second_path = self._dxf_generator_script("second")
-
-        with self.assertRaisesRegex(ValueError, "--output can only be used with exactly one target"):
-            cad_generation.generate_dxf_targets(
-                [str(first_path), str(second_path)],
-                output=str(self.temp_root / "first-output.dxf"),
-            )
 
     def test_step_generator_does_not_run_sidecars(self) -> None:
         script_path = self._generator_script("flat", with_dxf=True, dxf_before_step=True)
@@ -1359,12 +1221,7 @@ class CadGenerationTests(unittest.TestCase):
         return script, helper
 
     def _part_spec(self, script: Path) -> cad_generation.EntrySpec:
-        _all, selected, _outs = cad_generation._selected_specs_for_targets(
-            [str(script)],
-            expected_output_suffixes=(".step",),
-            tool_name="cadgen import",
-            include_output_paths=True,
-        )
+        _all, selected = cad_generation._selected_specs_for_targets([str(script)])
         return selected[0]
 
 

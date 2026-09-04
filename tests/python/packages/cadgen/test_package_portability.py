@@ -203,13 +203,10 @@ class PackagePortabilityTest(unittest.TestCase):
         from cadgen.generation import generate_step_targets
 
         # An imported STEP: the part's document COPIED under another name, so the
-        # store has no memory of a model writing it and it is its own source (a
-        # vendor file). The export itself is kept out of the no-op pass below
-        # because an explicit export ALWAYS writes its file -- that is the
-        # documented contract, not a freshness miss.
-        generate_step_targets([f"{root / 'widget.py'}={root / 'exported.step'}"])
-        shutil.copyfile(root / "exported.step", root / "imported.step")
-        (root / "exported.step").unlink()
+        # store has no memory of a model writing it -- a vendor file. Same bytes,
+        # same tree: every reader finds it by the bytes alone (STORE.md §2).
+        generate_step_targets([str(root / "widget.py")])
+        shutil.copyfile(root / "widget.step", root / "imported.step")
         cls._noop_pass(root)
 
     @staticmethod
@@ -218,10 +215,7 @@ class PackagePortabilityTest(unittest.TestCase):
         from cadgen.generation import generate_dxf_targets, generate_step_targets
         from cadgen.step_artifact_cli import build_step_artifact
 
-        generate_step_targets([
-            f"{root / 'widget.py'}={root / 'widget.step'}",
-            f"{root / 'rig.py'}={root / 'rig.step'}",
-        ])
+        generate_step_targets([str(root / "widget.py"), str(root / "rig.py")])
         build_step_artifact(repo_root=root, step=root / "imported.step")
         if HAS_NODE:
             generate_dxf_targets([str(root / "sheet.py")])

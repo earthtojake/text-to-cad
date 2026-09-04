@@ -19,8 +19,6 @@ from typing import Iterator, Sequence, TextIO
 from cadgen.catalog import (
     CadSource,
     StepImportOptions,
-    cad_ref_from_dxf_path,
-    cad_ref_from_step_path,
     find_source_by_path,
     iter_cad_sources,
     normalize_cad_ref,
@@ -97,29 +95,18 @@ from cadgen._internal.generation_runner import (
 from cadgen._internal.generation_spec import (
     EntrySpec,
     GeneratedStepResult,
-    _CliTargetSpec,
-    _apply_dxf_output_override,
-    _apply_dxf_output_overrides,
     _apply_step_options_to_spec,
-    _apply_step_output_overrides,
     _cli_progress_line,
-    _display_name_for_path,
     _display_path,
     _entry_spec_from_source,
     _hint_float,
     _hint_int,
-    _parse_cli_target_specs,
-    _resolve_cli_output_path,
     _resolve_discovery_root,
     _selector_options_for_part,
     _spec_for_source_ref,
-    _spec_output_paths,
     _spec_requests_extra_outputs,
-    _validate_cli_output_override,
-    _validate_duplicate_cli_output_overrides,
     list_entry_specs,
     selected_entry_specs,
-    targets_include_output_pairs,
 )
 
 def _sha256_of(path: Path) -> str:
@@ -968,25 +955,15 @@ def _selected_specs_for_targets(
     targets: Sequence[str],
     *,
     step_options: StepImportOptions | None = None,
-    expected_output_suffixes: tuple[str, ...] | None = None,
-    tool_name: str = "CAD",
-    include_output_paths: bool = False,
-) -> tuple[list[EntrySpec], list[EntrySpec]] | tuple[list[EntrySpec], list[EntrySpec], list[Path | None]]:
+) -> tuple[list[EntrySpec], list[EntrySpec]]:
+    """``(all specs the targets reach, the targets' own specs)``. A target is a
+    model script or a document — its outputs are what it declares (``out=``);
+    nothing on the command line renames them."""
     step_options = step_options or StepImportOptions()
-    target_specs = (
-        _parse_cli_target_specs(
-            targets,
-            expected_suffixes=expected_output_suffixes,
-            tool_name=tool_name,
-        )
-        if expected_output_suffixes is not None
-        else [_CliTargetSpec(target=str(target or "").strip()) for target in targets]
-    )
     explicit_specs: list[EntrySpec] = []
-    output_paths: list[Path | None] = []
     unresolved_targets: list[str] = []
-    for target_spec in target_specs:
-        target_text = target_spec.target
+    for target in targets:
+        target_text = str(target or "").strip()
         target_path = Path(target_text)
         resolved = target_path.resolve() if target_path.is_absolute() else (Path.cwd() / target_path).resolve()
         source = (
@@ -998,13 +975,9 @@ def _selected_specs_for_targets(
             unresolved_targets.append(target_text)
             continue
         explicit_specs.append(_apply_step_options_to_spec(_entry_spec_from_source(source), step_options))
-        output_paths.append(target_spec.output_path)
 
     if not unresolved_targets:
-        expanded_specs = _expand_specs_with_file_dependencies(explicit_specs)
-        if include_output_paths:
-            return expanded_specs, explicit_specs, output_paths
-        return expanded_specs, explicit_specs
+        return _expand_specs_with_file_dependencies(explicit_specs), explicit_specs
 
     unresolved = ", ".join(unresolved_targets)
     raise FileNotFoundError(
@@ -1065,7 +1038,7 @@ def _generated_python_glb_summary(spec: EntrySpec) -> str:
 
 
 def _generated_dxf_summary(spec: EntrySpec) -> str:
-    output = spec.dxf_export_path if spec.dxf_export_path is not None else spec.dxf_path
+    output = spec.dxf_path
     if output is not None:
         return f"generated DXF: {_display_path(output)}"
     return f"processed: {spec.source_ref}"
@@ -1295,21 +1268,9 @@ def generate_step_targets(
                 print(json.dumps(entry, separators=(",", ":")))
             else:
                 print(f"{entry['outcome']} {entry['packagePath']}")
-    all_specs, selected_specs, target_output_paths = _selected_specs_for_targets(
-        targets,
-        step_options=step_options,
-        expected_output_suffixes=(".step",),
-        tool_name=tool_name,
-        include_output_paths=True,
-    )
+    all_specs, selected_specs = _selected_specs_for_targets(targets, step_options=step_options)
     for spec in selected_specs:
         _validate_step_target(spec, tool_name=tool_name)
-    selected_specs = _apply_step_output_overrides(
-        selected_specs,
-        output_paths=target_output_paths,
-        all_specs=all_specs,
-        tool_name=tool_name,
-    )
     if step_options is not None and step_options.has_metadata:
         selected_specs = [_apply_step_options_to_spec(spec, step_options) for spec in selected_specs]
     # Children are not rebuilt here any more: a parent depends on its children by
@@ -1395,7 +1356,6 @@ def generate_step_targets(
 def generate_dxf_targets(
     targets: Sequence[str],
     *,
-    output: str | Path | None = None,
     force: bool = False,
     verbose: bool = False,
 ) -> int:
@@ -1411,34 +1371,15 @@ def generate_dxf_targets(
 
     tool_name = "dxf"
     logger = CliLogger("cadgen", verbose=verbose)
-    if output is not None and targets_include_output_pairs(targets):
-        raise ValueError(f"{tool_name} --output cannot be combined with SOURCE=OUTPUT targets")
-    output_path = _resolve_cli_output_path(output, expected_suffixes=(".dxf",), tool_name=tool_name)
-    all_specs, selected_specs, target_output_paths = _selected_specs_for_targets(
-        targets,
-        expected_output_suffixes=(".dxf",),
-        tool_name=tool_name,
-        include_output_paths=True,
-    )
+    all_specs, selected_specs = _selected_specs_for_targets(targets)
     for spec in selected_specs:
         _validate_dxf_target(spec)
-    selected_specs = _apply_dxf_output_override(
-        selected_specs,
-        output_path=output_path,
-        all_specs=all_specs,
-        tool_name=tool_name,
-    )
-    selected_specs = _apply_dxf_output_overrides(
-        selected_specs,
-        output_paths=target_output_paths,
-        all_specs=all_specs,
-        tool_name=tool_name,
-    )
-    # The .dxf IS the product (design/standalone-viewer.md Phase A): every target
-    # writes its sibling `<name>.dxf` unless `-o`/SOURCE=OUTPUT renamed it. The
-    # viewer parses that file directly; there is no drawing package.
+
+    # The .dxf IS the product: every drawing writes the `.dxf` its decorator
+    # declares (`out=`, else the sibling `<name>.dxf`). The viewer parses that
+    # file directly; there is no drawing package.
     def _effective_output(spec: EntrySpec) -> Path | None:
-        return spec.dxf_export_path if spec.dxf_export_path is not None else spec.dxf_path
+        return spec.dxf_path
 
     # No-op fast path: skip regenerating a drawing whose source closure is
     # unchanged and whose recorded output still verifies byte-for-byte.

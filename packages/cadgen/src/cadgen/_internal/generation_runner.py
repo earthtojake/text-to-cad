@@ -729,7 +729,7 @@ def _run_script_generator_body(
         )
         # The product IS the .dxf: the run always writes it — the sibling by
         # default, `-o` renames — and the viewer parses that file directly.
-        output_path = spec.dxf_export_path if spec.dxf_export_path is not None else spec.dxf_path
+        output_path = spec.dxf_path
         _write_dxf_payload(
             raw_payload, output_path=output_path, script_path=spec.script_path, logger=logger
         )
@@ -746,7 +746,7 @@ def _run_script_generator_body(
         generated_scene.source_closure_files = source_closure.files
         generated_scene.source_closure_constants = dict(source_closure.constants)
     if model_format == "dxf":
-        written = spec.dxf_export_path if spec.dxf_export_path is not None else spec.dxf_path
+        written = spec.dxf_path
         if written is not None and not written.exists():
             raise RuntimeError(
                 f"{_display_path(spec.script_path)} did not write {_display_path(written)}"
