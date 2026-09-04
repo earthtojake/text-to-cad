@@ -134,10 +134,14 @@ class Deduplication(CompileTestCase):
         threads = [threading.Thread(target=request) for _ in range(8)]
         for thread in threads:
             thread.start()
+        # Let the job finish only once every other request has ATTACHED to it:
+        # a thread that reaches compile() after the owner has finished would
+        # rightly start a second job, and that is not what this test is about.
         deadline = time.monotonic() + 5
-        while time.monotonic() < deadline and not compiler.in_flight(_scope(candidate)):
+        while time.monotonic() < deadline and compiler.waiters(_scope(candidate)) < 7:
             time.sleep(0.01)
         self.assertTrue(compiler.in_flight(_scope(candidate)))
+        self.assertEqual(compiler.waiters(_scope(candidate)), 7)
         self.submit.gate.set()
         for thread in threads:
             thread.join(timeout=5)
