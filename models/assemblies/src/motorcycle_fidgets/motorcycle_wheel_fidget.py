@@ -151,7 +151,7 @@ def _make_parts():
     return parts
 
 
-@step(out="../STEP/motorcycle_wheel_fidget.step")
+@step(out="../../STEP/motorcycle_fidgets/motorcycle_wheel_fidget.step")
 def motorcycle_wheel_fidget():
     compound = bd.Compound(children=_make_parts())
     compound.label = "motorcycle_wheel_fidget"

@@ -194,7 +194,7 @@ def _make_parts():
     return parts
 
 
-@step(out="../STEP/motorcycle_shock_fidget.step")
+@step(out="../../STEP/motorcycle_fidgets/motorcycle_shock_fidget.step")
 def motorcycle_shock_fidget():
     compound = bd.Compound(children=_make_parts())
     compound.label = "motorcycle_shock_fidget"

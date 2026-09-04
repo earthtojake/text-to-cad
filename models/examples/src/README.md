@@ -14,7 +14,7 @@ ls models/examples/src/*.py | xargs -n1 -P4 python   # every part
 
 Unchanged models are no-ops, so "build if missing" and "rebuild" are the same
 command. Shared helper modules live in `src/lib/` (`part_common`,
-`simple_model_library`, `mx_switch_socket`) — plain modules, never models.
+`simple_model_library`) — plain modules, never models.
 Because the scripts sit directly in `src/`, `from lib import ...` resolves with
 no path setup.
 
@@ -40,10 +40,6 @@ test's fixture), not an output.
 | `gusset_plate.py` | `STEP/gusset_plate.step` | Gusset plate with a triangular web, base holes, and softened perimeter edges |
 | `keyed_shaft_hub.py` | `STEP/keyed_shaft_hub.step` | Keyed shaft hub with central bore, keyway slot, and bolt-hole pattern |
 | `l_bracket.py` | `STEP/l_bracket.step` | L-bracket model |
-| `motorcycle_helmet_fidget.py` | `STEP/motorcycle_helmet_fidget.step` | Motorcycle helmet fidget with a Cherry MX switch socket |
-| `motorcycle_seat_fidget.py` | `STEP/motorcycle_seat_fidget.step` | Motorcycle pillion (backseat) fidget with a Cherry MX switch socket |
-| `motorcycle_shock_fidget.py` | `STEP/motorcycle_shock_fidget.step` | Motorcycle shock absorber fidget with a Cherry MX switch socket |
-| `motorcycle_wheel_fidget.py` | `STEP/motorcycle_wheel_fidget.step` | Motorcycle wheel fidget with a Cherry MX switch socket |
 | `mounting_plate.py` | `STEP/mounting_plate.step + STL/mounting_plate.stl, 3MF/mounting_plate.3mf, GLB/mounting_plate.glb` | Mounting plate with central circular cutout, elongated side slot, four corner holes, and rounded edges |
 | `open_top_electronics_enclosure.py` | `STEP/open_top_electronics_enclosure.step` | Open-top electronics enclosure model |
 | `print_in_place_hinge.py` | `STEP/print_in_place_hinge.step` | Print-in-place barrel hinge for FDM printing |
