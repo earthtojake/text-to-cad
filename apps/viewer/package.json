@@ -21,7 +21,7 @@
     "three": "0.185.1"
   },
   "devDependencies": {
-    "@babel/parser": "^7.29.7",
+    "@babel/parser": "^8.0.4",
     "@babel/traverse": "^7.29.7",
     "@tailwindcss/postcss": "^4.2.2",
     "@vitejs/plugin-react": "^4.7.0",
