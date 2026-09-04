@@ -3,16 +3,13 @@ set -euo pipefail
 
 # Build cadgen's non-Python runtime INTO THE PACKAGE (packages/cadgen/src/cadgen/_runtime).
 #
-# cadgen executes three things it does not write in Python: Node builders (the DXF render
-# package and the mesh export are baked by a JS child), a headless browser bundle (the
-# snapshot CLI drives it in a page), and the CAD Viewer's built client (`cadgen viewer`
-# serves it). They used to be generated once PER SKILL, beside each vendored copy of
-# cadgen, because cadgen found them by walking up from its own __file__. cadgen.assets
-# resolves them inside the distribution now, so there is one copy and one builder of that
-# copy: this script.
-#
-# Despite living under skills/, this is not a skill bundler -- it is registered with
-# bundle-skill.sh only so `--all`, `--check` and `--print-outputs` keep working uniformly.
+# cadgen executes three things it does not write in Python: Node builders (the DXF mesh
+# and the mesh exports are baked by a JS child), a headless browser bundle (the snapshot
+# CLI drives it in a page), and the CAD Viewer's built client (`cadgen viewer` serves
+# it). cadgen.assets resolves all three inside the distribution, so there is one copy
+# and one builder of that copy: this script. scripts/bundle/bundle.sh is the entry point
+# that calls it (after stamping derived version metadata); call this directly only when
+# debugging one stage.
 #
 # Stages (default: all of them):
 #   --node      esbuilt builders          -> _runtime/node       (committed)
@@ -28,12 +25,12 @@ set -euo pipefail
 # that proves the wheel got it.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BUNDLE_REPO_ROOT="$REPO_ROOT"
-# shellcheck source=../lib/node_builders.sh
-source "$SCRIPT_DIR/../lib/node_builders.sh"
-# shellcheck source=../lib/snapshot_runtime.sh
-source "$SCRIPT_DIR/../lib/snapshot_runtime.sh"
+# shellcheck source=lib/node_builders.sh
+source "$SCRIPT_DIR/lib/node_builders.sh"
+# shellcheck source=lib/snapshot_runtime.sh
+source "$SCRIPT_DIR/lib/snapshot_runtime.sh"
 
 RUNTIME_DIR="$REPO_ROOT/packages/cadgen/src/cadgen/_runtime"
 NODE_DIR="$RUNTIME_DIR/node"
@@ -61,7 +58,7 @@ ANY_STAGE=0
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/bundle/bundle-skill.sh cadgen-runtime [--check] [--clean] [stages...]
+  scripts/bundle/cadgen-runtime.sh [--check] [--clean] [--print-outputs] [stages...]
 
 Builds cadgen's packaged runtime assets into packages/cadgen/src/cadgen/_runtime.
 
@@ -259,7 +256,7 @@ if [ "$MODE" = "check" ]; then
   done
   if [ "$stale" -ne 0 ]; then
     echo "" >&2
-    echo "Run scripts/bundle/bundle-skill.sh cadgen-runtime and commit the result." >&2
+    echo "Run scripts/bundle/bundle.sh and commit the result." >&2
     exit 1
   fi
   echo "cadgen packaged runtime is up to date."

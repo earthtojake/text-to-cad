@@ -51,8 +51,8 @@ class BundleHelperCallsResolveTest(unittest.TestCase):
         scripts = _shell_scripts()
         self.assertTrue(scripts, "expected shell scripts under scripts/bundle/")
         self.assertTrue(
-            any(script.name.startswith("bundle-") for script in scripts),
-            "expected per-skill bundle-<skill>.sh scripts",
+            any(script.name == "cadgen-runtime.sh" for script in scripts),
+            "expected scripts/bundle/cadgen-runtime.sh, the packaged-runtime bundler",
         )
 
     def test_every_helper_call_resolves_to_a_definition(self) -> None:

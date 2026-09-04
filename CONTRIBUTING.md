@@ -275,8 +275,8 @@ scripts/bundle/bundle.sh --clean
 scripts/bundle/bundle.sh --check
 ```
 
-Do not run lower-level bundle scripts as part of routine iteration; use the
-script-specific details in `scripts/README.md` only when you are debugging a
+Do not call `scripts/bundle/cadgen-runtime.sh` directly as part of routine
+iteration; its per-stage flags (`scripts/README.md`) are for debugging a
 production-output check.
 
 ## Branch Layout
@@ -420,7 +420,7 @@ For local release preparation, use the same scripts the workflow calls:
 
 ```bash
 git fetch --tags origin
-scripts/release/bump-version.sh patch --no-commit
+scripts/release/bump-version.sh patch
 node scripts/release/sync-version.mjs
 scripts/release/pin-cadgen-requirements.sh
 scripts/release/check-version.sh --incremented-from "refs/tags/$(source scripts/release/release-tags.sh && latest_release_tag)"

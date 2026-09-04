@@ -106,8 +106,8 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
 - Reserve `scripts/` for durable repo commands. Do not write temporary,
   one-off, or local-only helper scripts there; use `tmp/` or `/tmp` instead.
 - When source changes affect generated runtimes, refresh or check them with the
-  master bundle wrapper, `scripts/bundle/bundle.sh`. Use lower-level bundle
-  scripts only when debugging the wrapper itself.
+  one bundle entry point, `scripts/bundle/bundle.sh`. Call
+  `scripts/bundle/cadgen-runtime.sh` directly only when debugging one stage.
 - Never let a symlink reach the published tree. Agent installers disagree about
   symlinks and one loses data silently: the Skills CLI dereferences them, Claude
   Code preserves them, and Codex `plugin add` drops them with no error, shipping
@@ -128,7 +128,7 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   generation, the CLI parsers behind every skill command (`cadgen/cli`), the warm
   build daemon (`cadgen/daemon`), and
   the JS/SPA assets it executes (`cadgen/_runtime`, built by
-  `scripts/bundle/skills/bundle-cadgen-runtime.sh`). Skills consume it as an
+  `scripts/bundle/cadgen-runtime.sh`). Skills consume it as an
   installed distribution.
 - Create lightweight shared Python packages under `packages/` when a helper
   should not inherit heavier package dependencies.
