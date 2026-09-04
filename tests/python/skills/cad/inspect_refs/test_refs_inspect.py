@@ -380,8 +380,8 @@ class InspectRefsTests(unittest.TestCase):
         """Serve `manifest` as the entry's topology artifact.
 
         Mocks at the one live boundary — ``ensure_step_topology_artifact`` —
-        which in production returns the render-package descriptor with a
-        descriptor-backed selector bundle (selector rows composed on demand
+        which in production returns the assembly.json with a
+        assembly.json-backed selector bundle (selector rows composed on demand
         from the per-component .surf files). Everything below that boundary
         (grammar, lookup, measure, align) runs for real.
         """

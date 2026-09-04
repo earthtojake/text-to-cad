@@ -4,7 +4,7 @@ design/pose-animation-split.md pins where each kind of state lives, and both
 halves are invisible until something breaks:
 
 * The CACHE PACKAGE is what the bytes imply — derived, evictable, content-keyed.
-  Kinematics and animation are not derivable from artifact bytes, so a package
+  Kinematics and animation are not derivable from artifact bytes, so a tree
   carrying either would make identical-bytes artifacts collide and would be
   destroyed by `cadgen cache gc`.
 * The SIDECAR is what the author meant, and it TRAVELS WITH THE FILE. A path
@@ -26,7 +26,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODELS = REPO_ROOT / "models"
 
-# Keys that belong to the sidecar and must never appear in a package descriptor.
+# Keys that belong to the sidecar and must never appear in assembly.json.
 SIDECAR_ONLY_KEYS = ("kinematics", "animation", "bakedPose")
 
 
@@ -36,7 +36,7 @@ def _sidecars() -> list[Path]:
 
 def _descriptors() -> list[Path]:
     # Committed packages, if any: the store is a user-level cache, so this
-    # normally finds the descriptors only where a fixture pins one.
+    # normally finds the assembly.json files only where a fixture pins one.
     return sorted(MODELS.rglob("assembly.json"))
 
 

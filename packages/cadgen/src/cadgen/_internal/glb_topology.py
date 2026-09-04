@@ -196,8 +196,8 @@ def is_displayable_step_edge_surface_class_code(value: object) -> bool:
 
 
 def read_step_topology_index_from_glb(glb_path: Path, *, entry_path: Path | None = None) -> dict[str, Any] | None:
-    # A render package DIRECTORY carries its topology index as the package
-    # descriptor (assembly.json). The monolith-GLB branch that used to read an
+    # A view DIRECTORY carries its topology index as its
+    # assembly.json. The monolith-GLB branch that used to read an
     # embedded index from a file is gone with the beside-model layout: every
     # artifact is a store directory.
     if not glb_path.is_dir():
@@ -211,7 +211,7 @@ def read_step_topology_index_from_glb(glb_path: Path, *, entry_path: Path | None
         return None
     if not isinstance(manifest, dict):
         return None
-    # The ONE merge point for the source sidecar: the descriptor is
+    # The ONE merge point for the source sidecar: the assembly.json is
     # STEP-pure (source_sidecar.py), so source-derived state — provenance
     # the freshness gates read, pose, mates — is attached here under an
     # internal key every manifest consumer shares. Never written to disk.
@@ -252,7 +252,7 @@ def build_step_topology_index_manifest(
         "entryKind": resolved_entry_kind,
     }
     # STEP-pure keys only: source-derived state rides the source sidecar
-    # (source_sidecar.py), attached by the package reader as _sourceSidecar.
+    # (source_sidecar.py), attached by the tree reader as _sourceSidecar.
     for key in (
         "capabilities",
         "stepPath",

@@ -52,7 +52,7 @@ def quantity_color_rgba_from_color(color: object) -> object | None:
 
     cadgen's colour contract (``cadgen.color``): a Color's channels -- the
     numbers ``tuple(color)`` yields, the ones ``srgb()`` computed -- ARE the
-    linear RGB the renderer displays. The render package stores exactly those
+    linear RGB the renderer displays. The tree stores exactly those
     (``component_package._occurrence_color``), so the STEP document must carry
     the same numbers or the two views of one model disagree.
 
@@ -62,7 +62,7 @@ def quantity_color_rgba_from_color(color: object) -> object | None:
     ``srgb("#808080")`` (channels 0.216) the internal value is 0.038. Written
     as linear, that reached the file as sRGB 0.216 and came back through the
     reader -- ``inspect``, ``read_step``, the Viewer's STEP import, any other
-    CAD tool -- two and a half stops darker than the package renders the same
+    CAD tool -- two and a half stops darker than the tree renders the same
     part. Normalizing the channel values through Quantity_TOC_RGB puts the
     intended sRGB byte in the file.
     """
@@ -903,7 +903,7 @@ def write_xcaf_doc_step_file(
     # FILE_NAME's wall-clock time_stamp. Exports are content-addressed
     # end-to-end (export records verify by sha256, identical models must
     # produce identical files), so the stamp is pinned. The real generation
-    # time lives in the package descriptor, not the interchange file.
+    # time lives in the assembly.json, not the interchange file.
     header.SetTimeStamp(TCollection_HAsciiString("2000-01-01T00:00:00"))
 
     # Atomic: OCCT writes in place, so write to a sibling temp file, canonicalize

@@ -1,4 +1,4 @@
-"""Views of a tree for consumers that speak the legacy package layout.
+"""Views of a tree for consumers that speak the view layout (assembly.json + components/).
 
 Two consumers cannot read objects by hash directly: the Node builders (the
 mesh exporter takes ``--package-dir``) and the browser (the viewer/snapshot
@@ -6,12 +6,12 @@ client resolves ``assembly.json`` and ``components/<cid>.surf`` RELATIVE to a
 package URL). Neither gets a directory in the store — the store has no result
 directories. They get a **view**:
 
-- :func:`export_view` writes the flattened descriptor plus every component it
+- :func:`export_view` writes the flattened tree (assembly.json) plus every component it
   references into a TEMPORARY directory outside the store (copies; the
   objects are small and the view is short-lived). Callers own its lifetime.
-- :func:`virtual_path` resolves a package-relative path (``<tree>/assembly.json``,
+- :func:`virtual_path` resolves a view-relative path (``<tree>/assembly.json``,
   ``<tree>/components/<object>.surf``) to bytes on demand, so an HTTP route can
-  present a tree as if it were a package directory without writing anything.
+  present a tree as if it were a view directory without writing anything.
 """
 
 from __future__ import annotations
@@ -51,8 +51,8 @@ def descriptor_for_view(tree_hash: str) -> dict[str, Any] | None:
 
 
 def component_object_for_ref(ref: str, descriptor: dict[str, Any] | None = None) -> tuple[str, str] | None:
-    """``components/<cid>.surf`` -> (object hash, suffix) through ``descriptor``
-    (a view descriptor); a bare object hash in place of the cid also resolves.
+    """``components/<cid>.surf`` -> (object hash, suffix) through ``assembly.json``
+    (a view's assembly.json); a bare object hash in place of the cid also resolves.
     None when nothing matches."""
     name = str(ref or "").replace("\\", "/").rsplit("/", 1)[-1]
     if "." not in name:
@@ -88,7 +88,7 @@ def _cleanup_views() -> None:
 
 
 def view_dir_for(tree_hash: str) -> Path:
-    """A package-shaped view of ``tree_hash``, built once per process and
+    """A view (assembly.json + components/) of ``tree_hash``, built once per process and
     removed at exit. The adapter for consumers that need a DIRECTORY (the Node
     exporters, the selector-index composer, the snapshot page)."""
     global _VIEW_CLEANUP_REGISTERED
@@ -106,7 +106,7 @@ def view_dir_for(tree_hash: str) -> Path:
 
 
 def export_view(tree_hash: str, dest: Path | None = None) -> Path:
-    """Write a package-shaped directory for ``tree_hash``; return its path.
+    """Write a view directory (assembly.json + components/) for ``tree_hash``; return its path.
     With ``dest`` None a fresh temporary directory is created (caller removes)."""
     descriptor = descriptor_for_view(tree_hash)
     if descriptor is None:
@@ -165,14 +165,14 @@ def ingest_view(view_dir: Path, *, base_tree: dict[str, Any]) -> tuple[str, dict
 def virtual_path(rel: str) -> tuple[bytes | Path | None, str]:
     """Resolve ``<tree>`` (or ``<tree>/assembly.json``) and ``<tree>/components/<cid>.<suffix>``.
 
-    Returns ``(payload, content_type)``: bytes for the descriptor, a Path for a
+    Returns ``(payload, content_type)``: bytes for the assembly.json, a Path for a
     component object (streamable), or ``(None, "")`` when nothing matches."""
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p]
     if not parts or not is_object_hash(parts[0]):
         return None, ""
     tree_hash = parts[0]
     if parts[1:] in ([], [DESCRIPTOR_NAME]):
-        # The tree itself IS the "directory" the client names; its descriptor
+        # The tree itself IS the "directory" the client names; its assembly.json
         # answers for both spellings.
         descriptor = descriptor_for_view(tree_hash)
         if descriptor is None:

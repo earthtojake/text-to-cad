@@ -67,7 +67,7 @@ def _load_generator_module(script_path: Path) -> object:
     original_sys_path = list(sys.path)
     # Seed sys.path so the generator's module-top imports (its sibling/shared packages such as
     # robot_common / STEP) resolve. Derive everything from the generator script's OWN location —
-    # its folder, plus any ancestor that is a package root (contains a STEP/ or robot_common/
+    # its folder, plus any ancestor that is a project root (contains a STEP/ or robot_common/
     # package) — so resolution is independent of the process working directory. Deliberately NOT
     # seeding the repo root or skills/cad/scripts: a generator must not depend on the repository's
     # skills/ being importable (AGENTS.md skill isolation).
@@ -95,7 +95,7 @@ def _load_generator_module(script_path: Path) -> object:
 
 def _generator_search_paths(resolved_script_path: Path) -> list[str]:
     """The import roots a generator's module body may rely on: its own folder,
-    plus any ancestor that is a package root (holds a ``STEP/`` or
+    plus any ancestor that is a project root (holds a ``STEP/`` or
     ``robot_common/`` package). Seeded onto ``sys.path`` for the module body
     ONLY (see ``_load_generator_module``); named again by the teaching error a
     function-level import of one of these roots' modules raises."""
@@ -145,7 +145,7 @@ def _purge_stale_bytecode(script_path: Path) -> None:
     edits inside one second load STALE BYTECODE on re-import -- exactly the
     cadence of an agent-driven edit loop. The job boundary is the one place the
     first-party module space is rebuilt, so it is the one place this belongs
-    (the scope layer used to do it on every miss, mid-job, alongside an eviction
+    (the old scope layer used to do it on every miss, mid-job, alongside an eviction
     that broke lazy imports).
 
     Best-effort by design, and no longer the guarantee: ``ignore_errors=True``
@@ -220,7 +220,7 @@ def _resolve_declared_kinematics(defn: object, *, script_path: Path) -> _Declare
     """The model's kinematics block, bake pose, and animation module TEXT.
 
     The block comes validated from the decoration-time normalizer; axis refs
-    resolve against real geometry later in the package build. The animation
+    resolve against real geometry later in the tree build. The animation
     path is an authoring-time input only: its text is read HERE and copied
     into the sidecar, so no generated file ever references the source tree.
 
@@ -598,9 +598,9 @@ def _run_script_generator_body(
     # Order-stable shape de-duplication (see determinism.py). Installed in the
     # same breath as the op memo and for the same reason: both exist so that a
     # re-executed model script produces the SAME geometry it produced last time.
-    # A memo that hands back identical shapes is worthless if the code consuming
+    # An op-memo entry that hands back identical shapes is worthless if the code consuming
     # them re-keys the components anyway, so this has to be in force before the
-    # generator's first kernel call, not merely before the package write.
+    # generator's first kernel call, not merely before the tree write.
     from cadgen._internal import determinism
 
     determinism.install()
@@ -675,7 +675,7 @@ def _run_script_generator_body(
         declared = _resolve_declared_kinematics(
             getattr(generator, "__cadgen_model__", None), script_path=spec.script_path
         )
-        # Record paths relative to the model folder so the descriptor stays
+        # Record paths relative to the model folder so the assembly.json stays
         # portable. The base is the GENERATOR's folder, never the output's:
         # with an explicit `--write <path>` the step_path moves to the output
         # location, and basing the closure there changed every recorded

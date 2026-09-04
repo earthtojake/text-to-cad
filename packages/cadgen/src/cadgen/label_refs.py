@@ -71,7 +71,7 @@ def build_label_aliases(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """
     ordered: list[tuple[str, str]] = []
     for row in rows:
-        # `occurrenceId` is the spelling the render package uses for the same
+        # `occurrenceId` is the spelling the tree uses for the same
         # field (cadgen-js/common/cadScene.js reads `part.id || part.occurrenceId`
         # throughout), and buildLabelAliasMap accepts both. Reading only `id`
         # here dropped those rows, so a label the viewer resolves had no alias

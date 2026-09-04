@@ -3,7 +3,7 @@
 An assembly is described by two artifacts that answer different questions, and until this module
 they disagreed about what an occurrence is:
 
-* ``assembly.json`` -- the package descriptor. Knows the instance tree: 160 occurrences for
+* ``assembly.json`` -- the materialized tree. Knows the instance tree: 160 occurrences for
   ``tom_v2``, ids ``o1.1.1``/``o1.12``/``o1.11.7.1.1.1.2``, each naming a component and carrying
   its placement. This is what ``snapshot --mode list`` enumerates and what the CAD Viewer hands
   the user when they click a part.
@@ -47,7 +47,7 @@ def _identity() -> list[float]:
 
 
 def _matrix(raw: object) -> list[float]:
-    """A row-major 4x4 as 16 floats, or identity when the descriptor omits/mangles it."""
+    """A row-major 4x4 as 16 floats, or identity when the assembly.json omits/mangles it."""
     if not isinstance(raw, (list, tuple)) or len(raw) < 16:
         return _identity()
     try:
@@ -507,7 +507,7 @@ def merge_assembly_entities(
 def assembly_group_nodes(descriptor: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     """The instance tree's INTERIOR nodes, keyed by occurrence id.
 
-    The descriptor's ``occurrences`` table is leaves only (a leaf is what owns geometry),
+    The assembly.json's ``occurrences`` table is leaves only (a leaf is what owns geometry),
     so a subassembly node appears nowhere a selector row can find it. Its identity --
     the name a person recognises the branch by -- lives in the ``assembly`` tree, which
     is what this reads.

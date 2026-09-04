@@ -6,7 +6,7 @@ motion matrix per mate about its world-at-rest axis, deltas composed down the
 mate tree. Pure 4x4 arithmetic on plain floats — deterministic to the bit, no
 OCP import — so a viewer slider position and an exported bake agree.
 
-Matrices are row-major 4x4 nested lists; descriptor occurrence transforms are
+Matrices are row-major 4x4 nested lists; assembly.json occurrence transforms are
 the 12-float row-major [R|t] form (rotation rows + translation column), and
 deltas PREMULTIPLY absolute transforms exactly like the viewer's effectMatrix
 premultiplies baseTransform.
@@ -45,7 +45,7 @@ def transform_vector(matrix: list[list[float]], vector: tuple[float, float, floa
 
 
 def matrix_from_rows12(rows: list[float]) -> list[list[float]]:
-    """Descriptor transform (12 floats, row-major [R|t]) -> 4x4."""
+    """assembly.json occurrence transform (12 floats, row-major [R|t]) -> 4x4."""
     return [
         [rows[0], rows[1], rows[2], rows[3]],
         [rows[4], rows[5], rows[6], rows[7]],

@@ -87,7 +87,7 @@ def read_step(step_path: Path | str, *, label: str | None = None) -> Any:
     a ``@dxf`` body (deriving a cut profile from one) alike. The returned shape
     is topologically identical to ``build123d.import_step``'s — the root itself,
     not a wrapper — with per-occurrence and prototype STEP colors applied, and it
-    comes from the content-keyed render-package store, so a warm read costs tens
+    comes from the store, so a warm read costs tens
     of milliseconds instead of a full text-STEP re-parse.
 
     **The recording is the point.** Freshness used to follow a model's Python

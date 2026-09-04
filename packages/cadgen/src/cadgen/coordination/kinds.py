@@ -41,7 +41,7 @@ class ArtifactKind:
     labels: Mapping[str, str] = field(default_factory=dict)
 
 
-# A component-GLB render package: assembly.json + content-addressed components/<cid>.glb.
+# A tree: assembly.json + content-addressed components/<cid>.glb.
 STEP_PACKAGE = ArtifactKind(name="step-package")
 
 # Phases the JS builders introduce. None of the STEP phase names fit their work, so they

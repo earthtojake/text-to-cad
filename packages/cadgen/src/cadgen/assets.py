@@ -1,7 +1,7 @@
 """Where cadgen's non-Python runtime assets live.
 
 cadgen executes three kinds of thing it does not write in Python: Node builders (the DXF
-render package is baked by a JS child), a headless browser bundle (the snapshot CLI
+tree is baked by a JS child), a headless browser bundle (the snapshot CLI
 drives it in a page), and the CAD Viewer's built client (``cadgen viewer`` serves it).
 All three ship inside the distribution under ``cadgen/_runtime``; all three can be
 pointed elsewhere for development.
@@ -11,7 +11,7 @@ looks for ``node``: ``pip install cadgen`` must succeed on a machine with no Nod
 browser, and the CAD Viewer's long-lived server must import light. A format that needs an
 asset asks for it at the moment it needs it, and gets an actionable error if it is absent.
 
-**Development beats the package, on purpose.** In this repo the builders resolve to the
+**Development beats the installed package, on purpose.** In this repo the builders resolve to the
 live ``packages/cadgen-js/bin`` sources rather than the committed bundles, so editing builder
 JS takes effect without a rebundle, and the viewer client resolves to ``apps/viewer/dist``
 so ``npm run build`` there is what ``cadgen viewer`` serves. An installed wheel has no such

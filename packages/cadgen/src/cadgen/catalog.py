@@ -69,13 +69,13 @@ class CadSource:
 
     @property
     def entry_path(self) -> Path | None:
-        # The actual on-disk ENTRY file the render package is keyed by: the `.step.py` generator
+        # The actual on-disk ENTRY file the tree is keyed by: the `.step.py` generator
         # for a generated model, or the `.step`/`.stp` itself for an imported one.
         return self.script_path if self.script_path is not None else self.step_path
 
     @property
     def generated_paths(self) -> tuple[Path, ...]:
-        # FILE outputs only — the store package dir is deliberately absent:
+        # FILE outputs only — the store view directory is deliberately absent:
         # two same-content documents legally SHARE one content-keyed package,
         # so it can never be a duplicate-output identity.
         paths: list[Path] = []
@@ -191,7 +191,7 @@ def find_source_by_path(path: Path, root: Path | None = None) -> CadSource | Non
 
 
 def source_ref_from_path(path: Path) -> str:
-    # Entry-identity string (sourceRef), relative to the live cwd. Has no descriptor readers and
+    # Entry-identity string (sourceRef), relative to the live cwd. Has no assembly.json readers and
     # is consistent within a build; the persisted model-folder-relative paths come from elsewhere.
     resolved = path.resolve()
     try:
@@ -266,12 +266,12 @@ def artifact_path_key(entry_path: Path) -> str:
     return hashlib.sha256(resolved.encode("utf-8")).hexdigest()[:24]
 
 
-# Content-hash memo for artifact files, keyed by (path, mtime_ns, size): a
+# Content-hash cache for artifact files, keyed by (path, mtime_ns, size): a
 # catalog scan or status poll re-asks for the same file's hash constantly,
 # and rereading megabytes each time would turn polling into IO. A stale hit
 # requires an edit that preserves BOTH mtime_ns and size — not a real editor.
 #
-# Bounded and locked: the viewer server shares this memo across request
+# Bounded and locked: the viewer server shares this cache across request
 # threads for the life of the process, and a large corpus would otherwise
 # grow it without limit.
 _ARTIFACT_HASH_MEMO: dict[str, tuple[int, int, str]] = {}
@@ -316,7 +316,7 @@ def artifact_file_hash(entry_path: Path) -> str | None:
 
 
 def seed_artifact_hash(entry_path: Path, digest: str) -> None:
-    """Prime the content-hash memo for a file the caller JUST wrote and
+    """Prime the content-hash cache for a file the caller JUST wrote and
     hashed (generation's export). Saves the full-file re-read the first
     post-build resolution would otherwise pay — linear in document size."""
     resolved = Path(entry_path).expanduser().resolve()
@@ -336,7 +336,7 @@ def result_tree_for(entry_path: Path) -> str | None:
     (a door then compiles it: ``cadgen._internal.doors.document_tree``). The
     hash is memoized by (path, mtime_ns, size), so a status poll does not
     re-read the file. The tree's flattened view (``cadgen.store.trees.flatten``)
-    is what every reader that used to open a package directory reads now."""
+    is what every reader that used to open a view directory reads now."""
     from cadgen.store.objects import has_object
     from cadgen.store.records import tree_for_document_hash
 
@@ -348,7 +348,7 @@ def result_tree_for(entry_path: Path) -> str | None:
 
 
 def result_descriptor_for(entry_path: Path) -> dict | None:
-    """The flattened descriptor (legacy shape, component refs as object hashes)
+    """The flattened tree (assembly.json; component refs as object hashes)
     behind a CAD artifact on disk, or None when it has no current tree."""
     from cadgen.store.trees import flatten
 
@@ -357,7 +357,7 @@ def result_descriptor_for(entry_path: Path) -> dict | None:
 
 
 def result_view_dir(entry_path: Path) -> Path:
-    """A package-shaped VIEW (a per-process temporary directory) of the tree
+    """A view directory (assembly.json + components/, a per-process temporary directory) of the tree
     behind a CAD artifact, for consumers that need files on disk — the Node
     exporters, the selector-index composer, the snapshot page. When the artifact
     has no current tree, a deterministic never-created path, so existence checks

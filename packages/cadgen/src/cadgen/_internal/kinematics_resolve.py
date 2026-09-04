@@ -1,6 +1,6 @@
 """Build-time kinematics resolution: refs -> numbers, pose -> baked package.
 
-Two jobs, both against the freshly built (staging) render package, before the
+Two jobs, both against the freshly built (staging) tree, before the
 STEP is assembled from it:
 
 1. RESOLVE: every mate's parent/child occurrence ref must name a real
@@ -9,7 +9,7 @@ STEP is assembled from it:
    uses. The sidecar carries only numbers — the viewer does arithmetic, never
    topology.
 
-2. BAKE (``pose=`` on the decorator): apply the FK deltas to the descriptor's
+2. BAKE (``pose=`` on the decorator): apply the FK deltas to the assembly.json's
    absolute occurrence transforms so the artifact is WRITTEN at the pose and
    is therefore its own q=0. Mate axes ride their parent chain, and declared
    limits/defaults/presets shift by the baked values so the sidecar describes
@@ -39,7 +39,7 @@ def _fail(message: str) -> ValueError:
 
 
 def _composed_index(package_dir: Path, *, step_path: Path, source_ref: str):
-    """The composed selector index for a package directory (staging or final):
+    """The composed selector index for a view directory (staging or final):
     descriptor as the (empty-tabled) bundle manifest, component GLBs supplying
     every ref per occurrence — the same shape ``_assembly_topology_artifact``
     returns for require_selector consumers."""
@@ -108,7 +108,7 @@ def _instance_tree_ids(descriptor: Mapping[str, Any]) -> tuple[dict[str, str], d
     instance-tree namespace: a mate on a group occurrence is how "rigid groups
     are free" (design/pose-animation-split.md), and ``_subtree_ids`` already
     carries a group's whole subtree. So group nodes have to be resolvable, and
-    ``descriptor["assembly"]["root"]`` is where they live.
+    ``assembly.json["assembly"]["root"]`` is where they live.
     """
     by_id: dict[str, str] = {}
     by_name: dict[str, list[str]] = {}
@@ -186,7 +186,7 @@ def resolve_kinematics_block(
 
 
 def _descriptor_nodes(descriptor: Mapping[str, Any]):
-    # The descriptor's occurrence list is FLAT: leaves only, the instance tree
+    # The assembly.json's occurrence list is FLAT: leaves only, the instance tree
     # encoded in dotted ids (o1.2.3 is inside o1.2). Walk defensively through
     # any children arrays too, should a nested form ever appear.
     stack = list(descriptor.get("occurrences") or [])
@@ -228,9 +228,9 @@ def bake_pose_into_package(
     package_dir: Path,
     occurrence_ids: Mapping[str, str],
 ) -> dict[str, Any]:
-    """Write the pose into the package descriptor and re-zero the block.
+    """Write the pose into the assembly.json and re-zero the block.
 
-    Descriptor occurrence transforms are ABSOLUTE, so a mate's world delta
+    assembly.json occurrence transforms are ABSOLUTE, so a mate's world delta
     premultiplies every transform in its child's subtree (deeper mates carry
     their own composed delta and simply override within their subtree). The
     returned block describes the artifact AS WRITTEN: axes carried by their
@@ -342,7 +342,7 @@ def resolved_block_pose_deltas(
     The mesh DOORS' path. A sidecar block carries world-number axes and the
     ``parentId``/``childId`` this expansion needs, so a door evaluates forward
     kinematics with no selector index, no topology and no OCCT: it reads the
-    package descriptor for the occurrence tree and folds. Nothing is written —
+    assembly.json for the occurrence tree and folds. Nothing is written —
     a mesh bake is transient (no sidecar, ever).
     """
     from cadgen._internal.component_package import read_package_descriptor

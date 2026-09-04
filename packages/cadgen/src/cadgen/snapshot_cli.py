@@ -913,7 +913,7 @@ def resolve_step_render_job(
         "tree": result_tree_for(source_path) or "",
     }
     # Component-GLB package (the canonical render artifact for every STEP model): inline
-    # the descriptor and pre-resolve one asset URL per unique component GLB so the renderer
+    # the assembly.json and pre-resolve one asset URL per unique component GLB so the renderer
     # fetches and composes them in world space.
     descriptor = json.loads((package_dir / "assembly.json").read_text())
     from cadgen.snapshot_core import asset_url_for_store_path

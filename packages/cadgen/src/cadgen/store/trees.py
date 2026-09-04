@@ -20,11 +20,11 @@ structure under ``assembly.root`` a link appears as a node with
 structure, re-rooting the child's ids under the link's id and composing the
 child's world transforms with the link's placement.
 
-``flatten(tree_hash)`` returns the LEGACY DESCRIPTOR SHAPE (``kind:
+``flatten(tree_hash)`` returns the ASSEMBLY.JSON SHAPE (``kind:
 "assembly-package"``, a flat component map, flat world-placed occurrences, a
 nested ``assembly.root``) with component refs as object hashes. Every reader
 that used to open ``assembly.json`` reads this instead; every path it used to
-join under a package directory becomes ``object_path(hash)``.
+join under a view directory becomes ``object_path(hash)``.
 """
 
 from __future__ import annotations
@@ -125,7 +125,7 @@ def _rebase_id(link_id: str, child_id: str) -> str:
 
 
 def flatten(tree_hash: str, *, memo: dict[str, dict[str, Any]] | None = None) -> dict[str, Any] | None:
-    """The legacy descriptor for a tree, links expanded. None when the tree is missing."""
+    """The assembly.json for a tree, links expanded. None when the tree is missing."""
     memo = memo if memo is not None else {}
     cached = memo.get(tree_hash)
     if cached is not None:

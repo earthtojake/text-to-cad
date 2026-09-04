@@ -60,7 +60,7 @@ class _Partner:
     def __deepcopy__(self, memo: dict) -> "_Partner":
         return self
 
-# Per-build memo of BinTools reads by object hash: a build that composes the same
+# Per-build cache of BinTools reads by object hash: a build that composes the same
 # child several times (or several children sharing a component) parses each
 # component once. Reset by ``reset_memo`` at the start of each build.
 _SHAPE_MEMO: dict[str, Any] = {}

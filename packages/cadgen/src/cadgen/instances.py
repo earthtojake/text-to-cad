@@ -6,11 +6,11 @@ heavy prototype costs N full copies at compose time plus N re-serializations
 at content-hash time. ``compound_from_instances`` places each instance with an
 OCCT location instead — O(1), sharing the prototype's underlying ``TShape`` —
 and carries the assembly hierarchy (names, world placements) as an explicit
-occurrence-metadata tree that the render packager consumes directly.
+occurrence-metadata tree that the tree writer consumes directly.
 
 The returned compound can be a model's whole ``@step`` shape or a child
 nested anywhere inside a plain build123d compound tree: the packager splices
-nested instance compounds into the descriptor walk, remapping occurrence ids
+nested instance compounds into the assembly.json walk, remapping occurrence ids
 and accumulating world locations.
 """
 
@@ -35,7 +35,7 @@ def compound_from_instances(
 
     Every placement shares the prototype's geometry (no per-instance copy);
     ``location`` is the instance's placement relative to the returned compound.
-    Prototype labels/colors on child shapes are preserved in the descriptor via
+    Prototype labels/colors on child shapes are preserved in the assembly.json via
     the occurrence-metadata tree, which reads the UN-copied prototypes.
     """
     if not instances:
@@ -53,7 +53,7 @@ def compound_from_instances(
             _occurrence_subtree(prototype, location, f"o1.{index}", str(instance_name))
         )
     compound = Compound(occt_compound, label=name)
-    # Occurrence-metadata tree consumed by the render packager (see
+    # Occurrence-metadata tree consumed by the tree writer (see
     # cadgen.store.build.build_tree_from_compound); a plain
     # build123d compound has no such attribute and falls back to the child walk.
     compound._occurrence_tree = {"id": "o1", "name": name, "children": occurrence_children}

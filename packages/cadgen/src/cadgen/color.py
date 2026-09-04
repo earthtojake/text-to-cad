@@ -16,7 +16,7 @@ linear channel tuple, which ``shape.color = ...`` wraps into a ``Color``)::
     glass.color = srgb("#38414D", 0.42) # with alpha
 
 Note also that colour set on a *group* compound never reaches the renderer --
-only leaf occurrences carry colour into the render package. Style every leaf.
+only leaf occurrences carry colour into the tree. Style every leaf.
 """
 
 from __future__ import annotations
