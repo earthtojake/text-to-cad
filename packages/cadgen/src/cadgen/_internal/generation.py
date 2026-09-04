@@ -946,9 +946,10 @@ def _generated_output_summary(spec: EntrySpec) -> str:
 def _generated_python_glb_summary(spec: EntrySpec) -> str:
     if spec.step_path is not None and not getattr(spec, "step_output", True):
         # A mesh-only model: step_path is the logical document the store keys by,
-        # never a file it wrote. Name what it did write.
-        meshes = ", ".join(_display_path(Path(m.path)) for m in (spec.mesh_exports or ()))
-        return f"wrote: {meshes or spec.source_ref}"
+        # never a file it wrote. Each mesh was already named by the line that
+        # wrote it (`wrote STL: …`), so the summary names the model once.
+        count = len(spec.mesh_exports or ())
+        return f"built {spec.source_ref} ({count} mesh output{'s' if count != 1 else ''})"
     if spec.step_path is not None:
         return f"wrote STEP: {_display_path(spec.step_path)}"
     return f"processed: {spec.source_ref}"
