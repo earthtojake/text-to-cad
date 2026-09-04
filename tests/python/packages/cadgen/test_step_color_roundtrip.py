@@ -1,10 +1,10 @@
-"""The STEP document carries the colour the package renders.
+"""The STEP document carries the colour the tree renders.
 
 ``srgb("#808080")`` is a Color whose CHANNELS are linear 0.216. The render
 package stores those channels; the STEP writer used to store the
 Quantity_Color's internal value instead (0.038 -- build123d linearizes its
 constructor arguments a second time), so the file said sRGB 0.216 and every
-reader of it showed the part two and a half stops darker than the package.
+reader of it showed the part two and a half stops darker than the tree.
 """
 
 from __future__ import annotations

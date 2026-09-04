@@ -262,7 +262,7 @@ class InvalidUtf8(ArtifactStatusTestCase):
     ``except`` clause as "the file is missing" — so one bad byte silently became
     ABSENT, and absent is a DIFFERENT state, not a degraded one.
 
-    Product names in a STEP file are arbitrary bytes and flow into the package
+    Product names in a STEP file are arbitrary bytes and flow into the tree
     descriptor, so these are real files, not hypothetical ones.
     """
 

@@ -243,7 +243,7 @@ def _assembly_provenance_manifest(
     step_path: Path,
     entry_kind: str,
 ) -> dict[str, object]:
-    """The index-manifest provenance an assembly package descriptor carries, mirroring
+    """The index-manifest provenance an assembly.json carries, mirroring
     the monolithic GLB's embedded STEP_topology index — but WITHOUT the expensive
     selector extraction. Sourced from the scene (sourceKind/closure), the edge-render
     options, and the STEP hash, so the build freshness gates can read it from

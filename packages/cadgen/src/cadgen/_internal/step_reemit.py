@@ -150,7 +150,7 @@ def resolve_output(target: Path, out: Path) -> tuple[Path, Path]:
         raise _fail(
             f"OUT is the input document ({_display(document)}): `cadgen step build` "
             "writes a NEW document — give it a different path (to make an existing "
-            "document's render package current instead, that is what compile does)"
+            "document's tree current instead, that is what compile does)"
         )
     return document, destination
 

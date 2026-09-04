@@ -20,7 +20,7 @@ from tests.python.support.paths import add_repo_path, repo_path
 
 def write_package(step_path, *, entry_kind="part", source_kind="step", kinematics=None, animation=None):
     """Materialize the canonical render artifact for ``step_path``: a SELF-CONTAINED
-    component-GLB PACKAGE directory inside the per-folder cache
+    view directory (assembly.json + components/) inside the per-folder cache
     (``__cadgen__/models/<step-filename>/assembly.json``) whose content-addressed component
     GLBs live in the tree's own ``components/<hash>.glb`` dir. Returns the view directory
     path, mirroring ``cadgen.catalog.result_view_dir``."""

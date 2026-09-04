@@ -1,6 +1,6 @@
 """cadgen must ship the Node builders its own producers spawn.
 
-cadgen builds the DXF render package by spawning a Node child
+cadgen tessellates a DXF by spawning a Node child
 (``cadgen._internal.node_runtime``), and finds that child through ``cadgen.assets.
 node_builders_dir()`` -- the repo's live ``packages/cadgen-js/bin`` in a checkout, and the
 packaged ``cadgen/_runtime/node`` in an installed wheel.

@@ -53,7 +53,7 @@ class BuildStepArtifactTests(unittest.TestCase):
 
     def test_imported_step_build_infers_kind(self) -> None:
         """Regression: the imported-STEP branch of build_step_artifact (the CAD Viewer's
-        on-demand render-package build) must run kind inference, not require a caller
+        on-demand tree build) must run kind inference, not require a caller
         kind."""
         imported_step = self._materialize_imported_step()
 
