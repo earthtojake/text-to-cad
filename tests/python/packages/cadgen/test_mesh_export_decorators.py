@@ -235,6 +235,42 @@ class MeshExportProductionTest(unittest.TestCase):
         self.assertEqual(glb_before, (self.project / "STEP" / "widget.glb").read_bytes())
         self.assertEqual(step_before, (self.project / "STEP" / "widget.step").read_bytes())
 
+    def test_a_declared_export_the_exporter_could_not_write_leaves_the_model_stale(self) -> None:
+        # Regression: a build whose mesh export FAILED still published a record
+        # listing only the STEP and its sidecar, so the next gate said "current"
+        # and the declared STL was missing forever (seen on a checkout with no
+        # node_modules). Every declared output is listed from the first publish,
+        # sha-less until written, and an unwritten one reads as stale.
+        import json
+
+        broken = dict(self.env, CADGEN_NODE=str(self.project / "no-such-node"))
+        failed = subprocess.run(
+            [PYTHON, "src/widget.py"], cwd=str(self.project), env=broken,
+            capture_output=True, text=True, timeout=600,
+        )
+        self.assertNotEqual(failed.returncode, 0, failed.stdout + failed.stderr)
+        self.assertTrue((self.project / "STEP" / "widget.step").is_file())
+        self.assertFalse((self.project / "STL" / "widget.stl").exists())
+
+        why = subprocess.run(
+            [PYTHON, "-m", "cadgen.cli", "store", "why", "src/widget.py", "--json"],
+            cwd=str(self.project), env=self.env, capture_output=True, text=True, timeout=600,
+        )
+        self.assertEqual(why.returncode, 1, why.stdout + why.stderr)
+        verdict = json.loads(why.stdout.strip().splitlines()[-1])
+        self.assertTrue(verdict["stale"])
+        clause5 = next(c for c in verdict["clauses"] if c["clause"] == 5)
+        unwritten = {Path(o["path"]).name: o["why"] for o in clause5["outputs"] if o["stale"]}
+        self.assertEqual(unwritten, {"widget.stl": "never written", "widget.glb": "never written", "widget.3mf": "never written"})
+
+        # With the exporter back, the gate's verdict drives the run: the meshes are written.
+        healed = self._run("src/widget.py")
+        self.assertIn("wrote STL", healed.stderr)
+        for rel in ("STL/widget.stl", "STEP/widget.glb", "3MF/widget.3mf"):
+            self.assertTrue((self.project / rel).is_file(), rel)
+        again = self._run("src/widget.py")
+        self.assertIn("current", again.stdout)
+
     def test_a_mesh_only_model_builds_its_meshes_and_no_step(self) -> None:
         # Regression: @stl with no @step used to be a SILENT NO-OP (the pending
         # declaration never registered; the static parser said "no model"). It is

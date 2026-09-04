@@ -595,6 +595,14 @@ def _generate_part_outputs(
         for output_path, entry in (previous.get("outputs") or {}).items():
             if isinstance(entry, dict) and entry.get("declared") and output_path not in outputs:
                 outputs[output_path] = entry
+        # Every declared mesh output is listed from the first publish, sha-less
+        # until its export writes it (record_mesh_export fills the entry), so a
+        # declaration the exporter failed to honour reads as STALE at the next
+        # gate ("never written") instead of as a current model missing an output.
+        if generated:
+            for declared in spec.mesh_exports or ():
+                key = str(Path(declared.path).expanduser().resolve())
+                outputs.setdefault(key, {"sha256": "", "declared": declared.fmt})
         record = {
             "entryKind": spec.kind,
             "sourceKind": "step" if (not generated or reemit_source_hash) else "python",

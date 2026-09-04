@@ -149,7 +149,8 @@ def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdi
         expected = str((meta or {}).get("sha256") or "")
         actual = _sha256_file(Path(path))
         ok = bool(expected) and actual == expected
-        output_clauses.append({"path": path, "stale": not ok, "why": None if ok else ("missing" if actual is None else "changed")})
+        why = None if ok else "never written" if not expected else "missing" if actual is None else "changed"
+        output_clauses.append({"path": path, "stale": not ok, "why": why})
         if not ok:
             verdict.stale = True
     clauses.append({"clause": 5, "stale": any(c["stale"] for c in output_clauses), "outputs": output_clauses})
