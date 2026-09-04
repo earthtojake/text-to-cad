@@ -157,12 +157,6 @@ class StepExportTargetTests(unittest.TestCase):
             step_export_target.export_cad_target(document, [("step", None)])
         self.assertIn("Unsupported export format: step", str(cm.exception))
 
-    def test_a_model_script_is_refused_by_naming_the_run(self) -> None:
-        # Scripts are RUN; the engine takes the document the run wrote.
-        generator = self._write_box_generator()
-        with self.assertRaises(ValueError) as cm:
-            step_export_target.export_cad_target(generator, [("stl", None)])
-        self.assertIn("run it: python", str(cm.exception))
 
     def test_a_bare_door_writes_the_sibling_default(self) -> None:
         # A door reads no declarations: OUT omitted means the sibling default

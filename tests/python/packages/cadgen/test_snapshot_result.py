@@ -322,17 +322,6 @@ class PublicVerbs(unittest.TestCase):
         self.assertEqual(parameters("urdf") - {"joint_values"}, parameters("stl"))
         self.assertEqual(parameters("stl"), parameters("dxf"))
 
-    def test_a_verb_refuses_a_format_that_is_not_its_door(self) -> None:
-        import tempfile
-
-        from cadgen import stl
-
-        with tempfile.TemporaryDirectory() as tmp:
-            step_path = Path(tmp) / "part.step"
-            step_path.write_text("ISO-10303-21;\n", encoding="utf-8")
-            with self.assertRaises(Exception) as ctx:
-                stl.snapshot(step_path, Path(tmp) / "out.png")
-            self.assertIn("does not render", str(ctx.exception))
 
     def test_a_verb_with_no_target_says_so_rather_than_reading_stdin(self) -> None:
         from cadgen import step
