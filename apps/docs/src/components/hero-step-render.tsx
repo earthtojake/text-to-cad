@@ -259,7 +259,7 @@ export function HeroStepRender() {
             cache: "no-store",
           }).then((response) => {
             if (!response.ok) {
-              throw new Error(`hero package descriptor: HTTP ${response.status}`);
+              throw new Error(`hero assembly.json: HTTP ${response.status}`);
             }
             return response.json();
           }),
@@ -270,7 +270,7 @@ export function HeroStepRender() {
           stepParameterUrl: HERO_SIDECAR_URL,
           cadPath: HERO_STEP_CAD_PATH,
         });
-        const clips = renderModule?.clips ?? {};
+        const clips = (renderModule?.clips ?? {}) as Parameters<typeof findAnimationClip>[0];
         if (disposed) {
           return;
         }
