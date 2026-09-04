@@ -1,8 +1,3 @@
----
-name: cad-project
-description: Project structure for multi-part CAD work - src/ for model scripts and shared code, format folders (STEP/, DXF/, STL/) for raw outputs, naming, and commit policy for projects with several @step/@dxf model scripts and imported source files. Use when starting a CAD project with more than a couple of models, when asked how to organize CAD code and artifacts, or when growing a flat folder of models into a project.
----
-
 # CAD project structure
 
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
@@ -318,7 +313,7 @@ Note the `*` forms: ignoring the directory itself (`/STEP/`) would make the
 
 ## Scaffolding a new project
 
-Copy `references/project-template.md` — the full tree with a working part,
+Copy `project-template.md` (beside this reference) — the full tree with a working part,
 drawing, mesh-only part, mirrored pair, two-level assembly, lib modules,
 README, and .gitignore to create verbatim. Then verify the loop end to end:
 `python src/assembly.py`, snapshot it, and confirm the format folders gained

@@ -81,7 +81,7 @@ def resolve_model_output_path(script_path: Path, *, fmt: str, explicit_out: str 
     UNOPINIONATED about layout (design/library-first-generation.md): an explicit
     ``out=`` resolves relative to the script's own folder (absolute allowed);
     otherwise the artifact is the sibling ``<stem>.<fmt>``. Project structure
-    conventions live in the cad-project skill as guidance, not in code."""
+    conventions live in the cad skill's project-layout reference as guidance, not in code."""
     script = Path(script_path).resolve()
     if explicit_out:
         target = Path(explicit_out)

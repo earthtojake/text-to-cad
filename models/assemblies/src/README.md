@@ -1,6 +1,6 @@
 # assemblies models
 
-The repo's demo assemblies as one `$cad-project`, one group per assembly:
+The repo's demo assemblies as one cad-project, one group per assembly:
 `src/<assembly>/` holds the root model plus every part model and helper that
 assembly owns, and its artifacts land in `STEP/<assembly>/` (meshes in
 `STL/<assembly>/`, `3MF/<assembly>/`, `GLB/<assembly>/`). Standalone parts

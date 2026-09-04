@@ -344,12 +344,12 @@ about to write is not a loop — it is a model whose input changes every time it
 runs, so the gate can never say "current", every build is a full rebuild, and
 the geometry depends on what the last run happened to leave on disk. Keep
 source documents where the model cannot write them — placement policy belongs
-to `$cad-project` (`imported/`). Input path and output path being different
+to `project-layout.md` (`imported/`). Input path and output path being different
 files is the whole rule. If the geometry you want is something the project
 already builds, call that model instead of reading the artifact.
 
 For structuring multi-part projects (folder layout, shared `src/lib/` code,
-commit policy), load the `$cad-project` skill.
+commit policy), read `project-layout.md` and `project-template.md`.
 
 ## Freshness: `cadgen store why`
 

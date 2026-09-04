@@ -1,6 +1,6 @@
 # drawings models
 
-The repo's 2D `@dxf` fixtures as one `$cad-project`: every script directly
+The repo's 2D `@dxf` fixtures as one cad-project: every script directly
 under `src/` is a runnable drawing model and its artifact lands in `DXF/`.
 Parts live in the sibling `models/examples/` project and assemblies in
 `models/assemblies/`. Nothing here is committed except this `src/` tree and

@@ -69,7 +69,7 @@ class MainModuleIsNotALauncher(unittest.TestCase):
     so ``python src/model.py`` classified the whole ``src/`` — including
     ``src/lib/`` shared helpers — as runtime, dropped them from the recorded
     closure, and silently disabled staleness detection for exactly the layout
-    the cad-project skill mandates (while the daemon path, whose ``__main__``
+    the cad skill's project-layout reference mandates (while the daemon path, whose ``__main__``
     is the worker, recorded a different closure and therefore a DIFFERENT
     package key for the same source)."""
 

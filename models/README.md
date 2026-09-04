@@ -20,7 +20,7 @@ models/
 ├── juno/ lyra/       authored robot description packages (URDF/SRDF)
 ```
 
-**Each cad-project has the same shape**, the one the `$cad-project` skill
+**Each cad-project has the same shape**, the one the `$cad` skill's `project-layout.md` reference
 defines: authored code in `src/` (one `@step` or `@dxf` model per file, shared
 modules in `src/lib/`), `.step.js` render modules beside the documents they animate (authored, committed),
 raw artifacts in format folders (`STEP/`, `DXF/`, `3MF/`, `GLB/`, `STL/`),

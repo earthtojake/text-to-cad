@@ -1,4 +1,4 @@
-"""cad-project's template is the exemplar: a reader who copies it verbatim gets
+"""The cad skill's project template is the exemplar: a reader who copies it verbatim gets
 a project that BUILDS — part, drawing, mesh-only part, mirrored pair,
 sub-assembly and root — with every output landing where the template's `out=`
 targets say, and with the store behaving as the skill describes (running the
@@ -24,8 +24,8 @@ from tests.python.support.paths import add_repo_path, repo_path
 
 CADGEN_SRC = add_repo_path("packages/cadgen/src")
 
-SKILL = repo_path("skills/cad-project/SKILL.md")
-TEMPLATE = repo_path("skills/cad-project/references/project-template.md")
+SKILL = repo_path("skills/cad/references/project-layout.md")
+TEMPLATE = repo_path("skills/cad/references/project-template.md")
 
 _FILE_BLOCK = re.compile(r"## `([^`]+)`\n\n```(?:python|markdown|gitignore)\n(.*?)```", re.S)
 

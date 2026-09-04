@@ -4,7 +4,7 @@ The retired gen/artifact CLIs each carried a private sibling-path helper and
 the two disagreed on Windows separators. Library-first has exactly one:
 ``cadgen.metadata.resolve_model_output_path`` — sibling ``<stem>.<fmt>`` by
 default, an explicit ``out=`` resolved relative to the script's own folder
-(structure conventions live in the cad-project skill as guidance, not code).
+(structure conventions live in the cad skill's project-layout reference as guidance, not code).
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ class ResolveModelOutputPathTest(unittest.TestCase):
         )
 
     def test_out_resolves_relative_to_the_script_folder(self) -> None:
-        # The cad-project skill's convention (src/ + capitalized format folders)
+        # The cad skill's project-layout convention (src/ + capitalized format folders)
         # is expressed exactly this way in model code.
         self.assertEqual(
             self.root / "STEP" / "bracket.step",

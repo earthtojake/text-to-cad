@@ -138,7 +138,7 @@ render-only behaviour — today choreography, as the `clips` export below;
 other render-only exports will join it, and an export the renderer does not
 know is a load ERROR, never ignored. It is an ES module with no imports,
 authored by you and COMMITTED even though it lives in a format folder (the
-project's `.gitignore` whitelists `*.step.js`; see the cad-project skill).
+project's `.gitignore` whitelists `*.step.js`; see `project-layout.md`).
 
 ```js
 // STEP/arm.step.js — beside arm.step; the viewer loads it by name.

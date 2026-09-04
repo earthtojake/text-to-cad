@@ -5,7 +5,7 @@ Mechanism assemblies inspired by the YouTube channel
 design, animation, and downloadable source files are credited to
 `thang010146`.
 
-A standard cad-project (`$cad-project`): authored code in `src/`, raw outputs
+A standard cad-project (the `$cad` skill's `project-layout.md` reference): authored code in `src/`, raw outputs
 in `STEP/`, vendor documents in `STEP/imported/`.
 
 ```

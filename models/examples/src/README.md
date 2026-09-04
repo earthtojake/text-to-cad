@@ -1,6 +1,6 @@
 # examples models
 
-Standalone demo parts as one `$cad-project`: every script directly under
+Standalone demo parts as one cad-project: every script directly under
 `src/` is a runnable part model and its artifact lands in a format folder at
 the project root (`STEP/`, `STL/`, `3MF/`, `GLB/`). Assemblies live in the
 sibling `models/assemblies/` project (one group per assembly) and 2D drawings
