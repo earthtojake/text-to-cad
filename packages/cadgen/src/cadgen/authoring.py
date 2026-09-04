@@ -22,7 +22,7 @@ Semantics:
   composed freely.
 - **A top-level call builds.** Calling the decorated name when no build is in
   progress (``__main__``, a REPL, a test) runs the full pipeline — freshness
-  gate, locks/progress, incremental package build, ``.step``/``.dxf`` output —
+  gate, progress, incremental package build, ``.step``/``.dxf`` output —
   via the warm daemon when available, in-process otherwise. It returns
   ``None``: the caller is the build's initiator, and loading the shape back
   into it would force the kernel import the gate exists to avoid. A failed
@@ -39,7 +39,7 @@ Semantics:
 
 Per-run flags ride ``sys.argv`` of the top-level call: ``--force``,
 ``--verbose``, ``--json``, ``-o/--output``, ``--mesh-tolerance``,
-``--mesh-angular-tolerance``, ``--lock-timeout``. Durable configuration lives
+``--mesh-angular-tolerance``. Durable configuration lives
 in the decorator call. A model function takes no parameters: it is one
 configuration of one output. Parametric geometry lives in a plain factory the
 model calls; another configuration is another model.

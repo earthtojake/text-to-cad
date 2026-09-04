@@ -110,6 +110,9 @@ def _run(argv: list[str], cwd: pathlib.Path, **env_extra) -> tuple[int, str]:
     output = re.sub(re.escape(str(cwd)), "<CWD>", proc.stdout + proc.stderr)
     output = re.sub(r"/private/var/folders/\S+", "<TMP>", output)
     output = re.sub(r"/(?:var|tmp)/\S*tmp\S+", "<TMP>", output)
+    # The build tree's JSONL transitions carry wall-clock elapsed times and, warm, arrive
+    # relayed through the daemon; they narrate the build and are not its output.
+    output = "".join(line for line in output.splitlines(keepends=True) if not line.startswith('{"model":'))
     return proc.returncode, output
 
 

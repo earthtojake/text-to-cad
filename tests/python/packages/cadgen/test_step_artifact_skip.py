@@ -122,14 +122,11 @@ class StepArtifactSkipTest(unittest.TestCase):
         self.assertFalse(rebuilt.get("skipped"), "an edited generator must rebuild")
         self.assertEqual(2, self._generator_runs())
 
-    def test_a_queued_producer_finds_the_package_current_and_skips(self):
-        """Two contenders on a COLD package must run model() exactly once between them.
-
-        This is the concurrent case the pre-lock fast path structurally cannot cover: it
-        runs before the peer's build exists, so the loser used to wait for the lock and
-        then redo the entire generator+mesh the winner had just finished. artifact_build
-        re-evaluates is_current() under the lock, which turns the loser into a no-op.
-        """
+    def test_two_contenders_on_a_cold_package_both_finish_and_the_result_is_current(self):
+        """No lock: both contenders run (STORE.md §7). Whether the loser redoes the
+        winner's work is timing -- its run re-checks the gate when it opens -- so what is
+        asserted is what the publish rule guarantees: both succeed, the generator ran at
+        most twice, and a third run finds the package current."""
         script = [
             sys.executable, "-m", "cadgen.step_artifact_cli",
             "--repo-root", str(self.root),
@@ -167,18 +164,13 @@ class StepArtifactSkipTest(unittest.TestCase):
             self.assertEqual(0, code, f"a contender failed:\n{out}")
         outs = [out for _code, out in drained]
 
-        self.assertEqual(
-            1,
-            self._generator_runs(),
-            f"model() ran {self._generator_runs()}x across two contenders; the loser "
-            f"redid the winner's work:\n{outs}",
-        )
+        self.assertIn(self._generator_runs(), (1, 2), f"model() ran {self._generator_runs()}x:\n{outs}")
         payloads = [json.loads(out.strip().splitlines()[-1]) for out in outs]
-        self.assertEqual(
-            1,
-            sum(1 for p in payloads if p.get("skipped")),
-            f"exactly one contender must short-circuit: {payloads}",
-        )
+        self.assertTrue(all(p.get("ok") for p in payloads), payloads)
+        runs = self._generator_runs()
+        third = self._build()
+        self.assertTrue(third.get("skipped"), f"a third run must find the package current: {third}")
+        self.assertEqual(runs, self._generator_runs(), "the third run re-ran the generator")
 
     def tearDown(self):
         shutil.rmtree(self.root / "__cadgen__", ignore_errors=True)

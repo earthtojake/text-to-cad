@@ -295,7 +295,6 @@ Flags ride the script's argv:
 | `--mesh-angular-tolerance FLOAT` | Override angular tolerance, radians. |
 | `--verbose` | Stage timing and full tracebacks on stderr. |
 | `--json` | One JSON result line on stdout. |
-| `--lock-timeout SECONDS` | Give up rather than wait for a concurrent build of the same model. |
 
 Two behaviours that differ from v0.4 and will bite:
 
@@ -935,7 +934,6 @@ The cache root, one rule, honoured by both Python and JS:
 | `components/` | Exact-geometry component store; components hardlink in from packages |
 | `opmemo/` | Kernel-op memo, one subdirectory per salt generation |
 | `meshes/` | Shared tessellation cache |
-| `locks/` | Locks and progress records, keyed by model path |
 | `records/` | Per-model provenance/freshness records |
 
 Everything under the root is content-addressed and best-effort. Deleting any

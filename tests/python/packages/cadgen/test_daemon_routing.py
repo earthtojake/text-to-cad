@@ -300,7 +300,8 @@ class DaemonRouting(unittest.TestCase):
         self.assertEqual(code, 0, f"the job in flight was not drained:\n{output}")
         self.server.wait(timeout=60)
         log = self.log_path.read_text(encoding="utf-8")
-        self.assertIn("finishing 1 job(s) in flight", log)
+        # The slow job plus its worker's slot lease are both request threads in flight.
+        self.assertRegex(log, r"finishing \d+ job\(s\) in flight")
 
 
 if __name__ == "__main__":

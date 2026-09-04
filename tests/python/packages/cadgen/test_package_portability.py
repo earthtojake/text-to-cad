@@ -149,13 +149,13 @@ def package_files(root: Path) -> list[Path]:
 
 
 def is_run_state(path: Path) -> bool:
-    """The generation lock and the status record: this machine's view of a build in flight.
+    """The progress record: this machine's view of a build in flight.
 
-    They live in the same directory as the package but are not part of it -- the lock is a
-    kernel-owned sentinel and the record is progress UI, carrying a pid and a hostname that
-    mean nothing anywhere else. Every run rewrites the record, including a run that decides
-    to do nothing, so they are excluded from the "nothing was rebuilt" comparison."""
-    return path.name.endswith((".generation.lock", ".generation.progress.json"))
+    It lives in the daemon's state directory (``progress/<key>.json``), never in the
+    package, and is progress UI carrying a pid and a hostname that mean nothing anywhere
+    else. Every run rewrites it, including a run that decides to do nothing, so it is
+    excluded from the "nothing was rebuilt" comparison."""
+    return path.parent.name == "progress" and path.suffix == ".json"
 
 
 def package_content_files(root: Path) -> list[Path]:

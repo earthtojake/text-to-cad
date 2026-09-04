@@ -285,8 +285,14 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             _send(conn, {"workerDied": {"pid": worker.pid, "detail": str(exc),
                                         "exitStatus": exc.exit_status}})
     except OSError:
-        # The CLIENT went away mid-job. The watchdog has killed the worker; stop relaying.
-        healthy = worker.alive()
+        # The CLIENT went away mid-job: a relay send failed before the watchdog's probe
+        # did. Same answer as the watchdog's -- the orphaned job's worker is killed, never
+        # released back to the pool mid-job (it would take the next request on a stdin
+        # that is still inside this one).
+        if worker.alive():
+            _log(f"{tool}: client disconnected mid-request; killing worker {worker.pid}")
+            worker.kill()
+        healthy = False
     finally:
         watchdog_done.set()
         watchdog.join(timeout=CLIENT_LIVENESS_INTERVAL_SECONDS + 1.0)

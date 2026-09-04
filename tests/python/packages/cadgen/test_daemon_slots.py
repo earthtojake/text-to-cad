@@ -229,6 +229,7 @@ class DaemonExecutor(_Executor):
         cls.address = rf"\\.\pipe\cadgen-slots-{os.getpid()}" if os.name == "nt" else str(Path(cls.socket_dir.name) / "d.sock")
         cls.log_path = Path(cls.socket_dir.name) / "daemon.log"
         cls.env["CADGEN_DAEMON_SOCKET"] = cls.address
+        cls.env["CADGEN_DAEMON"] = "1"  # the runner may export 0; these clients go warm
         cls.env["CADGEN_DAEMON_SPARES"] = "1"
         cls.env["CADGEN_DAEMON_IDLE_TIMEOUT"] = "600"
         os.environ["CADGEN_DAEMON_STATE_DIR"] = cls.env["CADGEN_DAEMON_STATE_DIR"]
