@@ -323,10 +323,11 @@ Every build goes through one interface, `cadgen.daemon.executors.submit(model)
   siblings. It inherits the environment, so a test's `CADGEN_CACHE_DIR`
   isolates its store; tests and CI run this way.
 
-**One daemon per identity, by lock.** The daemon takes a process-lifetime
-exclusive lock (`cadgen.daemon.transport.SingletonLock`: `flock` on POSIX,
-`msvcrt.locking` on Windows, released by the kernel when the holder dies)
-before it binds; a second daemon starting for the same identity stands down at
+**One daemon per address, by lock.** The daemon takes a process-lifetime
+exclusive lock keyed by its socket address (`cadgen.daemon.transport.
+SingletonLock`: `flock` on POSIX, `msvcrt.locking` on Windows, released by the
+kernel when the holder dies) before it binds — a private socket is a private
+daemon; a second daemon starting for the same address stands down at
 once, touching nothing; the winner is by construction alone, so a socket file it
 finds is dead and may be removed. Clients elect one spawner the same way and
 the rest wait for the address; the authkey is created once via a linked temp
@@ -352,11 +353,17 @@ memory is ever measured (`cadgen.daemon.broker`):
    while it waits for a child it forced** and reacquires — queuing if it must —
    when the child is done. A waiting parent therefore holds nothing, which is
    why a 1-slot pool still builds a 3-level tree. Slots count kernel work only:
-   the build pipeline takes one around a model body and its emit; `inspect`,
-   `snapshot`, `doctor`, `store why` and the gate check for a current model take
-   none. An export or topology extraction that re-runs a body does NOT take one
-   today (`run_script_generator` is called directly there) — a known gap, listed
-   for the review gate. The tree shows `queued` when a slot did not come at once.
+   the build pipeline takes one around a model body and its emit. **Doors take
+   none and never run a body**: `inspect`, `snapshot` and the mesh doors
+   (`stl|3mf|glb build`) ask one question of a document — does the store have a
+   tree for this file's bytes (`doors.document_tree`)? Yes → read it; a source
+   that has moved on is the model's record's business, not the door's, so no
+   document is ever refused. No → the door (or the CAD Viewer) submits a
+   **compile job** to the pool (`executors.submit_compile`) that builds a tree
+   from the bytes, generated or imported alike — the one door operation that is
+   a job: it runs on a spare, holds a slot through its read and emit, coalesces
+   on the document's bytes and shows in the tree. The tree shows `queued` when a
+   slot did not come at once.
 2. **In-flight coalescing.** A child submit carries its source's closure hash;
    a submit for `(model, closure)` matching a job already in flight attaches to
    that job instead of starting another. In flight only, identical source only,

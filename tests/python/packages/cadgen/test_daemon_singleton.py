@@ -1,4 +1,4 @@
-"""One daemon per identity, one spawning client, one authkey.
+"""One daemon per address, one spawning client, one authkey.
 
 Twenty clients starting at once used to start twenty daemons; the losers' probes
 against a backlog-8 listener were refused, read as a stale socket, and unlinked

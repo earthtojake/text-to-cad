@@ -606,10 +606,17 @@ def _generate_part_outputs(
             "closure": {"hash": closure_hash, "files": closure_files, "static": closure_static},
             "children": list(getattr(scene, "store_children", None) or []),
             "outputs": outputs,
+            # The bytes of the document this tree describes -- a door's one question
+            # (cadgen._internal.doors.document_tree). An imported document is hashed
+            # itself; a generated one carries the hash of the .step it wrote.
             "stepHash": (
                 str(getattr(scene, "step_hash", "") or "")
                 or (outputs and next(iter(outputs.values())).get("sha256"))
-                or ""
+                or (
+                    step_file_hash(spec.step_path)
+                    if not generated and spec.step_path is not None and Path(spec.step_path).is_file()
+                    else ""
+                )
             ),
         }
         if reemit_source_hash:

@@ -118,7 +118,8 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   ships in the wheel at `cadgen/_runtime/viewer` (gitignored; a checkout serves
   `apps/viewer/dist`). The cad-viewer skill is instructions over that verb.
   Nothing in `cadgen.viewer` imports the CAD kernel at module scope — the one
-  kernel action, importing a foreign STEP, runs in a worker the server owns.
+  kernel action, importing a foreign STEP, is a compile job in cadgen's build
+  pool, never work the server process does.
   Keep repo-level tooling in `scripts/`, not under `apps/viewer/`.
 - `packages/cadgen-js` must stay reusable/non-React; app UI and workflow state
   belong in `apps/viewer/`. It holds the shared CAD render/runtime code: one package,

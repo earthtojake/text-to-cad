@@ -21,7 +21,6 @@ from cadgen._internal.generation import (
     _generate_part_outputs,
     cli_progress_line,
     relative_to_cwd,
-    run_script_generator,
 )
 from cadgen.catalog import build_scope, result_view_dir
 from cadgen._internal.step_scene import LoadedStepScene, load_step_scene_cached
@@ -353,33 +352,16 @@ def _scene_for_regeneration(
     progress: object | None = None,
 ) -> tuple[EntrySpec, LoadedStepScene]:
     if spec.source == "generated":
-        from cadgen._internal.doors import announce_rebuild, document_staleness
+        # A door never runs the script. The document on disk is what inspect
+        # measures: its tree is made current from its BYTES (a compile job in the
+        # pool when the store has none), then it is read like any import below.
+        from cadgen._internal.doors import document_tree
 
-        document = spec.step_path
-        announce_rebuild(
-            "step inspect",
-            document,
-            reason=(
-                (document_staleness(document) if document.is_file() else "no document on disk")
-                or ("--force" if force else "its render package is missing or stale")
-            ),
-            source=spec.script_path or spec.source_path,
-            verb="inspecting",
-        )
-        # The run reporting, so the generator reports its phase (and whatever the
-        # generator itself reports through cadgen.progress). Without it this call -- which
-        # for a large assembly is the longest thing inspect does -- opened the build with no
-        # `generate` phase at all: the bar jumped straight to `collecting parts`.
-        scene = run_script_generator(
-            spec,
-            "step",
-            logger=logger,
-            force=force,
-            progress=progress,
-        )
-        if scene is None:
-            raise RuntimeError(f"Python generator did not produce a STEP scene: {spec.source_ref}")
-        return spec, scene
+        if not spec.step_path.is_file():
+            raise FileNotFoundError(
+                f"no document on disk for {spec.source_ref}: run python {spec.script_path or spec.source_path}"
+            )
+        document_tree(spec.step_path)
 
     resolve_progress(progress).phase(PHASE_GENERATE)
     with (logger.timed(f"load STEP {spec.cad_ref}") if logger is not None else _null_context()):

@@ -215,8 +215,60 @@ def worker_env(base: dict[str, str] | None = None) -> dict[str, str]:
     return env
 
 
+def submit_compile(
+    document: Path,
+    *,
+    store_root: Path | None = None,
+    force: bool = False,
+    root_id: str | None = None,
+    parent: Path | str | None = None,
+) -> Job:
+    """Compile an IMPORTED document (a foreign ``.step`` with no tree) as a job.
+
+    The one door operation that is a job (STORE.md §9): doors read the store and
+    never run a body, but a document nobody generated has to be read by the kernel
+    once. That read goes through the pool like a build — a slot, the tree, and
+    coalescing with anyone compiling the same bytes (the CAD Viewer, another door)
+    — on a daemon spare or a transient subprocess, never in the caller."""
+    import hashlib
+
+    from cadgen.store.paths import store_root as default_store_root
+
+    document = Path(document).resolve()
+    root = Path(store_root) if store_root is not None else default_store_root()
+    closure = hashlib.sha256(document.read_bytes()).hexdigest()
+    job = Job(document)
+    emit_event(model_event(document, "submitted", parent=str(parent) if parent else None))
+    tool_argv = [str(document)] + (["--force"] if force else [])
+    if use_daemon():
+        _submit_daemon(
+            job, root, force=force, root_id=root_id, closure=closure,
+            tool="step-compile", argv=tool_argv, prog="cadgen step compile",
+        )
+    else:
+        _submit_transient(
+            job, root, force=force, root_id=root_id, closure=closure,
+            command=[sys.executable, "-m", "cadgen.cli.step_compile", *tool_argv],
+        )
+    emit_event(model_event(document, "building", phase="compile"))
+
+    def finish() -> None:
+        # The compile narrates on stderr, not in tree events; the tree still needs its line closed.
+        if job.wait() == 0:
+            emit_event(model_event(document, "done"))
+
+    threading.Thread(target=finish, name=f"cadgen-compile-{document.stem}", daemon=True).start()
+    return job
+
+
 def _submit_transient(
-    job: Job, store_root: Path, *, force: bool, root_id: str | None, closure: str | None = None
+    job: Job,
+    store_root: Path,
+    *,
+    force: bool,
+    root_id: str | None,
+    closure: str | None = None,
+    command: list[str] | None = None,
 ) -> None:
     from cadgen.daemon import broker
 
@@ -235,8 +287,8 @@ def _submit_transient(
     env["CADGEN_EVENTS"] = "1"  # the child writes events as JSON lines on stderr
     if root_id:
         env["CADGEN_ROOT_ID"] = root_id
-    argv = [sys.executable, "-m", "cadgen.cli._run_model", str(job.model)]
-    if force:
+    argv = list(command) if command else [sys.executable, "-m", "cadgen.cli._run_model", str(job.model)]
+    if force and not command:
         argv.append("--force")
     try:
         process = subprocess.Popen(
@@ -305,20 +357,32 @@ EVENT_LINE_PREFIX = "CADGEN_EVENT "
 
 
 def _submit_daemon(
-    job: Job, store_root: Path, *, force: bool, root_id: str | None, closure: str | None = None
+    job: Job,
+    store_root: Path,
+    *,
+    force: bool,
+    root_id: str | None,
+    closure: str | None = None,
+    tool: str = "run",
+    argv: list[str] | None = None,
+    prog: str | None = None,
 ) -> None:
     from cadgen.daemon import client
 
-    argv = [str(job.model)]
-    if force:
-        argv.append("--force")
+    if argv is None:
+        argv = [str(job.model)]
+        if force:
+            argv.append("--force")
+    fallback = None
+    if tool != "run":
+        fallback = [sys.executable, "-m", f"cadgen.cli.{tool.replace('-', '_')}", *argv]
 
     def run() -> None:
         code = client.run_nested(
-            "run",
+            tool,
             argv,
             str(job.model.parent),
-            prog=f"python {job.model.name}",
+            prog=prog or f"python {job.model.name}",
             store_root=str(store_root),
             root_id=root_id,
             closure=closure,
@@ -328,7 +392,7 @@ def _submit_daemon(
         if code is None:
             # The daemon could not take the job (spawn failure, unsupported
             # platform mid-flight): run it transiently rather than fail the parent.
-            _submit_transient(job, store_root, force=force, root_id=root_id, closure=closure)
+            _submit_transient(job, store_root, force=force, root_id=root_id, closure=closure, command=fallback)
             return
         if code != 0:
             emit_event(model_event(job.model, "failed", exit=code))

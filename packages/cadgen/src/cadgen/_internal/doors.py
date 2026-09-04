@@ -6,19 +6,17 @@ door, and running it writes the document, its sidecar and its declared exports.
 Every command therefore takes the DOCUMENT — a ``.step``/``.stp``/``.stl``/
 ``.dxf`` file — and refuses a ``.py`` by naming the run.
 
-Staleness is a NO-OP GATE, never an auto-rebuild: a door handed a document
-whose sidecar closure no longer re-hashes says so and names ``python
-<sourcePath>``. Silently regenerating from a CLI would put a build inside a
-render, which is exactly the coupling the split exists to remove. A document
-with no sidecar is IMPORTED and has no staleness concept at all.
+A door asks ONE question of a document (:func:`document_tree`, STORE.md §9):
+does the store have a tree for this file's bytes? Yes → use it. No → a compile
+job in the pool builds one from the bytes, exactly as for an imported STEP,
+whether or not the file has a script. A door never refuses a document and never
+runs a model body: whether the source has moved on since the document was
+written is the model's record's business (:func:`document_staleness` answers it
+for the viewer's badge), not the door's.
 
-The doors that DO rebuild -- the in-memory scene doors (``inspect validate``,
-``inspect interfere``) and the Viewer's export ABI, which need the generator's
-scene rather than a render package -- announce it through
-:func:`announce_rebuild` the moment they decide to, on stderr, with the
-freshness authority's own reason. That one line is what separates "this door
-runs Python when the document is stale" from a fifteen-minute silence a user
-cannot attribute to anything.
+:func:`announce_rebuild` remains for the one path that is not a door — a
+caller handing a SCRIPT to the export pipeline (the viewer's export ABI), which
+runs the generator and says so on stderr before it starts.
 
 Stdlib-light: these run before any CAD import, on the ``--help`` path and on a
 model script's pre-gate path.
@@ -30,11 +28,10 @@ from pathlib import Path
 
 __all__ = [
     "ScriptTargetError",
-    "StaleDocumentError",
     "announce_rebuild",
     "document_staleness",
     "document_target",
-    "require_current_document",
+    "document_tree",
     "script_target_message",
 ]
 
@@ -43,8 +40,40 @@ class ScriptTargetError(ValueError):
     """A CLI door was handed a model script instead of a document."""
 
 
-class StaleDocumentError(ValueError):
-    """A document's sidecar closure no longer matches its source."""
+def document_tree(document: Path) -> str:
+    """The tree for THIS document's bytes — a door's one question (STORE.md §9).
+
+    Yes, the store has one → it is used (a record whose ``stepHash`` is the
+    file's hash: the model's when it wrote this file, or the document's own
+    from an earlier compile). Source changes are the model's record's business,
+    never the door's: a document is never refused and no body ever runs here.
+    No → a **compile job** in the pool builds a tree from the file's bytes,
+    exactly as for an imported STEP, whether or not the file has a script.
+    """
+    from cadgen._internal.step_hash import step_file_hash
+    from cadgen.store.records import read_record, record_for_document
+
+    document = Path(document).expanduser().resolve()
+    digest = step_file_hash(document)
+
+    def _matching(record: dict | None) -> str | None:
+        if not record or str(record.get("stepHash") or "") != digest:
+            return None
+        return str(record.get("tree") or "").strip() or None
+
+    tree = _matching(record_for_document(document)) or _matching(read_record(document))
+    if tree:
+        return tree
+    from cadgen.daemon.executors import submit_compile
+
+    job = submit_compile(document)
+    if job.wait() != 0:
+        said = job.output().rstrip()
+        raise RuntimeError(f"compiling {_display(document)} failed" + (f":\n{said}" if said else ""))
+    tree = _matching(read_record(document)) or _matching(record_for_document(document))
+    if not tree:
+        raise RuntimeError(f"no tree for {_display(document)} after its compile")
+    return tree
 
 
 def _display(path: Path) -> str:
@@ -176,23 +205,6 @@ def _listed(names: list[str], limit: int = 3) -> str:
     shown = ", ".join(names[:limit])
     rest = len(names) - limit
     return f"{shown} and {rest} more" if rest > 0 else shown
-
-
-def require_current_document(document: Path) -> None:
-    """Refuse to operate on a document that is stale relative to its source.
-
-    The gate is :func:`document_staleness`; this turns its reason into the
-    teaching error every no-op door raises.
-    """
-    document = Path(document)
-    reason = document_staleness(document)
-    if reason is None:
-        return
-    script = document_source_script(document)
-    raise StaleDocumentError(
-        f"{_display(document)} is stale relative to its source ({reason}) — "
-        f"run python {_display(script) if script is not None else '<script>'}"
-    )
 
 
 def announce_rebuild(

@@ -409,62 +409,72 @@ def build_step_artifact(
                     existing_spec,
                     logger=logger,
                 )
-        if from_generator:
-            from cadgen._internal.doors import announce_rebuild, document_staleness
+        import contextlib
 
-            document = existing_spec.step_path
-            announce_rebuild(
-                "step compile",
-                document,
-                reason=(
-                    (document_staleness(document) if document.is_file() else "no document on disk")
-                    or ("--force" if force else "its render package is missing or stale")
-                ),
-                source=existing_spec.script_path or existing_spec.source_path,
-                verb="compiling its render package",
-            )
-            scene = run_script_generator(
-                existing_spec,
-                "step",
-                logger=logger,
+        with contextlib.ExitStack() as slot:
+            if from_generator:
+                from cadgen._internal.doors import announce_rebuild, document_staleness
+
+                document = existing_spec.step_path
+                announce_rebuild(
+                    "step compile",
+                    document,
+                    reason=(
+                        (document_staleness(document) if document.is_file() else "no document on disk")
+                        or ("--force" if force else "its render package is missing or stale")
+                    ),
+                    source=existing_spec.script_path or existing_spec.source_path,
+                    verb="compiling its render package",
+                )
+                scene = run_script_generator(
+                    existing_spec,
+                    "step",
+                    logger=logger,
+                    force=force,
+                    progress=progress,
+                )
+                if scene is None:
+                    raise RuntimeError(f"Python generator did not produce a STEP scene: {existing_spec.source_ref}")
+                # The generation pipeline's contract: a generated model's build
+                # ALWAYS produces its STEP file (assembled from the package —
+                # design/step-document-architecture.md), no matter which front
+                # door asked (a model-script run, `cadgen step build`, inspect).
+                import dataclasses
+
+                spec = existing_spec
+                if spec.step_export_path is None and spec.step_path is not None:
+                    spec = dataclasses.replace(spec, step_export_path=spec.step_path)
+            else:
+                from cadgen.daemon import broker
+
+                # An imported document's compile is a JOB (STORE.md §9): its kernel
+                # work -- the read and the component emit -- holds a job slot the way
+                # a model body does. (A generated document's run takes its own slot
+                # inside run_script_generator.)
+                slot.enter_context(broker.held(existing_spec.source_ref))
+                # _generate_part_outputs reports this phase itself when it does the loading;
+                # here the scene is preloaded, so the parse would otherwise go unreported.
+                progress.phase(PHASE_GENERATE)
+                with logger.timed(f"load STEP {relative_to_cwd(step_path)}"):
+                    scene = load_step_scene(step_path)
+                kind_value = kind or infer_entry_kind(step_path, scene)
+                spec = _build_entry_spec(
+                    repo_root,
+                    step_path,
+                    scene,
+                    kind=kind_value,
+                    mesh_tolerance=mesh_tolerance,
+                    mesh_angular_tolerance=mesh_angular_tolerance,
+                )
+            result = _generate_part_outputs(
+                spec,
+                entries_by_step_path=_entries_by_step_path_for_repo(repo_root, spec),
+                preloaded_scene=scene,
+                require_step_file=not from_generator,
                 force=force,
+                logger=logger,
                 progress=progress,
             )
-            if scene is None:
-                raise RuntimeError(f"Python generator did not produce a STEP scene: {existing_spec.source_ref}")
-            # The generation pipeline's contract: a generated model's build
-            # ALWAYS produces its STEP file (assembled from the package —
-            # design/step-document-architecture.md), no matter which front
-            # door asked (a model-script run, `cadgen step build`, inspect).
-            import dataclasses
-
-            spec = existing_spec
-            if spec.step_export_path is None and spec.step_path is not None:
-                spec = dataclasses.replace(spec, step_export_path=spec.step_path)
-        else:
-            # _generate_part_outputs reports this phase itself when it does the loading;
-            # here the scene is preloaded, so the parse would otherwise go unreported.
-            progress.phase(PHASE_GENERATE)
-            with logger.timed(f"load STEP {relative_to_cwd(step_path)}"):
-                scene = load_step_scene(step_path)
-            kind_value = kind or infer_entry_kind(step_path, scene)
-            spec = _build_entry_spec(
-                repo_root,
-                step_path,
-                scene,
-                kind=kind_value,
-                mesh_tolerance=mesh_tolerance,
-                mesh_angular_tolerance=mesh_angular_tolerance,
-            )
-        result = _generate_part_outputs(
-            spec,
-            entries_by_step_path=_entries_by_step_path_for_repo(repo_root, spec),
-            preloaded_scene=scene,
-            require_step_file=not from_generator,
-            force=force,
-            logger=logger,
-            progress=progress,
-        )
     stats = result.selector_bundle.manifest.get("stats") if result.selector_bundle is not None else {}
     return _with_declared_exports(
         _generated_result_payload(spec, scene, stats if isinstance(stats, dict) else {}),

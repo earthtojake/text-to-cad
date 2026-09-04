@@ -253,7 +253,7 @@ def _connect_or_spawn(address: str) -> transport.Channel | None:
     # may remove a leftover socket (server._bind). And only ONE client spawns: the
     # first to take the spawn lock starts the daemon; the others just wait for the
     # address to answer. Twenty concurrent clients used to start twenty daemons.
-    election = transport.spawn_lock(daemon_identity())
+    election = transport.spawn_lock(address)
     spawner = election.acquire()
     process = None
     try:

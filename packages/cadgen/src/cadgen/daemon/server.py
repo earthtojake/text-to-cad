@@ -205,6 +205,20 @@ def _script_path(candidates, base: object) -> str:
     return ""
 
 
+def _document_path(candidates, base: object) -> str:
+    """The imported document a compile job names (``.step``/``.stp``), or "".
+
+    A coalescing key only: a document binds no worker (the request borrows a
+    spare), but two requests compiling the same bytes are one job."""
+    for candidate in candidates or ():
+        text = str(candidate)
+        if text.startswith("-") or not text.lower().endswith((".step", ".stp")):
+            continue
+        root = str(base or "")
+        return os.path.realpath(os.path.join(root, text) if root else text)
+    return ""
+
+
 def _handle_request(conn: transport.Channel, request: dict) -> None:
     """Relay one job to a warm worker and stream its frames back to the client."""
     send_lock = threading.Lock()
@@ -227,10 +241,14 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
 
     cwd = str(request.get("cwd") or "")
     model = _script_path(argv, cwd)
+    # What in-flight coalescing keys on: the model, or for a compile job the imported
+    # document (which binds no worker -- it borrows a spare -- but two compiles of one
+    # file are still one job).
+    subject = model or _document_path(argv, cwd)
     closure = str(request.get("closure") or "")
     inflight = None
-    if model and closure and request.get("coalesce"):
-        inflight = _BROKER.claim(model, closure)
+    if subject and closure and request.get("coalesce"):
+        inflight = _BROKER.claim(subject, closure)
         if inflight is not None:
             # Identical source is already building: attach, relay its exit, run nothing.
             _log(f"{tool} {model}: coalesced onto the job in flight")
@@ -244,8 +262,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         # A spawn that never announced itself. There is no worker to blame and nothing
         # to retry warm; the client sees the failure and can run cold.
         _log(f"{tool}: could not start a worker: {exc}")
-        if model and closure and request.get("coalesce"):
-            _BROKER.finish(model, closure, 1)
+        if subject and closure and request.get("coalesce"):
+            _BROKER.finish(subject, closure, 1)
         with contextlib.suppress(OSError), send_lock:
             _send(conn, {"stream": "stderr", "data": f"cadgen-daemon: could not start a worker: {exc}\n"})
             _send(conn, {"exit": 1})
@@ -298,8 +316,8 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         watchdog.join(timeout=CLIENT_LIVENESS_INTERVAL_SECONDS + 1.0)
         # A killed worker is not reusable; release() drops it and the pool respawns.
         _POOL.release(worker, healthy=healthy and worker.alive())
-        if model and closure and request.get("coalesce"):
-            _BROKER.finish(model, closure, exit_code)
+        if subject and closure and request.get("coalesce"):
+            _BROKER.finish(subject, closure, exit_code)
 
     _REQUESTS_SERVED[0] += 1
     _log(f"{tool} {argv!r} -> exit {exit_code} in {time.perf_counter() - started:.2f}s "
@@ -354,7 +372,7 @@ def _bind(address: str, authkey: bytes) -> transport.Server | None:
     and may be removed before binding.
     """
     global _DAEMON_LOCK
-    lock = transport.daemon_lock(daemon_identity())
+    lock = transport.daemon_lock(address)
     if not lock.acquire():
         _log(f"another daemon holds the lock for {address}; standing down")
         return None

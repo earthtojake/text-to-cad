@@ -198,14 +198,20 @@ class SingletonLock:
             os.close(fd)
 
 
-def daemon_lock(key: str) -> SingletonLock:
-    """The lock a daemon holds for its whole life: one daemon per identity."""
-    return SingletonLock(state_dir() / f"cadgen-daemon-v{PROTOCOL}-{key}.lock")
+def _lock_name(address: str) -> str:
+    return hashlib.sha256(str(address).encode("utf-8")).hexdigest()[:16]
 
 
-def spawn_lock(key: str) -> SingletonLock:
-    """The lock the ONE spawning client holds while it starts a daemon."""
-    return SingletonLock(state_dir() / f"cadgen-daemon-v{PROTOCOL}-{key}.spawn.lock")
+def daemon_lock(address: str) -> SingletonLock:
+    """The lock a daemon holds for its whole life: one daemon per ADDRESS. Keyed by
+    the socket, not the identity, so a private socket (a test's, a pilot's) is a
+    private daemon even when it serves the same cadgen as the user's."""
+    return SingletonLock(state_dir() / f"cadgen-daemon-v{PROTOCOL}-{_lock_name(address)}.lock")
+
+
+def spawn_lock(address: str) -> SingletonLock:
+    """The lock the ONE spawning client holds while it starts the daemon for ``address``."""
+    return SingletonLock(state_dir() / f"cadgen-daemon-v{PROTOCOL}-{_lock_name(address)}.spawn.lock")
 
 
 def forget_authkey(key: str) -> None:

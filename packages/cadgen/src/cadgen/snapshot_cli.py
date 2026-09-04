@@ -863,12 +863,9 @@ def resolve_step_render_job(
     if job.get("animation") is not None:
         animation_request = normalize_animation_request(job["animation"], where="render job animation")
         job["animation"] = animation_request
-    # A render is a READ. A document whose sidecar closure no longer re-hashes
-    # is refused by naming the run rather than rebuilt here — putting a build
-    # inside a render is exactly the coupling documents-only inputs remove.
-    from cadgen._internal.doors import require_current_document
-
-    require_current_document(input_path)
+    # A render is a READ of the tree behind the document's bytes (compiled from
+    # them on demand below when the store has none). Whether the document's
+    # source has moved on is its model's business, never a render's.
     # Kinematics values drive the model's sidecar kinematics block.
     debug_enabled = bool(job.get("debug"))
     step_artifact_debug: dict[str, object] | None = {} if debug_enabled else None

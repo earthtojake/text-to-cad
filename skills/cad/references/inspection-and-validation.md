@@ -188,14 +188,11 @@ the test when it dominates runtime. Progress paints on stderr per shape;
 until the run completes, so a run that is killed (out of memory, a lost daemon
 worker) leaves the findings it reached.
 
-`validate` and `interfere` need the model's in-memory scene. A current
-document is loaded from disk and runs no Python; a stale one (its script or a
-helper it imports changed since the document was written) is rebuilt from its
-script first, and the door announces that on stderr before the rebuild starts:
-
-```text
-inspect validate: STEP/rig.step is stale (src/lib/palette.py changed after the document was written); rebuilding from src/rig.py before validating
-```
+`validate` and `interfere` measure the document ON DISK: it is loaded as
+written and runs no Python, even when its script has changed since — a door
+never rebuilds a model. Rerun the script first when you want the new geometry
+measured. A document the store has never seen (one edited or written by another
+tool) is compiled from its bytes on demand, like an import.
 
 ### `interfere`: do two parts occupy the same space?
 

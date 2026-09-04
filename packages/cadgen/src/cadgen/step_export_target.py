@@ -107,18 +107,16 @@ def _resolve_spec_and_scene(
     Imported model (no ``source_path``): load the existing STEP and classify it via
     :func:`cadgen.step_artifact_cli.infer_entry_kind`.
 
-    Generated model (``source_path`` given): the DOCUMENT is the truth when it is
-    current -- the freshness authority (:func:`cadgen._internal.doors.document_staleness`)
-    finds the on-disk STEP and a closure that re-hashes -- and it is loaded exactly like
-    an import, running no Python at all. Only a stale or missing document runs the
-    ``@step`` entry in-process, and that decision is ANNOUNCED on stderr through
+    Generated model (``source_path`` given): the DOCUMENT on disk is the truth and is
+    loaded exactly like an import, running no Python at all -- a door never rebuilds
+    a model, current or not (STORE.md §9). Only a MISSING document runs the ``@step``
+    entry in-process (a caller handed the script and there is nothing else to read),
+    and that decision is ANNOUNCED on stderr through
     :func:`cadgen._internal.doors.announce_rebuild` before the generator starts, naming
-    ``door`` (the command deciding) and ``verb`` (what it will do afterwards). Until that
-    line existed, ``inspect validate`` on a stale document rebuilt the model for fifteen
-    minutes with nothing on any stream to say so.
+    ``door`` (the command deciding) and ``verb`` (what it will do afterwards).
     """
     if source_path is not None:
-        from cadgen._internal.doors import announce_rebuild, document_staleness
+        from cadgen._internal.doors import announce_rebuild
 
         source = source_from_path(source_path)
         if source is None:
@@ -137,13 +135,17 @@ def _resolve_spec_and_scene(
             )
         spec = _apply_mesh_overrides(spec, mesh_tolerance, mesh_angular_tolerance)
         document = spec.step_path
-        reason = document_staleness(document) if document.is_file() else "no document on disk"
-        if reason is None:
+        if document.is_file():
+            # The document AS WRITTEN is what a door measures (STORE.md §9): no
+            # staleness check, no rebuild -- a source that has moved on is the
+            # model's business. Load it exactly like an import.
             with logger.timed(f"load STEP {document.name}"):
                 scene = load_step_scene(document)
             return ResolvedScene(spec, scene, False)
+        # No document at all: nothing to read. Only a caller that handed a SCRIPT
+        # (the viewer's export ABI) reaches this, and it runs the generator, saying so.
         announce_rebuild(
-            door, document, reason=reason, source=spec.script_path or source_path, verb=verb
+            door, document, reason="no document on disk", source=spec.script_path or source_path, verb=verb
         )
         # An export runs the generator but writes the render package NOTHING -- its output
         # is a STEP/STL/3MF/GLB file somewhere else entirely. Reporting it as a build made
@@ -317,27 +319,13 @@ def _view_for_tree(tree_hash: str) -> Path:
     return view_dir
 
 
-def _ensure_imported_store_package(
-    repo_root: Path,
-    step_path: Path,
-    *,
-    logger: CliLogger,
-) -> Path:
-    """A view of the imported STEP's tree, built if missing.
+def _view_for_document(step_path: Path) -> Path:
+    """A view of the tree behind a document's BYTES, compiled if the store has
+    none (``cadgen._internal.doors.document_tree``: a job in the pool, the one
+    door operation that is one; the door itself never runs kernel work)."""
+    from cadgen._internal.doors import document_tree
 
-    An imported file is its own source: its record keys on the document and its
-    closure is the document's bytes, so it can never be stale — only absent. On
-    a miss this builds through the same path `cadgen step build` uses."""
-    from cadgen.catalog import result_tree_for
-    from cadgen.step_artifact_cli import build_step_artifact
-
-    tree = result_tree_for(step_path)
-    if tree is None:
-        build_step_artifact(repo_root=repo_root, step=step_path, logger=logger)
-        tree = result_tree_for(step_path)
-    if tree is None:
-        raise RuntimeError(f"no tree for {step_path.name} after import build")
-    return _view_for_tree(tree)
+    return _view_for_tree(document_tree(step_path))
 
 
 def _export_scene(
@@ -422,28 +410,21 @@ def _resolve_mesh_package(
         if package_dir is not None:
             logger.debug(f"reusing current render package: {package_dir.name}")
             return spec, package_dir, None
-        from cadgen._internal.doors import announce_rebuild, document_staleness
+        # No tree for the document's bytes: a door never runs the script. The
+        # document on disk is compiled from its bytes, like an import (a job in
+        # the pool), and the door reads that tree.
+        if spec.step_path.is_file():
+            return spec, _view_for_document(spec.step_path), None
+        # No document at all: a caller handed the SCRIPT (the export ABI); there is
+        # nothing to read, so the generator runs, saying so. See _resolve_spec_and_scene
+        # on intent: an export must not report as a build.
+        from cadgen._internal.doors import announce_rebuild
 
-        document = spec.step_path
         announce_rebuild(
-            door,
-            document,
-            reason=(
-                (document_staleness(document) if document.is_file() else "no document on disk")
-                or "its render package is missing or stale"
-            ),
-            source=spec.script_path or source_path,
-            verb=verb,
+            door, spec.step_path, reason="no document on disk",
+            source=spec.script_path or source_path, verb=verb,
         )
-        # See _resolve_spec_and_scene on intent: an export must not report as a
-        # build, or a fully-current model shows `generating`.
-        scene = run_script_generator(
-            spec,
-            "step",
-            logger=logger,
-            force=True,
-            intent="generate",
-        )
+        scene = run_script_generator(spec, "step", logger=logger, force=True, intent="generate")
         if scene is None:
             raise RuntimeError(f"Generator did not produce a STEP scene: {spec.source_ref}")
         return spec, None, scene
@@ -463,7 +444,7 @@ def _resolve_mesh_package(
         source="imported",
         step_path=step_path,
     )
-    package_dir = _ensure_imported_store_package(repo_root, step_path, logger=logger)
+    package_dir = _view_for_document(step_path)
     return spec, package_dir, None
 
 
