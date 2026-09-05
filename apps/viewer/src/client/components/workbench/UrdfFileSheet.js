@@ -29,6 +29,8 @@ import FileSheet, {
 } from "./FileSheet";
 import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
 import { buildFileStatusTab } from "./FileStatusSection";
+import RobotComponentsSection from "./RobotComponentsSection";
+import RobotComponentReferenceSection from "./RobotComponentReferenceSection";
 
 const compactNumericInputClasses = FILE_SHEET_COMPACT_NUMERIC_INPUT_CLASSES;
 const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
@@ -259,6 +261,8 @@ export default function UrdfFileSheet({
   onOpenChange,
   onStartResize,
   joints,
+  components = [],
+  componentSelection,
   groupStates,
   activeGroupStateId,
   jointValues,
@@ -348,6 +352,24 @@ export default function UrdfFileSheet({
                 ) : null}
               </div>
       )
+    } : null,
+    components.length ? {
+      id: "components",
+      title: "Components",
+      titleAttr: "Named exported mesh components",
+      content: (
+        <RobotComponentsSection
+          components={components}
+          selectedIds={componentSelection.selectedIds}
+          onSelect={componentSelection.select}
+          onHover={componentSelection.hover}
+        />
+      )
+    } : null,
+    components.length ? {
+      id: "reference",
+      title: "Reference",
+      content: <RobotComponentReferenceSection components={components} selectedIds={componentSelection.selectedIds} />
     } : null,
     showJoints ? {
       id: "joints",

@@ -1,5 +1,8 @@
 "use client";
 
+import { buildRobotComponentGeometry, robotComponents } from "@/workbench/robotComponents";
+import { useRobotComponentSelection } from "@/workbench/useRobotComponentSelection";
+
 import * as THREE from "three";
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight, ArrowRight, Circle, Eraser, Minus, PaintBucket, PenTool, Square } from "lucide-react";
@@ -1760,7 +1763,7 @@ export default function CadWorkspace({
     }
     try {
       return {
-        meshData: buildUrdfMeshGeometry(selectedUrdfData, selectedUrdfMeshes, { lightweight: true }),
+        meshData: buildRobotComponentGeometry(buildUrdfMeshGeometry(selectedUrdfData, selectedUrdfMeshes, { lightweight: true })),
         error: ""
       };
     } catch (error) {
@@ -1770,6 +1773,14 @@ export default function CadWorkspace({
       };
     }
   }, [selectedUrdfData, selectedUrdfMeshes]);
+  const selectedUrdfComponents = useMemo(
+    () => robotComponents(selectedUrdfMeshGeometryResult.meshData, selectedUrdfFileRef),
+    [selectedUrdfMeshGeometryResult.meshData, selectedUrdfFileRef]
+  );
+  const robotSelection = useRobotComponentSelection(
+    selectedUrdfComponents, selectedUrdfMeshGeometryResult.meshData, selectedUrdfFileRef
+  );
+  const robotComponentsActive = selectedEntryContentKind === VIEWPORT_CONTENT.ROBOT && selectedUrdfComponents.length > 0;
   const movableUrdfJoints = useMemo(
     () => (
       Array.isArray(selectedUrdfData?.joints)
@@ -3144,6 +3155,7 @@ export default function CadWorkspace({
     hasDxfBendsPanel: selectedFileSheetKind === "dxf" && drawingBends.length > 0,
     hasDxfLayersPanel: selectedFileSheetKind === "dxf" && drawingLayers.length > 1,
     isSdf: selectedFileSheetKind === "sdf",
+    hasRobotComponents: selectedUrdfComponents.length > 0,
     showJoints: selectedFileSheetKind === "urdf" || selectedFileSheetKind === "srdf" || selectedFileSheetKind === "sdf"
   }), [
     selectedAnimationClipList,
@@ -3155,6 +3167,7 @@ export default function CadWorkspace({
     selectedStepModuleError,
     selectedStepModuleStatus,
     selectedStepModuleUrl,
+    selectedUrdfComponents,
     drawingBends,
     drawingLayers
   ]);
@@ -3251,6 +3264,18 @@ export default function CadWorkspace({
     selectedFileStatusLevel,
     selectedKey
   ]);
+
+  const selectRobotComponent = useCallback((id, options) => {
+    robotSelection.select(id, options);
+    if (selectedUrdfComponents.some((component) => component.id === id)) {
+      if (isDesktop) setTabToolsOpen(true);
+      const revealIds = [FILE_SHEET_SECTION_IDS.STEP_REFERENCE, FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS];
+      setFileSheetOpenSectionIds((current) => [
+        ...(current || []).filter((sectionId) => !revealIds.includes(sectionId)),
+        ...revealIds
+      ]);
+    }
+  }, [robotSelection.select, selectedUrdfComponents, isDesktop]);
 
   const buildActiveTabSnapshot = useCallback(() => {
     return cloneTabSnapshot({
@@ -7058,12 +7083,13 @@ export default function CadWorkspace({
           referenceSelectionUnavailable={referenceSelectionUnavailable}
           referenceSelectionDeferred={selectedTopologyDeferredByCost}
           viewPlaneOffsetRight={viewportFrameInsets.right + 16}
-          viewerMode={viewerMode}
-          assemblyPickingActive={viewerInAssemblyMode}
-          assemblyParts={viewerAssemblyRenderParts}
+          viewerMode={robotComponentsActive ? "assembly" : viewerMode}
+          robotComponentPicking={robotComponentsActive}
+          assemblyPickingActive={robotComponentsActive || viewerInAssemblyMode}
+          assemblyParts={robotComponentsActive ? (selectedUrdfPreview.meshData?.parts || EMPTY_LIST) : viewerAssemblyRenderParts}
           hiddenPartIds={viewerHiddenPartIds}
-          selectedPartIds={viewerSelectedPartIds}
-          hoveredPartId={viewerHoveredPartIds}
+          selectedPartIds={robotComponentsActive ? robotSelection.selectedIds : viewerSelectedPartIds}
+          hoveredPartId={robotComponentsActive ? robotSelection.hoveredId : viewerHoveredPartIds}
           hoveredReferenceId={effectiveHoveredReferenceId}
           selectedReferenceIds={selectedReferenceIds}
           selectorRuntime={effectiveSelectorRuntime}
@@ -7079,10 +7105,10 @@ export default function CadWorkspace({
           drawingStrokes={drawingStrokes}
           handleDrawingStrokesChange={handleDrawingStrokesChange}
           handlePerspectiveChange={handlePerspectiveChange}
-          handleModelHoverChange={handleModelHoverChange}
-          handleModelReferenceActivate={handleModelReferenceActivate}
-          handleModelReferenceDoubleActivate={handleModelReferenceDoubleActivate}
-          handleModelReferenceContext={handleModelReferenceContext}
+          handleModelHoverChange={robotComponentsActive ? robotSelection.hover : handleModelHoverChange}
+          handleModelReferenceActivate={robotComponentsActive ? selectRobotComponent : handleModelReferenceActivate}
+          handleModelReferenceDoubleActivate={robotComponentsActive ? undefined : handleModelReferenceDoubleActivate}
+          handleModelReferenceContext={robotComponentsActive ? undefined : handleModelReferenceContext}
           onMeasurePick={handleMeasurePick}
           onMeasureHoverPoint={handleMeasureHoverPoint}
           activeMeasurementId={activeMeasureId}
@@ -7333,6 +7359,8 @@ export default function CadWorkspace({
                 onOpenChange={setTabToolsOpen}
                 onStartResize={handleStartFileSheetResize}
                 joints={movableUrdfJoints}
+                components={selectedUrdfComponents}
+                componentSelection={{ ...robotSelection, select: selectRobotComponent }}
                 groupStates={selectedUrdfGroupStates}
                 activeGroupStateId={activeSelectedUrdfGroupStateId}
                 jointValues={selectedUrdfJointValues}

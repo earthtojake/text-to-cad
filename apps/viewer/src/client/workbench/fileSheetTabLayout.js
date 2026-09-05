@@ -3,7 +3,7 @@ import { FILE_SHEET_SECTION_IDS } from "./fileSheetSections.js";
 // Layout model for the tabbed file sheet sidebar.
 //
 // The file sheet renders each section as a tab (Chrome-inspector style). For
-// STEP files the strip can be split into a top and bottom pane, with tabs that
+// STEP, drawing, and robot files can split into a top and bottom pane, with tabs that
 // can be dragged between panes and a resizable divider between them. Other file
 // kinds render a single tab strip.
 //
@@ -25,7 +25,7 @@ export const MAX_FILE_SHEET_SPLIT_RATIO = 0.8;
 
 export const FILE_SHEET_TAB_PANES = Object.freeze({ TOP: "top", BOTTOM: "bottom" });
 
-const SPLITTABLE_KINDS = Object.freeze(new Set(["step", "dxf"]));
+const SPLITTABLE_KINDS = Object.freeze(new Set(["step", "dxf", "urdf", "srdf", "sdf"]));
 
 function normalizeString(value) {
   return String(value == null ? "" : value).trim();
@@ -53,9 +53,10 @@ export function clampSplitRatio(ratio) {
 // Tabs that live in the top pane of a split layout; everything else defaults to
 // the bottom pane, in render order. STEP: the Tree on top, Reference/Pose/
 // Animation/Measure/Display below. DXF: Material on top (it always renders), the
-// conditional Bends/Layers tabs below.
+// conditional Bends/Layers tabs below. Robots: Components above, Reference/Joints below.
 const TOP_PANE_SECTION_IDS = Object.freeze(new Set([
   FILE_SHEET_SECTION_IDS.STEP_TREE,
+  FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS,
   FILE_SHEET_SECTION_IDS.DXF_MATERIAL
 ]));
 

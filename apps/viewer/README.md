@@ -121,3 +121,28 @@ The backend's suite lives with cadgen and is not collected here; running only
 
 Headless UI verification uses Playwright with `--use-angle=metal` —
 the default software WebGL renderer is not what users see.
+
+## Robot components
+
+URDF, SRDF, and SDF files with named objects in their linked meshes expose a
+Components tab. Its single-line rows are grouped by link. Selecting a row
+highlights that mesh object in the viewport; picking it in the viewport selects
+and reveals its row. Ctrl/Cmd/Shift-click toggles additional components. Objects
+retain their visual transforms as joints move. Unnamed objects remain rendered
+but are omitted from the inventory; files without named objects have neither
+Components nor the component Reference tab.
+
+Reference shows the selected objects' link, visual, mesh, and object identifiers,
+with a copy button for each. Robot references are prompt locators of the form
+`models/robot.urdf#link=arm&visual=arm%3Av1&object=3mf%3A0&index=0&name=bracket`.
+The prefix identifies the robot file; path segments and fragment values are percent-encoded.
+`visual` is the parsed visual ID (`<link>:v<one-based visual ordinal>` for URDF);
+`object` is the mesh loader's object ID and `index` its zero-based position in the
+loaded mesh's parts list. `name` preserves the authored object name. Resolve the
+link and visual in the robot description to find the mesh file, then identify
+that mesh object using its name and index. Repeated mesh instances have distinct
+references because they belong to different visuals. SRDF locators name the SRDF
+file and resolve visuals through its paired URDF. SDF uses its parsed visual IDs.
+These locators describe mesh objects for prompts; they are not STEP face selectors
+and are not accepted by the STEP selector CLI. They remain stable across pose
+changes, but reordering visuals or re-exporting a mesh can change the identifiers.
