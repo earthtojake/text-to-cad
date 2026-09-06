@@ -151,6 +151,31 @@ The `--ui-*` layer being viewer-only is the one real coupling here; a consumer
 that changes its shadcn palette and copies the `--ui-*` block unchanged gets a
 surface whose panels do not follow its theme.
 
+## Laying out inside a host
+
+The surface lays itself out against **its own root**, not the window: the
+layout hook measures the root element (a `ResizeObserver`, plus the window's
+resize events) to pick desktop or compact mode and to size the sidebar and
+the sheet. In the standalone app the two are the same box; in a host pane
+they are not, and a layout computed for the window's width would leave a
+narrow pane with no viewport at all. Two more things follow for a host:
+
+- The render pane is `absolute inset-0` inside the root, so it fills the
+  surface and nothing else; the standalone shell gives the root the whole
+  viewport (`h-svh`), a host gives it `h-full min-h-0` (the `min-h-0` beats
+  the sidebar wrapper's own `min-h-svh`).
+- Compact mode's file sheet is a drawer. Standalone it portals to `body`,
+  modal, and closes on an outside click, as a drawer should. Embedded it
+  portals into the surface's root instead (`FileSheetPortalContext`, set by
+  `<CadFileView>` itself), is not modal — a modal dialog would make the rest of
+  the host inert — and ignores outside clicks. A host should also give the
+  surface's ancestor a `transform` (any, `translateZ(0)` will do) so the
+  drawer's `position: fixed` resolves against the pane rather than the window.
+  Popovers and menus still portal to `body`; they are overlays and belong there.
+- The same-origin catalog store starts polling at import time only on an
+  `http(s)` page. A host loading this module from `file://` has no backend
+  beside it, and asks for its backend's store by origin.
+
 ## Known consequences of embedding
 
 - **The surface writes to `document.documentElement`.** The active CAD theme

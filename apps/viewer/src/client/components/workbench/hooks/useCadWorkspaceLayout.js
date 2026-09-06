@@ -18,6 +18,29 @@ function readWindowViewportWidth(fallback = 1600) {
   return Number.isFinite(width) && width > 0 ? width : fallback;
 }
 
+// The width the layout is laid out IN. The standalone viewer owns the window,
+// so that is the window; an embedded surface (the desktop app's file tab) is
+// one pane of a larger window, and laying its sidebar and sheet out for the
+// window's width leaves no viewport at all in a narrow pane. When a host
+// element is given, its own width is the viewport.
+function readHostViewportWidth(host, fallback = 1600) {
+  const width = host ? Number(host.getBoundingClientRect().width) : 0;
+  return Number.isFinite(width) && width > 0 ? width : readWindowViewportWidth(fallback);
+}
+
+// Run `sync` now, on window resizes, and — when there is a host element — on
+// its resizes too; a pane resized by a drag handle sees no window event.
+function watchViewport(host, sync) {
+  sync();
+  window.addEventListener("resize", sync);
+  const observer = host && typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => sync()) : null;
+  observer?.observe(host);
+  return () => {
+    window.removeEventListener("resize", sync);
+    observer?.disconnect();
+  };
+}
+
 export function preferredPanelWidthAfterViewportSync(width, minWidth = 0) {
   const numericWidth = Number(width);
   if (!Number.isFinite(numericWidth)) {
@@ -129,38 +152,30 @@ export function useCadWorkspaceLayout({
   sidebarMinWidth,
   tabToolsMinWidth,
   endPanelResize,
-  endTabToolsResize
+  endTabToolsResize,
+  /** The element the surface is laid out in; null means the window. */
+  hostRef = null
 }) {
   useEffect(() => {
-    const syncViewport = () => {
-      const viewportWidth = readWindowViewportWidth();
-      setLayoutMode(getCadWorkspaceLayoutMode(viewportWidth));
-    };
-
-    syncViewport();
-    window.addEventListener("resize", syncViewport);
-    return () => {
-      window.removeEventListener("resize", syncViewport);
-    };
-  }, [setLayoutMode]);
+    const host = hostRef?.current ?? null;
+    return watchViewport(host, () => {
+      setLayoutMode(getCadWorkspaceLayoutMode(readHostViewportWidth(host)));
+    });
+  }, [hostRef, setLayoutMode]);
 
   useEffect(() => {
     if (!isDesktop) {
       return undefined;
     }
 
-    const syncPanelWidths = () => {
-      setLayoutViewportWidth((current) => readWindowViewportWidth(current));
+    const host = hostRef?.current ?? null;
+    return watchViewport(host, () => {
+      setLayoutViewportWidth((current) => readHostViewportWidth(host, current));
       setSidebarWidth((current) => preferredPanelWidthAfterViewportSync(current, sidebarMinWidth));
       setTabToolsWidth((current) => preferredPanelWidthAfterViewportSync(current, tabToolsMinWidth));
-    };
-
-    syncPanelWidths();
-    window.addEventListener("resize", syncPanelWidths);
-    return () => {
-      window.removeEventListener("resize", syncPanelWidths);
-    };
+    });
   }, [
+    hostRef,
     isDesktop,
     setLayoutViewportWidth,
     setSidebarWidth,

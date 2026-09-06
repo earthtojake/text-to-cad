@@ -1,4 +1,4 @@
-import { Children, useEffect, useRef, useState } from "react";
+import { Children, createContext, useContext, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
@@ -59,6 +59,15 @@ export const FILE_SHEET_INLINE_CONTROL_ROW_CLASSES = "px-2";
 export const FILE_SHEET_SECTION_TITLE_CLASSES = "text-xs text-sidebar-foreground";
 export const FILE_SHEET_FIELD_LABEL_CLASSES = "block min-w-0 truncate text-tiny leading-4 text-muted-foreground";
 export const FILE_SHEET_STATUS_TEXT_CLASSES = "px-2 text-tiny leading-4 text-muted-foreground";
+/**
+ * The element a compact-mode file sheet portals into. Null means `body`,
+ * which is right for the standalone viewer — its window IS the surface. A
+ * host that embeds <CadFileView> in one pane of a larger window provides
+ * its root here, so the drawer covers that pane rather than the host's
+ * whole window (file-view/CadFileView.js).
+ */
+export const FileSheetPortalContext = createContext(null);
+
 export const FILE_SHEET_UNIT_SUFFIX_CLASSES = "pointer-events-none absolute inset-y-0 right-2 flex items-center text-micro text-muted-foreground";
 // A trigger must clip and ellipsize its own value: the Radix trigger only sets
 // whitespace-nowrap, so without this a long option pushes its chevron out
@@ -861,6 +870,7 @@ export default function FileSheet({
   scrollBody = true,
   children
 }) {
+  const portalContainer = useContext(FileSheetPortalContext);
   const desktopWidth = `min(${normalizeFileSheetWidth(width)}px, ${DESKTOP_FILE_SHEET_MAX_WIDTH})`;
   const sheetStyle = isDesktop
     ? {
@@ -889,10 +899,18 @@ export default function FileSheet({
 
   if (!isDesktop) {
     return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      // Modal only where the window is ours: a modal dialog makes everything
+      // outside it inert, which inside a host application would be the
+      // host's whole window — its tab strip, its sidebar, its chat.
+      <Sheet open={open} onOpenChange={onOpenChange} modal={!portalContainer}>
         <SheetContent
           side="right"
           showCloseButton={false}
+          portalContainer={portalContainer}
+          // Non-modal, the drawer would close on any click outside it — in a
+          // host that is a click anywhere else in the application. It stays
+          // until the person closes it or the layout widens into the aside.
+          onInteractOutside={portalContainer ? (event) => event.preventDefault() : undefined}
           className="cad-glass-surface gap-0 p-0 text-sidebar-foreground"
           style={sheetStyle}
           aria-label={title}
