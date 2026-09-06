@@ -1,28 +1,33 @@
 /**
- * `cad.*`. **A stub, on purpose** — P5 replaces the body, not the shape.
+ * `cad.*`: the viewer origin the file tab asks for, and the renderer's
+ * answers to the MCP bridge's commands.
  *
- * The file tab needs an origin to point `<CadFileView>` at, and that origin
- * comes from a `cadgen viewer --api-only` that P5 spawns once the managed
- * Python runtime exists (plan §7, §8). Answering `{ origin: null, reason:
- * "runtime-not-ready" }` here is not a placeholder in the "fill this in later"
- * sense: it is the answer a fresh install genuinely gives, the renderer has to
- * handle it either way, and the CAD placeholder card the file tab shows for it
- * is a real surface with a real button.
- *
- * When P5 lands `src/main/cad/viewer.ts`, this handler calls it and the
- * renderer does not change.
+ * `viewerOrigin` is P3's seam with P5's body: the project's root goes to the
+ * viewer manager, which spawns (or reuses) a `cadgen viewer --api-only` for it
+ * and answers with its origin — or with the reason there is none, which the
+ * renderer already turns into the right card. `reply` is the other half of
+ * `cad.command` (src/shared/ipc/cad.ts): the renderer did what an agent's
+ * tool asked and this hands the result back to the waiting bridge call.
  */
-import { projects } from "../db/repositories";
+import type { IpcHandlers } from "../../shared/ipc";
+import type { cadIpc } from "../../shared/ipc/cad";
 import type { ViewerOrigin } from "../../shared";
+import { rendererCommands, viewers } from "../cad";
+import { projects } from "../db/repositories";
+import type { IpcContext } from "./register";
 
 export const cadHandlers = {
   cad: {
-    viewerOrigin: ({ projectId }: { projectId: string }): ViewerOrigin => {
+    viewerOrigin: async ({ projectId }): Promise<ViewerOrigin> => {
       const project = projects.list().find((candidate) => candidate.id === projectId);
       if (!project) {
         return { origin: null, reason: "no-project" };
       }
-      return { origin: null, reason: "runtime-not-ready" };
+      return viewers().originFor(project.path);
+    },
+
+    reply: (reply) => {
+      rendererCommands().reply(reply);
     },
   },
-};
+} satisfies IpcHandlers<typeof cadIpc, IpcContext>;

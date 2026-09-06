@@ -31,6 +31,14 @@ apps/desktop/out/
 apps/desktop/dist/
 apps/desktop/release/
 apps/desktop/test-results/
+# Build outputs of apps/desktop's resources: the composed plugin
+# (scripts/build-plugin.mjs) and the cadgen wheel + constraints
+# (scripts/cad-resources.mjs, or the release workflow). The directories stay
+# (.gitkeep) so electron-builder's extraResources always has a source.
+apps/desktop/resources/plugin/*
+!apps/desktop/resources/plugin/.gitkeep
+apps/desktop/resources/cadgen/*
+!apps/desktop/resources/cadgen/.gitkeep
 
 
 # Temporary files and scratch notes

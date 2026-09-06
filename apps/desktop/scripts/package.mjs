@@ -5,8 +5,9 @@
  *
  * Three things this does that a bare `electron-builder` invocation would not:
  *
- * 1. Builds first (`electron-vite build`), because electron-builder ships
- *    `out/` and has no opinion about how it got there.
+ * 1. Builds first (`scripts/build.mjs`: the composed plugin, `electron-vite
+ *    build`, the bundled MCP server), because electron-builder ships `out/`
+ *    and has no opinion about how it got there.
  * 2. Stamps the repository's VERSION as `extraMetadata.version`. package.json
  *    stays at 0.0.0 (see scripts/app-version.mjs): the release version has
  *    exactly one home, and this is how it reaches the installer name,
@@ -96,7 +97,9 @@ const run = (command, args) => {
 
 const npx = process.platform === "win32" ? "npx.cmd" : "npx";
 
-run(npx, ["electron-vite", "build"]);
+// The same build `npm run build` does: the composed plugin, electron-vite,
+// the bundled MCP server (scripts/build.mjs).
+run(process.execPath, [path.join(appRoot, "scripts", "build.mjs")]);
 run(npx, [
   "electron-builder",
   ...targets,

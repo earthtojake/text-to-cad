@@ -109,7 +109,13 @@ export default defineConfig({
   },
   renderer: {
     root: path.join(appRoot, "src", "renderer"),
-    resolve: { alias: { ...alias, ...viewerAlias } },
+    // `dedupe` is load-bearing: the viewer's sources sit beside their own
+    // node_modules (React 18 there), and Rollup resolves a bare `react` from
+    // the importing file's location. Without it the built app carries two
+    // Reacts and the file tab dies with React error #525 ("an element from an
+    // older version of React was rendered") the moment the CAD surface
+    // mounts — in dev, pre-bundling hides it. One React: this app's.
+    resolve: { alias: { ...alias, ...viewerAlias }, dedupe: ["react", "react-dom"] },
     // The viewer's surf tessellation workers are ES modules, and so are
     // Monaco's. The classic-worker default fails at *run* time, not at build
     // time — a blank pane and a console error, which is the worst kind of

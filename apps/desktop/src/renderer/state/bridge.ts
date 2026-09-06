@@ -8,6 +8,7 @@
  */
 import { useAcp } from "./acp";
 import { useAgents } from "./agents";
+import { performCadCommand } from "./cad-commands";
 import { useExplorer } from "./explorer";
 import { usePlugins } from "./plugins";
 import { useProjects } from "./projects";
@@ -58,6 +59,20 @@ export function subscribeToMain(): () => void {
         projectId,
         changes.map((change) => change.path),
       );
+    }),
+    // An agent's tool call, relayed by main; answered whatever happens, so
+    // the bridge's wait ends with the reason rather than a timeout.
+    window.hardcore.on("cad.command", (command) => {
+      void performCadCommand(command)
+        .then((result) => window.hardcore.cad.reply({ requestId: command.requestId, ok: true, result }))
+        .catch((error: unknown) =>
+          window.hardcore.cad.reply({
+            requestId: command.requestId,
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        )
+        .catch(() => {});
     }),
     window.hardcore.on("ui.command", ({ command }) => {
       const ui = useUi.getState();

@@ -1,56 +1,35 @@
 /**
- * `plugins.*` handlers — stubs.
+ * `plugins.*` handlers: the bundled Hardcore plugin's state per agent, and
+ * installing it (src/main/cad/plugin.ts).
  *
- * P5 composes the bundled plugin (`resources/plugin/`) and installs it into
- * each agent through the `pluginInstall` argv in the registry. Until it does,
- * the honest answer is that nothing is installed, and install is a no-op that
- * says so: an Install button that reported success without installing anything
- * would be a worse lie than a button that does not work yet.
- *
- * The shape is not a stub, though. Every field the drawer and the CAD Runtime
- * page render is answered here, so P5 replaces the bodies and touches no UI.
+ * An install answers with the agent's state as it now is and broadcasts every
+ * agent's, so the drawer that asked and the CAD Runtime page that did not
+ * agree afterwards.
  */
-import { app } from "electron";
-
 import type { IpcHandlers } from "../../shared/ipc";
-import type { PluginStatus, pluginsContract } from "../../shared/ipc/plugins";
-import { AGENT_PROVIDERS, agentProvider } from "../agents/registry";
-import { IpcError, type IpcContext } from "./register";
-
-/** The version P5 will install: the app's own (plan §8). */
-function appVersion(): string {
-  return app.isPackaged ? app.getVersion() : __APP_VERSION__;
-}
-
-function statusFor(agentId: string): PluginStatus {
-  const provider = agentProvider(agentId);
-  if (!provider) {
-    throw new IpcError(`unknown agent: ${agentId}`);
-  }
-  return {
-    agentId,
-    // An agent with neither a plugin system nor a skills directory has nowhere
-    // to put the plugin, and that is a different answer from "not yet".
-    state: provider.pluginInstall || provider.skillsDir ? "not-installed" : "unsupported",
-    installedVersion: null,
-    availableVersion: appVersion(),
-    mcpServers: 0,
-  };
-}
+import type { pluginsContract } from "../../shared/ipc/plugins";
+import { pluginManager } from "../cad";
+import { broadcast, IpcError, type IpcContext } from "./register";
 
 export const pluginsHandlers = {
   plugins: {
-    status: ({ agentId }) => statusFor(agentId),
+    status: ({ agentId }) => surfacing(() => pluginManager().status(agentId)),
 
-    statusAll: () => AGENT_PROVIDERS.map((provider) => statusFor(provider.id)),
+    statusAll: () => pluginManager().statusAll(),
 
-    // P5: compose, register the marketplace, install, then broadcast
-    // `plugins.status`. Answering with the unchanged state keeps the button
-    // honest — the drawer shows "not installed" again rather than a version
-    // that does not exist.
-    install: ({ agentId }) => ({
-      ...statusFor(agentId),
-      message: "Installing the Hardcore plugin arrives with the CAD runtime (P5).",
-    }),
+    install: async ({ agentId }) => {
+      const status = await surfacing(() => pluginManager().install(agentId));
+      broadcast("plugins.status", await pluginManager().statusAll());
+      return status;
+    },
   },
 } satisfies IpcHandlers<typeof pluginsContract, IpcContext>;
+
+/** "unknown agent" is the one throw here, and it is a message worth showing. */
+async function surfacing<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    throw new IpcError(error instanceof Error ? error.message : String(error));
+  }
+}

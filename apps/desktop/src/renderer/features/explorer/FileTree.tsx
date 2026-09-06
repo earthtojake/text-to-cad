@@ -37,6 +37,7 @@ export function FileTree({
   projectId,
   projectName,
   activePath,
+  reveal = null,
   onOpen,
   onCollapse,
   fsRevision,
@@ -45,6 +46,12 @@ export function FileTree({
   projectName: string;
   /** The file the tab is showing, highlighted in the tree. */
   activePath: string | null;
+  /**
+   * A path to expand to and select without opening it — an agent's `reveal`
+   * (src/renderer/state/explorer.ts). Wins over `activePath` for the reveal
+   * and the scroll; the open file stays highlighted too.
+   */
+  reveal?: { path: string; directory: boolean } | null;
   onOpen: (path: string) => void;
   onCollapse: () => void;
   /** Bumped by `files.changed`; re-reads whatever is currently expanded. */
@@ -68,13 +75,16 @@ export function FileTree({
    */
   const [override, setOverride] = useState<Record<string, boolean>>({ "": true });
 
+  const revealTarget = reveal?.path ?? activePath;
   const revealed = useMemo(() => {
-    if (!activePath) {
+    if (!revealTarget) {
       return new Set<string>();
     }
-    const segments = activePath.split("/").slice(0, -1);
+    // A revealed folder is opened as well as shown; a file only its ancestors.
+    const parts = revealTarget.split("/");
+    const segments = reveal?.directory && reveal.path === revealTarget ? parts : parts.slice(0, -1);
     return new Set(segments.map((_, index) => segments.slice(0, index + 1).join("/")));
-  }, [activePath]);
+  }, [revealTarget, reveal]);
 
   const isExpanded = useCallback(
     (directory: string) => override[directory] ?? revealed.has(directory),
@@ -185,13 +195,13 @@ export function FileTree({
    * writes into a shared map is a ref read during render.
    */
   useEffect(() => {
-    if (!activePath) {
+    if (!revealTarget) {
       return;
     }
     listRef.current
-      ?.querySelector(`[data-path="${CSS.escape(activePath)}"]`)
+      ?.querySelector(`[data-path="${CSS.escape(revealTarget)}"]`)
       ?.scrollIntoView({ block: "nearest" });
-  }, [activePath, children]);
+  }, [revealTarget, children]);
 
   const toggle = useCallback(
     (directory: string) => {
@@ -327,7 +337,7 @@ export function FileTree({
           ) : (
             matches.map((match) => (
               <FilterRow
-                active={match.path === activePath}
+                active={match.path === activePath || match.path === reveal?.path}
                 cursor={match.path === cursorPath}
                 indices={match.indices}
                 key={match.path}
@@ -343,7 +353,7 @@ export function FileTree({
         ) : (
           rows.map((row) => (
             <TreeRow
-              active={row.path === activePath}
+              active={row.path === activePath || row.path === reveal?.path}
               cursor={row.path === cursorPath}
               key={row.path}
               onSelect={() => {

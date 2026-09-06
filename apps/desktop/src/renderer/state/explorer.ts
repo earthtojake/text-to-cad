@@ -73,6 +73,12 @@ type ExplorerState = {
   fsRevision: number;
   /** Paths touched by the last batch, so an open editor knows it is stale. */
   changedPaths: string[];
+  /**
+   * A path an agent asked to have revealed (`reveal` through the Hardcore MCP
+   * server): the tree expands to it and selects it without opening it.
+   * Transient — cleared when a file is opened or the project changes.
+   */
+  reveal: { path: string; directory: boolean } | null;
 
   bindProject: (projectId: string | null) => Promise<void>;
   open: <K extends ExplorerTabKind>(kind: K, init?: TabInit[K]) => ExplorerTab | null;
@@ -91,6 +97,7 @@ type ExplorerState = {
   setTreeCollapsed: (collapsed: boolean) => void;
   setTreeWidth: (width: number) => void;
   receiveChanges: (projectId: string, paths: string[]) => void;
+  setReveal: (reveal: { path: string; directory: boolean } | null) => void;
 };
 
 let sequence = 0;
@@ -158,6 +165,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   treeWidth: readLocal(TREE_WIDTH_KEY, TREE_DEFAULT_WIDTH, (raw) => Number(raw) || TREE_DEFAULT_WIDTH),
   fsRevision: 0,
   changedPaths: [],
+  reveal: null,
 
   bindProject: async (projectId) => {
     if (get().projectId === projectId && get().ready) {
@@ -172,7 +180,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     if (previous && previous !== projectId) {
       void window.hardcore.explorer.unwatch({ projectId: previous }).catch(() => {});
     }
-    set({ projectId, tabs: [], activeId: null, ready: false, changedPaths: [] });
+    set({ projectId, tabs: [], activeId: null, ready: false, changedPaths: [], reveal: null });
     if (!projectId) {
       set({ ready: true });
       return;
@@ -204,6 +212,8 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     if (!projectId) {
       return null;
     }
+    // Opening is the stronger reveal; a stale one would keep two rows lit.
+    set({ reveal: null });
     // Reuse rather than stack duplicates: clicking the same file in the tree
     // twice is one tab, the way every editor behaves.
     const existing = tabs.find((tab) => tab.kind === "file" && tab.path === filePath);
@@ -291,6 +301,8 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     writeLocal(TREE_WIDTH_KEY, String(treeWidth));
     set({ treeWidth });
   },
+
+  setReveal: (reveal) => set({ reveal }),
 
   receiveChanges: (projectId, paths) => {
     if (get().projectId !== projectId) {

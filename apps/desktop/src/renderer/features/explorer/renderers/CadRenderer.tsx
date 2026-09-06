@@ -52,14 +52,28 @@ const CadSurface = lazy(async () => {
   return {
     default: ({ origin, file, onOpenFile }: CadSurfaceProps) => (
       <ViewerOriginProvider origin={origin}>
-        <CadFileView
-          className="h-full"
+        {/*
+          A containing block for the surface's `position: fixed` parts. The
+          viewer's right-hand sheet is a shadcn Sidebar — `fixed inset-y-0
+          right-0` — which in the standalone app coincides with the window and
+          in this tab would pin itself to the window's edge, over the tab
+          strip and the file tree. A transform on an ancestor makes fixed
+          descendants position against it instead; popovers portal to `body`
+          and are unaffected.
+        */}
+        <div className="relative h-full min-h-0" style={{ transform: "translateZ(0)" }}>
+          <CadFileView
+          // `min-h-0` beats the surface's own `min-h-svh`: the tab is shorter
+          // than the window, and a surface that insists on the window's
+          // height puts its bottom panels below the tab's edge.
+          className="h-full min-h-0"
           file={file}
           // The desktop window owns its own title; the surface must not write it.
           manageDocumentTitle={false}
           onOpenFile={(next) => onOpenFile(next)}
           origin={origin}
         />
+        </div>
       </ViewerOriginProvider>
     ),
   };

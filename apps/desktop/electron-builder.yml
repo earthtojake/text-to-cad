@@ -61,6 +61,10 @@ asarUnpack:
   - "**/*.node"
   - node_modules/better-sqlite3/**
   - node_modules/node-pty/**
+  # The Hardcore MCP server is run by the AGENT (Codex, Claude Code) as a
+  # script path in `session/new`, so it has to be a real file on disk, not an
+  # entry in the archive (src/main/cad/index.ts, mcpServerScript).
+  - out/hardcore-mcp/**
 
 # Every artifact is named the same way, so a GitHub Release reads as a table:
 # Hardcore-<version>-<os>-<arch>.<ext>.

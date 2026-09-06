@@ -43,7 +43,7 @@ import { agentsContract, agentsEvents } from "./agents";
 import { dialogsContract } from "./dialogs";
 import { pluginsContract, pluginsEvents } from "./plugins";
 import { runtimeContract, runtimeEvents } from "./runtime";
-import { cadIpc } from "./cad";
+import { cadEvents, cadIpc } from "./cad";
 import { explorerEvents, explorerIpc } from "./explorer";
 
 export * from "./define";
@@ -158,6 +158,8 @@ export const ipcEvents = {
   ...runtimeEvents,
   // `files.changed`, `terminal.data` and `terminal.exit` (P3).
   ...explorerEvents,
+  // `cad.command` — the Hardcore MCP server's way into the explorer (P5).
+  ...cadEvents,
 } as const;
 
 export type IpcEvents = typeof ipcEvents;
