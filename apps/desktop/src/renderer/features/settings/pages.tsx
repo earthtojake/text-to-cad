@@ -1,5 +1,5 @@
 /**
- * The seven Settings pages (plan §10), each in its own module under `./pages/`.
+ * The six Settings pages (plan §10), each in its own module under `./pages/`.
  *
  * This file is only the switch. A page is a list of rows built from
  * `./SettingCard`, so the layout is not something a page gets to decide, and
@@ -9,7 +9,6 @@
 import { AboutPage } from "@renderer/features/settings/pages/AboutPage";
 import { AgentsPage } from "@renderer/features/settings/pages/AgentsPage";
 import { AppearancePage } from "@renderer/features/settings/pages/AppearancePage";
-import { CadRuntimePage } from "@renderer/features/settings/pages/CadRuntimePage";
 import { GeneralPage } from "@renderer/features/settings/pages/GeneralPage";
 import { GitPage } from "@renderer/features/settings/pages/GitPage";
 import { ShortcutsPage } from "@renderer/features/settings/pages/ShortcutsPage";
@@ -25,8 +24,6 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
       return <AppearancePage />;
     case "git":
       return <GitPage />;
-    case "cad-runtime":
-      return <CadRuntimePage />;
     case "shortcuts":
       return <ShortcutsPage />;
     case "about":

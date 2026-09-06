@@ -39,6 +39,11 @@ apps/desktop/resources/plugin/*
 !apps/desktop/resources/plugin/.gitkeep
 apps/desktop/resources/cadgen/*
 !apps/desktop/resources/cadgen/.gitkeep
+# The bundled CAD runtime (scripts/bundle-runtime.mjs): a pinned Python with
+# cadgen and its closure installed, one directory per packaged target. About
+# a gigabyte each, rebuilt on demand, shipped as an extraResource.
+apps/desktop/resources/runtime/*
+!apps/desktop/resources/runtime/.gitkeep
 
 
 # Temporary files and scratch notes

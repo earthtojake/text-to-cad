@@ -25,7 +25,8 @@
     "postinstall": "electron-builder install-app-deps",
     "build:plugin": "node scripts/build-plugin.mjs",
     "build:mcp": "node scripts/build-mcp.mjs",
-    "cad:resources": "node scripts/cad-resources.mjs"
+    "cad:resources": "node scripts/cad-resources.mjs",
+    "bundle:runtime": "node scripts/bundle-runtime.mjs"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "1.4.0",

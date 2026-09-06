@@ -1,7 +1,7 @@
 /**
  * The one-glyph answer to "is this thing there": a coloured dot and a word.
  *
- * Shared by the Agents drawer and the CAD Runtime page so "found", "missing"
+ * Shared by the Agents drawer and About's runtime block so "found", "missing"
  * and "working on it" look the same in both, and so the colour is decided once
  * rather than per call site.
  */

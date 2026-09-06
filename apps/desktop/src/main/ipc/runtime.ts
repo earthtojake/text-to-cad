@@ -1,19 +1,23 @@
 /**
- * `runtime.*` handlers: the managed Python and cadgen (src/main/cad/runtime.ts).
+ * `runtime.*` handlers: the CAD runtime (src/main/cad/runtime.ts).
  *
- * `status` probes without provisioning; `repair` installs (or reinstalls) the
- * managed runtime, streaming `runtime.progress` as it goes, and answers with
- * the state at the end. With an override or a checkout in force there is
- * nothing to install, and repair is a fresh probe of that interpreter.
+ * `status` probes the resolved interpreter once and remembers the answer;
+ * `repair` forgets it and probes again — there is nothing to install, the
+ * runtime ships inside the app — and both broadcast `runtime.status` so the
+ * About page and an open CAD tab agree afterwards.
  */
 import type { IpcHandlers } from "../../shared/ipc";
 import type { runtimeContract } from "../../shared/ipc/runtime";
 import { cadRuntime } from "../cad";
-import type { IpcContext } from "./register";
+import { broadcast, type IpcContext } from "./register";
 
 export const runtimeHandlers = {
   runtime: {
     status: () => cadRuntime().status(),
-    repair: () => cadRuntime().repair(),
+    repair: async () => {
+      const status = await cadRuntime().repair();
+      broadcast("runtime.status", status);
+      return status;
+    },
   },
 } satisfies IpcHandlers<typeof runtimeContract, IpcContext>;

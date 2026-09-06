@@ -16,25 +16,46 @@ files:
   - package.json
   - "!**/*.map"
 
-# What ships beside the app rather than inside the asar. Both directories are
-# committed empty (a .gitkeep and a README) and `scripts/package.mjs` recreates
-# them before every build, so a checkout that has not run P5's provisioning
-# still packages.
+# What ships beside the app rather than inside the asar. Every directory here
+# is committed empty (a .gitkeep and a README) and `scripts/package.mjs`
+# recreates them before every build, so a checkout that never ran a build
+# script still has a source for each entry.
 #
 # Measured against electron-builder 26.15.3, not assumed: a MISSING source here
 # is tolerated (the build succeeds and copies nothing) and an EMPTY one produces
 # no directory in Resources. The placeholders are belt to that braces — a
 # tolerance is a thing a minor release can withdraw, and the alternative is a
-# conditional config generated per build. Either way P5's code has to handle
-# "no bundled wheel", because a development checkout and a community build
-# genuinely have none.
+# conditional config generated per build.
 #
-#   resources/cadgen   the cadgen wheel and its constraints file; the release
-#                      workflow downloads the wheel the publish job built into
-#                      here before packaging (plan §8).
+#   resources/runtime/${os}-${arch}
+#                      THE CAD RUNTIME: a pinned Python with cadgen and its
+#                      whole dependency closure installed, one directory per
+#                      target (scripts/bundle-runtime.mjs). About 1.2 GB, and
+#                      the whole point of the app — a packaged Hardcore renders
+#                      CAD with nothing to download. `${os}` and `${arch}` are
+#                      the TARGET's (electron-builder expands them per arch of
+#                      a multi-arch build), so a mac build with --arm64 --x64
+#                      picks up mac-arm64/ and mac-x64/ for its two apps.
+#                      scripts/package.mjs refuses to package a target whose
+#                      runtime is missing. The layout inside the app is the same
+#                      as in the checkout — Resources/runtime/<os>-<arch>/ — so
+#                      src/main/cad/runtime.ts resolves both with one function.
+#   resources/cadgen   the cadgen wheel and its constraints file, which the
+#                      bundler installs from; kept beside the app so a person
+#                      can see what shipped (a couple of megabytes).
 #   resources/plugin   the composed Hardcore plugin (the cad plugin minus
 #                      cad-viewer, plus hardcore-app) installed into each agent.
+#
+# The runtime's executables keep their mode bits and their symlinks
+# (python/bin/python3 -> python3.13): electron-builder copies extraResources
+# with both, and the dmg and zip carry both. When mac signing lands, the
+# runtime's Mach-O files (bin/python3.13, lib/*.dylib, every *.so under
+# site-packages) are what `mac.binaries` or a walk in an afterSign hook has to
+# hand to codesign — Resources/ is a fine place for them as long as each one
+# is signed; nothing here has to move.
 extraResources:
+  - from: resources/runtime/${os}-${arch}
+    to: runtime/${os}-${arch}
   - from: resources/cadgen
     to: cadgen
   - from: resources/plugin

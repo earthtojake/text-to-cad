@@ -32,7 +32,7 @@ declare const window: {
     projects: { addPath(request: { path: string }): Promise<{ id: string; name: string }> };
     settings: { set(patch: { theme?: string; cadPythonOverride?: string | null }): Promise<unknown> };
     explorer: { loadTabs(request: { projectId: string }): Promise<unknown[]> };
-    runtime: { status(): Promise<{ state: string; python: string | null; cadgenVersion: string | null }> };
+    runtime: { status(): Promise<{ state: string; python: string | null; source: string | null; cadgenVersion: string | null }> };
   };
 };
 
@@ -53,19 +53,15 @@ const IMAGE = "apps/desktop/build/icon.png";
 const STEP = "models/examples/imported/import-smoke.step";
 
 /**
- * The interpreter the CAD tests point the app at: `CAD_DESKTOP_PYTHON`, or the
- * repository's `.venv` — the main checkout's when this is a worktree without
- * one. The app is launched WITHOUT the variable so the first STEP open shows
- * the not-set-up card (a worktree has no .venv and the throwaway user-data
- * directory has no managed runtime), and the override is then set through
- * Settings' IPC, which is the path a person takes.
+ * The CAD tests run against whatever runtime the app resolves on its own —
+ * the bundled one under `resources/runtime/<os>-<arch>/` when the bundler
+ * has run, else the checkout's `.venv` — so the app is launched WITHOUT
+ * `CAD_DESKTOP_PYTHON`. The first STEP test breaks the runtime on purpose
+ * (an override pointing nowhere) to see the failure card; the render test
+ * clears it and skips itself on a machine with no runtime at all (CI's
+ * test job, which bundles nothing and has no venv).
  */
-const CAD_PYTHON =
-  process.env.CAD_DESKTOP_PYTHON ??
-  [path.join(repoRoot, ".venv", "bin", "python"), path.resolve(repoRoot, "..", "..", "..", ".venv", "bin", "python")].find((candidate) =>
-    fs.existsSync(candidate),
-  ) ??
-  null;
+let cadReady = false;
 
 /**
  * The review test gets a repository of its own, built in `beforeAll`.
@@ -165,16 +161,35 @@ test("opens an image with its dimensions", async () => {
   await shoot("file-image.png");
 });
 
-test("shows the CAD runtime placeholder for a STEP file before a runtime exists", async () => {
+test("shows the runtime's own error for a STEP file when the runtime cannot start", async () => {
+  // An override that points nowhere is the one way to break the runtime on
+  // every machine alike. The tab is not a placeholder: it says the runtime
+  // did not start, shows the interpreter's words, and offers to try again.
+  await page.evaluate(() => window.hardcore.settings.set({ cadPythonOverride: "/nowhere/python" }));
+  const broken = await page.evaluate(() => window.hardcore.runtime.status());
+  expect(broken.state).toBe("error");
+
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await openFromTree(STEP);
+  await expect(page.getByText("The CAD runtime did not start")).toBeVisible();
+  await expect(page.locator("[data-cad-failure=runtime-not-ready]")).toContainText("/nowhere/python");
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Runtime status" })).toBeVisible();
+  await shoot("file-cad-failed.png");
 
-  // No override, no .venv in a worktree, nothing provisioned into a fresh
-  // user-data directory: `cad.viewerOrigin` answers `runtime-not-ready` and
-  // this is the surface the person gets — a real card with a real action.
-  await expect(page.getByText("CAD runtime is not set up yet")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Open CAD Runtime settings" })).toBeVisible();
-  await shoot("file-cad-placeholder.png");
+  // With the override gone the runtime is whatever the app resolves; Try
+  // again asks for the viewer once more without reopening the file.
+  await page.evaluate(() => window.hardcore.settings.set({ cadPythonOverride: null }));
+  const status = await page.evaluate(() => window.hardcore.runtime.status());
+  cadReady = status.state === "ready";
+  if (cadReady) {
+    expect(status.cadgenVersion).toMatch(/^\d+\.\d+\.\d+/);
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
+  }
+  // Closed either way: the render test opens it again from a clean tab.
+  await page.getByRole("tab", { name: /import-smoke\.step/ }).hover();
+  await page.getByRole("tab", { name: /import-smoke\.step/ }).getByRole("button", { name: "Close import-smoke.step" }).click();
 });
 
 test("runs a command in a terminal tab", async () => {
@@ -241,18 +256,13 @@ test("browses to a URL in a browser tab", async () => {
  * one, which scrolls the strip. The tests that click a tab by position want
  * the strip as it first was.
  */
-test("renders a STEP file through the viewer once an interpreter is set", async () => {
-  test.skip(CAD_PYTHON === null, "no CAD_DESKTOP_PYTHON and no .venv to point the app at");
+test("renders a STEP file through the bundled runtime's viewer", async () => {
+  test.skip(!cadReady, "no CAD runtime on this machine: no bundle under resources/runtime and no .venv");
 
-  // The override is a setting; the runtime reads it fresh and probes cadgen.
-  await page.evaluate((python) => window.hardcore.settings.set({ cadPythonOverride: python }), CAD_PYTHON);
   const status = await page.evaluate(() => window.hardcore.runtime.status());
   expect(status.state, JSON.stringify(status)).toBe("ready");
-  expect(status.cadgenVersion).toMatch(/^\d+\.\d+\.\d+/);
+  expect(["bundled", "checkout"]).toContain(status.source);
 
-  // A renderer asks for its origin once per mount: reopen the file.
-  await page.getByRole("tab", { name: /import-smoke\.step/ }).hover();
-  await page.getByRole("tab", { name: /import-smoke\.step/ }).getByRole("button", { name: "Close import-smoke.step" }).click();
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await openFromTree(STEP);
 
@@ -348,7 +358,7 @@ test("renders the explorer in light as well as dark", async () => {
   await page.getByRole("tab", { name: /example\.com/ }).click();
   await expect(page.getByLabel("Address")).toHaveValue(/example\.com/);
   await shoot("browser-light.png");
-  if (CAD_PYTHON !== null) {
+  if (cadReady) {
     await page.getByRole("tab", { name: /import-smoke\.step/ }).click();
     await expect(page.getByRole("tab", { name: "Tree" })).toBeVisible({ timeout: 60_000 });
     // The app stays light: the surface follows the app's theme rather than

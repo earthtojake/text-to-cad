@@ -119,6 +119,8 @@ const defaultDelay = (ms: number) => new Promise<void>((resolve) => setTimeout(r
 export class ViewerManager extends EventEmitter {
   private readonly entries = new Map<string, Entry>();
   private readonly pending = new Map<string, Promise<ViewerOrigin>>();
+  /** The last launch failure per root, for the card that says why there is no viewer. */
+  private readonly failures = new Map<string, string>();
   private readonly spawn: ViewerSpawn;
   private readonly probe: (origin: string) => Promise<boolean>;
   private readonly delay: (ms: number) => Promise<void>;
@@ -177,10 +179,13 @@ export class ViewerManager extends EventEmitter {
     }
     try {
       const entry = await this.start(root, resolved, 0);
+      this.failures.delete(root);
       return { origin: entry.origin };
     } catch (error) {
-      this.log(`launch failed for ${root}: ${error instanceof Error ? error.message : String(error)}`);
-      return { origin: null, reason: "viewer-failed" };
+      const message = error instanceof Error ? error.message : String(error);
+      this.failures.set(root, message);
+      this.log(`launch failed for ${root}: ${message}`);
+      return { origin: null, reason: "viewer-failed", message };
     }
   }
 
@@ -271,9 +276,11 @@ export class ViewerManager extends EventEmitter {
     const pending = this.start(root, resolved, attempt)
       .then((): ViewerOrigin => ({ origin: this.entries.get(root)?.origin ?? null }))
       .catch((error: unknown): ViewerOrigin => {
-        this.log(`restart failed for ${root}: ${error instanceof Error ? error.message : String(error)}`);
+        const message = error instanceof Error ? error.message : String(error);
+        this.failures.set(root, message);
+        this.log(`restart failed for ${root}: ${message}`);
         void this.restart(root, resolved, attempt + 1);
-        return { origin: null, reason: "viewer-failed" };
+        return { origin: null, reason: "viewer-failed", message };
       })
       .finally(() => this.pending.delete(root));
     this.pending.set(root, pending);

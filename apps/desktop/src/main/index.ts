@@ -5,11 +5,11 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, app, shell } from "electron";
+import { BrowserWindow, app, nativeImage, shell } from "electron";
 
-import { cadRuntime, initCad, pluginManager, shutdownCad } from "./cad";
+import { initCad, pluginManager, shutdownCad } from "./cad";
 import { endTrackedChildren, killTrackedChildren } from "./children";
-import { closeDb, db } from "./db";
+import { closeDb, databaseFile, db } from "./db";
 import { broadcast, registerIpcHandlers } from "./ipc";
 import { shutdownAcp } from "./ipc/acp";
 import { detector, shutdownAgents } from "./ipc/agents";
@@ -25,6 +25,31 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** electron-vite sets this in `dev`; it is absent in every built app. */
 const RENDERER_DEV_URL = process.env.ELECTRON_RENDERER_URL;
+
+/**
+ * The one icon source, `build/icon.png` (scripts/make-icons.mjs). A packaged
+ * app carries it as the bundle's icon and never reads this file; an
+ * unpackaged one — `npm run dev`, `npx electron .` — runs inside Electron's
+ * own binary and would show Electron's icon in the Dock and the taskbar
+ * without being told otherwise.
+ */
+const DEV_ICON = path.resolve(dirname, "..", "..", "build", "icon.png");
+
+/**
+ * The app's name decides its data directory (`appData/<name>`), and Electron
+ * takes the name from whichever package.json it happened to load: the
+ * packaged app's, `apps/desktop`'s under `electron .`, and NOTHING under
+ * `electron out/main/index.js` (then the name is "Electron" and the database
+ * lands in a directory called that). Every launch of this code is Hardcore,
+ * so the name and the directory are set here, before the single-instance
+ * lock (which lives in that directory) and before the database opens. A
+ * `--user-data-dir` on the command line — the e2e suite's — still wins.
+ */
+app.setName("Hardcore");
+if (!app.commandLine.hasSwitch("user-data-dir")) {
+  app.setPath("userData", path.join(app.getPath("appData"), "Hardcore"));
+  app.setPath("sessionData", app.getPath("userData"));
+}
 
 function createWindow() {
   const state = restoreWindowState();
@@ -43,6 +68,9 @@ function createWindow() {
     // Centred in a 32px strip (12px lights: 10 above, 10 below).
     trafficLightPosition: process.platform === "darwin" ? { x: 12, y: 10 } : undefined,
     backgroundColor: "#0a0a0a",
+    // Windows and Linux take the window's icon from here when unpackaged; a
+    // packaged app has it in the executable and the desktop entry.
+    ...(app.isPackaged ? {} : { icon: DEV_ICON }),
     // Nothing is painted until the renderer has something to paint, so the
     // window never flashes an empty frame.
     show: false,
@@ -112,16 +140,22 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   void app.whenReady().then(async () => {
-    app.setName("Hardcore");
+    if (!app.isPackaged && process.platform === "darwin") {
+      // The Dock shows Electron's icon for an unpackaged app; the packaged
+      // one has the bundle's icon and needs nothing here.
+      void app.dock?.setIcon(nativeImage.createFromPath(DEV_ICON));
+    }
     // Opening (and migrating) before the first window means the renderer's
-    // first `projects.list` cannot race the schema.
+    // first `projects.list` cannot race the schema. The path is logged so a
+    // "my projects are gone" report can be checked against the file that was
+    // actually written.
     db();
+    console.info(`[db] ${databaseFile()}`);
     registerIpcHandlers();
     // The CAD runtime, the viewer manager and the MCP bridge, before the
     // first window: the file tab's first `cad.viewerOrigin` and the first
     // session's `mcpServers` both need them up.
     await initCad({ detector, sendCommand: (command) => broadcast("cad.command", command) });
-    cadRuntime().onProgress((progress) => broadcast("runtime.progress", progress));
     schedulePluginInstall();
     installMenu(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
     initTelemetry();

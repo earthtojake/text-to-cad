@@ -41,7 +41,6 @@ const PAGES: [slug: string, label: string][] = [
   ["agents", "Agents"],
   ["appearance", "Appearance"],
   ["git", "Git & Worktrees"],
-  ["cad-runtime", "CAD Runtime"],
   ["shortcuts", "Keyboard shortcuts"],
   ["about", "About & Updates"],
 ];
@@ -78,6 +77,11 @@ test("every page renders, in both themes", async () => {
       // Agents shot is of the answer rather than of the spinner.
       if (slug === "agents") {
         await expect(page.getByText(/^Installed \(\d+\)$/)).toBeVisible();
+      }
+      // The runtime block probes the interpreter (`import cadgen` takes
+      // seconds); the About shot is of the answer, whichever it is.
+      if (slug === "about") {
+        await expect(page.getByText("Checking…")).toHaveCount(0, { timeout: 90_000 });
       }
       await shoot(`settings-${slug}${theme === "light" ? "-light" : ""}.png`);
     }

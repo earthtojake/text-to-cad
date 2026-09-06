@@ -35,7 +35,7 @@ Three environment variables matter in development:
 | Variable | Effect |
 | --- | --- |
 | `HARDCORE_APTABASE_KEY` | Read at BUILD time and compiled in (see Telemetry). Unset means no network call is ever attempted. |
-| `CAD_DESKTOP_PYTHON` | An interpreter with cadgen installed, used instead of the managed runtime (see CAD runtime below). Set by the e2e suite to the repository's `.venv`. |
+| `CAD_DESKTOP_PYTHON` | An interpreter with cadgen installed, used instead of the bundled runtime (see CAD runtime below). A developer's knob; the e2e suite breaks and clears the equivalent setting on purpose. |
 | `HARDCORE_NO_PLUGIN_INSTALL` | Skip the launch-time install of the Hardcore plugin into the user's agents. `NODE_ENV=test` implies it. |
 | `HARDCORE_FAKE_AGENT` | Launch this stdio ACP agent instead of whatever the registry says, for every provider. The session and git suites point it at `tests/fake-agent/index.mjs`; a session needs an agent to exist at all, and a real one would make the suite a test of somebody's login state. |
 
@@ -86,8 +86,8 @@ real, see above).
 
 `npm run e2e` writes `tests/e2e/__screenshots__/`: the shell in both themes,
 Settings, one per explorer surface — `file-markdown-preview`,
-`file-markdown-source`, `file-image`, `file-cad-placeholder`, `file-cad`
-(expanded), `file-cad-default` (the explorer at its default share, the tree
+`file-markdown-source`, `file-image`, `file-cad-failed` (the runtime broken
+on purpose), `file-cad` (expanded), `file-cad-default` (the explorer at its default share, the tree
 hidden for it) and both again at 1280×800, `file-cad-measure`, `terminal`,
 `browser-empty`, `browser`, `review`, `strip`, `expanded` — every one of those
 kinds in light as `*-light` — the `git-*` set for the git modes (the review
@@ -121,15 +121,19 @@ of every adapter); `codex.spec.ts` runs one real Codex session when
 `HARDCORE_E2E_CODEX=1`. `keyboard.spec.ts` presses every shortcut the
 Shortcuts page lists; `quit.spec.ts` times `app.quit()` with a repository
 watched, a shell, a session and the CAD viewer all running, and fails above
-two seconds (see Quitting, below).
+two seconds (see Quitting, below). `persistence.spec.ts` launches the app
+twice against one user-data directory — a project, a session with the fake
+agent, `app.quit()`, relaunch — and asserts both come back and the session's
+transcript resumes through `session/load`.
 
-The CAD tests need an interpreter with cadgen: `CAD_DESKTOP_PYTHON`, or the
-repository's `.venv` (a worktree without one falls back to the main
-checkout's). The explorer suite launches the app *without* the variable so
-the STEP tab first shows the not-set-up card, then sets the override through
-Settings' IPC and opens the file again — the path a person takes. The first
-render compiles the STEP in cadgen's build pool and is the slow assertion of
-the suite.
+The CAD tests run against whatever runtime the app resolves on its own (see
+CAD runtime, below): the bundled one once `npm run bundle:runtime` has run,
+else the checkout's `.venv`. The explorer suite first breaks the runtime on
+purpose — an override pointing nowhere — to see the failure card with the
+interpreter's words in it, then clears the override and renders the STEP;
+that render is skipped on a machine with no runtime at all (CI's test job,
+which bundles nothing). The first render compiles the STEP in cadgen's build
+pool and is the slow assertion of the suite.
 
 `tests/e2e/codex-open-file.spec.ts` runs a real Codex session in a scratch
 project and asks it to call `open_file`; it asserts the explorer opened the
@@ -145,12 +149,24 @@ else that needs a real database belongs in the e2e.
 ## Packaging
 
 ```sh
-npm run icons        # copy the docs favicon to build/icon.png (committed)
-npm run package:mac  # or :win, :linux -> release/
+npm run icons            # copy the docs favicon to build/icon.png (committed)
+npm run cad:resources    # the cadgen wheel + constraints into resources/cadgen (from the .venv)
+npm run bundle:runtime   # THE CAD RUNTIME into resources/runtime/<os>-<arch> (~1.2 GB, once per pin)
+npm run package:mac      # or :win, :linux -> release/
 ```
 
 `electron-builder.yml` holds the config: appId `dev.texttocad.hardcore`, and
-every artifact named `Hardcore-<version>-<os>-<arch>.<ext>`.
+every artifact named `Hardcore-<version>-<os>-<arch>.<ext>`. The runtime is
+the product: `scripts/package.mjs` refuses to package a target whose runtime
+is not under `resources/runtime/` at this version (`--no-runtime` to package
+without one, for a build whose purpose is not CAD). `npm run package:mac`
+with no arch flags builds arm64 and x64 and needs both runtimes;
+`-- --arm64` builds and needs one (the script adds the config's target
+names behind an arch flag, because electron-builder ignores a bare `--arm64`
+when the config lists arches). Sizes measured on 0.5.0, mac-arm64: the
+runtime is 1.24 GB on disk, the app 1.6 GB, the dmg 456 MB, the zip 468 MB
+— and that is the point (plan §8, as revised): nothing downloads at first
+launch.
 
 | Platform | Targets |
 | --- | --- |
@@ -166,6 +182,9 @@ stays at `0.0.0` because `VERSION` is the one canonical release version
 
 `npm run icons` copies the docs site's favicon to `build/icon.png`; the mark lives
 in one place and electron-builder derives the platform containers at package time.
+An unpackaged app (`npm run dev`, `npx electron .`) runs inside Electron's own
+binary and would show Electron's icon: main sets the Dock icon from that file
+on macOS and passes it to the window on Windows and Linux when `!app.isPackaged`.
 
 ### Signing
 
@@ -192,13 +211,19 @@ Development builds report `unsupported` and check nothing.
 
 ### What is bundled
 
-`resources/cadgen/` (the wheel and its constraints) and `resources/plugin/`
-(the composed plugin) ship beside the app as `extraResources`; both are
-build outputs, gitignored under a committed `.gitkeep`. `npm run build` fills
-the second; `npm run cad:resources` fills the first from a checkout, and the
-release workflow drops the wheel it just built into it instead. The MCP
-server ships inside `out/hardcore-mcp/`, unpacked from the asar so an agent
-can run it by path. See `resources/README.md`.
+`resources/runtime/<os>-<arch>/` (the CAD runtime: a pinned Python with
+cadgen and its whole closure installed), `resources/cadgen/` (the wheel and
+its constraints) and `resources/plugin/` (the composed plugin) ship beside
+the app as `extraResources`; all three are build outputs, gitignored under a
+committed `.gitkeep`. `npm run build` fills the plugin; `npm run
+cad:resources` fills the wheel directory from a checkout (the release
+workflow drops the wheel it just built into it instead); `npm run
+bundle:runtime` fills the runtime from those two (the release workflow runs
+it per leg: macOS bundles `mac-arm64` natively and `mac-x64` cross, Windows
+and Linux their own). The MCP server ships inside `out/hardcore-mcp/`,
+unpacked from the asar so an agent can run it by path. See
+`resources/README.md` for the bundler's steps, the cross-target rule and the
+signing note.
 
 ## Layout
 
@@ -256,34 +281,41 @@ gives it nothing to do.
 
 ## CAD runtime
 
-Every cadgen process the app runs — the viewer per project, the probe that
-reads the cadgen version — uses one interpreter, resolved in this order
-(`src/main/cad/runtime.ts`):
+The runtime ships inside the app. Every cadgen process the app runs — the
+viewer per project, the probe that reads the cadgen version — uses one
+interpreter, resolved in this order (`src/main/cad/runtime.ts`):
 
-1. `CAD_DESKTOP_PYTHON` in the environment, then the **Override interpreter**
-   field in Settings › CAD Runtime;
-2. a development checkout's `.venv` — the app is running from inside this
+1. `CAD_DESKTOP_PYTHON` in the environment, then the `cadPythonOverride`
+   setting (no UI; a developer's and the e2e suite's knob);
+2. the bundled runtime beside the app — `Resources/runtime/<os>-<arch>/` in
+   a packaged app, `resources/runtime/<os>-<arch>/` in a checkout that has
+   run `npm run bundle:runtime` — recognised by the `runtime.json` the
+   bundler writes last;
+3. a development checkout's `.venv` — the app is running from inside this
    repository (found by `VERSION` and `packages/cadgen/pyproject.toml` above
-   it), so dev never downloads anything;
-3. the managed runtime under `userData/runtime/<appVersion>/`;
-4. nothing: Settings says *Not installed* and offers Install.
+   it), which is what `npm run dev` has;
+4. nothing: the status is *Missing* and says where it looked.
 
 Inside a checkout, whichever interpreter wins runs with
 `PYTHONPATH=<checkout>/packages/cadgen/src`, so the cadgen it imports is the
 checkout's own — a `.venv` on a developer's machine points at one checkout
-and the app may be running from a worktree of another.
+and the app may be running from a worktree of another. The bundled
+interpreter runs closed to the shell's Python variables (`PYTHONHOME`,
+`PYTHONPATH`, `PYTHONSTARTUP`, `PYTHONUSERBASE` dropped; `PYTHONNOUSERSITE`)
+and with `PYTHONDONTWRITEBYTECODE`, because a signed bundle must not be
+written into — its pycs were compiled by the bundler. Every cadgen process
+also gets `CADGEN_NODE`: cadgen's DXF and mesh-export builders run in Node,
+an app launched from the Finder has no `node` on its PATH, and the one Node
+a packaged app is sure to have is its own Electron binary run as Node.
 
-Install (and Repair) provisions the managed runtime: a pinned
-python-build-standalone release (`PYTHON_BUILD` in `runtime.ts`: 3.13,
-macOS arm64/x64, Windows x64, Linux x64, sha256 checked against the pinned
-hashes before extraction), then
-`pip install --find-links resources/cadgen cadgen==<appVersion> -c
-resources/cadgen/constraints.txt`. The bundled wheel satisfies the exact-
-version requirement; its dependencies (OCP, build123d — the gigabyte) still
-come from PyPI, pinned by the constraints file that was frozen beside the
-wheel. Without a bundled wheel the same command installs the release from
-PyPI. Progress streams to Settings on `runtime.progress`; the log is
-`userData/runtime/<version>/provision.log`.
+There is nothing to install and no "installing" state. Settings › About &
+Updates carries a read-only block — the runtime (source and interpreter),
+cadgen's version against the app's, the viewer backend, the Hardcore plugin
+per installed agent — and Repair, which forgets the probe and looks again.
+A CAD tab whose runtime did not start shows the interpreter's words, the
+log (`userData/cad-runtime.log`: every failed probe, every viewer launch
+that did not come up, the viewer's stderr) and Try again; it never asks the
+person to set anything up.
 
 `src/main/cad/viewer.ts` runs one `python -m cadgen.viewer --api-only --host
 127.0.0.1 --json` per project root (cwd = the root, the launcher's contract),
@@ -366,7 +398,7 @@ src/main/                 the Electron main process: everything with a side effe
                           commit, the pull request, and the worktree list
   explorer/               fs.ts (tree, ignores, read/write, chokidar watcher),
                           terminal.ts (node-pty sessions + scrollback)
-  cad/                    runtime.ts (managed Python), viewer.ts (one viewer per project root),
+  cad/                    runtime.ts (which Python: override, bundled, checkout), viewer.ts (one viewer per project root),
                           plugin.ts (the composed plugin into each agent), mcp-bridge.ts + actions.ts
                           (the MCP server's way into the explorer), index.ts (the wiring)
   projects/git.ts         status, per-file diff, commit and push; then repository
@@ -411,6 +443,8 @@ tests/fixtures/acp/       recorded adapter transcripts (jsonl), written by the h
 scripts/acp-harness.mjs   run a real ACP session from the terminal; --record writes a fixture
 scripts/build.mjs         npm run build: build-plugin.mjs + electron-vite + build-mcp.mjs
 scripts/cad-resources.mjs the cadgen wheel and constraints into resources/cadgen, from a checkout
+scripts/bundle-runtime.mjs the CAD runtime into resources/runtime/<os>-<arch>: the pinned Python
+                          (scripts/python-build.json) with cadgen's closure installed, per target
 resources/hardcore-mcp/   the MCP server's source (bundled into out/hardcore-mcp by the build)
 skills/hardcore-app/      the skill only this app installs; composed into resources/plugin
 ```

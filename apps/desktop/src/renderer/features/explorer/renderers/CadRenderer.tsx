@@ -1,5 +1,5 @@
-import { Box, Settings2 } from "lucide-react";
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Box, RefreshCw, Settings2 } from "lucide-react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { Spinner } from "@renderer/components/ui/spinner";
@@ -27,11 +27,12 @@ import { EmptyState } from "../EmptyState";
  * `React.lazy` is what keeps it in its own chunk.
  *
  * The surface talks HTTP to a `cadgen viewer --api-only`, so it needs that
- * instance's origin. P5 spawns one per project root; until then
- * `cad.viewerOrigin` answers `{ origin: null, reason: "runtime-not-ready" }`
- * and this component shows the card below — which is not a placeholder for a
- * missing feature but the real first-run state of an app whose 1 GB Python
- * runtime installs on demand (plan §8).
+ * instance's origin; main spawns one per project root (`cad.viewerOrigin`).
+ * The runtime that process runs in SHIPS INSIDE THE APP, so an answer with no
+ * origin is a failure, never a first-run state: the card below shows the
+ * runtime's or the launcher's own words, the log to read, and the two things
+ * a person can do — try again, or go to About & Updates, where the runtime's
+ * status and Repair live.
  *
  * Three things are the desktop's to decide, not the surface's, and are passed
  * in (`cad-layout.ts`): the layout is always the desktop one — the sheet is a
@@ -110,8 +111,14 @@ export function CadRenderer({
   const colorScheme = useResolvedTheme();
   const [hostRef, width] = useElementWidth();
 
-  // Asked once per mount. A tab's project cannot change under it — a project
-  // change rebuilds the strip — so there is nothing to reset here.
+  // Asked once per mount, and again on Retry. A tab's project cannot change
+  // under it — a project change rebuilds the strip — so there is nothing
+  // else to reset here.
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => {
+    setAnswer(null);
+    setAttempt((count) => count + 1);
+  }, []);
   useEffect(() => {
     let cancelled = false;
     void window.hardcore.cad
@@ -121,15 +128,15 @@ export function CadRenderer({
           setAnswer(result);
         }
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!cancelled) {
-          setAnswer({ origin: null, reason: "viewer-failed" });
+          setAnswer({ origin: null, reason: "viewer-failed", message: error instanceof Error ? error.message : String(error) });
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, attempt]);
 
   if (!answer) {
     return (
@@ -141,22 +148,43 @@ export function CadRenderer({
   }
 
   if (!answer.origin) {
+    const reason = answer.reason ?? "runtime-not-ready";
     return (
       <EmptyState
         action={
-          <Button
-            className="h-7 gap-1.5 text-xs"
-            onClick={() => openSettings("cad-runtime")}
-            size="sm"
-            variant="secondary"
-          >
-            <Settings2 className="size-3.5" />
-            Open CAD Runtime settings
-          </Button>
+          reason === "no-project" ? undefined : (
+            <div className="flex flex-col items-center gap-2" data-cad-failure={reason}>
+              {answer.message ? (
+                <pre className="max-h-40 max-w-[420px] overflow-auto rounded-lg border bg-muted/40 px-3 py-2 text-left font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                  <code data-selectable>{answer.message}</code>
+                </pre>
+              ) : null}
+              {answer.log ? (
+                <p className="max-w-[420px] truncate text-[11px] text-muted-foreground" title={answer.log}>
+                  Log: <span data-selectable>{answer.log}</span>
+                </p>
+              ) : null}
+              <div className="flex items-center gap-2">
+                <Button className="h-7 gap-1.5 text-xs" onClick={retry} size="sm" variant="secondary">
+                  <RefreshCw className="size-3.5" />
+                  Try again
+                </Button>
+                <Button
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={() => openSettings("about")}
+                  size="sm"
+                  variant="ghost"
+                >
+                  <Settings2 className="size-3.5" />
+                  Runtime status
+                </Button>
+              </div>
+            </div>
+          )
         }
-        description={REASONS[answer.reason ?? "runtime-not-ready"]}
+        description={REASONS[reason]}
         icon={Box}
-        title="CAD runtime is not set up yet"
+        title={TITLES[reason]}
         tone="warn"
       />
     );
@@ -178,11 +206,16 @@ export function CadRenderer({
   );
 }
 
-/** One sentence per reason: they are different problems with different fixes. */
+/** One title and one sentence per reason: they are different problems with different fixes. */
+const TITLES: Record<NonNullable<ViewerOrigin["reason"]>, string> = {
+  "runtime-not-ready": "The CAD runtime did not start",
+  "viewer-failed": "The CAD viewer did not start",
+  "no-project": "This file's project is no longer open",
+};
+
 const REASONS: Record<NonNullable<ViewerOrigin["reason"]>, string> = {
   "runtime-not-ready":
-    "STEP, GLB, STL, 3MF, DXF and robot descriptions render here once the bundled Python runtime and cadgen are installed. It is a one-time download.",
-  "viewer-failed":
-    "The CAD runtime is installed but its viewer process did not start. Settings has a Repair button and the last error.",
-  "no-project": "This file's project is no longer open.",
+    "The Python runtime that ships with Hardcore could not run cadgen, so nothing can render this file. The runtime's own words are below.",
+  "viewer-failed": "The runtime is fine, but its viewer process for this project did not come up. The launcher's last words are below.",
+  "no-project": "Open the project again to render its files.",
 };

@@ -1,12 +1,15 @@
 import { create } from "zustand";
 
-/** The Settings pages, in the order the plan lists them (§10). */
+/**
+ * The Settings pages, in the order the plan lists them (§10) — minus CAD
+ * Runtime: the runtime ships inside the app, and what is left to say about
+ * it is a status block on About & Updates.
+ */
 export const SETTINGS_SECTIONS = [
   "general",
   "agents",
   "appearance",
   "git",
-  "cad-runtime",
   "shortcuts",
   "about",
 ] as const;
@@ -19,7 +22,6 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   agents: "Agents",
   appearance: "Appearance",
   git: "Git & Worktrees",
-  "cad-runtime": "CAD Runtime",
   shortcuts: "Keyboard shortcuts",
   about: "About & Updates",
 };
