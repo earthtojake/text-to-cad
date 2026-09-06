@@ -5,7 +5,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, app, shell } from "electron";
+import { BrowserWindow, app, nativeImage, shell } from "electron";
 
 import { initCad, pluginManager, shutdownCad } from "./cad";
 import { endTrackedChildren, killTrackedChildren } from "./children";
@@ -26,6 +26,15 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 /** electron-vite sets this in `dev`; it is absent in every built app. */
 const RENDERER_DEV_URL = process.env.ELECTRON_RENDERER_URL;
 
+/**
+ * The one icon source, `build/icon.png` (scripts/make-icons.mjs). A packaged
+ * app carries it as the bundle's icon and never reads this file; an
+ * unpackaged one — `npm run dev`, `npx electron .` — runs inside Electron's
+ * own binary and would show Electron's icon in the Dock and the taskbar
+ * without being told otherwise.
+ */
+const DEV_ICON = path.resolve(dirname, "..", "..", "build", "icon.png");
+
 function createWindow() {
   const state = restoreWindowState();
 
@@ -43,6 +52,9 @@ function createWindow() {
     // Centred in a 32px strip (12px lights: 10 above, 10 below).
     trafficLightPosition: process.platform === "darwin" ? { x: 12, y: 10 } : undefined,
     backgroundColor: "#0a0a0a",
+    // Windows and Linux take the window's icon from here when unpackaged; a
+    // packaged app has it in the executable and the desktop entry.
+    ...(app.isPackaged ? {} : { icon: DEV_ICON }),
     // Nothing is painted until the renderer has something to paint, so the
     // window never flashes an empty frame.
     show: false,
@@ -112,6 +124,11 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   void app.whenReady().then(async () => {
+    if (!app.isPackaged && process.platform === "darwin") {
+      // The Dock shows Electron's icon for an unpackaged app; the packaged
+      // one has the bundle's icon and needs nothing here.
+      void app.dock?.setIcon(nativeImage.createFromPath(DEV_ICON));
+    }
     app.setName("Hardcore");
     // Opening (and migrating) before the first window means the renderer's
     // first `projects.list` cannot race the schema.
