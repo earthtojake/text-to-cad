@@ -20,6 +20,7 @@ import type {
   SessionState,
 } from "../../shared/acp/types";
 import type { IpcEventChannel, IpcEventPayload } from "../../shared/ipc";
+import type { Launch } from "../../shared/agents";
 import type { GitMode, Session, SessionStatus } from "../../shared/types";
 import type { AgentDetector } from "../agents/detect";
 import { agentProvider } from "../agents/registry";
@@ -42,6 +43,11 @@ export type SessionManagerDeps = {
   mcpServers?: () => McpServer[];
   clientVersion?: string;
   newId: () => string;
+  /**
+   * Replace a provider's launch line. The e2e suite points every agent at
+   * `tests/fake-agent`; nothing else sets this.
+   */
+  launchOverride?: (agentId: string) => Launch | null;
 };
 
 /** Codex's convention: the first line of the first prompt, trimmed to fit a sidebar row. */
@@ -113,17 +119,22 @@ export class SessionManager {
       changedFiles: 0,
       insertions: 0,
       deletions: 0,
+      archived: false,
     };
     this.deps.repo.upsert(session);
     this.broadcastIndex();
 
-    const connection = await this.connect(session);
+    let connection: SessionConnection;
     try {
+      connection = await this.connect(session);
       await connection.newSession();
     } catch (error) {
-      this.setStatus(session.id, "error");
-      connection.close();
+      // A row with no agent session id can never be loaded; the renderer
+      // shows the failure (sign in, install) and the user creates again.
+      this.live.get(session.id)?.close();
       this.live.delete(session.id);
+      this.deps.repo.remove(session.id);
+      this.broadcastIndex();
       throw error;
     }
     const updated = this.update(session.id, { acpSessionId: connection.acpSessionId, status: "idle" });
@@ -191,6 +202,20 @@ export class SessionManager {
   setApprovalMode(id: string, mode: ApprovalMode): void {
     this.approval.set(id, mode);
     this.live.get(id)?.setApprovalMode(mode);
+  }
+
+  rename(id: string, title: string): Session {
+    this.require(id);
+    return this.update(id, { title: title.trim() });
+  }
+
+  /** Hide the row from the sidebar. The adapter is closed; `load` still resumes it later. */
+  archive(id: string, archived: boolean): Session {
+    this.require(id);
+    if (archived) {
+      this.close(id);
+    }
+    return this.update(id, { archived });
   }
 
   close(id: string): void {
@@ -266,7 +291,7 @@ export class SessionManager {
     const connection = new SessionConnection({
       sessionId: session.id,
       agentId: session.agentId,
-      launch: provider.launch,
+      launch: this.deps.launchOverride?.(provider.id) ?? provider.launch,
       env,
       cwd: session.cwd,
       mcpServers: this.deps.mcpServers?.() ?? [],

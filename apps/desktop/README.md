@@ -93,6 +93,11 @@ changed nothing: a blinking cursor, a scroll position, when a font finished
 rasterising. Commit them or discard them, but do not go looking for the change
 — if the picture is the same, it is the same.
 
+The session suite (`session-*.png`) drives the session UI through each of its
+states with `tests/fake-agent` (`HARDCORE_FAKE_AGENT` points main at it in place
+of every adapter); `codex.spec.ts` runs one real Codex session when
+`HARDCORE_E2E_CODEX=1`.
+
 Nothing in `npm test` loads `better-sqlite3` or `node-pty`: both are built
 against Electron's ABI and will not load in a plain Node process. The migration
 runner takes a structural `MigrationDb` so it can be tested anyway; everything
@@ -197,8 +202,11 @@ src/shared/               types.ts (domain types as zod schemas)
   ipc/cad.ts              cad.viewerOrigin — P3's stub, P5's implementation
 src/renderer/
   app/                    Shell (three resizable panes), App, CommandPalette
-  features/sidebar        projects and their sessions
-  features/session        the empty state and the composer
+  features/sidebar        projects and their sessions (five per project, Show more, status glyphs, menus)
+  features/session        the new-session state, the transcript, the composer
+    view.ts               SessionState -> rows: activity-row labels, folding, the status line (pure)
+    parts/                activity rows (+ Monaco diff, terminal), thoughts, permission cards, subagents
+    ComposerChips.tsx     agent / project / git mode / approval / model / options chips
   features/explorer       the one tab strip and its four kinds of tab
   features/settings       the Settings route, the card-grouped rows, the agent drawer, and
                           pages/ — one module per page; search is done by the rows themselves

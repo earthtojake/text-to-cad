@@ -107,6 +107,15 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX explorer_tabs_by_project ON explorer_tabs(project_id, position);
     `,
   },
+  {
+    version: 4,
+    name: "archived-sessions",
+    // P2: the sidebar's archive action. The row stays so the agent's own
+    // transcript can still be loaded back.
+    up: `
+      ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 /**

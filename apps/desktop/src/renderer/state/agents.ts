@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 
 import type { AgentJobOutput, AgentStatus } from "@shared/agents";
 
@@ -74,7 +75,13 @@ export const useAgents = create<AgentsState>((set) => ({
     }),
 }));
 
-/** The installed agents, for the composer's agent chip. */
+/**
+ * The installed agents, for the composer's agent chip. `useShallow` because
+ * the filter builds a fresh array every call and zustand compares with
+ * Object.is — without it every render schedules another.
+ */
 export function useInstalledAgents(): AgentStatus[] {
-  return useAgents((state) => state.agents.filter((agent) => agent.installed || agent.launchWithoutBinary));
+  return useAgents(
+    useShallow((state) => state.agents.filter((agent) => agent.installed || agent.launchWithoutBinary)),
+  );
 }

@@ -521,6 +521,7 @@ function blankToolCall(id: string): ToolCallPart {
     output: undefined,
     content: [],
     locations: [],
+    stream: "",
     children: [],
   };
 }
@@ -533,6 +534,7 @@ function mergeToolCall(part: ToolCallPart, update: Record<string, unknown>): Too
   const name = asString(update.name);
   const content = Array.isArray(update.content) ? toolContents(update.content) : null;
   const locations = Array.isArray(update.locations) ? toolLocations(update.locations) : null;
+  const delta = streamedOutput(update);
   return {
     ...part,
     kind: kind ?? part.kind,
@@ -543,7 +545,15 @@ function mergeToolCall(part: ToolCallPart, update: Record<string, unknown>): Too
     output: update.rawOutput !== undefined ? update.rawOutput : part.output,
     content: content ?? part.content,
     locations: locations ?? part.locations,
+    stream: delta === null ? part.stream : part.stream + delta,
   };
+}
+
+/** Codex streams a command's output as `_meta.terminal_output_delta.data` on each update. */
+function streamedOutput(update: Record<string, unknown>): string | null {
+  const meta = asRecord(update._meta);
+  const delta = meta ? asRecord(meta.terminal_output_delta) : null;
+  return delta ? asString(delta.data) : null;
 }
 
 /** Rebuild a parts tree with `fn` applied to every node, preserving identity where nothing changed. */
@@ -591,6 +601,8 @@ function promptBlockToPart(block: PromptBlock): Part {
       return { type: "image", data: block.data, mimeType: block.mimeType };
     case "resource_link":
       return { type: "resource_link", uri: block.uri, name: block.name };
+    case "resource":
+      return { type: "resource_link", uri: block.uri, name: block.uri.split(/[\\/]/).pop() || block.uri };
   }
 }
 

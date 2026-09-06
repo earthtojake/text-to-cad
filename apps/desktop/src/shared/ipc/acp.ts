@@ -66,6 +66,10 @@ export const acpContract = {
       z.void(),
     ),
     setApprovalMode: invoke(Id.extend({ mode: ApprovalModeSchema }), z.void()),
+    /** The sidebar title. Set by the first prompt (Codex's convention) until the user renames. */
+    rename: invoke(Id.extend({ title: z.string().min(1).max(200) }), SessionSchema),
+    /** Hide from (or restore to) the sidebar. Archiving closes the adapter. */
+    archive: invoke(Id.extend({ archived: z.boolean() }), SessionSchema),
     /** Kill the adapter; the index row stays and `load` brings it back. */
     close: invoke(Id, z.void()),
     /** Close and forget. The agent's own transcript store is not touched. */
