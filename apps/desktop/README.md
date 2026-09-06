@@ -355,7 +355,7 @@ owns both:
 
 **The Hardcore plugin** — `resources/plugin/`, composed by
 `scripts/build-plugin.mjs`: the repository's skills minus `cad-viewer` (the
-viewer is beside the chat here) plus `skills/hardcore-app` (which replaces
+viewer is beside the chat here) plus `skills/hardcore-app-use` (which replaces
 the `cad` skill's `$cad-viewer` hand-off), with `.claude-plugin/plugin.json`,
 `.claude-plugin/marketplace.json` and `.codex-plugin/plugin.json` naming the
 plugin `cad`, the marketplace `hardcore` and the version the app's. Copies,
@@ -474,7 +474,7 @@ scripts/cad-resources.mjs the cadgen wheel and constraints into resources/cadgen
 scripts/bundle-runtime.mjs the CAD runtime into resources/runtime/<os>-<arch>: the pinned Python
                           (scripts/python-build.json) with cadgen's closure installed, per target
 resources/hardcore-mcp/   the MCP server's source (bundled into out/hardcore-mcp by the build)
-skills/hardcore-app/      the skill only this app installs; composed into resources/plugin
+skills/hardcore-app-use/      the skill only this app installs; composed into resources/plugin
 ```
 
 ## ACP

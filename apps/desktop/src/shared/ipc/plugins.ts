@@ -1,6 +1,6 @@
 /**
  * `plugins.*`: whether Hardcore's own plugin — the repo's `cad` plugin minus
- * `cad-viewer`, plus `hardcore-app`, versioned with the app (plan §8) — is
+ * `cad-viewer`, plus `hardcore-app-use`, versioned with the app (plan §8) — is
  * installed into a given agent.
  *
  * Declared by P6 because the Agents drawer and the CAD Runtime page both have

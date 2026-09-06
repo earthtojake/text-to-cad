@@ -100,9 +100,9 @@ describe("plugin list parsing", () => {
 function composedPlugin(dir: string, version: string) {
   fs.mkdirSync(path.join(dir, "skills", "cad"), { recursive: true });
   fs.writeFileSync(path.join(dir, "skills", "cad", "SKILL.md"), "---\nname: cad\n---\n");
-  fs.mkdirSync(path.join(dir, "skills", "hardcore-app"), { recursive: true });
-  fs.writeFileSync(path.join(dir, "skills", "hardcore-app", "SKILL.md"), "---\nname: hardcore-app\n---\n");
-  fs.writeFileSync(path.join(dir, MANIFEST_FILE), JSON.stringify({ name: "cad", marketplace: "hardcore", version, skills: ["cad", "hardcore-app"] }));
+  fs.mkdirSync(path.join(dir, "skills", "hardcore-app-use"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "skills", "hardcore-app-use", "SKILL.md"), "---\nname: hardcore-app-use\n---\n");
+  fs.writeFileSync(path.join(dir, MANIFEST_FILE), JSON.stringify({ name: "cad", marketplace: "hardcore", version, skills: ["cad", "hardcore-app-use"] }));
 }
 
 function host(options: {
@@ -226,7 +226,7 @@ describe("PluginManager.install", () => {
     const status = await new PluginManager(h.host).install("gemini-cli");
     expect(status).toMatchObject({ state: "installed", installedVersion: "0.5.0" });
     expect(fs.existsSync(path.join(skills, "hardcore", "cad", "SKILL.md"))).toBe(true);
-    expect(fs.existsSync(path.join(skills, "hardcore", "hardcore-app", "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(skills, "hardcore", "hardcore-app-use", "SKILL.md"))).toBe(true);
     expect(fs.readFileSync(path.join(skills, "mine", "SKILL.md"), "utf8")).toBe("theirs");
     expect(h.commands).toEqual([]);
   });

@@ -4,7 +4,7 @@
  *
  * The plugin itself is composed at build time by `scripts/build-plugin.mjs`
  * into `resources/plugin/` — the repo's skills minus `cad-viewer`, plus
- * `hardcore-app`, with manifests naming the plugin `cad`, the marketplace
+ * `hardcore-app-use`, with manifests naming the plugin `cad`, the marketplace
  * `hardcore` and the version the app's. Three ways it lands:
  *
  *   - Claude Code: `claude plugin marketplace add <resources/plugin>` declares

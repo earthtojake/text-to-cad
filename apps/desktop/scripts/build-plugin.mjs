@@ -4,7 +4,7 @@
  * The plugin is the repository's `cad` plugin with one skill swapped: every
  * directory under `skills/` except `cad-viewer` (the viewer is beside the chat
  * in this app, so the skill that starts one and posts links would be wrong
- * here), plus `apps/desktop/skills/hardcore-app`, which replaces the hand-off
+ * here), plus `apps/desktop/skills/hardcore-app-use`, which replaces the hand-off
  * the `cad` skill makes to `$cad-viewer`. The three manifests mirror the
  * repository's — `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`,
  * `.codex-plugin/plugin.json` — with the plugin named `cad`, the marketplace
@@ -32,7 +32,7 @@ const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 /** The skill this app's viewer makes redundant. */
 export const EXCLUDED_SKILLS = ["cad-viewer"];
 /** The skill only this app installs. */
-export const APP_SKILL = "hardcore-app";
+export const APP_SKILL = "hardcore-app-use";
 export const PLUGIN_NAME = "cad";
 export const MARKETPLACE_NAME = "hardcore";
 

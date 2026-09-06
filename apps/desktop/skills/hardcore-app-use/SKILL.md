@@ -1,5 +1,5 @@
 ---
-name: hardcore-app
+name: hardcore-app-use
 description: How to work inside the Hardcore desktop app, where the CAD Viewer is beside the chat and files are shown with the `open_file` tool. Installed only by Hardcore; replaces the `cad` skill's `$cad-viewer` hand-off. Use whenever a CAD, drawing, mesh, or robot-description file is created, changed, or reviewed in a Hardcore session.
 ---
 

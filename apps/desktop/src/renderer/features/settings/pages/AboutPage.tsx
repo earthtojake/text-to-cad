@@ -297,7 +297,7 @@ function RuntimeCard({ appVersion }: { appVersion: string | null }) {
 }
 
 function EmptyPluginsRow() {
-  const matched = useRowMatch("Plugin", "No agents installed", "skills cad hardcore-app");
+  const matched = useRowMatch("Plugin", "No agents installed", "skills cad hardcore-app-use");
   if (!matched) {
     return null;
   }
@@ -308,7 +308,7 @@ function EmptyPluginsRow() {
   );
 }
 
-/** The Hardcore plugin — the cad skills and hardcore-app — in one agent. */
+/** The Hardcore plugin — the cad skills and hardcore-app-use — in one agent. */
 function PluginRow({ name, status }: { name: string; status: PluginStatus | null }) {
   const state = status?.state ?? "not-installed";
   const tone: Tone =
@@ -325,7 +325,7 @@ function PluginRow({ name, status }: { name: string; status: PluginStatus | null
   return (
     <SettingRow
       control={<StatusLabel tone={tone}>{label}</StatusLabel>}
-      description="The Hardcore plugin: the cad skills and hardcore-app."
+      description="The Hardcore plugin: the cad skills and hardcore-app-use."
       keywords="hardcore plugin skills marketplace cad"
       title={`Plugin in ${name}`}
     />

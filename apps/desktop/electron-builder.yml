@@ -44,7 +44,7 @@ files:
 #                      bundler installs from; kept beside the app so a person
 #                      can see what shipped (a couple of megabytes).
 #   resources/plugin   the composed Hardcore plugin (the cad plugin minus
-#                      cad-viewer, plus hardcore-app) installed into each agent.
+#                      cad-viewer, plus hardcore-app-use) installed into each agent.
 #
 # The runtime's executables keep their mode bits and their symlinks
 # (python/bin/python3 -> python3.13): electron-builder copies extraResources

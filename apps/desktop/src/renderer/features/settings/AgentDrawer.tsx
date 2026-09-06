@@ -327,7 +327,7 @@ function PluginSection({ agent }: { agent: AgentStatus }) {
         <div className="min-w-0">
           <p className="text-sm">Hardcore plugin</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            The cad skills and hardcore-app, installed where {agent.name} looks for them, and
+            The cad skills and hardcore-app-use, installed where {agent.name} looks for them, and
             versioned with this app.
           </p>
         </div>

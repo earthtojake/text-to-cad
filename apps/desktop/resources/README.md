@@ -8,7 +8,7 @@ copies each directory here into the packaged app's `Resources/`, and
 | --- | --- | --- |
 | `runtime/<os>-<arch>/` | `npm run bundle:runtime` (`scripts/bundle-runtime.mjs`), and the release workflow per leg | **The CAD runtime.** A pinned python-build-standalone (`scripts/python-build.json`) with cadgen and its whole dependency closure installed into its site-packages, pruned of what a runtime never reads, bytecode-compiled, and marked complete by `runtime.json`. About 1.2 GB per target; the app resolves it first after an explicit override (`src/main/cad/runtime.ts`). Packaged as `Resources/runtime/<os>-<arch>/`, the same layout as here. |
 | `cadgen/` | the release workflow, or `npm run cad:resources` (`scripts/cad-resources.mjs`) | the `cadgen` wheel for this version and `constraints.txt`, the dependency closure frozen from the development venv — what the bundler installs from (`--find-links` here, `-c` that file) |
-| `plugin/` | `npm run build` (`scripts/build-plugin.mjs`) | the Hardcore plugin — the repo's skills minus `cad-viewer`, plus `hardcore-app`, with manifests naming it `cad@hardcore` at the app's version — installed into each agent by `src/main/cad/plugin.ts` |
+| `plugin/` | `npm run build` (`scripts/build-plugin.mjs`) | the Hardcore plugin — the repo's skills minus `cad-viewer`, plus `hardcore-app-use`, with manifests naming it `cad@hardcore` at the app's version — installed into each agent by `src/main/cad/plugin.ts` |
 | `hardcore-mcp/` | committed source | the Hardcore MCP server (`server.mjs`); NOT an extraResource — the build bundles it into `out/hardcore-mcp/`, which ships unpacked beside the asar |
 
 The first three are build outputs: gitignored under a committed `.gitkeep`,

@@ -22,7 +22,7 @@ phase is not an oversight — it is the seam.
 | P2 | `src/renderer/features/session` — the transcript, activity rows, composer chips, permissions, plan card |
 | P3 (done) | `src/main/explorer`, `src/main/ipc/{explorer,cad}.ts`, `src/shared/ipc/{explorer,cad}.ts`, `src/renderer/features/explorer` — file tab, tree, Monaco, review, browser, terminal |
 | P4 (done) | `apps/viewer`'s `CadFileView` and its `viewerOrigin` threading; P3's file tab renders it |
-| P5 (done) | `src/main/cad/`, `src/main/ipc/{cad,runtime,plugins}.ts`, `resources/`, `skills/hardcore-app`, `scripts/{build,build-plugin,build-mcp,cad-resources,bundle-runtime}.mjs`, `src/renderer/state/cad-commands.ts`, the `reveal` field of the explorer store and tree |
+| P5 (done) | `src/main/cad/`, `src/main/ipc/{cad,runtime,plugins}.ts`, `resources/`, `skills/hardcore-app-use`, `scripts/{build,build-plugin,build-mcp,cad-resources,bundle-runtime}.mjs`, `src/renderer/state/cad-commands.ts`, the `reveal` field of the explorer store and tree |
 | P6 | `src/renderer/features/settings` — the pages' contents |
 | P7 (done) | `src/main/projects/{git,workspace}.ts`, `src/shared/ipc/git.ts`, `src/main/ipc/git.ts`, `src/renderer/lib/git-mode.ts`, the review tab's scopes and commit popover, Git & Worktrees' per-project cards, `tests/e2e/git.spec.ts` |
 | P8 (done) | `electron-builder.yml`, `build/`, `resources/`, `scripts/{package,make-icons}.mjs`, `updater.ts`, `telemetry.ts`, `src/{shared,main}/ipc/app.ts`, the CI jobs |

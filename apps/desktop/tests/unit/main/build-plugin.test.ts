@@ -35,7 +35,7 @@ function walk(root: string): Array<{ path: string; link: boolean }> {
 }
 
 describe("the composed plugin", () => {
-  it("is every repo skill but cad-viewer, plus hardcore-app", () => {
+  it("is every repo skill but cad-viewer, plus hardcore-app-use", () => {
     const names = planSkills(repoRoot, appRoot).map((skill: { name: string }) => skill.name);
     const repoSkills = fs
       .readdirSync(path.join(repoRoot, "skills"), { withFileTypes: true })
@@ -90,10 +90,10 @@ describe("the composed plugin", () => {
     expect(manifest.skills).toEqual(result.skills);
   });
 
-  it("keeps the hardcore-app skill short and pointed at the tools", () => {
+  it("keeps the hardcore-app-use skill short and pointed at the tools", () => {
     const skill = fs.readFileSync(path.join(appRoot, "skills", APP_SKILL, "SKILL.md"), "utf8");
     expect(skill.split("\n").length).toBeLessThanOrEqual(120);
-    expect(skill).toMatch(/^name: hardcore-app$/m);
+    expect(skill).toMatch(/^name: hardcore-app-use$/m);
     for (const tool of ["open_file", "reveal", "attach_snapshot", "list_open_tabs", "viewer_state", "open_url"]) {
       expect(skill).toContain(`\`${tool}`);
     }
