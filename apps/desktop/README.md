@@ -41,9 +41,18 @@ npm run build        # electron-vite build -> out/
 npm run e2e          # playwright _electron against out/ — run `npm run build` first
 ```
 
-`npm run e2e` writes `tests/e2e/__screenshots__/shell.png` (plus `shell-dark`,
-`shell-light` and `settings`). Look at them; they are the cheapest review of
-whether the app still looks like an app.
+`npm run e2e` writes `tests/e2e/__screenshots__/`: the shell in both themes,
+Settings, and one per explorer surface — `file-markdown-preview`,
+`file-markdown-source`, `file-image`, `file-cad-placeholder`, `terminal`,
+`browser-empty`, `browser`, `review`, `strip`, `expanded` and
+`explorer-light`. Look at them; they are the cheapest review of whether the
+app still looks like an app, and every defect found in P3's explorer — a tree
+that did not reveal the open file, a `+` that scrolled out of reach, a
+terminal that replayed its scrollback twice — was found by reading one.
+
+The explorer suite opens **this repository** as its project, on purpose: a
+fixture of six files would pass while the tree ignored nothing and the watcher
+took ten seconds to start.
 
 Nothing in `npm test` loads `better-sqlite3` or `node-pty`: both are built
 against Electron's ABI and will not load in a plain Node process. The migration
@@ -79,18 +88,25 @@ src/main/                 the Electron main process: everything with a side effe
   telemetry.ts            Aptabase, inert without a key and off without the setting
   updater.ts              electron-updater against GitHub Releases; a no-op in dev
   db/                     sqlite: migrations.ts (runner + schema), repositories.ts (rows <-> types)
-  ipc/                    register.ts (validating registration) + index.ts (the handlers)
+  ipc/                    register.ts (validating registration), index.ts (the
+                          handlers), explorer.ts and cad.ts (a phase's branch)
   agents/ acp/            P1
-  explorer/               P3
+  explorer/               fs.ts (tree, ignores, read/write, chokidar watcher),
+                          terminal.ts (node-pty sessions + scrollback)
   cad/                    P4, P5
-  projects/git.ts         P7
+  projects/git.ts         status, per-file diff and commit (P7 adds the modes
+                          and worktrees)
 src/preload/index.ts      the contextBridge: builds `window.hardcore` by walking the contract
-src/shared/               ipc.ts (contract + defineIpc), types.ts (domain types as zod schemas)
+src/shared/               types.ts (domain types as zod schemas)
+  ipc/index.ts            the contract, assembled
+  ipc/invoke.ts           the vocabulary a branch file needs, cycle-free
+  ipc/explorer.ts         explorer.* terminal.* git.* and their events
+  ipc/cad.ts              cad.viewerOrigin — P3's stub, P5's implementation
 src/renderer/
   app/                    Shell (three resizable panes), App, CommandPalette
   features/sidebar        projects and their sessions
   features/session        the empty state and the composer
-  features/explorer       the one tab strip
+  features/explorer       the one tab strip and its four kinds of tab
   features/settings       the full-window Settings route and its seven pages
   components/ui           shadcn/ui, vendored
   components/ai-elements  Vercel AI Elements, vendored (types.ts replaces the `ai` package)
@@ -104,9 +120,11 @@ tests/e2e/                playwright, against the built app
 
 Adding an IPC channel is the shape of most work here:
 
-1. declare it in `src/shared/ipc.ts` with its request and response schemas;
-2. implement it in `src/main/ipc/index.ts` — `registerIpc` refuses to start if
-   a channel has no handler;
+1. declare it in `src/shared/ipc/` with its request and response schemas — a
+   phase's branch is its own file there, spread into the map in `index.ts`;
+2. implement it in `src/main/ipc/` — one file per branch, spread into the
+   handler object in `index.ts`. `registerIpc` refuses to start if a channel
+   has no handler;
 3. call `window.hardcore.<branch>.<name>(...)` from a store in
    `src/renderer/state/`.
 
@@ -119,10 +137,25 @@ lands in the same place a click would.
 - The renderer's Tailwind tokens are stock shadcn neutral, identical to
   `apps/viewer`'s, so P4's `CadFileView` inherits them instead of bringing a
   second theme.
-- `@viewer/*` resolves to `apps/viewer/src/client`, and a scoped Vite plugin
-  runs the viewer's JSX-in-`.js` files through esbuild's `jsx` loader. Nothing
-  imports it yet; the config is ready for P4.
+- The CAD Viewer's `./file-view` entry is compiled from source by this app's
+  bundler, so `electron.vite.config.ts` and `styles/globals.css` carry what
+  `apps/viewer/docs/file-view.md` asks for: the scoped JSX-in-`.js` plugin,
+  the `@` / `cadgen-js` / `three` aliases, `worker: { format: "es" }`, a dev
+  `server.fs.allow`, the `@source` line, and the viewer's own `--ui-*` /
+  `--surface-*` token block copied verbatim into both `:root` and `.dark`.
+  `features/explorer/renderers/CadRenderer.tsx` imports it lazily — the
+  closure is three.js and the whole viewer client, and a window that only
+  opens a README should not pay for it at startup.
 - `src/renderer/components/ai-elements/types.ts` holds local copies of the
   handful of types those components take from Vercel's `ai` package. All twelve
   imports were `import type`, so the package is not a dependency. Re-vendoring a
   component means repointing its `from "ai"` import at `./types`.
+- P3 added exactly two dependencies, both pinned exactly: `ignore` (main —
+  `.gitignore` semantics for the file tree, rather than a hand-rolled matcher
+  that would disagree with git) and `@xterm/addon-web-links` (renderer — a URL
+  a build prints opens in the person's browser).
+- Monaco's five workers are imported as `monaco-editor/editor/editor.worker`,
+  **not** `monaco-editor/esm/vs/editor/editor.worker`. Since 0.5x the package
+  has an exports map whose `"./*"` already points at `./esm/vs/*.js`, so the
+  older deep path resolves to `esm/vs/esm/vs/…` and the build fails with a
+  message that names the file rather than the map.

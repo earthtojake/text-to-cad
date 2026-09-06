@@ -20,11 +20,11 @@ phase is not an oversight — it is the seam.
 | P0 (done) | the project itself, `src/shared`, `src/preload`, `src/main/{index,menu,window-state,telemetry,updater}.ts`, `src/main/db`, `src/main/ipc`, the shell, the command palette, Settings' frame, `tests/` |
 | P1 | `src/main/agents`, `src/main/acp`, `src/shared/acp/reduce.ts`, session creation and the session index |
 | P2 | `src/renderer/features/session` — the transcript, activity rows, composer chips, permissions, plan card |
-| P3 | `src/main/explorer`, `src/renderer/features/explorer` — file tab, tree, Monaco, review, browser, terminal |
-| P4 | `src/main/cad/viewer.ts` and the file tab's CAD renderer, against `apps/viewer`'s new `CadFileView` |
-| P5 | `src/main/cad/{runtime,plugin,mcp-server}.ts`, `resources/`, `skills/hardcore-app` |
+| P3 (done) | `src/main/explorer`, `src/main/ipc/{explorer,cad}.ts`, `src/shared/ipc/{explorer,cad}.ts`, `src/renderer/features/explorer` — file tab, tree, Monaco, review, browser, terminal |
+| P4 (done) | `apps/viewer`'s `CadFileView` and its `viewerOrigin` threading; P3's file tab renders it |
+| P5 | `src/main/cad/{runtime,viewer,plugin,mcp-server}.ts`, `resources/`, `skills/hardcore-app`. `viewer.ts` is what replaces P3's `cad.viewerOrigin` stub — the shape it answers with is already declared, and the renderer already handles both answers |
 | P6 | `src/renderer/features/settings` — the pages' contents |
-| P7 | `src/main/projects/git.ts` and the review tab's actions |
+| P7 | the rest of `src/main/projects/git.ts` — the three git modes and worktrees. P3 wrote its status, per-file diff and commit for the review tab |
 | P8 | `electron-builder.yml`, `scripts/package.mjs`, `updater.ts`, the CI jobs |
 
 Work outside your phase's directories only where the seam requires it — a new
@@ -39,6 +39,16 @@ are expected; reshaping the shell to fit one feature is not.
 - **Every IPC channel is declared once**, as a request schema and a response
   schema. `registerIpc` validates both and refuses to start if a channel has no
   handler. Do not add an `ipcMain.handle` outside it.
+- **A phase's branch is one file on each side.** `src/shared/ipc/<phase>.ts`
+  declares it and `src/shared/ipc/index.ts` spreads it into the map;
+  `src/main/ipc/<phase>.ts` implements it and `src/main/ipc/index.ts` spreads
+  that in. The vocabulary (`invoke`, `defineIpc`) lives in
+  `src/shared/ipc/invoke.ts` so a branch file does not import the map that
+  imports it.
+- **Every path from the renderer arrives with the project it is relative to.**
+  Main resolves the pair against that project's root — after `realpath`, so a
+  symlink is not a door — and refuses anything outside. A channel that took a
+  bare path would be a channel that reads any file on the machine.
 - **`src/renderer/components/{ui,ai-elements}` is vendored**, from the shadcn
   and AI Elements registries. It is excluded from eslint (not from the
   typechecker). Two deliberate edits are in it: the `ai` package's types are
@@ -54,3 +64,7 @@ are expected; reshaping the shell to fit one feature is not.
   drops them silently).
 - **No bottom panel.** The terminal is a fourth explorer tab kind. Everything
   secondary lives in the one strip.
+- **The explorer strip belongs to the project, not to a session.** A person
+  with a file, a terminal and a review open is looking at a directory; closing
+  a thread must not take those away. `explorer_tabs` is keyed by `project_id`
+  (migration 2).

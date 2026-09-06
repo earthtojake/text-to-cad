@@ -27,8 +27,9 @@ describe("defineIpc", () => {
 });
 
 describe("the contract", () => {
-  it("declares the P0 channels", () => {
+  it("declares every channel, in the order the map spreads them", () => {
     expect(ipcChannels(ipcContract).map(([name]) => name)).toEqual([
+      // P0
       "app.info",
       "projects.list",
       "projects.add",
@@ -41,7 +42,41 @@ describe("the contract", () => {
       "window.state",
       "shell.openExternal",
       "shell.showItemInFolder",
+      // P3 — src/shared/ipc/explorer.ts
+      "explorer.list",
+      "explorer.paths",
+      "explorer.stat",
+      "explorer.readText",
+      "explorer.writeText",
+      "explorer.readBinary",
+      "explorer.absolutePath",
+      "explorer.openDefault",
+      "explorer.watch",
+      "explorer.unwatch",
+      "explorer.loadTabs",
+      "explorer.saveTabs",
+      "terminal.create",
+      "terminal.write",
+      "terminal.resize",
+      "terminal.attach",
+      "terminal.kill",
+      "git.status",
+      "git.fileDiff",
+      "git.unifiedDiff",
+      "git.commit",
+      // P3's stub for P5 — src/shared/ipc/cad.ts
+      "cad.viewerOrigin",
     ]);
+  });
+
+  it("makes every explorer read name the project its path is relative to", () => {
+    // A path on its own would be a request to read any file on the machine.
+    const channels = Object.fromEntries(ipcChannels(ipcContract));
+    for (const name of ["explorer.readText", "explorer.stat", "explorer.readBinary"]) {
+      const channel = channels[name];
+      expect(channel?.request.safeParse({ path: "a.txt" }).success).toBe(false);
+      expect(channel?.request.safeParse({ projectId: "p1", path: "a.txt" }).success).toBe(true);
+    }
   });
 
   it("validates requests, which is the whole reason the schemas are there", () => {
