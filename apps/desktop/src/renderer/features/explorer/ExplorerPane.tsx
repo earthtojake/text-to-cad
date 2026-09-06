@@ -1,131 +1,143 @@
-import { FileText, GitCompare, Globe, Plus, SquareTerminal, X } from "lucide-react";
-import { cn } from "cn";
+import { FolderOpen, PanelsTopLeft, Plus } from "lucide-react";
+import { useEffect } from "react";
 
 import { Button } from "@renderer/components/ui/button";
-import { tabTitle, useExplorer } from "@renderer/state/explorer";
-import type { ExplorerTab, ExplorerTabKind } from "@shared/types";
+import { isMac } from "@renderer/lib/platform";
+import { useActiveProject } from "@renderer/state/projects";
+import { useActiveTab, useExplorer } from "@renderer/state/explorer";
+import type { ExplorerTab } from "@shared/types";
+import type { Project } from "@shared/types";
 
-const KIND_ICONS: Record<ExplorerTabKind, React.ReactNode> = {
-  file: <FileText className="size-3.5" />,
-  review: <GitCompare className="size-3.5" />,
-  browser: <Globe className="size-3.5" />,
-  terminal: <SquareTerminal className="size-3.5" />,
-};
+import { BrowserTab } from "./BrowserTab";
+import { EmptyState } from "./EmptyState";
+import { FileTab } from "./FileTab";
+import { ReviewTab } from "./ReviewTab";
+import { TabStrip } from "./TabStrip";
+import { TerminalTab } from "./TerminalTab";
 
 /**
- * One tab strip, four kinds of tab, no bottom panel (plan §3). P3 gives each
- * kind a body; P4 makes the file tab render CAD through the viewer's
- * `CadFileView`.
+ * The explorer: one tab strip and whatever the selected tab renders.
+ *
+ * Every tab kind is kept mounted only while it is selected. That is the
+ * cheaper half of a real trade-off — a webview and an xterm each cost a
+ * process and a canvas, and eight background tabs of them is a slow window —
+ * and the state that would otherwise be lost is kept where it belongs instead:
+ * the pty's output in main, the browser's URL on the tab, the file's draft in
+ * the tab's own component, the tree's geometry in the store.
  */
 export function ExplorerPane() {
+  const project = useActiveProject();
   const tabs = useExplorer((state) => state.tabs);
-  const activeId = useExplorer((state) => state.activeId);
+  const ready = useExplorer((state) => state.ready);
   const open = useExplorer((state) => state.open);
-  const close = useExplorer((state) => state.close);
-  const setActive = useExplorer((state) => state.setActive);
+  const active = useActiveTab();
 
-  const active = tabs.find((tab) => tab.id === activeId) ?? null;
+  useExplorerShortcuts();
+
+  if (!project) {
+    return (
+      <Frame>
+        <EmptyState
+          description="Files, reviews, browsers and terminals open here, in one strip — once there is a project to open them from."
+          icon={FolderOpen}
+          title="No project"
+        />
+      </Frame>
+    );
+  }
 
   return (
-    <div className="flex h-full flex-col border-l">
-      <div
-        className="app-drag flex shrink-0 items-stretch gap-1 overflow-x-auto px-2"
-        style={{ height: "var(--titlebar-height)" }}
-      >
-        <div className="app-no-drag flex items-center gap-1">
-          {tabs.map((tab) => (
-            <TabButton
-              active={tab.id === activeId}
-              key={tab.id}
-              onClose={() => close(tab.id)}
-              onSelect={() => setActive(tab.id)}
-              tab={tab}
-            />
-          ))}
-          <Button
-            aria-label="New tab"
-            className="size-6 text-muted-foreground"
-            onClick={() => open("file")}
-            size="icon-xs"
-            variant="ghost"
-          >
-            <Plus className="size-3.5" />
-          </Button>
-        </div>
+    <Frame>
+      <TabStrip />
+      <div className="min-h-0 flex-1">
+        {active ? (
+          <TabBody key={active.id} project={project} tab={active} />
+        ) : (
+          <EmptyState
+            action={
+              <Button className="h-7 gap-1.5 text-xs" onClick={() => open("file")} size="sm" variant="secondary">
+                <Plus className="size-3.5" />
+                Open a file
+              </Button>
+            }
+            description={
+              ready && tabs.length === 0
+                ? "Files, reviews, browsers and terminals all open here, in one strip."
+                : "Restoring…"
+            }
+            icon={PanelsTopLeft}
+            title="Nothing open"
+          />
+        )}
       </div>
-
-      <div className="min-h-0 flex-1 border-t bg-card/40">
-        {active ? <TabBody tab={active} /> : <EmptyExplorer onOpen={() => open("file")} />}
-      </div>
-    </div>
+    </Frame>
   );
 }
 
-function TabButton({
-  tab,
-  active,
-  onSelect,
-  onClose,
-}: {
-  tab: ExplorerTab;
-  active: boolean;
-  onSelect: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "group/tab flex h-7 max-w-[200px] items-center gap-1.5 rounded-md pr-1 pl-2 text-[13px] transition-colors",
-        active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/60",
-      )}
-    >
-      <button className="flex min-w-0 items-center gap-1.5" onClick={onSelect} type="button">
-        {KIND_ICONS[tab.kind]}
-        <span className="truncate">{tabTitle(tab)}</span>
-      </button>
-      <button
-        aria-label={`Close ${tabTitle(tab)}`}
-        className="flex size-4 shrink-0 items-center justify-center rounded-sm opacity-0 transition-opacity group-hover/tab:opacity-100 hover:bg-background/60"
-        onClick={onClose}
-        type="button"
-      >
-        <X className="size-3" />
-      </button>
-    </div>
-  );
+function Frame({ children }: { children: React.ReactNode }) {
+  return <div className="flex h-full min-h-0 flex-col border-l">{children}</div>;
+}
+
+function TabBody({ tab, project }: { tab: ExplorerTab; project: Project }) {
+  switch (tab.kind) {
+    case "file":
+      return (
+        <FileTab
+          path={tab.path}
+          project={project}
+          tabId={tab.id}
+          viewSource={tab.viewSource}
+        />
+      );
+    case "review":
+      return <ReviewTab project={project} scope={tab.scope} tabId={tab.id} />;
+    case "browser":
+      return <BrowserTab tabId={tab.id} url={tab.url} />;
+    case "terminal":
+      return (
+        <TerminalTab
+          cwd={tab.cwd}
+          project={project}
+          ptyId={tab.ptyId}
+          readOnly={tab.readOnly}
+          tabId={tab.id}
+        />
+      );
+  }
 }
 
 /**
- * Placeholder bodies. Each one names the phase that replaces it, so an empty
- * pane in a screenshot is legible instead of looking like a bug.
+ * The strip's keyboard.
+ *
+ * On the window rather than on the strip, because the chords have to work
+ * while the focus is inside a tab's body — an editor, a terminal, a webview —
+ * which is where it usually is. `Cmd/Ctrl+W` is intercepted before the menu's
+ * default close-window accelerator: with tabs open it means "close this tab",
+ * and only an empty strip lets it close the window.
  */
-function TabBody({ tab }: { tab: ExplorerTab }) {
-  const copy: Record<ExplorerTabKind, string> = {
-    file: "A file tree, Monaco, the markdown preview and the CAD file surface land in P3 and P4.",
-    review: "Per-file diffs and Commit or push land in P3.",
-    browser: "The webview and its chrome land in P3.",
-    terminal: "xterm.js over node-pty lands in P3.",
-  };
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">
-      <span className="text-muted-foreground">{KIND_ICONS[tab.kind]}</span>
-      <p className="text-sm font-medium">{tabTitle(tab)}</p>
-      <p className="max-w-[320px] text-xs text-muted-foreground">{copy[tab.kind]}</p>
-    </div>
-  );
-}
+function useExplorerShortcuts() {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const modifier = isMac ? event.metaKey : event.ctrlKey;
+      if (!modifier || event.altKey) {
+        return;
+      }
+      const { tabs, activeId, closeActive, selectIndex } = useExplorer.getState();
 
-function EmptyExplorer({ onOpen }: { onOpen: () => void }) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
-      <p className="text-sm font-medium">Nothing open</p>
-      <p className="max-w-[300px] text-xs text-muted-foreground">
-        Files, reviews, browsers and terminals all open here, in one strip.
-      </p>
-      <Button className="h-7 text-xs" onClick={onOpen} size="sm" variant="secondary">
-        <Plus className="size-3.5" />
-        Open a file
-      </Button>
-    </div>
-  );
+      if (event.key.toLowerCase() === "w" && !event.shiftKey && activeId) {
+        event.preventDefault();
+        closeActive();
+        return;
+      }
+      if (/^[1-9]$/.test(event.key) && tabs.length > 0) {
+        event.preventDefault();
+        // 9 is the last tab, the way browsers do it — otherwise the ninth
+        // shortcut is dead in every strip with fewer than nine tabs.
+        selectIndex(event.key === "9" ? tabs.length : Number(event.key));
+      }
+    };
+    // Capture: a terminal and Monaco both swallow keys on the bubble phase.
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, []);
 }

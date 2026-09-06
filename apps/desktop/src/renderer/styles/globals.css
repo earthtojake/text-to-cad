@@ -98,6 +98,74 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* ------------------------------------------------------------------ *
+   * The CAD Viewer's own token layer, copied verbatim from
+   * apps/viewer/src/client/styles/globals.css.
+   *
+   * `<CadFileView>` (the explorer's CAD renderer) is written against
+   * shadcn's names *and* against these — `--ui-glass-*`, `--surface-*`,
+   * `--background-N`, the status colours. Nothing sets them for you, and
+   * without them the surface renders with correct markup and no panels
+   * (apps/viewer/docs/file-view.md §5). They are all derived from the
+   * shadcn values above, so there is still one palette.
+   * ------------------------------------------------------------------ */
+
+  /* Tokens the viewer's components consume beyond shadcn's set, derived from
+   * the shadcn values above so no second palette appears. */
+  --background-1: var(--secondary);
+  --background-2: oklch(0.94 0 0);
+  --background-3: var(--border);
+  --foreground-inverse: var(--primary-foreground);
+  --foreground-muted: var(--muted-foreground);
+  --foreground-passive: var(--ring);
+  --border-1: var(--ring);
+  --border-2: var(--muted-foreground);
+  --border-primary: var(--primary);
+  --selection: var(--accent);
+  --selection-foreground: var(--accent-foreground);
+  --hc-cad-scene: var(--background);
+  --foreground-success: oklch(0.448 0.119 151.328);
+  --background-success: oklch(0.95 0.052 163.051);
+  --background-success-hover: oklch(0.925 0.06 163.051);
+  --border-success: oklch(0.8 0.1 155);
+  --foreground-error: oklch(0.505 0.213 27.518);
+  --background-error: oklch(0.936 0.032 17.717);
+  --background-error-hover: oklch(0.9 0.045 17.717);
+  --border-error: oklch(0.8 0.12 22);
+  --foreground-warning: oklch(0.473 0.137 46.201);
+  --background-warning: oklch(0.962 0.059 95.617);
+  --background-warning-hover: oklch(0.94 0.075 95.617);
+  --border-warning: oklch(0.85 0.13 85);
+  --foreground-info: oklch(0.488 0.243 264.376);
+  --background-info: oklch(0.95 0.03 264);
+  --background-info-hover: oklch(0.92 0.045 264);
+  --border-info: oklch(0.8 0.1 264);
+  --surface-sunken: var(--secondary);
+  --surface-sunken-hover: oklch(0.94 0 0);
+  --surface-sunken-selected: var(--border);
+  --surface-base: var(--background);
+  --surface-base-hover: var(--secondary);
+  --surface-base-selected: oklch(0.94 0 0);
+  --surface-elevated: var(--popover);
+  --surface-elevated-hover: var(--secondary);
+  --surface-elevated-selected: oklch(0.94 0 0);
+  --surface-paper: var(--background);
+  --surface-paper-hover: var(--secondary);
+  --surface-paper-selected: oklch(0.94 0 0);
+
+  /* Frosted glass over the 3D scene — viewer-owned. */
+  --cad-scene-backdrop: var(--hc-cad-scene);
+  --ui-glass-blur: 32px;
+  --ui-glass-saturation: 1.45;
+  --ui-glass-surface-tint: color-mix(in srgb, var(--cad-scene-backdrop) 60%, var(--sidebar));
+  --ui-glass-popover-tint: color-mix(in srgb, var(--cad-scene-backdrop) 45%, var(--popover));
+  --ui-glass-control-tint: color-mix(in srgb, var(--cad-scene-backdrop) 55%, var(--background));
+  --ui-glass-surface: color-mix(in srgb, var(--ui-glass-surface-tint) 42%, transparent);
+  --ui-glass-popover: color-mix(in srgb, var(--ui-glass-popover-tint) 56%, transparent);
+  --ui-glass-control: color-mix(in srgb, var(--ui-glass-control-tint) 34%, transparent);
+  --ui-loading-overlay: color-mix(in srgb, var(--background) 38%, transparent);
+  --ui-loading-overlay-strong: color-mix(in srgb, var(--background) 76%, transparent);
 }
 
 .dark {
@@ -134,6 +202,52 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* The CAD Viewer's token layer, dark. See the note in `:root`. */
+
+  --background-1: var(--card);
+  --background-2: var(--secondary);
+  --background-3: oklch(0.32 0 0);
+  --foreground-inverse: var(--primary-foreground);
+  --foreground-muted: var(--muted-foreground);
+  --foreground-passive: var(--ring);
+  --border-1: var(--ring);
+  --border-2: var(--muted-foreground);
+  --border-primary: var(--primary);
+  --selection: var(--accent);
+  --selection-foreground: var(--accent-foreground);
+  --hc-cad-scene: var(--background);
+  --foreground-success: oklch(0.871 0.15 154.449);
+  --background-success: oklch(0.262 0.051 172.552);
+  --background-success-hover: oklch(0.3 0.06 172.552);
+  --border-success: oklch(0.45 0.1 160);
+  --foreground-error: oklch(0.808 0.114 19.571);
+  --background-error: oklch(0.258 0.092 26.042);
+  --background-error-hover: oklch(0.3 0.1 26.042);
+  --border-error: oklch(0.45 0.15 25);
+  --foreground-warning: oklch(0.879 0.169 91.605);
+  --background-warning: oklch(0.269 0.077 45.635);
+  --background-warning-hover: oklch(0.31 0.085 45.635);
+  --border-warning: oklch(0.5 0.12 70);
+  --foreground-info: oklch(0.75 0.15 264);
+  --background-info: oklch(0.27 0.06 264);
+  --background-info-hover: oklch(0.31 0.07 264);
+  --border-info: oklch(0.45 0.12 264);
+  --surface-sunken: var(--background);
+  --surface-sunken-hover: var(--card);
+  --surface-sunken-selected: var(--secondary);
+  --surface-base: var(--card);
+  --surface-base-hover: var(--secondary);
+  --surface-base-selected: oklch(0.32 0 0);
+  --surface-elevated: var(--secondary);
+  --surface-elevated-hover: oklch(0.32 0 0);
+  --surface-elevated-selected: oklch(0.37 0 0);
+  --surface-paper: var(--card);
+  --surface-paper-hover: var(--secondary);
+  --surface-paper-selected: oklch(0.32 0 0);
+
+  --ui-loading-overlay: rgb(20 20 20 / 40%);
+  --ui-loading-overlay-strong: rgb(20 20 20 / 78%);
 }
 
 @layer base {
