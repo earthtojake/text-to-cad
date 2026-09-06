@@ -80,4 +80,5 @@ rejected during negotiation because scheduled automations and preview-server str
 
 The desktop has no hosted app account or sign-in gate. GitHub connections use the local
 GitHub CLI or GitHub device flow from settings; agent authentication stays with each
-provider CLI. First run offers legacy data import when available, then opens the welcome screen.
+provider CLI. First run opens the welcome screen directly. Existing Hardcore projects and chats
+continue through the normal database migrations.

@@ -47,7 +47,6 @@ import {
   showBootSplashEscapeHatch,
 } from '@renderer/lib/boot/boot-splash';
 import {
-  appQueriesSettled,
   raceSplashGate,
   SPLASH_GATE_TIMEOUT_MS,
   waitForActiveProjectContext,
@@ -166,10 +165,7 @@ async function bootstrap() {
     hydrateProjectContext: (projectId) => getProjectManagerStore().hydrateProjectContext(projectId),
   });
 
-  const gate = raceSplashGate(
-    [navigationRestored, activeProjectReady, appQueriesSettled()],
-    SPLASH_GATE_TIMEOUT_MS
-  );
+  const gate = raceSplashGate([navigationRestored, activeProjectReady], SPLASH_GATE_TIMEOUT_MS);
 
   // Render immediately behind the splash; the gate only decides when the
   // splash lifts. Avoid double-mount in dev which can duplicate PTY sessions.

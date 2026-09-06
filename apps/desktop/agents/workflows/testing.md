@@ -23,8 +23,8 @@ pnpm run test
 
 - Vitest config is in `vitest.config.ts` (separate from the build config in `electron.vite.config.ts`).
 - Five test projects:
-  - `node` — `src/**/*.test.ts` excluding `_*` dirs, browser tests, migration tests, `*.db.test.ts`, and `src/main/db/legacy-port/**/*.test.ts`
-  - `main-db` — `src/main/core/**/*.db.test.ts` and `src/main/db/legacy-port/**/*.test.ts` against real SQLite
+  - `node` — `src/**/*.test.ts` excluding `_*` dirs, browser tests, migration tests, `*.db.test.ts`
+  - `main-db` — `src/main/core/**/*.db.test.ts` against real SQLite
   - `fixtures` — fixture generator, run via `pnpm run db:fixtures`
   - `migrations` — `src/main/db/tests/migrations/**`, run via `pnpm run test:migrations`
   - `browser` — `src/renderer/tests/browser/**/*.test.{ts,tsx}` via Playwright

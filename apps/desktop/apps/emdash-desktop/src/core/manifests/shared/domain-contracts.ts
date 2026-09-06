@@ -6,7 +6,6 @@ import { devPerfContract, devPerfDomain } from '@core/features/dev-perf/api';
 import { editorContract, editorDomain } from '@core/features/editor/api';
 import { filesDomain, filesWireContract } from '@core/features/files/api';
 import { githubContract, githubDomain } from '@core/features/github/api';
-import { legacyPortContract, legacyPortDomain } from '@core/features/legacy-port/api';
 import { promptLibraryContract, promptLibraryDomain } from '@core/features/library/api';
 import { machinesContract, machinesDomain } from '@core/features/machines/api';
 import { mcpContract, mcpDomain } from '@core/features/mcp/api';
@@ -49,7 +48,6 @@ export const desktopDomainContracts = {
   [devPerfDomain]: devPerfContract,
   [editorDomain]: editorContract,
   [filesDomain]: filesWireContract,
-  [legacyPortDomain]: legacyPortContract,
   [loggingDomain]: loggingWireContract,
   [machinesDomain]: machinesContract,
   [projectSettingsDomain]: projectSettingsContract,

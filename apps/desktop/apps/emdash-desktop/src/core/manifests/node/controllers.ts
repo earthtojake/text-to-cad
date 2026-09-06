@@ -27,10 +27,6 @@ import { createEditorWireController } from '@core/features/editor/node/wire-cont
 import { createFilesWireController } from '@core/features/files/node/wire-controller';
 import type { GitCredentialsService } from '@core/features/github/api/node/services/git-credentials-service';
 import { createGithubWireController } from '@core/features/github/node/wire-controller';
-import {
-  createLegacyPortWireController,
-  type LegacyPortControllerOperations,
-} from '@core/features/legacy-port/node/wire-controller';
 import type { PromptLibraryService } from '@core/features/library/node/prompt-library-service';
 import { createPromptLibraryWireController } from '@core/features/library/node/wire-controller';
 import { createMachinesWireController } from '@core/features/machines/node/wire-controller';
@@ -117,7 +113,6 @@ export type DesktopControllerContext = {
   readonly hostAvailability: HostAvailabilityService;
   readonly hostIsReachable: HostReachabilityProbe;
   readonly hostOperations: DesktopHostControllerOperations;
-  readonly legacyPortOperations: LegacyPortControllerOperations;
   readonly logger: Logger;
   readonly loggingOperations: LoggingControllerOperations;
   readonly notifications: NotificationService;
@@ -186,9 +181,6 @@ export const desktopNodeControllers = {
   },
   files: {
     create: ({ runtimes }) => createFilesWireController({ runtimes }),
-  },
-  legacyPort: {
-    create: ({ legacyPortOperations }) => createLegacyPortWireController(legacyPortOperations),
   },
   logging: {
     create: ({ loggingOperations }) => createLoggingWireController(loggingOperations),

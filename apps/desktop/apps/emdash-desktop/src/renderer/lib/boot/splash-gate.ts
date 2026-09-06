@@ -2,7 +2,7 @@
  * The boot splash gate: decides when the single boot loading state ends.
  *
  * The splash lifts when the last-active view can render — mementos and
- * navigation restored, the session/onboarding queries answered, and the one
+ * navigation restored and the one
  * Project that view needs hydrated from desktop state — raced against a short
  * timer. Host readiness and attachment continue independently behind the gate.
  */
@@ -40,19 +40,4 @@ export async function waitForActiveProjectContext(options: {
   if (!projectId) return;
   await options.projectsLoaded;
   await options.hydrateProjectContext(projectId);
-}
-
-let resolveAppQueries: (() => void) | undefined;
-const appQueries = new Promise<void>((resolve) => {
-  resolveAppQueries = resolve;
-});
-
-/** AppContent reports that the session/onboarding queries have resolved. */
-export function reportAppQueriesSettled(): void {
-  resolveAppQueries?.();
-}
-
-/** Gate condition: the session/onboarding queries have resolved. */
-export function appQueriesSettled(): Promise<void> {
-  return appQueries;
 }
