@@ -29,9 +29,10 @@ import { projects, sessions, settings } from "../db/repositories";
 import { rootBelongsToProject } from "../projects/workspace";
 import * as git from "../projects/git";
 import { createActions, RendererCommands } from "./actions";
+import { DaemonWarmer } from "./daemon";
 import { McpBridge, type BridgeSession } from "./mcp-bridge";
 import { PluginManager } from "./plugin";
-import { CadRuntime, execCommand, nodeHost } from "./runtime";
+import { CadRuntime, execCommand, nodeHost, runtimeLogPath } from "./runtime";
 import { ViewerManager } from "./viewer";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -71,6 +72,7 @@ let viewersInstance: ViewerManager | null = null;
 let bridgeInstance: McpBridge | null = null;
 let pluginsInstance: PluginManager | null = null;
 let commandsInstance: RendererCommands | null = null;
+let daemonInstance: DaemonWarmer | null = null;
 
 export function cadRuntime(): CadRuntime {
   if (!runtimeInstance) {
@@ -100,6 +102,34 @@ export function rendererCommands(): RendererCommands {
   return commandsInstance;
 }
 
+export function daemonWarmer(): DaemonWarmer {
+  if (!daemonInstance) {
+    throw new Error("the CAD runtime is not initialised");
+  }
+  return daemonInstance;
+}
+
+/**
+ * A project opened at `root`: start what its first CAD file will need. The
+ * viewer's launch probes the runtime first (`import cadgen.viewer`, which
+ * primes the interpreter's caches for every cadgen process after it), and
+ * the daemon follows once the probe has said which interpreter runs. Nothing
+ * here is awaited by the caller; `cad.viewerOrigin` shares the launch.
+ *
+ * Measured on the reference machine (scripts/perf-cad.mjs): the first STEP
+ * open after launch paid 0.9 s for the probe and the viewer and 3.5 s for
+ * the daemon's own start inside its compile; warmed at project open, both
+ * are done before the click.
+ */
+export async function warmCad(root: string): Promise<void> {
+  const viewer = viewers().originFor(root);
+  const resolved = await cadRuntime().ready();
+  if (resolved) {
+    daemonWarmer().warm(resolved, root);
+  }
+  await viewer;
+}
+
 export type CadDeps = {
   detector: AgentDetector;
   sendCommand: (command: CadCommand) => void;
@@ -126,6 +156,15 @@ export async function initCad(deps: CadDeps): Promise<void> {
     log: (line) => {
       console.info(`[viewer] ${line}`);
       void runtimeInstance!.log(`[viewer] ${line}`);
+    },
+  });
+
+  daemonInstance = new DaemonWarmer({
+    env: (resolved) => runtimeInstance!.processEnv(resolved),
+    logFile: () => runtimeLogPath(userData),
+    log: (line) => {
+      console.info(`[daemon] ${line}`);
+      void runtimeInstance!.log(`[daemon] ${line}`);
     },
   });
 

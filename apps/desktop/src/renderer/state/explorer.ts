@@ -333,6 +333,10 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       set({ ready: true });
       return;
     }
+    // The project's CAD runtime starts now — the probe, the viewer for this
+    // root, the build daemon — so the first CAD file finds them up
+    // (src/main/cad/index.ts, `warmCad`). Nothing waits on it.
+    void window.hardcore.cad.warm({ projectId, ...(root ? { root } : {}) }).catch(() => {});
     const [tabs] = await Promise.all([
       window.hardcore.explorer.loadTabs({ projectId }).catch(() => [] as ExplorerTab[]),
       watch(projectId, root),

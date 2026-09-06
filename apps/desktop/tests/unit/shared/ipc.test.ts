@@ -104,6 +104,7 @@ describe("the contract", () => {
       "git.removeWorktree",
       // P5 — src/shared/ipc/cad.ts
       "cad.viewerOrigin",
+      "cad.warm",
       "cad.reply",
     ]);
   });

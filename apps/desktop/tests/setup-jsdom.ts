@@ -146,7 +146,10 @@ Object.defineProperty(window, "hardcore", {
       worktrees: vi.fn(async () => []),
       removeWorktree: vi.fn(async () => undefined),
     },
-    cad: { viewerOrigin: vi.fn(async () => ({ origin: null, reason: "runtime-not-ready" })) },
+    cad: {
+      viewerOrigin: vi.fn(async () => ({ origin: null, reason: "runtime-not-ready" })),
+      warm: vi.fn(async () => undefined),
+    },
     on: vi.fn(() => () => {}),
   },
 });
