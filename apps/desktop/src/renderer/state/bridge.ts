@@ -1,0 +1,80 @@
+/**
+ * One place where main's pushes land in the stores.
+ *
+ * Components subscribe to stores, never to IPC. That keeps the event listeners
+ * out of React's lifecycle — a `projects.changed` listener mounted per row
+ * would be re-registered on every render of the sidebar — and it means a
+ * change made from the app menu updates the same state a click would.
+ */
+import { useExplorer } from "./explorer";
+import { useProjects } from "./projects";
+import { useSessions } from "./sessions";
+import { useSettings } from "./settings";
+import { useUi } from "./ui";
+
+/** Attach every main → renderer listener. Returns a detach function. */
+export function subscribeToMain(): () => void {
+  const off = [
+    window.hardcore.on("projects.changed", (projects) => {
+      useProjects.getState().receive(projects);
+    }),
+    window.hardcore.on("sessions.changed", (sessions) => {
+      useSessions.getState().receive(sessions);
+    }),
+    window.hardcore.on("settings.changed", (settings) => {
+      useSettings.getState().receive(settings);
+    }),
+    window.hardcore.on("ui.command", ({ command }) => {
+      const ui = useUi.getState();
+      switch (command) {
+        case "open-settings":
+          ui.openSettings();
+          break;
+        case "close-settings":
+          ui.closeSettings();
+          break;
+        case "command-palette":
+          ui.toggleCommandPalette();
+          break;
+        case "toggle-sidebar":
+          void toggleLayout("sidebarCollapsed");
+          break;
+        case "toggle-explorer":
+          void toggleLayout("explorerCollapsed");
+          break;
+        case "new-session":
+          // P1 owns session creation. Until then the menu item lands on the
+          // new-session state the session pane already shows.
+          useSessions.getState().setActive(null);
+          useUi.getState().closeSettings();
+          break;
+      }
+    }),
+  ];
+
+  return () => {
+    for (const detach of off) {
+      detach();
+    }
+  };
+}
+
+function toggleLayout(key: "sidebarCollapsed" | "explorerCollapsed") {
+  const { settings, setLayout } = useSettings.getState();
+  if (!settings) {
+    return Promise.resolve();
+  }
+  return setLayout({ [key]: !settings.layout[key] });
+}
+
+/** First read of everything the shell needs. */
+export async function hydrate(): Promise<void> {
+  await Promise.all([
+    useSettings.getState().load(),
+    useProjects.getState().load(),
+    useSessions.getState().load(),
+  ]);
+  // Nothing to hydrate for the explorer yet — the strip is in-memory until P3
+  // persists it. Named here so the omission is a decision, not an oversight.
+  void useExplorer;
+}
