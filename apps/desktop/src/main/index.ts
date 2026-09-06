@@ -9,7 +9,7 @@ import { BrowserWindow, app, nativeImage, shell } from "electron";
 
 import { initCad, pluginManager, shutdownCad } from "./cad";
 import { endTrackedChildren, killTrackedChildren } from "./children";
-import { closeDb, db } from "./db";
+import { closeDb, databaseFile, db } from "./db";
 import { broadcast, registerIpcHandlers } from "./ipc";
 import { shutdownAcp } from "./ipc/acp";
 import { detector, shutdownAgents } from "./ipc/agents";
@@ -34,6 +34,22 @@ const RENDERER_DEV_URL = process.env.ELECTRON_RENDERER_URL;
  * without being told otherwise.
  */
 const DEV_ICON = path.resolve(dirname, "..", "..", "build", "icon.png");
+
+/**
+ * The app's name decides its data directory (`appData/<name>`), and Electron
+ * takes the name from whichever package.json it happened to load: the
+ * packaged app's, `apps/desktop`'s under `electron .`, and NOTHING under
+ * `electron out/main/index.js` (then the name is "Electron" and the database
+ * lands in a directory called that). Every launch of this code is Hardcore,
+ * so the name and the directory are set here, before the single-instance
+ * lock (which lives in that directory) and before the database opens. A
+ * `--user-data-dir` on the command line — the e2e suite's — still wins.
+ */
+app.setName("Hardcore");
+if (!app.commandLine.hasSwitch("user-data-dir")) {
+  app.setPath("userData", path.join(app.getPath("appData"), "Hardcore"));
+  app.setPath("sessionData", app.getPath("userData"));
+}
 
 function createWindow() {
   const state = restoreWindowState();
@@ -129,10 +145,12 @@ if (!app.requestSingleInstanceLock()) {
       // one has the bundle's icon and needs nothing here.
       void app.dock?.setIcon(nativeImage.createFromPath(DEV_ICON));
     }
-    app.setName("Hardcore");
     // Opening (and migrating) before the first window means the renderer's
-    // first `projects.list` cannot race the schema.
+    // first `projects.list` cannot race the schema. The path is logged so a
+    // "my projects are gone" report can be checked against the file that was
+    // actually written.
     db();
+    console.info(`[db] ${databaseFile()}`);
     registerIpcHandlers();
     // The CAD runtime, the viewer manager and the MCP bridge, before the
     // first window: the file tab's first `cad.viewerOrigin` and the first
