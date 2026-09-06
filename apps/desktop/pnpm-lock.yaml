@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@agentclientprotocol/codex-acp@1.0.2':
+    hash: 36261ecff890bc5471767f87856022556855163a0bae5597b8b7b4ffee4e9d3f
+    path: patches/@agentclientprotocol__codex-acp@1.0.2.patch
+
 importers:
 
   .:
@@ -528,7 +533,7 @@ importers:
         version: 0.54.1(@anthropic-ai/sdk@0.106.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))
       '@agentclientprotocol/codex-acp':
         specifier: ^1.0.2
-        version: 1.0.2
+        version: 1.0.2(patch_hash=36261ecff890bc5471767f87856022556855163a0bae5597b8b7b4ffee4e9d3f)
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260609.1
         version: 7.0.0-dev.20260609.1
@@ -7783,7 +7788,7 @@ snapshots:
       - '@anthropic-ai/sdk'
       - '@modelcontextprotocol/sdk'
 
-  '@agentclientprotocol/codex-acp@1.0.2':
+  '@agentclientprotocol/codex-acp@1.0.2(patch_hash=36261ecff890bc5471767f87856022556855163a0bae5597b8b7b4ffee4e9d3f)':
     dependencies:
       '@agentclientprotocol/sdk': 1.1.0(zod@4.4.3)
       '@openai/codex': 0.142.4

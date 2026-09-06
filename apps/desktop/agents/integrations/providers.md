@@ -101,11 +101,15 @@ adapter calls the client terminal methods; both run commands themselves.
 
 Adapter tests alone do not establish live subagent visualization. On 2026-09-06, a real
 Codex GPT-6-Astra desktop turn launched two read-only subagents and returned their answers,
-but the installed app-server's `thread/read` exposed only two `collabAgentToolCall` wait
-items, with empty receiver IDs and agent states. Spawn and interrupt calls existed in the
-provider transcript but were absent from those app-server items, so the desktop showed
-wait rows without individual subagent rows. Do not describe that configuration as full
-subagent visualization or synthesize lifecycle events from the agent's prose.
+but the desktop showed only wait rows. The initial audit inspected `collabAgentToolCall`
+items and missed the separate typed `subAgentActivity` records in `thread/read`.
+`codex-acp@1.0.2` explicitly dropped those records in both live notifications and history.
+The small pnpm patch under `patches/` forwards them as ACP tool calls, and Codex enrichment
+maps their child IDs, names and lifecycle to subagent rows. Remove the patch when the upstream
+adapter supports these records. No experimental raw stream or prose inference is needed.
+Typed activity also wins over same-ID raw history fallbacks, including their redundant completion
+updates. A fresh two-agent desktop turn displayed both named rows and completed states; both
+rows survived an application restart and history reload.
 
 Recheck with a real desktop turn after provider updates: confirm named spawn/running rows,
 completion/failure state, and persistence after reopening the thread. Codex child transcripts

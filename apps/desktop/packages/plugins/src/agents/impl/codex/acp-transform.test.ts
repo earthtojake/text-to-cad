@@ -206,6 +206,58 @@ describe('enrichCodexUpdate command output', () => {
   });
 });
 
+describe('enrichCodexUpdate child activity', () => {
+  const child = '01a0758a-19c1-7af2-b22d-cd3e7e20f7f7';
+  const activity = (kind: string, overrides: Record<string, unknown> = {}) =>
+    makeRaw({
+      type: 'subAgentActivity',
+      kind,
+      agentThreadId: child,
+      agentPath: '/root/card_dimensions',
+      ...overrides,
+    });
+
+  it('shows the named child as running even though the spawn activity is complete', () => {
+    expect(enrichCodexUpdate(makeToolCall({ status: 'completed' }), activity('started'))).toEqual({
+      kind: 'subagent',
+      toolCallId: 'tc-1',
+      title: 'card_dimensions',
+      status: 'in_progress',
+      parentToolCallId: null,
+      background: true,
+      agentId: child,
+    });
+  });
+
+  it.each(['completed', 'interrupted'])(
+    'settles %s activity by child id, not activity id',
+    (kind) => {
+      expect(
+        enrichCodexUpdate(makeToolCall({ toolCallId: 'different-call' }), activity(kind))
+      ).toEqual({ kind: 'subagent_update', agentId: child, status: 'completed' });
+    }
+  );
+
+  it('keeps interactions separate from spawn rows', () => {
+    expect(enrichCodexUpdate(makeToolCall(), activity('interacted'))).toMatchObject({
+      kind: 'tool_call',
+      title: 'Message to agent',
+      inputSummary: '/root/card_dimensions',
+    });
+  });
+
+  it.each([
+    { type: 'another-tool' },
+    { agentThreadId: null },
+    { agentThreadId: '' },
+    { agentPath: null },
+    { kind: 'unknown' },
+  ])('leaves unsupported activity intact: %j', (overrides) => {
+    const update = makeToolCall();
+    expect(enrichCodexUpdate(update, activity('started', overrides))).toBe(update);
+  });
+});
+
 describe('enrichCodexUpdate multi-agent tools', () => {
   const child = '019f259c-8089-7470-a1ac-f0481c9eb13a';
 

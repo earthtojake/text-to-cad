@@ -31,3 +31,6 @@ ignoredOptionalDependencies:
   - '@openai/codex-linux-x64'
   - '@openai/codex-win32-arm64'
   - '@openai/codex-win32-x64'
+
+patchedDependencies:
+  '@agentclientprotocol/codex-acp@1.0.2': patches/@agentclientprotocol__codex-acp@1.0.2.patch

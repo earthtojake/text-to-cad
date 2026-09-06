@@ -14,6 +14,9 @@ const COLLAB_TOOLS = new Set(['spawnAgent', 'sendInput', 'wait', 'closeAgent']);
 export function enrichCodexUpdate(update: NormalizedEvent, raw: SessionUpdate): NormalizedEvent {
   if (update.kind !== 'tool_call' && update.kind !== 'tool_update') return update;
 
+  const activity = codexSubAgentActivity(update, raw);
+  if (activity) return activity;
+
   const collab = codexCollabEvent(update, raw);
   if (collab) return collab;
 
@@ -97,6 +100,49 @@ type CollabInput = {
   receiverThreadIds?: unknown;
   agentsStates?: unknown;
 };
+
+/** Current Codex reports child lifecycle separately from collaboration tool calls. */
+function codexSubAgentActivity(
+  update: Extract<NormalizedEvent, { kind: 'tool_call' | 'tool_update' }>,
+  raw: SessionUpdate
+): NormalizedEvent | null {
+  const input = (raw as { rawInput?: unknown }).rawInput;
+  if (!input || typeof input !== 'object') return null;
+  const activity = input as Record<string, unknown>;
+  if (
+    activity.type !== 'subAgentActivity' ||
+    typeof activity.agentThreadId !== 'string' ||
+    !activity.agentThreadId ||
+    typeof activity.agentPath !== 'string'
+  ) {
+    return null;
+  }
+  const agentId = activity.agentThreadId;
+  switch (activity.kind) {
+    case 'started':
+      return {
+        kind: 'subagent',
+        toolCallId: update.toolCallId,
+        title: compactText(
+          activity.agentPath.split('/').filter(Boolean).at(-1) || 'Codex agent',
+          100
+        ),
+        status: 'in_progress',
+        parentToolCallId: update.parentToolCallId,
+        background: true,
+        agentId,
+      };
+    case 'completed':
+    case 'interrupted':
+      // This signal says the child stopped, not that its task failed. Codex
+      // also emits interrupted when closing an already completed child.
+      return { kind: 'subagent_update', agentId, status: 'completed' };
+    case 'interacted':
+      return describeCollabCall(update, 'Message to agent', activity.agentPath);
+    default:
+      return null;
+  }
+}
 
 /**
  * Codex's multi-agent tools (spawnAgent / sendInput / wait / closeAgent)
