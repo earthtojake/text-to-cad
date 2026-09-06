@@ -120,9 +120,12 @@ describe("agent icons", () => {
     for (const id of ["claude-code", "codex", "gemini-cli", "github-copilot"]) {
       expect(agentIconIds(), id).toContain(id);
     }
-    // Two agents the ACP registry has no logo for; they draw a letter instead.
-    expect(agentIconIds()).not.toContain("kiro");
-    expect(agentIcon("kiro")).toBeNull();
+    // Two agents the ACP registry has no logo for come from their vendors:
+    // Kiro's SVG from kiro.dev, Hermes's raster favicon wrapped by hand.
+    expect(agentIconIds()).toContain("kiro");
+    expect(agentIconIds()).toContain("hermes");
+    expect(agentIcon("hermes")).toContain("<image");
+    expect(agentIcon("not-an-agent")).toBeNull();
     expect(agentIcon(null)).toBeNull();
   });
 

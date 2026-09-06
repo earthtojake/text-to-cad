@@ -31,6 +31,12 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* The viewer's two settings-sheet sizes (apps/viewer globals.css); its
+   * components are compiled by THIS Tailwind, so the tokens must exist here. */
+  --text-micro: 10px;
+  --text-micro--line-height: 1.2;
+  --text-tiny: 11px;
+  --text-tiny--line-height: 1.3;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

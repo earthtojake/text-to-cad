@@ -11,6 +11,7 @@ import {
   hostPrefersDarkForColorScheme,
   normalizeHostSheetWidth,
   resolveHostLayoutMode,
+  normalizeHostSceneBackground,
 } from "./hostLayout.js";
 
 test("layout: only \"desktop\" pins anything", () => {
@@ -41,4 +42,13 @@ test("colour scheme: dark and light resolve, anything else is the surface's own"
   assert.equal(hostPrefersDarkForColorScheme(null), null);
   assert.equal(hostPrefersDarkForColorScheme(undefined), null);
   assert.equal(hostPrefersDarkForColorScheme("system"), null);
+});
+
+test("a host scene backdrop is hex or nothing", () => {
+  assert.equal(normalizeHostSceneBackground("#FFFFFF"), "#ffffff");
+  assert.equal(normalizeHostSceneBackground("#0a0a0a"), "#0a0a0a");
+  assert.equal(normalizeHostSceneBackground("#abc"), "#aabbcc");
+  assert.equal(normalizeHostSceneBackground("oklch(1 0 0)"), null);
+  assert.equal(normalizeHostSceneBackground(""), null);
+  assert.equal(normalizeHostSceneBackground(null), null);
 });

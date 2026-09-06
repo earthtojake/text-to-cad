@@ -310,6 +310,7 @@ import {
   capitalizeFirst,
   entryWithoutRenderAssets,
   hostPrefersDarkForColorScheme,
+  normalizeHostSceneBackground,
   normalizeHostSheetWidth,
   normalizeLargeFileState,
   resolveHostLayoutMode,
@@ -368,6 +369,7 @@ export default function CadFileView({
   layout = "auto",
   fileSheetWidth = null,
   colorScheme = null,
+  sceneBackground = null,
 }) {
   const viewerOrigin = normalizeViewerOrigin(origin);
   return (
@@ -386,6 +388,7 @@ export default function CadFileView({
         layout={layout}
         fileSheetWidth={fileSheetWidth}
         colorScheme={colorScheme}
+        sceneBackground={sceneBackground}
       />
     </ViewerOriginProvider>
   );
@@ -404,6 +407,7 @@ function CadFileViewSurface({
   layout,
   fileSheetWidth,
   colorScheme,
+  sceneBackground,
 }) {
   // What the host pins, if anything (docs/file-view.md, "Laying out inside a
   // host"): the layout mode, the sheet's width, and which way the colour
@@ -412,6 +416,7 @@ function CadFileViewSurface({
   const hostLayoutMode = resolveHostLayoutMode(layout);
   const hostSheetWidth = normalizeHostSheetWidth(fileSheetWidth);
   const hostPrefersDark = hostPrefersDarkForColorScheme(colorScheme);
+  const hostSceneBackground = normalizeHostSceneBackground(sceneBackground);
   const themeReadOptions = useMemo(
     () => (hostPrefersDark === null ? {} : { prefersDark: hostPrefersDark }),
     [hostPrefersDark]
@@ -570,10 +575,21 @@ function CadFileViewSurface({
   // re-mesh from these; the URL carries the package version, so a rebuild refetches.
   const drawingGeometryCacheRef = useRef(new Map());
   const [drawingGeometry, setDrawingGeometry] = useState(null);
-  const resolvedThemeSettings = useMemo(
-    () => resolveThemeSettingsForColorMode(themeSettings, { prefersDark: hostPrefersDark === true }),
-    [hostPrefersDark, themeSettings]
-  );
+  const resolvedThemeSettings = useMemo(() => {
+    const resolved = resolveThemeSettingsForColorMode(themeSettings, {
+      prefersDark: hostPrefersDark === true
+    });
+    if (!hostSceneBackground) {
+      return resolved;
+    }
+    // A host that embeds the surface paints the scene on its own ground so
+    // the model sits in the app rather than in a framed picture of a studio;
+    // the theme keeps its lights, grid, floor and materials.
+    return {
+      ...resolved,
+      background: { ...(resolved.background || {}), type: "solid", solidColor: hostSceneBackground }
+    };
+  }, [hostPrefersDark, hostSceneBackground, themeSettings]);
   const resolvedDisplayEdgeSettings = useMemo(() => {
     // Edge theme — colour, opacity, thickness — is fixed, not a user
     // setting. It comes from the cadgen-js defaults, or from a theme that styles its

@@ -45,3 +45,23 @@ export function hostPrefersDarkForColorScheme(colorScheme) {
   }
   return null;
 }
+
+/**
+ * A host's scene backdrop, or null for the theme's own. Hex only: the theme
+ * model stores colours as hex, and a host that has an oklch token converts
+ * before asking. `#rgb` is expanded so one shorthand does not silently fall
+ * back to the theme.
+ */
+export function normalizeHostSceneBackground(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^#[0-9a-f]{3}$/.test(trimmed)) {
+    return "#" + [...trimmed.slice(1)].map((c) => c + c).join("");
+  }
+  return null;
+}

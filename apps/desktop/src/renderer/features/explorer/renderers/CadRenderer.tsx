@@ -8,7 +8,7 @@ import { useResolvedTheme } from "@renderer/hooks/use-theme";
 import { useUi } from "@renderer/state/ui";
 import type { ViewerOrigin } from "@shared/ipc/cad";
 
-import { cadSheetWidthFor } from "../cad-layout";
+import { cadSceneBackgroundFor, cadSheetWidthFor } from "../cad-layout";
 import { EmptyState } from "../EmptyState";
 
 /**
@@ -87,6 +87,7 @@ const CadSurface = lazy(async () => {
             manageDocumentTitle={false}
             onOpenFile={(next) => onOpenFile(next)}
             origin={origin}
+            sceneBackground={cadSceneBackgroundFor(colorScheme)}
           />
         </div>
       </ViewerOriginProvider>

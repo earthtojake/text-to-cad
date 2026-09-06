@@ -55,6 +55,18 @@ function assertInert(id, svg) {
   }
 }
 
+/**
+ * Marks the registry does not publish, taken from the vendor's own site. A
+ * provider listed here has `registryId: null` and `icon: "<id>"` in the table.
+ */
+const EXTRA_SOURCES = new Map([["kiro", "https://kiro.dev/icon.svg"]]);
+
+/**
+ * Hand-made and never refetched: Hermes Agent publishes only a 48px raster
+ * favicon, wrapped into `hermes.svg` as an embedded image by hand.
+ */
+const HAND_MADE = new Set(["hermes"]);
+
 async function main() {
   const response = await fetch(REGISTRY_URL);
   if (!response.ok) {
@@ -68,7 +80,10 @@ async function main() {
   let written = 0;
 
   for (const [providerId, registryId] of providers()) {
-    const url = registryId ? icons.get(registryId) : undefined;
+    if (HAND_MADE.has(providerId)) {
+      continue;
+    }
+    const url = registryId ? icons.get(registryId) : EXTRA_SOURCES.get(providerId);
     if (!url) {
       missing.push(providerId);
       continue;

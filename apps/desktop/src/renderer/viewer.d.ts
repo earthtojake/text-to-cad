@@ -37,6 +37,8 @@ declare module "@viewer/file-view" {
      * owns that.
      */
     colorScheme?: "light" | "dark" | null;
+    /** Hex colour the scene is painted on, so the model sits on this app's ground. */
+    sceneBackground?: string | null;
   }>;
 
   /** Publishes `origin` to the subtree; `useViewerOrigin` reads it back. */

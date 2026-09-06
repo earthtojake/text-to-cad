@@ -64,6 +64,9 @@ let project: string;
 let sessionId: string | null = null;
 
 test.beforeAll(async () => {
+  // A real model turn costs credits; opt in the way codex.spec.ts does, so a
+  // default run never spends them (the build once ran into Codex's usage limit).
+  test.skip(process.env.HARDCORE_E2E_CODEX !== "1", "set HARDCORE_E2E_CODEX=1 to run the real Codex session");
   test.skip(!codexSignedIn(), "codex is not installed or not signed in");
   test.skip(!fs.existsSync(STEP_SOURCE) || fs.statSync(STEP_SOURCE).size < 1000, "the STEP fixture is an LFS pointer; git lfs checkout it");
 

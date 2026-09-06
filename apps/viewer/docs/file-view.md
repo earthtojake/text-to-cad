@@ -34,6 +34,7 @@ a build error or, worse, a silently unstyled surface.
 | `renderTopBar` / `renderSidebar` / `renderHome` | `null` | Render slots for injected chrome; each is called with the `chrome` object and placed in the surface's layout. Omit all three for a bare file surface. Without `renderSidebar` there is no sidebar and the viewport owns the full width. |
 | `layout` | `"auto"` | `"desktop"` pins the desktop layout — the file sheet is a column beside the model, never a drawer over it — however narrow the root is. `"auto"` measures the root and picks desktop or compact. |
 | `fileSheetWidth` | `null` | The sheet's width in px, when the host sizes it for its pane. Clamped to the sheet's own range (240–448) and not resizable from inside the surface. `null` uses the stored width. |
+| `sceneBackground` | `null` | A hex colour to paint the scene on instead of the theme's own backdrop, so the model sits on the host's ground; lights, grid, floor and materials are the theme's. |
 | `colorScheme` | `null` | `"light"` or `"dark"`: the host's resolved theme. The CAD "system" preset resolves the same way and the surface stops writing `.dark` / `color-scheme` to the document — the host owns those. `null` is the standalone case: the surface follows the OS and writes the document itself. |
 
 `origin` is also published through context:

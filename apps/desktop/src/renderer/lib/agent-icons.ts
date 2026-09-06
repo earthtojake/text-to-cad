@@ -3,8 +3,9 @@
  *
  * `scripts/fetch-agent-icons.mjs` downloads them into
  * `src/renderer/assets/agents/<providerId>.svg` and they are committed; the
- * `icon` column in `src/main/agents/registry.ts` names the one a provider uses,
- * and is null for the two agents the registry has no logo for.
+ * `icon` column in `src/main/agents/registry.ts` names the one a provider uses.
+ * Kiro's comes from kiro.dev and Hermes's is a hand-wrapped raster favicon
+ * (see the fetch script); the rest are the registry's.
  *
  * Every one of them is drawn in `currentColor`, which is why they are inlined
  * as markup rather than loaded through `<img>`: an external SVG has no

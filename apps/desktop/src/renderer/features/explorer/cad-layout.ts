@@ -34,3 +34,13 @@ export function cadSheetWidthFor(width: number): number | null {
 export function cadTabHidesTree(paneWidth: number, treeWidth: number): boolean {
   return paneWidth > 0 && paneWidth - treeWidth < CAD_SURFACE_MIN_WIDTH;
 }
+
+/**
+ * The scene's backdrop: the app's own `--background`, so a model sits on the
+ * same ground as the chrome around it instead of in a framed studio. The
+ * tokens are shadcn's neutral pair (`oklch(1 0 0)` / `oklch(0.145 0 0)`); the
+ * viewer's theme model takes hex, so they are written out here.
+ */
+export function cadSceneBackgroundFor(colorScheme: "light" | "dark"): string {
+  return colorScheme === "dark" ? "#0a0a0a" : "#ffffff";
+}
