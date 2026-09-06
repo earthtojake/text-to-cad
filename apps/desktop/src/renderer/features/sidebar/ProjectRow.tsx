@@ -118,7 +118,11 @@ function SessionRow({
   return (
     <button
       className={cn(
-        "flex items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] transition-colors",
+        // `min-w-0` on the row itself, not only on the title inside it: a flex
+        // item's `min-width` is `auto`, so a session titled with the first
+        // line of a prompt — which can be a paragraph — makes the row wider
+        // than the sidebar, and the trailing glyph goes off the edge.
+        "flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] transition-colors",
         selected ? "bg-sidebar-accent text-sidebar-accent-foreground" : "hover:bg-sidebar-accent/60",
       )}
       onClick={onSelect}
@@ -144,7 +148,7 @@ function SessionGlyph({ session }: { session: Session }) {
   if (session.status === "running") {
     return <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />;
   }
-  const glyph = gitGlyphFor(session, info?.defaultBranch);
+  const glyph = gitGlyphFor(session, info);
   if (!glyph) {
     return null;
   }

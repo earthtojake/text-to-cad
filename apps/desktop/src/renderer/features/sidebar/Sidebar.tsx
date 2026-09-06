@@ -83,7 +83,14 @@ export function Sidebar() {
           </Tooltip>
         </div>
 
-        <ScrollArea className="min-h-0 flex-1">
+        {/*
+          Radix wraps the viewport's children in a `display: table` div so it
+          can measure them, and a table sizes to its content — so a session
+          titled with the first line of a prompt makes the list wider than the
+          sidebar, scrolls it sideways, and takes the trailing git glyph off
+          the edge. Blocking that div is what lets `truncate` inside it work.
+        */}
+        <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
           <div className="px-2 pb-2">
             {projects.map((project) => (
               <ProjectRow key={project.id} project={project} />

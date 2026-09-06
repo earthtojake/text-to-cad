@@ -265,9 +265,15 @@ function ReviewBody({
 
         <div className="flex-1" />
 
+        {/*
+          Which thread, then which branch. The title gives up its width first:
+          a thread names itself from its first prompt, which can be a
+          paragraph, and the branch is the shorter and more load-bearing of
+          the two — it says where a commit from this header would land.
+        */}
         {target ? (
           <span
-            className="truncate text-[12px] text-muted-foreground"
+            className="max-w-[160px] truncate text-[12px] text-muted-foreground"
             title={`${target.title} · ${target.cwd}`}
           >
             {target.title}
@@ -275,7 +281,7 @@ function ReviewBody({
         ) : null}
 
         {status.branch ? (
-          <span className="truncate text-[12px] text-muted-foreground">{status.branch}</span>
+          <span className="shrink-0 text-[12px] text-muted-foreground">{status.branch}</span>
         ) : null}
 
         <Button

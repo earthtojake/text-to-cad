@@ -13,8 +13,8 @@
  */
 import { useEffect, useState } from "react";
 
-import type { GitMode, Session } from "@shared/types";
 import type { ProjectGitInfo } from "@shared/ipc/git";
+import type { GitMode, Session } from "@shared/types";
 
 /* -------------------------------------------------------------------------- */
 /* The glyph                                                                   */
@@ -38,7 +38,7 @@ export type GitGlyph = "worktree" | "branch" | null;
 
 export function gitGlyphFor(
   session: Pick<Session, "gitMode" | "branch">,
-  defaultBranch?: string | null,
+  project?: Pick<ProjectGitInfo, "branch" | "defaultBranch"> | null,
 ): GitGlyph {
   if (session.gitMode === "worktree") {
     return "worktree";
@@ -46,10 +46,13 @@ export function gitGlyphFor(
   if (session.gitMode !== "checkout" || !session.branch) {
     return null;
   }
-  // Without a default to compare against, any branch is worth naming: the
-  // alternative is hiding the one piece of information the glyph carries
-  // because the project's info has not loaded yet.
-  return defaultBranch && session.branch === defaultBranch ? null : "branch";
+  // The remote's default branch when there is one, and otherwise the branch
+  // the project is on right now. A repository with no remote has no "default"
+  // to speak of, and in a checkout session those two are the same branch
+  // anyway — so the glyph appears exactly when the thread is somewhere the
+  // person is not looking, which is the only time it says anything.
+  const ordinary = project?.defaultBranch ?? project?.branch ?? null;
+  return ordinary && session.branch === ordinary ? null : "branch";
 }
 
 /** What the glyph's tooltip says. */

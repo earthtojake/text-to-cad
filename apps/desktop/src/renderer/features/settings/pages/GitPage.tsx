@@ -259,7 +259,7 @@ function ProjectWorktreeCard({ project }: { project: Project }) {
           <Button
             className="h-8 gap-1.5"
             onClick={() => {
-              void window.hardcore.shell.showItemInFolder({ path: worktrees[0]?.path ?? "" });
+              void window.hardcore.shell.showItemInFolder({ path: parentOf(worktrees) });
             }}
             size="sm"
             variant="ghost"
@@ -268,17 +268,30 @@ function ProjectWorktreeCard({ project }: { project: Project }) {
             Reveal
           </Button>
         }
-        description={project.path}
-        keywords="reveal finder folder"
+        description={parentOf(worktrees)}
+        keywords="reveal finder folder directory"
         title="Where they live"
       />
     </SettingCard>
   );
 }
 
-/** The one-line description under a worktree's branch: path, age, state. */
+/** The directory the project's worktrees sit in — `<worktree root>/<project>`. */
+function parentOf(worktrees: Worktree[]): string {
+  const first = worktrees[0]?.path ?? "";
+  return first.slice(0, Math.max(0, first.lastIndexOf("/"))) || first;
+}
+
+/**
+ * The one-line description under a worktree's branch: the folder's own name,
+ * how long ago it was written in, and anything that stops it being deleted.
+ *
+ * The folder name and not the whole path: an absolute path is one unbreakable
+ * word, so it cannot wrap, and it runs under the row's buttons instead. The
+ * directory they share is printed once at the bottom of the card.
+ */
 function describe(worktree: Worktree): string {
-  const parts = [worktree.path];
+  const parts = [worktree.path.split("/").pop() ?? worktree.path];
   if (worktree.lastUsedAt) {
     parts.push(`last used ${relative(worktree.lastUsedAt)}`);
   }
