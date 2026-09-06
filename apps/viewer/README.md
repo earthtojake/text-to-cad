@@ -98,17 +98,31 @@ the build — detection only; it keeps serving.
 ## The shape of the app
 
 ```
-src/client/ # React app: CadWorkspace (state root), CadViewer (scene +
-            #   effects application), workbench/ (tabs, sections, session
-            #   state, playback), render/ (viewport)
+src/client/ # React app: CadWorkspace (the standalone shell: URL, top bar,
+            #   sidebar, home), file-view/ (CadFileView — the whole per-file
+            #   surface, exported as `cad-viewer/file-view` for hosts that
+            #   embed it), CadViewer (scene + effects application),
+            #   workbench/ (tabs, sections, session state, playback),
+            #   render/ (viewport)
 scripts/    # app tooling incl. e2e helpers and selfContained.test.mjs
             #   (the boundary fence) and the dev-backend spawn helpers
 docs/       # subsystem docs; settings-ui.md is the CURATED design-system
             #   reference for all settings UI work — binding, read it
-            #   before touching controls
+            #   before touching controls; file-view.md is the embedding
+            #   contract (bundler, Tailwind, tokens)
 dist/       # built client (gitignored); what `cadgen viewer` serves in a
             #   checkout and what the wheel bundles
 ```
+
+## Embedding the per-file surface
+
+`<CadFileView>` is everything the viewer draws for ONE file. `CadWorkspace` is
+one consumer; a host application embedding the same surface is the other, and
+`origin` is the only thing that differs between them — `""` (this app, served by
+its own backend) or the absolute origin of a `cadgen viewer` somewhere else.
+Every `/__cad` and `/__tess_cache` URL is built against that one value. The
+package exports the SOURCE at `cad-viewer/file-view`; `docs/file-view.md` says
+what a consumer's bundler, Tailwind entry and token layer have to be told.
 
 ## Testing
 

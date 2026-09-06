@@ -353,14 +353,26 @@ export async function tessellateComponentCached(index, floats, { cid = "", optio
   return component;
 }
 
+// "" (same origin) or an absolute origin with no trailing slash.
+export function originPrefix(origin) {
+  return String(origin ?? "").trim().replace(/\/+$/u, "");
+}
+
 // The fetch-backed provider both browser hosts use. `entryUrl(key)` resolves a
 // single entry, `batchUrl` the POST endpoint speaking the batch container
 // above; `headers` ride every request (the viewer adds its cross-site POST
 // guard header). A host without the batch route (404/405) demotes getMany to
 // per-key gets permanently for this provider instance.
+//
+// `origin` is the backend these routes live on, with "" (the default) meaning
+// same origin — the only case a page served BY that backend ever needs. A page
+// served from somewhere else (an embedded viewer surface) passes the absolute
+// origin instead; this package stays React-free and framework-free, so the
+// origin arrives as a plain argument and is never looked up.
 export function createHttpTessellationCacheProvider({
-  entryUrl = (key) => `/__tess_cache/${encodeURIComponent(key)}.tess`,
-  batchUrl = "/__tess_cache/batch",
+  origin = "",
+  entryUrl = (key) => `${originPrefix(origin)}/__tess_cache/${encodeURIComponent(key)}.tess`,
+  batchUrl = `${originPrefix(origin)}/__tess_cache/batch`,
   headers = {},
 } = {}) {
   let batchSupported = Boolean(batchUrl);
