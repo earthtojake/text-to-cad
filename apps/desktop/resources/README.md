@@ -6,11 +6,12 @@ copies each directory here into the packaged app's `Resources/`, and
 
 | Directory | Filled by | Contents |
 | --- | --- | --- |
-| `cadgen/` | the release workflow, or a local `pip wheel` | the `cadgen` wheel for this version and the constraints file the managed Python installs it with (plan §8) |
-| `plugin/` | P5's plugin composition | the Hardcore plugin — the repo's `cad` plugin minus `cad-viewer`, plus `hardcore-app` — installed into each agent's plugin store |
+| `cadgen/` | the release workflow, or `npm run cad:resources` (`scripts/cad-resources.mjs`) | the `cadgen` wheel for this version and `constraints.txt`, the dependency closure frozen from the development venv; the managed Python installs with `--find-links` here and `-c` that file (plan §8, `src/main/cad/runtime.ts`) |
+| `plugin/` | `npm run build` (`scripts/build-plugin.mjs`) | the Hardcore plugin — the repo's skills minus `cad-viewer`, plus `hardcore-app`, with manifests naming it `cad@hardcore` at the app's version — installed into each agent by `src/main/cad/plugin.ts` |
+| `hardcore-mcp/` | committed source | the Hardcore MCP server (`server.mjs`); NOT an extraResource — the build bundles it into `out/hardcore-mcp/`, which ships unpacked beside the asar |
 
-Both are committed empty, with a `.gitkeep`, and `scripts/package.mjs` recreates
-them before every build. electron-builder 26 tolerates a missing
+The first two are build outputs: gitignored under a committed `.gitkeep`, and
+`scripts/package.mjs` recreates the directories before every build. electron-builder 26 tolerates a missing
 `extraResources` source (checked, 26.15.3: the build succeeds and copies
 nothing), but a tolerance is a thing a minor release can withdraw, and the
 alternative — generating the config per build — is worse than two empty

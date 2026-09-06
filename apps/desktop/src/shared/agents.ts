@@ -62,6 +62,13 @@ export const PluginInstallSchema = z.object({
   marketplaceAdd: z.array(z.string()),
   /** argv that installs a plugin; `<plugin>` is substituted with `name@marketplace`. */
   install: z.array(z.string()),
+  /**
+   * argv that re-reads an already-declared marketplace; `<marketplace>` is
+   * substituted. For agents whose `marketplaceAdd` keeps its first snapshot.
+   */
+  marketplaceUpdate: z.array(z.string()).optional(),
+  /** argv that moves an installed plugin to the marketplace's version, where `install` refuses to. */
+  update: z.array(z.string()).optional(),
 });
 export type PluginInstall = z.infer<typeof PluginInstallSchema>;
 

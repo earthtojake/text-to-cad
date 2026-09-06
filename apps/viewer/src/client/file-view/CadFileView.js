@@ -40,6 +40,7 @@ import {
 } from "../components/workbench/DxfSettingsSection";
 import { buildDxfLayersTab } from "../components/workbench/DxfLayersSection";
 import StepFileSheet from "../components/workbench/StepFileSheet";
+import { FileSheetPortalContext } from "../components/workbench/FileSheet";
 import { poseValuesForPreset } from "../components/workbench/PoseControlsSection";
 import StatusToast from "../components/workbench/StatusToast";
 import UrdfFileSheet from "../components/workbench/UrdfFileSheet";
@@ -1999,6 +2000,14 @@ function CadFileViewSurface({
   const drawingUndoStackRef = useRef(drawingUndoStack);
   const drawingRedoStackRef = useRef(drawingRedoStack);
   const viewerRef = useRef(null);
+  // The surface's root: what the layout hook measures instead of the window
+  // when this surface is one pane of a host application, and where compact-
+  // mode sheets portal to so they cover this surface and not the host's window.
+  const hostRef = useRef(null);
+  const [hostElement, setHostElement] = useState(null);
+  useEffect(() => {
+    setHostElement(hostRef.current);
+  }, []);
   // Viewport LOD (design/unified-tessellation.md Phase 5): camera-settle
   // driven re-tessellation of the components that project the worst error.
   const { onCameraMoved: onLodCameraMoved } = useViewportLod({
@@ -3261,7 +3270,8 @@ function CadFileViewSurface({
     sidebarMinWidth: DESKTOP_SIDEBAR_MIN_WIDTH,
     tabToolsMinWidth: DESKTOP_TAB_TOOLS_MIN_WIDTH,
     endPanelResize,
-    endTabToolsResize
+    endTabToolsResize,
+    hostRef
   });
 
   useEffect(() => {
@@ -6434,6 +6444,7 @@ function CadFileViewSurface({
   };
 
   return (
+    <FileSheetPortalContext.Provider value={hostElement}>
     <SidebarProvider
       open={effectiveSidebarOpen}
       onOpenChange={handleSidebarOpenChange}
@@ -6442,8 +6453,9 @@ function CadFileViewSurface({
       data-glass-tone={cadWorkspaceGlassTone}
       style={{ "--sidebar-width": `${sidebarShellWidth}px` }}
       className={cn("relative h-svh overflow-hidden bg-transparent", className)}
+      ref={hostRef}
     >
-      <div className="fixed inset-0 z-0">
+      <div className="absolute inset-0 z-0">
         <CadRenderPane
           viewerRef={viewerRef}
           renderFormat={effectiveRenderFormat}
@@ -6542,7 +6554,7 @@ function CadFileViewSurface({
         />
       </div>
 
-      <SidebarInset className="pointer-events-none relative z-10 h-svh min-w-0 overflow-hidden bg-transparent">
+      <SidebarInset className="pointer-events-none relative z-10 h-full min-w-0 overflow-hidden bg-transparent">
         {renderTopBar ? renderTopBar(chrome) : null}
 
         <div className="pointer-events-none relative min-h-0 flex-1 overflow-hidden">
@@ -6834,5 +6846,6 @@ function CadFileViewSurface({
         />
       </SidebarInset>
     </SidebarProvider>
+    </FileSheetPortalContext.Provider>
   );
 }

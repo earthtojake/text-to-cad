@@ -13,6 +13,7 @@ import type { IpcHandlers } from "../../shared/ipc";
 import type { acpContract } from "../../shared/ipc/acp";
 import { spawnPtyTerminal } from "../acp/pty-backend";
 import { SessionManager } from "../acp/sessions";
+import { forgetSession, mcpServersFor } from "../cad";
 import { projects, sessions, settings } from "../db/repositories";
 import { head } from "../projects/git";
 import { releaseWorkspace, resolveWorkspace } from "../projects/workspace";
@@ -30,6 +31,8 @@ export const sessionManager = new SessionManager({
   detector,
   spawnTerminal: spawnPtyTerminal,
   broadcast,
+  // Every session gets the Hardcore MCP server, with a token that names it.
+  mcpServers: mcpServersFor,
   clientVersion: app.isPackaged ? app.getVersion() : __APP_VERSION__,
   newId: () => randomUUID(),
   launchOverride: fakeAgent
@@ -107,7 +110,11 @@ export const acpHandlers = {
     rename: ({ id, title }) => surfacing(() => sessionManager.rename(id, title)),
     archive: ({ id, archived }) => surfacing(() => sessionManager.archive(id, archived)),
     close: ({ id }) => surfacing(() => sessionManager.close(id)),
-    delete: ({ id }) => surfacing(() => sessionManager.delete(id)),
+    delete: ({ id }) =>
+      surfacing(async () => {
+        await sessionManager.delete(id);
+        forgetSession(id);
+      }),
   },
 } satisfies IpcHandlers<typeof acpContract, IpcContext>;
 

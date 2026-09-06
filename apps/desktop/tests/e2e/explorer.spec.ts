@@ -29,8 +29,9 @@ import {
 declare const window: {
   hardcore: {
     projects: { addPath(request: { path: string }): Promise<{ id: string; name: string }> };
-    settings: { set(patch: { theme: string }): Promise<unknown> };
+    settings: { set(patch: { theme?: string; cadPythonOverride?: string | null }): Promise<unknown> };
     explorer: { loadTabs(request: { projectId: string }): Promise<unknown[]> };
+    runtime: { status(): Promise<{ state: string; python: string | null; cadgenVersion: string | null }> };
   };
 };
 
@@ -51,6 +52,21 @@ const IMAGE = "apps/desktop/build/icon.png";
 const STEP = "models/examples/imported/import-smoke.step";
 
 /**
+ * The interpreter the CAD tests point the app at: `CAD_DESKTOP_PYTHON`, or the
+ * repository's `.venv` — the main checkout's when this is a worktree without
+ * one. The app is launched WITHOUT the variable so the first STEP open shows
+ * the not-set-up card (a worktree has no .venv and the throwaway user-data
+ * directory has no managed runtime), and the override is then set through
+ * Settings' IPC, which is the path a person takes.
+ */
+const CAD_PYTHON =
+  process.env.CAD_DESKTOP_PYTHON ??
+  [path.join(repoRoot, ".venv", "bin", "python"), path.resolve(repoRoot, "..", "..", "..", ".venv", "bin", "python")].find((candidate) =>
+    fs.existsSync(candidate),
+  ) ??
+  null;
+
+/**
  * The review test gets a repository of its own, built in `beforeAll`.
  *
  * Reviewing *this* checkout was the obvious thing and the wrong one: the
@@ -68,9 +84,11 @@ let userData: string;
 test.beforeAll(async () => {
   reviewRepo = makeReviewRepo();
   userData = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-explorer-e2e-"));
+  const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
+  const env = { ...inherited, NODE_ENV: "test" };
   app = await electron.launch({
     args: [path.join(appRoot, "out", "main", "index.js"), `--user-data-dir=${userData}`],
-    env: { ...process.env, NODE_ENV: "test" },
+    env,
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
@@ -88,6 +106,10 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  // Quitting takes the app anywhere from ten seconds to a few minutes — the
+  // detector's CLI probes and the watcher over this repository are still
+  // winding down — and a hook that gives up at sixty fails the last test.
+  test.setTimeout(300_000);
   await app?.close();
   fs.rmSync(userData, { recursive: true, force: true });
   fs.rmSync(reviewRepo, { recursive: true, force: true });
@@ -137,13 +159,13 @@ test("opens an image with its dimensions", async () => {
   await shoot("file-image.png");
 });
 
-test("shows the CAD runtime placeholder for a STEP file", async () => {
+test("shows the CAD runtime placeholder for a STEP file before a runtime exists", async () => {
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await openFromTree(STEP);
 
-  // P5 provisions the runtime; until then `cad.viewerOrigin` answers with a
-  // reason and this is the surface the person gets. It is a real card with a
-  // real action, not a blank pane.
+  // No override, no .venv in a worktree, nothing provisioned into a fresh
+  // user-data directory: `cad.viewerOrigin` answers `runtime-not-ready` and
+  // this is the surface the person gets — a real card with a real action.
   await expect(page.getByText("CAD runtime is not set up yet")).toBeVisible();
   await expect(page.getByRole("button", { name: "Open CAD Runtime settings" })).toBeVisible();
   await shoot("file-cad-placeholder.png");
@@ -207,15 +229,63 @@ test("browses to a URL in a browser tab", async () => {
   await shoot("browser.png");
 });
 
-test("keeps every tab in one strip, and expands it", async () => {
-  // Five by now: three file tabs, a terminal and a browser.
-  const tabs = page.getByRole("tab");
-  await expect(tabs).toHaveCount(5);
+/**
+ * After the terminal and browser tests, not before: this one expands and
+ * restores the layout, and the restored explorer is narrower than the initial
+ * one, which scrolls the strip. The tests that click a tab by position want
+ * the strip as it first was.
+ */
+test("renders a STEP file through the viewer once an interpreter is set", async () => {
+  test.skip(CAD_PYTHON === null, "no CAD_DESKTOP_PYTHON and no .venv to point the app at");
 
+  // The override is a setting; the runtime reads it fresh and probes cadgen.
+  await page.evaluate((python) => window.hardcore.settings.set({ cadPythonOverride: python }), CAD_PYTHON);
+  const status = await page.evaluate(() => window.hardcore.runtime.status());
+  expect(status.state, JSON.stringify(status)).toBe("ready");
+  expect(status.cadgenVersion).toMatch(/^\d+\.\d+\.\d+/);
+
+  // A renderer asks for its origin once per mount: reopen the file.
+  await page.getByRole("tab", { name: /import-smoke\.step/ }).hover();
+  await page.getByRole("tab", { name: /import-smoke\.step/ }).getByRole("button", { name: "Close import-smoke.step" }).click();
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await openFromTree(STEP);
+
+  // The viewer's surface: a WebGL canvas, and the STEP sheet's tabs. The
+  // first open compiles the document in cadgen's build pool, so this is the
+  // slow assertion of the suite.
+  await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
+  const tree = page.getByRole("tab", { name: "Tree" });
+  await expect(tree).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole("tab", { name: "Measure" })).toBeVisible();
+
+  // Expanded, the surface is wide enough for the viewer's desktop layout —
+  // the sheet beside the model rather than a drawer over it — which is how a
+  // person reviews a part. The tree lists the document's solids once the
+  // compile lands.
+  await page.getByRole("button", { name: "Expand explorer" }).click();
+  await expect(page.getByRole("button", { name: "Restore layout" })).toBeVisible();
+  await expect(page.getByRole("tree").first()).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("treeitem", { name: /import-smoke/ }).first()).toBeVisible();
+  await page.waitForTimeout(1500);
+  await shoot("file-cad.png", true);
+
+  // The sheets are live: switching to Measure shows its empty state.
+  await page.getByRole("tab", { name: "Measure" }).click();
+  await expect(page.getByRole("tab", { name: "Measure" })).toHaveAttribute("aria-selected", "true");
+  await shoot("file-cad-measure.png", true);
+  await tree.click();
+  await page.getByRole("button", { name: "Restore layout" }).click();
+});
+
+test("keeps every tab in one strip, and expands it", async () => {
   // A file tab under the strip, not whichever tab happened to be last: these
   // two shots are about the strip and the layout, and a review of *this*
-  // repository in the background would make them change on every run.
+  // repository in the background would make them change on every run. First,
+  // too, because the STEP tab is the one open and the viewer's own
+  // Tree/Measure tabs inside it are tabs as well.
   await page.getByRole("tab").first().click();
+  // Five by now: three file tabs, a terminal and a browser.
+  await expect(page.getByRole("tab")).toHaveCount(5);
   await shoot("strip.png", true);
 
   await page.getByRole("button", { name: "Expand explorer" }).click();

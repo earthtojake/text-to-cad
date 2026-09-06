@@ -358,9 +358,13 @@ export function refreshCadCatalog(options) {
   return getCadManifestStore("").refresh(options);
 }
 
-if (typeof window !== "undefined") {
+if (typeof window !== "undefined" && /^https?:$/.test(window.location.protocol)) {
   // The same-origin store is the standalone app's, and it starts polling the
-  // moment this module loads — as it always has.
+  // moment this module loads — as it always has. Only where "same origin" is
+  // a backend: a host that loads this module from a file:// page (the desktop
+  // app's renderer) has no `/__cad` beside it, and a poll there is a
+  // `file:///__cad/catalog` failure every two seconds for the life of the
+  // window. That host asks for its backend's store by origin instead.
   getCadManifestStore("");
 }
 

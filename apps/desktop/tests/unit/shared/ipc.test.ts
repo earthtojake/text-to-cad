@@ -101,8 +101,9 @@ describe("the contract", () => {
       "git.pullRequest",
       "git.worktrees",
       "git.removeWorktree",
-      // P3's stub for P5 — src/shared/ipc/cad.ts
+      // P5 — src/shared/ipc/cad.ts
       "cad.viewerOrigin",
+      "cad.reply",
     ]);
   });
 

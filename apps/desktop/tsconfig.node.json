@@ -8,6 +8,7 @@
     "tests/unit/shared/**/*.ts",
     "tests/e2e/**/*.ts",
     "scripts/**/*.mjs",
+    "resources/hardcore-mcp/**/*.mjs",
     "electron.vite.config.ts",
     "vitest.config.ts",
     "playwright.config.ts"

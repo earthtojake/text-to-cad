@@ -48,8 +48,8 @@ export type SessionManagerDeps = {
   detector: AgentDetector;
   spawnTerminal: SpawnTerminal;
   broadcast: <C extends IpcEventChannel>(channel: C, payload: IpcEventPayload<C>) => void;
-  /** The MCP servers every session gets; P5 adds the Hardcore server. */
-  mcpServers?: () => McpServer[];
+  /** The MCP servers a session gets: Hardcore's own, minted per session (src/main/cad). */
+  mcpServers?: (session: Session) => McpServer[];
   clientVersion?: string;
   newId: () => string;
   /**
@@ -420,7 +420,7 @@ export class SessionManager {
       launch: this.deps.launchOverride?.(provider.id) ?? provider.launch,
       env,
       cwd: session.cwd,
-      mcpServers: this.deps.mcpServers?.() ?? [],
+      mcpServers: this.deps.mcpServers?.(session) ?? [],
       spawnTerminal: this.deps.spawnTerminal,
       approvalMode: this.approval.get(session.id),
       clientVersion: this.deps.clientVersion,

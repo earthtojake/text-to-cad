@@ -10,6 +10,7 @@ import { BrowserWindow, app, dialog, shell } from "electron";
 
 import { ipcContract, type IpcContract } from "../../shared/ipc";
 import { projects, sessions, settings } from "../db/repositories";
+import { viewers } from "../cad";
 import { track } from "../telemetry";
 import { applySettingsEffects } from "../settings-effects";
 import { acpHandlers } from "./acp";
@@ -62,7 +63,12 @@ const handlers = {
     },
 
     remove: ({ id }: { id: string }) => {
+      const project = projects.list().find((candidate) => candidate.id === id);
       projects.remove(id);
+      // The viewer served that root for this project; nothing else asks for it.
+      if (project && !projects.list().some((other) => other.path === project.path)) {
+        viewers().stop(project.path);
+      }
       broadcast("projects.changed", projects.list());
       broadcast("sessions.changed", sessions.list());
     },
@@ -80,10 +86,10 @@ const handlers = {
   /** P1: the agent registry, detection, install and login. */
   ...agentsHandlers,
 
-  /** P6, stubbed until P5: the bundled plugin's state per agent. */
+  /** P5: the bundled plugin's state per agent. */
   ...pluginsHandlers,
 
-  /** P6, stubbed until P5: the managed Python and cadgen runtime. */
+  /** P5: the managed Python and cadgen runtime. */
   ...runtimeHandlers,
 
   /** P6: the native folder and file choosers Settings' path rows use. */

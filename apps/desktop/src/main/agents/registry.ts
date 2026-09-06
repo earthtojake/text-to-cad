@@ -82,9 +82,14 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     launch: { command: NPX, args: ["-y", "@agentclientprotocol/claude-agent-acp"], env: {} },
     capabilities: CAPS.full,
     skillsDir: "~/.claude/skills",
+    // `marketplace add` keeps the snapshot it first took and `install` answers
+    // "already installed" at the old version, so an update is the two extra
+    // verbs (src/main/cad/plugin.ts).
     pluginInstall: {
       marketplaceAdd: ["plugin", "marketplace", "add", "<path>"],
+      marketplaceUpdate: ["plugin", "marketplace", "update", "<marketplace>"],
       install: ["plugin", "install", "<plugin>"],
+      update: ["plugin", "update", "<plugin>"],
     },
   },
   {

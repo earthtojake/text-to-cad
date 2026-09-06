@@ -80,6 +80,7 @@ export function FileTab({
   const treeWidth = useExplorer((state) => state.treeWidth);
   const setTreeWidth = useExplorer((state) => state.setTreeWidth);
   const fsRevision = useExplorer((state) => state.fsRevision);
+  const treeReveal = useExplorer((state) => state.reveal);
 
   const [reloadToken, setReloadToken] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -462,6 +463,7 @@ export function FileTab({
                 onOpen={(next) => openFile(next)}
                 projectId={project.id}
                 projectName={project.name}
+                reveal={treeReveal}
               />
             </div>
           </>
