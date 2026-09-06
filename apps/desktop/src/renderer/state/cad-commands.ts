@@ -14,7 +14,6 @@ import type { CadCommand } from "@shared/ipc/cad";
 
 import { hostOf, tabTitle, useExplorer } from "./explorer";
 import { useProjects } from "./projects";
-import { useSettings } from "./settings";
 import { useUi } from "./ui";
 
 /** Bring the explorer for `projectId` on screen and wait until its strip is bound. */
@@ -28,10 +27,9 @@ async function focusProject(projectId: string): Promise<void> {
   }
   await useExplorer.getState().bindProject(projectId);
   useUi.getState().closeSettings();
-  const { settings, setLayout } = useSettings.getState();
-  if (settings?.layout.explorerCollapsed) {
-    await setLayout({ explorerCollapsed: false });
-  }
+  // An agent asking for a file is a reason to show the pane, not a preference
+  // about it: `show` leaves the person's own choice for this project alone.
+  useExplorer.getState().show();
 }
 
 function describeTabs() {

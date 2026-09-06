@@ -48,7 +48,7 @@ test.afterAll(async () => {
   fs.rmSync(userData, { recursive: true, force: true });
 });
 
-test("the shell shows three panes", async () => {
+test("the shell shows three panes, the explorer closed", async () => {
   // The panes are the app: sidebar, session, explorer, left to right.
   const panes = page.locator("[data-panel]");
   await expect(panes).toHaveCount(3);
@@ -56,9 +56,14 @@ test("the shell shows three panes", async () => {
   await expect(page.getByRole("button", { name: "Add project" })).toBeVisible();
   await expect(page.getByText("Projects", { exact: true })).toBeVisible();
   await expect(page.getByText("Add a project to get started")).toBeVisible();
-  // The explorer strip belongs to a project (P3), so an app with none has
-  // nothing to open a tab from and says so. Scoped to the pane: the session
-  // pane's composer carries a project chip that reads the same.
+
+  // The explorer starts closed and the session fills the window: it earns its
+  // width when something opens in it, not before.
+  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBe(0);
+  await openExplorer();
+  // The strip belongs to a project (P3), so an app with none has nothing to
+  // open a tab from and says so. Scoped to the pane: the session pane's
+  // composer carries a project chip that reads the same.
   await expect(page.getByTestId("explorer").getByText("No project")).toBeVisible();
 
   // Left to right, and the sidebar is the narrow one.
@@ -66,6 +71,34 @@ test("the shell shows three panes", async () => {
     nodes.map((node) => node.getBoundingClientRect().x),
   );
   expect(boxes).toEqual([...boxes].sort((a, b) => a - b));
+});
+
+/**
+ * The sidebar's collapse is on the left in both of its placements: in the
+ * sidebar's own header row while the sidebar is open, and at the far left of
+ * the session's title bar once it is not. The explorer's stays on the right.
+ */
+test("the sidebar's collapse follows the window's left edge", async () => {
+  const sidebar = page.locator("[data-panel]").first();
+  await expect(sidebar.getByRole("button", { name: "Toggle sidebar" })).toBeVisible();
+  await expect(page.getByText("Hardcore", { exact: true })).toBeVisible();
+
+  await sidebar.getByRole("button", { name: "Toggle sidebar" }).click();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBe(0);
+
+  const header = page.locator("[data-session-header]");
+  const collapse = header.getByRole("button", { name: "Toggle sidebar" });
+  await expect(collapse).toBeVisible();
+  const [collapseBox, titleBox, explorerToggleBox] = await Promise.all([
+    collapse.boundingBox(),
+    header.locator("[data-session-title]").boundingBox(),
+    header.getByRole("button", { name: "Toggle explorer" }).boundingBox(),
+  ]);
+  expect(collapseBox!.x).toBeLessThan(titleBox!.x);
+  expect(explorerToggleBox!.x).toBeGreaterThan(titleBox!.x);
+
+  await collapse.click();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThan(0);
 });
 
 test("the explorer opens and closes a tab", async () => {
@@ -79,6 +112,8 @@ test("the explorer opens and closes a tab", async () => {
     (directory) => window.hardcore.projects.addPath({ path: directory }),
     fixture,
   );
+  // A new project starts with the pane closed, like every other one.
+  await openExplorer();
   await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "New tab", exact: true }).click();
@@ -132,6 +167,9 @@ test("About reports the updater's state", async () => {
 });
 
 test("renders in both themes", async () => {
+  // The canonical shots are of the app as it opens: the explorer closed.
+  await closeExplorer();
+
   // Dark, then light, through the real setting — which round-trips through
   // sqlite in main, so this also proves settings persist.
   for (const theme of ["dark", "light"] as const) {
@@ -143,6 +181,23 @@ test("renders in both themes", async () => {
   await setTheme("dark");
   await shoot(page, "shell.png");
 });
+
+/** Open the explorer pane if it is closed — it starts that way (plan §3). */
+async function openExplorer() {
+  const pane = page.getByTestId("explorer");
+  if (((await pane.boundingBox())?.width ?? 0) === 0) {
+    await page.getByRole("button", { name: "Toggle explorer" }).click();
+  }
+  await expect.poll(async () => (await pane.boundingBox())?.width ?? 0).toBeGreaterThan(0);
+}
+
+async function closeExplorer() {
+  const pane = page.getByTestId("explorer");
+  if (((await pane.boundingBox())?.width ?? 0) > 0) {
+    await page.getByRole("button", { name: "Toggle explorer" }).click();
+  }
+  await expect.poll(async () => (await pane.boundingBox())?.width ?? 0).toBe(0);
+}
 
 async function setTheme(theme: "dark" | "light") {
   await page.evaluate((value) => window.hardcore.settings.set({ theme: value }), theme);

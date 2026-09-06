@@ -120,6 +120,11 @@ test.beforeAll(async () => {
   projectId = project.id;
   await expect(page.getByText(projectName).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  // The explorer pane starts closed and opens when something opens in it
+  // (plan §3). This suite is about what it *shows*, so it is opened once
+  // here rather than incidentally by the first file.
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeGreaterThan(0);
 });
 
 test.afterAll(async () => {

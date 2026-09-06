@@ -30,9 +30,13 @@ import { useProjects } from "@renderer/state/projects";
 import type { Worktree } from "@shared/ipc/git";
 import type { GitMode, Project } from "@shared/types";
 
+/**
+ * The two choices the composer offers (`lib/git-mode.ts`). `none` is not one
+ * of them: it is what "Local" means in a folder that is not a repository, and
+ * that is decided per project when the session is created, not here.
+ */
 const GIT_MODES: { value: GitMode; label: string }[] = [
-  { value: "none", label: "Plain directory" },
-  { value: "checkout", label: "Current branch" },
+  { value: "checkout", label: "Local" },
   { value: "worktree", label: "New worktree" },
 ];
 
@@ -49,12 +53,14 @@ export function GitPage() {
     <>
       <SettingCard title="New sessions">
         <SelectRow
-          description="What a new session's working directory is. Every session can override it."
-          keywords="branch checkout worktree directory"
+          description="Where a new session works: the project's own folder, or a worktree of its own. Every session can override it."
+          keywords="branch checkout worktree directory local"
           onChange={(defaultGitMode) => patch({ defaultGitMode })}
           options={GIT_MODES}
           title="Default git mode"
-          value={settings.defaultGitMode}
+          // A folder that is not a repository resolves Local to `none` when
+          // the session is made; the setting itself only names the choice.
+          value={settings.defaultGitMode === "worktree" ? "worktree" : "checkout"}
         />
         <TextRow
           description="Prepended to every branch Hardcore creates."

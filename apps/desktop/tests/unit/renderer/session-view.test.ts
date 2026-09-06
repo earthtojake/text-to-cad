@@ -7,6 +7,7 @@ import {
   formatDuration,
   formatTokens,
   isAuthError,
+  isEffortOption,
   partsView,
   statusLine,
   turnView,
@@ -187,5 +188,18 @@ describe("formatting", () => {
     expect(isAuthError("session/new: Authentication required — sign in first (API Key, ChatGPT)")).toBe(true);
     expect(isAuthError("codex exited unexpectedly (code 1)")).toBe(false);
     expect(isAuthError(null)).toBe(false);
+  });
+});
+
+describe("the composer's model and effort dropdowns", () => {
+  it("finds the effort option by category or by the two agents' ids", () => {
+    // Codex names it, Claude names it differently, and an adapter that sets
+    // ACP's category is right whatever it called the option.
+    expect(isEffortOption({ id: "reasoning_effort", category: null })).toBe(true);
+    expect(isEffortOption({ id: "effort", category: null })).toBe(true);
+    expect(isEffortOption({ id: "anything", category: "thought_level" })).toBe(true);
+    // The model itself, and an agent's own inventions, are not it.
+    expect(isEffortOption({ id: "model", category: "model" })).toBe(false);
+    expect(isEffortOption({ id: "web_search", category: null })).toBe(false);
   });
 });

@@ -45,6 +45,42 @@ const fixture = fixturePath ? loadFixture(fixturePath) : null;
 
 const stream = ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin));
 
+/**
+ * The two config options the composer draws as dropdowns of its own: the
+ * model, and the effort beside it (Codex's `reasoning_effort`, Claude's
+ * `effort`). Kept as state so `session/set_config_option` answers with what
+ * the session now is, which is what the agents do.
+ */
+const chosen = { model: "fast", reasoning_effort: "medium" };
+
+function configOptions() {
+  return [
+    {
+      id: "model",
+      name: "Model",
+      category: "model",
+      type: "select",
+      currentValue: chosen.model,
+      options: [
+        { value: "fast", name: "Fast" },
+        { value: "smart", name: "Smart" },
+      ],
+    },
+    {
+      id: "reasoning_effort",
+      name: "Effort",
+      category: "thought_level",
+      type: "select",
+      currentValue: chosen.reasoning_effort,
+      options: [
+        { value: "low", name: "Low" },
+        { value: "medium", name: "Medium" },
+        { value: "high", name: "High" },
+      ],
+    },
+  ];
+}
+
 let cancelled = false;
 let cancelWaiter = null;
 
@@ -83,19 +119,7 @@ new AgentSideConnection((conn) => ({
           { id: "plan", name: "Plan", description: "Read only" },
         ],
       },
-      configOptions: [
-        {
-          id: "model",
-          name: "Model",
-          category: "model",
-          type: "select",
-          currentValue: "fast",
-          options: [
-            { value: "fast", name: "Fast" },
-            { value: "smart", name: "Smart" },
-          ],
-        },
-      ],
+      configOptions: configOptions(),
     };
   },
 
@@ -124,21 +148,10 @@ new AgentSideConnection((conn) => ({
   },
 
   async setSessionConfigOption(params) {
-    return {
-      configOptions: [
-        {
-          id: "model",
-          name: "Model",
-          category: "model",
-          type: "select",
-          currentValue: String(params.value),
-          options: [
-            { value: "fast", name: "Fast" },
-            { value: "smart", name: "Smart" },
-          ],
-        },
-      ],
-    };
+    if (params.configId in chosen) {
+      chosen[params.configId] = String(params.value);
+    }
+    return { configOptions: configOptions() };
   },
 
   async prompt(params) {

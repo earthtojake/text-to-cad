@@ -67,20 +67,46 @@ export function gitGlyphLabel(session: Pick<Session, "gitMode" | "branch">): str
 /* The chip                                                                    */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * What a person chooses between: **Local** or **New worktree**. Two choices,
+ * not three — "the project's own folder" and "a folder of its own" is the
+ * whole decision, and whether that folder happens to be a git checkout is a
+ * fact about the project, not a third option to weigh (`localGitMode`).
+ *
+ * `GitMode` keeps its three values because main's `projects/workspace.ts`
+ * genuinely does three different things with a directory; `none` and
+ * `checkout` are simply never offered as a pair.
+ */
 export const GIT_MODE_LABELS: Record<GitMode, string> = {
-  none: "Plain directory",
-  checkout: "Current branch",
+  none: "Local",
+  checkout: "Local",
   worktree: "New worktree",
 };
+
+/** Which `GitMode` "Local" is here: the checkout, or a folder that has none. */
+export function localGitMode(info: ProjectGitInfo | null): GitMode {
+  return info && !info.isRepository ? "none" : "checkout";
+}
+
+/**
+ * The mode a session would actually run in. Anything but an available
+ * `worktree` is Local — a mode a project cannot offer is not a mode, and the
+ * chip disables it with the reason rather than starting a session that fails.
+ */
+export function resolveGitMode(mode: GitMode, info: ProjectGitInfo | null): GitMode {
+  if (mode === "worktree" && gitModeAvailability("worktree", info).available) {
+    return "worktree";
+  }
+  return localGitMode(info);
+}
 
 /**
  * Whether a project can offer a mode, and why not when it cannot.
  *
- * `none` is always available: a project is a directory, and git is optional
- * (plan §9). `checkout` needs a repository only to have a branch to name — a
- * folder without one still runs, so it is offered too, and the chip simply has
- * no branch to print. Only `worktree` can genuinely fail, and it fails for two
- * different reasons that need two different sentences.
+ * Local is always available: a project is a directory, and git is optional
+ * (plan §9) — without a repository it is `none`, with one it is `checkout`.
+ * Only `worktree` can genuinely fail, and it fails for two different reasons
+ * that need two different sentences.
  */
 export function gitModeAvailability(
   mode: GitMode,
@@ -96,21 +122,6 @@ export function gitModeAvailability(
     return { available: false, reason: "This repository has no commits yet to branch from" };
   }
   return { available: true };
-}
-
-/** The chip's text: `text-to-cad · hardcore/model-the-wrist`, Codex-style. */
-export function gitModeSummary(
-  mode: GitMode,
-  info: ProjectGitInfo | null,
-  session?: Pick<Session, "branch" | "gitMode"> | null,
-): string {
-  if (session) {
-    return session.branch ?? GIT_MODE_LABELS[session.gitMode];
-  }
-  if (mode === "checkout" && info?.branch) {
-    return info.branch;
-  }
-  return GIT_MODE_LABELS[mode];
 }
 
 /* -------------------------------------------------------------------------- */

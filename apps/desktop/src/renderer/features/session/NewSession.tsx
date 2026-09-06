@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { AlertCircle, Blocks, Bug, Ruler, ScanSearch } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
 import { Button } from "@renderer/components/ui/button";
+import { resolveGitMode, useProjectGitInfo } from "@renderer/lib/git-mode";
 import { useAcp } from "@renderer/state/acp";
 import { useAgents, useInstalledAgents } from "@renderer/state/agents";
 import { useComposer } from "@renderer/state/composer";
@@ -18,10 +19,12 @@ import { errorMessage, isAuthError } from "./view";
 
 /**
  * The new-session state (plan §2): "What should we build in <project>?",
- * the context strip — project · git mode · agent, Codex's — above the
- * composer, the composer with its approval chip, four suggestion cards. Sending
- * creates the session — `sessions.create` spawns the agent — selects it,
- * and sends the first prompt; the transcript takes over from there.
+ * a line saying what a session is, the context strip — project · git mode ·
+ * agent, Codex's — and an empty composer with its approval chip. Nothing
+ * else: a grid of canned prompts under the box is four guesses at what
+ * somebody came here to do. Sending creates the session — `sessions.create`
+ * spawns the agent — selects it, and sends the first prompt; the transcript
+ * takes over from there.
  *
  * Creation can fail before there is a session to show it in: the agent is
  * not signed in, or its adapter would not start. Those land here, above
@@ -54,7 +57,11 @@ export function NewSession({ project }: { project: Project }) {
     (settings?.defaultAgentId && installed.some((agent) => agent.id === settings.defaultAgentId)
       ? settings.defaultAgentId
       : (installed.find((agent) => agent.auth !== "unauthenticated")?.id ?? installed[0]?.id ?? null));
-  const resolvedGitMode = gitMode ?? settings?.defaultGitMode ?? "checkout";
+  // Two choices, Local and New worktree (plan §9, `lib/git-mode.ts`): which
+  // `GitMode` "Local" means is the project's business, not the person's — a
+  // folder that is not a repository has no checkout to work in.
+  const gitInfo = useProjectGitInfo(project.id);
+  const resolvedGitMode = resolveGitMode(gitMode ?? settings?.defaultGitMode ?? "checkout", gitInfo);
   const agent = agents.find((candidate) => candidate.id === resolvedAgentId) ?? null;
 
   const chooseAgent = (id: string) => {
@@ -101,7 +108,7 @@ export function NewSession({ project }: { project: Project }) {
     <div className="mb-1.5 flex items-center gap-1 px-1" data-context-strip>
       <ProjectChip onChange={setActiveProject} project={project} />
       <Dot />
-      <GitModeChip gitMode={resolvedGitMode} onChange={setGitMode} />
+      <GitModeChip gitMode={resolvedGitMode} info={gitInfo} onChange={setGitMode} />
       <Dot />
       <AgentChip agentId={resolvedAgentId} onChange={chooseAgent} />
     </div>
@@ -148,78 +155,15 @@ export function NewSession({ project }: { project: Project }) {
             status={busy ? "submitted" : "ready"}
           />
         </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {SUGGESTIONS.map((suggestion) => (
-            <SuggestionCard
-              key={suggestion.title}
-              onClick={() => setDraft("__new__", suggestion.prompt)}
-              {...suggestion}
-            />
-          ))}
-        </div>
       </div>
     </div>
   );
 }
-
-const SUGGESTIONS = [
-  {
-    icon: <ScanSearch className="size-4" />,
-    title: "Explore this project",
-    description: "Read the models and say how they fit together",
-    prompt: "Explore this project: read the models and explain how they fit together.",
-  },
-  {
-    icon: <Blocks className="size-4" />,
-    title: "Model a new part",
-    description: "From a description, a sketch or a drawing",
-    prompt: "Model a new part: ",
-  },
-  {
-    icon: <Ruler className="size-4" />,
-    title: "Measure and validate",
-    description: "Check fits, clearances and printability",
-    prompt: "Measure and validate the parts in this project: check fits, clearances and printability.",
-  },
-  {
-    icon: <Bug className="size-4" />,
-    title: "Fix a build",
-    description: "Track down why a model stopped generating",
-    prompt: "A model stopped generating. Track down why and fix it.",
-  },
-] as const;
 
 function Dot() {
   return (
     <span aria-hidden className="text-[12px] text-muted-foreground/60">
       ·
     </span>
-  );
-}
-
-function SuggestionCard({
-  icon,
-  title,
-  description,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className="flex items-start gap-3 rounded-xl border bg-card px-3.5 py-3 text-left transition-colors hover:bg-accent"
-      onClick={onClick}
-      type="button"
-    >
-      <span className="mt-0.5 text-muted-foreground">{icon}</span>
-      <span className="min-w-0">
-        <span className="block text-[13px] font-medium">{title}</span>
-        <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{description}</span>
-      </span>
-    </button>
   );
 }

@@ -3,6 +3,7 @@ import {
   Check,
   ChevronDown,
   Folder,
+  Gauge,
   GitBranch,
   GitFork,
   ShieldCheck,
@@ -21,11 +22,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
+import { agentIcon } from "@renderer/lib/agent-icons";
+import { GIT_MODE_LABELS, gitModeAvailability, localGitMode } from "@renderer/lib/git-mode";
 import { useAgents, useInstalledAgents } from "@renderer/state/agents";
 import { useProjects } from "@renderer/state/projects";
 import { useUi } from "@renderer/state/ui";
 import type { ApprovalMode, ConfigOption, SessionMode } from "@shared/acp/types";
 import type { AgentStatus } from "@shared/agents";
+import type { ProjectGitInfo } from "@shared/ipc/git";
 import type { GitMode, Project } from "@shared/types";
 
 /**
@@ -192,31 +196,56 @@ export function ProjectChip({ project, onChange }: { project: Project | null; on
   );
 }
 
-const GIT_MODES: { value: GitMode; label: string; description: string; icon: React.ReactNode }[] = [
-  { value: "none", label: "Local", description: "Work in the project directory; git is left alone", icon: <Folder /> },
-  { value: "checkout", label: "Current branch", description: "Work in the project directory on its branch", icon: <GitBranch /> },
-  { value: "worktree", label: "New worktree", description: "A fresh branch in its own worktree", icon: <GitFork /> },
-];
-
-export function GitModeChip({ gitMode, onChange }: { gitMode: GitMode; onChange: (mode: GitMode) => void }) {
-  const current = GIT_MODES.find((mode) => mode.value === gitMode) ?? GIT_MODES[0]!;
+/**
+ * Where the session's working directory comes from. Two choices (plan §9):
+ * **Local**, the project's own folder — its checkout, or just the folder when
+ * it is not a repository — and **New worktree**, a branch of its own, which a
+ * project that is not a repository or has no commits cannot offer and which
+ * says why instead of failing later.
+ */
+export function GitModeChip({
+  gitMode,
+  info,
+  onChange,
+}: {
+  gitMode: GitMode;
+  info: ProjectGitInfo | null;
+  onChange: (mode: GitMode) => void;
+}) {
+  const local = localGitMode(info);
+  const worktree = gitModeAvailability("worktree", info);
+  const isWorktree = gitMode === "worktree";
   return (
     <Chip
-      icon={current.icon}
-      label={current.label}
+      icon={isWorktree ? <GitFork /> : local === "none" ? <Folder /> : <GitBranch />}
+      label={GIT_MODE_LABELS[gitMode]}
       menu={
-        <DropdownMenuRadioGroup onValueChange={(value) => onChange(value as GitMode)} value={gitMode}>
-          {GIT_MODES.map((mode) => (
-            <DropdownMenuRadioItem key={mode.value} value={mode.value}>
-              <span className="flex flex-col">
-                <span>{mode.label}</span>
-                <span className="text-[11px] text-muted-foreground">{mode.description}</span>
+        <DropdownMenuRadioGroup
+          onValueChange={(value) => onChange(value === "worktree" ? "worktree" : local)}
+          value={isWorktree ? "worktree" : "local"}
+        >
+          <DropdownMenuRadioItem value="local">
+            <span className="flex flex-col">
+              <span>Local</span>
+              <span className="text-[11px] text-muted-foreground">
+                {local === "none"
+                  ? "The project folder; it is not a git repository"
+                  : `The project's checkout${info?.branch ? `, on ${info.branch}` : ""}`}
               </span>
-            </DropdownMenuRadioItem>
-          ))}
+            </span>
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem disabled={!worktree.available} value="worktree">
+            <span className="flex flex-col">
+              <span>New worktree</span>
+              <span className="text-[11px] text-muted-foreground">
+                {worktree.reason ?? "A fresh branch in a worktree of its own"}
+              </span>
+            </span>
+          </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       }
       testId="git-mode"
+      title={isWorktree ? "A fresh branch in a worktree of its own" : "The project's own folder"}
     />
   );
 }
@@ -322,42 +351,79 @@ export function ModeChip({
 }
 
 /**
- * Codex's model chip: `GPT-6 Astra · High`. The `model` option and the
- * `thought_level` option share one menu, in two groups.
+ * The model, with the mark of whoever runs it: `◇ GPT-6 Astra`. The icon is
+ * the agent's own (`lib/agent-icons.ts`) — the model belongs to a provider,
+ * and a row of identical sparkles says nothing about which one.
  */
 export function ModelChip({
   model,
-  effort,
+  icon,
   onChange,
 }: {
   model: SelectOption;
-  effort: SelectOption | null;
+  /** The agent's registry `icon`; a sparkle stands in when it has none. */
+  icon?: string | null;
   onChange: (configId: string, value: string) => void;
 }) {
   const modelName = model.options.find((option) => option.value === model.currentValue)?.name ?? model.currentValue;
-  const effortName = effort
-    ? (effort.options.find((option) => option.value === effort.currentValue)?.name ?? effort.currentValue)
-    : null;
   return (
     <Chip
-      icon={<Sparkles />}
-      label={effortName ? `${modelName} · ${effortName}` : modelName}
+      icon={<ProviderGlyph icon={icon} />}
+      label={modelName}
+      maxWidth={170}
       menu={
         <>
           <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">{model.name}</DropdownMenuLabel>
           <OptionGroup onChange={(value) => onChange(model.id, value)} option={model} />
-          {effort ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">{effort.name}</DropdownMenuLabel>
-              <OptionGroup onChange={(value) => onChange(effort.id, value)} option={effort} />
-            </>
-          ) : null}
         </>
       }
       testId="model"
-      title={model.description ?? undefined}
+      title={model.description ?? model.name}
     />
+  );
+}
+
+/**
+ * How hard the model is asked to think, when the agent exposes it — Codex's
+ * `reasoning_effort`, Claude's `effort`. Its own dropdown beside the model's
+ * rather than a second group inside it: they are two decisions, and the one
+ * that changes between prompts is this one.
+ */
+export function EffortChip({
+  effort,
+  onChange,
+}: {
+  effort: SelectOption;
+  onChange: (configId: string, value: string) => void;
+}) {
+  const current = effort.options.find((option) => option.value === effort.currentValue)?.name ?? effort.currentValue;
+  return (
+    <Chip
+      icon={<Gauge />}
+      label={current}
+      maxWidth={130}
+      menu={
+        <>
+          <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">{effort.name}</DropdownMenuLabel>
+          <OptionGroup onChange={(value) => onChange(effort.id, value)} option={effort} />
+        </>
+      }
+      testId="effort"
+      title={effort.description ?? effort.name}
+    />
+  );
+}
+
+/** The agent's mark at chip size, in `currentColor`, or a sparkle. */
+function ProviderGlyph({ icon }: { icon?: string | null }) {
+  const markup = agentIcon(icon);
+  if (!markup) {
+    return <Sparkles />;
+  }
+  return (
+    // Committed assets, checked by the script that downloads them — not user
+    // input (see `features/settings/AgentMark.tsx`).
+    <span aria-hidden className="block size-3.5" dangerouslySetInnerHTML={{ __html: markup }} />
   );
 }
 

@@ -1,6 +1,7 @@
-import { ChevronDown, FolderPlus, MessageSquarePlus, Search, Settings } from "lucide-react";
+import { FolderPlus, MessageSquarePlus, Search, Settings } from "lucide-react";
 import { cn } from "cn";
 
+import { SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import {
@@ -18,7 +19,9 @@ import { useUi } from "@renderer/state/ui";
  * fixed links, the project list, and a footer.
  *
  * The top strip is the window's drag region on macOS — the traffic lights sit
- * in it, which is why it is exactly `--titlebar-height` tall.
+ * in it, which is why it is exactly `--titlebar-height` tall and why nothing
+ * is drawn in it. The app's name goes *under* it, at Codex's size, with the
+ * sidebar's own collapse on its left and search on its right.
  */
 export function Sidebar() {
   const projects = useProjects((state) => state.projects);
@@ -30,18 +33,12 @@ export function Sidebar() {
 
   return (
     <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
-      <header
-        className="app-drag flex shrink-0 items-center gap-1 pr-2"
-        style={{
-          height: "var(--titlebar-height)",
-          // The traffic lights land here on macOS; nothing else may.
-          paddingLeft: "calc(var(--titlebar-inset) + 0.5rem)",
-        }}
-      >
-        <span className="app-no-drag flex items-center gap-1.5 text-[13px] font-semibold tracking-tight">
-          Hardcore
-          <ChevronDown className="size-3.5 text-muted-foreground" />
-        </span>
+      {/* The traffic lights' strip on macOS: drag region, and nothing else. */}
+      <div className="app-drag shrink-0" style={{ height: "var(--titlebar-height)" }} />
+
+      <header className="app-drag flex shrink-0 items-center gap-1 pt-0.5 pr-2 pb-1 pl-1.5">
+        <SidebarToggle />
+        <span className="app-no-drag truncate text-[15px] font-semibold tracking-tight">Hardcore</span>
         <div className="flex-1" />
         <Button
           aria-label="Search"

@@ -76,8 +76,12 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   const strip = page.locator("[data-context-strip]");
   await expect(strip.locator("[data-chip=project]")).toContainText(projectName);
   await expect(strip.locator("[data-chip=agent]")).not.toContainText("Choose an agent");
-  await expect(strip.locator("[data-chip=git-mode]")).toBeVisible();
+  // Two choices behind the git chip, and a scratch directory that is not a
+  // repository still runs: Local (plan §9).
+  await expect(strip.locator("[data-chip=git-mode]")).toContainText("Local");
   await expect(page.locator("[data-composer] [data-chip=approval]")).toContainText("Ask");
+  // The heading, the line under it, the strip and an empty box — nothing else.
+  await expect(page.locator("[data-new-session] button", { hasText: "Explore this project" })).toHaveCount(0);
   await shoot("session-new.png");
   await setTheme("light");
   await shoot("session-new-light.png");
@@ -130,9 +134,12 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await shoot("session-completed.png");
 
   // The composer is one row at the default session width (Codex's): `+` and
-  // approval on the left, the model chip and the options glyph on the right,
-  // nothing wrapped. The fake agent exposes a model and an effort, so the
-  // right-hand chips are there to measure.
+  // approval on the left, the model, the effort and the options glyph on the
+  // right, nothing wrapped. The fake agent exposes a model and an effort, so
+  // the right-hand chips are there to measure.
+  const composerRow = page.locator("[data-composer]");
+  await expect(composerRow.locator("[data-chip=model]")).toContainText("Fast");
+  await expect(composerRow.locator("[data-chip=effort]")).toContainText("Medium");
   await expectOneRowComposer();
   // And still one row at the three window sizes the layout is designed for.
   for (const [width, height] of [[1280, 800], [1680, 1050]] as const) {
@@ -143,6 +150,13 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   }
   await resizeWindow(1440, 900);
   await expectPaneWidths();
+
+  // Model and effort are two dropdowns, not two groups in one menu: each
+  // sets its own config option and the other stays where it was.
+  await composerRow.locator("[data-chip=effort]").click();
+  await page.getByRole("menuitemradio", { name: "High" }).click();
+  await expect(composerRow.locator("[data-chip=effort]")).toContainText("High");
+  await expect(composerRow.locator("[data-chip=model]")).toContainText("Fast");
 
   // Folding: the consecutive reads, edits and commands are one line.
   const group = page.locator("[data-activity-group]").first();
@@ -307,11 +321,16 @@ async function expectOneRowComposer() {
   }
 }
 
-/** The shell's contract: a 230px sidebar, a session column of at least 560px, the explorer the rest. */
+/**
+ * The shell's contract with the explorer closed, which is how it starts: a
+ * 230px sidebar and the session taking the rest of the window. The explorer
+ * opens when something opens in it (`tests/e2e/explorer.spec.ts`).
+ */
 async function expectPaneWidths() {
   const widths = await page.locator("[data-panel]").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().width));
   expect(widths).toHaveLength(3);
   expect(Math.abs(widths[0]! - 230), `sidebar ${widths[0]}`).toBeLessThanOrEqual(1);
-  expect(widths[1]!).toBeGreaterThanOrEqual(559);
-  expect(widths[2]!).toBeGreaterThan(300);
+  expect(widths[2]!, `explorer ${widths[2]}`).toBe(0);
+  expect(widths[1]!, `session ${widths[1]}`).toBeGreaterThanOrEqual(559);
+  expect(Math.abs(widths[0]! + widths[1]! - await page.evaluate(() => window.innerWidth))).toBeLessThanOrEqual(3);
 }

@@ -71,6 +71,10 @@ test("Cmd+K opens the palette and Escape closes it", async () => {
 });
 
 test("Cmd+1..9 switch tabs and Cmd+W closes the active one", async () => {
+  // The explorer starts closed (plan §3); the shortcut for that is its own
+  // test below, so this one just opens it.
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeGreaterThan(0);
   for (const name of ["one.md", "two.md", "three.md"]) {
     await page.getByRole("button", { name: "New tab", exact: true }).click();
     await page.getByLabel("Filter files").fill(name);
@@ -132,9 +136,16 @@ test("Cmd+B and Cmd+Alt+B toggle the side panes", async () => {
   await page.keyboard.press(`${mod}+B`);
   await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThan(0);
 
+  // The explorer is closed until something opens it, and an earlier test in
+  // this file opened it: closed is where this one starts from either way.
   const explorer = page.getByTestId("explorer");
+  const explorerWidth = async () => (await explorer.boundingBox())?.width ?? 0;
+  if ((await explorerWidth()) > 0) {
+    await page.keyboard.press(`${mod}+Alt+B`);
+  }
+  await expect.poll(explorerWidth).toBe(0);
   await page.keyboard.press(`${mod}+Alt+B`);
-  await expect.poll(async () => (await explorer.boundingBox())?.width ?? 0).toBe(0);
+  await expect.poll(explorerWidth).toBeGreaterThan(0);
   await page.keyboard.press(`${mod}+Alt+B`);
-  await expect.poll(async () => (await explorer.boundingBox())?.width ?? 0).toBeGreaterThan(0);
+  await expect.poll(explorerWidth).toBe(0);
 });

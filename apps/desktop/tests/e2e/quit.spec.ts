@@ -69,6 +69,9 @@ test("the app quits in under two seconds with everything running, leaving no chi
   // The watcher over this repository.
   const project = await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repoRoot);
   await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  // The explorer pane starts closed (plan §3); everything below opens in it.
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeGreaterThan(0);
 
   // A shell.
   await page.getByRole("button", { name: "New tab of another kind" }).click();

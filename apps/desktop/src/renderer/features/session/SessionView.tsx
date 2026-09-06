@@ -10,12 +10,12 @@ import type { Session } from "@shared/types";
 
 import { AuthPrompt } from "./AuthPrompt";
 import { Composer } from "./Composer";
-import { ApprovalChip, ModeChip, ModelChip, OptionsChip } from "./ComposerChips";
+import { ApprovalChip, EffortChip, ModeChip, ModelChip, OptionsChip } from "./ComposerChips";
 import { FilesChangedPill } from "./FilesChangedPill";
 import { PlanCard } from "./PlanCard";
 import { SessionHeader } from "./SessionHeader";
 import { Transcript } from "./Transcript";
-import { isAuthError } from "./view";
+import { isAuthError, isEffortOption } from "./view";
 
 /**
  * One thread, one agent (plan §3): the header, the transcript, the pinned
@@ -67,12 +67,12 @@ export function SessionView({ session }: { session: Session }) {
     const selects = state.configOptions.filter((option) => option.type === "select");
     const booleans = state.configOptions.filter((option) => option.type === "boolean");
     const model = selects.find((option) => option.category === "model") ?? null;
-    const effort = selects.find((option) => option.category === "thought_level") ?? null;
+    const effort = selects.find(isEffortOption) ?? null;
     const preset = selects.find((option) => option.category === "mode") ?? null;
     const others = selects.filter((option) => option !== model && option !== effort && option !== preset);
     const setOption = (configId: string, value: string | boolean) => void setConfigOption(session.id, configId, value);
-    // Codex's row, left to right: `+`, approval; then on the right the model
-    // (with its effort), the options glyph, mic, send. The agent and the
+    // Codex's row, left to right: `+`, approval; then on the right the model,
+    // the effort beside it, the options glyph, mic, send. The agent and the
     // project are the title bar's and the sidebar's, not the composer's. An
     // agent with modes but no `mode` config option (Claude) gets its modes as
     // a chip of their own, beside approval.
@@ -96,12 +96,13 @@ export function SessionView({ session }: { session: Session }) {
       ),
       trailing: (
         <>
-          {model ? <ModelChip effort={effort} model={model} onChange={setOption} /> : null}
+          {model ? <ModelChip icon={agent?.icon} model={model} onChange={setOption} /> : null}
+          {effort ? <EffortChip effort={effort} onChange={setOption} /> : null}
           <OptionsChip booleans={booleans} onSelect={setOption} onToggle={setOption} selects={others} />
         </>
       ),
     };
-  }, [state, session.id, setApprovalMode, setMode, setConfigOption]);
+  }, [state, session.id, agent?.icon, setApprovalMode, setMode, setConfigOption]);
 
   const planTurn =
     state?.turns.findLast((turn) => turn.role === "agent" && turn.parts.some((part) => part.type === "plan")) ?? null;

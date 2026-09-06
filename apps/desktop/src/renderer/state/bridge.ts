@@ -133,7 +133,7 @@ export function runUiCommand(payload: IpcEventPayload<"ui.command">): void {
       void toggleLayout("sidebarCollapsed");
       break;
     case "toggle-explorer":
-      void toggleLayout("explorerCollapsed");
+      useExplorer.getState().toggleCollapsed();
       break;
     case "new-session": {
       ui.closeSettings();
@@ -159,14 +159,11 @@ export function runUiCommand(payload: IpcEventPayload<"ui.command">): void {
     }
     case "open-review": {
       // The files-changed pill: open (or focus) the Review tab, and the
-      // explorer if it was collapsed. P3 gives the tab its body.
-      const { settings, setLayout } = useSettings.getState();
-      if (settings?.layout.explorerCollapsed) {
-        void setLayout({ explorerCollapsed: false });
-      }
+      // explorer if it was closed. P3 gives the tab its body.
       const explorer = useExplorer.getState();
       const existing = explorer.tabs.find((tab) => tab.kind === "review");
       if (existing) {
+        explorer.show();
         explorer.setActive(existing.id);
       } else {
         explorer.open("review");
@@ -176,7 +173,7 @@ export function runUiCommand(payload: IpcEventPayload<"ui.command">): void {
   }
 }
 
-function toggleLayout(key: "sidebarCollapsed" | "explorerCollapsed") {
+function toggleLayout(key: "sidebarCollapsed") {
   const { settings, setLayout } = useSettings.getState();
   if (!settings) {
     return Promise.resolve();
