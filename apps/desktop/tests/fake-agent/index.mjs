@@ -13,6 +13,9 @@
  *   "terminal"    create a terminal (`echo` + args), poll it, wait, release
  *   "read"        fs/read_text_file on the path after "read "
  *   "write"       fs/write_text_file "hello" to the path after "write "
+ *   "open"        call the Hardcore MCP server's `open_file` on the path
+ *                 after "open " — the server `session/new` carried in
+ *                 `mcpServers`, spawned the way an adapter spawns it
  *   "subagent"    the draft subagent_spawned / child update / state_update
  *   "thought"     an agent_thought_chunk first
  *   "slow"        wait until cancelled
@@ -38,6 +41,8 @@ import path from "node:path";
 import { Readable, Writable } from "node:stream";
 
 import { AgentSideConnection, PROTOCOL_VERSION, RequestError, ndJsonStream } from "@agentclientprotocol/sdk";
+import { Client as McpClient } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const args = process.argv.slice(2);
 const fixturePath = args.includes("--fixture") ? args[args.indexOf("--fixture") + 1] : null;
@@ -83,6 +88,8 @@ function configOptions() {
 
 let cancelled = false;
 let cancelWaiter = null;
+/** The MCP servers `session/new` named, so a prompt can call one (below). */
+let mcpServers = [];
 
 const SESSION_ID = fixture?.newSession?.sessionId ?? "fake-session-1";
 
@@ -110,6 +117,7 @@ new AgentSideConnection((conn) => ({
     if (params?.cwd && existsSync(path.join(params.cwd, ".fake-auth-required"))) {
       throw RequestError.authRequired();
     }
+    mcpServers = Array.isArray(params?.mcpServers) ? params.mcpServers : [];
     return {
       sessionId: SESSION_ID,
       modes: {
@@ -227,6 +235,20 @@ async function script(conn, params) {
     }
   }
 
+  if (text.includes("open")) {
+    // The real thing, end to end: the stdio server Hardcore put in
+    // `session/new`, spawned with the environment it gave (bridge URL, the
+    // session's token and cwd), and its `open_file` tool called over MCP.
+    const file = after("open");
+    await send({ sessionUpdate: "tool_call", toolCallId: "open-1", title: `open_file ${file}`, kind: "other", status: "in_progress", rawInput: { path: file } });
+    try {
+      const result = await callHardcoreTool("open_file", { path: file });
+      await send({ sessionUpdate: "tool_call_update", toolCallId: "open-1", status: result.isError ? "failed" : "completed", rawOutput: result });
+    } catch (error) {
+      await send({ sessionUpdate: "tool_call_update", toolCallId: "open-1", status: "failed", content: [{ type: "content", content: { type: "text", text: String(error.message ?? error) } }] });
+    }
+  }
+
   if (text.includes("permission")) {
     await send({ sessionUpdate: "tool_call", toolCallId: "cmd-1", title: "Run ls", kind: "execute", status: "pending", rawInput: { command: "ls" } });
     const answer = await conn.requestPermission({
@@ -279,6 +301,26 @@ async function script(conn, params) {
     stopReason: cancelled ? "cancelled" : "end_turn",
     usage: { totalTokens: 12, inputTokens: 10, outputTokens: 2 },
   };
+}
+
+/** Spawn the `hardcore` MCP server from `session/new`, call one tool, and let it go. */
+async function callHardcoreTool(name, args) {
+  const server = mcpServers.find((candidate) => candidate.name === "hardcore") ?? mcpServers[0];
+  if (!server) {
+    throw new Error("session/new carried no MCP servers");
+  }
+  const env = { ...process.env };
+  for (const entry of server.env ?? []) {
+    env[entry.name] = entry.value;
+  }
+  const transport = new StdioClientTransport({ command: server.command, args: server.args ?? [], env });
+  const client = new McpClient({ name: "fake-agent", version: "0.0.0" });
+  await client.connect(transport);
+  try {
+    return await client.callTool({ name, arguments: args });
+  } finally {
+    await client.close().catch(() => {});
+  }
 }
 
 /* -------------------------------------------------------------------------- */

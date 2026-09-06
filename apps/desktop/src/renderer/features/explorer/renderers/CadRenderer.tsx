@@ -1,12 +1,14 @@
 import { Box, RefreshCw, Settings2 } from "lucide-react";
-import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { Spinner } from "@renderer/components/ui/spinner";
 import { useElementWidth } from "@renderer/hooks/use-element-width";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
+import { useExplorer } from "@renderer/state/explorer";
 import { useUi } from "@renderer/state/ui";
 import type { ViewerOrigin } from "@shared/ipc/cad";
+import type { ExplorerRoot } from "@shared/types";
 
 import { cadSceneBackgroundFor, cadSheetWidthFor } from "../cad-layout";
 import { EmptyState } from "../EmptyState";
@@ -27,7 +29,8 @@ import { EmptyState } from "../EmptyState";
  * `React.lazy` is what keeps it in its own chunk.
  *
  * The surface talks HTTP to a `cadgen viewer --api-only`, so it needs that
- * instance's origin; main spawns one per project root (`cad.viewerOrigin`).
+ * instance's origin; main spawns one per root — the project, or a worktree —
+ * (`cad.viewerOrigin`).
  * The runtime that process runs in SHIPS INSIDE THE APP, so an answer with no
  * origin is a failure, never a first-run state: the card below shows the
  * runtime's or the launcher's own words, the log to read, and the two things
@@ -47,6 +50,8 @@ type CadSurfaceProps = {
   width: number;
   colorScheme: "light" | "dark";
   onOpenFile: (path: string) => void;
+  /** A reference to select once the model is up; `key` distinguishes repeats. */
+  selectReference: { selector: string; key: number } | null;
 };
 
 /**
@@ -63,7 +68,7 @@ const CadSurface = lazy(async () => {
   // no declarations of its own.
   const { CadFileView, ViewerOriginProvider } = await import("@viewer/file-view");
   return {
-    default: ({ origin, file, width, colorScheme, onOpenFile }: CadSurfaceProps) => (
+    default: ({ origin, file, width, colorScheme, onOpenFile, selectReference }: CadSurfaceProps) => (
       <ViewerOriginProvider origin={origin}>
         {/*
           A containing block for the surface's `position: fixed` parts. The
@@ -89,6 +94,7 @@ const CadSurface = lazy(async () => {
             onOpenFile={(next) => onOpenFile(next)}
             origin={origin}
             sceneBackground={cadSceneBackgroundFor(colorScheme)}
+            selectReference={selectReference}
           />
         </div>
       </ViewerOriginProvider>
@@ -97,16 +103,27 @@ const CadSurface = lazy(async () => {
 });
 
 export function CadRenderer({
+  tabId,
   projectId,
+  root,
   path,
   onOpenFile,
 }: {
+  tabId: string;
   projectId: string;
-  /** Project-root-relative: the same path the viewer's `?file=` carries. */
+  /** The directory the viewer serves: the project, or the tab's worktree (plan §9). */
+  root: ExplorerRoot;
+  /** Root-relative: the same path the viewer's `?file=` carries. */
   path: string;
   onOpenFile: (path: string) => void;
 }) {
   const [answer, setAnswer] = useState<ViewerOrigin | null>(null);
+  // A transcript link's `#selector` for this tab (`explorer.selectCadReference`).
+  const selection = useExplorer((state) => (state.cadSelection?.tabId === tabId ? state.cadSelection : null));
+  const selectReference = useMemo(
+    () => (selection ? { selector: selection.selector, key: selection.nonce } : null),
+    [selection],
+  );
   const openSettings = useUi((state) => state.openSettings);
   const colorScheme = useResolvedTheme();
   const [hostRef, width] = useElementWidth();
@@ -122,7 +139,7 @@ export function CadRenderer({
   useEffect(() => {
     let cancelled = false;
     void window.hardcore.cad
-      .viewerOrigin({ projectId })
+      .viewerOrigin({ projectId, ...(root ? { root } : {}) })
       .then((result) => {
         if (!cancelled) {
           setAnswer(result);
@@ -136,7 +153,7 @@ export function CadRenderer({
     return () => {
       cancelled = true;
     };
-  }, [projectId, attempt]);
+  }, [projectId, root, attempt]);
 
   if (!answer) {
     return (
@@ -200,7 +217,14 @@ export function CadRenderer({
           </div>
         }
       >
-        <CadSurface colorScheme={colorScheme} file={path} onOpenFile={onOpenFile} origin={answer.origin} width={width} />
+        <CadSurface
+          colorScheme={colorScheme}
+          file={path}
+          onOpenFile={onOpenFile}
+          origin={answer.origin}
+          selectReference={selectReference}
+          width={width}
+        />
       </Suspense>
     </div>
   );

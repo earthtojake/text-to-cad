@@ -17,6 +17,7 @@ function reset() {
   window.localStorage.clear();
   useExplorer.setState({
     projectId: PROJECT,
+    root: null,
     tabs: [],
     activeId: null,
     ready: true,
@@ -150,11 +151,78 @@ describe("the explorer strip", () => {
   });
 
   it("ignores a change batch for another project", () => {
-    useExplorer.getState().receiveChanges("some-other-project", ["a.txt"]);
+    useExplorer.getState().receiveChanges("some-other-project", null, ["a.txt"]);
     expect(useExplorer.getState().fsRevision).toBe(0);
-    useExplorer.getState().receiveChanges(PROJECT, ["a.txt"]);
+    useExplorer.getState().receiveChanges(PROJECT, null, ["a.txt"]);
     expect(useExplorer.getState().fsRevision).toBe(1);
     expect(useExplorer.getState().changedPaths).toEqual(["a.txt"]);
+    expect(useExplorer.getState().changedRoot).toBeNull();
+    useExplorer.getState().receiveChanges(PROJECT, "/wt/slug", ["b.txt"]);
+    expect(useExplorer.getState().changedRoot).toBe("/wt/slug");
+  });
+
+  /**
+   * The root (plan §9): where a new file or terminal opens, and which tree the
+   * pane lists. It follows the active session — a worktree thread makes it the
+   * worktree — while every tab keeps the root it was opened in.
+   */
+  describe("roots", () => {
+    const WORKTREE = "/home/me/.hardcore/worktrees/proj/model-the-wrist";
+
+    it("opens files and terminals in the active root, and remembers it on the tab", () => {
+      useExplorer.getState().setRoot(WORKTREE);
+      const file = useExplorer.getState().openFile("STEP/wrist.step");
+      expect(file).toMatchObject({ kind: "file", path: "STEP/wrist.step", root: WORKTREE });
+      const terminal = useExplorer.getState().open("terminal");
+      expect(terminal).toMatchObject({ kind: "terminal", cwd: WORKTREE });
+      useExplorer.getState().setRoot(null);
+      expect(useExplorer.getState().open("file")).toMatchObject({ kind: "file", root: null });
+      expect(useExplorer.getState().open("terminal")).toMatchObject({ kind: "terminal", cwd: null });
+      // The worktree tab still says where it came from.
+      expect(useExplorer.getState().tabs.find((tab) => tab.id === file?.id)).toMatchObject({ root: WORKTREE });
+    });
+
+    it("keeps the same path in two roots as two tabs, and reuses within a root", () => {
+      useExplorer.getState().setRoot(null);
+      const checkout = useExplorer.getState().openFile("README.md");
+      const worktree = useExplorer.getState().openFile("README.md", WORKTREE);
+      expect(worktree?.id).not.toBe(checkout?.id);
+      expect(useExplorer.getState().openFile("README.md", WORKTREE)?.id).toBe(worktree?.id);
+      expect(useExplorer.getState().openFile("README.md")?.id).toBe(checkout?.id);
+      expect(useExplorer.getState().tabs).toHaveLength(2);
+    });
+
+    it("fills a blank tab with the root it was asked for", () => {
+      useExplorer.getState().open("file");
+      const filled = useExplorer.getState().openFile("a.py", WORKTREE);
+      expect(useExplorer.getState().tabs).toHaveLength(1);
+      expect(filled).toMatchObject({ path: "a.py", root: WORKTREE });
+    });
+
+    it("switches the watcher with the root and keeps each root's tree", () => {
+      useExplorer.getState().setRoot(null);
+      useExplorer.getState().setTreeOpen(null, (open) => new Set([...open, "src"]));
+      vi.mocked(window.hardcore.explorer.watch).mockClear();
+      vi.mocked(window.hardcore.explorer.unwatch).mockClear();
+      useExplorer.getState().setRoot(WORKTREE);
+      expect(window.hardcore.explorer.unwatch).toHaveBeenCalledWith({ projectId: PROJECT });
+      expect(window.hardcore.explorer.watch).toHaveBeenCalledWith({ projectId: PROJECT, root: WORKTREE });
+      expect(useExplorer.getState().root).toBe(WORKTREE);
+      // The worktree's tree starts fresh; the checkout's keeps its open folder.
+      expect(useExplorer.getState().trees[WORKTREE]).toBeUndefined();
+      expect(useExplorer.getState().trees[""]?.open.has("src")).toBe(true);
+      // Setting the same root again is a no-op.
+      vi.mocked(window.hardcore.explorer.watch).mockClear();
+      useExplorer.getState().setRoot(WORKTREE);
+      expect(window.hardcore.explorer.watch).not.toHaveBeenCalled();
+    });
+
+    it("drops a reveal when the root changes; a reveal names its root", () => {
+      useExplorer.getState().setRoot(null);
+      useExplorer.getState().setReveal({ path: "STEP", directory: true, root: null });
+      useExplorer.getState().setRoot(WORKTREE);
+      expect(useExplorer.getState().reveal).toBeNull();
+    });
   });
 
   it("opens the pane when a tab of any kind opens, without writing a preference", () => {
@@ -181,10 +249,10 @@ describe("the explorer strip", () => {
 
   it("titles a tab by what a person would call it", () => {
     const base = { id: "t", projectId: PROJECT, order: 0 } as const;
-    expect(tabTitle({ ...base, kind: "file", path: "src/wrist.step", viewSource: false })).toBe(
+    expect(tabTitle({ ...base, kind: "file", path: "src/wrist.step", root: null, viewSource: false })).toBe(
       "wrist.step",
     );
-    expect(tabTitle({ ...base, kind: "file", path: null, viewSource: false })).toBe("Untitled");
+    expect(tabTitle({ ...base, kind: "file", path: null, root: null, viewSource: false })).toBe("Untitled");
     expect(tabTitle({ ...base, kind: "browser", url: "https://example.com/a/b" })).toBe(
       "example.com",
     );

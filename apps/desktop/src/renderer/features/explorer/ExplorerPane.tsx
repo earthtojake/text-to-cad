@@ -85,6 +85,7 @@ function TabBody({ tab, project }: { tab: ExplorerTab; project: Project }) {
         <FileTab
           path={tab.path}
           project={project}
+          root={tab.root}
           tabId={tab.id}
           viewSource={tab.viewSource}
         />

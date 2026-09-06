@@ -86,7 +86,18 @@ export type TerminalInfo = z.infer<typeof TerminalInfoSchema>;
 /* -------------------------------------------------------------------------- */
 
 const InProject = z.object({ projectId: z.string().min(1) });
-const AtPath = InProject.extend({ path: z.string() });
+/**
+ * A project and, optionally, one of its worktrees as the root (plan §9). Main
+ * resolves the pair: no `root` is the project directory; a `root` has to be
+ * the project itself or a directory under its worktree folder, and anything
+ * else is refused before a path is read.
+ */
+const InRoot = InProject.extend({ root: z.string().optional() });
+const AtPath = InRoot.extend({ path: z.string() });
+
+/** What `explorer.exists` answers per path: what is there, or nothing. */
+export const PathKindSchema = z.enum(["file", "directory"]).nullable();
+export type PathKind = z.infer<typeof PathKindSchema>;
 
 export const explorerIpc = {
   explorer: {
@@ -101,6 +112,16 @@ export const explorerIpc = {
       z.object({ paths: z.array(z.string()), truncated: z.boolean() }),
     ),
     stat: invoke(AtPath, FileStatSchema),
+    /**
+     * Which of `paths` exist under the root, in one round trip. The
+     * transcript asks this for every path-shaped token in a message before
+     * drawing it as a link (`features/session/links`); one call per message
+     * rather than one per token.
+     */
+    exists: invoke(
+      InRoot.extend({ paths: z.array(z.string()).max(500) }),
+      z.record(z.string(), PathKindSchema),
+    ),
     readText: invoke(AtPath, TextFileSchema),
     writeText: invoke(
       AtPath.extend({
@@ -117,9 +138,9 @@ export const explorerIpc = {
     /** Open a file in the OS's default application for its type. */
     openDefault: invoke(AtPath, z.void()),
 
-    /** Start (or join) the project root's watcher. Refcounted in main. */
-    watch: invoke(InProject, z.void()),
-    unwatch: invoke(InProject, z.void()),
+    /** Start (or join) the root's watcher. Refcounted in main. */
+    watch: invoke(InRoot, z.void()),
+    unwatch: invoke(InRoot, z.void()),
 
     /** The persisted tab strip for a project (the `explorer_tabs` table). */
     loadTabs: invoke(InProject, z.array(ExplorerTabSchema)),
@@ -129,7 +150,11 @@ export const explorerIpc = {
   terminal: {
     create: invoke(
       InProject.extend({
-        /** Defaults to the project root; a session passes its worktree. */
+        /**
+         * Defaults to the project root; a tab opened while a worktree
+         * session is active passes that worktree. Checked like a root: the
+         * project or one of its worktrees, nothing else.
+         */
         cwd: z.string().optional(),
         cols: z.number().int().positive().optional(),
         rows: z.number().int().positive().optional(),
@@ -178,6 +203,8 @@ export const explorerEvents = {
    */
   "files.changed": z.object({
     projectId: z.string(),
+    /** The watched root the paths are relative to; null is the project directory. */
+    root: z.string().nullable(),
     changes: z.array(FileChangeSchema),
   }),
   /**

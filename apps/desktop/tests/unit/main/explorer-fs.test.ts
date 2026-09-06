@@ -13,6 +13,7 @@ import {
   listDirectory,
   listPaths,
   looksBinary,
+  pathKinds,
   readTextFile,
   resolveInRoot,
   revisionOf,
@@ -228,3 +229,16 @@ describe("reading and writing", () => {
 function row(name: string, kind: "file" | "directory") {
   return { path: name, name, kind, size: 0, modifiedAt: 0, symlink: false };
 }
+
+describe("pathKinds", () => {
+  it("answers file, directory or null per path, and null for anything outside", async () => {
+    const answers = await pathKinds(root, ["README.md", "src", "nope.txt", "../outside", "/etc/passwd", "src/../README.md"]);
+    expect(answers["README.md"]).toBe("file");
+    expect(answers["src"]).toBe("directory");
+    expect(answers["nope.txt"]).toBeNull();
+    expect(answers["../outside"]).toBeNull();
+    expect(answers["/etc/passwd"]).toBeNull();
+    // Answered under the key it was asked by, however it was spelled.
+    expect(answers["src/../README.md"]).toBe("file");
+  });
+});

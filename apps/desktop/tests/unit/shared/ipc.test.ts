@@ -78,6 +78,7 @@ describe("the contract", () => {
       "explorer.list",
       "explorer.paths",
       "explorer.stat",
+      "explorer.exists",
       "explorer.readText",
       "explorer.writeText",
       "explorer.readBinary",

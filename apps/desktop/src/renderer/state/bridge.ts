@@ -7,12 +7,14 @@
  * change made from the app menu updates the same state a click would.
  */
 import type { IpcEventPayload } from "@shared/ipc";
+import type { ExplorerRoot } from "@shared/types";
 
 import { useAcp } from "./acp";
 import { useAgents } from "./agents";
 import { useComposer } from "./composer";
 import { performCadCommand } from "./cad-commands";
 import { useExplorer } from "./explorer";
+import { usePathLinks } from "./path-links";
 import { usePlugins } from "./plugins";
 import { useProjects } from "./projects";
 import { useRuntime } from "./runtime";
@@ -63,11 +65,12 @@ export function subscribeToMain(): () => void {
     window.hardcore.on("runtime.status", (status) => {
       useRuntime.getState().receive(status);
     }),
-    window.hardcore.on("files.changed", ({ projectId, changes }) => {
-      useExplorer.getState().receiveChanges(
-        projectId,
-        changes.map((change) => change.path),
-      );
+    window.hardcore.on("files.changed", ({ projectId, root, changes }) => {
+      const paths = changes.map((change) => change.path);
+      useExplorer.getState().receiveChanges(projectId, root, paths);
+      // A path the transcript showed as text may exist now, or one it linked
+      // may be gone: the next render asks again.
+      usePathLinks.getState().invalidate({ projectId, root }, paths);
     }),
     // An agent's tool call, relayed by main; answered whatever happens, so
     // the bridge's wait ends with the reason rather than a timeout.
@@ -96,15 +99,39 @@ export function subscribeToMain(): () => void {
       return;
     }
     boundProject = state.activeId;
-    void useExplorer.getState().bindProject(state.activeId);
+    void useExplorer.getState().bindProject(state.activeId, explorerRootFor(state.activeId));
+  });
+  // And its root follows the session selection (plan §9): a thread in a
+  // worktree makes the explorer look at that worktree; a thread in the
+  // checkout, or no thread, makes it look at the project.
+  const unsubscribeSessions = useSessions.subscribe(() => {
+    const explorer = useExplorer.getState();
+    if (explorer.projectId && explorer.ready) {
+      explorer.setRoot(explorerRootFor(explorer.projectId));
+    }
   });
 
   return () => {
     unsubscribeProjects();
+    unsubscribeSessions();
     for (const detach of off) {
       detach();
     }
   };
+}
+
+/**
+ * The explorer root the active session implies for a project: its worktree
+ * when it has one and belongs to that project, else null — the project
+ * directory. The new-session state has no session and reads the project.
+ */
+export function explorerRootFor(projectId: string | null): ExplorerRoot {
+  if (!projectId) {
+    return null;
+  }
+  const { activeId, sessions } = useSessions.getState();
+  const session = sessions.find((candidate) => candidate.id === activeId);
+  return session && session.projectId === projectId ? (session.worktreePath ?? null) : null;
 }
 
 /**
@@ -192,5 +219,6 @@ export async function hydrate(): Promise<void> {
   ]);
   // The explorer's strip follows the active project, which the subscription
   // in `subscribeToMain` picks up as soon as `useProjects.load` resolves.
-  await useExplorer.getState().bindProject(useProjects.getState().activeId);
+  const projectId = useProjects.getState().activeId;
+  await useExplorer.getState().bindProject(projectId, explorerRootFor(projectId));
 }

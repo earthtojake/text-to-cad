@@ -17,7 +17,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   projectWorktreeDir,
   releaseWorkspace,
+  resolveProjectRoot,
   resolveWorkspace,
+  rootBelongsToProject,
   worktreeRoot,
 } from "@main/projects/workspace";
 import { defaultSettings, type Project, type Settings } from "@shared/types";
@@ -217,5 +219,42 @@ describe("releaseWorkspace", () => {
     expect(refused.removed).toBe(false);
     expect(refused.reason).toMatch(/uncommitted/);
     expect((await stat(dirty.cwd)).isDirectory()).toBe(true);
+  });
+});
+
+/**
+ * The explorer's root check (plan §9): a tab, a terminal or an agent may
+ * name the project directory or one of its worktrees, and nothing else on
+ * the machine. Pure path arithmetic — no repository is needed to say where a
+ * worktree would be allowed to live.
+ */
+describe("resolveProjectRoot", () => {
+  const settings: Pick<Settings, "worktreeRoot"> = { worktreeRoot: "/tmp/hardcore-worktrees" };
+  const project: Pick<Project, "name" | "path"> = { name: "text-to-cad", path: "/Users/me/text-to-cad" };
+
+  it("answers the project directory for no root, and for the project itself", () => {
+    expect(resolveProjectRoot(settings, project, null)).toBe(project.path);
+    expect(resolveProjectRoot(settings, project, undefined)).toBe(project.path);
+    expect(resolveProjectRoot(settings, project, project.path)).toBe(project.path);
+    expect(resolveProjectRoot(settings, project, "/Users/me/text-to-cad/")).toBe(project.path);
+  });
+
+  it("admits a directory under the project's worktree folder, resolved", () => {
+    const worktree = path.join(projectWorktreeDir(settings, project), "model-the-wrist");
+    expect(rootBelongsToProject(settings, project, worktree)).toBe(true);
+    expect(resolveProjectRoot(settings, project, worktree)).toBe(worktree);
+    expect(resolveProjectRoot(settings, project, `${worktree}/../model-the-wrist`)).toBe(worktree);
+  });
+
+  it("refuses everything else with a sentence", () => {
+    expect(rootBelongsToProject(settings, project, "/etc")).toBe(false);
+    expect(rootBelongsToProject(settings, project, "/Users/me/text-to-cad-other")).toBe(false);
+    // Another project's worktrees are another project's.
+    expect(rootBelongsToProject(settings, project, "/tmp/hardcore-worktrees/other/slug")).toBe(false);
+    // The worktree folder itself is not a worktree.
+    expect(rootBelongsToProject(settings, project, projectWorktreeDir(settings, project))).toBe(false);
+    // Climbing out of the worktree folder is not in it.
+    expect(rootBelongsToProject(settings, project, `${projectWorktreeDir(settings, project)}/slug/../../..`)).toBe(false);
+    expect(() => resolveProjectRoot(settings, project, "/etc")).toThrow("does not belong to this project");
   });
 });

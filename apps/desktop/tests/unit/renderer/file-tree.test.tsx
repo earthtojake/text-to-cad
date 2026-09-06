@@ -50,7 +50,7 @@ function stub(name: keyof typeof window.hardcore.explorer, implementation: unkno
 
 beforeEach(() => {
   listed = [];
-  useExplorer.setState({ treeOpen: new Set([""]), treeListings: {} });
+  useExplorer.setState({ trees: {} });
   stub("list", async ({ path }: { path: string }) => {
     listed.push(path);
     return entriesOf(path);
@@ -66,6 +66,7 @@ function mount(props: Partial<Parameters<typeof FileTree>[0]> = {}) {
       onOpen={() => {}}
       projectId="p1"
       projectName="text-to-cad"
+      root={null}
       {...props}
     />,
   );
@@ -139,6 +140,7 @@ describe("FileTree", () => {
         onOpen={() => {}}
         projectId="p1"
         projectName="text-to-cad"
+        root={null}
       />,
     );
     await waitFor(() => expect(rowExists("apps/viewer/src/main.jsx")).toBe(true));

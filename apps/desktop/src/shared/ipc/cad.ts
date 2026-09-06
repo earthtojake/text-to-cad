@@ -71,7 +71,13 @@ export const CadCommandSchema = z.object({
   kind: CadCommandKindSchema,
   /** The project the command is about; the renderer switches to it. */
   projectId: z.string().min(1),
-  /** Project-root-relative, already resolved and checked by main. */
+  /**
+   * The root `path` is relative to: null for the project directory, else the
+   * absolute path of the session's worktree (plan §9). Main chose it from the
+   * session's cwd and checked it belongs to the project.
+   */
+  root: z.string().nullable().optional(),
+  /** Root-relative, already resolved and checked by main. */
   path: z.string().optional(),
   /** For `reveal`: whether `path` is a folder (opened, not just shown). */
   directory: z.boolean().optional(),
@@ -92,11 +98,12 @@ export type CadReply = z.infer<typeof CadReplySchema>;
 export const cadIpc = {
   cad: {
     /**
-     * The viewer origin for a project root, starting one if need be.
+     * The viewer origin for a root — the project, or one of its worktrees,
+     * each served by its own `cadgen viewer` — starting one if need be.
      * Idempotent: the launcher's reuse contract means asking twice gets the
      * same instance.
      */
-    viewerOrigin: invoke(z.object({ projectId: z.string().min(1) }), ViewerOriginSchema),
+    viewerOrigin: invoke(z.object({ projectId: z.string().min(1), root: z.string().optional() }), ViewerOriginSchema),
     /** The renderer's answer to a `cad.command`. */
     reply: invoke(CadReplySchema, z.void()),
   },

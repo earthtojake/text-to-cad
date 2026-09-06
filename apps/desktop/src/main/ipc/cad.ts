@@ -2,7 +2,8 @@
  * `cad.*`: the viewer origin the file tab asks for, and the renderer's
  * answers to the MCP bridge's commands.
  *
- * `viewerOrigin` is P3's seam with P5's body: the project's root goes to the
+ * `viewerOrigin` is P3's seam with P5's body: the tab's root — the project,
+ * or one of its worktrees — goes to the
  * viewer manager, which spawns (or reuses) a `cadgen viewer --api-only` for it
  * and answers with its origin — or with the reason there is none, plus the
  * runtime's or the launcher's words, which the renderer shows as they are. `reply` is the other half of
@@ -14,16 +15,19 @@ import type { cadIpc } from "../../shared/ipc/cad";
 import type { ViewerOrigin } from "../../shared";
 import { cadRuntime, rendererCommands, viewers } from "../cad";
 import { projects } from "../db/repositories";
+import { rootOf } from "./explorer";
 import type { IpcContext } from "./register";
 
 export const cadHandlers = {
   cad: {
-    viewerOrigin: async ({ projectId }): Promise<ViewerOrigin> => {
+    viewerOrigin: async ({ projectId, root }): Promise<ViewerOrigin> => {
       const project = projects.list().find((candidate) => candidate.id === projectId);
       if (!project) {
         return { origin: null, reason: "no-project" };
       }
-      const answer = await viewers().originFor(project.path);
+      // One viewer per root: a worktree is served by its own instance, so a
+      // file the session wrote there is the file the viewer renders.
+      const answer = await viewers().originFor(rootOf(projectId, root));
       if (answer.origin || answer.reason !== "runtime-not-ready") {
         return answer;
       }

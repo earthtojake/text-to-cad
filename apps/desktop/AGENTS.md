@@ -51,10 +51,14 @@ not.
   compiled in as `__APTABASE_KEY__` (`electron.vite.config.ts`); a packaged app
   has no build environment, and a key the launcher can set is a key anyone can
   redirect.
-- **Every path from the renderer arrives with the project it is relative to.**
-  Main resolves the pair against that project's root — after `realpath`, so a
-  symlink is not a door — and refuses anything outside. A channel that took a
-  bare path would be a channel that reads any file on the machine.
+- **Every path from the renderer arrives with the project it is relative to,
+  and optionally a root within it.** Main resolves the pair against that
+  project's directory — or, when the request names a `root`, against one of
+  that project's own worktrees, and nothing else (`rootOf` in
+  `src/main/ipc/explorer.ts`, `resolveProjectRoot` in
+  `src/main/projects/workspace.ts`) — after `realpath`, so a symlink is not a
+  door — and refuses anything outside. A channel that took a bare path would
+  be a channel that reads any file on the machine.
 - **`src/renderer/components/{ui,ai-elements}` is vendored**, from the shadcn
   and AI Elements registries. It is excluded from eslint (not from the
   typechecker). Three deliberate edits are in it: the `ai` package's types are
@@ -82,7 +86,9 @@ not.
 - **The explorer strip belongs to the project, not to a session.** A person
   with a file, a terminal and a review open is looking at a directory; closing
   a thread must not take those away. `explorer_tabs` is keyed by `project_id`
-  (migration 2).
+  (migration 2). What *does* follow the session is the strip's **root** (README,
+  "The explorer's root"): a worktree thread makes new tabs open in, and the
+  tree list, its worktree; every tab keeps the root it was opened in.
 - **The renderer never picks a session's working directory.** It sends a git
   mode; main resolves it (`src/main/projects/workspace.ts`), creates the
   worktree, and writes `cwd`, `branch` and `worktreePath` onto the row. The one

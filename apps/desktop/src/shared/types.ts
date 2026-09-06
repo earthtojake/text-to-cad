@@ -148,15 +148,33 @@ const ExplorerTabBase = {
 };
 
 /** A file, rendered by whichever renderer its extension selects. */
+/**
+ * An explorer root: the directory a tab's paths are relative to.
+ *
+ * Null is the project directory. A string is the absolute path of one of the
+ * project's own worktrees (plan §9) — a session in `worktree` mode works in
+ * `~/.hardcore/worktrees/<project>/<slug>`, and the files it writes, the
+ * tree beside them, the terminal's cwd and the CAD viewer serving them all
+ * belong to that directory, not to the checkout. The explorer store carries
+ * the *active* root, chosen from the active session; every tab carries the
+ * root it was opened in, so a file from a worktree keeps saying so after the
+ * person switches threads. Main resolves the pair (project, root) and refuses
+ * a root that is neither the project nor one of its worktrees.
+ */
+export const ExplorerRootSchema = z.string().nullable();
+export type ExplorerRoot = z.infer<typeof ExplorerRootSchema>;
+
 export const FileTabSchema = z.object({
   ...ExplorerTabBase,
   kind: z.literal("file"),
   /**
-   * Project-root-relative path with POSIX separators, or null for a tab
-   * opened before a file was picked. Relative rather than absolute so a strip
+   * Root-relative path with POSIX separators, or null for a tab opened
+   * before a file was picked. Relative rather than absolute so a strip
    * survives the project directory being moved.
    */
   path: z.string().nullable(),
+  /** The directory `path` is relative to; null is the project (see `ExplorerRootSchema`). */
+  root: ExplorerRootSchema.default(null),
   /** Markdown opens as a preview; `View source` flips this. */
   viewSource: z.boolean().default(false),
 });

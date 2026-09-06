@@ -112,8 +112,9 @@ export const acpHandlers = {
     close: ({ id }) => surfacing(() => sessionManager.close(id)),
     delete: ({ id }) =>
       surfacing(async () => {
+        const row = sessions.get(id);
         await sessionManager.delete(id);
-        forgetSession(id);
+        forgetSession(id, row?.worktreePath ?? null);
       }),
   },
 } satisfies IpcHandlers<typeof acpContract, IpcContext>;

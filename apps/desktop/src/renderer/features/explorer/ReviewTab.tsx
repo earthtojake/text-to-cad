@@ -127,11 +127,14 @@ function ReviewBody({
   const info = useProjectGitInfo(project.id);
 
   // The session the scope is measured in. A pinned one that has since been
-  // deleted falls back to the project, which is what an unpinned tab reads.
+  // deleted falls back to the project, which is what an unpinned tab reads —
+  // unless the active thread runs in a worktree (plan §9): its changes are
+  // in that directory and nowhere else, so an unpinned `All changes` follows
+  // it there rather than reviewing a checkout the thread never touched.
   const pinned = sessions.find((candidate) => candidate.id === sessionId) ?? null;
   const candidate =
     pinned ?? sessions.find((session) => session.id === activeSessionId) ?? null;
-  const target = scopeNeedsSession(scope) ? candidate : pinned;
+  const target = scopeNeedsSession(scope) ? candidate : (pinned ?? (candidate?.worktreePath ? candidate : null));
   const request = useMemo(
     () => ({ projectId: project.id, ...(target ? { sessionId: target.id } : {}) }),
     [project.id, target],

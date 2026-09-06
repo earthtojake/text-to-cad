@@ -118,7 +118,7 @@ describe("RendererCommands", () => {
   it("pushes a command with a request id and resolves on the matching reply", async () => {
     const sent: CadCommand[] = [];
     let id = 0;
-    const commands = new RendererCommands({ projectRoot: () => "/proj", send: (command) => sent.push(command), newId: () => `r${++id}` });
+    const commands = new RendererCommands({ sessionRoot: () => ({ directory: "/proj", root: null }), send: (command) => sent.push(command), newId: () => `r${++id}` });
     const pending = commands.request({ kind: "open-file", projectId: "p1", path: "a.step" });
     expect(sent).toEqual([{ kind: "open-file", projectId: "p1", path: "a.step", requestId: "r1" }]);
     commands.reply({ requestId: "other", ok: true, result: 1 });
@@ -127,7 +127,7 @@ describe("RendererCommands", () => {
   });
 
   it("rejects on a refusal and on a timeout", async () => {
-    const commands = new RendererCommands({ projectRoot: () => "/proj", send: () => {}, newId: () => "r1", timeoutMs: 20 });
+    const commands = new RendererCommands({ sessionRoot: () => ({ directory: "/proj", root: null }), send: () => {}, newId: () => "r1", timeoutMs: 20 });
     const refused = commands.request({ kind: "reveal", projectId: "p1", path: "x" });
     commands.reply({ requestId: "r1", ok: false, error: "no such tab" });
     await expect(refused).rejects.toThrow("no such tab");
@@ -141,12 +141,47 @@ describe("the actions", () => {
     fs.mkdirSync(path.join(root, "STEP"));
     fs.writeFileSync(path.join(root, "STEP", "a.step"), "");
     const session: BridgeSession = { sessionId: "s", projectId: "p", cwd: path.join(root, "STEP") };
-    const deps = { projectRoot: () => root };
-    expect((await resolveForSession(deps, session, "a.step")).relative).toBe("STEP/a.step");
+    const deps = { sessionRoot: () => ({ directory: root, root: null }) };
+    expect(await resolveForSession(deps, session, "a.step")).toMatchObject({ relative: "STEP/a.step", root: null });
     expect((await resolveForSession(deps, session, path.join(root, "STEP", "a.step"))).relative).toBe("STEP/a.step");
     await expect(resolveForSession(deps, session, "../../etc/passwd")).rejects.toThrow("outside the project");
     await expect(resolveForSession(deps, session, "missing.step")).rejects.toThrow("does not exist");
-    await expect(resolveForSession({ projectRoot: () => null }, session, "a.step")).rejects.toThrow("no longer open");
+    await expect(resolveForSession({ sessionRoot: () => null }, session, "a.step")).rejects.toThrow("no longer open");
+  });
+
+  it("resolve a worktree session's paths against the worktree, and say which root", async () => {
+    // The project and its worktree are siblings under a temp dir, the way
+    // `~/.hardcore/worktrees/<project>/<slug>` is a sibling of nothing in the
+    // checkout: a file in the worktree is outside the project directory and
+    // must still open, and a file in the checkout must not resolve for a
+    // session that cannot see it.
+    const base = tempDir("hardcore-wt-");
+    const project = path.join(base, "project");
+    const worktree = path.join(base, "worktrees", "project", "model-the-wrist");
+    fs.mkdirSync(path.join(project, "STEP"), { recursive: true });
+    fs.mkdirSync(path.join(worktree, "STEP"), { recursive: true });
+    fs.writeFileSync(path.join(project, "STEP", "old.step"), "");
+    fs.writeFileSync(path.join(worktree, "STEP", "new.step"), "");
+    const session: BridgeSession = { sessionId: "s", projectId: "p", cwd: worktree };
+    const deps = { sessionRoot: () => ({ directory: worktree, root: worktree }) };
+
+    const resolved = await resolveForSession(deps, session, "STEP/new.step");
+    expect(resolved.relative).toBe("STEP/new.step");
+    expect(resolved.root).toBe(worktree);
+    expect(resolved.absolute).toBe(fs.realpathSync(path.join(worktree, "STEP", "new.step")));
+    await expect(resolveForSession(deps, session, path.join(project, "STEP", "old.step"))).rejects.toThrow("outside this session's worktree");
+
+    // And the command the explorer gets names the worktree, so the tab opens there.
+    const sent: CadCommand[] = [];
+    const commands = new RendererCommands({ ...deps, send: (command) => sent.push(command), newId: () => "r" });
+    const actions = createActions({ ...deps, send: () => {}, newId: () => "r" }, commands);
+    const opened = actions.open_file(session, { path: "STEP/new.step" });
+    while (sent.length < 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    commands.reply({ requestId: "r", ok: true, result: {} });
+    await opened;
+    expect(sent[0]).toMatchObject({ kind: "open-file", path: "STEP/new.step", root: worktree, projectId: "p" });
   });
 
   it("relay open_file and reveal with the resolved path, and answer attach_snapshot from disk", async () => {
@@ -156,8 +191,9 @@ describe("the actions", () => {
     fs.writeFileSync(path.join(root, "tmp", "review.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     fs.writeFileSync(path.join(root, "notes.txt"), "text");
     const sent: CadCommand[] = [];
-    const commands = new RendererCommands({ projectRoot: () => root, send: (command) => sent.push(command), newId: () => "r" });
-    const actions = createActions({ projectRoot: () => root, send: () => {}, newId: () => "r" }, commands);
+    const sessionRoot = () => ({ directory: root, root: null });
+    const commands = new RendererCommands({ sessionRoot, send: (command) => sent.push(command), newId: () => "r" });
+    const actions = createActions({ sessionRoot, send: () => {}, newId: () => "r" }, commands);
     const session: BridgeSession = { sessionId: "s", projectId: "p", cwd: root };
 
     // The action resolves the path before it asks the renderer, so the reply
@@ -172,7 +208,7 @@ describe("the actions", () => {
     await untilSent(1);
     commands.reply({ requestId: "r", ok: true, result: { opened: "part.step" } });
     expect(await opened).toEqual({ opened: "part.step" });
-    expect(sent[0]).toMatchObject({ kind: "open-file", path: "part.step", projectId: "p" });
+    expect(sent[0]).toMatchObject({ kind: "open-file", path: "part.step", root: null, projectId: "p" });
 
     await expect(actions.open_file(session, { path: "tmp" })).rejects.toThrow("is a directory");
 

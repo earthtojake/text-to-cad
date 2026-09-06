@@ -66,6 +66,48 @@ export function projectWorktreeDir(
   return path.join(worktreeRoot(settings), name);
 }
 
+/**
+ * Is `candidate` somewhere this project's work is allowed to be — the project
+ * directory itself, or a directory under its worktree folder?
+ *
+ * The one answer to that question, asked by three callers: Settings' `New
+ * chat in this worktree` (a session about to run there), the explorer (a
+ * root a tab reads from, plan §9's worktree-aware tree) and the MCP bridge
+ * (an agent naming a file in its session's cwd). A renderer or an agent can
+ * name any directory on the machine; this is what keeps the answer to the
+ * project.
+ */
+export function rootBelongsToProject(
+  settings: Pick<Settings, "worktreeRoot">,
+  project: Pick<Project, "name" | "path">,
+  candidate: string,
+): boolean {
+  const requested = path.resolve(candidate);
+  return (
+    git.samePath(requested, project.path) ||
+    git.isUnder(projectWorktreeDir(settings, project), requested)
+  );
+}
+
+/**
+ * The directory an explorer root names: the project's, or the worktree's
+ * when the root belongs to the project. Throws — with a sentence, not a path
+ * — for anything else.
+ */
+export function resolveProjectRoot(
+  settings: Pick<Settings, "worktreeRoot">,
+  project: Pick<Project, "name" | "path">,
+  root: string | null | undefined,
+): string {
+  if (!root) {
+    return project.path;
+  }
+  if (!rootBelongsToProject(settings, project, root)) {
+    throw new git.GitError("that directory does not belong to this project");
+  }
+  return git.samePath(path.resolve(root), project.path) ? project.path : path.resolve(root);
+}
+
 export type ResolveInput = {
   project: Project;
   gitMode: GitMode;
@@ -127,10 +169,7 @@ export async function resolveWorkspace(input: ResolveInput): Promise<Workspace> 
  */
 async function explicitWorkspace(cwd: string, input: ResolveInput): Promise<Workspace> {
   const requested = path.resolve(cwd);
-  const parent = projectWorktreeDir(input.settings, input.project);
-  const allowed =
-    git.samePath(requested, input.project.path) || git.isUnder(parent, requested);
-  if (!allowed) {
+  if (!rootBelongsToProject(input.settings, input.project, requested)) {
     throw new git.GitError("that directory does not belong to this project");
   }
 

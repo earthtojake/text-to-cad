@@ -446,6 +446,33 @@ export async function statFile(root: string, target: string): Promise<FileStat> 
   };
 }
 
+/**
+ * What each of `targets` is under the root: a file, a directory, or nothing.
+ *
+ * One `stat` per path and one answer for all of them, for the transcript's
+ * path links (`explorer.exists`): a message naming twenty files is one round
+ * trip, not twenty. A path outside the root answers `null` like a missing
+ * one — the caller is drawing links, and "not linkable" is the same answer
+ * for both.
+ */
+export async function pathKinds(root: string, targets: readonly string[]): Promise<Record<string, PathKind>> {
+  const answers: Record<string, PathKind> = {};
+  await Promise.all(
+    targets.map(async (target) => {
+      try {
+        const absolute = await resolveInRoot(root, target);
+        const stats = await fs.stat(absolute);
+        answers[target] = stats.isDirectory() ? "directory" : stats.isFile() ? "file" : null;
+      } catch {
+        answers[target] = null;
+      }
+    }),
+  );
+  return answers;
+}
+
+export type PathKind = "file" | "directory" | null;
+
 export type TextFile = {
   path: string;
   content: string;

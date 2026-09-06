@@ -555,6 +555,47 @@ the *working tree*, so an edit the agent has not committed is in the answer.
 Those two scopes also move the whole read into the session's directory, which
 for a worktree thread is not the project's checkout.
 
+### The explorer's root
+
+A worktree is outside the project directory, so the explorer cannot be
+rooted at the project alone: a session working in
+`~/.hardcore/worktrees/text-to-cad/model-the-wrist` writes its STEP there,
+and `open_file` on it has to open *that* file, in a tree that lists *that*
+directory, served by a viewer run from it. The **root** is the concept that
+carries this (`ExplorerRoot` in `src/shared/types.ts`): `null` for the
+project directory, else the absolute path of one of the project's own
+worktrees.
+
+- The explorer store has an active root, derived from the active session
+  (`state/bridge.ts`, `explorerRootFor`): a worktree thread's worktree,
+  otherwise the project. Selecting another thread switches it; the
+  new-session state reads the project. Switching starts the new root's
+  watcher and keeps each root's tree state (open folders, listings) apart,
+  because the checkout and a worktree are different trees with the same
+  names in them.
+- A file tab carries the root it was opened in (`FileTabSchema.root`) and
+  keeps it after the person switches threads; the breadcrumb shows the
+  worktree's name with a branch glyph. A terminal opened while a worktree
+  thread is active starts there (`TerminalTab.cwd`). An unpinned review's
+  `All changes` follows a worktree thread into its directory. The CAD tab
+  asks `cad.viewerOrigin` for its root, and main runs one `cadgen viewer`
+  per root — a worktree gets its own, stopped when its last session is
+  deleted.
+- Every `explorer.*` request names `{ projectId, root? }`, and main's
+  `rootOf` (`src/main/ipc/explorer.ts`) resolves the pair with
+  `resolveProjectRoot` (`src/main/projects/workspace.ts`): the project
+  directory, or a directory under the project's worktree folder, and a
+  sentence for anything else. The MCP bridge resolves an agent's paths
+  against the session's root the same way (`src/main/cad/actions.ts`,
+  `sessionRoot`), and the `cad.command` it produces names the root so the
+  renderer opens the file where it is. `files.changed` names the root its
+  paths are relative to.
+
+`tests/e2e/worktree.spec.ts` runs the whole path with the fake agent: a
+worktree session writes a file, calls `open_file` through the MCP server,
+and the tab, the breadcrumb, the tree and a new terminal all root at the
+worktree; the new-session state roots the explorer at the project again.
+
 ## How a change moves through the app
 
 Adding an IPC channel is the shape of most work here:

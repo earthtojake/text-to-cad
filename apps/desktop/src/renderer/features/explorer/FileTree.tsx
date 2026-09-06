@@ -3,8 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { cn } from "@renderer/lib/utils";
-import { useExplorer } from "@renderer/state/explorer";
+import { useExplorer, useTree } from "@renderer/state/explorer";
 import type { DirEntry } from "@shared/ipc/explorer";
+import type { ExplorerRoot } from "@shared/types";
 
 import { FileIcon, FolderIcon } from "./icons";
 import { fuzzyFilter } from "./fuzzy";
@@ -35,6 +36,7 @@ type Row = {
 
 export function FileTree({
   projectId,
+  root,
   projectName,
   activePath,
   reveal = null,
@@ -43,6 +45,8 @@ export function FileTree({
   fsRevision,
 }: {
   projectId: string;
+  /** The directory listed: null for the project, else one of its worktrees (plan §9). */
+  root: ExplorerRoot;
   projectName: string;
   /** The file the tab is showing, highlighted in the tree. */
   activePath: string | null;
@@ -51,7 +55,7 @@ export function FileTree({
    * (src/renderer/state/explorer.ts). Wins over `activePath` for the reveal
    * and the scroll; the open file stays highlighted too.
    */
-  reveal?: { path: string; directory: boolean } | null;
+  reveal?: { path: string; directory: boolean; root: ExplorerRoot } | null;
   onOpen: (path: string) => void;
   onCollapse: () => void;
   /** Bumped by `files.changed`; re-reads whatever is currently expanded. */
@@ -82,21 +86,31 @@ export function FileTree({
    * One set, written by the person and by `reveal` alike, says both things
    * without disagreeing with itself.
    */
-  const expanded = useExplorer((state) => state.treeOpen);
-  const setExpanded = useExplorer((state) => state.setTreeOpen);
-  const children = useExplorer((state) => state.treeListings);
-  const setListing = useExplorer((state) => state.setTreeListing);
+  const { open: expanded, listings: children } = useTree(root);
+  const setTreeOpen = useExplorer((state) => state.setTreeOpen);
+  const setTreeListing = useExplorer((state) => state.setTreeListing);
+  const setExpanded = useCallback(
+    (next: (current: ReadonlySet<string>) => ReadonlySet<string>) => setTreeOpen(root, next),
+    [root, setTreeOpen],
+  );
+  const setListing = useCallback(
+    (directory: string, entries: DirEntry[]) => setTreeListing(root, directory, entries),
+    [root, setTreeListing],
+  );
+  // The request every read here makes: the project, and the root within it.
+  const at = useMemo(() => ({ projectId, ...(root ? { root } : {}) }), [projectId, root]);
 
-  const revealTarget = reveal?.path ?? activePath;
+  // A reveal into another root's tree is not this tree's business.
+  const revealTarget = (reveal && reveal.root === root ? reveal.path : null) ?? activePath;
   const revealed = useMemo(() => {
     if (!revealTarget) {
       return new Set<string>();
     }
     // A revealed folder is opened as well as shown; a file only its ancestors.
     const parts = revealTarget.split("/");
-    const segments = reveal?.directory && reveal.path === revealTarget ? parts : parts.slice(0, -1);
+    const segments = reveal?.directory && reveal.root === root && reveal.path === revealTarget ? parts : parts.slice(0, -1);
     return new Set(segments.map((_, index) => segments.slice(0, index + 1).join("/")));
-  }, [revealTarget, reveal]);
+  }, [revealTarget, reveal, root]);
 
   const isExpanded = useCallback((directory: string) => expanded.has(directory), [expanded]);
 
@@ -111,10 +125,10 @@ export function FileTree({
   const load = useCallback(
     (directory: string) =>
       window.hardcore.explorer
-        .list({ projectId, path: directory })
+        .list({ ...at, path: directory })
         .then((entries: DirEntry[]) => setListing(directory, entries))
         .catch(() => {}),
-    [projectId, setListing],
+    [at, setListing],
   );
 
   // The root, on every mount: the listings survive a remount, but a tree that
@@ -144,13 +158,14 @@ export function FileTree({
   useEffect(
     () =>
       useExplorer.subscribe((state, previous) => {
-        if (state.fsRevision !== previous.fsRevision) {
+        // A batch from another root's watcher changed another tree.
+        if (state.fsRevision !== previous.fsRevision && state.changedRoot === root) {
           for (const directory of openRef.current) {
             void load(directory);
           }
         }
       }),
-    [load],
+    [load, root],
   );
 
   /**
@@ -171,7 +186,7 @@ export function FileTree({
     }
     let cancelled = false;
     void window.hardcore.explorer
-      .paths({ projectId, path: "" })
+      .paths({ ...at, path: "" })
       .then((result) => {
         if (!cancelled) {
           setCorpus({ revision: fsRevision, paths: result.paths });
@@ -185,7 +200,7 @@ export function FileTree({
     return () => {
       cancelled = true;
     };
-  }, [filtering, corpusStale, fsRevision, projectId]);
+  }, [filtering, corpusStale, fsRevision, at]);
 
   /**
    * Reveal: open every ancestor of the revealed path and read them.

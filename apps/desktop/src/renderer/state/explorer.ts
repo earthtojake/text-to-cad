@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type { DirEntry } from "@shared/ipc/explorer";
 import type {
   BrowserTab,
+  ExplorerRoot,
   ExplorerTab,
   ExplorerTabKind,
   FileTab,
@@ -23,6 +24,16 @@ import type {
  * renumbers `order` and schedules the save. A setter that wrote `tabs`
  * directly would produce a strip whose order in the database disagreed with
  * the order on screen after the next reload.
+ *
+ * The strip has a **root** as well as a project (plan §9, `ExplorerRoot` in
+ * `@shared/types`): the directory new tabs open in and the tree lists. It is
+ * the project directory until the active session runs in a worktree, and
+ * then it is that worktree — `state/bridge.ts` derives it from the session
+ * selection and calls `setRoot`. A tab keeps the root it was opened in, so
+ * switching threads changes where the *next* file opens and which tree the
+ * pane shows, not what an open tab is looking at. The tree's state is kept
+ * per root, because a worktree and the checkout are different trees with
+ * the same names in them.
  */
 
 /** How long a burst of changes is collected before it reaches sqlite. */
@@ -83,9 +94,23 @@ function collapsedFor(projectId: string | null): boolean {
   return collapsedByProject()[projectId ?? NO_PROJECT] ?? true;
 }
 
+/** The open folders and the listings of one root's tree. */
+export type TreeState = {
+  open: ReadonlySet<string>;
+  listings: Record<string, DirEntry[]>;
+};
+
+/** The key a root's tree is filed under. */
+export function treeKey(root: ExplorerRoot): string {
+  return root ?? "";
+}
+
+// The root is always open; there is no row for it to be shut by.
+const EMPTY_TREE: TreeState = { open: new Set([""]), listings: {} };
+
 /** Initial state for a new tab of each kind. */
 type TabInit = {
-  file: Partial<Pick<FileTab, "path" | "viewSource">>;
+  file: Partial<Pick<FileTab, "path" | "root" | "viewSource">>;
   review: Partial<Pick<ReviewTab, "scope" | "sessionId">>;
   browser: Partial<Pick<BrowserTab, "url">>;
   terminal: Partial<Pick<TerminalTab, "cwd" | "readOnly">>;
@@ -94,6 +119,11 @@ type TabInit = {
 type ExplorerState = {
   /** The project the strip belongs to; null before one is chosen. */
   projectId: string | null;
+  /**
+   * Where new tabs open and what the tree lists: null for the project
+   * directory, else the active session's worktree (see the note above).
+   */
+  root: ExplorerRoot;
   tabs: ExplorerTab[];
   activeId: string | null;
   /** True once the strip has been loaded for `projectId`. */
@@ -110,35 +140,51 @@ type ExplorerState = {
   treeCollapsed: boolean;
   treeWidth: number;
   /**
-   * Which folders the tree has open, and the listing behind each one.
+   * Which folders each root's tree has open, and the listing behind each one,
+   * keyed by `treeKey(root)`.
    *
    * Here rather than in the component because the file tab is unmounted every
    * time another tab is selected — and *opening a file makes a tab*, so the
    * tree that the person had just expanded three levels into was thrown away
-   * by the click that used it. The tree belongs to the project, like the strip
-   * itself; the listings ride along so coming back does not re-read every open
+   * by the click that used it. The tree belongs to the root, like the tab;
+   * the listings ride along so coming back does not re-read every open
    * folder.
    */
-  treeOpen: ReadonlySet<string>;
-  treeListings: Record<string, DirEntry[]>;
+  trees: Record<string, TreeState>;
   /**
    * Bumped on every `files.changed` batch. Views that read the filesystem
    * subscribe to it instead of each holding a watcher subscription.
    */
   fsRevision: number;
-  /** Paths touched by the last batch, so an open editor knows it is stale. */
+  /** Paths touched by the last batch, and the root they are under, so an open editor knows it is stale. */
   changedPaths: string[];
+  changedRoot: ExplorerRoot;
   /**
    * A path an agent asked to have revealed (`reveal` through the Hardcore MCP
    * server): the tree expands to it and selects it without opening it.
    * Transient — cleared when a file is opened or the project changes.
    */
-  reveal: { path: string; directory: boolean } | null;
+  reveal: { path: string; directory: boolean; root: ExplorerRoot } | null;
+  /**
+   * A reference a CAD tab should select once its model is up: a link in the
+   * transcript said `bracket.step#o1.2`. The nonce makes clicking the same
+   * link twice a second selection. Consumed by `CadRenderer`, which hands it
+   * to the viewer's `selectReference` prop.
+   */
+  cadSelection: { tabId: string; selector: string; nonce: number } | null;
 
-  bindProject: (projectId: string | null) => Promise<void>;
+  bindProject: (projectId: string | null, root?: ExplorerRoot) => Promise<void>;
+  /**
+   * Change the root new tabs open in. The tree state of the root being
+   * left is kept, so coming back to a thread finds its folders still open.
+   */
+  setRoot: (root: ExplorerRoot) => void;
   open: <K extends ExplorerTabKind>(kind: K, init?: TabInit[K]) => ExplorerTab | null;
-  /** Open a file, reusing a tab already showing it. */
-  openFile: (path: string) => ExplorerTab | null;
+  /**
+   * Open a file, reusing a tab already showing it. `root` defaults to the
+   * active one; an agent's `open_file` names the session's.
+   */
+  openFile: (path: string, root?: ExplorerRoot) => ExplorerTab | null;
   close: (id: string) => void;
   closeActive: () => void;
   setActive: (id: string) => void;
@@ -156,12 +202,19 @@ type ExplorerState = {
   show: () => void;
   setTreeCollapsed: (collapsed: boolean) => void;
   setTreeWidth: (width: number) => void;
-  /** Open or shut folders in the tree. The updater sees the current set. */
-  setTreeOpen: (next: (current: ReadonlySet<string>) => ReadonlySet<string>) => void;
-  /** File one directory's listing. */
-  setTreeListing: (directory: string, entries: DirEntry[]) => void;
-  receiveChanges: (projectId: string, paths: string[]) => void;
-  setReveal: (reveal: { path: string; directory: boolean } | null) => void;
+  /** Open or shut folders in a root's tree. The updater sees the current set. */
+  setTreeOpen: (root: ExplorerRoot, next: (current: ReadonlySet<string>) => ReadonlySet<string>) => void;
+  /** File one directory's listing in a root's tree. */
+  setTreeListing: (root: ExplorerRoot, directory: string, entries: DirEntry[]) => void;
+  receiveChanges: (projectId: string, root: ExplorerRoot, paths: string[]) => void;
+  setReveal: (reveal: { path: string; directory: boolean; root: ExplorerRoot } | null) => void;
+  /**
+   * Expand the tree to `path` and select it without opening it — an agent's
+   * `reveal`, a folder link in the transcript. The tree lives in a file tab
+   * of the same root, so one is brought forward or opened first.
+   */
+  revealPath: (path: string, directory: boolean, root: ExplorerRoot) => void;
+  selectCadReference: (tabId: string, selector: string) => void;
 };
 
 let sequence = 0;
@@ -176,7 +229,7 @@ function blankTab(
   const base = { id: nextId(), projectId, order };
   switch (kind) {
     case "file":
-      return { ...base, kind: "file", path: null, viewSource: false, ...init } as FileTab;
+      return { ...base, kind: "file", path: null, root: null, viewSource: false, ...init } as FileTab;
     case "review":
       return { ...base, kind: "review", scope: "all" as const, sessionId: null, ...init };
     case "browser":
@@ -219,8 +272,18 @@ function commit(
   }, SAVE_DEBOUNCE_MS);
 }
 
+/** The watcher for one root, started and stopped with the binding. */
+function watch(projectId: string, root: ExplorerRoot): Promise<void> {
+  return window.hardcore.explorer.watch({ projectId, ...(root ? { root } : {}) }).catch(() => undefined);
+}
+
+function unwatch(projectId: string, root: ExplorerRoot): void {
+  void window.hardcore.explorer.unwatch({ projectId, ...(root ? { root } : {}) }).catch(() => {});
+}
+
 export const useExplorer = create<ExplorerState>((set, get) => ({
   projectId: null,
+  root: null,
   tabs: [],
   activeId: null,
   ready: false,
@@ -228,15 +291,18 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   collapsed: collapsedFor(null),
   treeCollapsed: readLocal(TREE_COLLAPSED_KEY, false, (raw) => raw === "true"),
   treeWidth: readLocal(TREE_WIDTH_KEY, TREE_DEFAULT_WIDTH, (raw) => Number(raw) || TREE_DEFAULT_WIDTH),
-  // The root is always open; there is no row for it to be shut by.
-  treeOpen: new Set([""]),
-  treeListings: {},
+  trees: {},
   fsRevision: 0,
   changedPaths: [],
+  changedRoot: null,
   reveal: null,
+  cadSelection: null,
 
-  bindProject: async (projectId) => {
+  bindProject: async (projectId, root = null) => {
     if (get().projectId === projectId && get().ready) {
+      if (get().root !== root) {
+        get().setRoot(root);
+      }
       return;
     }
     // A pending save belongs to the project being left, not the one arriving.
@@ -246,20 +312,22 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     }
     const previous = get().projectId;
     if (previous && previous !== projectId) {
-      void window.hardcore.explorer.unwatch({ projectId: previous }).catch(() => {});
+      unwatch(previous, get().root);
     }
     set({
       projectId,
+      root,
       tabs: [],
       activeId: null,
       ready: false,
       changedPaths: [],
+      changedRoot: null,
       reveal: null,
+      cadSelection: null,
       // Each project keeps its own answer to "is the pane worth the width".
       collapsed: collapsedFor(projectId),
-      // A different project is a different tree, with nothing to carry over.
-      treeOpen: new Set([""]),
-      treeListings: {},
+      // A different project is a different set of trees, with nothing to carry over.
+      trees: {},
     });
     if (!projectId) {
       set({ ready: true });
@@ -267,7 +335,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     }
     const [tabs] = await Promise.all([
       window.hardcore.explorer.loadTabs({ projectId }).catch(() => [] as ExplorerTab[]),
-      window.hardcore.explorer.watch({ projectId }).catch(() => undefined),
+      watch(projectId, root),
     ]);
     // A slower load for a project the user has already navigated away from
     // must not overwrite the one they are looking at.
@@ -277,29 +345,52 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     set({ tabs, activeId: tabs[0]?.id ?? null, ready: true });
   },
 
+  setRoot: (root) => {
+    const { projectId, root: previous } = get();
+    if (previous === root) {
+      return;
+    }
+    if (projectId) {
+      unwatch(projectId, previous);
+      void watch(projectId, root);
+    }
+    // A reveal points into one tree; it means nothing in the next one.
+    set({ root, reveal: null });
+  },
+
   open: (kind, init) => {
-    const { projectId, tabs } = get();
+    const { projectId, root, tabs } = get();
     if (!projectId) {
       return null;
     }
     // A tab nobody can see is not an open tab: every kind reveals the pane.
     get().show();
-    const tab = blankTab(kind, projectId, tabs.length, init as Record<string, unknown>);
+    // A file or a terminal opens in the active root unless told otherwise —
+    // the worktree of the thread being talked to, or the project.
+    const rooted: Record<string, unknown> =
+      kind === "file"
+        ? { root, ...(init as Record<string, unknown> | undefined) }
+        : kind === "terminal"
+          ? { cwd: root, ...(init as Record<string, unknown> | undefined) }
+          : { ...(init as Record<string, unknown> | undefined) };
+    const tab = blankTab(kind, projectId, tabs.length, rooted);
     commit(set, projectId, [...tabs, tab], tab.id);
     return tab;
   },
 
-  openFile: (filePath) => {
+  openFile: (filePath, root) => {
     const { projectId, tabs } = get();
     if (!projectId) {
       return null;
     }
+    const target = root === undefined ? get().root : root;
     // Opening is the stronger reveal; a stale one would keep two rows lit.
     set({ reveal: null });
     get().show();
     // Reuse rather than stack duplicates: clicking the same file in the tree
-    // twice is one tab, the way every editor behaves.
-    const existing = tabs.find((tab) => tab.kind === "file" && tab.path === filePath);
+    // twice is one tab, the way every editor behaves. The same path in two
+    // roots is two files — the checkout's and the worktree's — and two tabs.
+    const existing = tabs.find((tab) => tab.kind === "file" && tab.path === filePath && tab.root === target);
     if (existing) {
       set({ activeId: existing.id });
       return existing;
@@ -309,12 +400,12 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     const blank = tabs.find((tab) => tab.kind === "file" && tab.path === null);
     if (blank) {
       const next = tabs.map((tab) =>
-        tab.id === blank.id ? ({ ...tab, path: filePath } as ExplorerTab) : tab,
+        tab.id === blank.id ? ({ ...tab, path: filePath, root: target } as ExplorerTab) : tab,
       );
       commit(set, projectId, next, blank.id);
       return next.find((tab) => tab.id === blank.id) ?? null;
     }
-    return get().open("file", { path: filePath });
+    return get().open("file", { path: filePath, root: target });
   },
 
   close: (id) => {
@@ -398,26 +489,60 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     set({ treeWidth });
   },
 
-  setTreeOpen: (next) =>
+  setTreeOpen: (root, next) =>
     set((state) => {
-      const treeOpen = next(state.treeOpen);
+      const key = treeKey(root);
+      const tree = state.trees[key] ?? EMPTY_TREE;
+      const open = next(tree.open);
       // An updater that changes nothing — a reveal of a path already open —
       // returns the same set, and zustand's subscribers stay put.
-      return treeOpen === state.treeOpen ? state : { treeOpen };
+      return open === tree.open ? state : { trees: { ...state.trees, [key]: { ...tree, open } } };
     }),
 
-  setTreeListing: (directory, entries) =>
-    set((state) => ({ treeListings: { ...state.treeListings, [directory]: entries } })),
+  setTreeListing: (root, directory, entries) =>
+    set((state) => {
+      const key = treeKey(root);
+      const tree = state.trees[key] ?? EMPTY_TREE;
+      return { trees: { ...state.trees, [key]: { ...tree, listings: { ...tree.listings, [directory]: entries } } } };
+    }),
 
   setReveal: (reveal) => set({ reveal }),
 
-  receiveChanges: (projectId, paths) => {
+  revealPath: (path, directory, root) => {
+    const explorer = get();
+    if (!explorer.projectId) {
+      return;
+    }
+    explorer.show();
+    const fileTab =
+      explorer.tabs.find((tab) => tab.id === explorer.activeId && tab.kind === "file" && tab.root === root) ??
+      explorer.tabs.find((tab) => tab.kind === "file" && tab.root === root);
+    if (fileTab) {
+      set({ activeId: fileTab.id });
+    } else {
+      explorer.open("file", { root });
+    }
+    if (explorer.treeCollapsed) {
+      explorer.setTreeCollapsed(false);
+    }
+    set({ reveal: { path, directory, root } });
+  },
+
+  selectCadReference: (tabId, selector) =>
+    set((state) => ({ cadSelection: { tabId, selector, nonce: (state.cadSelection?.nonce ?? 0) + 1 } })),
+
+  receiveChanges: (projectId, root, paths) => {
     if (get().projectId !== projectId) {
       return;
     }
-    set((state) => ({ fsRevision: state.fsRevision + 1, changedPaths: paths }));
+    set((state) => ({ fsRevision: state.fsRevision + 1, changedPaths: paths, changedRoot: root }));
   },
 }));
+
+/** One root's tree: its open folders and listings, or the empty tree. */
+export function useTree(root: ExplorerRoot): TreeState {
+  return useExplorer((state) => state.trees[treeKey(root)] ?? EMPTY_TREE);
+}
 
 /** The active tab, or null. */
 export function useActiveTab(): ExplorerTab | null {

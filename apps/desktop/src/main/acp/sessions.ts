@@ -12,6 +12,7 @@
  * main wires it to the sqlite repository, node-pty and the IPC broadcaster.
  */
 import { existsSync } from "node:fs";
+import nodePath from "node:path";
 
 import type { McpServer } from "@agentclientprotocol/sdk";
 
@@ -433,10 +434,17 @@ export class SessionManager {
           tally.files.add(file);
         }
         // The explorer owns this event's shape (src/shared/ipc/explorer.ts): the
-        // project the paths belong to and one change record per path.
+        // project and root the paths belong to — the session's worktree when
+        // it has one, else the project directory, which is also its cwd —
+        // and one root-relative change record per path.
         this.deps.broadcast("files.changed", {
           projectId: session.projectId,
-          changes: paths.map((path) => ({ path, kind: "changed" as const, directory: false })),
+          root: session.worktreePath ?? null,
+          changes: paths.map((file) => ({
+            path: nodePath.relative(session.cwd, file).split(nodePath.sep).join("/"),
+            kind: "changed" as const,
+            directory: false,
+          })),
         });
       },
       onStderr: (line) => console.info(`[${session.agentId}:${session.id.slice(0, 8)}] ${line}`),

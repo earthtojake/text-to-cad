@@ -13,12 +13,13 @@ import path from "node:path";
 
 import { shell } from "electron";
 
-import { explorerTabs, projects } from "../db/repositories";
+import { explorerTabs, projects, settings } from "../db/repositories";
 import {
   FileWatchers,
   FsError,
   listDirectory,
   listPaths,
+  pathKinds,
   readBinaryFile,
   readTextFile,
   resolveInRoot,
@@ -28,6 +29,7 @@ import {
 } from "../explorer/fs";
 import { Terminals } from "../explorer/terminal";
 import * as git from "../projects/git";
+import { projectWorktreeDir, resolveProjectRoot } from "../projects/workspace";
 import type { ExplorerTab, IpcEventChannel, IpcEventPayload } from "../../shared";
 import { IpcError } from "./register";
 
@@ -50,9 +52,12 @@ let terminals: Terminals | null = null;
  */
 export function initExplorerServices(broadcast: Broadcast) {
   watchers ??= new FileWatchers((root, changes) => {
-    const project = projects.list().find((candidate) => candidate.path === root);
-    if (project) {
-      broadcast("files.changed", { projectId: project.id, changes });
+    // A watched root is a project directory or one of a project's worktrees;
+    // the event names both, because a tab knows its root and a strip knows
+    // its project.
+    const owner = projectOfRoot(root);
+    if (owner) {
+      broadcast("files.changed", { projectId: owner.project.id, root: owner.root, changes });
     }
   });
   terminals ??= new Terminals((event) => {
@@ -86,12 +91,43 @@ function services() {
 /* Projects and paths                                                          */
 /* -------------------------------------------------------------------------- */
 
-export function rootOf(projectId: string): string {
+/**
+ * The directory a request reads from: the project's, or — when the request
+ * names a `root` — one of that project's worktrees (plan §9). Anything else
+ * is refused here, before a path is resolved against it.
+ */
+export function rootOf(projectId: string, root?: string | null): string {
   const project = projects.list().find((candidate) => candidate.id === projectId);
   if (!project) {
     throw new IpcError("that project is no longer open");
   }
-  return project.path;
+  try {
+    return resolveProjectRoot(settings.get(), project, root);
+  } catch (error) {
+    throw new IpcError(error instanceof Error ? error.message : String(error));
+  }
+}
+
+/**
+ * The project a watched directory belongs to, and the root the renderer
+ * knows it by (null for the project directory itself). Roots are compared
+ * by real path: the watcher reports the directory it was given after
+ * `realpath`, and a project under `/tmp` on macOS is really under
+ * `/private/tmp`.
+ */
+function projectOfRoot(root: string): { project: { id: string }; root: string | null } | null {
+  const current = settings.get();
+  for (const project of projects.list()) {
+    if (git.samePath(project.path, root)) {
+      return { project, root: null };
+    }
+  }
+  for (const project of projects.list()) {
+    if (git.isUnder(projectWorktreeDir(current, project), root)) {
+      return { project, root };
+    }
+  }
+  return null;
 }
 
 /**
@@ -134,19 +170,23 @@ function isErrno(error: unknown, code: string): boolean {
 /* Handlers                                                                    */
 /* -------------------------------------------------------------------------- */
 
+type AtPath = { projectId: string; root?: string; path: string };
+
 export const explorerHandlers = {
   explorer: {
     list: ({
       projectId,
+      root: rootPath,
       path: directory,
       includeIgnored,
     }: {
       projectId: string;
+      root?: string;
       path: string;
       includeIgnored?: boolean;
     }) =>
       fsCall(async () => {
-        const root = rootOf(projectId);
+        const root = rootOf(projectId, rootPath);
         return listDirectory(root, directory, {
           rules: await IgnoreRules.read(root),
           ...(includeIgnored === undefined ? {} : { includeIgnored }),
@@ -155,44 +195,48 @@ export const explorerHandlers = {
 
     paths: ({
       projectId,
+      root,
       path: directory,
       limit,
     }: {
       projectId: string;
+      root?: string;
       path: string;
       limit?: number;
     }) =>
       fsCall(() =>
-        listPaths(rootOf(projectId), directory, limit === undefined ? {} : { limit }),
+        listPaths(rootOf(projectId, root), directory, limit === undefined ? {} : { limit }),
       ),
 
-    stat: ({ projectId, path: target }: { projectId: string; path: string }) =>
-      fsCall(() => statFile(rootOf(projectId), target)),
+    stat: ({ projectId, root, path: target }: AtPath) =>
+      fsCall(() => statFile(rootOf(projectId, root), target)),
 
-    readText: ({ projectId, path: target }: { projectId: string; path: string }) =>
-      fsCall(() => readTextFile(rootOf(projectId), target)),
+    exists: ({ projectId, root, paths }: { projectId: string; root?: string; paths: string[] }) =>
+      fsCall(() => pathKinds(rootOf(projectId, root), paths)),
+
+    readText: ({ projectId, root, path: target }: AtPath) =>
+      fsCall(() => readTextFile(rootOf(projectId, root), target)),
 
     writeText: ({
       projectId,
+      root,
       path: target,
       content,
       expectedRevision,
-    }: {
-      projectId: string;
-      path: string;
+    }: AtPath & {
       content: string;
       expectedRevision?: string;
-    }) => fsCall(() => writeTextFile(rootOf(projectId), target, content, expectedRevision)),
+    }) => fsCall(() => writeTextFile(rootOf(projectId, root), target, content, expectedRevision)),
 
-    readBinary: ({ projectId, path: target }: { projectId: string; path: string }) =>
-      fsCall(() => readBinaryFile(rootOf(projectId), target)),
+    readBinary: ({ projectId, root, path: target }: AtPath) =>
+      fsCall(() => readBinaryFile(rootOf(projectId, root), target)),
 
-    absolutePath: ({ projectId, path: target }: { projectId: string; path: string }) =>
-      fsCall(async () => ({ path: await resolveInRoot(rootOf(projectId), target) })),
+    absolutePath: ({ projectId, root, path: target }: AtPath) =>
+      fsCall(async () => ({ path: await resolveInRoot(rootOf(projectId, root), target) })),
 
-    openDefault: ({ projectId, path: target }: { projectId: string; path: string }) =>
+    openDefault: ({ projectId, root, path: target }: AtPath) =>
       fsCall(async () => {
-        const absolute = await resolveInRoot(rootOf(projectId), target);
+        const absolute = await resolveInRoot(rootOf(projectId, root), target);
         // `openPath` answers with a message instead of throwing, and an
         // unhandled one leaves the user clicking a menu item that does nothing.
         const failure = await shell.openPath(absolute);
@@ -201,11 +245,11 @@ export const explorerHandlers = {
         }
       }),
 
-    watch: ({ projectId }: { projectId: string }) =>
-      fsCall(() => services().watchers.watch(rootOf(projectId))),
+    watch: ({ projectId, root }: { projectId: string; root?: string }) =>
+      fsCall(() => services().watchers.watch(rootOf(projectId, root))),
 
-    unwatch: ({ projectId }: { projectId: string }) =>
-      fsCall(() => services().watchers.unwatch(rootOf(projectId))),
+    unwatch: ({ projectId, root }: { projectId: string; root?: string }) =>
+      fsCall(() => services().watchers.unwatch(rootOf(projectId, root))),
 
     loadTabs: ({ projectId }: { projectId: string }) => explorerTabs.list(projectId),
 
@@ -231,11 +275,10 @@ export const explorerHandlers = {
       args?: string[];
     }) =>
       fsCall(async () => {
-        const root = rootOf(projectId);
-        // A worktree is outside the project root by design (plan §9), so this
-        // is not `resolveInRoot`: the check that matters is that main chose
-        // the directory, which it does by falling back to the root.
-        const directory = cwd ? path.resolve(cwd) : root;
+        // A worktree is outside the project directory by design (plan §9), so
+        // this is not `resolveInRoot`; it is the root check, which admits the
+        // project and its own worktrees and nothing else.
+        const directory = rootOf(projectId, cwd ? path.resolve(cwd) : null);
         return services().terminals.create({
           cwd: directory,
           ...(cols === undefined ? {} : { cols }),

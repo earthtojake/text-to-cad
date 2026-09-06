@@ -39,6 +39,20 @@ declare module "@viewer/file-view" {
     colorScheme?: "light" | "dark" | null;
     /** Hex colour the scene is painted on, so the model sits on this app's ground. */
     sceneBackground?: string | null;
+    /**
+     * Select a reference — `o1.2`, `label.f45`, a comma-separated list — once
+     * the model is up. A new `key` selects again; null selects nothing.
+     */
+    selectReference?: { selector: string; key: number } | null;
+    /**
+     * A reference the person copied from the surface — the render pane's
+     * Copy Reference, the tree's, the sheet's, the file menu's Copy Link —
+     * beside the clipboard. `file` is served-root-relative; `selector` is
+     * the half after `#`, `""` for a whole file; `text` is what was copied.
+     */
+    onReference?: (reference: { file: string; selector: string; text: string }) => void;
+    /** The viewport rendered to a PNG, from the toolbar's camera button (shown only when this is given). */
+    onCapture?: (capture: { blob: Blob; file: string }) => void;
   }>;
 
   /** Publishes `origin` to the subtree; `useViewerOrigin` reads it back. */

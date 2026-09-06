@@ -40,7 +40,7 @@ function describeTabs() {
       id: tab.id,
       kind: tab.kind,
       title: tabTitle(tab),
-      ...(tab.kind === "file" ? { path: tab.path, renderer: tab.path ? rendererForPath(tab.path).id : null } : {}),
+      ...(tab.kind === "file" ? { path: tab.path, root: tab.root, renderer: tab.path ? rendererForPath(tab.path).id : null } : {}),
       ...(tab.kind === "browser" ? { url: tab.url } : {}),
       ...(tab.kind === "terminal" ? { cwd: tab.cwd } : {}),
       ...(tab.kind === "review" ? { scope: tab.scope } : {}),
@@ -55,12 +55,15 @@ export async function performCadCommand(command: CadCommand): Promise<unknown> {
         throw new Error("open-file needs a path");
       }
       await focusProject(command.projectId);
-      const tab = useExplorer.getState().openFile(command.path);
+      // The session's root, not the explorer's: an agent in a worktree names
+      // a file in that worktree whichever thread the person is looking at.
+      const tab = useExplorer.getState().openFile(command.path, command.root ?? null);
       if (!tab) {
         throw new Error("the explorer could not open a tab");
       }
       return {
         opened: command.path,
+        root: command.root ?? null,
         tabId: tab.id,
         renderer: rendererForPath(command.path).id,
         note:
@@ -75,20 +78,9 @@ export async function performCadCommand(command: CadCommand): Promise<unknown> {
         throw new Error("reveal needs a path");
       }
       await focusProject(command.projectId);
-      const explorer = useExplorer.getState();
-      // The tree lives in a file tab: make sure one is showing.
-      const fileTab = explorer.tabs.find((tab) => tab.id === explorer.activeId && tab.kind === "file")
-        ?? explorer.tabs.find((tab) => tab.kind === "file");
-      if (fileTab) {
-        explorer.setActive(fileTab.id);
-      } else {
-        explorer.open("file");
-      }
-      if (explorer.treeCollapsed) {
-        explorer.setTreeCollapsed(false);
-      }
-      useExplorer.getState().setReveal({ path: command.path, directory: command.directory ?? false });
-      return { revealed: command.path };
+      const root = command.root ?? null;
+      useExplorer.getState().revealPath(command.path, command.directory ?? false, root);
+      return { revealed: command.path, root };
     }
 
     case "open-url": {
@@ -110,6 +102,7 @@ export async function performCadCommand(command: CadCommand): Promise<unknown> {
       const renderer = file ? rendererForPath(file).id : null;
       return {
         file,
+        root: active?.kind === "file" ? active.root : null,
         renderer,
         viewer: renderer === "cad",
         // The viewer surface keeps selection and camera to itself for now;

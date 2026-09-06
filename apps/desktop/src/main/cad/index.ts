@@ -25,9 +25,11 @@ import type { CadCommand } from "../../shared/ipc/cad";
 import type { Session } from "../../shared/types";
 import { AGENT_PROVIDERS } from "../agents/registry";
 import type { AgentDetector } from "../agents/detect";
-import { projects, settings } from "../db/repositories";
+import { projects, sessions, settings } from "../db/repositories";
+import { rootBelongsToProject } from "../projects/workspace";
+import * as git from "../projects/git";
 import { createActions, RendererCommands } from "./actions";
-import { McpBridge } from "./mcp-bridge";
+import { McpBridge, type BridgeSession } from "./mcp-bridge";
 import { PluginManager } from "./plugin";
 import { CadRuntime, execCommand, nodeHost } from "./runtime";
 import { ViewerManager } from "./viewer";
@@ -128,12 +130,12 @@ export async function initCad(deps: CadDeps): Promise<void> {
   });
 
   commandsInstance = new RendererCommands({
-    projectRoot: projectRoot,
+    sessionRoot,
     send: deps.sendCommand,
     newId: () => randomUUID(),
   });
 
-  bridgeInstance = new McpBridge(createActions({ projectRoot, send: deps.sendCommand, newId: () => randomUUID() }, commandsInstance), mcpServerScript);
+  bridgeInstance = new McpBridge(createActions({ sessionRoot, send: deps.sendCommand, newId: () => randomUUID() }, commandsInstance), mcpServerScript);
   await bridgeInstance.start();
 
   pluginsInstance = new PluginManager({
@@ -151,9 +153,26 @@ export async function initCad(deps: CadDeps): Promise<void> {
   });
 }
 
-function projectRoot(projectId: string): string | null {
-  const project = projects.list().find((candidate) => candidate.id === projectId);
-  return project && fs.existsSync(project.path) ? project.path : null;
+/**
+ * Where a session's paths resolve (plan §9): its worktree when its cwd is one
+ * of the project's worktrees, else the project directory. A cwd that is
+ * neither — a row from before worktrees, or one edited by hand — falls back
+ * to the project, which is what every session could reach before.
+ */
+function sessionRoot(session: BridgeSession): { directory: string; root: string | null } | null {
+  const project = projects.list().find((candidate) => candidate.id === session.projectId);
+  if (!project || !fs.existsSync(project.path)) {
+    return null;
+  }
+  const cwd = path.resolve(session.cwd);
+  if (
+    !git.samePath(cwd, project.path) &&
+    rootBelongsToProject(settings.get(), project, cwd) &&
+    fs.existsSync(cwd)
+  ) {
+    return { directory: cwd, root: cwd };
+  }
+  return { directory: project.path, root: null };
 }
 
 /** The MCP servers every session gets: Hardcore's own. */
@@ -164,8 +183,16 @@ export function mcpServersFor(session: Session): McpServer[] {
   return [bridgeInstance.serverFor({ sessionId: session.id, projectId: session.projectId, cwd: session.cwd })];
 }
 
-export function forgetSession(sessionId: string): void {
+/**
+ * A session is gone. Its bridge token is revoked, and the viewer that served
+ * its worktree — one instance per root — is stopped when no other session
+ * still runs there; the project's own viewer is never touched here.
+ */
+export function forgetSession(sessionId: string, worktreePath?: string | null): void {
   bridgeInstance?.revoke(sessionId);
+  if (worktreePath && !sessions.list().some((other) => other.id !== sessionId && git.samePath(other.cwd, worktreePath))) {
+    viewersInstance?.stop(path.resolve(worktreePath));
+  }
 }
 
 export async function shutdownCad(): Promise<void> {

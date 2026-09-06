@@ -8,6 +8,7 @@ import {
   FileText,
   FolderOpen,
   FolderTree,
+  GitBranch,
   RotateCw,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -27,7 +28,7 @@ import {
   TREE_MIN_WIDTH,
   useExplorer,
 } from "@renderer/state/explorer";
-import type { Project } from "@shared/types";
+import type { ExplorerRoot, Project } from "@shared/types";
 import type { FileStat, TextFileResult } from "./types";
 
 import { cadTabHidesTree } from "./cad-layout";
@@ -67,11 +68,14 @@ type Loaded =
 export function FileTab({
   tabId,
   project,
+  root,
   path,
   viewSource,
 }: {
   tabId: string;
   project: Project;
+  /** The directory `path` is relative to: null for the project, else a worktree (plan §9). */
+  root: ExplorerRoot;
   path: string | null;
   viewSource: boolean;
 }) {
@@ -88,6 +92,25 @@ export function FileTab({
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [rootRef, paneWidth] = useElementWidth();
+  // Every read and write of this file names its root as well as its project.
+  const at = useMemo(() => ({ projectId: project.id, ...(root ? { root } : {}) }), [project.id, root]);
+
+  /**
+   * A tab whose root is not the strip's — a worktree file kept open after
+   * the person switched to a thread in the checkout — watches its own root
+   * for as long as it is on screen, so an edit by that thread's agent still
+   * reaches it. Refcounted in main; the strip's own watch is separate.
+   */
+  const activeRoot = useExplorer((state) => state.root);
+  useEffect(() => {
+    if (root === activeRoot) {
+      return;
+    }
+    void window.hardcore.explorer.watch(at).catch(() => {});
+    return () => {
+      void window.hardcore.explorer.unwatch(at).catch(() => {});
+    };
+  }, [at, root, activeRoot]);
 
   /**
    * What is being shown is `(path, reloadToken)`. Every piece of state that
@@ -138,17 +161,14 @@ export function FileTab({
 
     void (async () => {
       try {
-        const stat = await window.hardcore.explorer.stat({ projectId: project.id, path });
+        const stat = await window.hardcore.explorer.stat({ ...at, path });
         const renderer = rendererFor(stat);
         if (renderer.id === "cad") {
           settle({ state: "cad", stat });
           return;
         }
         if (renderer.id === "image" || renderer.id === "pdf") {
-          const binary = await window.hardcore.explorer.readBinary({
-            projectId: project.id,
-            path,
-          });
+          const binary = await window.hardcore.explorer.readBinary({ ...at, path });
           settle({ state: "binary", stat, dataUrl: binary.dataUrl });
           return;
         }
@@ -156,7 +176,7 @@ export function FileTab({
           settle({ state: "unsupported", stat });
           return;
         }
-        const file = await window.hardcore.explorer.readText({ projectId: project.id, path });
+        const file = await window.hardcore.explorer.readText({ ...at, path });
         settle({ state: "text", stat, file });
         if (!cancelled) {
           setDraftState({ key, value: file.content });
@@ -169,7 +189,7 @@ export function FileTab({
     return () => {
       cancelled = true;
     };
-  }, [key, path, project.id]);
+  }, [key, path, at]);
 
   /**
    * The watcher fired.
@@ -193,7 +213,11 @@ export function FileTab({
       return;
     }
     return useExplorer.subscribe((state, previous) => {
-      if (state.fsRevision === previous.fsRevision || !state.changedPaths.includes(path)) {
+      if (
+        state.fsRevision === previous.fsRevision ||
+        state.changedRoot !== root ||
+        !state.changedPaths.includes(path)
+      ) {
         return;
       }
       if (dirtyRef.current) {
@@ -202,7 +226,7 @@ export function FileTab({
         setReloadToken((token) => token + 1);
       }
     });
-  }, [key, path]);
+  }, [key, path, root]);
 
   /* ---------------------------------------------------------------------- */
   /* Actions                                                                 */
@@ -215,7 +239,7 @@ export function FileTab({
     setSaving(true);
     try {
       const written = await window.hardcore.explorer.writeText({
-        projectId: project.id,
+        ...at,
         path: loaded.stat.path,
         content: draft,
         expectedRevision: loaded.file.revision,
@@ -231,39 +255,39 @@ export function FileTab({
     } finally {
       setSaving(false);
     }
-  }, [draft, key, loaded, project.id, saving]);
+  }, [draft, key, loaded, at, saving]);
 
   const copyPath = useCallback(async () => {
     if (!path) {
       return;
     }
     const absolute = await window.hardcore.explorer
-      .absolutePath({ projectId: project.id, path })
+      .absolutePath({ ...at, path })
       .then((result) => result.path)
       .catch(() => path);
     await navigator.clipboard.writeText(absolute).catch(() => {});
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1400);
-  }, [path, project.id]);
+  }, [path, at]);
 
   const reveal = useCallback(async () => {
     if (!path) {
       return;
     }
     const absolute = await window.hardcore.explorer
-      .absolutePath({ projectId: project.id, path })
+      .absolutePath({ ...at, path })
       .then((result) => result.path)
       .catch(() => null);
     if (absolute) {
       await window.hardcore.shell.showItemInFolder({ path: absolute }).catch(() => {});
     }
-  }, [path, project.id]);
+  }, [path, at]);
 
   const openExternally = useCallback(() => {
     if (path) {
-      void window.hardcore.explorer.openDefault({ projectId: project.id, path }).catch(() => {});
+      void window.hardcore.explorer.openDefault({ ...at, path }).catch(() => {});
     }
-  }, [path, project.id]);
+  }, [path, at]);
 
   /* ---------------------------------------------------------------------- */
   /* The tree's drag handle                                                  */
@@ -318,24 +342,24 @@ export function FileTab({
   };
 
   /**
-   * The breadcrumb: project, folders, file. In a pane too narrow for the
-   * folders they fold into one `…` (Codex does the same) rather than each
-   * truncating to two letters; the full path is the tooltip either way.
+   * The breadcrumb: project, the worktree when the file is in one, folders,
+   * file. In a pane too narrow for the folders they fold into one `…`
+   * (Codex does the same) rather than each truncating to two letters; the
+   * full path is the tooltip either way. The worktree crumb survives the
+   * fold: which copy of the tree a file is in is the one thing a person
+   * cannot tell from its name.
    */
   const crumbs = useMemo(() => {
-    const parts = [project.name, ...(path ? path.split("/") : [])];
+    const worktree = root ? { label: root.split(/[\\/]/).pop() ?? root, title: root, worktree: true } : null;
+    const head = [{ label: project.name, title: project.name }, ...(worktree ? [worktree] : [])];
+    const parts = path ? path.split("/") : [];
     const narrow = paneWidth > 0 && paneWidth - (treeHidden ? 0 : treeWidth) < 720;
-    if (!narrow || parts.length <= 3) {
-      return parts.map((label) => ({ label, title: label }));
+    if (!narrow || parts.length <= 2) {
+      return [...head, ...parts.map((label) => ({ label, title: label }))];
     }
-    const first = parts[0]!;
     const last = parts[parts.length - 1]!;
-    return [
-      { label: first, title: first },
-      { label: "…", title: parts.slice(1, -1).join("/") },
-      { label: last, title: last },
-    ];
-  }, [project.name, path, paneWidth, treeHidden, treeWidth]);
+    return [...head, { label: "…", title: parts.slice(0, -1).join("/") }, { label: last, title: last }];
+  }, [project.name, root, path, paneWidth, treeHidden, treeWidth]);
 
   return (
     <div className="flex h-full min-h-0 flex-col" ref={rootRef}>
@@ -365,12 +389,14 @@ export function FileTab({
                 ) : null}
                 <span
                   className={cn(
-                    "min-w-0 truncate",
+                    "flex min-w-0 items-center gap-1 truncate",
                     last ? "max-w-[60vw] font-medium text-foreground" : "text-muted-foreground",
                   )}
+                  data-crumb={"worktree" in crumb ? "worktree" : undefined}
                   title={crumb.title}
                 >
-                  {crumb.label}
+                  {"worktree" in crumb ? <GitBranch aria-label="Worktree" className="size-3 shrink-0" /> : null}
+                  <span className="truncate">{crumb.label}</span>
                 </span>
               </span>
             );
@@ -484,9 +510,11 @@ export function FileTab({
             loaded={loaded}
             onChange={setDraft}
             onOpenExternally={openExternally}
-            onOpenFile={(next) => openFile(next)}
+            onOpenFile={(next) => openFile(next, root)}
             projectId={project.id}
             reloadToken={reloadToken}
+            root={root}
+            tabId={tabId}
             save={save}
             showingSource={showingSource}
           />
@@ -511,15 +539,16 @@ export function FileTab({
               <FileTree
                 activePath={path}
                 fsRevision={fsRevision}
-                // A different project is a different tree. The reset is the
-                // store's (`bindProject`); the key keeps the filter and the
-                // cursor from crossing over with it.
-                key={project.id}
+                // A different project or root is a different tree. The
+                // state is the store's, per root; the key keeps the filter
+                // and the cursor from crossing over with it.
+                key={`${project.id}:${root ?? ""}`}
                 onCollapse={() => setTreeCollapsed(true)}
-                onOpen={(next) => openFile(next)}
+                onOpen={(next) => openFile(next, root)}
                 projectId={project.id}
                 projectName={project.name}
                 reveal={treeReveal}
+                root={root}
               />
             </div>
           </>
@@ -535,6 +564,8 @@ function Body({
   showingSource,
   reloadToken,
   projectId,
+  root,
+  tabId,
   onChange,
   save,
   onOpenFile,
@@ -545,6 +576,8 @@ function Body({
   showingSource: boolean;
   reloadToken: number;
   projectId: string;
+  root: ExplorerRoot;
+  tabId: string;
   onChange: (next: string) => void;
   save: () => void;
   onOpenFile: (path: string) => void;
@@ -572,7 +605,7 @@ function Body({
       return <EmptyState description={loaded.message} icon={FileText} title="Could not open that file" tone="warn" />;
 
     case "cad":
-      return <CadRenderer onOpenFile={onOpenFile} path={loaded.stat.path} projectId={projectId} />;
+      return <CadRenderer onOpenFile={onOpenFile} path={loaded.stat.path} projectId={projectId} root={root} tabId={tabId} />;
 
     case "binary":
       return loaded.stat.fileKind === "pdf" ? (
