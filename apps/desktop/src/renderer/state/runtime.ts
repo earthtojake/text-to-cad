@@ -3,38 +3,22 @@ import { create } from "zustand";
 import type { RuntimeStatus } from "@shared/ipc/runtime";
 
 /**
- * The CAD runtime's state, mirrored from main (plan §8).
- *
- * `progress` is the tail of the provisioning log rather than the whole of it:
- * the page shows what is happening now, and P5's installer writes the full log
- * to disk for the case where that is not enough.
+ * The CAD runtime's state, mirrored from main (plan §8, as revised: the
+ * runtime ships inside the app, so this is a status, never a progress bar).
+ * Read by the block in Settings › About & Updates and by a CAD tab that has
+ * no viewer to show.
  */
 type RuntimeState = {
-  status: RuntimeStatus;
-  /** 0–100 while installing. */
-  percent: number | null;
-  /** The most recent progress line. */
-  progress: string | null;
+  status: RuntimeStatus | null;
   busy: boolean;
   load: () => Promise<void>;
+  /** Forget the probe and look again. */
   repair: () => Promise<void>;
-  receive: (status: RuntimeStatus, message?: string, percent?: number) => void;
-};
-
-/** What the page renders before main has answered. */
-const UNKNOWN: RuntimeStatus = {
-  state: "missing",
-  python: null,
-  cadgenVersion: null,
-  viewerBuilt: false,
-  overridden: false,
-  log: null,
+  receive: (status: RuntimeStatus) => void;
 };
 
 export const useRuntime = create<RuntimeState>((set) => ({
-  status: UNKNOWN,
-  percent: null,
-  progress: null,
+  status: null,
   busy: false,
 
   load: async () => {
@@ -42,7 +26,7 @@ export const useRuntime = create<RuntimeState>((set) => ({
   },
 
   repair: async () => {
-    set({ busy: true, progress: null, percent: null });
+    set({ busy: true });
     try {
       set({ status: await window.hardcore.runtime.repair() });
     } finally {
@@ -50,10 +34,5 @@ export const useRuntime = create<RuntimeState>((set) => ({
     }
   },
 
-  receive: (status, message, percent) =>
-    set({
-      status,
-      progress: message ?? null,
-      percent: percent ?? null,
-    }),
+  receive: (status) => set({ status }),
 }));

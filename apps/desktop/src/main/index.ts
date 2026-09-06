@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, app, shell } from "electron";
 
-import { cadRuntime, initCad, pluginManager, shutdownCad } from "./cad";
+import { initCad, pluginManager, shutdownCad } from "./cad";
 import { endTrackedChildren, killTrackedChildren } from "./children";
 import { closeDb, db } from "./db";
 import { broadcast, registerIpcHandlers } from "./ipc";
@@ -121,7 +121,6 @@ if (!app.requestSingleInstanceLock()) {
     // first window: the file tab's first `cad.viewerOrigin` and the first
     // session's `mcpServers` both need them up.
     await initCad({ detector, sendCommand: (command) => broadcast("cad.command", command) });
-    cadRuntime().onProgress((progress) => broadcast("runtime.progress", progress));
     schedulePluginInstall();
     installMenu(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
     initTelemetry();

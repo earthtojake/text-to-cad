@@ -1,9 +1,9 @@
 /**
  * The app's version, platform and dev flag, read once per mount.
  *
- * Two pages need it — About prints it, CAD Runtime compares cadgen's version
- * against it — and it never changes while the app is running, so it is a hook
- * around one IPC call rather than a store.
+ * About prints it and compares cadgen's version against it, and it never
+ * changes while the app is running, so it is a hook around one IPC call
+ * rather than a store.
  */
 import { useEffect, useState } from "react";
 

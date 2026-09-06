@@ -92,8 +92,13 @@ test.afterAll(async () => {
     await page.evaluate((id) => window.hardcore.sessions.close({ id }), sessionId).catch(() => {});
   }
   await app?.close();
-  fs.rmSync(userData, { recursive: true, force: true });
-  fs.rmSync(project, { recursive: true, force: true });
+  // A skipped beforeAll never made these, and rmSync(undefined) is a failure
+  // reported against a test that was skipped on purpose.
+  for (const dir of [userData, project]) {
+    if (dir) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
 });
 
 test("a Codex session opens a STEP in the explorer through open_file", async () => {

@@ -229,16 +229,19 @@ jobs:
             runner: macos-14
             script: package:mac
             args: --arm64 --x64
+            runtime_targets: --target mac-arm64 --target mac-x64
             best_effort: false
           - name: Windows
             runner: windows-latest
             script: package:win
             args: ""
+            runtime_targets: --target win-x64
             best_effort: false
           - name: Linux
             runner: ubuntu-latest
             script: package:linux
             args: ""
+            runtime_targets: --target linux-x64
             best_effort: true
 
     steps:
@@ -255,16 +258,42 @@ jobs:
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
 
-      # Into the directory electron-builder's extraResources copies from. It exists in
-      # the checkout (a .gitkeep) so a build without a wheel still packages; this fills
-      # it with the wheel this very release is publishing. The artifact is the whole
-      # distribution, so the sdist lands here too -- a few hundred kilobytes, and
-      # cheaper than a second artifact upload to separate them.
+      # The wheel this very release is publishing, into the directory the runtime
+      # bundler installs from (and electron-builder's extraResources copies, so a
+      # person can see what shipped). The artifact is the whole distribution, so the
+      # sdist lands here too -- a few hundred kilobytes, and cheaper than a second
+      # artifact upload to separate them. The constraints file beside it is written
+      # next, from the runner's own Python, so the bundle pins the closure the
+      # release was tested against.
       - name: Download the cadgen wheel
         uses: actions/download-artifact@v7
         with:
           name: cadgen-${{ needs.publish.outputs.version }}
           path: apps/desktop/resources/cadgen
+
+      - name: Set up Python for the constraints file
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      # `pip freeze` of cadgen's closure, from a venv that has this release's wheel
+      # installed: what `scripts/cad-resources.mjs` writes from a checkout's .venv,
+      # written here from the wheel itself. The bundler passes it to pip as `-c`.
+      - name: Write constraints.txt
+        run: |
+          python -m venv "$RUNNER_TEMP/cadgen-venv"
+          "$RUNNER_TEMP/cadgen-venv/bin/python" -m pip install --quiet --find-links apps/desktop/resources/cadgen "cadgen==${{ needs.publish.outputs.version }}"
+          node apps/desktop/scripts/cad-resources.mjs --no-wheel --python "$RUNNER_TEMP/cadgen-venv/bin/python"
+        shell: bash
+        if: runner.os != 'Windows'
+
+      - name: Write constraints.txt (Windows)
+        run: |
+          python -m venv "$RUNNER_TEMP/cadgen-venv"
+          "$RUNNER_TEMP/cadgen-venv/Scripts/python.exe" -m pip install --quiet --find-links apps/desktop/resources/cadgen "cadgen==${{ needs.publish.outputs.version }}"
+          node apps/desktop/scripts/cad-resources.mjs --no-wheel --python "$RUNNER_TEMP/cadgen-venv/Scripts/python.exe"
+        shell: bash
+        if: runner.os == 'Windows'
 
       # postinstall runs `electron-builder install-app-deps`, which rebuilds
       # better-sqlite3 and node-pty against Electron's ABI. Skipping scripts here would
@@ -272,10 +301,38 @@ jobs:
       - name: Install desktop dependencies
         run: npm --prefix apps/desktop ci
 
+      # The CAD runtime ships INSIDE the app: a pinned python-build-standalone with
+      # cadgen and its whole dependency closure installed (scripts/bundle-runtime.mjs),
+      # one directory per target under apps/desktop/resources/runtime/, copied beside
+      # the app as an extraResource. About 1.2 GB per target, and the point of the
+      # product -- scripts/package.mjs refuses to package without it.
+      #
+      # Each leg bundles its own host's runtime with the runtime's own pip, which is
+      # also what probes it (`import cadgen`, `import cadgen.viewer`). The mac leg
+      # bundles mac-x64 too, for the x64 app it cross-builds: pip resolves the x64
+      # closure with --platform/--only-binary (it never runs the x64 interpreter),
+      # and Rosetta on the macos-14 runner executes the result for the probe.
+      #
+      # The interpreter tarball is cached on the pin (scripts/python-build.json), so
+      # a release that does not move the pin downloads nothing for Python; the wheels
+      # are cached by pip under the same key's second path.
+      - name: Cache the pinned Python and the wheel cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/hardcore/python
+          key: hardcore-python-${{ runner.os }}-${{ hashFiles('apps/desktop/scripts/python-build.json', 'apps/desktop/resources/cadgen/constraints.txt') }}
+          restore-keys: |
+            hardcore-python-${{ runner.os }}-
+
+      - name: Bundle the CAD runtime
+        run: npm --prefix apps/desktop run bundle:runtime -- ${{ matrix.runtime_targets }}
+        shell: bash
+
       # scripts/package.mjs builds (electron-vite) and then packages
       # (electron-builder --publish never), stamping the repository's VERSION as
-      # extraMetadata.version. Publishing is this workflow's job, not the builder's:
-      # tag-release attaches the artifacts to the Release it creates.
+      # extraMetadata.version, after checking a bundled runtime exists for every
+      # target it is about to produce. Publishing is this workflow's job, not the
+      # builder's: tag-release attaches the artifacts to the Release it creates.
       - name: Build and package
         env:
           # Empty until the secrets exist. See the note above the job.

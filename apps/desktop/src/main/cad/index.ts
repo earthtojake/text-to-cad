@@ -3,7 +3,7 @@
  *
  * Four pieces, each testable on its own without this file:
  *
- *   - `runtime.ts`   which Python runs cadgen, and provisioning one;
+ *   - `runtime.ts`   which Python runs cadgen — the bundled one, normally;
  *   - `viewer.ts`    one `cadgen viewer --api-only` per project root;
  *   - `plugin.ts`    the composed Hardcore plugin, installed into each agent;
  *   - `mcp-bridge.ts` + `actions.ts`  the stdio MCP server every session gets
@@ -119,6 +119,12 @@ export async function initCad(deps: CadDeps): Promise<void> {
   viewersInstance = new ViewerManager({
     runtime: () => runtimeInstance!.ready(),
     env: (resolved) => runtimeInstance!.processEnv(resolved),
+    // The viewer's stderr and its launch failures go to the runtime log
+    // beside the probe's, so one file answers "why is there no viewer".
+    log: (line) => {
+      console.info(`[viewer] ${line}`);
+      void runtimeInstance!.log(`[viewer] ${line}`);
+    },
   });
 
   commandsInstance = new RendererCommands({

@@ -60,8 +60,8 @@ export function subscribeToMain(): () => void {
     window.hardcore.on("plugins.status", (statuses) => {
       usePlugins.getState().receive(statuses);
     }),
-    window.hardcore.on("runtime.progress", ({ status, message, percent }) => {
-      useRuntime.getState().receive(status, message, percent);
+    window.hardcore.on("runtime.status", (status) => {
+      useRuntime.getState().receive(status);
     }),
     window.hardcore.on("files.changed", ({ projectId, changes }) => {
       useExplorer.getState().receiveChanges(

@@ -102,7 +102,7 @@ test("the command palette opens on the keyboard", async () => {
 test("settings replaces the window and comes back", async () => {
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByRole("heading", { name: "General" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "CAD Runtime" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "About & Updates" })).toBeVisible();
 
   await page.getByRole("button", { name: "Appearance" }).click();
   await expect(page.getByRole("heading", { name: "Appearance" })).toBeVisible();

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,31 +6,19 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   CadRuntime,
-  PYTHON_BUILD,
+  bundledPaths,
   findCheckout,
-  managedPaths,
-  pythonBuildTarget,
-  pythonBuildUrl,
+  readBundleMarker,
+  runtimeLogPath,
+  runtimeTarget,
   type ExecResult,
-  type PythonBuild,
   type RuntimeHost,
 } from "@main/cad/runtime";
 
-/** The real pin, with one asset's hash replaced by that of the bytes the fake downloads. */
-function pinFor(bytes: Buffer): PythonBuild {
-  return {
-    ...PYTHON_BUILD,
-    assets: {
-      ...PYTHON_BUILD.assets,
-      "darwin-arm64": { ...PYTHON_BUILD.assets["darwin-arm64"], sha256: createHash("sha256").update(bytes).digest("hex") },
-    },
-  };
-}
-
 /**
  * A fake machine: a user-data directory, an optional checkout with a venv,
- * an optional bundled wheel, and an `exec` that answers the cadgen probe for
- * the interpreters it is told exist.
+ * an optional bundled runtime beside the app, and an `exec` that answers the
+ * cadgen probe for the interpreters it is told exist.
  */
 const temps: string[] = [];
 function tempDir(prefix: string): string {
@@ -49,28 +36,28 @@ type Machine = {
   host: RuntimeHost;
   userData: string;
   appRoot: string;
+  resources: string;
   execs: Array<{ file: string; args: string[]; env: Record<string, string> }>;
-  downloads: string[];
-  extracts: string[];
 };
 
 function machine(options: {
   checkout?: boolean;
   venv?: boolean;
-  wheel?: boolean;
+  /** A complete bundle (marker + interpreter); `"half"` is an interpreter without the marker. */
+  bundle?: boolean | "half";
   env?: Record<string, string>;
   override?: string | null;
-  cadgenVersions?: Record<string, string>;
+  cadgenVersions?: Record<string, string | { version: string; viewer: boolean }>;
   platform?: NodeJS.Platform;
   arch?: string;
-  downloadBytes?: Buffer;
-  extractProduces?: boolean;
 }): Machine {
   const root = tempDir("hardcore-runtime-");
   const userData = path.join(root, "userData");
   const resources = path.join(root, "resources");
   fs.mkdirSync(userData, { recursive: true });
-  fs.mkdirSync(path.join(resources, "cadgen"), { recursive: true });
+  fs.mkdirSync(resources, { recursive: true });
+  const platform = options.platform ?? "darwin";
+  const arch = options.arch ?? "arm64";
   let appRoot = path.join(root, "elsewhere", "app");
   if (options.checkout) {
     const checkout = path.join(root, "checkout");
@@ -84,70 +71,70 @@ function machine(options: {
     }
   }
   fs.mkdirSync(appRoot, { recursive: true });
-  if (options.wheel) {
-    fs.writeFileSync(path.join(resources, "cadgen", "cadgen-9.9.9-py3-none-any.whl"), "");
-    fs.writeFileSync(path.join(resources, "cadgen", "constraints.txt"), "build123d==1.0\n");
+  const versions: Record<string, { version: string; viewer: boolean }> = {};
+  for (const [file, value] of Object.entries(options.cadgenVersions ?? {})) {
+    versions[file] = typeof value === "string" ? { version: value, viewer: true } : value;
+  }
+  if (options.bundle) {
+    const bundled = bundledPaths(resources, platform, arch);
+    fs.mkdirSync(path.dirname(bundled.python), { recursive: true });
+    fs.writeFileSync(bundled.python, "#!/bin/sh\n");
+    if (options.bundle === true) {
+      fs.writeFileSync(
+        bundled.marker,
+        JSON.stringify({ target: runtimeTarget(platform, arch), python: "3.13.15", cadgen: "9.9.9", builtAt: "2026-09-06T00:00:00Z" }),
+      );
+      versions[bundled.python] = versions[bundled.python] ?? { version: "9.9.9", viewer: true };
+    }
   }
   const execs: Machine["execs"] = [];
-  const downloads: string[] = [];
-  const extracts: string[] = [];
-  const versions = options.cadgenVersions ?? {};
-  const platform = options.platform ?? "darwin";
-  const managed = managedPaths(userData, "9.9.9", platform);
 
   const host: RuntimeHost = {
     platform,
-    arch: options.arch ?? "arm64",
+    arch,
     userData,
     appVersion: "9.9.9",
     resourcesDir: resources,
     appRoot,
+    nodeBinary: "/apps/Hardcore.app/Contents/MacOS/Hardcore",
     env: options.env ?? {},
     overrideSetting: () => options.override ?? null,
     exec: async (file, args, execOptions): Promise<ExecResult> => {
       execs.push({ file, args, env: execOptions.env });
-      if (args[0] === "-m" && args[1] === "pip") {
-        execOptions.onLine?.("Collecting cadgen==9.9.9");
-        execOptions.onLine?.("Successfully installed cadgen-9.9.9");
-        return { stdout: "", stderr: "", code: 0 };
+      const answer = versions[file];
+      if (!answer) {
+        return { stdout: "", stderr: "Traceback (most recent call last):\nModuleNotFoundError: No module named 'cadgen'", code: 1 };
       }
-      const version = versions[file];
-      if (!version) {
-        return { stdout: "", stderr: "ModuleNotFoundError: No module named 'cadgen'", code: 1 };
-      }
-      return { stdout: `${JSON.stringify({ version, viewer: true })}\n`, stderr: "", code: 0 };
-    },
-    download: async (url, dest, onProgress) => {
-      downloads.push(url);
-      const bytes = options.downloadBytes ?? Buffer.from("not really python");
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.writeFileSync(dest, bytes);
-      onProgress(bytes.length, bytes.length);
-    },
-    extract: async (archive, _dest) => {
-      extracts.push(archive);
-      if (options.extractProduces !== false) {
-        fs.mkdirSync(path.dirname(managed.python), { recursive: true });
-        fs.writeFileSync(managed.python, "#!/bin/sh\n");
-        // The interpreter the extract produced answers the probe from now on.
-        versions[managed.python] = versions[managed.python] ?? "9.9.9";
-      }
+      return { stdout: `${JSON.stringify(answer)}\n`, stderr: "", code: 0 };
     },
   };
-  return { host, userData, appRoot, execs, downloads, extracts };
+  return { host, userData, appRoot, resources, execs };
 }
 
-describe("the pinned interpreter", () => {
-  it("names one asset per packaged platform, with a hash for each", () => {
-    for (const target of ["darwin-arm64", "darwin-x64", "win32-x64", "linux-x64"] as const) {
-      expect(PYTHON_BUILD.assets[target].file).toContain(`+${PYTHON_BUILD.release}-`);
-      expect(PYTHON_BUILD.assets[target].sha256).toMatch(/^[0-9a-f]{64}$/);
-      expect(pythonBuildUrl(target)).toBe(
-        `https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_BUILD.release}/${PYTHON_BUILD.assets[target].file}`,
-      );
-    }
-    expect(pythonBuildTarget("darwin", "arm64")).toBe("darwin-arm64");
-    expect(pythonBuildTarget("linux", "arm64")).toBeNull();
+describe("the bundled layout", () => {
+  it("names the target the way electron-builder does and the interpreter the way the tarball lays it out", () => {
+    expect(runtimeTarget("darwin", "arm64")).toBe("mac-arm64");
+    expect(runtimeTarget("darwin", "x64")).toBe("mac-x64");
+    expect(runtimeTarget("win32", "x64")).toBe("win-x64");
+    expect(runtimeTarget("linux", "x64")).toBe("linux-x64");
+    expect(bundledPaths("/R", "darwin", "arm64")).toEqual({
+      root: "/R/runtime/mac-arm64",
+      python: "/R/runtime/mac-arm64/python/bin/python3",
+      marker: "/R/runtime/mac-arm64/runtime.json",
+    });
+    expect(bundledPaths("/R", "win32", "x64").python).toBe(path.join("/R/runtime/win-x64", "python", "python.exe"));
+  });
+
+  it("reads the bundler's marker and rejects anything else", () => {
+    const dir = tempDir("hardcore-marker-");
+    const marker = path.join(dir, "runtime.json");
+    fs.writeFileSync(marker, JSON.stringify({ target: "mac-arm64", python: "3.13.15", cadgen: "9.9.9" }));
+    expect(readBundleMarker(marker)).toEqual({ target: "mac-arm64", python: "3.13.15", cadgen: "9.9.9" });
+    fs.writeFileSync(marker, "{not json");
+    expect(readBundleMarker(marker)).toBeNull();
+    fs.writeFileSync(marker, JSON.stringify({ cadgen: 1 }));
+    expect(readBundleMarker(marker)).toBeNull();
+    expect(readBundleMarker(path.join(dir, "missing.json"))).toBeNull();
   });
 });
 
@@ -164,15 +151,27 @@ describe("findCheckout", () => {
 });
 
 describe("resolution order", () => {
-  it("prefers CAD_DESKTOP_PYTHON over everything, and reports it as an override", async () => {
-    const m = machine({ checkout: true, venv: true, env: { CAD_DESKTOP_PYTHON: "/opt/py/bin/python" }, override: "/setting/python" });
-    const runtime = new CadRuntime(m.host);
-    expect(runtime.resolve()).toMatchObject({ python: "/opt/py/bin/python", source: "override" });
+  it("prefers CAD_DESKTOP_PYTHON over everything, and reports it as an override", () => {
+    const m = machine({ checkout: true, venv: true, bundle: true, env: { CAD_DESKTOP_PYTHON: "/opt/py/bin/python" }, override: "/setting/python" });
+    expect(new CadRuntime(m.host).resolve()).toMatchObject({ python: "/opt/py/bin/python", source: "override" });
   });
 
   it("then the settings override", () => {
-    const m = machine({ checkout: true, venv: true, override: "/setting/python" });
+    const m = machine({ checkout: true, venv: true, bundle: true, override: "/setting/python" });
     expect(new CadRuntime(m.host).resolve()).toMatchObject({ python: "/setting/python", source: "override" });
+  });
+
+  it("then the bundled runtime beside the app, even inside a checkout with a venv", () => {
+    const m = machine({ checkout: true, venv: true, bundle: true });
+    const resolved = new CadRuntime(m.host).resolve();
+    expect(resolved).toMatchObject({ python: bundledPaths(m.resources, "darwin", "arm64").python, source: "bundled" });
+    // The checkout's cadgen source still wins over the bundle's installed copy.
+    expect(resolved?.env.PYTHONPATH).toMatch(/packages\/cadgen\/src$/);
+  });
+
+  it("does not count an interpreter without the bundler's marker as a runtime", () => {
+    const m = machine({ bundle: "half" });
+    expect(new CadRuntime(m.host).resolve()).toBeNull();
   });
 
   it("then a checkout's .venv, with PYTHONPATH pointing at the checkout's cadgen", () => {
@@ -188,61 +187,118 @@ describe("resolution order", () => {
     expect(new CadRuntime(m.host).resolve()?.env.PYTHONPATH).toMatch(/packages\/cadgen\/src$/);
   });
 
-  it("then the managed runtime, only once its marker is written", () => {
+  it("finds nothing outside a checkout without a bundle", () => {
     const m = machine({});
-    const runtime = new CadRuntime(m.host);
-    expect(runtime.resolve()).toBeNull();
-    const managed = managedPaths(m.userData, "9.9.9", "darwin");
-    fs.mkdirSync(path.dirname(managed.python), { recursive: true });
-    fs.writeFileSync(managed.python, "");
-    // An interpreter without the marker is a half-finished provision.
-    expect(runtime.resolve()).toBeNull();
-    fs.writeFileSync(managed.marker, "{}");
-    expect(runtime.resolve()).toMatchObject({ python: managed.python, source: "managed" });
+    expect(new CadRuntime(m.host).resolve()).toBeNull();
   });
 
-  it("uses python.exe under Scripts/ and python/ on Windows", () => {
-    const m = machine({ checkout: true, platform: "win32", arch: "x64" });
+  it("looks for python.exe under python/ on Windows", () => {
+    const m = machine({ bundle: true, platform: "win32", arch: "x64" });
+    expect(new CadRuntime(m.host).resolve()).toMatchObject({
+      python: bundledPaths(m.resources, "win32", "x64").python,
+      source: "bundled",
+    });
+  });
+});
+
+describe("the process environment", () => {
+  it("gives every cadgen process the app's own Node, unbuffered output, and the resolution's PYTHONPATH", () => {
+    const m = machine({ checkout: true, venv: true, env: { HOME: "/home/x", PATH: "/usr/bin" } });
     const runtime = new CadRuntime(m.host);
-    // No venv was created for win32 in the fake, so this resolves to nothing,
-    // but the managed layout is what matters here.
-    expect(managedPaths(m.userData, "9.9.9", "win32").python).toMatch(/python[\\/]python\.exe$/);
-    expect(runtime.resolve()).toBeNull();
+    const env = runtime.processEnv(runtime.resolve()!);
+    expect(env).toMatchObject({
+      HOME: "/home/x",
+      PATH: "/usr/bin",
+      PYTHONUNBUFFERED: "1",
+      CADGEN_NODE: "/apps/Hardcore.app/Contents/MacOS/Hardcore",
+      ELECTRON_RUN_AS_NODE: "1",
+    });
+    expect(env.PYTHONPATH).toMatch(/packages\/cadgen\/src$/);
+  });
+
+  it("leaves a CADGEN_NODE the person set alone", () => {
+    const m = machine({ checkout: true, venv: true, env: { CADGEN_NODE: "/opt/node/bin/node" } });
+    const runtime = new CadRuntime(m.host);
+    const env = runtime.processEnv(runtime.resolve()!);
+    expect(env.CADGEN_NODE).toBe("/opt/node/bin/node");
+    expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+  });
+
+  it("closes the bundled interpreter to the shell's Python variables and never writes bytecode into the bundle", () => {
+    const m = machine({
+      bundle: true,
+      env: { PYTHONPATH: "/somebody/elses/site-packages", PYTHONHOME: "/usr", PYTHONSTARTUP: "/x/rc.py", HOME: "/home/x" },
+    });
+    const runtime = new CadRuntime(m.host);
+    const env = runtime.processEnv(runtime.resolve()!);
+    expect(env.PYTHONPATH).toBeUndefined();
+    expect(env.PYTHONHOME).toBeUndefined();
+    expect(env.PYTHONSTARTUP).toBeUndefined();
+    expect(env).toMatchObject({ HOME: "/home/x", PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1" });
+  });
+
+  it("keeps the shell's PYTHONPATH for a checkout venv, behind the checkout's own source", () => {
+    const m = machine({ checkout: true, venv: true, env: { PYTHONPATH: "/extra" } });
+    const runtime = new CadRuntime(m.host);
+    expect(runtime.processEnv(runtime.resolve()!).PYTHONPATH).toMatch(/packages\/cadgen\/src:\/extra$/);
   });
 });
 
 describe("status", () => {
-  it("is missing with nothing resolved", async () => {
+  it("is missing, and says where it looked, with nothing resolved", async () => {
     const m = machine({});
-    expect(await new CadRuntime(m.host).status()).toMatchObject({ state: "missing", python: null, cadgenVersion: null });
+    const status = await new CadRuntime(m.host).status();
+    expect(status).toMatchObject({ state: "missing", python: null, source: null, cadgenVersion: null });
+    expect(status.message).toContain(bundledPaths(m.resources, "darwin", "arm64").root);
+    expect(status.message).toContain("not running from a checkout");
   });
 
-  it("is ready when the interpreter imports cadgen, with its version and viewer flag", async () => {
-    const m = machine({ checkout: true, venv: true, cadgenVersions: {} });
+  it("is ready with the bundle's version and viewer flag, probed once", async () => {
+    const m = machine({ bundle: true });
     const runtime = new CadRuntime(m.host);
-    const python = runtime.resolve()!.python;
-    (m.host as { exec: RuntimeHost["exec"] }).exec = async () => ({
-      stdout: `${JSON.stringify({ version: "9.9.9", viewer: true })}\n`,
-      stderr: "",
-      code: 0,
-    });
+    const python = bundledPaths(m.resources, "darwin", "arm64").python;
     expect(await runtime.status()).toMatchObject({
       state: "ready",
       python,
+      source: "bundled",
       cadgenVersion: "9.9.9",
       viewerBuilt: true,
-      overridden: false,
+      log: null,
     });
+    await runtime.status();
+    expect(m.execs.filter((exec) => exec.file === python)).toHaveLength(1);
+    // The probe ran the interpreter closed to the shell and told it not to write pycs.
+    expect(m.execs[0]?.env).toMatchObject({ PYTHONNOUSERSITE: "1", PYTHONDONTWRITEBYTECODE: "1" });
   });
 
-  it("is an error, with the interpreter's words, when cadgen does not import", async () => {
+  it("reports a cadgen whose viewer does not import as not viewer-built", async () => {
+    const m = machine({ bundle: true });
+    const python = bundledPaths(m.resources, "darwin", "arm64").python;
+    (m.host as { exec: RuntimeHost["exec"] }).exec = async () => ({
+      stdout: `${JSON.stringify({ version: "9.9.9", viewer: false })}\n`,
+      stderr: "",
+      code: 0,
+    });
+    const status = await new CadRuntime(m.host).status();
+    expect(status.state).toBe("ready");
+    expect(status.python).toBe(python);
+    expect(status.viewerBuilt).toBe(false);
+  });
+
+  it("is an error, with the interpreter's words and the log, when cadgen does not import", async () => {
     const m = machine({ override: "/setting/python" });
     fs.writeFileSync(path.join(m.userData, "python"), "");
     (m.host as { overrideSetting: () => string | null }).overrideSetting = () => path.join(m.userData, "python");
-    const status = await new CadRuntime(m.host).status();
+    const runtime = new CadRuntime(m.host);
+    const status = await runtime.status();
     expect(status.state).toBe("error");
-    expect(status.overridden).toBe(true);
+    expect(status.source).toBe("override");
+    expect(status.message).toContain("The override interpreter");
     expect(status.message).toContain("No module named 'cadgen'");
+    // The failure was written to the runtime log, which the status points at.
+    const log = runtimeLogPath(m.userData);
+    expect(status.log).toBe(log);
+    expect(fs.readFileSync(log, "utf8")).toContain("No module named 'cadgen'");
   });
 
   it("is an error naming a missing override path", async () => {
@@ -252,95 +308,27 @@ describe("status", () => {
     expect(status.message).toContain("/nowhere/python");
   });
 
-  it("says why nothing can be provisioned on an unsupported platform", async () => {
-    const m = machine({ platform: "linux", arch: "arm64" });
-    const status = await new CadRuntime(m.host).status();
-    expect(status.state).toBe("missing");
-    expect(status.message).toContain("linux/arm64");
-  });
-});
-
-describe("provisioning", () => {
-  it("downloads the pinned asset, verifies it, extracts, installs cadgen and writes the marker", async () => {
-    const bytes = Buffer.from("python-build-standalone bytes");
-    const m = machine({ downloadBytes: bytes });
-    const runtime = new CadRuntime(m.host, pinFor(bytes));
-    const progress: Array<{ percent?: number; message?: string }> = [];
-    runtime.onProgress((event) => progress.push({ percent: event.percent, message: event.message }));
-
-    const status = await runtime.provision();
-    expect(status.state).toBe("ready");
-    expect(status.cadgenVersion).toBe("9.9.9");
-    expect(m.downloads).toEqual([pythonBuildUrl("darwin-arm64")]);
-    expect(m.extracts).toHaveLength(1);
-    const managed = managedPaths(m.userData, "9.9.9", "darwin");
-    expect(fs.existsSync(managed.marker)).toBe(true);
-    expect(JSON.parse(fs.readFileSync(managed.marker, "utf8"))).toMatchObject({ cadgenVersion: "9.9.9" });
-    expect(fs.existsSync(managed.log)).toBe(true);
-    // The download directory is cleaned up; only the interpreter stays.
-    expect(fs.existsSync(managed.downloads)).toBe(false);
-
-    const pip = m.execs.find((exec) => exec.args[1] === "pip");
-    expect(pip?.file).toBe(managed.python);
-    expect(pip?.args).toEqual(["-m", "pip", "install", "cadgen==9.9.9"]);
-
-    // Progress moves forward and ends at 100.
-    const percents = progress.map((event) => event.percent).filter((value): value is number => value !== undefined);
-    expect(percents[0]).toBe(0);
-    expect(percents.at(-1)).toBe(100);
-    expect([...percents]).toEqual([...percents].sort((a, b) => a - b));
-    expect(progress.some((event) => event.message?.includes("Downloading Python"))).toBe(true);
-    expect(progress.some((event) => event.message?.includes("Installing cadgen"))).toBe(true);
-  });
-
-  it("offers the bundled wheel with --find-links and the constraints with -c", async () => {
-    const bytes = Buffer.from("python-build-standalone bytes");
-    const m = machine({ downloadBytes: bytes, wheel: true });
-    const runtime = new CadRuntime(m.host, pinFor(bytes));
-    const { args } = runtime.pipArgs();
-    expect(args).toEqual([
-      "--find-links",
-      path.join(m.host.resourcesDir, "cadgen"),
-      "cadgen==9.9.9",
-      "-c",
-      path.join(m.host.resourcesDir, "cadgen", "constraints.txt"),
-    ]);
-    expect((await runtime.provision()).state).toBe("ready");
-    const pip = m.execs.find((exec) => exec.args[1] === "pip");
-    expect(pip?.args.slice(2)).toEqual(["install", ...args]);
-  });
-
-  it("refuses a download whose hash is not the pinned one, and leaves no marker", async () => {
-    const m = machine({ downloadBytes: Buffer.from("tampered") });
-    // The real pin: whatever the fake downloads, it is not python-build-standalone.
+  it("does not remember a failed probe, and repair probes again", async () => {
+    const m = machine({ bundle: true });
+    const python = bundledPaths(m.resources, "darwin", "arm64").python;
+    // First the bundle answers with an error; then it is fixed.
+    let broken = true;
+    const exec = m.host.exec;
+    (m.host as { exec: RuntimeHost["exec"] }).exec = async (file, args, options) =>
+      broken ? { stdout: "", stderr: "ImportError: dlopen failed", code: 1 } : exec(file, args, options);
     const runtime = new CadRuntime(m.host);
-    const status = await runtime.provision();
-    expect(status.state).toBe("error");
-    expect(status.message).toContain("checksum mismatch");
-    expect(status.log).toContain("[error]");
-    expect(m.extracts).toHaveLength(0);
-    expect(fs.existsSync(managedPaths(m.userData, "9.9.9", "darwin").marker)).toBe(false);
-    // And resolution still finds nothing: the half-provisioned runtime is not a runtime.
-    expect(runtime.resolve()).toBeNull();
+    expect((await runtime.status()).state).toBe("error");
+    broken = false;
+    expect((await runtime.repair()).state).toBe("ready");
+    expect((await runtime.ready())?.python).toBe(python);
   });
 
-  it("repair re-probes rather than provisions when an override is in force", async () => {
-    const m = machine({ override: "/setting/python" });
-    fs.writeFileSync(path.join(m.userData, "python"), "");
-    (m.host as { overrideSetting: () => string | null }).overrideSetting = () => path.join(m.userData, "python");
-    const runtime = new CadRuntime(m.host);
-    const status = await runtime.repair();
-    expect(status.overridden).toBe(true);
-    expect(m.downloads).toHaveLength(0);
-  });
-
-  it("shares one in-flight provision between concurrent callers", async () => {
-    const bytes = Buffer.from("python-build-standalone bytes");
-    const m = machine({ downloadBytes: bytes });
-    const runtime = new CadRuntime(m.host, pinFor(bytes));
-    const [a, b] = await Promise.all([runtime.provision(), runtime.provision()]);
-    expect(a.state).toBe("ready");
-    expect(b.state).toBe("ready");
-    expect(m.downloads).toHaveLength(1);
+  it("ready() answers the interpreter only when it probes", async () => {
+    const good = machine({ bundle: true });
+    expect((await new CadRuntime(good.host).ready())?.source).toBe("bundled");
+    const bad = machine({ override: "/nowhere/python" });
+    expect(await new CadRuntime(bad.host).ready()).toBeNull();
+    const none = machine({});
+    expect(await new CadRuntime(none.host).ready()).toBeNull();
   });
 });

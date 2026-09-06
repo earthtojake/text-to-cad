@@ -91,14 +91,13 @@ describe("Explorer", () => {
 });
 
 describe("Settings", () => {
-  it("renders the seven pages in the nav", () => {
+  it("renders the six pages in the nav", () => {
     wrap(<SettingsRoute />);
     for (const label of [
       "General",
       "Agents",
       "Appearance",
       "Git & Worktrees",
-      "CAD Runtime",
       "Keyboard shortcuts",
       "About & Updates",
     ]) {

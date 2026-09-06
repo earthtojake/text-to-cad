@@ -1,62 +1,56 @@
 /**
- * `runtime.*`: the managed CAD runtime — a pinned Python under `userData/`
- * plus the bundled cadgen wheel, about a gigabyte on disk and therefore
- * installed on first launch rather than shipped in the installer (plan §8).
+ * `runtime.*`: the CAD runtime — the pinned Python with cadgen installed that
+ * ships INSIDE the app (`resources/runtime/<os>-<arch>/`, built by
+ * `scripts/bundle-runtime.mjs`), or the interpreter standing in for it in
+ * development (plan §8, as revised: nothing downloads at first launch).
  *
- * Declared by P6 because the CAD Runtime settings page is `cad:check` as UI
- * and needs something to render; answered by stubs until P5 provisions the
- * runtime. The stub answers `missing`, which is true of every build that has
- * not run P5's provisioner.
+ * Read by the status block in Settings › About & Updates and by the CAD file
+ * tab when it has no viewer to show.
  */
 import { z } from "zod";
 
 import { invoke } from "./define";
 
 /**
- * - `missing` — no runtime yet; the page offers Install.
- * - `installing` — provisioning, with `runtime.progress` arriving.
- * - `ready` — Python, cadgen and the viewer client are all in place.
- * - `error` — provisioning failed; `message` says how and `log` has the tail.
+ * - `missing` — no interpreter at all: no bundle beside the app, no checkout
+ *   venv, no override. `message` says where the app looked.
+ * - `ready` — Python, cadgen and cadgen's viewer all import.
+ * - `error` — an interpreter was found and cannot run cadgen; `message` has
+ *   the interpreter's words and `log` the file with the rest.
  */
-export const RuntimeStateSchema = z.enum(["missing", "installing", "ready", "error"]);
+export const RuntimeStateSchema = z.enum(["missing", "ready", "error"]);
 export type RuntimeState = z.infer<typeof RuntimeStateSchema>;
+
+/** Where the interpreter came from, in resolution order. */
+export const RuntimeSourceSchema = z.enum(["override", "bundled", "checkout"]);
+export type RuntimeSource = z.infer<typeof RuntimeSourceSchema>;
 
 export const RuntimeStatusSchema = z.object({
   state: RuntimeStateSchema,
-  /** Absolute path of the interpreter in use, managed or overridden. */
+  /** Absolute path of the interpreter in use. */
   python: z.string().nullable().default(null),
+  source: RuntimeSourceSchema.nullable().default(null),
   /** Version reported by the installed cadgen, for comparison with the app's. */
   cadgenVersion: z.string().nullable().default(null),
-  /** Whether the viewer client the wheel carries is present. */
+  /** Whether `cadgen.viewer` — the backend the file tab talks to — imports. */
   viewerBuilt: z.boolean().default(false),
-  /** True when `cadPythonOverride` is what `python` points at. */
-  overridden: z.boolean().default(false),
-  /** Tail of the provisioning log, for the error state. */
+  /** The runtime log (`userData/cad-runtime.log`), once anything has been written to it. */
   log: z.string().nullable().default(null),
-  /** Set on `error`; safe to show. */
+  /** Set on `missing` and `error`; safe to show. */
   message: z.string().optional(),
 });
 export type RuntimeStatus = z.infer<typeof RuntimeStatusSchema>;
 
 export const runtimeContract = {
   runtime: {
-    /** The current state, without provisioning anything. */
+    /** The current state, probing the interpreter once and remembering the answer. */
     status: invoke(z.void(), RuntimeStatusSchema),
-    /** Install or reinstall from the bundled wheel; answers with the new state. */
+    /** Forget the probe and look again; answers with the new state. */
     repair: invoke(z.void(), RuntimeStatusSchema),
   },
 } as const;
 
 export const runtimeEvents = {
-  /**
-   * One event for the whole install: the state as it now is, plus the line and
-   * the percentage that moved it. One shape rather than a status event and a
-   * log event, because the page renders them in one card.
-   */
-  "runtime.progress": z.object({
-    status: RuntimeStatusSchema,
-    /** The most recent line of output, when there is one. */
-    message: z.string().optional(),
-    percent: z.number().min(0).max(100).optional(),
-  }),
+  /** The state changed — a repair finished, or a probe answered. */
+  "runtime.status": RuntimeStatusSchema,
 } as const;

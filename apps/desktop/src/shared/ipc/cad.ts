@@ -24,7 +24,11 @@ import { invoke } from "./define";
  * is the whole reason this is not a bare `null`.
  */
 export const ViewerOriginReasonSchema = z.enum([
-  /** The managed Python and cadgen are not installed yet (P5's setup flow). */
+  /**
+   * No interpreter can run cadgen: the bundled runtime is missing or broken
+   * (`runtime.status` has the words). A failure, not a first-run state —
+   * the runtime ships inside the app.
+   */
   "runtime-not-ready",
   /** The runtime is there; the viewer process failed to come up. */
   "viewer-failed",
@@ -40,6 +44,10 @@ export const ViewerOriginSchema = z.object({
    */
   origin: z.string().nullable(),
   reason: ViewerOriginReasonSchema.optional(),
+  /** What went wrong, in the interpreter's or the launcher's words; safe to show. */
+  message: z.string().optional(),
+  /** The runtime log's path, when there is one to point at. */
+  log: z.string().optional(),
 });
 export type ViewerOrigin = z.infer<typeof ViewerOriginSchema>;
 

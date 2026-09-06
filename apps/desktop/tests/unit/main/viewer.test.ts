@@ -110,7 +110,7 @@ describe("ViewerManager", () => {
     await new Promise((resolve) => setImmediate(resolve));
     m.children[0]!.child.stderr.write("No built CAD Viewer client found\n");
     m.children[0]!.child.exit(1);
-    expect(await pending).toEqual({ origin: null, reason: "viewer-failed" });
+    expect(await pending).toMatchObject({ origin: null, reason: "viewer-failed", message: expect.stringContaining("exited") });
     expect(m.logs.some((line) => line.includes("No built CAD Viewer client found"))).toBe(true);
   });
 
