@@ -4,7 +4,9 @@ copyright: Copyright © text-to-cad contributors
 
 # `npm run build` (electron-vite) has to have run first: everything shipped
 # comes out of out/, plus the native modules electron-builder resolves from
-# `dependencies` in package.json.
+# `dependencies` in package.json. `scripts/package.mjs` does both in order and
+# is the only supported way in — it stamps the version and decides, from the
+# environment alone, whether this build is signed.
 directories:
   buildResources: build
   output: release
@@ -14,16 +16,42 @@ files:
   - package.json
   - "!**/*.map"
 
-# One 1024×1024 PNG in build/ (scripts/make-icons.mjs). electron-builder
-# derives the .icns and the .ico from it, so there is no icon toolchain and no
-# set of near-identical binaries in the tree.
+# What ships beside the app rather than inside the asar. Both directories are
+# committed empty (a .gitkeep and a README) and `scripts/package.mjs` recreates
+# them before every build, so a checkout that has not run P5's provisioning
+# still packages.
+#
+# Measured against electron-builder 26.15.3, not assumed: a MISSING source here
+# is tolerated (the build succeeds and copies nothing) and an EMPTY one produces
+# no directory in Resources. The placeholders are belt to that braces — a
+# tolerance is a thing a minor release can withdraw, and the alternative is a
+# conditional config generated per build. Either way P5's code has to handle
+# "no bundled wheel", because a development checkout and a community build
+# genuinely have none.
+#
+#   resources/cadgen   the cadgen wheel and its constraints file; the release
+#                      workflow downloads the wheel the publish job built into
+#                      here before packaging (plan §8).
+#   resources/plugin   the composed Hardcore plugin (the cad plugin minus
+#                      cad-viewer, plus hardcore-app) installed into each agent.
+extraResources:
+  - from: resources/cadgen
+    to: cadgen
+  - from: resources/plugin
+    to: plugin
+
+# One icon set in build/ (scripts/make-icons.mjs, committed): icon.icns for
+# macOS, icon.ico for Windows, icon.png for Linux. electron-builder picks each
+# one up by name.
 
 # The updater feed. `release-publish.yml` attaches the installers to the same
-# GitHub Release it tags (plan §11), so the feed is that repository.
+# GitHub Release it tags (plan §11), so the feed is that repository, and
+# electron-updater reads the app-update.yml this block generates.
 publish:
   provider: github
   owner: earthtojake
   repo: text-to-cad
+  releaseType: release
 
 # better-sqlite3 and node-pty are native. `npm run postinstall` runs
 # `electron-builder install-app-deps`, which rebuilds them against the Electron
@@ -35,6 +63,10 @@ asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/node-pty/**
 
+# Every artifact is named the same way, so a GitHub Release reads as a table:
+# Hardcore-<version>-<os>-<arch>.<ext>.
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
 mac:
   category: public.app-category.developer-tools
   target:
@@ -42,17 +74,31 @@ mac:
       arch: [arm64, x64]
     - target: zip
       arch: [arm64, x64]
-  # Unsigned for now (plan §14 question 2). Turning signing on is adding the
-  # CSC_* and APPLE_* secrets and flipping these three; nothing else changes.
-  identity: null
-  hardenedRuntime: false
-  notarize: false
   darkModeSupport: true
+  # Signing and notarisation are driven by the environment and nothing else
+  # (scripts/package.mjs):
+  #   CSC_LINK + CSC_KEY_PASSWORD            -> the build is signed
+  #   APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD
+  #     + APPLE_TEAM_ID                      -> and notarised (--config.mac.notarize=true)
+  #   neither                                -> CSC_IDENTITY_AUTO_DISCOVERY=false
+  #
+  # `hardenedRuntime` and the entitlements stay on either way: they cost
+  # nothing on an unsigned build, and leaving them off would mean the first
+  # signed build is the first time they are exercised. `notarize` is false here
+  # and turned on by the packaging script, because a notarize attempt without
+  # credentials fails the whole run.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  notarize: false
   extendInfo:
     NSHumanReadableCopyright: text-to-cad contributors
 
 dmg:
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  # ${arch} in a dmg name is the architecture of the app inside it, which is
+  # what someone downloading needs to tell the two apart.
+  artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 
 win:
   target:
@@ -63,11 +109,18 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  artifactName: ${productName}-Setup-${version}.${ext}
+  # The installer, not the app: `-setup` keeps it apart from the zip in a
+  # release's file list.
+  artifactName: ${productName}-${version}-${os}-${arch}-setup.${ext}
 
 linux:
   category: Development
+  maintainer: text-to-cad contributors <noreply@github.com>
+  synopsis: A CAD-first agent workbench
+  # Best-effort and unsigned (plan §14). AppImage is the portable one; deb is a
+  # convenience for the distributions that want it.
   target:
     - target: AppImage
       arch: [x64]
-  artifactName: ${productName}-${version}-${arch}.${ext}
+    - target: deb
+      arch: [x64]
