@@ -233,8 +233,8 @@ function cadgenEnv(extra = {}) {
 async function timeExec(file, args, options) {
   const started = performance.now();
   let code = 0;
-  let stdout = "";
-  let stderr = "";
+  let stdout;
+  let stderr;
   try {
     ({ stdout, stderr } = await execFileAsync(file, args, { ...options, maxBuffer: 64 * 1024 * 1024 }));
   } catch (error) {
@@ -598,6 +598,8 @@ async function timeOpen(context, model, phase, options) {
   await clearMeasures(page);
 
   const viewerLine = stdoutLines.slice(stdoutFrom).find((entry) => /\[viewer\] (started|reused) /.test(entry.line));
+  // A viewer that was up before the click: a pre-warm, or an earlier open.
+  const viewerWarm = !viewerLine && stdoutLines.slice(0, stdoutFrom).some((entry) => /\[viewer\] (started|reused) /.test(entry.line));
   const own = responses.slice(responsesFrom);
   const compile = own.filter((entry) => entry.method === "POST" && entry.url.includes("/__cad/artifact"));
   const catalog = own.filter((entry) => entry.method === "GET" && entry.url.includes("/__cad/catalog"));
@@ -614,6 +616,7 @@ async function timeOpen(context, model, phase, options) {
     phase,
     ms: {
       viewerUp: viewerLine ? round(viewerLine.at - openedAt, 0) : null,
+      viewerWarm,
       canvas: round(marks.canvasAt - openedAt, 0),
       firstFrame: firstFrame ? round(toHarness(firstFrame.start) - openedAt, 0) : null,
       compile: compile.length ? round(compile[0].durationMs, 0) : null,
@@ -684,9 +687,18 @@ async function measureApp(options, scratch) {
     try {
       await body(context);
     } finally {
+      // What came up on its own after the project was added — the viewer
+      // and the daemon a pre-warm starts — as ms from the add; null when
+      // nothing did (the first click then asks for the viewer itself).
+      const firstLine = (pattern) => launched.stdoutLines.find((entry) => pattern.test(entry.line));
+      const viewerLine = firstLine(/\[viewer\] (started|reused) /);
+      const daemonLine = firstLine(/\[daemon\] warming /);
+      const launch = result.launches.at(-1);
+      launch.viewerWarmMs = viewerLine ? round(viewerLine.at - projectStarted, 0) : null;
+      launch.daemonWarmMs = daemonLine ? round(daemonLine.at - projectStarted, 0) : null;
       const closing = performance.now();
       await launched.app.close();
-      result.launches.at(-1).quitMs = round(performance.now() - closing, 0);
+      launch.quitMs = round(performance.now() - closing, 0);
     }
   };
 
@@ -757,9 +769,9 @@ function report(result) {
   }
   if (result.app) {
     const a = result.app;
-    lines.push("## App launches", "", "| Launch | window ready | project ready | quit |", "| --- | --- | --- | --- |");
+    lines.push("## App launches", "", "| Launch | window ready | project ready | viewer up after add | daemon warming after add | quit |", "| --- | --- | --- | --- | --- | --- |");
     for (const launch of a.launches) {
-      lines.push(`| ${launch.label} | ${fmt(launch.windowReadyMs)} | ${fmt(launch.projectReadyMs)} | ${fmt(launch.quitMs)} |`);
+      lines.push(`| ${launch.label} | ${fmt(launch.windowReadyMs)} | ${fmt(launch.projectReadyMs)} | ${fmt(launch.viewerWarmMs)} | ${fmt(launch.daemonWarmMs)} | ${fmt(launch.quitMs)} |`);
     }
     lines.push("", "## Opens (ms from the click in the tree)", "");
     lines.push("| Model | Phase | viewer up | canvas | first frame | compile | model painted | sheet | interactive | tess (n, hit/miss, wall) | store GETs | tess cache GET hit/total, PUT |");
@@ -767,7 +779,7 @@ function report(result) {
     for (const open of a.opens) {
       const t = open.tessellation;
       lines.push(
-        `| ${path.basename(open.model)} | ${open.phase} | ${fmt(open.ms.viewerUp)} | ${fmt(open.ms.canvas)} | ${fmt(open.ms.firstFrame)} | ${fmt(open.ms.compile)} | ${fmt(open.ms.modelPainted)} | ${fmt(open.ms.sheetReady)} | ${fmt(open.ms.interactive)} | ${t.components}, ${t.hits}/${t.misses}, ${fmt(t.wall)} | ${open.network.store.count} (${round(open.network.store.bytes / 1024, 0)} KB) | ${open.network.tessCache.getHits}/${open.network.tessCache.gets}+${open.network.tessCache.batch}b, ${open.network.tessCache.puts} |`,
+        `| ${path.basename(open.model)} | ${open.phase} | ${open.ms.viewerWarm ? "warm" : fmt(open.ms.viewerUp)} | ${fmt(open.ms.canvas)} | ${fmt(open.ms.firstFrame)} | ${fmt(open.ms.compile)} | ${fmt(open.ms.modelPainted)} | ${fmt(open.ms.sheetReady)} | ${fmt(open.ms.interactive)} | ${t.components}, ${t.hits}/${t.misses}, ${fmt(t.wall)} | ${open.network.store.count} (${round(open.network.store.bytes / 1024, 0)} KB) | ${open.network.tessCache.getHits}/${open.network.tessCache.gets}+${open.network.tessCache.batch}b, ${open.network.tessCache.puts} |`,
       );
     }
     lines.push("", "## Interaction", "", "| Model | Phase | hover picks | hover frames | orbit frames | orbit fps |", "| --- | --- | --- | --- | --- | --- |");
