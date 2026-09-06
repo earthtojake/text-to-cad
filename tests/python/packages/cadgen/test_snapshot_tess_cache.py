@@ -25,10 +25,28 @@ from cadgen.snapshot_core import (  # noqa: E402
     TESS_CACHE_BATCH_VERSION,
     TESS_CACHE_ROUTE_PREFIX,
     SnapshotAssetServer,
+    _write_http_body,
     read_tessellation_cache_batch,
     read_tessellation_cache_entry,
     write_tessellation_cache_entry,
 )
+
+
+class LargeHttpBodyTest(unittest.TestCase):
+    def test_response_writes_are_bounded_views_of_the_original_body(self):
+        body = b"x" * (16 * 1024 * 1024 + 3)
+        chunks = []
+
+        class BoundedSocket:
+            def write(self, chunk):
+                self_outer.assertLessEqual(len(chunk), 16 * 1024 * 1024)
+                self_outer.assertIs(chunk.obj, body)
+                chunks.append(chunk)
+
+        self_outer = self
+        _write_http_body(BoundedSocket(), body)
+        self.assertEqual([len(chunk) for chunk in chunks], [16 * 1024 * 1024, 3])
+        self.assertEqual(b"".join(chunks), body)
 
 
 def decode_batch(body: bytes) -> list[bytes | None]:

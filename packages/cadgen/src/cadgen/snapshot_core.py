@@ -999,6 +999,13 @@ def _store_packages_root() -> Path:
     return views_root()
 
 
+def _write_http_body(output, body: bytes) -> None:
+    """Send large mesh batches without exceeding a platform socket-write limit."""
+    view = memoryview(body)
+    for start in range(0, len(view), 16 * 1024 * 1024):
+        output.write(view[start : start + 16 * 1024 * 1024])
+
+
 class SnapshotAssetServer:
     """Loopback HTTP server for the snapshot page's BULK bytes.
 
@@ -1032,7 +1039,7 @@ class SnapshotAssetServer:
             def _send(self, status: int, body: bytes = b"", content_type: str = "application/octet-stream") -> None:
                 self._headers(status, content_type, len(body))
                 if body:
-                    self.wfile.write(body)
+                    _write_http_body(self.wfile, body)
 
             def do_OPTIONS(self) -> None:  # noqa: N802 - http.server naming
                 self.send_response(204)

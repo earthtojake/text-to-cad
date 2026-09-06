@@ -376,52 +376,20 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid)
     throw new Error("Assembly package matched no renderable component GLBs");
   }
 
-  // Shared-geometry package rendering. Baking each occurrence's transform into fresh
-  // world-space vertices inflates GPU memory ~12x on large packages (falcon_heavy: 114k
-  // unique -> 1.4M composed) and stalls the main thread. Instead, every occurrence renders
-  // as a THREE.Mesh over its component's OWN geometry — uploaded once per cid (cadScene
-  // caches by sourceMeshKey) and placed by its occurrence transform at render time
-  // (partTransformsBaked: false). The top-level arrays hold each unique component's geometry
-  // ONCE, only for the render gate + the whole-mesh fallback (which per-part packages never
-  // hit). Selectors are unaffected: sourcePartRanges are component-local triangle offsets and
-  // the per-occurrence selector runtime is built + placed from the occurrence transform
-  // elsewhere; mirrored occurrences render correctly because the surface material is DoubleSide.
-
-  // One copy of each unique component's geometry (component-local) for the gate/fallback.
+  // Every occurrence renders its component's sourceMesh at its own transform.
+  // No aggregate copy is consumed by that path. A single component can expose
+  // its existing arrays directly; several components stay in their own buffers
+  // instead of allocating gigabytes of duplicate positions, normals and indices.
   const uniqueComponents = new Map();
-  for (const placement of placements) {
-    const cid = String(placement.occurrence?.component || "").trim();
-    if (cid && !uniqueComponents.has(cid)) {
-      uniqueComponents.set(cid, placement.componentMeshData);
-    }
+  for (const { occurrence, componentMeshData } of placements) {
+    uniqueComponents.set(String(occurrence.component).trim(), componentMeshData);
   }
-  let uniqueVertexCount = 0;
-  let uniqueIndexCount = 0;
-  for (const component of uniqueComponents.values()) {
-    uniqueVertexCount += Math.floor((component?.vertices?.length || 0) / 3);
-    uniqueIndexCount += component?.indices?.length || 0;
-  }
-  const vertices = new Float32Array(uniqueVertexCount * 3);
-  const normals = new Float32Array(uniqueVertexCount * 3);
-  const indices = new Uint32Array(uniqueIndexCount);
-  {
-    let uniqueVertexOffset = 0;
-    let uniqueIndexOffset = 0;
-    for (const component of uniqueComponents.values()) {
-      const cv = component?.vertices || new Float32Array(0);
-      const cn = component?.normals || new Float32Array(0);
-      const ci = component?.indices || new Uint32Array(0);
-      vertices.set(cv, uniqueVertexOffset * 3);
-      if (cn.length === cv.length) {
-        normals.set(cn, uniqueVertexOffset * 3);
-      }
-      for (let i = 0; i < ci.length; i += 1) {
-        indices[uniqueIndexOffset + i] = ci[i] + uniqueVertexOffset;
-      }
-      uniqueVertexOffset += Math.floor(cv.length / 3);
-      uniqueIndexOffset += ci.length;
-    }
-  }
+  const singleComponent = uniqueComponents.size === 1
+    ? uniqueComponents.values().next().value
+    : null;
+  const vertices = singleComponent?.vertices || new Float32Array(0);
+  const normals = singleComponent?.normals || new Float32Array(0);
+  const indices = singleComponent?.indices || new Uint32Array(0);
 
   const parts = [];
   for (const { occurrence, componentMeshData, sourceParts } of placements) {

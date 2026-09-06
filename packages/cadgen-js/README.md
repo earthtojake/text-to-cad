@@ -82,6 +82,9 @@ Scene geometry shares immutable component normal and surface-edge buffers.
 Effects that change vertex positions or normals acquire writable attributes
 before deforming them; material refreshes leave component data unchanged. This
 keeps large assemblies from duplicating these buffers for display.
+Assemblies keep geometry in their component buffers; they allocate no combined
+copy of all positions, normals and indices. Rendering and section views visit
+the placed components directly, and the Viewer accepts that component geometry.
 
 ## Working on cadgen-js
 
