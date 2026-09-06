@@ -62,6 +62,8 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   the skill CLI parsers, the CAD Viewer backend + client, and the Node/browser
   runtimes it executes.
 - `apps/docs/`: documentation site.
+- `apps/desktop/`: Hardcore, the Electron agent workbench. A standalone npm
+  project; its version is `VERSION` and it ships no runtime of its own.
 - `tests/`: root-owned test suites for skills, packages, viewer services, and
   repo-wide policy.
 - `scripts/`: durable repo commands grouped by purpose.
