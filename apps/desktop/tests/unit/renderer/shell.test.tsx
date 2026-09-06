@@ -14,7 +14,7 @@ import { useUi } from "@renderer/state/ui";
 const wrap = (ui: React.ReactNode) => render(<TooltipProvider>{ui}</TooltipProvider>);
 
 beforeEach(() => {
-  useExplorer.setState({ tabs: [], activeId: null });
+  useExplorer.setState({ projectId: null, tabs: [], activeId: null, ready: true, expanded: false });
   useProjects.setState({ projects: [], ready: true, activeId: null, collapsed: new Set() });
   useUi.setState({ route: "app", settingsSection: "general", commandPaletteOpen: false });
 });
@@ -40,8 +40,28 @@ describe("Sidebar", () => {
 });
 
 describe("Explorer", () => {
+  const PROJECT = { id: "p1", name: "text-to-cad", path: "/repo", createdAt: 0 };
+
+  // The strip belongs to a project (plan §3): there is nowhere to open a tab
+  // without one, which is a state the pane has its own empty view for.
+  const withProject = () => {
+    useProjects.setState({
+      projects: [PROJECT],
+      ready: true,
+      activeId: PROJECT.id,
+      collapsed: new Set(),
+    });
+    useExplorer.setState({ projectId: PROJECT.id, tabs: [], activeId: null, ready: true });
+  };
+
+  it("says so when there is no project to open anything from", () => {
+    wrap(<ExplorerPane />);
+    expect(screen.getByText("No project")).toBeInTheDocument();
+  });
+
   it("starts empty and opens a file tab from the strip", async () => {
     const user = userEvent.setup();
+    withProject();
     wrap(<ExplorerPane />);
     expect(screen.getByText("Nothing open")).toBeInTheDocument();
 
@@ -52,10 +72,21 @@ describe("Explorer", () => {
 
   it("closes a tab from its close button", async () => {
     const user = userEvent.setup();
+    withProject();
     wrap(<ExplorerPane />);
     await user.click(screen.getByRole("button", { name: "New tab" }));
     await user.click(screen.getByRole("button", { name: "Close Untitled" }));
     expect(useExplorer.getState().tabs).toHaveLength(0);
+  });
+
+  it("expands to the whole window and back", async () => {
+    const user = userEvent.setup();
+    withProject();
+    wrap(<ExplorerPane />);
+    await user.click(screen.getByRole("button", { name: "Expand explorer" }));
+    expect(useExplorer.getState().expanded).toBe(true);
+    await user.click(screen.getByRole("button", { name: "Restore layout" }));
+    expect(useExplorer.getState().expanded).toBe(false);
   });
 });
 

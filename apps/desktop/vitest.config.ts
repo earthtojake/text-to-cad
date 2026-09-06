@@ -5,13 +5,25 @@ import { defineConfig } from "vitest/config";
 
 const appRoot = path.dirname(fileURLToPath(import.meta.url));
 
-const alias = {
-  "@main": path.join(appRoot, "src", "main"),
-  "@preload": path.join(appRoot, "src", "preload"),
-  "@renderer": path.join(appRoot, "src", "renderer"),
-  "@shared": path.join(appRoot, "src", "shared"),
-  "@viewer": path.resolve(appRoot, "..", "viewer", "src", "client"),
-};
+/**
+ * Aliases as an array, because one of them has to be a pattern.
+ *
+ * `?worker` is a Vite build feature (`monaco.ts` imports Monaco's five workers
+ * that way). Vitest has no worker plugin, so without this every test that
+ * reaches that module — including one that only wants `languageFor` — fails to
+ * load on an unresolvable import.
+ */
+const alias = [
+  { find: "@main", replacement: path.join(appRoot, "src", "main") },
+  { find: "@preload", replacement: path.join(appRoot, "src", "preload") },
+  { find: "@renderer", replacement: path.join(appRoot, "src", "renderer") },
+  { find: "@shared", replacement: path.join(appRoot, "src", "shared") },
+  { find: "@viewer", replacement: path.resolve(appRoot, "..", "viewer", "src", "client") },
+  // The pattern has to match the *whole* id: a RegExp alias is applied with
+  // `id.replace(find, replacement)`, so `/\?worker$/` alone would leave the
+  // module path glued to the front of the stub's.
+  { find: /^.*\?worker$/, replacement: path.join(appRoot, "tests", "stubs", "worker.ts") },
+];
 
 /**
  * Two projects, split by folder, matching the two tsconfigs:

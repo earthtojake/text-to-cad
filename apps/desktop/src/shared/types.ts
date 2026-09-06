@@ -107,10 +107,17 @@ export type Session = z.infer<typeof SessionSchema>;
 export const ExplorerTabKindSchema = z.enum(["file", "review", "browser", "terminal"]);
 export type ExplorerTabKind = z.infer<typeof ExplorerTabKindSchema>;
 
+/**
+ * A strip belongs to a *project*, not to a session.
+ *
+ * A person opening a file, a terminal and a review is looking at a directory;
+ * closing a thread and starting another one in the same directory should not
+ * take those away. Sessions live under projects (§3), so the project is the
+ * longer-lived of the two, and it is the one the strip is keyed by.
+ */
 const ExplorerTabBase = {
   id: z.string(),
-  /** The session whose explorer strip holds this tab. */
-  sessionId: z.string(),
+  projectId: z.string(),
   /** Strip order, ascending. */
   order: z.number().int(),
 };
@@ -119,17 +126,28 @@ const ExplorerTabBase = {
 export const FileTabSchema = z.object({
   ...ExplorerTabBase,
   kind: z.literal("file"),
-  /** Absolute path, or null for a tab opened before a file was picked. */
+  /**
+   * Project-root-relative path with POSIX separators, or null for a tab
+   * opened before a file was picked. Relative rather than absolute so a strip
+   * survives the project directory being moved.
+   */
   path: z.string().nullable(),
   /** Markdown opens as a preview; `View source` flips this. */
   viewSource: z.boolean().default(false),
 });
 
-/** The working tree's diff, per file. */
+/**
+ * The working tree's diff, per file.
+ *
+ * `all` is Codex's `All changes`; the rest are its `Since …` presets, resolved
+ * against git in main. A per-turn scope arrives with P2, which knows when a
+ * turn started; the shape it will use (`{ kind: "range" }`) is already in the
+ * IPC contract.
+ */
 export const ReviewTabSchema = z.object({
   ...ExplorerTabBase,
   kind: z.literal("review"),
-  scope: z.enum(["last-turn", "all-changes"]).default("last-turn"),
+  scope: z.enum(["all", "1h", "4h", "24h", "7d"]).default("all"),
 });
 
 /** An Electron `<webview>` with browser chrome. */
@@ -139,12 +157,17 @@ export const BrowserTabSchema = z.object({
   url: z.string().nullable(),
 });
 
-/** xterm.js over a node-pty in the session's cwd. */
+/** xterm.js over a node-pty. */
 export const TerminalTabSchema = z.object({
   ...ExplorerTabBase,
   kind: z.literal("terminal"),
-  /** Set once the pty exists. */
+  /** Set once the pty exists; null after a restart, when it is respawned. */
   ptyId: z.string().nullable(),
+  /**
+   * Absolute working directory. Null means the project root — a session that
+   * runs in a worktree (§9) points its terminals at that instead.
+   */
+  cwd: z.string().nullable().default(null),
   /** Agent-created ACP terminals are shown read-only with a label. */
   readOnly: z.boolean().default(false),
 });

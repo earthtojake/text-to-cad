@@ -29,22 +29,26 @@ import {
   SessionSchema,
   SettingsSchema,
   WindowStateSchema,
-} from "./types";
+} from "../types";
 // The machinery (`invoke`, `defineIpc`, the derived types) lives in
 // ./ipc/define.ts and is re-exported here, so importing "@shared/ipc" still
 // gets the whole surface.
-import { defineIpc, invoke, type IpcClient } from "./ipc/define";
+import { defineIpc, invoke, type IpcClient } from "./define";
 // One module per branch, spread in below: phases land in parallel, and a
 // contract that grows by a spread per branch is one several people can extend
 // at once.
-import { appEvents, appIpc } from "./ipc/app";
-import { acpContract, acpEvents } from "./ipc/acp";
-import { agentsContract, agentsEvents } from "./ipc/agents";
-import { dialogsContract } from "./ipc/dialogs";
-import { pluginsContract, pluginsEvents } from "./ipc/plugins";
-import { runtimeContract, runtimeEvents } from "./ipc/runtime";
+import { appEvents, appIpc } from "./app";
+import { acpContract, acpEvents } from "./acp";
+import { agentsContract, agentsEvents } from "./agents";
+import { dialogsContract } from "./dialogs";
+import { pluginsContract, pluginsEvents } from "./plugins";
+import { runtimeContract, runtimeEvents } from "./runtime";
+import { cadIpc } from "./cad";
+import { explorerEvents, explorerIpc } from "./explorer";
 
-export * from "./ipc/define";
+export * from "./define";
+export * from "./cad";
+export * from "./explorer";
 
 /* -------------------------------------------------------------------------- */
 /* Requests                                                                    */
@@ -110,6 +114,12 @@ export const ipcContract = defineIpc({
     /** Reveals a path in Finder/Explorer. */
     showItemInFolder: invoke(z.object({ path: z.string().min(1) }), z.void()),
   },
+
+  // The branches a phase owns are declared in their own file and spread in
+  // here, so this map stays a map. `explorer.*`, `terminal.*` and `git.*` come
+  // from ./explorer (P3); `cad.*` from ./cad (P3's stub, P5's implementation).
+  ...explorerIpc,
+  ...cadIpc,
 });
 
 export type IpcContract = typeof ipcContract;
@@ -146,6 +156,8 @@ export const ipcEvents = {
   ...agentsEvents,
   ...pluginsEvents,
   ...runtimeEvents,
+  // `files.changed`, `terminal.data` and `terminal.exit` (P3).
+  ...explorerEvents,
 } as const;
 
 export type IpcEvents = typeof ipcEvents;

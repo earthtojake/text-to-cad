@@ -83,6 +83,30 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE sessions ADD COLUMN deletions INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 3,
+    name: "explorer-tabs-per-project",
+    // The strip belongs to the project, not to a thread (see the comment on
+    // ExplorerTabBase in src/shared/types.ts). Migration 1 keyed it by session
+    // with a cascading foreign key, which would take a person's open files
+    // away when they closed a thread.
+    //
+    // Rebuilt rather than altered: sqlite cannot drop a foreign key with
+    // ALTER TABLE, and there is nothing to carry over — no build has shipped
+    // with a session strip in it.
+    up: `
+      DROP TABLE explorer_tabs;
+
+      CREATE TABLE explorer_tabs (
+        id          TEXT PRIMARY KEY,
+        project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        kind        TEXT NOT NULL,
+        position    INTEGER NOT NULL,
+        payload     TEXT NOT NULL
+      );
+      CREATE INDEX explorer_tabs_by_project ON explorer_tabs(project_id, position);
+    `,
+  },
 ];
 
 /**

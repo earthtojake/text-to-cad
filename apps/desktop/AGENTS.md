@@ -20,15 +20,15 @@ phase is not an oversight — it is the seam.
 | P0 (done) | the project itself, `src/shared`, `src/preload`, `src/main/{index,menu,window-state,telemetry,updater}.ts`, `src/main/db`, `src/main/ipc`, the shell, the command palette, Settings' frame, `tests/` |
 | P1 (done) | `src/main/agents`, `src/main/acp`, `src/shared/acp`, `src/shared/agents.ts`, `src/shared/ipc/{acp,agents}.ts`, `src/main/ipc/{acp,agents}.ts`, `src/renderer/state/{acp,agents}.ts`, `scripts/acp-harness.mjs`, `tests/fake-agent`, `tests/fixtures/acp` |
 | P2 | `src/renderer/features/session` — the transcript, activity rows, composer chips, permissions, plan card |
-| P3 | `src/main/explorer`, `src/renderer/features/explorer` — file tab, tree, Monaco, review, browser, terminal |
-| P4 | `src/main/cad/viewer.ts` and the file tab's CAD renderer, against `apps/viewer`'s new `CadFileView` |
-| P5 | `src/main/cad/{runtime,plugin,mcp-server}.ts`, `resources/`, `skills/hardcore-app` |
+| P3 (done) | `src/main/explorer`, `src/main/ipc/{explorer,cad}.ts`, `src/shared/ipc/{explorer,cad}.ts`, `src/renderer/features/explorer` — file tab, tree, Monaco, review, browser, terminal |
+| P4 (done) | `apps/viewer`'s `CadFileView` and its `viewerOrigin` threading; P3's file tab renders it |
+| P5 | `src/main/cad/{runtime,viewer,plugin,mcp-server}.ts`, `resources/`, `skills/hardcore-app`. `viewer.ts` is what replaces P3's `cad.viewerOrigin` stub — the shape it answers with is already declared, and the renderer already handles both answers |
 | P6 | `src/renderer/features/settings` — the pages' contents |
-| P7 | `src/main/projects/git.ts` and the review tab's actions |
+| P7 | the rest of `src/main/projects/git.ts` — the three git modes and worktrees. P3 wrote its status, per-file diff and commit for the review tab |
 | P8 (done) | `electron-builder.yml`, `build/`, `resources/`, `scripts/{package,make-icons}.mjs`, `updater.ts`, `telemetry.ts`, `src/{shared,main}/ipc/app.ts`, the CI jobs |
 
 Work outside your phase's directories only where the seam requires it — a new
-IPC branch in `src/shared/ipc/<branch>.ts`, spread into `src/shared/ipc.ts`,
+IPC branch in `src/shared/ipc/<branch>.ts`, spread into `src/shared/ipc/index.ts`,
 with its handlers in `src/main/ipc/<branch>.ts` spread into
 `src/main/ipc/index.ts`, is expected; reshaping the shell to fit one feature is
 not.
@@ -37,7 +37,7 @@ not.
 
 - **The renderer imports from `src/main` never, and from `src/shared` types
   only.** Its one way off the page is `window.hardcore`, built from the
-  contract in `src/shared/ipc.ts`.
+  contract in `src/shared/ipc/index.ts`.
 - **Every IPC channel is declared once**, as a request schema and a response
   schema. `registerIpc` validates both and refuses to start if a channel has no
   handler. Do not add an `ipcMain.handle` outside it. A branch is its own module
@@ -51,6 +51,10 @@ not.
   compiled in as `__APTABASE_KEY__` (`electron.vite.config.ts`); a packaged app
   has no build environment, and a key the launcher can set is a key anyone can
   redirect.
+- **Every path from the renderer arrives with the project it is relative to.**
+  Main resolves the pair against that project's root — after `realpath`, so a
+  symlink is not a door — and refuses anything outside. A channel that took a
+  bare path would be a channel that reads any file on the machine.
 - **`src/renderer/components/{ui,ai-elements}` is vendored**, from the shadcn
   and AI Elements registries. It is excluded from eslint (not from the
   typechecker). Two deliberate edits are in it: the `ai` package's types are
@@ -66,3 +70,7 @@ not.
   drops them silently).
 - **No bottom panel.** The terminal is a fourth explorer tab kind. Everything
   secondary lives in the one strip.
+- **The explorer strip belongs to the project, not to a session.** A person
+  with a file, a terminal and a review open is looking at a directory; closing
+  a thread must not take those away. `explorer_tabs` is keyed by `project_id`
+  (migration 2).

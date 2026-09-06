@@ -189,33 +189,53 @@ export const sessions = {
 /* Explorer tabs                                                               */
 /* -------------------------------------------------------------------------- */
 
-type ExplorerTabRow = { id: string; session_id: string; payload: string };
+type ExplorerTabRow = { id: string; project_id: string; payload: string };
 
 export const explorerTabs = {
-  list(sessionId: string): ExplorerTab[] {
+  /**
+   * A project's strip, in order.
+   *
+   * A row that no longer parses is dropped rather than thrown on: the payload
+   * is a JSON blob written by whichever build was running, and one stale tab
+   * must not cost the person the other five.
+   */
+  list(projectId: string): ExplorerTab[] {
     const rows = db()
-      .prepare("SELECT id, session_id, payload FROM explorer_tabs WHERE session_id = ? ORDER BY position")
-      .all(sessionId) as ExplorerTabRow[];
-    return rows.map((row) => ExplorerTabSchema.parse(JSON.parse(row.payload)));
+      .prepare(
+        "SELECT id, project_id, payload FROM explorer_tabs WHERE project_id = ? ORDER BY position",
+      )
+      .all(projectId) as ExplorerTabRow[];
+    return rows.flatMap((row) => {
+      const parsed = ExplorerTabSchema.safeParse(safeJson(row.payload));
+      return parsed.success ? [parsed.data] : [];
+    });
   },
 
-  /** Replaces a session's whole strip — the only write the UI ever needs. */
-  replace(sessionId: string, tabs: ExplorerTab[]): ExplorerTab[] {
+  /** Replaces a project's whole strip — the only write the UI ever needs. */
+  replace(projectId: string, tabs: ExplorerTab[]): ExplorerTab[] {
     const parsed = tabs.map((tab) => ExplorerTabSchema.parse(tab));
     const connection = db();
     const write = connection.transaction(() => {
-      connection.prepare("DELETE FROM explorer_tabs WHERE session_id = ?").run(sessionId);
+      connection.prepare("DELETE FROM explorer_tabs WHERE project_id = ?").run(projectId);
       const insert = connection.prepare(
-        "INSERT INTO explorer_tabs (id, session_id, kind, position, payload) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO explorer_tabs (id, project_id, kind, position, payload) VALUES (?, ?, ?, ?, ?)",
       );
       parsed.forEach((tab, index) => {
-        insert.run(tab.id, sessionId, tab.kind, index, JSON.stringify(tab));
+        insert.run(tab.id, projectId, tab.kind, index, JSON.stringify({ ...tab, order: index }));
       });
     });
     write();
     return parsed;
   },
 };
+
+function safeJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
 
 /* -------------------------------------------------------------------------- */
 /* Settings                                                                    */

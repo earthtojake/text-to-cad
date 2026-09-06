@@ -281,7 +281,12 @@ export class SessionManager {
         for (const file of paths) {
           tally.files.add(file);
         }
-        this.deps.broadcast("files.changed", { sessionId: session.id, paths });
+        // The explorer owns this event's shape (src/shared/ipc/explorer.ts): the
+        // project the paths belong to and one change record per path.
+        this.deps.broadcast("files.changed", {
+          projectId: session.projectId,
+          changes: paths.map((path) => ({ path, kind: "changed" as const, directory: false })),
+        });
       },
       onStderr: (line) => console.info(`[${session.agentId}:${session.id.slice(0, 8)}] ${line}`),
     });

@@ -101,7 +101,7 @@ describe("ExplorerTab", () => {
   it("discriminates the four kinds", () => {
     const file = ExplorerTabSchema.parse({
       id: "t1",
-      sessionId: "s1",
+      projectId: "p1",
       order: 0,
       kind: "file",
       path: "/tmp/a.step",
@@ -110,7 +110,7 @@ describe("ExplorerTab", () => {
 
     const terminal = ExplorerTabSchema.parse({
       id: "t2",
-      sessionId: "s1",
+      projectId: "p1",
       order: 1,
       kind: "terminal",
       ptyId: null,
@@ -120,7 +120,7 @@ describe("ExplorerTab", () => {
 
   it("has no kind for a bottom panel, because there is not one", () => {
     expect(
-      ExplorerTabSchema.safeParse({ id: "t3", sessionId: "s1", order: 0, kind: "panel" }).success,
+      ExplorerTabSchema.safeParse({ id: "t3", projectId: "p1", order: 0, kind: "panel" }).success,
     ).toBe(false);
   });
 });

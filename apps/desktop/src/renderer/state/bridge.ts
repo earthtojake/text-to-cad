@@ -53,6 +53,12 @@ export function subscribeToMain(): () => void {
     window.hardcore.on("runtime.progress", ({ status, message, percent }) => {
       useRuntime.getState().receive(status, message, percent);
     }),
+    window.hardcore.on("files.changed", ({ projectId, changes }) => {
+      useExplorer.getState().receiveChanges(
+        projectId,
+        changes.map((change) => change.path),
+      );
+    }),
     window.hardcore.on("ui.command", ({ command }) => {
       const ui = useUi.getState();
       switch (command) {
@@ -81,7 +87,21 @@ export function subscribeToMain(): () => void {
     }),
   ];
 
+  // The explorer strip belongs to the active project, so it follows the
+  // project selection rather than being loaded once. Subscribing to the store
+  // rather than doing this in a component keeps the load off React's
+  // lifecycle — a remount must not re-read the strip and lose the selection.
+  let boundProject: string | null | undefined;
+  const unsubscribeProjects = useProjects.subscribe((state) => {
+    if (state.activeId === boundProject) {
+      return;
+    }
+    boundProject = state.activeId;
+    void useExplorer.getState().bindProject(state.activeId);
+  });
+
   return () => {
+    unsubscribeProjects();
     for (const detach of off) {
       detach();
     }
@@ -105,7 +125,7 @@ export async function hydrate(): Promise<void> {
     useUpdates.getState().load(),
     useAgents.getState().load(),
   ]);
-  // Nothing to hydrate for the explorer yet — the strip is in-memory until P3
-  // persists it. Named here so the omission is a decision, not an oversight.
-  void useExplorer;
+  // The explorer's strip follows the active project, which the subscription
+  // in `subscribeToMain` picks up as soon as `useProjects.load` resolves.
+  await useExplorer.getState().bindProject(useProjects.getState().activeId);
 }

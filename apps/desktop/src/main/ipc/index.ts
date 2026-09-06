@@ -1,11 +1,10 @@
 /**
  * Every IPC handler the app serves, assembled into the shape of the contract.
  *
- * P0 covers projects, sessions (read-only), settings, shell and app info.
- * Later phases add branches next to these: `agents.*` and `acp.*` (P1),
- * `explorer.*` (P3), `cad.*` (P4/P5), `git.*` (P7). Each one is a new branch
- * in `src/shared/ipc.ts` and a new object here — `registerIpc` refuses to
- * start if the two disagree.
+ * P0 covers projects, sessions (read-only), settings, shell and app info;
+ * P3 adds `explorer.*`, `terminal.*`, `git.*` and the `cad.viewerOrigin`
+ * stub. Each phase's branch is one file in `src/shared/ipc/` and one object
+ * spread in below — `registerIpc` refuses to start if the two disagree.
  */
 import { BrowserWindow, app, dialog, shell } from "electron";
 
@@ -16,7 +15,9 @@ import { applySettingsEffects } from "../settings-effects";
 import { acpHandlers } from "./acp";
 import { agentsHandlers } from "./agents";
 import { appHandlers } from "./app";
+import { cadHandlers } from "./cad";
 import { dialogsHandlers } from "./dialogs";
+import { explorerHandlers, initExplorerServices } from "./explorer";
 import { pluginsHandlers } from "./plugins";
 import { runtimeHandlers } from "./runtime";
 import { IpcError, broadcast, registerIpc, type IpcContext } from "./register";
@@ -124,6 +125,11 @@ const handlers = {
       shell.showItemInFolder(target);
     },
   },
+
+  // A phase's handlers live in their own file and are spread in, exactly as
+  // its branch of the contract is (src/shared/ipc/index.ts).
+  ...explorerHandlers,
+  ...cadHandlers,
 } satisfies Parameters<typeof registerIpc<IpcContract>>[1];
 
 const openProjectDialog = {
@@ -133,6 +139,9 @@ const openProjectDialog = {
 } as const satisfies Electron.OpenDialogOptions;
 
 export function registerIpcHandlers() {
+  // The watcher and the pty manager push events, so they are handed the
+  // broadcaster rather than reaching back for it.
+  initExplorerServices(broadcast);
   registerIpc(ipcContract, handlers);
   // Boot is a settings change like any other: the login item, the menu-bar
   // item and the window's vibrancy have to match what is stored before the

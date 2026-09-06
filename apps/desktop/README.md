@@ -72,9 +72,26 @@ npm run build        # electron-vite build -> out/
 npm run e2e          # playwright _electron against out/ — run `npm run build` first
 ```
 
-`npm run e2e` writes `tests/e2e/__screenshots__/shell.png` (plus `shell-dark`,
-`shell-light` and `settings`). Look at them; they are the cheapest review of
-whether the app still looks like an app.
+`npm run e2e` writes `tests/e2e/__screenshots__/`: the shell in both themes,
+Settings, and one per explorer surface — `file-markdown-preview`,
+`file-markdown-source`, `file-image`, `file-cad-placeholder`, `terminal`,
+`browser-empty`, `browser`, `review`, `strip`, `expanded` and
+`explorer-light`. Look at them; they are the cheapest review of whether the
+app still looks like an app, and every defect found in P3's explorer — a tree
+that did not reveal the open file, a `+` that scrolled out of reach, a
+terminal that replayed its scrollback twice — was found by reading one.
+
+The explorer suite opens **this repository** as its project, on purpose: a
+fixture of six files would pass while the tree ignored nothing and the watcher
+took ten seconds to start. The one exception is the review tab, which gets a
+small repository built in `beforeAll` — reviewing this checkout made the
+screenshot a function of the tree it is committed into, and it never
+converged.
+
+Two or three of the images still come back byte-different from a run that
+changed nothing: a blinking cursor, a scroll position, when a font finished
+rasterising. Commit them or discard them, but do not go looking for the change
+— if the picture is the same, it is the same.
 
 Nothing in `npm test` loads `better-sqlite3` or `node-pty`: both are built
 against Electron's ABI and will not load in a plain Node process. The migration
@@ -161,23 +178,28 @@ src/main/                 the Electron main process: everything with a side effe
   ipc/{acp,agents}.ts     the P1 handler branches, spread into ipc/index.ts
   ipc/{plugins,runtime}.ts  P6's branches, answering for P5 until it lands
   ipc/dialogs.ts          the native folder and file choosers Settings' path rows use
-  explorer/               P3
+  ipc/{explorer,cad}.ts   P3's handler branches: files, terminals, git, and the viewer origin stub
+  explorer/               fs.ts (tree, ignores, read/write, chokidar watcher),
+                          terminal.ts (node-pty sessions + scrollback)
   cad/                    P4, P5
-  projects/git.ts         P7
+  projects/git.ts         status, per-file diff and commit (P7 adds the modes
+                          and worktrees)
 src/preload/index.ts      the contextBridge: builds `window.hardcore` by walking the contract
 src/shared/               types.ts (domain types as zod schemas)
-  ipc.ts                  the contract: one branch per domain, assembled from ipc/
+  ipc/index.ts            the contract: one branch per domain, assembled from the files beside it
   ipc/define.ts           invoke / defineIpc and the types derived from a contract
   ipc/app.ts              the app.* branch: the updater's channels and its event
   ipc/acp.ts, ipc/agents.ts  the session and agent branches (P1)
   ipc/plugins.ts, ipc/runtime.ts, ipc/dialogs.ts  the plugin, CAD runtime and chooser branches (P6)
   agents.ts               provider and status schemas
   acp/types.ts, acp/reduce.ts  SessionState and the pure session/update reducer
+  ipc/explorer.ts         explorer.* terminal.* git.* and their events (P3)
+  ipc/cad.ts              cad.viewerOrigin — P3's stub, P5's implementation
 src/renderer/
   app/                    Shell (three resizable panes), App, CommandPalette
   features/sidebar        projects and their sessions
   features/session        the empty state and the composer
-  features/explorer       the one tab strip
+  features/explorer       the one tab strip and its four kinds of tab
   features/settings       the Settings route, the card-grouped rows, the agent drawer, and
                           pages/ — one module per page; search is done by the rows themselves
   lib/shortcuts.ts        the keyboard-shortcut table the Shortcuts page prints
@@ -234,7 +256,7 @@ Two things learned from the real adapters that the code now depends on:
 Adding an IPC channel is the shape of most work here:
 
 1. declare it in `src/shared/ipc/<branch>.ts` with its request and response
-   schemas, and spread that module into `src/shared/ipc.ts` — one line, so
+   schemas, and spread that module into `src/shared/ipc/index.ts` — one line, so
    several phases can add branches at once. Import `invoke` from
    `./define`, never from `../ipc`: the contract imports the branches, and
    importing it back is a cycle that fails at load time;
@@ -254,10 +276,25 @@ lands in the same place a click would.
 - The renderer's Tailwind tokens are stock shadcn neutral, identical to
   `apps/viewer`'s, so P4's `CadFileView` inherits them instead of bringing a
   second theme.
-- `@viewer/*` resolves to `apps/viewer/src/client`, and a scoped Vite plugin
-  runs the viewer's JSX-in-`.js` files through esbuild's `jsx` loader. Nothing
-  imports it yet; the config is ready for P4.
+- The CAD Viewer's `./file-view` entry is compiled from source by this app's
+  bundler, so `electron.vite.config.ts` and `styles/globals.css` carry what
+  `apps/viewer/docs/file-view.md` asks for: the scoped JSX-in-`.js` plugin,
+  the `@` / `cadgen-js` / `three` aliases, `worker: { format: "es" }`, a dev
+  `server.fs.allow`, the `@source` line, and the viewer's own `--ui-*` /
+  `--surface-*` token block copied verbatim into both `:root` and `.dark`.
+  `features/explorer/renderers/CadRenderer.tsx` imports it lazily — the
+  closure is three.js and the whole viewer client, and a window that only
+  opens a README should not pay for it at startup.
 - `src/renderer/components/ai-elements/types.ts` holds local copies of the
   handful of types those components take from Vercel's `ai` package. All twelve
   imports were `import type`, so the package is not a dependency. Re-vendoring a
   component means repointing its `from "ai"` import at `./types`.
+- P3 added exactly two dependencies, both pinned exactly: `ignore` (main —
+  `.gitignore` semantics for the file tree, rather than a hand-rolled matcher
+  that would disagree with git) and `@xterm/addon-web-links` (renderer — a URL
+  a build prints opens in the person's browser).
+- Monaco's five workers are imported as `monaco-editor/editor/editor.worker`,
+  **not** `monaco-editor/esm/vs/editor/editor.worker`. Since 0.5x the package
+  has an exports map whose `"./*"` already points at `./esm/vs/*.js`, so the
+  older deep path resolves to `esm/vs/esm/vs/…` and the build fails with a
+  message that names the file rather than the map.

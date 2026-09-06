@@ -13,7 +13,13 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
  * the main process, where it does not exist.
  */
 declare const window: {
-  hardcore: { settings: { set(patch: { theme: string }): Promise<unknown> } };
+  hardcore: {
+    settings: { set(patch: { theme: string }): Promise<unknown> };
+    projects: {
+      addPath(request: { path: string }): Promise<{ id: string }>;
+      remove(request: { id: string }): Promise<void>;
+    };
+  };
 };
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -50,7 +56,10 @@ test("the shell shows three panes", async () => {
   await expect(page.getByRole("button", { name: "Add project" })).toBeVisible();
   await expect(page.getByText("Projects", { exact: true })).toBeVisible();
   await expect(page.getByText("Add a project to get started")).toBeVisible();
-  await expect(page.getByText("Nothing open")).toBeVisible();
+  // The explorer strip belongs to a project (P3), so an app with none has
+  // nothing to open a tab from and says so. Scoped to the pane: the session
+  // pane's composer carries a project chip that reads the same.
+  await expect(page.getByTestId("explorer").getByText("No project")).toBeVisible();
 
   // Left to right, and the sidebar is the narrow one.
   const boxes = await panes.evaluateAll((nodes) =>
@@ -60,10 +69,27 @@ test("the shell shows three panes", async () => {
 });
 
 test("the explorer opens and closes a tab", async () => {
-  await page.getByRole("button", { name: "New tab" }).click();
+  // A strip needs a project. `tests/e2e/explorer.spec.ts` covers what each
+  // kind of tab then does; this is the shell's half of it.
+  // A directory of its own, not `/tmp`: a project's root is watched, and
+  // pointing a recursive watcher at the machine's temp directory is a great
+  // deal of work before the first click can land.
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-shell-project-"));
+  const project = await page.evaluate(
+    (directory) => window.hardcore.projects.addPath({ path: directory }),
+    fixture,
+  );
+  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
   await expect(page.getByRole("button", { name: "Close Untitled" })).toBeVisible();
   await page.getByRole("button", { name: "Close Untitled" }).click();
   await expect(page.getByText("Nothing open")).toBeVisible();
+
+  // Put the app back the way the rest of this file expects to find it.
+  await page.evaluate((id) => window.hardcore.projects.remove({ id }), project.id);
+  await expect(page.getByText("Add a project to get started")).toBeVisible();
+  fs.rmSync(fixture, { recursive: true, force: true });
 });
 
 test("the command palette opens on the keyboard", async () => {

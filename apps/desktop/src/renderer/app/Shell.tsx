@@ -9,6 +9,7 @@ import {
 import { ExplorerPane } from "@renderer/features/explorer/ExplorerPane";
 import { SessionPane } from "@renderer/features/session/SessionPane";
 import { Sidebar } from "@renderer/features/sidebar/Sidebar";
+import { useExplorer } from "@renderer/state/explorer";
 import { useSettings } from "@renderer/state/settings";
 
 /**
@@ -23,9 +24,16 @@ export function Shell() {
   const setLayout = useSettings((state) => state.setLayout);
   const sidebarRef = useRef<PanelImperativeHandle | null>(null);
   const explorerRef = useRef<PanelImperativeHandle | null>(null);
+  const sessionRef = useRef<PanelImperativeHandle | null>(null);
 
-  const sidebarCollapsed = layout?.sidebarCollapsed ?? false;
-  const explorerCollapsed = layout?.explorerCollapsed ?? false;
+  // The explorer's expand affordance (the strip's far-right control, plan §2)
+  // is a *view*, not a preference: it collapses the other two panes without
+  // writing their collapsed flags, so leaving it restores what was there.
+  const expanded = useExplorer((state) => state.expanded);
+
+  const sidebarCollapsed = expanded || (layout?.sidebarCollapsed ?? false);
+  const explorerCollapsed = !expanded && (layout?.explorerCollapsed ?? false);
+  const sessionCollapsed = expanded;
 
   // The collapsed flags are state, not a one-off gesture: the menu, the
   // keyboard and a drag to zero all write the same flag, and the panels follow
@@ -54,11 +62,27 @@ export function Shell() {
     }
   }, [explorerCollapsed]);
 
+  useEffect(() => {
+    const panel = sessionRef.current;
+    if (!panel) {
+      return;
+    }
+    if (sessionCollapsed) {
+      panel.collapse();
+    } else {
+      panel.expand();
+    }
+  }, [sessionCollapsed]);
+
   const onLayoutChanged = (next: Layout, meta: LayoutChangedMeta) => {
     // Only a drag or a resize keypress is worth writing: mount and the
     // programmatic collapse above also fire here, and persisting those would
     // overwrite the user's sizes with whatever the collapse produced.
     if (!meta.isUserInteraction) {
+      return;
+    }
+    // Expanded is a temporary shape, not the sizes to come back to.
+    if (expanded) {
       return;
     }
     const total = (next.sidebar ?? 0) + (next.session ?? 0) + (next.explorer ?? 0);
@@ -99,7 +123,14 @@ export function Shell() {
 
         <ResizableHandle />
 
-        <ResizablePanel id="session" minSize="24%" className="bg-background">
+        <ResizablePanel
+          id="session"
+          panelRef={sessionRef}
+          minSize="24%"
+          collapsible
+          collapsedSize={0}
+          className="bg-background"
+        >
           <SessionPane />
         </ResizablePanel>
 
