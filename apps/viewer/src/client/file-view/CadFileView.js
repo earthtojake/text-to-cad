@@ -289,6 +289,7 @@ import {
   normalizeParameterValues
 } from "cadgen-js/common/parameters.js";
 import { copyTextToClipboard, readTextFromClipboard } from "@/ui/clipboard";
+import { HostReferenceContext, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
 import {
   copyTargetsForFileAccessAsset,
   fileAccessAssetsForEntry,
@@ -370,6 +371,9 @@ export default function CadFileView({
   fileSheetWidth = null,
   colorScheme = null,
   sceneBackground = null,
+  selectReference = null,
+  onReference = null,
+  onCapture = null,
 }) {
   const viewerOrigin = normalizeViewerOrigin(origin);
   return (
@@ -389,6 +393,9 @@ export default function CadFileView({
         fileSheetWidth={fileSheetWidth}
         colorScheme={colorScheme}
         sceneBackground={sceneBackground}
+        selectReference={selectReference}
+        onReference={onReference}
+        onCapture={onCapture}
       />
     </ViewerOriginProvider>
   );
@@ -408,6 +415,9 @@ function CadFileViewSurface({
   fileSheetWidth,
   colorScheme,
   sceneBackground,
+  selectReference,
+  onReference,
+  onCapture,
 }) {
   // What the host pins, if anything (docs/file-view.md, "Laying out inside a
   // host"): the layout mode, the sheet's width, and which way the colour
@@ -4811,6 +4821,25 @@ function CadFileViewSurface({
     setCopyStatus("");
   }, []);
 
+  /**
+   * Every reference the surface copies goes through here: to the clipboard,
+   * as it always did, and — embedded — to the host's `onReference`, one call
+   * per line, with the file the reference belongs to (hostReference.js).
+   * Standalone the second half is nothing.
+   */
+  const deliverReferenceText = useCallback(async (text) => {
+    await copyTextToClipboard(text);
+    if (typeof onReference === "function") {
+      for (const reference of referencesFromCopyText(text, cadFileParamForEntry(selectedEntry))) {
+        onReference(reference);
+      }
+    }
+  }, [onReference, selectedEntry]);
+  const hostReference = useMemo(
+    () => (typeof onReference === "function" ? { deliverReference: deliverReferenceText } : null),
+    [onReference, deliverReferenceText]
+  );
+
   const handleCopySelection = useCallback(async () => {
     setScreenshotStatus("");
     if (stepUpdateInProgress) {
@@ -4880,7 +4909,7 @@ function CadFileViewSurface({
       // The SAME prefixing the button label gets. This is the write that matters, and it
       // built its own payload rather than reusing canonicalCopySelectionLines, so leaving it
       // out made the label promise a file prefix the clipboard never carried.
-      await copyTextToClipboard(
+      await deliverReferenceText(
         lines
           .map((line) => canonicalCadRefCopyText(line))
           .map((line) => withFileRefPrefix(line, selectedEntry?.fileRefPrefix))
@@ -5038,6 +5067,50 @@ function CadFileViewSurface({
     const normalizedNodeId = String(nodeId || "").trim();
     togglePartSelection(normalizedNodeId, { multiSelect, source: "tree" });
   }, [
+    togglePartSelection
+  ]);
+
+  /**
+   * A reference the host names (`selectReference`, docs/file-view.md): a
+   * transcript link said `bracket.step#o1.2`. Resolved against whatever is
+   * loaded (hostReference.js) and applied once per `key` — the maps fill as
+   * the model and its topology arrive, so an unresolved selector is tried
+   * again on the next change, and a resolved one is not re-applied when they
+   * change after. Already selected means revealed, not toggled off.
+   */
+  const appliedSelectReferenceKeyRef = useRef(null);
+  useEffect(() => {
+    const selector = String(selectReference?.selector || "").trim();
+    if (!selector || appliedSelectReferenceKeyRef.current === selectReference.key || viewerLoading) {
+      return;
+    }
+    const resolved = resolveSelectorSelection(selector, {
+      referenceMap: effectiveActiveReferenceMap,
+      treeRoot: displayStepTreeRoot || stepTreeRoot
+    });
+    if (!resolved) {
+      return;
+    }
+    appliedSelectReferenceKeyRef.current = selectReference.key;
+    if (resolved.kind === "reference") {
+      if (selectedReferenceIdsRef.current.includes(resolved.id)) {
+        revealStepTreeNode(findStepTreeTopologyNodeIdForReference(displayStepTreeRoot, resolved.id) || resolved.id, { source: "tree" });
+      } else {
+        toggleReferenceSelection(resolved.id, { source: "tree" });
+      }
+    } else if (selectedPartIdsRef.current.includes(resolved.id)) {
+      revealStepTreeNode(resolved.id, { source: "tree" });
+    } else {
+      togglePartSelection(resolved.id, { source: "tree" });
+    }
+  }, [
+    selectReference,
+    viewerLoading,
+    effectiveActiveReferenceMap,
+    displayStepTreeRoot,
+    stepTreeRoot,
+    revealStepTreeNode,
+    toggleReferenceSelection,
     togglePartSelection
   ]);
 
@@ -5784,12 +5857,12 @@ function CadFileViewSurface({
       return;
     }
     try {
-      await copyTextToClipboard(copyText);
+      await deliverReferenceText(copyText);
       setCopyStatus("Copied reference");
     } catch (error) {
       setCopyStatus(error instanceof Error ? error.message : "Failed to copy reference");
     }
-  }, []);
+  }, [deliverReferenceText]);
 
   const copyStepTreeContextMenuReference = useCallback(async (id, { topology = false } = {}) => {
     const normalizedId = String(id || "").trim();
@@ -5848,12 +5921,13 @@ function CadFileViewSurface({
       return;
     }
     try {
-      await copyTextToClipboard(copyText);
+      await deliverReferenceText(copyText);
       setCopyStatus("Copied reference");
     } catch (error) {
       setCopyStatus(error instanceof Error ? error.message : "Failed to copy reference");
     }
   }, [
+    deliverReferenceText,
     assemblyPartMap,
     displayStepTreeRoot,
     effectiveActiveReferenceMap,
@@ -6179,13 +6253,19 @@ function CadFileViewSurface({
       }
 
       await copyTextToClipboard(copyText);
+      // The host hears a file reference for every kind — a viewer link most
+      // of all, because a link is the one thing an agent inside the host
+      // cannot use, and the file it points at is what it wants.
+      if (typeof onReference === "function") {
+        onReference({ file: cadFileParamForEntry(entry), selector: "", text: cadFileParamForEntry(entry) });
+      }
       const filename = String(resolvedAsset?.filename || "").trim();
       // Naming the file after "Copied filename" would just repeat what was copied.
       setCopyStatus(filename && copyText !== filename ? `${statusLabel} for ${filename}` : statusLabel);
     } catch (error) {
       setCopyStatus(error instanceof Error ? error.message : "Failed to copy file reference");
     }
-  }, [origin, viewerServerInfo]);
+  }, [onReference, origin, viewerServerInfo]);
 
   const handleDrawingStrokesChange = useCallback((nextStrokes) => {
     const normalized = cloneDrawingStrokes(nextStrokes);
@@ -6285,6 +6365,27 @@ function CadFileViewSurface({
     setSidebarOpen,
     setTabToolMode
   });
+
+  // The viewport as a PNG, to the host (`onCapture`): the desktop app
+  // attaches it to the composer. The toolbar shows the button only when the
+  // host is listening.
+  const handleCapture = useCallback(async () => {
+    if (!selectedEntry || typeof onCapture !== "function") {
+      return;
+    }
+    try {
+      if (!viewerRef.current?.captureScreenshotBlob) {
+        throw new Error("CAD Viewer not ready");
+      }
+      const blob = await viewerRef.current.captureScreenshotBlob();
+      onCapture({ blob, file: cadFileParamForEntry(selectedEntry) });
+      setCopyStatus("");
+      setScreenshotStatus("Sent the view to the chat");
+    } catch (captureError) {
+      setCopyStatus("");
+      setScreenshotStatus(captureError instanceof Error ? captureError.message : "Capture failed");
+    }
+  }, [onCapture, selectedEntry]);
 
   const handleScreenshotCopy = useCallback(async () => {
     if (!selectedEntry) {
@@ -6508,6 +6609,7 @@ function CadFileViewSurface({
 
   return (
     <FileSheetPortalContext.Provider value={hostElement}>
+    <HostReferenceContext.Provider value={hostReference}>
     <SidebarProvider
       open={effectiveSidebarOpen}
       onOpenChange={handleSidebarOpenChange}
@@ -6664,6 +6766,7 @@ function CadFileViewSurface({
                 handleEnterPreviewMode={handleEnterPreviewMode}
                 handleExitPreviewMode={handleExitPreviewMode}
                 handleScreenshotCopy={handleScreenshotCopy}
+                handleCapture={typeof onCapture === "function" ? handleCapture : null}
               />
 
               {chrome.homeVisible && renderHome ? renderHome(chrome) : null}
@@ -6909,6 +7012,7 @@ function CadFileViewSurface({
         />
       </SidebarInset>
     </SidebarProvider>
+    </HostReferenceContext.Provider>
     </FileSheetPortalContext.Provider>
   );
 }

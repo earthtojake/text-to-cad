@@ -36,6 +36,9 @@ a build error or, worse, a silently unstyled surface.
 | `fileSheetWidth` | `null` | The sheet's width in px, when the host sizes it for its pane. Clamped to the sheet's own range (240–448) and not resizable from inside the surface. `null` uses the stored width. |
 | `sceneBackground` | `null` | A hex colour to paint the scene on instead of the theme's own backdrop, so the model sits on the host's ground; lights, grid, floor and materials are the theme's. |
 | `colorScheme` | `null` | `"light"` or `"dark"`: the host's resolved theme. The CAD "system" preset resolves the same way and the surface stops writing `.dark` / `color-scheme` to the document — the host owns those. `null` is the standalone case: the surface follows the OS and writes the document itself. |
+| `selectReference` | `null` | `{ selector, key }`: select a reference — `o1.2`, `label.f45`, `bracket`, a comma-separated list (its first member) — once the model is up. Applied once per `key`; a new `key` selects again. See "References and captures". |
+| `onReference` | `null` | `({ file, selector, text }) => void`. Called for every reference the person copies out of the surface, beside the clipboard write. `null` (standalone) means the clipboard alone. |
+| `onCapture` | `null` | `({ blob, file }) => void`. Given, the floating toolbar shows a camera button that renders the viewport to a PNG and hands it over; `null` shows no button. |
 
 `origin` is also published through context:
 
@@ -46,6 +49,47 @@ import { ViewerOriginProvider, useViewerOrigin } from "cad-viewer/file-view";
 `<CadFileView>` provides it for its own subtree; `useViewerOrigin()` is how any
 component under it builds a backend URL. `packages/cadgen-js` stays React-free
 and takes the origin as a plain argument instead.
+
+## References and captures
+
+The surface copies references — the render pane's Copy Reference button, the
+tree's and the viewport's context menus, the reference sheet's copy buttons,
+the file menu's Copy Link — to the clipboard, and standalone that is the end
+of it. A host usually wants them somewhere of its own (the desktop app's
+composer), so every one of those sites also calls `onReference` when the host
+gives one, once per copied line:
+
+```js
+{ file: "models/STEP/bracket.step", selector: "o1.2", text: "bracket.step#o1.2" }
+```
+
+`file` is the served-root-relative path of the file the reference belongs to
+(what `?file=` would carry), always in full — the prefix on the copied `text`
+is the viewer's shortest-unique suffix, right for a prompt and wrong for a
+host that wants to open the file. `selector` is the half after `#` without
+it, `""` for a whole file. Copy Link hands over the file with no selector
+rather than the URL: a viewer link is the one thing an agent inside a host
+cannot use. `hostReference.js` holds the parser (`referenceFromCopyText`,
+exported from the entry) and the context the sheet's copy buttons read.
+
+`onCapture` is the other direction for pictures: given, the floating toolbar
+gains a camera button ("Send view to chat") beside Copy screenshot, and
+clicking it renders the current viewport — the same composite the clipboard
+gets, drawings included — to a PNG `Blob` and calls `onCapture({ blob, file })`.
+Without it there is no button; standalone there is no chat.
+
+`selectReference` goes the other way: a host holding a reference from
+elsewhere (a link in a transcript) asks the surface to select it. The
+selector is resolved against what is loaded — the reference map for
+entities, the tree for occurrences by id, name or label, and `label.f45`
+through the labelled node's occurrence (`resolveSelectorSelection`) — and
+applied through the same `toggleReferenceSelection` / `togglePartSelection`
+a click uses, so the sheet reveals it and the copy button names it. It is
+applied once per `key`, when it first resolves: the maps fill as the model
+and its topology arrive, so a selector for a face not yet loaded waits for
+the next change rather than being dropped, and one already selected is
+revealed, not toggled off. Pass a new `key` to select the same reference
+again.
 
 ## What the consumer's bundler needs
 

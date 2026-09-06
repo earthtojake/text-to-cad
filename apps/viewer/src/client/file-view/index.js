@@ -9,6 +9,7 @@
 // entry have to be told; this package ships SOURCE, not a build.
 export { default as CadFileView } from "./CadFileView.js";
 export { ViewerOriginProvider, useViewerOrigin } from "./viewerOriginContext.js";
+export { referenceFromCopyText, referencesFromCopyText } from "./hostReference.js";
 export {
   applyViewerOriginToEntries,
   applyViewerOriginToEntry,

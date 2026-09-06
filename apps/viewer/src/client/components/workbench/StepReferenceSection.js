@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Copy, SquareMousePointer } from "lucide-react";
 import { cn } from "@/ui/utils";
 import { copyTextToClipboard } from "@/ui/clipboard";
+import { useHostReference } from "@/file-view/hostReference.js";
 import { FILE_SHEET_SECTION_IDS } from "@/workbench/fileSheetSections";
 import { Button } from "../ui/button";
 
@@ -96,6 +97,8 @@ function isPartNode(item) {
 function CopyButton({ text, className }) {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef(null);
+  // Embedded, the host hears the copy as well (hostReference.js).
+  const host = useHostReference();
   useEffect(() => () => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -113,7 +116,11 @@ function CopyButton({ text, className }) {
       aria-label="Copy reference"
       title="Copy reference"
       onClick={() => {
-        copyTextToClipboard(text);
+        if (host) {
+          void host.deliverReference(text);
+        } else {
+          copyTextToClipboard(text);
+        }
         setCopied(true);
         if (timerRef.current) {
           clearTimeout(timerRef.current);

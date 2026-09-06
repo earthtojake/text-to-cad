@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Camera,
   Focus,
   Hand,
   MousePointer2,
@@ -134,6 +135,7 @@ function DesktopFloatingToolBar({
   drawingStrokes,
   handleEnterPreviewMode,
   handleScreenshotCopy,
+  handleCapture = null,
   selectedEntry
 }) {
   // What this format can do, from the one capability table — never re-derived from
@@ -185,6 +187,21 @@ function DesktopFloatingToolBar({
       <Focus className="size-3" strokeWidth={2} aria-hidden="true" />
     </ToolbarButton>
   );
+
+  // Only a host that takes captures gets the button (docs/file-view.md,
+  // `onCapture`): standalone there is no chat for the picture to go to.
+  const captureButton = typeof handleCapture === "function" ? (
+    <ToolbarButton
+      label="Send view to chat"
+      onClick={() => {
+        void handleCapture();
+      }}
+      disabled={captureDisabled}
+      data-testid="capture-to-chat"
+    >
+      <Camera className="size-3" strokeWidth={2} aria-hidden="true" />
+    </ToolbarButton>
+  ) : null;
 
   // A drawing's own toolbar, in its own pill to the LEFT of the shared one: 2D and 3D are a
   // property of the drawing being viewed, not a tool that acts on it, so grouping them with
@@ -250,6 +267,7 @@ function DesktopFloatingToolBar({
             <>
               {animationButton}
               {screenshotButton}
+              {captureButton}
               <ToolbarButton label="Exit orbit" onClick={handleExitPreviewMode}>
                 <X className="size-3" strokeWidth={2} aria-hidden="true" />
               </ToolbarButton>
@@ -315,6 +333,7 @@ function DesktopFloatingToolBar({
               </ToolbarButton>
 
               {screenshotButton}
+              {captureButton}
             </>
           )}
         </div>
