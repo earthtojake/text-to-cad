@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [
+    "src/renderer/**/*.ts",
+    "src/renderer/**/*.tsx",
+    "src/preload/*.d.ts",
+    "src/shared/**/*.ts",
+    "tests/unit/renderer/**/*.ts",
+    "tests/unit/renderer/**/*.tsx",
+    "tests/setup-jsdom.ts"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.web.tsbuildinfo",
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "vite/client",
+      "vitest/globals"
+    ],
+    "jsx": "react-jsx",
+    "allowSyntheticDefaultImports": true
+  }
+}
