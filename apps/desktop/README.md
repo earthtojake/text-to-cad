@@ -52,7 +52,15 @@ terminal that replayed its scrollback twice — was found by reading one.
 
 The explorer suite opens **this repository** as its project, on purpose: a
 fixture of six files would pass while the tree ignored nothing and the watcher
-took ten seconds to start.
+took ten seconds to start. The one exception is the review tab, which gets a
+small repository built in `beforeAll` — reviewing this checkout made the
+screenshot a function of the tree it is committed into, and it never
+converged.
+
+Two or three of the images still come back byte-different from a run that
+changed nothing: a blinking cursor, a scroll position, when a font finished
+rasterising. Commit them or discard them, but do not go looking for the change
+— if the picture is the same, it is the same.
 
 Nothing in `npm test` loads `better-sqlite3` or `node-pty`: both are built
 against Electron's ABI and will not load in a plain Node process. The migration
