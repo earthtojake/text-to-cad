@@ -3,9 +3,12 @@ import { Suspense, lazy, useEffect, useState } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { Spinner } from "@renderer/components/ui/spinner";
+import { useElementWidth } from "@renderer/hooks/use-element-width";
+import { useResolvedTheme } from "@renderer/hooks/use-theme";
 import { useUi } from "@renderer/state/ui";
 import type { ViewerOrigin } from "@shared/ipc/cad";
 
+import { cadSheetWidthFor } from "../cad-layout";
 import { EmptyState } from "../EmptyState";
 
 /**
@@ -29,10 +32,19 @@ import { EmptyState } from "../EmptyState";
  * and this component shows the card below — which is not a placeholder for a
  * missing feature but the real first-run state of an app whose 1 GB Python
  * runtime installs on demand (plan §8).
+ *
+ * Three things are the desktop's to decide, not the surface's, and are passed
+ * in (`cad-layout.ts`): the layout is always the desktop one — the sheet is a
+ * column beside the model at any pane width, never a drawer over it — the
+ * sheet's width follows the pane, and light/dark is the app's theme. Without
+ * the last, opening a STEP file flipped the whole window to the CAD theme's
+ * scheme.
  */
 type CadSurfaceProps = {
   origin: string;
   file: string;
+  width: number;
+  colorScheme: "light" | "dark";
   onOpenFile: (path: string) => void;
 };
 
@@ -50,7 +62,7 @@ const CadSurface = lazy(async () => {
   // no declarations of its own.
   const { CadFileView, ViewerOriginProvider } = await import("@viewer/file-view");
   return {
-    default: ({ origin, file, onOpenFile }: CadSurfaceProps) => (
+    default: ({ origin, file, width, colorScheme, onOpenFile }: CadSurfaceProps) => (
       <ViewerOriginProvider origin={origin}>
         {/*
           A containing block for the surface's `position: fixed` parts. The
@@ -63,16 +75,19 @@ const CadSurface = lazy(async () => {
         */}
         <div className="relative h-full min-h-0" style={{ transform: "translateZ(0)" }}>
           <CadFileView
-          // `min-h-0` beats the surface's own `min-h-svh`: the tab is shorter
-          // than the window, and a surface that insists on the window's
-          // height puts its bottom panels below the tab's edge.
-          className="h-full min-h-0"
-          file={file}
-          // The desktop window owns its own title; the surface must not write it.
-          manageDocumentTitle={false}
-          onOpenFile={(next) => onOpenFile(next)}
-          origin={origin}
-        />
+            // `min-h-0` beats the surface's own `min-h-svh`: the tab is shorter
+            // than the window, and a surface that insists on the window's
+            // height puts its bottom panels below the tab's edge.
+            className="h-full min-h-0"
+            colorScheme={colorScheme}
+            file={file}
+            fileSheetWidth={cadSheetWidthFor(width)}
+            layout="desktop"
+            // The desktop window owns its own title; the surface must not write it.
+            manageDocumentTitle={false}
+            onOpenFile={(next) => onOpenFile(next)}
+            origin={origin}
+          />
         </div>
       </ViewerOriginProvider>
     ),
@@ -91,6 +106,8 @@ export function CadRenderer({
 }) {
   const [answer, setAnswer] = useState<ViewerOrigin | null>(null);
   const openSettings = useUi((state) => state.openSettings);
+  const colorScheme = useResolvedTheme();
+  const [hostRef, width] = useElementWidth();
 
   // Asked once per mount. A tab's project cannot change under it — a project
   // change rebuilds the strip — so there is nothing to reset here.
@@ -145,16 +162,18 @@ export function CadRenderer({
   }
 
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground">
-          <Spinner className="size-3.5" />
-          Loading the CAD viewer…
-        </div>
-      }
-    >
-      <CadSurface file={path} onOpenFile={onOpenFile} origin={answer.origin} />
-    </Suspense>
+    <div className="h-full min-h-0" data-cad-surface ref={hostRef}>
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground">
+            <Spinner className="size-3.5" />
+            Loading the CAD viewer…
+          </div>
+        }
+      >
+        <CadSurface colorScheme={colorScheme} file={path} onOpenFile={onOpenFile} origin={answer.origin} width={width} />
+      </Suspense>
+    </div>
   );
 }
 

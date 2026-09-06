@@ -103,10 +103,11 @@ export function TabStrip() {
   return (
     <div
       className="app-drag flex shrink-0 items-center gap-1 border-b pr-1.5 pl-2"
+      data-tab-strip
       style={{ height: "var(--titlebar-height)" }}
     >
       <div
-        className="app-no-drag flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
+        className="no-scrollbar app-no-drag flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
         ref={stripRef}
         role="tablist"
       >

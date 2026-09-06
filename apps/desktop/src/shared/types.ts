@@ -363,12 +363,24 @@ export type AgentOverride = z.infer<typeof AgentOverrideSchema>;
  * The three numbers are react-resizable-panels percentages and always sum to
  * 100 for the panes that are open.
  */
+/**
+ * The panes' fixed widths, in pixels. The sidebar's and the session's are
+ * preferences; the explorer's is whatever the window has left, so it is not
+ * one. Codex keeps its sidebar at one width whatever the window does, and its
+ * session column has a floor the transcript needs (a 720px reading column
+ * with margins fits from 560px up). The shell reads the same table for its
+ * limits, so a stored width outside them is clamped by the panel, not
+ * trusted.
+ */
+export const PANE_LIMITS = {
+  sidebar: { default: 230, min: 180, max: 360 },
+  session: { default: 560, min: 560 },
+  explorer: { min: 320 },
+} as const;
+
 export const PaneLayoutSchema = z.object({
-  // 16 / 39 / 45 of a 1440-wide window is a 230px sidebar and a session
-  // column wide enough for a 640px transcript — Codex's proportions.
-  sidebar: z.number().min(0).max(100).default(16),
-  session: z.number().min(0).max(100).default(39),
-  explorer: z.number().min(0).max(100).default(45),
+  sidebarWidth: z.number().min(0).default(PANE_LIMITS.sidebar.default),
+  sessionWidth: z.number().min(0).default(PANE_LIMITS.session.default),
   sidebarCollapsed: z.boolean().default(false),
   explorerCollapsed: z.boolean().default(false),
 });

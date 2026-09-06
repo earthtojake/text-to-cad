@@ -18,7 +18,8 @@ describe("Settings", () => {
     expect(settings.theme).toBe("system");
     expect(settings.defaultGitMode).toBe("checkout");
     expect(settings.branchPrefix).toBe("hardcore/");
-    expect(settings.layout.sidebar + settings.layout.session + settings.layout.explorer).toBe(100);
+    // Pixels, Codex's proportions: a 230px sidebar and a 560px session column.
+    expect(settings.layout).toMatchObject({ sidebarWidth: 230, sessionWidth: 560, sidebarCollapsed: false, explorerCollapsed: false });
   });
 
   it("has telemetry on with an opt-out (plan §14)", () => {

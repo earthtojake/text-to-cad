@@ -24,6 +24,19 @@ declare module "@viewer/file-view" {
     className?: string;
     manageDocumentTitle?: boolean;
     onOpenFile?: (path: string, meta: { history?: string }) => void;
+    /**
+     * `"desktop"` pins the desktop layout — the sheet beside the model, never
+     * a drawer over it — however narrow the pane; `"auto"` measures.
+     */
+    layout?: "auto" | "desktop";
+    /** The sheet's width in px, when the host sizes it; null for the surface's own. */
+    fileSheetWidth?: number | null;
+    /**
+     * The host's resolved theme. Resolves the CAD "system" preset the same
+     * way and stops the surface writing `.dark` to the document — the host
+     * owns that.
+     */
+    colorScheme?: "light" | "dark" | null;
   }>;
 
   /** Publishes `origin` to the subtree; `useViewerOrigin` reads it back. */

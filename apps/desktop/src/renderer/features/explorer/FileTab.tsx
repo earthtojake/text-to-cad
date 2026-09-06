@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
 import { Spinner } from "@renderer/components/ui/spinner";
+import { useElementWidth } from "@renderer/hooks/use-element-width";
 import { cn } from "@renderer/lib/utils";
 import {
   TREE_MAX_WIDTH,
@@ -29,6 +30,7 @@ import {
 import type { Project } from "@shared/types";
 import type { FileStat, TextFileResult } from "./types";
 
+import { cadTabHidesTree } from "./cad-layout";
 import { EmptyState } from "./EmptyState";
 import { FileTree } from "./FileTree";
 import { BinaryRenderer } from "./renderers/BinaryRenderer";
@@ -85,6 +87,7 @@ export function FileTab({
   const [reloadToken, setReloadToken] = useState(0);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [rootRef, paneWidth] = useElementWidth();
 
   /**
    * What is being shown is `(path, reloadToken)`. Every piece of state that
@@ -295,37 +298,83 @@ export function FileTab({
   const traits = loaded.state === "text" ? rendererFor(loaded.stat) : null;
   const showingSource = traits?.id !== "markdown" || viewSource;
 
-  const crumbs = useMemo(
-    () => [project.name, ...(path ? path.split("/") : [])],
-    [project.name, path],
-  );
+  /**
+   * A CAD file in a narrow pane hides the tree.
+   *
+   * The viewer's surface wants 560px for a model and its sheet side by side
+   * (`cad-layout.ts`), and the default explorer minus a 248px tree is less.
+   * The tree is hidden for *this file*, not collapsed as a preference: the
+   * header's toggle brings it straight back, and the next markdown file
+   * opens with the tree where it was. Derived during render rather than set
+   * from an effect; the one piece of state is the person's own "show it
+   * anyway", keyed on the file so it does not outlive it.
+   */
+  const [treeShownFor, setTreeShownFor] = useState<string | null>(null);
+  const narrowForCad = loaded.state === "cad" && cadTabHidesTree(paneWidth, treeWidth);
+  const treeHidden = treeCollapsed || (narrowForCad && treeShownFor !== key);
+  const showTree = () => {
+    setTreeShownFor(key);
+    setTreeCollapsed(false);
+  };
+
+  /**
+   * The breadcrumb: project, folders, file. In a pane too narrow for the
+   * folders they fold into one `…` (Codex does the same) rather than each
+   * truncating to two letters; the full path is the tooltip either way.
+   */
+  const crumbs = useMemo(() => {
+    const parts = [project.name, ...(path ? path.split("/") : [])];
+    const narrow = paneWidth > 0 && paneWidth - (treeHidden ? 0 : treeWidth) < 720;
+    if (!narrow || parts.length <= 3) {
+      return parts.map((label) => ({ label, title: label }));
+    }
+    const first = parts[0]!;
+    const last = parts[parts.length - 1]!;
+    return [
+      { label: first, title: first },
+      { label: "…", title: parts.slice(1, -1).join("/") },
+      { label: last, title: last },
+    ];
+  }, [project.name, path, paneWidth, treeHidden, treeWidth]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col" ref={rootRef}>
       <header className="flex h-9 shrink-0 items-center gap-2 border-b px-2">
+        {/*
+          The file's name is the crumb that matters, so it is the one that
+          never shrinks; the project and the folders give up their width
+          first and truncate. Every crumb is `min-w-0` so flex can take the
+          width back — a `shrink-0` on the folders is how they were drawn
+          over each other in a narrow pane.
+        */}
         <nav
           aria-label="Breadcrumb"
           className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-[13px]"
         >
-          {crumbs.map((crumb, index) => (
-            <span className="flex min-w-0 items-center gap-1" key={`${crumb}-${index}`}>
-              {index > 0 ? (
-                <span className="shrink-0 text-muted-foreground/60" aria-hidden>
-                  ›
-                </span>
-              ) : null}
+          {crumbs.map((crumb, index) => {
+            const last = index === crumbs.length - 1;
+            return (
               <span
-                className={cn(
-                  "truncate",
-                  index === crumbs.length - 1
-                    ? "font-medium text-foreground"
-                    : "shrink-0 text-muted-foreground",
-                )}
+                className={cn("flex min-w-0 items-center gap-1", last ? "shrink-0" : "shrink")}
+                key={`${crumb.label}-${index}`}
               >
-                {crumb}
+                {index > 0 ? (
+                  <span className="shrink-0 text-muted-foreground/60" aria-hidden>
+                    ›
+                  </span>
+                ) : null}
+                <span
+                  className={cn(
+                    "min-w-0 truncate",
+                    last ? "max-w-[60vw] font-medium text-foreground" : "text-muted-foreground",
+                  )}
+                  title={crumb.title}
+                >
+                  {crumb.label}
+                </span>
               </span>
-            </span>
-          ))}
+            );
+          })}
           {dirty ? (
             <span
               aria-label="Unsaved changes"
@@ -384,11 +433,11 @@ export function FileTab({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {treeCollapsed ? (
+          {treeHidden ? (
             <Button
               aria-label="Show file tree"
               className="size-6 text-muted-foreground"
-              onClick={() => setTreeCollapsed(false)}
+              onClick={showTree}
               size="icon-xs"
               title="Show file tree"
               variant="ghost"
@@ -437,7 +486,7 @@ export function FileTab({
           />
         </div>
 
-        {treeCollapsed ? null : (
+        {treeHidden ? null : (
           <>
             <div
               aria-label="Resize file tree"
