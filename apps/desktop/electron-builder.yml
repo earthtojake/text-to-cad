@@ -1,0 +1,73 @@
+appId: dev.texttocad.hardcore
+productName: Hardcore
+copyright: Copyright © text-to-cad contributors
+
+# `npm run build` (electron-vite) has to have run first: everything shipped
+# comes out of out/, plus the native modules electron-builder resolves from
+# `dependencies` in package.json.
+directories:
+  buildResources: build
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+  - "!**/*.map"
+
+# One 1024×1024 PNG in build/ (scripts/make-icons.mjs). electron-builder
+# derives the .icns and the .ico from it, so there is no icon toolchain and no
+# set of near-identical binaries in the tree.
+
+# The updater feed. `release-publish.yml` attaches the installers to the same
+# GitHub Release it tags (plan §11), so the feed is that repository.
+publish:
+  provider: github
+  owner: earthtojake
+  repo: text-to-cad
+
+# better-sqlite3 and node-pty are native. `npm run postinstall` runs
+# `electron-builder install-app-deps`, which rebuilds them against the Electron
+# version above; asarUnpack keeps their .node files outside the archive so
+# dlopen can find them at run time.
+asar: true
+asarUnpack:
+  - "**/*.node"
+  - node_modules/better-sqlite3/**
+  - node_modules/node-pty/**
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  # Unsigned for now (plan §14 question 2). Turning signing on is adding the
+  # CSC_* and APPLE_* secrets and flipping these three; nothing else changes.
+  identity: null
+  hardenedRuntime: false
+  notarize: false
+  darkModeSupport: true
+  extendInfo:
+    NSHumanReadableCopyright: text-to-cad contributors
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+linux:
+  category: Development
+  target:
+    - target: AppImage
+      arch: [x64]
+  artifactName: ${productName}-${version}-${arch}.${ext}

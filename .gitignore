@@ -30,6 +30,7 @@ apps/desktop/node_modules/
 apps/desktop/out/
 apps/desktop/dist/
 apps/desktop/release/
+apps/desktop/test-results/
 
 
 # Temporary files and scratch notes
