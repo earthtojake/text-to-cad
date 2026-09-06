@@ -216,7 +216,7 @@ function TabButton({
   return (
     <div
       className={cn(
-        "group/tab relative flex h-7 max-w-[190px] shrink-0 items-center gap-1.5 rounded-md pr-1 pl-2 text-[13px] transition-colors",
+        "group/tab relative flex h-[26px] max-w-[190px] shrink-0 items-center gap-1.5 rounded-md pr-0.5 pl-1.5 text-[13px] transition-colors",
         active
           ? "bg-accent text-accent-foreground"
           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",

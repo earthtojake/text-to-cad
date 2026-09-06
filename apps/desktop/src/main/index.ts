@@ -66,7 +66,7 @@ function createWindow() {
     // keep their native frame, because a hand-drawn one there is a liability.
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     // Centred in a 32px strip (12px lights: 10 above, 10 below).
-    trafficLightPosition: process.platform === "darwin" ? { x: 12, y: 10 } : undefined,
+    trafficLightPosition: process.platform === "darwin" ? { x: 12, y: 12 } : undefined,
     backgroundColor: "#0a0a0a",
     // Windows and Linux take the window's icon from here when unpackaged; a
     // packaged app has it in the executable and the desktop entry.

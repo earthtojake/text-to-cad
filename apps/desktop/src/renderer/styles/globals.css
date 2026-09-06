@@ -303,7 +303,7 @@
  * the leftmost pane; `platform-mac` is set by main.tsx before the first paint.
  */
 :root {
-  --titlebar-height: 32px;
+  --titlebar-height: 36px;
   --titlebar-inset: 0px;
 }
 
