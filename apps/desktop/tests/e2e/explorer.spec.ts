@@ -440,7 +440,10 @@ test("edits a markdown file in place and saves the lines it changed", async () =
   // The document, not a preview of it: an H1 that is a real heading, and a
   // paragraph a caret can be put into.
   await expect(page.getByRole("heading", { level: 1, name: "AGENTS.md" })).toBeVisible();
-  const paragraph = page.locator(".ProseMirror p").first();
+  // Scoped to the explorer: the composer is a ProseMirror editor as well
+  // (features/session/composer), and the first `.ProseMirror p` on the page
+  // is the chat box.
+  const paragraph = page.getByTestId("explorer").locator(".ProseMirror p").first();
   await paragraph.click();
   await page.keyboard.type("Edited in the app. ");
 

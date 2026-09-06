@@ -5,7 +5,9 @@ import { Button } from "@renderer/components/ui/button";
 import { Spinner } from "@renderer/components/ui/spinner";
 import { useElementWidth } from "@renderer/hooks/use-element-width";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
+import { NEW_SESSION_KEY, useComposer } from "@renderer/state/composer";
 import { useExplorer } from "@renderer/state/explorer";
+import { useSessions } from "@renderer/state/sessions";
 import { useUi } from "@renderer/state/ui";
 import type { ViewerOrigin } from "@shared/ipc/cad";
 import type { ExplorerRoot } from "@shared/types";
@@ -52,6 +54,8 @@ type CadSurfaceProps = {
   onOpenFile: (path: string) => void;
   /** A reference to select once the model is up; `key` distinguishes repeats. */
   selectReference: { selector: string; key: number } | null;
+  onReference: (reference: { file: string; selector: string; text: string }) => void;
+  onCapture: (capture: { blob: Blob; file: string }) => void;
 };
 
 /**
@@ -68,7 +72,7 @@ const CadSurface = lazy(async () => {
   // no declarations of its own.
   const { CadFileView, ViewerOriginProvider } = await import("@viewer/file-view");
   return {
-    default: ({ origin, file, width, colorScheme, onOpenFile, selectReference }: CadSurfaceProps) => (
+    default: ({ origin, file, width, colorScheme, onOpenFile, selectReference, onReference, onCapture }: CadSurfaceProps) => (
       <ViewerOriginProvider origin={origin}>
         {/*
           A containing block for the surface's `position: fixed` parts. The
@@ -91,7 +95,9 @@ const CadSurface = lazy(async () => {
             layout="desktop"
             // The desktop window owns its own title; the surface must not write it.
             manageDocumentTitle={false}
+            onCapture={onCapture}
             onOpenFile={(next) => onOpenFile(next)}
+            onReference={onReference}
             origin={origin}
             sceneBackground={cadSceneBackgroundFor(colorScheme)}
             selectReference={selectReference}
@@ -124,6 +130,21 @@ export function CadRenderer({
     () => (selection ? { selector: selection.selector, key: selection.nonce } : null),
     [selection],
   );
+
+  /**
+   * The viewer's copies and captures go to the composer of the thread the
+   * person is in — or the new-session box when there is none — as a chip
+   * and as an image attachment (`state/composer.ts`). `file` is the tab's
+   * root-relative path, which is what the agent can open.
+   */
+  const onReference = useCallback((reference: { file: string; selector: string }) => {
+    useComposer.getState().insertReference(composerKey(), { file: reference.file, selector: reference.selector });
+  }, []);
+  const onCapture = useCallback(({ blob, file }: { blob: Blob; file: string }) => {
+    const stem = (file.split("/").pop() ?? "view").replace(/\.[^.]+$/, "");
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    useComposer.getState().attachFile(composerKey(), new File([blob], `${stem}-${stamp}.png`, { type: "image/png" }));
+  }, []);
   const openSettings = useUi((state) => state.openSettings);
   const colorScheme = useResolvedTheme();
   const [hostRef, width] = useElementWidth();
@@ -220,7 +241,9 @@ export function CadRenderer({
         <CadSurface
           colorScheme={colorScheme}
           file={path}
+          onCapture={onCapture}
           onOpenFile={onOpenFile}
+          onReference={onReference}
           origin={answer.origin}
           selectReference={selectReference}
           width={width}
@@ -228,6 +251,11 @@ export function CadRenderer({
       </Suspense>
     </div>
   );
+}
+
+/** The composer a reference or a capture goes to: the active thread's, else the new-session box. */
+function composerKey(): string {
+  return useSessions.getState().activeId ?? NEW_SESSION_KEY;
 }
 
 /** One title and one sentence per reason: they are different problems with different fixes. */

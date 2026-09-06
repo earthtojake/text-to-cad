@@ -104,7 +104,10 @@ test("Shift+Enter is a newline, Enter sends, Escape stops the turn", async () =>
   await composer.fill("first line");
   await page.keyboard.press("Shift+Enter");
   await page.keyboard.type("second line");
-  await expect(composer).toHaveValue("first line\nsecond line");
+  // The composer is an editor, not a textarea (features/session/composer):
+  // the break is a hard break in its document, and the draft it prints —
+  // the form's `message` field — is what has the newline.
+  await expect(page.locator('[data-composer] textarea[name="message"]')).toHaveValue("first line\nsecond line");
   // Still the new-session state: a newline did not send.
   await expect(page.locator("[data-session-view]")).toHaveCount(0);
 

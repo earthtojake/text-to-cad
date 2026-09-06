@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useAcp } from "./acp";
 import type { PromptBlock } from "@shared/acp/types";
+import { referenceText, type CadReference } from "@shared/cad-refs";
 
 /**
  * What the composer holds that is not yet a turn: the queue of prompts
@@ -14,6 +15,13 @@ import type { PromptBlock } from "@shared/acp/types";
  * even when the session pane has re-rendered or the user has moved on to
  * another session: `drain` is called from the bridge whenever a session goes
  * idle.
+ *
+ * The explorer writes into the composer too (item 4 of the CAD review): a
+ * reference copied in the viewer lands in the draft as its token, which the
+ * editor draws as a chip (`features/session/composer`), and a capture of the
+ * viewport is queued as a file for the composer's attachments to pick up —
+ * they live inside AI Elements' `PromptInput`, which nothing outside it can
+ * reach directly, so `pendingFiles` is the hand-off.
  */
 export type QueuedPrompt = {
   id: string;
@@ -22,9 +30,14 @@ export type QueuedPrompt = {
   content: PromptBlock[];
 };
 
+/** The draft key for a session, or for the new-session state. */
+export const NEW_SESSION_KEY = "__new__";
+
 type ComposerState = {
   queues: Record<string, QueuedPrompt[]>;
   drafts: Record<string, string>;
+  /** Files the explorer attached, per draft key, until the composer takes them. */
+  pendingFiles: Record<string, File[]>;
 
   /** Send now when the session is idle; queue it otherwise. */
   submit: (sessionId: string, text: string, content: PromptBlock[]) => Promise<void>;
@@ -34,6 +47,12 @@ type ComposerState = {
   /** Send the next queued prompt if the session is idle. */
   drain: (sessionId: string) => Promise<void>;
   setDraft: (sessionId: string, text: string) => void;
+  /** Append a reference to a draft, as its token, spaced from what is there. */
+  insertReference: (key: string, reference: CadReference) => void;
+  /** Queue a file for a draft's attachments. */
+  attachFile: (key: string, file: File) => void;
+  /** The composer takes what was queued for it. */
+  takeFiles: (key: string) => File[];
 };
 
 let sequence = 0;
@@ -41,6 +60,7 @@ let sequence = 0;
 export const useComposer = create<ComposerState>((set, get) => ({
   queues: {},
   drafts: {},
+  pendingFiles: {},
 
   submit: async (sessionId, text, content) => {
     const status = useAcp.getState().sessions[sessionId]?.status;
@@ -85,6 +105,28 @@ export const useComposer = create<ComposerState>((set, get) => ({
 
   setDraft: (sessionId, text) =>
     set((state) => ({ drafts: { ...state.drafts, [sessionId]: text } })),
+
+  insertReference: (key, reference) =>
+    set((state) => {
+      const current = state.drafts[key] ?? "";
+      const token = referenceText(reference);
+      const separator = current === "" || /\s$/.test(current) ? "" : " ";
+      return { drafts: { ...state.drafts, [key]: `${current}${separator}${token} ` } };
+    }),
+
+  attachFile: (key, file) =>
+    set((state) => ({ pendingFiles: { ...state.pendingFiles, [key]: [...(state.pendingFiles[key] ?? []), file] } })),
+
+  takeFiles: (key) => {
+    const files = get().pendingFiles[key] ?? [];
+    if (files.length > 0) {
+      set((state) => {
+        const { [key]: _taken, ...rest } = state.pendingFiles;
+        return { pendingFiles: rest };
+      });
+    }
+    return files;
+  },
 }));
 
 /**

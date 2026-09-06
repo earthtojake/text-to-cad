@@ -16,7 +16,6 @@ import {
   PromptInputFooter,
   PromptInputHeader,
   PromptInputSubmit,
-  PromptInputTextarea,
   PromptInputTools,
   usePromptInputAttachments,
   type PromptInputMessage,
@@ -35,8 +34,11 @@ import {
   QueueSectionTrigger,
 } from "@renderer/components/ai-elements/queue";
 import type { FileUIPart } from "@renderer/components/ai-elements/types";
-import { useComposer, useQueue } from "@renderer/state/composer";
+import { NEW_SESSION_KEY, useComposer, useQueue } from "@renderer/state/composer";
 import type { AvailableCommand, PromptBlock } from "@shared/acp/types";
+
+import { dataUrlOf, rememberFiles } from "./composer/attachments";
+import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEditor";
 
 /**
  * The composer (plan §2): "Do anything", `+` for attachments, the chips
@@ -54,6 +56,12 @@ import type { AvailableCommand, PromptBlock } from "@shared/acp/types";
  * the rest does not. Submission hands back the text and the ACP content
  * blocks; whether that creates a session or queues a prompt is the
  * caller's decision.
+ *
+ * The input is `composer/ComposerEditor`, not AI Elements' textarea: a CAD
+ * reference typed, pasted or copied in from the viewer is drawn as a chip in
+ * the sentence and sent as its plain token. `PromptInput` itself — the form,
+ * the attachments, the footer — is untouched; the editor keeps the form's
+ * `message` field for it.
  */
 export function Composer({
   sessionId,
@@ -84,7 +92,7 @@ export function Composer({
   // The draft lives in the composer store, per session, so switching
   // sessions and back does not lose typed text and a suggestion card can
   // fill the box from outside.
-  const draftKey = sessionId ?? "__new__";
+  const draftKey = sessionId ?? NEW_SESSION_KEY;
   const text = useComposer((state) => state.drafts[draftKey] ?? "");
   const setDraft = useComposer((state) => state.setDraft);
   const setText = useCallback(
@@ -94,7 +102,7 @@ export function Composer({
     },
     [draftKey, setDraft],
   );
-  const textRef = useRef<HTMLTextAreaElement | null>(null);
+  const textRef = useRef<ComposerEditorHandle | null>(null);
   const queue = useQueue(sessionId);
   const dequeue = useComposer((state) => state.dequeue);
 
@@ -178,16 +186,17 @@ export function Composer({
         onSubmit={handleSubmit}
       >
         <AttachmentStrip />
+        <AttachmentSink draftKey={draftKey} />
         {/*
          * No <PromptInputBody>: it renders `display: contents`, which the
          * InputGroup's direct-child stacking selector does not see, and the
          * composer collapses to one row.
          */}
-        <PromptInputTextarea
+        <ComposerEditorField
           autoFocus={autoFocus}
-          className="min-h-12 px-3 py-2.5 text-[13px] leading-5"
           disabled={disabled}
-          onChange={(event) => setText(event.target.value)}
+          handle={textRef}
+          onChange={setText}
           onKeyDown={(event) => {
             if (!slash.open) {
               if (event.key === "Escape" && status === "streaming" && onStop) {
@@ -211,7 +220,6 @@ export function Composer({
             }
           }}
           placeholder={placeholder}
-          ref={textRef}
           value={text}
         />
         <PromptInputFooter className="flex-nowrap px-2 pb-1.5">
@@ -244,19 +252,103 @@ export function Composer({
   );
 }
 
-function AttachButton({ disabled }: { disabled?: boolean }) {
+/**
+ * The editor, with the three things the textarea did for the form: Enter
+ * submits unless the submit button says no, Backspace on an empty box
+ * removes the last attachment, and files on the clipboard become
+ * attachments. All three need `usePromptInputAttachments`, so this lives
+ * inside `PromptInput`.
+ */
+function ComposerEditorField({
+  handle,
+  onKeyDown,
+  ...props
+}: Omit<React.ComponentProps<typeof ComposerEditor>, "onSubmit" | "onPasteFiles" | "onKeyDown"> & {
+  handle: React.RefObject<ComposerEditorHandle | null>;
+  onKeyDown: (event: React.KeyboardEvent) => void;
+}) {
   const attachments = usePromptInputAttachments();
   return (
-    <PromptInputButton
-      aria-label="Attach files"
-      className="size-7 text-muted-foreground"
-      disabled={disabled}
-      onClick={() => attachments.openFileDialog()}
-      size="icon-sm"
-      tooltip="Attach files or images"
-    >
-      <Plus className="size-4" />
-    </PromptInputButton>
+    <ComposerEditor
+      {...props}
+      handle={handle}
+      onKeyDown={(event) => {
+        onKeyDown(event);
+        if (event.defaultPrevented) {
+          return;
+        }
+        if (event.key === "Backspace" && handle.current?.isEmpty() && attachments.files.length > 0) {
+          event.preventDefault();
+          const last = attachments.files.at(-1);
+          if (last) {
+            attachments.remove(last.id);
+          }
+        }
+      }}
+      onPasteFiles={(files) => attachments.add(rememberFiles(files))}
+      onSubmit={() => {
+        const form = handle.current?.form() ?? null;
+        const submit = form?.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+        if (form && !submit?.disabled) {
+          form.requestSubmit();
+        }
+      }}
+    />
+  );
+}
+
+/**
+ * Files the explorer attached — a capture of the viewer — reach the form's
+ * attachments here, the one place inside `PromptInput` that can add them.
+ */
+function AttachmentSink({ draftKey }: { draftKey: string }) {
+  const attachments = usePromptInputAttachments();
+  const pending = useComposer((state) => state.pendingFiles[draftKey]);
+  const takeFiles = useComposer((state) => state.takeFiles);
+  useEffect(() => {
+    if (pending && pending.length > 0) {
+      attachments.add(rememberFiles(takeFiles(draftKey)));
+    }
+  }, [pending, attachments, takeFiles, draftKey]);
+  return null;
+}
+
+/**
+ * The attach button, with a file input of its own rather than the vendored
+ * component's: the files have to be remembered (`composer/attachments.ts`)
+ * before they become blob URLs, and only this side can do that.
+ */
+function AttachButton({ disabled }: { disabled?: boolean }) {
+  const attachments = usePromptInputAttachments();
+  const input = useRef<HTMLInputElement | null>(null);
+  return (
+    <>
+      <input
+        aria-hidden
+        className="hidden"
+        multiple
+        onChange={(event) => {
+          const files = [...(event.currentTarget.files ?? [])];
+          event.currentTarget.value = "";
+          if (files.length > 0) {
+            attachments.add(rememberFiles(files));
+          }
+        }}
+        ref={input}
+        tabIndex={-1}
+        type="file"
+      />
+      <PromptInputButton
+        aria-label="Attach files"
+        className="size-7 text-muted-foreground"
+        disabled={disabled}
+        onClick={() => input.current?.click()}
+        size="icon-sm"
+        tooltip="Attach files or images"
+      >
+        <Plus className="size-4" />
+      </PromptInputButton>
+    </>
   );
 }
 
@@ -364,6 +456,8 @@ function SlashPalette({
  * (base64), text files embedded as `resource` so the agent has the
  * content whether or not its sandbox can reach the path. Anything else is
  * refused with a toast rather than sent as bytes the agent cannot read.
+ * The bytes come through `dataUrlOf`: the vendored form's own blob fetch
+ * fails on a `file://` renderer (`composer/attachments.ts`).
  */
 export async function toPromptBlocks(text: string, files: FileUIPart[]): Promise<PromptBlock[]> {
   const blocks: PromptBlock[] = [];
@@ -371,8 +465,9 @@ export async function toPromptBlocks(text: string, files: FileUIPart[]): Promise
     blocks.push({ type: "text", text });
   }
   for (const file of files) {
-    const parsed = parseDataUrl(file.url ?? "");
+    const parsed = parseDataUrl((await dataUrlOf(file)) ?? "");
     if (!parsed) {
+      toast.error(`${file.filename ?? "An attachment"} could not be read, so it was not attached.`);
       continue;
     }
     const mimeType = file.mediaType || parsed.mimeType || "application/octet-stream";

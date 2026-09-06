@@ -12,6 +12,7 @@ import { AuthPrompt } from "./AuthPrompt";
 import { Composer } from "./Composer";
 import { ApprovalChip, EffortChip, ModeChip, ModelChip, OptionsChip } from "./ComposerChips";
 import { FilesChangedPill } from "./FilesChangedPill";
+import { TranscriptScopeContext, type TranscriptScope } from "./links/PathLink";
 import { PlanCard } from "./PlanCard";
 import { SessionHeader } from "./SessionHeader";
 import { Transcript } from "./Transcript";
@@ -45,6 +46,13 @@ export function SessionView({ session }: { session: Session }) {
   }, [session.id, ensureLoaded]);
 
   const onSubmit = (text: string, content: PromptBlock[]) => submit(session.id, text, content);
+
+  // What a path in this thread's prose is relative to: its worktree when it
+  // runs in one (plan §9), else the project. `links/PathLink` reads it.
+  const scope = useMemo<TranscriptScope>(
+    () => ({ projectId: session.projectId, root: session.worktreePath ?? null }),
+    [session.projectId, session.worktreePath],
+  );
 
   const retry = () => {
     const lastPrompt = lastUserPrompt(state);
@@ -117,7 +125,9 @@ export function SessionView({ session }: { session: Session }) {
       <SessionHeader session={session} title={session.title} />
 
       {state ? (
-        <Transcript onReconnect={() => void load(session.id)} onRetry={retry} state={state} />
+        <TranscriptScopeContext.Provider value={scope}>
+          <Transcript onReconnect={() => void load(session.id)} onRetry={retry} state={state} />
+        </TranscriptScopeContext.Provider>
       ) : loadError ? (
         isAuthError(loadError) || agent?.auth === "unauthenticated" ? (
           <div className="min-h-0 flex-1 overflow-y-auto">

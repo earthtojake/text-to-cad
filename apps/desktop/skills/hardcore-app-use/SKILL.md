@@ -20,9 +20,15 @@ and `gcode` skills still say how to build the files.
   cannot see.
 - Where the `cad` skill says to hand paths to `$cad-viewer`, do this instead:
   call `open_file` with the path. That call is the hand-off.
-- Reference files by their path relative to the project root
-  (`STEP/bracket.step`, not `/Users/…/STEP/bracket.step`); Hardcore turns them
-  into links the person can click.
+- Reference files by their path relative to your working directory
+  (`STEP/bracket.step`, not `/Users/…/STEP/bracket.step`), in prose or in
+  backticks. Hardcore turns a path that exists into a link: a file opens in
+  the explorer (CAD in the viewer, images, code, markdown in their own
+  renderers), a folder is revealed in the tree. A path with a selector —
+  `STEP/bracket.step#o1.2`, `STEP/bracket.step#label.f45` — opens the file in
+  the viewer *and selects that reference*, which is how to point at a face
+  or a part. A path that does not exist stays plain text, so name outputs
+  after they are written.
 
 ## The tools Hardcore gives you
 

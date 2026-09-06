@@ -1,10 +1,26 @@
 import { AlertCircle, Paperclip, RotateCcw, Unplug } from "lucide-react";
 
+import { defaultRemarkPlugins } from "streamdown";
+
 import { MessageResponse } from "@renderer/components/ai-elements/message";
 import { Button } from "@renderer/components/ui/button";
 import type { Part } from "@shared/acp/types";
 
+import { PathLink } from "../links/PathLink";
+import { remarkPathLinks } from "../links/remarkPathLinks";
 import { formatTokens, partsView, type ViewItem } from "../view";
+
+/**
+ * The transcript's markdown: Streamdown's own plugins, then the one that
+ * turns a path in prose into a link (`../links`). Module constants, because
+ * `MessageResponse` is memoised on its children and a fresh array per render
+ * would rebuild every block on every keystroke of the composer.
+ *
+ * `remarkPlugins` *replaces* Streamdown's defaults rather than extending
+ * them, so GFM is spread back in first.
+ */
+const REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), remarkPathLinks];
+const COMPONENTS = { a: PathLink };
 import { ActivityGroup } from "./ActivityRow";
 import { PermissionCard } from "./PermissionCard";
 import { SubagentRow } from "./SubagentRow";
@@ -59,7 +75,9 @@ function ViewItemView({
     case "text":
       return (
         <div className="prose-transcript my-1 text-[14px] leading-6" data-part="text">
-          <MessageResponse isAnimating={item.streaming}>{item.text}</MessageResponse>
+          <MessageResponse components={COMPONENTS} isAnimating={item.streaming} remarkPlugins={REMARK_PLUGINS}>
+            {item.text}
+          </MessageResponse>
         </div>
       );
     case "thought":

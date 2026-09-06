@@ -405,3 +405,21 @@
 .translucent-sidebar [data-translucent] {
   backdrop-filter: saturate(140%) blur(20px);
 }
+
+/*
+ * The composer's editor (features/session/composer): the placeholder the
+ * Placeholder extension writes as a data attribute on the empty paragraph,
+ * and a chip under ProseMirror's node selection.
+ */
+.composer-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.composer-editor p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

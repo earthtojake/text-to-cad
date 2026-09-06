@@ -16,6 +16,9 @@
  *   "open"        call the Hardcore MCP server's `open_file` on the path
  *                 after "open " — the server `session/new` carried in
  *                 `mcpServers`, spawned the way an adapter spawns it
+ *   "mention"     reply with prose naming files — real and missing paths,
+ *                 a CAD reference, one in backticks — for the transcript's
+ *                 links
  *   "subagent"    the draft subagent_spawned / child update / state_update
  *   "thought"     an agent_thought_chunk first
  *   "slow"        wait until cancelled
@@ -233,6 +236,13 @@ async function script(conn, params) {
     } catch (error) {
       await send({ sessionUpdate: "tool_call_update", toolCallId: "write-1", status: "failed", content: [{ type: "content", content: { type: "text", text: String(error.message ?? error) } }] });
     }
+  }
+
+  if (text.includes("mention")) {
+    const prose =
+      "Look at README.md and `apps/desktop/AGENTS.md`; the part is models/examples/imported/import-smoke.step#o1 " +
+      "(nope/missing.md does not exist, and 0.5.0 is a version).\n";
+    await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: prose } });
   }
 
   if (text.includes("open")) {
