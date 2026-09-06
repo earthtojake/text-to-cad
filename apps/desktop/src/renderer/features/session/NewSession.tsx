@@ -18,7 +18,8 @@ import { errorMessage, isAuthError } from "./view";
 
 /**
  * The new-session state (plan §2): "What should we build in <project>?",
- * the composer with its four chips, four suggestion cards. Sending
+ * the context strip — project · git mode · agent, Codex's — above the
+ * composer, the composer with its approval chip, four suggestion cards. Sending
  * creates the session — `sessions.create` spawns the agent — selects it,
  * and sends the first prompt; the transcript takes over from there.
  *
@@ -93,14 +94,19 @@ export function NewSession({ project }: { project: Project }) {
     void submitPrompt(sessionId, text, content);
   };
 
-  const chips = (
-    <>
-      <AgentChip agentId={resolvedAgentId} onChange={chooseAgent} />
+  // What the session will be, as a strip above the box: where it runs, how
+  // it treats git, who runs it. Each is a menu; none of them changes once the
+  // session exists, which is why they are not in the composer's row.
+  const context = (
+    <div className="mb-1.5 flex items-center gap-1 px-1" data-context-strip>
       <ProjectChip onChange={setActiveProject} project={project} />
+      <Dot />
       <GitModeChip gitMode={resolvedGitMode} onChange={setGitMode} />
-      <ApprovalChip mode={approval} onChange={setApprovalMode} />
-    </>
+      <Dot />
+      <AgentChip agentId={resolvedAgentId} onChange={chooseAgent} />
+    </div>
   );
+  const chips = <ApprovalChip mode={approval} onChange={setApprovalMode} />;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 pb-10" data-new-session>
@@ -130,6 +136,7 @@ export function NewSession({ project }: { project: Project }) {
         ) : null}
 
         <div className="mt-5">
+          {context}
           <Composer
             autoFocus
             chips={chips}
@@ -182,6 +189,14 @@ const SUGGESTIONS = [
     prompt: "A model stopped generating. Track down why and fix it.",
   },
 ] as const;
+
+function Dot() {
+  return (
+    <span aria-hidden className="text-[12px] text-muted-foreground/60">
+      ·
+    </span>
+  );
+}
 
 function SuggestionCard({
   icon,

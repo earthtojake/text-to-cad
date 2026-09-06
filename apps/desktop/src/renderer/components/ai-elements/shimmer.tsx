@@ -52,7 +52,12 @@ const ShimmerComponent = ({
       animate={{ backgroundPosition: "0% center" }}
       className={cn(
         "relative inline-block bg-[length:250%_100%,auto] bg-clip-text text-transparent",
-        "[--bg:linear-gradient(90deg,#0000_calc(50%-var(--spread)),var(--color-background),#0000_calc(50%+var(--spread)))] [background-repeat:no-repeat,padding-box]",
+        // Deliberate edit to the vendored component: the band is the
+        // foreground, not the background. A background-coloured band erases
+        // the letters it passes over — the first letter of "Editing hello.py"
+        // vanished in every streaming screenshot — where a brighter band reads
+        // as the shimmer it is meant to be.
+        "[--bg:linear-gradient(90deg,#0000_calc(50%-var(--spread)),var(--color-foreground),#0000_calc(50%+var(--spread)))] [background-repeat:no-repeat,padding-box]",
         className
       )}
       initial={{ backgroundPosition: "100% center" }}

@@ -76,7 +76,7 @@ export function ProjectRow({ project }: { project: Project }) {
           />
         </button>
         <button
-          className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left text-[13px]"
+          className="flex h-7 min-w-0 flex-1 items-center gap-2 text-left text-[13px]"
           onClick={() => {
             setActiveProject(project.id);
             setActiveSession(null);
@@ -128,7 +128,7 @@ export function ProjectRow({ project }: { project: Project }) {
       {collapsed ? null : (
         <div className="mt-0.5 mb-1 ml-[26px] flex flex-col gap-px border-l border-sidebar-border pl-2">
           {sessions.length === 0 ? (
-            <p className="py-1.5 text-xs text-muted-foreground">No sessions yet</p>
+            <p className="flex h-7 items-center text-xs text-muted-foreground">No sessions yet</p>
           ) : (
             visible.map((session) => (
               <SessionRow
@@ -223,7 +223,7 @@ function SessionRow({
       <ContextMenuTrigger asChild>
         <div
           className={cn(
-            "group/session flex min-w-0 items-center gap-1.5 rounded-md pr-1 pl-2 transition-colors",
+            "group/session flex h-7 min-w-0 items-center gap-1.5 rounded-md pr-1 pl-2 transition-colors",
             selected
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
               : "hover:bg-sidebar-accent/60",
@@ -235,7 +235,7 @@ function SessionRow({
             <input
               aria-label="Session title"
               autoFocus
-              className="min-w-0 flex-1 bg-transparent py-1 text-[13px] outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
               onBlur={commitRename}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -249,7 +249,7 @@ function SessionRow({
             />
           ) : (
             <button
-              className="min-w-0 flex-1 truncate py-1 text-left text-[13px]"
+              className="min-w-0 flex-1 truncate text-left text-[13px]"
               onClick={onSelect}
               onDoubleClick={startRename}
               title={session.title}

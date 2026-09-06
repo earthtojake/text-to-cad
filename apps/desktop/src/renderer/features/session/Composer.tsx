@@ -41,8 +41,14 @@ import type { AvailableCommand, PromptBlock } from "@shared/acp/types";
 /**
  * The composer (plan §2): "Do anything", `+` for attachments, the chips
  * the caller supplies, a mic placeholder, and send — which becomes stop
- * while a turn runs. Enter sends, Shift+Enter is a newline, a pasted image
- * becomes an attachment. Typing `/` opens the agent's slash commands.
+ * while a turn runs. Enter sends, Shift+Enter is a newline, Escape stops a
+ * running turn, a pasted image becomes an attachment. Typing `/` opens the
+ * agent's slash commands.
+ *
+ * One row, Codex's: `+` and the caller's `chips` on the left, the caller's
+ * `trailing` chips (the model, the options glyph) then mic and send on the
+ * right. Nothing wraps — the chips truncate — so the box is the same height
+ * at 560px as at 1200px.
  *
  * Shared by the new-session state and the live session: the chips differ,
  * the rest does not. Submission hands back the text and the ACP content
@@ -52,6 +58,7 @@ import type { AvailableCommand, PromptBlock } from "@shared/acp/types";
 export function Composer({
   sessionId,
   chips,
+  trailing,
   commands,
   status,
   disabled,
@@ -63,6 +70,8 @@ export function Composer({
   /** Drafts and the queue are kept per session; null in the new-session state. */
   sessionId: string | null;
   chips: React.ReactNode;
+  /** Chips on the right, before the mic and send. */
+  trailing?: React.ReactNode;
   commands: AvailableCommand[];
   /** `streaming` shows stop; `submitted` shows a spinner (the session is being created). */
   status: "ready" | "submitted" | "streaming";
@@ -181,6 +190,10 @@ export function Composer({
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
             if (!slash.open) {
+              if (event.key === "Escape" && status === "streaming" && onStop) {
+                event.preventDefault();
+                onStop();
+              }
               return;
             }
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -201,12 +214,13 @@ export function Composer({
           ref={textRef}
           value={text}
         />
-        <PromptInputFooter className="px-2 pb-1.5">
-          <PromptInputTools className="min-w-0 flex-1 flex-wrap gap-0.5">
+        <PromptInputFooter className="flex-nowrap px-2 pb-1.5">
+          <PromptInputTools className="min-w-0 flex-1 flex-nowrap gap-0.5 overflow-hidden">
             <AttachButton disabled={disabled} />
             {chips}
           </PromptInputTools>
-          <div className="flex shrink-0 items-center gap-0.5">
+          <div className="flex min-w-0 shrink-0 items-center gap-0.5">
+            {trailing}
             <PromptInputButton
               aria-label="Voice input (coming later)"
               className="size-7 text-muted-foreground"

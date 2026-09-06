@@ -103,7 +103,7 @@ function UserTurn({ turn }: { turn: Turn }) {
   return (
     <div className="flex w-full flex-col items-end gap-1.5" data-turn={turn.id} data-role="user">
       {text ? (
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-3.5 py-2 text-[14px] leading-6 whitespace-pre-wrap text-foreground select-text">
+        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-secondary px-3.5 py-2 text-[14px] leading-6 break-words whitespace-pre-wrap text-foreground select-text [overflow-wrap:anywhere]">
           {text}
         </div>
       ) : null}

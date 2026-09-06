@@ -30,7 +30,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "new-session", group: "Application", label: "New chat", binding: "Mod+N" },
   { id: "command-palette", group: "Application", label: "Command palette", binding: "Mod+K" },
   { id: "settings", group: "Application", label: "Settings", binding: "Mod+," },
-  { id: "close-settings", group: "Application", label: "Back to the app", binding: "Escape" },
+  { id: "close-settings", group: "Application", label: "Close Settings or the palette", binding: "Escape" },
   { id: "toggle-sidebar", group: "Application", label: "Toggle sidebar", binding: "Mod+B" },
   { id: "toggle-explorer", group: "Application", label: "Toggle explorer", binding: "Mod+Alt+B" },
 
@@ -41,7 +41,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
     label: "New line in the composer",
     binding: "Shift+Enter",
   },
-  { id: "stop", group: "Session", label: "Stop the current turn", binding: "Mod+." },
+  { id: "stop", group: "Session", label: "Stop the current turn", binding: "Escape" },
 
   { id: "close-tab", group: "Explorer", label: "Close tab", binding: "Mod+W" },
   {

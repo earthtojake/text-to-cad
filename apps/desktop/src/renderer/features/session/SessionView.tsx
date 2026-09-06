@@ -5,13 +5,12 @@ import { Button } from "@renderer/components/ui/button";
 import { useAcp } from "@renderer/state/acp";
 import { useAgents } from "@renderer/state/agents";
 import { useComposer } from "@renderer/state/composer";
-import { useProjects } from "@renderer/state/projects";
 import type { PromptBlock, SessionState } from "@shared/acp/types";
 import type { Session } from "@shared/types";
 
 import { AuthPrompt } from "./AuthPrompt";
 import { Composer } from "./Composer";
-import { ApprovalChip, ContextChip, ModeChip, ModelChip, OptionsChip } from "./ComposerChips";
+import { ApprovalChip, ModeChip, ModelChip, OptionsChip } from "./ComposerChips";
 import { FilesChangedPill } from "./FilesChangedPill";
 import { PlanCard } from "./PlanCard";
 import { SessionHeader } from "./SessionHeader";
@@ -39,7 +38,6 @@ export function SessionView({ session }: { session: Session }) {
   const setApprovalMode = useAcp((store) => store.setApprovalMode);
   const submit = useComposer((store) => store.submit);
   const agents = useAgents((store) => store.agents);
-  const project = useProjects((store) => store.projects.find((candidate) => candidate.id === session.projectId) ?? null);
   const agent = agents.find((candidate) => candidate.id === session.agentId) ?? null;
 
   useEffect(() => {
@@ -73,36 +71,37 @@ export function SessionView({ session }: { session: Session }) {
     const preset = selects.find((option) => option.category === "mode") ?? null;
     const others = selects.filter((option) => option !== model && option !== effort && option !== preset);
     const setOption = (configId: string, value: string | boolean) => void setConfigOption(session.id, configId, value);
-    // Codex's row: context, approval, model, then everything else folded
-    // into one Options chip. An agent with modes but no `mode` config
-    // option (Claude) gets its modes as a chip of their own.
-    return (
-      <>
-        <ContextChip
-          agentName={agent?.name ?? session.agentId}
-          branch={session.branch}
-          cwd={session.cwd}
-          gitMode={session.gitMode}
-          project={project}
-        />
-        <ApprovalChip
-          mode={state.approvalMode}
-          onChange={(mode) => void setApprovalMode(session.id, mode)}
-          onPresetChange={setOption}
-          preset={preset}
-        />
-        {state.modes.length > 1 && !preset ? (
-          <ModeChip
-            currentModeId={state.currentModeId}
-            modes={state.modes}
-            onChange={(modeId) => void setMode(session.id, modeId)}
+    // Codex's row, left to right: `+`, approval; then on the right the model
+    // (with its effort), the options glyph, mic, send. The agent and the
+    // project are the title bar's and the sidebar's, not the composer's. An
+    // agent with modes but no `mode` config option (Claude) gets its modes as
+    // a chip of their own, beside approval.
+    return {
+      leading: (
+        <>
+          <ApprovalChip
+            mode={state.approvalMode}
+            onChange={(mode) => void setApprovalMode(session.id, mode)}
+            onPresetChange={setOption}
+            preset={preset}
           />
-        ) : null}
-        {model ? <ModelChip effort={effort} model={model} onChange={setOption} /> : null}
-        <OptionsChip booleans={booleans} onSelect={setOption} onToggle={setOption} selects={others} />
-      </>
-    );
-  }, [state, agent?.name, session, project, setApprovalMode, setMode, setConfigOption]);
+          {state.modes.length > 1 && !preset ? (
+            <ModeChip
+              currentModeId={state.currentModeId}
+              modes={state.modes}
+              onChange={(modeId) => void setMode(session.id, modeId)}
+            />
+          ) : null}
+        </>
+      ),
+      trailing: (
+        <>
+          {model ? <ModelChip effort={effort} model={model} onChange={setOption} /> : null}
+          <OptionsChip booleans={booleans} onSelect={setOption} onToggle={setOption} selects={others} />
+        </>
+      ),
+    };
+  }, [state, session.id, setApprovalMode, setMode, setConfigOption]);
 
   const planTurn =
     state?.turns.findLast((turn) => turn.role === "agent" && turn.parts.some((part) => part.type === "plan")) ?? null;
@@ -151,7 +150,7 @@ export function SessionView({ session }: { session: Session }) {
           <FilesChangedPill deletions={session.deletions} files={session.changedFiles} insertions={session.insertions} />
           <Composer
             autoFocus
-            chips={chips}
+            chips={chips?.leading ?? null}
             commands={state?.availableCommands ?? []}
             disabled={!state || state.status === "connecting" || state.status === "closed"}
             onStop={() => void cancel(session.id)}
@@ -159,6 +158,7 @@ export function SessionView({ session }: { session: Session }) {
             placeholder={running ? "Send another message — it goes next" : "Do anything"}
             sessionId={session.id}
             status={composerStatus}
+            trailing={chips?.trailing ?? null}
           />
           {state?.contextUsage ? <ContextFooter used={state.contextUsage.used} size={state.contextUsage.size} cost={state.contextUsage.cost} /> : null}
         </div>

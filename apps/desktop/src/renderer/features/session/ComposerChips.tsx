@@ -3,7 +3,6 @@ import {
   Check,
   ChevronDown,
   Folder,
-  FolderGit2,
   GitBranch,
   GitFork,
   ShieldCheck,
@@ -31,10 +30,11 @@ import type { GitMode, Project } from "@shared/types";
 
 /**
  * The composer's context strip (plan §2, §6). Every chip is the same
- * shape: an icon, a short label, a chevron when it opens a menu. New
- * sessions get Agent / Project / Git mode / Approval; a live session gets
- * one context chip for what is fixed (agent, project, git mode), then
- * Approval, the agent's modes and its config options.
+ * shape: an icon, a short label, a chevron when it opens a menu. A new
+ * session shows Project / Git mode / Agent in a strip above the composer and
+ * Approval in it; a live session shows Approval and the agent's modes on the
+ * left, the model and its other options on the right. What a session cannot
+ * change — its agent, its project — is the title bar's and the sidebar's.
  */
 export function Chip({
   icon,
@@ -286,34 +286,6 @@ export function ApprovalChip({
 /* -------------------------------------------------------------------------- */
 /* Live-session chips                                                          */
 /* -------------------------------------------------------------------------- */
-
-/** `Codex · text-to-cad · Local` — what a session cannot change. */
-export function ContextChip({
-  agentName,
-  project,
-  gitMode,
-  branch,
-  cwd,
-}: {
-  agentName: string;
-  project: Project | null;
-  gitMode: GitMode;
-  branch: string | undefined;
-  cwd: string;
-}) {
-  const where =
-    gitMode === "worktree" ? `worktree${branch ? ` ${branch}` : ""}` : gitMode === "checkout" ? branch : "Local";
-  return (
-    <Chip
-      icon={gitMode === "none" ? <Folder /> : <FolderGit2 />}
-      label={`${agentName} · ${project?.name ?? cwd.split(/[\\/]/).pop() ?? cwd}`}
-      detail={where ? `· ${where}` : null}
-      maxWidth={220}
-      testId="context"
-      title={`${agentName} in ${cwd}`}
-    />
-  );
-}
 
 export function ModeChip({
   modes,

@@ -387,7 +387,7 @@ function RailRow({ file, onSelect }: { file: ChangedFile; onSelect: () => void }
   const name = file.path.split("/").pop() ?? file.path;
   return (
     <button
-      className="flex h-7 w-full items-center gap-1.5 px-3 text-left text-[12px] transition-colors hover:bg-accent/50"
+      className="flex h-7 w-full items-center gap-1.5 px-3 text-left text-[13px] transition-colors hover:bg-accent/50"
       onClick={onSelect}
       title={file.path}
       type="button"
