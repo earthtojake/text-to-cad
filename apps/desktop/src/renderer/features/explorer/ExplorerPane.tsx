@@ -90,7 +90,14 @@ function TabBody({ tab, project }: { tab: ExplorerTab; project: Project }) {
         />
       );
     case "review":
-      return <ReviewTab project={project} scope={tab.scope} tabId={tab.id} />;
+      return (
+        <ReviewTab
+          project={project}
+          scope={tab.scope}
+          sessionId={tab.sessionId}
+          tabId={tab.id}
+        />
+      );
     case "browser":
       return <BrowserTab tabId={tab.id} url={tab.url} />;
     case "terminal":

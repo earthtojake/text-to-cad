@@ -1,4 +1,4 @@
-import { ChevronRight, Folder, GitBranch, Loader2, MoreHorizontal } from "lucide-react";
+import { ChevronRight, Folder, GitBranch, GitFork, Loader2, MoreHorizontal } from "lucide-react";
 import { cn } from "cn";
 
 import { Button } from "@renderer/components/ui/button";
@@ -9,6 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
+import { gitGlyphFor, gitGlyphLabel, useProjectGitInfo } from "@renderer/lib/git-mode";
 import { useProjects } from "@renderer/state/projects";
 import { useProjectSessions, useSessions } from "@renderer/state/sessions";
 import type { Project, Session } from "@shared/types";
@@ -124,11 +125,34 @@ function SessionRow({
       type="button"
     >
       <span className="min-w-0 flex-1 truncate">{session.title}</span>
-      {session.status === "running" ? (
-        <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
-      ) : session.gitMode === "worktree" ? (
-        <GitBranch className="size-3 shrink-0 text-muted-foreground" />
-      ) : null}
+      <SessionGlyph session={session} />
     </button>
+  );
+}
+
+/**
+ * Codex's trailing glyph: a spinner while a turn runs, and otherwise whatever
+ * the session's git mode is worth saying (`@renderer/lib/git-mode.ts`) —
+ * a worktree, a branch that is not the project's default, or nothing.
+ */
+function SessionGlyph({ session }: { session: Session }) {
+  const project = useProjects((state) =>
+    state.projects.find((candidate) => candidate.id === session.projectId),
+  );
+  const info = useProjectGitInfo(project?.id);
+
+  if (session.status === "running") {
+    return <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />;
+  }
+  const glyph = gitGlyphFor(session, info?.defaultBranch);
+  if (!glyph) {
+    return null;
+  }
+  const Icon = glyph === "worktree" ? GitFork : GitBranch;
+  return (
+    <Icon
+      aria-label={gitGlyphLabel(session)}
+      className="size-3 shrink-0 text-muted-foreground"
+    />
   );
 }

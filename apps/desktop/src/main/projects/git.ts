@@ -7,14 +7,17 @@
  * submodules and their line-ending config. A reimplementation of git's diff
  * that disagreed with git in one of those cases would be worse than no diff.
  *
- * **P7 owns the rest of this file's remit** (plan §9): the three git modes,
- * worktree creation and deletion, `Commit or push`'s push half and
- * `Create pull request`. What is here is what the review tab reads, plus the
- * commit it can make.
+ * Two halves, in order: what the review tab reads (status, diffs, commit,
+ * push) and what the git modes need (plan §9) — repository detection,
+ * worktree creation, listing, removal and the keep-limit sweep, and
+ * `Create pull request` through `gh`. Which mode a session gets and where its
+ * worktree goes is `projects/workspace.ts`; this file has no opinion about
+ * settings, sessions or the app's directories.
  *
  * The parsers are exported and pure: `git`'s porcelain formats are stable and
  * fiddly, and they are the part worth a unit test.
  */
+import fsp from "node:fs/promises";
 import path from "node:path";
 
 import { execa, type Options } from "execa";
@@ -322,7 +325,7 @@ export async function status(cwd: string, scope: DiffScope = { kind: "working-tr
   const files =
     scope.kind === "working-tree"
       ? await workingTreeFiles(root, porcelain)
-      : await rangeFiles(root, scope);
+      : await rangeFiles(root, scope, porcelain);
 
   return {
     isRepository: true,
@@ -394,7 +397,11 @@ async function countUntracked(root: string, filePath: string) {
   return { insertions: lines, deletions: 0, binary: false };
 }
 
-async function rangeFiles(root: string, scope: DiffScope): Promise<ChangedFile[]> {
+async function rangeFiles(
+  root: string,
+  scope: DiffScope,
+  porcelain: ReturnType<typeof parsePorcelainStatus>,
+): Promise<ChangedFile[]> {
   const base = await baseRevision(root, scope);
   if (!base) {
     return [];
@@ -403,16 +410,34 @@ async function rangeFiles(root: string, scope: DiffScope): Promise<ChangedFile[]
   const nameStatus = await git(root, ["diff", "--name-status", "-z", "-M", base]);
   const statuses = parseNameStatus(nameStatus);
 
-  return [...numstat.entries()]
-    .map(([filePath, counted]) => ({
-      path: filePath,
-      status: statuses.get(filePath) ?? "modified",
-      insertions: counted.insertions,
-      deletions: counted.deletions,
-      binary: counted.binary,
-      ...(counted.oldPath ? { oldPath: counted.oldPath } : {}),
-    }))
-    .sort((left, right) => left.path.localeCompare(right.path));
+  const files: ChangedFile[] = [...numstat.entries()].map(([filePath, counted]) => ({
+    path: filePath,
+    status: statuses.get(filePath) ?? "modified",
+    insertions: counted.insertions,
+    deletions: counted.deletions,
+    binary: counted.binary,
+    ...(counted.oldPath ? { oldPath: counted.oldPath } : {}),
+  }));
+
+  // An open-ended range — `git diff <base>` with no second revision — is
+  // measured against the working tree, and `git diff` says nothing about a
+  // file git has never seen. Without this a "since this turn began" review of
+  // a turn whose whole output was new files shows nothing at all, which is the
+  // one case the scope exists for.
+  if (openEnded(scope)) {
+    for (const file of porcelain.files) {
+      if (file.status === "untracked" && !numstat.has(file.path)) {
+        files.push({ ...file, ...(await countUntracked(root, file.path)) });
+      }
+    }
+  }
+
+  return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+/** True when the scope's second side is the working tree rather than a revision. */
+function openEnded(scope: DiffScope): boolean {
+  return scope.kind === "since" || (scope.kind === "range" && !scope.to);
 }
 
 /** `git diff --name-status -z`: a status letter and a path per record. */
@@ -499,7 +524,10 @@ export async function fileDiff(
   const after =
     meta.status === "deleted"
       ? ""
-      : scope.kind === "working-tree"
+      : // An open-ended scope's second side is the working tree, not a
+        // revision: "since this turn began" has to show the edit the agent
+        // has not committed, which is every edit it just made.
+        scope.kind === "working-tree" || openEnded(scope)
         ? await readWorkingCopy(root, filePath)
         : ((await tryGit(root, ["show", `${scopeTip(scope)}:${filePath}`])) ?? "");
 
@@ -611,4 +639,555 @@ export async function push(cwd: string): Promise<void> {
   }
   const upstream = await tryGit(root, ["rev-parse", "--abbrev-ref", `${branch}@{upstream}`]);
   await git(root, upstream ? ["push"] : ["push", "--set-upstream", "origin", branch]);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Repository detection (P7)                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What the composer's git-mode chip needs to know before it offers a mode,
+ * and what the settings page prints beside a project.
+ *
+ * One call, because every field is cheap and the caller wants all of them:
+ * asking four channels whether a directory is a repository, on what branch,
+ * tracking what, and whether it is dirty, is four round trips to answer one
+ * question.
+ */
+export type RepoInfo = {
+  isRepository: boolean;
+  /** The repository root, which is not necessarily the directory asked about. */
+  root: string | null;
+  branch: string | null;
+  /** `origin/main`, or null when the branch tracks nothing. */
+  upstream: string | null;
+  /** The remote's default branch, for a pull request's base. */
+  defaultBranch: string | null;
+  /** Any staged, unstaged or untracked change. */
+  dirty: boolean;
+  detached: boolean;
+  /** HEAD points at a branch with no commits: nothing can be branched from it. */
+  unborn: boolean;
+  hasRemote: boolean;
+};
+
+export function emptyRepoInfo(): RepoInfo {
+  return {
+    isRepository: false,
+    root: null,
+    branch: null,
+    upstream: null,
+    defaultBranch: null,
+    dirty: false,
+    detached: false,
+    unborn: false,
+    hasRemote: false,
+  };
+}
+
+export async function repoInfo(cwd: string): Promise<RepoInfo> {
+  const root = await repositoryRoot(cwd);
+  if (!root) {
+    return emptyRepoInfo();
+  }
+
+  const [branchName, symbolic, porcelain, remotes, verified] = await Promise.all([
+    tryGit(root, ["rev-parse", "--abbrev-ref", "HEAD"]),
+    // `rev-parse --abbrev-ref HEAD` fails outright in a repository with no
+    // commits, so the branch git *would* create comes from `symbolic-ref`.
+    // Without it a fresh `git init` reads as detached, and the mode chip would
+    // say a repository has no branch when the person is standing on one.
+    tryGit(root, ["symbolic-ref", "--short", "HEAD"]),
+    // `-z` and `--untracked-files=all`: the same read `status()` makes, so
+    // "dirty" here and "there are changes to review" there cannot disagree.
+    tryGit(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]),
+    tryGit(root, ["remote"]),
+    // No commits yet: `rev-parse HEAD` fails while `--abbrev-ref HEAD` still
+    // names the branch git would create on the first commit.
+    tryGit(root, ["rev-parse", "--verify", "HEAD"]),
+  ]);
+
+  const branch = (branchName?.trim() || symbolic?.trim()) ?? "";
+  const detached = branch === "HEAD" || branch === "";
+
+  const upstream = detached
+    ? null
+    : (await tryGit(root, ["rev-parse", "--abbrev-ref", `${branch}@{upstream}`]))?.trim() || null;
+
+  return {
+    isRepository: true,
+    root,
+    branch: detached ? null : branch,
+    upstream,
+    defaultBranch: await defaultBranchOf(root),
+    dirty: (porcelain ?? "").split("\0").some((record) => record !== ""),
+    detached,
+    unborn: verified === null,
+    hasRemote: (remotes ?? "").trim() !== "",
+  };
+}
+
+/**
+ * The branch a pull request should target.
+ *
+ * `origin/HEAD` is the remote's own answer and what `gh` uses; a checkout
+ * cloned before the default was renamed may not have it, so the fallback is
+ * whichever of the usual two exists on the remote, and then nothing — a null
+ * base lets `gh` pick, which is better than guessing `master` at a repository
+ * that has not had one for five years.
+ */
+async function defaultBranchOf(root: string): Promise<string | null> {
+  const symbolic = await tryGit(root, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]);
+  const named = symbolic?.trim().replace(/^origin\//, "");
+  if (named) {
+    return named;
+  }
+  for (const candidate of ["main", "master"]) {
+    if (await tryGit(root, ["rev-parse", "--verify", `refs/remotes/origin/${candidate}`])) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/** The commit HEAD is at, or null in a repository with no commits. */
+export async function head(cwd: string): Promise<string | null> {
+  const sha = await tryGit(cwd, ["rev-parse", "HEAD"]);
+  return sha?.trim() || null;
+}
+
+/** Whether anything is uncommitted — the check `removeWorktree` refuses on. */
+export async function isDirty(cwd: string): Promise<boolean> {
+  const porcelain = await tryGit(cwd, [
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+  ]);
+  return (porcelain ?? "").split("\0").some((record) => record !== "");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Slugs                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A directory and branch name made from a session's first prompt.
+ *
+ * Lowercase ASCII words joined by hyphens, because the name becomes both a
+ * path component and a git ref: a ref may not contain a space, `~^:?*[\`, two
+ * consecutive dots or a trailing dot, and a path on Windows may not contain
+ * `<>:"|?*`. Restricting to `[a-z0-9-]` satisfies both without a table of
+ * per-platform exceptions.
+ *
+ * Input with nothing left after the filter answers `""`: what a nameless
+ * session is called is a product decision, and this is a string function.
+ */
+export function slugify(name: string, max = 40): string {
+  const slug = name
+    .normalize("NFKD")
+    // Strip the combining marks NFKD just separated, so "Modèle" becomes
+    // "modele" rather than "mod-le". `\p{M}` and not `\p{Diacritic}`: the
+    // latter also matches the ASCII `^`, `~`, `` ` `` and `"`, which are
+    // separators here and would be deleted, gluing two words together.
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (slug.length <= max) {
+    return slug;
+  }
+  // Cut at a word boundary when there is one near the limit, so the name stays
+  // readable instead of ending mid-word.
+  const cut = slug.slice(0, max);
+  const boundary = cut.lastIndexOf("-");
+  return (boundary > max / 2 ? cut.slice(0, boundary) : cut).replace(/-+$/, "");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Worktrees                                                                   */
+/* -------------------------------------------------------------------------- */
+
+export type WorktreeInfo = {
+  /** Absolute path, normalised. */
+  path: string;
+  /** Short branch name, or null when the worktree is detached. */
+  branch: string | null;
+  head: string | null;
+  bare: boolean;
+  detached: boolean;
+  locked: boolean;
+  /** The repository's own working tree — the one that cannot be removed. */
+  primary: boolean;
+};
+
+/**
+ * `git worktree list --porcelain [-z]`.
+ *
+ * Both forms parse here. With `-z` every attribute is NUL-terminated and a
+ * record ends with an extra NUL; without it they are newline-terminated. The
+ * only difference is the terminator, so the NULs are folded to newlines and
+ * one parser reads both — and `-z` is what is asked for, so a path with a
+ * newline in it does not silently end the record.
+ *
+ * The first record is always the main working tree.
+ */
+export function parseWorktreeList(output: string): WorktreeInfo[] {
+  const worktrees: WorktreeInfo[] = [];
+  let current: WorktreeInfo | null = null;
+
+  for (const line of output.replace(/\0/g, "\n").split("\n")) {
+    if (line === "") {
+      continue;
+    }
+    const [key, value] = splitOnce(line, " ");
+    if (key === "worktree") {
+      current = {
+        path: path.normalize(value),
+        branch: null,
+        head: null,
+        bare: false,
+        detached: false,
+        locked: false,
+        primary: worktrees.length === 0,
+      };
+      worktrees.push(current);
+      continue;
+    }
+    if (!current) {
+      continue;
+    }
+    if (key === "HEAD") {
+      current.head = value;
+    } else if (key === "branch") {
+      current.branch = value.replace(/^refs\/heads\//, "");
+    } else if (key === "bare") {
+      current.bare = true;
+    } else if (key === "detached") {
+      current.detached = true;
+    } else if (key === "locked") {
+      current.locked = true;
+    }
+  }
+
+  return worktrees;
+}
+
+/** Every worktree of the repository containing `cwd`, the main one first. */
+export async function listWorktrees(cwd: string): Promise<WorktreeInfo[]> {
+  const root = await repositoryRoot(cwd);
+  if (!root) {
+    return [];
+  }
+  // `-z` first; a git too old for it fails, and the plain form parses the same.
+  const zero = await tryGit(root, ["worktree", "list", "--porcelain", "-z"]);
+  const output = zero ?? (await tryGit(root, ["worktree", "list", "--porcelain"])) ?? "";
+  return parseWorktreeList(output);
+}
+
+export type CreateWorktreeOptions = {
+  /** Any directory inside the repository to branch from. */
+  repoPath: string;
+  /** Where the worktree directory goes: `<worktreeRoot>/<project>`. */
+  parentDir: string;
+  /** The name to slugify — a session's first prompt, usually. */
+  name?: string;
+  /** From settings; `hardcore/` by default. */
+  branchPrefix?: string;
+  /** From settings: fetch the remote first, so the branch starts from the server. */
+  fetch?: boolean;
+  /** What to branch from. Defaults to HEAD. */
+  base?: string;
+};
+
+export type CreatedWorktree = {
+  path: string;
+  branch: string;
+  /** The revision the branch was cut from, for the record. */
+  base: string;
+};
+
+/**
+ * A new branch in a new worktree under `parentDir` (plan §9).
+ *
+ * Worktrees live outside the project on purpose: one inside the checkout is a
+ * directory the project's own tools index, test and lint, and every agent
+ * working in one would see all the others' trees.
+ *
+ * The name is made unique against both the filesystem and the ref namespace
+ * before `git worktree add` runs. Letting git fail on the collision instead
+ * would be one error message for two different problems — a directory in the
+ * way, and a branch someone else is already on.
+ */
+export async function createWorktree(options: CreateWorktreeOptions): Promise<CreatedWorktree> {
+  const root = await repositoryRoot(options.repoPath);
+  if (!root) {
+    throw new GitError("Project is not a git repository, worktree mode unavailable");
+  }
+  if ((await head(root)) === null) {
+    throw new GitError("This repository has no commits yet, so there is nothing to branch from");
+  }
+
+  if (options.fetch) {
+    // Best-effort: a laptop on a plane must still get a worktree. The branch
+    // then starts from what the checkout already has, which is what the user
+    // would get by hand.
+    await tryGit(root, ["fetch", "--quiet", "--prune"]);
+  }
+
+  const prefix = options.branchPrefix ?? "hardcore/";
+  const stem = slugify(options.name ?? "") || generatedName();
+  const base = options.base ?? "HEAD";
+
+  const { directory, branch } = await uniqueName(root, options.parentDir, prefix, stem);
+
+  await fsp.mkdir(options.parentDir, { recursive: true });
+  await git(root, ["worktree", "add", "-b", branch, directory, base]);
+
+  return {
+    path: path.normalize(directory),
+    branch,
+    base: (await head(directory)) ?? base,
+  };
+}
+
+/** `session-4f2c`: enough to tell two nameless threads apart, short enough to read. */
+function generatedName(): string {
+  return `session-${Math.random().toString(16).slice(2, 6)}`;
+}
+
+/**
+ * The first of `<stem>`, `<stem>-2`, `<stem>-3`… whose directory does not
+ * exist and whose branch is not taken.
+ */
+async function uniqueName(
+  root: string,
+  parentDir: string,
+  prefix: string,
+  stem: string,
+): Promise<{ directory: string; branch: string }> {
+  for (let attempt = 1; attempt <= 100; attempt += 1) {
+    const name = attempt === 1 ? stem : `${stem}-${attempt}`;
+    const directory = path.join(parentDir, name);
+    const branch = `${prefix}${name}`;
+    const exists = await fsp.stat(directory).then(
+      () => true,
+      () => false,
+    );
+    if (exists) {
+      continue;
+    }
+    if (await tryGit(root, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`])) {
+      continue;
+    }
+    return { directory, branch };
+  }
+  throw new GitError(`a hundred worktrees are already called ${stem}`);
+}
+
+/**
+ * Remove a worktree's directory and git's registration of it.
+ *
+ * Uncommitted work is refused rather than discarded: `git worktree remove`
+ * takes a `--force` that deletes it, and a button in a settings page is not
+ * where someone decides to lose an afternoon. The branch is left behind —
+ * deleting a checkout is reversible, deleting the commits on it is not.
+ */
+export async function removeWorktree(
+  worktreePath: string,
+  options: { force?: boolean } = {},
+): Promise<void> {
+  const root = await repositoryRoot(worktreePath);
+  if (!root) {
+    throw new GitError("that worktree is no longer a git repository");
+  }
+  const target = (await listWorktrees(root)).find((candidate) =>
+    samePath(candidate.path, worktreePath),
+  );
+  if (!target) {
+    throw new GitError("git does not know that worktree");
+  }
+  if (target.primary) {
+    throw new GitError("that is the repository itself, not a worktree");
+  }
+  if (!options.force && (await isDirty(worktreePath))) {
+    throw new GitError("that worktree has uncommitted changes");
+  }
+  await git(root, ["worktree", "remove", ...(options.force ? ["--force"] : []), worktreePath]);
+}
+
+/** Path comparison that survives a trailing separator and Windows' case rules. */
+export function samePath(left: string, right: string): boolean {
+  const normalise = (value: string) => path.normalize(value).replace(/[\\/]+$/, "");
+  const a = normalise(left);
+  const b = normalise(right);
+  return process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
+}
+
+export type PruneOptions = {
+  repoPath: string;
+  /** Only worktrees under here are considered: never one the user made. */
+  parentDir: string;
+  /** How many survive. */
+  keep: number;
+  /** Worktrees with an open session — never swept. */
+  protectedPaths?: string[];
+};
+
+/**
+ * Sweep the oldest worktrees past the keep limit (Settings › Git & Worktrees).
+ *
+ * Three things are never removed, and each is a separate promise to the user:
+ * a worktree Hardcore did not create (outside `parentDir`), one a session is
+ * still open on, and one with uncommitted changes. An automatic sweep that
+ * could throw work away would make the setting unusable, so it is only ever
+ * allowed to remove what the branch can recreate.
+ */
+export async function pruneWorktrees(options: PruneOptions): Promise<{ removed: string[] }> {
+  const worktrees = await listWorktrees(options.repoPath);
+  const kept = options.protectedPaths ?? [];
+
+  const candidates: { path: string; usedAt: number }[] = [];
+  for (const worktree of worktrees) {
+    if (worktree.primary || worktree.locked || !isUnder(options.parentDir, worktree.path)) {
+      continue;
+    }
+    if (kept.some((protectedPath) => samePath(protectedPath, worktree.path))) {
+      continue;
+    }
+    const stat = await fsp.stat(worktree.path).catch(() => null);
+    candidates.push({ path: worktree.path, usedAt: stat?.mtimeMs ?? 0 });
+  }
+
+  // Newest first, so the tail is what falls off the end of the limit.
+  candidates.sort((left, right) => right.usedAt - left.usedAt);
+
+  const removed: string[] = [];
+  for (const candidate of candidates.slice(Math.max(0, options.keep))) {
+    if (await isDirty(candidate.path)) {
+      continue;
+    }
+    await removeWorktree(candidate.path).then(
+      () => removed.push(candidate.path),
+      // One worktree that will not go must not stop the sweep: the next launch
+      // would meet the same one and the limit would never be enforced.
+      () => undefined,
+    );
+  }
+  return { removed };
+}
+
+/** True when `child` is inside `parent` — the test that keeps the sweep in its own root. */
+export function isUnder(parent: string, child: string): boolean {
+  const relative = path.relative(path.normalize(parent), path.normalize(child));
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pull requests                                                               */
+/* -------------------------------------------------------------------------- */
+
+let ghPath: Promise<string | null> | null = null;
+
+/**
+ * Where `gh` is, or null. Cached: the answer does not change while the app
+ * runs, and the review header asks on every render.
+ *
+ * `env` matters. An app launched from the Dock inherits launchd's PATH, which
+ * has never heard of Homebrew — the same reason `agents/shell-env.ts` exists.
+ */
+export function ghAvailable(env?: NodeJS.ProcessEnv, force = false): Promise<string | null> {
+  if (!ghPath || force) {
+    const command = process.platform === "win32" ? "where" : "which";
+    ghPath = execa(command, ["gh"], {
+      ...GIT_OPTIONS,
+      ...(env ? { env, extendEnv: false } : {}),
+    })
+      .then((result) =>
+        result.exitCode === 0 && typeof result.stdout === "string"
+          ? (result.stdout.split(/\r?\n/)[0]?.trim() ?? null) || null
+          : null,
+      )
+      .catch(() => null);
+  }
+  return ghPath;
+}
+
+export type PullRequestOptions = {
+  title: string;
+  body?: string;
+  /** From settings. */
+  draft?: boolean;
+  /** Defaults to the remote's default branch, and then to gh's own guess. */
+  base?: string | null;
+  env?: NodeJS.ProcessEnv;
+};
+
+/**
+ * Open a pull request with `gh`, pushing the branch first when it has no
+ * upstream — `gh` would offer to do that interactively, and there is no
+ * terminal here to answer it in.
+ *
+ * The URL comes back rather than being opened: whether a link opens in a
+ * browser is the renderer's decision, and a main process that opened one as a
+ * side effect would do it in the tests too.
+ */
+export async function createPullRequest(
+  cwd: string,
+  options: PullRequestOptions,
+): Promise<{ url: string }> {
+  const root = await repositoryRoot(cwd);
+  if (!root) {
+    throw new GitError("not a git repository");
+  }
+  if (!(await ghAvailable(options.env))) {
+    throw new GitError("the GitHub CLI (gh) is not installed");
+  }
+
+  const branch = (await git(root, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
+  if (branch === "HEAD") {
+    throw new GitError("cannot open a pull request from a detached HEAD");
+  }
+  await push(root);
+
+  const base = options.base ?? (await defaultBranchOf(root));
+  const result = await execa(
+    "gh",
+    [
+      "pr",
+      "create",
+      "--head",
+      branch,
+      ...(base ? ["--base", base] : []),
+      ...(options.draft ? ["--draft"] : []),
+      "--title",
+      options.title,
+      "--body",
+      options.body ?? "",
+    ],
+    {
+      ...GIT_OPTIONS,
+      cwd: root,
+      ...(options.env ? { env: options.env, extendEnv: false } : {}),
+    },
+  );
+
+  const stdout = typeof result.stdout === "string" ? result.stdout : "";
+  const stderr = typeof result.stderr === "string" ? result.stderr : "";
+  const url = findUrl(stdout) ?? findUrl(stderr);
+  if (!url) {
+    throw new GitError(stderr.trim() || "gh did not print a pull request URL");
+  }
+  return { url };
+}
+
+/**
+ * The URL in `gh`'s output.
+ *
+ * `gh pr create` prints the URL on its own line on success and, when the pull
+ * request already exists, an error naming the existing one — which is the
+ * answer the user wanted either way, so both are read the same.
+ */
+export function findUrl(output: string): string | null {
+  return /https:\/\/\S+/.exec(output)?.[0]?.replace(/[.,)]+$/, "") ?? null;
 }

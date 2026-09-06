@@ -1,6 +1,8 @@
 /**
- * The explorer's handlers: the file tab's filesystem, the terminal tabs' ptys
- * and the review tab's git reads.
+ * The explorer's handlers: the file tab's filesystem and the terminal tabs'
+ * ptys. The review tab's git reads are `./git.ts`, which borrows `rootOf` and
+ * `fsCall` from here — the same two questions ("which project" and "what does
+ * this failure look like to a person") have one answer for both.
  *
  * Every one of them starts by turning a `projectId` into a root, because a
  * path from the renderer means nothing on its own. `rootOf` throws when the
@@ -26,12 +28,7 @@ import {
 } from "../explorer/fs";
 import { Terminals } from "../explorer/terminal";
 import * as git from "../projects/git";
-import type {
-  DiffScope,
-  ExplorerTab,
-  IpcEventChannel,
-  IpcEventPayload,
-} from "../../shared";
+import type { ExplorerTab, IpcEventChannel, IpcEventPayload } from "../../shared";
 import { IpcError } from "./register";
 
 /* -------------------------------------------------------------------------- */
@@ -86,7 +83,7 @@ function services() {
 /* Projects and paths                                                          */
 /* -------------------------------------------------------------------------- */
 
-function rootOf(projectId: string): string {
+export function rootOf(projectId: string): string {
   const project = projects.list().find((candidate) => candidate.id === projectId);
   if (!project) {
     throw new IpcError("that project is no longer open");
@@ -102,7 +99,7 @@ function rootOf(projectId: string): string {
  * reach the UI. `registerIpc` already hides anything that is not an
  * `IpcError`, so the job here is only to promote the ones that are safe.
  */
-async function fsCall<T>(work: () => Promise<T>): Promise<T> {
+export async function fsCall<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work();
   } catch (error) {
@@ -128,20 +125,6 @@ function isErrno(error: unknown, code: string): boolean {
     error !== null &&
     (error as NodeJS.ErrnoException).code === code
   );
-}
-
-/** The tab's scope enum, as git's. `since` strings are git's own syntax. */
-const SCOPES: Record<string, DiffScope> = {
-  all: { kind: "working-tree" },
-  "1h": { kind: "since", since: "1 hour ago" },
-  "4h": { kind: "since", since: "4 hours ago" },
-  "24h": { kind: "since", since: "24 hours ago" },
-  "7d": { kind: "since", since: "7 days ago" },
-};
-
-/** Exported so the renderer's presets and main's scopes cannot drift apart. */
-export function scopeFor(name: string | undefined): DiffScope {
-  return SCOPES[name ?? "all"] ?? { kind: "working-tree" };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -272,51 +255,5 @@ export const explorerHandlers = {
     kill: ({ id }: { id: string }) => {
       services().terminals.kill(id);
     },
-  },
-
-  git: {
-    status: ({ projectId, scope }: { projectId: string; scope?: DiffScope }) =>
-      fsCall(() => git.status(rootOf(projectId), scope ?? { kind: "working-tree" })),
-
-    fileDiff: ({
-      projectId,
-      path: target,
-      scope,
-    }: {
-      projectId: string;
-      path: string;
-      scope?: DiffScope;
-    }) => fsCall(() => git.fileDiff(rootOf(projectId), target, scope ?? { kind: "working-tree" })),
-
-    unifiedDiff: ({
-      projectId,
-      path: target,
-      scope,
-    }: {
-      projectId: string;
-      path: string;
-      scope?: DiffScope;
-    }) =>
-      fsCall(async () => ({
-        patch: await git.unifiedDiff(rootOf(projectId), target, scope ?? { kind: "working-tree" }),
-      })),
-
-    commit: ({
-      projectId,
-      message,
-      push,
-    }: {
-      projectId: string;
-      message: string;
-      push?: boolean;
-    }) =>
-      fsCall(async () => {
-        const root = rootOf(projectId);
-        const result = await git.commitAll(root, message);
-        if (push) {
-          await git.push(root);
-        }
-        return result;
-      }),
   },
 };

@@ -2,9 +2,16 @@
  * Git & Worktrees (plan §9): where a session's working directory comes from,
  * and what Hardcore is allowed to create and remove around it.
  *
- * Every value here is stored so P7 can read it — this page does not run git,
- * and nothing on it takes effect until a session is created.
+ * The rows above the fold are settings — read by `projects/workspace.ts` when
+ * a session is created, by the sweep after each worktree is made, and by the
+ * review's commit popover. Below them is Codex's per-project section: one card
+ * per project listing the worktrees that exist right now, with the two actions
+ * that make sense on one.
  */
+import { useCallback, useEffect, useState } from "react";
+import { Folder, Loader2 } from "lucide-react";
+
+import { Button } from "@renderer/components/ui/button";
 import { Textarea } from "@renderer/components/ui/textarea";
 import {
   PathRow,
@@ -18,7 +25,10 @@ import {
   useSettingsPatch,
   useSettingsValue,
 } from "@renderer/features/settings/settings-value";
-import type { GitMode } from "@shared/types";
+import { runUiCommand } from "@renderer/state/bridge";
+import { useProjects } from "@renderer/state/projects";
+import type { Worktree } from "@shared/ipc/git";
+import type { GitMode, Project } from "@shared/types";
 
 const GIT_MODES: { value: GitMode; label: string }[] = [
   { value: "none", label: "Plain directory" },
@@ -124,8 +134,183 @@ export function GitPage() {
           value={settings.pullRequestInstructions}
         />
       </SettingCard>
+
+      <ProjectWorktrees />
     </>
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Per-project worktrees                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A card per project, listing the worktrees under this project's worktree
+ * directory (Codex's Worktrees page, plan §2).
+ *
+ * Only Hardcore's own: a worktree the person made themselves, somewhere else,
+ * is theirs, and a Delete button beside it would be the app offering to remove
+ * something it never created. A project with none is skipped rather than shown
+ * empty — a settings page that lists every project you have ever added, each
+ * saying "no worktrees", is a page nobody reads to the bottom of.
+ */
+function ProjectWorktrees() {
+  const projects = useProjects((state) => state.projects);
+
+  if (projects.length === 0) {
+    return null;
+  }
+  return (
+    <>
+      {projects.map((project) => (
+        <ProjectWorktreeCard key={project.id} project={project} />
+      ))}
+    </>
+  );
+}
+
+function ProjectWorktreeCard({ project }: { project: Project }) {
+  const [worktrees, setWorktrees] = useState<Worktree[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const read = useCallback(() => {
+    void window.hardcore.git
+      .worktrees({ projectId: project.id })
+      .then(setWorktrees)
+      .catch(() => setWorktrees([]));
+  }, [project.id]);
+
+  useEffect(read, [read]);
+
+  const remove = async (worktree: Worktree) => {
+    setBusy(worktree.path);
+    setError(null);
+    try {
+      await window.hardcore.git.removeWorktree({ projectId: project.id, path: worktree.path });
+      read();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Nothing to say until the read comes back, and nothing to say afterwards
+  // if the project has no worktrees of ours.
+  if (!worktrees || worktrees.length === 0) {
+    return null;
+  }
+
+  return (
+    <SettingCard title={`Worktrees · ${project.name}`}>
+      {worktrees.map((worktree) => (
+        <SettingRow
+          control={
+            <div className="flex items-center gap-1.5">
+              <Button
+                className="h-8"
+                onClick={() =>
+                  runUiCommand({
+                    command: "new-session",
+                    projectId: project.id,
+                    cwd: worktree.path,
+                  })
+                }
+                size="sm"
+                variant="secondary"
+              >
+                New chat in this worktree
+              </Button>
+              <Button
+                className="h-8"
+                // A worktree with uncommitted work, or with a thread still
+                // open on it, is not deleted from here: main refuses the
+                // first, and the second would pull the directory out from
+                // under a running agent.
+                disabled={busy === worktree.path || worktree.dirty || worktree.openSessions > 0}
+                onClick={() => void remove(worktree)}
+                size="sm"
+                title={
+                  worktree.dirty
+                    ? "This worktree has uncommitted changes"
+                    : worktree.openSessions > 0
+                      ? "A session is still open in this worktree"
+                      : undefined
+                }
+                variant="ghost"
+              >
+                {busy === worktree.path ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                Delete
+              </Button>
+            </div>
+          }
+          description={describe(worktree)}
+          key={worktree.path}
+          keywords={`worktree branch ${project.name} ${worktree.branch ?? ""}`}
+          title={worktree.branch ?? (worktree.path.split("/").pop() ?? worktree.path)}
+        />
+      ))}
+      {error ? (
+        <p className="px-4 py-2 text-[12px] text-destructive">{error}</p>
+      ) : null}
+      <SettingRow
+        control={
+          <Button
+            className="h-8 gap-1.5"
+            onClick={() => {
+              void window.hardcore.shell.showItemInFolder({ path: worktrees[0]?.path ?? "" });
+            }}
+            size="sm"
+            variant="ghost"
+          >
+            <Folder className="size-3.5" />
+            Reveal
+          </Button>
+        }
+        description={project.path}
+        keywords="reveal finder folder"
+        title="Where they live"
+      />
+    </SettingCard>
+  );
+}
+
+/** The one-line description under a worktree's branch: path, age, state. */
+function describe(worktree: Worktree): string {
+  const parts = [worktree.path];
+  if (worktree.lastUsedAt) {
+    parts.push(`last used ${relative(worktree.lastUsedAt)}`);
+  }
+  if (worktree.openSessions > 0) {
+    parts.push(
+      `${worktree.openSessions} open session${worktree.openSessions === 1 ? "" : "s"}`,
+    );
+  }
+  if (worktree.dirty) {
+    parts.push("uncommitted changes");
+  }
+  return parts.join(" · ");
+}
+
+/** "4 minutes ago" — enough resolution to tell today's worktrees apart. */
+function relative(at: number): string {
+  const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
+  const units: [number, string][] = [
+    [60, "second"],
+    [60, "minute"],
+    [24, "hour"],
+    [7, "day"],
+    [Number.POSITIVE_INFINITY, "week"],
+  ];
+  let value = seconds;
+  for (const [size, name] of units) {
+    if (value < size) {
+      return `${Math.round(value)} ${name}${Math.round(value) === 1 ? "" : "s"} ago`;
+    }
+    value /= size;
+  }
+  return "a while ago";
 }
 
 /** A row whose control is a paragraph, so it sits under the title rather than beside it. */

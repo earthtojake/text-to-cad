@@ -75,6 +75,13 @@ export const SessionSchema = z.object({
   gitMode: GitModeSchema,
   /** Set when `gitMode` is `checkout` or `worktree`. */
   branch: z.string().optional(),
+  /**
+   * Set only for `worktree`: the directory Hardcore created, which is also
+   * `cwd`. Kept as its own field because `cwd` is where the agent runs and
+   * this is what may be *removed* — a session in `checkout` mode has a cwd
+   * that nothing is ever allowed to delete.
+   */
+  worktreePath: z.string().optional(),
   /** First prompt, trimmed — Codex's convention. */
   title: z.string(),
   createdAt: z.number().int(),
@@ -93,6 +100,22 @@ export const SessionSchema = z.object({
   changedFiles: z.number().int().nonnegative().default(0),
   insertions: z.number().int().nonnegative().default(0),
   deletions: z.number().int().nonnegative().default(0),
+  /**
+   * The commit the working tree was at when the session was created, and when
+   * the newest turn began (plan §2, the review's `Last Turn ▾`).
+   *
+   * The review's `This session` and `Last turn` scopes are `git diff <sha>`
+   * against the working tree, so what they need is a revision, recorded at the
+   * moment the scope starts. Timestamps cannot do this job on their own: two
+   * commits can share a second, and `--before=` picks a commit, not a moment.
+   * `turnStartedAt` is kept beside the sha for the header's label and for the
+   * one case a sha cannot cover — a repository with no commits yet.
+   *
+   * Null when the session's directory is not a repository, or has no commits.
+   */
+  sessionHead: z.string().nullable().default(null),
+  turnHead: z.string().nullable().default(null),
+  turnStartedAt: z.number().int().nullable().default(null),
 });
 export type Session = z.infer<typeof SessionSchema>;
 
@@ -137,17 +160,115 @@ export const FileTabSchema = z.object({
 });
 
 /**
- * The working tree's diff, per file.
+ * What a review is taken against.
  *
- * `all` is Codex's `All changes`; the rest are its `Since …` presets, resolved
- * against git in main. A per-turn scope arrives with P2, which knows when a
- * turn started; the shape it will use (`{ kind: "range" }`) is already in the
- * IPC contract.
+ * A domain type rather than an IPC one: the review tab stores it, the session
+ * row's marks resolve two of its cases, and main's git module consumes it.
+ *
+ * `working-tree` is Codex's `All changes`; `since` is the header's time
+ * presets, resolved to a revision in main because "1 hour ago" is git's own
+ * syntax and reimplementing it in the renderer would be a second answer.
+ * `turn` and `session` are resolved against the session's recorded marks
+ * (`sessionHead` / `turnHead`), which is why only main can turn them into a
+ * revision.
  */
+export const DiffScopeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("working-tree") }),
+  z.object({ kind: z.literal("since"), since: z.string().min(1) }),
+  z.object({ kind: z.literal("range"), from: z.string().min(1), to: z.string().optional() }),
+  z.object({ kind: z.literal("turn") }),
+  z.object({ kind: z.literal("session") }),
+]);
+export type DiffScope = z.infer<typeof DiffScopeSchema>;
+
+/**
+ * The review header's dropdown, in the order it lists them: Codex's
+ * `Last Turn ▾` first, because that is what someone opening a review after a
+ * turn wants to see (plan §2).
+ */
+export const ReviewScopeSchema = z.enum(["turn", "session", "all", "1h", "4h", "24h", "7d"]);
+export type ReviewScope = z.infer<typeof ReviewScopeSchema>;
+
+/** The dropdown's labels, in one place so main and the renderer cannot drift. */
+export const REVIEW_SCOPE_LABELS: Record<ReviewScope, string> = {
+  turn: "Last turn",
+  session: "This session",
+  all: "All changes",
+  "1h": "Since an hour ago",
+  "4h": "Since four hours ago",
+  "24h": "Since yesterday",
+  "7d": "Since last week",
+};
+
+/** The two scopes that mean nothing without a session to measure from. */
+export function scopeNeedsSession(scope: ReviewScope): boolean {
+  return scope === "turn" || scope === "session";
+}
+
+/**
+ * A named scope as the one git is asked for. The `since` strings are git's own
+ * `--before=` syntax, which is why they are strings and not durations.
+ */
+export function diffScopeFor(scope: ReviewScope): DiffScope {
+  switch (scope) {
+    case "turn":
+      return { kind: "turn" };
+    case "session":
+      return { kind: "session" };
+    case "all":
+      return { kind: "working-tree" };
+    case "1h":
+      return { kind: "since", since: "1 hour ago" };
+    case "4h":
+      return { kind: "since", since: "4 hours ago" };
+    case "24h":
+      return { kind: "since", since: "24 hours ago" };
+    case "7d":
+      return { kind: "since", since: "7 days ago" };
+  }
+}
+
+/**
+ * A scope with the two session cases resolved away, which is what git can
+ * actually be asked for.
+ *
+ * The marks are revisions rather than times on purpose: two commits can share
+ * a second, and `--before=` picks a commit, not a moment. A session with no
+ * mark — its directory is not a repository, or had no commits when the mark
+ * was taken — falls back to the working tree, which is the honest answer,
+ * because everything in it *is* new since that point.
+ */
+export type ResolvedDiffScope = Exclude<DiffScope, { kind: "turn" } | { kind: "session" }>;
+
+export function resolveDiffScope(
+  scope: DiffScope | undefined,
+  marks: Pick<Session, "turnHead" | "sessionHead"> | null,
+): ResolvedDiffScope {
+  if (!scope || scope.kind === "working-tree") {
+    return { kind: "working-tree" };
+  }
+  if (scope.kind === "since" || scope.kind === "range") {
+    return scope;
+  }
+  const from = scope.kind === "turn" ? marks?.turnHead : marks?.sessionHead;
+  return from ? { kind: "range", from } : { kind: "working-tree" };
+}
+
+/** The working tree's diff, per file. */
 export const ReviewTabSchema = z.object({
   ...ExplorerTabBase,
   kind: z.literal("review"),
-  scope: z.enum(["all", "1h", "4h", "24h", "7d"]).default("all"),
+  scope: ReviewScopeSchema.default("all"),
+  /**
+   * The session the `turn` and `session` scopes are measured from, pinned when
+   * one of them is chosen.
+   *
+   * The strip belongs to the project, not to a thread, so a review tab that
+   * followed "whichever session is selected" would change what it is showing
+   * every time someone clicked another thread in the sidebar. Null means the
+   * project's own checkout, which is what `all` and the time presets read.
+   */
+  sessionId: z.string().nullable().default(null),
 });
 
 /** An Electron `<webview>` with browser chrome. */

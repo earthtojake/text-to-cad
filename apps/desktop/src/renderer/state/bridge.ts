@@ -6,6 +6,8 @@
  * would be re-registered on every render of the sidebar — and it means a
  * change made from the app menu updates the same state a click would.
  */
+import type { IpcEventPayload } from "@shared/ipc";
+
 import { useAcp } from "./acp";
 import { useAgents } from "./agents";
 import { useExplorer } from "./explorer";
@@ -59,32 +61,7 @@ export function subscribeToMain(): () => void {
         changes.map((change) => change.path),
       );
     }),
-    window.hardcore.on("ui.command", ({ command }) => {
-      const ui = useUi.getState();
-      switch (command) {
-        case "open-settings":
-          ui.openSettings();
-          break;
-        case "close-settings":
-          ui.closeSettings();
-          break;
-        case "command-palette":
-          ui.toggleCommandPalette();
-          break;
-        case "toggle-sidebar":
-          void toggleLayout("sidebarCollapsed");
-          break;
-        case "toggle-explorer":
-          void toggleLayout("explorerCollapsed");
-          break;
-        case "new-session":
-          // P1 owns session creation. Until then the menu item lands on the
-          // new-session state the session pane already shows.
-          useSessions.getState().setActive(null);
-          useUi.getState().closeSettings();
-          break;
-      }
-    }),
+    window.hardcore.on("ui.command", (payload) => runUiCommand(payload)),
   ];
 
   // The explorer strip belongs to the active project, so it follows the
@@ -106,6 +83,59 @@ export function subscribeToMain(): () => void {
       detach();
     }
   };
+}
+
+/**
+ * One `ui.command`, whether it came from the app menu or from a button in the
+ * renderer.
+ *
+ * Exported because Settings › Git & Worktrees' `New chat in this worktree` is
+ * the same command as the menu's New Session, only with a directory attached —
+ * and a second implementation of "start a thread and show it" would be a
+ * second place for the two to disagree about what happens to Settings, the
+ * project selection and the explorer strip.
+ */
+export function runUiCommand(payload: IpcEventPayload<"ui.command">): void {
+  const ui = useUi.getState();
+  switch (payload.command) {
+    case "open-settings":
+      ui.openSettings();
+      break;
+    case "close-settings":
+      ui.closeSettings();
+      break;
+    case "command-palette":
+      ui.toggleCommandPalette();
+      break;
+    case "toggle-sidebar":
+      void toggleLayout("sidebarCollapsed");
+      break;
+    case "toggle-explorer":
+      void toggleLayout("explorerCollapsed");
+      break;
+    case "new-session": {
+      ui.closeSettings();
+      const projectId = payload.projectId ?? useProjects.getState().activeId;
+      if (payload.projectId) {
+        useProjects.getState().setActive(payload.projectId);
+      }
+      // Without a directory this is the menu item, which lands on the empty
+      // new-session state the session pane shows and lets the composer decide
+      // the mode. With one it is Settings' `New chat in this worktree`, and
+      // the thread starts in that worktree straight away.
+      if (!projectId || !payload.cwd) {
+        useSessions.getState().setActive(null);
+        return;
+      }
+      void useSessions
+        .getState()
+        .start({ projectId, cwd: payload.cwd, gitMode: "worktree" })
+        .catch((error: unknown) => {
+          console.error("[ui] could not start a session", error);
+        });
+      break;
+    }
+  }
 }
 
 function toggleLayout(key: "sidebarCollapsed" | "explorerCollapsed") {

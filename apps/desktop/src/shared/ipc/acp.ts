@@ -28,14 +28,23 @@ export const acpContract = {
     /**
      * Spawn the agent, `initialize`, `session/new`. Answers once the agent has
      * a session id; the state snapshot follows on `session.state`.
+     *
+     * The working directory is **not** given: main resolves it from
+     * `gitMode` (plan §9), which is the only place that knows where worktrees
+     * go and what they are called. `cwd` is the one exception — Settings'
+     * `New chat in this worktree` — and main checks it belongs to the project
+     * before running anything in it.
      */
     create: invoke(
       z.object({
         projectId: z.string().min(1),
         agentId: z.string().min(1),
-        cwd: z.string().min(1),
-        gitMode: GitModeSchema,
-        branch: z.string().optional(),
+        /** Omitted means the `defaultGitMode` setting. */
+        gitMode: GitModeSchema.optional(),
+        /** The first prompt, when there is one: a worktree's name comes from it. */
+        name: z.string().optional(),
+        /** An existing worktree of this project, or the project itself. */
+        cwd: z.string().min(1).optional(),
       }),
       SessionSchema,
     ),

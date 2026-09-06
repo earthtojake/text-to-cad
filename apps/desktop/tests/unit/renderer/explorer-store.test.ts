@@ -165,6 +165,6 @@ describe("the explorer strip", () => {
       "example.com",
     );
     expect(tabTitle({ ...base, kind: "browser", url: null })).toBe("New tab");
-    expect(tabTitle({ ...base, kind: "review", scope: "all" })).toBe("Review");
+    expect(tabTitle({ ...base, kind: "review", scope: "all", sessionId: null })).toBe("Review");
   });
 });
