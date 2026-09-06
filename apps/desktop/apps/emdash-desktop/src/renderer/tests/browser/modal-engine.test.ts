@@ -10,9 +10,9 @@ afterEach(async () => {
 
 describe('modal engine', () => {
   it('connects the typed API to the modal store and resolves completed outcomes', async () => {
-    const outcome = openModal('feedbackModal');
+    const outcome = openModal('commandPaletteModal');
 
-    expect(modalStore.activeModalId).toBe('feedbackModal');
+    expect(modalStore.activeModalId).toBe('commandPaletteModal');
     modalStore.complete(undefined);
 
     await expect(outcome).resolves.toEqual(ok(undefined));

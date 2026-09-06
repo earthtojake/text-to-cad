@@ -168,27 +168,5 @@ export const desktopHostContract = defineContract({
   getAppVersion: procedure({ input: z.void(), output: z.string() }),
   getElectronVersion: procedure({ input: z.void(), output: z.string() }),
   getPlatform: procedure({ input: z.void(), output: z.custom<NodePlatform>() }),
-  getPlatformDisplayName: procedure({ input: z.void(), output: z.string() }),
-  getDiagnosticLogAttachment: procedure({
-    input: z.void(),
-    output: z.object({
-      filename: z.string(),
-      mimeType: z.literal('text/plain'),
-      content: z.string(),
-    }),
-  }),
-  submitFeedback: procedure({
-    input: z.object({
-      content: z.string(),
-      files: z.array(
-        z.object({
-          filename: z.string(),
-          mimeType: z.string(),
-          bytes: z.custom<Uint8Array>(),
-        })
-      ),
-    }),
-    output: z.custom<ActionResult>(),
-  }),
   events: eventStream({ key: z.void(), event: z.custom<DesktopHostEvent>() }),
 });

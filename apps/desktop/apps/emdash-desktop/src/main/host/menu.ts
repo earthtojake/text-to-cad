@@ -209,10 +209,6 @@ export function setupApplicationMenu(
             },
           ],
         },
-        {
-          label: 'Give Feedback',
-          click: () => emitCommand('app.giveFeedback'),
-        },
       ],
     },
   ];

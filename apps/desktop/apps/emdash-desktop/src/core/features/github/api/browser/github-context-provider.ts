@@ -1,50 +1,20 @@
 import { useToast } from '@emdash/ui/react/primitives';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import React, { createContext, useCallback, useContext, useEffect } from 'react';
-import type {
-  GitHubAccountState,
-  GitHubAccountSummary,
-  GitHubUser,
-} from '@core/primitives/github/api';
+import type { GitHubAccountState, GitHubUser } from '@core/primitives/github/api';
 import { log } from '@core/primitives/logging/browser/logger';
 import { getGithubClient } from './client';
 import { GITHUB_ACCOUNT_STATE_QUERY_KEY, invalidateGitHubAccountState } from './useGithubAccounts';
 
 type GithubContextValue = {
-  user: GitHubUser | null;
   cancelGithubConnect: () => void;
 };
 
 const GithubContext = createContext<GithubContextValue | null>(null);
 
-function accountSummaryToUser(account: GitHubAccountSummary | undefined): GitHubUser | null {
-  if (!account) return null;
-  const providerAccountId = account.accountId.slice(`${account.host}:`.length);
-  const numericId = Number(providerAccountId);
-  return {
-    id: Number.isFinite(numericId) ? numericId : 0,
-    login: account.login,
-    name: '',
-    email: '',
-    avatar_url: account.avatarUrl,
-  };
-}
-
 export function GithubContextProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-
-  const { data: accountState } = useQuery<GitHubAccountState>({
-    queryKey: GITHUB_ACCOUNT_STATE_QUERY_KEY,
-    queryFn: async () => (await getGithubClient()).getAccountState(undefined),
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-  });
-
-  const defaultAccount = accountState?.accounts.find(
-    (account) => account.accountId === accountState.defaultAccountId
-  );
-  const user = accountSummaryToUser(defaultAccount);
 
   const invalidateGitHubState = useCallback(() => {
     invalidateGitHubAccountState(queryClient);
@@ -112,7 +82,6 @@ export function GithubContextProvider({ children }: { children: React.ReactNode 
   }, [toast]);
 
   const value: GithubContextValue = {
-    user,
     cancelGithubConnect,
   };
 

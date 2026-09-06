@@ -17,15 +17,14 @@ import { scopes, type ViewScopes } from '@core/primitives/view-scopes/browser';
 import { getCommandIcon } from '../../browser/command-palette/command-icons';
 import { PALETTE_ITEM_CLASS } from '../../browser/command-palette/palette-item-styles';
 
-const APP_IDLE_COMMAND_IDS = ['app.newProject', 'app.settings', 'app.giveFeedback'] as const;
-const PROJECT_IDLE_COMMAND_IDS = ['app.newTask', 'app.settings', 'app.giveFeedback'] as const;
+const APP_IDLE_COMMAND_IDS = ['app.newProject', 'app.settings'] as const;
+const PROJECT_IDLE_COMMAND_IDS = ['app.newTask', 'app.settings'] as const;
 const TASK_IDLE_COMMAND_IDS = [
   'task.newConversation',
   'task.sidebarChanges',
   'task.sidebarFiles',
   'task.sidebarConversations',
   'task.toggleTerminalDrawer',
-  'app.giveFeedback',
 ] as const;
 
 export interface CommandPaletteMatch extends PaletteProviderMatch {

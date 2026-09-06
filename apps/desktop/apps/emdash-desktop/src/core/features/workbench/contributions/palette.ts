@@ -1,7 +1,6 @@
 import {
   commandPaletteCommand,
   closeTabCommand,
-  giveFeedbackCommand,
   newProjectCommand,
   newTaskCommand,
   openInEditorCommand,
@@ -21,7 +20,6 @@ export const WORKBENCH_COMMAND_PALETTE_ITEMS = [
   defineCommandPaletteItem({ command: settingsCommand }),
   defineCommandPaletteItem({ command: newProjectCommand }),
   defineCommandPaletteItem({ command: newTaskCommand }),
-  defineCommandPaletteItem({ command: giveFeedbackCommand }),
   defineCommandPaletteItem({
     command: toggleThemeCommand,
     aliases: ['appearance', 'color scheme', 'dark mode', 'light mode'],

@@ -9,7 +9,6 @@ import {
   toggleTerminalDrawerCommand,
 } from '@core/features/tasks/contributions/commands';
 import {
-  giveFeedbackCommand,
   newProjectCommand,
   newTaskCommand,
   settingsCommand,
@@ -117,7 +116,6 @@ describe('commands palette provider', () => {
       settingsCommand,
       newProjectCommand,
       newTaskCommand,
-      giveFeedbackCommand,
       toggleThemeCommand,
       newConversationCommand,
       sidebarChangesCommand,
@@ -141,7 +139,6 @@ describe('commands palette provider', () => {
         'app.settings': () => ({ execute: vi.fn() }),
         'app.newProject': () => ({ execute: vi.fn() }),
         'app.newTask': () => ({ execute: vi.fn() }),
-        'app.giveFeedback': () => ({ execute: vi.fn() }),
         'app.toggleTheme': () => ({ execute: vi.fn() }),
         'task.newConversation': () => ({ execute: vi.fn() }),
         'task.sidebarChanges': () => ({ execute: vi.fn() }),
@@ -159,19 +156,14 @@ describe('commands palette provider', () => {
     const idleIds = (context: { projectId?: string; taskId?: string }) =>
       requireSynchronous(provider.idle?.(context) ?? []).map(({ id }) => id);
 
-    expect(idleIds({})).toEqual([newProjectCommand.id, settingsCommand.id, giveFeedbackCommand.id]);
-    expect(idleIds({ projectId: 'project-1' })).toEqual([
-      newTaskCommand.id,
-      settingsCommand.id,
-      giveFeedbackCommand.id,
-    ]);
+    expect(idleIds({})).toEqual([newProjectCommand.id, settingsCommand.id]);
+    expect(idleIds({ projectId: 'project-1' })).toEqual([newTaskCommand.id, settingsCommand.id]);
     expect(idleIds({ projectId: 'project-1', taskId: 'task-1' })).toEqual([
       newConversationCommand.id,
       sidebarChangesCommand.id,
       sidebarFilesCommand.id,
       sidebarConversationsCommand.id,
       toggleTerminalDrawerCommand.id,
-      giveFeedbackCommand.id,
     ]);
     expect([...idleIds({}), ...idleIds({ projectId: 'project-1' })]).not.toContain(
       toggleThemeCommand.id
@@ -183,7 +175,7 @@ describe('commands palette provider', () => {
     const commandCatalog = defineCommandCatalog([
       settingsCommand,
       toggleThemeCommand,
-      giveFeedbackCommand,
+      newProjectCommand,
     ]);
     const paletteCatalog = defineCommandPaletteCatalog(
       commandCatalog,
@@ -214,7 +206,7 @@ describe('commands palette provider', () => {
           availability: () => disabled('Theme switching is unavailable'),
           execute: disabledExecute,
         }),
-        'app.giveFeedback': () => ({ execute: enabledExecute }),
+        'app.newProject': () => ({ execute: enabledExecute }),
       },
     });
     const capture = viewScopes.instantiate(capturingScope(), { parent: origin, impl: {} });
@@ -236,7 +228,9 @@ describe('commands palette provider', () => {
     expect(disabledMatch?.execute()).toBe(false);
     expect(disabledExecute).not.toHaveBeenCalled();
 
-    const enabledMatch = requireSynchronous(provider.search({ query: 'feedback', context: {} }))[0];
+    const enabledMatch = requireSynchronous(
+      provider.search({ query: 'new project', context: {} })
+    )[0];
     expect(enabledMatch?.execute()).toBe(true);
     expect(enabledExecute).toHaveBeenCalledWith(undefined, 'palette');
     expect(hiddenExecute).not.toHaveBeenCalled();

@@ -1,13 +1,9 @@
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { redactAll } from '@emdash/shared/logger';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  flushLogWrites,
-  isDiskFullError,
-  redactDiagnosticLog,
-  writeRendererLogEntry,
-} from './file-logger';
+import { flushLogWrites, isDiskFullError, writeRendererLogEntry } from './file-logger';
 
 vi.mock('electron', () => ({
   app: {
@@ -37,9 +33,9 @@ describe('file transport output', () => {
   });
 });
 
-describe('redactDiagnosticLog', () => {
+describe('redactAll', () => {
   it('redacts common secrets in free-form text', () => {
-    const redacted = redactDiagnosticLog(
+    const redacted = redactAll(
       [
         'authorization: Bearer abc123',
         'api_key=super-secret-key',
@@ -57,7 +53,7 @@ describe('redactDiagnosticLog', () => {
   });
 
   it('redacts secrets embedded in JSON-quoted values', () => {
-    const redacted = redactDiagnosticLog(
+    const redacted = redactAll(
       JSON.stringify({
         password: 'hunter2',
         api_key: 'super-secret-key',
@@ -77,13 +73,13 @@ describe('redactDiagnosticLog', () => {
     const inner = JSON.stringify({ password: 'hunter2' });
     const outer = JSON.stringify({ message: inner });
 
-    const redacted = redactDiagnosticLog(outer);
+    const redacted = redactAll(outer);
 
     expect(redacted).not.toContain('hunter2');
   });
 
   it('redacts vendor-specific tokens', () => {
-    const redacted = redactDiagnosticLog(
+    const redacted = redactAll(
       [
         'ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         'glpat-aaaaaaaaaaaaaaaaaaaa',
@@ -113,11 +109,11 @@ describe('redactDiagnosticLog', () => {
       '-----END RSA PRIVATE KEY-----',
     ].join('\n');
 
-    expect(redactDiagnosticLog(pem)).toBe('[REDACTED_PEM_BLOCK]');
+    expect(redactAll(pem)).toBe('[REDACTED_PEM_BLOCK]');
   });
 
   it('redacts credentials in non-HTTPS DSNs', () => {
-    const redacted = redactDiagnosticLog(
+    const redacted = redactAll(
       [
         'postgres://admin:s3cret@db.internal/app',
         'mongodb://user:pass@cluster.example.com',
@@ -133,7 +129,7 @@ describe('redactDiagnosticLog', () => {
   });
 
   it('redacts common PII while keeping useful path shape', () => {
-    const redacted = redactDiagnosticLog(
+    const redacted = redactAll(
       [
         'email person@example.com',
         'mac /Users/alice/projects/emdash',

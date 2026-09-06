@@ -1,15 +1,12 @@
-import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { redactAll, serializeLogValue, stringifyLogValue } from '@emdash/shared/logger';
-import { createFileTransport, trimToLineBoundary } from '@emdash/shared/logger/node';
+import { serializeLogValue, stringifyLogValue } from '@emdash/shared/logger';
+import { createFileTransport } from '@emdash/shared/logger/node';
 import { app } from 'electron';
 import type pinoLib from 'pino';
 
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
-const DIAGNOSTIC_LOG_BYTES = 500 * 1024;
 const RETAINED_LOG_FILES = 5;
 const LOG_FILE_NAME = 'hardcore.log';
-const DIAGNOSTIC_ATTACHMENT_FILENAME = 'hardcore-diagnostics.log';
 const RENDERER_LOG_PAYLOAD_LIMIT = 64 * 1024;
 const PROCESS_EXIT_FLUSH_TIMEOUT_MS = 1000;
 
@@ -61,28 +58,6 @@ export function getLogFileDestination(): pinoLib.DestinationStream {
 
 export function flushLogWrites(): Promise<void> {
   return sharedTransport.flush();
-}
-
-export async function getDiagnosticLogAttachment() {
-  const path = resolveLogPath();
-
-  const fallback = {
-    filename: DIAGNOSTIC_ATTACHMENT_FILENAME,
-    mimeType: 'text/plain' as const,
-    content: 'No application logs were available.',
-  };
-
-  if (!path) return fallback;
-
-  const raw = await readFile(path, 'utf8').catch(() => '');
-  const tail = trimToLineBoundary(raw, DIAGNOSTIC_LOG_BYTES);
-  const redacted = redactAll(tail);
-
-  return {
-    filename: DIAGNOSTIC_ATTACHMENT_FILENAME,
-    mimeType: 'text/plain' as const,
-    content: redacted || fallback.content,
-  };
 }
 
 export function registerProcessErrorLogging(logger: { error(...input: unknown[]): void }) {
@@ -141,9 +116,4 @@ function isWithinPayloadLimit(payload: unknown): boolean {
   } catch {
     return false;
   }
-}
-
-/** Exported for diagnostic attachment (used in the diagnostics controller). */
-export function redactDiagnosticLog(value: string): string {
-  return redactAll(value);
 }

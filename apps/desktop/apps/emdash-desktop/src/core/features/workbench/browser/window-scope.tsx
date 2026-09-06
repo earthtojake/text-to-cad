@@ -60,11 +60,6 @@ export function WindowScope({ children }: { readonly children: ReactNode }) {
         getNavigation().navigate(newChatDraftView(projectId));
       },
     }),
-    'app.giveFeedback': () => ({
-      execute: () => {
-        void openModal('feedbackModal', {});
-      },
-    }),
     'app.toggleTheme': () => ({
       execute: () => {
         void toggleAppTheme().then((result) => {

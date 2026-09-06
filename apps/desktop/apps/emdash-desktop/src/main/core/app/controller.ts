@@ -1,6 +1,3 @@
-import { execFile } from 'node:child_process';
-import { arch, release } from 'node:os';
-import { promisify } from 'node:util';
 import type { OpenInAppId } from '@core/primitives/open-in-apps/api/open-in-apps';
 import {
   ackShutdownFlush,
@@ -12,43 +9,14 @@ import {
   persistClipboardImagePath,
   persistDroppedBlobBytes,
 } from '@main/core/app/persist-terminal-attachment';
-import { submitFeedbackToRelay, type FeedbackAttachment } from '@main/core/app/submit-feedback';
-import { getDiagnosticLogAttachment } from '@main/host/file-logger';
 import { setApplicationMenuKeybindings } from '@main/host/menu';
 import { log } from '@main/lib/logger';
 import { telemetryService } from '@main/lib/telemetry';
 import { appService } from './service';
 
-const execFileAsync = promisify(execFile);
-
 void cleanupExpiredDroppedBlobs().catch((error) => {
   log.warn('app:cleanupExpiredDroppedBlobs failed', { error });
 });
-
-async function getPlatformDisplayName(): Promise<string> {
-  const architecture = arch();
-
-  if (process.platform === 'darwin') {
-    try {
-      const { stdout } = await execFileAsync('sw_vers', ['-productVersion']);
-      const macOsVersion = stdout.trim();
-      if (macOsVersion) return `macOS ${macOsVersion} (${architecture})`;
-    } catch {
-      // Fall back to the Darwin kernel version when sw_vers is unavailable.
-    }
-    return `macOS ${release()} (${architecture})`;
-  }
-
-  if (process.platform === 'win32') {
-    return `Windows ${release()} (${architecture})`;
-  }
-
-  if (process.platform === 'linux') {
-    return `Linux ${release()} (${architecture})`;
-  }
-
-  return `${process.platform} ${release()} (${architecture})`;
-}
 
 export const appOperations = {
   openExternal: async (url: string) => {
@@ -196,17 +164,4 @@ export const appOperations = {
   getAppVersion: () => appService.getCachedAppVersion(),
   getElectronVersion: () => process.versions.electron,
   getPlatform: () => process.platform,
-  getPlatformDisplayName,
-  getDiagnosticLogAttachment,
-  submitFeedback: async (args: { content: string; files: FeedbackAttachment[] }) => {
-    try {
-      await submitFeedbackToRelay(args);
-      return { success: true };
-    } catch (error) {
-      log.error('app:submitFeedback failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return { success: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  },
 };

@@ -31,14 +31,6 @@ export const newTaskCommand = defineCommand({
   keybinding: keybinding.settings('newTask', 'Mod+N'),
 });
 
-export const giveFeedbackCommand = defineCommand({
-  id: 'app.giveFeedback',
-  title: 'Give Feedback',
-  description: 'Send feedback about Hardcore',
-  category: 'App',
-  icon: 'message-square-share',
-});
-
 export const toggleThemeCommand = defineCommand({
   id: 'app.toggleTheme',
   title: 'Toggle Theme',
@@ -238,7 +230,6 @@ export const WINDOW_COMMAND_DEFS = [
   settingsCommand,
   newProjectCommand,
   newTaskCommand,
-  giveFeedbackCommand,
   toggleThemeCommand,
   navigateBackCommand,
   navigateForwardCommand,
