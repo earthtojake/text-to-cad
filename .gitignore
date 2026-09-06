@@ -92,3 +92,8 @@ design/
 # a build timestamp, so committing them would churn); a fresh checkout
 # restores pose/mates by running the script once.
 *.source.json
+# e2e screenshots are review artifacts: written by every run, uploaded by CI,
+# read locally — never committed (a dozen megabytes that churn per phase).
+apps/desktop/tests/e2e/__screenshots__/
+# The bundled CAD runtime is assembled at package time.
+apps/desktop/resources/runtime/
