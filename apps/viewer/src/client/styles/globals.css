@@ -1,9 +1,10 @@
 @import "tailwindcss" source(none);
 @import "tw-animate-css";
 /*
- * EXPERIMENT: stock shadcn/ui v4 "neutral" defaults, in place of the Hardcore
- * design system. The Hardcore token layer is saved beside this session's
- * scratchpad as globals.hardcore.css.
+ * Token layer: stock shadcn/ui v4 "neutral" defaults, shared with the Hardcore
+ * desktop app (apps/desktop). Keep the two in step: the desktop embeds this
+ * client's file surface and inherits these tokens. The viewer-owned additions
+ * are the glass and loading tokens and the surface/semantic ladders below.
  */
 @source "../components";
 @source "../hooks";
