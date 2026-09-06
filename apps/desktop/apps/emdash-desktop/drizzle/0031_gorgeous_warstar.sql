@@ -1,0 +1,4 @@
+CREATE UNIQUE INDEX `idx_projects_repository_workspace_id` ON `projects` (`repository_workspace_id`) WHERE "projects"."repository_workspace_id" IS NOT NULL AND "projects"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX `idx_workspaces_local_path` ON `workspaces` (`path`) WHERE "workspaces"."location" = 'local' AND "workspaces"."deleted_at" IS NULL AND "workspaces"."path" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX `idx_workspaces_remote_path` ON `workspaces` (`ssh_connection_id`,`path`) WHERE "workspaces"."location" = 'remote' AND "workspaces"."deleted_at" IS NULL AND "workspaces"."path" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX `idx_workspaces_parent_id` ON `workspaces` (`parent_id`);

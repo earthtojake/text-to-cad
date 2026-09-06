@@ -1,0 +1,55 @@
+/* Structural CSS: fonts, keyframes used by the animation token system.
+ * Mini-preflight and global element rules now live in reset.css.ts and
+ * base.css.ts (VE files) so they participate in the @layer cascade.
+ * Import this file after the color theme files (theme.css, semantic.css). */
+
+@import '@fontsource-variable/jetbrains-mono/index.css';
+@import './effects/effects.css';
+
+/* Keyframes referenced by tokenVars.animate* — kept here rather than in
+ * animations.css.ts so they appear in the plain CSS bundle alongside the
+ * animation shorthand custom properties defined in tokens.css.ts. */
+
+@keyframes accordion-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--accordion-panel-height);
+  }
+}
+
+@keyframes accordion-up {
+  from {
+    height: var(--accordion-panel-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@keyframes panel-blur-in {
+  from {
+    opacity: 0;
+    filter: blur(12px);
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes panel-blur-out {
+  from {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(6px);
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `ssh_connections` ADD `should_connect` integer;

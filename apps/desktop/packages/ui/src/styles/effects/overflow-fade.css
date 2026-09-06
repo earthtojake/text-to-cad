@@ -1,0 +1,91 @@
+/*
+ * overflow-fade.css — mask-based scroll-aware top-edge fade primitive.
+ *
+ * Usage: wrap a scrollable container in .scroll-fade and add .scroll-fade__viewport
+ * to the overflow element. A top fade appears once the user scrolls down, driven by
+ * a CSS scroll-driven animation — no JavaScript required in Chromium targets.
+ *
+ * Size: --fade-size defaults to 24px. Override per-instance on the viewport:
+ *   <div class="scroll-fade__viewport" style="--fade-size: 40px">…</div>
+ *
+ * Disable the fade with the sf-no-top class:
+ *   <div class="scroll-fade__viewport sf-no-top">…</div>
+ */
+
+/*
+ * Registered custom property lets the scroll-driven animation interpolate the
+ * top fade amount. initial-value: 0 means "no fade" when the timeline is inactive
+ * (i.e. content does not overflow, so scroll(self) never activates).
+ */
+@property --sf-t {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+/* ── Wrapper ─────────────────────────────────────────────────────────────────── */
+
+.scroll-fade {
+  position: relative;
+}
+
+/* ── Viewport ────────────────────────────────────────────────────────────────── */
+
+.scroll-fade__viewport {
+  overflow: auto;
+  --fade-size: 24px;
+
+  /*
+   * Single-layer mask: transparent top band → opaque rest.
+   * When --sf-t = 0: top stop is "transparent 0, #000 0" = no top fade.
+   * When --sf-t = 1: top stop is "transparent 0, #000 24px" = 24px top fade.
+   */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 calc(var(--sf-t) * var(--fade-size)),
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 calc(var(--sf-t) * var(--fade-size)),
+    #000 100%
+  );
+
+  /*
+   * Anonymous self-timeline: the viewport drives the animation from its own
+   * scroll position.
+   *
+   * fill-mode must be none. With fill-mode: both/forwards, Chromium renders an
+   * inactive timeline (no overflow) in its after-fill phase and applies the 100%
+   * keyframe (--sf-t: 1), showing a permanent fade with no overflow. With none,
+   * the inactive case falls back to the base initial-value 0 (no fade), while the
+   * active case is always in-phase during scroll so fill-mode does not matter.
+   */
+  animation: sf-t-anim auto linear;
+  animation-timeline: scroll(self block);
+  animation-fill-mode: none;
+}
+
+/* ── Keyframes ───────────────────────────────────────────────────────────────── */
+
+/* No top fade at the very top; reveal quickly as soon as the user scrolls. */
+@keyframes sf-t-anim {
+  0% {
+    --sf-t: 0;
+  }
+  4% {
+    --sf-t: 1;
+  }
+  100% {
+    --sf-t: 1;
+  }
+}
+
+/* ── Disable hook ────────────────────────────────────────────────────────────── */
+
+/* Pins the top edge var to 0, suppressing the fade. Applied when topFade={false}. */
+.scroll-fade__viewport.sf-no-top {
+  --sf-t: 0 !important;
+}

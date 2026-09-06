@@ -1,0 +1,1 @@
+ALTER TABLE `conversations` ADD `deletion_tombstone` text;

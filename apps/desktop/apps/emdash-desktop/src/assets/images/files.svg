@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Generic file manager folder icon for Linux -->
+  <path d="M4 10C4 7.79 5.79 6 8 6H18L22 10H40C42.21 10 44 11.79 44 14V38C44 40.21 42.21 42 40 42H8C5.79 42 4 40.21 4 38V10Z" fill="#5C6BC0"/>
+  <path d="M4 18H44V38C44 40.21 42.21 42 40 42H8C5.79 42 4 40.21 4 38V18Z" fill="#7986CB"/>
+  <path d="M4 18H44V20H4V18Z" fill="#6F7FCC"/>
+</svg>

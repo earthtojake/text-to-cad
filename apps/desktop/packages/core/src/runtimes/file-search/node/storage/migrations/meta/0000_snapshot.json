@@ -1,0 +1,160 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "f60e3a2a-d86e-46bb-aa8a-627db42706f9",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "path_entries": {
+      "name": "path_entries",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "root_id": {
+          "name": "root_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "generation": {
+          "name": "generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "relative_path": {
+          "name": "relative_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "path_entries_root_generation_path_idx": {
+          "name": "path_entries_root_generation_path_idx",
+          "columns": ["root_id", "generation", "relative_path"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "path_entries_root_id_registered_roots_id_fk": {
+          "name": "path_entries_root_id_registered_roots_id_fk",
+          "tableFrom": "path_entries",
+          "tableTo": "registered_roots",
+          "columnsFrom": ["root_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "path_entries_generation_check": {
+          "name": "path_entries_generation_check",
+          "value": "\"path_entries\".\"generation\" >= 1"
+        },
+        "path_entries_relative_path_check": {
+          "name": "path_entries_relative_path_check",
+          "value": "length(\"path_entries\".\"relative_path\") > 0"
+        },
+        "path_entries_name_check": {
+          "name": "path_entries_name_check",
+          "value": "length(\"path_entries\".\"name\") > 0"
+        },
+        "path_entries_kind_check": {
+          "name": "path_entries_kind_check",
+          "value": "\"path_entries\".\"kind\" IN ('file', 'directory')"
+        }
+      }
+    },
+    "registered_roots": {
+      "name": "registered_roots",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "root_key": {
+          "name": "root_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "root_path": {
+          "name": "root_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "current_generation": {
+          "name": "current_generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "registered_roots_root_key_idx": {
+          "name": "registered_roots_root_key_idx",
+          "columns": ["root_key"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "registered_roots_root_key_check": {
+          "name": "registered_roots_root_key_check",
+          "value": "length(\"registered_roots\".\"root_key\") > 0"
+        },
+        "registered_roots_root_path_check": {
+          "name": "registered_roots_root_path_check",
+          "value": "length(\"registered_roots\".\"root_path\") > 0"
+        },
+        "registered_roots_current_generation_check": {
+          "name": "registered_roots_current_generation_check",
+          "value": "\"registered_roots\".\"current_generation\" >= 1"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

@@ -1,0 +1,47 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Docs/Tool Lifecycle" />
+
+# Tool Call Lifecycle
+
+Tool calls in emdash follow a four-state lifecycle that maps directly to the ACP
+`ToolCallStatus` enum and the chat-ui `ToolStatus` type.
+
+## States
+
+| Status    | ACP equivalent | Description                                                  |
+| --------- | -------------- | ------------------------------------------------------------ |
+| `pending` | `pending`      | Tool call created; awaiting user permission before execution |
+| `running` | `in_progress`  | Tool is actively executing (may be streaming output)         |
+| `done`    | `completed`    | Tool completed successfully                                  |
+| `error`   | `failed`       | Tool failed; error detail and retry option available         |
+
+## Permission requests
+
+Before executing sensitive operations an ACP agent may call
+`session/request_permission`, pausing the tool in the `pending` state and
+presenting the user with a set of `PermissionOption` buttons:
+
+- `allow_once` / `allow_always` — affirmative options (green / primary)
+- `reject_once` / `reject_always` — destructive options (secondary)
+
+The user's choice is surfaced to the host via the `onPermissionDecision`
+command callback. Cancelling the turn while a prompt is open resolves with
+`outcome: 'cancelled'`.
+
+## Error recovery
+
+When a tool enters the `error` state the row shows the error message and an
+optional "Retry" button. Clicking Retry fires the `onRetryTool` command
+callback; the host is responsible for issuing a new `session/prompt` to the
+agent. The failed row is preserved in history — a new attempt appears as fresh
+rows below it.
+
+## Implementation status
+
+The `pending` status and the `permission`/`error` model fields are part of a
+separate lifecycle effort and are not yet implemented. Stories for those states
+will be added here once the feature lands.
+
+Implemented states visible in the Tools stories: `running` (with streaming
+simulation), `done`, `error` (visual treatment only — no error detail yet).

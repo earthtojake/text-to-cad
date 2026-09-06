@@ -1,0 +1,1138 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Claude ACP fixture parsing > agents 1`] = `
+[
+  {
+    "agentId": "ad0a1acabfb4a0dc1",
+    "background": true,
+    "launchTurnId": "677167db-64b7-4193-8470-302e96b223a6:turn:10",
+    "name": "Agent",
+    "outputFile": "/private/tmp/claude-501/-private-tmp-emdash-acp-fixture-1783037827823/677167db-64b7-4193-8470-302e96b223a6/tasks/ad0a1acabfb4a0dc1.output",
+    "startedAt": 1577836800000,
+    "status": "running",
+    "toolCallId": "toolu_01N3Y7C4y7eLVpC11EJGC4oA",
+  },
+]
+`;
+
+exports[`Claude ACP fixture parsing > config 1`] = `
+{
+  "availableCommands": [
+    {
+      "description": "Build, review, refactor, or architect ASP.NET Core web applications using current official guidance for .NET web development. Use when working on Blazor Web Apps, Razor Pages, MVC, Minimal APIs, controller-based Web APIs, SignalR, gRPC, middleware, dependency injection, configuration, authentication, authorization, testing, performance, deployment, or ASP.NET Core upgrades. (user)",
+      "name": "aspnet-core",
+      "source": "provider-command",
+    },
+    {
+      "description": "Deep research harness — fan-out web searches, fetch sources, adversarially verify claims, synthesize a cited report. (dynamic workflow)",
+      "name": "deep-research",
+      "source": "provider-command",
+    },
+    {
+      "description": "Push a React design system to claude.ai/design. This runs a converter that bundles the real component code (from Storybook or a bare package) and uploads it. Use when the user runs /design-sync or says "sync my design system to Claude Design".",
+      "inputHint": "[<project hint, e.g. "Acme DS">]",
+      "name": "design-sync",
+      "source": "provider-command",
+    },
+    {
+      "description": "Use this skill whenever you are about to create ANY chart, graph, plot, dashboard, or data visualization, in ANY output medium — an HTML or React artifact, inline SVG, plotting code in any library (matplotlib, plotly, d3, Recharts, …), an image/PNG you will render and upload, or a chart shared into Slack. Read it BEFORE writing the first line of chart code, choosing chart colors, building a stat tile / meter / KPI row, or laying out a dashboard. Produces visualizations that read as one system — elegant, accessible, consistent in light and dark — using a brand-neutral placeholder palette you swap for your own. Teaches a design-system-agnostic method: a form heuristic, a color formula with a runnable validator, mark specs, and interaction rules. A validated default palette is documented in \`references/palette.md\` — swap that file's values for your brand's. Triggers on: "chart", "graph", "plot", "data viz", "visualization", "dashboard", "analytics", "visualize data", "categorical colors", "sequential / diverging palette", "stat tile", "sparkline", "heatmap", "legend", "axis", "tooltip", "chart colors", "color by series".",
+      "name": "dataviz",
+      "source": "provider-command",
+    },
+    {
+      "description": "Use this skill to configure the Claude Code harness via settings.json. Automated behaviors ("from now on when X", "each time X", "whenever X", "before/after X") require hooks configured in settings.json - the harness executes these, not Claude, so memory/preferences cannot fulfill them. Also use for: permissions ("allow X", "add permission", "move permission to"), env vars ("set X=Y"), hook troubleshooting, or any changes to settings.json/settings.local.json files. Examples: "allow npm commands", "add bq permission to global settings", "move permission to user settings", "set DEBUG=true", "when claude stops show X". For simple settings like theme/model, suggest the /config command.",
+      "name": "update-config",
+      "source": "provider-command",
+    },
+    {
+      "description": "Verify that a code change actually does what it's supposed to by exercising it end-to-end and observing behavior — drive the affected flow, not just tests or typecheck. Run before committing nontrivial changes. Don't invoke it on a diff that only touches tests, docs, or other code with no runtime surface to drive (a change to product source always has one) — there's nothing to observe.",
+      "name": "verify",
+      "source": "provider-command",
+    },
+    {
+      "description": "Enable debug logging for this session and help diagnose issues",
+      "inputHint": "[issue description]",
+      "name": "debug",
+      "source": "provider-command",
+    },
+    {
+      "description": "Review the current diff for correctness bugs and reuse/simplification/efficiency cleanups at the given effort level (low/medium: fewer, high-confidence findings; high→max: broader coverage, may include uncertain findings). Pass --comment to post findings as inline PR comments, or --fix to apply the findings to the working tree after the review.",
+      "inputHint": "[low|medium|high|xhigh|max] [--fix] [--comment] [<target>]",
+      "name": "code-review",
+      "source": "provider-command",
+    },
+    {
+      "description": "Review the changed code for reuse, simplification, efficiency, and altitude cleanups, then apply the fixes. Quality only — it does not hunt for bugs; use /code-review for that.",
+      "inputHint": "[<target>]",
+      "name": "simplify",
+      "source": "provider-command",
+    },
+    {
+      "description": "Research and plan a large-scale change, then execute it in parallel across 5–30 isolated worktree agents that each open a PR.",
+      "inputHint": "<instruction>",
+      "name": "batch",
+      "source": "provider-command",
+    },
+    {
+      "description": "Scan your transcripts for common read-only Bash and MCP tool calls, then add a prioritized allowlist to project .claude/settings.json to reduce permission prompts.",
+      "name": "fewer-permission-prompts",
+      "source": "provider-command",
+    },
+    {
+      "description": "Run a prompt or slash command on a recurring interval (e.g. /loop 5m /foo). Omit the interval to let the model self-pace.",
+      "inputHint": "[interval] [prompt]",
+      "name": "loop",
+      "source": "provider-command",
+    },
+    {
+      "description": "Reference for the Claude API / Anthropic SDK — model ids, pricing, params, streaming, tool use, MCP, agents, caching, token counting, model migration.
+TRIGGER — read BEFORE opening the target file; don't skip because it "looks like a one-liner" — whenever: the prompt names Claude/Anthropic in any form (Claude, Anthropic, Fable, Opus, Sonnet, Haiku, \`anthropic\`, \`@anthropic-ai\`, \`claude-*\`, \`us.anthropic.*\`, \`[1m]\`); the user asks about an LLM (pricing/model choice/limits/caching) — never answer from memory; OR the task is LLM-shaped with provider unstated (agent/MCP/tool-definition/multi-agent/RAG/LLM-judge/computer-use; generate/summarize/extract/classify/rewrite/converse over NL; debugging refusals/cutoffs/streaming/tool-calls/tokens).
+SKIP only when another provider is being worked on (overrides all triggers): OpenAI/GPT/Gemini/Llama/Mistral/Cohere/Ollama named in the query; OR \`grep -rE 'openai|langchain_openai|google.generativeai|genai|mistralai|cohere|ollama'\` over the project hits (run this grep FIRST if no provider named — don't Read the file).",
+      "name": "claude-api",
+      "source": "provider-command",
+    },
+    {
+      "description": "Launch and drive this project's app to see a change working. Use when asked to run, start, or screenshot the app, or to confirm a change works in the real app (not just tests). First looks for a project skill that already covers launching the app; otherwise falls back to built-in patterns per project type (CLI, server, TUI, Electron, browser-driven, library).",
+      "name": "run",
+      "source": "provider-command",
+    },
+    {
+      "description": "Author or improve the run-<unit> skill — a per-project skill that tells agents how to build, launch, and drive this project's app. Use when the user asks to set up the project, get it running, write run instructions, or verify build/run steps work from a clean environment.",
+      "name": "run-skill-generator",
+      "source": "provider-command",
+    },
+    {
+      "description": "(removed) Ask Claude to create/manage subagents, or edit .claude/agents/",
+      "name": "agents",
+      "source": "provider-command",
+    },
+    {
+      "description": "Free up context by summarizing the conversation so far",
+      "inputHint": "<optional custom summarization instructions>",
+      "name": "compact",
+      "source": "provider-command",
+    },
+    {
+      "description": "Set a setting by key",
+      "inputHint": "key=value",
+      "name": "config",
+      "source": "provider-command",
+    },
+    {
+      "description": "Show current context usage",
+      "name": "context",
+      "source": "provider-command",
+    },
+    {
+      "description": "Dump the JS heap to ~/Desktop",
+      "name": "heapdump",
+      "source": "provider-command",
+    },
+    {
+      "description": "Initialize a new CLAUDE.md file with codebase documentation",
+      "name": "init",
+      "source": "provider-command",
+    },
+    {
+      "description": "Pick up skills added or changed on disk during this session",
+      "name": "reload-skills",
+      "source": "provider-command",
+    },
+    {
+      "description": "Review a GitHub pull request; for your working diff use /code-review",
+      "inputHint": "[pr number]",
+      "name": "review",
+      "source": "provider-command",
+    },
+    {
+      "description": "Complete a security review of the pending changes on the current branch",
+      "name": "security-review",
+      "source": "provider-command",
+    },
+    {
+      "description": "Show session cost, plan usage, and what's contributing to your limits",
+      "name": "usage",
+      "source": "provider-command",
+    },
+    {
+      "description": "Generate a report analyzing your Claude Code sessions",
+      "name": "insights",
+      "source": "provider-command",
+    },
+    {
+      "description": "Generate a one-line session recap now",
+      "name": "recap",
+      "source": "provider-command",
+    },
+    {
+      "description": "Set a goal — keep working until the condition is met",
+      "name": "goal",
+      "source": "provider-command",
+    },
+    {
+      "description": "Grant or revoke Claude agent access to your Design projects",
+      "inputHint": "consent | revoke",
+      "name": "design",
+      "source": "provider-command",
+    },
+    {
+      "description": "Help teammates ramp on Claude Code with a guide from your usage",
+      "name": "team-onboarding",
+      "source": "provider-command",
+    },
+  ],
+  "efforts": {
+    "available": [
+      {
+        "id": "default",
+        "name": "Default",
+      },
+      {
+        "id": "low",
+        "name": "Low",
+      },
+      {
+        "id": "medium",
+        "name": "Medium",
+      },
+      {
+        "id": "high",
+        "name": "High",
+      },
+      {
+        "id": "xhigh",
+        "name": "Xhigh",
+      },
+      {
+        "id": "max",
+        "name": "Max",
+      },
+    ],
+    "configId": "effort",
+    "selected": "default",
+  },
+  "modeOptions": {
+    "available": [
+      {
+        "description": "Use a model classifier to approve/deny permission prompts",
+        "id": "auto",
+        "name": "Auto",
+      },
+      {
+        "description": "Standard behavior, prompts for dangerous operations",
+        "id": "default",
+        "name": "Default",
+      },
+      {
+        "description": "Auto-accept file edit operations",
+        "id": "acceptEdits",
+        "name": "Accept Edits",
+      },
+      {
+        "description": "Planning mode, no actual tool execution",
+        "id": "plan",
+        "name": "Plan Mode",
+      },
+      {
+        "description": "Don't prompt for permissions, deny if not pre-approved",
+        "id": "dontAsk",
+        "name": "Don't Ask",
+      },
+      {
+        "description": "Bypass all permission checks",
+        "id": "bypassPermissions",
+        "name": "Bypass Permissions",
+      },
+    ],
+    "configId": "mode",
+    "selected": "acceptEdits",
+  },
+  "modelOptions": {
+    "available": [
+      {
+        "description": "Use the default model (currently Opus 4.8 (1M context)) · $5/$25 per Mtok",
+        "id": "default",
+        "name": "Default (recommended)",
+      },
+      {
+        "description": "Opus 4.8 with 1M context · Best for everyday, complex tasks · $5/$25 per Mtok",
+        "id": "opus[1m]",
+        "name": "Opus",
+      },
+      {
+        "description": "Fable 5 · Most capable for your hardest and longest-running tasks · $10/$50 per Mtok",
+        "id": "claude-fable-5[1m]",
+        "name": "Fable",
+      },
+      {
+        "description": "Sonnet 5 · Efficient for routine tasks · $2/$10 per Mtok · promo through Aug 31",
+        "id": "sonnet",
+        "name": "Sonnet",
+      },
+      {
+        "description": "Haiku 4.5 · Fastest for quick answers · $1/$5 per Mtok",
+        "id": "haiku",
+        "name": "Haiku",
+      },
+    ],
+    "configId": "model",
+    "selected": "default",
+  },
+}
+`;
+
+exports[`Claude ACP fixture parsing > plan 1`] = `null`;
+
+exports[`Claude ACP fixture parsing > title 1`] = `"Understand what emdash is"`;
+
+exports[`Claude ACP fixture parsing > transcript 1`] = `
+{
+  "active": null,
+  "committed": [
+    {
+      "id": "677167db-64b7-4193-8470-302e96b223a6:turn:0",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:0:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "In one sentence, without reading any files, what is emdash?",
+        },
+        {
+          "durationMs": 0,
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:0:thinking:msg_015EBAhvJCPri7c5ENz1uFXR",
+          "kind": "thinking",
+          "segmentId": "msg_015EBAhvJCPri7c5ENz1uFXR",
+          "seq": 1,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "The user is asking me to describe emdash in one sentence without reading any files. However, I have already been provided with context in the CLAUDE.md and AGENTS.md files that were included in the system reminder.
+
+From the project instructions provided:
+"Emdash is a local-first, cross-platform Electron app for running multiple AI coding agents in parallel. Each task is isolated in its own Git worktree and can run locally or over SSH, while the desktop app coordinates provider CLIs, ACP chat sessions, terminal sessions, issue and PR integrations, diff review, and release packaging."
+
+The user said "without reading any files" but I've been given this context in the system reminder already, so I can use it. They're asking for a concise one-sentence summary.
+
+Let me provide a clean, concise one-liner based on what I've been given.",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:0:message:msg_015EBAhvJCPri7c5ENz1uFXR",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "Emdash is a local-first, cross-platform Electron app that runs multiple AI coding agents in parallel, each isolated in its own Git worktree, coordinating with provider CLIs, chat sessions, terminals, and GitHub/GitLab integrations.",
+        },
+      ],
+      "seq": 0,
+    },
+    {
+      "id": "677167db-64b7-4193-8470-302e96b223a6:turn:1",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:1:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Think about how to explore this repo, then read \`AGENTS.md\` and give me the Repository Structure section as exactly 3 bullet points.",
+        },
+        {
+          "durationMs": 0,
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:1:thinking:msg_012AxTxxN5TVLYEiq98L8AHU",
+          "kind": "thinking",
+          "segmentId": "msg_012AxTxxN5TVLYEiq98L8AHU",
+          "seq": 1,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "The user is asking me to:
+1. Think about how to explore this repo
+2. Read AGENTS.md
+3. Give them the Repository Structure section as exactly 3 bullet points
+
+Let me read the AGENTS.md file first to get the Repository Structure section.",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:1:tool:toolu_019KBHfhSqsvBKYbM3VbKBJB",
+          "kind": "read-tool-call",
+          "path": "/private/tmp/emdash-acp-fixture-1783037827823/AGENTS.md",
+          "seq": 2,
+          "status": "done",
+          "title": "Read /private/tmp/emdash-acp-fixture-1783037827823/AGENTS.md (1 - 50)",
+          "toolCallId": "toolu_019KBHfhSqsvBKYbM3VbKBJB",
+        },
+        {
+          "durationMs": 0,
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:1:thinking:msg_013RkzbccDS8Mkj5a8TsX32D",
+          "kind": "thinking",
+          "segmentId": "msg_013RkzbccDS8Mkj5a8TsX32D",
+          "seq": 3,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "Good, I've read the Repository Structure section. Now I need to distill it into exactly 3 bullet points. Let me look at the key points:
+
+1. It's a pnpm workspace monorepo with the Electron app in \`apps/emdash-desktop/\` and shared packages under \`packages/\`
+2. The repo root contains configuration, GitHub workflows, agent docs, and the workspace definition
+3. Inside the app are the main process, renderer, shared types/IPC, database migrations, and tooling
+
+Let me make 3 concise bullet points that capture the essential structure:",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:1:message:msg_013RkzbccDS8Mkj5a8TsX32D",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 4,
+          "text": "**Repository Structure (3 bullet points):**
+
+- **pnpm workspace monorepo** with Electron app in \`apps/emdash-desktop/\` and shared packages (\`chat-ui\`, \`core\`, \`plugins\`, \`shared\`, \`ui\`) under \`packages/\`
+- **Repo root** contains \`.claude/\`, \`.github/\` (workflows), \`agents/\` (architecture docs), and workspace configuration (\`pnpm-workspace.yaml\`, \`package.json\`, \`nx.json\`)
+- **App internals** (\`apps/emdash-desktop/\`) include main process (\`src/main/\`), vertical slices (\`src/core/\`), the React composition shell (\`src/renderer/\`), preload bridge, and database migrations (\`drizzle/\`)",
+        },
+      ],
+      "seq": 1,
+    },
+    {
+      "id": "677167db-64b7-4193-8470-302e96b223a6:turn:2",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:2:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Search the codebase for the definition of \`toAgentUpdate\` — give the file path and line number.",
+        },
+        {
+          "durationMs": 0,
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:2:thinking:msg_01QWVzBTPgQSUaGRyaoxJ3Pb",
+          "kind": "thinking",
+          "segmentId": "msg_01QWVzBTPgQSUaGRyaoxJ3Pb",
+          "seq": 1,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "The user wants me to search for \`toAgentUpdate\` in the codebase. I should use the Bash tool to grep for this function/variable definition.
+
+Let me search for it using grep.",
+        },
+        {
+          "command": "grep -rn "toAgentUpdate" /private/tmp/emdash-acp-fixture-1783037827823 --include="*.ts" --include="*.tsx" | head -20",
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:2:tool:toolu_015T1fvNzvcrkCDuAoEEMf1p",
+          "kind": "execute-tool-call",
+          "outputText": "/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/agents/plugins/capabilities/acp.ts:85:   * \`toAgentUpdate\` conversion. Receives the already-decoded \`AgentUpdate\`
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/agents/plugins/capabilities/acp.ts:90:   * Omit for standard-ACP passthrough — \`toAgentUpdate\` handles baseline decoding.
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/acp-session-runtime.test.ts:902:  it('baseline toAgentUpdate runs even without a provider enrich', async () => {
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/acp-agent-connection.ts:7:import { toAgentUpdate } from './agent-update';
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/acp-agent-connection.ts:79:    const base = toAgentUpdate(raw);
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.ts:5: * process by \`toAgentUpdate\` before being stored in \`AcpTurn.updates\` or emitted
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.ts:122:export function toAgentUpdate(update: SessionUpdate): AgentUpdate {
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/index.ts:45:export { toAgentUpdate } from './agent-update';
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/acp-session-runtime.ts:58:   * Composed of the baseline \`toAgentUpdate\` plus the optional provider \`enrich\` hook.
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.test.ts:3:import { toAgentUpdate } from './agent-update';
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.test.ts:30:describe('toAgentUpdate', () => {
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.test.ts:34:    const result = toAgentUpdate(agentText('hello', 'msg-1'));
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.test.ts:44:    const result = toAgentUpdate(userText('world', 'msg-2'));
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.test.ts:54:    const result = toAgentUpdate(agentText('hi'));
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.test.ts:63:    expect(toAgentUpdate(update)).toStrictEqual({ kind: 'ignored' });
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.test.ts:71:    expect(toAgentUpdate(update)).toStrictEqual({ kind: 'ignored' });
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.test.ts:77:    const result = toAgentUpdate(agentThought('pondering'));
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.test.ts:90:    expect(toAgentUpdate(update)).toStrictEqual({ kind: 'ignored' });
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.test.ts:103:    expect(toAgentUpdate(update)).toStrictEqual({
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.test.ts:122:    const result = toAgentUpdate(update);",
+          "seq": 2,
+          "status": "done",
+          "title": "grep -rn "toAgentUpdate" /private/tmp/emdash-acp-fixture-1783037827823 --include="*.ts" --include="*.tsx" | head -20",
+          "toolCallId": "toolu_015T1fvNzvcrkCDuAoEEMf1p",
+        },
+        {
+          "durationMs": 0,
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:2:thinking:msg_012c1bsBg7MqfceSREeLeMX3",
+          "kind": "thinking",
+          "segmentId": "msg_012c1bsBg7MqfceSREeLeMX3",
+          "seq": 3,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "I found it! The definition is at:
+\`packages/core/src/acp/agent-update.ts:122\`
+
+The grep output shows \`export function toAgentUpdate(update: SessionUpdate): AgentUpdate {\` at line 122 in that file.",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:2:message:msg_012c1bsBg7MqfceSREeLeMX3",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 4,
+          "text": "**\`packages/core/src/acp/agent-update.ts:122\`**",
+        },
+      ],
+      "seq": 2,
+    },
+    {
+      "id": "677167db-64b7-4193-8470-302e96b223a6:turn:3",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:3:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Read \`packages/core/src/acp/agent-update.ts\` and \`packages/core/src/acp/session-machine.ts\`, then explain in two sentences how they relate.",
+        },
+        {
+          "durationMs": 0,
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:3:thinking:msg_01F2sC2qPhcPEqK9WG34rFTt",
+          "kind": "thinking",
+          "segmentId": "msg_01F2sC2qPhcPEqK9WG34rFTt",
+          "seq": 1,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "The user wants me to read two files and explain how they relate in two sentences. Let me read both files.",
+        },
+        {
+          "children": [
+            {
+              "id": "677167db-64b7-4193-8470-302e96b223a6:turn:3:tool:toolu_01EQQ7MeGGtaLE3iWWQR49hK",
+              "kind": "read-tool-call",
+              "path": "/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.ts",
+              "seq": 2,
+              "status": "done",
+              "title": "Read /private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/agent-update.ts",
+              "toolCallId": "toolu_01EQQ7MeGGtaLE3iWWQR49hK",
+            },
+            {
+              "id": "677167db-64b7-4193-8470-302e96b223a6:turn:3:tool:toolu_01FKwN7A4ztxfhDKm2qSFUyg",
+              "kind": "read-tool-call",
+              "path": "/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/session-machine.ts",
+              "seq": 3,
+              "status": "done",
+              "title": "Read /private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/session-machine.ts",
+              "toolCallId": "toolu_01FKwN7A4ztxfhDKm2qSFUyg",
+            },
+          ],
+          "groupKind": "read-batch",
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:3:tool:toolu_01EQQ7MeGGtaLE3iWWQR49hK:group",
+          "kind": "tool-group",
+          "label": "2 file reads",
+          "seq": 2,
+          "status": "done",
+        },
+        {
+          "durationMs": 0,
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:3:thinking:msg_01UYwkDSUTu8dSqSiGTm6qQX",
+          "kind": "thinking",
+          "segmentId": "msg_01UYwkDSUTu8dSqSiGTm6qQX",
+          "seq": 4,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "Now I need to understand how these two files relate. Let me analyze:
+
+1. **agent-update.ts**: Defines the \`AgentUpdate\` type (a discriminated union with kinds like 'message', 'thinking', 'tool_call', 'tool_update', 'plan', 'ignored') and the \`toAgentUpdate()\` function that converts raw ACP SessionUpdate objects into the provider-neutral AgentUpdate vocabulary.
+
+2. **session-machine.ts**: Implements a pure ACP session state machine with pure functions \`decide()\` and \`evolve()\`, plus a stateful \`SessionMachine\` class. The state machine processes Commands (user intents) and DomainEvents (facts from the agent). Looking at the \`DomainEvent\` type, I see there's an \`Updated\` event that carries an \`AgentUpdate\`: \`{ type: 'Updated'; update: AgentUpdate }\`.
+
+So the relationship is:
+- \`agent-update.ts\` defines \`AgentUpdate\` and the conversion function to get there from raw ACP updates
+- \`session-machine.ts\` uses \`AgentUpdate\` in its DomainEvent type, specifically the \`Updated\` event that feeds updates through the state machine's \`evolve()\` function
+
+The connection is that the raw ACP \`SessionUpdate\` is converted to \`AgentUpdate\` by \`toAgentUpdate()\`, then that \`AgentUpdate\` is wrapped in a DomainEvent and fed into the session machine's state machine logic.
+
+Let me write this in two sentences.",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:3:message:msg_01UYwkDSUTu8dSqSiGTm6qQX",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 5,
+          "text": "\`agent-update.ts\` defines the \`AgentUpdate\` type and exports the \`toAgentUpdate()\` function that converts raw ACP protocol messages into a provider-neutral vocabulary. \`session-machine.ts\` uses \`AgentUpdate\` in its \`Updated\` domain event to feed those converted updates through the pure state machine's \`evolve()\` function, which folds them into the session state and produces effects for the runtime to perform.",
+        },
+      ],
+      "seq": 3,
+    },
+    {
+      "id": "677167db-64b7-4193-8470-302e96b223a6:turn:4",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:4:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Make a checklist / todo plan for adding an optional \`foo: string\` field to AgentUpdate. Do NOT edit any files.",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:4:message:msg_018nsD7aD5n5mNmXQdSVJwDy",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 1,
+          "text": "Here's a checklist for adding an optional \`foo: string\` field to \`AgentUpdate\`. No files edited.
+
+## Plan: add optional \`foo?: string\` to \`AgentUpdate\`
+
+**1. Decide scope of the field**
+- [ ] Confirm which variants get \`foo\` — a single variant (e.g. \`message\`), a subset, or all of the union in \`packages/core/src/acp/agent-update.ts:43\`. Optional fields on a discriminated union must be added per-variant, not once, so this decision drives the rest.
+
+**2. Amend the type**
+- [ ] Add \`foo?: string;\` to the chosen variant(s) in the \`AgentUpdate\` union (\`agent-update.ts:43-93\`).
+- [ ] Update the doc comment above the union / relevant variant to explain what \`foo\` means and when it's populated.
+
+**3. Populate it in \`toAgentUpdate\`**
+- [ ] In \`toAgentUpdate\` (\`agent-update.ts:122\`), set \`foo\` in the matching \`case\` block(s) — decoding it from the ACP \`SessionUpdate\` if it comes from the protocol, or leaving it unset if it's only populated later by provider \`enrich\`.
+- [ ] If \`foo\` originates from vendor \`_meta\` (like \`parentToolCallId\`), leave it \`undefined\` in the baseline and note that \`IAcpBehavior.enrich\` promotes it.
+
+**4. Provider enrichment (if applicable)**
+- [ ] Check \`packages/core/src/agents/plugins/capabilities/acp.ts\` (the \`enrich\` hook, ~line 85) and any provider \`enrich\` implementations under \`packages/plugins/\` to populate \`foo\` if it's vendor-specific.
+
+**5. Downstream consumers**
+- [ ] \`packages/core/src/acp/session-machine.ts\` — \`foo\` flows through \`Updated\` events and \`update\` Effects unchanged (no code change needed, but verify no exhaustive destructuring drops it).
+- [ ] Trace \`AgentUpdate\` consumers: \`src/core/features/conversations/browser/acp/\` (maps updates into \`@emdash/chat-ui\`) and \`packages/chat-ui/\` renderer — decide whether \`foo\` needs rendering or just passthrough.
+- [ ] Check \`SessionSnapshot\` / IPC serialization path (\`state.ts\`) — an optional string serializes fine, but confirm no schema/validation rejects unknown fields.
+
+**6. Tests**
+- [ ] Update/add cases in \`packages/core/src/acp/agent-update.test.ts\` covering \`foo\` set and unset.
+- [ ] Check \`acp-session-runtime.test.ts\` and any chat-ui snapshot tests for fixtures that assert on full \`AgentUpdate\` shape.
+
+**7. Verify**
+- [ ] \`pnpm run typecheck\` (catches every exhaustive switch/spread that needs updating).
+- [ ] \`pnpm run test\` (or focused \`@emdash/core\` + \`chat-ui\` targets).
+- [ ] \`pnpm run lint\` / \`pnpm run format\`.
+
+The two load-bearing spots are the union definition and \`toAgentUpdate\` (both in \`agent-update.ts\`); everything else is passthrough plus deciding whether the renderer should surface \`foo\`.",
+        },
+      ],
+      "seq": 4,
+    },
+    {
+      "id": "677167db-64b7-4193-8470-302e96b223a6:turn:5",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:5:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Run \`git rev-parse --abbrev-ref HEAD\` and tell me the current branch name.",
+        },
+        {
+          "command": "git rev-parse --abbrev-ref HEAD",
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:5:tool:toolu_01JaFQWcogSDXZDV2gdCtAPX",
+          "kind": "execute-tool-call",
+          "outputText": "HEAD",
+          "seq": 1,
+          "status": "done",
+          "title": "git rev-parse --abbrev-ref HEAD",
+          "toolCallId": "toolu_01JaFQWcogSDXZDV2gdCtAPX",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:5:message:msg_01BFNx7jqLF9UinzgZwgsXex",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "The output is \`HEAD\`, which means you're in a **detached HEAD state** — not on any branch. This matches the git status from the start of the session (which showed \`Current branch: HEAD\`). You're checked out directly to a commit rather than a named branch.",
+        },
+      ],
+      "seq": 5,
+    },
+    {
+      "id": "677167db-64b7-4193-8470-302e96b223a6:turn:6",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:6:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Run \`ls packages\` and list the workspace package names.",
+        },
+        {
+          "command": "ls packages",
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:6:tool:toolu_01LD1XT6tVwgeJpJJpmz44o7",
+          "kind": "execute-tool-call",
+          "outputText": "chat-ui
+core
+plugins
+shared
+ui",
+          "seq": 1,
+          "status": "done",
+          "title": "ls packages",
+          "toolCallId": "toolu_01LD1XT6tVwgeJpJJpmz44o7",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:6:message:msg_01CHjCVcRmD2eKqPWJQKWVpp",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "The workspace packages are:
+
+- **chat-ui**
+- **core**
+- **plugins**
+- **shared**
+- **ui**",
+        },
+      ],
+      "seq": 6,
+    },
+    {
+      "id": "677167db-64b7-4193-8470-302e96b223a6:turn:7",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:7:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Create the file \`.acp-fixture-scratch/NOTES.md\` containing exactly this line: \`# ACP fixture notes\`",
+        },
+        {
+          "content": "# ACP fixture notes
+",
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:7:tool:toolu_01JeGgFpDENi9UKyGyURTM6X:/private/tmp/emdash-acp-fixture-1783037827823/.acp-fixture-scratch/NOTES.md",
+          "kind": "create-file-tool-call",
+          "path": "/private/tmp/emdash-acp-fixture-1783037827823/.acp-fixture-scratch/NOTES.md",
+          "seq": 1,
+          "status": "done",
+          "title": "Write /private/tmp/emdash-acp-fixture-1783037827823/.acp-fixture-scratch/NOTES.md",
+          "toolCallId": "toolu_01JeGgFpDENi9UKyGyURTM6X",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:7:message:msg_01KT8Pkbv15P91bwomPmcPnt",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "Created \`.acp-fixture-scratch/NOTES.md\` with the single line \`# ACP fixture notes\`.",
+        },
+      ],
+      "seq": 7,
+    },
+    {
+      "id": "677167db-64b7-4193-8470-302e96b223a6:turn:8",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:8:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Append the line \`generated by fixture script\` to \`.acp-fixture-scratch/NOTES.md\`.",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:8:tool:toolu_01SdTsjTARBJXjkPGAa31kzt:/private/tmp/emdash-acp-fixture-1783037827823/.acp-fixture-scratch/NOTES.md",
+          "kind": "modify-file-tool-call",
+          "newText": "# ACP fixture notes
+generated by fixture script",
+          "oldText": "# ACP fixture notes",
+          "path": "/private/tmp/emdash-acp-fixture-1783037827823/.acp-fixture-scratch/NOTES.md",
+          "seq": 1,
+          "status": "done",
+          "title": "Edit file",
+          "toolCallId": "toolu_01SdTsjTARBJXjkPGAa31kzt",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:8:message:msg_01NDQLy3F4NYu6zVMdebDqfF",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "Appended. The file now contains:
+
+\`\`\`
+# ACP fixture notes
+generated by fixture script
+\`\`\`",
+        },
+      ],
+      "seq": 8,
+    },
+    {
+      "id": "677167db-64b7-4193-8470-302e96b223a6:turn:9",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:9:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Rename \`.acp-fixture-scratch/NOTES.md\` to \`.acp-fixture-scratch/NOTES2.md\`, then delete \`.acp-fixture-scratch/NOTES2.md\`.",
+        },
+        {
+          "command": "mv .acp-fixture-scratch/NOTES.md .acp-fixture-scratch/NOTES2.md && rm .acp-fixture-scratch/NOTES2.md && ls -la .acp-fixture-scratch",
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:9:tool:toolu_01LB5oK2J3sbz7XV51uMA5Ub",
+          "kind": "execute-tool-call",
+          "outputText": "total 0
+drwxr-xr-x@  2 davidkonopka  wheel   64 Jul  2 17:18 .
+drwxr-xr-x@ 29 davidkonopka  wheel  928 Jul  2 17:18 ..",
+          "seq": 1,
+          "status": "done",
+          "title": "mv .acp-fixture-scratch/NOTES.md .acp-fixture-scratch/NOTES2.md && rm .acp-fixture-scratch/NOTES2.md && ls -la .acp-fixture-scratch",
+          "toolCallId": "toolu_01LB5oK2J3sbz7XV51uMA5Ub",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:9:message:msg_018hXa3UZ3ByPyhvXFH2NwxN",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "Done. Renamed \`NOTES.md\` → \`NOTES2.md\`, then deleted \`NOTES2.md\`. The \`.acp-fixture-scratch/\` directory is now empty.",
+        },
+      ],
+      "seq": 9,
+    },
+    {
+      "id": "677167db-64b7-4193-8470-302e96b223a6:turn:10",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:10:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Use a subagent (Task tool) to find all files under \`packages/core/src/acp\` that contain the string \`stopReason\`, then summarize what each file does.",
+        },
+        {
+          "agentId": "ad0a1acabfb4a0dc1",
+          "background": true,
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:10:tool:toolu_01N3Y7C4y7eLVpC11EJGC4oA",
+          "kind": "spawn-subagent-tool-call",
+          "name": "Agent",
+          "seq": 1,
+          "status": "done",
+          "title": "Agent",
+          "toolCallId": "toolu_01N3Y7C4y7eLVpC11EJGC4oA",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:10:message:msg_01BpSD8mA4TtQqxp3dJsUKLV",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "The search subagent is running in the background. I'll relay its findings once it completes.",
+        },
+      ],
+      "seq": 10,
+    },
+    {
+      "id": "677167db-64b7-4193-8470-302e96b223a6:turn:11",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:11:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Explain the ACP session lifecycle in detail, using markdown headings for each phase and including a fenced code block showing an example sequence of events.",
+        },
+        {
+          "command": "grep -rl "stopReason" /private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp",
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:11:tool:toolu_01AY8xD2Y4FtSd1YEV7FdL91",
+          "kind": "execute-tool-call",
+          "outputText": "/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/state.ts
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/acp-test-support.ts
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/acp-session-runtime.test.ts
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/session-machine.test.ts
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/acp-session-runtime.ts
+/private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/session-machine.ts",
+          "parentToolCallId": "toolu_01N3Y7C4y7eLVpC11EJGC4oA",
+          "seq": 1,
+          "status": "done",
+          "title": "grep -rl "stopReason" /private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp",
+          "toolCallId": "toolu_01AY8xD2Y4FtSd1YEV7FdL91",
+        },
+        {
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:11:message:msg_013h49auSubLZw7pd5oKY1Wa",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "The ACP session lifecycle is a state machine defined in \`packages/core/src/acp/session-machine.ts\`. It's built on a strict separation: **Commands** are validated intents that may be rejected (via \`decide\`), while **DomainEvents** are facts that are always folded into state (via \`evolve\`). Both are pure functions with no I/O — they emit \`Effect\`s that the runtime interprets.
+
+There are six phases: \`starting\`, \`replaying\`, \`ready\`, \`working\`, \`cancelling\`, and \`closed\`.
+
+## \`starting\`
+
+The initial phase for every session (\`initialMachineState\`). The session has been created but neither established nor replayed yet. Two mutually exclusive exits:
+
+- **\`newSession\` path** → \`SessionReady\` event → \`ready\`. Used when starting fresh; the session becomes immediately usable.
+- **\`loadSession\` path** → \`ReplayStarted\` event → \`replaying\`. Used when a prior session is being restored and its transcript must be replayed first.
+
+Both setup events may carry \`modes\` and \`configOptions\`; a \`meta\` effect is emitted alongside \`state\` only when that metadata is actually present (\`needsMetaEffect\`).
+
+## \`replaying\`
+
+Reached only on the \`loadSession\` path. A synthetic replay turn (\`source: 'replay'\`) is opened via \`makeTurn\` to accumulate the historical updates streaming back from the agent.
+
+- \`SessionLoaded\` may arrive here to fold in session metadata (modes/config) without changing phase.
+- \`ReplayEnded\` commits the replay turn with its final status and transitions to \`ready\`.
+
+## \`ready\`
+
+The idle, usable state — the only phase where a new prompt is accepted. \`isPromptReady\` returns \`true\` exclusively for \`ready\`, and \`canSubmit\` additionally requires no pending permission.
+
+- A \`Prompt\` command (valid only here) produces \`PromptStarted\` → \`working\`.
+- Metadata changes (\`MetaChanged\`) can update modes, config options, available commands, and usage figures without leaving \`ready\`.
+
+## \`working\`
+
+An in-flight turn is active. \`PromptStarted\` opens a live turn (\`source: 'live'\`) whose first update is the synthesized user message, and emits an \`agentEvent\` with phase \`start\`.
+
+- **\`Updated\`** events append streamed agent updates to the active turn and emit \`update\` effects. Crucially, \`Updated\` never flips the lifecycle — it stays \`working\`.
+- **\`TurnEnded\`** commits the turn (status \`complete\`/\`cancelled\`/\`error\` derived from the outcome), records \`lastStopReason\`, and returns to \`ready\`, emitting an \`agentEvent\` of \`stop\` or \`error\`.
+- **\`Cancel\`** command → \`CancellationRequested\` → \`cancelling\`.
+
+## \`cancelling\`
+
+The user requested cancellation but the agent hasn't acknowledged the turn's end yet. On entering, all pending permission requests are drained with \`cancelled: true\`. The phase resolves when \`TurnEnded\` arrives, transitioning back to \`ready\`.
+
+## \`closed\`
+
+Terminal. Reached from \`ready\`, \`working\`, or \`cancelling\` when \`ProcessClosed\` fires (agent process exited / connection dropped). Any still-active turn is committed as \`status: 'error'\`, pending permissions are drained as cancelled, and \`closed\` + \`state\` effects are emitted with the exit code.
+
+## Permissions (orthogonal to phase)
+
+Permission handling spans phases rather than being one: \`PermissionRequested\` appends to \`pendingPermissions\`; \`PermissionResolved\` removes one; and both \`CancellationRequested\` and \`ProcessClosed\` drain all pending requests as cancelled.
+
+## Example event sequence
+
+A typical \`loadSession\` restore followed by one user turn:
+
+\`\`\`text
+Phase: starting
+  → E: ReplayStarted                     ⇒ phase: replaying   [effect: state]
+  → E: SessionLoaded {modes, config}     ⇒ phase: replaying   [effect: meta]
+  → E: Updated (historical agent_message) ⇒ phase: replaying  [effect: update]
+  → E: ReplayEnded {status: complete}    ⇒ phase: ready       [effects: turnCommitted, state]
+
+Phase: ready
+  → C: Prompt {userUpdate}               ⇒ (decide ok) 
+  → E: PromptStarted {userUpdate}        ⇒ phase: working     [effects: state, update, agentEvent:start]
+
+Phase: working
+  → E: Updated (agent_message_chunk)     ⇒ phase: working     [effect: update]
+  → E: PermissionRequested {req-1}       ⇒ phase: working     [effect: permissionRequest]
+  → C: ResolvePermission {req-1, allow}  ⇒ (decide ok)
+  → E: PermissionResolved {req-1}        ⇒ phase: working     [effect: permissionResolved]
+  → E: Updated (tool_call_update)        ⇒ phase: working     [effect: update]
+  → E: TurnEnded {stopped, end_turn}     ⇒ phase: ready       [effects: turnCommitted, state, agentEvent:stop]
+
+Phase: ready
+  → E: ProcessClosed {exitCode: 0}       ⇒ phase: closed      [effects: state, closed]
+\`\`\`
+
+Note how \`decide\` gates the \`Prompt\`/\`ResolvePermission\` **commands** (rejecting out-of-phase intents with an \`AcpRuntimeError\` and no state change), while \`evolve\` unconditionally folds the **events**, and an out-of-place event would yield only a diagnostic \`warn\` effect rather than an error.
+
+Separately — the background subagent finished its \`stopReason\` file search; want me to relay its summary?",
+        },
+        {
+          "command": "for f in state.ts acp-test-support.ts acp-session-runtime.test.ts session-machine.test.ts acp-session-runtime.ts session-machine.ts; do echo "===== $f ====="; head -30 /private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/$f; echo; done",
+          "id": "677167db-64b7-4193-8470-302e96b223a6:turn:11:tool:toolu_01HiEJYjpi7zXdZACwyuVM4Q",
+          "kind": "execute-tool-call",
+          "outputText": "===== state.ts =====
+/**
+ * Shared turn model for ACP conversation history.
+ *
+ * AcpSessionRuntime is the single authority on turn state: it owns history
+ * (committed turns) and the at-most-one active turn, committing turns via
+ * prompt() stopReason.  The renderer queries this data on mount rather than
+ * reconstructing it from a replay event stream.
+ */
+import type {
+  AvailableCommand,
+  SessionConfigOption,
+  SessionModeState,
+  StopReason,
+} from '@agentclientprotocol/sdk';
+import type { AgentUpdate } from './agent-update';
+import type { AcpPermissionRequest } from './permissions';
+
+/**
+ * Provider-neutral snapshot of ACP usage_update data.
+ * Tracks context-window consumption and cumulative session cost.
+ */
+export interface SessionUsage {
+  /** Total context window size in tokens. */
+  contextSize: number;
+  /** Tokens currently in context. */
+  contextUsed: number;
+  /** Cumulative session cost, if the agent reports it. */
+  cost: { amount: number; currency: string } | null;
+}
+
+
+===== acp-test-support.ts =====
+/**
+ * Reusable test helpers for AcpSessionRuntime tests.
+ *
+ * Not a test file itself (no \`.test.\` suffix) — Vitest will not collect it.
+ * Import from \`./acp-test-support\` in test files that need it.
+ */
+
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import type { Client } from '@agentclientprotocol/sdk';
+import { noopLogger } from '@emdash/shared/logger';
+import { vi } from 'vitest';
+import type { AcpAgentApi, IAcpBehavior } from '../agents/plugins/capabilities/acp';
+import type { AcpRuntimeListener, AcpSessionRuntimeDeps, AcpStartInput } from './runtime';
+import type { AcpTurn, SessionSnapshot } from './state';
+import type {
+  AcpProcessHandle,
+  AcpProcessHost,
+  AcpFs,
+  AcpTerminalExit,
+  AcpTerminalProcess,
+} from './transport';
+
+/**
+ * Creates a recording AcpRuntimeListener.
+ * \`emitted(field)\` returns all objects emitted via that method.
+ */
+export function createRecordingListener() {
+  const snapshots: { conversationId: string; snapshot: SessionSnapshot }[] = [];
+  const updates: { conversationId: string; turnId: string; seq: number }[] = [];
+
+===== acp-session-runtime.test.ts =====
+import type { PermissionOptionKind, SessionUpdate } from '@agentclientprotocol/sdk';
+import { describe, expect, it, vi } from 'vitest';
+import { AcpSessionRuntime } from './acp-session-runtime';
+import {
+  FakeAcpProcessHandle,
+  FakeAcpTerminalProcess,
+  makeAcpHarness,
+  makeStartInput,
+} from './acp-test-support';
+import type { AgentUpdate } from './agent-update';
+
+// ---------------------------------------------------------------------------
+// Pooling
+// ---------------------------------------------------------------------------
+
+describe('AcpSessionRuntime – pooling', () => {
+  it('two conversations in the same workspace share one child process', async () => {
+    const h = makeAcpHarness();
+    const rt = new AcpSessionRuntime(h.deps);
+
+    h.agent.newSession
+      .mockResolvedValueOnce({ sessionId: 'session-a' })
+      .mockResolvedValueOnce({ sessionId: 'session-b' });
+
+    await rt.start(makeStartInput({ conversationId: 'conv-a', workspaceId: 'ws-1' }));
+    await rt.start(makeStartInput({ conversationId: 'conv-b', workspaceId: 'ws-1' }));
+
+    expect(h.children).toHaveLength(1);
+    expect(h.agent.newSession).toHaveBeenCalledTimes(2);
+  });
+
+===== session-machine.test.ts =====
+import { isErr, isOk } from '@emdash/shared';
+import { describe, expect, it } from 'vitest';
+import type { AgentUpdate } from './agent-update';
+import type { AcpPermissionRequest } from './permissions';
+import type { SessionMachineState } from './session-machine';
+import {
+  decide,
+  evolve,
+  initialMachineState,
+  activeTurnFromPhase,
+  phaseToLifecycle,
+  SessionMachine,
+} from './session-machine';
+
+const CONV_ID = 'conv-test';
+
+function makeReady(): SessionMachineState {
+  const s0 = initialMachineState(CONV_ID);
+  const { state } = evolve(s0, { type: 'SessionReady' });
+  return state;
+}
+
+function makeWorking(): SessionMachineState {
+  const ready = makeReady();
+  const userUpdate: AgentUpdate = { kind: 'message', role: 'user', messageId: null, text: 'hello' };
+  const events = decide(ready, { type: 'Prompt', userUpdate });
+  if (!isOk(events)) throw new Error('decide Prompt failed');
+  let s = ready;
+  for (const ev of events.data) {
+    ({ state: s } = evolve(s, ev));
+
+===== acp-session-runtime.ts =====
+import type {
+  Client,
+  CreateTerminalRequest,
+  CreateTerminalResponse,
+  KillTerminalRequest,
+  KillTerminalResponse,
+  LoadSessionRequest,
+  NewSessionRequest,
+  ReadTextFileRequest,
+  ReadTextFileResponse,
+  ReleaseTerminalRequest,
+  ReleaseTerminalResponse,
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+  SessionNotification,
+  SessionUpdate,
+  SetSessionConfigOptionRequest,
+  SetSessionModeRequest,
+  TerminalOutputRequest,
+  TerminalOutputResponse,
+  WaitForTerminalExitRequest,
+  WaitForTerminalExitResponse,
+  WriteTextFileRequest,
+  WriteTextFileResponse,
+} from '@agentclientprotocol/sdk';
+import type { Result } from '@emdash/shared';
+import { isErr, LifecycleMap, ok, toSerializedError } from '@emdash/shared';
+import type { AcpAgentApi, IAcpBehavior } from '../agents/plugins/capabilities/acp';
+import { createAcpAgentConnection } from './acp-agent-connection';
+import { AgentTerminalManager } from './agent-ports/terminal-manager';
+
+===== session-machine.ts =====
+/**
+ * Pure ACP session state machine.
+ *
+ * Separates inputs into two distinct kinds:
+ *
+ * - Commands — intents from the public API that MAY be rejected by validation.
+ *   They produce zero or more DomainEvents on success, or an AcpRuntimeError on
+ *   failure. No state changes occur on rejection.
+ *
+ * - DomainEvents — facts from the agent process, ACP notifications, or our own
+ *   orchestration that are ALWAYS folded into state. An out-of-place event
+ *   yields only a diagnostic \`warn\` Effect, never an error.
+ *
+ * The two pure functions \`decide\` and \`evolve\` contain no I/O. The runtime
+ * feeds commands through \`decide\` to get events, then feeds events through
+ * \`evolve\` to get the next state and the list of Effects to perform.
+ *
+ * State machine transitions:
+ *
+ *   starting → replaying (E: ReplayStarted — only when loadSession capable)
+ *   starting → ready     (E: SessionReady — newSession path)
+ *   replaying → ready    (E: ReplayEnded)
+ *   ready → working      (C: Prompt → E: PromptStarted)
+ *   working → ready      (E: TurnEnded)
+ *   working → cancelling (C: Cancel → E: CancellationRequested)
+ *   cancelling → ready   (E: TurnEnded)
+ *   {ready,working,cancelling} → closed (E: ProcessClosed)
+ */
+
+import type {",
+          "parentToolCallId": "toolu_01N3Y7C4y7eLVpC11EJGC4oA",
+          "seq": 3,
+          "status": "done",
+          "title": "for f in state.ts acp-test-support.ts acp-session-runtime.test.ts session-machine.test.ts acp-session-runtime.ts session-machine.ts; do echo "===== $f ====="; head -30 /private/tmp/emdash-acp-fixture-1783037827823/packages/core/src/acp/$f; echo; done",
+          "toolCallId": "toolu_01HiEJYjpi7zXdZACwyuVM4Q",
+        },
+      ],
+      "seq": 11,
+    },
+  ],
+}
+`;
+
+exports[`Claude ACP fixture parsing > usage 1`] = `
+{
+  "contextSize": 1000000,
+  "contextUsed": 54442,
+  "cost": {
+    "amount": 0.8453810499999999,
+    "currency": "USD",
+  },
+}
+`;

@@ -1,0 +1,8 @@
+/*
+ * Chat engine font imports.
+ *
+ * Font imports must be here so they are requested before any measurement runs.
+ */
+
+@import '@fontsource-variable/inter/index.css';
+@import '@fontsource-variable/jetbrains-mono/index.css';

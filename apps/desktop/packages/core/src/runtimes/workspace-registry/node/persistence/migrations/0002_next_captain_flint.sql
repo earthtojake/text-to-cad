@@ -1,0 +1,1 @@
+ALTER TABLE `workspace_records` ADD `background` text;

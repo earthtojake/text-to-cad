@@ -1,0 +1,56 @@
+/*
+ * base.css — global element defaults, opt-in.
+ *
+ * Applies design-system colour tokens to body, scrollbars, and selection.
+ * Intentionally avoids app-specific layout rules (height/overflow on html/body,
+ * #root constraints, xterm/Monaco/diff integrations) — those belong in the
+ * consuming app's own stylesheet.
+ *
+ * This file is NOT included in dist/style.css so it doesn't fight the host
+ * app's body/token CSS. Import it explicitly when you want these defaults:
+ *
+ *   import '@emdash/ui/styles/global-base.css';   // library consumers
+ *   import '../src/styles/base.css';               // Storybook
+ */
+
+@layer base {
+  * {
+    border-color: var(--em-border);
+  }
+
+  body {
+    background-color: var(--em-background);
+    color: var(--em-foreground);
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--em-selection) 35%, transparent);
+    color: var(--em-selection-foreground);
+  }
+
+  ::-moz-selection {
+    background-color: color-mix(in srgb, var(--em-selection) 35%, transparent);
+    color: var(--em-selection-foreground);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--em-border) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--em-border);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+}

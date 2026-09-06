@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    // No customConditions here: this package typechecks and emits dts with tsc 6,
+    // which crashes ("No error for last overload signature") when it resolves
+    // workspace types from src via the development condition (see chat-ui).
+    // Types resolve from built dists; runtime tooling (vite, vitest) still uses src.
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "noEmit": true,
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@react/*": ["./src/react/*"],
+      "@styles/*": ["./src/styles/*"],
+      "@theme/*": ["./src/theme/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "dist"]
+}

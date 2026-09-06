@@ -1,0 +1,33 @@
+{
+  // Browser-environment program: renderer + core browser/api surfaces.
+  // No node ambient types and no @main alias — a renderer file importing a
+  // main path or an api file touching `process` fails this program.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["react", "react-dom"],
+    "paths": {
+      "@core/*": ["./src/core/*"],
+      "@renderer/*": ["./src/renderer/*"],
+      // Narrowed to src/core: pre-existing '@root/src/core/...' imports (the
+      // cross-slice escape hatch the boundary lint rule deliberately ignores)
+      // must resolve, but '@root/src/main/...' must stay unresolvable here.
+      "@root/src/core/*": ["./src/core/*"],
+      "@/assets/*": ["./src/assets/*"],
+      // The real @types/jsdom references node types, which would leak node
+      // ambient globals into this program; see the shim for details.
+      "jsdom": ["./tooling/types/jsdom.browser.d.ts"]
+    }
+  },
+  "include": ["src/renderer/**/*", "src/core/**/*", "src/types/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "out",
+    "**/_*/**",
+    // Node surfaces: features/services `node/`, `api/node`, manifests/node.
+    "**/node/**",
+    // Worker contributions are aggregated by the node manifest.
+    "**/contributions/worker.ts"
+  ]
+}

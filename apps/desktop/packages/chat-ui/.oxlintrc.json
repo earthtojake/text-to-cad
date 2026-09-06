@@ -1,0 +1,8 @@
+{
+  "extends": ["../../.oxlintrc.json"],
+  "plugins": ["eslint", "typescript", "react"],
+  "rules": {
+    "react/rules-of-hooks": "off",
+    "react/exhaustive-deps": "off"
+  }
+}
