@@ -32,6 +32,9 @@ a build error or, worse, a silently unstyled surface.
 | `catalog` | `null` | `{ entries, revision, hydrated, refreshing, error }` when the host already subscribes to the catalog. Omit it and the surface reads the store for `origin` itself — which is all an embedded consumer needs. |
 | `manageDocumentTitle` | `true` | Whether the surface writes `document.title`. Pass `false` from a host that owns its own window. |
 | `renderTopBar` / `renderSidebar` / `renderHome` | `null` | Render slots for injected chrome; each is called with the `chrome` object and placed in the surface's layout. Omit all three for a bare file surface. Without `renderSidebar` there is no sidebar and the viewport owns the full width. |
+| `layout` | `"auto"` | `"desktop"` pins the desktop layout — the file sheet is a column beside the model, never a drawer over it — however narrow the root is. `"auto"` measures the root and picks desktop or compact. |
+| `fileSheetWidth` | `null` | The sheet's width in px, when the host sizes it for its pane. Clamped to the sheet's own range (240–448) and not resizable from inside the surface. `null` uses the stored width. |
+| `colorScheme` | `null` | `"light"` or `"dark"`: the host's resolved theme. The CAD "system" preset resolves the same way and the surface stops writing `.dark` / `color-scheme` to the document — the host owns those. `null` is the standalone case: the surface follows the OS and writes the document itself. |
 
 `origin` is also published through context:
 
@@ -175,16 +178,26 @@ narrow pane with no viewport at all. Two more things follow for a host:
 - The same-origin catalog store starts polling at import time only on an
   `http(s)` page. A host loading this module from `file://` has no backend
   beside it, and asks for its backend's store by origin.
+- A host whose pane can be narrower than the compact breakpoint but still
+  wants the sheet beside the model — a review pane in a three-column window —
+  passes `layout="desktop"` and sizes the sheet itself with `fileSheetWidth`.
+  The desktop app does exactly this: the sheet is `clamp(36% of the pane,
+  240, 365)`, and the app's own file tree hides itself for a CAD tab in a pane
+  too narrow to hold both. The surface still measures its root for everything
+  else (the viewport, the toolbar), so the pinned layout is never wider than
+  the pane.
 
 ## Known consequences of embedding
 
-- **The surface writes to `document.documentElement`.** The active CAD theme
-  decides light/dark, and the surface applies it to the root element (`.dark`,
-  `data-theme`, `data-theme-preference`, `style.color-scheme`) along with
-  `data-glass-tone` and `--cad-scene-backdrop` — because the viewer's own
-  popovers and toolbars portal out of the surface and read them there. In a host
-  window that means the CAD theme drives the whole app's light/dark. Nothing
-  else about the host is touched.
+- **The surface writes to `document.documentElement`** — unless the host
+  passes `colorScheme`. Standalone, the active CAD theme decides light/dark and
+  the surface applies it to the root element (`.dark`, `data-theme`,
+  `data-theme-preference`, `style.color-scheme`), because the viewer's own
+  popovers and toolbars portal out of the surface and read them there. With
+  `colorScheme` the direction reverses: the host's theme resolves the CAD
+  "system" preset, and the surface writes only `data-glass-tone` and
+  `--cad-scene-backdrop` (which its glass chrome reads) to the root. A host
+  that did not pass it would find a STEP file flipping its whole window light.
 - **One tessellation cache provider per page.** `setTessellationCacheProvider`
   in `cadgen-js` is a module singleton, so a page showing two backends at once
   shares one provider. Register it with the origin you care about:

@@ -36,8 +36,15 @@ export const EMPTY_LIST = Object.freeze([]);
 export const DESKTOP_SIDEBAR_MIN_WIDTH = 150;
 export const DESKTOP_SIDEBAR_MAX_WIDTH = 520;
 export const DEFAULT_SIDEBAR_WIDTH = CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH;
-export const DESKTOP_TAB_TOOLS_MIN_WIDTH = 240;
-export const DESKTOP_TAB_TOOLS_MAX_WIDTH = 448;
+// The sheet's range and what a host may pin live in hostLayout.js (a module
+// with no bundler aliases, so its tests run under plain node).
+export {
+  DESKTOP_TAB_TOOLS_MAX_WIDTH,
+  DESKTOP_TAB_TOOLS_MIN_WIDTH,
+  hostPrefersDarkForColorScheme,
+  normalizeHostSheetWidth,
+  resolveHostLayoutMode
+} from "./hostLayout.js";
 export const CAD_WORKSPACE_TOP_BAR_HEIGHT = 44;
 export const DEFAULT_LARGE_FILE_STATE = Object.freeze({
   selectableTopologyEnabled: false
@@ -110,3 +117,4 @@ export function entryWithoutRenderAssets(entry) {
   }
   return next;
 }
+

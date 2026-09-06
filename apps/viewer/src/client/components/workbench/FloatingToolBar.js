@@ -234,7 +234,9 @@ function DesktopFloatingToolBar({
       style={floatingCadToolbarPosition}
     >
       <TooltipProvider delayDuration={250}>
-        <div className="flex w-fit items-center gap-1 self-end">
+        {/* Wraps: in a host pane too narrow for the zoom pill beside the
+            tools, the pill drops under them rather than off the left edge. */}
+        <div className="flex w-fit flex-wrap items-center justify-end gap-1 self-end">
         {zoomToolbar}
         {drawingViewToolbar}
         <div

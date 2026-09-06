@@ -309,7 +309,10 @@ import {
   EMPTY_LIST,
   capitalizeFirst,
   entryWithoutRenderAssets,
+  hostPrefersDarkForColorScheme,
+  normalizeHostSheetWidth,
   normalizeLargeFileState,
+  resolveHostLayoutMode,
   readDirectorySessionState,
   readInitialFileSheetOpen,
   readInitialFileSheetWidth,
@@ -362,6 +365,9 @@ export default function CadFileView({
   renderTopBar = null,
   renderSidebar = null,
   renderHome = null,
+  layout = "auto",
+  fileSheetWidth = null,
+  colorScheme = null,
 }) {
   const viewerOrigin = normalizeViewerOrigin(origin);
   return (
@@ -377,6 +383,9 @@ export default function CadFileView({
         renderTopBar={renderTopBar}
         renderSidebar={renderSidebar}
         renderHome={renderHome}
+        layout={layout}
+        fileSheetWidth={fileSheetWidth}
+        colorScheme={colorScheme}
       />
     </ViewerOriginProvider>
   );
@@ -392,7 +401,21 @@ function CadFileViewSurface({
   renderTopBar,
   renderSidebar,
   renderHome,
+  layout,
+  fileSheetWidth,
+  colorScheme,
 }) {
+  // What the host pins, if anything (docs/file-view.md, "Laying out inside a
+  // host"): the layout mode, the sheet's width, and which way the colour
+  // scheme goes. Each is null/auto for the standalone app, whose window is
+  // the viewport and whose theme is its own.
+  const hostLayoutMode = resolveHostLayoutMode(layout);
+  const hostSheetWidth = normalizeHostSheetWidth(fileSheetWidth);
+  const hostPrefersDark = hostPrefersDarkForColorScheme(colorScheme);
+  const themeReadOptions = useMemo(
+    () => (hostPrefersDark === null ? {} : { prefersDark: hostPrefersDark }),
+    [hostPrefersDark]
+  );
   // The catalog comes from the host when it already has one (the standalone app
   // subscribes in main.jsx and hands it down), and otherwise straight from this
   // origin's store — so an embedded surface needs nothing but `origin` and
@@ -498,13 +521,24 @@ function CadFileViewSurface({
     readDirectorySessionState().fileViewerWidthPx || DEFAULT_SIDEBAR_WIDTH
   ));
   const [layoutViewportWidth, setLayoutViewportWidth] = useState(readViewerViewportWidth);
-  const isDesktop = viewerLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP;
+  const isDesktop = hostLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP ||
+    viewerLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP;
   const [fileSheetOpenIntent, setFileSheetOpenIntent] = useState(readInitialFileSheetOpen);
   const [viewerAlertOpen, setViewerAlertOpen] = useState(false);
   const [viewerRuntimeAlert, setViewerRuntimeAlert] = useState(null);
   // One active theme id plus at most one custom settings blob. Presets are
   // read-only; editing anything moves the active theme to "custom".
-  const [themeState, setThemeState] = useState(() => readDirectoryThemeSettingsState());
+  const [themeState, setThemeState] = useState(() => readDirectoryThemeSettingsState(themeReadOptions));
+  // A host that flips light/dark re-resolves the "system" preset; the
+  // standalone app's document never changes scheme under it.
+  const themeReadOptionsRef = useRef(themeReadOptions);
+  useEffect(() => {
+    if (themeReadOptionsRef.current === themeReadOptions) {
+      return;
+    }
+    themeReadOptionsRef.current = themeReadOptions;
+    setThemeState(readDirectoryThemeSettingsState(themeReadOptions));
+  }, [themeReadOptions]);
   const themeSettings = themeState.settings;
   const themeId = themeState.themeId;
   const [themeEditing, setThemeEditing] = useState(false);
@@ -537,8 +571,8 @@ function CadFileViewSurface({
   const drawingGeometryCacheRef = useRef(new Map());
   const [drawingGeometry, setDrawingGeometry] = useState(null);
   const resolvedThemeSettings = useMemo(
-    () => resolveThemeSettingsForColorMode(themeSettings, { prefersDark: false }),
-    [themeSettings]
+    () => resolveThemeSettingsForColorMode(themeSettings, { prefersDark: hostPrefersDark === true }),
+    [hostPrefersDark, themeSettings]
   );
   const resolvedDisplayEdgeSettings = useMemo(() => {
     // Edge theme — colour, opacity, thickness — is fixed, not a user
@@ -568,7 +602,10 @@ function CadFileViewSurface({
     ));
   }, []);
   const [previewMode, setPreviewMode] = useState(false);
-  const [tabToolsWidth, setTabToolsWidth] = useState(readInitialFileSheetWidth);
+  const [storedTabToolsWidth, setTabToolsWidth] = useState(readInitialFileSheetWidth);
+  // A host-pinned sheet width wins over the stored one and is not resizable
+  // from inside the surface: the host sized it for its own pane.
+  const tabToolsWidth = hostSheetWidth ?? storedTabToolsWidth;
   const [fileSheetWidthIsCustom, setFileSheetWidthIsCustom] = useState(readInitialFileSheetWidthIsCustom);
   const [drawingTool, setDrawingTool] = useState(DRAWING_TOOL.FREEHAND);
   const [viewerPerspective, setViewerPerspective] = useState(null);
@@ -2094,8 +2131,8 @@ function CadFileViewSurface({
   // theme wholesale. The custom slot is kept so the user can flip back to it.
   const selectTheme = useCallback((nextThemeId) => {
     writeThemeState(nextThemeId, { onWriteError: handlePersistenceWriteError });
-    setThemeState(readThemeSettingsState());
-  }, [handlePersistenceWriteError]);
+    setThemeState(readThemeSettingsState(themeReadOptions));
+  }, [handlePersistenceWriteError, themeReadOptions]);
 
   // Any settings edit lands in the single custom slot and makes it active,
   // unless it happens to reproduce a preset exactly.
@@ -2405,6 +2442,9 @@ function CadFileViewSurface({
   }, [isDesktop, setTabToolsOpen]);
 
   const handleStartFileSheetResize = useCallback((event) => {
+    if (hostSheetWidth != null) {
+      return;
+    }
     // Gate on the shared right-panel flag, not the file sheet specifically:
     // the theme sidebar is the same panel and resizes the same width.
     if (event.button !== 0 || !desktopRightPanelOpen) {
@@ -2433,11 +2473,13 @@ function CadFileViewSurface({
   }, [
     desktopRightPanelOpen,
     desktopSidebarOpen,
+    hostSheetWidth,
     layoutViewportWidth,
     sidebarWidth,
     setFileSheetWidthIsCustom,
     tabToolsWidth
   ]);
+  const fileSheetResizeHandler = hostSheetWidth == null ? handleStartFileSheetResize : null;
 
   const resetSelectionForStepUpdate = useCallback(() => {
     selectedPartIdsRef.current = [];
@@ -3044,8 +3086,13 @@ function CadFileViewSurface({
   }, [flushActiveFileSession]);
 
   useEffect(() => {
+    // Embedded, the host's theme drives the document and the CAD theme
+    // follows it (through `colorScheme`), not the other way round.
+    if (hostPrefersDark !== null) {
+      return;
+    }
     applyColorSchemeToDocument(resolvedColorSchemeMode, document.documentElement);
-  }, [resolvedColorSchemeMode]);
+  }, [hostPrefersDark, resolvedColorSchemeMode]);
 
   useEffect(() => {
     document.documentElement.dataset.glassTone = cadWorkspaceGlassTone;
@@ -3073,7 +3120,7 @@ function CadFileViewSurface({
         return;
       }
       try {
-        setThemeState(readThemeSettingsState());
+        setThemeState(readThemeSettingsState(themeReadOptions));
       } catch (error) {
         console.warn("Failed to sync theme from another tab", error);
       }
@@ -6619,7 +6666,7 @@ function CadFileViewSurface({
                 isDesktop={isDesktop}
                 width={activeSheetWidth || tabToolsWidth}
                 onOpenChange={setTabToolsOpen}
-                onStartResize={handleStartFileSheetResize}
+                onStartResize={fileSheetResizeHandler}
                 selectedEntry={selectedEntry}
                 viewerLoading={viewerLoading || assemblySidebarLoading}
                 isAssemblyView={isAssemblyView}
@@ -6712,7 +6759,7 @@ function CadFileViewSurface({
                 width={activeSheetWidth || tabToolsWidth}
                 selectedEntry={selectedEntry}
                 onOpenChange={setTabToolsOpen}
-                onStartResize={handleStartFileSheetResize}
+                onStartResize={fileSheetResizeHandler}
                 joints={movableUrdfJoints}
                 groupStates={selectedUrdfGroupStates}
                 activeGroupStateId={activeSelectedUrdfGroupStateId}
@@ -6743,7 +6790,7 @@ function CadFileViewSurface({
                 width={activeSheetWidth || tabToolsWidth}
                 selectedEntry={selectedEntry}
                 onOpenChange={setTabToolsOpen}
-                onStartResize={handleStartFileSheetResize}
+                onStartResize={fileSheetResizeHandler}
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
                 statusItems={selectedFileStatusItems}
@@ -6792,7 +6839,7 @@ function CadFileViewSurface({
                 width={activeSheetWidth || tabToolsWidth}
                 selectedEntry={selectedEntry}
                 onOpenChange={setTabToolsOpen}
-                onStartResize={handleStartFileSheetResize}
+                onStartResize={fileSheetResizeHandler}
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
                 statusItems={selectedFileStatusItems}
@@ -6814,7 +6861,7 @@ function CadFileViewSurface({
                 isDesktop={isDesktop}
                 width={activeSheetWidth || tabToolsWidth}
                 onClose={closeThemeEditor}
-                onStartResize={handleStartFileSheetResize}
+                onStartResize={fileSheetResizeHandler}
                 themeSettings={themeSettings}
                 themeId={themeId}
                 resolvedColorSchemeMode={resolvedColorSchemeMode}
