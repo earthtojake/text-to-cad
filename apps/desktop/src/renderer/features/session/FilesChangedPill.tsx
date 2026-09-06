@@ -25,7 +25,7 @@ export function FilesChangedPill({
       <button
         className="pointer-events-auto inline-flex h-7 items-center gap-2 rounded-full border bg-background px-3 text-[12px] shadow-xs transition-colors hover:bg-accent"
         data-files-changed
-        onClick={() => runUiCommand("open-review")}
+        onClick={() => runUiCommand({ command: "open-review" })}
         type="button"
       >
         <GitCompare className="size-3.5 text-muted-foreground" />

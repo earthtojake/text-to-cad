@@ -13,7 +13,10 @@ import type { IpcHandlers } from "../../shared/ipc";
 import type { acpContract } from "../../shared/ipc/acp";
 import { spawnPtyTerminal } from "../acp/pty-backend";
 import { SessionManager } from "../acp/sessions";
-import { sessions } from "../db/repositories";
+import { projects, sessions, settings } from "../db/repositories";
+import { head } from "../projects/git";
+import { releaseWorkspace, resolveWorkspace } from "../projects/workspace";
+import { pruneProjectWorktrees } from "./git";
 
 /**
  * `HARDCORE_FAKE_AGENT=<path to tests/fake-agent/index.mjs>` makes every
@@ -37,6 +40,34 @@ export const sessionManager = new SessionManager({
         env: { ELECTRON_RUN_AS_NODE: "1" },
       })
     : undefined,
+
+  /** P7: the git mode as a directory, and a worktree when the mode asks (plan §9). */
+  workspace: async ({ projectId, gitMode, name, cwd }) => {
+    const project = projects.list().find((candidate) => candidate.id === projectId);
+    if (!project) {
+      throw new Error("that project is no longer open");
+    }
+    const workspace = await resolveWorkspace({
+      project,
+      gitMode,
+      settings: settings.get(),
+      name,
+      cwd,
+    });
+    if (workspace.worktreePath) {
+      // One more worktree exists, so this is the moment the keep limit can be
+      // exceeded. The sweep never touches a worktree with an open session, and
+      // this one has just become one.
+      await pruneProjectWorktrees(project);
+    }
+    return workspace;
+  },
+
+  head: (cwd) => head(cwd),
+
+  releaseWorkspace: async (session) => {
+    await releaseWorkspace(session, settings.get());
+  },
 });
 
 /** Re-raise as an IpcError so the renderer sees the agent's words, not "failed". */
@@ -52,7 +83,17 @@ export const acpHandlers = {
   sessions: {
     list: ({ projectId }) => sessionManager.list(projectId),
     get: ({ id }) => sessionManager.get(id),
-    create: (input) => surfacing(() => sessionManager.create(input)),
+    // The mode falls back to the setting here rather than in the composer:
+    // Settings › Git & Worktrees' `Default git mode` has to hold for every
+    // caller, including the menu's New Session and Settings' `New chat in
+    // this worktree`, not only the one chip that happens to read it.
+    create: (input) =>
+      surfacing(() =>
+        sessionManager.create({
+          ...input,
+          gitMode: input.gitMode ?? settings.get().defaultGitMode,
+        }),
+      ),
     load: ({ id }) => surfacing(() => sessionManager.load(id)),
     state: ({ id }) => sessionManager.state(id),
     prompt: ({ id, content }) => surfacing(() => sessionManager.prompt(id, content)),

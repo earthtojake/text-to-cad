@@ -4,6 +4,7 @@ import {
   ChevronRight,
   GitCommitHorizontal,
   GitCompare,
+  GitPullRequest,
   RotateCw,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,9 +26,19 @@ import {
 import { Spinner } from "@renderer/components/ui/spinner";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
+import { useProjectGitInfo } from "@renderer/lib/git-mode";
 import { cn } from "@renderer/lib/utils";
 import { useExplorer } from "@renderer/state/explorer";
-import type { ReviewTab as ReviewTabModel } from "@shared/types";
+import { useSessions } from "@renderer/state/sessions";
+import { useSettings } from "@renderer/state/settings";
+import {
+  REVIEW_SCOPE_LABELS,
+  ReviewScopeSchema,
+  diffScopeFor,
+  scopeNeedsSession,
+  type ReviewScope,
+  type Session,
+} from "@shared/types";
 import type { Project } from "@shared/types";
 
 import { EmptyState } from "./EmptyState";
@@ -49,15 +60,23 @@ import type { ChangedFile, FileDiff, GitStatus } from "./types";
  * The diffs are Monaco's diff editor in **inline** mode, which is what Codex
  * shows and what fits: a side-by-side diff in a 45%-wide pane is two columns
  * of forty characters each.
+ *
+ * ## Scope, and which directory it is taken in
+ *
+ * `Last turn` and `This session` are measured from revisions main recorded
+ * when the turn began and when the session was created — the renderer sends
+ * the *name* of the scope and main resolves it, because the marks are its
+ * record, not a number the UI is allowed to compute (plan §13, P7).
+ *
+ * Choosing one of them pins the session onto the tab. That matters because the
+ * strip belongs to the **project**: a review that followed whichever thread
+ * happened to be selected would change what it was showing every time someone
+ * clicked another row in the sidebar. A pinned session also moves the whole
+ * read into that session's working directory, which for a thread in `worktree`
+ * mode is not the project's checkout at all.
  */
 
-const SCOPE_LABELS: Record<ReviewTabModel["scope"], string> = {
-  all: "All changes",
-  "1h": "Since an hour ago",
-  "4h": "Since four hours ago",
-  "24h": "Since yesterday",
-  "7d": "Since last week",
-};
+const SCOPES = ReviewScopeSchema.options;
 
 const STATUS_BADGES: Record<ChangedFile["status"], { letter: string; className: string }> = {
   added: { letter: "A", className: "text-emerald-600 dark:text-emerald-400" },
@@ -66,6 +85,10 @@ const STATUS_BADGES: Record<ChangedFile["status"], { letter: string; className: 
   renamed: { letter: "R", className: "text-sky-600 dark:text-sky-400" },
   deleted: { letter: "D", className: "text-rose-600 dark:text-rose-400" },
 };
+
+const FALLBACK_BADGE = { letter: "M", className: "text-amber-600 dark:text-amber-400" };
+
+const badgeFor = (status: ChangedFile["status"]) => STATUS_BADGES[status] ?? FALLBACK_BADGE;
 
 /**
  * The scope is the review's identity: changing it changes every answer on the
@@ -76,21 +99,43 @@ const STATUS_BADGES: Record<ChangedFile["status"], { letter: string; className: 
 export function ReviewTab(props: {
   tabId: string;
   project: Project;
-  scope: ReviewTabModel["scope"];
+  scope: ReviewScope;
+  sessionId: string | null;
 }) {
-  return <ReviewBody key={`${props.project.id}:${props.scope}`} {...props} />;
+  return (
+    <ReviewBody
+      key={`${props.project.id}:${props.scope}:${props.sessionId ?? ""}`}
+      {...props}
+    />
+  );
 }
 
 function ReviewBody({
   tabId,
   project,
   scope,
+  sessionId,
 }: {
   tabId: string;
   project: Project;
-  scope: ReviewTabModel["scope"];
+  scope: ReviewScope;
+  sessionId: string | null;
 }) {
   const update = useExplorer((state) => state.update);
+  const sessions = useSessions((state) => state.sessions);
+  const activeSessionId = useSessions((state) => state.activeId);
+  const info = useProjectGitInfo(project.id);
+
+  // The session the scope is measured in. A pinned one that has since been
+  // deleted falls back to the project, which is what an unpinned tab reads.
+  const pinned = sessions.find((candidate) => candidate.id === sessionId) ?? null;
+  const candidate =
+    pinned ?? sessions.find((session) => session.id === activeSessionId) ?? null;
+  const target = scopeNeedsSession(scope) ? candidate : pinned;
+  const request = useMemo(
+    () => ({ projectId: project.id, ...(target ? { sessionId: target.id } : {}) }),
+    [project.id, target],
+  );
 
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,7 +146,7 @@ function ReviewBody({
   const read = useCallback(
     (openTop: boolean) =>
       window.hardcore.git
-        .status({ projectId: project.id, scope: scopeFor(scope) })
+        .status({ ...request, scope: diffScopeFor(scope) })
         .catch(() => null)
         .then((next) => {
           setStatus(next);
@@ -121,7 +166,7 @@ function ReviewBody({
             );
           }
         }),
-    [project.id, scope],
+    [request, scope],
   );
 
   useEffect(() => {
@@ -150,6 +195,15 @@ function ReviewBody({
     setLoading(true);
     void read(false);
   }, [read]);
+
+  const chooseScope = (next: ReviewScope) => {
+    // Pin the session the moment a scope needs one, so the tab keeps showing
+    // the thread it was opened against rather than following the sidebar.
+    update(tabId, {
+      scope: next,
+      sessionId: scopeNeedsSession(next) ? (candidate?.id ?? null) : null,
+    });
+  };
 
   const scrollTo = (path: string) => {
     setOpen((current) => new Set(current).add(path));
@@ -184,20 +238,24 @@ function ReviewBody({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button className="h-6 gap-1 px-2 text-[13px] font-medium" size="sm" variant="ghost">
-              {SCOPE_LABELS[scope]}
+              {REVIEW_SCOPE_LABELS[scope]}
               <ChevronDown className="size-3 text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-52">
+          <DropdownMenuContent align="start" className="w-56">
             <DropdownMenuLabel className="text-xs">Compare against</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {(Object.keys(SCOPE_LABELS) as ReviewTabModel["scope"][]).map((option) => (
+            {SCOPES.map((option) => (
               <DropdownMenuCheckboxItem
                 checked={option === scope}
+                // The two session scopes need a thread to measure from; with
+                // none they are shown and disabled rather than hidden, so the
+                // menu does not change shape depending on what is selected.
+                disabled={scopeNeedsSession(option) && !candidate}
                 key={option}
-                onSelect={() => update(tabId, { scope: option })}
+                onSelect={() => chooseScope(option)}
               >
-                {SCOPE_LABELS[option]}
+                {REVIEW_SCOPE_LABELS[option]}
               </DropdownMenuCheckboxItem>
             ))}
           </DropdownMenuContent>
@@ -207,8 +265,23 @@ function ReviewBody({
 
         <div className="flex-1" />
 
+        {/*
+          Which thread, then which branch. The title gives up its width first:
+          a thread names itself from its first prompt, which can be a
+          paragraph, and the branch is the shorter and more load-bearing of
+          the two — it says where a commit from this header would land.
+        */}
+        {target ? (
+          <span
+            className="max-w-[160px] truncate text-[12px] text-muted-foreground"
+            title={`${target.title} · ${target.cwd}`}
+          >
+            {target.title}
+          </span>
+        ) : null}
+
         {status.branch ? (
-          <span className="truncate text-[12px] text-muted-foreground">{status.branch}</span>
+          <span className="shrink-0 text-[12px] text-muted-foreground">{status.branch}</span>
         ) : null}
 
         <Button
@@ -222,19 +295,17 @@ function ReviewBody({
         </Button>
 
         <CommitPopover
+          canOpenPullRequest={Boolean(info?.hasGh && info.hasRemote)}
           disabled={status.files.length === 0}
           onDone={refresh}
-          projectId={project.id}
+          request={request}
+          session={target}
         />
       </header>
 
       {status.files.length === 0 ? (
         <EmptyState
-          description={
-            scope === "all"
-              ? "The working tree matches HEAD. Diffs from an agent's turn will land here."
-              : "Nothing changed in that window."
-          }
+          description={emptyDescription(scope)}
           icon={GitCompare}
           title="No changes"
         />
@@ -255,7 +326,6 @@ function ReviewBody({
                   })
                 }
                 open={open.has(file.path)}
-                projectId={project.id}
                 ref={(node) => {
                   if (node) {
                     sections.current.set(file.path, node);
@@ -263,6 +333,7 @@ function ReviewBody({
                     sections.current.delete(file.path);
                   }
                 }}
+                request={request}
                 scope={scope}
               />
             ))}
@@ -282,9 +353,25 @@ function ReviewBody({
   );
 }
 
+function emptyDescription(scope: ReviewScope): string {
+  switch (scope) {
+    case "all":
+      return "The working tree matches HEAD. Diffs from an agent's turn will land here.";
+    case "turn":
+      return "Nothing changed in the newest turn.";
+    case "session":
+      return "Nothing has changed since this session started.";
+    default:
+      return "Nothing changed in that window.";
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Pieces                                                                      */
 /* -------------------------------------------------------------------------- */
+
+/** The project (and optionally session) every read in this tab is answered for. */
+type ReviewRequest = { projectId: string; sessionId?: string };
 
 function Totals({ insertions, deletions }: { insertions: number; deletions: number }) {
   return (
@@ -296,7 +383,7 @@ function Totals({ insertions, deletions }: { insertions: number; deletions: numb
 }
 
 function RailRow({ file, onSelect }: { file: ChangedFile; onSelect: () => void }) {
-  const badge = STATUS_BADGES[file.status];
+  const badge = badgeFor(file.status);
   const name = file.path.split("/").pop() ?? file.path;
   return (
     <button
@@ -320,15 +407,15 @@ function RailRow({ file, onSelect }: { file: ChangedFile; onSelect: () => void }
 
 function FileSection({
   file,
-  projectId,
+  request,
   scope,
   open,
   onToggle,
   ref,
 }: {
   file: ChangedFile;
-  projectId: string;
-  scope: ReviewTabModel["scope"];
+  request: ReviewRequest;
+  scope: ReviewScope;
   open: boolean;
   onToggle: () => void;
   ref: (node: HTMLElement | null) => void;
@@ -343,7 +430,7 @@ function FileSection({
     }
     let cancelled = false;
     void window.hardcore.git
-      .fileDiff({ projectId, path: file.path, scope: scopeFor(scope) })
+      .fileDiff({ ...request, path: file.path, scope: diffScopeFor(scope) })
       .then((result) => {
         if (!cancelled) {
           setDiff(result);
@@ -353,9 +440,9 @@ function FileSection({
     return () => {
       cancelled = true;
     };
-  }, [open, diff, projectId, file.path, scope]);
+  }, [open, diff, request, file.path, scope]);
 
-  const badge = STATUS_BADGES[file.status];
+  const badge = badgeFor(file.status);
   const height = useMemo(() => sectionHeight(diff), [diff]);
 
   return (
@@ -421,28 +508,45 @@ function FileSection({
   );
 }
 
+/**
+ * `Commit or push`, and `Create pull request` beside it (plan §9).
+ *
+ * The settings' commit instructions are the message box's **placeholder**, not
+ * text prepended to what the person writes: they are house style for whoever
+ * is composing the message, and a GUI that silently pasted them into every
+ * commit would be writing commit messages nobody read.
+ *
+ * The pull-request action is offered only when `gh` is on the PATH and the
+ * repository has a remote. Everything else it needs — pushing a branch that
+ * has no upstream, choosing the base, the draft setting — main does.
+ */
 function CommitPopover({
-  projectId,
+  request,
+  session,
   disabled,
+  canOpenPullRequest,
   onDone,
 }: {
-  projectId: string;
+  request: ReviewRequest;
+  session: Session | null;
   disabled: boolean;
+  canOpenPullRequest: boolean;
   onDone: () => void;
 }) {
+  const settings = useSettings((state) => state.settings);
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const run = async (push: boolean) => {
-    if (message.trim() === "" || busy) {
+  const run = async (work: () => Promise<unknown>) => {
+    if (busy) {
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await window.hardcore.git.commit({ projectId, message: message.trim(), push });
+      await work();
       setMessage("");
       setOpen(false);
       onDone();
@@ -453,6 +557,35 @@ function CommitPopover({
     }
   };
 
+  const commit = (push: boolean) => {
+    if (message.trim() === "") {
+      return;
+    }
+    void run(() => window.hardcore.git.commit({ ...request, message: message.trim(), push }));
+  };
+
+  /**
+   * The pull request's title is the message's first line, and its body the
+   * rest — git's own convention, so one box does for both and there is no
+   * second form to fill in. A session with a title uses that instead when the
+   * box is empty: the thread already named itself from the first prompt.
+   */
+  const pullRequest = () => {
+    const [first, ...rest] = message.trim().split("\n");
+    const title = first?.trim() || session?.title || "";
+    if (!title) {
+      return;
+    }
+    void run(async () => {
+      const { url } = await window.hardcore.git.pullRequest({
+        ...request,
+        title,
+        body: rest.join("\n").trim(),
+      });
+      await window.hardcore.shell.openExternal({ url });
+    });
+  };
+
   return (
     <Popover onOpenChange={setOpen} open={open}>
       <PopoverTrigger asChild>
@@ -461,21 +594,40 @@ function CommitPopover({
           Commit or push
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-3">
+      <PopoverContent align="end" className="w-96 p-3">
         <p className="mb-2 text-[12px] font-medium">Commit every change</p>
         <Textarea
+          aria-label="Commit message"
           autoFocus
           className="min-h-20 text-[13px]"
           onChange={(event) => setMessage(event.target.value)}
-          placeholder="Message"
+          placeholder={settings?.commitInstructions?.trim() || "Message"}
           value={message}
         />
+        {settings?.commitInstructions?.trim() ? (
+          <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">
+            {settings.commitInstructions.trim()}
+          </p>
+        ) : null}
         {error ? <p className="mt-2 text-[11px] text-destructive">{error}</p> : null}
-        <div className="mt-2.5 flex items-center justify-end gap-1.5">
+        <div className="mt-2.5 flex items-center gap-1.5">
+          {canOpenPullRequest ? (
+            <Button
+              className="h-7 gap-1.5 text-xs"
+              disabled={busy || (message.trim() === "" && !session?.title)}
+              onClick={pullRequest}
+              size="sm"
+              variant="ghost"
+            >
+              <GitPullRequest className="size-3.5" />
+              Create pull request
+            </Button>
+          ) : null}
+          <div className="flex-1" />
           <Button
             className="h-7 text-xs"
             disabled={busy || message.trim() === ""}
-            onClick={() => void run(false)}
+            onClick={() => commit(false)}
             size="sm"
             variant="secondary"
           >
@@ -484,13 +636,19 @@ function CommitPopover({
           <Button
             className="h-7 text-xs"
             disabled={busy || message.trim() === ""}
-            onClick={() => void run(true)}
+            onClick={() => commit(true)}
             size="sm"
           >
             {busy ? <Spinner className="size-3" /> : null}
             Commit and push
           </Button>
         </div>
+        {canOpenPullRequest ? (
+          <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+            {settings?.pullRequestInstructions?.trim() ||
+              "The first line is the title, the rest the description. Uncommitted work is not included."}
+          </p>
+        ) : null}
       </PopoverContent>
     </Popover>
   );
@@ -499,25 +657,6 @@ function CommitPopover({
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
-
-/**
- * The tab's scope enum as the IPC's `DiffScope`. Mirrors `scopeFor` in
- * `src/main/ipc/explorer.ts`; the strings are git's own `--before=` syntax.
- */
-function scopeFor(scope: ReviewTabModel["scope"]) {
-  switch (scope) {
-    case "all":
-      return { kind: "working-tree" } as const;
-    case "1h":
-      return { kind: "since", since: "1 hour ago" } as const;
-    case "4h":
-      return { kind: "since", since: "4 hours ago" } as const;
-    case "24h":
-      return { kind: "since", since: "24 hours ago" } as const;
-    case "7d":
-      return { kind: "since", since: "7 days ago" } as const;
-  }
-}
 
 /**
  * How tall a section needs to be. Monaco has no intrinsic height, so someone

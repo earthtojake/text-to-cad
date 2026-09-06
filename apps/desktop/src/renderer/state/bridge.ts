@@ -22,52 +22,6 @@ import { useUpdates } from "./updates";
 
 export type UiCommand = IpcEventPayload<"ui.command">["command"];
 
-/**
- * A `ui.command`, whether it came from the app menu, a shortcut bound in the
- * renderer, or a control on the page (the files-changed pill sends
- * `open-review`). One switch, so none of them can drift.
- */
-export function runUiCommand(command: UiCommand): void {
-  const ui = useUi.getState();
-  switch (command) {
-    case "open-settings":
-      ui.openSettings();
-      break;
-    case "close-settings":
-      ui.closeSettings();
-      break;
-    case "command-palette":
-      ui.toggleCommandPalette();
-      break;
-    case "toggle-sidebar":
-      void toggleLayout("sidebarCollapsed");
-      break;
-    case "toggle-explorer":
-      void toggleLayout("explorerCollapsed");
-      break;
-    case "new-session":
-      useSessions.getState().setActive(null);
-      ui.closeSettings();
-      break;
-    case "open-review": {
-      // P3 gives the tab a body; opening it (and the explorer, if it was
-      // collapsed) is the whole of what the pill asks for.
-      const { settings, setLayout } = useSettings.getState();
-      if (settings?.layout.explorerCollapsed) {
-        void setLayout({ explorerCollapsed: false });
-      }
-      const explorer = useExplorer.getState();
-      const existing = explorer.tabs.find((tab) => tab.kind === "review");
-      if (existing) {
-        explorer.setActive(existing.id);
-      } else {
-        explorer.open("review");
-      }
-      break;
-    }
-  }
-}
-
 /** Attach every main → renderer listener. Returns a detach function. */
 export function subscribeToMain(): () => void {
   const off = [
@@ -114,9 +68,7 @@ export function subscribeToMain(): () => void {
         changes.map((change) => change.path),
       );
     }),
-    window.hardcore.on("ui.command", ({ command }) => {
-      runUiCommand(command);
-    }),
+    window.hardcore.on("ui.command", (payload) => runUiCommand(payload)),
   ];
 
   // The explorer strip belongs to the active project, so it follows the
@@ -138,6 +90,75 @@ export function subscribeToMain(): () => void {
       detach();
     }
   };
+}
+
+/**
+ * One `ui.command`, whether it came from the app menu or from a button in the
+ * renderer.
+ *
+ * Exported because Settings › Git & Worktrees' `New chat in this worktree` is
+ * the same command as the menu's New Session, only with a directory attached —
+ * and a second implementation of "start a thread and show it" would be a
+ * second place for the two to disagree about what happens to Settings, the
+ * project selection and the explorer strip.
+ */
+export function runUiCommand(payload: IpcEventPayload<"ui.command">): void {
+  const ui = useUi.getState();
+  switch (payload.command) {
+    case "open-settings":
+      ui.openSettings();
+      break;
+    case "close-settings":
+      ui.closeSettings();
+      break;
+    case "command-palette":
+      ui.toggleCommandPalette();
+      break;
+    case "toggle-sidebar":
+      void toggleLayout("sidebarCollapsed");
+      break;
+    case "toggle-explorer":
+      void toggleLayout("explorerCollapsed");
+      break;
+    case "new-session": {
+      ui.closeSettings();
+      const projectId = payload.projectId ?? useProjects.getState().activeId;
+      if (payload.projectId) {
+        useProjects.getState().setActive(payload.projectId);
+      }
+      // Without a directory this is the menu item, which lands on the empty
+      // new-session state the session pane shows and lets the composer decide
+      // the mode. With one it is Settings' `New chat in this worktree`, and
+      // the thread starts in that worktree straight away.
+      if (!projectId || !payload.cwd) {
+        useSessions.getState().setActive(null);
+        return;
+      }
+      void useSessions
+        .getState()
+        .start({ projectId, cwd: payload.cwd, gitMode: "worktree" })
+        .catch((error: unknown) => {
+          console.error("[ui] could not start a session", error);
+        });
+      break;
+    }
+    case "open-review": {
+      // The files-changed pill: open (or focus) the Review tab, and the
+      // explorer if it was collapsed. P3 gives the tab its body.
+      const { settings, setLayout } = useSettings.getState();
+      if (settings?.layout.explorerCollapsed) {
+        void setLayout({ explorerCollapsed: false });
+      }
+      const explorer = useExplorer.getState();
+      const existing = explorer.tabs.find((tab) => tab.kind === "review");
+      if (existing) {
+        explorer.setActive(existing.id);
+      } else {
+        explorer.open("review");
+      }
+      break;
+    }
+  }
 }
 
 function toggleLayout(key: "sidebarCollapsed" | "explorerCollapsed") {

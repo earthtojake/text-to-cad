@@ -30,12 +30,13 @@ thing. The Browser pane cannot show an Electron window — visual checks go
 through computer-use `app_screenshot` on the Hardcore window, or through the
 Playwright screenshots below.
 
-Two environment variables matter in development:
+Three environment variables matter in development:
 
 | Variable | Effect |
 | --- | --- |
 | `HARDCORE_APTABASE_KEY` | Read at BUILD time and compiled in (see Telemetry). Unset means no network call is ever attempted. |
 | `CAD_DESKTOP_PYTHON` | P5: use a checkout's `.venv` instead of the managed Python runtime. |
+| `HARDCORE_FAKE_AGENT` | Launch this stdio ACP agent instead of whatever the registry says, for every provider. `tests/e2e/git.spec.ts` points it at `tests/fake-agent/index.mjs`; a session needs an agent to exist at all, and a real one would make the suite a test of somebody's login state. |
 
 ## Telemetry
 
@@ -73,13 +74,20 @@ npm run e2e          # playwright _electron against out/ — run `npm run build`
 ```
 
 `npm run e2e` writes `tests/e2e/__screenshots__/`: the shell in both themes,
-Settings, and one per explorer surface — `file-markdown-preview`,
+Settings, one per explorer surface — `file-markdown-preview`,
 `file-markdown-source`, `file-image`, `file-cad-placeholder`, `terminal`,
 `browser-empty`, `browser`, `review`, `strip`, `expanded` and
-`explorer-light`. Look at them; they are the cheapest review of whether the
-app still looks like an app, and every defect found in P3's explorer — a tree
-that did not reveal the open file, a `+` that scrolled out of reach, a
-terminal that replayed its scrollback twice — was found by reading one.
+`explorer-light` — and the `git-*` set for the git modes: the review under
+three scopes, before and after a commit, the sidebar's worktree glyph, and
+Settings' per-project worktree card with and without one. Look at them; they
+are the cheapest review of whether the app still looks like an app, and every
+defect found in P3's explorer — a tree that did not reveal the open file, a
+`+` that scrolled out of reach, a terminal that replayed its scrollback twice
+— was found by reading one. So were two of P7's: a session titled with a whole
+prompt scrolled the sidebar sideways and took the git glyph off the edge
+(Radix's scroll viewport wraps its children in a `display: table` div, which
+sizes to content), and a worktree card's absolute path ran under its own
+buttons because a path is one unbreakable word.
 
 The explorer suite opens **this repository** as its project, on purpose: a
 fixture of six files would pass while the tree ignored nothing and the watcher
@@ -183,12 +191,16 @@ src/main/                 the Electron main process: everything with a side effe
   ipc/{acp,agents}.ts     the P1 handler branches, spread into ipc/index.ts
   ipc/{plugins,runtime}.ts  P6's branches, answering for P5 until it lands
   ipc/dialogs.ts          the native folder and file choosers Settings' path rows use
-  ipc/{explorer,cad}.ts   P3's handler branches: files, terminals, git, and the viewer origin stub
+  ipc/{explorer,cad}.ts   P3's handler branches: files, terminals, and the viewer origin stub
+  ipc/git.ts              P7's: the review's reads in a session's directory, the
+                          commit, the pull request, and the worktree list
   explorer/               fs.ts (tree, ignores, read/write, chokidar watcher),
                           terminal.ts (node-pty sessions + scrollback)
   cad/                    P4, P5
-  projects/git.ts         status, per-file diff and commit (P7 adds the modes
-                          and worktrees)
+  projects/git.ts         status, per-file diff, commit and push; then repository
+                          detection, worktrees, the keep-limit sweep and `gh pr create`
+  projects/workspace.ts   a git mode as a directory: the three modes, the worktree
+                          layout, and what a deleted session takes with it
 src/preload/index.ts      the contextBridge: builds `window.hardcore` by walking the contract
 src/shared/               types.ts (domain types as zod schemas)
   ipc/index.ts            the contract: one branch per domain, assembled from the files beside it
@@ -198,7 +210,8 @@ src/shared/               types.ts (domain types as zod schemas)
   ipc/plugins.ts, ipc/runtime.ts, ipc/dialogs.ts  the plugin, CAD runtime and chooser branches (P6)
   agents.ts               provider and status schemas
   acp/types.ts, acp/reduce.ts  SessionState and the pure session/update reducer
-  ipc/explorer.ts         explorer.* terminal.* git.* and their events (P3)
+  ipc/explorer.ts         explorer.* terminal.* and their events (P3)
+  ipc/git.ts              git.* — the review's reads plus P7's worktrees
   ipc/cad.ts              cad.viewerOrigin — P3's stub, P5's implementation
 src/renderer/
   app/                    Shell (three resizable panes), App, CommandPalette
@@ -211,6 +224,8 @@ src/renderer/
   features/settings       the Settings route, the card-grouped rows, the agent drawer, and
                           pages/ — one module per page; search is done by the rows themselves
   lib/shortcuts.ts        the keyboard-shortcut table the Shortcuts page prints
+  lib/git-mode.ts         the sidebar glyph, the composer chip's labels and which
+                          modes a project can offer — one answer, two features
   hooks/use-appearance.ts accent, UI scale, code font, reduced motion, translucency as <html> tokens
   components/ui           shadcn/ui, vendored
   components/ai-elements  Vercel AI Elements, vendored (types.ts replaces the `ai` package)
@@ -258,6 +273,48 @@ Two things learned from the real adapters that the code now depends on:
   marker. The Claude fixture on this machine is the auth-failure exchange for
   that reason (`claude-code-auth-required.jsonl`); a machine with a signed-in
   `claude` (`claude auth status` → `loggedIn: true`) records a full session.
+
+## Git modes and worktrees
+
+Every session has a working directory, and a git mode is how it got one
+(plan §9). No mode is ever forced.
+
+| Mode | `cwd` | `branch` | `worktreePath` |
+| --- | --- | --- | --- |
+| `none` | the project directory | — | — |
+| `checkout` | the project directory | whatever it is on | — |
+| `worktree` | a new worktree | a new `hardcore/<slug>` | the same directory |
+
+`worktree` is the only one that can fail — a project that is not a repository,
+or one with no commits — and it fails with a sentence rather than git's words.
+The others work in a plain folder: git is optional, and a project is a
+directory.
+
+Worktrees live outside the project, one folder per project, whichever agent
+made them:
+
+```
+~/.hardcore/worktrees/<project>/<slug>       branch hardcore/<slug>
+```
+
+The root and the branch prefix are settings, as are the fetch before creating,
+the auto-delete and its keep limit (Settings › Git & Worktrees, which also
+lists what exists per project). The slug comes from the session's first prompt
+when there is one, so a directory can be matched to a thread without opening
+anything. That directory is also the session's *identity* in the agent's own
+store — both `codex resume` and `claude --resume` key their threads by cwd —
+so a Hardcore worktree session is resumable from a terminal later.
+
+Three things are never deleted automatically: a worktree outside the app's own
+root, one with an open session, and one with uncommitted changes. The branch is
+never deleted at all — a checkout can be recreated, the commits on it cannot.
+
+The review's scopes are the other half of this. Main records HEAD when a
+session is created and again at the start of every turn (`sessions.sessionHead`
+and `turnHead`), and `Last turn` / `This session` are `git diff <sha>` against
+the *working tree*, so an edit the agent has not committed is in the answer.
+Those two scopes also move the whole read into the session's directory, which
+for a worktree thread is not the project's checkout.
 
 ## How a change moves through the app
 

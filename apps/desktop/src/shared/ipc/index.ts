@@ -45,10 +45,12 @@ import { pluginsContract, pluginsEvents } from "./plugins";
 import { runtimeContract, runtimeEvents } from "./runtime";
 import { cadIpc } from "./cad";
 import { explorerEvents, explorerIpc } from "./explorer";
+import { gitIpc } from "./git";
 
 export * from "./define";
 export * from "./cad";
 export * from "./explorer";
+export * from "./git";
 
 /* -------------------------------------------------------------------------- */
 /* Requests                                                                    */
@@ -116,9 +118,11 @@ export const ipcContract = defineIpc({
   },
 
   // The branches a phase owns are declared in their own file and spread in
-  // here, so this map stays a map. `explorer.*`, `terminal.*` and `git.*` come
-  // from ./explorer (P3); `cad.*` from ./cad (P3's stub, P5's implementation).
+  // here, so this map stays a map. `explorer.*` and `terminal.*` come from
+  // ./explorer (P3); `git.*` from ./git (P3's reads, P7's worktrees);
+  // `cad.*` from ./cad (P3's stub, P5's implementation).
   ...explorerIpc,
+  ...gitIpc,
   ...cadIpc,
 });
 
@@ -151,6 +155,14 @@ export const ipcEvents = {
       /** The files-changed pill: show the session's diff in the explorer's Review tab (P3). */
       "open-review",
     ]),
+    /**
+     * `new-session` only: the project to start it in, and the directory to
+     * start it in — Settings › Git & Worktrees' `New chat in this worktree`
+     * (plan §2). Without them, `new-session` means "in whatever project is
+     * selected, in the default mode".
+     */
+    projectId: z.string().optional(),
+    cwd: z.string().optional(),
   }),
   /** electron-updater's progress, surfaced on About & Updates. */
   ...appEvents,

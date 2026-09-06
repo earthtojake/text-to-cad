@@ -116,6 +116,21 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 5,
+    name: "worktrees-and-review-marks",
+    // P7: the worktree a session owns (and may take with it when it is
+    // deleted), and the two revisions the review's `Last turn` and `This
+    // session` scopes are measured from. All nullable: a session in `none` or
+    // `checkout` mode has no worktree, and a directory that is not a
+    // repository has no revisions.
+    up: `
+      ALTER TABLE sessions ADD COLUMN worktree_path TEXT;
+      ALTER TABLE sessions ADD COLUMN session_head TEXT;
+      ALTER TABLE sessions ADD COLUMN turn_head TEXT;
+      ALTER TABLE sessions ADD COLUMN turn_started_at INTEGER;
+    `,
+  },
 ];
 
 /**

@@ -18,6 +18,7 @@ import { appHandlers } from "./app";
 import { cadHandlers } from "./cad";
 import { dialogsHandlers } from "./dialogs";
 import { explorerHandlers, initExplorerServices } from "./explorer";
+import { gitHandlers } from "./git";
 import { pluginsHandlers } from "./plugins";
 import { runtimeHandlers } from "./runtime";
 import { IpcError, broadcast, registerIpc, type IpcContext } from "./register";
@@ -129,6 +130,7 @@ const handlers = {
   // A phase's handlers live in their own file and are spread in, exactly as
   // its branch of the contract is (src/shared/ipc/index.ts).
   ...explorerHandlers,
+  ...gitHandlers,
   ...cadHandlers,
 } satisfies Parameters<typeof registerIpc<IpcContract>>[1];
 

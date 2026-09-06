@@ -1,6 +1,13 @@
 import { create } from "zustand";
 
-import type { BrowserTab, ExplorerTab, ExplorerTabKind, FileTab, TerminalTab } from "@shared/types";
+import type {
+  BrowserTab,
+  ExplorerTab,
+  ExplorerTabKind,
+  FileTab,
+  ReviewTab,
+  TerminalTab,
+} from "@shared/types";
 
 /**
  * The explorer's one tab strip. Four kinds, no bottom panel — the terminal is
@@ -49,7 +56,7 @@ function writeLocal(key: string, value: string) {
 /** Initial state for a new tab of each kind. */
 type TabInit = {
   file: Partial<Pick<FileTab, "path" | "viewSource">>;
-  review: Record<string, never>;
+  review: Partial<Pick<ReviewTab, "scope" | "sessionId">>;
   browser: Partial<Pick<BrowserTab, "url">>;
   terminal: Partial<Pick<TerminalTab, "cwd" | "readOnly">>;
 };
@@ -107,7 +114,7 @@ function blankTab(
     case "file":
       return { ...base, kind: "file", path: null, viewSource: false, ...init } as FileTab;
     case "review":
-      return { ...base, kind: "review", scope: "all" as const, ...init };
+      return { ...base, kind: "review", scope: "all" as const, sessionId: null, ...init };
     case "browser":
       return { ...base, kind: "browser", url: null, ...init } as BrowserTab;
     case "terminal":

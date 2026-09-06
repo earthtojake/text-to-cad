@@ -11,6 +11,8 @@
  * Dependencies are injected so this file has no Electron import of its own:
  * main wires it to the sqlite repository, node-pty and the IPC broadcaster.
  */
+import { existsSync } from "node:fs";
+
 import type { McpServer } from "@agentclientprotocol/sdk";
 
 import type {
@@ -34,6 +36,13 @@ export interface SessionRepository {
   remove(id: string): void;
 }
 
+/** What a git mode resolves to (P7, `src/main/projects/workspace.ts`). */
+export type SessionWorkspace = {
+  cwd: string;
+  branch?: string | undefined;
+  worktreePath?: string | undefined;
+};
+
 export type SessionManagerDeps = {
   repo: SessionRepository;
   detector: AgentDetector;
@@ -48,6 +57,35 @@ export type SessionManagerDeps = {
    * `tests/fake-agent`; nothing else sets this.
    */
   launchOverride?: (agentId: string) => Launch | null;
+
+  /**
+   * P7: the git mode as a directory (plan §9). Injected rather than imported
+   * so this file still knows nothing about settings, projects or git — it
+   * takes a directory and runs an agent in it.
+   *
+   * It runs *before* the row is written. A `worktree` mode that cannot be
+   * satisfied — a project that is not a repository — should leave no thread
+   * behind for the person to wonder about, so its message is thrown out of
+   * `create` instead of being stored as a failed session.
+   */
+  workspace?: (input: {
+    projectId: string;
+    gitMode: GitMode;
+    /** The first prompt, when the caller has one: the worktree's slug. */
+    name?: string | undefined;
+    /** An explicit directory — Settings' `New chat in this worktree`. */
+    cwd?: string | undefined;
+  }) => Promise<SessionWorkspace>;
+
+  /**
+   * P7: the commit a directory is at. Recorded when the session is created and
+   * again when each turn starts, which is what the review's `This session` and
+   * `Last turn` scopes are measured from.
+   */
+  head?: (cwd: string) => Promise<string | null>;
+
+  /** P7: remove the session's worktree on delete, if the settings allow it. */
+  releaseWorkspace?: (session: Session) => Promise<void>;
 };
 
 /** Codex's convention: the first line of the first prompt, trimmed to fit a sidebar row. */
@@ -93,24 +131,39 @@ export class SessionManager {
   /* Lifecycle                                                                */
   /* ---------------------------------------------------------------------- */
 
+  /**
+   * A new thread.
+   *
+   * The working directory is resolved from `gitMode` first (plan §9) and only
+   * then is anything written: a worktree that cannot be created is an error
+   * with a sentence in it, not a session row pointing at a directory that does
+   * not exist.
+   */
   async create(input: {
     projectId: string;
     agentId: string;
-    cwd: string;
     gitMode: GitMode;
+    /** Used when there is no workspace resolver — the tests, and `none` mode. */
+    cwd?: string;
+    /** The first prompt, when the caller has one: the worktree's slug. */
+    name?: string | undefined;
     branch?: string;
   }): Promise<Session> {
     if (!agentProvider(input.agentId)) {
       throw new Error(`unknown agent: ${input.agentId}`);
     }
+
+    const workspace = await this.workspaceFor(input);
+    const startHead = await this.headOf(workspace.cwd);
     const now = Date.now();
     const session: Session = {
       id: this.deps.newId(),
       projectId: input.projectId,
       agentId: input.agentId,
-      cwd: input.cwd,
+      cwd: workspace.cwd,
       gitMode: input.gitMode,
-      branch: input.branch,
+      branch: workspace.branch ?? input.branch,
+      ...(workspace.worktreePath ? { worktreePath: workspace.worktreePath } : {}),
       title: "New session",
       createdAt: now,
       updatedAt: now,
@@ -120,6 +173,12 @@ export class SessionManager {
       insertions: 0,
       deletions: 0,
       archived: false,
+      // Both scopes start here. `turnHead` is the session's head until the
+      // first turn moves it, so a review taken before any prompt shows what
+      // the person changed by hand rather than nothing at all.
+      sessionHead: startHead,
+      turnHead: startHead,
+      turnStartedAt: null,
     };
     this.deps.repo.upsert(session);
     this.broadcastIndex();
@@ -173,6 +232,13 @@ export class SessionManager {
     if (session.title === "New session") {
       this.update(id, { title: titleFromPrompt(content) });
     }
+    // The turn's starting point, read before the agent can move it. This is
+    // what the review's `Last turn` scope diffs against; taking it afterwards
+    // would measure the turn against its own result.
+    this.update(id, {
+      turnHead: await this.headOf(session.cwd),
+      turnStartedAt: Date.now(),
+    });
     try {
       const response = await connection.prompt(content, `${id}:${Date.now()}`);
       this.persistTally(id);
@@ -229,13 +295,27 @@ export class SessionManager {
     }
   }
 
-  delete(id: string): void {
+  /**
+   * Close and forget, and — when the settings say so and the worktree is
+   * clean — take the worktree with it (plan §9).
+   *
+   * The row goes either way. A worktree that cannot be removed because there
+   * is uncommitted work in it stays on disk and in Settings › Git &
+   * Worktrees, which is where someone can look at it and decide; refusing to
+   * delete the thread over it would leave a thread nobody wants and a
+   * directory they cannot see.
+   */
+  async delete(id: string): Promise<void> {
+    const session = this.deps.repo.get(id);
     this.live.get(id)?.close();
     this.live.delete(id);
     this.tallies.delete(id);
     this.approval.delete(id);
     this.deps.repo.remove(id);
     this.broadcastIndex();
+    if (session) {
+      await this.deps.releaseWorkspace?.(session).catch(() => undefined);
+    }
   }
 
   /** On quit: kill every adapter. */
@@ -248,6 +328,41 @@ export class SessionManager {
   /* ---------------------------------------------------------------------- */
   /* Internals                                                                */
   /* ---------------------------------------------------------------------- */
+
+  /**
+   * The directory a new session runs in.
+   *
+   * Without a resolver — the unit tests, and any caller that already knows
+   * where it wants to run — the given `cwd` is taken as it is. Main always
+   * installs one (`src/main/ipc/git.ts`), so in the app the mode decides.
+   */
+  private async workspaceFor(input: {
+    projectId: string;
+    gitMode: GitMode;
+    cwd?: string;
+    name?: string | undefined;
+  }): Promise<SessionWorkspace> {
+    if (this.deps.workspace) {
+      return this.deps.workspace({
+        projectId: input.projectId,
+        gitMode: input.gitMode,
+        name: input.name,
+        cwd: input.cwd,
+      });
+    }
+    if (!input.cwd) {
+      throw new Error("a session needs a working directory");
+    }
+    return { cwd: input.cwd };
+  }
+
+  /** The commit a directory is at, or null — never a reason to fail a turn. */
+  private async headOf(cwd: string): Promise<string | null> {
+    if (!this.deps.head) {
+      return null;
+    }
+    return this.deps.head(cwd).catch(() => null);
+  }
 
   private require(id: string): Session {
     const session = this.deps.repo.get(id);
@@ -283,6 +398,17 @@ export class SessionManager {
     const status = this.deps.detector.list().find((candidate) => candidate.id === provider.id);
     if (!provider.launchWithoutBinary && status && !status.installed) {
       throw new Error(`${provider.name} is not installed`);
+    }
+    // A worktree removed from Settings, or from a terminal, while its thread
+    // was closed. The adapter would fail to spawn with an ENOENT naming an
+    // absolute path; this says what actually happened.
+    if (!existsSync(session.cwd)) {
+      const message =
+        session.gitMode === "worktree"
+          ? "This session's worktree has been deleted"
+          : "This session's directory no longer exists";
+      this.setStatus(session.id, "error", message);
+      throw new Error(message);
     }
     this.live.get(session.id)?.close();
     this.setStatus(session.id, "connecting");

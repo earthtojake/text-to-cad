@@ -24,7 +24,7 @@ phase is not an oversight — it is the seam.
 | P4 (done) | `apps/viewer`'s `CadFileView` and its `viewerOrigin` threading; P3's file tab renders it |
 | P5 | `src/main/cad/{runtime,viewer,plugin,mcp-server}.ts`, `resources/`, `skills/hardcore-app`. `viewer.ts` is what replaces P3's `cad.viewerOrigin` stub — the shape it answers with is already declared, and the renderer already handles both answers |
 | P6 | `src/renderer/features/settings` — the pages' contents |
-| P7 | the rest of `src/main/projects/git.ts` — the three git modes and worktrees. P3 wrote its status, per-file diff and commit for the review tab |
+| P7 (done) | `src/main/projects/{git,workspace}.ts`, `src/shared/ipc/git.ts`, `src/main/ipc/git.ts`, `src/renderer/lib/git-mode.ts`, the review tab's scopes and commit popover, Git & Worktrees' per-project cards, `tests/e2e/git.spec.ts` |
 | P8 (done) | `electron-builder.yml`, `build/`, `resources/`, `scripts/{package,make-icons}.mjs`, `updater.ts`, `telemetry.ts`, `src/{shared,main}/ipc/app.ts`, the CI jobs |
 
 Work outside your phase's directories only where the seam requires it — a new
@@ -74,3 +74,14 @@ not.
   with a file, a terminal and a review open is looking at a directory; closing
   a thread must not take those away. `explorer_tabs` is keyed by `project_id`
   (migration 2).
+- **The renderer never picks a session's working directory.** It sends a git
+  mode; main resolves it (`src/main/projects/workspace.ts`), creates the
+  worktree, and writes `cwd`, `branch` and `worktreePath` onto the row. The one
+  exception is Settings' `New chat in this worktree`, which names a directory
+  that already exists — and main checks it is the project or one of that
+  project's own worktrees before running anything in it.
+- **A review's `Last turn` and `This session` are revisions, not times.** Main
+  records HEAD when a session is created and again at the start of every turn
+  (`sessions.sessionHead` / `turnHead`); the renderer sends the scope's *name*
+  and main resolves it. Two commits can share a second, and `--before=` picks a
+  commit rather than a moment, so a timestamp cannot do this job.

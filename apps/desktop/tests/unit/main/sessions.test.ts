@@ -1,4 +1,4 @@
-import { mkdtemp, realpath } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,7 +7,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { AgentDetector } from "@main/agents/detect";
 import { spawnProcessTerminal } from "@main/acp/process-backend";
-import { SessionManager, diffCounts, titleFromPrompt, type SessionRepository } from "@main/acp/sessions";
+import {
+  SessionManager,
+  diffCounts,
+  titleFromPrompt,
+  type SessionManagerDeps,
+  type SessionRepository,
+} from "@main/acp/sessions";
 import type { AgentProvider } from "@shared/agents";
 import type { IpcEventChannel } from "@shared/ipc";
 import type { Session } from "@shared/types";
@@ -84,7 +90,7 @@ afterEach(() => {
   }
 });
 
-async function setup() {
+async function setup(extra: Partial<SessionManagerDeps> = {}) {
   const repo = memoryRepo();
   const broadcasts: { channel: IpcEventChannel; payload: unknown }[] = [];
   const detector = new AgentDetector([fakeProvider], {
@@ -105,6 +111,7 @@ async function setup() {
       broadcasts.push({ channel, payload });
     },
     newId: () => `session-${++counter}`,
+    ...extra,
   });
   managers.push(manager);
   const cwd = await realpath(await mkdtemp(path.join(os.tmpdir(), "hardcore-mgr-")));
@@ -196,6 +203,136 @@ describe("SessionManager", () => {
     expect(manager.list("p1")).toHaveLength(1);
     expect(manager.list()).toHaveLength(2);
     expect(manager.list("p2")[0]?.branch).toBe("main");
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* P7: the git mode decides the directory (plan §9)                    */
+  /* ------------------------------------------------------------------ */
+
+  it("resolves the working directory from the git mode, and records both review marks", async () => {
+    const { repo, manager, cwd } = await setup({
+      workspace: async ({ gitMode, name }) => {
+        if (gitMode !== "worktree") {
+          return { cwd, ...(gitMode === "checkout" ? { branch: "main" } : {}) };
+        }
+        // A real resolver makes the directory; the adapter is spawned in it.
+        await mkdir(`${cwd}/wt`, { recursive: true });
+        return {
+          cwd: `${cwd}/wt`,
+          branch: `hardcore/${name ?? "generated"}`,
+          worktreePath: `${cwd}/wt`,
+        };
+      },
+      head: async (directory: string) =>
+        directory.endsWith("/wt") ? "worktree-head" : "checkout-head",
+    });
+
+    const plain = await manager.create({ projectId: "p1", agentId: "claude-code", gitMode: "none" });
+    expect(plain.cwd).toBe(cwd);
+    expect(plain.branch).toBeUndefined();
+    expect(plain.worktreePath).toBeUndefined();
+    // Both scopes start at the same revision, so a review taken before the
+    // first prompt shows what the person changed by hand rather than nothing.
+    expect(plain).toMatchObject({
+      sessionHead: "checkout-head",
+      turnHead: "checkout-head",
+      turnStartedAt: null,
+    });
+
+    const checkout = await manager.create({
+      projectId: "p1",
+      agentId: "claude-code",
+      gitMode: "checkout",
+    });
+    expect(checkout).toMatchObject({ cwd, branch: "main" });
+    expect(checkout.worktreePath).toBeUndefined();
+
+    const worktree = await manager.create({
+      projectId: "p1",
+      agentId: "claude-code",
+      gitMode: "worktree",
+      name: "Model the wrist",
+    });
+    expect(worktree).toMatchObject({
+      cwd: `${cwd}/wt`,
+      branch: "hardcore/Model the wrist",
+      worktreePath: `${cwd}/wt`,
+      sessionHead: "worktree-head",
+    });
+    expect(repo.get(worktree.id)?.cwd).toBe(`${cwd}/wt`);
+  });
+
+  it("marks where the working tree was when each turn began", async () => {
+    let head = "before-the-turn";
+    const { repo, manager, cwd } = await setup({ head: async () => head });
+    const session = await manager.create({
+      projectId: "p1",
+      agentId: "claude-code",
+      cwd,
+      gitMode: "none",
+    });
+    expect(repo.get(session.id)?.turnHead).toBe("before-the-turn");
+
+    head = "the-turn-starts-here";
+    await manager.prompt(session.id, [{ type: "text", text: "hello" }]);
+
+    const row = repo.get(session.id)!;
+    // The turn's mark moved; the session's did not.
+    expect(row.turnHead).toBe("the-turn-starts-here");
+    expect(row.sessionHead).toBe("before-the-turn");
+    expect(row.turnStartedAt).toBeGreaterThan(0);
+  });
+
+  it("refuses a mode its workspace cannot satisfy, and writes no row for it", async () => {
+    const { repo, manager } = await setup({
+      workspace: async () => {
+        throw new Error("Project is not a git repository, worktree mode unavailable");
+      },
+    });
+    await expect(
+      manager.create({ projectId: "p1", agentId: "claude-code", gitMode: "worktree" }),
+    ).rejects.toThrow("Project is not a git repository, worktree mode unavailable");
+    // No half-made thread pointing at a directory that does not exist.
+    expect(manager.list()).toHaveLength(0);
+    expect(repo.rows.size).toBe(0);
+  });
+
+  it("hands the session to releaseWorkspace on delete", async () => {
+    const released: (string | undefined)[] = [];
+    const { manager, cwd } = await setup({
+      workspace: async () => ({ cwd, worktreePath: `${cwd}/wt` }),
+      releaseWorkspace: async (session) => {
+        released.push(session.worktreePath);
+      },
+    });
+    const session = await manager.create({
+      projectId: "p1",
+      agentId: "claude-code",
+      gitMode: "worktree",
+    });
+    await manager.delete(session.id);
+    expect(released).toEqual([`${cwd}/wt`]);
+  });
+
+  it("says what happened when a session's directory has gone", async () => {
+    const { manager, cwd, broadcasts } = await setup();
+    const session = await manager.create({
+      projectId: "p1",
+      agentId: "claude-code",
+      cwd,
+      gitMode: "none",
+    });
+    manager.close(session.id);
+    await rm(cwd, { recursive: true, force: true });
+
+    await expect(manager.load(session.id)).rejects.toThrow(/directory no longer exists/);
+    expect(
+      broadcasts.some(
+        (entry) =>
+          entry.channel === "session.status" &&
+          (entry.payload as { error: string | null }).error?.includes("no longer exists"),
+      ),
+    ).toBe(true);
   });
 });
 

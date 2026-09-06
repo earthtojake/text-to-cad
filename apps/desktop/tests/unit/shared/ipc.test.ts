@@ -92,10 +92,15 @@ describe("the contract", () => {
       "terminal.resize",
       "terminal.attach",
       "terminal.kill",
+      // P3's reads and P7's worktrees — src/shared/ipc/git.ts
+      "git.projectInfo",
       "git.status",
       "git.fileDiff",
       "git.unifiedDiff",
       "git.commit",
+      "git.pullRequest",
+      "git.worktrees",
+      "git.removeWorktree",
       // P3's stub for P5 — src/shared/ipc/cad.ts
       "cad.viewerOrigin",
     ]);

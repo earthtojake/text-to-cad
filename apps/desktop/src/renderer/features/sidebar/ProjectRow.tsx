@@ -27,6 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
+import { gitGlyphFor, gitGlyphLabel, useProjectGitInfo } from "@renderer/lib/git-mode";
 import { useProjects } from "@renderer/state/projects";
 import { useProjectSessions, useSessions } from "@renderer/state/sessions";
 import type { Project, Session } from "@shared/types";
@@ -222,7 +223,7 @@ function SessionRow({
       <ContextMenuTrigger asChild>
         <div
           className={cn(
-            "group/session flex items-center gap-1.5 rounded-md pr-1 pl-2 transition-colors",
+            "group/session flex min-w-0 items-center gap-1.5 rounded-md pr-1 pl-2 transition-colors",
             selected
               ? "bg-sidebar-accent text-sidebar-accent-foreground"
               : "hover:bg-sidebar-accent/60",
@@ -258,13 +259,7 @@ function SessionRow({
             </button>
           )}
           <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
-            {busy ? (
-              <Loader2 aria-label="Working" className="size-3 animate-spin" />
-            ) : session.gitMode === "worktree" ? (
-              <GitFork aria-label="Runs in a worktree" className="size-3" />
-            ) : session.gitMode === "checkout" && session.branch ? (
-              <GitBranch aria-label={`On ${session.branch}`} className="size-3" />
-            ) : null}
+            {busy ? <Loader2 aria-label="Working" className="size-3 animate-spin" /> : <SessionGlyph session={session} />}
           </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -326,4 +321,19 @@ function MenuItemBoth({
 function Separator() {
   const kind = useContext(MenuContext);
   return kind === "dropdown" ? <DropdownMenuSeparator /> : <ContextMenuSeparator />;
+}
+
+/**
+ * Codex's trailing glyph when nothing is running: whatever the session's git
+ * mode is worth saying (`@renderer/lib/git-mode.ts`) — a worktree, a branch
+ * that is not the project's own, or nothing.
+ */
+function SessionGlyph({ session }: { session: Session }) {
+  const info = useProjectGitInfo(session.projectId);
+  const glyph = gitGlyphFor(session, info);
+  if (!glyph) {
+    return null;
+  }
+  const Icon = glyph === "worktree" ? GitFork : GitBranch;
+  return <Icon aria-label={gitGlyphLabel(session)} className="size-3" />;
 }

@@ -9,7 +9,8 @@ import type { z } from "zod";
 
 import type { TextFileSchema, BinaryFileSchema } from "@shared/ipc/explorer";
 
-export type { DirEntry, FileStat, ChangedFile, FileDiff, GitStatus } from "@shared/ipc/explorer";
+export type { DirEntry, FileStat } from "@shared/ipc/explorer";
+export type { ChangedFile, FileDiff, GitStatus, ProjectGitInfo, Worktree } from "@shared/ipc/git";
 
 export type TextFileResult = z.infer<typeof TextFileSchema>;
 export type BinaryFileResult = z.infer<typeof BinaryFileSchema>;

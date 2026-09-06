@@ -1,8 +1,11 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 
+import type { GitMode, Session } from "@shared/types";
+
+import { useAgents } from "./agents";
 import { useProjects } from "./projects";
-import type { Session } from "@shared/types";
+import { useSettings } from "./settings";
 
 /**
  * The session index — id, title, status, cwd, the files-changed counters.
@@ -27,6 +30,21 @@ type SessionsState = {
   archive: (id: string, archived: boolean) => Promise<void>;
   remove: (id: string) => Promise<void>;
   receive: (sessions: Session[]) => void;
+  /**
+   * Start a thread and select it (plan §9).
+   *
+   * The working directory is main's to decide: this passes the mode, not a
+   * path, and main resolves the worktree. `cwd` is the one exception —
+   * Settings' `New chat in this worktree` names a directory that already
+   * exists, and main checks it belongs to the project.
+   */
+  start: (input: {
+    projectId: string;
+    agentId?: string;
+    gitMode?: GitMode;
+    cwd?: string;
+    name?: string;
+  }) => Promise<Session>;
 };
 
 export const useSessions = create<SessionsState>((set, get) => ({
@@ -84,11 +102,47 @@ export const useSessions = create<SessionsState>((set, get) => ({
       ready: true,
       // A deleted session must not stay selected.
       activeId:
-        state.activeId && sessions.some((session) => session.id === state.activeId)
+        state.activeId &&
+        sessions.some((session) => session.id === state.activeId)
           ? state.activeId
           : null,
     })),
+
+  start: async (input) => {
+    const agentId = input.agentId ?? defaultAgentId();
+    if (!agentId) {
+      throw new Error("no agent is installed; add one from Settings › Agents");
+    }
+    const session = await window.hardcore.sessions.create({
+      projectId: input.projectId,
+      agentId,
+      ...(input.gitMode ? { gitMode: input.gitMode } : {}),
+      ...(input.cwd ? { cwd: input.cwd } : {}),
+      ...(input.name ? { name: input.name } : {}),
+    });
+    set({ activeId: session.id });
+    return session;
+  },
 }));
+
+/**
+ * Which agent a session gets when the caller does not say: the one Settings
+ * names, and otherwise the first installed one.
+ *
+ * A default that pointed at an agent the person has since uninstalled would
+ * fail at `session/new` with the adapter's own words, so the setting is only
+ * honoured while the detector still finds it.
+ */
+function defaultAgentId(): string | null {
+  const installed = useAgents
+    .getState()
+    .agents.filter((agent) => agent.installed);
+  const preferred = useSettings.getState().settings?.defaultAgentId;
+  if (preferred && installed.some((agent) => agent.id === preferred)) {
+    return preferred;
+  }
+  return installed[0]?.id ?? null;
+}
 
 /**
  * A project's unarchived sessions, newest first. `useShallow` because the
@@ -99,7 +153,9 @@ export function useProjectSessions(projectId: string): Session[] {
   return useSessions(
     useShallow((state) =>
       state.sessions
-        .filter((session) => session.projectId === projectId && !session.archived)
+        .filter(
+          (session) => session.projectId === projectId && !session.archived,
+        )
         .sort((a, b) => b.updatedAt - a.updatedAt),
     ),
   );
@@ -108,6 +164,7 @@ export function useProjectSessions(projectId: string): Session[] {
 /** The active session's index row, or null in the new-session state. */
 export function useActiveSession(): Session | null {
   return useSessions(
-    (state) => state.sessions.find((session) => session.id === state.activeId) ?? null,
+    (state) =>
+      state.sessions.find((session) => session.id === state.activeId) ?? null,
   );
 }

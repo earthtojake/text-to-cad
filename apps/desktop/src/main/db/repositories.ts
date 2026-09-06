@@ -111,11 +111,16 @@ type SessionRow = {
   insertions: number;
   deletions: number;
   archived: number;
+  worktree_path: string | null;
+  session_head: string | null;
+  turn_head: string | null;
+  turn_started_at: number | null;
 };
 
 const SESSION_COLUMNS =
   "id, project_id, agent_id, cwd, git_mode, branch, title, created_at, updated_at, status, " +
-  "acp_session_id, changed_files, insertions, deletions, archived";
+  "acp_session_id, changed_files, insertions, deletions, archived, " +
+  "worktree_path, session_head, turn_head, turn_started_at";
 
 const toSession = (row: SessionRow): Session =>
   SessionSchema.parse({
@@ -125,6 +130,7 @@ const toSession = (row: SessionRow): Session =>
     cwd: row.cwd,
     gitMode: row.git_mode,
     branch: row.branch ?? undefined,
+    worktreePath: row.worktree_path ?? undefined,
     title: row.title,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -134,6 +140,9 @@ const toSession = (row: SessionRow): Session =>
     insertions: row.insertions,
     deletions: row.deletions,
     archived: row.archived === 1,
+    sessionHead: row.session_head,
+    turnHead: row.turn_head,
+    turnStartedAt: row.turn_started_at,
   });
 
 export const sessions = {
@@ -164,7 +173,8 @@ export const sessions = {
       .prepare(
         `INSERT INTO sessions (${SESSION_COLUMNS})
          VALUES (@id, @projectId, @agentId, @cwd, @gitMode, @branch, @title, @createdAt, @updatedAt, @status,
-                 @acpSessionId, @changedFiles, @insertions, @deletions, @archived)
+                 @acpSessionId, @changedFiles, @insertions, @deletions, @archived,
+                 @worktreePath, @sessionHead, @turnHead, @turnStartedAt)
          ON CONFLICT(id) DO UPDATE SET
            agent_id = excluded.agent_id,
            cwd = excluded.cwd,
@@ -177,9 +187,18 @@ export const sessions = {
            changed_files = excluded.changed_files,
            insertions = excluded.insertions,
            deletions = excluded.deletions,
-           archived = excluded.archived`,
+           archived = excluded.archived,
+           worktree_path = excluded.worktree_path,
+           session_head = excluded.session_head,
+           turn_head = excluded.turn_head,
+           turn_started_at = excluded.turn_started_at`,
       )
-      .run({ ...parsed, branch: parsed.branch ?? null, archived: parsed.archived ? 1 : 0 });
+      .run({
+        ...parsed,
+        branch: parsed.branch ?? null,
+        archived: parsed.archived ? 1 : 0,
+        worktreePath: parsed.worktreePath ?? null,
+      });
     return parsed;
   },
 

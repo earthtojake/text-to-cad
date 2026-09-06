@@ -131,6 +131,9 @@ describe("Sidebar sessions", () => {
     insertions: 0,
     deletions: 0,
     archived: false,
+    sessionHead: null,
+    turnHead: null,
+    turnStartedAt: null,
     ...overrides,
   });
 
@@ -166,7 +169,7 @@ describe("Sidebar sessions", () => {
     });
     wrap(<Sidebar />);
     expect(screen.getByLabelText("Working")).toBeInTheDocument();
-    expect(screen.getByLabelText("Runs in a worktree")).toBeInTheDocument();
-    expect(screen.getByLabelText("On main")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Worktree/)).toBeInTheDocument();
+    expect(screen.getByLabelText("main")).toBeInTheDocument();
   });
 });

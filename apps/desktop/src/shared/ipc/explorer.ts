@@ -1,6 +1,7 @@
 /**
  * The explorer's half of the IPC contract: the filesystem behind the file tab,
- * the ptys behind the terminal tabs, and the git reads behind the review tab.
+ * the ptys behind the terminal tabs. The review tab's git reads are their own
+ * branch (`./git.ts`).
  *
  * It lives in its own file rather than in `index.ts` because it is the largest
  * branch in the contract and it belongs to one phase (P3). `index.ts` spreads
@@ -79,68 +80,6 @@ export const TerminalInfoSchema = z.object({
   exitCode: z.number().nullable(),
 });
 export type TerminalInfo = z.infer<typeof TerminalInfoSchema>;
-
-/* -------------------------------------------------------------------------- */
-/* Git                                                                         */
-/* -------------------------------------------------------------------------- */
-
-export const ChangeStatusSchema = z.enum([
-  "added",
-  "modified",
-  "deleted",
-  "renamed",
-  "untracked",
-]);
-export type ChangeStatus = z.infer<typeof ChangeStatusSchema>;
-
-export const ChangedFileSchema = z.object({
-  path: z.string(),
-  oldPath: z.string().optional(),
-  status: ChangeStatusSchema,
-  insertions: z.number(),
-  deletions: z.number(),
-  binary: z.boolean(),
-});
-export type ChangedFile = z.infer<typeof ChangedFileSchema>;
-
-export const GitStatusSchema = z.object({
-  isRepository: z.boolean(),
-  branch: z.string().nullable(),
-  unborn: z.boolean(),
-  ahead: z.number(),
-  behind: z.number(),
-  files: z.array(ChangedFileSchema),
-  insertions: z.number(),
-  deletions: z.number(),
-});
-export type GitStatus = z.infer<typeof GitStatusSchema>;
-
-/**
- * What a review is taken against.
- *
- * `working-tree` is "All changes"; `since` is the header's time presets, which
- * are resolved to a revision in main because "1 hour ago" is git's own syntax
- * and reimplementing it in the renderer would be a second answer. `range` is
- * what P2 will hand in for a per-turn review.
- */
-export const DiffScopeSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("working-tree") }),
-  z.object({ kind: z.literal("since"), since: z.string().min(1) }),
-  z.object({ kind: z.literal("range"), from: z.string().min(1), to: z.string().optional() }),
-]);
-export type DiffScope = z.infer<typeof DiffScopeSchema>;
-
-export const FileDiffSchema = z.object({
-  path: z.string(),
-  oldPath: z.string().optional(),
-  status: ChangeStatusSchema,
-  insertions: z.number(),
-  deletions: z.number(),
-  binary: z.boolean(),
-  before: z.string().nullable(),
-  after: z.string().nullable(),
-});
-export type FileDiff = z.infer<typeof FileDiffSchema>;
 
 /* -------------------------------------------------------------------------- */
 /* The contract                                                                */
@@ -222,23 +161,9 @@ export const explorerIpc = {
     kill: invoke(z.object({ id: z.string().min(1) }), z.void()),
   },
 
-  git: {
-    status: invoke(InProject.extend({ scope: DiffScopeSchema.optional() }), GitStatusSchema),
-    /** Both sides of one file, for the inline diff editor. */
-    fileDiff: invoke(
-      AtPath.extend({ scope: DiffScopeSchema.optional() }),
-      FileDiffSchema,
-    ),
-    /** The unified patch, for copying out of a review. */
-    unifiedDiff: invoke(
-      AtPath.extend({ scope: DiffScopeSchema.optional() }),
-      z.object({ patch: z.string() }),
-    ),
-    commit: invoke(
-      InProject.extend({ message: z.string().min(1), push: z.boolean().optional() }),
-      z.object({ sha: z.string() }),
-    ),
-  },
+  // `git.*` used to live here. It is its own branch now (./git.ts): the
+  // review's reads and P7's worktrees are one subject, and this branch was
+  // already the biggest in the contract.
 } as const;
 
 /* -------------------------------------------------------------------------- */

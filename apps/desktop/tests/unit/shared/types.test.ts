@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   ExplorerTabSchema,
+  REVIEW_SCOPE_LABELS,
+  ReviewScopeSchema,
   SessionSchema,
   SettingsSchema,
   defaultSettings,
+  diffScopeFor,
+  resolveDiffScope,
+  scopeNeedsSession,
 } from "@shared/types";
 
 describe("Settings", () => {
@@ -122,5 +127,47 @@ describe("ExplorerTab", () => {
     expect(
       ExplorerTabSchema.safeParse({ id: "t3", projectId: "p1", order: 0, kind: "panel" }).success,
     ).toBe(false);
+  });
+});
+
+describe("review scopes", () => {
+  it("names every scope the dropdown offers", () => {
+    for (const scope of ReviewScopeSchema.options) {
+      expect(REVIEW_SCOPE_LABELS[scope]).toBeTruthy();
+    }
+    expect(ReviewScopeSchema.options).toContain("turn");
+    expect(ReviewScopeSchema.options).toContain("session");
+  });
+
+  it("turns a named scope into the one git is asked for", () => {
+    expect(diffScopeFor("all")).toEqual({ kind: "working-tree" });
+    expect(diffScopeFor("4h")).toEqual({ kind: "since", since: "4 hours ago" });
+    expect(diffScopeFor("turn")).toEqual({ kind: "turn" });
+    expect(scopeNeedsSession("turn")).toBe(true);
+    expect(scopeNeedsSession("session")).toBe(true);
+    expect(scopeNeedsSession("24h")).toBe(false);
+  });
+
+  it("resolves the two session scopes from the session's recorded marks", () => {
+    const marks = { turnHead: "bbb", sessionHead: "aaa" };
+
+    // An open-ended range: git measures it against the working tree, so an
+    // edit the agent has not committed is in the answer.
+    expect(resolveDiffScope({ kind: "session" }, marks)).toEqual({ kind: "range", from: "aaa" });
+    expect(resolveDiffScope({ kind: "turn" }, marks)).toEqual({ kind: "range", from: "bbb" });
+
+    // No session, or no mark on it: the working tree, which is the honest
+    // answer — everything in it is new since a point that was never recorded.
+    expect(resolveDiffScope({ kind: "turn" }, null)).toEqual({ kind: "working-tree" });
+    expect(
+      resolveDiffScope({ kind: "turn" }, { turnHead: null, sessionHead: "aaa" }),
+    ).toEqual({ kind: "working-tree" });
+
+    // Everything else passes through untouched, including no scope at all.
+    expect(resolveDiffScope(undefined, marks)).toEqual({ kind: "working-tree" });
+    expect(resolveDiffScope({ kind: "since", since: "1 hour ago" }, marks)).toEqual({
+      kind: "since",
+      since: "1 hour ago",
+    });
   });
 });
