@@ -17,8 +17,11 @@ Model recipes use `@step` on a parameterless function and call it from an
 
 - While you work, the desktop discovers completed model artifacts under the local
   workspace (`.step`, `.stp`, `.dxf`, `.glb`, `.stl`, `.3mf`). It validates new
-  STEP files before opening the first model beside the chat. Other new models
-  are announced with an Open action so the current viewer stays selected.
+  STEP files before opening a temporary preview beside the chat. The preview follows
+  completed parts and then the assembled artifact as they appear. Parts use their own
+  coordinates until an assembly exists; the desktop never guesses their placement.
+  Pinning, closing, or selecting another tab stops following. Existing model tabs stay
+  selected; other new models are announced with an Open action.
 - For longer CAD tasks, build valid intermediate geometry at meaningful milestones
   (for example, the base shape, then features, then the assembly). Publish each
   revision to the same output path: the viewer follows artifact changes live.

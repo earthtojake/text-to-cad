@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { planCadArtifactReveal } from './cad-artifact-reveal';
 
 describe('planCadArtifactReveal', () => {
-  it('opens the first STEP when no CAD tab is open and announces the rest', () => {
+  it('opens the newest STEP when no CAD tab is open and announces the rest', () => {
     expect(
       planCadArtifactReveal({
         newPaths: ['exports/plate.glb', 'models/plate.step', 'models/plate.step'],
@@ -30,6 +30,19 @@ describe('planCadArtifactReveal', () => {
     expect(planCadArtifactReveal({ newPaths: [], hasOpenCadTab: false })).toEqual({
       open: null,
       announce: [],
+    });
+  });
+
+  it('follows finished parts and then the assembly in a live preview', () => {
+    expect(
+      planCadArtifactReveal({
+        newPaths: ['STEP/base.step', 'STEP/lid.step', 'STEP/assembly.step', 'GLB/assembly.glb'],
+        hasOpenCadTab: true,
+        followingBuild: true,
+      })
+    ).toEqual({
+      open: 'STEP/assembly.step',
+      announce: ['STEP/base.step', 'STEP/lid.step', 'GLB/assembly.glb'],
     });
   });
 });

@@ -1,6 +1,6 @@
 import { toast } from '@emdash/ui/react/primitives';
 import { reaction } from 'mobx';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { getBrowserClient } from '@core/features/browser/api/browser/client';
 import type { ConversationManagerStore } from '@core/features/conversations/api/browser/conversation-manager';
 import { openFile } from '@core/features/workbench/api/browser/open-file';
@@ -14,18 +14,20 @@ export type CadArtifactRevealPlan = { open: string | null; announce: string[] };
 
 /**
  * Decide what to do with model artifacts that appeared during a turn. With no
- * CAD tab open, the first model (a STEP when there is one) opens in the
- * artifact pane. Every other new artifact is announced with an Open action so
- * a viewer the user is reviewing is never hijacked mid-turn.
+ * CAD tab open, the newest model (prefer STEP) opens in a preview tab. That
+ * tab follows completed parts until the user pins it or selects another tab.
+ * Existing pinned viewers remain under the user's control.
  */
 export function planCadArtifactReveal(input: {
   newPaths: readonly string[];
   hasOpenCadTab: boolean;
+  followingBuild?: boolean;
 }): CadArtifactRevealPlan {
   const paths = [...new Set(input.newPaths)];
   if (paths.length === 0) return { open: null, announce: [] };
-  if (input.hasOpenCadTab) return { open: null, announce: paths };
-  const preferred = paths.find((path) => /\.(?:step|stp)$/i.test(path)) ?? paths[0]!;
+  if (input.hasOpenCadTab && !input.followingBuild) return { open: null, announce: paths };
+  const preferred =
+    [...paths].reverse().find((path) => /\.(?:step|stp)$/i.test(path)) ?? paths.at(-1)!;
   return { open: preferred, announce: paths.filter((path) => path !== preferred) };
 }
 
@@ -34,7 +36,16 @@ type RevealTask = {
   taskId: string;
   workspace?: { path: string; sshConnectionId?: string } | null;
   paneLayout: {
-    groups: ReadonlyArray<{ pane: { resolvedTabs: ReadonlyArray<{ kind: string }> } }>;
+    groups: ReadonlyArray<{
+      pane: {
+        resolvedTabs: ReadonlyArray<{
+          kind: string;
+          isActive?: boolean;
+          isPreview?: boolean;
+          resource?: object;
+        }>;
+      };
+    }>;
   };
 };
 
@@ -69,19 +80,51 @@ export function useCadArtifactReveal(
   const workspacePath = task.workspace?.path;
   const connectionId = task.workspace?.sshConnectionId;
   const { projectId, taskId, paneLayout } = task;
+  const preview = useRef<{
+    taskId: string;
+    workspace: string;
+    path: string;
+    stopped: boolean;
+  } | null>(null);
 
   useEffect(() => {
     // The CAD Viewer serves local directories only; remote workspaces have no viewer to reveal into.
     if (!workspacePath || connectionId) return;
+    if (preview.current?.taskId !== taskId || preview.current.workspace !== workspacePath) {
+      preview.current = null;
+    }
     watchTurns(conversations);
     const revealed = revealedPaths.get(workspacePath) ?? new Set<string>();
     revealedPaths.set(workspacePath, revealed);
 
-    const open = (relativePath: string) =>
+    const open = (relativePath: string, asPreview = false) =>
       openFile(hostFileRefFromNativePath(resolveWorkspacePath(workspacePath, relativePath)), {
         context: { projectId, taskId },
         target: 'artifact',
+        preview: asPreview,
       });
+
+    // A pinned, closed, or manually deselected preview must stay put, even if
+    // the user later returns to it. Focusing the conversation doesn't stop it.
+    const stopFollowing = reaction(
+      () =>
+        paneLayout.groups.some(({ pane }) =>
+          pane.resolvedTabs.some(
+            (tab) =>
+              tab.kind === 'cad' &&
+              tab.isActive &&
+              tab.isPreview &&
+              tab.resource &&
+              'path' in tab.resource &&
+              tab.resource.path === preview.current?.path
+          )
+        ),
+      (stillFollowing) => {
+        if (!stillFollowing && preview.current?.workspace === workspacePath) {
+          preview.current.stopped = true;
+        }
+      }
+    );
 
     const reveal = async (sinceMs: number, isDisposed: () => boolean): Promise<boolean> => {
       const client = await getBrowserClient();
@@ -110,10 +153,35 @@ export function useCadArtifactReveal(
       const hasOpenCadTab = paneLayout.groups.some(({ pane }) =>
         pane.resolvedTabs.some((tab) => tab.kind === 'cad')
       );
-      const plan = planCadArtifactReveal({ newPaths: fresh, hasOpenCadTab });
+      const followingBuild = Boolean(
+        preview.current?.workspace === workspacePath && !preview.current.stopped
+      );
+      const plan = planCadArtifactReveal({
+        newPaths: fresh,
+        hasOpenCadTab: hasOpenCadTab || preview.current?.stopped === true,
+        followingBuild,
+      });
       if (plan.open) {
-        open(plan.open);
-        revealed.add(plan.open);
+        const path = plan.open;
+        const previous = preview.current;
+        preview.current = {
+          taskId,
+          workspace: workspacePath,
+          path: resolveWorkspacePath(workspacePath, path),
+          stopped: false,
+        };
+        if (open(path, true)) {
+          revealed.add(path);
+          if (!followingBuild) {
+            toast.info('Live CAD preview', {
+              description: 'Completed parts appear as they finish. Pin the tab to keep this view.',
+              action: { label: 'Keep this view', onClick: () => open(path) },
+            });
+          }
+        } else {
+          preview.current = previous;
+          settled = false;
+        }
       }
       if (isDisposed()) return false;
       for (const path of plan.announce) {
@@ -127,11 +195,15 @@ export function useCadArtifactReveal(
       return settled;
     };
 
-    return startCadArtifactPolling({
+    const stopPolling = startCadArtifactPolling({
       ledger: cadTurnLedger,
       conversationIds: () => conversations.conversations.keys(),
       scan: reveal,
     });
+    return () => {
+      stopPolling();
+      stopFollowing();
+    };
   }, [
     connectionId,
     conversations,

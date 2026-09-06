@@ -97,8 +97,11 @@ choreography lives in the document's `.step.js` render module.
 
 While a local task is visible and an agent is working, the desktop scans for new artifacts
 about every two seconds, using asynchronous filesystem reads. It waits for recent writes to
-settle and validates new STEP files before opening the first model. Other new files receive an
-Open action; discovery never replaces an existing CAD tab. A final scan also covers turns
+settle and validates new STEP files before opening a temporary preview tab. This tab follows
+the newest completed model, preferring STEP, so finished leaf parts can appear during the
+first build and the assembled artifact replaces them when ready. Pinning, closing, or selecting
+another tab stops following; an existing CAD tab is never taken over. Other new files receive
+an Open action. A final scan also covers turns
 that finished while another task was visible. Failed scans stay pending for retry.
 
 The embedded viewer already polls its artifact catalog and follows revisions at the same path.
@@ -107,7 +110,8 @@ replace its rollback backup. Final validation and rollback remain owned by the d
 lifecycle. Previewing never executes a recipe. Agents should publish completed, valid builds at
 meaningful milestones; the viewport cannot show geometry that has not been built yet.
 
-This is completed-artifact discovery, not progressive assembly construction. Cadgen's daemon
+Parts are shown individually in their own artifact coordinates, not progressively placed in an
+unfinished assembly. Cadgen's daemon
 already exposes child job states and declared output paths, but that feed carries no parent
 occurrence transforms. Pending placements live inside the build process; the completed artifact
 tree publishes them. The viewer must not infer placements from source or model records, or treat
