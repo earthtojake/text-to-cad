@@ -10,7 +10,7 @@ import { measureLabelText, measureSeriesColor } from "cadgen-js/lib/viewer/measu
 import { MEASURE_RULER_MAX_MEASUREMENTS } from "../../workbench/measureRulerState.js";
 import { cn } from "@/ui/utils";
 
-const groupLabelClasses = "px-2 pb-1 pt-2 text-[10px] font-medium text-sidebar-foreground/45";
+const groupLabelClasses = "px-2 pb-1 pt-2 text-micro text-sidebar-foreground/45";
 
 // What each endpoint bound to, so an exact edge or face reading is visibly
 // different from a free point taken off the tessellated surface.
@@ -32,7 +32,7 @@ export default function StepMeasurementsSection({
     return (
       <div className="flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 px-4 py-5 text-center">
         <Ruler className="size-4 text-muted-foreground/45" strokeWidth={1.5} aria-hidden="true" />
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-tiny text-muted-foreground">
           {measureModeActive
             ? "Click two points on the model to measure"
             : "Pick the Measure tool to start measuring"}
@@ -52,7 +52,7 @@ export default function StepMeasurementsSection({
         </div>
         <button
           type="button"
-          className="rounded-sm px-1.5 py-0.5 text-[10px] text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          className="rounded-sm px-1.5 py-0.5 text-micro text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           onClick={() => onClear?.()}
         >
           Clear
@@ -82,7 +82,7 @@ export default function StepMeasurementsSection({
               className={cn(
                 "group/measure-row flex h-7 min-w-0 w-full max-w-full cursor-pointer items-center gap-2 rounded-md px-2 outline-none transition-colors",
                 active
-                  ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground"
               )}
             >
@@ -93,11 +93,11 @@ export default function StepMeasurementsSection({
                 className="size-2 shrink-0 rounded-full"
                 style={{ backgroundColor: measureSeriesColor(item.colorIndex) }}
               />
-              <span className="min-w-0 flex-1 truncate text-[11px] tabular-nums">
+              <span className="min-w-0 flex-1 truncate text-tiny tabular-nums">
                 {labelText}
                 {angleText ? <span className="ml-1.5">{angleText}</span> : null}
                 {snapText ? (
-                  <span className="ml-1.5 text-[10px] font-normal text-current/45">{snapText}</span>
+                  <span className="ml-1.5 text-micro text-current/45">{snapText}</span>
                 ) : null}
               </span>
               <button

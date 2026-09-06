@@ -250,7 +250,7 @@ function ViewerContextMenu({
 
 // Width and typography shared by the copy button and the hidden ruler that decides whether
 // its label fits. One constant so the two cannot drift apart.
-const CTA_METRICS_CLASS = "h-9 w-fit min-w-0 max-w-full sm:max-w-[min(28rem,calc(100%-16rem))] shrink overflow-hidden px-4 text-[12px] font-semibold max-sm:w-full max-sm:pr-32";
+const CTA_METRICS_CLASS = "h-9 w-fit min-w-0 max-w-full sm:max-w-[min(28rem,calc(100%-16rem))] shrink overflow-hidden px-4 text-xs max-sm:w-full max-sm:pr-32";
 
 export default function CadRenderPane({
   viewerRef,
@@ -604,7 +604,7 @@ export default function CadRenderPane({
             variant="destructive"
             className="cad-glass-popover pointer-events-auto w-full max-w-xl min-w-0 p-4 text-center shadow-lg"
           >
-            <p className="col-start-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-destructive">
+            <p className="col-start-1 text-tiny uppercase tracking-[0.16em] text-destructive">
               {missingFileOutsideRoot ? "Outside this viewer's root" : "File does not exist"}
             </p>
             <AlertTitle className="col-start-1 mt-1 line-clamp-none text-lg text-foreground">
@@ -647,12 +647,12 @@ export default function CadRenderPane({
             </span>
             <div className="min-w-0 max-w-full">
               <span className={cn(
-                "text-[10px] font-medium uppercase tracking-[0.08em]",
+                "text-micro uppercase tracking-[0.08em]",
                 viewportIssueMeta.labelClassName
               )}>
                 {viewportIssueMeta.label}
               </span>
-              <div className="mt-1 line-clamp-2 min-w-0 max-w-full break-words text-sm font-medium leading-5 text-foreground">
+              <div className="mt-1 line-clamp-2 min-w-0 max-w-full break-words text-sm leading-5 text-foreground">
                 {viewerAlert.title || viewerAlert.summary || "Viewer issue"}
               </div>
               {viewerAlert.message ? (
@@ -668,7 +668,7 @@ export default function CadRenderPane({
         <div className="pointer-events-none absolute z-20 flex justify-center px-4" style={modelViewportBottomOverlayStyle}>
           <Alert
             role="status"
-            className="cad-glass-popover w-auto px-3 py-1.5 text-[11px] font-medium text-popover-foreground shadow-sm"
+            className="cad-glass-popover w-auto px-3 py-1.5 text-tiny text-popover-foreground shadow-sm"
           >
             STEP changed. Updating/regenerating references...
           </Alert>
@@ -678,7 +678,7 @@ export default function CadRenderPane({
         <div className="pointer-events-none absolute z-20 flex justify-center px-4" style={modelViewportBottomOverlayStyle}>
           <Alert
             role="status"
-            className="cad-glass-popover w-auto px-3 py-1.5 text-[11px] font-medium text-popover-foreground shadow-sm"
+            className="cad-glass-popover w-auto px-3 py-1.5 text-tiny text-popover-foreground shadow-sm"
           >
             Preparing selectable topology...
           </Alert>

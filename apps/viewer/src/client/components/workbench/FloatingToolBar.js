@@ -202,14 +202,14 @@ function DesktopFloatingToolBar({
         active={drawingViewMode === "2d"}
         onClick={() => onDrawingViewModeChange?.("2d")}
       >
-        <span className="text-[10px] font-medium leading-none">2D</span>
+        <span className="text-micro leading-none">2D</span>
       </ToolbarButton>
       <ToolbarButton
         label="3D view"
         active={drawingViewMode !== "2d"}
         onClick={() => onDrawingViewModeChange?.("3d")}
       >
-        <span className="text-[10px] font-medium leading-none">3D</span>
+        <span className="text-micro leading-none">3D</span>
       </ToolbarButton>
     </div>
   ) : null;

@@ -27,8 +27,8 @@ import StepMeasurementsSection from "./StepMeasurementsSection";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections";
 const treeChevronButtonClasses = "grid h-5 w-5 shrink-0 place-items-center rounded-sm px-0 text-current/60 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45";
 const treeRowActionButtonClasses = "h-5 w-5 rounded-sm px-0 text-current/60 shadow-none hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45 focus-visible:text-sidebar-accent-foreground";
-const treeRowContentClasses = "h-7 min-w-0 text-xs font-normal";
-const treeGroupLabelClasses = "px-2 pb-1 pt-2 text-[10px] font-medium text-sidebar-foreground/45";
+const treeRowContentClasses = "h-7 min-w-0 text-xs";
+const treeGroupLabelClasses = "px-2 pb-1 pt-2 text-micro text-sidebar-foreground/45";
 const treeGlyphIconClasses = "size-3.5 shrink-0 text-current/60";
 // One indent level equals the expand-chevron's footprint (w-5 button + gap-1.5),
 // so a leaf row's glyph (which has no chevron) lines up exactly under its
@@ -672,7 +672,7 @@ export default function StepFileSheet({
                   {hasHiddenTreeRows ? (
                     <button
                       type="button"
-                      className="rounded-sm px-1.5 py-0.5 text-[10px] text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      className="rounded-sm px-1.5 py-0.5 text-micro text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                       onClick={() => showAllHiddenParts?.()}
                     >
                       Show All
@@ -927,7 +927,7 @@ export default function StepFileSheet({
                                   ? "cursor-default text-sidebar-foreground/55"
                                   : "cursor-pointer text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground",
                                 showSelectedRowState
-                                  ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
                                   : hovered && "bg-sidebar-accent text-sidebar-accent-foreground",
                                 (hidden || isolationMuted) && "opacity-45"
                               )}
@@ -967,12 +967,12 @@ export default function StepFileSheet({
                                 >
                                   <StepTreeRowGlyph row={row} />
                                   <span className="min-w-0 flex-1 overflow-hidden">
-                                    <span className="flex min-w-0 items-baseline gap-1.5 overflow-hidden text-xs font-medium leading-4">
+                                    <span className="flex min-w-0 items-baseline gap-1.5 overflow-hidden text-xs leading-4">
                                       <span className="min-w-0 truncate">
                                         {row.label}
                                       </span>
                                       {inlineRowDetail ? (
-                                        <span className="min-w-0 truncate text-[10px] font-normal text-current/50">
+                                        <span className="min-w-0 truncate text-micro text-current/50">
                                           {inlineRowDetail}
                                         </span>
                                       ) : null}

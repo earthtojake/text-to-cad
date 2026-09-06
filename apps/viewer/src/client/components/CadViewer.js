@@ -4930,7 +4930,7 @@ const CadViewer = forwardRef(function CadViewer({
         activateDefaultViewPlane={activateDefaultViewPlane}
       />
       {error ? (
-        <p className="cad-glass-popover pointer-events-none absolute left-4 top-24 z-20 rounded-[10px] border border-[var(--ui-error-bg)] px-4 py-3 text-sm text-[var(--ui-error-text)] shadow-[var(--ui-shadow-soft)] sm:top-20">
+        <p className="cad-glass-popover pointer-events-none absolute left-4 top-24 z-20 rounded-lg border border-error-border px-4 py-3 text-sm text-error shadow-sm sm:top-20">
           {error}
         </p>
       ) : null}
