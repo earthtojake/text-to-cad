@@ -9,6 +9,7 @@ import { BrowserWindow, app, shell } from "electron";
 
 import { closeDb, db } from "./db";
 import { registerIpcHandlers } from "./ipc";
+import { disposeExplorerServices } from "./ipc/explorer";
 import { installMenu } from "./menu";
 import { initTelemetry, track } from "./telemetry";
 import { initUpdater } from "./updater";
@@ -48,6 +49,11 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,
+      // The explorer's browser tab is an Electron `<webview>` (plan §7). The
+      // tag is off by default and has to be asked for; the guest it creates
+      // is its own process with node integration off, which is why a browser
+      // tab is a webview and not an iframe pointed at the open internet.
+      webviewTag: true,
     },
   });
 
@@ -124,6 +130,9 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on("before-quit", () => {
+    // A pty that outlives the window is a shell nobody can see or stop, and a
+    // chokidar watcher holds an fsevents handle open.
+    void disposeExplorerServices();
     closeDb();
   });
 }

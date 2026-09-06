@@ -26,74 +26,29 @@ import {
   SessionSchema,
   SettingsSchema,
   WindowStateSchema,
-} from "./types";
-
-/* -------------------------------------------------------------------------- */
-/* The helper                                                                  */
-/* -------------------------------------------------------------------------- */
-
-const INVOKE = Symbol.for("hardcore.ipc.invoke");
-
-/** One request/response channel. */
-export type InvokeDef<Req extends z.ZodType = z.ZodType, Res extends z.ZodType = z.ZodType> = {
-  readonly [INVOKE]: true;
-  readonly request: Req;
-  readonly response: Res;
-};
-
-/** A branch of the contract tree. */
-export type IpcNode = InvokeDef | { readonly [key: string]: IpcNode };
+} from "../types";
+import { cadIpc } from "./cad";
+import { explorerEvents, explorerIpc } from "./explorer";
+import { defineIpc, invoke, type IpcClient } from "./invoke";
 
 /**
- * Declare a request/response channel.
- *
- * `z.void()` on either side is the honest way to say "no argument" / "no
- * answer"; it makes the generated client method callable with no arguments.
+ * The vocabulary lives in `./invoke` so a branch file can declare channels
+ * without importing this module. Re-exported here because main, preload and
+ * the tests all reach for the contract by this name.
  */
-export function invoke<Req extends z.ZodType, Res extends z.ZodType>(
-  request: Req,
-  response: Res,
-): InvokeDef<Req, Res> {
-  return { [INVOKE]: true, request, response };
-}
+export {
+  defineIpc,
+  invoke,
+  ipcChannels,
+  isInvokeDef,
+  type InvokeDef,
+  type IpcClient,
+  type IpcHandlers,
+  type IpcNode,
+} from "./invoke";
 
-/** Narrow a contract node to a leaf. */
-export function isInvokeDef(node: unknown): node is InvokeDef {
-  return typeof node === "object" && node !== null && INVOKE in node;
-}
-
-/**
- * Declare the contract. Identity at run time — its whole job is to pin the
- * literal type of the tree so `HardcoreApi` and `IpcHandlers` can be derived
- * from it.
- */
-export function defineIpc<const T extends IpcNode>(contract: T): T {
-  return contract;
-}
-
-/** Walk a contract tree, yielding `["a.b.c", def]` for every leaf. */
-export function ipcChannels(node: IpcNode, prefix: string[] = []): [string, InvokeDef][] {
-  if (isInvokeDef(node)) {
-    return [[prefix.join("."), node]];
-  }
-  return Object.entries(node).flatMap(([key, child]) => ipcChannels(child, [...prefix, key]));
-}
-
-/** The renderer-facing shape of a contract tree. */
-export type IpcClient<T> =
-  T extends InvokeDef<infer Req, infer Res>
-    ? (request: z.input<Req>) => Promise<z.output<Res>>
-    : { readonly [K in keyof T]: IpcClient<T[K]> };
-
-/**
- * The main-process shape of a contract tree. Handlers receive the *parsed*
- * request and may return either the parsed or the input form of the response —
- * whatever they return is validated before it crosses the bridge.
- */
-export type IpcHandlers<T, Ctx = unknown> =
-  T extends InvokeDef<infer Req, infer Res>
-    ? (request: z.output<Req>, ctx: Ctx) => z.input<Res> | Promise<z.input<Res>>
-    : { readonly [K in keyof T]: IpcHandlers<T[K], Ctx> };
+export * from "./cad";
+export * from "./explorer";
 
 /* -------------------------------------------------------------------------- */
 /* Requests                                                                    */
@@ -147,6 +102,12 @@ export const ipcContract = defineIpc({
     /** Reveals a path in Finder/Explorer. */
     showItemInFolder: invoke(z.object({ path: z.string().min(1) }), z.void()),
   },
+
+  // The branches a phase owns are declared in their own file and spread in
+  // here, so this map stays a map. `explorer.*`, `terminal.*` and `git.*` come
+  // from ./explorer (P3); `cad.*` from ./cad (P3's stub, P5's implementation).
+  ...explorerIpc,
+  ...cadIpc,
 });
 
 export type IpcContract = typeof ipcContract;
@@ -184,6 +145,9 @@ export const ipcEvents = {
     percent: z.number().optional(),
     message: z.string().optional(),
   }),
+
+  // `files.changed`, `terminal.data` and `terminal.exit` (P3).
+  ...explorerEvents,
 } as const;
 
 export type IpcEvents = typeof ipcEvents;

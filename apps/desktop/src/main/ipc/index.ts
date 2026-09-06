@@ -1,11 +1,10 @@
 /**
  * Every IPC handler the app serves, assembled into the shape of the contract.
  *
- * P0 covers projects, sessions (read-only), settings, shell and app info.
- * Later phases add branches next to these: `agents.*` and `acp.*` (P1),
- * `explorer.*` (P3), `cad.*` (P4/P5), `git.*` (P7). Each one is a new branch
- * in `src/shared/ipc.ts` and a new object here — `registerIpc` refuses to
- * start if the two disagree.
+ * P0 covers projects, sessions (read-only), settings, shell and app info;
+ * P3 adds `explorer.*`, `terminal.*`, `git.*` and the `cad.viewerOrigin`
+ * stub. Each phase's branch is one file in `src/shared/ipc/` and one object
+ * spread in below — `registerIpc` refuses to start if the two disagree.
  */
 import { BrowserWindow, app, dialog, shell } from "electron";
 
@@ -16,6 +15,8 @@ import {
   type IpcEventPayload,
 } from "../../shared/ipc";
 import { projects, sessions, settings } from "../db/repositories";
+import { cadHandlers } from "./cad";
+import { explorerHandlers, initExplorerServices } from "./explorer";
 import { IpcError, emit, registerIpc, type IpcContext } from "./register";
 
 /** Broadcast to every open window. */
@@ -108,6 +109,11 @@ const handlers = {
       shell.showItemInFolder(target);
     },
   },
+
+  // A phase's handlers live in their own file and are spread in, exactly as
+  // its branch of the contract is (src/shared/ipc/index.ts).
+  ...explorerHandlers,
+  ...cadHandlers,
 } satisfies Parameters<typeof registerIpc<IpcContract>>[1];
 
 const openProjectDialog = {
@@ -117,5 +123,8 @@ const openProjectDialog = {
 } as const satisfies Electron.OpenDialogOptions;
 
 export function registerIpcHandlers() {
+  // The watcher and the pty manager push events, so they are handed the
+  // broadcaster rather than reaching back for it.
+  initExplorerServices(broadcast);
   registerIpc(ipcContract, handlers);
 }
