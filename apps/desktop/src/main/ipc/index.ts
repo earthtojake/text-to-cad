@@ -12,10 +12,14 @@ import { BrowserWindow, app, dialog, shell } from "electron";
 import { ipcContract, type IpcContract } from "../../shared/ipc";
 import { projects, sessions, settings } from "../db/repositories";
 import { track } from "../telemetry";
+import { applySettingsEffects } from "../settings-effects";
 import { acpHandlers } from "./acp";
 import { agentsHandlers } from "./agents";
 import { appHandlers } from "./app";
-import { IpcError, broadcast, emit, registerIpc, type IpcContext } from "./register";
+import { dialogsHandlers } from "./dialogs";
+import { pluginsHandlers } from "./plugins";
+import { runtimeHandlers } from "./runtime";
+import { IpcError, broadcast, registerIpc, type IpcContext } from "./register";
 
 export { broadcast } from "./register";
 
@@ -74,11 +78,23 @@ const handlers = {
   /** P1: the agent registry, detection, install and login. */
   ...agentsHandlers,
 
+  /** P6, stubbed until P5: the bundled plugin's state per agent. */
+  ...pluginsHandlers,
+
+  /** P6, stubbed until P5: the managed Python and cadgen runtime. */
+  ...runtimeHandlers,
+
+  /** P6: the native folder and file choosers Settings' path rows use. */
+  ...dialogsHandlers,
+
   settings: {
     get: () => settings.get(),
     set: (patch: Parameters<typeof settings.set>[0]) => {
       const next = settings.set(patch);
       broadcast("settings.changed", next);
+      // Three of these fields are instructions to the OS or to the window, not
+      // stored values (src/main/settings-effects.ts).
+      applySettingsEffects(next);
       // The field's NAME, never its value: "someone changed the git mode" is a
       // product question, "to what" is their business (src/main/telemetry.ts).
       for (const key of Object.keys(patch) as (keyof typeof patch & string)[]) {
@@ -118,4 +134,8 @@ const openProjectDialog = {
 
 export function registerIpcHandlers() {
   registerIpc(ipcContract, handlers);
+  // Boot is a settings change like any other: the login item, the menu-bar
+  // item and the window's vibrancy have to match what is stored before the
+  // first window is shown.
+  applySettingsEffects(settings.get());
 }

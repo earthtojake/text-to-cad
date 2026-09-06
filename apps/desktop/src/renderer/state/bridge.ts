@@ -9,7 +9,9 @@
 import { useAcp } from "./acp";
 import { useAgents } from "./agents";
 import { useExplorer } from "./explorer";
+import { usePlugins } from "./plugins";
 import { useProjects } from "./projects";
+import { useRuntime } from "./runtime";
 import { useSessions } from "./sessions";
 import { useSettings } from "./settings";
 import { useUi } from "./ui";
@@ -44,6 +46,12 @@ export function subscribeToMain(): () => void {
     }),
     window.hardcore.on("agents.output", (chunk) => {
       useAgents.getState().receiveOutput(chunk);
+    }),
+    window.hardcore.on("plugins.status", (statuses) => {
+      usePlugins.getState().receive(statuses);
+    }),
+    window.hardcore.on("runtime.progress", ({ status, message, percent }) => {
+      useRuntime.getState().receive(status, message, percent);
     }),
     window.hardcore.on("ui.command", ({ command }) => {
       const ui = useUi.getState();

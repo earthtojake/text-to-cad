@@ -64,6 +64,7 @@ const fakeProvider: AgentProvider = {
   websiteUrl: "",
   docsUrl: "",
   registryId: null,
+  icon: null,
   binaryNames: ["fake"],
   versionArgs: [],
   launchWithoutBinary: true,

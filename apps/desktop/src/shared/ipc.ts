@@ -40,6 +40,9 @@ import { defineIpc, invoke, type IpcClient } from "./ipc/define";
 import { appEvents, appIpc } from "./ipc/app";
 import { acpContract, acpEvents } from "./ipc/acp";
 import { agentsContract, agentsEvents } from "./ipc/agents";
+import { dialogsContract } from "./ipc/dialogs";
+import { pluginsContract, pluginsEvents } from "./ipc/plugins";
+import { runtimeContract, runtimeEvents } from "./ipc/runtime";
 
 export * from "./ipc/define";
 
@@ -77,6 +80,15 @@ export const ipcContract = defineIpc({
 
   /** P1: `agents.*` lives in ./ipc/agents.ts. */
   ...agentsContract,
+
+  /** P6, stubbed until P5: the bundled plugin's state per agent. */
+  ...pluginsContract,
+
+  /** P6, stubbed until P5: the managed Python and cadgen runtime. */
+  ...runtimeContract,
+
+  /** P6: the native folder and file choosers Settings' path rows use. */
+  ...dialogsContract,
 
   settings: {
     get: invoke(z.void(), SettingsSchema),
@@ -132,6 +144,8 @@ export const ipcEvents = {
   ...appEvents,
   ...acpEvents,
   ...agentsEvents,
+  ...pluginsEvents,
+  ...runtimeEvents,
 } as const;
 
 export type IpcEvents = typeof ipcEvents;

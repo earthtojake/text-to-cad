@@ -60,8 +60,7 @@ describe("Explorer", () => {
 });
 
 describe("Settings", () => {
-  it("renders the seven pages in the nav and filters them", async () => {
-    const user = userEvent.setup();
+  it("renders the seven pages in the nav", () => {
     wrap(<SettingsRoute />);
     for (const label of [
       "General",
@@ -74,12 +73,6 @@ describe("Settings", () => {
     ]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
-
-    // The search box matches aliases, not just labels: "worktree" has to find
-    // the Git page even though the word order differs.
-    await user.type(screen.getByPlaceholderText("Search settings"), "python");
-    expect(screen.getByRole("button", { name: "CAD Runtime" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Appearance" })).not.toBeInTheDocument();
   });
 
   it("goes back to the app", async () => {

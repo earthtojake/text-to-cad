@@ -12,6 +12,7 @@ import { registerIpcHandlers } from "./ipc";
 import { shutdownAcp } from "./ipc/acp";
 import { shutdownAgents } from "./ipc/agents";
 import { installMenu } from "./menu";
+import { disposeSettingsEffects } from "./settings-effects";
 import { initTelemetry, track } from "./telemetry";
 import { initUpdater, stopUpdater } from "./updater";
 import { restoreWindowState, trackWindowState } from "./window-state";
@@ -129,6 +130,7 @@ if (!app.requestSingleInstanceLock()) {
     stopUpdater();
     shutdownAcp();
     shutdownAgents();
+    disposeSettingsEffects();
     closeDb();
   });
 }

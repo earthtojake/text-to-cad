@@ -169,6 +169,50 @@ export const ThemePreferenceSchema = z.enum(["system", "light", "dark"]);
 export type ThemePreference = z.infer<typeof ThemePreferenceSchema>;
 
 /**
+ * The accent, applied by overriding `--primary` and `--ring` on `<html>`
+ * (`src/renderer/hooks/use-appearance.ts`). `neutral` is stock shadcn and
+ * writes no override at all, so the default app is exactly the token set
+ * `apps/viewer` ships (plan §7).
+ */
+export const AccentColorSchema = z.enum(["neutral", "blue", "violet", "green", "orange", "rose"]);
+export type AccentColor = z.infer<typeof AccentColorSchema>;
+
+/** Root font size, which every `rem` in the UI is a multiple of. */
+export const UiFontSizeSchema = z.enum(["small", "default", "large"]);
+export type UiFontSize = z.infer<typeof UiFontSizeSchema>;
+
+/** The family Monaco, terminals and code blocks ask for first. */
+export const CodeFontSchema = z.enum(["system", "jetbrains-mono"]);
+export type CodeFont = z.infer<typeof CodeFontSchema>;
+
+/**
+ * What "open this file outside Hardcore" means (plan §10, General). P3's
+ * explorer reads it; `custom` runs `fileOpenCommand` with the path
+ * substituted for `{path}`.
+ */
+export const FileOpenDestinationSchema = z.enum(["reveal", "editor", "custom"]);
+export type FileOpenDestination = z.infer<typeof FileOpenDestinationSchema>;
+
+/** When the notification sound plays. */
+export const NotificationSoundTimingSchema = z.enum(["always", "unfocused"]);
+export type NotificationSoundTiming = z.infer<typeof NotificationSoundTimingSchema>;
+
+/**
+ * Per-agent additions to the launch line the registry declares (plan §5).
+ *
+ * The registry is data the app ships; this is the user's amendment to it, kept
+ * out of the registry so an app update cannot overwrite it and a bad edit
+ * cannot corrupt the table every other agent is read from.
+ */
+export const AgentOverrideSchema = z.object({
+  /** Appended to `launch.args`. */
+  extraArgs: z.array(z.string()).default([]),
+  /** Merged over `launch.env`. */
+  env: z.record(z.string(), z.string()).default({}),
+});
+export type AgentOverride = z.infer<typeof AgentOverrideSchema>;
+
+/**
  * Pane geometry, persisted so the window comes back the way it was left.
  * The three numbers are react-resizable-panels percentages and always sum to
  * 100 for the panes that are open.
@@ -192,28 +236,55 @@ export type PaneLayout = z.infer<typeof PaneLayoutSchema>;
 export const SettingsSchema = z.object({
   /* General */
   defaultProjectFolder: z.string().nullable().default(null),
+  fileOpenDestination: FileOpenDestinationSchema.default("reveal"),
+  /** The shell line `custom` runs; `{path}` is substituted. */
+  fileOpenCommand: z.string().default(""),
+  /** BCP-47, or `auto` to follow the OS. Only `auto` is offered so far. */
+  language: z.string().default("auto"),
   launchAtLogin: z.boolean().default(false),
   showInMenuBar: z.boolean().default(false),
   notificationsEnabled: z.boolean().default(true),
-  notificationSound: z.boolean().default(false),
-  /** Off by default (plan §10). Aptabase is a no-op unless this is on. */
-  telemetry: z.boolean().default(false),
+  notificationSound: z.boolean().default(true),
+  /** Absolute path to a sound file, or null for Hardcore's own chime. */
+  notificationSoundFile: z.string().nullable().default(null),
+  notificationSoundTiming: NotificationSoundTimingSchema.default("unfocused"),
+  /** Hand the notification to the OS as a banner as well as showing it in-app. */
+  notificationOsBanners: z.boolean().default(true),
+  /**
+   * On with an opt-out (plan §14). Aptabase is a no-op without a compiled-in
+   * key either way, and `src/main/telemetry.ts` reads this per event, so
+   * turning it off stops the next one rather than the next launch.
+   */
+  telemetry: z.boolean().default(true),
 
   /* Appearance */
   theme: ThemePreferenceSchema.default("system"),
+  accentColor: AccentColorSchema.default("neutral"),
+  uiFontSize: UiFontSizeSchema.default("default"),
+  codeFont: CodeFontSchema.default("system"),
+  reduceMotion: z.boolean().default(false),
+  /** macOS vibrancy behind the sidebar. Off: it costs a compositing pass. */
+  translucentSidebar: z.boolean().default(false),
   layout: PaneLayoutSchema.default(PaneLayoutSchema.parse({})),
 
   /* Agents */
   defaultAgentId: z.string().nullable().default(null),
+  /** Keyed by registry id; an agent with no entry uses the registry's launch line. */
+  agentOverrides: z.record(z.string(), AgentOverrideSchema).default({}),
 
   /* Git & worktrees */
   defaultGitMode: GitModeSchema.default("checkout"),
+  /** Null means `~/.hardcore/worktrees` — main expands it, so the row shows the default without storing a home path. */
   worktreeRoot: z.string().nullable().default(null),
   branchPrefix: z.string().default("hardcore/"),
   fetchBeforeCreate: z.boolean().default(true),
   autoDeleteWorktrees: z.boolean().default(false),
   worktreeKeepLimit: z.number().int().min(1).default(10),
   draftPullRequests: z.boolean().default(true),
+  /** Free text appended to the agent's instructions when it commits (P7). */
+  commitInstructions: z.string().default(""),
+  /** Free text appended to the agent's instructions when it opens a PR (P7). */
+  pullRequestInstructions: z.string().default(""),
 
   /* CAD runtime */
   cadPythonOverride: z.string().nullable().default(null),
