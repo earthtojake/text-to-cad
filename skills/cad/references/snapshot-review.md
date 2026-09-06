@@ -53,6 +53,16 @@ Set `input` to the primary STEP/STP artifact using a relative or absolute path (
 
 Use `--focus '#o1.2' ...` to emphasize specific part or subassembly occurrence refs — in `view` renders the focused refs keep full opacity while the rest of the assembly is ghosted in place (framing and context are preserved); in `section` mode focus isolates the refs entirely. Use `--hide '#o1.2' ...` to omit parts from the render in every mode. Do not combine focus and hide in the same snapshot command or job. These filters accept occurrence refs only, not face, edge, vertex, or shape selectors.
 
+For close macro views, a JSON job can set `render.tessellation` to
+`{"chordTolerance": 0.0005, "angleTolerance": 0.10}`. Chord tolerance is
+relative to each component's bounding diagonal; angle tolerance is radians.
+These positive numeric overrides retessellate the exact STEP surfaces and use
+separate shared-cache entries. They do not change the STEP geometry or a model's
+declared mesh-export tolerances. Use them only when visible faceting needs finer
+sampling; lower tolerances cost more memory and render time. The largest named
+still profile is `presentation-large` (2800×1800). Existing mesh documents cannot
+be retessellated this way.
+
 ## Output paths
 
 Name the file and you get that file:

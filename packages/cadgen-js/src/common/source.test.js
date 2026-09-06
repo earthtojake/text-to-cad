@@ -5,8 +5,9 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-import { loadSource } from "./source.js";
+import { loadSource, normalizeRenderTessellation } from "./source.js";
 import { renderAssetSourceScope } from "../lib/renderAssetSourceScope.js";
+import { setTessellationCacheProvider } from "../lib/surf/tessellationCache.js";
 
 // Composition coverage for the scoping of render asset caches.
 //
@@ -69,6 +70,53 @@ function meshData() {
     parts: []
   };
 }
+
+test("snapshot tessellation is explicit, finite and restricted to exact surfaces", async () => {
+  assert.deepEqual(normalizeRenderTessellation(undefined), {});
+  assert.deepEqual(normalizeRenderTessellation({ chordTolerance: .0001, angleTolerance: .025 }),
+    { chordTolerance: .0001, angleTolerance: .025 });
+  for (const value of [0, -1, NaN, Infinity, "0.01"]) {
+    assert.throws(() => normalizeRenderTessellation({ chordTolerance: value }), /positive finite/);
+  }
+  assert.throws(() => normalizeRenderTessellation({ quality: "high" }), /Unknown/);
+  assert.throws(() => normalizeRenderTessellation([]), /must be an object/);
+  await assert.rejects(() => loadSource({ kind: "glb", meshData: meshData(),
+    render: { tessellation: { chordTolerance: .001 } } }), /only for STEP/);
+  await assert.rejects(() => loadSource({ kind: "step", meshData: meshData(),
+    render: { tessellation: { chordTolerance: .001 } } }), /exact-surface STEP package/);
+});
+
+test("macro tessellation changes the rendered surface and uses its own cache entry", async (t) => {
+  const bytes = fs.readFileSync(new URL("../lib/surf/fixtures/cam_follower_roller.surf", import.meta.url));
+  const oldFetch = globalThis.fetch;
+  let fetches = 0;
+  globalThis.fetch = async () => { fetches += 1; return new Response(bytes); };
+  const entries = new Map();
+  const requested = [];
+  setTessellationCacheProvider({
+    get: async (key) => entries.get(key) || null,
+    getMany: async (keys) => { requested.push(...keys); return keys.map((key) => entries.get(key) || null); },
+    put: async (key, value) => { entries.set(key, value); }
+  });
+  t.after(() => { globalThis.fetch = oldFetch; setTessellationCacheProvider(null); });
+  const base = { kind: "step", package: {
+    descriptor: { components: { roller: {} },
+      occurrences: [{ id: "o1.1", name: "roller", component: "roller" }],
+      assembly: { root: { id: "o1", name: "macro", nodeType: "assembly", children: [
+        { id: "o1.1", name: "roller", nodeType: "part", children: [] }
+      ] } } },
+    componentUrls: { roller: "/macro-fixture/roller.surf" }
+  } };
+  const coarse = await loadSource(base);
+  const fineJob = { ...base, render: { tessellation: { chordTolerance: .0001, angleTolerance: .025 } } };
+  const fine = await loadSource(fineJob);
+  assert.ok(fine.meshData.indices.length > coarse.meshData.indices.length);
+  assert.notEqual(requested[0], requested[1]);
+  const beforeWarm = fetches;
+  const warm = await loadSource(fineJob);
+  assert.equal(fetches, beforeWarm, "fine cache hit must not fetch or retessellate the source");
+  assert.equal(warm.meshData.indices.length, fine.meshData.indices.length);
+});
 
 async function withTempModule(callback) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "render-source-test-"));

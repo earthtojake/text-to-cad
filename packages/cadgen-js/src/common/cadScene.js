@@ -1,3 +1,4 @@
+import { applyRecordTubeDeformation } from "./tubeDeformation.js";
 import {
   normalizeThemeSettings,
   resolveThemeFillColor
@@ -226,7 +227,9 @@ function clearGroup(group, options = {}) {
 function applyGeometryNormals(THREE, geometry, normals, recomputeNormals) {
   const hasNormals = isNumericArray(normals, 3);
   if (!recomputeNormals && hasNormals) {
-    geometry.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(normals), 3));
+    // Component buffers are immutable. Deformation owns its writable copy;
+    // duplicating every normal here can exhaust large assembly renders.
+    geometry.setAttribute("normal", new THREE.BufferAttribute(normals instanceof Float32Array ? normals : new Float32Array(normals), 3));
     return;
   }
   geometry.computeVertexNormals();
@@ -248,11 +251,11 @@ function setSurfaceEdgeAttributes(THREE, geometry, meshData, vertexOffset = 0, v
   }
   geometry.setAttribute(
     SURFACE_EDGE_BARYCENTRIC_ATTRIBUTE,
-    new THREE.BufferAttribute(barycentric.slice(componentOffset, componentOffset + componentCount), 3)
+    new THREE.BufferAttribute(barycentric.subarray(componentOffset, componentOffset + componentCount), 3)
   );
   geometry.setAttribute(
     SURFACE_EDGE_CLASS_ATTRIBUTE,
-    new THREE.BufferAttribute(edgeClass.slice(componentOffset, componentOffset + componentCount), 3)
+    new THREE.BufferAttribute(edgeClass.subarray(componentOffset, componentOffset + componentCount), 3)
   );
 }
 
@@ -1281,7 +1284,9 @@ export function applyPartVisualState(THREE, records, {
 
     record.mesh.visible = !effectHidden;
     if (record.edges) {
+      const wasVisible=record.edges.visible;
       record.edges.visible = showEdges && !effectHidden;
+      if(!wasVisible && record.edges.visible && record.effectDeformation)applyRecordTubeDeformation(THREE,record,record.effectDeformation);
     }
     if (record.silhouette) {
       record.silhouette.visible = !effectHidden;
@@ -1375,8 +1380,9 @@ export function applyPartVisualState(THREE, records, {
   }
 }
 
-function resetParameterEffects(records) {
+function resetParameterEffects(THREE, records) {
   for (const record of Array.isArray(records) ? records : []) {
+    applyRecordTubeDeformation(THREE, record, null);
     record.effectMatrix = null;
     record.effectStyle = null;
     record.effectVisible = null;
@@ -1558,7 +1564,7 @@ function applyParameters(THREE, runtime, parameters, meshData, callbacks = {}) {
     }
   });
   if (!applied) {
-    resetParameterEffects(runtime.displayRecords);
+    resetParameterEffects(THREE, runtime.displayRecords);
     for (const record of runtime.displayRecords) {
       applyDisplayRecordTransform(THREE, record);
     }
@@ -1902,6 +1908,7 @@ function buildDisplayRecords(THREE, runtime, meshData, settings) {
     runtime.modelGroup.add(mesh);
 
     const record = {
+      gpuTubeDeformationAllowed: true,
       partId,
       sourcePart: part || null,
       mesh,

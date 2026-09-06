@@ -4121,7 +4121,7 @@ const CadViewer = forwardRef(function CadViewer({
       updateTransformedRuntimeState(setTransformedSelectorRuntime, null);
       updateTransformedRuntimeState(setTransformedDisplayEdgeRuntime, null);
       runtime.topologyDisplayEdgeTransformByRecord = explodedViewActive;
-      resetStepModuleRecordEffects(runtime.displayRecords);
+      resetStepModuleRecordEffects(runtime.displayRecords, THREE);
       for (const record of runtime.displayRecords) {
         applyDisplayRecordTransform(runtime.THREE, record, runtime.modelRadius || 1);
       }

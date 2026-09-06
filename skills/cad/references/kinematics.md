@@ -164,7 +164,23 @@ export const clips = {
   targets THROW — a typo never silently animates nothing. Labels here match
   RENDERED PARTS only: to animate a whole group, name its occurrence id.
 - Handles: `.rotate(axis, degrees, origin=[0,0,0])`, `.translate(vec)`,
-  `.opacity(0..1)`, `.visible(bool)`. Successive transform calls
+  `.opacity(0..1)`, `.visible(bool)`, and
+  `.deformTube({rest, path, twistDeg: 0, maxSegmentLength: 1})`. The latter
+  deforms an existing continuous swept STEP body using rest and posed
+  centerlines in assembly coordinates. Each path is `{normal?, segments}`;
+  segments are tangent-connected `{kind:"line",start,end}`,
+  `{kind:"arc",center,axis,start,sweepDeg}`, or
+  `{kind:"bezier",points:[p0,p1,p2,p3]}`. Normal is a transverse frame seed;
+  coordinates are vec3 millimetres and circle angles are degrees. Normalized
+  arc length maps rest to pose; solve tendon length, bend radius and collision
+  constraints separately. `twistDeg` rotates authored braid cross-sections;
+  it does not calculate spool payout. Optional
+  `braid:{pitch:0.8,depth:0.02,strands:8}` adds procedural fiber color and
+  normal relief to the real swept core (millimetres, even carrier count);
+  this is surface finish, not additional CAD or collision geometry. `maxSegmentLength` controls one-time
+  longitudinal mesh refinement in mm (default 1, minimum 0.05). Rest mesh,
+  smooth normals and topology remain continuous; shared source buffers remain
+  immutable. Omitting deformation in a later frame restores rest. Successive transform calls
   PREMULTIPLY: spin about a part's own center first, then orbit the origin,
   and the spin rides the orbit.
 - Every frame starts from rest and `update(t)` rebuilds the state — a pure

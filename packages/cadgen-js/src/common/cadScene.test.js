@@ -21,6 +21,7 @@ import {
   PART_SELECTED_HIGHLIGHT_BLEND,
   partHighlightSurfaceColor
 } from "../lib/viewer/partHighlight.js";
+import { applyRecordTubeDeformation, normalizeTubeDeformation } from "./tubeDeformation.js";
 
 function sampleMeshData() {
   return {
@@ -417,6 +418,33 @@ test("buildModel renders STEP surface-owned edges from mesh attributes without l
   assert.equal(scene.displayRecords[0].material.polygonOffset, false);
   assert.equal(scene.displayRecords[0].geometry.getAttribute("_cad_edge_barycentric").count, 3);
   assert.equal(scene.displayRecords[0].geometry.getAttribute("_cad_edge_class").count, 3);
+  scene.dispose();
+});
+
+test("component mesh buffers stay shared until a deformation needs writable attributes", () => {
+  const sourceMesh = sampleMeshData();
+  sourceMesh.surfaceEdgeBarycentric = new Float32Array(18).fill(1 / 3);
+  sourceMesh.surfaceEdgeClass = new Uint8Array(18).fill(1);
+  const savedPositions = sourceMesh.vertices.slice();
+  const savedNormals = sourceMesh.normals.slice();
+  const meshData = {
+    vertices: new Float32Array(0), indices: new Uint32Array(0),
+    bounds: sourceMesh.bounds,
+    parts: [{ id: "tube", sourceMeshKey: "tube", sourceMesh, vertexCount: 6, triangleCount: 2, bounds: sourceMesh.bounds }]
+  };
+  const scene = buildModel(THREE, meshData, { renderPartsIndividually: true });
+  const record = scene.displayRecords[0];
+  assert.equal(record.geometry.getAttribute("normal").array, sourceMesh.normals);
+  assert.equal(record.geometry.getAttribute("_cad_edge_barycentric").array.buffer, sourceMesh.surfaceEdgeBarycentric.buffer);
+  assert.equal(record.geometry.getAttribute("_cad_edge_class").array.buffer, sourceMesh.surfaceEdgeClass.buffer);
+  record.gpuTubeDeformationAllowed = false;
+  const rest = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 0], end: [3, 0, 0] }] };
+  const path = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 2], end: [0, 3, 2] }] };
+  applyRecordTubeDeformation(THREE, record, normalizeTubeDeformation({ rest, path, maxSegmentLength: 1000 }));
+  assert.notEqual(record.geometry.getAttribute("normal").array, sourceMesh.normals);
+  assert.notDeepEqual(record.geometry.getAttribute("position").array, savedPositions);
+  assert.deepEqual(sourceMesh.vertices, savedPositions);
+  assert.deepEqual(sourceMesh.normals, savedNormals);
   scene.dispose();
 });
 
