@@ -321,8 +321,9 @@ test("keeps every tab in one strip, and expands it", async () => {
   // too, because the STEP tab is the one open and the viewer's own
   // Tree/Measure tabs inside it are tabs as well.
   await page.getByRole("tab").first().click();
-  // Five by now: three file tabs, a terminal and a browser.
-  await expect(page.getByRole("tab")).toHaveCount(5);
+  // Two file tabs, a terminal and a browser — and the STEP when the runtime
+  // could open it on this machine.
+  await expect(page.getByRole("tab")).toHaveCount(cadReady ? 5 : 4);
   await shoot("strip.png", true);
 
   await page.getByRole("button", { name: "Expand explorer" }).click();

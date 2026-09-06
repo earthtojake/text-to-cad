@@ -211,6 +211,34 @@ function venvPython(root: string, platform: NodeJS.Platform): string {
     : path.join(root, ".venv", "bin", "python");
 }
 
+/**
+ * The main checkout behind a git worktree, or null. A worktree's `.git` is a
+ * file reading `gitdir: <main>/.git/worktrees/<name>`; worktrees are kept
+ * light on purpose (CONTRIBUTING.md: no `.venv` copied in), so the venv to
+ * run is the main checkout's while `PYTHONPATH` stays the worktree's own
+ * `packages/cadgen/src`.
+ */
+export function mainCheckoutOfWorktree(root: string): string | null {
+  const dotGit = path.join(root, ".git");
+  let text: string;
+  try {
+    if (!fs.statSync(dotGit).isFile()) {
+      return null;
+    }
+    text = fs.readFileSync(dotGit, "utf8");
+  } catch {
+    return null;
+  }
+  const match = /^gitdir:\s*(.+?)\s*$/m.exec(text);
+  if (!match?.[1]) {
+    return null;
+  }
+  const gitdir = path.resolve(root, match[1]);
+  const marker = `${path.sep}.git${path.sep}worktrees${path.sep}`;
+  const at = gitdir.indexOf(marker);
+  return at === -1 ? null : gitdir.slice(0, at);
+}
+
 /** The runtime log: every failed probe and every viewer launch that did not come up. */
 export function runtimeLogPath(userData: string): string {
   return path.join(userData, "cad-runtime.log");
@@ -298,6 +326,15 @@ export class CadRuntime {
       const python = venvPython(checkout, this.host.platform);
       if (fs.existsSync(python)) {
         return { python, source: "checkout", env };
+      }
+      // A worktree carries no venv of its own; the main checkout's runs the
+      // worktree's cadgen through the PYTHONPATH already in `env`.
+      const main = mainCheckoutOfWorktree(checkout);
+      if (main) {
+        const mainPython = venvPython(main, this.host.platform);
+        if (fs.existsSync(mainPython)) {
+          return { python: mainPython, source: "checkout", env };
+        }
       }
     }
     return null;
