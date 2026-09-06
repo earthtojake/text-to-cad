@@ -57,9 +57,11 @@ not.
   bare path would be a channel that reads any file on the machine.
 - **`src/renderer/components/{ui,ai-elements}` is vendored**, from the shadcn
   and AI Elements registries. It is excluded from eslint (not from the
-  typechecker). Two deliberate edits are in it: the `ai` package's types are
-  replaced by `./types` (`components/ai-elements/types.ts`), and about nine
-  index accesses are guarded for `noUncheckedIndexedAccess`. Re-vendoring a
+  typechecker). Three deliberate edits are in it: the `ai` package's types are
+  replaced by `./types` (`components/ai-elements/types.ts`), about nine
+  index accesses are guarded for `noUncheckedIndexedAccess`, and `shimmer.tsx`
+  sweeps a foreground-coloured band rather than a background-coloured one
+  (the stock band erases the letters it passes over). Re-vendoring a
   component means redoing those.
 - **`package.json` stays at version `0.0.0`.** The repository's `VERSION` is
   the canonical release version; `scripts/app-version.mjs` reads it and both

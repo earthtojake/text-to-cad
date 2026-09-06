@@ -27,6 +27,7 @@ import {
  */
 
 declare const window: {
+  innerWidth: number;
   hardcore: {
     projects: { addPath(request: { path: string }): Promise<{ id: string; name: string }> };
     settings: { set(patch: { theme?: string; cadPythonOverride?: string | null }): Promise<unknown> };
@@ -258,16 +259,37 @@ test("renders a STEP file through the viewer once an interpreter is set", async 
   await expect(tree).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole("tab", { name: "Measure" })).toBeVisible();
 
-  // Expanded, the surface is wide enough for the viewer's desktop layout —
-  // the sheet beside the model rather than a drawer over it — which is how a
+  // At the explorer's default share the pane is too narrow for a model, a
+  // sheet and the file tree: the tree hides itself for this file (the
+  // header's toggle brings it back) and the sheet is a column to the right
+  // of the model — never a drawer over it — at 1440×900 and at 1280×800.
+  await expect(page.getByRole("button", { name: "Show file tree" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Hide file tree" })).toHaveCount(0);
+  await expect(page.getByRole("tree").first()).toBeVisible({ timeout: 120_000 });
+  await page.waitForTimeout(1000);
+  await shoot("file-cad-default.png", true);
+  await expectSheetBesideModel();
+  await resizeWindow(1280, 800);
+  await expectSheetBesideModel();
+  await shoot("file-cad-default-1280x800.png", true);
+  // The toggle brings the tree back for this file, and it stays back.
+  await page.getByRole("button", { name: "Show file tree" }).click();
+  await expect(page.getByRole("button", { name: "Hide file tree" })).toBeVisible();
+  await resizeWindow(1440, 900);
+  await expect(page.getByRole("button", { name: "Hide file tree" })).toBeVisible();
+
+  // Expanded, the surface is wide enough for everything — which is how a
   // person reviews a part. The tree lists the document's solids once the
   // compile lands.
   await page.getByRole("button", { name: "Expand explorer" }).click();
   await expect(page.getByRole("button", { name: "Restore layout" })).toBeVisible();
-  await expect(page.getByRole("tree").first()).toBeVisible({ timeout: 120_000 });
   await expect(page.getByRole("treeitem", { name: /import-smoke/ }).first()).toBeVisible();
+  await expectSheetBesideModel();
   await page.waitForTimeout(1500);
   await shoot("file-cad.png", true);
+  await resizeWindow(1280, 800);
+  await shoot("file-cad-1280x800.png", true);
+  await resizeWindow(1440, 900);
 
   // The sheets are live: switching to Measure shows its empty state.
   await page.getByRole("tab", { name: "Measure" }).click();
@@ -306,9 +328,33 @@ test("persists the strip across a reload", async () => {
 test("renders the explorer in light as well as dark", async () => {
   await page.evaluate(() => window.hardcore.settings.set({ theme: "light" }));
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
+  // Every kind of tab, in light: the markdown preview, the image, the
+  // terminal, the browser and — when a runtime is there — the CAD surface,
+  // whose light is the app's, not the CAD theme's.
   await page.getByRole("tab").first().click();
   await shoot("explorer-light.png");
+  await page.getByRole("tab", { name: /icon\.png/ }).click();
+  await expect(page.locator(`img[alt="icon.png"]`)).toBeVisible();
+  await shoot("file-image-light.png");
+  await page.getByRole("tab", { name: /Terminal/ }).click();
+  await expect(page.locator(".xterm-screen")).toBeVisible();
+  await settleTerminal();
+  await shoot("terminal-light.png");
+  await page.getByRole("tab", { name: /example\.com/ }).click();
+  await expect(page.getByLabel("Address")).toHaveValue(/example\.com/);
+  await shoot("browser-light.png");
+  if (CAD_PYTHON !== null) {
+    await page.getByRole("tab", { name: /import-smoke\.step/ }).click();
+    await expect(page.getByRole("tab", { name: "Tree" })).toBeVisible({ timeout: 60_000 });
+    // The app stays light: the surface follows the app's theme rather than
+    // flipping the document to the CAD theme's own.
+    await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
+    await page.waitForTimeout(1000);
+    await shoot("file-cad-light.png", true);
+  }
+  await page.getByRole("tab").first().click();
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
+  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
 });
 
 /**
@@ -342,6 +388,10 @@ test("reviews a repository's changes", async () => {
   await expect(page.locator(".monaco-diff-editor")).toHaveCount(2, { timeout: 30_000 });
 
   await shoot("review.png");
+  await page.evaluate(() => window.hardcore.settings.set({ theme: "light" }));
+  await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
+  await shoot("review-light.png");
+  await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
 });
 
 /* -------------------------------------------------------------------------- */
@@ -353,7 +403,10 @@ async function openFromTree(target: string) {
   const filter = page.getByLabel("Filter files");
   await filter.fill(target);
   await page.getByRole("option", { name: target, exact: false }).first().click();
-  await filter.fill("");
+  // A CAD file in a narrow pane hides the tree, filter and all.
+  if (await filter.isVisible()) {
+    await filter.fill("");
+  }
 }
 
 /**
@@ -370,6 +423,39 @@ async function openFromTree(target: string) {
 async function shoot(name: string, whole = false) {
   const target = whole ? page : page.getByTestId("explorer");
   await target.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
+}
+
+async function resizeWindow(width: number, height: number) {
+  await app.evaluate(
+    ({ BrowserWindow }, size) => {
+      const [win] = BrowserWindow.getAllWindows();
+      win?.setSize(size.width, size.height);
+    },
+    { width, height },
+  );
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(width);
+  await page.waitForTimeout(400);
+}
+
+/**
+ * The STEP sheet is a column to the right of the model, inside the surface:
+ * its left edge is past the canvas's left edge by more than the sheet's own
+ * width, and its right edge is the surface's. A drawer over the model would
+ * fail the first; a sheet pinned to the window would fail the second.
+ */
+async function expectSheetBesideModel() {
+  const surface = page.locator("[data-cad-surface]");
+  const sheet = page.getByRole("tab", { name: "Tree" }).locator("xpath=ancestor::aside[1]");
+  await expect(sheet).toBeVisible();
+  const surfaceBox = (await surface.boundingBox())!;
+  const sheetBox = (await sheet.boundingBox())!;
+  const where = `surface ${JSON.stringify(surfaceBox)} sheet ${JSON.stringify(sheetBox)}`;
+  expect(sheetBox.width, where).toBeGreaterThanOrEqual(240);
+  // The model keeps the rest of the surface: at 1280 the pane is 487px and
+  // the model 247, which is a model, not a sliver.
+  expect(sheetBox.x, where).toBeGreaterThan(surfaceBox.x + 200);
+  expect(Math.abs(sheetBox.x + sheetBox.width - (surfaceBox.x + surfaceBox.width)), where).toBeLessThan(2);
+  expect(sheetBox.height, where).toBeGreaterThan(surfaceBox.height * 0.9);
 }
 
 /**

@@ -86,12 +86,15 @@ real, see above).
 
 `npm run e2e` writes `tests/e2e/__screenshots__/`: the shell in both themes,
 Settings, one per explorer surface — `file-markdown-preview`,
-`file-markdown-source`, `file-image`, `file-cad-placeholder`, `file-cad`,
-`file-cad-measure`, `terminal`, `browser-empty`, `browser`, `review`, `strip`,
-`expanded` and `explorer-light` — the `git-*` set for the git modes (the review
+`file-markdown-source`, `file-image`, `file-cad-placeholder`, `file-cad`
+(expanded), `file-cad-default` (the explorer at its default share, the tree
+hidden for it) and both again at 1280×800, `file-cad-measure`, `terminal`,
+`browser-empty`, `browser`, `review`, `strip`, `expanded` — every one of those
+kinds in light as `*-light` — the `git-*` set for the git modes (the review
 under three scopes, before and after a commit, the sidebar's worktree glyph,
-Settings' per-project worktree card), and `codex-open-file` from the one test
-that runs a real agent (below). Look at them; they are the cheapest review of
+Settings' per-project worktree card), the session states in both themes with
+the composer at 1280×800 and 1680×1050, and `codex-open-file` from the one
+test that runs a real agent (below). Look at them; they are the cheapest review of
 whether the app still looks like an app, and every defect found in P3's
 explorer — a tree that did not reveal the open file, a `+` that scrolled out
 of reach, a terminal that replayed its scrollback twice — was found by reading
@@ -115,7 +118,10 @@ rasterising. Commit them or discard them, but do not go looking for the change
 The session suite (`session-*.png`) drives the session UI through each of its
 states with `tests/fake-agent` (`HARDCORE_FAKE_AGENT` points main at it in place
 of every adapter); `codex.spec.ts` runs one real Codex session when
-`HARDCORE_E2E_CODEX=1`.
+`HARDCORE_E2E_CODEX=1`. `keyboard.spec.ts` presses every shortcut the
+Shortcuts page lists; `quit.spec.ts` times `app.quit()` with a repository
+watched, a shell, a session and the CAD viewer all running, and fails above
+two seconds (see Quitting, below).
 
 The CAD tests need an interpreter with cadgen: `CAD_DESKTOP_PYTHON`, or the
 repository's `.venv` (a worktree without one falls back to the main
@@ -193,6 +199,48 @@ the second; `npm run cad:resources` fills the first from a checkout, and the
 release workflow drops the wheel it just built into it instead. The MCP
 server ships inside `out/hardcore-mcp/`, unpacked from the asar so an agent
 can run it by path. See `resources/README.md`.
+
+## Layout
+
+Three panes, in pixels (`PANE_LIMITS` in `src/shared/types.ts`, read by
+`Shell.tsx`): a 230px sidebar (180–360), a session column of 560px by default
+and never less — its transcript and composer are a 720px column centred in
+it — and the explorer takes whatever is left. The two fixed widths are the
+persisted preference (`settings.layout`); the explorer's is a consequence.
+With the explorer collapsed the session fills the window. The strips along
+the top are 32px, and whichever pane is leftmost makes room for the macOS
+traffic lights (`--titlebar-inset`, keyed off `data-leftmost` on the shell).
+
+A CAD file in the explorer is laid out by the desktop, not measured by the
+viewer (`features/explorer/cad-layout.ts`): the surface is pinned to its
+desktop layout with the sheet a column beside the model at any pane width,
+the sheet is `clamp(36% of the pane, 240, 365)`, the file tree hides itself
+for that tab when the pane cannot hold all three (its toggle brings it
+back), and light/dark is the app's theme rather than the CAD theme's.
+
+## Quitting
+
+`app.quit()` has a budget of two seconds (`tests/e2e/quit.spec.ts`), and the
+teardown in `before-quit` is written for it: every owner signals what it
+owns and nothing is awaited. Electron waits for the Node side, and the Node
+side waits for every child it holds a pipe to, so `src/main/children.ts`
+registers every process main spawns — the viewer, the adapters, the
+terminals' backends, the probes, `git` — and `before-quit` kills the probes
+outright and detaches the rest; `will-quit` kills whatever ignored its
+signal. Before that, a cadgen version probe (sixty-second timeout) still
+importing OCP held the exit for sixty seconds, and chokidar's `close()` over
+this repository blocked for most of a second, so the watchers are not closed
+at all — an fsevents handle dies with the process.
+
+What is left after `will-quit` is Chromium's own shutdown, which on this
+macOS takes twelve seconds to minutes once a window has held a WebGL context
+(the GPU and utility helpers hang, then the browser process retries a
+CoreAnalytics XPC send; `app.exit()` is slower still, and no timer of ours
+runs once the event loop has stopped). `src/main/quit-deadline.ts` keeps a
+deadline from outside: a detached copy of this binary run as Node that
+kills the app and its helpers 1.2 seconds after `will-quit` if they are
+still there. A quit that finishes on its own — half a second without WebGL —
+gives it nothing to do.
 
 ## CAD runtime
 

@@ -15,6 +15,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
  * every adapter; the `showcase` prompt is the fake's Codex-shaped turn.
  */
 declare const window: {
+  innerWidth: number;
   hardcore: {
     projects: { addPath(input: { path: string }): Promise<{ id: string }> };
     settings: { set(patch: { theme: string }): Promise<unknown> };
@@ -69,11 +70,18 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   const projectName = path.basename(project);
   await expect(page.getByRole("heading", { name: `What should we build in ${projectName}?` })).toBeVisible();
   // The agent chip fills in once the detector has probed; sending before
-  // that would have nothing to launch.
-  await expect(page.locator("[data-chip=agent]")).not.toContainText("Choose an agent");
-  await expect(page.locator("[data-chip=git-mode]")).toBeVisible();
-  await expect(page.locator("[data-chip=approval]")).toContainText("Ask");
+  // that would have nothing to launch. The new-session context — project,
+  // git mode, agent — is a strip above the composer (Codex); the composer's
+  // own row holds approval.
+  const strip = page.locator("[data-context-strip]");
+  await expect(strip.locator("[data-chip=project]")).toContainText(projectName);
+  await expect(strip.locator("[data-chip=agent]")).not.toContainText("Choose an agent");
+  await expect(strip.locator("[data-chip=git-mode]")).toBeVisible();
+  await expect(page.locator("[data-composer] [data-chip=approval]")).toContainText("Ask");
   await shoot("session-new.png");
+  await setTheme("light");
+  await shoot("session-new-light.png");
+  await setTheme("dark");
 
   const composer = page.getByPlaceholder("Do anything");
   await composer.fill("showcase: write a greeting script and tidy up");
@@ -121,6 +129,21 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await expect(row).toHaveAttribute("data-status", "idle");
   await shoot("session-completed.png");
 
+  // The composer is one row at the default session width (Codex's): `+` and
+  // approval on the left, the model chip and the options glyph on the right,
+  // nothing wrapped. The fake agent exposes a model and an effort, so the
+  // right-hand chips are there to measure.
+  await expectOneRowComposer();
+  // And still one row at the three window sizes the layout is designed for.
+  for (const [width, height] of [[1280, 800], [1680, 1050]] as const) {
+    await resizeWindow(width, height);
+    await expectOneRowComposer();
+    await expectPaneWidths();
+    await shoot(`session-${width}x${height}.png`);
+  }
+  await resizeWindow(1440, 900);
+  await expectPaneWidths();
+
   // Folding: the consecutive reads, edits and commands are one line.
   const group = page.locator("[data-activity-group]").first();
   await expect(group).toContainText("Read 2 files, edited 2 files, ran 2 commands");
@@ -135,6 +158,43 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await execRow.getByRole("button").first().click();
   await expect(page.locator("[data-tool-detail]").filter({ hasText: "hello from the fake agent" }).last()).toBeVisible();
   await shoot("session-expanded.png");
+  await setTheme("light");
+  await shoot("session-expanded-light.png");
+  await setTheme("dark");
+});
+
+/**
+ * The same turn again in light, for the states that only exist mid-turn:
+ * streaming and the permission card. A theme switch after the fact cannot
+ * show them, so the fake runs its showcase once more.
+ */
+test("the streaming and permission states render in light", async () => {
+  await page.getByRole("button", { name: "New chat" }).click();
+  await expect(page.getByRole("heading", { name: /What should we build in/ })).toBeVisible();
+  await setTheme("light");
+  const composer = page.getByPlaceholder("Do anything");
+  await composer.fill("showcase: the same script, in light");
+  await composer.press("Enter");
+
+  await expect(page.locator("[data-activity-row], [data-activity-group]").first()).toBeVisible();
+  await expect(page.locator("[data-status-line]")).toBeVisible();
+  await shoot("session-streaming-light.png");
+
+  const permission = page.locator("[data-permission][data-outcome=pending]");
+  await expect(permission).toBeVisible();
+  await shoot("session-permission-light.png");
+  await permission.getByRole("button", { name: "Yes", exact: true }).click();
+  await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
+  await shoot("session-completed-light.png");
+  await setTheme("dark");
+  // Back to the first session, which the rest of the file drives — and this
+  // one deleted, so the sidebar holds exactly the row those tests expect.
+  const light = page.locator("[data-session-row]").filter({ hasText: "in light" });
+  await light.getByRole("button", { name: /actions$/ }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await expect(page.locator("[data-session-row]")).toHaveCount(1);
+  await page.locator("[data-session-row]").click();
+  await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle");
 });
 
 test("stop cancels the running turn", async () => {
@@ -215,4 +275,43 @@ test("a signed-out agent asks to sign in", async () => {
 
 async function shoot(name: string) {
   await page.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
+}
+
+async function setTheme(theme: "dark" | "light") {
+  await page.evaluate((value) => window.hardcore.settings.set({ theme: value }), theme);
+  await expect(page.locator("html")).toHaveClass(theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b).*$/);
+}
+
+async function resizeWindow(width: number, height: number) {
+  await app.evaluate(
+    ({ BrowserWindow }, size) => {
+      const [win] = BrowserWindow.getAllWindows();
+      win?.setSize(size.width, size.height);
+    },
+    { width, height },
+  );
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(width);
+  // The panels lay out on the next frame.
+  await page.waitForTimeout(150);
+}
+
+/** The composer's footer is one line: every chip shares the send button's row. */
+async function expectOneRowComposer() {
+  const send = page.locator("[data-composer] button[aria-label=\"Submit\"], [data-composer] button[aria-label=\"Stop\"]").first();
+  const sendBox = await send.boundingBox();
+  expect(sendBox).not.toBeNull();
+  for (const chip of await page.locator("[data-composer] [data-chip]").all()) {
+    const box = await chip.boundingBox();
+    expect(box, "a chip is off the send button's row").not.toBeNull();
+    expect(Math.abs((box!.y + box!.height / 2) - (sendBox!.y + sendBox!.height / 2))).toBeLessThan(6);
+  }
+}
+
+/** The shell's contract: a 230px sidebar, a session column of at least 560px, the explorer the rest. */
+async function expectPaneWidths() {
+  const widths = await page.locator("[data-panel]").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().width));
+  expect(widths).toHaveLength(3);
+  expect(Math.abs(widths[0]! - 230), `sidebar ${widths[0]}`).toBeLessThanOrEqual(1);
+  expect(widths[1]!).toBeGreaterThanOrEqual(559);
+  expect(widths[2]!).toBeGreaterThan(300);
 }
