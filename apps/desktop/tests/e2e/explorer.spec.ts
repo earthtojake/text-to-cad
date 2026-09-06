@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -50,19 +51,22 @@ const IMAGE = "apps/desktop/build/icon.png";
 const STEP = "models/examples/imported/import-smoke.step";
 
 /**
- * A file the review test writes and removes.
+ * The review test gets a repository of its own, built in `beforeAll`.
  *
- * Untracked, in the repository rather than in a temp directory, because the
- * only way to have something to review is to change the tree being reviewed —
- * and untracked is the case whose counts git does not hand over.
+ * Reviewing *this* checkout was the obvious thing and the wrong one: the
+ * screenshot then shows the state of the tree it is committed into, so every
+ * run changes it, which changes the review, which changes the screenshot. A
+ * fixture with one modified file and one untracked file is deterministic, and
+ * it is still a real repository with real `git` behind it.
  */
-const REVIEW_FIXTURE = path.join(repoRoot, "review-fixture.txt");
+let reviewRepo: string;
 
 let app: ElectronApplication;
 let page: Page;
 let userData: string;
 
 test.beforeAll(async () => {
+  reviewRepo = makeReviewRepo();
   userData = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-explorer-e2e-"));
   app = await electron.launch({
     args: [path.join(appRoot, "out", "main", "index.js"), `--user-data-dir=${userData}`],
@@ -86,7 +90,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await app?.close();
   fs.rmSync(userData, { recursive: true, force: true });
-  fs.rmSync(REVIEW_FIXTURE, { force: true });
+  fs.rmSync(reviewRepo, { recursive: true, force: true });
 });
 
 test.describe.configure({ mode: "serial" });
@@ -203,39 +207,15 @@ test("browses to a URL in a browser tab", async () => {
   await shoot("browser.png");
 });
 
-test("shows this checkout's changes in the review tab", async () => {
-  // The review needs something to review, and a checkout that happens to be
-  // dirty is not something to rely on — this test failed the first time it ran
-  // against a clean tree. So it makes its own change: an untracked file, which
-  // is also the case whose counts git will not give you.
-  fs.writeFileSync(REVIEW_FIXTURE, `${"a line\n".repeat(12)}`);
-
-  await page.getByRole("button", { name: "New tab of another kind" }).click();
-  await page.getByRole("menuitem", { name: "Review" }).click();
-
-  await expect(page.getByRole("button", { name: /All changes/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Commit or push" })).toBeVisible();
-  await expect(page.getByText(/^\+\d+$/).first()).toBeVisible();
-
-  // A new file's counts come from the file, not from `git diff` against a
-  // revision that has never seen it — `git diff --no-index` reports "the files
-  // differ" as exit code 1, and reading that as failure showed every added
-  // file as `+0 −0`.
-  const fixtureRow = page.getByRole("button", { name: /review-fixture\.txt/ }).last();
-  await expect(fixtureRow).toContainText("+12");
-
-  // The rail scrolls to a file and opens its section; the diff then arrives.
-  // A review whose sections all say "Reading the diff…" is a list of filenames.
-  await fixtureRow.click();
-  await expect(page.locator(".monaco-diff-editor").first()).toBeVisible({ timeout: 30_000 });
-
-  await shoot("review.png");
-});
-
 test("keeps every tab in one strip, and expands it", async () => {
-  // Six tabs by now: the four opened above plus the two file tabs.
+  // Five by now: three file tabs, a terminal and a browser.
   const tabs = page.getByRole("tab");
-  await expect(tabs).toHaveCount(6);
+  await expect(tabs).toHaveCount(5);
+
+  // A file tab under the strip, not whichever tab happened to be last: these
+  // two shots are about the strip and the layout, and a review of *this*
+  // repository in the background would make them change on every run.
+  await page.getByRole("tab").first().click();
   await shoot("strip.png", true);
 
   await page.getByRole("button", { name: "Expand explorer" }).click();
@@ -259,6 +239,39 @@ test("renders the explorer in light as well as dark", async () => {
   await page.getByRole("tab").first().click();
   await shoot("explorer-light.png");
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
+});
+
+/**
+ * Last, because it switches projects: the strip belongs to the project, so
+ * this leaves a different one selected than every test above it expects.
+ */
+test("reviews a repository's changes", async () => {
+  await page.evaluate(
+    (directory) => window.hardcore.projects.addPath({ path: directory }),
+    reviewRepo,
+  );
+  await page.getByText(path.basename(reviewRepo)).first().click();
+  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+
+  await page.getByRole("button", { name: "New tab of another kind" }).click();
+  await page.getByRole("menuitem", { name: "Review" }).click();
+
+  await expect(page.getByRole("button", { name: /All changes/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Commit or push" })).toBeVisible();
+
+  // A tracked file, edited: git's own numstat.
+  await expect(page.getByRole("button", { name: /tracked\.txt/ }).last()).toContainText("+1");
+  // A new file's counts come from the file, not from `git diff` against a
+  // revision that has never seen it — `git diff --no-index` reports "the files
+  // differ" as exit code 1, and reading that as failure showed every added
+  // file as `+0 −0`.
+  await expect(page.getByRole("button", { name: /added\.txt/ }).last()).toContainText("+12");
+
+  // Both sections open by default and both diffs arrive. A review whose
+  // sections all say "Reading the diff…" is a list of filenames.
+  await expect(page.locator(".monaco-diff-editor")).toHaveCount(2, { timeout: 30_000 });
+
+  await shoot("review.png");
 });
 
 /* -------------------------------------------------------------------------- */
@@ -326,3 +339,37 @@ async function settleTerminal() {
 function occurrences(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1;
 }
+
+/**
+ * A small git repository with one modified file and one untracked file.
+ *
+ * A real repository, run through the real `git`, because that is what
+ * `src/main/projects/git.ts` shells out to — but a *fixed* one, so the review
+ * screenshot shows the same thing on every run.
+ */
+function makeReviewRepo(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-review-repo-"));
+  const run = (...args: string[]) =>
+    execFileSync("git", args, { cwd: root, stdio: "ignore", env: gitEnv });
+
+  run("init", "--quiet", "--initial-branch=main");
+  fs.writeFileSync(path.join(root, "tracked.txt"), "one\ntwo\nthree\n");
+  run("add", "-A");
+  run("commit", "--quiet", "-m", "the state being reviewed against");
+
+  fs.writeFileSync(path.join(root, "tracked.txt"), "one\ntwo\nthree\nfour\n");
+  fs.writeFileSync(path.join(root, "added.txt"), "a line\n".repeat(12));
+  return root;
+}
+
+/**
+ * The fixture repository's identity, so it does not depend on the machine's
+ * `user.name` being set — on a fresh CI runner `git commit` fails without one.
+ */
+const gitEnv = {
+  ...process.env,
+  GIT_AUTHOR_NAME: "Hardcore Tests",
+  GIT_AUTHOR_EMAIL: "tests@example.invalid",
+  GIT_COMMITTER_NAME: "Hardcore Tests",
+  GIT_COMMITTER_EMAIL: "tests@example.invalid",
+};
