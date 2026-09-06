@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { AGENT_PROVIDERS, agentProvider } from "@main/agents/registry";
@@ -94,6 +98,32 @@ describe("the agent registry", () => {
     }
     expect(agentProvider("claude-code")?.authProbe.checkArgs).toEqual(["auth", "status"]);
     expect(agentProvider("codex")?.authProbe.checkArgs).toEqual(["login", "status"]);
+  });
+
+  it("points every icon at a committed asset, and says so when there is none", () => {
+    // The `icon` column names a file in src/renderer/assets/agents/, downloaded
+    // by scripts/fetch-agent-icons.mjs. A name with no file behind it would be
+    // an empty square in the Agents list, so the file is what is asserted.
+    const assets = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+      "..",
+      "..",
+      "src",
+      "renderer",
+      "assets",
+      "agents",
+    );
+    for (const provider of AGENT_PROVIDERS) {
+      if (provider.icon === null) {
+        // Only for agents the ACP registry has no logo for; anything else is a
+        // fetch that was never run.
+        expect(["kiro", "hermes"], provider.id).toContain(provider.id);
+        continue;
+      }
+      expect(provider.icon, provider.id).toBe(provider.id);
+      expect(fs.existsSync(path.join(assets, `${provider.icon}.svg`)), provider.id).toBe(true);
+    }
   });
 
   it("marks the two adapters that run without the CLI on PATH", () => {

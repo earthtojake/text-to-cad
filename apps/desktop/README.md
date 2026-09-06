@@ -44,8 +44,10 @@ a key was compiled in (`HARDCORE_APTABASE_KEY` at build time, baked in as
 `__APTABASE_KEY__` by `electron.vite.config.ts` — a packaged app has no build
 environment to read, and a key settable by whoever launches the binary is a key
 anyone can point at their own project), and the user's `telemetry` setting is
-on. It defaults to off, and it is read per event, so turning it off stops the
-next one.
+on. That setting is on with an opt-out (plan §14) and is read per event, so
+turning it off in Settings › General stops the next one, not the next launch —
+and Settings prints the table below beside the switch rather than linking to
+it.
 
 Four events, and the union type in `src/main/telemetry.ts` is the whole
 vocabulary — adding a fifth is a change to that type:
@@ -146,6 +148,8 @@ src/main/                 the Electron main process: everything with a side effe
   menu.ts                 app menu; View items send `ui.command` rather than reaching into the UI
   window-state.ts         persisted geometry, checked against the displays that exist now
   telemetry.ts            Aptabase, inert without a key and off without the setting
+  settings-effects.ts     the settings that are instructions to the OS: login item, menu-bar
+                          item, macOS vibrancy — applied at boot and on every settings write
   updater.ts              electron-updater against GitHub Releases; a no-op in dev
   db/                     sqlite: migrations.ts (runner + schema), repositories.ts (rows <-> types)
   ipc/                    register.ts (validating registration) + index.ts (the handlers)
@@ -155,6 +159,8 @@ src/main/                 the Electron main process: everything with a side effe
                           client.ts (fs/terminal/permission), terminals.ts (+ pty/process backends),
                           sessions.ts (index + live connections)
   ipc/{acp,agents}.ts     the P1 handler branches, spread into ipc/index.ts
+  ipc/{plugins,runtime}.ts  P6's branches, answering for P5 until it lands
+  ipc/dialogs.ts          the native folder and file choosers Settings' path rows use
   explorer/               P3
   cad/                    P4, P5
   projects/git.ts         P7
@@ -164,6 +170,7 @@ src/shared/               types.ts (domain types as zod schemas)
   ipc/define.ts           invoke / defineIpc and the types derived from a contract
   ipc/app.ts              the app.* branch: the updater's channels and its event
   ipc/acp.ts, ipc/agents.ts  the session and agent branches (P1)
+  ipc/plugins.ts, ipc/runtime.ts, ipc/dialogs.ts  the plugin, CAD runtime and chooser branches (P6)
   agents.ts               provider and status schemas
   acp/types.ts, acp/reduce.ts  SessionState and the pure session/update reducer
 src/renderer/
@@ -171,7 +178,10 @@ src/renderer/
   features/sidebar        projects and their sessions
   features/session        the empty state and the composer
   features/explorer       the one tab strip
-  features/settings       the full-window Settings route and its seven pages
+  features/settings       the Settings route, the card-grouped rows, the agent drawer, and
+                          pages/ — one module per page; search is done by the rows themselves
+  lib/shortcuts.ts        the keyboard-shortcut table the Shortcuts page prints
+  hooks/use-appearance.ts accent, UI scale, code font, reduced motion, translucency as <html> tokens
   components/ui           shadcn/ui, vendored
   components/ai-elements  Vercel AI Elements, vendored (types.ts replaces the `ai` package)
   state/                  one zustand store per domain, plus bridge.ts for main's pushes

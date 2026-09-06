@@ -16,14 +16,56 @@ describe("Settings", () => {
     expect(settings.layout.sidebar + settings.layout.session + settings.layout.explorer).toBe(100);
   });
 
-  it("keeps telemetry off unless it is asked for", () => {
-    expect(defaultSettings().telemetry).toBe(false);
+  it("has telemetry on with an opt-out (plan §14)", () => {
+    expect(defaultSettings().telemetry).toBe(true);
+    // And the opt-out survives, which is the half that matters: a stored false
+    // is not a missing field, so a later build cannot default it back on.
+    expect(SettingsSchema.parse({ telemetry: false }).telemetry).toBe(false);
   });
 
   it("fills in fields a row written by an older build is missing", () => {
+    // Settings rows are per-key JSON in sqlite, so a new field is not a schema
+    // migration: it is a default, and this is the test that it is a complete
+    // one. A field without a default would make every older install parse to a
+    // half-formed object.
     const fromOldRow = SettingsSchema.parse({ theme: "dark" });
     expect(fromOldRow.theme).toBe("dark");
     expect(fromOldRow.worktreeKeepLimit).toBe(10);
+    expect(fromOldRow.accentColor).toBe("neutral");
+    expect(fromOldRow.uiFontSize).toBe("default");
+    expect(fromOldRow.fileOpenDestination).toBe("reveal");
+    expect(fromOldRow.notificationSoundTiming).toBe("unfocused");
+    expect(fromOldRow.agentOverrides).toEqual({});
+    expect(fromOldRow.commitInstructions).toBe("");
+  });
+
+  it("gives every field a default, so no row is ever half-formed", () => {
+    const parsed = defaultSettings();
+    for (const key of Object.keys(SettingsSchema.shape)) {
+      expect(parsed, key).toHaveProperty(key);
+      expect(parsed[key as keyof typeof parsed], key).not.toBeUndefined();
+    }
+  });
+
+  it("stores the launch amendments an agent's drawer writes", () => {
+    const parsed = SettingsSchema.parse({
+      agentOverrides: { codex: { extraArgs: ["--verbose"], env: { CODEX_HOME: "/tmp" } } },
+    });
+    expect(parsed.agentOverrides["codex"]).toEqual({
+      extraArgs: ["--verbose"],
+      env: { CODEX_HOME: "/tmp" },
+    });
+    // Both halves are optional; an entry with neither is still a valid entry.
+    expect(SettingsSchema.parse({ agentOverrides: { codex: {} } }).agentOverrides["codex"]).toEqual({
+      extraArgs: [],
+      env: {},
+    });
+  });
+
+  it("refuses an accent or a font size it does not have tokens for", () => {
+    expect(SettingsSchema.safeParse({ accentColor: "chartreuse" }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ uiFontSize: "enormous" }).success).toBe(false);
+    expect(SettingsSchema.safeParse({ worktreeKeepLimit: 0 }).success).toBe(false);
   });
 
   it("drops keys it does not know, which is how window state hides in the same table", () => {

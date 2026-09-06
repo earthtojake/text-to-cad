@@ -74,6 +74,13 @@ export const AgentProviderSchema = z.object({
   /** The public ACP registry's id for this agent, when it has one. */
   registryId: z.string().nullable(),
   /**
+   * The agent's mark: the basename of a committed file in
+   * `src/renderer/assets/agents/`, downloaded from the ACP registry by
+   * `scripts/fetch-agent-icons.mjs`. Null for the agents the registry has no
+   * logo for, which the UI draws as a letter instead.
+   */
+  icon: z.string().nullable(),
+  /**
    * Executables `which` looks for, in preference order. Usually the agent's
    * own CLI: its presence is what "installed" means, and its home directory
    * is where auth and skills live.
