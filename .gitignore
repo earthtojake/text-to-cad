@@ -31,6 +31,8 @@ apps/desktop/out/
 apps/desktop/dist/
 apps/desktop/release/
 apps/desktop/test-results/
+# scripts/perf-cad.mjs's raw numbers.
+apps/desktop/tests/perf/
 # Build outputs of apps/desktop's resources: the composed plugin
 # (scripts/build-plugin.mjs) and the cadgen wheel + constraints
 # (scripts/cad-resources.mjs, or the release workflow). The directories stay

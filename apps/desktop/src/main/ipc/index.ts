@@ -98,11 +98,20 @@ const handlers = {
   settings: {
     get: () => settings.get(),
     set: (patch: Parameters<typeof settings.set>[0]) => {
+      const previous = settings.get();
       const next = settings.set(patch);
       broadcast("settings.changed", next);
       // Three of these fields are instructions to the OS or to the window, not
       // stored values (src/main/settings-effects.ts).
       applySettingsEffects(next);
+      // A viewer is bound to the interpreter that runs it. When the override
+      // changes, every viewer this app started — including the ones a project
+      // open warmed before the change — is stale: stopped here, so the next
+      // `cad.viewerOrigin` launches (or fails) with the interpreter that is
+      // now configured, instead of handing out a process the old one runs.
+      if (previous.cadPythonOverride !== next.cadPythonOverride) {
+        viewers().stopAll();
+      }
       // The field's NAME, never its value: "someone changed the git mode" is a
       // product question, "to what" is their business (src/main/telemetry.ts).
       for (const key of Object.keys(patch) as (keyof typeof patch & string)[]) {

@@ -13,7 +13,7 @@
 import type { IpcHandlers } from "../../shared/ipc";
 import type { cadIpc } from "../../shared/ipc/cad";
 import type { ViewerOrigin } from "../../shared";
-import { cadRuntime, rendererCommands, viewers } from "../cad";
+import { cadRuntime, rendererCommands, viewers, warmCad } from "../cad";
 import { projects } from "../db/repositories";
 import { rootOf } from "./explorer";
 import type { IpcContext } from "./register";
@@ -39,6 +39,18 @@ export const cadHandlers = {
         ...(status.message ? { message: status.message } : {}),
         ...(status.log ? { log: status.log } : {}),
       };
+    },
+
+    warm: ({ projectId, root }) => {
+      if (!projects.list().some((candidate) => candidate.id === projectId)) {
+        return;
+      }
+      // Started, not awaited: the renderer asked on the way into a project
+      // and has nothing to show for it. The first `viewerOrigin` will find
+      // the launch in progress (or done) and share it.
+      warmCad(rootOf(projectId, root)).catch(() => {
+        /* the first viewerOrigin reports the failure, with its words */
+      });
     },
 
     reply: (reply) => {

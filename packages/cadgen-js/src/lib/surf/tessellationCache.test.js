@@ -11,19 +11,25 @@ import { fileURLToPath } from "node:url";
 import { parseSurf } from "./container.js";
 import { DEFAULT_OPTIONS, TESSELLATION_VERSION, tessellateComponent } from "./tessellate.js";
 import {
+  clearPrimedEntries,
+  configureTessellationCacheWriteBack,
   createHttpTessellationCacheProvider,
   decodeComponentTessellation,
   decodeTessellationCacheBatch,
   edgeClassesFromSurfIndex,
   encodeComponentTessellation,
   encodeTessellationCacheBatch,
+  flushTessellationCacheWriteBacks,
   getCachedComponentEntries,
+  getCachedEntryBytes,
+  primeCachedEntryBytes,
   setTessellationCacheProvider,
   originPrefix,
   surfIndexFromCacheEntry,
   tessellateComponentCached,
   tessellationCacheKey,
   tessellationOptionsCacheable,
+  writeBackEntryBytes,
 } from "./tessellationCache.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -259,4 +265,105 @@ test("the HTTP provider addresses the cache routes at both origins", async () =>
     `${REMOTE}/__tess_cache/abc.tess`,
     `${REMOTE}/__tess_cache/batch`,
   ]);
+});
+
+test("priming takes one batch round trip and feeds the per-component reads once", async (t) => {
+  t.after(() => {
+    setTessellationCacheProvider(null);
+    clearPrimedEntries();
+  });
+  const hit = new Uint8Array([1, 2, 3, 4]);
+  const calls = { getMany: 0, get: 0 };
+  setTessellationCacheProvider({
+    async get() {
+      calls.get += 1;
+      return null;
+    },
+    async put() {},
+    async getMany(keys) {
+      calls.getMany += 1;
+      return keys.map((key) => (key.startsWith("hit-") ? hit : null));
+    },
+  });
+  assert.equal(await primeCachedEntryBytes(["hit-a", "miss-b", "hit-a"]), 1);
+  assert.equal(calls.getMany, 1);
+  // Hits and known misses both answer without a request…
+  assert.equal(await getCachedEntryBytes("hit-a"), hit);
+  assert.equal(await getCachedEntryBytes("miss-b"), null);
+  assert.equal(calls.get, 0);
+  // …and each primed answer is taken once: the next read asks the provider.
+  assert.equal(await getCachedEntryBytes("hit-a"), null);
+  assert.equal(calls.get, 1);
+});
+
+test("priming without a batch route leaves the per-component reads to the provider", async (t) => {
+  t.after(() => setTessellationCacheProvider(null));
+  let gets = 0;
+  setTessellationCacheProvider({
+    async get() {
+      gets += 1;
+      return null;
+    },
+    async put() {},
+  });
+  assert.equal(await primeCachedEntryBytes(["a", "b"]), 0);
+  await getCachedEntryBytes("a");
+  assert.equal(gets, 1);
+});
+
+test("deferred write-backs queue until quiet, then drain at the configured concurrency", async (t) => {
+  t.after(() => {
+    setTessellationCacheProvider(null);
+    configureTessellationCacheWriteBack({ deferMs: 0 });
+  });
+  const puts = [];
+  let inFlight = 0;
+  let peak = 0;
+  setTessellationCacheProvider({
+    async get() {
+      return null;
+    },
+    async put(key) {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      puts.push(key);
+      inFlight -= 1;
+    },
+  });
+  configureTessellationCacheWriteBack({ deferMs: 30, concurrency: 2 });
+  const bytes = new Uint8Array([9]);
+  await writeBackEntryBytes("c1", {}, bytes);
+  await writeBackEntryBytes("c2", {}, bytes);
+  await writeBackEntryBytes("c3", {}, bytes);
+  await writeBackEntryBytes("c1", {}, bytes); // the same key twice is one write
+  assert.deepEqual(puts, [], "nothing is written while entries keep arriving");
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.deepEqual(puts.map((key) => key.split("-t")[0]).sort(), ["c1", "c2", "c3"]);
+  assert.equal(peak, 2);
+  // Immediate again: the default policy writes on the spot.
+  configureTessellationCacheWriteBack({ deferMs: 0 });
+  await writeBackEntryBytes("c4", {}, bytes);
+  assert.equal(puts.length, 4);
+});
+
+test("flushing writes the deferred entries now", async (t) => {
+  t.after(() => {
+    setTessellationCacheProvider(null);
+    configureTessellationCacheWriteBack({ deferMs: 0 });
+  });
+  const puts = [];
+  setTessellationCacheProvider({
+    async get() {
+      return null;
+    },
+    async put(key) {
+      puts.push(key);
+    },
+  });
+  configureTessellationCacheWriteBack({ deferMs: 10_000, concurrency: 1 });
+  await writeBackEntryBytes("c1", {}, new Uint8Array([1]));
+  assert.equal(puts.length, 0);
+  await flushTessellationCacheWriteBacks();
+  assert.equal(puts.length, 1);
 });

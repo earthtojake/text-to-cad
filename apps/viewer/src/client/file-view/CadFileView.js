@@ -298,6 +298,7 @@ import {
 
 import { ViewerOriginProvider } from "./viewerOriginContext.js";
 import { normalizeViewerOrigin } from "./viewerOrigin.js";
+import { installViewerTessellationCacheProvider } from "./hostTessellationCache.js";
 import {
   ARTIFACT_GENERATING_LABEL,
   CAD_WORKSPACE_TOP_BAR_HEIGHT,
@@ -376,6 +377,12 @@ export default function CadFileView({
   onCapture = null,
 }) {
   const viewerOrigin = normalizeViewerOrigin(origin);
+  // The shared tessellation cache is reached through THIS origin's
+  // `/__tess_cache/` routes (hostTessellationCache.js): installed before the
+  // surface's first component load, and again when the origin changes.
+  useLayoutEffect(() => {
+    installViewerTessellationCacheProvider(viewerOrigin);
+  }, [viewerOrigin]);
   return (
     <ViewerOriginProvider origin={viewerOrigin}>
       <CadFileViewSurface

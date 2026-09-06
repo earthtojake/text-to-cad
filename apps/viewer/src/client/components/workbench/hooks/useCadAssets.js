@@ -23,6 +23,7 @@ import {
   buildComposedPackageMeshData
 } from "cadgen-js/lib/assembly/meshData";
 import { mapWithConcurrency } from "cadgen-js/lib/async/concurrency";
+import { primeCachedEntryBytes } from "cadgen-js/lib/surf/tessellationCache.js";
 import { resolvePackageAssetUrl } from "./packageAssetUrl.js";
 import { ASSET_STATUS, REFERENCE_STATUS } from "../../../workbench/constants";
 import {
@@ -549,6 +550,15 @@ export function useCadAssets({
           setMeshLoadStage("loading components");
           const componentEntries = Object.entries(packageDescriptor.components || {});
           const componentMeshDataByCid = {};
+          // One batch round trip for the whole hit set BEFORE the component
+          // loads, which then take their cached tessellations from it instead
+          // of asking the backend one GET per component (an unprimed load of
+          // a 483-component model was 483 GETs against the backend already
+          // streaming its 483 surfs). Best-effort: nothing here can fail a load.
+          await primeCachedEntryBytes(componentEntries.map(([cid]) => cid)).catch(() => 0);
+          if (requestId !== requestIdRef.current) {
+            return;
+          }
           await mapWithConcurrency(componentEntries, packageComponentLoadConcurrency(), async ([cid, component]) => {
             // Exact-surface artifact: tessellated client-side from the .surf
             // (design/surface-rendering.md). Same meshData contract as the

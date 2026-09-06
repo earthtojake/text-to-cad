@@ -380,6 +380,19 @@ stops it when the project is removed and on quit — and never kills an
 instance the launcher reported as `reused`, because that one is somebody
 else's. `cad.viewerOrigin` is how the file tab gets the origin.
 
+The viewer does not wait for the first CAD file. When the explorer binds to
+a project (or a session's worktree), the renderer calls `cad.warm`, and main
+starts what the first CAD file would have paid for on its own clock: the
+runtime probe, the viewer for that root, and cadgen's warm build daemon
+(`src/main/cad/daemon.ts` spawns `python -m cadgen.daemon`, the registered
+command a cadgen client spawns for itself, detached and never stopped — it is
+the person's daemon, shared with every terminal, and it retires on its own
+idle timeout). Once per interpreter per app run, and never when
+`CADGEN_DAEMON=0`. Measured with `scripts/perf-cad.mjs`: the first STEP open
+after launch had paid 0.9 s for the probe and the viewer and ~3 s for the
+daemon's start inside its first compile; warmed at project open both are done
+before the click, and `viewerOrigin` shares the launch already in flight.
+
 ## The plugin and the MCP server
 
 Two things reach the agent from the app (plan §8), and `src/main/cad/`
@@ -449,12 +462,13 @@ src/main/                 the Electron main process: everything with a side effe
   ipc/{acp,agents}.ts     the P1 handler branches, spread into ipc/index.ts
   ipc/{plugins,runtime}.ts  the plugin and CAD runtime branches (P5's bodies, P6's shape)
   ipc/dialogs.ts          the native folder and file choosers Settings' path rows use
-  ipc/{explorer,cad}.ts   P3's handler branches: files, terminals; cad.viewerOrigin + cad.reply (P5)
+  ipc/{explorer,cad}.ts   P3's handler branches: files, terminals; cad.viewerOrigin + cad.warm + cad.reply (P5)
   ipc/git.ts              P7's: the review's reads in a session's directory, the
                           commit, the pull request, and the worktree list
   explorer/               fs.ts (tree, ignores, read/write, chokidar watcher),
                           terminal.ts (node-pty sessions + scrollback)
   cad/                    runtime.ts (which Python: override, bundled, checkout), viewer.ts (one viewer per project root),
+                          daemon.ts (the warm build daemon, started at project open),
                           plugin.ts (the composed plugin into each agent), mcp-bridge.ts + actions.ts
                           (the MCP server's way into the explorer), index.ts (the wiring)
   projects/git.ts         status, per-file diff, commit and push; then repository
@@ -472,7 +486,7 @@ src/shared/               types.ts (domain types as zod schemas)
   acp/types.ts, acp/reduce.ts  SessionState and the pure session/update reducer
   ipc/explorer.ts         explorer.* terminal.* and their events (P3)
   ipc/git.ts              git.* — the review's reads plus P7's worktrees
-  ipc/cad.ts              cad.viewerOrigin, and cad.command / cad.reply for the MCP server
+  ipc/cad.ts              cad.viewerOrigin, cad.warm, and cad.command / cad.reply for the MCP server
 src/renderer/
   app/                    Shell (three resizable panes), App, CommandPalette
   features/sidebar        projects and their sessions (five per project, Show more, status glyphs, menus)
