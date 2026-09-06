@@ -176,8 +176,7 @@ test("a checkout session runs in the project, on the branch it is already on", a
 });
 
 test("a change made in the terminal tab lands in the review, in every scope", async () => {
-  await page.getByRole("button", { name: "New tab of another kind" }).click();
-  await page.getByRole("menuitem", { name: "Terminal" }).click();
+  await newTab(page, "Terminal");
   await expect(page.locator(".xterm-screen")).toBeVisible();
   await settleTerminal();
   await page.locator(".xterm-helper-textarea").click();
@@ -188,8 +187,7 @@ test("a change made in the terminal tab lands in the review, in every scope", as
   await page.keyboard.press("Enter");
   await expect(page.locator(".xterm-rows")).toContainText("wrote-four", { timeout: 20_000 });
 
-  await page.getByRole("button", { name: "New tab of another kind" }).click();
-  await page.getByRole("menuitem", { name: "Review" }).click();
+  await newTab(page, "Review");
 
   // All changes: the working tree against HEAD.
   await expect(page.getByRole("button", { name: /All changes/ })).toBeVisible();
@@ -379,4 +377,13 @@ async function settleTerminal() {
     previous = current;
     await page.waitForTimeout(150);
   }
+}
+
+/**
+ * Open a tab of one kind. `+` is a menu of the four kinds now, so every open
+ * is two clicks — which is also the only way to reach a review or a terminal.
+ */
+async function newTab(page: Page, label: "File" | "Review" | "Browser" | "Terminal") {
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.getByRole("menuitem", { name: label }).click();
 }

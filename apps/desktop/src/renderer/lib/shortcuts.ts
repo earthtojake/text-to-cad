@@ -43,6 +43,12 @@ export const SHORTCUTS: readonly Shortcut[] = [
   },
   { id: "stop", group: "Session", label: "Stop the current turn", binding: "Escape" },
 
+  { id: "new-file-tab", group: "Explorer", label: "New file tab", binding: "Mod+T" },
+  { id: "new-review-tab", group: "Explorer", label: "New review tab", binding: "Mod+Shift+R" },
+  { id: "new-browser-tab", group: "Explorer", label: "New browser tab", binding: "Mod+Shift+B" },
+  // Control on every platform, not `Mod`: ⌃` is what a person already presses
+  // for a terminal, and it is the same key on the machine they came from.
+  { id: "new-terminal-tab", group: "Explorer", label: "New terminal tab", binding: "Ctrl+`" },
   { id: "close-tab", group: "Explorer", label: "Close tab", binding: "Mod+W" },
   {
     id: "switch-tab",

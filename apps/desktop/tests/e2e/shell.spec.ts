@@ -116,7 +116,9 @@ test("the explorer opens and closes a tab", async () => {
   await openExplorer();
   await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeVisible();
 
+  // `+` is a menu of the four kinds now.
   await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.getByRole("menuitem", { name: /^File/ }).click();
   await expect(page.getByRole("button", { name: "Close Untitled" })).toBeVisible();
   await page.getByRole("button", { name: "Close Untitled" }).click();
   await expect(page.getByText("Nothing open")).toBeVisible();

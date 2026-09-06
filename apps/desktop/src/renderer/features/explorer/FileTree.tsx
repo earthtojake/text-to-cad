@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, PanelRightClose, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderTree, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@renderer/components/ui/button";
@@ -57,23 +57,35 @@ export function FileTree({
   /** Bumped by `files.changed`; re-reads whatever is currently expanded. */
   fsRevision: number;
 }) {
-  const [children, setChildren] = useState<Record<string, DirEntry[]>>({});
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   /**
-   * Which folders are open, as *overrides* on a default rather than as the
-   * whole answer.
+   * Which folders are open, and what is in them. One set, one cache, and both
+   * in the store rather than in this component.
    *
-   * The default is "the ancestors of the open file are open", which is what
-   * reveals `apps › desktop › build` when `icon.png` opens. Storing that by
-   * writing it into the open set would be a setState in an effect — a render
-   * cascade on every file opened — and it would fight the person: a folder
-   * they shut by hand would spring back. An override map says both things at
-   * once, and the reveal costs nothing.
+   * They used to be local state, and "which folders are open" used to be an
+   * *override map* over a default derived from the open file. Both halves of
+   * that were wrong, and together they are why expanding a folder two levels
+   * down did nothing:
+   *
+   * - The component is remounted whenever another tab is selected, and opening
+   *   a file *makes a tab* — so the three levels a person had just expanded to
+   *   reach a file were thrown away by the click that opened it.
+   * - In the tree that came back, the ancestors of the open file were "open"
+   *   by derivation with no entry in the override map, so a click on one read
+   *   `opening = !isExpanded(dir)` as `false`, wrote "closed" and issued no
+   *   `explorer.list`. Clicking the folders again collapsed the tree instead
+   *   of opening them.
+   *
+   * One set, written by the person and by `reveal` alike, says both things
+   * without disagreeing with itself.
    */
-  const [override, setOverride] = useState<Record<string, boolean>>({ "": true });
+  const expanded = useExplorer((state) => state.treeOpen);
+  const setExpanded = useExplorer((state) => state.setTreeOpen);
+  const children = useExplorer((state) => state.treeListings);
+  const setListing = useExplorer((state) => state.setTreeListing);
 
   const revealTarget = reveal?.path ?? activePath;
   const revealed = useMemo(() => {
@@ -86,10 +98,7 @@ export function FileTree({
     return new Set(segments.map((_, index) => segments.slice(0, index + 1).join("/")));
   }, [revealTarget, reveal]);
 
-  const isExpanded = useCallback(
-    (directory: string) => override[directory] ?? revealed.has(directory),
-    [override, revealed],
-  );
+  const isExpanded = useCallback((directory: string) => expanded.has(directory), [expanded]);
 
   /**
    * Read one directory's children.
@@ -103,15 +112,14 @@ export function FileTree({
     (directory: string) =>
       window.hardcore.explorer
         .list({ projectId, path: directory })
-        .then((entries: DirEntry[]) =>
-          setChildren((current) => ({ ...current, [directory]: entries })),
-        )
+        .then((entries: DirEntry[]) => setListing(directory, entries))
         .catch(() => {}),
-    [projectId],
+    [projectId, setListing],
   );
 
-  // The root. The component is keyed on `projectId` by its parent, so there is
-  // no old project's tree to clear first — a remount is the reset.
+  // The root, on every mount: the listings survive a remount, but a tree that
+  // trusted a cache taken before the last `git checkout` would show files that
+  // are not there.
   useEffect(() => {
     void load("");
   }, [load]);
@@ -179,13 +187,30 @@ export function FileTree({
     };
   }, [filtering, corpusStale, fsRevision, projectId]);
 
-  // The revealed ancestors are open by default, but their children still have
-  // to be read before there is anything to show.
+  /**
+   * Reveal: open every ancestor of the revealed path and read them.
+   *
+   * `setExpanded` returns the set it was given when there is nothing to add,
+   * which is the common case — the ancestors of the file already open — and
+   * React drops an update that returns the same value, so this costs a render
+   * only when the tree actually has to move.
+   *
+   * A folder the person shut by hand does spring back when a file inside it is
+   * opened afterwards. That is the point of a reveal: the alternative is a
+   * tree that selects a row it is not showing.
+   */
   useEffect(() => {
+    if (revealed.size > 0) {
+      setExpanded((current) =>
+        [...revealed].every((directory) => current.has(directory))
+          ? current
+          : new Set([...current, ...revealed]),
+      );
+    }
     for (const directory of revealed) {
       void load(directory);
     }
-  }, [revealed, load]);
+  }, [revealed, load, setExpanded]);
 
   /**
    * Scroll the open file into view.
@@ -203,15 +228,28 @@ export function FileTree({
       ?.scrollIntoView({ block: "nearest" });
   }, [revealTarget, children]);
 
+  /**
+   * Open or shut one folder — always the opposite of what is on screen, and
+   * always a read when it opens, because a folder can be open with its
+   * children still unknown (a reveal, or a listing that failed).
+   */
   const toggle = useCallback(
     (directory: string) => {
-      const opening = !isExpanded(directory);
-      setOverride((current) => ({ ...current, [directory]: opening }));
+      const opening = !expanded.has(directory);
+      setExpanded((current) => {
+        const next = new Set(current);
+        if (opening) {
+          next.add(directory);
+        } else {
+          next.delete(directory);
+        }
+        return next;
+      });
       if (opening) {
         void load(directory);
       }
     },
-    [isExpanded, load],
+    [expanded, load, setExpanded],
   );
 
   /** The visible rows, flattened depth-first from what is expanded. */
@@ -311,14 +349,16 @@ export function FileTree({
             </button>
           ) : null}
         </div>
+        {/* The same glyph the header shows it with — see FileTab. */}
         <Button
-          aria-label="Hide file tree"
+          aria-label="Hide files"
           className="size-6 shrink-0 text-muted-foreground"
           onClick={onCollapse}
           size="icon-xs"
+          title="Hide files"
           variant="ghost"
         >
-          <PanelRightClose className="size-3.5" />
+          <FolderTree className="size-3.5" />
         </Button>
       </div>
 

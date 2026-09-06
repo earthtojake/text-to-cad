@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import type { DirEntry } from "@shared/ipc/explorer";
 import type {
   BrowserTab,
   ExplorerTab,
@@ -109,6 +110,18 @@ type ExplorerState = {
   treeCollapsed: boolean;
   treeWidth: number;
   /**
+   * Which folders the tree has open, and the listing behind each one.
+   *
+   * Here rather than in the component because the file tab is unmounted every
+   * time another tab is selected — and *opening a file makes a tab*, so the
+   * tree that the person had just expanded three levels into was thrown away
+   * by the click that used it. The tree belongs to the project, like the strip
+   * itself; the listings ride along so coming back does not re-read every open
+   * folder.
+   */
+  treeOpen: ReadonlySet<string>;
+  treeListings: Record<string, DirEntry[]>;
+  /**
    * Bumped on every `files.changed` batch. Views that read the filesystem
    * subscribe to it instead of each holding a watcher subscription.
    */
@@ -143,6 +156,10 @@ type ExplorerState = {
   show: () => void;
   setTreeCollapsed: (collapsed: boolean) => void;
   setTreeWidth: (width: number) => void;
+  /** Open or shut folders in the tree. The updater sees the current set. */
+  setTreeOpen: (next: (current: ReadonlySet<string>) => ReadonlySet<string>) => void;
+  /** File one directory's listing. */
+  setTreeListing: (directory: string, entries: DirEntry[]) => void;
   receiveChanges: (projectId: string, paths: string[]) => void;
   setReveal: (reveal: { path: string; directory: boolean } | null) => void;
 };
@@ -211,6 +228,9 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   collapsed: collapsedFor(null),
   treeCollapsed: readLocal(TREE_COLLAPSED_KEY, false, (raw) => raw === "true"),
   treeWidth: readLocal(TREE_WIDTH_KEY, TREE_DEFAULT_WIDTH, (raw) => Number(raw) || TREE_DEFAULT_WIDTH),
+  // The root is always open; there is no row for it to be shut by.
+  treeOpen: new Set([""]),
+  treeListings: {},
   fsRevision: 0,
   changedPaths: [],
   reveal: null,
@@ -237,6 +257,9 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       reveal: null,
       // Each project keeps its own answer to "is the pane worth the width".
       collapsed: collapsedFor(projectId),
+      // A different project is a different tree, with nothing to carry over.
+      treeOpen: new Set([""]),
+      treeListings: {},
     });
     if (!projectId) {
       set({ ready: true });
@@ -374,6 +397,17 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     writeLocal(TREE_WIDTH_KEY, String(treeWidth));
     set({ treeWidth });
   },
+
+  setTreeOpen: (next) =>
+    set((state) => {
+      const treeOpen = next(state.treeOpen);
+      // An updater that changes nothing — a reveal of a path already open —
+      // returns the same set, and zustand's subscribers stay put.
+      return treeOpen === state.treeOpen ? state : { treeOpen };
+    }),
+
+  setTreeListing: (directory, entries) =>
+    set((state) => ({ treeListings: { ...state.treeListings, [directory]: entries } })),
 
   setReveal: (reveal) => set({ reveal }),
 

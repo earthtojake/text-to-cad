@@ -121,17 +121,48 @@ function TabBody({ tab, project }: { tab: ExplorerTab; project: Project }) {
  * which is where it usually is. `Cmd/Ctrl+W` is intercepted before the menu's
  * default close-window accelerator: with tabs open it means "close this tab",
  * and only an empty strip lets it close the window.
+ *
+ * The four "new tab" chords are here too, and they are the same four the `+`
+ * menu prints beside its rows (`src/renderer/lib/shortcuts.ts` is the table
+ * both read).
  */
 function useExplorerShortcuts() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const { tabs, activeId, closeActive, selectIndex, open } = useExplorer.getState();
+
+      // `⌃\`` is Control on macOS as well: it is the chord a person already
+      // has in their fingers for a terminal, and it is the same one on the
+      // machine they came from.
+      if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key === "`") {
+        event.preventDefault();
+        open("terminal");
+        return;
+      }
+
       const modifier = isMac ? event.metaKey : event.ctrlKey;
       if (!modifier || event.altKey) {
         return;
       }
-      const { tabs, activeId, closeActive, selectIndex } = useExplorer.getState();
 
-      if (event.key.toLowerCase() === "w" && !event.shiftKey && activeId) {
+      const key = event.key.toLowerCase();
+      if (event.shiftKey) {
+        // The two kinds that are not the common one. `Mod+B` is the sidebar,
+        // so `Mod+Shift+B` had to stay clear of it — Shell's handler drops
+        // anything with Shift held for exactly this reason.
+        const kind = key === "r" ? "review" : key === "b" ? "browser" : null;
+        if (kind) {
+          event.preventDefault();
+          open(kind);
+        }
+        return;
+      }
+      if (key === "t") {
+        event.preventDefault();
+        open("file");
+        return;
+      }
+      if (key === "w" && activeId) {
         event.preventDefault();
         closeActive();
         return;

@@ -4,6 +4,15 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 const appRoot = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(appRoot, "..", "..");
+
+/**
+ * The markdown round-trip tests load this repository's own `README.md`,
+ * `AGENTS.md` and `CONTRIBUTING.md` through Vite's `?raw`, because a fixture
+ * written for those tests would be a fixture written to pass them. Vite serves
+ * nothing outside the project root without being told to.
+ */
+const server = { fs: { allow: [appRoot, repoRoot] } };
 
 /**
  * Aliases as an array, because one of them has to be a pattern.
@@ -62,6 +71,7 @@ export default defineConfig({
         resolve: { alias },
         define: { __APP_VERSION__: JSON.stringify("0.0.0-test") },
         esbuild: { jsx: "automatic" },
+        server,
         test: {
           name: "renderer",
           environment: "jsdom",

@@ -74,12 +74,26 @@ let cadReady = false;
  */
 let reviewRepo: string;
 
+/**
+ * A directory holding copies of this repository's `README.md` and
+ * `AGENTS.md`.
+ *
+ * The editing test wants *these* files — raw HTML, badge images, GFM tables,
+ * hard-wrapped prose — and it wants to save them and diff the result, which
+ * is not something to do to the checkout the suite is running from.
+ */
+let docsDir: string;
+
 let app: ElectronApplication;
 let page: Page;
 let userData: string;
 
 test.beforeAll(async () => {
   reviewRepo = makeReviewRepo();
+  docsDir = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-docs-"));
+  for (const name of ["README.md", "AGENTS.md"]) {
+    fs.copyFileSync(path.join(repoRoot, name), path.join(docsDir, name));
+  }
   userData = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-explorer-e2e-"));
   const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
   const env = { ...inherited, NODE_ENV: "test" };
@@ -115,12 +129,13 @@ test.afterAll(async () => {
   await app?.close();
   fs.rmSync(userData, { recursive: true, force: true });
   fs.rmSync(reviewRepo, { recursive: true, force: true });
+  fs.rmSync(docsDir, { recursive: true, force: true });
 });
 
 test.describe.configure({ mode: "serial" });
 
 test("opens a markdown file as a preview, then as source", async () => {
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await newTab(page, "File");
 
   // The tree is the way in, and it is what the filter is for. The root file
   // ranks above the other AGENTS.md in the tree — depth is the tie-break.
@@ -143,8 +158,44 @@ test("opens a markdown file as a preview, then as source", async () => {
   await expect(page.getByRole("heading", { level: 1, name: "AGENTS.md" })).toBeVisible();
 });
 
+test("expands three levels of the tree, and keeps them", async () => {
+  await newTab(page, "File");
+
+  // Jake's repro: `apps`, then `apps/viewer`, then `apps/viewer/src`. Each
+  // one is a lazy `explorer.list`, and each one used to be a click that shut
+  // the tree instead of opening it once a file was open under any of them.
+  const folder = (relative: string) => page.locator(`[role="treeitem"][data-path="${relative}"]`);
+
+  await folder("apps").click();
+  await expect(folder("apps/viewer")).toBeVisible();
+  await folder("apps/viewer").click();
+  await expect(folder("apps/viewer/src")).toBeVisible();
+  await folder("apps/viewer/src").click();
+
+  // The leaves of the third level, which is what "nothing happened" cost.
+  await expect(folder("apps/viewer/src/client")).toBeVisible();
+  await expect(folder("apps/viewer/src/shared")).toBeVisible();
+  await expect(folder("apps/viewer/src")).toHaveAttribute("aria-expanded", "true");
+
+  // Opening a file makes a tab, and a tab is a remount: the three levels have
+  // to still be there afterwards, and a click on one of them has to shut it
+  // rather than do nothing.
+  await folder("apps/viewer/src/client").click();
+  await page.locator(`[role="treeitem"][data-path="apps/viewer/src/client/main.jsx"]`).click();
+  await expect(page.getByRole("tab", { name: /main\.jsx/ })).toBeVisible();
+  await expect(folder("apps/viewer/src/client")).toBeVisible();
+
+  await folder("apps/viewer").click();
+  await expect(folder("apps/viewer/src")).toHaveCount(0);
+  await folder("apps/viewer").click();
+  await expect(folder("apps/viewer/src/client")).toBeVisible();
+
+  await shoot("file-tree-deep.png");
+  await page.getByRole("tab", { name: /main\.jsx/ }).getByRole("button", { name: "Close main.jsx" }).click();
+});
+
 test("opens an image with its dimensions", async () => {
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await newTab(page, "File");
   await openFromTree(IMAGE);
 
   const image = page.locator(`img[alt="icon.png"]`);
@@ -169,7 +220,7 @@ test("shows the runtime's own error for a STEP file when the runtime cannot star
   const broken = await page.evaluate(() => window.hardcore.runtime.status());
   expect(broken.state).toBe("error");
 
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await newTab(page, "File");
   await openFromTree(STEP);
   await expect(page.getByText("The CAD runtime did not start")).toBeVisible();
   await expect(page.locator("[data-cad-failure=runtime-not-ready]")).toContainText("/nowhere/python");
@@ -193,8 +244,7 @@ test("shows the runtime's own error for a STEP file when the runtime cannot star
 });
 
 test("runs a command in a terminal tab", async () => {
-  await page.getByRole("button", { name: "New tab of another kind" }).click();
-  await page.getByRole("menuitem", { name: "Terminal" }).click();
+  await newTab(page, "Terminal");
 
   await expect(page.locator(".xterm-screen")).toBeVisible();
   // The shell is a *login* shell, so it reads the user's profile before it
@@ -232,8 +282,7 @@ test("replays a terminal's scrollback exactly once on reattach", async () => {
 });
 
 test("browses to a URL in a browser tab", async () => {
-  await page.getByRole("button", { name: "New tab of another kind" }).click();
-  await page.getByRole("menuitem", { name: "Browser" }).click();
+  await newTab(page, "Browser");
 
   await expect(page.getByText("Start browsing")).toBeVisible();
   await shoot("browser-empty.png");
@@ -263,7 +312,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   expect(status.state, JSON.stringify(status)).toBe("ready");
   expect(["bundled", "checkout"]).toContain(status.source);
 
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await newTab(page, "File");
   await openFromTree(STEP);
 
   // The viewer's surface: a WebGL canvas, and the STEP sheet's tabs. The
@@ -278,8 +327,8 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   // sheet and the file tree: the tree hides itself for this file (the
   // header's toggle brings it back) and the sheet is a column to the right
   // of the model — never a drawer over it — at 1440×900 and at 1280×800.
-  await expect(page.getByRole("button", { name: "Show file tree" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Hide file tree" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show files" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Hide files" })).toHaveCount(0);
   await expect(page.getByRole("tree").first()).toBeVisible({ timeout: 120_000 });
   await page.waitForTimeout(1000);
   await shoot("file-cad-default.png", true);
@@ -288,10 +337,10 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expectSheetBesideModel();
   await shoot("file-cad-default-1280x800.png", true);
   // The toggle brings the tree back for this file, and it stays back.
-  await page.getByRole("button", { name: "Show file tree" }).click();
-  await expect(page.getByRole("button", { name: "Hide file tree" })).toBeVisible();
+  await page.getByRole("button", { name: "Show files" }).click();
+  await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
   await resizeWindow(1440, 900);
-  await expect(page.getByRole("button", { name: "Hide file tree" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
 
   // Expanded, the surface is wide enough for everything — which is how a
   // person reviews a part. The tree lists the document's solids once the
@@ -374,6 +423,61 @@ test("renders the explorer in light as well as dark", async () => {
 });
 
 /**
+ * Second to last: this one switches projects too, so it sits with the review
+ * test at the end rather than in the middle of the strip's own tests.
+ */
+test("edits a markdown file in place and saves the lines it changed", async () => {
+  await page.evaluate((directory) => window.hardcore.projects.addPath({ path: directory }), docsDir);
+  await page.getByText(path.basename(docsDir)).first().click();
+  // A new project starts with the pane closed, like every other one.
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+
+  await newTab(page, "File");
+  await page.getByLabel("Filter files").fill("AGENTS.md");
+  await page.getByRole("option", { name: "AGENTS.md", exact: false }).first().click();
+
+  // The document, not a preview of it: an H1 that is a real heading, and a
+  // paragraph a caret can be put into.
+  await expect(page.getByRole("heading", { level: 1, name: "AGENTS.md" })).toBeVisible();
+  const paragraph = page.locator(".ProseMirror p").first();
+  await paragraph.click();
+  await page.keyboard.type("Edited in the app. ");
+
+  // The tab says so, and Cmd/Ctrl+S is the same save Monaco gets.
+  await expect(page.getByLabel("Unsaved changes")).toBeVisible();
+  await shoot("file-markdown-editable.png");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+s" : "Control+s");
+  await expect(page.getByLabel("Unsaved changes")).toHaveCount(0);
+
+  // The file on disk. The edited paragraph is re-printed; every other line of
+  // a 210-line document is exactly the line it was — which is the whole point
+  // of `src/renderer/features/explorer/markdown/document.ts`.
+  const before = fs.readFileSync(path.join(repoRoot, "AGENTS.md"), "utf8");
+  const after = fs.readFileSync(path.join(docsDir, "AGENTS.md"), "utf8");
+  // Re-wrapped to the column the file wraps at, so the typed words can land on
+  // either side of a newline.
+  expect(after.replace(/\s+/g, " ")).toContain("Edited in the app.");
+
+  // The other document, for the surfaces AGENTS.md has none of: raw HTML
+  // blocks, badge images and a GFM table.
+  await newTab(page, "File");
+  await page.getByLabel("Filter files").fill("README.md");
+  await page.getByRole("option", { name: "README.md", exact: false }).first().click();
+  await expect(page.getByRole("table")).toBeVisible();
+  await shoot("file-markdown-raw-blocks.png");
+
+  const editedBlock = before.split("\n\n")[1]!;
+  const untouched = before
+    .split("\n")
+    .filter((line) => line.trim() !== "" && !editedBlock.includes(line));
+  expect(untouched.length).toBeGreaterThan(100);
+  for (const line of untouched) {
+    expect(after, `a line nobody edited was rewritten: ${line}`).toContain(line);
+  }
+});
+
+/**
  * Last, because it switches projects: the strip belongs to the project, so
  * this leaves a different one selected than every test above it expects.
  */
@@ -389,8 +493,7 @@ test("reviews a repository's changes", async () => {
   await page.getByRole("button", { name: "Toggle explorer" }).click();
   await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeGreaterThan(0);
 
-  await page.getByRole("button", { name: "New tab of another kind" }).click();
-  await page.getByRole("menuitem", { name: "Review" }).click();
+  await newTab(page, "Review");
 
   await expect(page.getByRole("button", { name: /All changes/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Commit or push" })).toBeVisible();
@@ -549,3 +652,12 @@ const gitEnv = {
   GIT_COMMITTER_NAME: "Hardcore Tests",
   GIT_COMMITTER_EMAIL: "tests@example.invalid",
 };
+
+/**
+ * Open a tab of one kind. `+` is a menu of the four kinds now, so every open
+ * is two clicks — which is also the only way to reach a review or a terminal.
+ */
+async function newTab(page: Page, label: "File" | "Review" | "Browser" | "Terminal") {
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.getByRole("menuitem", { name: label }).click();
+}
