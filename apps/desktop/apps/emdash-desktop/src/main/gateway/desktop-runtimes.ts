@@ -14,8 +14,6 @@ export type DesktopRuntimes = {
   readonly workers: DesktopRuntimeWorkers;
   /** Activate per-worker vitals self-sampling (telemetry-sampled sessions only). */
   startWorkerVitalsSampling(intervalMs: number): void;
-  /** Toggle verbose per-spawn logging in every live and future worker. */
-  setWorkerSpawnLogging(enabled: boolean): void;
   dispose(): Promise<void>;
 };
 
@@ -32,7 +30,6 @@ export function desktopRuntimes(
     hostAvailability,
     workers: workers.workers,
     startWorkerVitalsSampling: (intervalMs) => workers.startVitalsSampling(intervalMs),
-    setWorkerSpawnLogging: (enabled) => workers.setSpawnLogging(enabled),
     dispose() {
       disposePromise ??= (async () => {
         try {

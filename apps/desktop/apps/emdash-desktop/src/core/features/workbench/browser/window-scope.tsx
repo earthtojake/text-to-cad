@@ -1,6 +1,5 @@
 import { toast } from '@emdash/ui/react/primitives';
 import { useLayoutEffect, type ReactNode } from 'react';
-import { captureDevPerfTrace } from '@core/features/dev-perf/api/browser/capture-trace';
 import { projectViewDef } from '@core/features/projects/contributions/views';
 import { toggleAppTheme } from '@core/features/settings/api/browser/theme-toggle';
 import {
@@ -107,21 +106,6 @@ export function WindowScope({ children }: { readonly children: ReactNode }) {
     }),
     'workbench.toggleLeftSidebar': () => ({
       execute: () => toggleLeftSidebar(),
-    }),
-    'devPerf.processPanel': () => ({
-      execute: () => {
-        void openModal('devProcessPanelModal');
-      },
-    }),
-    'devPerf.captureTrace': () => ({
-      execute: () => {
-        toast('Recording performance trace', { description: 'Capturing 10 seconds…' });
-        void captureDevPerfTrace().then((outcome) =>
-          outcome.ok
-            ? toast.success('Trace captured', { description: outcome.path })
-            : toast.error('Trace capture failed', { description: outcome.message })
-        );
-      },
     }),
     // Zen is workspace-chrome data; the task sidebar hides while zen is
     // active as a derived condition (no task-chrome mutation).

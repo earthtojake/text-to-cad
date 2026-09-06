@@ -22,16 +22,6 @@ export type WorkerVitalsReport = {
   vitals: Readonly<Record<string, number>>;
 };
 
-/**
- * Host → worker: toggle verbose per-spawn logging (burst forensics). The
- * worker logs each child-process spawn with its purpose tag while enabled.
- */
-export type WorkerSpawnLogToggle = {
-  kind: typeof WORKER_VITALS_KIND;
-  event: 'spawn-log';
-  enabled: boolean;
-};
-
 export function workerVitalsStart(intervalMs: number): WorkerVitalsStart {
   return { kind: WORKER_VITALS_KIND, event: 'start', intervalMs };
 }
@@ -40,20 +30,12 @@ export function workerVitalsReport(vitals: Readonly<Record<string, number>>): Wo
   return { kind: WORKER_VITALS_KIND, event: 'report', vitals };
 }
 
-export function workerSpawnLogToggle(enabled: boolean): WorkerSpawnLogToggle {
-  return { kind: WORKER_VITALS_KIND, event: 'spawn-log', enabled };
-}
-
 export function isWorkerVitalsStart(message: unknown): message is WorkerVitalsStart {
   return isVitalsMessage(message) && message.event === 'start';
 }
 
 export function isWorkerVitalsReport(message: unknown): message is WorkerVitalsReport {
   return isVitalsMessage(message) && message.event === 'report';
-}
-
-export function isWorkerSpawnLogToggle(message: unknown): message is WorkerSpawnLogToggle {
-  return isVitalsMessage(message) && message.event === 'spawn-log';
 }
 
 function isVitalsMessage(message: unknown): message is { kind: string; event: string } {
@@ -68,10 +50,6 @@ export type VitalsCollectingSpawner = WorkerProcessSpawner & {
    * Idempotent; the last interval wins for future spawns.
    */
   startSampling(intervalMs: number): void;
-  /**
-   * Toggle verbose per-spawn logging in every live and future worker.
-   */
-  setSpawnLogging(enabled: boolean): void;
 };
 
 export type CreateVitalsCollectingSpawnerOptions = {
@@ -89,7 +67,6 @@ export function createVitalsCollectingSpawner(
   options: CreateVitalsCollectingSpawnerOptions
 ): VitalsCollectingSpawner {
   let samplingIntervalMs: number | null = null;
-  let spawnLogging = false;
   const live = new Set<WorkerProcess>();
 
   return {
@@ -108,21 +85,12 @@ export function createVitalsCollectingSpawner(
       if (samplingIntervalMs !== null) {
         trySend(process, workerVitalsStart(samplingIntervalMs));
       }
-      if (spawnLogging) {
-        trySend(process, workerSpawnLogToggle(true));
-      }
       return process;
     },
     startSampling(intervalMs: number): void {
       samplingIntervalMs = intervalMs;
       for (const process of live) {
         trySend(process, workerVitalsStart(intervalMs));
-      }
-    },
-    setSpawnLogging(enabled: boolean): void {
-      spawnLogging = enabled;
-      for (const process of live) {
-        trySend(process, workerSpawnLogToggle(enabled));
       }
     },
   };

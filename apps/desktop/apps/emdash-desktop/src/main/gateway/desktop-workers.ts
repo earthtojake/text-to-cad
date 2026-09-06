@@ -137,8 +137,6 @@ export type DesktopWorkersHandle = {
    * only). Reaches every live worker and any worker spawned later.
    */
   startVitalsSampling(intervalMs: number): void;
-  /** Toggle verbose per-spawn logging in every live and future worker. */
-  setSpawnLogging(enabled: boolean): void;
   dispose(): Promise<void>;
 };
 
@@ -176,7 +174,6 @@ export async function startDesktopWorkers(
     return {
       ...handle,
       startVitalsSampling: (intervalMs) => vitalsSpawner.startSampling(intervalMs),
-      setSpawnLogging: (enabled) => vitalsSpawner.setSpawnLogging(enabled),
     };
   } catch (error) {
     await workerScope.dispose(error);
@@ -188,7 +185,7 @@ function startDesktopWorkersWithHost(
   deps: StartDesktopWorkersDeps,
   workerScope: Scope,
   host: ReturnType<typeof createWireWorkerHost>
-): Omit<DesktopWorkersHandle, 'startVitalsSampling' | 'setSpawnLogging'> {
+): Omit<DesktopWorkersHandle, 'startVitalsSampling'> {
   const workersStartedAt = Date.now();
   // Every worker spawns from this environment; the CAD runtime goes first on its
   // PATH so agents and terminals find the python that carries cadgen.

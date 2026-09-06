@@ -12,6 +12,6 @@ export function initWorkerProcessLogging(fallbackName: string): Logger {
   startDevPerfInstruments({ logger });
   // Telemetry vitals + verbose spawn logging: inert until the host sends a
   // control message; no timers or instruments are created before then.
-  installWorkerVitals({ logger });
+  installWorkerVitals();
   return logger;
 }

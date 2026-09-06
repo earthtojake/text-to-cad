@@ -8,8 +8,6 @@
  * separate (see dev-instruments.ts) and only runs when debug logging is enabled.
  */
 
-import type { Logger } from '../logger/types';
-
 /**
  * Single source of truth for the purpose key set — the `SpawnPurpose` union,
  * the vitals iteration order, and the `spawns_*` telemetry field names are all
@@ -73,17 +71,6 @@ export function resetSpawnCounts(): void {
  */
 export function setSpawnObserver(next: SpawnObserver | null): void {
   observer = next;
-}
-
-/**
- * Toggle the canonical verbose spawn-log observer: one `perf.spawn` info line
- * per spawn, tagged with its purpose. Shared by the main-process dev-perf
- * controller and worker processes so the log shape stays identical.
- */
-export function setVerboseSpawnLogging(logger: Logger, enabled: boolean): void {
-  setSpawnObserver(
-    enabled ? (purpose, command) => logger.info('perf.spawn', { purpose, command }) : null
-  );
 }
 
 function executableName(file: string): string {

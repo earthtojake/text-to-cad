@@ -60,6 +60,8 @@ projects and threads | active conversation | artifacts and viewer
 
 First launch opens the welcome screen directly. The inherited EmDash database import wizard
 and import services are removed; existing Hardcore data still uses the normal schema migrations.
+The developer process panel, trace capture, and their spawn-logging controls are also removed.
+Normal diagnostic logs and resource sampling remain available for troubleshooting.
 
 Artifact tabs belong to the selected thread. Opening an existing CAD file opens its canonical STEP
 directly in the artifact area, served by the CAD Viewer for that thread's workspace. Advanced file

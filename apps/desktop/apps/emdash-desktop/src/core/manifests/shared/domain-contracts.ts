@@ -2,7 +2,6 @@ import { agentsContract, agentsDomain } from '@core/features/agents/api';
 import { browserContract, browserDomain } from '@core/features/browser/api';
 import { catalogDomain, catalogWireContract } from '@core/features/catalog/api';
 import { conversationsContract, conversationsDomain } from '@core/features/conversations/api';
-import { devPerfContract, devPerfDomain } from '@core/features/dev-perf/api';
 import { editorContract, editorDomain } from '@core/features/editor/api';
 import { filesDomain, filesWireContract } from '@core/features/files/api';
 import { githubContract, githubDomain } from '@core/features/github/api';
@@ -45,7 +44,6 @@ import { sshContract, sshDomain } from '@core/services/ssh/api';
 export const desktopDomainContracts = {
   [agentsDomain]: agentsContract,
   [appSettingsDomain]: appSettingsContract,
-  [devPerfDomain]: devPerfContract,
   [editorDomain]: editorContract,
   [filesDomain]: filesWireContract,
   [loggingDomain]: loggingWireContract,

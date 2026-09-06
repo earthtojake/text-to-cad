@@ -1,4 +1,3 @@
-import { DEV_PERF_COMMAND_DEFS } from '@core/features/dev-perf/contributions/commands';
 import { EDITOR_FILE_TREE_COMMAND_DEFS } from '@core/features/editor/contributions/commands';
 import { SETTINGS_COMMAND_DEFS } from '@core/features/settings/contributions/commands';
 import {
@@ -9,7 +8,6 @@ import { WORKBENCH_COMMAND_DEFS } from '@core/features/workbench/contributions/c
 import { defineCommandCatalog } from '@core/primitives/commands/api';
 
 export const COMMAND_CATALOG = defineCommandCatalog([
-  ...DEV_PERF_COMMAND_DEFS,
   ...SETTINGS_COMMAND_DEFS,
   ...EDITOR_FILE_TREE_COMMAND_DEFS,
   ...WORKBENCH_COMMAND_DEFS,

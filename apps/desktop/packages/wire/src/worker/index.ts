@@ -24,15 +24,12 @@ export { runWireComponentWorker, type RunWireComponentWorkerOptions } from './ru
 export { WORKER_NAME_ENV_VAR } from './types';
 export {
   createVitalsCollectingSpawner,
-  isWorkerSpawnLogToggle,
   isWorkerVitalsReport,
   isWorkerVitalsStart,
-  workerSpawnLogToggle,
   workerVitalsReport,
   workerVitalsStart,
   type CreateVitalsCollectingSpawnerOptions,
   type VitalsCollectingSpawner,
-  type WorkerSpawnLogToggle,
   type WorkerVitalsReport,
   type WorkerVitalsStart,
 } from './vitals';

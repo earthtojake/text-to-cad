@@ -7,7 +7,6 @@ import {
 } from '@emdash/chat-ui';
 import ReactDOM from 'react-dom/client';
 import { installChatUiRuntime } from '@core/features/conversations/api/browser/chat/chat-ui-runtime';
-import { configureDevPerfClient } from '@core/features/dev-perf/api/browser/client';
 import { installMonacoFacetBinder } from '@core/features/editor/browser/monaco/install-monaco-facet-binder';
 import { monacoBootstrap } from '@core/features/editor/browser/monaco/monaco-bootstrap';
 import { getProjectManagerStore } from '@core/features/projects/api/browser/stores/project-selectors';
@@ -52,7 +51,6 @@ import {
   waitForActiveProjectContext,
 } from '@renderer/lib/boot/splash-gate';
 import { wireExternalLinkRequests } from '@renderer/lib/external-link-requests';
-import { getDesktopWireClient } from '@renderer/lib/runtime/desktop-wire-client';
 import { seedDesktopWire } from '@renderer/lib/runtime/seed-desktop-wire';
 import { seedRendererNavigationHost } from '@renderer/lib/runtime/seed-navigation-host';
 import { initRendererPerfVitals } from '@renderer/utils/perf-vitals';
@@ -113,7 +111,6 @@ async function bootstrap() {
   initSoundPlayer();
   initNotificationDeliveryListener((sound, dedupeKey) => soundPlayer.play(sound, dedupeKey));
   initRendererPerfVitals();
-  configureDevPerfClient(async () => (await getDesktopWireClient()).devPerf);
 
   // Stores may acquire memento spaces while project data loads, so initialize
   // the singleton before starting any store construction.

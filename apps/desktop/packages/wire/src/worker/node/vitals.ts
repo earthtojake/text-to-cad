@@ -1,11 +1,9 @@
-import type { Logger } from '@emdash/shared/logger';
-import { setVerboseSpawnLogging } from '@emdash/shared/perf';
 import {
   startVitalsReporting,
   type StartVitalsReportingOptions,
   type VitalsReporting,
 } from '@emdash/shared/perf/node';
-import { isWorkerSpawnLogToggle, isWorkerVitalsStart, workerVitalsReport } from '../vitals';
+import { isWorkerVitalsStart, workerVitalsReport } from '../vitals';
 
 export type WorkerVitalsPort = {
   send(message: unknown): void;
@@ -14,16 +12,13 @@ export type WorkerVitalsPort = {
 
 export type InstallWorkerVitalsOptions = {
   port?: WorkerVitalsPort;
-  /** Destination for verbose per-spawn log lines when the host toggles them on. */
-  logger?: Logger;
   startReporting?: (options: StartVitalsReportingOptions) => VitalsReporting;
 };
 
 /**
  * Worker-side perf hookup: waits for host control messages and only then does
  * any work. A vitals start message begins self-sampling on the requested
- * cadence, sending numbers-only reports back over the IPC channel; a spawn-log
- * toggle installs/removes a verbose per-spawn log observer. Until a control
+ * cadence, sending numbers-only reports back over the IPC channel. Until a control
  * message arrives (i.e. in every unsampled or telemetry-disabled session) no
  * timers or instruments exist — just this message listener.
  */
@@ -47,11 +42,6 @@ export function installWorkerVitals(options: InstallWorkerVitalsOptions = {}): v
         },
       });
       return;
-    }
-    if (isWorkerSpawnLogToggle(message)) {
-      const logger = options.logger;
-      if (!logger) return;
-      setVerboseSpawnLogging(logger, message.enabled);
     }
   });
 }

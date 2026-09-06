@@ -18,10 +18,6 @@ import {
 import { createCatalogWireController } from '@core/features/catalog/node/wire-controller';
 import type { CompensationRunner } from '@core/features/conversations/node/createConversation';
 import { createConversationsWireController } from '@core/features/conversations/node/wire-controller';
-import {
-  createDevPerfWireController,
-  type DevPerfOperations,
-} from '@core/features/dev-perf/node/wire-controller';
 import type { EditorBufferService } from '@core/features/editor/node/editor-buffer-service';
 import { createEditorWireController } from '@core/features/editor/node/wire-controller';
 import { createFilesWireController } from '@core/features/files/node/wire-controller';
@@ -106,7 +102,6 @@ export type DesktopControllerContext = {
   readonly browserOperations: BrowserOperations;
   readonly compensation: CompensationRunner;
   readonly db: AppDb;
-  readonly devPerfOperations: DevPerfOperations;
   readonly editorBuffer: EditorBufferService;
   readonly github: Omit<Parameters<typeof createGithubWireController>[0], 'logger' | 'telemetry'>;
   readonly gitCredentials: GitCredentialsService;
@@ -171,10 +166,6 @@ export const desktopNodeControllers = {
   appSettings: {
     create: ({ appSettings, settingsRuntime }) =>
       createAppSettingsWireController(appSettings, settingsRuntime),
-  },
-  devPerf: {
-    create: ({ devPerfOperations, logger }) =>
-      createDevPerfWireController(devPerfOperations, logger),
   },
   editor: {
     create: ({ editorBuffer }) => createEditorWireController({ editorBuffer }),

@@ -1,15 +1,11 @@
 import type { Scope } from '@emdash/shared/concurrency';
-import type { Logger } from '@emdash/shared/logger';
-import { recordSpawn, setSpawnObserver } from '@emdash/shared/perf';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { installWorkerVitals, type WorkerVitalsPort } from './node/vitals';
 import type { ProcessExit, WorkerProcess, WorkerProcessSpawner, WorkerProcessSpec } from './types';
 import { WORKER_NAME_ENV_VAR } from './types';
 import {
   createVitalsCollectingSpawner,
-  isWorkerSpawnLogToggle,
   isWorkerVitalsStart,
-  workerSpawnLogToggle,
   workerVitalsReport,
   workerVitalsStart,
 } from './vitals';
@@ -105,25 +101,6 @@ describe('createVitalsCollectingSpawner', () => {
     expect(second.sent).toHaveLength(1);
     expect(isWorkerVitalsStart(second.sent[0])).toBe(true);
   });
-
-  it('broadcasts spawn-log toggles to live and future workers', async () => {
-    const first = fakeWorkerProcess();
-    const second = fakeWorkerProcess();
-    const spawner = createVitalsCollectingSpawner(fakeSpawner([first, second]), {
-      onReport: vi.fn(),
-    });
-
-    await spawner.spawn(spec('git'), scope);
-    spawner.setSpawnLogging(true);
-    expect(first.sent).toEqual([workerSpawnLogToggle(true)]);
-
-    await spawner.spawn(spec('acp'), scope);
-    expect(second.sent).toEqual([workerSpawnLogToggle(true)]);
-
-    spawner.setSpawnLogging(false);
-    expect(first.sent[1]).toEqual(workerSpawnLogToggle(false));
-    expect(isWorkerSpawnLogToggle(first.sent[1])).toBe(true);
-  });
 });
 
 describe('installWorkerVitals', () => {
@@ -176,44 +153,5 @@ describe('installWorkerVitals', () => {
 
     capturedReport!({ rss_mb: 17, interval_ms: 300_000 });
     expect(port.sent).toEqual([workerVitalsReport({ rss_mb: 17, interval_ms: 300_000 })]);
-  });
-
-  describe('spawn-log toggle', () => {
-    afterEach(() => {
-      setSpawnObserver(null);
-    });
-
-    function stubLogger(): Logger & { infoCalls: unknown[][] } {
-      const infoCalls: unknown[][] = [];
-      const logger = {
-        level: 'info',
-        infoCalls,
-        debug: vi.fn(),
-        info: (...args: unknown[]) => {
-          infoCalls.push(args);
-        },
-        warn: vi.fn(),
-        error: vi.fn(),
-        child: () => logger,
-      };
-      return logger as unknown as Logger & { infoCalls: unknown[][] };
-    }
-
-    it('logs each spawn with its purpose tag while enabled, and stops when disabled', () => {
-      const port = fakePort();
-      const logger = stubLogger();
-      installWorkerVitals({ port, logger, startReporting: vi.fn(() => ({ dispose: vi.fn() })) });
-
-      recordSpawn('git', 'git status');
-      expect(logger.infoCalls).toHaveLength(0);
-
-      port.emitMessage(workerSpawnLogToggle(true));
-      recordSpawn('git', 'git status');
-      expect(logger.infoCalls).toEqual([['perf.spawn', { purpose: 'git', command: 'git status' }]]);
-
-      port.emitMessage(workerSpawnLogToggle(false));
-      recordSpawn('tmux');
-      expect(logger.infoCalls).toHaveLength(1);
-    });
   });
 });
