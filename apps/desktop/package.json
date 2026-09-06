@@ -5,6 +5,9 @@
   "type": "module",
   "version": "0.0.0",
   "description": "Hardcore — a CAD-first agent workbench desktop app.",
+  "author": "text-to-cad contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/earthtojake/text-to-cad",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -41,7 +44,6 @@
     "fsevents@2.3.3": true
   },
   "devDependencies": {
-    "@electron/rebuild": "4.2.0",
     "@eslint/js": "10.0.1",
     "@monaco-editor/react": "4.7.0",
     "@playwright/test": "1.63.0",
