@@ -1,9 +1,5 @@
 import { StrictMode, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  createHttpTessellationCacheProvider,
-  setTessellationCacheProvider,
-} from "cadgen-js/lib/surf/tessellationCache";
 import CadWorkspace from "./components/CadWorkspace";
 import faviconUrl from "./assets/favicon.ico";
 import "./styles/globals.css";
@@ -34,17 +30,10 @@ function bootstrap() {
   if (!rootElement) {
     throw new Error(`Missing #${ROOT_ID} mount point.`);
   }
-  // The viewer is a consumer of the shared component-tessellation cache
-  // (~/.cache/cadgen/meshes, served by viewer/server on /__tess_cache/):
-  // component loads and LOD level re-tessellations resolve through it and
-  // write back on miss, so tessellations persist across sessions and are
-  // shared with snapshots and exports. Best-effort by construction — any
-  // failure degrades to plain in-page tessellation. The POST guard header
-  // rides every request; only the write-back POSTs need it, but it is
-  // harmless on GETs and keeps the provider config to one line.
-  setTessellationCacheProvider(
-    createHttpTessellationCacheProvider({ headers: { "x-cadgen-viewer": "1" } }),
-  );
+  // The shared component-tessellation cache provider is installed by the
+  // per-file surface for ITS origin (file-view/hostTessellationCache.js) —
+  // "" here, the same routes as before — so the standalone shell and an
+  // embedded surface reach the cache the same way.
   ensureFavicon();
   // Before anything renders, so a re-armed tip can fire on this page load.
   applyTutorialTipResetQueryParam();

@@ -299,17 +299,143 @@ export async function getCachedComponentEntries(cids, options = {}) {
   return hits;
 }
 
+// --- priming: one round trip for a whole assembly's hit set ----------------
+//
+// A component load asks the cache per component (`getCachedEntryBytes`), and
+// over HTTP that is one request per component: a 483-component assembly made
+// 483 GETs to a single-process backend that was also streaming its 483 surfs,
+// and the round trips cost more than the tessellation they skipped. The batch
+// route (`getMany`) exists for exactly this; priming asks it once for every
+// cid up front and parks the answers — hits AND known misses — for the
+// per-component reads to take. An entry is taken once (a second read for the
+// same key goes back to the provider), so a primed set never goes stale past
+// the load it was primed for.
+
+const primedEntries = new Map();
+const PRIME_CHUNK = 1024;
+
+export async function primeCachedEntryBytes(cids, options = {}) {
+  const provider = cacheProvider;
+  const unique = [...new Set((cids || []).filter(Boolean))];
+  if (!provider || typeof provider.getMany !== "function" || !unique.length) return 0;
+  if (!tessellationOptionsCacheable(options)) return 0;
+  let hits = 0;
+  for (let start = 0; start < unique.length; start += PRIME_CHUNK) {
+    const chunk = unique.slice(start, start + PRIME_CHUNK);
+    const keys = chunk.map((cid) => tessellationCacheKey(cid, options));
+    let raw = null;
+    try {
+      raw = await provider.getMany(keys);
+    } catch {
+      raw = null;
+    }
+    if (!Array.isArray(raw) || raw.length !== keys.length) {
+      continue; // no batch route: the per-component reads ask as before
+    }
+    for (let i = 0; i < keys.length; i += 1) {
+      const bytes = raw[i] instanceof Uint8Array && raw[i].length ? raw[i] : null;
+      primedEntries.set(keys[i], bytes);
+      if (bytes) hits += 1;
+    }
+  }
+  return hits;
+}
+
+export function clearPrimedEntries() {
+  primedEntries.clear();
+}
+
 // Raw entry bytes for one component — for callers that hand the entry to a
 // worker (transfer) instead of decoding on this thread. Null on miss/failure.
+// A primed answer is taken first, once.
 export async function getCachedEntryBytes(cid, options = {}) {
   const provider = cacheProvider;
   if (!provider || !cid || !tessellationOptionsCacheable(options)) return null;
+  const key = tessellationCacheKey(cid, options);
+  if (primedEntries.has(key)) {
+    const primed = primedEntries.get(key);
+    primedEntries.delete(key);
+    return primed;
+  }
   try {
-    const bytes = await provider.get(tessellationCacheKey(cid, options));
+    const bytes = await provider.get(key);
     return bytes instanceof Uint8Array ? bytes : null;
   } catch {
     return null;
   }
+}
+
+// --- write-back scheduling --------------------------------------------------
+//
+// The default is immediate: a miss is written back the moment the worker
+// hands its entry over, which is what a snapshot or an export wants (the page
+// is gone right after). A viewer loading a large assembly wants the opposite —
+// hundreds of PUTs racing the surf fetches on the same backend doubled a cold
+// open — so a host may defer them: writes queue until `deferMs` has passed
+// with no new one, then drain `concurrency` at a time.
+
+let writeBackPolicy = { deferMs: 0, concurrency: Infinity };
+const pendingWriteBacks = new Map();
+let writeBackTimer = null;
+let writeBackDrain = null;
+
+export function configureTessellationCacheWriteBack({ deferMs = 0, concurrency = Infinity } = {}) {
+  writeBackPolicy = {
+    deferMs: Number.isFinite(deferMs) && deferMs > 0 ? deferMs : 0,
+    concurrency: Number.isFinite(concurrency) && concurrency >= 1 ? Math.floor(concurrency) : Infinity,
+  };
+}
+
+async function putEntry(key, bytes) {
+  const provider = cacheProvider;
+  if (!provider || typeof provider.put !== "function") return;
+  try {
+    await provider.put(key, bytes);
+  } catch {
+    // best-effort write-back
+  }
+}
+
+async function drainWriteBacks() {
+  const limit = writeBackPolicy.concurrency;
+  const queue = [...pendingWriteBacks.entries()];
+  pendingWriteBacks.clear();
+  let next = 0;
+  const lane = async () => {
+    while (next < queue.length) {
+      const [key, bytes] = queue[next];
+      next += 1;
+      await putEntry(key, bytes);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(queue.length, Number.isFinite(limit) ? limit : queue.length) }, lane));
+}
+
+/** Write every deferred entry now. Resolves when the drain (and any running one) is done. */
+export async function flushTessellationCacheWriteBacks() {
+  if (writeBackTimer) {
+    clearTimeout(writeBackTimer);
+    writeBackTimer = null;
+  }
+  if (writeBackDrain) {
+    await writeBackDrain;
+  }
+  if (pendingWriteBacks.size) {
+    writeBackDrain = drainWriteBacks().finally(() => {
+      writeBackDrain = null;
+    });
+    await writeBackDrain;
+  }
+}
+
+function scheduleWriteBackDrain() {
+  if (writeBackTimer) {
+    clearTimeout(writeBackTimer);
+  }
+  writeBackTimer = setTimeout(() => {
+    writeBackTimer = null;
+    void flushTessellationCacheWriteBacks();
+  }, writeBackPolicy.deferMs);
 }
 
 // Raw write-back for entry bytes a worker already encoded.
@@ -317,11 +443,13 @@ export async function writeBackEntryBytes(cid, options, bytes) {
   const provider = cacheProvider;
   if (!provider || typeof provider.put !== "function" || !cid) return;
   if (!tessellationOptionsCacheable(options) || !(bytes instanceof Uint8Array)) return;
-  try {
-    await provider.put(tessellationCacheKey(cid, options), bytes);
-  } catch {
-    // best-effort write-back
+  const key = tessellationCacheKey(cid, options);
+  if (writeBackPolicy.deferMs > 0) {
+    pendingWriteBacks.set(key, bytes);
+    scheduleWriteBackDrain();
+    return;
   }
+  await putEntry(key, bytes);
 }
 
 // Best-effort write-back of a fresh tessellation; `index` supplies the header

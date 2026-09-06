@@ -50,6 +50,15 @@ import { ViewerOriginProvider, useViewerOrigin } from "cad-viewer/file-view";
 component under it builds a backend URL. `packages/cadgen-js` stays React-free
 and takes the origin as a plain argument instead.
 
+The surface also installs cadgen-js's shared **tessellation cache provider**
+for its origin when it mounts (`hostTessellationCache.js`): a package load asks
+`origin`'s `/__tess_cache/batch` once for every component before tessellating,
+and writes the misses back after the load has gone quiet, so a component
+tessellated once is a cache hit on every later open, in the standalone viewer
+and in a host alike. A host does nothing for this beyond passing `origin`; the
+provider is per page, and the last surface mounted owns it, which is safe
+because every `cadgen viewer` reads and writes the one store.
+
 ## References and captures
 
 The surface copies references — the render pane's Copy Reference button, the
