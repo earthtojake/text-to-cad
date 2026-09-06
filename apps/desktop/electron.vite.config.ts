@@ -51,11 +51,21 @@ function viewerJsxPlugin(): Plugin {
   };
 }
 
+// The Aptabase key is baked in at build time, not read from the environment at
+// run time: a packaged app has no build environment to read, and a key that
+// could be set by whoever launches the binary is a key anyone can point at
+// their own project. Absent (a checkout, a community build) it compiles to "",
+// which makes src/main/telemetry.ts inert — no init, no network call.
+const aptabaseKey = process.env.HARDCORE_APTABASE_KEY ?? "";
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     resolve: { alias },
-    define: { __APP_VERSION__: JSON.stringify(appVersion()) },
+    define: {
+      __APP_VERSION__: JSON.stringify(appVersion()),
+      __APTABASE_KEY__: JSON.stringify(aptabaseKey),
+    },
     build: {
       rollupOptions: {
         input: { index: path.join(appRoot, "src", "main", "index.ts") },

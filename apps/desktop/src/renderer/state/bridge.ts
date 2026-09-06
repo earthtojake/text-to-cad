@@ -11,6 +11,7 @@ import { useProjects } from "./projects";
 import { useSessions } from "./sessions";
 import { useSettings } from "./settings";
 import { useUi } from "./ui";
+import { useUpdates } from "./updates";
 
 /** Attach every main → renderer listener. Returns a detach function. */
 export function subscribeToMain(): () => void {
@@ -23,6 +24,9 @@ export function subscribeToMain(): () => void {
     }),
     window.hardcore.on("settings.changed", (settings) => {
       useSettings.getState().receive(settings);
+    }),
+    window.hardcore.on("app.updateStatus", (status) => {
+      useUpdates.getState().receive(status);
     }),
     window.hardcore.on("ui.command", ({ command }) => {
       const ui = useUi.getState();
@@ -73,6 +77,7 @@ export async function hydrate(): Promise<void> {
     useSettings.getState().load(),
     useProjects.getState().load(),
     useSessions.getState().load(),
+    useUpdates.getState().load(),
   ]);
   // Nothing to hydrate for the explorer yet — the strip is in-memory until P3
   // persists it. Named here so the omission is a decision, not an oversight.

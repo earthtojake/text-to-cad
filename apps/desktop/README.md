@@ -12,6 +12,12 @@ A standalone npm project, like `apps/viewer` — there is no root `package.json`
 so every command below runs from `apps/desktop` (or with
 `npm --prefix apps/desktop`).
 
+Unlike `apps/viewer`, a worktree cannot borrow another checkout's
+`node_modules` through a symlink: electron-builder resolves the dependency tree
+by real path, and a `node_modules` that lives outside the project resolves every
+transitive dependency to `undefined`. The build still succeeds; the app it
+produces dies at launch on a missing module. Run `npm ci` here.
+
 ## Dev
 
 ```sh
@@ -28,8 +34,31 @@ Two environment variables matter in development:
 
 | Variable | Effect |
 | --- | --- |
-| `HARDCORE_APTABASE_KEY` | Enables telemetry (still gated on the user's own setting, which defaults to off). Unset means no network call is ever attempted. |
+| `HARDCORE_APTABASE_KEY` | Read at BUILD time and compiled in (see Telemetry). Unset means no network call is ever attempted. |
 | `CAD_DESKTOP_PYTHON` | P5: use a checkout's `.venv` instead of the managed Python runtime. |
+
+## Telemetry
+
+Anonymous counts through Aptabase, and only when two separate things are true:
+a key was compiled in (`HARDCORE_APTABASE_KEY` at build time, baked in as
+`__APTABASE_KEY__` by `electron.vite.config.ts` — a packaged app has no build
+environment to read, and a key settable by whoever launches the binary is a key
+anyone can point at their own project), and the user's `telemetry` setting is
+on. It defaults to off, and it is read per event, so turning it off stops the
+next one.
+
+Four events, and the union type in `src/main/telemetry.ts` is the whole
+vocabulary — adding a fifth is a change to that type:
+
+| Event | Property |
+| --- | --- |
+| `app_launched` | — |
+| `session_created` | `agent` — the registry id (`claude-code`, `codex`, …) |
+| `file_opened` | `extension` — `step`, `md`, `py`, … |
+| `settings_changed` | `key` — the settings field's name, never its value |
+
+Aptabase adds the app version, the OS and a per-install random id. Nothing here
+carries a path, a file name, a project name, a prompt, or an agent's output.
 
 ## Checks
 
@@ -53,17 +82,57 @@ else that needs a real database belongs in the e2e.
 ## Packaging
 
 ```sh
-npm run icons        # regenerate build/icon.png (committed)
+npm run icons        # regenerate build/icon.{png,icns,ico} (committed)
 npm run package:mac  # or :win, :linux -> release/
 ```
 
-`electron-builder.yml` holds the config: appId `dev.texttocad.hardcore`, mac
-dmg + zip for arm64 and x64 (unsigned for now), Windows nsis x64, Linux
-AppImage. `scripts/package.mjs` builds first and then stamps the repository's
-`VERSION` onto the app as `extraMetadata.version` — `package.json` stays at
-`0.0.0` because `VERSION` is the one canonical release version (AGENTS.md).
-electron-builder derives the `.icns` and `.ico` from the single
-`build/icon.png`.
+`electron-builder.yml` holds the config: appId `dev.texttocad.hardcore`, and
+every artifact named `Hardcore-<version>-<os>-<arch>.<ext>`.
+
+| Platform | Targets |
+| --- | --- |
+| macOS | dmg + zip, arm64 and x64 |
+| Windows | nsis x64 (`…-windows-x64-setup.exe`) |
+| Linux | AppImage + deb, x64, best-effort |
+
+`scripts/package.mjs` is the way in. It builds first, then stamps the
+repository's `VERSION` onto the app as `extraMetadata.version` — `package.json`
+stays at `0.0.0` because `VERSION` is the one canonical release version
+(AGENTS.md) — and passes anything else through to electron-builder, so
+`npm run package:mac -- --arm64 --x64` works.
+
+`npm run icons` writes all three icons from one script: no image toolchain, no
+binary assets, and changing the mark is a diff.
+
+### Signing
+
+Decided by the environment and nothing else. There is no signed/unsigned pair
+of configs to keep in step — the secrets are there or they are not:
+
+| Set | Result |
+| --- | --- |
+| nothing | unsigned; `CSC_IDENTITY_AUTO_DISCOVERY=false`, so a certificate in your keychain cannot quietly change the artifact |
+| `CSC_LINK`, `CSC_KEY_PASSWORD` | signed |
+| …plus `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` | signed and notarised |
+
+`hardenedRuntime` and the entitlements (`build/entitlements.mac*.plist`) are on
+either way, so the first signed build is not the first time they are exercised.
+
+### Updates
+
+`electron-updater` against the GitHub Releases of `earthtojake/text-to-cad` —
+the same Release the repo tags, which is where `release-publish.yml`'s `desktop`
+job attaches the installers. `src/main/updater.ts` checks ten seconds after
+launch and every six hours, with `autoDownload` off: the app says an update
+exists and downloads when asked. Settings › About & Updates is the whole UI.
+Development builds report `unsupported` and check nothing.
+
+### What is bundled
+
+`resources/cadgen/` (the wheel) and `resources/plugin/` (the composed plugin)
+ship beside the app as `extraResources`. Both are committed empty; P5 fills
+them, and the release workflow drops the wheel it just built into the first.
+See `resources/README.md`.
 
 ## Layout
 
@@ -85,7 +154,10 @@ src/main/                 the Electron main process: everything with a side effe
   cad/                    P4, P5
   projects/git.ts         P7
 src/preload/index.ts      the contextBridge: builds `window.hardcore` by walking the contract
-src/shared/               ipc.ts (contract + defineIpc), types.ts (domain types as zod schemas)
+src/shared/               types.ts (domain types as zod schemas)
+  ipc.ts                  the contract: one branch per domain, assembled from ipc/
+  ipc/define.ts           invoke / defineIpc and the types derived from a contract
+  ipc/app.ts              the app.* branch: the updater's channels and its event
 src/renderer/
   app/                    Shell (three resizable panes), App, CommandPalette
   features/sidebar        projects and their sessions
@@ -104,11 +176,17 @@ tests/e2e/                playwright, against the built app
 
 Adding an IPC channel is the shape of most work here:
 
-1. declare it in `src/shared/ipc.ts` with its request and response schemas;
-2. implement it in `src/main/ipc/index.ts` — `registerIpc` refuses to start if
-   a channel has no handler;
+1. declare it in `src/shared/ipc/<branch>.ts` with its request and response
+   schemas, and spread that module into `src/shared/ipc.ts` — one line, so
+   several phases can add branches at once. Import `invoke` from
+   `./define`, never from `../ipc`: the contract imports the branches, and
+   importing it back is a cycle that fails at load time;
+2. implement it in `src/main/ipc/<branch>.ts` and spread that into
+   `src/main/ipc/index.ts` — `registerIpc` refuses to start if a channel has no
+   handler;
 3. call `window.hardcore.<branch>.<name>(...)` from a store in
-   `src/renderer/state/`.
+   `src/renderer/state/`. Events go through `state/bridge.ts`, never through a
+   listener in a component.
 
 The preload needs no edit: it builds the client from the contract. Components
 read stores, never IPC, so a change pushed from the menu or another window

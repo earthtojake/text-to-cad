@@ -25,11 +25,13 @@ phase is not an oversight — it is the seam.
 | P5 | `src/main/cad/{runtime,plugin,mcp-server}.ts`, `resources/`, `skills/hardcore-app` |
 | P6 | `src/renderer/features/settings` — the pages' contents |
 | P7 | `src/main/projects/git.ts` and the review tab's actions |
-| P8 | `electron-builder.yml`, `scripts/package.mjs`, `updater.ts`, the CI jobs |
+| P8 (done) | `electron-builder.yml`, `build/`, `resources/`, `scripts/{package,make-icons}.mjs`, `updater.ts`, `telemetry.ts`, `src/{shared,main}/ipc/app.ts`, the CI jobs |
 
 Work outside your phase's directories only where the seam requires it — a new
-IPC branch in `src/shared/ipc.ts` and its handler in `src/main/ipc/index.ts`
-are expected; reshaping the shell to fit one feature is not.
+IPC branch in `src/shared/ipc/<branch>.ts`, spread into `src/shared/ipc.ts`,
+with its handlers in `src/main/ipc/<branch>.ts` spread into
+`src/main/ipc/index.ts`, is expected; reshaping the shell to fit one feature is
+not.
 
 ## Rules that are easy to break here
 
@@ -38,7 +40,17 @@ are expected; reshaping the shell to fit one feature is not.
   contract in `src/shared/ipc.ts`.
 - **Every IPC channel is declared once**, as a request schema and a response
   schema. `registerIpc` validates both and refuses to start if a channel has no
-  handler. Do not add an `ipcMain.handle` outside it.
+  handler. Do not add an `ipcMain.handle` outside it. A branch is its own module
+  under `src/shared/ipc/`, spread into the contract; `invoke` comes from
+  `./define`, because importing `../ipc` from a branch is a load-time cycle.
+- **`node_modules` here is installed, never symlinked.** electron-builder walks
+  the tree by real path: a symlinked `node_modules` resolves every transitive
+  dependency to `undefined`, packages an app missing half its modules, and does
+  not fail while doing it. The viewer's worktree trick does not apply.
+- **Nothing reads `process.env` for a build-time secret.** The Aptabase key is
+  compiled in as `__APTABASE_KEY__` (`electron.vite.config.ts`); a packaged app
+  has no build environment, and a key the launcher can set is a key anyone can
+  redirect.
 - **`src/renderer/components/{ui,ai-elements}` is vendored**, from the shadcn
   and AI Elements registries. It is excluded from eslint (not from the
   typechecker). Two deliberate edits are in it: the `ai` package's types are

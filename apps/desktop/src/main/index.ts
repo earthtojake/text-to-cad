@@ -11,7 +11,7 @@ import { closeDb, db } from "./db";
 import { registerIpcHandlers } from "./ipc";
 import { installMenu } from "./menu";
 import { initTelemetry, track } from "./telemetry";
-import { initUpdater } from "./updater";
+import { initUpdater, stopUpdater } from "./updater";
 import { restoreWindowState, trackWindowState } from "./window-state";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -108,7 +108,7 @@ if (!app.requestSingleInstanceLock()) {
     initTelemetry();
     createWindow();
     initUpdater();
-    track("app_started");
+    track({ name: "app_launched" });
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
@@ -124,6 +124,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on("before-quit", () => {
+    stopUpdater();
     closeDb();
   });
 }

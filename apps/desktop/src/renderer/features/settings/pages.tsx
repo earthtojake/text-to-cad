@@ -14,6 +14,7 @@ import {
 import { Switch } from "@renderer/components/ui/switch";
 import { PendingRow, SettingCard, SettingRow } from "@renderer/features/settings/SettingCard";
 import { useSettings } from "@renderer/state/settings";
+import { useUpdates } from "@renderer/state/updates";
 import type { AppInfo, GitMode, ThemePreference } from "@shared/types";
 import type { SettingsSection } from "@renderer/state/ui";
 
@@ -356,11 +357,76 @@ function AboutPage() {
               onCheckedChange={(checkUpdatesOnLaunch) => void patch({ checkUpdatesOnLaunch })}
             />
           }
-          description="Ask GitHub Releases for a newer build when Hardcore starts."
-          title="Check for updates on launch"
+          description="Ask GitHub Releases for a newer build when Hardcore starts, and every six hours after that."
+          title="Check for updates automatically"
         />
-        <PendingRow description="Check now, and install what is downloaded." phase="P8" title="Check for updates" />
+        <UpdateRow />
       </SettingCard>
     </>
+  );
+}
+
+/**
+ * The updater, as one row: what the state is on the left, the only action that
+ * state allows on the right.
+ *
+ * Nothing downloads without being asked and nothing restarts without being
+ * asked — that is the whole reason `autoDownload` is off in
+ * `src/main/updater.ts`, and the reason this is a button rather than a
+ * progress bar that appeared on its own.
+ */
+function UpdateRow() {
+  const status = useUpdates((state) => state.status);
+  const busy = useUpdates((state) => state.busy);
+  const check = useUpdates((state) => state.check);
+  const download = useUpdates((state) => state.download);
+  const install = useUpdates((state) => state.install);
+
+  const version = status.version ? ` ${status.version}` : "";
+
+  const { description, action } = {
+    unsupported: {
+      description: "Updates are delivered to installed builds; this one runs from a checkout.",
+      action: null,
+    },
+    idle: {
+      description: "Hardcore is up to date.",
+      action: { label: "Check now", onClick: check },
+    },
+    checking: { description: "Checking GitHub Releases…", action: null },
+    available: {
+      description: `Version${version} is available.`,
+      action: { label: "Download", onClick: download },
+    },
+    downloading: {
+      description: `Downloading${version}… ${status.percent ?? 0}%`,
+      action: null,
+    },
+    downloaded: {
+      description: `Version${version} is ready. Restarting installs it.`,
+      action: { label: "Restart", onClick: install },
+    },
+    error: {
+      description: status.message ?? "The update check failed.",
+      action: { label: "Try again", onClick: check },
+    },
+  }[status.state];
+
+  return (
+    <SettingRow
+      control={
+        action ? (
+          <Button disabled={busy} onClick={() => void action.onClick()} size="sm" variant="secondary">
+            {action.label}
+          </Button>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {status.state === "checking" || status.state === "downloading" ? "…" : "—"}
+          </span>
+        )
+      }
+      description={description}
+      title="Software update"
+    />
   );
 }

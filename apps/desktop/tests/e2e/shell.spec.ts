@@ -86,6 +86,25 @@ test("settings replaces the window and comes back", async () => {
   await expect(page.getByText("Add a project to get started")).toBeVisible();
 });
 
+/**
+ * The updater's whole path, end to end: main's status, over IPC, into the store,
+ * onto the page. Its value here is `unsupported` — an unpackaged build has no
+ * `app-update.yml` and must never be told to replace itself — and asserting the
+ * honest empty state is the only assertion this suite can make without a real
+ * release to check against.
+ */
+test("About reports the updater's state", async () => {
+  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "About & Updates" }).click();
+  await expect(page.getByRole("heading", { name: "About & Updates" })).toBeVisible();
+
+  await expect(page.getByText("Software update")).toBeVisible();
+  await expect(page.getByText("Updates are delivered to installed builds")).toBeVisible();
+
+  await page.getByRole("button", { name: "Back to app" }).click();
+  await expect(page.getByText("Add a project to get started")).toBeVisible();
+});
+
 test("renders in both themes", async () => {
   // Dark, then light, through the real setting — which round-trips through
   // sqlite in main, so this also proves settings persist.

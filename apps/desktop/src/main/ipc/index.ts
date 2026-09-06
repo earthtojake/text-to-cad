@@ -16,6 +16,8 @@ import {
   type IpcEventPayload,
 } from "../../shared/ipc";
 import { projects, sessions, settings } from "../db/repositories";
+import { track } from "../telemetry";
+import { appHandlers } from "./app";
 import { IpcError, emit, registerIpc, type IpcContext } from "./register";
 
 /** Broadcast to every open window. */
@@ -37,6 +39,7 @@ const handlers = {
       platform: process.platform as "darwin" | "win32" | "linux",
       isDev: !app.isPackaged,
     }),
+    ...appHandlers,
   },
 
   projects: {
@@ -84,6 +87,11 @@ const handlers = {
     set: (patch: Parameters<typeof settings.set>[0]) => {
       const next = settings.set(patch);
       broadcast("settings.changed", next);
+      // The field's NAME, never its value: "someone changed the git mode" is a
+      // product question, "to what" is their business (src/main/telemetry.ts).
+      for (const key of Object.keys(patch) as (keyof typeof patch & string)[]) {
+        track({ name: "settings_changed", key });
+      }
       return next;
     },
   },
