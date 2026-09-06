@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { parseSurf } from "./container.js";
 import { DEFAULT_OPTIONS, TESSELLATION_VERSION, tessellateComponent } from "./tessellate.js";
 import {
+  createHttpTessellationCacheProvider,
   decodeComponentTessellation,
   decodeTessellationCacheBatch,
   edgeClassesFromSurfIndex,
@@ -18,6 +19,7 @@ import {
   encodeTessellationCacheBatch,
   getCachedComponentEntries,
   setTessellationCacheProvider,
+  originPrefix,
   surfIndexFromCacheEntry,
   tessellateComponentCached,
   tessellationCacheKey,
@@ -221,4 +223,40 @@ test("a provider that throws degrades to plain tessellation", async (t) => {
   });
   const component = await tessellateComponentCached(index, floats, { cid: "c0" });
   assert.ok(component.positions.length > 0);
+});
+
+// The HTTP provider is the one place this package names the viewer's cache routes,
+// and an embedded surface is served from a different origin than the backend that
+// owns them. "" (same origin) must stay byte-identical to what shipped.
+test("the HTTP provider addresses the cache routes at both origins", async () => {
+  const REMOTE = "http://127.0.0.1:3250";
+  assert.equal(originPrefix(undefined), "");
+  assert.equal(originPrefix(""), "");
+  assert.equal(originPrefix(`${REMOTE}/`), REMOTE);
+
+  const requested = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    requested.push(String(url));
+    return { ok: false, status: 404, statusText: "Not Found" };
+  };
+  try {
+    await createHttpTessellationCacheProvider().get("abc");
+    await createHttpTessellationCacheProvider().put("abc", new Uint8Array(1));
+    await createHttpTessellationCacheProvider().getMany(["abc"]);
+    await createHttpTessellationCacheProvider({ origin: REMOTE }).get("abc");
+    await createHttpTessellationCacheProvider({ origin: REMOTE }).put("abc", new Uint8Array(1));
+    await createHttpTessellationCacheProvider({ origin: REMOTE }).getMany(["abc"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(requested, [
+    "/__tess_cache/abc.tess",
+    "/__tess_cache/abc.tess",
+    "/__tess_cache/batch",
+    `${REMOTE}/__tess_cache/abc.tess`,
+    `${REMOTE}/__tess_cache/abc.tess`,
+    `${REMOTE}/__tess_cache/batch`,
+  ]);
 });

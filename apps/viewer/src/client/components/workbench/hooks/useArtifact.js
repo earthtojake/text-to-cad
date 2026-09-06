@@ -46,7 +46,7 @@ function isAbortError(error) {
   return error?.name === "AbortError" || /abort/i.test(String(error?.message || ""));
 }
 
-export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {}) {
+export function useArtifact(fileRef, { enabled = true, freshnessKey = "", origin = "" } = {}) {
   const activeRef = String(enabled ? fileRef || "" : "").trim();
   const key = activeRef ? `${activeRef}:${freshnessKey}` : "";
   const [state, setState] = useState({ key: "", status: "rendered", error: "", progress: null });
@@ -110,7 +110,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
       }
       let reported = "";
       try {
-        const status = await requestArtifactStatus(activeRef, { signal: controller.signal });
+        const status = await requestArtifactStatus(activeRef, { origin, signal: controller.signal });
         reported = String(status?.state || "");
         mergeProgress(status);
       } catch {
@@ -139,7 +139,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
 
     async function resolve() {
       try {
-        const status = await requestArtifactStatus(activeRef, { signal: controller.signal });
+        const status = await requestArtifactStatus(activeRef, { origin, signal: controller.signal });
         if (!isCurrent()) {
           return;
         }
@@ -168,7 +168,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
         attached = false;
         showGenerating(status);
         pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);
-        const result = await requestArtifact(activeRef, { signal: controller.signal });
+        const result = await requestArtifact(activeRef, { origin, signal: controller.signal });
         stopPolling();
         if (!isCurrent()) {
           return;
@@ -198,7 +198,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
       stopPolling();
       controller.abort();
     };
-  }, [activeRef, key]);
+  }, [activeRef, key, origin]);
 
   // Optimistic-ready until this exact key has settled, so a fresh selection renders without a flash.
   return state.key === key
