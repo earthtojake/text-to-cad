@@ -520,5 +520,10 @@ function toContentBlock(block: PromptBlock) {
         mimeType: block.mimeType ?? undefined,
         title: block.title ?? undefined,
       };
+    case "resource":
+      return {
+        type: "resource" as const,
+        resource: { uri: block.uri, text: block.text, mimeType: block.mimeType ?? undefined },
+      };
   }
 }

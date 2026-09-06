@@ -190,6 +190,13 @@ export const PromptBlockSchema = z.discriminatedUnion("type", [
     mimeType: z.string().nullable().default(null),
     title: z.string().nullable().default(null),
   }),
+  /** An attached text file, embedded: the agent gets the content, not a path it may not be able to read. */
+  z.object({
+    type: z.literal("resource"),
+    uri: z.string(),
+    text: z.string(),
+    mimeType: z.string().nullable().default(null),
+  }),
 ]);
 export type PromptBlock = z.infer<typeof PromptBlockSchema>;
 
@@ -222,6 +229,12 @@ export type Part =
       output: unknown;
       content: ToolContent[];
       locations: ToolLocation[];
+      /**
+       * Text the adapter streamed for this call while it ran — Codex's
+       * `_meta.terminal_output_delta` — so a command's output shows before
+       * the call completes. Empty for adapters that only report at the end.
+       */
+      stream: string;
       children: Part[];
     }
   | { type: "plan"; entries: PlanEntry[] }
@@ -270,6 +283,7 @@ export const PartSchema: z.ZodType<Part> = z.lazy(() =>
       output: z.unknown(),
       content: z.array(ToolContentSchema),
       locations: z.array(ToolLocationSchema),
+      stream: z.string(),
       children: z.array(PartSchema),
     }),
     z.object({ type: z.literal("plan"), entries: z.array(PlanEntrySchema) }),

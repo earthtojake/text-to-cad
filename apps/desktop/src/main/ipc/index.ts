@@ -15,7 +15,7 @@ import { track } from "../telemetry";
 import { acpHandlers } from "./acp";
 import { agentsHandlers } from "./agents";
 import { appHandlers } from "./app";
-import { IpcError, broadcast, emit, registerIpc, type IpcContext } from "./register";
+import { IpcError, broadcast, registerIpc, type IpcContext } from "./register";
 
 export { broadcast } from "./register";
 

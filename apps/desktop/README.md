@@ -71,8 +71,14 @@ npm run e2e          # playwright _electron against out/ — run `npm run build`
 ```
 
 `npm run e2e` writes `tests/e2e/__screenshots__/shell.png` (plus `shell-dark`,
-`shell-light` and `settings`). Look at them; they are the cheapest review of
-whether the app still looks like an app.
+`shell-light` and `settings`), and `session-*.png` — the session UI in each of
+its states, driven through `tests/fake-agent` (`HARDCORE_FAKE_AGENT` points
+main at it in place of every adapter). Look at them; they are the cheapest
+review of whether the app still looks like an app.
+
+`tests/e2e/codex.spec.ts` runs one real Codex session through the built app
+and writes `session-codex*.png`. It needs a signed-in `codex` and spends
+tokens, so it is skipped unless `HARDCORE_E2E_CODEX=1` is set.
 
 Nothing in `npm test` loads `better-sqlite3` or `node-pty`: both are built
 against Electron's ABI and will not load in a plain Node process. The migration
@@ -168,8 +174,11 @@ src/shared/               types.ts (domain types as zod schemas)
   acp/types.ts, acp/reduce.ts  SessionState and the pure session/update reducer
 src/renderer/
   app/                    Shell (three resizable panes), App, CommandPalette
-  features/sidebar        projects and their sessions
-  features/session        the empty state and the composer
+  features/sidebar        projects and their sessions (five per project, Show more, status glyphs, menus)
+  features/session        the new-session state, the transcript, the composer
+    view.ts               SessionState -> rows: activity-row labels, folding, the status line (pure)
+    parts/                activity rows (+ Monaco diff, terminal), thoughts, permission cards, subagents
+    ComposerChips.tsx     agent / project / git mode / approval / model / options chips
   features/explorer       the one tab strip
   features/settings       the full-window Settings route and its seven pages
   components/ui           shadcn/ui, vendored

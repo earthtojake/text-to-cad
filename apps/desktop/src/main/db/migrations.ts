@@ -83,6 +83,15 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE sessions ADD COLUMN deletions INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 3,
+    name: "archived-sessions",
+    // P2: the sidebar's archive action. The row stays so the agent's own
+    // transcript can still be loaded back.
+    up: `
+      ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 /**

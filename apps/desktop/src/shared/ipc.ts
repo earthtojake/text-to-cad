@@ -126,6 +126,8 @@ export const ipcEvents = {
       "toggle-explorer",
       "new-session",
       "command-palette",
+      /** The files-changed pill: show the session's diff in the explorer's Review tab (P3). */
+      "open-review",
     ]),
   }),
   /** electron-updater's progress, surfaced on About & Updates. */

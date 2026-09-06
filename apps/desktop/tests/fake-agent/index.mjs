@@ -17,18 +17,27 @@
  *   "thought"     an agent_thought_chunk first
  *   "slow"        wait until cancelled
  *   "crash"       exit(3) mid-turn
+ *   "showcase"    a Codex-shaped turn for the session UI's e2e: thoughts,
+ *                 reads, edits with diffs, a streamed command, a plan, a
+ *                 permission request that waits for the answer, a subagent,
+ *                 prose — with small delays so the streaming states can be
+ *                 seen
  *
  * and always ends with the text "ok" and `end_turn` (or `cancelled`).
+ *
+ * A cwd containing a `.fake-auth-required` file makes `session/new` answer
+ * "Authentication required", the way an adapter whose CLI is signed out does.
  *
  * A fixture replays the agent→client frames of each recorded prompt turn in
  * order: notifications are re-sent (with the live session id), requests are
  * re-issued and awaited (terminal ids are mapped from the recorded response
  * to the live one), and the recorded prompt response is returned.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { Readable, Writable } from "node:stream";
 
-import { AgentSideConnection, PROTOCOL_VERSION, ndJsonStream } from "@agentclientprotocol/sdk";
+import { AgentSideConnection, PROTOCOL_VERSION, RequestError, ndJsonStream } from "@agentclientprotocol/sdk";
 
 const args = process.argv.slice(2);
 const fixturePath = args.includes("--fixture") ? args[args.indexOf("--fixture") + 1] : null;
@@ -58,9 +67,12 @@ new AgentSideConnection((conn) => ({
     return {};
   },
 
-  async newSession() {
+  async newSession(params) {
     if (fixture?.newSession) {
       return fixture.newSession;
+    }
+    if (params?.cwd && existsSync(path.join(params.cwd, ".fake-auth-required"))) {
+      throw RequestError.authRequired();
     }
     return {
       sessionId: SESSION_ID,
@@ -167,6 +179,10 @@ async function script(conn, params) {
     process.exit(3);
   }
 
+  if (text.includes("showcase")) {
+    return showcase(conn, sessionId);
+  }
+
   if (text.includes("thought")) {
     await send({ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "thinking…" } });
   }
@@ -249,6 +265,129 @@ async function script(conn, params) {
   return {
     stopReason: cancelled ? "cancelled" : "end_turn",
     usage: { totalTokens: 12, inputTokens: 10, outputTokens: 2 },
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* The showcase turn                                                          */
+/* -------------------------------------------------------------------------- */
+
+const pause = (ms) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+/** A turn shaped like a real Codex turn, paced so each state is visible. */
+async function showcase(conn, sessionId) {
+  const send = (update) => conn.sessionUpdate({ sessionId, update });
+  const text = (chunk) => send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: chunk } });
+  const thought = (chunk) => send({ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: chunk } });
+  const STEP = 120;
+
+  for (const chunk of ["The user wants a greeting script. ", "I should look at what is here, ", "then write it and check the directory."]) {
+    await thought(chunk);
+    await pause(STEP);
+  }
+
+  await send({
+    sessionUpdate: "plan",
+    entries: [
+      { content: "Read the project notes", priority: "medium", status: "in_progress" },
+      { content: "Write hello.py and update the README", priority: "high", status: "pending" },
+      { content: "Run it and tidy up", priority: "low", status: "pending" },
+    ],
+  });
+
+  await text("I'll look at the notes first, then write the script.\n\n");
+  await pause(STEP);
+
+  await send({ sessionUpdate: "tool_call", toolCallId: "sc-read-1", title: "Read README.md", kind: "read", status: "in_progress", locations: [{ path: "README.md" }] });
+  await pause(STEP * 2);
+  await send({ sessionUpdate: "tool_call_update", toolCallId: "sc-read-1", status: "completed", content: [{ type: "content", content: { type: "text", text: "# Scratch\n\nA place to try things.\n" } }] });
+  await send({ sessionUpdate: "tool_call", toolCallId: "sc-read-2", title: "Read notes.md", kind: "read", status: "completed", locations: [{ path: "docs/notes.md" }] });
+  await pause(STEP);
+
+  await send({
+    sessionUpdate: "plan",
+    entries: [
+      { content: "Read the project notes", priority: "medium", status: "completed" },
+      { content: "Write hello.py and update the README", priority: "high", status: "in_progress" },
+      { content: "Run it and tidy up", priority: "low", status: "pending" },
+    ],
+  });
+
+  await send({ sessionUpdate: "tool_call", toolCallId: "sc-edit-1", title: "Write hello.py", kind: "edit", status: "in_progress", locations: [{ path: "hello.py" }] });
+  await pause(STEP * 2);
+  await send({
+    sessionUpdate: "tool_call_update",
+    toolCallId: "sc-edit-1",
+    status: "completed",
+    content: [{ type: "diff", path: "hello.py", oldText: null, newText: 'def main():\n    print("hello from the fake agent")\n\n\nif __name__ == "__main__":\n    main()\n' }],
+  });
+  await send({ sessionUpdate: "tool_call", toolCallId: "sc-edit-2", title: "Edit README.md", kind: "edit", status: "in_progress", locations: [{ path: "README.md" }] });
+  await pause(STEP);
+  await send({
+    sessionUpdate: "tool_call_update",
+    toolCallId: "sc-edit-2",
+    status: "completed",
+    content: [{ type: "diff", path: "README.md", oldText: "# Scratch\n\nA place to try things.\n", newText: "# Scratch\n\nA place to try things.\n\nRun `python hello.py` for a greeting.\n" }],
+  });
+
+  await send({ sessionUpdate: "tool_call", toolCallId: "sc-exec-1", title: "python hello.py", kind: "execute", status: "in_progress", rawInput: { command: "python hello.py" } });
+  await pause(STEP);
+  await send({ sessionUpdate: "tool_call_update", toolCallId: "sc-exec-1", _meta: { terminal_output_delta: { data: "hello from the fake agent\n" } } });
+  await pause(STEP);
+  await send({ sessionUpdate: "tool_call_update", toolCallId: "sc-exec-1", status: "completed", rawOutput: { formatted_output: "hello from the fake agent\n", exit_code: 0 } });
+  await send({ sessionUpdate: "tool_call", toolCallId: "sc-exec-2", title: "ls -la", kind: "execute", status: "completed", rawInput: { command: "ls -la" }, rawOutput: { formatted_output: "total 16\n-rw-r--r--  1 user  staff   61 hello.py\n-rw-r--r--  1 user  staff   72 README.md\n", exit_code: 0 } });
+  await pause(STEP);
+
+  await text("The script runs. There is a stale `build/` directory here — removing it needs your say-so.\n\n");
+  await send({ sessionUpdate: "tool_call", toolCallId: "sc-rm-1", title: "rm -rf build", kind: "delete", status: "pending", rawInput: { command: "rm -rf build" } });
+  const answer = await conn.requestPermission({
+    sessionId,
+    toolCall: { toolCallId: "sc-rm-1", title: "rm -rf build", kind: "delete", status: "pending", rawInput: { command: "rm -rf build" } },
+    options: [
+      { optionId: "allow-once", name: "Yes", kind: "allow_once" },
+      { optionId: "allow-always", name: "Yes, always", kind: "allow_always" },
+      { optionId: "reject", name: "No", kind: "reject_once" },
+    ],
+    _meta: { permission: { version: 1, title: "Delete the build directory?", description: "Runs `rm -rf build` in the project. This cannot be undone." } },
+  });
+  const selected = answer.outcome.outcome === "selected" ? answer.outcome.optionId : null;
+  if (selected === null || selected === "reject") {
+    await send({ sessionUpdate: "tool_call_update", toolCallId: "sc-rm-1", status: "failed", rawOutput: { rejected: true } });
+    await text("Understood — I left `build/` alone.");
+    return { stopReason: answer.outcome.outcome === "cancelled" ? "cancelled" : "end_turn" };
+  }
+  await send({ sessionUpdate: "tool_call_update", toolCallId: "sc-rm-1", status: "completed", rawOutput: { removed: "build" } });
+  await pause(STEP);
+
+  const childId = `${sessionId}:child-showcase`;
+  await send({ sessionUpdate: "tool_call", toolCallId: "sc-task-1", title: "Task: check the docs", kind: "think", status: "in_progress" });
+  await send({ sessionUpdate: "subagent_spawned", subagentSessionId: childId, name: "Docs checker", task: "confirm the README mentions the script", parentToolCallId: "sc-task-1", capabilities: {} });
+  await conn.sessionUpdate({ sessionId: childId, update: { sessionUpdate: "tool_call", toolCallId: "sc-child-read", title: "Read README.md", kind: "read", status: "completed", locations: [{ path: "README.md" }] } });
+  await conn.sessionUpdate({ sessionId: childId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "The README now documents `python hello.py`." } } });
+  await pause(STEP * 2);
+  await send({ sessionUpdate: "subagent_state_update", subagentSessionId: childId, state: "completed" });
+  await send({ sessionUpdate: "tool_call_update", toolCallId: "sc-task-1", status: "completed" });
+
+  await send({
+    sessionUpdate: "plan",
+    entries: [
+      { content: "Read the project notes", priority: "medium", status: "completed" },
+      { content: "Write hello.py and update the README", priority: "high", status: "completed" },
+      { content: "Run it and tidy up", priority: "low", status: "completed" },
+    ],
+  });
+  await send({ sessionUpdate: "usage_update", used: 18_420, size: 258_400 });
+
+  for (const chunk of ["Done. ", "`hello.py` prints a greeting, ", "the README says how to run it, ", "and the stale build directory is gone."]) {
+    await text(chunk);
+    await pause(STEP);
+  }
+  return {
+    stopReason: cancelled ? "cancelled" : "end_turn",
+    usage: { totalTokens: 18_420, inputTokens: 17_900, outputTokens: 520, cachedReadTokens: 12_000 },
   };
 }
 

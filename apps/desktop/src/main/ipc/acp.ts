@@ -15,6 +15,13 @@ import { spawnPtyTerminal } from "../acp/pty-backend";
 import { SessionManager } from "../acp/sessions";
 import { sessions } from "../db/repositories";
 
+/**
+ * `HARDCORE_FAKE_AGENT=<path to tests/fake-agent/index.mjs>` makes every
+ * provider launch the scripted agent instead of its adapter. The Playwright
+ * suite runs the built app this way; a packaged app ignores it.
+ */
+const fakeAgent = app.isPackaged ? undefined : process.env.HARDCORE_FAKE_AGENT;
+
 export const sessionManager = new SessionManager({
   repo: sessions,
   detector,
@@ -22,6 +29,14 @@ export const sessionManager = new SessionManager({
   broadcast,
   clientVersion: app.isPackaged ? app.getVersion() : __APP_VERSION__,
   newId: () => randomUUID(),
+  launchOverride: fakeAgent
+    ? () => ({
+        // Electron's own binary, told to be plain Node.
+        command: process.execPath,
+        args: [fakeAgent, ...(process.env.HARDCORE_FAKE_AGENT_ARGS?.split(" ").filter(Boolean) ?? [])],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      })
+    : undefined,
 });
 
 /** Re-raise as an IpcError so the renderer sees the agent's words, not "failed". */
@@ -48,6 +63,8 @@ export const acpHandlers = {
     respondPermission: ({ id, requestId, optionId }) =>
       surfacing(() => sessionManager.respondPermission(id, requestId, optionId)),
     setApprovalMode: ({ id, mode }) => surfacing(() => sessionManager.setApprovalMode(id, mode)),
+    rename: ({ id, title }) => surfacing(() => sessionManager.rename(id, title)),
+    archive: ({ id, archived }) => surfacing(() => sessionManager.archive(id, archived)),
     close: ({ id }) => surfacing(() => sessionManager.close(id)),
     delete: ({ id }) => surfacing(() => sessionManager.delete(id)),
   },

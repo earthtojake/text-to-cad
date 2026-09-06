@@ -1,7 +1,25 @@
-import { ChevronRight, Folder, GitBranch, Loader2, MoreHorizontal } from "lucide-react";
+import { createContext, useContext, useState } from "react";
+import {
+  Archive,
+  ChevronRight,
+  Folder,
+  GitBranch,
+  GitFork,
+  Loader2,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { cn } from "cn";
 
 import { Button } from "@renderer/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@renderer/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,6 +30,9 @@ import {
 import { useProjects } from "@renderer/state/projects";
 import { useProjectSessions, useSessions } from "@renderer/state/sessions";
 import type { Project, Session } from "@shared/types";
+
+/** Codex shows this many threads per project before `Show more`. */
+const VISIBLE_SESSIONS = 5;
 
 /**
  * A project and the sessions under it. Collapsible, with the session's status
@@ -26,16 +47,20 @@ export function ProjectRow({ project }: { project: Project }) {
   const removeProject = useProjects((state) => state.remove);
   const sessions = useProjectSessions(project.id);
   const activeSessionId = useSessions((state) => state.activeId);
+  const selectSession = useSessions((state) => state.select);
   const setActiveSession = useSessions((state) => state.setActive);
+  const [showAll, setShowAll] = useState(false);
 
   const selected = activeProjectId === project.id;
+  const visible = showAll ? sessions : sessions.slice(0, VISIBLE_SESSIONS);
+  const hidden = sessions.length - visible.length;
 
   return (
     <div className="group/project">
       <div
         className={cn(
           "flex items-center gap-1 rounded-md pr-1 pl-1 transition-colors",
-          selected ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
+          selected && activeSessionId === null ? "bg-sidebar-accent" : "hover:bg-sidebar-accent/60",
         )}
       >
         <button
@@ -50,8 +75,11 @@ export function ProjectRow({ project }: { project: Project }) {
           />
         </button>
         <button
-          className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left text-sm"
-          onClick={() => setActiveProject(project.id)}
+          className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left text-[13px]"
+          onClick={() => {
+            setActiveProject(project.id);
+            setActiveSession(null);
+          }}
           title={project.path}
           type="button"
         >
@@ -72,6 +100,17 @@ export function ProjectRow({ project }: { project: Project }) {
           <DropdownMenuContent align="start" className="w-44">
             <DropdownMenuItem
               onSelect={() => {
+                setActiveProject(project.id);
+                setActiveSession(null);
+              }}
+            >
+              New chat here
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(project.path)}>
+              Copy path
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
                 void window.hardcore.shell.showItemInFolder({ path: project.path });
               }}
             >
@@ -90,21 +129,43 @@ export function ProjectRow({ project }: { project: Project }) {
           {sessions.length === 0 ? (
             <p className="py-1.5 text-xs text-muted-foreground">No sessions yet</p>
           ) : (
-            sessions.map((session) => (
+            visible.map((session) => (
               <SessionRow
                 key={session.id}
-                onSelect={() => setActiveSession(session.id)}
+                onSelect={() => selectSession(session.id)}
                 selected={session.id === activeSessionId}
                 session={session}
               />
             ))
           )}
+          {hidden > 0 ? (
+            <button
+              className="rounded-md px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+              onClick={() => setShowAll(true)}
+              type="button"
+            >
+              Show {hidden} more
+            </button>
+          ) : showAll && sessions.length > VISIBLE_SESSIONS ? (
+            <button
+              className="rounded-md px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+              onClick={() => setShowAll(false)}
+              type="button"
+            >
+              Show less
+            </button>
+          ) : null}
         </div>
       )}
     </div>
   );
 }
 
+/**
+ * One thread. The trailing glyph is Codex's: a spinner while the agent
+ * works, a worktree glyph when the session runs in one, a branch glyph
+ * when it runs on a branch of the checkout, nothing for a plain directory.
+ */
 function SessionRow({
   session,
   selected,
@@ -114,21 +175,155 @@ function SessionRow({
   selected: boolean;
   onSelect: () => void;
 }) {
-  return (
-    <button
-      className={cn(
-        "flex items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] transition-colors",
-        selected ? "bg-sidebar-accent text-sidebar-accent-foreground" : "hover:bg-sidebar-accent/60",
-      )}
-      onClick={onSelect}
-      type="button"
-    >
-      <span className="min-w-0 flex-1 truncate">{session.title}</span>
-      {session.status === "running" ? (
-        <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
-      ) : session.gitMode === "worktree" ? (
-        <GitBranch className="size-3 shrink-0 text-muted-foreground" />
-      ) : null}
-    </button>
+  const rename = useSessions((state) => state.rename);
+  const archive = useSessions((state) => state.archive);
+  const remove = useSessions((state) => state.remove);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(session.title);
+
+  const startRename = () => {
+    setDraft(session.title);
+    setEditing(true);
+  };
+  const commitRename = () => {
+    setEditing(false);
+    if (draft.trim() && draft.trim() !== session.title) {
+      void rename(session.id, draft);
+    }
+  };
+
+  const busy =
+    session.status === "running" || session.status === "waiting" || session.status === "connecting";
+
+  const menuItems = (
+    <>
+      <MenuItemBoth icon={<Pencil />} label="Rename" onSelect={startRename} />
+      <MenuItemBoth
+        icon={<Archive />}
+        label="Archive"
+        onSelect={() => void archive(session.id, true)}
+      />
+      <MenuItemBoth
+        label="Copy path"
+        onSelect={() => void navigator.clipboard.writeText(session.cwd)}
+      />
+      <Separator />
+      <MenuItemBoth
+        destructive
+        icon={<Trash2 />}
+        label="Delete"
+        onSelect={() => void remove(session.id)}
+      />
+    </>
   );
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className={cn(
+            "group/session flex items-center gap-1.5 rounded-md pr-1 pl-2 transition-colors",
+            selected
+              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+              : "hover:bg-sidebar-accent/60",
+          )}
+          data-session-row={session.id}
+          data-status={session.status}
+        >
+          {editing ? (
+            <input
+              aria-label="Session title"
+              autoFocus
+              className="min-w-0 flex-1 bg-transparent py-1 text-[13px] outline-none"
+              onBlur={commitRename}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  commitRename();
+                } else if (event.key === "Escape") {
+                  setEditing(false);
+                }
+              }}
+              value={draft}
+            />
+          ) : (
+            <button
+              className="min-w-0 flex-1 truncate py-1 text-left text-[13px]"
+              onClick={onSelect}
+              onDoubleClick={startRename}
+              title={session.title}
+              type="button"
+            >
+              {session.title}
+            </button>
+          )}
+          <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
+            {busy ? (
+              <Loader2 aria-label="Working" className="size-3 animate-spin" />
+            ) : session.gitMode === "worktree" ? (
+              <GitFork aria-label="Runs in a worktree" className="size-3" />
+            ) : session.gitMode === "checkout" && session.branch ? (
+              <GitBranch aria-label={`On ${session.branch}`} className="size-3" />
+            ) : null}
+          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                aria-label={`${session.title} actions`}
+                className="size-5 shrink-0 text-muted-foreground opacity-0 group-hover/session:opacity-100 data-[state=open]:opacity-100"
+                size="icon-xs"
+                variant="ghost"
+              >
+                <MoreHorizontal className="size-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-40">
+              <MenuContext.Provider value="dropdown">{menuItems}</MenuContext.Provider>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-40">
+        <MenuContext.Provider value="context">{menuItems}</MenuContext.Provider>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/*
+ * The same items serve the `…` dropdown and the right-click menu. Radix's
+ * two menus want their own item components, so a tiny context picks the
+ * right one and the list is written once.
+ */
+const MenuContext = createContext<"dropdown" | "context">("dropdown");
+
+function MenuItemBoth({
+  icon,
+  label,
+  onSelect,
+  destructive,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  onSelect: () => void;
+  destructive?: boolean;
+}) {
+  const kind = useContext(MenuContext);
+  const variant = destructive ? "destructive" : "default";
+  return kind === "dropdown" ? (
+    <DropdownMenuItem onSelect={onSelect} variant={variant}>
+      {icon}
+      {label}
+    </DropdownMenuItem>
+  ) : (
+    <ContextMenuItem onSelect={onSelect} variant={variant}>
+      {icon}
+      {label}
+    </ContextMenuItem>
+  );
+}
+
+function Separator() {
+  const kind = useContext(MenuContext);
+  return kind === "dropdown" ? <DropdownMenuSeparator /> : <ContextMenuSeparator />;
 }

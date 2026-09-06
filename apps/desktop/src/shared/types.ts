@@ -93,6 +93,8 @@ export const SessionSchema = z.object({
   changedFiles: z.number().int().nonnegative().default(0),
   insertions: z.number().int().nonnegative().default(0),
   deletions: z.number().int().nonnegative().default(0),
+  /** Hidden from the sidebar; the row and the agent's transcript both stay. */
+  archived: z.boolean().default(false),
 });
 export type Session = z.infer<typeof SessionSchema>;
 

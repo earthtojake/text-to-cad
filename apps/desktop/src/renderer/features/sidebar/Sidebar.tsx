@@ -83,8 +83,11 @@ export function Sidebar() {
           </Tooltip>
         </div>
 
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="px-2 pb-2">
+        {/* Radix lays the viewport's content out as a table that grows to its
+            content; forcing it to block keeps long titles truncating instead of
+            scrolling the list sideways when a rename input takes focus. */}
+        <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+          <div className="min-w-0 px-2 pb-2">
             {projects.map((project) => (
               <ProjectRow key={project.id} project={project} />
             ))}

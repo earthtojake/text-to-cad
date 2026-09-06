@@ -51,6 +51,8 @@ describe("the contract", () => {
       "sessions.setConfigOption",
       "sessions.respondPermission",
       "sessions.setApprovalMode",
+      "sessions.rename",
+      "sessions.archive",
       "sessions.close",
       "sessions.delete",
       "agents.list",
