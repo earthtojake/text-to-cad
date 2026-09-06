@@ -38,6 +38,8 @@ test("opening a project starts the viewer and the daemon before any file is open
     ...inherited,
     NODE_ENV: "test",
     HARDCORE_NO_PLUGIN_INSTALL: "1",
+    // Pre-warming is off under test for every other spec; this one is about it.
+    HARDCORE_PREWARM: "1",
     ...(process.platform === "win32" ? {} : { CADGEN_DAEMON_SOCKET: path.join(socketDir, "d.sock") }),
   };
   const lines: string[] = [];

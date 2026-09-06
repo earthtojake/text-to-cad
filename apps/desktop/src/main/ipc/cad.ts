@@ -45,6 +45,12 @@ export const cadHandlers = {
       if (!projects.list().some((candidate) => candidate.id === projectId)) {
         return;
       }
+      // The suite adds a project in nearly every spec; a viewer and a daemon
+      // importing the kernel behind each of them is load the tests never see
+      // a result from. Only the pre-warm spec asks for it.
+      if (process.env.NODE_ENV === "test" && process.env.HARDCORE_PREWARM !== "1") {
+        return;
+      }
       // Started, not awaited: the renderer asked on the way into a project
       // and has nothing to show for it. The first `viewerOrigin` will find
       // the launch in progress (or done) and share it.

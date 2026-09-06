@@ -38,6 +38,7 @@ Three environment variables matter in development:
 | `HARDCORE_APTABASE_KEY` | Read at BUILD time and compiled in (see Telemetry). Unset means no network call is ever attempted. |
 | `CAD_DESKTOP_PYTHON` | An interpreter with cadgen installed, used instead of the bundled runtime (see CAD runtime below). A developer's knob; the e2e suite breaks and clears the equivalent setting on purpose. |
 | `HARDCORE_NO_PLUGIN_INSTALL` | Skip the launch-time install of the Hardcore plugin into the user's agents. `NODE_ENV=test` implies it. |
+| `HARDCORE_PREWARM` | Under `NODE_ENV=test` the project pre-warm (viewer child + cadgen daemon on project open) is off; `1` turns it on, as `tests/e2e/prewarm.spec.ts` does. |
 | `HARDCORE_FAKE_AGENT` | Launch this stdio ACP agent instead of whatever the registry says, for every provider. The session and git suites point it at `tests/fake-agent/index.mjs`; a session needs an agent to exist at all, and a real one would make the suite a test of somebody's login state. |
 
 ## Telemetry
