@@ -7,7 +7,7 @@ import {
   Eye,
   FileText,
   FolderOpen,
-  PanelRightOpen,
+  FolderTree,
   RotateCw,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -433,16 +433,22 @@ export function FileTab({
             </DropdownMenuContent>
           </DropdownMenu>
 
+          {/*
+            The files toggle. A folder-tree glyph rather than a panel one:
+            the button is named by what comes back, not by the fact that a
+            panel slides — a panel icon in a row of file actions reads as a
+            layout control and was skipped over.
+          */}
           {treeHidden ? (
             <Button
-              aria-label="Show file tree"
+              aria-label="Show files"
               className="size-6 text-muted-foreground"
               onClick={showTree}
               size="icon-xs"
-              title="Show file tree"
+              title="Show files"
               variant="ghost"
             >
-              <PanelRightOpen className="size-3.5" />
+              <FolderTree className="size-3.5" />
             </Button>
           ) : null}
         </div>
@@ -505,8 +511,9 @@ export function FileTab({
               <FileTree
                 activePath={path}
                 fsRevision={fsRevision}
-                // A remount is the reset: a different project is a different
-                // tree, with nothing to carry over.
+                // A different project is a different tree. The reset is the
+                // store's (`bindProject`); the key keeps the filter and the
+                // cursor from crossing over with it.
                 key={project.id}
                 onCollapse={() => setTreeCollapsed(true)}
                 onOpen={(next) => openFile(next)}

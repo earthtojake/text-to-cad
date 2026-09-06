@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { _electron as electron, expect, test } from "@playwright/test";
+import { _electron as electron, expect, test, type Page } from "@playwright/test";
 
 /**
  * Quitting has a budget: two seconds from `app.quit()` to the process being
@@ -71,8 +71,7 @@ test("the app quits in under two seconds with everything running, leaving no chi
   await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
 
   // A shell.
-  await page.getByRole("button", { name: "New tab of another kind" }).click();
-  await page.getByRole("menuitem", { name: "Terminal" }).click();
+  await newTab(page, "Terminal");
   await expect(page.locator(".xterm-screen")).toBeVisible();
 
   // A live adapter, mid-turn: the fake's `slow` prompt runs until it is stopped.
@@ -85,7 +84,7 @@ test("the app quits in under two seconds with everything running, leaving no chi
   // The CAD viewer child and a WebGL context, when an interpreter is available.
   if (CAD_PYTHON) {
     await page.evaluate((python) => window.hardcore.settings.set({ cadPythonOverride: python }), CAD_PYTHON);
-    await page.getByRole("button", { name: "New tab", exact: true }).click();
+    await newTab(page, "File");
     const filter = page.getByLabel("Filter files");
     await filter.fill(STEP);
     await page.getByRole("option", { name: STEP, exact: false }).first().click();
@@ -152,4 +151,13 @@ function descendants(pid: number): { pid: number; command: string }[] {
     out.push(...descendants(Number(child)));
   }
   return out;
+}
+
+/**
+ * Open a tab of one kind. `+` is a menu of the four kinds now, so every open
+ * is two clicks — which is also the only way to reach a review or a terminal.
+ */
+async function newTab(page: Page, label: "File" | "Review" | "Browser" | "Terminal") {
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.getByRole("menuitem", { name: label }).click();
 }

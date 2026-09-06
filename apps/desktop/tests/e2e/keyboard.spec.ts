@@ -72,7 +72,7 @@ test("Cmd+K opens the palette and Escape closes it", async () => {
 
 test("Cmd+1..9 switch tabs and Cmd+W closes the active one", async () => {
   for (const name of ["one.md", "two.md", "three.md"]) {
-    await page.getByRole("button", { name: "New tab", exact: true }).click();
+    await newTab(page, "File");
     await page.getByLabel("Filter files").fill(name);
     await page.getByRole("option", { name, exact: false }).first().click();
   }
@@ -138,3 +138,12 @@ test("Cmd+B and Cmd+Alt+B toggle the side panes", async () => {
   await page.keyboard.press(`${mod}+Alt+B`);
   await expect.poll(async () => (await explorer.boundingBox())?.width ?? 0).toBeGreaterThan(0);
 });
+
+/**
+ * Open a tab of one kind. `+` is a menu of the four kinds now, so every open
+ * is two clicks — which is also the only way to reach a review or a terminal.
+ */
+async function newTab(page: Page, label: "File" | "Review" | "Browser" | "Terminal") {
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.getByRole("menuitem", { name: label }).click();
+}

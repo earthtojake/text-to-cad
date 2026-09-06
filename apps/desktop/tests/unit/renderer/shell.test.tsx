@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { SettingCard, SettingRow } from "@renderer/features/settings/SettingCard";
@@ -59,15 +59,38 @@ describe("Explorer", () => {
     expect(screen.getByText("No project")).toBeInTheDocument();
   });
 
-  it("starts empty and opens a file tab from the strip", async () => {
+  it("opens a tab of each kind from the one `+` menu", async () => {
     const user = userEvent.setup();
     withProject();
     wrap(<ExplorerPane />);
     expect(screen.getByText("Nothing open")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "New tab" }));
+    // Four kinds, each with the binding the keyboard actually answers to.
+    // jsdom is not a Mac, so these print in the `Ctrl+` column.
+    const rows: [string, string][] = [
+      ["File", "Ctrl+T"],
+      ["Review", "Ctrl+Shift+R"],
+      ["Browser", "Ctrl+Shift+B"],
+      ["Terminal", "Ctrl+`"],
+    ];
+    for (const [label, keys] of rows) {
+      expect(screen.getByRole("menuitem", { name: new RegExp(`^${label}`) })).toHaveTextContent(keys);
+    }
+    // And no second control beside it any more.
+    expect(screen.queryByRole("button", { name: "New tab of another kind" })).toBeNull();
+
+    await user.click(screen.getByRole("menuitem", { name: /^File/ }));
     expect(useExplorer.getState().tabs).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Close Untitled" })).toBeInTheDocument();
+  });
+
+  it("opens a file tab on Mod+T without the menu", async () => {
+    withProject();
+    wrap(<ExplorerPane />);
+    fireEvent.keyDown(window, { key: "t", metaKey: true, ctrlKey: true });
+    expect(useExplorer.getState().tabs).toHaveLength(1);
+    expect(useExplorer.getState().tabs[0]?.kind).toBe("file");
   });
 
   it("closes a tab from its close button", async () => {
@@ -75,6 +98,7 @@ describe("Explorer", () => {
     withProject();
     wrap(<ExplorerPane />);
     await user.click(screen.getByRole("button", { name: "New tab" }));
+    await user.click(screen.getByRole("menuitem", { name: /^File/ }));
     await user.click(screen.getByRole("button", { name: "Close Untitled" }));
     expect(useExplorer.getState().tabs).toHaveLength(0);
   });

@@ -1,5 +1,4 @@
 import {
-  ChevronDown,
   FileText,
   GitCompare,
   Globe,
@@ -17,8 +16,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
+import { isMac } from "@renderer/lib/platform";
+import { SHORTCUTS, shortcutKeys } from "@renderer/lib/shortcuts";
 import { cn } from "@renderer/lib/utils";
 import { tabTitle, useExplorer } from "@renderer/state/explorer";
 import type { ExplorerTab, ExplorerTabKind } from "@shared/types";
@@ -28,9 +30,12 @@ import { FileIcon } from "./icons";
 /**
  * The one strip. Four kinds, no bottom panel (plan §3).
  *
- * `+` opens a file tab, which is what Codex's does; the chevron beside it is
- * where the other three kinds live, because a strip whose `+` opens a menu
- * costs a click on the common case to save one on the rare ones.
+ * `+` opens the menu of the four kinds. It used to open a file tab, with a
+ * chevron beside it for the other three, on the argument that a menu costs a
+ * click on the common case — but two adjacent controls a quarter of an inch
+ * wide, one of them a 4px chevron, cost aim on every case, and a person who
+ * wants a file tab has the shortcut. One button, one menu, and the binding
+ * printed on every row.
  *
  * Reordering is a plain HTML5 drag, not a library. What a tab strip needs is
  * "pick up a tab, drop it between two others"; `dragover` on a tab and an
@@ -50,11 +55,19 @@ const KIND_ICONS: Record<ExplorerTabKind, LucideIcon> = {
   terminal: SquareTerminal,
 };
 
-const KIND_LABELS: Record<Exclude<ExplorerTabKind, "file">, string> = {
-  review: "Review",
-  browser: "Browser",
-  terminal: "Terminal",
-};
+/** The menu's rows, in the order a person reaches for them. */
+const KINDS: readonly { kind: ExplorerTabKind; label: string; shortcut: string }[] = [
+  { kind: "file", label: "File", shortcut: "new-file-tab" },
+  { kind: "review", label: "Review", shortcut: "new-review-tab" },
+  { kind: "browser", label: "Browser", shortcut: "new-browser-tab" },
+  { kind: "terminal", label: "Terminal", shortcut: "new-terminal-tab" },
+];
+
+/** The binding as the shortcut table has it — one declaration, two readers. */
+function bindingOf(id: string): string {
+  const shortcut = SHORTCUTS.find((candidate) => candidate.id === id);
+  return shortcut ? shortcutKeys(shortcut.binding, isMac) : "";
+}
 
 /**
  * A tab's icon: the file type for a file tab, the kind's glyph otherwise.
@@ -140,31 +153,23 @@ export function TabStrip() {
         is the thing that scrolls off.
       */}
       <div className="app-no-drag flex shrink-0 items-center gap-0.5 border-l pl-1.5">
-        <Button
-          aria-label="New tab"
-          className="size-6 rounded-r-none text-muted-foreground"
-          onClick={() => open("file")}
-          size="icon-xs"
-          variant="ghost"
-        >
-          <Plus className="size-3.5" />
-        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              aria-label="New tab of another kind"
-              className="h-6 w-4 rounded-l-none px-0 text-muted-foreground"
+              aria-label="New tab"
+              className="size-6 text-muted-foreground"
               size="icon-xs"
               variant="ghost"
             >
-              <ChevronDown className="size-3" />
+              <Plus className="size-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            {(Object.keys(KIND_LABELS) as (keyof typeof KIND_LABELS)[]).map((kind) => (
+          <DropdownMenuContent align="end" className="w-48">
+            {KINDS.map(({ kind, label, shortcut }) => (
               <DropdownMenuItem key={kind} onSelect={() => open(kind)}>
                 <KindIcon className="size-3.5" kind={kind} />
-                {KIND_LABELS[kind]}
+                {label}
+                <DropdownMenuShortcut>{bindingOf(shortcut)}</DropdownMenuShortcut>
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
