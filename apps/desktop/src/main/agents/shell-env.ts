@@ -10,6 +10,8 @@
  */
 import { execFile } from "node:child_process";
 
+import { trackChild } from "../children";
+
 export type Env = Record<string, string>;
 
 /** Keys a shell sets for itself that should not leak into a child. */
@@ -78,12 +80,12 @@ async function captureLoginEnv(timeoutMs: number): Promise<Env> {
   const output = await new Promise<string>((resolve, reject) => {
     // `-i` because zsh users put their PATH in .zshrc, `-l` because bash
     // users put it in .bash_profile. `command env -0` sidesteps any alias.
-    execFile(
+    trackChild(execFile(
       shell,
       ["-ilc", "command env -0 2>/dev/null || command env"],
       { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, env: process.env, encoding: "utf8" },
       (error, stdout) => (error ? reject(error) : resolve(stdout)),
-    );
+    ), "probe");
   });
   const parsed = parseEnv(output);
   if (!parsed.PATH) {

@@ -8,12 +8,14 @@ import { fileURLToPath } from "node:url";
 import { BrowserWindow, app, shell } from "electron";
 
 import { cadRuntime, initCad, pluginManager, shutdownCad } from "./cad";
+import { endTrackedChildren, killTrackedChildren } from "./children";
 import { closeDb, db } from "./db";
 import { broadcast, registerIpcHandlers } from "./ipc";
 import { shutdownAcp } from "./ipc/acp";
 import { detector, shutdownAgents } from "./ipc/agents";
 import { disposeExplorerServices } from "./ipc/explorer";
 import { installMenu } from "./menu";
+import { armQuitDeadline } from "./quit-deadline";
 import { disposeSettingsEffects } from "./settings-effects";
 import { initTelemetry, track } from "./telemetry";
 import { initUpdater, stopUpdater } from "./updater";
@@ -38,7 +40,8 @@ function createWindow() {
     // sidebar's top strip (--titlebar-height in globals.css). Other platforms
     // keep their native frame, because a hand-drawn one there is a liability.
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
-    trafficLightPosition: process.platform === "darwin" ? { x: 14, y: 14 } : undefined,
+    // Centred in a 32px strip (12px lights: 10 above, 10 below).
+    trafficLightPosition: process.platform === "darwin" ? { x: 12, y: 10 } : undefined,
     backgroundColor: "#0a0a0a",
     // Nothing is painted until the renderer has something to paint, so the
     // window never flashes an empty frame.
@@ -139,7 +142,19 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 
+  /**
+   * Quitting is a budget, not a sequence (tests/e2e/quit.spec.ts: under two
+   * seconds with a repository watched, a shell, an adapter and the viewer all
+   * up). Everything here is told to stop and nothing is awaited: the viewer,
+   * the adapters and the ptys get their signals, the watcher and the bridge
+   * start closing, the database closes — and then every child this process
+   * still has a pipe to is detached, with the probes killed outright. Electron
+   * waits for the Node side, and the Node side waits for its children; a
+   * `--version` probe mid-`import cadgen` with a sixty-second timeout is what
+   * made quitting take sixty seconds.
+   */
   app.on("before-quit", () => {
+    const started = Date.now();
     stopUpdater();
     // The viewers this app started, the bridge, and any tool call still
     // waiting on a window.
@@ -147,10 +162,17 @@ if (!app.requestSingleInstanceLock()) {
     shutdownAcp();
     shutdownAgents();
     disposeSettingsEffects();
-    // A pty that outlives the window is a shell nobody can see or stop, and a
-    // chokidar watcher holds an fsevents handle open.
-    void disposeExplorerServices();
+    disposeExplorerServices();
     closeDb();
+    endTrackedChildren();
+    console.info(`[quit] teardown ${Date.now() - started}ms`);
+  });
+
+  // Whatever ignored its signal is not going to stop on its own — and
+  // Chromium's own shutdown gets a deadline (src/main/quit-deadline.ts).
+  app.on("will-quit", () => {
+    killTrackedChildren();
+    armQuitDeadline();
   });
 }
 

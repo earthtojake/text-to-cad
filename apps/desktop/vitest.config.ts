@@ -52,6 +52,10 @@ export default defineConfig({
           name: "node",
           environment: "node",
           include: ["tests/unit/main/**/*.test.ts", "tests/unit/shared/**/*.test.ts"],
+          // The git and workspace suites run dozens of real `git` processes
+          // per test; on a machine that is also building the app, that is
+          // more than five seconds and not a failure.
+          testTimeout: 20_000,
         },
       },
       {

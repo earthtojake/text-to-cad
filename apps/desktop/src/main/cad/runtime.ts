@@ -31,6 +31,8 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { execFile } from "node:child_process";
 
+import { trackChild } from "../children";
+
 import type { RuntimeStatus } from "../../shared/ipc/runtime";
 
 /* -------------------------------------------------------------------------- */
@@ -132,7 +134,9 @@ export function execCommand(
   options: { env: Record<string, string>; cwd?: string; onLine?: (line: string) => void; timeoutMs?: number },
 ): Promise<ExecResult> {
   return new Promise((resolve) => {
-    const child = execFile(
+    // A probe: the answer is not wanted once the app is quitting, and the
+    // process must not wait sixty seconds for `import cadgen` to finish.
+    const child = trackChild(execFile(
       file,
       args,
       {
@@ -146,7 +150,7 @@ export function execCommand(
         const code = error && "code" in error && typeof error.code === "number" ? error.code : error ? null : 0;
         resolve({ stdout: String(stdout), stderr: String(stderr), code: error ? code : 0 });
       },
-    );
+    ), "probe");
     if (options.onLine) {
       const onLine = options.onLine;
       let buffer = "";

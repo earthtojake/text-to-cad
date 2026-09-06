@@ -24,6 +24,8 @@
  * in plain Node with the `child_process` terminal backend.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+
+import { trackChild } from "../children";
 import { Readable, Writable } from "node:stream";
 
 import {
@@ -118,11 +120,14 @@ export class SessionConnection {
       });
     }
 
-    this.process = spawn(options.launch.command, options.launch.args, {
-      cwd: options.cwd,
-      env: { ...options.env, ...options.launch.env },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    this.process = trackChild(
+      spawn(options.launch.command, options.launch.args, {
+        cwd: options.cwd,
+        env: { ...options.env, ...options.launch.env },
+        stdio: ["pipe", "pipe", "pipe"],
+      }),
+      "service",
+    );
 
     this.process.stderr.setEncoding("utf8");
     this.process.stderr.on("data", (chunk: string) => {

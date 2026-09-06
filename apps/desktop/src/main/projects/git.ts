@@ -22,6 +22,8 @@ import path from "node:path";
 
 import { execa, type Options } from "execa";
 
+import { trackChild, type ChildKind, type Trackable } from "../children";
+
 /* -------------------------------------------------------------------------- */
 /* Types                                                                       */
 /* -------------------------------------------------------------------------- */
@@ -96,8 +98,20 @@ const GIT_OPTIONS: Options = {
   timeout: 60_000,
 };
 
+/**
+ * Every process this module starts goes through the child registry
+ * (`../children`): a read or a commit in flight is not worth waiting for at
+ * quit, and a `fetch` against a slow remote would otherwise hold the exit
+ * open. execa's subprocess is a promise with `pid` and `kill` mixed in,
+ * which is the shape the registry tracks. `gh pr create` is the one call
+ * worth finishing, so it is a service — left alone until `will-quit`.
+ */
+function tracked<T extends Trackable>(subprocess: T, kind: ChildKind = "probe"): T {
+  return trackChild(subprocess, kind);
+}
+
 async function git(cwd: string, args: string[]): Promise<string> {
-  const result = await execa("git", args, { ...GIT_OPTIONS, cwd });
+  const result = await tracked(execa("git", args, { ...GIT_OPTIONS, cwd }));
   if (result.failed || result.exitCode !== 0) {
     const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
     throw new GitError(stderr || `git ${args[0]} failed`);
@@ -125,11 +139,11 @@ async function gitNoIndex(
   filePath: string,
 ): Promise<string | null> {
   const nullDevice = process.platform === "win32" ? "NUL" : "/dev/null";
-  const result = await execa(
+  const result = await tracked(execa(
     "git",
     ["diff", "--no-index", ...extra, "--", nullDevice, filePath],
     { ...GIT_OPTIONS, cwd },
-  ).catch(() => null);
+  )).catch(() => null);
   if (!result || (result.exitCode !== 0 && result.exitCode !== 1)) {
     return null;
   }
@@ -1099,10 +1113,10 @@ let ghPath: Promise<string | null> | null = null;
 export function ghAvailable(env?: NodeJS.ProcessEnv, force = false): Promise<string | null> {
   if (!ghPath || force) {
     const command = process.platform === "win32" ? "where" : "which";
-    ghPath = execa(command, ["gh"], {
+    ghPath = tracked(execa(command, ["gh"], {
       ...GIT_OPTIONS,
       ...(env ? { env, extendEnv: false } : {}),
-    })
+    }))
       .then((result) =>
         result.exitCode === 0 && typeof result.stdout === "string"
           ? (result.stdout.split(/\r?\n/)[0]?.trim() ?? null) || null
@@ -1151,7 +1165,7 @@ export async function createPullRequest(
   await push(root);
 
   const base = options.base ?? (await defaultBranchOf(root));
-  const result = await execa(
+  const result = await tracked(execa(
     "gh",
     [
       "pr",
@@ -1170,7 +1184,7 @@ export async function createPullRequest(
       cwd: root,
       ...(options.env ? { env: options.env, extendEnv: false } : {}),
     },
-  );
+  ), "service");
 
   const stdout = typeof result.stdout === "string" ? result.stdout : "";
   const stderr = typeof result.stderr === "string" ? result.stderr : "";

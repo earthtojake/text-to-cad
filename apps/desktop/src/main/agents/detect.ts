@@ -17,6 +17,7 @@ import os from "node:os";
 import path from "node:path";
 
 import type { AgentProvider, AgentStatus, AuthState } from "../../shared/agents";
+import { trackChild } from "../children";
 import { AGENT_PROVIDERS } from "./registry";
 import { loginEnv, type Env } from "./shell-env";
 
@@ -58,7 +59,7 @@ export const nodeProbes: DetectorProbes = {
   },
   exec: (file, args, env) =>
     new Promise((resolve) => {
-      execFile(
+      trackChild(execFile(
         file,
         args,
         { env, timeout: EXEC_TIMEOUT_MS, maxBuffer: 1024 * 1024, encoding: "utf8" },
@@ -71,7 +72,7 @@ export const nodeProbes: DetectorProbes = {
                 : 0;
           resolve({ stdout, stderr, code });
         },
-      );
+      ), "probe");
     }),
   homeDir: () => os.homedir(),
   platform: process.platform,

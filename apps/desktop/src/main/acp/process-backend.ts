@@ -6,10 +6,11 @@
  */
 import { spawn } from "node:child_process";
 
+import { trackChild } from "../children";
 import type { SpawnTerminal, TerminalExit, TerminalProcess } from "./terminals";
 
 export const spawnProcessTerminal: SpawnTerminal = ({ command, args, cwd, env }) => {
-  const child = spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+  const child = trackChild(spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] }), "service");
   const dataListeners: ((data: string) => void)[] = [];
   const exitListeners: ((exit: TerminalExit) => void)[] = [];
   let pendingExit: TerminalExit | null = null;

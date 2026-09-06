@@ -65,9 +65,12 @@ export function initExplorerServices(broadcast: Broadcast) {
 }
 
 /** On quit: no pty and no watcher outlives the window that opened it. */
-export async function disposeExplorerServices() {
+export function disposeExplorerServices() {
+  // The ptys: a shell that outlives the window is a shell nobody can see or
+  // stop. The watchers are left alone on purpose — chokidar's `close()` over
+  // a large tree blocks for most of a second before its first await, and an
+  // fsevents handle dies with the process anyway.
   terminals?.killAll();
-  await watchers?.closeAll();
   terminals = null;
   watchers = null;
 }

@@ -24,6 +24,7 @@ import readline from "node:readline";
 import type { Readable } from "node:stream";
 
 import type { ViewerOrigin } from "../../shared/ipc/cad";
+import { trackChild } from "../children";
 import type { ResolvedPython } from "./runtime";
 
 export interface ViewerChild {
@@ -96,7 +97,12 @@ export type ViewerManagerDeps = {
 };
 
 function defaultSpawn(python: string, args: string[], options: { cwd: string; env: Record<string, string> }): ViewerChild {
-  return nodeSpawn(python, args, { cwd: options.cwd, env: options.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  // A service: `stop` sends it SIGTERM and it unregisters itself on the way
+  // out; quitting must not wait for that.
+  return trackChild(
+    nodeSpawn(python, args, { cwd: options.cwd, env: options.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true }),
+    "service",
+  );
 }
 
 async function defaultProbe(origin: string): Promise<boolean> {
