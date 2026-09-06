@@ -378,11 +378,16 @@ export const PANE_LIMITS = {
   explorer: { min: 320 },
 } as const;
 
+/**
+ * The explorer's own collapse is not here: it is closed by default and
+ * remembered per project by the renderer (`state/explorer.ts`), because
+ * whether the right-hand pane earns its width is a fact about the project
+ * rather than about the app.
+ */
 export const PaneLayoutSchema = z.object({
   sidebarWidth: z.number().min(0).default(PANE_LIMITS.sidebar.default),
   sessionWidth: z.number().min(0).default(PANE_LIMITS.session.default),
   sidebarCollapsed: z.boolean().default(false),
-  explorerCollapsed: z.boolean().default(false),
 });
 export type PaneLayout = z.infer<typeof PaneLayoutSchema>;
 

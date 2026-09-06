@@ -44,9 +44,12 @@ export function Shell() {
   // is a *view*, not a preference: it collapses the other two panes without
   // writing their collapsed flags, so leaving it restores what was there.
   const expanded = useExplorer((state) => state.expanded);
+  // The explorer is closed until something opens it, and its state belongs to
+  // the project rather than to the app (`state/explorer.ts`).
+  const explorerClosed = useExplorer((state) => state.collapsed);
 
   const sidebarCollapsed = expanded || (layout?.sidebarCollapsed ?? false);
-  const explorerCollapsed = !expanded && (layout?.explorerCollapsed ?? false);
+  const explorerCollapsed = !expanded && explorerClosed;
   const sessionCollapsed = expanded;
 
   // Which pane is leftmost decides who makes room for the macOS traffic

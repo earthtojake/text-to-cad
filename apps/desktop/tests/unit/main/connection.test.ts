@@ -65,7 +65,7 @@ describe("SessionConnection against the fake agent", () => {
     expect(created.sessionId).toBe("fake-session-1");
     expect(connection.state.status).toBe("idle");
     expect(connection.state.currentModeId).toBe("default");
-    expect(connection.state.configOptions.map((option) => option.id)).toEqual(["model"]);
+    expect(connection.state.configOptions.map((option) => option.id)).toEqual(["model", "reasoning_effort"]);
 
     const response = await connection.prompt([{ type: "text", text: "say ok" }]);
     expect(response.stopReason).toBe("end_turn");
@@ -200,6 +200,13 @@ describe("SessionConnection against the fake agent", () => {
     expect(connection.state.currentModeId).toBe("plan");
     await connection.setConfigOption("model", "smart");
     expect(connection.state.configOptions[0]).toMatchObject({ id: "model", currentValue: "smart" });
+    // The effort is a second option of its own, and setting one leaves the
+    // other where it was — the composer draws them as two dropdowns.
+    await connection.setConfigOption("reasoning_effort", "high");
+    expect(connection.state.configOptions).toMatchObject([
+      { id: "model", currentValue: "smart" },
+      { id: "reasoning_effort", currentValue: "high" },
+    ]);
   });
 
   it("loads a session back through session/load", async () => {

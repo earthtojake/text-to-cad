@@ -207,9 +207,21 @@ Three panes, in pixels (`PANE_LIMITS` in `src/shared/types.ts`, read by
 and never less — its transcript and composer are a 720px column centred in
 it — and the explorer takes whatever is left. The two fixed widths are the
 persisted preference (`settings.layout`); the explorer's is a consequence.
-With the explorer collapsed the session fills the window. The strips along
-the top are 32px, and whichever pane is leftmost makes room for the macOS
-traffic lights (`--titlebar-inset`, keyed off `data-leftmost` on the shell).
+The strips along the top are 32px, and whichever pane is leftmost makes room
+for the macOS traffic lights (`--titlebar-inset`, keyed off `data-leftmost` on
+the shell). The sidebar's own collapse follows that left edge: it sits in the
+sidebar's header row beside the app's name, and moves to the far left of the
+session's title bar when the sidebar is gone. The explorer's toggle stays on
+the right of that bar.
+
+**The explorer is closed until something opens it**, and the session then
+fills the window. Opening a file, a review, a browser or a terminal shows it —
+from the tree, the files-changed pill, the command palette or an agent's
+`open_file` — because every one of those goes through `state/explorer.ts`'s
+`open`/`openFile`. That state is the explorer store's rather than
+`settings.layout`'s and is remembered **per project** (localStorage), and only
+a person's own toggle writes it: an agent opening a file shows the pane
+without deciding anything for next time.
 
 A CAD file in the explorer is laid out by the desktop, not measured by the
 viewer (`features/explorer/cad-layout.ts`): the surface is pinned to its

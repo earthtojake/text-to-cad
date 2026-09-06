@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Archive, Folder, MoreHorizontal, PanelLeft, PanelRight, Pencil, Trash2, Unplug } from "lucide-react";
+import { Archive, Folder, MoreHorizontal, Pencil, Trash2, Unplug } from "lucide-react";
 
+import { ExplorerToggle, SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -9,7 +10,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { useAcp } from "@renderer/state/acp";
 import { useSessions } from "@renderer/state/sessions";
 import { useSettings } from "@renderer/state/settings";
@@ -17,8 +17,12 @@ import type { Session } from "@shared/types";
 
 /**
  * The session's title bar (plan §2): folder icon, the title (from the
- * first prompt; click to edit), a `…` menu; on the right the pane toggles.
- * The strip is the window's drag region, so the controls opt out of it.
+ * first prompt; click to edit), a `…` menu; the explorer's toggle on the
+ * right. The strip is the window's drag region, so the controls opt out of it.
+ *
+ * The sidebar's toggle is on the *left*, and only while the sidebar is hidden:
+ * open, it lives in the sidebar's own header (Codex's placement), so the
+ * control never moves further right than the window's left edge.
  */
 export function SessionHeader({
   session,
@@ -32,6 +36,7 @@ export function SessionHeader({
   const archive = useSessions((state) => state.archive);
   const remove = useSessions((state) => state.remove);
   const closeSession = useAcp((state) => state.close);
+  const sidebarCollapsed = useSettings((state) => state.settings?.layout.sidebarCollapsed ?? false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
 
@@ -55,6 +60,8 @@ export function SessionHeader({
       data-session-header
       style={{ height: "var(--titlebar-height)" }}
     >
+      {/* The window's left edge when the sidebar is gone. */}
+      {sidebarCollapsed ? <SidebarToggle /> : null}
       <div className="app-no-drag flex min-w-0 items-center gap-2">
         <Folder className="size-3.5 shrink-0 text-muted-foreground" />
         {editing && session ? (
@@ -124,59 +131,9 @@ export function SessionHeader({
         ) : null}
       </div>
       <div className="flex-1" />
-      <PaneToggles />
+      <div className="app-no-drag flex items-center gap-0.5">
+        <ExplorerToggle />
+      </div>
     </header>
-  );
-}
-
-/** The explorer and sidebar toggles on the right of the title bar. */
-export function PaneToggles() {
-  const layout = useSettings((state) => state.settings?.layout);
-  const setLayout = useSettings((state) => state.setLayout);
-  return (
-    <div className="app-no-drag flex items-center gap-0.5">
-      <PaneToggle
-        active={!(layout?.sidebarCollapsed ?? false)}
-        icon={<PanelLeft className="size-3.5" />}
-        label="Toggle sidebar"
-        onClick={() => void setLayout({ sidebarCollapsed: !(layout?.sidebarCollapsed ?? false) })}
-      />
-      <PaneToggle
-        active={!(layout?.explorerCollapsed ?? false)}
-        icon={<PanelRight className="size-3.5" />}
-        label="Toggle explorer"
-        onClick={() => void setLayout({ explorerCollapsed: !(layout?.explorerCollapsed ?? false) })}
-      />
-    </div>
-  );
-}
-
-function PaneToggle({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          aria-label={label}
-          aria-pressed={active}
-          className={active ? "size-7" : "size-7 text-muted-foreground"}
-          onClick={onClick}
-          size="icon-sm"
-          variant="ghost"
-        >
-          {icon}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
   );
 }

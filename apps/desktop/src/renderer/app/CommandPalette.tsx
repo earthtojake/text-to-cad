@@ -10,6 +10,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@renderer/components/ui/command";
+import { useExplorer } from "@renderer/state/explorer";
 import { useProjects } from "@renderer/state/projects";
 import { useSettings } from "@renderer/state/settings";
 import { SETTINGS_SECTIONS, SETTINGS_SECTION_LABELS, useUi } from "@renderer/state/ui";
@@ -91,9 +92,7 @@ export function CommandPalette() {
             Toggle sidebar
           </CommandItem>
           <CommandItem
-            onSelect={run(() =>
-              void setLayout({ explorerCollapsed: !(layout?.explorerCollapsed ?? false) }),
-            )}
+            onSelect={run(() => useExplorer.getState().toggleCollapsed())}
             value="toggle explorer"
           >
             <PanelRight className="size-4" />

@@ -458,6 +458,24 @@ export function promptCount(state: SessionState): number {
   return state.turns.filter((turn) => turn.role === "user").length;
 }
 
+/**
+ * Whether a config option is the one that says how hard to think.
+ *
+ * The composer gives it a dropdown of its own beside the model's, so it has
+ * to be found among options the agent named itself. ACP's `thought_level`
+ * category is the answer when an adapter sets it; the ids are Codex's
+ * (`reasoning_effort`) and Claude's (`effort`), which do not. Matching the
+ * name as well would catch a boolean called "Effortless"; two known ids and a
+ * category is the whole rule, and an agent that invents a third gets its
+ * option under the options glyph, which is not a bug.
+ */
+export function isEffortOption(option: { id: string; category: string | null }): boolean {
+  return (
+    option.category === "thought_level" ||
+    ["reasoning_effort", "effort", "thinking_level", "thought_level"].includes(option.id)
+  );
+}
+
 export { errorMessage } from "@shared/ipc/errors";
 
 /** True when the message names an authentication failure the user can fix by signing in. */

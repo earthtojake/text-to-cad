@@ -104,6 +104,11 @@ test.beforeAll(async () => {
   // The strip binds to the project asynchronously (it loads `explorer_tabs`
   // and starts the watcher); `+` does nothing until it has.
   await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  // The explorer pane starts closed and opens when something opens in it
+  // (plan §3). This suite is about what it *shows*, so it is opened once
+  // here rather than incidentally by the first file.
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeGreaterThan(0);
 });
 
 test.afterAll(async () => {
@@ -368,6 +373,10 @@ test("reviews a repository's changes", async () => {
   );
   await page.getByText(path.basename(reviewRepo)).first().click();
   await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  // The pane's state is per project, so a project nobody has opened it in
+  // starts closed however wide the last one was.
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeGreaterThan(0);
 
   await page.getByRole("button", { name: "New tab of another kind" }).click();
   await page.getByRole("menuitem", { name: "Review" }).click();

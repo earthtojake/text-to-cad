@@ -14,12 +14,14 @@ import { tabTitle, useExplorer } from "@renderer/state/explorer";
 const PROJECT = "project-1";
 
 function reset() {
+  window.localStorage.clear();
   useExplorer.setState({
     projectId: PROJECT,
     tabs: [],
     activeId: null,
     ready: true,
     expanded: false,
+    collapsed: true,
     fsRevision: 0,
     changedPaths: [],
   });
@@ -153,6 +155,28 @@ describe("the explorer strip", () => {
     useExplorer.getState().receiveChanges(PROJECT, ["a.txt"]);
     expect(useExplorer.getState().fsRevision).toBe(1);
     expect(useExplorer.getState().changedPaths).toEqual(["a.txt"]);
+  });
+
+  it("opens the pane when a tab of any kind opens, without writing a preference", () => {
+    for (const kind of ["file", "review", "browser", "terminal"] as const) {
+      useExplorer.setState({ collapsed: true, tabs: [], activeId: null });
+      useExplorer.getState().open(kind);
+      expect(useExplorer.getState().collapsed, kind).toBe(false);
+    }
+    useExplorer.setState({ collapsed: true, tabs: [], activeId: null });
+    useExplorer.getState().openFile("src/wrist.step");
+    expect(useExplorer.getState().collapsed).toBe(false);
+    // The person never said anything, so nothing was remembered for them.
+    expect(window.localStorage.getItem("hardcore.explorer.collapsed")).toBeNull();
+  });
+
+  it("remembers the pane's state for the project it was chosen in", () => {
+    useExplorer.getState().setCollapsed(false);
+    void useExplorer.getState().bindProject("project-2");
+    // A project nobody has opened the pane in starts closed.
+    expect(useExplorer.getState().collapsed).toBe(true);
+    void useExplorer.getState().bindProject(PROJECT);
+    expect(useExplorer.getState().collapsed).toBe(false);
   });
 
   it("titles a tab by what a person would call it", () => {
