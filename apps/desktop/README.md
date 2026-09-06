@@ -82,7 +82,7 @@ else that needs a real database belongs in the e2e.
 ## Packaging
 
 ```sh
-npm run icons        # regenerate build/icon.{png,icns,ico} (committed)
+npm run icons        # copy the docs favicon to build/icon.png (committed)
 npm run package:mac  # or :win, :linux -> release/
 ```
 
@@ -101,8 +101,8 @@ stays at `0.0.0` because `VERSION` is the one canonical release version
 (AGENTS.md) — and passes anything else through to electron-builder, so
 `npm run package:mac -- --arm64 --x64` works.
 
-`npm run icons` writes all three icons from one script: no image toolchain, no
-binary assets, and changing the mark is a diff.
+`npm run icons` copies the docs site's favicon to `build/icon.png`; the mark lives
+in one place and electron-builder derives the platform containers at package time.
 
 ### Signing
 

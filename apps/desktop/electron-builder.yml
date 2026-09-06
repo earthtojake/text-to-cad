@@ -40,9 +40,8 @@ extraResources:
   - from: resources/plugin
     to: plugin
 
-# One icon set in build/ (scripts/make-icons.mjs, committed): icon.icns for
-# macOS, icon.ico for Windows, icon.png for Linux. electron-builder picks each
-# one up by name.
+# One icon source, build/icon.png (scripts/make-icons.mjs copies the docs favicon;
+# committed). electron-builder derives the macOS .icns and Windows .ico from it.
 
 # The updater feed. `release-publish.yml` attaches the installers to the same
 # GitHub Release it tags (plan §11), so the feed is that repository, and
