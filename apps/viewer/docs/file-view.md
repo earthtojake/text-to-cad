@@ -17,7 +17,7 @@ through the render slots below.
 import { CadFileView } from "cad-viewer/file-view";
 ```
 
-`apps/viewer` exports `./file-view` as **source**, not a build. The consumer's
+This package exports `./file-view` as **source**, not a build. The consumer's
 bundler compiles it, so the settings below are not optional — a missing one is
 a build error or, worse, a silently unstyled surface.
 
@@ -51,7 +51,7 @@ The viewer's components are JSX in `.js` files. esbuild will not parse them as
 JSX unless told to, and the failure is a parse error on the first `<`:
 
 ```js
-// vite.config.mjs (mirrors apps/viewer/vite.config.mjs)
+// vite.config.mjs (mirrors this package's own vite.config.mjs)
 esbuild: {
   loader: "jsx",
   include: /.*\.[jt]sx?$/,
@@ -72,12 +72,13 @@ Both halves are required: `esbuild` covers the build and the dev transform,
 The viewer's own imports use two specifiers the consumer must resolve:
 
 ```js
+// viewerRoot: this package's directory; cadgenJsRoot: the cadgen-js source package
 resolve: {
   alias: {
     // `@/…` is the viewer client root
-    "@": path.resolve(repoRoot, "apps/viewer/src/client"),
+    "@": path.resolve(viewerRoot, "src/client"),
     // the shared render/runtime package, imported by name from source
-    "cadgen-js": path.resolve(repoRoot, "packages/cadgen-js/src"),
+    "cadgen-js": path.resolve(cadgenJsRoot, "src"),
   },
 },
 worker: { format: "es" },
@@ -99,8 +100,8 @@ The whole `./file-view` closure (113 modules) reaches exactly these packages:
 `react`, `three`, `radix-ui`, `lucide-react`, `class-variance-authority`,
 `clsx`, `tailwind-merge`, and `cadgen-js`.
 
-Keep `three` on a single copy — `0.185.1`, the version `apps/viewer` and
-`packages/cadgen-js` both pin. Two copies of three.js in one bundle is a
+Keep `three` on a single copy — `0.185.1`, the version this package and
+the cadgen-js runtime both pin. Two copies of three.js in one bundle is a
 silent-wrong-render class of bug, not a build error.
 
 ### 4. Tailwind: scan the viewer's source
@@ -144,7 +145,7 @@ So the consumer's token layer needs:
 2. Its own shadcn palette (or the viewer's, copied), for both `:root` and
    `.dark`.
 3. The `--ui-*` declarations from the `:root` and `.dark` blocks of
-   `apps/viewer/src/client/styles/globals.css`, copied verbatim.
+   this package's `src/client/styles/globals.css`, copied verbatim.
 
 The `--ui-*` layer being viewer-only is the one real coupling here; a consumer
 that changes its shadcn palette and copies the `--ui-*` block unchanged gets a
