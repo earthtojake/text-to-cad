@@ -17,6 +17,9 @@
  * Validation is not decoration. The renderer is a browser context: everything
  * arriving from it is untrusted input, and a handler that reads
  * `request.path` should know a string was actually sent.
+ *
+ * Each phase keeps its channels in its own file under `src/shared/ipc/` and
+ * is spread into the contract and the event map here, one line each.
  */
 import { z } from "zod";
 
@@ -35,6 +38,8 @@ import { defineIpc, invoke, type IpcClient } from "./ipc/define";
 // contract that grows by a spread per branch is one several people can extend
 // at once.
 import { appEvents, appIpc } from "./ipc/app";
+import { acpContract, acpEvents } from "./ipc/acp";
+import { agentsContract, agentsEvents } from "./ipc/agents";
 
 export * from "./ipc/define";
 
@@ -67,10 +72,11 @@ export const ipcContract = defineIpc({
     rename: invoke(Id.extend({ name: z.string().min(1) }), ProjectSchema),
   },
 
-  sessions: {
-    /** Every session, or just one project's, newest first. */
-    list: invoke(z.object({ projectId: z.string().optional() }), z.array(SessionSchema)),
-  },
+  /** P1: `sessions.*` lives in ./ipc/acp.ts. */
+  ...acpContract,
+
+  /** P1: `agents.*` lives in ./ipc/agents.ts. */
+  ...agentsContract,
 
   settings: {
     get: invoke(z.void(), SettingsSchema),
@@ -124,6 +130,8 @@ export const ipcEvents = {
   }),
   /** electron-updater's progress, surfaced on About & Updates. */
   ...appEvents,
+  ...acpEvents,
+  ...agentsEvents,
 } as const;
 
 export type IpcEvents = typeof ipcEvents;

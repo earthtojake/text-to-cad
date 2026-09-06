@@ -7,7 +7,7 @@
  * that quietly returns the wrong shape produces a bug in the renderer, three
  * files away from its cause.
  */
-import { ipcMain, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { BrowserWindow, ipcMain, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { z } from "zod";
 
 import {
@@ -104,6 +104,15 @@ export function emit<C extends IpcEventChannel>(
       target.send(`${IPC_EVENT_PREFIX}${channel}`, validated);
     }
   }
+}
+
+/** Broadcast to every open window. */
+export function broadcast<C extends IpcEventChannel>(channel: C, payload: IpcEventPayload<C>) {
+  emit(
+    BrowserWindow.getAllWindows().map((window) => window.webContents),
+    channel,
+    payload,
+  );
 }
 
 /** Guard used by the contract walk; re-exported so handlers can assert shapes. */

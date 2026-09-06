@@ -71,6 +71,18 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX explorer_tabs_by_session ON explorer_tabs(session_id, position);
     `,
   },
+  {
+    version: 2,
+    name: "acp-sessions",
+    // P1: the agent's own session id (what `session/load` resumes) and the
+    // files-changed counters the sidebar pill shows.
+    up: `
+      ALTER TABLE sessions ADD COLUMN acp_session_id TEXT;
+      ALTER TABLE sessions ADD COLUMN changed_files INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE sessions ADD COLUMN insertions INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE sessions ADD COLUMN deletions INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 /**

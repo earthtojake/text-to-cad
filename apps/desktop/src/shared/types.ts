@@ -45,6 +45,8 @@ export type GitMode = z.infer<typeof GitModeSchema>;
 
 /** The trailing glyph on a sidebar session row. */
 export const SessionStatusSchema = z.enum([
+  /** The adapter is being spawned or the session loaded. */
+  "connecting",
   /** No turn in flight. */
   "idle",
   /** A turn is streaming. */
@@ -53,6 +55,8 @@ export const SessionStatusSchema = z.enum([
   "waiting",
   /** The last turn ended badly; the row shows a retry. */
   "error",
+  /** No adapter process; the next prompt reconnects and loads. */
+  "closed",
 ]);
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 
@@ -76,6 +80,19 @@ export const SessionSchema = z.object({
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
   status: SessionStatusSchema,
+  /**
+   * The agent's own id for this session, set by `session/new` and used by
+   * `session/load` to resume. Null until the first successful connect.
+   */
+  acpSessionId: z.string().nullable().default(null),
+  /**
+   * Files the agent has touched in this session (edits with diffs and
+   * `fs/write_text_file`), for the sidebar's files-changed pill. Line counts
+   * come from the diffs the agent reported, not from git — P7 owns that.
+   */
+  changedFiles: z.number().int().nonnegative().default(0),
+  insertions: z.number().int().nonnegative().default(0),
+  deletions: z.number().int().nonnegative().default(0),
 });
 export type Session = z.infer<typeof SessionSchema>;
 

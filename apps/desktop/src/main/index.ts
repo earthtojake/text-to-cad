@@ -9,6 +9,8 @@ import { BrowserWindow, app, shell } from "electron";
 
 import { closeDb, db } from "./db";
 import { registerIpcHandlers } from "./ipc";
+import { shutdownAcp } from "./ipc/acp";
+import { shutdownAgents } from "./ipc/agents";
 import { installMenu } from "./menu";
 import { initTelemetry, track } from "./telemetry";
 import { initUpdater, stopUpdater } from "./updater";
@@ -125,6 +127,8 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on("before-quit", () => {
     stopUpdater();
+    shutdownAcp();
+    shutdownAgents();
     closeDb();
   });
 }
