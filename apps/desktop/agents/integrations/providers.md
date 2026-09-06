@@ -97,6 +97,23 @@ field at a time through the composer's permission band (free-text fields have
 no input there and stay empty, which the agent treats as skipped). Neither
 adapter calls the client terminal methods; both run commands themselves.
 
+## Subagent verification
+
+Adapter tests alone do not establish live subagent visualization. On 2026-09-06, a real
+Codex GPT-6-Astra desktop turn launched two read-only subagents and returned their answers,
+but the installed app-server's `thread/read` exposed only two `collabAgentToolCall` wait
+items, with empty receiver IDs and agent states. Spawn and interrupt calls existed in the
+provider transcript but were absent from those app-server items, so the desktop showed
+wait rows without individual subagent rows. Do not describe that configuration as full
+subagent visualization or synthesize lifecycle events from the agent's prose.
+
+Recheck with a real desktop turn after provider updates: confirm named spawn/running rows,
+completion/failure state, and persistence after reopening the thread. Codex child transcripts
+are not currently streamed through the adapter. Claude's separate enrichment supports Agent
+and Task calls. The same desktop check with authenticated Claude/Fable displayed a completed
+Agent row and returned the subagent's card-dimension report. This verifies the foreground
+Agent path; background agents and full nested transcripts still need separate live checks.
+
 ## Adding Or Changing A Provider
 
 1. add or update the plugin in `packages/plugins/src/agents/impl/` and register it in
