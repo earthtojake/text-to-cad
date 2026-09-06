@@ -49,6 +49,15 @@ const MARKDOWN = "AGENTS.md";
 const IMAGE = "apps/desktop/build/icon.png";
 const STEP = "models/examples/imported/import-smoke.step";
 
+/**
+ * A file the review test writes and removes.
+ *
+ * Untracked, in the repository rather than in a temp directory, because the
+ * only way to have something to review is to change the tree being reviewed —
+ * and untracked is the case whose counts git does not hand over.
+ */
+const REVIEW_FIXTURE = path.join(repoRoot, "review-fixture.txt");
+
 let app: ElectronApplication;
 let page: Page;
 let userData: string;
@@ -77,6 +86,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await app?.close();
   fs.rmSync(userData, { recursive: true, force: true });
+  fs.rmSync(REVIEW_FIXTURE, { force: true });
 });
 
 test.describe.configure({ mode: "serial" });
@@ -194,6 +204,12 @@ test("browses to a URL in a browser tab", async () => {
 });
 
 test("shows this checkout's changes in the review tab", async () => {
+  // The review needs something to review, and a checkout that happens to be
+  // dirty is not something to rely on — this test failed the first time it ran
+  // against a clean tree. So it makes its own change: an untracked file, which
+  // is also the case whose counts git will not give you.
+  fs.writeFileSync(REVIEW_FIXTURE, `${"a line\n".repeat(12)}`);
+
   await page.getByRole("button", { name: "New tab of another kind" }).click();
   await page.getByRole("menuitem", { name: "Review" }).click();
 
@@ -201,16 +217,17 @@ test("shows this checkout's changes in the review tab", async () => {
   await expect(page.getByRole("button", { name: "Commit or push" })).toBeVisible();
   await expect(page.getByText(/^\+\d+$/).first()).toBeVisible();
 
-  // The first sections open by default and their diffs arrive: a review whose
-  // sections all say "Reading the diff…" is a list of filenames.
-  await expect(page.locator(".monaco-diff-editor").first()).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator(".monaco-diff-editor")).toHaveCount(3);
-
   // A new file's counts come from the file, not from `git diff` against a
-  // revision that has never seen it: `+0 −0` on an added file is the bug this
-  // guards.
-  const added = page.getByRole("button", { name: /explorer\/fs\.ts/ }).first();
-  await expect(added).toContainText(/\+\d\d+/);
+  // revision that has never seen it — `git diff --no-index` reports "the files
+  // differ" as exit code 1, and reading that as failure showed every added
+  // file as `+0 −0`.
+  const fixtureRow = page.getByRole("button", { name: /review-fixture\.txt/ }).last();
+  await expect(fixtureRow).toContainText("+12");
+
+  // The rail scrolls to a file and opens its section; the diff then arrives.
+  // A review whose sections all say "Reading the diff…" is a list of filenames.
+  await fixtureRow.click();
+  await expect(page.locator(".monaco-diff-editor").first()).toBeVisible({ timeout: 30_000 });
 
   await shoot("review.png");
 });

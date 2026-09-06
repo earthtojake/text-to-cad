@@ -108,8 +108,17 @@ function ReviewBody({
           setLoading(false);
           if (openTop) {
             // The first few files open by default: a review whose sections are
-            // all shut is a list of filenames, which is not a review.
-            setOpen(new Set((next?.files ?? []).slice(0, 3).map((file) => file.path)));
+            // all shut is a list of filenames, which is not a review. Binary
+            // files are skipped — they have no diff to show, and a review that
+            // opens on three "Binary file" panels has told you nothing.
+            setOpen(
+              new Set(
+                (next?.files ?? [])
+                  .filter((file) => !file.binary)
+                  .slice(0, 3)
+                  .map((file) => file.path),
+              ),
+            );
           }
         }),
     [project.id, scope],
@@ -347,7 +356,7 @@ function FileSection({
   }, [open, diff, projectId, file.path, scope]);
 
   const badge = STATUS_BADGES[file.status];
-  const lines = useMemo(() => countLines(diff), [diff]);
+  const height = useMemo(() => sectionHeight(diff), [diff]);
 
   return (
     <section className="border-b" ref={ref}>
@@ -382,7 +391,7 @@ function FileSection({
             Binary file — no textual diff.
           </p>
         ) : diff ? (
-          <div style={{ height: Math.min(560, Math.max(120, lines * 20 + 24)) }}>
+          <div style={{ height }}>
             <DiffEditor
               language={languageFor(file.path)}
               modified={diff.after ?? ""}
@@ -510,12 +519,23 @@ function scopeFor(scope: ReviewTabModel["scope"]) {
   }
 }
 
-/** How tall a diff needs to be. Monaco has no intrinsic height. */
-function countLines(diff: FileDiff | null): number {
+/**
+ * How tall a section needs to be. Monaco has no intrinsic height, so someone
+ * has to guess.
+ *
+ * The guess is the *change*, not the file. `hideUnchangedRegions` collapses
+ * everything that did not move into a one-line "407 hidden lines" band, so
+ * sizing by the file's length leaves a screen of blank editor under a
+ * four-line edit — which is what the first review screenshot showed.
+ */
+const LINE_HEIGHT = 20;
+
+function sectionHeight(diff: FileDiff | null): number {
   if (!diff) {
-    return 6;
+    return 120;
   }
-  const before = diff.before?.split("\n").length ?? 0;
-  const after = diff.after?.split("\n").length ?? 0;
-  return Math.max(before, after, 6);
+  // The changed lines, plus the context Monaco keeps around each collapsed
+  // band, plus the band itself.
+  const lines = diff.insertions + diff.deletions + 8;
+  return Math.min(560, Math.max(120, lines * LINE_HEIGHT));
 }
