@@ -6,6 +6,8 @@
  * would be re-registered on every render of the sidebar — and it means a
  * change made from the app menu updates the same state a click would.
  */
+import { useAcp } from "./acp";
+import { useAgents } from "./agents";
 import { useExplorer } from "./explorer";
 import { useProjects } from "./projects";
 import { useSessions } from "./sessions";
@@ -23,6 +25,21 @@ export function subscribeToMain(): () => void {
     }),
     window.hardcore.on("settings.changed", (settings) => {
       useSettings.getState().receive(settings);
+    }),
+    window.hardcore.on("session.state", ({ sessionId, state }) => {
+      useAcp.getState().receiveState(sessionId, state);
+    }),
+    window.hardcore.on("session.update", ({ sessionId, event }) => {
+      useAcp.getState().receiveEvent(sessionId, event);
+    }),
+    window.hardcore.on("terminal.output", ({ sessionId, terminalId, data }) => {
+      useAcp.getState().receiveTerminalOutput(sessionId, terminalId, data);
+    }),
+    window.hardcore.on("agents.status", (agents) => {
+      useAgents.getState().receive(agents);
+    }),
+    window.hardcore.on("agents.output", (chunk) => {
+      useAgents.getState().receiveOutput(chunk);
     }),
     window.hardcore.on("ui.command", ({ command }) => {
       const ui = useUi.getState();
@@ -73,6 +90,7 @@ export async function hydrate(): Promise<void> {
     useSettings.getState().load(),
     useProjects.getState().load(),
     useSessions.getState().load(),
+    useAgents.getState().load(),
   ]);
   // Nothing to hydrate for the explorer yet — the strip is in-memory until P3
   // persists it. Named here so the omission is a decision, not an oversight.

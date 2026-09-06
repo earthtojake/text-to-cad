@@ -9,23 +9,13 @@
  */
 import { BrowserWindow, app, dialog, shell } from "electron";
 
-import {
-  ipcContract,
-  type IpcContract,
-  type IpcEventChannel,
-  type IpcEventPayload,
-} from "../../shared/ipc";
+import { ipcContract, type IpcContract } from "../../shared/ipc";
 import { projects, sessions, settings } from "../db/repositories";
-import { IpcError, emit, registerIpc, type IpcContext } from "./register";
+import { acpHandlers } from "./acp";
+import { agentsHandlers } from "./agents";
+import { IpcError, broadcast, registerIpc, type IpcContext } from "./register";
 
-/** Broadcast to every open window. */
-export function broadcast<C extends IpcEventChannel>(channel: C, payload: IpcEventPayload<C>) {
-  emit(
-    BrowserWindow.getAllWindows().map((window) => window.webContents),
-    channel,
-    payload,
-  );
-}
+export { broadcast } from "./register";
 
 const handlers = {
   app: {
@@ -75,9 +65,11 @@ const handlers = {
     },
   },
 
-  sessions: {
-    list: ({ projectId }: { projectId?: string }) => sessions.list(projectId),
-  },
+  /** P1: sessions and the live ACP connections behind them. */
+  ...acpHandlers,
+
+  /** P1: the agent registry, detection, install and login. */
+  ...agentsHandlers,
 
   settings: {
     get: () => settings.get(),

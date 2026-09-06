@@ -27,7 +27,7 @@ describe("defineIpc", () => {
 });
 
 describe("the contract", () => {
-  it("declares the P0 channels", () => {
+  it("declares the P0 and P1 channels", () => {
     expect(ipcChannels(ipcContract).map(([name]) => name)).toEqual([
       "app.info",
       "projects.list",
@@ -36,6 +36,24 @@ describe("the contract", () => {
       "projects.remove",
       "projects.rename",
       "sessions.list",
+      "sessions.get",
+      "sessions.create",
+      "sessions.load",
+      "sessions.state",
+      "sessions.prompt",
+      "sessions.cancel",
+      "sessions.setMode",
+      "sessions.setConfigOption",
+      "sessions.respondPermission",
+      "sessions.setApprovalMode",
+      "sessions.close",
+      "sessions.delete",
+      "agents.list",
+      "agents.refresh",
+      "agents.install",
+      "agents.login",
+      "agents.writeJob",
+      "agents.cancelJob",
       "settings.get",
       "settings.set",
       "window.state",

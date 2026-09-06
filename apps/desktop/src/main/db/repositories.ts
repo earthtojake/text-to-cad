@@ -106,10 +106,15 @@ type SessionRow = {
   created_at: number;
   updated_at: number;
   status: string;
+  acp_session_id: string | null;
+  changed_files: number;
+  insertions: number;
+  deletions: number;
 };
 
 const SESSION_COLUMNS =
-  "id, project_id, agent_id, cwd, git_mode, branch, title, created_at, updated_at, status";
+  "id, project_id, agent_id, cwd, git_mode, branch, title, created_at, updated_at, status, " +
+  "acp_session_id, changed_files, insertions, deletions";
 
 const toSession = (row: SessionRow): Session =>
   SessionSchema.parse({
@@ -123,6 +128,10 @@ const toSession = (row: SessionRow): Session =>
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     status: row.status,
+    acpSessionId: row.acp_session_id,
+    changedFiles: row.changed_files,
+    insertions: row.insertions,
+    deletions: row.deletions,
   });
 
 export const sessions = {
@@ -152,7 +161,8 @@ export const sessions = {
     db()
       .prepare(
         `INSERT INTO sessions (${SESSION_COLUMNS})
-         VALUES (@id, @projectId, @agentId, @cwd, @gitMode, @branch, @title, @createdAt, @updatedAt, @status)
+         VALUES (@id, @projectId, @agentId, @cwd, @gitMode, @branch, @title, @createdAt, @updatedAt, @status,
+                 @acpSessionId, @changedFiles, @insertions, @deletions)
          ON CONFLICT(id) DO UPDATE SET
            agent_id = excluded.agent_id,
            cwd = excluded.cwd,
@@ -160,7 +170,11 @@ export const sessions = {
            branch = excluded.branch,
            title = excluded.title,
            updated_at = excluded.updated_at,
-           status = excluded.status`,
+           status = excluded.status,
+           acp_session_id = excluded.acp_session_id,
+           changed_files = excluded.changed_files,
+           insertions = excluded.insertions,
+           deletions = excluded.deletions`,
       )
       .run({ ...parsed, branch: parsed.branch ?? null });
     return parsed;

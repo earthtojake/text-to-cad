@@ -80,12 +80,20 @@ src/main/                 the Electron main process: everything with a side effe
   updater.ts              electron-updater against GitHub Releases; a no-op in dev
   db/                     sqlite: migrations.ts (runner + schema), repositories.ts (rows <-> types)
   ipc/                    register.ts (validating registration) + index.ts (the handlers)
-  agents/ acp/            P1
+  agents/                 registry.ts (the provider table), detect.ts (login-shell PATH, which,
+                          versions, auth), shell-env.ts, install.ts + auth.ts (pty jobs via jobs.ts)
+  acp/                    connection.ts (adapter process + SDK + stream tap + reducer),
+                          client.ts (fs/terminal/permission), terminals.ts (+ pty/process backends),
+                          sessions.ts (index + live connections)
+  ipc/{acp,agents}.ts     the P1 handler branches, spread into ipc/index.ts
   explorer/               P3
   cad/                    P4, P5
   projects/git.ts         P7
 src/preload/index.ts      the contextBridge: builds `window.hardcore` by walking the contract
-src/shared/               ipc.ts (contract + defineIpc), types.ts (domain types as zod schemas)
+src/shared/               ipc.ts (the contract), ipc/define.ts (the helpers), ipc/{acp,agents}.ts
+                          (P1's channels and events), types.ts (domain types as zod schemas),
+                          agents.ts (provider/status schemas), acp/types.ts + acp/reduce.ts
+                          (SessionState and the pure session/update reducer)
 src/renderer/
   app/                    Shell (three resizable panes), App, CommandPalette
   features/sidebar        projects and their sessions
@@ -98,15 +106,57 @@ src/renderer/
   styles/globals.css      stock shadcn neutral tokens — the same ones apps/viewer uses
 tests/unit/               vitest
 tests/e2e/                playwright, against the built app
+tests/fake-agent/         a scripted ACP agent on stdio (SDK agent side), also replays fixtures
+tests/fixtures/acp/       recorded adapter transcripts (jsonl), written by the harness
+scripts/acp-harness.mjs   run a real ACP session from the terminal; --record writes a fixture
 ```
+
+## ACP
+
+Every session is one adapter process driven by `@agentclientprotocol/sdk`
+(`src/main/acp/connection.ts`). The provider table in
+`src/main/agents/registry.ts` says how each agent is launched, installed and
+signed in; the detector probes the user's login-shell PATH for them.
+
+```sh
+node scripts/acp-harness.mjs codex /tmp/scratch "Reply with exactly: ok"
+node scripts/acp-harness.mjs claude-code /tmp/scratch "Create hello.txt, then run ls" \
+    --record tests/fixtures/acp/claude-code-session.jsonl
+node scripts/acp-harness.mjs codex /tmp/scratch "What did we do?" --load <acpSessionId>
+```
+
+The harness runs the same `SessionConnection` main does (child_process
+terminals instead of node-pty), prints every update, auto-answers permission
+requests (`--approval ask` to answer by hand), and `--record` writes every
+wire frame as jsonl. Those recordings are the reducer's test corpus
+(`tests/unit/shared/reduce.test.ts`) and what `tests/fake-agent` replays for
+the connection tests. Re-record after an adapter upgrade; never run the
+harness against this repository, use a scratch directory.
+
+Two things learned from the real adapters that the code now depends on:
+
+- Both adapters accept the draft subagent capability and then send update
+  kinds (`subagent_spawned`, `subagent_state_update`) that SDK 1.4.0's schema
+  rejects. The connection reads every `session/update` raw off the wire and
+  only forwards the kinds the SDK knows, so the reducer sees everything.
+- A terminal started from inside a Claude Code session carries that session's
+  environment (`CLAUDECODE`, `CLAUDE_CODE_*`, its `ANTHROPIC_BASE_URL`). A
+  nested `claude` then reports itself logged out and the adapter answers
+  `Authentication required`. `shell-env.ts` strips those when it sees the
+  marker. The Claude fixture on this machine is the auth-failure exchange for
+  that reason (`claude-code-auth-required.jsonl`); a machine with a signed-in
+  `claude` (`claude auth status` → `loggedIn: true`) records a full session.
 
 ## How a change moves through the app
 
 Adding an IPC channel is the shape of most work here:
 
-1. declare it in `src/shared/ipc.ts` with its request and response schemas;
-2. implement it in `src/main/ipc/index.ts` — `registerIpc` refuses to start if
-   a channel has no handler;
+1. declare it in your phase's file under `src/shared/ipc/` (or `src/shared/ipc.ts`
+   for P0's branches) with its request and response schemas — a new file is
+   one spread line in the contract and one in the event map;
+2. implement it in the matching `src/main/ipc/<phase>.ts`, spread into
+   `src/main/ipc/index.ts` — `registerIpc` refuses to start if a channel has
+   no handler;
 3. call `window.hardcore.<branch>.<name>(...)` from a store in
    `src/renderer/state/`.
 

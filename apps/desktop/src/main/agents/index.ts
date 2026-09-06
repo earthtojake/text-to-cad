@@ -1,11 +1,14 @@
 /**
- * Agent registry, detection, installation and auth. **Filled by P1.**
+ * Agent registry, detection, installation and auth (plan §5).
  *
- * `registry.ts` is a data table of the 35 provider definitions lifted from
- * Emdash: id, name, icon, website, binary names, per-OS install commands, auth
- * methods, the ACP launch command, capabilities, and the hooks that install
- * Hardcore's plugin into that agent. `detect.ts` probes PATH against a
- * login-shell environment resolved once at boot. Nothing here spawns an agent
- * — that is `acp/`.
+ * `registry.ts` is the provider table; `detect.ts` probes PATH against a
+ * login-shell environment resolved once (`shell-env.ts`); `install.ts` and
+ * `auth.ts` run their jobs through `jobs.ts` in a pty. Nothing here spawns
+ * an agent — that is `../acp`.
  */
-export {};
+export { AGENT_PROVIDERS, agentProvider } from "./registry";
+export { AgentDetector, nodeProbes, parseVersion, which, type DetectorProbes } from "./detect";
+export { loginEnv, parseEnv, processEnv, stripHostSession, type Env } from "./shell-env";
+export { JobRunner, type Job, type JobPty, type SpawnJobPty } from "./jobs";
+export { currentPlatform, installCommand, startInstall } from "./install";
+export { loginCommand, startLogin } from "./auth";

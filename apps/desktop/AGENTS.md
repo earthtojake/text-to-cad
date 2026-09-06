@@ -18,7 +18,7 @@ phase is not an oversight — it is the seam.
 | Phase | Owns |
 | --- | --- |
 | P0 (done) | the project itself, `src/shared`, `src/preload`, `src/main/{index,menu,window-state,telemetry,updater}.ts`, `src/main/db`, `src/main/ipc`, the shell, the command palette, Settings' frame, `tests/` |
-| P1 | `src/main/agents`, `src/main/acp`, `src/shared/acp/reduce.ts`, session creation and the session index |
+| P1 (done) | `src/main/agents`, `src/main/acp`, `src/shared/acp`, `src/shared/agents.ts`, `src/shared/ipc/{acp,agents}.ts`, `src/main/ipc/{acp,agents}.ts`, `src/renderer/state/{acp,agents}.ts`, `scripts/acp-harness.mjs`, `tests/fake-agent`, `tests/fixtures/acp` |
 | P2 | `src/renderer/features/session` — the transcript, activity rows, composer chips, permissions, plan card |
 | P3 | `src/main/explorer`, `src/renderer/features/explorer` — file tab, tree, Monaco, review, browser, terminal |
 | P4 | `src/main/cad/viewer.ts` and the file tab's CAD renderer, against `apps/viewer`'s new `CadFileView` |
@@ -28,8 +28,9 @@ phase is not an oversight — it is the seam.
 | P8 | `electron-builder.yml`, `scripts/package.mjs`, `updater.ts`, the CI jobs |
 
 Work outside your phase's directories only where the seam requires it — a new
-IPC branch in `src/shared/ipc.ts` and its handler in `src/main/ipc/index.ts`
-are expected; reshaping the shell to fit one feature is not.
+IPC file under `src/shared/ipc/` spread into `src/shared/ipc.ts`, and its
+handler file spread into `src/main/ipc/index.ts`, are expected (P1 did exactly
+that); reshaping the shell to fit one feature is not.
 
 ## Rules that are easy to break here
 
