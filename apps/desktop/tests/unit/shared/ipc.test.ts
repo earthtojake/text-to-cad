@@ -94,8 +94,9 @@ describe("the contract", () => {
       "git.fileDiff",
       "git.unifiedDiff",
       "git.commit",
-      // P3's stub for P5 — src/shared/ipc/cad.ts
+      // P5 — src/shared/ipc/cad.ts
       "cad.viewerOrigin",
+      "cad.reply",
     ]);
   });
 

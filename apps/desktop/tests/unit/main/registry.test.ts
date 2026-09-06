@@ -76,7 +76,9 @@ describe("the agent registry", () => {
     expect(claude.skillsDir).toBe("~/.claude/skills");
     expect(claude.pluginInstall).toEqual({
       marketplaceAdd: ["plugin", "marketplace", "add", "<path>"],
+      marketplaceUpdate: ["plugin", "marketplace", "update", "<marketplace>"],
       install: ["plugin", "install", "<plugin>"],
+      update: ["plugin", "update", "<plugin>"],
     });
     const codex = agentProvider("codex")!;
     expect(codex.skillsDir).toBe("~/.codex/skills");
