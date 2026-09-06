@@ -6,7 +6,8 @@ file type the CAD Viewer understands. cadgen and the CAD skills ship inside the
 app, pinned to its own version, and every session runs with them.
 
 Electron 40 · electron-vite · React 19 · TypeScript · Tailwind v4 ·
-shadcn/ui (stock neutral) · Vercel AI Elements · `@agentclientprotocol/sdk`.
+shadcn/ui (stock neutral) · Vercel AI Elements · `@agentclientprotocol/sdk` ·
+Monaco (code) · TipTap over remark (markdown).
 
 A standalone npm project, like `apps/viewer` — there is no root `package.json`,
 so every command below runs from `apps/desktop` (or with
@@ -86,7 +87,9 @@ real, see above).
 
 `npm run e2e` writes `tests/e2e/__screenshots__/`: the shell in both themes,
 Settings, one per explorer surface — `file-markdown-preview`,
-`file-markdown-source`, `file-image`, `file-cad-placeholder`, `file-cad`
+`file-markdown-source`, `file-markdown-editable` (the dirty dot on an edited
+document), `file-markdown-raw-blocks` (raw HTML kept as its own bytes),
+`file-tree-deep`, `file-image`, `file-cad-placeholder`, `file-cad`
 (expanded), `file-cad-default` (the explorer at its default share, the tree
 hidden for it) and both again at 1280×800, `file-cad-measure`, `terminal`,
 `browser-empty`, `browser`, `review`, `strip`, `expanded` — every one of those
@@ -217,6 +220,27 @@ desktop layout with the sheet a column beside the model at any pane width,
 the sheet is `clamp(36% of the pane, 240, 365)`, the file tree hides itself
 for that tab when the pane cannot hold all three (its toggle brings it
 back), and light/dark is the app's theme rather than the CAD theme's.
+
+A markdown file opens as a document you can type in — a ProseMirror editor
+over TipTap's schema, saved with `Cmd/Ctrl+S` like any other file, with
+`View source` still there for the bytes. What it writes back is the file it
+opened, block for block: every top-level block (and every list item) carries
+the exact slice of the file it came from, and only the ones that changed are
+re-printed, by remark, using the bullet, emphasis and wrap column the file
+already uses. A whole-document serializer moves 18 lines of this
+repository's `README.md` and 149 of its `AGENTS.md` on a one-word edit; this
+moves the block. Raw HTML, link reference definitions and footnotes have no
+node in the schema and are held as their own bytes. See
+`features/explorer/markdown/document.ts` for the whole argument, and
+`tests/unit/renderer/markdown-*.test.ts` for the proof, which is run against
+these three files.
+
+The strip's `+` is one button and a menu of the four kinds, each with its
+binding — ⌘T file, ⇧⌘R review, ⇧⌘B browser, ⌃` terminal
+(`lib/shortcuts.ts` is the table the menu prints and `ExplorerPane` answers
+to). The file tree's open folders and its listings live in the explorer
+store, not in the file tab, because opening a file makes a tab and the pane
+mounts one tab at a time.
 
 ## Quitting
 
@@ -381,6 +405,10 @@ src/renderer/
     parts/                activity rows (+ Monaco diff, terminal), thoughts, permission cards, subagents
     ComposerChips.tsx     agent / project / git mode / approval / model / options chips
   features/explorer       the one tab strip and its four kinds of tab
+    markdown/document.ts  markdown <-> the editor's document, keeping every block the
+                          person did not touch byte for byte (remark; read its header)
+    markdown/schema.ts    the editor's schema: TipTap's starter kit plus tables, task
+                          lists, images, a raw-markdown atom and the source attributes
   features/settings       the Settings route, the card-grouped rows, the agent drawer, and
                           pages/ — one module per page; search is done by the rows themselves
   lib/shortcuts.ts        the keyboard-shortcut table the Shortcuts page prints

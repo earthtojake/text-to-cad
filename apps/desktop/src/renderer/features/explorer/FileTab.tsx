@@ -604,7 +604,15 @@ function Body({
           value={draft ?? loaded.file.content}
         />
       ) : (
-        <MarkdownRenderer content={draft ?? loaded.file.content} />
+        <MarkdownRenderer
+          content={draft ?? loaded.file.content}
+          editable={!loaded.file.truncated}
+          // The same remount-on-reload as Monaco, for the same reason: a
+          // live document cannot take new text without moving the cursor.
+          key={`${loaded.stat.path}:${reloadToken}`}
+          onChange={onChange}
+          onSave={save}
+        />
       );
   }
 }

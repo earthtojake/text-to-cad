@@ -78,12 +78,26 @@ const CAD_PYTHON =
  */
 let reviewRepo: string;
 
+/**
+ * A directory holding copies of this repository's `README.md` and
+ * `AGENTS.md`.
+ *
+ * The editing test wants *these* files — raw HTML, badge images, GFM tables,
+ * hard-wrapped prose — and it wants to save them and diff the result, which
+ * is not something to do to the checkout the suite is running from.
+ */
+let docsDir: string;
+
 let app: ElectronApplication;
 let page: Page;
 let userData: string;
 
 test.beforeAll(async () => {
   reviewRepo = makeReviewRepo();
+  docsDir = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-docs-"));
+  for (const name of ["README.md", "AGENTS.md"]) {
+    fs.copyFileSync(path.join(repoRoot, name), path.join(docsDir, name));
+  }
   userData = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-explorer-e2e-"));
   const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
   const env = { ...inherited, NODE_ENV: "test" };
@@ -114,6 +128,7 @@ test.afterAll(async () => {
   await app?.close();
   fs.rmSync(userData, { recursive: true, force: true });
   fs.rmSync(reviewRepo, { recursive: true, force: true });
+  fs.rmSync(docsDir, { recursive: true, force: true });
 });
 
 test.describe.configure({ mode: "serial" });
@@ -389,6 +404,59 @@ test("renders the explorer in light as well as dark", async () => {
   await page.getByRole("tab").first().click();
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+});
+
+/**
+ * Second to last: this one switches projects too, so it sits with the review
+ * test at the end rather than in the middle of the strip's own tests.
+ */
+test("edits a markdown file in place and saves the lines it changed", async () => {
+  await page.evaluate((directory) => window.hardcore.projects.addPath({ path: directory }), docsDir);
+  await page.getByText(path.basename(docsDir)).first().click();
+  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+
+  await newTab(page, "File");
+  await page.getByLabel("Filter files").fill("AGENTS.md");
+  await page.getByRole("option", { name: "AGENTS.md", exact: false }).first().click();
+
+  // The document, not a preview of it: an H1 that is a real heading, and a
+  // paragraph a caret can be put into.
+  await expect(page.getByRole("heading", { level: 1, name: "AGENTS.md" })).toBeVisible();
+  const paragraph = page.locator(".ProseMirror p").first();
+  await paragraph.click();
+  await page.keyboard.type("Edited in the app. ");
+
+  // The tab says so, and Cmd/Ctrl+S is the same save Monaco gets.
+  await expect(page.getByLabel("Unsaved changes")).toBeVisible();
+  await shoot("file-markdown-editable.png");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+s" : "Control+s");
+  await expect(page.getByLabel("Unsaved changes")).toHaveCount(0);
+
+  // The file on disk. The edited paragraph is re-printed; every other line of
+  // a 210-line document is exactly the line it was — which is the whole point
+  // of `src/renderer/features/explorer/markdown/document.ts`.
+  const before = fs.readFileSync(path.join(repoRoot, "AGENTS.md"), "utf8");
+  const after = fs.readFileSync(path.join(docsDir, "AGENTS.md"), "utf8");
+  // Re-wrapped to the column the file wraps at, so the typed words can land on
+  // either side of a newline.
+  expect(after.replace(/\s+/g, " ")).toContain("Edited in the app.");
+
+  // The other document, for the surfaces AGENTS.md has none of: raw HTML
+  // blocks, badge images and a GFM table.
+  await newTab(page, "File");
+  await page.getByLabel("Filter files").fill("README.md");
+  await page.getByRole("option", { name: "README.md", exact: false }).first().click();
+  await expect(page.getByRole("table")).toBeVisible();
+  await shoot("file-markdown-raw-blocks.png");
+
+  const editedBlock = before.split("\n\n")[1]!;
+  const untouched = before
+    .split("\n")
+    .filter((line) => line.trim() !== "" && !editedBlock.includes(line));
+  expect(untouched.length).toBeGreaterThan(100);
+  for (const line of untouched) {
+    expect(after, `a line nobody edited was rewritten: ${line}`).toContain(line);
+  }
 });
 
 /**

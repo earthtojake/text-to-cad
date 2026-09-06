@@ -92,8 +92,14 @@ test.afterAll(async () => {
     await page.evaluate((id) => window.hardcore.sessions.close({ id }), sessionId).catch(() => {});
   }
   await app?.close();
-  fs.rmSync(userData, { recursive: true, force: true });
-  fs.rmSync(project, { recursive: true, force: true });
+  // `beforeAll` skips before either directory exists when Codex is not opted
+  // in, and `afterAll` still runs — an `rmSync(undefined)` there fails the
+  // test that was skipped.
+  for (const directory of [userData, project]) {
+    if (directory) {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  }
 });
 
 test("a Codex session opens a STEP in the explorer through open_file", async () => {
