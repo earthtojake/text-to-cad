@@ -10,6 +10,7 @@ copies each directory here into the packaged app's `Resources/`, and
 | `cadgen/` | the release workflow, or `npm run cad:resources` (`scripts/cad-resources.mjs`) | the `cadgen` wheel for this version and `constraints.txt`, the dependency closure frozen from the development venv — what the bundler installs from (`--find-links` here, `-c` that file) |
 | `plugin/` | `npm run build` (`scripts/build-plugin.mjs`) | the Hardcore plugin — the repo's skills minus `cad-viewer`, plus `hardcore-app-use`, with manifests naming it `cad@hardcore` at the app's version — installed into each agent by `src/main/cad/plugin.ts` |
 | `hardcore-mcp/` | committed source | the Hardcore MCP server (`server.mjs`); NOT an extraResource — the build bundles it into `out/hardcore-mcp/`, which ships unpacked beside the asar |
+| `brand/` | `npm run brand` (`scripts/make-brand.mjs`), committed | the HARDCORE wordmark and the H monogram as PNGs, plus the JetBrains Mono ExtraBold Italic face they are set in and its OFL licence. NOT an extraResource either — `scripts/make-icons.mjs` reads `brand/hardcore-h.png` at development time to write `build/icon.png`, and nothing here is opened at run time. See the README's **Brand** section |
 
 The first three are build outputs: gitignored under a committed `.gitkeep`,
 and `scripts/package.mjs` recreates the directories before every build.
