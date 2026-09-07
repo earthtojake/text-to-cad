@@ -30,7 +30,7 @@ apps/desktop/node_modules/
 apps/desktop/out/
 apps/desktop/dist/
 apps/desktop/release/
-apps/desktop/test-results/
+test-results/
 # scripts/perf-cad.mjs's raw numbers.
 apps/desktop/tests/perf/
 # Build outputs of apps/desktop's resources: the composed plugin
