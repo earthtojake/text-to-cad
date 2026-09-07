@@ -32,20 +32,20 @@ export function ActivityGroup({ item, sessionId }: { item: ActivityItem; session
   }
 
   return (
-    <div className="not-prose" data-activity-group data-open={open}>
+    <div className="not-prose min-w-0" data-activity-group data-open={open}>
       <RowButton
         active={active}
         onClick={() => setOpen((value) => !value)}
         open={open}
       >
-        <span className="flex size-4 items-center justify-center text-muted-foreground">
+        <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
           {active ? (
             <Loader2 className="size-3.5 animate-spin" />
           ) : (
             <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
           )}
         </span>
-        <span className="min-w-0 flex-1 truncate">{item.summary}</span>
+        <span className="min-w-0 truncate">{item.summary}</span>
         {failureCount > 0 ? <FailureIndicator count={failureCount} /> : null}
       </RowButton>
       {open ? (
@@ -67,19 +67,19 @@ export function ActivityRowView({ row, sessionId }: { row: ActivityRow; sessionI
   const command = row.command ? commandLine(row.command) : null;
 
   return (
-    <div className="not-prose" data-activity-row={row.id} data-status={row.status}>
+    <div className="not-prose min-w-0" data-activity-row={row.id} data-status={row.status}>
       <RowButton
         active={active}
         onClick={() => setOpen((value) => !value)}
         open={open}
         title={row.path ?? row.command ?? row.part.title}
       >
-        <span className="flex size-4 items-center justify-center text-muted-foreground">
+        <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
           {active ? <Loader2 className="size-3.5 animate-spin" /> : <GlyphIcon glyph={row.glyph} />}
         </span>
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
           {label ? (
-            <span className="shrink-0 truncate">{label}</span>
+            <span className="min-w-0 truncate">{label}</span>
           ) : null}
           {command ? (
             <span className="min-w-0 truncate font-mono text-[12px] text-foreground/80">{command}</span>
@@ -124,7 +124,7 @@ function RowButton({
     <button
       aria-expanded={open}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[13px] leading-5 transition-colors hover:bg-accent/60",
+        "flex min-w-0 w-full items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-[13px] leading-5 transition-colors hover:bg-accent/60",
         "text-muted-foreground",
         active && "text-foreground/80",
       )}
@@ -159,8 +159,8 @@ export function ToolDetail({ part, sessionId }: { part: ToolCallPart; sessionId:
       : null;
 
   return (
-    <div className="mt-1 mb-2 ml-6 flex flex-col gap-2 text-[13px]" data-tool-detail>
-      {command !== null && command.includes("\n") ? (
+    <div className="mt-1 mb-2 ml-6 flex min-w-0 flex-col gap-2 text-[13px]" data-tool-detail>
+      {command !== null ? (
         <pre className="overflow-x-auto rounded-md bg-muted/60 px-3 py-2 font-mono text-[12px] leading-5 whitespace-pre-wrap">
           {command}
         </pre>
@@ -181,7 +181,7 @@ export function ToolDetail({ part, sessionId }: { part: ToolCallPart; sessionId:
       )}
       {terminalText !== null ? (
         <Terminal
-          className="border bg-muted/40 text-foreground dark:bg-black/30"
+          className="min-w-0 border bg-muted/40 text-foreground dark:bg-black/30"
           isStreaming={running}
           output={terminalText || (running ? "" : "(no output)")}
         >
@@ -204,7 +204,7 @@ export function ToolDetail({ part, sessionId }: { part: ToolCallPart; sessionId:
         image.type === "image" ? (
           <img
             alt=""
-            className="max-h-72 w-fit rounded-md border"
+            className="max-h-72 w-fit max-w-full rounded-md border"
             key={index}
             src={`data:${image.mimeType};base64,${image.data}`}
           />
@@ -214,7 +214,7 @@ export function ToolDetail({ part, sessionId }: { part: ToolCallPart; sessionId:
         <div className="flex flex-wrap gap-1.5">
           {links.map((link, index) =>
             link.type === "resource_link" ? (
-              <span className="rounded-md border px-2 py-0.5 font-mono text-[11px]" key={index}>
+              <span className="min-w-0 rounded-md border px-2 py-0.5 break-words [overflow-wrap:anywhere] font-mono text-[11px]" key={index}>
                 {link.name}
               </span>
             ) : null,

@@ -28,8 +28,8 @@ export function Transcript({
   const lastTurn = state.turns.at(-1);
 
   return (
-    <Conversation className="min-h-0 flex-1" data-transcript>
-      <ConversationContent className="mx-auto w-full max-w-[720px] gap-4 px-6 pt-6 pb-4">
+    <Conversation className="min-h-0 min-w-0 flex-1" data-transcript>
+      <ConversationContent className="mx-auto min-w-0 w-full max-w-[720px] gap-4 px-6 pt-6 pb-4">
         {state.turns.map((turn, index) => (
           <TurnView
             key={turn.id}
@@ -66,7 +66,7 @@ function TurnView({
   }
   const open = turn.endedAt === null;
   return (
-    <div className="flex w-full flex-col" data-turn={turn.id} data-role="agent" data-stop-reason={turn.stopReason ?? undefined}>
+    <div className="flex min-w-0 w-full flex-col" data-turn={turn.id} data-role="agent" data-stop-reason={turn.stopReason ?? undefined}>
       <PartsList
         onReconnect={last ? onReconnect : undefined}
         onRetry={last ? onRetry : undefined}

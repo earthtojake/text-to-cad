@@ -7,7 +7,7 @@ import { Shimmer } from "@renderer/components/ai-elements/shimmer";
  */
 export function StatusLine({ text }: { text: string }) {
   return (
-    <p className="not-prose mt-1 px-1.5 text-[13px] leading-5 italic" data-status-line>
+    <p className="not-prose mt-1 min-w-0 truncate px-1.5 text-[13px] leading-5 italic" data-status-line title={text}>
       <Shimmer as="span">{text}</Shimmer>
     </p>
   );

@@ -74,7 +74,7 @@ function ViewItemView({
   switch (item.kind) {
     case "text":
       return (
-        <div className="prose-transcript my-1 text-[14px] leading-6" data-part="text">
+        <div className="prose-transcript my-2 min-w-0 [overflow-wrap:anywhere] text-[14px] leading-6" data-part="text">
           <MessageResponse components={COMPONENTS} isAnimating={item.streaming} remarkPlugins={REMARK_PLUGINS}>
             {item.text}
           </MessageResponse>

@@ -17,11 +17,11 @@ import {
  */
 export function ThoughtPart({ text, streaming }: { text: string; streaming: boolean }) {
   return (
-    <Reasoning className="not-prose mb-0" defaultOpen={false} isStreaming={streaming}>
-      <ReasoningTrigger className="rounded-md px-1.5 py-1 text-[13px] leading-5 hover:bg-accent/60 hover:text-foreground">
+    <Reasoning className="not-prose mb-0 min-w-0" defaultOpen={false} isStreaming={streaming}>
+      <ReasoningTrigger className="rounded-md px-1.5 py-0.5 text-[13px] leading-5 hover:bg-accent/60 hover:text-foreground">
         <TriggerBody />
       </ReasoningTrigger>
-      <ReasoningContent className="mt-1 ml-6 text-[13px] leading-6">{text}</ReasoningContent>
+      <ReasoningContent className="mt-1 ml-6 min-w-0 [overflow-wrap:anywhere] text-[13px] leading-6">{text}</ReasoningContent>
     </Reasoning>
   );
 }
@@ -35,7 +35,7 @@ function TriggerBody() {
       : `Thought for ${duration}s`;
   return (
     <>
-      <span aria-hidden className="flex size-4 items-center justify-center text-muted-foreground">
+      <span aria-hidden className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
         {isStreaming ? <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" /> : <GlyphIcon glyph="think" />}
       </span>
       <span className="min-w-0 flex-1 truncate text-left">{message}</span>
