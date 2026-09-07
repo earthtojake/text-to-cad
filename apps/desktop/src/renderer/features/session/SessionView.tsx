@@ -5,18 +5,19 @@ import { Button } from "@renderer/components/ui/button";
 import { useAcp } from "@renderer/state/acp";
 import { useAgents } from "@renderer/state/agents";
 import { useComposer } from "@renderer/state/composer";
+import { effortOption, fastOption, modeOption, modelOption } from "@shared/acp/options";
 import type { PromptBlock, SessionState } from "@shared/acp/types";
 import type { Session } from "@shared/types";
 
 import { AuthPrompt } from "./AuthPrompt";
 import { Composer } from "./Composer";
-import { ApprovalChip, EffortChip, ModeChip, ModelChip, OptionsChip } from "./ComposerChips";
+import { ApprovalChip, EffortChip, ModeChip, ModelChip } from "./ComposerChips";
 import { FilesChangedPill } from "./FilesChangedPill";
 import { TranscriptScopeContext, type TranscriptScope } from "./links/PathLink";
 import { PlanCard } from "./PlanCard";
 import { SessionHeader } from "./SessionHeader";
 import { Transcript } from "./Transcript";
-import { isAuthError, isEffortOption } from "./view";
+import { isAuthError } from "./view";
 
 /**
  * One thread, one agent (plan §3): the header, the transcript, the pinned
@@ -72,18 +73,17 @@ export function SessionView({ session }: { session: Session }) {
     if (!state) {
       return null;
     }
-    const selects = state.configOptions.filter((option) => option.type === "select");
-    const booleans = state.configOptions.filter((option) => option.type === "boolean");
-    const model = selects.find((option) => option.category === "model") ?? null;
-    const effort = selects.find(isEffortOption) ?? null;
-    const preset = selects.find((option) => option.category === "mode") ?? null;
-    const others = selects.filter((option) => option !== model && option !== effort && option !== preset);
+    const model = modelOption(state.configOptions);
+    const effort = effortOption(state.configOptions);
+    const preset = modeOption(state.configOptions);
+    const fast = fastOption(state.configOptions);
     const setOption = (configId: string, value: string | boolean) => void setConfigOption(session.id, configId, value);
-    // Codex's row, left to right: `+`, approval; then on the right the model,
-    // the effort beside it, the options glyph, mic, send. The agent and the
-    // project are the title bar's and the sidebar's, not the composer's. An
-    // agent with modes but no `mode` config option (Claude) gets its modes as
-    // a chip of their own, beside approval.
+    // Codex's row, left to right: `+`, approval; then on the right the model
+    // and the effort beside it, then send. The agent and the project are the
+    // title bar's and the sidebar's, not the composer's. An agent with modes
+    // but no `mode` config option (Claude) gets its modes as a chip of their
+    // own, beside approval. Everything else the agent exposes is the agent's
+    // business: the composer is four decisions, not a settings panel.
     return {
       leading: (
         <>
@@ -104,13 +104,27 @@ export function SessionView({ session }: { session: Session }) {
       ),
       trailing: (
         <>
-          {model ? <ModelChip icon={agent?.icon} model={model} onChange={setOption} /> : null}
+          {model ? (
+            <ModelChip
+              agentId={session.agentId}
+              fast={fast}
+              onChange={(_agentId, value) => setOption(model.id, value)}
+              onFastChange={setOption}
+              providers={[
+                {
+                  agentId: session.agentId,
+                  agentName: agent?.name ?? session.agentId,
+                  icon: agent?.icon ?? null,
+                  model,
+                },
+              ]}
+            />
+          ) : null}
           {effort ? <EffortChip effort={effort} onChange={setOption} /> : null}
-          <OptionsChip booleans={booleans} onSelect={setOption} onToggle={setOption} selects={others} />
         </>
       ),
     };
-  }, [state, session.id, agent?.icon, setApprovalMode, setMode, setConfigOption]);
+  }, [state, session.id, session.agentId, agent?.icon, agent?.name, setApprovalMode, setMode, setConfigOption]);
 
   const planTurn =
     state?.turns.findLast((turn) => turn.role === "agent" && turn.parts.some((part) => part.type === "plan")) ?? null;
@@ -159,6 +173,7 @@ export function SessionView({ session }: { session: Session }) {
             <PlanCard entries={state.plan} running={running} startedAt={planTurn?.startedAt ?? null} />
           ) : null}
           <FilesChangedPill deletions={session.deletions} files={session.changedFiles} insertions={session.insertions} />
+          <ContextLine usage={state?.contextUsage ?? null} />
           <Composer
             autoFocus
             chips={chips?.leading ?? null}
@@ -171,7 +186,6 @@ export function SessionView({ session }: { session: Session }) {
             status={composerStatus}
             trailing={chips?.trailing ?? null}
           />
-          {state?.contextUsage ? <ContextFooter used={state.contextUsage.used} size={state.contextUsage.size} cost={state.contextUsage.cost} /> : null}
         </div>
       </div>
     </div>
@@ -200,31 +214,29 @@ function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void
   );
 }
 
-/** A small footer under the composer: how full the context window is, and what it has cost. */
-function ContextFooter({
-  used,
-  size,
-  cost,
-}: {
-  used: number;
-  size: number;
-  cost: { amount: number; currency: string } | null;
-}) {
-  const percent = size > 0 ? Math.min(100, Math.round((used / size) * 100)) : 0;
+/**
+ * How full the context window is, **above** the box and always the same
+ * height. Under it, the line appeared with the first turn and moved every
+ * time the composer grew a row, so the thing you were reading walked up the
+ * screen as you typed. A reserved line does not move, and an empty one costs
+ * ten pixels.
+ *
+ * What a turn cost in dollars is not here. It is a number nobody acts on
+ * mid-thread, and a price tag on a box someone is about to type into is a
+ * poor thing to put in front of them.
+ */
+function ContextLine({ usage }: { usage: { used: number; size: number } | null }) {
+  const percent = usage && usage.size > 0 ? Math.min(100, Math.round((usage.used / usage.size) * 100)) : null;
   return (
-    <div className="flex items-center justify-end gap-2 px-2 font-mono text-[10px] text-muted-foreground tabular-nums" data-context-footer>
-      <span title={`${used} of ${size} tokens`}>{percent}% context</span>
-      {cost ? <span>· {formatCostShort(cost.amount, cost.currency)}</span> : null}
+    <div
+      className="flex h-3.5 items-center justify-end px-2 font-mono text-[10px] text-muted-foreground/70 tabular-nums"
+      data-context-line
+    >
+      {percent === null || !usage ? null : (
+        <span title={`${usage.used} of ${usage.size} tokens`}>{percent}% context</span>
+      )}
     </div>
   );
-}
-
-function formatCostShort(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: amount < 1 ? 3 : 2 }).format(amount);
-  } catch {
-    return `${amount.toFixed(2)} ${currency}`;
-  }
 }
 
 function lastUserPrompt(state: SessionState | null): PromptBlock[] | null {

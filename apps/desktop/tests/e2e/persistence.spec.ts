@@ -65,13 +65,33 @@ test("a project and its session survive a quit and a relaunch", async () => {
   await first.page.evaluate((dir) => window.hardcore.projects.addPath({ path: dir }), project);
   await expect(first.page.getByRole("heading", { name: `What should we build in ${projectName}?` })).toBeVisible();
   const strip = first.page.locator("[data-context-strip]");
-  await expect(strip.locator("[data-chip=agent]")).not.toContainText("Choose an agent");
+  // The model and effort chips appear once the agent has been probed for
+  // what it offers (`agentOptions.probe`), which on a first run means the
+  // adapter is spawned, asked, and closed.
+  await expect(strip.locator("[data-chip=model]")).toContainText("Fast", { timeout: 30_000 });
+  await expect(strip.locator("[data-chip=effort]")).toContainText("Medium");
+
+  // Pick the other model and a different effort. Both are stored against the
+  // agent, and the second launch has to come back to them.
+  await strip.locator("[data-chip=model]").click();
+  await first.page.getByRole("menuitemradio", { name: "Smart" }).first().click();
+  await expect(strip.locator("[data-chip=model]")).toContainText("Smart");
+  await strip.locator("[data-chip=effort]").click();
+  await first.page.getByRole("menuitemradio", { name: "High" }).first().click();
+  await expect(strip.locator("[data-chip=effort]")).toContainText("High");
+
   const composer = first.page.getByPlaceholder("Do anything");
   await composer.fill("keep this one around");
   await composer.press("Enter");
   const view = first.page.locator("[data-session-view]");
   await expect(view).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
   await expect(first.page.locator("[data-session-row]")).toContainText("keep this one around");
+  // The session was created with the model that was picked, and in the
+  // agent's own auto mode rather than the `default` it starts in.
+  const liveComposer = first.page.locator("[data-composer]");
+  await expect(liveComposer.locator("[data-chip=model]")).toContainText("Smart");
+  await expect(liveComposer.locator("[data-chip=effort]")).toContainText("High");
+  await expect(liveComposer.locator("[data-chip=mode]")).toContainText("Auto");
   const before = await first.page.evaluate(() => window.hardcore.sessions.list({}));
   expect(before).toHaveLength(1);
   expect(before[0]?.acpSessionId).not.toBeNull();
@@ -85,6 +105,11 @@ test("a project and its session survive a quit and a relaunch", async () => {
   try {
     // The project is back, and the session row under it.
     await expect(second.page.getByText(projectName).first()).toBeVisible();
+    // The chips are drawn from the cache this time — no probe, no spawn —
+    // and they are on the choice the first launch made.
+    const secondStrip = second.page.locator("[data-context-strip]");
+    await expect(secondStrip.locator("[data-chip=model]")).toContainText("Smart");
+    await expect(secondStrip.locator("[data-chip=effort]")).toContainText("High");
     const row = second.page.locator("[data-session-row]");
     await expect(row).toHaveCount(1);
     await expect(row).toContainText("keep this one around");

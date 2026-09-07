@@ -98,7 +98,7 @@ test("Cmd+1..9 switch tabs and Cmd+W closes the active one", async () => {
 
 test("Shift+Enter is a newline, Enter sends, Escape stops the turn", async () => {
   // Sending needs an agent, and the chip fills in once the detector has probed.
-  await expect(page.locator("[data-context-strip] [data-chip=agent]")).not.toContainText("Choose an agent");
+  await expect(page.locator("[data-context-strip] [data-chip=model]")).toBeVisible();
   const composer = page.getByPlaceholder("Do anything");
   await composer.click();
   await composer.fill("first line");
