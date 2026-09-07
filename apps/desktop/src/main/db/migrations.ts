@@ -153,6 +153,17 @@ export const MIGRATIONS: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 7,
+    name: "pinned-sessions",
+    // The sidebar's `Pinned` section. A column on the session rather than a
+    // list of ids in the settings blob: the row already goes away when the
+    // thread is deleted, and a list would be a second place to forget it
+    // from.
+    up: `
+      ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 /**

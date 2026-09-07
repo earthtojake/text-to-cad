@@ -363,7 +363,7 @@ test("the + is a menu of the three ways something gets into a prompt", async () 
  * show them, so the fake runs its showcase once more.
  */
 test("the streaming and permission states render in light", async () => {
-  await page.getByRole("button", { name: "New chat" }).click();
+  await page.getByRole("button", { name: "New", exact: true }).click();
   await expect(page.getByRole("heading", { name: /What should we build in/ })).toBeVisible();
   await setTheme("light");
   const composer = page.getByPlaceholder("Do anything");

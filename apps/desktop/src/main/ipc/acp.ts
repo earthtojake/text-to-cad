@@ -149,6 +149,7 @@ export const acpHandlers = {
     setApprovalMode: ({ id, mode }) => surfacing(() => sessionManager.setApprovalMode(id, mode)),
     rename: ({ id, title }) => surfacing(() => sessionManager.rename(id, title)),
     archive: ({ id, archived }) => surfacing(() => sessionManager.archive(id, archived)),
+    setPinned: ({ id, pinned }) => surfacing(() => sessionManager.setPinned(id, pinned)),
     close: ({ id }) => surfacing(() => sessionManager.close(id)),
     delete: ({ id }) =>
       surfacing(async () => {

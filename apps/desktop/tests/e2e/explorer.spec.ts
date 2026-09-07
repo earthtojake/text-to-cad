@@ -564,7 +564,9 @@ test("renders the explorer in light as well as dark", async () => {
  */
 test("edits a markdown file in place and saves the lines it changed", async () => {
   await page.evaluate((directory) => window.hardcore.projects.addPath({ path: directory }), docsDir);
-  await page.getByText(path.basename(docsDir)).first().click();
+  // A project's section header collapses it; what *binds* the project is the
+  // `+` on that header, which is the sidebar's `new chat in this project`.
+  await page.getByRole("button", { name: `New chat in ${path.basename(docsDir)}` }).click();
   // A new project starts with the pane closed, like every other one.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
@@ -684,7 +686,7 @@ test("reviews a repository's changes", async () => {
     (directory) => window.hardcore.projects.addPath({ path: directory }),
     reviewRepo,
   );
-  await page.getByText(path.basename(reviewRepo)).first().click();
+  await page.getByRole("button", { name: `New chat in ${path.basename(reviewRepo)}` }).click();
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
   // The pane's state is per project, so a project nobody has opened it in
   // starts closed however wide the last one was.

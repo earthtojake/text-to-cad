@@ -79,6 +79,12 @@ export const acpContract = {
     rename: invoke(Id.extend({ title: z.string().min(1).max(200) }), SessionSchema),
     /** Hide from (or restore to) the sidebar. Archiving closes the adapter. */
     archive: invoke(Id.extend({ archived: z.boolean() }), SessionSchema),
+    /**
+     * Lift the row into the sidebar's `Pinned` section, or put it back under
+     * its project. Nothing about the thread itself changes — not even
+     * `updatedAt`, so pinning does not reorder a list sorted by activity.
+     */
+    setPinned: invoke(Id.extend({ pinned: z.boolean() }), SessionSchema),
     /** Kill the adapter; the index row stays and `load` brings it back. */
     close: invoke(Id, z.void()),
     /** Close and forget. The agent's own transcript store is not touched. */

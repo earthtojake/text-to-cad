@@ -28,6 +28,7 @@ function session(id: string, projectId: string): Session {
     createdAt: 0,
     updatedAt: 0,
     status: "idle",
+    pinned: false,
     acpSessionId: null,
     changedFiles: 0,
     insertions: 0,
@@ -49,7 +50,7 @@ let detach: () => void;
 
 beforeEach(() => {
   useHistory.setState({ entries: [], index: -1 });
-  useProjects.setState({ projects: [project("p1"), project("p2")], ready: true, activeId: null, collapsed: new Set() });
+  useProjects.setState({ projects: [project("p1"), project("p2")], ready: true, activeId: null });
   useSessions.setState({
     sessions: [session("s1", "p1"), session("s2", "p1"), session("s3", "p2")],
     ready: true,

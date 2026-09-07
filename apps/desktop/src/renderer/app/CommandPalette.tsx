@@ -4,6 +4,7 @@ import {
   ChevronRight,
   FolderPlus,
   Folder,
+  MessageSquare,
   MessageSquarePlus,
   PanelLeft,
   PanelRight,
@@ -22,11 +23,21 @@ import {
 import { useExplorer } from "@renderer/state/explorer";
 import { useHistory, useHistoryReach } from "@renderer/state/history";
 import { useProjects } from "@renderer/state/projects";
+import { useSessions } from "@renderer/state/sessions";
 import { useSettings } from "@renderer/state/settings";
 import { SETTINGS_SECTIONS, SETTINGS_SECTION_LABELS, useUi } from "@renderer/state/ui";
 
 /**
- * Cmd/Ctrl+K. Switches project and opens any Settings page.
+ * Cmd/Ctrl+K. Switches project, jumps to a thread, and opens any Settings
+ * page.
+ *
+ * There is one way to narrow the list — the box — and every row carries the
+ * words it can be found by in its `value`, project names included. That is
+ * what the search glyph on a project's sidebar header uses: it opens this
+ * with the project's name already typed (`openCommandPalette`), so the
+ * threads listed are that project's and the person can widen it by editing
+ * what is there. A second, invisible filter would be a list nobody could see
+ * the shape of.
  *
  * The shortcut is bound here as well as in the app menu: the menu accelerator
  * is the one that works when focus is inside a webview or a native dialog, and
@@ -37,11 +48,15 @@ export function CommandPalette() {
   const open = useUi((state) => state.commandPaletteOpen);
   const setOpen = useUi((state) => state.setCommandPaletteOpen);
   const toggle = useUi((state) => state.toggleCommandPalette);
+  const query = useUi((state) => state.commandPaletteQuery);
+  const setQuery = useUi((state) => state.setCommandPaletteQuery);
   const openSettings = useUi((state) => state.openSettings);
   const projects = useProjects((state) => state.projects);
   const activeProjectId = useProjects((state) => state.activeId);
   const setActiveProject = useProjects((state) => state.setActive);
   const addProject = useProjects((state) => state.add);
+  const sessions = useSessions((state) => state.sessions);
+  const selectSession = useSessions((state) => state.select);
   const layout = useSettings((state) => state.settings?.layout);
   const setLayout = useSettings((state) => state.setLayout);
   const reach = useHistoryReach();
@@ -69,9 +84,39 @@ export function CommandPalette() {
       open={open}
       title="Command palette"
     >
-      <CommandInput placeholder="Search projects and commands…" />
+      <CommandInput
+        onValueChange={setQuery}
+        placeholder="Search projects and commands…"
+        value={query}
+      />
       <CommandList>
         <CommandEmpty>No matches.</CommandEmpty>
+
+        {/* Threads first: the box is most often a thread's name, and a
+            project's search glyph seeds it with the project's, which every
+            one of these rows carries. */}
+        <CommandGroup heading="Sessions">
+          {sessions.map((session) => {
+            const project = projects.find((candidate) => candidate.id === session.projectId);
+            return (
+              <CommandItem
+                key={session.id}
+                onSelect={run(() => selectSession(session.id))}
+                value={`${session.title} ${project?.name ?? ""} ${session.branch ?? ""}`}
+              >
+                <MessageSquare className="size-4" />
+                <span className="truncate">{session.title}</span>
+                {project ? (
+                  <span className="ml-auto truncate text-xs text-muted-foreground">
+                    {project.name}
+                  </span>
+                ) : null}
+              </CommandItem>
+            );
+          })}
+        </CommandGroup>
+
+        <CommandSeparator />
 
         <CommandGroup heading="Projects">
           {projects.map((project) => (

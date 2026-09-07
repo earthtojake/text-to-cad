@@ -38,18 +38,32 @@ type UiState = {
   route: "app" | "settings";
   settingsSection: SettingsSection;
   commandPaletteOpen: boolean;
+  /**
+   * What the palette's box starts with.
+   *
+   * The palette has no filter of its own beyond that box — every row carries
+   * a `value` and cmdk scores the query against it — so "open the palette
+   * showing this project's threads" is the query, seeded. A prefix rather
+   * than a second filtering mechanism: one way to narrow the list, and the
+   * person can widen it by editing what is already typed.
+   */
+  commandPaletteQuery: string;
 
   openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
   setSettingsSection: (section: SettingsSection) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   toggleCommandPalette: () => void;
+  /** Open it with the box already holding `query`. */
+  openCommandPalette: (query?: string) => void;
+  setCommandPaletteQuery: (query: string) => void;
 };
 
 export const useUi = create<UiState>((set) => ({
   route: "app",
   settingsSection: "general",
   commandPaletteOpen: false,
+  commandPaletteQuery: "",
 
   openSettings: (section) =>
     set((state) => ({
@@ -59,7 +73,15 @@ export const useUi = create<UiState>((set) => ({
     })),
   closeSettings: () => set({ route: "app" }),
   setSettingsSection: (settingsSection) => set({ settingsSection }),
-  setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
+  setCommandPaletteOpen: (commandPaletteOpen) =>
+    set(commandPaletteOpen ? { commandPaletteOpen } : { commandPaletteOpen, commandPaletteQuery: "" }),
   toggleCommandPalette: () =>
-    set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),
+    set((state) =>
+      state.commandPaletteOpen
+        ? { commandPaletteOpen: false, commandPaletteQuery: "" }
+        : { commandPaletteOpen: true },
+    ),
+  openCommandPalette: (query = "") =>
+    set({ commandPaletteOpen: true, commandPaletteQuery: query }),
+  setCommandPaletteQuery: (commandPaletteQuery) => set({ commandPaletteQuery }),
 }));

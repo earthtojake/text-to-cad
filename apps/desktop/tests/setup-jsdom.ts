@@ -55,7 +55,13 @@ Object.defineProperty(window, "hardcore", {
       remove: vi.fn(),
       rename: vi.fn(),
     },
-    sessions: { list: vi.fn(async () => []) },
+    sessions: {
+      list: vi.fn(async () => []),
+      rename: vi.fn(async () => undefined),
+      archive: vi.fn(async () => undefined),
+      setPinned: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    },
     agents: {
       list: vi.fn(async () => []),
       refresh: vi.fn(async () => []),

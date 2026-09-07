@@ -69,7 +69,7 @@ test("shows two panes and no explorer until a project is bound", async () => {
   await expect(page.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
 
   await expect(page.getByRole("button", { name: "Add project" })).toBeVisible();
-  await expect(page.getByText("Projects", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New", exact: true })).toBeVisible();
   await expect(page.getByText("Add a project to get started")).toBeVisible();
 
   // Nor in the palette, and `Mod+Alt+B` has nothing to act on either.

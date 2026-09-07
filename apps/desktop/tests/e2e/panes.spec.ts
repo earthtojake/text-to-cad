@@ -279,7 +279,7 @@ test("back and forward walk the sessions and the new-session screen", async () =
   await expectShowing("Alpha");
   await sidebar.getByRole("button", { name: "Beta", exact: true }).click();
   await expectShowing("Beta");
-  await sidebar.getByRole("button", { name: "New chat", exact: true }).click();
+  await sidebar.getByRole("button", { name: "New", exact: true }).click();
   await expect(page.getByRole("heading", { name: new RegExp(`What should we build in ${projectName}`) })).toBeVisible();
   await expect(back).toBeEnabled();
   await expect(forward).toBeDisabled();
