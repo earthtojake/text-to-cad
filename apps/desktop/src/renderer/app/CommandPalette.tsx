@@ -29,6 +29,7 @@ export function CommandPalette() {
   const toggle = useUi((state) => state.toggleCommandPalette);
   const openSettings = useUi((state) => state.openSettings);
   const projects = useProjects((state) => state.projects);
+  const activeProjectId = useProjects((state) => state.activeId);
   const setActiveProject = useProjects((state) => state.setActive);
   const addProject = useProjects((state) => state.add);
   const layout = useSettings((state) => state.settings?.layout);
@@ -91,13 +92,16 @@ export function CommandPalette() {
             <PanelLeft className="size-4" />
             Toggle sidebar
           </CommandItem>
-          <CommandItem
-            onSelect={run(() => useExplorer.getState().toggleCollapsed())}
-            value="toggle explorer"
-          >
-            <PanelRight className="size-4" />
-            Toggle explorer
-          </CommandItem>
+          {/* No project, no explorer to toggle (`Shell`). */}
+          {activeProjectId ? (
+            <CommandItem
+              onSelect={run(() => useExplorer.getState().toggleCollapsed())}
+              value="toggle explorer"
+            >
+              <PanelRight className="size-4" />
+              Toggle explorer
+            </CommandItem>
+          ) : null}
           <CommandItem onSelect={run(() => undefined)} value="new session chat">
             <MessageSquarePlus className="size-4" />
             New session

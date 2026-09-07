@@ -1,7 +1,8 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { ExplorerToggle } from "@renderer/app/PaneToggles";
 import { SettingCard, SettingRow } from "@renderer/features/settings/SettingCard";
 import { SettingsRoute } from "@renderer/features/settings/SettingsRoute";
 import { Sidebar } from "@renderer/features/sidebar/Sidebar";
@@ -14,7 +15,7 @@ import { useUi } from "@renderer/state/ui";
 const wrap = (ui: React.ReactNode) => render(<TooltipProvider>{ui}</TooltipProvider>);
 
 beforeEach(() => {
-  useExplorer.setState({ projectId: null, tabs: [], activeId: null, ready: true, expanded: false });
+  useExplorer.setState({ projectId: null, tabs: [], activeId: null, ready: true });
   useProjects.setState({ projects: [], ready: true, activeId: null, collapsed: new Set() });
   useUi.setState({ route: "app", settingsSection: "general", commandPaletteOpen: false });
 });
@@ -43,7 +44,7 @@ describe("Explorer", () => {
   const PROJECT = { id: "p1", name: "text-to-cad", path: "/repo", createdAt: 0 };
 
   // The strip belongs to a project (plan §3): there is nowhere to open a tab
-  // without one, which is a state the pane has its own empty view for.
+  // without one, and no pane either.
   const withProject = () => {
     useProjects.setState({
       projects: [PROJECT],
@@ -54,9 +55,21 @@ describe("Explorer", () => {
     useExplorer.setState({ projectId: PROJECT.id, tabs: [], activeId: null, ready: true });
   };
 
-  it("says so when there is no project to open anything from", () => {
-    wrap(<ExplorerPane />);
-    expect(screen.getByText("No project")).toBeInTheDocument();
+  // The shell does not mount the pane without a project; the pane draws
+  // nothing if it is mounted anyway. Either way there is no strip and no
+  // control that offers to open one.
+  it("draws nothing when there is no project to open anything from", () => {
+    const { container } = wrap(<ExplorerPane />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("has no toggle for an explorer that is not there", () => {
+    wrap(<ExplorerToggle />);
+    expect(screen.queryByRole("button", { name: "Toggle explorer" })).toBeNull();
+    cleanup();
+    withProject();
+    wrap(<ExplorerToggle />);
+    expect(screen.getByRole("button", { name: "Toggle explorer" })).toBeInTheDocument();
   });
 
   it("opens a tab of each kind from the one `+` menu", async () => {
@@ -103,14 +116,36 @@ describe("Explorer", () => {
     expect(useExplorer.getState().tabs).toHaveLength(0);
   });
 
-  it("expands to the whole window and back", async () => {
+  // The fullscreen explorer is gone: it was the one control in the app that
+  // could take the session pane away, and the session is the app.
+  it("offers no way to take the window from the session", () => {
+    withProject();
+    wrap(<ExplorerPane />);
+    expect(screen.queryByRole("button", { name: "Expand explorer" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Restore layout" })).toBeNull();
+  });
+
+  // `+` is the last thing in the scrolling row rather than a control outside
+  // it, so it reads as the end of the tabs — and `sticky right-0` is what
+  // keeps it on screen once the row is longer than the pane.
+  it("puts + after the last tab, pinned to the strip's right edge", async () => {
     const user = userEvent.setup();
     withProject();
     wrap(<ExplorerPane />);
-    await user.click(screen.getByRole("button", { name: "Expand explorer" }));
-    expect(useExplorer.getState().expanded).toBe(true);
-    await user.click(screen.getByRole("button", { name: "Restore layout" }));
-    expect(useExplorer.getState().expanded).toBe(false);
+    for (let i = 0; i < 3; i += 1) {
+      await user.click(screen.getByRole("button", { name: "New tab" }));
+      await user.click(screen.getByRole("menuitem", { name: /^File/ }));
+    }
+    const tablist = screen.getByRole("tablist");
+    const plus = screen.getByRole("button", { name: "New tab" }).closest("[data-new-tab]");
+    expect(plus).not.toBeNull();
+    // A sibling that follows the tabs, not a child of the tablist.
+    expect(tablist.contains(plus!)).toBe(false);
+    expect(tablist.compareDocumentPosition(plus!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(plus).toHaveClass("sticky", "right-0");
+    // The same scrolling row as the tabs, which is what makes it slide with
+    // them until it reaches the edge.
+    expect(plus!.parentElement).toBe(tablist.parentElement);
   });
 });
 

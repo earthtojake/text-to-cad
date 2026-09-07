@@ -416,10 +416,9 @@ test("browses to a URL in a browser tab", async () => {
 });
 
 /**
- * After the terminal and browser tests, not before: this one expands and
- * restores the layout, and the restored explorer is narrower than the initial
- * one, which scrolls the strip. The tests that click a tab by position want
- * the strip as it first was.
+ * After the terminal and browser tests, not before: this one resizes the
+ * window, and the tests that click a tab by position want the strip as it
+ * first was.
  */
 test("renders a STEP file through the bundled runtime's viewer", async () => {
   test.skip(!cadReady, "no CAD runtime on this machine: no bundle under resources/runtime and no .venv");
@@ -458,11 +457,12 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await resizeWindow(1440, 900);
   await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
 
-  // Expanded, the surface is wide enough for everything — which is how a
-  // person reviews a part. The tree lists the document's solids once the
-  // compile lands.
-  await page.getByRole("button", { name: "Expand explorer" }).click();
-  await expect(page.getByRole("button", { name: "Restore layout" })).toBeVisible();
+  // At the explorer's widest — the sidebar hidden and the session at its
+  // 560px floor — the surface holds everything at once, which is how a person
+  // reviews a part. There is no fullscreen to reach for: the session pane is
+  // never taken away, so this is as wide as the explorer gets. The tree lists
+  // the document's solids once the compile lands.
+  await widenExplorer();
   await expect(page.getByRole("treeitem", { name: /import-smoke/ }).first()).toBeVisible();
   await expectSheetBesideModel();
   await page.waitForTimeout(1500);
@@ -476,27 +476,39 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(page.getByRole("tab", { name: "Measure" })).toHaveAttribute("aria-selected", "true");
   await shoot("file-cad-measure.png", true);
   await tree.click();
-  await page.getByRole("button", { name: "Restore layout" }).click();
+  await restoreLayout();
 });
 
-test("keeps every tab in one strip, and expands it", async () => {
-  // A file tab under the strip, not whichever tab happened to be last: these
-  // two shots are about the strip and the layout, and a review of *this*
-  // repository in the background would make them change on every run. First,
-  // too, because the STEP tab is the one open and the viewer's own
-  // Tree/Measure tabs inside it are tabs as well.
+test("keeps every tab in one strip, with + at its end", async () => {
+  // A file tab under the strip, not whichever tab happened to be last: this
+  // shot is about the strip and the layout, and a review of *this* repository
+  // in the background would make it change on every run. First, too, because
+  // the STEP tab is the one open and the viewer's own Tree/Measure tabs
+  // inside it are tabs as well.
   await page.getByRole("tab").first().click();
   // Two file tabs, a terminal and a browser — and the STEP when the runtime
   // could open it on this machine.
   await expect(page.getByRole("tab")).toHaveCount(cadReady ? 5 : 4);
-  await shoot("strip.png", true);
 
-  await page.getByRole("button", { name: "Expand explorer" }).click();
-  // Expanded means the explorer owns the window: the sidebar and the session
-  // are collapsed to zero.
-  await expect(page.getByRole("button", { name: "Restore layout" })).toBeVisible();
-  await shoot("expanded.png", true);
-  await page.getByRole("button", { name: "Restore layout" }).click();
+  // `+` trails the tabs inside their scrolling row rather than sitting in a
+  // corner of its own, and it is at the strip's right edge with five tabs of
+  // real names in a pane this wide. `tests/e2e/shell.spec.ts` is where the
+  // row is driven properly into overflow.
+  const strip = page.locator("[data-tab-strip]");
+  const plus = page.locator("[data-new-tab]");
+  const [stripBox, plusBox, firstTabBox] = await Promise.all([
+    strip.boundingBox(),
+    plus.boundingBox(),
+    page.getByRole("tab").first().boundingBox(),
+  ]);
+  expect(plusBox!.x).toBeGreaterThan(firstTabBox!.x);
+  expect(plusBox!.x + plusBox!.width).toBeLessThanOrEqual(stripBox!.x + stripBox!.width + 1);
+  expect(plusBox!.x + plusBox!.width).toBeGreaterThan(stripBox!.x + stripBox!.width - 24);
+  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeVisible();
+  // And nothing that would take the session pane away.
+  await expect(page.getByRole("button", { name: "Expand explorer" })).toHaveCount(0);
+
+  await shoot("strip.png", true);
 });
 
 test("persists the strip across a reload", async () => {
@@ -734,6 +746,50 @@ async function pick(item: string) {
 async function shoot(name: string, whole = false) {
   const target = whole ? page : page.getByTestId("explorer");
   await target.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
+}
+
+/**
+ * The explorer at its widest: the sidebar hidden and the session dragged down
+ * to its 560px floor. There is no fullscreen — the session pane is not
+ * collapsible, because the session is the app — so this is the whole of what
+ * "give the CAD surface some room" means now.
+ */
+async function widenExplorer() {
+  const before = (await page.getByTestId("explorer").boundingBox())!.width;
+  // The sidebar's own toggle, not the session header's copy: both are in the
+  // document, and the one in a zero-width panel cannot be clicked.
+  await page.getByTestId("sidebar").getByRole("button", { name: "Toggle sidebar" }).click();
+  await expect
+    .poll(async () => (await page.getByTestId("sidebar").boundingBox())?.width ?? 0)
+    .toBe(0);
+  await dragSeparator(-4000);
+  await expect
+    .poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0)
+    .toBeGreaterThan(before);
+}
+
+/** Undo `widenExplorer`. */
+async function restoreLayout() {
+  await dragSeparator(4000);
+  await page
+    .locator("[data-session-header]")
+    .getByRole("button", { name: "Toggle sidebar" })
+    .click();
+  await expect
+    .poll(async () => (await page.getByTestId("sidebar").boundingBox())?.width ?? 0)
+    .toBeGreaterThan(0);
+}
+
+/** Drag the separator between the session and the explorer; it clamps. */
+async function dragSeparator(by: number) {
+  const box = (await page.locator("[data-separator]").last().boundingBox())!;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + by, y, { steps: 12 });
+  await page.mouse.up();
+  // The layout is reapplied on the next frame (`Shell`'s `applyLayout`).
+  await page.waitForTimeout(300);
 }
 
 async function resizeWindow(width: number, height: number) {
