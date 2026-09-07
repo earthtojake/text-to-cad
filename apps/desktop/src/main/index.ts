@@ -98,9 +98,12 @@ function createWindow() {
   trackWindowState(window);
 
   // A launch from a terminal or a script may ask to stay out of the way:
-  // the window appears without taking focus from whatever is in front.
+  // the window appears without taking focus from whatever is in front. The
+  // e2e suite launches the app dozens of times in a run; every one of those
+  // taking focus made the machine unusable while it ran, so under test this
+  // is the rule rather than the option.
   window.once("ready-to-show", () => {
-    if (process.env.HARDCORE_LAUNCH_INACTIVE === "1") {
+    if (process.env.HARDCORE_LAUNCH_INACTIVE === "1" || process.env.NODE_ENV === "test") {
       window.showInactive();
     } else {
       window.show();

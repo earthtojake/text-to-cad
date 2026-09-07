@@ -1,13 +1,14 @@
 /**
  * The two buttons that open and close the side panes.
  *
- * They live here rather than in either feature because the sidebar's collapse
- * is drawn in two places: at the right end of the sidebar's title strip (the
- * traffic lights' row, level with the session's bar) while the sidebar is
- * open, and at the far left of the session's title bar once it is gone. The
- * explorer's sits on the right of that title bar whatever the explorer is
- * doing — and is absent entirely while no project is selected, since there is
- * then no explorer to toggle. One component, so the placements cannot drift.
+ * They live here rather than in either feature because each is drawn in two
+ * places that are the same spot on screen (Codex's rule: a pane's toggle
+ * never moves). The sidebar's sits right after the traffic lights: in the
+ * sidebar's title strip while it is open, at the left of the session's title
+ * bar once it is gone. The explorer's sits at the window's right edge: in the
+ * session's title bar while the explorer is shut, at the end of the
+ * explorer's tab strip once it is open — and is absent entirely while no
+ * project is selected, since there is then no explorer to toggle.
  */
 import { PanelLeft, PanelRight } from "lucide-react";
 

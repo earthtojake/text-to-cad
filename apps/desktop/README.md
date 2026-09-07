@@ -249,11 +249,13 @@ it — and the explorer takes whatever is left. The two fixed widths are the
 persisted preference (`settings.layout`); the explorer's is a consequence.
 The strips along the top are 32px, and whichever pane is leftmost makes room
 for the macOS traffic lights (`--titlebar-inset`, keyed off `data-leftmost` on
-the shell — `sidebar` or `session`, and nothing else). The sidebar's collapse
-sits at the right end of the sidebar's title strip — the traffic lights' row,
-level with the session's bar — while the sidebar is open, and at the far left
-of the session's title bar once it is gone. The explorer's toggle stays on the
-right of that bar.
+the shell — `sidebar` or `session`, and nothing else). The two pane toggles never move on screen (Codex's rule): the sidebar's
+sits right after the traffic lights — in the sidebar's title strip while it
+is open, at the left of the session's title bar once it is gone — and the
+explorer's sits at the window's right edge — in the session's title bar while
+the explorer is shut, at the end of the explorer's tab strip once it is open.
+The session's title bar and the explorer's tab strip carry a rule beneath
+them; the projects panel does not.
 
 **The sidebar and the explorer collapse; the session never does.** Its panel
 is not `collapsible` at all, so 560px is a floor the explorer's divider stops

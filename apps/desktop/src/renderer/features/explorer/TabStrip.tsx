@@ -2,6 +2,7 @@ import { FileText, GitCompare, Globe, Plus, SquareTerminal, X } from "lucide-rea
 import type { LucideIcon } from "lucide-react";
 import { createElement, useEffect, useRef, useState } from "react";
 
+import { ExplorerToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -91,6 +92,7 @@ function KindIcon({ kind, className }: { kind: ExplorerTabKind; className?: stri
 
 export function TabStrip() {
   const tabs = useExplorer((state) => state.tabs);
+  const collapsed = useExplorer((state) => state.collapsed);
   const activeId = useExplorer((state) => state.activeId);
   const open = useExplorer((state) => state.open);
   const close = useExplorer((state) => state.close);
@@ -159,7 +161,7 @@ export function TabStrip() {
           than being cut off against a hard edge.
         */}
         <div
-          className="sticky right-0 z-10 flex shrink-0 items-center bg-background pr-0.5 pl-1 before:pointer-events-none before:absolute before:top-0 before:right-full before:h-full before:w-5 before:bg-gradient-to-r before:from-transparent before:to-background"
+          className="sticky right-0 z-10 flex shrink-0 items-center bg-background pr-1.5 pl-1 before:pointer-events-none before:absolute before:top-0 before:right-full before:h-full before:w-5 before:bg-gradient-to-r before:from-transparent before:to-background"
           data-new-tab
         >
           <DropdownMenu>
@@ -183,6 +185,11 @@ export function TabStrip() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+        {/* The window's right edge while the explorer is open: the same
+              spot the session's title bar holds this toggle in while it is
+              shut, so it never moves. A shut explorer keeps its strip in the
+              document at zero width, so the title bar's is the only one then. */}
+          {collapsed ? null : <ExplorerToggle />}
         </div>
       </div>
     </div>

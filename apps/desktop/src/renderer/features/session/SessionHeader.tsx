@@ -12,6 +12,7 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { useAcp } from "@renderer/state/acp";
 import { useSessions } from "@renderer/state/sessions";
+import { useExplorer } from "@renderer/state/explorer";
 import { useSettings } from "@renderer/state/settings";
 import type { Session } from "@shared/types";
 
@@ -20,9 +21,11 @@ import type { Session } from "@shared/types";
  * first prompt; click to edit), a `…` menu; the explorer's toggle on the
  * right. The strip is the window's drag region, so the controls opt out of it.
  *
- * The sidebar's toggle is here only while the sidebar is hidden: open, it
- * sits at the right end of the sidebar's title strip, level with this bar,
- * so the control stays on the same line when the panel closes.
+ * The two pane toggles keep their places on screen whatever the panes do
+ * (Codex's rule): the sidebar's is right after the traffic lights — in the
+ * sidebar's own title strip while it is open, here once it is gone — and
+ * the explorer's is at the window's right edge — here while the explorer is
+ * shut, in the explorer's tab strip once it is open.
  */
 export function SessionHeader({
   session,
@@ -37,6 +40,7 @@ export function SessionHeader({
   const remove = useSessions((state) => state.remove);
   const closeSession = useAcp((state) => state.close);
   const sidebarCollapsed = useSettings((state) => state.settings?.layout.sidebarCollapsed ?? false);
+  const explorerCollapsed = useExplorer((state) => state.collapsed);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
 
@@ -56,7 +60,7 @@ export function SessionHeader({
 
   return (
     <header
-      className="app-drag flex shrink-0 items-center gap-2 px-3"
+      className="app-drag flex shrink-0 items-center gap-2 border-b px-3"
       data-session-header
       style={{ height: "var(--titlebar-height)" }}
     >
@@ -131,9 +135,13 @@ export function SessionHeader({
         ) : null}
       </div>
       <div className="flex-1" />
-      <div className="app-no-drag flex items-center gap-0.5">
-        <ExplorerToggle />
-      </div>
+      {/* The window's right edge while the explorer is shut; open, the
+          explorer's own strip holds the toggle at that same edge. */}
+      {explorerCollapsed ? (
+        <div className="app-no-drag flex items-center gap-0.5">
+          <ExplorerToggle />
+        </div>
+      ) : null}
     </header>
   );
 }

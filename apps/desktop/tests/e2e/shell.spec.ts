@@ -93,7 +93,7 @@ test("shows two panes and no explorer until a project is bound", async () => {
  * title bar once the sidebar is gone. (The explorer's toggle, which stays on
  * the right of that bar, needs a project: the test below.)
  */
-test("the sidebar's collapse is level with the title bar, then at its left", async () => {
+test("the sidebar's collapse is right after the traffic lights, open or shut", async () => {
   const sidebar = page.locator("[data-panel]").first();
   const header = page.locator("[data-session-header]");
   const inSidebar = sidebar.getByRole("button", { name: "Toggle sidebar" });
@@ -104,7 +104,7 @@ test("the sidebar's collapse is level with the title bar, then at its left", asy
     page.getByText("Hardcore", { exact: true }).boundingBox(),
     header.locator("[data-session-title]").boundingBox(),
   ]);
-  expect(toggleBox!.x).toBeGreaterThan(nameBox!.x);
+  // In the title strip above the name, level with the session's bar.
   expect(toggleBox!.y + toggleBox!.height).toBeLessThanOrEqual(nameBox!.y + 1);
   const toggleMid = toggleBox!.y + toggleBox!.height / 2;
   const titleMid = openTitleBox!.y + openTitleBox!.height / 2;
@@ -113,6 +113,8 @@ test("the sidebar's collapse is level with the title bar, then at its left", asy
   await inSidebar.click();
   await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBe(0);
 
+  // Gone, the same control is in the session's title bar — at the same
+  // place on screen, so the eye and the pointer find it where it was.
   const collapse = header.getByRole("button", { name: "Toggle sidebar" });
   await expect(collapse).toBeVisible();
   const [collapseBox, titleBox] = await Promise.all([
@@ -120,6 +122,8 @@ test("the sidebar's collapse is level with the title bar, then at its left", asy
     header.locator("[data-session-title]").boundingBox(),
   ]);
   expect(collapseBox!.x).toBeLessThan(titleBox!.x);
+  expect(Math.abs(collapseBox!.x - toggleBox!.x)).toBeLessThan(4);
+  expect(Math.abs(collapseBox!.y - toggleBox!.y)).toBeLessThan(4);
 
   await collapse.click();
   await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThan(0);
@@ -152,6 +156,14 @@ test("the explorer opens and closes a tab", async () => {
 
   await openExplorer();
   await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeVisible();
+  // Open, the toggle is the explorer's strip's last control — at the same
+  // place on screen it had in the title bar, the window's right edge.
+  await expect(header.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
+  const inStrip = page.locator("[data-tab-strip]").getByRole("button", { name: "Toggle explorer" });
+  await expect(inStrip).toBeVisible();
+  const stripBox = (await inStrip.boundingBox())!;
+  expect(Math.abs(stripBox.x - toggleBox!.x)).toBeLessThan(4);
+  expect(Math.abs(stripBox.y - toggleBox!.y)).toBeLessThan(4);
 
   // `+` is a menu of the four kinds now.
   await page.getByRole("button", { name: "New tab", exact: true }).click();

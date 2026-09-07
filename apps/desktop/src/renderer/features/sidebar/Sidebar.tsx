@@ -34,9 +34,13 @@ export function Sidebar() {
   return (
     <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
       {/* The traffic lights' strip on macOS — the row the session's and the
-          explorer's bars share — with the panel's own collapse at its right
-          end, level with those bars' controls. */}
-      <div className="app-drag flex shrink-0 items-center justify-end pr-1" style={{ height: "var(--titlebar-height)" }}>
+          explorer's bars share. The panel's collapse sits right after the
+          lights, at the same x the session's title bar gives it once the
+          panel is gone: the control never moves (Codex's placement). */}
+      <div
+        className="app-drag flex shrink-0 items-center"
+        style={{ height: "var(--titlebar-height)", paddingLeft: "calc(var(--titlebar-inset) + 0.75rem)" }}
+      >
         <SidebarToggle />
       </div>
 
