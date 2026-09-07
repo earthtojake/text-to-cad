@@ -13,11 +13,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import { MenuKind } from "@renderer/features/sidebar/menu";
-import { ProjectMenuItems } from "@renderer/features/sidebar/project-menu";
 import { useSettings, useSidebarSettings } from "@renderer/state/settings";
 import type {
-  Project,
   SidebarEnvironmentFilter,
   SidebarGroupBy,
   SidebarSortBy,
@@ -26,24 +23,18 @@ import type {
 
 /**
  * How the list is read: which threads it holds, how they are grouped, in
- * what order, and what each row says. Reached from the sliders glyph on a
- * section header.
+ * what order, and what each row says. Reached from the sliders glyph in the
+ * panel's header, beside search.
  *
- * The settings are **global**, not per project (`settings.sidebar`), even
- * though the menu is opened from one project's header: "show me the archived
- * ones" is a question about how the whole list is read, and a person who set
- * it on one header and found the next unchanged would have to set it once per
- * project. The header the menu was opened from decides only one thing — which
- * project `Project…` acts on.
+ * The settings are **global** (`settings.sidebar`): "show me the archived
+ * ones" is a question about how the whole list is read, not about one folder.
+ * The menu used to hang off a project's section header, with that project's
+ * own actions as a `Project…` submenu at the bottom — a global menu that
+ * secretly belonged to whichever header you opened it from. Now it is where
+ * it acts, and the project actions are on the header's right-click, which is
+ * the one place they were ever a project's.
  */
-export function SidebarFilterMenu({
-  project,
-  onRenameProject,
-}: {
-  /** The header this was opened from, when it is a project's. */
-  project: Project | null;
-  onRenameProject: () => void;
-}) {
+export function SidebarFilterMenu() {
   const filters = useSidebarSettings();
   const setSidebar = useSettings((state) => state.setSidebar);
 
@@ -52,14 +43,17 @@ export function SidebarFilterMenu({
       <DropdownMenuTrigger asChild>
         <Button
           aria-label="Filters"
-          className="size-5 shrink-0 text-muted-foreground data-[state=open]:opacity-100"
-          size="icon-xs"
+          className="app-no-drag size-7 shrink-0 text-muted-foreground"
+          size="icon-sm"
           variant="ghost"
         >
-          <SlidersHorizontal className="size-3" />
+          <SlidersHorizontal className="size-3.5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
+      {/* Anchored to the trigger's right edge: it is the last control in the
+          panel's header, and a menu that opened rightward from there would
+          be pushed back by the collision boundary every time. */}
+      <DropdownMenuContent align="end" className="w-56">
         <Choice
           items={STATUS}
           label="Status"
@@ -98,21 +92,6 @@ export function SidebarFilterMenu({
         >
           Show branch
         </DropdownMenuCheckboxItem>
-        {project ? (
-          <>
-            <DropdownMenuSeparator />
-            {/* The project's own actions, so nothing that used to be behind
-                the header's `…` is only reachable with a mouse. */}
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Project…</DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="w-48">
-                <MenuKind.Provider value="dropdown">
-                  <ProjectMenuItems onRename={onRenameProject} project={project} />
-                </MenuKind.Provider>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          </>
-        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

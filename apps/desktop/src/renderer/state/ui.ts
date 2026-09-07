@@ -39,13 +39,11 @@ type UiState = {
   settingsSection: SettingsSection;
   commandPaletteOpen: boolean;
   /**
-   * What the palette's box starts with.
+   * What is in the palette's box.
    *
    * The palette has no filter of its own beyond that box — every row carries
-   * a `value` and cmdk scores the query against it — so "open the palette
-   * showing this project's threads" is the query, seeded. A prefix rather
-   * than a second filtering mechanism: one way to narrow the list, and the
-   * person can widen it by editing what is already typed.
+   * a `value` and cmdk scores the query against it. One way to narrow the
+   * list, and it is the one the person can see the shape of.
    */
   commandPaletteQuery: string;
 
@@ -54,8 +52,6 @@ type UiState = {
   setSettingsSection: (section: SettingsSection) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   toggleCommandPalette: () => void;
-  /** Open it with the box already holding `query`. */
-  openCommandPalette: (query?: string) => void;
   setCommandPaletteQuery: (query: string) => void;
 };
 
@@ -81,7 +77,5 @@ export const useUi = create<UiState>((set) => ({
         ? { commandPaletteOpen: false, commandPaletteQuery: "" }
         : { commandPaletteOpen: true },
     ),
-  openCommandPalette: (query = "") =>
-    set({ commandPaletteOpen: true, commandPaletteQuery: query }),
   setCommandPaletteQuery: (commandPaletteQuery) => set({ commandPaletteQuery }),
 }));

@@ -111,7 +111,13 @@ export function ComposerEditor({
       immediatelyRender: false,
       editorProps: {
         attributes: {
-          class: "composer-editor min-h-12 max-h-48 overflow-y-auto px-3 py-2.5 text-[13px] leading-5 outline-none",
+          // One row when it is empty, growing with the sentence to eight and
+          // scrolling after that. The numbers are the arithmetic of the two
+          // classes beside them and nothing else: `leading-5` is a 20px
+          // line and `py-2.5` is 10px above and below, so one row is 40px
+          // and eight are 180px. A `min-h` larger than one line is what made
+          // an empty box look like a paragraph waiting to be written.
+          class: "composer-editor max-h-[180px] min-h-10 overflow-y-auto px-3 py-2.5 text-[13px] leading-5 outline-none",
           role: "textbox",
           "aria-multiline": "true",
           "aria-label": placeholder,

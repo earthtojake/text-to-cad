@@ -1,10 +1,12 @@
-import { CirclePlus, FolderPlus, Search, Settings } from "lucide-react";
+import { CirclePlus, Search, Settings } from "lucide-react";
 import { cn } from "cn";
 
 import { HistoryNav, SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { SessionSection } from "@renderer/features/sidebar/SessionSection";
+import { SidebarFilterMenu } from "@renderer/features/sidebar/SidebarFilterMenu";
+import { useOpenFolder } from "@renderer/hooks/use-open-folder";
 import { useProjects } from "@renderer/state/projects";
 import { useSessions, useSidebarSections } from "@renderer/state/sessions";
 import { useUi } from "@renderer/state/ui";
@@ -24,12 +26,16 @@ import { useUi } from "@renderer/state/ui";
  * The top strip is the window's drag region on macOS — the traffic lights sit
  * in it, which is why it is exactly `--titlebar-height` tall and why nothing
  * is drawn in it. The app's name goes *under* it, with the sidebar's own
- * collapse on its left and search on its right.
+ * collapse on its left and, on its right, the two controls that act on the
+ * whole list: search and the filter menu. Both used to be per project — a
+ * search glyph and the sliders on every section header — and neither ever
+ * meant one project: the palette searches every thread, and the filters are
+ * `settings.sidebar`, global. One list, one place to narrow it.
  */
 export function Sidebar() {
   const projects = useProjects((state) => state.projects);
   const ready = useProjects((state) => state.ready);
-  const addProject = useProjects((state) => state.add);
+  const openFolder = useOpenFolder();
   const setActiveSession = useSessions((state) => state.setActive);
   const openSettings = useUi((state) => state.openSettings);
   const toggleCommandPalette = useUi((state) => state.toggleCommandPalette);
@@ -63,23 +69,20 @@ export function Sidebar() {
         >
           <Search className="size-3.5" />
         </Button>
+        <SidebarFilterMenu />
       </header>
 
-      {/* The nav list. `New` is the accent-ringed plus: the one row that
-          starts something, and the same action as the app menu's `Cmd+N` —
-          the active project's new-session screen. `Add project` is beside it
-          rather than behind a heading, because with no project it is the only
-          thing in the app that does anything. */}
+      {/* The nav list, which is one row: `New`, the accent-ringed plus — the
+          one row that starts something, and the same action as the app menu's
+          `Cmd+N`. Adding a folder is not a row here any more; it is
+          `Open folder…` at the bottom of the project chip's menu, where
+          picking a folder already happens, and the card below for the one
+          state that has no chip to open — no projects at all. */}
       <nav className="shrink-0 px-2 pb-1">
         <SidebarLink
           icon={<CirclePlus className="size-4 text-primary" />}
           label="New"
           onClick={() => setActiveSession(null)}
-        />
-        <SidebarLink
-          icon={<FolderPlus className="size-4" />}
-          label="Add project"
-          onClick={() => void addProject()}
         />
       </nav>
 
@@ -91,7 +94,7 @@ export function Sidebar() {
           {sections.map((section) => (
             <SessionSection key={section.id} section={section} />
           ))}
-          {ready && projects.length === 0 ? <NoProjects onAdd={() => void addProject()} /> : null}
+          {ready && projects.length === 0 ? <NoProjects onOpen={() => void openFolder()} /> : null}
         </div>
       </ScrollArea>
 
@@ -135,12 +138,16 @@ function SidebarLink({
   );
 }
 
-function NoProjects({ onAdd }: { onAdd: () => void }) {
+/**
+ * The one state that needs a chooser of its own: with no project there is no
+ * project chip to open `Open folder…` from, so the card is it.
+ */
+function NoProjects({ onOpen }: { onOpen: () => void }) {
   return (
     <div className="mt-2 rounded-lg border border-dashed border-sidebar-border px-3 py-4 text-center">
       <p className="text-xs text-muted-foreground">No projects yet.</p>
-      <Button className="mt-2 h-7 text-xs" onClick={onAdd} size="sm" variant="secondary">
-        Add a folder
+      <Button className="mt-2 h-7 text-xs" onClick={onOpen} size="sm" variant="secondary">
+        Open folder…
       </Button>
     </div>
   );

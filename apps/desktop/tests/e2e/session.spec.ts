@@ -14,8 +14,24 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
  * `HARDCORE_FAKE_AGENT` makes main launch `tests/fake-agent` in place of
  * every adapter; the `showcase` prompt is the fake's Codex-shaped turn.
  */
+/**
+ * The renderer globals this file's `page.evaluate` calls reach for, declared
+ * the way the other suites declare theirs: the e2e tsconfig has no `dom`
+ * lib, on purpose — a spec that could see the whole DOM API would be a spec
+ * that forgot which side of the bridge it is on.
+ */
+declare const document: { querySelectorAll(selectors: string): Iterable<object>; };
+declare function getComputedStyle(element: object): {
+  userSelect: string;
+  lineHeight: string;
+  paddingTop: string;
+  paddingBottom: string;
+};
+
 declare const window: {
   innerWidth: number;
+  /** What a drag actually selected. */
+  getSelection(): { toString(): string; removeAllRanges(): void } | null;
   hardcore: {
     projects: { addPath(input: { path: string }): Promise<{ id: string }> };
     settings: { set(patch: { theme: string }): Promise<unknown> };
@@ -261,6 +277,41 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
 });
 
 /**
+ * The transcript is a document: a drag across an agent's reply selects it.
+ *
+ * It did not, and the reason was one line in `styles/globals.css` — `body {
+ * user-select: none }`, written for a window of chrome — so every word an
+ * agent produced was a word nobody could copy. The drag is a real mouse
+ * drag rather than `selectAllChildren`, because a programmatic range
+ * succeeds against `user-select: none` and would have passed the whole time
+ * this was broken.
+ */
+test("text in an agent's message can be selected with the mouse", async () => {
+  const prose = page.locator("[data-part=text]").first();
+  await expect(prose).toBeVisible();
+  const box = (await prose.boundingBox())!;
+  await page.mouse.move(box.x + 2, box.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 4, box.y + box.height - 6, { steps: 16 });
+  await page.mouse.up();
+  const selected = await page.evaluate(() => window.getSelection()?.toString() ?? "");
+  expect(selected.trim().length, "nothing was selected in the agent's prose").toBeGreaterThan(0);
+  // It is the agent's words, not a stray label from somewhere else.
+  expect(await prose.innerText()).toContain(selected.trim().split("\n")[0]!.trim());
+
+  // Left cleared, so the screenshots after this are not a picture of a
+  // highlight.
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+
+  // The rest of the document, asserted rather than dragged over: a summary
+  // line and the code in a fenced block are inside buttons and `<pre>`, and
+  // a drag that starts and ends inside one button is also a *click* on it —
+  // this test would fold the transcript's rows shut behind itself.
+  expect(await selectability("[data-activity-row] button, [data-activity-group] button")).toBe("text");
+  expect(await selectability("[data-part=text] pre, [data-part=text] code")).toBe("text");
+});
+
+/**
  * The categories, when an agent sends any. Neither shipping adapter does —
  * Claude's `usage_update` is used/size/cost, Codex's is used/size — so the
  * fake agent is the only place the `_meta.contextBreakdown` shape exists,
@@ -358,6 +409,69 @@ test("the + is a menu of the three ways something gets into a prompt", async () 
 });
 
 /**
+ * The box is one row until there is more than one row to show, and it stops
+ * growing at eight.
+ *
+ * Measured against its own line height rather than a pixel constant: the
+ * question is "is this box one line of text tall", and a `min-h` a person
+ * bumps to 3rem is exactly the mistake this catches. Send is on that row,
+ * centred on it, because a button on a second row inside the box makes the
+ * smallest composer twice as tall as the sentence in it.
+ */
+test("the composer starts at one row, grows, and caps at eight", async () => {
+  const input = page.locator("[data-composer-input]");
+  await expect(input).toBeVisible();
+  const rows = () =>
+    input.evaluate((node) => {
+      const style = getComputedStyle(node);
+      const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const line = parseFloat(style.lineHeight);
+      return {
+        line,
+        text: node.clientHeight - padding,
+        scrolls: node.scrollHeight > node.clientHeight + 1,
+      };
+    });
+
+  const empty = await rows();
+  expect(Math.abs(empty.text - empty.line), `empty box is ${empty.text}px of text`).toBeLessThanOrEqual(4);
+  expect(empty.scrolls).toBe(false);
+
+  // Send shares that row, centred on it.
+  const submit = page.locator("[data-composer] form button[type=submit]");
+  const [inputBox, submitBox] = await Promise.all([input.boundingBox(), submit.boundingBox()]);
+  expect(Math.abs((submitBox!.y + submitBox!.height / 2) - (inputBox!.y + inputBox!.height / 2))).toBeLessThan(4);
+
+  // Five lines: five rows of text, no scrolling.
+  await input.click();
+  await type(5);
+  const five = await rows();
+  expect(Math.round(five.text / five.line)).toBe(5);
+  expect(five.scrolls).toBe(false);
+
+  // Twenty: eight rows, and the rest is scrolled inside.
+  await type(15);
+  const twenty = await rows();
+  expect(Math.round(twenty.text / twenty.line)).toBe(8);
+  expect(twenty.scrolls).toBe(true);
+
+  // Twenty Shift+Enters made twenty lines and sent nothing: the last turn is
+  // still the one the test before this left there. (That Enter *does* send is
+  // every other test in this file.)
+  await expect(page.locator("[data-turn][data-role=user]").last()).not.toContainText("line 19");
+  await expect(page.locator("[data-composer] form [data-chip]")).toHaveCount(0);
+
+  // Emptied, it is one row again — the min is a floor, not a remembered
+  // height.
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+a" : "Control+a");
+  await page.keyboard.press("Backspace");
+  await expect(input).toHaveText("");
+  const after = await rows();
+  expect(Math.abs(after.text - after.line)).toBeLessThanOrEqual(4);
+  expect(after.scrolls).toBe(false);
+});
+
+/**
  * The same turn again in light, for the states that only exist mid-turn:
  * streaming and the permission card. A theme switch after the fact cannot
  * show them, so the fake runs its showcase once more.
@@ -425,6 +539,9 @@ test("a crashed agent is an inline error with retry, and reconnecting resumes th
   await expect(page.locator("[data-part=error]")).toContainText("exited");
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
   await expect(page.locator("[data-session-row]")).toHaveAttribute("data-status", "error");
+  // The transcript selects, but its own controls do not: a drag that starts
+  // on Retry is somebody missing the button (see the selection test).
+  expect(await selectability("[data-part=error] button")).toBe("none");
   await shoot("session-error.png");
 
   await page.getByRole("button", { name: "Reconnect" }).click();
@@ -454,7 +571,9 @@ test("the sidebar renames and archives a session", async () => {
 test("a signed-out agent asks to sign in", async () => {
   await page.evaluate((dir) => window.hardcore.projects.addPath({ path: dir }), signedOutProject);
   await page.locator("[data-chip=project]").click();
-  await page.getByRole("menuitemradio", { name: path.basename(signedOutProject) }).click();
+  // `Recent`, then a plain item per folder with a check on the current one
+  // (`sidebar.spec.ts` covers the order and `Open folder…`).
+  await page.getByRole("menuitem", { name: path.basename(signedOutProject) }).click();
   await expect(page.getByRole("heading", { name: `What should we build in ${path.basename(signedOutProject)}?` })).toBeVisible();
   const composer = page.getByPlaceholder("Do anything");
   await composer.fill("hello");
@@ -469,6 +588,38 @@ test("a signed-out agent asks to sign in", async () => {
 
 async function shoot(name: string) {
   await page.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
+}
+
+/**
+ * What `user-select` computes to for everything in the transcript matching
+ * `selector` — one value when they agree, and the values joined when they do
+ * not, so a mixture fails loudly. `no such node` rather than a default,
+ * because an assertion that passes by matching nothing is not an assertion.
+ */
+async function selectability(selector: string): Promise<string> {
+  return page.evaluate((query) => {
+    const nodes = [...document.querySelectorAll(`[data-transcript] :is(${query})`)];
+    if (nodes.length === 0) {
+      return "no such node";
+    }
+    return [...new Set(nodes.map((node) => getComputedStyle(node).userSelect))].sort().join("/");
+  }, selector);
+}
+
+/**
+ * `lines` more lines into the focused composer, the way a person makes them:
+ * Shift+Enter. The counter carries across calls, so the last line typed has
+ * a name the assertions can look for.
+ */
+let typedLines = 0;
+async function type(lines: number) {
+  for (let index = 0; index < lines; index += 1) {
+    if (typedLines > 0) {
+      await page.keyboard.press("Shift+Enter");
+    }
+    await page.keyboard.type(`line ${typedLines}`);
+    typedLines += 1;
+  }
 }
 
 /** One popover's worth of fade and scale, before a picture is taken of it. */

@@ -20,6 +20,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@renderer/components/ui/command";
+import { useOpenFolder } from "@renderer/hooks/use-open-folder";
 import { useExplorer } from "@renderer/state/explorer";
 import { useHistory, useHistoryReach } from "@renderer/state/history";
 import { useProjects } from "@renderer/state/projects";
@@ -32,12 +33,12 @@ import { SETTINGS_SECTIONS, SETTINGS_SECTION_LABELS, useUi } from "@renderer/sta
  * page.
  *
  * There is one way to narrow the list — the box — and every row carries the
- * words it can be found by in its `value`, project names included. That is
- * what the search glyph on a project's sidebar header uses: it opens this
- * with the project's name already typed (`openCommandPalette`), so the
- * threads listed are that project's and the person can widen it by editing
- * what is there. A second, invisible filter would be a list nobody could see
- * the shape of.
+ * words it can be found by in its `value`, project names included, so typing
+ * a project's name is how its threads get filtered. A second, invisible
+ * filter would be a list nobody could see the shape of. This is the app's
+ * only search: the glyph that used to sit on each project's sidebar header
+ * and seed the box with that project's name is gone, and the one in the
+ * panel's header opens this empty.
  *
  * The shortcut is bound here as well as in the app menu: the menu accelerator
  * is the one that works when focus is inside a webview or a native dialog, and
@@ -54,7 +55,7 @@ export function CommandPalette() {
   const projects = useProjects((state) => state.projects);
   const activeProjectId = useProjects((state) => state.activeId);
   const setActiveProject = useProjects((state) => state.setActive);
-  const addProject = useProjects((state) => state.add);
+  const openFolder = useOpenFolder();
   const sessions = useSessions((state) => state.sessions);
   const selectSession = useSessions((state) => state.select);
   const layout = useSettings((state) => state.settings?.layout);
@@ -130,9 +131,12 @@ export function CommandPalette() {
               <span className="ml-auto truncate text-xs text-muted-foreground">{project.path}</span>
             </CommandItem>
           ))}
-          <CommandItem onSelect={run(() => void addProject())} value="add project folder">
+          {/* The keyboard's way to the chooser the project chip's menu ends
+              with. `add project` stays in the search terms: it is what
+              somebody who remembers the old row will type. */}
+          <CommandItem onSelect={run(() => void openFolder())} value="open folder add project">
             <FolderPlus className="size-4" />
-            Add project…
+            Open folder…
           </CommandItem>
         </CommandGroup>
 

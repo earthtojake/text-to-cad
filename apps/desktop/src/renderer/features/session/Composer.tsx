@@ -13,7 +13,6 @@ import {
 import {
   PromptInput,
   PromptInputButton,
-  PromptInputFooter,
   PromptInputHeader,
   PromptInputSubmit,
   usePromptInputAttachments,
@@ -60,6 +59,12 @@ import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEd
  * Nothing wraps — the chips truncate — so that row is the same height at
  * 560px as at 1200px.
  *
+ * **The box is one row until there is more to show.** Empty, it is a single
+ * line with send centred at its right end; it grows with the sentence to
+ * eight lines and then scrolls inside (the min and the max are the editor's,
+ * `composer/ComposerEditor`). A composer that starts three lines tall is
+ * three lines of nothing, and the prompt most people send is short.
+ *
  * There is no microphone. There is no dictation backend behind one, and on
  * macOS the system's own dictation already types into this box; a button
  * that is permanently disabled is a promise the app does not keep.
@@ -72,8 +77,9 @@ import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEd
  * The input is `composer/ComposerEditor`, not AI Elements' textarea: a CAD
  * reference typed, pasted or copied in from the viewer is drawn as a chip in
  * the sentence and sent as its plain token. `PromptInput` itself — the form,
- * the attachments, the footer — is untouched; the editor keeps the form's
- * `message` field for it.
+ * its attachments, its submit — is untouched; the editor keeps the form's
+ * `message` field for it. Its footer is not used: send sits beside the
+ * sentence, not under it.
  */
 export function Composer({
   sessionId,
@@ -194,7 +200,17 @@ export function Composer({
 
       <div className="flex flex-col gap-1">
         <PromptInput
-          className={cn("rounded-2xl shadow-xs", disabled && "opacity-70")}
+          className={cn(
+            "rounded-2xl shadow-xs",
+            // shadcn's `input-group` is a fixed `h-9` unless one of its own
+            // children is a textarea or a block-aligned addon. The editor is
+            // neither, and send is now on its row rather than in a footer, so
+            // without this the box is 36px tall whatever is in it — and
+            // `overflow-hidden` on the group means the second line is simply
+            // not drawn. The height comes from the editor's min/max instead.
+            "[&>[data-slot=input-group]]:h-auto",
+            disabled && "opacity-70",
+          )}
           maxFileSize={20 * 1024 * 1024}
           multiple
           onError={(error) => toast.error(error.message)}
@@ -208,45 +224,54 @@ export function Composer({
            * InputGroup's direct-child stacking selector does not see, and the
            * composer collapses to one row.
            */}
-          <ComposerEditorField
-            autoFocus={autoFocus}
-            disabled={disabled}
-            handle={textRef}
-            onChange={setText}
-            onKeyDown={(event) => {
-              if (!slash.open) {
-                if (event.key === "Escape" && status === "streaming" && onStop) {
+          {/*
+           * The sentence and send share one row, so an empty composer is one
+           * line tall with send centred on it (Codex's, Claude Code's). Send
+           * in a footer under the box made the smallest possible composer two
+           * rows: a line to type in and a line holding one button.
+           */}
+          <div className="flex w-full min-w-0 items-center gap-1 pr-1.5">
+            <ComposerEditorField
+              autoFocus={autoFocus}
+              disabled={disabled}
+              handle={textRef}
+              onChange={setText}
+              onKeyDown={(event) => {
+                if (!slash.open) {
+                  if (event.key === "Escape" && status === "streaming" && onStop) {
+                    event.preventDefault();
+                    onStop();
+                  }
+                  return;
+                }
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                   event.preventDefault();
-                  onStop();
+                  slash.move(event.key === "ArrowDown" ? 1 : -1);
+                } else if ((event.key === "Enter" || event.key === "Tab") && slash.matches.length > 0) {
+                  event.preventDefault();
+                  const command = slash.matches[slash.selected];
+                  if (command) {
+                    setText(`/${command.name} `);
+                  }
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  slash.dismiss();
                 }
-                return;
-              }
-              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                event.preventDefault();
-                slash.move(event.key === "ArrowDown" ? 1 : -1);
-              } else if ((event.key === "Enter" || event.key === "Tab") && slash.matches.length > 0) {
-                event.preventDefault();
-                const command = slash.matches[slash.selected];
-                if (command) {
-                  setText(`/${command.name} `);
-                }
-              } else if (event.key === "Escape") {
-                event.preventDefault();
-                slash.dismiss();
-              }
-            }}
-            placeholder={placeholder}
-            value={text}
-          />
-          <PromptInputFooter className="flex-nowrap justify-end px-2 pb-1.5">
+              }}
+              placeholder={placeholder}
+              value={text}
+            />
             <PromptInputSubmit
-              className={cn("size-7 rounded-full", status === "streaming" && "bg-foreground text-background")}
+              className={cn(
+                "size-7 shrink-0 rounded-full",
+                status === "streaming" && "bg-foreground text-background",
+              )}
               disabled={disabled || status === "submitted"}
               onStop={onStop}
               size="icon-sm"
               status={status}
             />
-          </PromptInputFooter>
+          </div>
         </PromptInput>
 
         {/*

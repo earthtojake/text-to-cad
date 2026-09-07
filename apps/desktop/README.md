@@ -126,9 +126,12 @@ a pane at its floor, `+` pinned to the right edge), `panes-sidebar-collapsed`
 (the sidebar closed by a drag past its minimum, with the toggle that brings it
 back) and `panes-history` (the bottom of the back/forward stack, back
 muted) — every one of those
-kinds in light as `*-light` — the sidebar's own three, dark only
+kinds in light as `*-light` — the sidebar's own five, dark only
 (`sidebar-pinned`, a `Pinned` section above the project sections;
-`sidebar-filters`, the filter menu open; `sidebar-waiting`, the amber glyph on
+`sidebar-filters`, the filter menu open under the panel's header;
+`sidebar-header`, a project header hovered with `+` its one control;
+`project-menu`, the composer's project chip open on `Recent` and
+`Open folder…`; `sidebar-waiting`, the amber glyph on
 a thread the agent has stopped to ask about), the `git-*` set for the git modes (the review
 under three scopes, before and after a commit, the sidebar's worktree glyph,
 Settings' per-project worktree card), the session states in both themes with
@@ -420,18 +423,19 @@ preference it has nowhere to file). A project brings the pane back with that
 project's own remembered state.
 
 **The sidebar is sections, not a tree** (`features/sidebar`, Claude Code's
-shape). A nav list at the top — `New`, a plus in an accent ring, which is the
-active project's new-session screen and the same thing `Cmd+N` does, and
-`Add project` — then one grey header per project with a flat list of that
-project's threads under it. The header is the project: its name and a chevron
-that collapses the section (persisted per project in `settings.sidebar`), and
-on the right `+` (a thread in *that* project), a search glyph (the command
-palette with that project's name already typed, which is how its threads get
-filtered — there is one way to narrow that list and it is the box) and the
-sliders that open the filter menu. Everything else a project can do —
-rename, copy path, reveal, remove — is a right-click on the header, and the
-same list is the filter menu's last item (`Project…`), so nothing is
-mouse-only. A session row is its **state** as a leading glyph (a hollow
+shape). Its header is the app's name with the two controls that act on the
+whole list — search (the command palette) and the sliders that open the
+filter menu — then a nav list of one row, `New`: a plus in an accent ring,
+the active project's new-session screen and the same thing `Cmd+N` does.
+Under that, one grey header per project with a flat list of that project's
+threads. The header is the project: its name and a chevron that collapses the
+section (persisted per project in `settings.sidebar`), and on the right `+`,
+a thread in *that* project — and nothing else. A search glyph and a copy of
+the sliders used to appear on it on hover; neither was ever about one project
+(the palette searches every thread and the filter settings are global), and a
+control that only exists under the pointer is a control nobody finds.
+Everything else a project can do — rename, copy path, reveal, remove — is a
+right-click on the header. A session row is its **state** as a leading glyph (a hollow
 circle idle, a pulsing dot while a turn streams, an amber triangle waiting on
 a permission, a red one after a failure, a spinner ring connecting —
 `lib/sidebar.ts`), the title, git's own glyph when the thread runs in a
@@ -439,7 +443,7 @@ worktree or on a branch of its own, and a `…` on hover for pin, rename,
 archive and delete. `Pinned` is the first section when anything is pinned,
 and a pinned thread lives **only** there — never twice.
 
-The filter menu is global, though it is opened from a project's header:
+The filter menu is global, and it is opened from the panel's own header:
 `Status` (Active / Archived / All), `Environment` (All / Local / Worktree —
 our git modes), `Group by` (Project, or None for one flat list), `Sort by`
 (Last activity / Created / Name) and two toggles, `Show empty groups` and
@@ -493,6 +497,16 @@ a selector (`bracket.step#o1.2`, `#label.f45`) opens the file in the
 viewer and hands the selector to `CadFileView`'s `selectReference`. Paths
 are relative to the thread's root — its worktree when it has one.
 
+**The transcript is the one part of the window that selects.** `body` is
+`user-select: none` — this is a desktop chrome, and a drag across a sidebar
+should not paint it blue — which quietly made every word an agent wrote
+uncopyable. `[data-transcript]` sets `user-select: text` back
+(`styles/globals.css`), so prose, a person's own prompt, a fenced code
+block and an activity row's summary line all select; only the transcript's
+own controls (the jump pill, an error row's buttons, a permission card's
+answers) opt out again. Anything else that needs selecting says so with
+`data-selectable`, the same as a path in Settings.
+
 **The composer is an editor, not a textarea** (`features/session/composer`).
 A CAD reference typed into it — `models/bracket.step#o1.2`, `#label.f45`,
 `bracket.step` — becomes a chip the moment the space after it lands, a
@@ -504,9 +518,21 @@ keys step over it and select it as a unit, and it prints back to its plain
 token on send, so what the agent reads is exactly the text. The draft in
 the composer store stays the source of truth; the editor is a view of it
 (`references.ts` is the two functions between them, and the unit test is
-the round trip). AI Elements' `PromptInput` is untouched — its form,
-attachments and footer are as vendored — because the editor keeps the
-form's `message` field for it. The viewer's camera button ("Send view to
+the round trip). AI Elements' `PromptInput` is untouched — its form, its
+attachments and its submit are as vendored — because the editor keeps the
+form's `message` field for it; its footer is the one part not used, since
+send shares the sentence's row.
+
+**The box is one row until there is more to show.** Empty, it is a single
+line of text with send centred at its right end; it grows with what is
+typed to eight lines and then scrolls inside. The floor and the ceiling are
+the editor's `min-h`/`max-h` and are the arithmetic of its own line height
+(`composer/ComposerEditor.tsx`), which is what the e2e measures — "one row"
+is a question about a line of text, not about a pixel count. Two things had
+to go for it: a `min-h` of three lines, and send in a footer under the box,
+which made the smallest possible composer a line to type in plus a line
+holding one button. The row of chips is still under the box, outside it.
+The viewer's camera button ("Send view to
 chat", shown only inside the desktop) renders the viewport to a PNG and
 queues it on the composer store (`attachFile`), which the composer's
 attachments pick up and send as an ACP image block.
@@ -562,6 +588,20 @@ per-option `description`: a menu of models is a list of names, and a paragraph
 under each is a wall to read past rather than a choice to make. The `fast`
 switch, when an agent has one, is the last row of the model menu — it is a
 property of the model, not a second decision.
+
+**The project chip is where a folder is chosen, and the only place one is
+added.** Its menu is `Recent` — the projects in order of when they were last
+worked in, which is the newest `updatedAt` of any of their sessions
+(`lib/projects.ts`, over the index, because a project has no `lastUsedAt` of
+its own and should not grow one) — a check on the one this screen is for,
+then `Open folder…`: the same native chooser the sidebar's `Add project` row
+used to open, followed by that folder's new-session screen
+(`hooks/use-open-folder.ts`). Codex's shape, minus its `No folder` row: a
+session here always belongs to a folder. There is no `Add project` button
+any more, because adding a folder *is* choosing one; the two states with no
+chip to open keep a button of their own (the sidebar's card and the
+"Add a project to get started" screen), and the command palette has the row
+for the keyboard.
 
 There is no options chip. It held whatever else the agent exposed, which in
 practice meant Claude's "main-thread agent persona" — a list of every custom
@@ -864,6 +904,8 @@ src/renderer/
   features/sidebar        projects as sections, their sessions flat, Pinned, the filter menu
   lib/sidebar.ts          which sections exist and what is in them: the status/environment
                           filters, pinned-only-once, the grouping, the sort, the state glyph (pure)
+  lib/projects.ts         the project chip's `Recent` order, out of the session index (pure)
+  hooks/use-open-folder.ts  `Open folder…`: the chooser, then that folder's new-session screen
   features/session        the new-session state, the transcript, the composer
     view.ts               SessionState -> rows: activity-row labels, folding, the status line (pure)
     parts/                activity rows (+ Monaco diff, terminal), thoughts, permission cards, subagents

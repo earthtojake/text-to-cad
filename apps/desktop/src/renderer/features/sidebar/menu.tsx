@@ -12,12 +12,11 @@ import {
 /**
  * One list of menu items, drawn by whichever of Radix's two menus is asking.
  *
- * Everything in this sidebar is reachable two ways — a `…` button and a
+ * A session's actions are reachable two ways — a `…` button and a
  * right-click — and Radix wants its own item component for each menu, which
  * would mean writing the list twice and letting the copies drift. A context
  * picks the component and the list is written once. A submenu's content is
- * still the dropdown's items, so `Project…` inside the filter menu needs no
- * third case.
+ * still the dropdown's items, so a nested list needs no third case.
  */
 export const MenuKind = createContext<"dropdown" | "context">("dropdown");
 
