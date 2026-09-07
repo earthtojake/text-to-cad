@@ -12,7 +12,7 @@ import type { Session } from "@shared/types";
 import { AuthPrompt } from "./AuthPrompt";
 import { Composer } from "./Composer";
 import { ApprovalChip, EffortChip, ModeChip, ModelChip } from "./ComposerChips";
-import { ContextLine } from "./ContextLine";
+import { ContextMeter } from "./ContextMeter";
 import { TranscriptScopeContext, type TranscriptScope } from "./links/PathLink";
 import { PlanCard } from "./PlanCard";
 import { SessionHeader } from "./SessionHeader";
@@ -21,7 +21,8 @@ import { isAuthError } from "./view";
 
 /**
  * One thread, one agent (plan §3): the header, the transcript, the pinned
- * plan and the context line above the composer, the composer.
+ * plan above the composer, the composer — whose row under the box ends in
+ * the context ring.
  *
  * The session's live state comes from the acp store; a session picked from
  * the index with no snapshot yet is loaded here, which is the "connecting"
@@ -78,9 +79,9 @@ export function SessionView({ session }: { session: Session }) {
     const preset = modeOption(state.configOptions);
     const fast = fastOption(state.configOptions);
     const setOption = (configId: string, value: string | boolean) => void setConfigOption(session.id, configId, value);
-    // Codex's row, left to right: `+`, approval; then on the right the model
-    // and the effort beside it, then send. The agent and the project are the
-    // title bar's and the sidebar's, not the composer's. An agent with modes
+    // The row under the box, left to right: `+`, approval; then on the right
+    // the model, the effort and how full the window is. The agent and the
+    // project are the title bar's and the sidebar's. An agent with modes
     // but no `mode` config option (Claude) gets its modes as a chip of their
     // own, beside approval. Everything else the agent exposes is the agent's
     // business: the composer is four decisions, not a settings panel.
@@ -121,6 +122,13 @@ export function SessionView({ session }: { session: Session }) {
             />
           ) : null}
           {effort ? <EffortChip effort={effort} onChange={setOption} /> : null}
+          <ContextMeter
+            lastTurnUsage={state.lastTurnUsage}
+            rateLimits={state.rateLimits}
+            sessionId={session.id}
+            sessionUsage={state.sessionUsage}
+            usage={state.contextUsage}
+          />
         </>
       ),
     };
@@ -172,11 +180,6 @@ export function SessionView({ session }: { session: Session }) {
           {state?.plan && state.plan.length > 0 ? (
             <PlanCard entries={state.plan} running={running} startedAt={planTurn?.startedAt ?? null} />
           ) : null}
-          <ContextLine
-            lastTurnUsage={state?.lastTurnUsage ?? null}
-            sessionUsage={state?.sessionUsage ?? null}
-            usage={state?.contextUsage ?? null}
-          />
           <Composer
             autoFocus
             chips={chips?.leading ?? null}

@@ -11,7 +11,14 @@ import {
   statusLine,
   turnView,
 } from "@renderer/features/session/view";
-import { formatTokens } from "@renderer/features/session/ContextLine";
+import {
+  formatReset,
+  formatTokens,
+  limitTone,
+  orderedLimits,
+  rateLimitLabel,
+  ringTone,
+} from "@renderer/features/session/ContextMeter";
 import { initialSessionState, type Part, type SessionState, type ToolCallPart } from "@shared/acp/types";
 
 import codexSession from "../../fixtures/acp/codex-session.jsonl?raw";
@@ -194,6 +201,71 @@ describe("formatting", () => {
     expect(isAuthError("session/new: Authentication required — sign in first (API Key, ChatGPT)")).toBe(true);
     expect(isAuthError("codex exited unexpectedly (code 1)")).toBe(false);
     expect(isAuthError(null)).toBe(false);
+  });
+});
+
+describe("the context ring and its panel", () => {
+  it("colours the ring quiet, then warning, then destructive", () => {
+    expect(ringTone(0)).toBe("muted");
+    expect(ringTone(0.49)).toBe("muted");
+    expect(ringTone(0.5)).toBe("warning");
+    expect(ringTone(0.79)).toBe("warning");
+    expect(ringTone(0.8)).toBe("danger");
+    expect(ringTone(1)).toBe("danger");
+  });
+
+  it("runs a plan limit's bar later than the ring — its colour means soon, not much", () => {
+    expect(limitTone(0.63)).toBe("muted");
+    expect(limitTone(0.7)).toBe("warning");
+    expect(limitTone(0.89)).toBe("warning");
+    expect(limitTone(0.9)).toBe("danger");
+  });
+
+  it("counts a reset down under a day and names the day above one", () => {
+    const now = Date.UTC(2026, 8, 7, 12, 0, 0);
+    const inMinutes = (minutes: number) => formatReset(now + minutes * 60_000, now);
+    expect(inMinutes(245)).toBe("Resets in 4 hr 5 min");
+    expect(inMinutes(120)).toBe("Resets in 2 hr");
+    expect(inMinutes(45)).toBe("Resets in 45 min");
+    expect(inMinutes(0)).toBe("Resetting now");
+    expect(inMinutes(-60)).toBe("Resetting now");
+    // Past a day it is a weekday and a local clock time, not 62 hours to
+    // convert. The zone is the machine's, so the day is read back the same
+    // way rather than written into the expectation.
+    const friday = now + 3 * 24 * 60 * 60_000 + 15 * 60 * 60_000;
+    const weekday = new Date(friday).toLocaleDateString("en-US", { weekday: "short" });
+    expect(formatReset(friday, now)).toMatch(/^Resets \w{3} \d{1,2}:\d{2} (AM|PM)$/);
+    expect(formatReset(friday, now)).toContain(`Resets ${weekday} `);
+  });
+
+  it("names the limits it ships with and derives a label for one it does not", () => {
+    expect(rateLimitLabel("five_hour")).toBe("5-hour limit");
+    expect(rateLimitLabel("seven_day")).toBe("Weekly · all models");
+    expect(rateLimitLabel("seven_day_opus")).toBe("Weekly · Opus");
+    expect(rateLimitLabel("seven_day_sonnet")).toBe("Weekly · Sonnet");
+    // Whatever a later plan calls one still says what it is.
+    expect(rateLimitLabel("seven_day_overage_included")).toBe("Weekly · Overage included");
+    expect(rateLimitLabel("overage")).toBe("Overage");
+  });
+
+  it("orders the limits by when they bite, unknown ones last", () => {
+    const limit = (type: string) =>
+      ({ type, status: "allowed", utilization: 0.5, resetsAt: null, isUsingOverage: null }) as const;
+    const ordered = orderedLimits({
+      zzz: limit("zzz"),
+      seven_day_opus: limit("seven_day_opus"),
+      five_hour: limit("five_hour"),
+      overage: limit("overage"),
+      seven_day: limit("seven_day"),
+    });
+    expect(ordered.map((entry) => entry.type)).toEqual([
+      "five_hour",
+      "seven_day",
+      "seven_day_opus",
+      "overage",
+      "zzz",
+    ]);
+    expect(orderedLimits({})).toEqual([]);
   });
 });
 

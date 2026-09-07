@@ -71,8 +71,8 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await expect(page.getByRole("heading", { name: `What should we build in ${projectName}?` })).toBeVisible();
   // The agent chip fills in once the detector has probed; sending before
   // that would have nothing to launch. The new-session context — project,
-  // git mode, agent — is a strip above the composer (Codex); the composer's
-  // own row holds approval.
+  // git mode, model, effort — is a strip ABOVE the box; `+` and approval are
+  // in the row UNDER it, the same row a live session has.
   const strip = page.locator("[data-context-strip]");
   await expect(strip.locator("[data-chip=project]")).toContainText(projectName);
   // Two choices behind the git chip, and a scratch directory that is not a
@@ -84,7 +84,19 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await expect(strip.locator("[data-chip=model]")).toContainText("Fast", { timeout: 30_000 });
   await expect(strip.locator("[data-chip=effort]")).toContainText("Medium");
   await expect(strip.locator("[data-chip=agent]")).toHaveCount(0);
-  await expect(page.locator("[data-composer] [data-chip=approval]")).toContainText("Ask");
+  await expect(page.locator("[data-composer-row] [data-chip=approval]")).toContainText("Ask");
+  await expect(page.locator("[data-composer] form [data-chip]")).toHaveCount(0);
+  {
+    // Strip above the box, row below it: the same shape as a live session's.
+    const stripBox = (await strip.boundingBox())!;
+    const box = (await page.locator("[data-composer] form").boundingBox())!;
+    const rowBox = (await page.locator("[data-composer-row]").boundingBox())!;
+    expect(stripBox.y + stripBox.height).toBeLessThanOrEqual(box.y + 1);
+    expect(rowBox.y).toBeGreaterThanOrEqual(box.y + box.height - 1);
+  }
+  await expectNoChevrons();
+  // No ring before there is a turn to have used anything.
+  await expect(page.locator("[data-context-trigger]")).toHaveCount(0);
   // The heading, the line under it, the strip and an empty box — nothing else.
   await expect(page.locator("[data-new-session] button", { hasText: "Explore this project" })).toHaveCount(0);
   await shoot("session-new.png");
@@ -155,41 +167,60 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await expect(row).toHaveAttribute("data-status", "idle");
   await shoot("session-completed.png");
 
-  // The composer is one row at the default session width (Codex's): `+` and
-  // approval on the left, the model, the effort and the options glyph on the
-  // right, nothing wrapped. The fake agent exposes a model and an effort, so
-  // the right-hand chips are there to measure.
-  const composerRow = page.locator("[data-composer]");
-  await expect(composerRow.locator("[data-chip=model]")).toContainText("Fast");
-  await expect(composerRow.locator("[data-chip=effort]")).toContainText("Medium");
+  // The composer's row is one line UNDER the box: `+` and approval on the
+  // left, the model, the effort and the context ring on the right, nothing
+  // wrapped. The fake agent exposes a model and an effort, so the
+  // right-hand chips are there to measure.
+  const composerArea = page.locator("[data-composer]");
+  const chipRow = page.locator("[data-composer-row]");
+  await expect(chipRow.locator("[data-chip=model]")).toContainText("Fast");
+  await expect(chipRow.locator("[data-chip=effort]")).toContainText("Medium");
   // No options chip and no microphone: the first was somebody else's plugin
   // agents behind a settings glyph, the second a button that never worked.
-  await expect(composerRow.locator("[data-chip=options]")).toHaveCount(0);
-  await expect(composerRow.getByRole("button", { name: /voice/i })).toHaveCount(0);
+  await expect(composerArea.locator("[data-chip=options]")).toHaveCount(0);
+  await expect(composerArea.getByRole("button", { name: /voice/i })).toHaveCount(0);
   // And the session started in the agent's own auto mode, not its default.
-  await expect(composerRow.locator("[data-chip=mode]")).toContainText("Auto");
-  // How full the context is sits ABOVE the box, so typing cannot move it.
-  const contextLine = page.locator("[data-context-line]");
-  await expect(contextLine).toContainText("% context");
-  await expect(contextLine).not.toContainText("$");
-  const lineBox = (await contextLine.boundingBox())!;
-  const boxTop = (await composerRow.boundingBox())!.y;
-  expect(lineBox.y + lineBox.height).toBeLessThanOrEqual(boxTop + 1);
+  await expect(chipRow.locator("[data-chip=mode]")).toContainText("Auto");
+  // The box holds the sentence and send; everything else is below it.
+  const inputBox = (await composerArea.locator("form").boundingBox())!;
+  const chipRowBox = (await chipRow.boundingBox())!;
+  expect(chipRowBox.y).toBeGreaterThanOrEqual(inputBox.y + inputBox.height - 1);
+  await expect(composerArea.locator("form [data-chip]")).toHaveCount(0);
+  // Every chip is an icon and a label. No chevron: six of them in two rows
+  // say the same thing about six controls that are visibly the same control.
+  await expectNoChevrons();
 
-  // Hovering it opens the breakdown: the window as a bar with its numbers,
-  // and the session's token accounting — which is where the per-turn chip's
-  // information went. The fake agent sends no categories, as neither real
-  // adapter does, so there are none to show.
-  await page.locator("[data-context-trigger]").hover();
+  // How full the window is, as a ring at the end of the row rather than a
+  // line of text above the box.
+  const ring = page.locator("[data-context-trigger]");
+  await expect(ring).toHaveAttribute("aria-label", /^Context \d+% used$/);
+  await expect(ring).toHaveAttribute("title", /^[\d.]+k? \/ [\d.]+k? \(\d+%\)$/);
+
+  // Clicking it opens the breakdown, and it STAYS open — hover does nothing
+  // and moving away does not take it back. The window as a bar with its
+  // numbers, then the session's token accounting behind `See detailed
+  // breakdown`, which is where the per-turn chip's information went. The
+  // fake agent sends no categories, as neither real adapter does.
+  await ring.click();
   const popover = page.locator("[data-context-popover]");
   await expect(popover).toBeVisible();
-  await expect(popover.locator("[data-context-window]")).toContainText("of");
+  await expect(popover.locator("[data-context-window]")).toContainText("/");
   await expect(popover.locator("[data-context-bar]")).toBeVisible();
+  await expect(popover.locator("[data-context-tokens]")).toHaveCount(0);
+  await page.mouse.move(20, 20);
+  await expect(popover).toBeVisible();
+  await popover.locator("[data-context-detail-toggle]").click();
   await expect(popover.locator("[data-context-token-row=input]")).toContainText("Fresh input");
   await expect(popover.locator("[data-context-token-row=cache-read]")).toContainText("Cache reads");
   await expect(popover.locator("[data-context-token-row=output]")).toContainText("Output");
   await expect(popover.locator("[data-context-categories]")).toHaveCount(0);
+  // The fake agent reported no plan limits either, so nothing claims to
+  // know about the account's.
+  await expect(popover.locator("[data-rate-limits]")).toHaveCount(0);
   await expect(popover).not.toContainText("$");
+  // Folded away again, which is where the next test expects to find it.
+  await popover.locator("[data-context-detail-toggle]").click();
+  await expect(popover.locator("[data-context-tokens]")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(popover).toBeHidden();
   await expectOneRowComposer();
@@ -205,10 +236,10 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
 
   // Model and effort are two dropdowns, not two groups in one menu: each
   // sets its own config option and the other stays where it was.
-  await composerRow.locator("[data-chip=effort]").click();
+  await chipRow.locator("[data-chip=effort]").click();
   await page.getByRole("menuitemradio", { name: "High" }).click();
-  await expect(composerRow.locator("[data-chip=effort]")).toContainText("High");
-  await expect(composerRow.locator("[data-chip=model]")).toContainText("Fast");
+  await expect(chipRow.locator("[data-chip=effort]")).toContainText("High");
+  await expect(chipRow.locator("[data-chip=model]")).toContainText("Fast");
 
   // Folding: the consecutive reads, edits and commands are one line.
   const group = page.locator("[data-activity-group]").first();
@@ -235,15 +266,20 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
  * fake agent is the only place the `_meta.contextBreakdown` shape exists,
  * and this is the only place the coloured segments are drawn.
  */
-test("the context popover breaks the window down when the agent sends categories", async () => {
+test("the context panel breaks the window down when the agent sends categories", async () => {
   const composer = page.getByPlaceholder("Do anything");
   await composer.fill("context");
   await composer.press("Enter");
   await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
 
-  await page.locator("[data-context-trigger]").hover();
+  const ring = page.locator("[data-context-trigger]");
+  await ring.click();
   const popover = page.locator("[data-context-popover]");
   await expect(popover).toBeVisible();
+  // Folded, the way the last test left it. The bar at the top is segmented
+  // by the categories; naming them is the breakdown.
+  await expect(popover.locator("[data-context-detail]")).toHaveCount(0);
+  await popover.locator("[data-context-detail-toggle]").click();
   const categories = popover.locator("[data-context-categories]");
   await expect(categories.locator("[data-context-category=system_prompt]")).toContainText("System prompt");
   await expect(categories.locator("[data-context-category=messages]")).toContainText("Messages");
@@ -251,12 +287,55 @@ test("the context popover breaks the window down when the agent sends categories
   // Two turns now: the session column adds them up, the last-turn column is
   // the small one just finished.
   await expect(popover.locator("[data-context-token-row=cache-write]")).toContainText("Cache writes");
-  // A click keeps it open, so the picture is not of a popover mid-fade.
-  await page.locator("[data-context-trigger]").click();
-  await expect(popover).toBeVisible();
+  // Closing and opening it again finds it where it was left.
+  await page.keyboard.press("Escape");
+  await expect(popover).toBeHidden();
+  await ring.click();
+  await expect(popover.locator("[data-context-detail]")).toBeVisible();
+  await settled();
   await shoot("session-context.png");
   await setTheme("light");
   await shoot("session-context-light.png");
+  await setTheme("dark");
+  await page.keyboard.press("Escape");
+  await expect(popover).toBeHidden();
+});
+
+/**
+ * The account's plan limits, which only the Claude adapter reports — it
+ * forwards the SDK's `rate_limit_event` as a `usage_update` carrying
+ * `_meta._claude/rateLimit`, one limit type per event. The fake agent sends
+ * three on the word `limits`, in the SDK's own units, so this exercises the
+ * reducer's normalisation as well as the rows.
+ */
+test("the context panel lists the account's plan limits", async () => {
+  const composer = page.getByPlaceholder("Do anything");
+  await composer.fill("limits");
+  await composer.press("Enter");
+  await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
+
+  await page.locator("[data-context-trigger]").click();
+  const popover = page.locator("[data-context-popover]");
+  await expect(popover).toBeVisible();
+  const limits = popover.locator("[data-rate-limits]");
+  await expect(limits).toContainText("Plan usage limits");
+  // In the order they bite, each with the reset it named and its share.
+  await expect(limits.locator("[data-rate-limit=five_hour]")).toContainText("5-hour limit");
+  await expect(limits.locator("[data-rate-limit=five_hour]")).toContainText("Resets in 4 hr 5 min");
+  await expect(limits.locator("[data-rate-limit=five_hour]")).toContainText("17%");
+  await expect(limits.locator("[data-rate-limit=seven_day]")).toContainText("Weekly · all models");
+  // Three days out is a weekday and a clock time, not sixty-odd hours.
+  await expect(limits.locator("[data-rate-limit=seven_day]")).toContainText(/Resets \w{3} \d{1,2}:\d{2} (AM|PM)/);
+  await expect(limits.locator("[data-rate-limit=seven_day_opus]")).toContainText("Weekly · Opus");
+  await expect(limits.locator("[data-rate-limit=seven_day_opus]")).toContainText("96%");
+  await expect(limits.locator("[data-rate-limit-overage]")).toContainText("Using overage");
+  // Radix fades and scales the panel in. `animations: "disabled"` finishes
+  // an animation rather than skipping it, so a screenshot taken the instant
+  // the assertions pass catches it half-transparent and two-thirds size.
+  await settled();
+  await shoot("session-context-limits.png");
+  await setTheme("light");
+  await shoot("session-context-limits-light.png");
   await setTheme("dark");
   await page.keyboard.press("Escape");
   await expect(popover).toBeHidden();
@@ -392,6 +471,11 @@ async function shoot(name: string) {
   await page.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
 }
 
+/** One popover's worth of fade and scale, before a picture is taken of it. */
+async function settled() {
+  await page.waitForTimeout(250);
+}
+
 async function setTheme(theme: "dark" | "light") {
   await page.evaluate((value) => window.hardcore.settings.set({ theme: value }), theme);
   await expect(page.locator("html")).toHaveClass(theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b).*$/);
@@ -410,15 +494,33 @@ async function resizeWindow(width: number, height: number) {
   await page.waitForTimeout(150);
 }
 
-/** The composer's footer is one line: every chip shares the send button's row. */
+/**
+ * The row under the box is one line: `+`, every chip and the context ring
+ * share its centre, and nothing has wrapped to a second line.
+ */
 async function expectOneRowComposer() {
-  const send = page.locator("[data-composer] button[aria-label=\"Submit\"], [data-composer] button[aria-label=\"Stop\"]").first();
-  const sendBox = await send.boundingBox();
-  expect(sendBox).not.toBeNull();
-  for (const chip of await page.locator("[data-composer] [data-chip]").all()) {
-    const box = await chip.boundingBox();
-    expect(box, "a chip is off the send button's row").not.toBeNull();
-    expect(Math.abs((box!.y + box!.height / 2) - (sendBox!.y + sendBox!.height / 2))).toBeLessThan(6);
+  const row = page.locator("[data-composer-row]");
+  const rowBox = await row.boundingBox();
+  expect(rowBox, "the composer has no row under its box").not.toBeNull();
+  const middle = rowBox!.y + rowBox!.height / 2;
+  const items = page.locator("[data-composer-row] [data-chip], [data-composer-row] button");
+  expect(await items.count(), "the row is empty").toBeGreaterThan(0);
+  for (const item of await items.all()) {
+    const box = await item.boundingBox();
+    expect(box, "something in the row has no box").not.toBeNull();
+    expect(Math.abs(box!.y + box!.height / 2 - middle), "the row has wrapped").toBeLessThan(6);
+  }
+}
+
+/**
+ * No chevron on any chip, in either row. The icon is the chip's one glyph,
+ * so a chip with two of them is one that grew a chevron back.
+ */
+async function expectNoChevrons() {
+  const chips = page.locator("[data-chip]");
+  expect(await chips.count()).toBeGreaterThan(0);
+  for (const chip of await chips.all()) {
+    expect(await chip.locator("svg").count(), `${await chip.innerText()} has more than its icon`).toBe(1);
   }
 }
 

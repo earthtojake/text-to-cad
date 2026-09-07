@@ -200,6 +200,32 @@ export const ContextUsageSchema = z.object({
 });
 export type ContextUsage = z.infer<typeof ContextUsageSchema>;
 
+/**
+ * One of the account's plan limits, as the Claude adapter forwards the SDK's
+ * `rate_limit_event`: `_meta["_claude/rateLimit"]` on a `usage_update`. One
+ * event carries one limit, so a session keeps the latest of each `type`.
+ *
+ * `type` is the SDK's `rateLimitType`, kept as a plain string rather than an
+ * enum: the vocabulary belongs to the subscription and grows with the plans,
+ * and a limit whose name arrived after this build should draw with a label
+ * derived from its name rather than vanish.
+ *
+ * The units are normalised on the way in (`reduce.ts`): `utilization` is a
+ * fraction of the limit between 0 and 1, and `resetsAt` is epoch
+ * **milliseconds**. Codex sends nothing of the kind, so a Codex session's
+ * `rateLimits` stays empty and the panel says nothing about plans.
+ */
+export const RateLimitSchema = z.object({
+  type: z.string(),
+  status: z.enum(["allowed", "allowed_warning", "rejected"]),
+  /** 0 to 1. */
+  utilization: z.number(),
+  /** Epoch milliseconds, or null when the event did not say. */
+  resetsAt: z.number().nullable().default(null),
+  isUsingOverage: z.boolean().nullable().default(null),
+});
+export type RateLimit = z.infer<typeof RateLimitSchema>;
+
 export const StopReasonSchema = z.enum([
   "end_turn",
   "max_tokens",
@@ -424,6 +450,8 @@ export const SessionStateSchema = z.object({
   /** The last turn's `usage`, and every turn's added up. Both null until one reports. */
   lastTurnUsage: TurnUsageSchema.nullable(),
   sessionUsage: TokenTotalsSchema.nullable(),
+  /** The account's plan limits by `type`, latest of each; empty for an agent that reports none. */
+  rateLimits: z.record(z.string(), RateLimitSchema),
   pendingPermissions: z.array(PendingPermissionSchema),
   /** Every subagent session id seen, mapped to the root session's part path. */
   subagentSessionIds: z.array(z.string()),
@@ -448,6 +476,7 @@ export function initialSessionState(sessionId: string, agentId: string): Session
     contextUsage: null,
     lastTurnUsage: null,
     sessionUsage: null,
+    rateLimits: {},
     pendingPermissions: [],
     subagentSessionIds: [],
   };

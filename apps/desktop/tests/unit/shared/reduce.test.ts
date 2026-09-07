@@ -317,6 +317,127 @@ describe("reduce: session-level facts", () => {
     expect(state.contextUsage?.breakdown).toBeNull();
   });
 
+  it("keeps the latest of each plan limit out of usage_update's _meta", () => {
+    // What the Claude adapter forwards: the SDK's `rate_limit_event`
+    // verbatim under `_claude/rateLimit`, on a `usage_update` carrying the
+    // window. One event is one limit type.
+    let state = update(connected(), {
+      sessionUpdate: "usage_update",
+      used: 292_300,
+      size: 1_000_000,
+      _meta: {
+        "_claude/rateLimit": {
+          status: "allowed",
+          rateLimitType: "five_hour",
+          utilization: 0.17,
+          resetsAt: 1_800_000_000,
+        },
+      },
+    });
+    expect(state.rateLimits.five_hour).toEqual({
+      type: "five_hour",
+      status: "allowed",
+      utilization: 0.17,
+      // Epoch seconds on the wire, epoch milliseconds in the state.
+      resetsAt: 1_800_000_000_000,
+      isUsingOverage: null,
+    });
+    // The window came along with it and is not lost to the limit.
+    expect(state.contextUsage?.used).toBe(292_300);
+
+    // A second type is a second row, and a second event of a type replaces
+    // it rather than adding to it.
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 292_300,
+      size: 1_000_000,
+      _meta: {
+        "_claude/rateLimit": {
+          status: "allowed_warning",
+          rateLimitType: "seven_day",
+          utilization: 0.63,
+          isUsingOverage: true,
+        },
+      },
+    });
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 292_300,
+      size: 1_000_000,
+      _meta: {
+        "_claude/rateLimit": { status: "rejected", rateLimitType: "seven_day", utilization: 0.96 },
+      },
+    });
+    expect(Object.keys(state.rateLimits).sort()).toEqual(["five_hour", "seven_day"]);
+    expect(state.rateLimits.seven_day).toMatchObject({ status: "rejected", utilization: 0.96 });
+    expect(state.rateLimits.five_hour?.utilization).toBe(0.17);
+
+    // Milliseconds already, and a percentage where a fraction was expected:
+    // both are read for what they can only mean.
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 1,
+      size: 2,
+      _meta: {
+        "_claude/rateLimit": {
+          status: "allowed",
+          rateLimitType: "seven_day_opus",
+          utilization: 96,
+          resetsAt: 1_800_000_000_000,
+        },
+      },
+    });
+    expect(state.rateLimits.seven_day_opus).toMatchObject({
+      utilization: 0.96,
+      resetsAt: 1_800_000_000_000,
+    });
+  });
+
+  it("ignores a malformed rate limit rather than throwing on it", () => {
+    const before = update(connected(), {
+      sessionUpdate: "usage_update",
+      used: 10,
+      size: 100,
+      _meta: { "_claude/rateLimit": { status: "allowed", rateLimitType: "five_hour", utilization: 0.4 } },
+    });
+    const malformed = [
+      // No type: `rateLimits` is keyed by it and there is nowhere to put this.
+      { status: "allowed", utilization: 0.4 },
+      // No utilization: a bar with no length.
+      { status: "allowed", rateLimitType: "five_hour" },
+      // The wrong shapes entirely.
+      { rateLimitType: 7, utilization: "lots" },
+      "rejected",
+      null,
+      [],
+    ];
+    for (const value of malformed) {
+      const after = update(before, {
+        sessionUpdate: "usage_update",
+        used: 10,
+        size: 100,
+        _meta: { "_claude/rateLimit": value },
+      });
+      expect(after.rateLimits).toEqual(before.rateLimits);
+    }
+    // An unknown status is the harmless one; the rest of the event stands.
+    const odd = update(before, {
+      sessionUpdate: "usage_update",
+      used: 10,
+      size: 100,
+      _meta: { "_claude/rateLimit": { status: "hmm", rateLimitType: "overage", utilization: 150 } },
+    });
+    // An unreadable status reads as `allowed` and a bar cannot run past its end.
+    expect(odd.rateLimits.overage).toMatchObject({ status: "allowed", utilization: 1 });
+    // And an update with no window at all still lands its limit.
+    const windowless = update(before, {
+      sessionUpdate: "usage_update",
+      _meta: { "_claude/rateLimit": { status: "allowed", rateLimitType: "seven_day", utilization: 0.5 } },
+    });
+    expect(windowless.rateLimits.seven_day?.utilization).toBe(0.5);
+    expect(windowless.contextUsage).toEqual(before.contextUsage);
+  });
+
   it("keeps the latest plan as one part per turn", () => {
     let state = started(connected());
     state = update(state, { sessionUpdate: "plan", entries: [{ content: "a", priority: "high", status: "pending" }] });

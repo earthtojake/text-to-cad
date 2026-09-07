@@ -1,6 +1,5 @@
 import {
   Check,
-  ChevronDown,
   Folder,
   Gauge,
   GitBranch,
@@ -30,16 +29,23 @@ import type { ProjectGitInfo } from "@shared/ipc/git";
 import type { GitMode, Project } from "@shared/types";
 
 /**
- * The composer's context strip (plan §2, §6). Every chip is the same
- * shape: an icon, a short label, a chevron when it opens a menu.
+ * The composer's context strip (plan §2, §6). Every chip is the same shape:
+ * an icon and a short label.
+ *
+ * No chevron. Six of them in two rows is six glyphs saying the same thing
+ * about six controls that are visibly the same control, and the row is
+ * narrow enough that the space they cost is a chip's label truncated. A
+ * chevron earns its place where nothing else says a thing opens; here the
+ * hover, the icon and the row all do.
  *
  * A new session shows Project / Git mode / Model / Effort in a strip above
- * the composer and Approval in it; a live session shows Approval and the
- * agent's modes on the left, the model and the effort on the right. The two
- * screens draw the **same** model and effort chips: on the new-session screen
- * the model menu lists every installed provider's models and picking one
- * picks the agent, and in a live session it is scoped to that session's
- * agent. What a session cannot change — its project — is the sidebar's.
+ * the composer and `+` / Approval in the row under it; a live session shows
+ * `+`, Approval and the agent's modes on the left of that row, the model,
+ * the effort and the context ring on the right. The two screens draw the
+ * **same** model and effort chips: on the new-session screen the model menu
+ * lists every installed provider's models and picking one picks the agent,
+ * and in a live session it is scoped to that session's agent. What a session
+ * cannot change — its project — is the sidebar's.
  */
 export function Chip({
   icon,
@@ -77,7 +83,6 @@ export function Chip({
       <span className="[&>svg]:size-3.5">{icon}</span>
       {label ? <span className="truncate text-foreground/90">{label}</span> : null}
       {detail ? <span className="truncate">{detail}</span> : null}
-      {menu ? <ChevronDown className="size-3 opacity-70" /> : null}
     </button>
   );
   if (!menu) {
