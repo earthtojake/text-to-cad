@@ -1,7 +1,6 @@
 import { FolderPlus, MessageSquarePlus, Search, Settings } from "lucide-react";
 import { cn } from "cn";
 
-import { SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import {
@@ -36,9 +35,8 @@ export function Sidebar() {
       {/* The traffic lights' strip on macOS: drag region, and nothing else. */}
       <div className="app-drag shrink-0" style={{ height: "var(--titlebar-height)" }} />
 
-      <header className="app-drag flex shrink-0 items-center gap-1 pt-0.5 pr-2 pb-1 pl-1.5">
-        <SidebarToggle />
-        <span className="app-no-drag truncate text-[15px] font-semibold tracking-tight">Hardcore</span>
+      <header className="app-drag flex shrink-0 items-center gap-1 pt-0.5 pr-2 pb-1 pl-3">
+        <span className="app-no-drag truncate text-[17px] font-semibold tracking-tight">Hardcore</span>
         <div className="flex-1" />
         <Button
           aria-label="Search"

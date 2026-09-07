@@ -1,12 +1,10 @@
 /**
  * The two buttons that open and close the side panes.
  *
- * They live here rather than in either feature because each of them is drawn
- * in two places: the sidebar's collapse sits in the sidebar's own header while
- * the sidebar is open and at the far left of the session's title bar once it
- * is gone (Codex's placement — the control is always on the left edge of the
- * window), and the explorer's sits on the right of that title bar whatever the
- * explorer is doing. One component, so the two placements cannot drift.
+ * They live here rather than in either feature because both sit in the
+ * session's title bar — the sidebar's collapse at its far left, the
+ * explorer's at its right — whatever the two panes are doing, and the
+ * command palette and the shortcuts reach the same two actions.
  */
 import { PanelLeft, PanelRight } from "lucide-react";
 

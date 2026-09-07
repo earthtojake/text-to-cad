@@ -238,10 +238,9 @@ it — and the explorer takes whatever is left. The two fixed widths are the
 persisted preference (`settings.layout`); the explorer's is a consequence.
 The strips along the top are 32px, and whichever pane is leftmost makes room
 for the macOS traffic lights (`--titlebar-inset`, keyed off `data-leftmost` on
-the shell). The sidebar's own collapse follows that left edge: it sits in the
-sidebar's header row beside the app's name, and moves to the far left of the
-session's title bar when the sidebar is gone. The explorer's toggle stays on
-the right of that bar.
+the shell). The sidebar's collapse is the first control of the session's
+title bar, open or closed; the sidebar's own header holds only the app's
+name. The explorer's toggle stays on the right of that bar.
 
 **The explorer is closed until something opens it**, and the session then
 fills the window. Opening a file, a review, a browser or a terminal shows it —

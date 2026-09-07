@@ -12,7 +12,6 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { useAcp } from "@renderer/state/acp";
 import { useSessions } from "@renderer/state/sessions";
-import { useSettings } from "@renderer/state/settings";
 import type { Session } from "@shared/types";
 
 /**
@@ -20,9 +19,9 @@ import type { Session } from "@shared/types";
  * first prompt; click to edit), a `…` menu; the explorer's toggle on the
  * right. The strip is the window's drag region, so the controls opt out of it.
  *
- * The sidebar's toggle is on the *left*, and only while the sidebar is hidden:
- * open, it lives in the sidebar's own header (Codex's placement), so the
- * control never moves further right than the window's left edge.
+ * The sidebar's toggle is the first thing on the left, whether the sidebar is
+ * open or not: the title bar's left edge is where the person's eye goes to
+ * change the panes, and the sidebar's own header holds only the app's name.
  */
 export function SessionHeader({
   session,
@@ -36,7 +35,6 @@ export function SessionHeader({
   const archive = useSessions((state) => state.archive);
   const remove = useSessions((state) => state.remove);
   const closeSession = useAcp((state) => state.close);
-  const sidebarCollapsed = useSettings((state) => state.settings?.layout.sidebarCollapsed ?? false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
 
@@ -60,8 +58,7 @@ export function SessionHeader({
       data-session-header
       style={{ height: "var(--titlebar-height)" }}
     >
-      {/* The window's left edge when the sidebar is gone. */}
-      {sidebarCollapsed ? <SidebarToggle /> : null}
+      <SidebarToggle />
       <div className="app-no-drag flex min-w-0 items-center gap-2">
         <Folder className="size-3.5 shrink-0 text-muted-foreground" />
         {editing && session ? (

@@ -74,17 +74,14 @@ test("the shell shows three panes, the explorer closed", async () => {
 });
 
 /**
- * The sidebar's collapse is on the left in both of its placements: in the
- * sidebar's own header row while the sidebar is open, and at the far left of
- * the session's title bar once it is not. The explorer's stays on the right.
+ * The sidebar's collapse sits at the far left of the session's title bar,
+ * open or closed; the sidebar's own header holds only the app's name. The
+ * explorer's toggle stays on the right.
  */
-test("the sidebar's collapse follows the window's left edge", async () => {
+test("the sidebar's collapse is the title bar's first control", async () => {
   const sidebar = page.locator("[data-panel]").first();
-  await expect(sidebar.getByRole("button", { name: "Toggle sidebar" })).toBeVisible();
   await expect(page.getByText("Hardcore", { exact: true })).toBeVisible();
-
-  await sidebar.getByRole("button", { name: "Toggle sidebar" }).click();
-  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBe(0);
+  await expect(sidebar.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(0);
 
   const header = page.locator("[data-session-header]");
   const collapse = header.getByRole("button", { name: "Toggle sidebar" });
@@ -96,6 +93,10 @@ test("the sidebar's collapse follows the window's left edge", async () => {
   ]);
   expect(collapseBox!.x).toBeLessThan(titleBox!.x);
   expect(explorerToggleBox!.x).toBeGreaterThan(titleBox!.x);
+
+  await collapse.click();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBe(0);
+  await expect(collapse).toBeVisible();
 
   await collapse.click();
   await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThan(0);
