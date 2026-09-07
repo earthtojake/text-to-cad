@@ -1,28 +1,9 @@
-import {
-  Check,
-  ChevronDown,
-  Code2,
-  Copy,
-  ExternalLink,
-  Eye,
-  FileText,
-  FolderOpen,
-  FolderTree,
-  GitBranch,
-  RotateCw,
-} from "lucide-react";
+import { Code2, Eye, FileText, FolderTree, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@renderer/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@renderer/components/ui/dropdown-menu";
 import { Spinner } from "@renderer/components/ui/spinner";
 import { useElementWidth } from "@renderer/hooks/use-element-width";
-import { cn } from "@renderer/lib/utils";
 import {
   TREE_MAX_WIDTH,
   TREE_MIN_WIDTH,
@@ -31,9 +12,12 @@ import {
 import type { ExplorerRoot, Project } from "@shared/types";
 import type { FileStat, TextFileResult } from "./types";
 
+import { buildCrumbs } from "./crumbs";
+import { Breadcrumbs } from "./Breadcrumbs";
 import { cadTabHidesTree } from "./cad-layout";
 import { EmptyState } from "./EmptyState";
-import { FileTree } from "./FileTree";
+import { currentPlatform, type EntryActionContext } from "./entry-actions";
+import { FileTree, type TreeEdit, type TreeEditRequest } from "./FileTree";
 import { BinaryRenderer } from "./renderers/BinaryRenderer";
 import { CadRenderer } from "./renderers/CadRenderer";
 import { CodeRenderer } from "./renderers/CodeRenderer";
@@ -90,7 +74,6 @@ export function FileTab({
 
   const [reloadToken, setReloadToken] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [rootRef, paneWidth] = useElementWidth();
   // Every read and write of this file names its root as well as its project.
   const at = useMemo(() => ({ projectId: project.id, ...(root ? { root } : {}) }), [project.id, root]);
@@ -257,32 +240,6 @@ export function FileTab({
     }
   }, [draft, key, loaded, at, saving]);
 
-  const copyPath = useCallback(async () => {
-    if (!path) {
-      return;
-    }
-    const absolute = await window.hardcore.explorer
-      .absolutePath({ ...at, path })
-      .then((result) => result.path)
-      .catch(() => path);
-    await navigator.clipboard.writeText(absolute).catch(() => {});
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1400);
-  }, [path, at]);
-
-  const reveal = useCallback(async () => {
-    if (!path) {
-      return;
-    }
-    const absolute = await window.hardcore.explorer
-      .absolutePath({ ...at, path })
-      .then((result) => result.path)
-      .catch(() => null);
-    if (absolute) {
-      await window.hardcore.shell.showItemInFolder({ path: absolute }).catch(() => {});
-    }
-  }, [path, at]);
-
   const openExternally = useCallback(() => {
     if (path) {
       void window.hardcore.explorer.openDefault({ ...at, path }).catch(() => {});
@@ -340,26 +297,80 @@ export function FileTab({
     setTreeShownFor(key);
     setTreeCollapsed(false);
   };
+  const toggleTree = () => {
+    if (treeHidden) {
+      showTree();
+    } else {
+      setTreeCollapsed(true);
+    }
+  };
+
+  /**
+   * The breadcrumb's entry menus. `Rename` on the file crumb is the one
+   * item drawn here — a field over the crumb — and `New …` from a folder
+   * crumb, or a rename of one, goes to the tree, which is where a row can
+   * be typed into; the tree is shown for it if it was hidden.
+   */
+  const [renamingCrumb, setRenamingCrumb] = useState(false);
+  const [treeEdit, setTreeEdit] = useState<TreeEdit | null>(null);
+
+  /**
+   * A file picked from a crumb's menu opens *here*: the breadcrumb is this
+   * tab's address bar, and a sibling chosen from it is where this tab goes
+   * next — the tree's rows open tabs, this does not. A file already open
+   * elsewhere in the strip is brought forward instead of shown twice.
+   */
+  const openHere = useCallback(
+    (next: string) => {
+      const { tabs, setActive } = useExplorer.getState();
+      const existing = tabs.find((tab) => tab.kind === "file" && tab.path === next && tab.root === root);
+      if (existing && existing.id !== tabId) {
+        setActive(existing.id);
+        return;
+      }
+      update(tabId, { path: next, viewSource: false });
+    },
+    [tabId, root, update],
+  );
+  const crumbCtx = useMemo<EntryActionContext>(() => {
+    const askTree = (edit: TreeEditRequest) => {
+      setTreeShownFor(key);
+      setTreeCollapsed(false);
+      setTreeEdit((previous) => ({ ...edit, nonce: (previous?.nonce ?? 0) + 1 }));
+    };
+    return {
+      projectId: project.id,
+      root,
+      platform: currentPlatform(),
+      beginRename: (entry) => {
+        if (entry.path === path) {
+          setRenamingCrumb(true);
+        } else {
+          askTree({ mode: "rename", entry });
+        }
+      },
+      beginCreate: (directory, kind) => askTree({ mode: "create", directory, kind }),
+    };
+  }, [project.id, root, path, key, setTreeCollapsed]);
 
   /**
    * The breadcrumb: project, the worktree when the file is in one, folders,
-   * file. In a pane too narrow for the folders they fold into one `…`
-   * (Codex does the same) rather than each truncating to two letters; the
-   * full path is the tooltip either way. The worktree crumb survives the
-   * fold: which copy of the tree a file is in is the one thing a person
-   * cannot tell from its name.
+   * file — each a menu (`Breadcrumbs.tsx`). In a pane too narrow for the
+   * folders they fold into one `…` (Codex does the same) rather than each
+   * truncating to two letters; the full path is the tooltip either way. The
+   * worktree crumb survives the fold: which copy of the tree a file is in
+   * is the one thing a person cannot tell from its name.
    */
-  const crumbs = useMemo(() => {
-    const worktree = root ? { label: root.split(/[\\/]/).pop() ?? root, title: root, worktree: true } : null;
-    const head = [{ label: project.name, title: project.name }, ...(worktree ? [worktree] : [])];
-    const parts = path ? path.split("/") : [];
-    const narrow = paneWidth > 0 && paneWidth - (treeHidden ? 0 : treeWidth) < 720;
-    if (!narrow || parts.length <= 2) {
-      return [...head, ...parts.map((label) => ({ label, title: label }))];
-    }
-    const last = parts[parts.length - 1]!;
-    return [...head, { label: "…", title: parts.slice(0, -1).join("/") }, { label: last, title: last }];
-  }, [project.name, root, path, paneWidth, treeHidden, treeWidth]);
+  const crumbs = useMemo(
+    () =>
+      buildCrumbs({
+        projectName: project.name,
+        root,
+        path,
+        narrow: paneWidth > 0 && paneWidth - (treeHidden ? 0 : treeWidth) < 720,
+      }),
+    [project.name, root, path, paneWidth, treeHidden, treeWidth],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col" ref={rootRef}>
@@ -375,32 +386,15 @@ export function FileTab({
           aria-label="Breadcrumb"
           className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-[13px]"
         >
-          {crumbs.map((crumb, index) => {
-            const last = index === crumbs.length - 1;
-            return (
-              <span
-                className={cn("flex min-w-0 items-center gap-1", last ? "shrink-0" : "shrink")}
-                key={`${crumb.label}-${index}`}
-              >
-                {index > 0 ? (
-                  <span className="shrink-0 text-muted-foreground/60" aria-hidden>
-                    ›
-                  </span>
-                ) : null}
-                <span
-                  className={cn(
-                    "flex min-w-0 items-center gap-1 truncate",
-                    last ? "max-w-[60vw] font-medium text-foreground" : "text-muted-foreground",
-                  )}
-                  data-crumb={"worktree" in crumb ? "worktree" : undefined}
-                  title={crumb.title}
-                >
-                  {"worktree" in crumb ? <GitBranch aria-label="Worktree" className="size-3 shrink-0" /> : null}
-                  <span className="truncate">{crumb.label}</span>
-                </span>
-              </span>
-            );
-          })}
+          <Breadcrumbs
+            activePath={path}
+            crumbs={crumbs}
+            ctx={crumbCtx}
+            onOpen={openHere}
+            onRenamed={() => setRenamingCrumb(false)}
+            onRenameEnd={() => setRenamingCrumb(false)}
+            renaming={renamingCrumb && path !== null}
+          />
           {dirty ? (
             <span
               aria-label="Unsaved changes"
@@ -410,6 +404,13 @@ export function FileTab({
           ) : null}
         </nav>
 
+        {/*
+          The actions that used to be here — Copy path, Open ▾ — live in the
+          entry menus now (right-click a crumb or a row). What is left is
+          the one toggle that is about the view, not the file, and the files
+          toggle, which never moves: it is the right end of this row whether
+          the tree is open or shut.
+        */}
         <div className="flex shrink-0 items-center gap-0.5">
           {traits?.sourceToggle ? (
             <Button
@@ -423,60 +424,24 @@ export function FileTab({
             </Button>
           ) : null}
 
-          <Button
-            aria-label="Copy path"
-            className="size-6 text-muted-foreground"
-            disabled={!path}
-            onClick={copyPath}
-            size="icon-xs"
-            title="Copy path"
-            variant="ghost"
-          >
-            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-          </Button>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                className="h-6 gap-1 px-2 text-[12px] text-muted-foreground"
-                disabled={!path}
-                size="sm"
-                variant="ghost"
-              >
-                Open
-                <ChevronDown className="size-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onSelect={() => void reveal()}>
-                <FolderOpen className="size-3.5" />
-                {revealLabel()}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={openExternally}>
-                <ExternalLink className="size-3.5" />
-                Default application
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
           {/*
             The files toggle. A folder-tree glyph rather than a panel one:
             the button is named by what comes back, not by the fact that a
             panel slides — a panel icon in a row of file actions reads as a
             layout control and was skipped over.
           */}
-          {treeHidden ? (
-            <Button
-              aria-label="Show files"
-              className="size-6 text-muted-foreground"
-              onClick={showTree}
-              size="icon-xs"
-              title="Show files"
-              variant="ghost"
-            >
-              <FolderTree className="size-3.5" />
-            </Button>
-          ) : null}
+          <Button
+            aria-label={treeHidden ? "Show files" : "Hide files"}
+            aria-pressed={!treeHidden}
+            className="size-6 text-muted-foreground aria-pressed:text-foreground"
+            data-testid="tree-toggle"
+            onClick={toggleTree}
+            size="icon-xs"
+            title={treeHidden ? "Show files" : "Hide files"}
+            variant="ghost"
+          >
+            <FolderTree className="size-3.5" />
+          </Button>
         </div>
       </header>
 
@@ -538,12 +503,12 @@ export function FileTab({
             <div className="shrink-0 overflow-hidden border-l" style={{ width: treeWidth }}>
               <FileTree
                 activePath={path}
+                edit={treeEdit}
                 fsRevision={fsRevision}
                 // A different project or root is a different tree. The
                 // state is the store's, per root; the key keeps the filter
                 // and the cursor from crossing over with it.
                 key={`${project.id}:${root ?? ""}`}
-                onCollapse={() => setTreeCollapsed(true)}
                 onOpen={(next) => openFile(next, root)}
                 projectId={project.id}
                 projectName={project.name}
@@ -648,10 +613,6 @@ function Body({
         />
       );
   }
-}
-
-function revealLabel(): string {
-  return navigator.platform.startsWith("Mac") ? "Reveal in Finder" : "Show in Explorer";
 }
 
 function messageOf(error: unknown): string {

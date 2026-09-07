@@ -90,7 +90,8 @@ real, see above).
 Settings, one per explorer surface — `file-markdown-preview`,
 `file-markdown-source`, `file-markdown-editable` (the dirty dot on an edited
 document), `file-markdown-raw-blocks` (raw HTML kept as its own bytes),
-`file-tree-deep`, `file-image`, `file-cad-failed` (the runtime broken on
+`file-tree-deep`, `file-crumb-menu` (a folder crumb's menu, open),
+`file-context-menu` (a tree row's), `file-image`, `file-cad-failed` (the runtime broken on
 purpose), `file-cad` (expanded), `file-cad-default` (the explorer at its default share, the tree
 hidden for it) and both again at 1280×800, `file-cad-measure`, `terminal`,
 `browser-empty`, `browser`, `review`, `strip`, `expanded` — every one of those
@@ -377,6 +378,51 @@ binding — ⌘T file, ⇧⌘R review, ⇧⌘B browser, ⌃` terminal
 to). The file tree's open folders and its listings live in the explorer
 store, not in the file tab, because opening a file makes a tab and the pane
 mounts one tab at a time.
+
+### The file tab's nav
+
+One row: the breadcrumb, `View source` for markdown, and the files toggle at
+the right end — which stays there whether the tree is open or shut (it used
+to move into the tree's own header when the tree opened; the tree's header
+is now the filter and nothing else). There is no `Copy path` button and no
+`Open ▾`: those are items in the entry menus.
+
+**Every crumb is a menu** (`features/explorer/Breadcrumbs.tsx`, the model in
+`crumbs.ts`), the way the CAD Viewer's breadcrumb is. The project crumb
+lists the root, a folder crumb lists that folder, the file crumb lists its
+siblings, and every menu marks the entry on the way to the open file.
+Directories come first, each a submenu of its own listing read when it is
+opened; picking a file opens it *in this tab* — the crumb is the tab's
+address bar, unlike the tree's rows, which open tabs. In a narrow pane the
+folders fold into a `…` crumb whose menu is those folders. The listings are
+the tree's own (`useTree`), so a folder the tree has read costs the menu
+nothing and the two never disagree. A worktree tab's project crumb has no
+menu: its listing is another root's.
+
+**Right-click a crumb or a tree row** for the entry menu
+(`entry-menu.ts` is the table, `entry-actions.ts` what each item does,
+`EntryContextMenu.tsx` draws one from the other; the tree has one menu over
+the whole list aimed at the row that was clicked, and the empty space under
+the rows is the root). A file: Open · Open in new tab · Open with default
+app · Open with… · Reveal in Finder (Show in Explorer / Show in file manager)
+· Copy path · Copy relative path · Copy reference (CAD files: the
+`path` token the composer reads, which also lands a chip in the box) ·
+Rename · Duplicate · Move to Trash. A folder: New file · New folder · Open
+in terminal · Reveal · Copy path · Copy relative path · Rename · Move to
+Trash; the root has no Rename and no Trash. The one destructive item is
+alone at the bottom and goes to the OS trash (`shell.trashItem`) with no
+dialog — the trash is the undo. Rename and the two `New …` are typed in
+place (`InlineName.tsx`: Enter commits, Escape cancels, clicking away
+commits, the stem is selected and the extension is not); from a crumb they
+go to the tree, which is shown for them. F2 renames the tree's cursor row,
+⌘⌫ (Ctrl+Delete) trashes it. Every edit is an `explorer.*` request main
+resolves against the root and refuses outside it (`src/main/explorer/fs.ts`
+for create/rename/duplicate, plain Node and unit-tested; trash, reveal and
+`Open with…` — a chooser over `/Applications` then `open -a`, the shell's
+own Open With on Windows — in `src/main/ipc/explorer.ts`). A rename or a
+trash keeps the strip honest: tabs showing the file or anything under the
+folder are re-pointed or closed. `Open in terminal` on a folder is the one
+`terminal.create` whose `cwd` is under a root rather than a root.
 
 ## Quitting
 
