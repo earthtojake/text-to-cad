@@ -85,6 +85,28 @@ test("viewer context and revision requests stay with the right draft and workspa
     await expect(page.locator("[data-composer]").getByText(/car-.*\.png/)).toHaveCount(1);
     await expect(chip).toHaveCount(1);
     await expect(draft).toBeFocused();
+    const enlarge = page.getByRole("button", { name: /^Enlarge car-/ });
+    await enlarge.click();
+    const preview = page.getByRole("dialog");
+    await expect(preview).toBeVisible();
+    const previewImage = preview.getByRole("img");
+    await expect.poll(() => previewImage.evaluate((node) => (node as unknown as { complete: boolean }).complete && (node as unknown as { naturalWidth: number }).naturalWidth > 0)).toBe(true);
+    await page.screenshot({ path: test.info().outputPath("attachment-preview.png"), animations: "disabled" });
+    await page.keyboard.press("Escape");
+    await expect(preview).toHaveCount(0);
+    await expect(enlarge).toBeFocused();
+    await expect(wheel).toHaveAttribute("aria-selected", "true");
+    await enlarge.press("Enter");
+    await expect(preview).toBeVisible();
+    await preview.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(enlarge).toBeFocused();
+    await enlarge.click();
+    await expect(preview).toBeVisible();
+    await page.mouse.click(8, 8);
+    await expect(preview).toHaveCount(0);
+    await expect(enlarge).toBeFocused();
+    const unsent = await page.evaluate((id) => window.hardcore.sessions.state({ id }), session.id);
+    expect(unsent?.turns).toHaveLength(0);
     await draft.press("Enter");
     await expect.poll(async () => {
       const state = await page.evaluate((id) => window.hardcore.sessions.state({ id }), session.id);
@@ -130,6 +152,10 @@ test("viewer context and revision requests stay with the right draft and workspa
     expect(created?.cwd).toBe(project);
     expect((await page.evaluate((id) => window.hardcore.sessions.state({ id }), created!.id))?.turns).toHaveLength(0);
     await page.screenshot({ path: test.info().outputPath("view-in-correct-workspace.png"), animations: "disabled" });
+    await page.locator("[data-composer]").getByRole("button", { name: "Remove", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Enlarge car-/ })).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(chip).toHaveText("wheel_front_left");
     await page.locator(`[data-session-row="${other.id}"]`).getByRole("button").first().click();
     await expect(draft).toHaveText("Preserve my other workspace draft.");
   } catch (error) {

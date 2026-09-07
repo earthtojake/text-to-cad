@@ -48,6 +48,7 @@ import type { AvailableCommand, PromptBlock } from "@shared/acp/types";
 
 import { isCadPath } from "../explorer/renderers/registry";
 import { dataUrlOf, rememberFiles } from "./composer/attachments";
+import { AttachmentImagePreview } from "./composer/AttachmentImagePreview";
 import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEditor";
 import { ReferenceScopeContext } from "./composer/ReferenceScope";
 
@@ -437,7 +438,7 @@ function AttachmentStrip() {
               onRemove={() => attachments.remove(file.id)}
               title={file.filename}
             >
-              <AttachmentPreview className={isImage ? "size-16 rounded-md border bg-background [&_img]:object-contain" : "size-4"} />
+              {isImage ? <AttachmentImagePreview file={file} /> : <AttachmentPreview className="size-4" />}
               <AttachmentInfo className={isImage ? "min-w-0 text-[11px] leading-4" : "max-w-[160px]"} />
               <AttachmentRemove className="size-6 opacity-60 hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring" />
             </Attachment>

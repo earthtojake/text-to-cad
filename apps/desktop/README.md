@@ -331,7 +331,7 @@ agent. Names are optional display metadata scoped to the draft; typed or
 unresolved references keep their file/selector fallback. The viewer’s compact
 reference hint stays inside its surface and dismisses with Close or Escape.
 
-Image attachments show a contained thumbnail beside the filename, with an always-visible remove control. Explorer tabs use a bordered active state and visible keyboard focus on selection and close controls.
+Image attachments show a contained thumbnail beside the filename, with an always-visible remove control. Click the thumbnail (or focus it and press Enter) to inspect the full image. Escape, Close or the backdrop dismisses the preview and returns focus to the thumbnail; the draft is unchanged. Explorer tabs use a bordered active state and visible keyboard focus on selection and close controls.
 
 Copy Reference and Copy Link remain clipboard-only. Ask about this view adds
 the image and selected part references together, without duplicating existing
