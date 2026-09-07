@@ -140,15 +140,17 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await permission.getByRole("button", { name: "Yes", exact: true }).click();
   await expect(page.locator("[data-permission][data-outcome=selected]")).toContainText("Allowed");
 
-  // Completed: prose, the folded rows, the subagent, the plan card, the
-  // files-changed pill, the usage chip; send is back.
+  // Completed: prose, the folded rows, the subagent, the plan card; send is
+  // back. No pill above the box and no chip at the end of the turn: the
+  // files-changed pill and the per-turn token count are both gone — the
+  // first said what the review tab says, the second put a number nobody
+  // reads mid-thread into the transcript once per turn.
   await expect(view).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
   await expect(page.getByText("the stale build directory is gone")).toBeVisible();
   await expect(page.locator("[data-subagent]")).toContainText("Docs checker finished");
   await expect(page.locator("[data-plan-card]")).toContainText("3 of 3 done");
-  await expect(page.locator("[data-files-changed]")).toContainText("2 files changed");
-  await expect(page.locator("[data-files-changed]")).toContainText("+8 −0");
-  await expect(page.locator("[data-part=usage]")).toContainText("tokens");
+  await expect(page.locator("[data-files-changed]")).toHaveCount(0);
+  await expect(page.locator("[data-part=usage]")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Submit" })).toBeVisible();
   await expect(row).toHaveAttribute("data-status", "idle");
   await shoot("session-completed.png");
@@ -173,6 +175,23 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   const lineBox = (await contextLine.boundingBox())!;
   const boxTop = (await composerRow.boundingBox())!.y;
   expect(lineBox.y + lineBox.height).toBeLessThanOrEqual(boxTop + 1);
+
+  // Hovering it opens the breakdown: the window as a bar with its numbers,
+  // and the session's token accounting — which is where the per-turn chip's
+  // information went. The fake agent sends no categories, as neither real
+  // adapter does, so there are none to show.
+  await page.locator("[data-context-trigger]").hover();
+  const popover = page.locator("[data-context-popover]");
+  await expect(popover).toBeVisible();
+  await expect(popover.locator("[data-context-window]")).toContainText("of");
+  await expect(popover.locator("[data-context-bar]")).toBeVisible();
+  await expect(popover.locator("[data-context-token-row=input]")).toContainText("Fresh input");
+  await expect(popover.locator("[data-context-token-row=cache-read]")).toContainText("Cache reads");
+  await expect(popover.locator("[data-context-token-row=output]")).toContainText("Output");
+  await expect(popover.locator("[data-context-categories]")).toHaveCount(0);
+  await expect(popover).not.toContainText("$");
+  await page.keyboard.press("Escape");
+  await expect(popover).toBeHidden();
   await expectOneRowComposer();
   // And still one row at the three window sizes the layout is designed for.
   for (const [width, height] of [[1280, 800], [1680, 1050]] as const) {
@@ -208,6 +227,39 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await setTheme("light");
   await shoot("session-expanded-light.png");
   await setTheme("dark");
+});
+
+/**
+ * The categories, when an agent sends any. Neither shipping adapter does —
+ * Claude's `usage_update` is used/size/cost, Codex's is used/size — so the
+ * fake agent is the only place the `_meta.contextBreakdown` shape exists,
+ * and this is the only place the coloured segments are drawn.
+ */
+test("the context popover breaks the window down when the agent sends categories", async () => {
+  const composer = page.getByPlaceholder("Do anything");
+  await composer.fill("context");
+  await composer.press("Enter");
+  await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
+
+  await page.locator("[data-context-trigger]").hover();
+  const popover = page.locator("[data-context-popover]");
+  await expect(popover).toBeVisible();
+  const categories = popover.locator("[data-context-categories]");
+  await expect(categories.locator("[data-context-category=system_prompt]")).toContainText("System prompt");
+  await expect(categories.locator("[data-context-category=messages]")).toContainText("Messages");
+  await expect(categories.locator("[data-context-category=mcp_tools]")).toContainText("MCP tools");
+  // Two turns now: the session column adds them up, the last-turn column is
+  // the small one just finished.
+  await expect(popover.locator("[data-context-token-row=cache-write]")).toContainText("Cache writes");
+  // A click keeps it open, so the picture is not of a popover mid-fade.
+  await page.locator("[data-context-trigger]").click();
+  await expect(popover).toBeVisible();
+  await shoot("session-context.png");
+  await setTheme("light");
+  await shoot("session-context-light.png");
+  await setTheme("dark");
+  await page.keyboard.press("Escape");
+  await expect(popover).toBeHidden();
 });
 
 test("the + is a menu of the three ways something gets into a prompt", async () => {

@@ -157,11 +157,46 @@ export const TurnUsageSchema = z.object({
 });
 export type TurnUsage = z.infer<typeof TurnUsageSchema>;
 
+/**
+ * Every turn's `usage` added up, and how many turns went into it. The
+ * per-turn fields the adapters leave out count as zero here — a sum of
+ * "some turns reported cache writes" is still a number.
+ */
+export const TokenTotalsSchema = z.object({
+  turns: z.number(),
+  totalTokens: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cachedReadTokens: z.number(),
+  cachedWriteTokens: z.number(),
+});
+export type TokenTotals = z.infer<typeof TokenTotalsSchema>;
+
+/**
+ * One category of what is in the window: Claude Code's own `/context` view
+ * names system prompt, system tools, MCP tools, custom agents, memory files,
+ * messages, free space and an autocompact buffer.
+ *
+ * Neither adapter sends one today (the Claude adapter's `usage_update` is
+ * `used`, `size`, `cost` and a `_claude/origin` or `_claude/rateLimit`
+ * `_meta`; Codex's is `used` and `size`), and ACP has no field for it — so
+ * this is read out of `_meta` and is usually absent. When it is absent the
+ * popover shows no categories rather than guessing at any.
+ */
+export const ContextBreakdownEntrySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  tokens: z.number(),
+});
+export type ContextBreakdownEntry = z.infer<typeof ContextBreakdownEntrySchema>;
+
 /** `usage_update`: how full the context window is. */
 export const ContextUsageSchema = z.object({
   used: z.number(),
   size: z.number(),
   cost: z.object({ amount: z.number(), currency: z.string() }).nullable().default(null),
+  /** `_meta`'s category breakdown of `used`, when the agent sends one. */
+  breakdown: z.array(ContextBreakdownEntrySchema).nullable().default(null),
 });
 export type ContextUsage = z.infer<typeof ContextUsageSchema>;
 
@@ -266,7 +301,6 @@ export type Part =
     }
   | { type: "mode_change"; modeId: string }
   | { type: "available_commands"; commands: AvailableCommand[] }
-  | { type: "usage"; usage: TurnUsage }
   | { type: "error"; message: string }
   | { type: "image"; data: string; mimeType: string }
   | { type: "resource_link"; uri: string; name: string };
@@ -315,7 +349,6 @@ export const PartSchema: z.ZodType<Part> = z.lazy(() =>
     }),
     z.object({ type: z.literal("mode_change"), modeId: z.string() }),
     z.object({ type: z.literal("available_commands"), commands: z.array(AvailableCommandSchema) }),
-    z.object({ type: z.literal("usage"), usage: TurnUsageSchema }),
     z.object({ type: z.literal("error"), message: z.string() }),
     z.object({ type: z.literal("image"), data: z.string(), mimeType: z.string() }),
     z.object({ type: z.literal("resource_link"), uri: z.string(), name: z.string() }),
@@ -388,7 +421,9 @@ export const SessionStateSchema = z.object({
   /** The latest plan the agent reported, or null once it removed it. */
   plan: z.array(PlanEntrySchema).nullable(),
   contextUsage: ContextUsageSchema.nullable(),
+  /** The last turn's `usage`, and every turn's added up. Both null until one reports. */
   lastTurnUsage: TurnUsageSchema.nullable(),
+  sessionUsage: TokenTotalsSchema.nullable(),
   pendingPermissions: z.array(PendingPermissionSchema),
   /** Every subagent session id seen, mapped to the root session's part path. */
   subagentSessionIds: z.array(z.string()),
@@ -412,6 +447,7 @@ export function initialSessionState(sessionId: string, agentId: string): Session
     plan: null,
     contextUsage: null,
     lastTurnUsage: null,
+    sessionUsage: null,
     pendingPermissions: [],
     subagentSessionIds: [],
   };

@@ -26,6 +26,7 @@
 import {
   type AvailableCommand,
   type ConfigOption,
+  type ContextBreakdownEntry,
   type Part,
   type PendingPermission,
   type PermissionOption,
@@ -36,12 +37,14 @@ import {
   type SessionMode,
   type SessionState,
   type SubagentState,
+  type TokenTotals,
   type ToolCallPart,
   type ToolCallStatus,
   type ToolContent,
   type ToolKind,
   type ToolLocation,
   type Turn,
+  type TurnUsage,
   ToolCallStatusSchema,
   ToolKindSchema,
 } from "./types";
@@ -96,18 +99,12 @@ export function reduce(state: SessionState, event: SessionEvent): SessionState {
     }
 
     case "prompt/end": {
-      let next = state;
-      if (event.usage) {
-        next = withRootParts(next, event.at, (parts) => [
-          ...parts,
-          { type: "usage", usage: event.usage! },
-        ]);
-      }
-      next = closeOpenTurn(next, event.at, event.stopReason);
+      const next = closeOpenTurn(state, event.at, event.stopReason);
       return {
         ...next,
         status: "idle",
         lastTurnUsage: event.usage ?? next.lastTurnUsage,
+        sessionUsage: event.usage ? addTurnUsage(next.sessionUsage, event.usage) : next.sessionUsage,
         // A cancelled turn takes its unanswered permission requests with it.
         pendingPermissions: [],
       };
@@ -292,6 +289,7 @@ function applyUpdate(
           used,
           size,
           cost: amount !== null && currency !== null ? { amount, currency } : null,
+          breakdown: contextBreakdown(u._meta),
         },
       };
     }
@@ -948,6 +946,83 @@ function asString(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Token accounting                                                            */
+/* -------------------------------------------------------------------------- */
+
+/** Add one turn's `usage` to the session's running totals. */
+function addTurnUsage(totals: TokenTotals | null, usage: TurnUsage): TokenTotals {
+  const base = totals ?? {
+    turns: 0,
+    totalTokens: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedReadTokens: 0,
+    cachedWriteTokens: 0,
+  };
+  return {
+    turns: base.turns + 1,
+    totalTokens: base.totalTokens + usage.totalTokens,
+    inputTokens: base.inputTokens + usage.inputTokens,
+    outputTokens: base.outputTokens + usage.outputTokens,
+    cachedReadTokens: base.cachedReadTokens + (usage.cachedReadTokens ?? 0),
+    cachedWriteTokens: base.cachedWriteTokens + (usage.cachedWriteTokens ?? 0),
+  };
+}
+
+/**
+ * The category breakdown of a `usage_update`, out of its `_meta`.
+ *
+ * ACP has no field for one and neither adapter sends one today, so this
+ * reads an extension: any `_meta` key whose name ends in `breakdown` — bare,
+ * `contextBreakdown`, or namespaced the way the Claude adapter namespaces its
+ * own (`_claude/contextBreakdown`) — holding either a list of
+ * `{ id, name, tokens }` or a plain `name: tokens` map. Anything else, and
+ * anything that adds up to nothing, reads as no breakdown at all: the popover
+ * then shows the window and the token counts and says nothing about
+ * categories, which is the honest answer when the agent did not say.
+ */
+function contextBreakdown(meta: unknown): ContextBreakdownEntry[] | null {
+  const record = asRecord(meta);
+  if (!record) {
+    return null;
+  }
+  const key = Object.keys(record).find((candidate) => candidate.toLowerCase().endsWith("breakdown"));
+  if (key === undefined) {
+    return null;
+  }
+  const raw = record[key];
+  const entries: ContextBreakdownEntry[] = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const fields = asRecord(item);
+      if (!fields) {
+        continue;
+      }
+      const tokens = asNumber(fields.tokens) ?? asNumber(fields.used) ?? asNumber(fields.value);
+      const name = asString(fields.name) ?? asString(fields.label) ?? asString(fields.title);
+      const id = asString(fields.id) ?? name;
+      if (tokens === null || tokens <= 0 || id === null) {
+        continue;
+      }
+      entries.push({ id, name: name ?? id, tokens });
+    }
+  } else {
+    const fields = asRecord(raw);
+    if (!fields) {
+      return null;
+    }
+    for (const [id, value] of Object.entries(fields)) {
+      const tokens = asNumber(value);
+      if (tokens === null || tokens <= 0) {
+        continue;
+      }
+      entries.push({ id, name: id, tokens });
+    }
+  }
+  return entries.length > 0 ? entries : null;
 }
 
 /* -------------------------------------------------------------------------- */

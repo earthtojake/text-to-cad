@@ -21,7 +21,6 @@ import type {
   ToolCallStatus,
   ToolKind,
   Turn,
-  TurnUsage,
 } from "@shared/acp/types";
 
 /* -------------------------------------------------------------------------- */
@@ -60,7 +59,6 @@ export type ViewItem =
   | { kind: "permission"; key: string; part: PermissionRequestPart }
   | { kind: "subagent"; key: string; part: SubagentPart }
   | { kind: "error"; key: string; message: string }
-  | { kind: "usage"; key: string; usage: TurnUsage }
   | { kind: "image"; key: string; data: string; mimeType: string }
   | { kind: "attachment"; key: string; uri: string; name: string }
   | { kind: "mode"; key: string; modeId: string };
@@ -117,10 +115,6 @@ export function partsView(parts: Part[], open: boolean, prefix: string): ViewIte
       case "error":
         flush();
         items.push({ kind: "error", key, message: part.message });
-        return;
-      case "usage":
-        flush();
-        items.push({ kind: "usage", key, usage: part.usage });
         return;
       case "image":
         flush();
@@ -415,29 +409,6 @@ function lastActive(parts: Part[]): Part | null {
     return lastActive(last.parts) ?? last;
   }
   return last;
-}
-
-/** "19.6k" — token counts read better rounded. */
-export function formatTokens(count: number): string {
-  if (count < 1_000) {
-    return String(count);
-  }
-  if (count < 1_000_000) {
-    return `${(count / 1_000).toFixed(count < 10_000 ? 1 : 0)}k`;
-  }
-  return `${(count / 1_000_000).toFixed(1)}M`;
-}
-
-export function formatCost(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency,
-      maximumFractionDigits: amount < 1 ? 3 : 2,
-    }).format(amount);
-  } catch {
-    return `${amount.toFixed(2)} ${currency}`;
-  }
 }
 
 /** "1m 12s" for the plan card and the reasoning trigger. */
