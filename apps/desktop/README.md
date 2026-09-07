@@ -101,7 +101,10 @@ Settings' per-project worktree card), the session states in both themes with
 the composer at 1280×800 and 1680×1050, `session-new-model-menu` (the model
 menu open on the new-session screen, a group per installed provider),
 `session-attach-menu` (the composer's `+`), `session-context` (the context
-breakdown open over the composer, and `-light`), and `codex-open-file` from the one
+panel open over the composer, its breakdown expanded) and
+`session-context-limits` (the same panel with the account's plan limits in
+it, from the fake agent's `limits` turn) — both with a `-light` — and
+`codex-open-file` from the one
 test that runs a real agent (below). Look at them; they are the cheapest review of
 whether the app still looks like an app, and every defect found in P3's
 explorer — a tree that did not reveal the open file, a `+` that scrolled out
@@ -367,24 +370,49 @@ practice meant Claude's "main-thread agent persona" — a list of every custom
 agent a person's plugins had installed — behind a settings glyph. The
 composer is four decisions, not a settings panel.
 
-How full the context window is sits **above** the box, on a line of fixed
-height, so typing cannot move it. Hovering that line opens the breakdown
-(`features/session/ContextLine.tsx`), and a click keeps it open: the window
-as a bar with its numbers, the agent's own categories when it sends any, and
-the session's token accounting — fresh input, cache reads, cache writes,
-output, summed across the thread and for the last turn. That accounting used
-to be a chip at the end of every turn and a `22 files changed` pill over the
-composer; the first put a number nobody reads mid-thread into the transcript
-once per turn, and the second said what the Review tab says.
+All of it is one row **under** the box, not inside it. The box holds the
+sentence and send; `+` and the chips sit on a 28px line beneath it — `+`,
+approval and the mode on the left, the model, the effort and the context
+ring on the right, with a wider gap between those three because they are
+three decisions rather than one run of text. The new-session screen is the
+same shape: its context strip (project · git mode · model · effort) above
+the box, the same `+` and approval row below it. No chip has a chevron:
+six of them saying "this opens" about six controls that are visibly the
+same control is six glyphs' worth of a row that would rather spend the
+space on a label.
 
-No adapter sends the categories today — Claude's `usage_update` is
-`used`/`size`/`cost` with a `_claude/origin` `_meta`, Codex's is `used` and
-`size`, and ACP has no field for a breakdown — so the reducer reads one out
-of `_meta` (any key ending in `breakdown`) and the popover shows no
-categories at all when there are none. Claude Code's own `/context`
-categories are computed inside that CLI and never cross the protocol.
+How full the context window is is a 16px ring at the end of that row
+(`features/session/ContextMeter.tsx`) — the arc is what is used, quiet under
+half, amber to four fifths, the destructive colour above it, and the numbers
+are its tooltip. Clicking it opens a panel that **stays** open until Escape,
+a click outside, or the ring again; hover does nothing, because a popover
+that closes when the pointer leaves cannot be read down its length. In it:
+the window as a segmented bar with `292.3k / 1M (29%)`; the account's plan
+usage limits when the agent reports any — a row per limit with what it is,
+when it comes back and how much of it is gone; and behind `See detailed
+breakdown` (remembered per session, for as long as the window lives) the
+agent's own categories and the session's token accounting — fresh input,
+cache reads, cache writes, output, summed across the thread and for the last
+turn. That accounting used to be a chip at the end of every turn and a
+`22 files changed` pill over the composer; the first put a number nobody
+reads mid-thread into the transcript once per turn, and the second said what
+the Review tab says.
 
-What a turn cost in dollars is in neither place: it is a number nobody acts
+Neither of the two extras comes from ACP. No adapter sends the categories —
+Claude's `usage_update` is `used`/`size`/`cost` with a `_claude/origin`
+`_meta`, Codex's is `used` and `size` — so the reducer reads a breakdown out
+of `_meta` (any key ending in `breakdown`) and the panel shows no categories
+at all when there are none; Claude Code's own `/context` categories are
+computed inside that CLI and never cross the protocol. The plan limits are
+the Claude adapter forwarding the SDK's `rate_limit_event` as a
+`usage_update` whose `_meta._claude/rateLimit` is one `SDKRateLimitInfo` —
+one limit type per event, so the reducer keeps the latest of each in
+`rateLimits` and normalises the two units on the way in (`utilization` to a
+fraction, `resetsAt` to epoch milliseconds). Codex sends nothing of the kind
+and the section is absent for it. Every field is read defensively: an event
+this build does not understand is ignored rather than thrown on.
+
+What a turn cost in dollars is in none of it: it is a number nobody acts
 on mid-thread, and a price tag on a box someone is about to type into is a
 poor thing to put in front of them.
 
@@ -632,6 +660,8 @@ src/renderer/
     view.ts               SessionState -> rows: activity-row labels, folding, the status line (pure)
     parts/                activity rows (+ Monaco diff, terminal), thoughts, permission cards, subagents
     ComposerChips.tsx     project / git mode / approval / mode / model / effort chips
+    ContextMeter.tsx      the context ring at the end of the composer's row, and the
+                          panel behind it: the window, the plan limits, the tokens
   features/explorer       the one tab strip and its four kinds of tab
     markdown/document.ts  markdown <-> the editor's document, keeping every block the
                           person did not touch byte for byte (remark; read its header)

@@ -32,6 +32,7 @@ import {
   type PermissionOption,
   type PlanEntry,
   type PromptBlock,
+  type RateLimit,
   type RawSessionUpdate,
   type SessionEvent,
   type SessionMode,
@@ -275,16 +276,25 @@ function applyUpdate(
     }
 
     case "usage_update": {
+      // A `usage_update` carries two independent things: the window, and —
+      // when the Claude adapter is forwarding a `rate_limit_event` — one of
+      // the account's plan limits. Either can be there without the other, so
+      // the limit is folded first and a window that did not parse does not
+      // throw the limit away with it.
+      const limit = rateLimit(u._meta);
+      const withLimit = limit
+        ? { ...state, rateLimits: { ...state.rateLimits, [limit.type]: limit } }
+        : state;
       const used = asNumber(u.used);
       const size = asNumber(u.size);
       if (used === null || size === null) {
-        return state;
+        return withLimit;
       }
       const cost = asRecord(u.cost);
       const amount = cost ? asNumber(cost.amount) : null;
       const currency = cost ? asString(cost.currency) : null;
       return {
-        ...state,
+        ...withLimit,
         contextUsage: {
           used,
           size,
@@ -1023,6 +1033,56 @@ function contextBreakdown(meta: unknown): ContextBreakdownEntry[] | null {
     }
   }
   return entries.length > 0 ? entries : null;
+}
+
+/**
+ * One plan limit out of a `usage_update`'s `_meta`.
+ *
+ * The Claude adapter forwards the SDK's `rate_limit_event` verbatim under
+ * `_claude/rateLimit`; the key is matched loosely (any `_meta` key ending in
+ * `ratelimit`) for the same reason the breakdown is, and every field is read
+ * defensively — an event this build does not understand is ignored, never
+ * thrown on. Two units are normalised here so nothing downstream has to
+ * guess:
+ *
+ *   - `utilization` becomes a fraction of the limit. The SDK sends 0…1; a
+ *     value above 1 is read as a percentage, because the only other thing a
+ *     number like `63` can mean is 63%.
+ *   - `resetsAt` becomes epoch **milliseconds**. The SDK sends epoch
+ *     seconds, so anything past the year 2001 in milliseconds (`> 1e12`) is
+ *     already milliseconds and is left alone.
+ *
+ * A limit with no `rateLimitType` is dropped: `rateLimits` is keyed by type,
+ * and an unnamed limit has nowhere to go and nothing to be labelled with.
+ */
+function rateLimit(meta: unknown): RateLimit | null {
+  const record = asRecord(meta);
+  if (!record) {
+    return null;
+  }
+  const key = Object.keys(record).find((candidate) => candidate.toLowerCase().endsWith("ratelimit"));
+  if (key === undefined) {
+    return null;
+  }
+  const fields = asRecord(record[key]);
+  if (!fields) {
+    return null;
+  }
+  const type = asString(fields.rateLimitType);
+  const raw = asNumber(fields.utilization);
+  if (type === null || type === "" || raw === null) {
+    return null;
+  }
+  const fraction = raw > 1 ? raw / 100 : raw;
+  const resets = asNumber(fields.resetsAt);
+  const status = asString(fields.status);
+  return {
+    type,
+    status: status === "allowed_warning" || status === "rejected" ? status : "allowed",
+    utilization: Math.max(0, Math.min(1, fraction)),
+    resetsAt: resets === null || resets <= 0 ? null : resets > 1e12 ? resets : resets * 1000,
+    isUsingOverage: typeof fields.isUsingOverage === "boolean" ? fields.isUsingOverage : null,
+  };
 }
 
 /* -------------------------------------------------------------------------- */

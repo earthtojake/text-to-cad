@@ -25,6 +25,11 @@
  *                 popover reads. No shipping adapter sends one (Claude's
  *                 `usage_update` is used/size/cost, Codex's is used/size),
  *                 so this is the only place the categories exist
+ *   "limits"      three usage_updates carrying `_meta._claude/rateLimit` —
+ *                 the SDK's `rate_limit_event` as the Claude adapter
+ *                 forwards it, one limit type per event, in the SDK's own
+ *                 units (`utilization` 0…1, `resetsAt` epoch seconds) — so
+ *                 the panel's plan rows have something to draw
  *   "thought"     an agent_thought_chunk first
  *   "slow"        wait until cancelled
  *   "crash"       exit(3) mid-turn
@@ -277,6 +282,26 @@ async function script(conn, params) {
         ],
       },
     });
+  }
+
+  if (text.includes("limits")) {
+    // One event per limit type, the way the SDK sends them: the adapter
+    // attaches the window it last saw to each. `resetsAt` is epoch seconds
+    // and `utilization` a fraction — the units the renderer normalises.
+    const seconds = Math.floor(Date.now() / 1000);
+    for (const rateLimit of [
+      { status: "allowed", rateLimitType: "five_hour", utilization: 0.17, resetsAt: seconds + 4 * 3600 + 300 },
+      { status: "allowed", rateLimitType: "seven_day", utilization: 0.63, resetsAt: seconds + 3 * 86_400 },
+      {
+        status: "allowed_warning",
+        rateLimitType: "seven_day_opus",
+        utilization: 0.96,
+        resetsAt: seconds + 3 * 86_400,
+        isUsingOverage: true,
+      },
+    ]) {
+      await send({ sessionUpdate: "usage_update", used: 292_300, size: 1_000_000, _meta: { "_claude/rateLimit": rateLimit } });
+    }
   }
 
   if (text.includes("slow")) {

@@ -16,7 +16,6 @@ import {
   PromptInputFooter,
   PromptInputHeader,
   PromptInputSubmit,
-  PromptInputTools,
   usePromptInputAttachments,
   type PromptInputMessage,
 } from "@renderer/components/ai-elements/prompt-input";
@@ -54,10 +53,12 @@ import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEd
  * Shift+Enter is a newline, Escape stops a running turn, a pasted image
  * becomes an attachment. Typing `/` opens the agent's slash commands.
  *
- * One row, Codex's: `+` and the caller's `chips` on the left, the caller's
- * `trailing` chips (the model, the effort) then send on the right. Nothing
- * wraps — the chips truncate — so the box is the same height at 560px as at
- * 1200px.
+ * The box holds the sentence and send, and nothing else. Everything the
+ * caller supplies — `+`, `chips` on the left, `trailing` on the right — is
+ * one row **under** the box (Claude Code's), so the thing being typed into
+ * is a box with writing in it rather than a box with a toolbar in it.
+ * Nothing wraps — the chips truncate — so that row is the same height at
+ * 560px as at 1200px.
  *
  * There is no microphone. There is no dictation backend behind one, and on
  * macOS the system's own dictation already types into this box; a button
@@ -89,7 +90,7 @@ export function Composer({
   /** Drafts and the queue are kept per session; null in the new-session state. */
   sessionId: string | null;
   chips: React.ReactNode;
-  /** Chips on the right, before the mic and send. */
+  /** The row's right-hand end: the model, the effort, the context ring. */
   trailing?: React.ReactNode;
   commands: AvailableCommand[];
   /** `streaming` shows stop; `submitted` shows a spinner (the session is being created). */
@@ -114,6 +115,8 @@ export function Composer({
     [draftKey, setDraft],
   );
   const textRef = useRef<ComposerEditorHandle | null>(null);
+  // The form's attachments, for the `+` that now sits outside the form.
+  const attachmentsRef = useRef<AttachmentsHandle | null>(null);
   const queue = useQueue(sessionId);
   const dequeue = useComposer((state) => state.dequeue);
 
@@ -189,57 +192,53 @@ export function Composer({
         />
       ) : null}
 
-      <PromptInput
-        className={cn("rounded-2xl shadow-xs", disabled && "opacity-70")}
-        maxFileSize={20 * 1024 * 1024}
-        multiple
-        onError={(error) => toast.error(error.message)}
-        onSubmit={handleSubmit}
-      >
-        <AttachmentStrip />
-        <AttachmentSink draftKey={draftKey} />
-        {/*
-         * No <PromptInputBody>: it renders `display: contents`, which the
-         * InputGroup's direct-child stacking selector does not see, and the
-         * composer collapses to one row.
-         */}
-        <ComposerEditorField
-          autoFocus={autoFocus}
-          disabled={disabled}
-          handle={textRef}
-          onChange={setText}
-          onKeyDown={(event) => {
-            if (!slash.open) {
-              if (event.key === "Escape" && status === "streaming" && onStop) {
+      <div className="flex flex-col gap-1">
+        <PromptInput
+          className={cn("rounded-2xl shadow-xs", disabled && "opacity-70")}
+          maxFileSize={20 * 1024 * 1024}
+          multiple
+          onError={(error) => toast.error(error.message)}
+          onSubmit={handleSubmit}
+        >
+          <AttachmentStrip />
+          <AttachmentSink draftKey={draftKey} />
+          <AttachmentBridge targetRef={attachmentsRef} />
+          {/*
+           * No <PromptInputBody>: it renders `display: contents`, which the
+           * InputGroup's direct-child stacking selector does not see, and the
+           * composer collapses to one row.
+           */}
+          <ComposerEditorField
+            autoFocus={autoFocus}
+            disabled={disabled}
+            handle={textRef}
+            onChange={setText}
+            onKeyDown={(event) => {
+              if (!slash.open) {
+                if (event.key === "Escape" && status === "streaming" && onStop) {
+                  event.preventDefault();
+                  onStop();
+                }
+                return;
+              }
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                 event.preventDefault();
-                onStop();
+                slash.move(event.key === "ArrowDown" ? 1 : -1);
+              } else if ((event.key === "Enter" || event.key === "Tab") && slash.matches.length > 0) {
+                event.preventDefault();
+                const command = slash.matches[slash.selected];
+                if (command) {
+                  setText(`/${command.name} `);
+                }
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                slash.dismiss();
               }
-              return;
-            }
-            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-              event.preventDefault();
-              slash.move(event.key === "ArrowDown" ? 1 : -1);
-            } else if ((event.key === "Enter" || event.key === "Tab") && slash.matches.length > 0) {
-              event.preventDefault();
-              const command = slash.matches[slash.selected];
-              if (command) {
-                setText(`/${command.name} `);
-              }
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              slash.dismiss();
-            }
-          }}
-          placeholder={placeholder}
-          value={text}
-        />
-        <PromptInputFooter className="flex-nowrap px-2 pb-1.5">
-          <PromptInputTools className="min-w-0 flex-1 flex-nowrap gap-0.5 overflow-hidden">
-            <AttachButton disabled={disabled} />
-            {chips}
-          </PromptInputTools>
-          <div className="flex min-w-0 shrink-0 items-center gap-0.5">
-            {trailing}
+            }}
+            placeholder={placeholder}
+            value={text}
+          />
+          <PromptInputFooter className="flex-nowrap justify-end px-2 pb-1.5">
             <PromptInputSubmit
               className={cn("size-7 rounded-full", status === "streaming" && "bg-foreground text-background")}
               disabled={disabled || status === "submitted"}
@@ -247,12 +246,52 @@ export function Composer({
               size="icon-sm"
               status={status}
             />
+          </PromptInputFooter>
+        </PromptInput>
+
+        {/*
+         * The row, under the box. `+` and the caller's chips on the left,
+         * the caller's `trailing` on the right with a wider gap between its
+         * items — the model, the effort and the ring are three separate
+         * things, and reading them as one run of text is the thing the gap
+         * prevents.
+         */}
+        <div className="flex h-7 items-center gap-1 px-0.5" data-composer-row>
+          <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
+            <AttachButton attachmentsRef={attachmentsRef} disabled={disabled} />
+            {chips}
           </div>
-        </PromptInputFooter>
-      </PromptInput>
+          <div className="flex min-w-0 shrink-0 items-center gap-2">{trailing}</div>
+        </div>
+      </div>
     </div>
   );
 }
+
+/**
+ * The form's attachments, reachable from outside the form.
+ *
+ * `usePromptInputAttachments` only answers inside `<PromptInput>`, and the
+ * `+` is no longer inside it. Rather than lift the vendored component's
+ * state into a provider — which swaps its validated `add` (the size limit,
+ * the accept list) for the provider's unchecked one — this renders nothing
+ * inside the form and hands the context out through a ref. The `+` reads it
+ * when it is clicked, which is always after this has mounted.
+ */
+function AttachmentBridge({ targetRef }: { targetRef: React.RefObject<AttachmentsHandle | null> }) {
+  const attachments = usePromptInputAttachments();
+  useEffect(() => {
+    targetRef.current = attachments;
+    return () => {
+      if (targetRef.current === attachments) {
+        targetRef.current = null;
+      }
+    };
+  }, [attachments, targetRef]);
+  return null;
+}
+
+type AttachmentsHandle = ReturnType<typeof usePromptInputAttachments>;
 
 /**
  * The editor, with the three things the textarea did for the form: Enter
@@ -325,9 +364,17 @@ function AttachmentSink({ draftKey }: { draftKey: string }) {
  * the same capture as the viewer's own camera button and lands in the same
  * place — it is disabled, not hidden, when no CAD file is open, because the
  * answer to "why can I not do that" should be visible.
+ *
+ * It sits in the row under the box, so the form's attachments reach it
+ * through `AttachmentBridge`'s ref rather than through the form's context.
  */
-function AttachButton({ disabled }: { disabled?: boolean }) {
-  const attachments = usePromptInputAttachments();
+function AttachButton({
+  attachmentsRef,
+  disabled,
+}: {
+  attachmentsRef: React.RefObject<AttachmentsHandle | null>;
+  disabled?: boolean;
+}) {
   const files = useRef<HTMLInputElement | null>(null);
   const images = useRef<HTMLInputElement | null>(null);
   const cadTabId = useExplorer((state) => state.tabs.find((tab) => tab.id === state.activeId && isCadTab(tab))?.id
@@ -338,7 +385,7 @@ function AttachButton({ disabled }: { disabled?: boolean }) {
     const picked = [...(event.currentTarget.files ?? [])];
     event.currentTarget.value = "";
     if (picked.length > 0) {
-      attachments.add(rememberFiles(picked));
+      attachmentsRef.current?.add(rememberFiles(picked));
     }
   };
   return (

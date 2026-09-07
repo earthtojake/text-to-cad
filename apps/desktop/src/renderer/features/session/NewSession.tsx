@@ -21,7 +21,8 @@ import { errorMessage, isAuthError } from "./view";
 /**
  * The new-session state (plan §2): "What should we build in <project>?",
  * a line saying what a session is, the context strip — project · git mode ·
- * model · effort — and an empty composer with its approval chip. Nothing
+ * model · effort — and an empty composer with `+` and approval in the row
+ * under its box. Nothing
  * else: a grid of canned prompts under the box is four guesses at what
  * somebody came here to do. Sending creates the session — `sessions.create`
  * spawns the agent — selects it, and sends the first prompt; the transcript
@@ -149,6 +150,8 @@ export function NewSession({ project }: { project: Project }) {
   // it treats git, which model runs it and how hard it thinks. The first two
   // cannot change once the session exists, which is why they are not in the
   // composer's row; the last two are the same chips the live session has.
+  // Under the box is the same row the live session has — `+` and approval —
+  // so the two screens are one shape: the context above, the actions below.
   const context = (
     <div className="mb-1.5 flex items-center gap-1 px-1" data-context-strip>
       <ProjectChip onChange={setActiveProject} project={project} />
