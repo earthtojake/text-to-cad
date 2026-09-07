@@ -282,6 +282,29 @@
   [data-selectable] {
     user-select: text;
   }
+
+  /* The transcript is the one part of this window that is a document, so all
+   * of it selects: an agent's prose, a person's own prompt, the code in a
+   * fenced block, an activity row's summary and the path in it. It was
+   * unselectable for no reason but the `user-select: none` above — a rule
+   * about chrome that a thread of writing is not — and a reply nobody can
+   * copy out of is a reply they retype.
+   *
+   * The transcript's own controls opt back out below. */
+  [data-transcript] {
+    user-select: text;
+  }
+
+  /* Chrome inside the document: the jump pill, an error row's Retry and
+   * Reconnect, a permission card's answers. A drag that starts on one of
+   * those is somebody missing the button, not somebody copying its label.
+   * An activity row's button is deliberately not here — its one line is the
+   * tool call's summary and the path in it, which is exactly what gets
+   * copied. */
+  [data-transcript]
+    :is([data-jump-to-latest], [data-part="error"] button, [data-permission] button) {
+    user-select: none;
+  }
 }
 
 /* The strip Electron reserves for the window controls (titleBarStyle

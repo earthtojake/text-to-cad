@@ -50,7 +50,7 @@ export function GeneralPage() {
     <>
       <SettingCard title="Files and projects">
         <PathRow
-          description="Where the Add project chooser opens."
+          description="Where the Open folder chooser opens."
           keywords="directory workspace"
           onChoose={() => {
             void window.hardcore.dialogs

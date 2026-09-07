@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   Check,
   Folder,
@@ -20,9 +21,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
+import { useOpenFolder } from "@renderer/hooks/use-open-folder";
 import { agentIcon } from "@renderer/lib/agent-icons";
 import { GIT_MODE_LABELS, gitModeAvailability, localGitMode } from "@renderer/lib/git-mode";
+import { recentProjects } from "@renderer/lib/projects";
 import { useProjects } from "@renderer/state/projects";
+import { useSessions } from "@renderer/state/sessions";
 import { currentName, type SelectOption } from "@shared/acp/options";
 import type { ApprovalMode, SessionMode } from "@shared/acp/types";
 import type { ProjectGitInfo } from "@shared/ipc/git";
@@ -113,27 +117,55 @@ export function Chip({
 /* New-session chips                                                           */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Which folder the session runs in, and the one place a new folder is added
+ * (Codex's shape): `Recent` over the projects a person has worked in, newest
+ * first, a check on the one this session is for, and `Open folder…` at the
+ * bottom.
+ *
+ * There is no `Add project` button anywhere else. Adding a folder *is*
+ * choosing one — the chooser, then that folder's new-session screen — so a
+ * second control for it would be the same menu item with a different name.
+ * The order is `lib/projects.ts`, over the session index.
+ */
 export function ProjectChip({ project, onChange }: { project: Project | null; onChange: (id: string) => void }) {
   const projects = useProjects((state) => state.projects);
-  const addProject = useProjects((state) => state.add);
+  const sessions = useSessions((state) => state.sessions);
+  const openFolder = useOpenFolder();
+  const recent = useMemo(() => recentProjects(projects, sessions), [projects, sessions]);
   return (
     <Chip
       icon={<Folder />}
       label={project?.name ?? "No project"}
       menu={
         <>
-          <DropdownMenuRadioGroup onValueChange={onChange} value={project?.id ?? ""}>
-            {projects.map((candidate) => (
-              <DropdownMenuRadioItem key={candidate.id} value={candidate.id}>
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate">{candidate.name}</span>
-                  <span className="truncate text-[11px] text-muted-foreground">{candidate.path}</span>
-                </span>
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
+          <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">Recent</DropdownMenuLabel>
+          {recent.map((candidate) => (
+            <DropdownMenuItem
+              key={candidate.id}
+              onSelect={() => onChange(candidate.id)}
+              // The name is what a person picks by; the path is a hover away
+              // rather than a second line under every row.
+              title={candidate.path}
+            >
+              <span className="flex size-4 shrink-0 items-center justify-center">
+                {candidate.id === project?.id ? <Check className="size-3.5" /> : null}
+              </span>
+              <span className="truncate">{candidate.name}</span>
+            </DropdownMenuItem>
+          ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => void addProject()}>Add project…</DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() =>
+              void openFolder().then((added) => {
+                if (added) {
+                  onChange(added.id);
+                }
+              })
+            }
+          >
+            Open folder…
+          </DropdownMenuItem>
         </>
       }
       maxWidth={150}

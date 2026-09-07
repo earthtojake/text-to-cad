@@ -94,19 +94,40 @@ test.afterAll(async () => {
 });
 
 /**
- * `New` replaced `New chat`: a plus in a ring and one word. Search stayed in
- * the header, Settings in the footer, and `Add project` is a nav row of its
- * own now that there is no `Projects` heading to hang it off.
+ * `New` replaced `New chat`: a plus in a ring and one word, and it is the
+ * whole nav list — adding a folder is `Open folder…` on the project chip's
+ * menu, not a row here. Search and the filters are in the panel's header
+ * beside the app's name, Settings in the footer.
  */
 test("the nav list is `New`, and `New chat` is gone", async () => {
   await expect(sidebar().getByRole("button", { name: "New", exact: true })).toBeVisible();
   await expect(sidebar().getByRole("button", { name: "New chat", exact: true })).toHaveCount(0);
-  await expect(sidebar().getByRole("button", { name: "Add project" })).toBeVisible();
+  await expect(sidebar().getByRole("button", { name: "Add project" })).toHaveCount(0);
   await expect(sidebar().getByRole("button", { name: "Search", exact: true })).toBeVisible();
+  await expect(sidebar().getByRole("button", { name: "Filters" })).toBeVisible();
   await expect(sidebar().getByRole("button", { name: "Settings" })).toBeVisible();
 
   // Each project is a header, not a row with a folder icon and children.
   await expect(sidebar().getByRole("button", { name: `Collapse ${beta.name}` })).toBeVisible();
+});
+
+/**
+ * A project's header is its name, its collapse and `+`. The search glyph and
+ * the sliders that used to appear on it on hover are the panel's now: one
+ * search box for every thread, one filter menu for a set of settings that
+ * was always global. Hovered, because that is the state the two of them
+ * used to appear in — a header that grows a control under the pointer is
+ * exactly what this checks is gone.
+ */
+test("a project's header has + and nothing else", async () => {
+  const header = sectionOf(alpha.id).locator("[data-sidebar-section-header]");
+  await header.hover();
+  await expect(header.getByRole("button", { name: `New chat in ${alpha.name}` })).toBeVisible();
+  await expect(header.getByRole("button", { name: `Search ${alpha.name}` })).toHaveCount(0);
+  await expect(header.getByRole("button", { name: "Filters" })).toHaveCount(0);
+  // One filter menu in the panel, not one per project.
+  await expect(sidebar().getByRole("button", { name: "Filters" })).toHaveCount(1);
+  await shoot("sidebar-header.png");
 });
 
 /**
@@ -208,6 +229,45 @@ test("the filter menu reorders the list and shows the archived threads", async (
 });
 
 /**
+ * The project chip's menu, which is where a folder is chosen *and* where a
+ * new one is added (Codex's shape): `Recent`, the projects in order of when
+ * they were last worked in, a check on the one this screen is for, then
+ * `Open folder…`.
+ *
+ * Two projects is the whole point. `alpha` has threads and `beta` has none,
+ * so `alpha` is first — while the check is on `beta`, whose new-session
+ * screen this is. A menu that sorted by "the active one first", or a check
+ * drawn on the first row, would pass with one project and lie with two.
+ *
+ * This is the suite with two projects, which is why the composer's chip is
+ * tested here rather than in `session.spec.ts`.
+ */
+test("the project chip lists the recent folders, and ends in `Open folder…`", async () => {
+  await sidebar().getByRole("button", { name: `New chat in ${beta.name}` }).click();
+  await expect(page.getByRole("heading", { name: `What should we build in ${beta.name}?` })).toBeVisible();
+
+  await page.locator("[data-chip=project]").click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await expect(menu.getByText("Recent", { exact: true })).toBeVisible();
+  // In order, and `Open folder…` last. `alpha` has the sessions, so it leads.
+  await expect(menu.getByRole("menuitem")).toHaveText([alpha.name, beta.name, "Open folder…"]);
+  // No `No folder` row: a session always belongs to one.
+  await expect(menu.getByRole("menuitem", { name: "No folder" })).toHaveCount(0);
+  await shoot("project-menu.png");
+
+  // The check is on the active project, not on the first row.
+  const checked = (name: string) =>
+    menu.getByRole("menuitem", { name }).locator("svg").count();
+  expect(await checked(beta.name)).toBe(1);
+  expect(await checked(alpha.name)).toBe(0);
+
+  // And picking one switches to it.
+  await menu.getByRole("menuitem", { name: alpha.name }).click();
+  await expect(page.getByRole("heading", { name: `What should we build in ${alpha.name}?` })).toBeVisible();
+});
+
+/**
  * The leading glyph is the session's state, which is the thing a sidebar is
  * read for: a pulse while a turn streams, and an amber triangle when the
  * agent has stopped to ask. Both come from the index's status, so this is
@@ -278,15 +338,12 @@ async function createSession(projectId: string, title: string) {
 }
 
 /**
- * Open the filter menu from the first project's header. The two glyphs beside
- * `+` are only opaque on the active or hovered header, so the header is
- * hovered first — a click would work either way (opacity is not visibility),
- * but hovering is what a person does and what the screenshot needs.
+ * Open the filter menu, which is in the panel's own header beside search —
+ * one menu for the whole list, wherever the pointer happens to be. It used
+ * to be a glyph on each project's header that only appeared on hover.
  */
 async function openFilters() {
-  const header = sectionOf(alpha.id).locator("[data-sidebar-section-header]");
-  await header.hover();
-  await header.getByRole("button", { name: "Filters" }).click();
+  await sidebar().getByRole("button", { name: "Filters" }).click();
   await expect(page.getByRole("menu").first()).toBeVisible();
 }
 

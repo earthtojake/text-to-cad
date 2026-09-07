@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { ChevronRight, Plus, Search } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import { cn } from "cn";
 
 import { Button } from "@renderer/components/ui/button";
@@ -12,28 +12,25 @@ import {
 import { MenuKind } from "@renderer/features/sidebar/menu";
 import { ProjectMenuItems } from "@renderer/features/sidebar/project-menu";
 import { SessionRow } from "@renderer/features/sidebar/SessionRow";
-import { SidebarFilterMenu } from "@renderer/features/sidebar/SidebarFilterMenu";
 import type { SidebarSection } from "@renderer/lib/sidebar";
 import { useProjects } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
 import { useSettings, useSidebarSettings } from "@renderer/state/settings";
-import { useUi } from "@renderer/state/ui";
 
 /**
  * One section of the sidebar: a grey header and a flat list of threads under
  * it (`lib/sidebar.ts` decides which sections exist and what is in them).
  *
- * The header is the project — its name, its collapse, and the three controls
- * the design gives it: `+` starts a thread in *this* project, the search
- * glyph opens the palette with this project's name already typed, and the
- * sliders open the filter menu. Everything else a project can do is a
- * right-click away (and in the filter menu's `Project…`), because a header
- * with five buttons on it is not a header.
+ * The header is the project — its name, its collapse, and one control: `+`,
+ * a thread in *this* project. Everything else a project can do is a
+ * right-click away, because a header with four buttons on it is not a header.
+ * Search and the filter menu are the panel's, in its own header
+ * (`Sidebar.tsx`): the palette searches every thread and the filters are
+ * `settings.sidebar`, so neither was ever a per-project control.
  *
  * `Pinned` and the one flat list `Group by › None` produces are sections too,
- * with no project behind them: no `+`, nothing to collapse into a preference,
- * and — for the flat list — the sliders, so the grouping that hid every
- * project header can still be changed back.
+ * with no project behind them: no `+`, and nothing to collapse into a
+ * preference.
  */
 export function SessionSection({ section }: { section: SidebarSection }) {
   const project = section.project;
@@ -46,7 +43,6 @@ export function SessionSection({ section }: { section: SidebarSection }) {
   const setActiveSession = useSessions((state) => state.setActive);
   const filters = useSidebarSettings();
   const setSidebar = useSettings((state) => state.setSidebar);
-  const openCommandPalette = useUi((state) => state.openCommandPalette);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(section.name);
 
@@ -88,7 +84,7 @@ export function SessionSection({ section }: { section: SidebarSection }) {
 
   const header = (
     <div
-      className="group/section flex h-7 items-center gap-0.5 rounded-md pr-0.5 pl-2"
+      className="flex h-7 items-center gap-0.5 rounded-md pr-0.5 pl-2"
       data-sidebar-section-header
     >
       {editing ? (
@@ -134,40 +130,20 @@ export function SessionSection({ section }: { section: SidebarSection }) {
       )}
 
       {project ? (
-        <>
-          {/* `+` is on every project header; search and the sliders join it
-              on hover, and stay out for the active project. */}
-          <Button
-            aria-label={`New chat in ${project.name}`}
-            className="size-5 shrink-0 text-muted-foreground"
-            onClick={newHere}
-            size="icon-xs"
-            variant="ghost"
-          >
-            <Plus className="size-3" />
-          </Button>
-          <div
-            className={cn(
-              "flex shrink-0 items-center gap-0.5",
-              active
-                ? "opacity-100"
-                : "opacity-0 group-hover/section:opacity-100 group-focus-within/section:opacity-100",
-            )}
-          >
-            <Button
-              aria-label={`Search ${project.name}`}
-              className="size-5 shrink-0 text-muted-foreground"
-              onClick={() => openCommandPalette(project.name)}
-              size="icon-xs"
-              variant="ghost"
-            >
-              <Search className="size-3" />
-            </Button>
-            <SidebarFilterMenu onRenameProject={startRename} project={project} />
-          </div>
-        </>
-      ) : section.kind === "all" ? (
-        <SidebarFilterMenu onRenameProject={() => undefined} project={null} />
+        /* `+` is the header's one control, and it is always there. The search
+           glyph and the sliders that used to join it on hover have moved to
+           the panel's own header: neither was ever about one project — the
+           palette searches every thread and the filters are global — and a
+           control that appears on hover is one nobody finds. */
+        <Button
+          aria-label={`New chat in ${project.name}`}
+          className="size-5 shrink-0 text-muted-foreground"
+          onClick={newHere}
+          size="icon-xs"
+          variant="ghost"
+        >
+          <Plus className="size-3" />
+        </Button>
       ) : null}
     </div>
   );

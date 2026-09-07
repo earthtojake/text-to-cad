@@ -153,9 +153,11 @@ const handlers = {
   ...cadHandlers,
 } satisfies Parameters<typeof registerIpc<IpcContract>>[1];
 
+// The words on the native chooser are the words on the control that opened
+// it — `Open folder…`, on the project chip's menu and the two empty states.
 const openProjectDialog = {
-  title: "Add project",
-  buttonLabel: "Add project",
+  title: "Open folder",
+  buttonLabel: "Open folder",
   properties: ["openDirectory", "createDirectory"],
 } as const satisfies Electron.OpenDialogOptions;
 

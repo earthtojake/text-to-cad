@@ -1,5 +1,8 @@
 import { useEffect } from "react";
+import { FolderOpen } from "lucide-react";
 
+import { Button } from "@renderer/components/ui/button";
+import { useOpenFolder } from "@renderer/hooks/use-open-folder";
 import { useActiveProject } from "@renderer/state/projects";
 import { useActiveSession, useSessions } from "@renderer/state/sessions";
 
@@ -19,6 +22,7 @@ export function SessionPane() {
   const project = useActiveProject();
   const session = useActiveSession();
   const setActiveSession = useSessions((state) => state.setActive);
+  const openFolder = useOpenFolder();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -41,14 +45,23 @@ export function SessionPane() {
       {project ? (
         <NewSession key={project.id} project={project} />
       ) : (
-        <div className="flex min-h-0 flex-1 items-center justify-center px-6 pb-10">
+        <div className="flex min-h-0 flex-1 items-center justify-center px-6 pb-10" data-no-project>
           <div className="w-full max-w-[720px]">
             <h1 className="text-center text-[22px] leading-tight font-medium tracking-tight text-balance">
               Add a project to get started
             </h1>
             <p className="mt-2 text-center text-[13px] text-balance text-muted-foreground">
-              A session always belongs to a folder. Add one from the sidebar.
+              A session always belongs to a folder.
             </p>
+            {/* The chooser itself, not a sentence pointing at one: with no
+                project there is no project chip to open `Open folder…` from,
+                and this screen is the whole app until there is. */}
+            <div className="mt-4 flex justify-center">
+              <Button onClick={() => void openFolder()} size="sm" variant="secondary">
+                <FolderOpen className="size-3.5" />
+                Open folder…
+              </Button>
+            </div>
           </div>
         </div>
       )}

@@ -68,14 +68,27 @@ test("shows two panes and no explorer until a project is bound", async () => {
   await expect(page.getByTestId("explorer")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
 
-  await expect(page.getByRole("button", { name: "Add project" })).toBeVisible();
   await expect(page.getByRole("button", { name: "New", exact: true })).toBeVisible();
+  // With no project there is no project chip to open `Open folder…` from, so
+  // both halves of this screen offer the chooser themselves. `Add project`
+  // is gone: adding a folder is picking one, and it lives at the bottom of
+  // the chip's menu everywhere else.
+  await expect(page.getByRole("button", { name: "Add project" })).toHaveCount(0);
   await expect(page.getByText("Add a project to get started")).toBeVisible();
+  await expect(
+    page.getByTestId("sidebar").getByRole("button", { name: "Open folder…" }),
+  ).toBeVisible();
+  await expect(
+    page.locator("[data-no-project]").getByRole("button", { name: "Open folder…" }),
+  ).toBeVisible();
 
   // Nor in the palette, and `Mod+Alt+B` has nothing to act on either.
   await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
   await expect(page.getByPlaceholder("Search projects and commands…")).toBeVisible();
   await expect(page.getByRole("option", { name: "Toggle sidebar" })).toBeVisible();
+  // The keyboard's way to the chooser, which is the palette's job now that
+  // the sidebar has no row for it.
+  await expect(page.getByRole("option", { name: "Open folder…" })).toBeVisible();
   await expect(page.getByRole("option", { name: "Toggle explorer" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.keyboard.press(process.platform === "darwin" ? "Meta+Alt+b" : "Control+Alt+b");

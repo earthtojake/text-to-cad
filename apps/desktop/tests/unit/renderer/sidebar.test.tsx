@@ -230,10 +230,20 @@ describe("Sidebar", () => {
     });
   };
 
-  it("offers a way in when there are no projects", () => {
+  /**
+   * The chooser is `Open folder…` on the project chip's menu now, so the
+   * panel has no `Add project` row — except in this one state, which has no
+   * chip to open it from.
+   */
+  it("offers a way in when there are no projects, and no Add project row otherwise", () => {
     wrap(<Sidebar />);
     expect(screen.getByText("No projects yet.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add project" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open folder…" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add project" })).not.toBeInTheDocument();
+
+    withProject();
+    wrap(<Sidebar />);
+    expect(screen.queryByRole("button", { name: "Add project" })).not.toBeInTheDocument();
   });
 
   it("starts a thread from `New`, not from `New chat`", () => {
@@ -340,13 +350,37 @@ describe("Sidebar", () => {
     expect(screen.getByText("No sessions yet")).toBeInTheDocument();
   });
 
-  it("opens the palette with a project's name typed, from its search glyph", async () => {
+  /**
+   * Search and the filters act on the whole list, so they are the panel's
+   * header and not each project's. A project header carries `+` and nothing
+   * else: the glyph that opened the palette with one project's name typed is
+   * gone, and so is the per-header copy of a menu whose settings were always
+   * global.
+   */
+  it("keeps search and the filters in the panel's header, not on a project's", async () => {
     const user = userEvent.setup();
     withProject();
     wrap(<Sidebar />);
-    await user.click(screen.getByRole("button", { name: "Search text-to-cad" }));
+
+    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filters" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Search text-to-cad" })).not.toBeInTheDocument();
+    // One filter menu in the panel, whatever the projects are.
+    expect(screen.getAllByRole("button", { name: "Filters" })).toHaveLength(1);
+
+    // And it is the global menu: the settings, with no `Project…` submenu.
+    await user.click(screen.getByRole("button", { name: "Filters" }));
+    expect(screen.getByRole("menuitem", { name: /^Status/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Project…" })).not.toBeInTheDocument();
+  });
+
+  it("opens the palette from the panel's search glyph, with nothing typed", async () => {
+    const user = userEvent.setup();
+    withProject();
+    wrap(<Sidebar />);
+    await user.click(screen.getByRole("button", { name: "Search" }));
     expect(useUi.getState().commandPaletteOpen).toBe(true);
-    expect(useUi.getState().commandPaletteQuery).toBe("text-to-cad");
+    expect(useUi.getState().commandPaletteQuery).toBe("");
   });
 
   it("starts a thread in the project the `+` belongs to", async () => {
