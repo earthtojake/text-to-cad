@@ -39,6 +39,7 @@ import { defineIpc, invoke, type IpcClient } from "./define";
 // at once.
 import { appEvents, appIpc } from "./app";
 import { acpContract, acpEvents } from "./acp";
+import { agentOptionsContract, agentOptionsEvents } from "./agent-options";
 import { agentsContract, agentsEvents } from "./agents";
 import { dialogsContract } from "./dialogs";
 import { pluginsContract, pluginsEvents } from "./plugins";
@@ -48,6 +49,7 @@ import { explorerEvents, explorerIpc } from "./explorer";
 import { gitIpc } from "./git";
 
 export * from "./define";
+export * from "./agent-options";
 export * from "./cad";
 export * from "./explorer";
 export * from "./git";
@@ -86,6 +88,9 @@ export const ipcContract = defineIpc({
 
   /** P1: `agents.*` lives in ./ipc/agents.ts. */
   ...agentsContract,
+
+  /** P2: `agentOptions.*` — the model and effort chips before a session exists. */
+  ...agentOptionsContract,
 
   /** P6, stubbed until P5: the bundled plugin's state per agent. */
   ...pluginsContract,
@@ -168,6 +173,7 @@ export const ipcEvents = {
   ...appEvents,
   ...acpEvents,
   ...agentsEvents,
+  ...agentOptionsEvents,
   ...pluginsEvents,
   ...runtimeEvents,
   // `files.changed`, `terminal.data` and `terminal.exit` (P3).

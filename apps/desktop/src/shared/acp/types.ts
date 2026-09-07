@@ -96,6 +96,13 @@ export const SessionModeSchema = z.object({
   id: z.string(),
   name: z.string(),
   description: z.string().nullable().default(null),
+  /**
+   * The adapters' `_meta.kind`: `standard`, `plan`, `auto_review`,
+   * `full_access`. It is how a provider names its own auto-approval preset
+   * — Claude's `auto`, Codex's `agent` — without the app knowing either id
+   * (`src/shared/acp/options.ts`).
+   */
+  kind: z.string().nullable().default(null),
 });
 export type SessionMode = z.infer<typeof SessionModeSchema>;
 
@@ -119,6 +126,8 @@ export const ConfigOptionSchema = z.discriminatedUnion("type", [
         description: z.string().nullable().default(null),
         /** Set when the agent grouped its options (a model family, say). */
         group: z.string().nullable().default(null),
+        /** `_meta.kind`, as on a session mode: the `mode` option carries it. */
+        kind: z.string().nullable().default(null),
       }),
     ),
   }),

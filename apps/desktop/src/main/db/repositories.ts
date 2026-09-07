@@ -9,6 +9,10 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
+import { z } from "zod";
+
+import { ConfigOptionSchema, type ConfigOption } from "../../shared/acp/types";
+import type { AgentOptions } from "../../shared/ipc/agent-options";
 import {
   ExplorerTabSchema,
   ProjectSchema,
@@ -204,6 +208,81 @@ export const sessions = {
 
   remove(id: string): void {
     db().prepare("DELETE FROM sessions WHERE id = ?").run(id);
+  },
+};
+
+/* -------------------------------------------------------------------------- */
+/* Agent options                                                               */
+/* -------------------------------------------------------------------------- */
+
+type AgentOptionsRow = {
+  agent_id: string;
+  options: string | null;
+  options_at: number | null;
+  default_model: string | null;
+  default_effort: string | null;
+};
+
+/**
+ * A row that no longer parses is a snapshot of an adapter that has changed
+ * its wire shape. It is dropped to "never seen", which makes the next probe
+ * take a fresh one — the same thing that happens on a first run, and the
+ * reason this table is a cache rather than a record.
+ */
+const toAgentOptions = (row: AgentOptionsRow): AgentOptions => {
+  const parsed = z.array(ConfigOptionSchema).safeParse(safeJson(row.options ?? "null"));
+  return {
+    agentId: row.agent_id,
+    options: parsed.success ? parsed.data : [],
+    updatedAt: parsed.success ? row.options_at : null,
+    defaultModel: row.default_model,
+    defaultEffort: row.default_effort,
+  };
+};
+
+const AGENT_OPTIONS_COLUMNS = "agent_id, options, options_at, default_model, default_effort";
+
+export const agentOptions = {
+  list(): AgentOptions[] {
+    const rows = db()
+      .prepare(`SELECT ${AGENT_OPTIONS_COLUMNS} FROM agent_options ORDER BY agent_id`)
+      .all() as AgentOptionsRow[];
+    return rows.map(toAgentOptions);
+  },
+
+  get(agentId: string): AgentOptions | null {
+    const row = db()
+      .prepare(`SELECT ${AGENT_OPTIONS_COLUMNS} FROM agent_options WHERE agent_id = ?`)
+      .get(agentId) as AgentOptionsRow | undefined;
+    return row ? toAgentOptions(row) : null;
+  },
+
+  /** Replace the snapshot; the defaults on the row are untouched. */
+  setOptions(agentId: string, options: ConfigOption[], at = Date.now()): void {
+    db()
+      .prepare(
+        `INSERT INTO agent_options (agent_id, options, options_at) VALUES (?, ?, ?)
+         ON CONFLICT(agent_id) DO UPDATE SET options = excluded.options, options_at = excluded.options_at`,
+      )
+      .run(agentId, JSON.stringify(options), at);
+  },
+
+  /** Set the defaults given; an absent key leaves that default as it was. */
+  setDefaults(agentId: string, defaults: { model?: string | null; effort?: string | null }): void {
+    const connection = db();
+    connection
+      .prepare("INSERT INTO agent_options (agent_id) VALUES (?) ON CONFLICT(agent_id) DO NOTHING")
+      .run(agentId);
+    if (defaults.model !== undefined) {
+      connection
+        .prepare("UPDATE agent_options SET default_model = ? WHERE agent_id = ?")
+        .run(defaults.model, agentId);
+    }
+    if (defaults.effort !== undefined) {
+      connection
+        .prepare("UPDATE agent_options SET default_effort = ? WHERE agent_id = ?")
+        .run(defaults.effort, agentId);
+    }
   },
 };
 
