@@ -115,6 +115,7 @@ type SessionRow = {
   insertions: number;
   deletions: number;
   archived: number;
+  pinned: number;
   worktree_path: string | null;
   session_head: string | null;
   turn_head: string | null;
@@ -123,7 +124,7 @@ type SessionRow = {
 
 const SESSION_COLUMNS =
   "id, project_id, agent_id, cwd, git_mode, branch, title, created_at, updated_at, status, " +
-  "acp_session_id, changed_files, insertions, deletions, archived, " +
+  "acp_session_id, changed_files, insertions, deletions, archived, pinned, " +
   "worktree_path, session_head, turn_head, turn_started_at";
 
 const toSession = (row: SessionRow): Session =>
@@ -144,6 +145,7 @@ const toSession = (row: SessionRow): Session =>
     insertions: row.insertions,
     deletions: row.deletions,
     archived: row.archived === 1,
+    pinned: row.pinned === 1,
     sessionHead: row.session_head,
     turnHead: row.turn_head,
     turnStartedAt: row.turn_started_at,
@@ -177,7 +179,7 @@ export const sessions = {
       .prepare(
         `INSERT INTO sessions (${SESSION_COLUMNS})
          VALUES (@id, @projectId, @agentId, @cwd, @gitMode, @branch, @title, @createdAt, @updatedAt, @status,
-                 @acpSessionId, @changedFiles, @insertions, @deletions, @archived,
+                 @acpSessionId, @changedFiles, @insertions, @deletions, @archived, @pinned,
                  @worktreePath, @sessionHead, @turnHead, @turnStartedAt)
          ON CONFLICT(id) DO UPDATE SET
            agent_id = excluded.agent_id,
@@ -192,6 +194,7 @@ export const sessions = {
            insertions = excluded.insertions,
            deletions = excluded.deletions,
            archived = excluded.archived,
+           pinned = excluded.pinned,
            worktree_path = excluded.worktree_path,
            session_head = excluded.session_head,
            turn_head = excluded.turn_head,
@@ -201,6 +204,7 @@ export const sessions = {
         ...parsed,
         branch: parsed.branch ?? null,
         archived: parsed.archived ? 1 : 0,
+        pinned: parsed.pinned ? 1 : 0,
         worktreePath: parsed.worktreePath ?? null,
       });
     return parsed;

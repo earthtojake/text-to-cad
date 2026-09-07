@@ -126,7 +126,10 @@ a pane at its floor, `+` pinned to the right edge), `panes-sidebar-collapsed`
 (the sidebar closed by a drag past its minimum, with the toggle that brings it
 back) and `panes-history` (the bottom of the back/forward stack, back
 muted) — every one of those
-kinds in light as `*-light` — the `git-*` set for the git modes (the review
+kinds in light as `*-light` — the sidebar's own three, dark only
+(`sidebar-pinned`, a `Pinned` section above the project sections;
+`sidebar-filters`, the filter menu open; `sidebar-waiting`, the amber glyph on
+a thread the agent has stopped to ask about), the `git-*` set for the git modes (the review
 under three scopes, before and after a commit, the sidebar's worktree glyph,
 Settings' per-project worktree card), the session states in both themes with
 the composer at 1280×800 and 1680×1050, `session-new-model-menu` (the model
@@ -362,6 +365,36 @@ the window, and the toggle in the title bar, the palette's `Toggle explorer`
 row and `Mod+Alt+B` are all absent or inert (`toggleCollapsed` refuses a
 preference it has nowhere to file). A project brings the pane back with that
 project's own remembered state.
+
+**The sidebar is sections, not a tree** (`features/sidebar`, Claude Code's
+shape). A nav list at the top — `New`, a plus in an accent ring, which is the
+active project's new-session screen and the same thing `Cmd+N` does, and
+`Add project` — then one grey header per project with a flat list of that
+project's threads under it. The header is the project: its name and a chevron
+that collapses the section (persisted per project in `settings.sidebar`), and
+on the right `+` (a thread in *that* project), a search glyph (the command
+palette with that project's name already typed, which is how its threads get
+filtered — there is one way to narrow that list and it is the box) and the
+sliders that open the filter menu. Everything else a project can do —
+rename, copy path, reveal, remove — is a right-click on the header, and the
+same list is the filter menu's last item (`Project…`), so nothing is
+mouse-only. A session row is its **state** as a leading glyph (a hollow
+circle idle, a pulsing dot while a turn streams, an amber triangle waiting on
+a permission, a red one after a failure, a spinner ring connecting —
+`lib/sidebar.ts`), the title, git's own glyph when the thread runs in a
+worktree or on a branch of its own, and a `…` on hover for pin, rename,
+archive and delete. `Pinned` is the first section when anything is pinned,
+and a pinned thread lives **only** there — never twice.
+
+The filter menu is global, though it is opened from a project's header:
+`Status` (Active / Archived / All), `Environment` (All / Local / Worktree —
+our git modes), `Group by` (Project, or None for one flat list), `Sort by`
+(Last activity / Created / Name) and two toggles, `Show empty groups` and
+`Show branch`. It is stored in `settings.sidebar` and applied by one pure
+function over the index (`sidebarSections` in `lib/sidebar.ts`), which is also
+where the rules live that a screenshot cannot check: a pinned thread is
+excluded from its project's section, projects keep the project list's order,
+and every section is sorted the same way.
 
 **The explorer is closed until something opens it**, and the session then
 fills the window. Opening a file, a review, a browser or a terminal shows it —
@@ -775,7 +808,9 @@ src/renderer/
     PaneSeparator.tsx     one pane divider: drag, arrow keys, and the overshoot collapse
     PaneToggles.tsx       the sidebar's and explorer's toggles, and back/forward
   lib/panes.ts            the pane geometry: clamps, the overshoot rule, what fits (pure)
-  features/sidebar        projects and their sessions (five per project, Show more, status glyphs, menus)
+  features/sidebar        projects as sections, their sessions flat, Pinned, the filter menu
+  lib/sidebar.ts          which sections exist and what is in them: the status/environment
+                          filters, pinned-only-once, the grouping, the sort, the state glyph (pure)
   features/session        the new-session state, the transcript, the composer
     view.ts               SessionState -> rows: activity-row labels, folding, the status line (pure)
     parts/                activity rows (+ Monaco diff, terminal), thoughts, permission cards, subagents

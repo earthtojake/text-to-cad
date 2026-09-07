@@ -6,14 +6,16 @@ import type { Project } from "@shared/types";
  * The project list, mirrored from main. Every mutation is an IPC call; the
  * `projects.changed` event is what actually updates this store, so a change
  * made from the menu or another window lands here too.
+ *
+ * Whether a project's sidebar section is expanded is **not** here: it is
+ * `settings.sidebar.collapsedProjects`, in sqlite, so a collapsed section is
+ * still collapsed after a relaunch. One copy, one place to read it.
  */
 type ProjectsState = {
   projects: Project[];
   ready: boolean;
   /** The project the sidebar and the session pane are scoped to. */
   activeId: string | null;
-  /** Project rows the user has collapsed. */
-  collapsed: Set<string>;
 
   load: () => Promise<void>;
   /** Opens the native folder chooser. Resolves to null when cancelled. */
@@ -21,7 +23,6 @@ type ProjectsState = {
   remove: (id: string) => Promise<void>;
   rename: (id: string, name: string) => Promise<void>;
   setActive: (id: string | null) => void;
-  toggleCollapsed: (id: string) => void;
   receive: (projects: Project[]) => void;
 };
 
@@ -29,7 +30,6 @@ export const useProjects = create<ProjectsState>((set, get) => ({
   projects: [],
   ready: false,
   activeId: null,
-  collapsed: new Set(),
 
   load: async () => {
     const projects = await window.hardcore.projects.list();
@@ -56,15 +56,6 @@ export const useProjects = create<ProjectsState>((set, get) => ({
   },
 
   setActive: (activeId) => set({ activeId }),
-
-  toggleCollapsed: (id) =>
-    set((state) => {
-      const collapsed = new Set(state.collapsed);
-      if (!collapsed.delete(id)) {
-        collapsed.add(id);
-      }
-      return { collapsed };
-    }),
 
   receive: (projects) =>
     set((state) => ({

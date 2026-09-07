@@ -93,11 +93,27 @@ describe("runMigrations", () => {
   it("gives agent_options a column for each thing the composer's chips need", () => {
     const { db, statements } = fakeDb(5);
     runMigrations(db, MIGRATIONS);
-    // Only migration 6 runs: an installed app is already at 5.
+    // The sessions table is never rebuilt from here on: an installed app is
+    // already at 5, so only the migrations above it run.
     const sql = statements.join("\n");
     expect(sql).not.toContain("CREATE TABLE sessions");
     for (const column of ["agent_id", "options", "options_at", "default_model", "default_effort"]) {
       expect(sql).toContain(column);
     }
+  });
+
+  /**
+   * The sidebar's `Pinned` section. A pin is a column on the session, added
+   * to an installed database rather than shipped in migration 1 — which is
+   * the whole point of the runner, and the case a `DEFAULT 0` has to cover:
+   * every row that already exists is unpinned.
+   */
+  it("adds the pinned column to a database that already has sessions", () => {
+    const { db, statements, version } = fakeDb(6);
+    expect(runMigrations(db, MIGRATIONS)).toBe(7);
+    expect(version()).toBe(7);
+    const sql = statements.join("\n");
+    expect(sql).not.toContain("CREATE TABLE sessions");
+    expect(sql).toContain("ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
   });
 });

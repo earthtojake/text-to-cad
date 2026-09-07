@@ -1,11 +1,12 @@
+import { useMemo } from "react";
 import { create } from "zustand";
-import { useShallow } from "zustand/react/shallow";
 
+import { sidebarSections, type SidebarSection } from "@renderer/lib/sidebar";
 import type { GitMode, Session } from "@shared/types";
 
 import { useAgents } from "./agents";
 import { useProjects } from "./projects";
-import { useSettings } from "./settings";
+import { useSettings, useSidebarSettings } from "./settings";
 
 /**
  * The session index — id, title, status, cwd, the files-changed counters.
@@ -28,6 +29,8 @@ type SessionsState = {
   select: (id: string) => void;
   rename: (id: string, title: string) => Promise<void>;
   archive: (id: string, archived: boolean) => Promise<void>;
+  /** Move the row into the sidebar's `Pinned` section, or back to its project. */
+  setPinned: (id: string, pinned: boolean) => Promise<void>;
   remove: (id: string) => Promise<void>;
   receive: (sessions: Session[]) => void;
   /**
@@ -89,6 +92,10 @@ export const useSessions = create<SessionsState>((set, get) => ({
     }
   },
 
+  setPinned: async (id, pinned) => {
+    await window.hardcore.sessions.setPinned({ id, pinned });
+  },
+
   remove: async (id) => {
     await window.hardcore.sessions.delete({ id });
     if (get().activeId === id) {
@@ -145,19 +152,23 @@ function defaultAgentId(): string | null {
 }
 
 /**
- * A project's unarchived sessions, newest first. `useShallow` because the
- * selector builds a fresh array every call, and zustand compares with
- * Object.is — without it this re-renders forever.
+ * The sidebar's sections — `Pinned`, then whatever the grouping asks for
+ * (`lib/sidebar.ts`).
+ *
+ * `useMemo` over the three stores' own values rather than a zustand selector:
+ * the sections are fresh objects on every call, so no equality zustand can
+ * apply to the *result* is ever true and a selector re-renders forever (it
+ * did). The three inputs, on the other hand, are stable references — a store
+ * replaces its list when it changes and not otherwise — so memoising on them
+ * recomputes exactly when one of them moves.
  */
-export function useProjectSessions(projectId: string): Session[] {
-  return useSessions(
-    useShallow((state) =>
-      state.sessions
-        .filter(
-          (session) => session.projectId === projectId && !session.archived,
-        )
-        .sort((a, b) => b.updatedAt - a.updatedAt),
-    ),
+export function useSidebarSections(): SidebarSection[] {
+  const sessions = useSessions((state) => state.sessions);
+  const projects = useProjects((state) => state.projects);
+  const filters = useSidebarSettings();
+  return useMemo(
+    () => sidebarSections({ sessions, projects, filters }),
+    [sessions, projects, filters],
   );
 }
 

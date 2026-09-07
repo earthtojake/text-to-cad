@@ -209,6 +209,7 @@ export class SessionManager {
       insertions: 0,
       deletions: 0,
       archived: false,
+      pinned: false,
       // Both scopes start here. `turnHead` is the session's head until the
       // first turn moves it, so a review taken before any prompt shows what
       // the person changed by hand rather than nothing at all.
@@ -457,6 +458,19 @@ export class SessionManager {
       this.close(id);
     }
     return this.update(id, { archived });
+  }
+
+  /**
+   * Pin or unpin. Written straight through `repo.upsert` rather than through
+   * `update`, which stamps `updatedAt`: pinning a thread is not activity in
+   * it, and a sidebar sorted by last activity must not jump when someone
+   * pins the oldest row in the list.
+   */
+  setPinned(id: string, pinned: boolean): Session {
+    const session = this.require(id);
+    const next = this.deps.repo.upsert({ ...session, pinned });
+    this.broadcastIndex();
+    return next;
   }
 
   close(id: string): void {

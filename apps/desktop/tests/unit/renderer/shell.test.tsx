@@ -5,7 +5,6 @@ import userEvent from "@testing-library/user-event";
 import { ExplorerToggle } from "@renderer/app/PaneToggles";
 import { SettingCard, SettingRow } from "@renderer/features/settings/SettingCard";
 import { SettingsRoute } from "@renderer/features/settings/SettingsRoute";
-import { Sidebar } from "@renderer/features/sidebar/Sidebar";
 import { ExplorerPane } from "@renderer/features/explorer/ExplorerPane";
 import { TooltipProvider } from "@renderer/components/ui/tooltip";
 import { useExplorer } from "@renderer/state/explorer";
@@ -16,29 +15,11 @@ const wrap = (ui: React.ReactNode) => render(<TooltipProvider>{ui}</TooltipProvi
 
 beforeEach(() => {
   useExplorer.setState({ projectId: null, tabs: [], activeId: null, ready: true });
-  useProjects.setState({ projects: [], ready: true, activeId: null, collapsed: new Set() });
+  useProjects.setState({ projects: [], ready: true, activeId: null });
   useUi.setState({ route: "app", settingsSection: "general", commandPaletteOpen: false });
 });
 
-describe("Sidebar", () => {
-  it("offers a way in when there are no projects", () => {
-    wrap(<Sidebar />);
-    expect(screen.getByText("No projects yet.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add project" })).toBeInTheDocument();
-  });
-
-  it("lists projects with an empty session state under each", () => {
-    useProjects.setState({
-      projects: [{ id: "p1", name: "text-to-cad", path: "/repo", createdAt: 0 }],
-      ready: true,
-      activeId: "p1",
-      collapsed: new Set(),
-    });
-    wrap(<Sidebar />);
-    expect(screen.getByText("text-to-cad")).toBeInTheDocument();
-    expect(screen.getByText("No sessions yet")).toBeInTheDocument();
-  });
-});
+/* The sidebar has its own suite: tests/unit/renderer/sidebar.test.tsx. */
 
 describe("Explorer", () => {
   const PROJECT = { id: "p1", name: "text-to-cad", path: "/repo", createdAt: 0 };
@@ -50,7 +31,6 @@ describe("Explorer", () => {
       projects: [PROJECT],
       ready: true,
       activeId: PROJECT.id,
-      collapsed: new Set(),
     });
     useExplorer.setState({ projectId: PROJECT.id, tabs: [], activeId: null, ready: true });
   };

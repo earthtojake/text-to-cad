@@ -1,27 +1,30 @@
-import { FolderPlus, MessageSquarePlus, Search, Settings } from "lucide-react";
+import { CirclePlus, FolderPlus, Search, Settings } from "lucide-react";
 import { cn } from "cn";
 
 import { HistoryNav, SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@renderer/components/ui/tooltip";
-import { ProjectRow } from "@renderer/features/sidebar/ProjectRow";
+import { SessionSection } from "@renderer/features/sidebar/SessionSection";
 import { useProjects } from "@renderer/state/projects";
-import { useSessions } from "@renderer/state/sessions";
+import { useSessions, useSidebarSections } from "@renderer/state/sessions";
 import { useUi } from "@renderer/state/ui";
 
 /**
- * Projects, and the sessions under them. Codex's shape (plan §2): a title row,
- * fixed links, the project list, and a footer.
+ * Projects and their threads, as Claude Code's sidebar: a short nav list, then
+ * a grey section header per project with a flat list of sessions under it.
+ *
+ * There is no tree. A project is a **section**, not a row with children —
+ * a header in muted text with a chevron for its collapse, `+` for a thread in
+ * that project, and the sliders for the filter menu — and a session is one
+ * flat row with its state as a leading glyph. `Pinned` is the first section
+ * when anything is pinned, and a pinned thread lives *only* there. What each
+ * section holds is `lib/sidebar.ts`, a pure function of the index and the
+ * filter menu; this file is the frame around it.
  *
  * The top strip is the window's drag region on macOS — the traffic lights sit
  * in it, which is why it is exactly `--titlebar-height` tall and why nothing
- * is drawn in it. The app's name goes *under* it, at Codex's size, with the
- * sidebar's own collapse on its left and search on its right.
+ * is drawn in it. The app's name goes *under* it, with the sidebar's own
+ * collapse on its left and search on its right.
  */
 export function Sidebar() {
   const projects = useProjects((state) => state.projects);
@@ -30,6 +33,7 @@ export function Sidebar() {
   const setActiveSession = useSessions((state) => state.setActive);
   const openSettings = useUi((state) => state.openSettings);
   const toggleCommandPalette = useUi((state) => state.toggleCommandPalette);
+  const sections = useSidebarSections();
 
   return (
     <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
@@ -61,47 +65,35 @@ export function Sidebar() {
         </Button>
       </header>
 
-      <nav className="shrink-0 px-2 pb-2">
+      {/* The nav list. `New` is the accent-ringed plus: the one row that
+          starts something, and the same action as the app menu's `Cmd+N` —
+          the active project's new-session screen. `Add project` is beside it
+          rather than behind a heading, because with no project it is the only
+          thing in the app that does anything. */}
+      <nav className="shrink-0 px-2 pb-1">
         <SidebarLink
-          icon={<MessageSquarePlus className="size-4" />}
-          label="New chat"
+          icon={<CirclePlus className="size-4 text-primary" />}
+          label="New"
           onClick={() => setActiveSession(null)}
+        />
+        <SidebarLink
+          icon={<FolderPlus className="size-4" />}
+          label="Add project"
+          onClick={() => void addProject()}
         />
       </nav>
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center justify-between px-4 pt-1 pb-1.5">
-          <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-            Projects
-          </span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                aria-label="Add project"
-                className="size-6 text-muted-foreground"
-                onClick={() => void addProject()}
-                size="icon-xs"
-                variant="ghost"
-              >
-                <FolderPlus className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Add a project folder</TooltipContent>
-          </Tooltip>
+      {/* Radix lays the viewport's content out as a table that grows to its
+          content; forcing it to block keeps long titles truncating instead of
+          scrolling the list sideways when a rename input takes focus. */}
+      <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
+        <div className="min-w-0 px-2 pb-2">
+          {sections.map((section) => (
+            <SessionSection key={section.id} section={section} />
+          ))}
+          {ready && projects.length === 0 ? <NoProjects onAdd={() => void addProject()} /> : null}
         </div>
-
-        {/* Radix lays the viewport's content out as a table that grows to its
-            content; forcing it to block keeps long titles truncating instead of
-            scrolling the list sideways when a rename input takes focus. */}
-        <ScrollArea className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block">
-          <div className="min-w-0 px-2 pb-2">
-            {projects.map((project) => (
-              <ProjectRow key={project.id} project={project} />
-            ))}
-            {ready && projects.length === 0 ? <NoProjects onAdd={() => void addProject()} /> : null}
-          </div>
-        </ScrollArea>
-      </div>
+      </ScrollArea>
 
       <footer className="flex shrink-0 items-center gap-2 border-t border-sidebar-border px-3 py-2">
         <Button
