@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { Box, RefreshCw, Settings2 } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -5,9 +6,9 @@ import { Button } from "@renderer/components/ui/button";
 import { Spinner } from "@renderer/components/ui/spinner";
 import { useElementWidth } from "@renderer/hooks/use-element-width";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
-import { NEW_SESSION_KEY, useComposer } from "@renderer/state/composer";
+import { useComposer } from "@renderer/state/composer";
 import { useExplorer } from "@renderer/state/explorer";
-import { useSessions } from "@renderer/state/sessions";
+import { cadDraftKey } from "@renderer/state/cad-draft";
 import { useUi } from "@renderer/state/ui";
 import type { ViewerOrigin } from "@shared/ipc/cad";
 import type { ExplorerRoot } from "@shared/types";
@@ -138,13 +139,21 @@ export function CadRenderer({
    * root-relative path, which is what the agent can open.
    */
   const onReference = useCallback((reference: { file: string; selector: string }) => {
-    useComposer.getState().insertReference(composerKey(), { file: reference.file, selector: reference.selector });
-  }, []);
+    try {
+      useComposer.getState().insertReference(cadDraftKey(projectId, root), reference);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }, [projectId, root]);
   const onCapture = useCallback(({ blob, file }: { blob: Blob; file: string }) => {
     const stem = (file.split("/").pop() ?? "view").replace(/\.[^.]+$/, "");
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    useComposer.getState().attachFile(composerKey(), new File([blob], `${stem}-${stamp}.png`, { type: "image/png" }));
-  }, []);
+    try {
+      useComposer.getState().attachFile(cadDraftKey(projectId, root), new File([blob], `${stem}-${stamp}.png`, { type: "image/png" }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }, [projectId, root]);
   const openSettings = useUi((state) => state.openSettings);
   const colorScheme = useResolvedTheme();
   const [hostRef, width] = useElementWidth();
@@ -251,11 +260,6 @@ export function CadRenderer({
       </Suspense>
     </div>
   );
-}
-
-/** The composer a reference or a capture goes to: the active thread's, else the new-session box. */
-function composerKey(): string {
-  return useSessions.getState().activeId ?? NEW_SESSION_KEY;
 }
 
 /** One title and one sentence per reason: they are different problems with different fixes. */

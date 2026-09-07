@@ -85,6 +85,12 @@ describe("SessionConnection against the fake agent", () => {
     const connection = connect({ cwd: await scratch(), record: (frame) => frames.push(frame) });
     await connection.newSession();
     await connection.prompt([{ type: "text", text: "thought then ok" }]);
+    const initialize = frames.find((frame) => frame.dir === "out" && (frame.msg as { method?: string }).method === "initialize");
+    expect(initialize?.msg).toMatchObject({
+      params: { clientCapabilities: { _meta: { jetbrains: { air: {
+        version: 1, capabilities: ["nativeSubagentSessions"],
+      } } } } },
+    });
     const methods = frames.map((frame) => `${frame.dir}:${(frame.msg as { method?: string }).method ?? "response"}`);
     expect(methods).toEqual([
       "out:initialize",

@@ -145,6 +145,17 @@ tab and that the session recorded the tool call. It is skipped unless a
 signed-in `codex` is on the machine (`codex login status`), so a runner
 without one stays green. It is the only test that talks to a model.
 
+`tests/e2e/draft-workspace.spec.ts` checks new-project draft isolation and the
+new-worktree choice through the form. `live-car-handoff.spec.ts` is opt-in:
+set `HARDCORE_E2E_LIVE_CAD=1`, `HARDCORE_E2E_CAD_SOURCE` to the small car
+recipe (with `BODY_LENGTH = 160.0`), and `CAD_DESKTOP_PYTHON` to the developer
+runtime. It spends provider tokens, builds a disposable worktree car, copies a
+part reference into the draft, requests an edit and reopens the session.
+`HARDCORE_E2E_HANDOFF_DIR` optionally retains the temporary project and writes
+provider session IDs there for a separate native CLI resume check. Otherwise
+it removes the temporary project. Runtime provisioning is not covered by this
+UX test: its build instruction explicitly supplies the configured interpreter.
+
 Nothing in `npm test` loads `better-sqlite3` or `node-pty`: both are built
 against Electron's ABI and will not load in a plain Node process. The migration
 runner takes a structural `MigrationDb` so it can be tested anyway; everything
@@ -641,6 +652,15 @@ worktrees.
 worktree session writes a file, calls `open_file` through the MCP server,
 and the tab, the breadcrumb, the tree and a new terminal all root at the
 worktree; the new-session state roots the explorer at the project again.
+
+### CAD references and new drafts
+
+New-chat text drafts are separate per project. A viewer reference or capture
+can enter an existing chat only when the tab and chat share a workspace.
+For a new chat, the draft keeps the model’s root and shows it beside the
+composer; main still validates that root when creating the session. Clearing
+the text releases that root. An ordinary new chat sends only its Git mode,
+so choosing **New worktree** creates one instead of using the project folder.
 
 ## How a change moves through the app
 

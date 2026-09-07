@@ -32,12 +32,16 @@ export type QueuedPrompt = {
 
 /** The draft key for a session, or for the new-session state. */
 export const NEW_SESSION_KEY = "__new__";
+export const newSessionKey = (projectId: string) => `${NEW_SESSION_KEY}:${projectId}`;
 
 type ComposerState = {
   queues: Record<string, QueuedPrompt[]>;
   drafts: Record<string, string>;
   /** Files the explorer attached, per draft key, until the composer takes them. */
   pendingFiles: Record<string, File[]>;
+  /** A new draft with a CAD reference runs in that model’s workspace. */
+  draftRoots: Record<string, string>;
+  setDraftRoot: (key: string, root: string | undefined) => void;
 
   /** Send now when the session is idle; queue it otherwise. */
   submit: (sessionId: string, text: string, content: PromptBlock[]) => Promise<void>;
@@ -61,6 +65,12 @@ export const useComposer = create<ComposerState>((set, get) => ({
   queues: {},
   drafts: {},
   pendingFiles: {},
+  draftRoots: {},
+  setDraftRoot: (key, root) => set((state) => {
+    const roots = { ...state.draftRoots };
+    if (root) roots[key] = root; else delete roots[key];
+    return { draftRoots: roots };
+  }),
 
   submit: async (sessionId, text, content) => {
     const status = useAcp.getState().sessions[sessionId]?.status;
@@ -104,7 +114,11 @@ export const useComposer = create<ComposerState>((set, get) => ({
   },
 
   setDraft: (sessionId, text) =>
-    set((state) => ({ drafts: { ...state.drafts, [sessionId]: text } })),
+    set((state) => {
+      const roots = { ...state.draftRoots };
+      if (!text.trim()) delete roots[sessionId];
+      return { drafts: { ...state.drafts, [sessionId]: text }, draftRoots: roots };
+    }),
 
   insertReference: (key, reference) =>
     set((state) => {

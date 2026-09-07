@@ -79,7 +79,8 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
       envVars: ["ANTHROPIC_API_KEY"],
       checkArgs: ["auth", "status"],
     },
-    launch: { command: NPX, args: ["-y", "@agentclientprotocol/claude-agent-acp"], env: {} },
+    // An explicit tag prevents npx selecting an older global adapter and its bundled SDK.
+    launch: { command: NPX, args: ["-y", "@agentclientprotocol/claude-agent-acp@latest"], env: {} },
     capabilities: CAPS.full,
     skillsDir: "~/.claude/skills",
     // `marketplace add` keeps the snapshot it first took and `install` answers
@@ -120,7 +121,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
       envVars: ["CODEX_API_KEY", "OPENAI_API_KEY"],
       checkArgs: ["login", "status"],
     },
-    launch: { command: NPX, args: ["-y", "@agentclientprotocol/codex-acp"], env: {} },
+    launch: { command: NPX, args: ["-y", "@agentclientprotocol/codex-acp@latest"], env: {} },
     capabilities: CAPS.full,
     skillsDir: "~/.codex/skills",
     pluginInstall: {

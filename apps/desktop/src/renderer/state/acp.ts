@@ -42,7 +42,7 @@ type AcpState = {
   create: (input: {
     projectId: string;
     agentId: string;
-    cwd: string;
+    cwd?: string;
     gitMode: "none" | "checkout" | "worktree";
     branch?: string;
   }) => Promise<string>;

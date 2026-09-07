@@ -65,6 +65,7 @@ import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEd
  */
 export function Composer({
   sessionId,
+  newDraftKey,
   chips,
   trailing,
   commands,
@@ -77,6 +78,7 @@ export function Composer({
 }: {
   /** Drafts and the queue are kept per session; null in the new-session state. */
   sessionId: string | null;
+  newDraftKey?: string;
   chips: React.ReactNode;
   /** Chips on the right, before the mic and send. */
   trailing?: React.ReactNode;
@@ -92,7 +94,7 @@ export function Composer({
   // The draft lives in the composer store, per session, so switching
   // sessions and back does not lose typed text and a suggestion card can
   // fill the box from outside.
-  const draftKey = sessionId ?? NEW_SESSION_KEY;
+  const draftKey = sessionId ?? newDraftKey ?? NEW_SESSION_KEY;
   const text = useComposer((state) => state.drafts[draftKey] ?? "");
   const setDraft = useComposer((state) => state.setDraft);
   const setText = useCallback(

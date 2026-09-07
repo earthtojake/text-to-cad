@@ -224,7 +224,7 @@ export class SessionConnection {
         ...({ subagents: {} } as Record<string, unknown>),
         _meta: {
           "subagent-transcript": true,
-          jetbrains: { air: { capabilities: { nativeSubagentSessions: true } } },
+          jetbrains: { air: { version: 1, capabilities: ["nativeSubagentSessions"] } },
         },
       },
     });

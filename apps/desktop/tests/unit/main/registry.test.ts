@@ -45,12 +45,12 @@ describe("the agent registry", () => {
   it("launches Claude Code and Codex through the public ACP adapters", () => {
     expect(agentProvider("claude-code")?.launch).toEqual({
       command: "npx",
-      args: ["-y", "@agentclientprotocol/claude-agent-acp"],
+      args: ["-y", "@agentclientprotocol/claude-agent-acp@latest"],
       env: {},
     });
     expect(agentProvider("codex")?.launch).toEqual({
       command: "npx",
-      args: ["-y", "@agentclientprotocol/codex-acp"],
+      args: ["-y", "@agentclientprotocol/codex-acp@latest"],
       env: {},
     });
     expect(agentProvider("gemini-cli")?.launch).toEqual({ command: "gemini", args: ["--acp"], env: {} });
