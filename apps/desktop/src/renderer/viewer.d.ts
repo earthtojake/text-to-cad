@@ -53,6 +53,12 @@ declare module "@viewer/file-view" {
     onReference?: (reference: { file: string; selector: string; text: string }) => void;
     /** The viewport rendered to a PNG, from the toolbar's camera button (shown only when this is given). */
     onCapture?: (capture: { blob: Blob; file: string }) => void;
+    /**
+     * The same capture, asked for from outside the viewport — this app's
+     * composer has `Capture from viewer` in its `+` menu. A new `key` takes
+     * another picture; the result goes to `onCapture` either way.
+     */
+    captureRequest?: { key: number } | null;
   }>;
 
   /** Publishes `origin` to the subtree; `useViewerOrigin` reads it back. */
