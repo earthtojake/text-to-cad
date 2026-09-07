@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { tabTitle, useExplorer } from "@renderer/state/explorer";
+import { dedupeFileTabs, tabTitle, useExplorer } from "@renderer/state/explorer";
 
 /**
  * The strip's behaviour, without React.
@@ -101,6 +101,29 @@ describe("the explorer strip", () => {
     const again = useExplorer.getState().openFile("README.md");
     expect(again!.id).toBe(first!.id);
     expect(useExplorer.getState().tabs).toHaveLength(1);
+  });
+
+  it("never holds two tabs for one file, whichever door opened it", () => {
+    const { open, openFile } = useExplorer.getState();
+    const first = openFile("src/a.ts");
+    const again = open("file", { path: "src/a.ts", root: null });
+    expect(again?.id).toBe(first?.id);
+    expect(useExplorer.getState().tabs).toHaveLength(1);
+    // The same path in another root is another file.
+    open("file", { path: "src/a.ts", root: "/tmp/worktree" });
+    expect(useExplorer.getState().tabs).toHaveLength(2);
+  });
+
+  it("drops a duplicate that reaches the strip by any other path, keeping the selection", () => {
+    const tabs = [
+      { id: "t1", kind: "file", path: "a.ts", root: null },
+      { id: "t2", kind: "file", path: "a.ts", root: null },
+      { id: "t3", kind: "file", path: null, root: null },
+      { id: "t4", kind: "file", path: null, root: null },
+    ] as never[];
+    const result = dedupeFileTabs(tabs, "t2");
+    expect(result.tabs.map((tab: { id: string }) => tab.id)).toEqual(["t1", "t3", "t4"]);
+    expect(result.activeId).toBe("t1");
   });
 
   it("fills the blank tab the + button made instead of stacking one", () => {

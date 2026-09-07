@@ -257,6 +257,35 @@ function blankTab(
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * One tab per file per root. Whatever produced the list — an open, a
+ * restore, a drag — a second tab for a path already in it is dropped, and a
+ * selection that pointed at the dropped one moves to the survivor, so the
+ * strip can never show two tabs for one file. Blank file tabs (`path`
+ * null) are slots, not files, and are left alone.
+ */
+export function dedupeFileTabs(
+  tabs: ExplorerTab[],
+  activeId: string | null,
+): { tabs: ExplorerTab[]; activeId: string | null } {
+  const seen = new Map<string, string>();
+  const dropped = new Map<string, string>();
+  const kept = tabs.filter((tab) => {
+    if (tab.kind !== "file" || tab.path === null) {
+      return true;
+    }
+    const key = `${tab.root ?? ""}\u0000${tab.path}`;
+    const survivor = seen.get(key);
+    if (survivor) {
+      dropped.set(tab.id, survivor);
+      return false;
+    }
+    seen.set(key, tab.id);
+    return true;
+  });
+  return { tabs: kept, activeId: activeId && dropped.has(activeId) ? (dropped.get(activeId) ?? null) : activeId };
+}
+
 /** Renumber, publish, and schedule the write. The one mutation path. */
 function commit(
   set: (partial: Partial<ExplorerState>) => void,
@@ -264,8 +293,9 @@ function commit(
   tabs: ExplorerTab[],
   activeId: string | null,
 ) {
-  const ordered = tabs.map((tab, order) => ({ ...tab, order }) as ExplorerTab);
-  set({ tabs: ordered, activeId });
+  const unique = dedupeFileTabs(tabs, activeId);
+  const ordered = unique.tabs.map((tab, order) => ({ ...tab, order }) as ExplorerTab);
+  set({ tabs: ordered, activeId: unique.activeId });
   if (!projectId) {
     return;
   }
@@ -356,7 +386,9 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     if (get().projectId !== projectId) {
       return;
     }
-    set({ tabs, activeId: tabs[0]?.id ?? null, ready: true });
+    // A strip written by an older build may hold two tabs for one file.
+    const restored = dedupeFileTabs(tabs, tabs[0]?.id ?? null);
+    set({ tabs: restored.tabs, activeId: restored.activeId, ready: true });
   },
 
   setRoot: (root) => {
@@ -387,6 +419,16 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
         : kind === "terminal"
           ? { cwd: root, ...(init as Record<string, unknown> | undefined) }
           : { ...(init as Record<string, unknown> | undefined) };
+    // A file that is already open is that tab, whichever door was used.
+    if (kind === "file" && typeof rooted.path === "string") {
+      const existing = tabs.find(
+        (tab) => tab.kind === "file" && tab.path === rooted.path && tab.root === (rooted.root ?? null),
+      );
+      if (existing) {
+        set({ activeId: existing.id });
+        return existing;
+      }
+    }
     const tab = blankTab(kind, projectId, tabs.length, rooted);
     commit(set, projectId, [...tabs, tab], tab.id);
     return tab;

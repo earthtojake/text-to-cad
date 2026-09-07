@@ -421,8 +421,9 @@ menu: its listing is another root's.
 (`entry-menu.ts` is the table, `entry-actions.ts` what each item does,
 `EntryContextMenu.tsx` draws one from the other; the tree has one menu over
 the whole list aimed at the row that was clicked, and the empty space under
-the rows is the root). A file: Open · Open in new tab · Open with default
-app · Open with… · Reveal in Finder (Show in Explorer / Show in file manager)
+the rows is the root). A file: Open (tree rows only — a crumb is the open
+file, and a file is one tab: opening it again by any door focuses that
+tab) · Open with default app · Open with… · Reveal in Finder (Show in Explorer / Show in file manager)
 · Copy path · Copy relative path · Copy reference (CAD files: the
 `path` token the composer reads, which also lands a chip in the box) ·
 Rename · Duplicate · Move to Trash. A folder: New file · New folder · Open

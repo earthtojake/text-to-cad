@@ -9,7 +9,6 @@ import {
   FolderPlus,
   Link,
   Pencil,
-  SquarePlus,
   SquareTerminal,
   Trash2,
 } from "lucide-react";
@@ -41,7 +40,6 @@ import { entryMenu, type EntryAction, type MenuEntryTarget } from "./entry-menu"
 
 const ICONS: Record<EntryAction, LucideIcon> = {
   open: Eye,
-  "open-new-tab": SquarePlus,
   "open-default": ExternalLink,
   "open-with": AppWindow,
   reveal: FolderOpen,

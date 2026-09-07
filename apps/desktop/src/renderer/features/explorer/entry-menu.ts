@@ -14,7 +14,6 @@ import { isCadFile } from "@shared/cad-refs";
 
 export type EntryAction =
   | "open"
-  | "open-new-tab"
   | "open-default"
   | "open-with"
   | "reveal"
@@ -42,6 +41,11 @@ export type MenuEntryTarget = {
   /** Root-relative; `""` is the root itself, which has no rename and no trash. */
   path: string;
   kind: "file" | "directory";
+  /**
+   * Where the menu was asked for. A breadcrumb names what the tab already
+   * shows, so its menu has no Open; the tree's rows do. Default: the tree.
+   */
+  surface?: "tree" | "crumb";
 };
 
 /** What the OS calls its file browser. */
@@ -80,11 +84,10 @@ export function entryMenu(target: MenuEntryTarget, platform: Platform): EntryMen
     ];
   }
 
+  // One tab per file (the store dedupes), so there is no "open in new tab";
+  // and a crumb IS the open file, so it does not offer Open at all.
   return [
-    [
-      { action: "open", label: "Open" },
-      { action: "open-new-tab", label: "Open in new tab" },
-    ],
+    ...(target.surface === "crumb" ? [] : [[{ action: "open" as const, label: "Open" }]]),
     [
       { action: "open-default", label: "Open with default app" },
       { action: "open-with", label: "Open with…" },

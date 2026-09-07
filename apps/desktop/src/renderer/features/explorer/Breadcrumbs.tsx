@@ -148,7 +148,11 @@ function CrumbButton({
   const entry =
     crumb.kind === "ellipsis"
       ? null
-      : { path: crumb.path, kind: crumb.kind === "file" ? ("file" as const) : ("directory" as const) };
+      : {
+          path: crumb.path,
+          kind: crumb.kind === "file" ? ("file" as const) : ("directory" as const),
+          surface: "crumb" as const,
+        };
 
   return (
     <DropdownMenu modal={false}>

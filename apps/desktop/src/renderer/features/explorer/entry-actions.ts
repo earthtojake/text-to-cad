@@ -56,9 +56,6 @@ export async function performEntryAction(
       case "open":
         explorer.openFile(entry.path, ctx.root);
         return;
-      case "open-new-tab":
-        explorer.open("file", { path: entry.path, root: ctx.root });
-        return;
       case "open-default":
         await window.hardcore.explorer.openDefault({ ...at, path: entry.path });
         return;

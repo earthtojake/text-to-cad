@@ -11,7 +11,6 @@ describe("entryMenu", () => {
   it("offers a file the open, copy, edit and trash items, in that order", () => {
     expect(entryMenuActions({ path: "src/index.ts", kind: "file" }, "darwin")).toEqual([
       "open",
-      "open-new-tab",
       "open-default",
       "open-with",
       "reveal",
@@ -21,6 +20,16 @@ describe("entryMenu", () => {
       "duplicate",
       "trash",
     ]);
+  });
+
+  it("gives a breadcrumb the same menu without Open — the crumb is the open file", () => {
+    const fromCrumb = entryMenuActions({ path: "src/index.ts", kind: "file", surface: "crumb" }, "darwin");
+    const fromTree = entryMenuActions({ path: "src/index.ts", kind: "file", surface: "tree" }, "darwin");
+    expect(fromCrumb).not.toContain("open");
+    expect(fromCrumb).toEqual(fromTree.filter((action) => action !== "open"));
+    expect(entryMenuActions({ path: "src", kind: "directory", surface: "crumb" }, "darwin")).toEqual(
+      entryMenuActions({ path: "src", kind: "directory" }, "darwin"),
+    );
   });
 
   it("adds Copy reference for a CAD file only", () => {
