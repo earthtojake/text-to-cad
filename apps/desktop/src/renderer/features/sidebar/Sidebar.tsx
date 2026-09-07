@@ -1,7 +1,7 @@
 import { FolderPlus, MessageSquarePlus, Search, Settings } from "lucide-react";
 import { cn } from "cn";
 
-import { SidebarToggle } from "@renderer/app/PaneToggles";
+import { HistoryNav, SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import {
@@ -35,14 +35,16 @@ export function Sidebar() {
     <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
       {/* The traffic lights' strip on macOS — the row the session's and the
           explorer's bars share. The panel's collapse sits right after the
-          lights, at the same x the session's title bar gives it once the
-          panel is gone: the control never moves (Codex's placement). */}
+          lights and back/forward right after it, at the same x the session's
+          title bar gives them once the panel is gone: a control in this row
+          never moves (Codex's placement). */}
       <div
         className="app-drag flex shrink-0 items-center"
         data-sidebar-titlebar
         style={{ height: "var(--titlebar-height)", paddingLeft: "calc(var(--titlebar-inset) + 0.75rem)" }}
       >
         <SidebarToggle />
+        <HistoryNav />
       </div>
 
       <header className="app-drag flex shrink-0 items-center gap-1 pt-0.5 pr-2 pb-1 pl-3">

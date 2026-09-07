@@ -57,7 +57,7 @@ test("opening a project starts the viewer and the daemon before any file is open
 
     await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repoRoot);
     // The strip binds to the project on its own; binding is what warms.
-    await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+    await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 
     await expect.poll(() => lines.some((line) => /\[viewer\] (started|reused) http:\/\/127\.0\.0\.1:\d+ for /.test(line)), { timeout: 90_000 }).toBe(true);
     await expect.poll(() => lines.some((line) => /\[daemon\] warming /.test(line)), { timeout: 30_000 }).toBe(true);

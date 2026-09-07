@@ -113,12 +113,12 @@ test.beforeAll(async () => {
   await expect(page.getByText(projectName).first()).toBeVisible();
   // The strip binds to the project asynchronously (it loads `explorer_tabs`
   // and starts the watcher); `+` does nothing until it has.
-  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
   // The explorer pane starts closed and opens when something opens in it
   // (plan §3). This suite is about what it *shows*, so it is opened once
   // here rather than incidentally by the first file.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
-  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeGreaterThan(0);
+  await expect(page.getByTestId("explorer")).toBeVisible();
 });
 
 test.afterAll(async () => {
@@ -567,7 +567,7 @@ test("edits a markdown file in place and saves the lines it changed", async () =
   await page.getByText(path.basename(docsDir)).first().click();
   // A new project starts with the pane closed, like every other one.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
-  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 
   await newTab(page, "File");
   await page.getByLabel("Filter files").fill("AGENTS.md");
@@ -685,11 +685,11 @@ test("reviews a repository's changes", async () => {
     reviewRepo,
   );
   await page.getByText(path.basename(reviewRepo)).first().click();
-  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
   // The pane's state is per project, so a project nobody has opened it in
   // starts closed however wide the last one was.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
-  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeGreaterThan(0);
+  await expect(page.getByTestId("explorer")).toBeVisible();
 
   await newTab(page, "Review");
 
@@ -756,48 +756,52 @@ async function shoot(name: string, whole = false) {
   await target.screenshot({ path: path.join(screenshots, name), animations: "disabled" });
 }
 
+/** How wide the explorer was before `widenExplorer`, so it can be put back. */
+let explorerBefore = 0;
+
 /**
  * The explorer at its widest: the sidebar hidden and the session dragged down
- * to its 560px floor. There is no fullscreen — the session pane is not
+ * to its 320px floor. There is no fullscreen — the session pane is not
  * collapsible, because the session is the app — so this is the whole of what
  * "give the CAD surface some room" means now.
  */
 async function widenExplorer() {
-  const before = (await page.getByTestId("explorer").boundingBox())!.width;
-  // The sidebar's own toggle, not the session header's copy: both are in the
-  // document, and the one in a zero-width panel cannot be clicked.
+  explorerBefore = (await page.getByTestId("explorer").boundingBox())!.width;
+  // The sidebar's own toggle. A hidden sidebar is not in the document at all,
+  // so once it is gone this locator finds nothing and the session's bar holds
+  // the only copy of the button.
   await page.getByTestId("sidebar").getByRole("button", { name: "Toggle sidebar" }).click();
-  await expect
-    .poll(async () => (await page.getByTestId("sidebar").boundingBox())?.width ?? 0)
-    .toBe(0);
+  await expect(page.getByTestId("sidebar")).toHaveCount(0);
   await dragSeparator(-4000);
   await expect
     .poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0)
-    .toBeGreaterThan(before);
+    .toBeGreaterThan(explorerBefore);
 }
 
-/** Undo `widenExplorer`. */
+/**
+ * Undo `widenExplorer`. By the distance it moved, not by four thousand
+ * pixels: a drag that overshoots the explorer's minimum by 40px closes the
+ * pane now, and this is meant to put the layout back, not to shut it.
+ */
 async function restoreLayout() {
-  await dragSeparator(4000);
+  const wide = (await page.getByTestId("explorer").boundingBox())!.width;
+  await dragSeparator(wide - explorerBefore);
   await page
     .locator("[data-session-header]")
     .getByRole("button", { name: "Toggle sidebar" })
     .click();
-  await expect
-    .poll(async () => (await page.getByTestId("sidebar").boundingBox())?.width ?? 0)
-    .toBeGreaterThan(0);
+  await expect(page.getByTestId("sidebar")).toHaveCount(1);
 }
 
 /** Drag the separator between the session and the explorer; it clamps. */
 async function dragSeparator(by: number) {
-  const box = (await page.locator("[data-separator]").last().boundingBox())!;
+  const box = (await page.locator("[data-separator=explorer]").boundingBox())!;
   const y = box.y + box.height / 2;
   await page.mouse.move(box.x + box.width / 2, y);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2 + by, y, { steps: 12 });
   await page.mouse.up();
-  // The layout is reapplied on the next frame (`Shell`'s `applyLayout`).
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(200);
 }
 
 async function resizeWindow(width: number, height: number) {

@@ -1,5 +1,14 @@
 import { useEffect } from "react";
-import { FolderPlus, Folder, MessageSquarePlus, PanelLeft, PanelRight, Settings } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  FolderPlus,
+  Folder,
+  MessageSquarePlus,
+  PanelLeft,
+  PanelRight,
+  Settings,
+} from "lucide-react";
 
 import {
   CommandDialog,
@@ -11,6 +20,7 @@ import {
   CommandSeparator,
 } from "@renderer/components/ui/command";
 import { useExplorer } from "@renderer/state/explorer";
+import { useHistory, useHistoryReach } from "@renderer/state/history";
 import { useProjects } from "@renderer/state/projects";
 import { useSettings } from "@renderer/state/settings";
 import { SETTINGS_SECTIONS, SETTINGS_SECTION_LABELS, useUi } from "@renderer/state/ui";
@@ -34,6 +44,7 @@ export function CommandPalette() {
   const addProject = useProjects((state) => state.add);
   const layout = useSettings((state) => state.settings?.layout);
   const setLayout = useSettings((state) => state.setLayout);
+  const reach = useHistoryReach();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -106,6 +117,21 @@ export function CommandPalette() {
             <MessageSquarePlus className="size-4" />
             New session
           </CommandItem>
+          {/* The top level's history (`state/history.ts`). Offered only when
+              there is somewhere to go, since a palette row cannot be muted
+              the way the two arrows in the title strip are. */}
+          {reach.back ? (
+            <CommandItem onSelect={run(() => useHistory.getState().back())} value="back navigate history">
+              <ChevronLeft className="size-4" />
+              Back
+            </CommandItem>
+          ) : null}
+          {reach.forward ? (
+            <CommandItem onSelect={run(() => useHistory.getState().forward())} value="forward navigate history">
+              <ChevronRight className="size-4" />
+              Forward
+            </CommandItem>
+          ) : null}
         </CommandGroup>
 
         <CommandSeparator />

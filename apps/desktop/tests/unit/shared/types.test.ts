@@ -18,8 +18,9 @@ describe("Settings", () => {
     expect(settings.theme).toBe("system");
     expect(settings.defaultGitMode).toBe("checkout");
     expect(settings.branchPrefix).toBe("hardcore/");
-    // Pixels, Codex's proportions: a 230px sidebar and a 560px session column.
-    expect(settings.layout).toMatchObject({ sidebarWidth: 230, sessionWidth: 560, sidebarCollapsed: false });
+    // Pixels, and only the sidebar's pair: the session is elastic and the
+    // explorer's width is per project, in the renderer.
+    expect(settings.layout).toEqual({ sidebarWidth: 230, sidebarCollapsed: false });
   });
 
   it("has telemetry on with an opt-out (plan §14)", () => {

@@ -106,7 +106,7 @@ test("a Codex session opens a STEP in the explorer through open_file", async () 
 
   const added = await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), project);
   await expect(page.getByText(path.basename(project)).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 
   const session = await page.evaluate(
     ({ projectId, cwd }) => window.hardcore.sessions.create({ projectId, agentId: "codex", cwd, gitMode: "none" }),

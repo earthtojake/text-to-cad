@@ -38,6 +38,7 @@ import {
 } from "@playwright/test";
 
 import { TITLEBAR_HEIGHT, TRAFFIC_LIGHTS_INSET, trafficLightPosition } from "../../src/shared/titlebar";
+import { PANE_LIMITS } from "../../src/shared/types";
 
 /**
  * `page.evaluate` bodies run in the renderer; see the note in shell.spec.ts.
@@ -145,28 +146,32 @@ test("the sidebar's strip is clear, open and at its narrowest", async () => {
   await expectLeftmost("sidebar", "[data-sidebar-titlebar]");
   await shootTitlebar("titlebar-sidebar.png");
 
-  // Dragged as far left as it goes. The sidebar's minimum (180px) is wider
-  // than the lights need, so the strip cannot be squeezed under them — but
-  // the drag is what would prove otherwise, and a panel that collapses under
-  // the pressure hands the corner to the session's bar, which is checked too.
-  const sidebar = page.locator("[data-panel]").first();
-  const separator = page.locator("[data-separator]").first();
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await dragSeparator(separator, -4000);
-  }
-  const width = (await sidebar.boundingBox())?.width ?? 0;
-  if (width > 0) {
-    expect(width, "the sidebar was dragged under its minimum").toBeGreaterThanOrEqual(179);
-    await expectLeftmost("sidebar", "[data-sidebar-titlebar]");
-  } else {
-    await expectLeftmost("session", "[data-session-header]");
-  }
-
-  // Back to a width the tests below can click in.
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await dragSeparator(separator, 4000);
-  }
+  // Dragged as far left as it goes without closing. The sidebar's minimum
+  // (180px) is wider than the lights need, so the strip cannot be squeezed
+  // under them — but the drag is what would prove otherwise.
+  const sidebar = page.getByTestId("sidebar");
+  const separator = page.locator("[data-separator=sidebar]");
+  const width = async () => ((await sidebar.count()) === 0 ? 0 : ((await sidebar.boundingBox())?.width ?? 0));
+  await dragSeparator(separator, -((await width()) - 180) - 20);
+  expect(await width(), "the sidebar was dragged under its minimum").toBe(180);
   await expectLeftmost("sidebar", "[data-sidebar-titlebar]");
+
+  // And 40px past that minimum the pane closes, which hands the corner to the
+  // session's bar — with the toggle in it, since a pane that goes away always
+  // leaves the control that brings it back.
+  await dragSeparator(separator, -PANE_LIMITS.overshoot - 8);
+  expect(await width(), "the sidebar did not close past its overshoot").toBe(0);
+  await expectLeftmost("session", "[data-session-header]");
+  const collapse = page.locator("[data-session-header]").getByRole("button", { name: "Toggle sidebar" });
+  await expect(collapse).toBeVisible();
+
+  // Back to a width the tests below can click in. The toggle restores the
+  // width the drag stopped at, not the pane's floor.
+  await collapse.click();
+  expect(await width()).toBe(180);
+  await expectLeftmost("sidebar", "[data-sidebar-titlebar]");
+  await dragSeparator(separator, 50);
+  expect(await width()).toBe(230);
 });
 
 test("the session's bar takes the corner when the sidebar is hidden", async () => {
@@ -191,9 +196,7 @@ test("a project and its explorer do not move the corner", async () => {
   );
   await expect(page.getByRole("button", { name: "Toggle explorer" })).toBeVisible();
   await page.getByRole("button", { name: "Toggle explorer" }).click();
-  await expect
-    .poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0)
-    .toBeGreaterThan(0);
+  await expect(page.getByTestId("explorer")).toBeVisible();
 
   // Three panes, and then three panes with the sidebar gone: the explorer's
   // strip is never at the window's left edge, because the session never
@@ -364,18 +367,16 @@ async function expectDragRegion(bar: string) {
 }
 
 async function collapseSidebar(collapsed: boolean) {
-  const sidebar = page.locator("[data-panel]").first();
-  const width = (await sidebar.boundingBox())?.width ?? 0;
-  if (collapsed === (width === 0)) {
+  const sidebar = page.getByTestId("sidebar");
+  // A hidden sidebar is not in the document, so its absence is the state.
+  if (collapsed === ((await sidebar.count()) === 0)) {
     return;
   }
   const toggle = collapsed
     ? sidebar.getByRole("button", { name: "Toggle sidebar" })
     : page.locator("[data-session-header]").getByRole("button", { name: "Toggle sidebar" });
   await toggle.click();
-  await expect
-    .poll(async () => ((await sidebar.boundingBox())?.width ?? 0) === 0)
-    .toBe(collapsed);
+  await expect(sidebar).toHaveCount(collapsed ? 0 : 1);
 }
 
 async function setContentSize(width: number, height: number) {

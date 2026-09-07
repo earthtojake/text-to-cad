@@ -88,6 +88,21 @@ export function buildMenu(focusedWindow: () => BrowserWindow | null) {
           click: send("toggle-explorer"),
         },
         { type: "separator" },
+        // The top level's history — the threads and new-session screens the
+        // session pane has shown. Declared here as well as in the renderer
+        // because this accelerator is the one that fires with focus inside a
+        // webview or a terminal.
+        {
+          label: "Back",
+          accelerator: "CmdOrCtrl+[",
+          click: send("navigate-back"),
+        },
+        {
+          label: "Forward",
+          accelerator: "CmdOrCtrl+]",
+          click: send("navigate-forward"),
+        },
+        { type: "separator" },
         {
           label: "Command Palette…",
           accelerator: "CmdOrCtrl+K",

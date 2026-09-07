@@ -65,7 +65,7 @@ test.beforeAll(async () => {
 
   const project = await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repoRoot);
   await expect(page.getByText(projectName).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 
   const session = await page.evaluate(
     ({ projectId, cwd }) => window.hardcore.sessions.create({ projectId, agentId: "claude-code", gitMode: "none", cwd }),

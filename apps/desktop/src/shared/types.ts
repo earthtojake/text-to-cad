@@ -377,34 +377,40 @@ export const AgentOverrideSchema = z.object({
 export type AgentOverride = z.infer<typeof AgentOverrideSchema>;
 
 /**
- * Pane geometry, persisted so the window comes back the way it was left.
- * The three numbers are react-resizable-panels percentages and always sum to
- * 100 for the panes that are open.
- */
-/**
- * The panes' fixed widths, in pixels. The sidebar's and the session's are
- * preferences; the explorer's is whatever the window has left, so it is not
- * one. Codex keeps its sidebar at one width whatever the window does, and its
- * session column has a floor the transcript needs (a 720px reading column
- * with margins fits from 560px up). The shell reads the same table for its
- * limits, so a stored width outside them is clamped by the panel, not
- * trusted.
+ * The two side panes' widths, in pixels, and the floor the session keeps.
+ *
+ * The shell is a flex row: the sidebar and the explorer are each `width: Npx`
+ * (a preference), and the session takes what is left with `min-width` of its
+ * floor. Only the two side panes have a stored width, because only they are
+ * dragged; the session's number here is a floor, not a size.
+ *
+ * `overshoot` is how far *past* a pane's minimum a drag has to go before the
+ * pane collapses. Below the minimum the drag stops dead at it; 40px further
+ * and the pane closes and its toggle appears. The gap is deliberate: a pane
+ * that collapsed the instant a drag touched its minimum closed itself on
+ * every stray pixel of a drag that meant "as narrow as it goes", which is the
+ * defect this table's comment exists to prevent coming back.
  */
 export const PANE_LIMITS = {
-  sidebar: { default: 230, min: 180, max: 360 },
-  session: { default: 560, min: 560 },
-  explorer: { min: 320 },
+  sidebar: { default: 230, min: 180, max: 480 },
+  /** A floor, not a width: the session is flexible and never collapses. */
+  session: { min: 320 },
+  /** The maximum is the window less the session's floor and the sidebar. */
+  explorer: { default: 560, min: 280 },
+  overshoot: 40,
 } as const;
 
 /**
- * The explorer's own collapse is not here: it is closed by default and
- * remembered per project by the renderer (`state/explorer.ts`), because
- * whether the right-hand pane earns its width is a fact about the project
- * rather than about the app.
+ * The sidebar's half of the layout — its width and whether it is on screen,
+ * and nothing else. The explorer's pair of the same two values is per project
+ * and lives in the renderer (`state/explorer.ts`), because whether the
+ * right-hand pane earns its width is a fact about the project rather than
+ * about the app. There is no third value anywhere: what is rendered, where
+ * the toggles are and which pane makes room for the traffic lights are all
+ * derived from these two pairs.
  */
 export const PaneLayoutSchema = z.object({
   sidebarWidth: z.number().min(0).default(PANE_LIMITS.sidebar.default),
-  sessionWidth: z.number().min(0).default(PANE_LIMITS.session.default),
   sidebarCollapsed: z.boolean().default(false),
 });
 export type PaneLayout = z.infer<typeof PaneLayoutSchema>;

@@ -12,6 +12,8 @@ import {
   type Page,
 } from "@playwright/test";
 
+import { PANE_LIMITS } from "../../src/shared/types";
+
 /**
  * `page.evaluate` bodies run in the renderer, not here, so they see the
  * preload bridge. This file is compiled with the node tsconfig, which has no
@@ -94,7 +96,7 @@ test("shows two panes and no explorer until a project is bound", async () => {
  * the right of that bar, needs a project: the test below.)
  */
 test("the sidebar's collapse is right after the traffic lights, open or shut", async () => {
-  const sidebar = page.locator("[data-panel]").first();
+  const sidebar = page.getByTestId("sidebar");
   const header = page.locator("[data-session-header]");
   const inSidebar = sidebar.getByRole("button", { name: "Toggle sidebar" });
   await expect(inSidebar).toBeVisible();
@@ -111,7 +113,10 @@ test("the sidebar's collapse is right after the traffic lights, open or shut", a
   expect(Math.abs(toggleMid - titleMid)).toBeLessThan(6);
 
   await inSidebar.click();
-  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBe(0);
+  // A collapsed pane is not rendered at all — the point of there being one
+  // flag: no zero-width sidebar is left in the document holding a copy of
+  // this button that nobody can click.
+  await expect(sidebar).toHaveCount(0);
 
   // Gone, the same control is in the session's title bar — at the same
   // place on screen, so the eye and the pointer find it where it was.
@@ -126,7 +131,7 @@ test("the sidebar's collapse is right after the traffic lights, open or shut", a
   expect(Math.abs(collapseBox!.y - toggleBox!.y)).toBeLessThan(4);
 
   await collapse.click();
-  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThan(0);
+  await expect(sidebar).toHaveCount(1);
   await expect(inSidebar).toBeVisible();
 });
 
@@ -147,11 +152,10 @@ test("the explorer opens and closes a tab", async () => {
   const header = page.locator("[data-session-header]");
   const toggle = header.getByRole("button", { name: "Toggle explorer" });
   await expect(toggle).toBeVisible();
-  await expect(page.locator("[data-panel]")).toHaveCount(3);
-  // The third panel arrives at its default share and is collapsed a frame
-  // later; the toggle is at the window's right edge only once that has
-  // landed, which is the state every measurement below is about.
-  await expect.poll(async () => (await page.locator("[data-panel]").nth(2).boundingBox())?.width ?? -1).toBe(0);
+  // Two panes, not three at a zero width: the explorer is closed for a
+  // project nobody has opened it in, and a closed pane is not in the document.
+  await expect(page.locator("[data-panel]")).toHaveCount(2);
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
   const [toggleBox, titleBox] = await Promise.all([
     toggle.boundingBox(),
     header.locator("[data-session-title]").boundingBox(),
@@ -173,6 +177,23 @@ test("the explorer opens and closes a tab", async () => {
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await page.getByRole("menuitem", { name: /^File/ }).click();
   await expect(page.getByRole("button", { name: "Close Untitled" })).toBeVisible();
+
+  // The toggle answers in every state, from wherever it is drawn — with a tab
+  // open, with the sidebar hidden, and from the palette. There is one of it in
+  // the document at a time, so "the toggle did nothing" cannot be a state.
+  await inStrip.click();
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
+  await header.getByRole("button", { name: "Toggle explorer" }).click();
+  await expect(page.getByTestId("explorer")).toHaveCount(1);
+  await page.getByTestId("sidebar").getByRole("button", { name: "Toggle sidebar" }).click();
+  await expect(page.getByTestId("sidebar")).toHaveCount(0);
+  await page.locator("[data-tab-strip]").getByRole("button", { name: "Toggle explorer" }).click();
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+Alt+b" : "Control+Alt+b");
+  await expect(page.getByTestId("explorer")).toHaveCount(1);
+  await page.locator("[data-session-header]").getByRole("button", { name: "Toggle sidebar" }).click();
+  await expect(page.getByTestId("sidebar")).toHaveCount(1);
+
   await page.getByRole("button", { name: "Close Untitled" }).click();
   await expect(page.getByText("Nothing open")).toBeVisible();
 
@@ -190,9 +211,9 @@ test("the explorer opens and closes a tab", async () => {
  *
  * `+` trails the last tab and sticks to the strip's right edge, so the button
  * that opens the eighth tab is not the thing that scrolled off when the
- * seventh was opened. And the session is not collapsible: dragging the
- * explorer's divider as far left as it goes stops at 560px rather than
- * squeezing the pane out of the window.
+ * seventh was opened. And the session never collapses: dragging the explorer's
+ * divider as far left as it goes stops at the session's 320px floor rather
+ * than squeezing the pane out of the window.
  */
 test("keeps + at the strip's right edge, and the session above its floor", async () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-shell-strip-"));
@@ -201,19 +222,16 @@ test("keeps + at the strip's right edge, and the session above its floor", async
     fixture,
   );
   await openExplorer();
-  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 
-  // The explorer at its 320px floor, which is the pane a person actually has
-  // this problem in: drag its separator as far right as it goes.
-  const separator = page.locator("[data-separator]").last();
-  const explorerWidth = async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0;
-  // Retried, not asserted on the first try: the layout is reapplied a frame
-  // after a project binds, and a drag aimed at where the separator was lands
-  // on nothing at all.
-  for (let attempt = 0; attempt < 4 && (await explorerWidth()) >= 360; attempt += 1) {
-    await dragSeparator(separator, 4000);
-  }
+  // The explorer at its floor, which is the pane a person actually has this
+  // problem in: drag its separator right until it stops. Not by four thousand
+  // pixels — 40px past the floor is a collapse now — but by the distance to
+  // the floor and a little more, which clamps.
+  const separator = page.locator("[data-separator=explorer]");
+  await dragSeparator(separator, (await explorerWidth()) - PANE_LIMITS.explorer.min + 20);
   expect(await explorerWidth(), "the explorer would not narrow").toBeLessThan(360);
+  expect(await explorerWidth(), "the explorer went under its floor").toBe(PANE_LIMITS.explorer.min);
 
   // Seven file tabs. Each is about a hundred pixels, so the row is twice the
   // pane and the seventh `+` is exactly the button that used to scroll away.
@@ -246,17 +264,18 @@ test("keeps + at the strip's right edge, and the session above its floor", async
   await shoot(page, "strip-overflow.png");
 
   // The session's floor. Drag the same separator to the window's left edge:
-  // the session stops at its minimum instead of collapsing to nothing.
-  const session = page.getByTestId("session");
-  const sessionWidth = async () => (await session.boundingBox())?.width ?? 0;
+  // the session stops at its 320px minimum instead of collapsing to nothing,
+  // and the explorer stops growing there. The session is the app; it has no
+  // collapse to reach.
+  const sessionWidth = async () => (await page.getByTestId("session").boundingBox())?.width ?? 0;
   const roomy = await sessionWidth();
-  for (let attempt = 0; attempt < 4 && (await sessionWidth()) >= roomy; attempt += 1) {
-    await dragSeparator(separator, -4000);
-  }
+  await dragSeparator(separator, -4000);
   const floored = await sessionWidth();
   expect(floored, "the divider did not move the session at all").toBeLessThan(roomy);
-  expect(floored, "the session was dragged under its minimum").toBeGreaterThanOrEqual(559);
+  expect(floored, "the session was dragged under its minimum").toBeGreaterThanOrEqual(PANE_LIMITS.session.min);
+  expect(floored, "the session kept more than its floor").toBeLessThanOrEqual(PANE_LIMITS.session.min + 2);
   await expect(page.locator("[data-session-header]")).toBeVisible();
+  await expect(page.getByTestId("explorer")).toHaveCount(1);
 
   await page.evaluate((id) => window.hardcore.projects.remove({ id }), project.id);
   await expect(page.getByText("Add a project to get started")).toBeVisible();
@@ -319,16 +338,28 @@ test("renders in both themes", async () => {
   await shoot(page, "shell.png");
 });
 
-/** Open the explorer pane if it is closed — it starts that way (plan §3). */
-async function openExplorer() {
+/**
+ * The explorer's width, and zero when it is closed: a closed pane is not in
+ * the document, so there is nothing to measure rather than a zero-width box.
+ */
+async function explorerWidth() {
   const pane = page.getByTestId("explorer");
-  if (((await pane.boundingBox())?.width ?? 0) === 0) {
-    await page.getByRole("button", { name: "Toggle explorer" }).click();
-  }
-  await expect.poll(async () => (await pane.boundingBox())?.width ?? 0).toBeGreaterThan(0);
+  return (await pane.count()) === 0 ? 0 : ((await pane.boundingBox())?.width ?? 0);
 }
 
-/** Drag one of the group's separators `by` pixels; the library clamps it. */
+/** Open the explorer pane if it is closed — it starts that way (plan §3). */
+async function openExplorer() {
+  if ((await explorerWidth()) === 0) {
+    await page.getByRole("button", { name: "Toggle explorer" }).click();
+  }
+  await expect.poll(explorerWidth).toBeGreaterThan(0);
+}
+
+/**
+ * Drag a separator `by` pixels. A pane clamps at its minimum, and 40px past
+ * it (`PANE_LIMITS.overshoot`) collapses instead — so a drag meant to reach a
+ * floor aims at the floor rather than at infinity.
+ */
 async function dragSeparator(separator: Locator, by: number) {
   const box = (await separator.boundingBox())!;
   const y = box.y + box.height / 2;
@@ -336,8 +367,7 @@ async function dragSeparator(separator: Locator, by: number) {
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2 + by, y, { steps: 12 });
   await page.mouse.up();
-  // The layout is reapplied on the next frame (`Shell`'s `applyLayout`).
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(120);
 }
 
 async function setTheme(theme: "dark" | "light") {

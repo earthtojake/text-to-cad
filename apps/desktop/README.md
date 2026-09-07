@@ -119,10 +119,13 @@ document), `file-markdown-raw-blocks` (raw HTML kept as its own bytes),
 `file-tree-deep`, `file-crumb-menu` (a folder crumb's menu, open),
 `file-context-menu` (a tree row's), `file-image`, `file-cad-failed` (the runtime broken on
 purpose), `file-cad` (the explorer at its widest: the sidebar hidden and the
-session at its floor), `file-cad-default` (the explorer at its default share, the tree
+session at its floor), `file-cad-default` (the explorer at its default width, the tree
 hidden for it) and both again at 1280×800, `file-cad-measure`, `terminal`,
 `browser-empty`, `browser`, `review`, `strip`, `strip-overflow` (seven tabs in
-a 320px pane, `+` pinned to the right edge) — every one of those
+a pane at its floor, `+` pinned to the right edge), `panes-sidebar-collapsed`
+(the sidebar closed by a drag past its minimum, with the toggle that brings it
+back) and `panes-history` (the bottom of the back/forward stack, back
+muted) — every one of those
 kinds in light as `*-light` — the `git-*` set for the git modes (the review
 under three scopes, before and after a commit, the sidebar's worktree glyph,
 Settings' per-project worktree card), the session states in both themes with
@@ -158,7 +161,8 @@ The session suite (`session-*.png`) drives the session UI through each of its
 states with `tests/fake-agent` (`HARDCORE_FAKE_AGENT` points main at it in place
 of every adapter); `codex.spec.ts` runs one real Codex session when
 `HARDCORE_E2E_CODEX=1`. `keyboard.spec.ts` presses every shortcut the
-Shortcuts page lists; `quit.spec.ts` times `app.quit()` with a repository
+Shortcuts page lists except back and forward, which `panes.spec.ts` covers
+along with the pane drags, the overshoot collapse and the too-narrow window; `quit.spec.ts` times `app.quit()` with a repository
 watched, a shell, a session and the CAD viewer all running, and fails above
 two seconds (see Quitting, below). `persistence.spec.ts` launches the app
 twice against one user-data directory — a project, a session with the fake
@@ -266,20 +270,54 @@ signing note.
 
 ## Layout
 
-Three panes, in pixels (`PANE_LIMITS` in `src/shared/types.ts`, read by
-`Shell.tsx`): a 230px sidebar (180–360), a session column of 560px by default
-and never less — its transcript and composer are a 720px column centred in
-it — and the explorer takes whatever is left. The two fixed widths are the
-persisted preference (`settings.layout`); the explorer's is a consequence.
+Three panes in a flex row, in pixels (`PANE_LIMITS` in `src/shared/types.ts`,
+read by `Shell.tsx`): a 230px sidebar (180–480), the session taking what is
+left with a 320px floor — its transcript and composer are a 720px column
+centred in it — and a 560px explorer (280 up to the window less the session's
+floor and the sidebar). The two side panes are `width: Npx` and are the
+persisted preference; the session's width is a consequence, so there is no
+number for it beyond the floor. Two separators (`[data-separator]`,
+`app/PaneSeparator.tsx`) size the side panes: drag, or focus one and use the
+arrow keys; Enter, Space or a double click closes the pane.
 The strips along the top are 36px (`--titlebar-height`), and whichever pane is leftmost makes room
 for the macOS traffic lights (`--titlebar-inset`, keyed off `data-leftmost` on
-the shell — `sidebar` or `session`, and nothing else). The two pane toggles never move on screen (Codex's rule): the sidebar's
-sits right after the traffic lights — in the sidebar's title strip while it
-is open, at the left of the session's title bar once it is gone — and the
-explorer's sits at the window's right edge — in the session's title bar while
-the explorer is shut, at the end of the explorer's tab strip once it is open.
+the shell — `sidebar` or `session`, and nothing else). The controls of that
+row never move on screen (Codex's rule): the sidebar's toggle sits right after
+the traffic lights with back and forward beside it — in the sidebar's title
+strip while it is open, at the left of the session's title bar once it is
+gone — and the explorer's toggle sits at the window's right edge — in the
+session's title bar while the explorer is shut, at the end of the explorer's
+tab strip once it is open.
 The session's title bar and the explorer's tab strip carry a rule beneath
 them; the projects panel does not.
+
+**One source of truth per side pane**, `{ collapsed, width }`: the sidebar's in
+`settings.layout` (sqlite), the explorer's per project in `state/explorer.ts`
+(localStorage). Everything on screen is derived from those two pairs — which
+panes are rendered, where each toggle is drawn, which pane reserves the
+corner. **A collapsed pane is not rendered at all**, so a toggle is in the
+document exactly once and "the toggle did nothing" cannot be a state. There is
+no panel library: `react-resizable-panels` kept a collapse of its own beside
+ours, and the two disagreed — a drag under a minimum sometimes snapped back and
+sometimes closed a pane without recording it, which left the only toggle inside
+the pane that had just gone away.
+
+**A drag stops at a pane's minimum; 40px past it the pane closes.** That
+overshoot (`PANE_LIMITS.overshoot`) is deliberate: a pane that collapsed the
+moment a drag touched its minimum closed itself on the stray pixel of a drag
+that meant "as narrow as it goes". A collapse keeps the width, so the toggle
+brings the pane back the size it was. Widths are written once, when the gesture
+ends.
+
+**Back and forward** (`state/history.ts`) walk the top level: a project's
+new-session screen and its threads, which is everything the session pane can
+show. Entries are recorded by watching the selection rather than pushed by each
+of the half-dozen doors into "show me this thread"; back and forward set the
+selection, so they never push. Deleted sessions' entries are stepped over, the
+buttons are muted rather than hidden at the ends of the stack, and the keys are
+`Mod+[` and `Mod+]` (the app menu's View submenu carries the accelerators).
+The explorer's tabs are not in this history and Settings is not an entry —
+it replaces the shell and comes back to whatever was under it.
 
 **The traffic lights' room is measured, not guessed.** Main pins the cluster
 where the layout expects it (`trafficLightPosition`, vertically centred in the
@@ -307,12 +345,16 @@ macOS that draws the buttons differently announces itself. Its screenshots
 (`titlebar-*.png`) draw the reserved rectangle over the corner, because the
 lights themselves are AppKit's and never appear in a screenshot of the page.
 
-**The sidebar and the explorer collapse; the session never does.** Its panel
-is not `collapsible` at all, so 560px is a floor the explorer's divider stops
-against rather than a threshold past which the pane disappears. There is no
-fullscreen explorer: the one control that could take the session away is gone,
-and the widest the explorer gets is the window less a hidden sidebar and that
-floor.
+**The sidebar and the explorer collapse; the session never does.** It has no
+collapsed state at all: 320px is a floor the separators stop against rather
+than a threshold past which the pane disappears. There is no fullscreen
+explorer either — the one control that could take the session away is gone —
+so the widest the explorer gets is the window less a hidden sidebar and that
+floor. When the window is too narrow for all three minimums, the explorer
+gives way first and the sidebar second, by *collapsing*: the state is written,
+so the person is left with two toggles rather than a session pane pushed off
+the right of the window. Growing the window back does not reopen them; the
+toggles do.
 
 **No project, no explorer.** The pane is a view of a directory: with none
 bound, `Shell` renders neither the panel nor its separator, the session has
@@ -326,9 +368,9 @@ fills the window. Opening a file, a review, a browser or a terminal shows it —
 from the tree, the tab strip, the command palette or an agent's
 `open_file` — because every one of those goes through `state/explorer.ts`'s
 `open`/`openFile`. That state is the explorer store's rather than
-`settings.layout`'s and is remembered **per project** (localStorage), and only
-a person's own toggle writes it: an agent opening a file shows the pane
-without deciding anything for next time.
+`settings.layout`'s and is remembered **per project** (localStorage) along with
+the pane's width, and only a person's own toggle or drag writes it: an agent
+opening a file shows the pane without deciding anything for next time.
 
 A CAD file in the explorer is laid out by the desktop, not measured by the
 viewer (`features/explorer/cad-layout.ts`): the surface is pinned to its
@@ -729,7 +771,10 @@ src/shared/               types.ts (domain types as zod schemas)
   ipc/git.ts              git.* — the review's reads plus P7's worktrees
   ipc/cad.ts              cad.viewerOrigin, cad.warm, and cad.command / cad.reply for the MCP server
 src/renderer/
-  app/                    Shell (three resizable panes), App, CommandPalette
+  app/                    Shell (three panes in a flex row), App, CommandPalette
+    PaneSeparator.tsx     one pane divider: drag, arrow keys, and the overshoot collapse
+    PaneToggles.tsx       the sidebar's and explorer's toggles, and back/forward
+  lib/panes.ts            the pane geometry: clamps, the overshoot rule, what fits (pure)
   features/sidebar        projects and their sessions (five per project, Show more, status glyphs, menus)
   features/session        the new-session state, the transcript, the composer
     view.ts               SessionState -> rows: activity-row labels, folding, the status line (pure)
@@ -752,6 +797,7 @@ src/renderer/
   components/ai-elements  Vercel AI Elements, vendored (types.ts replaces the `ai` package)
   state/                  one zustand store per domain, plus bridge.ts for main's pushes and
                           cad-commands.ts for an agent's tool calls against the stores
+    history.ts            back and forward over the top level, recorded from the selection
   styles/globals.css      stock shadcn neutral tokens — the same ones apps/viewer uses
 tests/unit/               vitest
 tests/e2e/                playwright, against the built app

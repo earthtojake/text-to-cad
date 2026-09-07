@@ -92,7 +92,6 @@ function KindIcon({ kind, className }: { kind: ExplorerTabKind; className?: stri
 
 export function TabStrip() {
   const tabs = useExplorer((state) => state.tabs);
-  const collapsed = useExplorer((state) => state.collapsed);
   const activeId = useExplorer((state) => state.activeId);
   const open = useExplorer((state) => state.open);
   const close = useExplorer((state) => state.close);
@@ -191,13 +190,12 @@ export function TabStrip() {
           scrolling row, since `+` follows the last tab and only pins to the
           edge on overflow — the same spot the session's title bar holds this
           toggle in while the explorer is shut, so it never moves. A shut
-          explorer keeps its strip in the document at zero width, so the
-          title bar's is the only one then. */}
-      {collapsed ? null : (
-        <div className="app-no-drag flex shrink-0 items-center pl-1">
-          <ExplorerToggle />
-        </div>
-      )}
+          explorer is not rendered at all (`Shell`), so this strip existing is
+          the same fact as the pane being open: there is never a second copy
+          of this button hidden in a pane nobody can see. */}
+      <div className="app-no-drag flex shrink-0 items-center pl-1">
+        <ExplorerToggle />
+      </div>
     </div>
   );
 }

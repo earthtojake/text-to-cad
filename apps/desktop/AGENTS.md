@@ -112,6 +112,17 @@ not.
   fails when the two drift or when any state puts a control in the corner. A
   new full-window route reserves the room itself, the way Settings does.
 
+- **A side pane is `{ collapsed, width }` and nothing else** — the sidebar's in
+  `settings.layout`, the explorer's per project in `state/explorer.ts`. What is
+  rendered, where each toggle is drawn and which pane reserves the traffic
+  lights' corner are all derived from those two pairs, and **a collapsed pane is
+  not rendered at all**, so a toggle exists in the document exactly once. Do not
+  add a second collapse: a panel library with its own flag, or a width
+  recomputed into shares behind the preference, is what made a drag under a
+  minimum sometimes snap back and sometimes close a pane with no toggle left
+  anywhere to reopen it. The geometry is `lib/panes.ts` (pure) and the drag is
+  `app/PaneSeparator.tsx`; the session never collapses, and 40px past a
+  minimum is the collapse (`PANE_LIMITS.overshoot`).
 - **No bottom panel.** The terminal is a fourth explorer tab kind. Everything
   secondary lives in the one strip.
 - **The explorer strip belongs to the project, not to a session.** A person

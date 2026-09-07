@@ -45,7 +45,7 @@ test.beforeAll(async () => {
   await page.waitForLoadState("domcontentloaded");
   await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
   await page.evaluate((dir) => window.hardcore.projects.addPath({ path: dir }), project);
-  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 });
 
 test.afterAll(async () => {
@@ -74,7 +74,7 @@ test("Cmd+1..9 switch tabs and Cmd+W closes the active one", async () => {
   // The explorer starts closed (plan §3); the shortcut for that is its own
   // test below, so this one just opens it.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
-  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeGreaterThan(0);
+  await expect(page.getByTestId("explorer")).toBeVisible();
   for (const name of ["one.md", "two.md", "three.md"]) {
     await newTab(page, "File");
     await page.getByLabel("Filter files").fill(name);
@@ -131,26 +131,26 @@ test("Cmd+N starts a new chat", async () => {
 });
 
 test("Cmd+B and Cmd+Alt+B toggle the side panes", async () => {
-  const sidebar = page.locator("[data-panel][data-panel-id=sidebar], [data-panel]").first();
-  const before = (await sidebar.boundingBox())?.width ?? 0;
-  expect(before).toBeGreaterThan(0);
+  // A hidden pane is not in the document at all, so its count is the state
+  // (`Shell`): there is no zero-width panel left behind.
+  const sidebar = page.getByTestId("sidebar");
+  await expect(sidebar).toHaveCount(1);
   await page.keyboard.press(`${mod}+B`);
-  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBe(0);
+  await expect(sidebar).toHaveCount(0);
   await page.keyboard.press(`${mod}+B`);
-  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThan(0);
+  await expect(sidebar).toHaveCount(1);
 
   // The explorer is closed until something opens it, and an earlier test in
   // this file opened it: closed is where this one starts from either way.
   const explorer = page.getByTestId("explorer");
-  const explorerWidth = async () => (await explorer.boundingBox())?.width ?? 0;
-  if ((await explorerWidth()) > 0) {
+  if ((await explorer.count()) > 0) {
     await page.keyboard.press(`${mod}+Alt+B`);
   }
-  await expect.poll(explorerWidth).toBe(0);
+  await expect(explorer).toHaveCount(0);
   await page.keyboard.press(`${mod}+Alt+B`);
-  await expect.poll(explorerWidth).toBeGreaterThan(0);
+  await expect(explorer).toHaveCount(1);
   await page.keyboard.press(`${mod}+Alt+B`);
-  await expect.poll(explorerWidth).toBe(0);
+  await expect(explorer).toHaveCount(0);
 });
 
 /**

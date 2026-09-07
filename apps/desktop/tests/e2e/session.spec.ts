@@ -526,14 +526,14 @@ async function expectNoChevrons() {
 
 /**
  * The shell's contract with the explorer closed, which is how it starts: a
- * 230px sidebar and the session taking the rest of the window. The explorer
- * opens when something opens in it (`tests/e2e/explorer.spec.ts`).
+ * 230px sidebar and the session taking the rest of the window. Two panes, not
+ * three — a closed pane is not rendered (`Shell`). The explorer opens when
+ * something opens in it (`tests/e2e/explorer.spec.ts`).
  */
 async function expectPaneWidths() {
   const widths = await page.locator("[data-panel]").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().width));
-  expect(widths).toHaveLength(3);
+  expect(widths).toHaveLength(2);
   expect(Math.abs(widths[0]! - 230), `sidebar ${widths[0]}`).toBeLessThanOrEqual(1);
-  expect(widths[2]!, `explorer ${widths[2]}`).toBe(0);
-  expect(widths[1]!, `session ${widths[1]}`).toBeGreaterThanOrEqual(559);
+  expect(widths[1]!, `session ${widths[1]}`).toBeGreaterThanOrEqual(320);
   expect(Math.abs(widths[0]! + widths[1]! - await page.evaluate(() => window.innerWidth))).toBeLessThanOrEqual(3);
 }

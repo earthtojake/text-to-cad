@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Archive, Folder, MoreHorizontal, Pencil, Trash2, Unplug } from "lucide-react";
 
-import { ExplorerToggle, SidebarToggle } from "@renderer/app/PaneToggles";
+import { ExplorerToggle, HistoryNav, SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -21,11 +21,13 @@ import type { Session } from "@shared/types";
  * first prompt; click to edit), a `…` menu; the explorer's toggle on the
  * right. The strip is the window's drag region, so the controls opt out of it.
  *
- * The two pane toggles keep their places on screen whatever the panes do
- * (Codex's rule): the sidebar's is right after the traffic lights — in the
- * sidebar's own title strip while it is open, here once it is gone — and
- * the explorer's is at the window's right edge — here while the explorer is
- * shut, in the explorer's tab strip once it is open.
+ * The controls of the title row keep their places on screen whatever the
+ * panes do (Codex's rule): the sidebar's toggle and the history's two arrows
+ * are right after the traffic lights — in the sidebar's own title strip while
+ * it is open, here once it is gone — and the explorer's toggle is at the
+ * window's right edge — here while the explorer is shut, in the explorer's
+ * tab strip once it is open. A collapsed pane is not rendered at all, so each
+ * toggle is in the document exactly once.
  */
 export function SessionHeader({
   session,
@@ -64,8 +66,15 @@ export function SessionHeader({
       data-session-header
       style={{ height: "var(--titlebar-height)" }}
     >
-      {/* The window's left edge once the sidebar is gone. */}
-      {sidebarCollapsed ? <SidebarToggle /> : null}
+      {/* The window's left edge once the sidebar is gone: its toggle and the
+          history's two arrows, in the order and at the x they had in the
+          sidebar's own strip. */}
+      {sidebarCollapsed ? (
+        <div className="flex shrink-0 items-center">
+          <SidebarToggle />
+          <HistoryNav />
+        </div>
+      ) : null}
       <div className="app-no-drag flex min-w-0 items-center gap-2">
         <Folder className="size-3.5 shrink-0 text-muted-foreground" />
         {editing && session ? (

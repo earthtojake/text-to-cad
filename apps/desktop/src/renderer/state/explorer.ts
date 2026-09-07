@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import type { DirEntry } from "@shared/ipc/explorer";
+import { PANE_LIMITS } from "@shared/types";
 import type {
   BrowserTab,
   ExplorerRoot,
@@ -44,6 +45,8 @@ const TREE_WIDTH_KEY = "hardcore.explorer.treeWidth";
 const TREE_COLLAPSED_KEY = "hardcore.explorer.treeCollapsed";
 /** Whether the pane itself is closed, per project id (see `collapsed`). */
 const PANE_COLLAPSED_KEY = "hardcore.explorer.collapsed";
+/** How wide it is when it is open, per project id (see `width`). */
+const PANE_WIDTH_KEY = "hardcore.explorer.width";
 export const TREE_MIN_WIDTH = 180;
 export const TREE_MAX_WIDTH = 480;
 export const TREE_DEFAULT_WIDTH = 248;
@@ -67,6 +70,18 @@ function writeLocal(key: string, value: string) {
   }
 }
 
+/** One of the per-project maps in localStorage, parsed defensively. */
+function byProject<T>(key: string): Record<string, T> {
+  return readLocal<Record<string, T>>(key, {}, (raw) => {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, T>) : {};
+    } catch {
+      return {};
+    }
+  });
+}
+
 /**
  * The pane is closed until something opens it, and a person's own choice is
  * remembered for the project they made it in.
@@ -80,19 +95,18 @@ function writeLocal(key: string, value: string) {
  * There is no entry for "no project": without one the explorer is not drawn
  * at all, so there is no choice to remember and nothing to remember it for.
  */
-function collapsedByProject(): Record<string, boolean> {
-  return readLocal<Record<string, boolean>>(PANE_COLLAPSED_KEY, {}, (raw) => {
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? (parsed as Record<string, boolean>) : {};
-    } catch {
-      return {};
-    }
-  });
+function collapsedFor(projectId: string): boolean {
+  return byProject<boolean>(PANE_COLLAPSED_KEY)[projectId] ?? true;
 }
 
-function collapsedFor(projectId: string): boolean {
-  return collapsedByProject()[projectId] ?? true;
+/**
+ * The pane's width for a project, in pixels. Its pair with `collapsed` is the
+ * explorer's whole state: a collapse keeps the width, so the toggle brings
+ * the pane back the size it was rather than at its floor.
+ */
+function widthFor(projectId: string): number {
+  const stored = byProject<number>(PANE_WIDTH_KEY)[projectId];
+  return typeof stored === "number" && stored > 0 ? stored : PANE_LIMITS.explorer.default;
 }
 
 /** The open folders and the listings of one root's tree. */
@@ -136,6 +150,12 @@ type ExplorerState = {
    * rendered at all (`Shell`).
    */
   collapsed: boolean;
+  /**
+   * How wide the pane is when it is open, in pixels — the other half of the
+   * pair. A drag writes it, a collapse keeps it, and the toggle brings the
+   * pane back at it. Per project, like `collapsed`.
+   */
+  width: number;
   /** The file tab's right-hand tree. */
   treeCollapsed: boolean;
   treeWidth: number;
@@ -203,6 +223,8 @@ type ExplorerState = {
   /** A person's choice, remembered for the project they made it in. */
   setCollapsed: (collapsed: boolean) => void;
   toggleCollapsed: () => void;
+  /** A drag's result, remembered for the project it was made in. */
+  setWidth: (width: number) => void;
   /** Something opened: show the pane, leaving the stored preference alone. */
   show: () => void;
   setTreeCollapsed: (collapsed: boolean) => void;
@@ -325,6 +347,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   activeId: null,
   ready: false,
   collapsed: true,
+  width: PANE_LIMITS.explorer.default,
   treeCollapsed: readLocal(TREE_COLLAPSED_KEY, false, (raw) => raw === "true"),
   treeWidth: readLocal(TREE_WIDTH_KEY, TREE_DEFAULT_WIDTH, (raw) => Number(raw) || TREE_DEFAULT_WIDTH),
   trees: {},
@@ -365,6 +388,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       // Without a project there is no pane at all (`Shell`), and closed is
       // the state it comes back to when one arrives.
       collapsed: projectId ? collapsedFor(projectId) : true,
+      width: projectId ? widthFor(projectId) : PANE_LIMITS.explorer.default,
       // A different project is a different set of trees, with nothing to carry over.
       trees: {},
     });
@@ -523,11 +547,21 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     if (!projectId) {
       return;
     }
-    writeLocal(PANE_COLLAPSED_KEY, JSON.stringify({ ...collapsedByProject(), [projectId]: collapsed }));
+    writeLocal(PANE_COLLAPSED_KEY, JSON.stringify({ ...byProject<boolean>(PANE_COLLAPSED_KEY), [projectId]: collapsed }));
     set({ collapsed });
   },
 
   toggleCollapsed: () => get().setCollapsed(!get().collapsed),
+
+  setWidth: (width) => {
+    const { projectId } = get();
+    const rounded = Math.round(width);
+    if (!projectId || rounded <= 0) {
+      return;
+    }
+    writeLocal(PANE_WIDTH_KEY, JSON.stringify({ ...byProject<number>(PANE_WIDTH_KEY), [projectId]: rounded }));
+    set({ width: rounded });
+  },
 
   show: () => {
     if (get().collapsed) {

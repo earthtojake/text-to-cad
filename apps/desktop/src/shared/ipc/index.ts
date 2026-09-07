@@ -157,6 +157,13 @@ export const ipcEvents = {
       "toggle-explorer",
       "new-session",
       "command-palette",
+      /**
+       * The top level's history: the project new-session screens and the
+       * threads the session pane has shown (`state/history.ts`). Not the
+       * explorer's tabs.
+       */
+      "navigate-back",
+      "navigate-forward",
       /** The files-changed pill: show the session's diff in the explorer's Review tab (P3). */
       "open-review",
     ]),

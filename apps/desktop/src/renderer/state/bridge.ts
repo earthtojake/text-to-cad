@@ -15,6 +15,7 @@ import { useAgents } from "./agents";
 import { useComposer } from "./composer";
 import { performCadCommand } from "./cad-commands";
 import { useExplorer } from "./explorer";
+import { attachHistory, useHistory } from "./history";
 import { usePathLinks } from "./path-links";
 import { usePlugins } from "./plugins";
 import { useProjects } from "./projects";
@@ -115,9 +116,15 @@ export function subscribeToMain(): () => void {
     }
   });
 
+  // Back and forward are a history of the selection, recorded by watching it
+  // (`state/history.ts`): every door into "show me this thread" ends at these
+  // two stores, and one watcher is one place to get it right.
+  const unsubscribeHistory = attachHistory();
+
   return () => {
     unsubscribeProjects();
     unsubscribeSessions();
+    unsubscribeHistory();
     for (const detach of off) {
       detach();
     }
@@ -165,6 +172,12 @@ export function runUiCommand(payload: IpcEventPayload<"ui.command">): void {
       break;
     case "toggle-explorer":
       useExplorer.getState().toggleCollapsed();
+      break;
+    case "navigate-back":
+      useHistory.getState().back();
+      break;
+    case "navigate-forward":
+      useHistory.getState().forward();
       break;
     case "new-session": {
       ui.closeSettings();
