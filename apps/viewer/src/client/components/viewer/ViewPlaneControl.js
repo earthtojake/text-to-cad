@@ -195,7 +195,7 @@ export default function ViewPlaneControl({
     ? { width: customViewPlaneSize, height: customViewPlaneSize }
     : undefined;
   const viewPlaneSurfaceClasses = is2d
-    ? "bg-sidebar pointer-events-auto relative rounded-md border border-sidebar-border text-sidebar-foreground shadow-sm transition duration-150"
+    ? "bg-background pointer-events-auto relative rounded-md border border-border text-foreground shadow-sm transition duration-150"
     : "pointer-events-auto relative text-sidebar-foreground transition duration-150";
   const viewPlaneLabel = is2d ? "2D view selector" : "Perspective selector";
   const normalizedBottomOffset = typeof viewPlaneOffsetBottom === "number"

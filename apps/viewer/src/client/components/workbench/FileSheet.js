@@ -911,7 +911,7 @@ export default function FileSheet({
           // host that is a click anywhere else in the application. It stays
           // until the person closes it or the layout widens into the aside.
           onInteractOutside={portalContainer ? (event) => event.preventDefault() : undefined}
-          className="bg-sidebar gap-0 p-0 text-sidebar-foreground"
+          className="bg-background gap-0 p-0 text-foreground"
           style={sheetStyle}
           aria-label={title}
         >
@@ -932,7 +932,7 @@ export default function FileSheet({
   return (
     <aside
       className={cn(
-        "bg-sidebar pointer-events-auto z-30 flex h-full max-w-[calc(100vw_-_0.75rem)] flex-col border-l border-sidebar-border text-sidebar-foreground",
+        "bg-background pointer-events-auto z-30 flex h-full max-w-[calc(100vw_-_0.75rem)] flex-col border-l border-border text-foreground",
         isDesktop
           ? "relative shrink-0"
           : "absolute inset-y-0 right-0 shadow-xl"

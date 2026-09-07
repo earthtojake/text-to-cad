@@ -167,7 +167,7 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           data-mobile="true"
-          className="bg-sidebar w-(--sidebar-width) !transition-none p-0 text-sidebar-foreground data-[state=closed]:!animate-none data-[state=closed]:!duration-0 data-[state=open]:!animate-none data-[state=open]:!duration-0 [&>button]:hidden"
+          className="bg-background w-(--sidebar-width) !transition-none p-0 text-foreground data-[state=closed]:!animate-none data-[state=closed]:!duration-0 data-[state=open]:!animate-none data-[state=open]:!duration-0 [&>button]:hidden"
           overlayClassName="data-[state=closed]:!animate-none data-[state=closed]:!duration-0 data-[state=open]:!animate-none data-[state=open]:!duration-0"
           style={
             {
@@ -221,7 +221,7 @@ function Sidebar({
         <div
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          className="bg-sidebar flex h-full w-full flex-col border-sidebar-border group-data-[side=left]:border-r group-data-[side=right]:border-l group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm">
+          className="bg-background flex h-full w-full flex-col border-border group-data-[side=left]:border-r group-data-[side=right]:border-l group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:shadow-sm">
           {children}
         </div>
       </div>

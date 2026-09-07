@@ -1040,7 +1040,7 @@ export default function CadWorkspaceTopBar({
 
   return (
     <header
-      className="bg-sidebar pointer-events-auto flex h-11 shrink-0 items-center gap-2 border-b border-sidebar-border px-2 text-sidebar-foreground"
+      className="bg-background pointer-events-auto flex h-11 shrink-0 items-center gap-2 border-b border-border px-2 text-foreground"
     >
       {navigationAvailable ? (
         <SidebarTrigger
