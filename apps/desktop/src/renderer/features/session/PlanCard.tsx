@@ -42,7 +42,7 @@ export function PlanCard({
       defaultOpen={false}
       isStreaming={false}
     >
-      <PlanHeader className="grid-cols-[auto_1fr_auto] items-center gap-x-2 px-3 py-2">
+      <PlanHeader className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 px-3 py-2 text-left">
         <span className="row-span-2 flex size-6 items-center justify-center rounded-md bg-muted text-muted-foreground">
           <Target className="size-3.5" />
         </span>

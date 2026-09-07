@@ -148,6 +148,10 @@ test("the explorer opens and closes a tab", async () => {
   const toggle = header.getByRole("button", { name: "Toggle explorer" });
   await expect(toggle).toBeVisible();
   await expect(page.locator("[data-panel]")).toHaveCount(3);
+  // The third panel arrives at its default share and is collapsed a frame
+  // later; the toggle is at the window's right edge only once that has
+  // landed, which is the state every measurement below is about.
+  await expect.poll(async () => (await page.locator("[data-panel]").nth(2).boundingBox())?.width ?? -1).toBe(0);
   const [toggleBox, titleBox] = await Promise.all([
     toggle.boundingBox(),
     header.locator("[data-session-title]").boundingBox(),
@@ -231,8 +235,13 @@ test("keeps + at the strip's right edge, and the session above its floor", async
   expect(firstBox!.x, "the strip did not overflow; the pin is untested").toBeLessThan(stripBox!.x);
   // And `+` is inside the strip, at its right end.
   expect(plusBox!.x).toBeGreaterThanOrEqual(stripBox!.x);
-  expect(plusBox!.x + plusBox!.width).toBeLessThanOrEqual(stripBox!.x + stripBox!.width + 1);
-  expect(plusBox!.x + plusBox!.width).toBeGreaterThan(stripBox!.x + stripBox!.width - 24);
+  // `+` ends where the explorer's toggle begins: that toggle is the strip's
+  // last control, pinned to the window's right edge, and `+` sits just
+  // inside it.
+  const toggleBox = (await strip.getByRole("button", { name: "Toggle explorer" }).boundingBox())!;
+  expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(stripBox!.x + stripBox!.width + 1);
+  expect(plusBox!.x + plusBox!.width).toBeLessThanOrEqual(toggleBox.x + 1);
+  expect(plusBox!.x + plusBox!.width).toBeGreaterThan(toggleBox.x - 24);
   await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeVisible();
   await shoot(page, "strip-overflow.png");
 

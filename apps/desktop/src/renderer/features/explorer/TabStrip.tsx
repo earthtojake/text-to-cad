@@ -116,7 +116,7 @@ export function TabStrip() {
 
   return (
     <div
-      className="app-drag flex shrink-0 items-center border-b pr-1.5 pl-2"
+      className="app-drag flex shrink-0 items-center border-b pr-3 pl-2"
       data-tab-strip
       style={{ height: "var(--titlebar-height)" }}
     >
@@ -161,7 +161,7 @@ export function TabStrip() {
           than being cut off against a hard edge.
         */}
         <div
-          className="sticky right-0 z-10 flex shrink-0 items-center bg-background pr-1.5 pl-1 before:pointer-events-none before:absolute before:top-0 before:right-full before:h-full before:w-5 before:bg-gradient-to-r before:from-transparent before:to-background"
+          className="sticky right-0 z-10 flex shrink-0 items-center bg-background pr-0.5 pl-1 before:pointer-events-none before:absolute before:top-0 before:right-full before:h-full before:w-5 before:bg-gradient-to-r before:from-transparent before:to-background"
           data-new-tab
         >
           <DropdownMenu>
@@ -185,13 +185,19 @@ export function TabStrip() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-        {/* The window's right edge while the explorer is open: the same
-              spot the session's title bar holds this toggle in while it is
-              shut, so it never moves. A shut explorer keeps its strip in the
-              document at zero width, so the title bar's is the only one then. */}
-          {collapsed ? null : <ExplorerToggle />}
         </div>
       </div>
+      {/* The window's right edge while the explorer is open — outside the
+          scrolling row, since `+` follows the last tab and only pins to the
+          edge on overflow — the same spot the session's title bar holds this
+          toggle in while the explorer is shut, so it never moves. A shut
+          explorer keeps its strip in the document at zero width, so the
+          title bar's is the only one then. */}
+      {collapsed ? null : (
+        <div className="app-no-drag flex shrink-0 items-center pl-1">
+          <ExplorerToggle />
+        </div>
+      )}
     </div>
   );
 }
