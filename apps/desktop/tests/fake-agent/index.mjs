@@ -28,8 +28,16 @@
  *                 permission request that waits for the answer, a subagent,
  *                 prose — with small delays so the streaming states can be
  *                 seen
+ *   "applied"     reply with what the client configured on this session and
+ *                 in which order — `model,reasoning_effort,mode:auto` — so a
+ *                 test can assert that a new session applies the stored
+ *                 model before the effort (the model decides which efforts
+ *                 exist) and lands in the agent's own auto mode
  *
  * and always ends with the text "ok" and `end_turn` (or `cancelled`).
+ *
+ * `FAKE_AGENT_REFUSE=<configId>` makes `session/set_config_option` throw for
+ * that option, the way an adapter refuses a model an account cannot use.
  *
  * A cwd containing a `.fake-auth-required` file makes `session/new` answer
  * "Authentication required", the way an adapter whose CLI is signed out does.
@@ -60,6 +68,28 @@ const stream = ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(proce
  * the session now is, which is what the agents do.
  */
 const chosen = { model: "fast", reasoning_effort: "medium" };
+/**
+ * Which mode the session is in, and every configuration the client applied,
+ * in order (`applied` above). A real session starts in the adapter's own
+ * default and the client moves it to the auto preset; keeping both here is
+ * what lets a test see that it did.
+ */
+let currentModeId = "default";
+const applied = [];
+const refuse = process.env.FAKE_AGENT_REFUSE || null;
+
+/**
+ * The session's modes. `auto` carries ACP's `_meta.kind: auto_review`, which
+ * is how both real adapters name their own auto-approval preset — and how
+ * the app finds it without knowing either provider's id for it.
+ */
+function availableModes() {
+  return [
+    { id: "default", name: "Default", _meta: { kind: "standard" } },
+    { id: "plan", name: "Plan", description: "Read only", _meta: { kind: "plan" } },
+    { id: "auto", name: "Auto", description: "Answers its own permission requests", _meta: { kind: "auto_review" } },
+  ];
+}
 
 function configOptions() {
   return [
@@ -121,15 +151,11 @@ new AgentSideConnection((conn) => ({
       throw RequestError.authRequired();
     }
     mcpServers = Array.isArray(params?.mcpServers) ? params.mcpServers : [];
+    currentModeId = "default";
+    applied.length = 0;
     return {
       sessionId: SESSION_ID,
-      modes: {
-        currentModeId: "default",
-        availableModes: [
-          { id: "default", name: "Default" },
-          { id: "plan", name: "Plan", description: "Read only" },
-        ],
-      },
+      modes: { currentModeId, availableModes: availableModes() },
       configOptions: configOptions(),
     };
   },
@@ -147,21 +173,33 @@ new AgentSideConnection((conn) => ({
       sessionId: params.sessionId,
       update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "earlier reply" } },
     });
-    return { modes: { currentModeId: "default", availableModes: [{ id: "default", name: "Default" }] } };
+    return { modes: { currentModeId, availableModes: availableModes() } };
   },
 
   async setSessionMode(params) {
+    currentModeId = params.modeId;
+    applied.push(`mode:${params.modeId}`);
     await conn.sessionUpdate({
       sessionId: params.sessionId,
-      update: { sessionUpdate: "current_mode_update", currentModeId: params.modeId },
+      update: { sessionUpdate: "current_mode_update", currentModeId },
     });
     return {};
   },
 
   async setSessionConfigOption(params) {
+    if (refuse && params.configId === refuse) {
+      throw RequestError.invalidParams(`${params.configId} is not available`);
+    }
+    applied.push(params.configId);
     if (params.configId in chosen) {
       chosen[params.configId] = String(params.value);
     }
+    // Both adapters also announce the new set on the session; the client
+    // caches it against the agent, so the notification is part of the shape.
+    await conn.sessionUpdate({
+      sessionId: params.sessionId,
+      update: { sessionUpdate: "config_option_update", configOptions: configOptions() },
+    });
     return { configOptions: configOptions() };
   },
 
@@ -205,6 +243,14 @@ async function script(conn, params) {
 
   if (text.includes("showcase")) {
     return showcase(conn, sessionId);
+  }
+
+  if (text.includes("applied")) {
+    await send({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: `applied: ${applied.join(",")} in ${currentModeId}` },
+    });
+    return { stopReason: "end_turn" };
   }
 
   if (text.includes("thought")) {

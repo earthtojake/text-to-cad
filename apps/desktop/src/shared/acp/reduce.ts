@@ -764,6 +764,12 @@ function availableCommands(raw: unknown): AvailableCommand[] {
 }
 
 /** Normalise the wire form of modes; exported for `session/new` responses. */
+/** `_meta.kind`, which is where both adapters say what a mode or preset *is*. */
+function metaKind(entry: Record<string, unknown>): string | null {
+  const meta = asRecord(entry._meta);
+  return meta ? asString(meta.kind) : null;
+}
+
 export function sessionModes(raw: unknown): SessionMode[] {
   if (!Array.isArray(raw)) {
     return [];
@@ -775,7 +781,12 @@ export function sessionModes(raw: unknown): SessionMode[] {
     if (!entry || id === null) {
       continue;
     }
-    out.push({ id, name: asString(entry.name) ?? id, description: asString(entry.description) });
+    out.push({
+      id,
+      name: asString(entry.name) ?? id,
+      description: asString(entry.description),
+      kind: metaKind(entry),
+    });
   }
   return out;
 }
@@ -822,6 +833,7 @@ export function configOptions(raw: unknown): ConfigOption[] {
               name: asString(inner.name) ?? value,
               description: asString(inner.description),
               group,
+              kind: metaKind(inner),
             });
           }
         }
@@ -833,6 +845,7 @@ export function configOptions(raw: unknown): ConfigOption[] {
             name: asString(option.name) ?? value,
             description: asString(option.description),
             group: null,
+            kind: metaKind(option),
           });
         }
       }

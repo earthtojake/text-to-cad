@@ -215,7 +215,7 @@ function sessionRoot(session: BridgeSession): { directory: string; root: string 
 }
 
 /** The MCP servers every session gets: Hardcore's own. */
-export function mcpServersFor(session: Session): McpServer[] {
+export function mcpServersFor(session: Pick<Session, "id" | "projectId" | "cwd">): McpServer[] {
   if (!bridgeInstance?.address()) {
     return [];
   }

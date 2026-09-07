@@ -314,6 +314,111 @@ describe("SessionManager", () => {
     expect(released).toEqual([`${cwd}/wt`]);
   });
 
+  /* ------------------------------------------------------------------ */
+  /* P2: the model, the effort and the agent's own auto mode             */
+  /* ------------------------------------------------------------------ */
+
+  /** A stand-in for the option store, recording what the manager asked it. */
+  function optionRecorder(defaults: { model: string | null; effort: string | null }) {
+    const remembered: { agentId: string; ids: string[] }[] = [];
+    const choices: { agentId: string; configId: string; value: string | boolean }[] = [];
+    return {
+      remembered,
+      choices,
+      deps: {
+        defaults: () => defaults,
+        remember: (agentId: string, options: { id: string }[]) => {
+          remembered.push({ agentId, ids: options.map((option) => option.id) });
+        },
+        rememberChoice: (agentId: string, configId: string, value: string | boolean) => {
+          choices.push({ agentId, configId, value });
+        },
+      },
+    };
+  }
+
+  /** What the fake agent says it was configured with, in order (tests/fake-agent). */
+  async function appliedIn(manager: SessionManager, sessionId: string): Promise<string> {
+    await manager.prompt(sessionId, [{ type: "text", text: "applied" }]);
+    const parts = manager.state(sessionId)!.turns.at(-1)!.parts;
+    const text = parts.find((part) => part.type === "text");
+    return text?.type === "text" ? text.text : "";
+  }
+
+  it("applies the stored model before the effort, then the agent's own auto mode", async () => {
+    const recorder = optionRecorder({ model: "smart", effort: "high" });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+
+    // The order is the assertion: the model decides which effort levels the
+    // agent has, so an effort set first would be set against the old list.
+    // The mode is last, and is the fake's `auto_review` preset — not the
+    // `default` it starts in.
+    expect(await appliedIn(manager, session.id)).toBe("applied: model,reasoning_effort,mode:auto in auto");
+    const state = manager.state(session.id)!;
+    expect(state.configOptions.find((option) => option.id === "model")?.currentValue).toBe("smart");
+    expect(state.currentModeId).toBe("auto");
+    // And the session's own snapshot went to the cache.
+    expect(recorder.remembered.at(-1)?.ids).toContain("model");
+  });
+
+  it("sets nothing it does not have to: no defaults, and a mode already auto", async () => {
+    const recorder = optionRecorder({ model: null, effort: null });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    expect(await appliedIn(manager, session.id)).toBe("applied: mode:auto in auto");
+  });
+
+  it("ignores a stored model the agent no longer offers", async () => {
+    const recorder = optionRecorder({ model: "gpt-9", effort: null });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    expect(await appliedIn(manager, session.id)).toBe("applied: mode:auto in auto");
+  });
+
+  it("creates the session anyway when the agent refuses the model", async () => {
+    // The fake refuses `model` outright, the way an adapter refuses a model
+    // an account cannot use.
+    const refusing = { ...fakeProvider.launch, env: { FAKE_AGENT_REFUSE: "model" } };
+    (claude as { launch: AgentProvider["launch"] }).launch = refusing;
+    const recorder = optionRecorder({ model: "smart", effort: "high" });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    expect(session.status).toBe("idle");
+    // The effort and the mode still landed; only the model did not.
+    expect(await appliedIn(manager, session.id)).toBe("applied: reasoning_effort,mode:auto in auto");
+  });
+
+  it("remembers the model and effort a live session was switched to", async () => {
+    const recorder = optionRecorder({ model: null, effort: null });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    await manager.setConfigOption(session.id, "model", "smart");
+    await manager.setConfigOption(session.id, "reasoning_effort", "low");
+    expect(recorder.choices).toEqual([
+      { agentId: "claude-code", configId: "model", value: "smart" },
+      { agentId: "claude-code", configId: "reasoning_effort", value: "low" },
+    ]);
+  });
+
+  it("probes an agent for its config options without leaving a session behind", async () => {
+    // The detector in this file finds nothing on PATH, so the probe needs the
+    // launch override — which is also the rule: a probe never `npx`-fetches an
+    // adapter for an agent whose CLI is not on the machine.
+    const { manager, repo, cwd } = await setup({ launchOverride: () => fakeProvider.launch });
+    const options = await manager.probeOptions({ agentId: "claude-code", cwd, projectId: "p1" });
+    expect(options.map((option) => option.id)).toEqual(["model", "reasoning_effort"]);
+    expect(repo.list()).toHaveLength(0);
+    expect(manager.list()).toHaveLength(0);
+  });
+
+  it("refuses to probe an agent whose CLI is not on the machine", async () => {
+    const { manager, cwd } = await setup();
+    await expect(manager.probeOptions({ agentId: "claude-code", cwd, projectId: "p1" })).rejects.toThrow(
+      /not installed/,
+    );
+  });
+
   it("says what happened when a session's directory has gone", async () => {
     const { manager, cwd, broadcasts } = await setup();
     const session = await manager.create({
