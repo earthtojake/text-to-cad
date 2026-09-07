@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { GroupImperativeHandle, Layout, LayoutChangedMeta, PanelImperativeHandle } from "react-resizable-panels";
 
@@ -62,13 +62,21 @@ export function Shell() {
   const explorerCollapsed = !hasProject || explorerClosed;
 
   // Which pane is leftmost decides who makes room for the macOS traffic
-  // lights (`--titlebar-inset`, globals.css): the sidebar's header normally,
-  // and the session's title bar once the sidebar is hidden.
-  const leftmost = sidebarCollapsed ? "session" : "sidebar";
+  // lights (`--titlebar-inset`, globals.css): the sidebar's top strip
+  // normally, and the session's title bar once the sidebar is hidden.
+  //
+  // The preference is not the whole answer. The panel can also be squeezed to
+  // nothing by a drag — the library takes the width from the sidebar once the
+  // session is at its floor — and a sidebar that is not on screen cannot be
+  // the pane that keeps the corner clear, whatever the flag says. So the
+  // measurement wins when the two disagree (`onLayoutChanged` below).
+  const [sidebarOnScreen, setSidebarOnScreen] = useState(true);
+  const leftmost = sidebarCollapsed || !sidebarOnScreen ? "session" : "sidebar";
 
   // The collapsed flags are state, not a one-off gesture: the menu, the
-  // keyboard and a drag to zero all write the same flag, and the panels follow
-  // it. Doing this imperatively is what react-resizable-panels asks for.
+  // keyboard and the toggles write the flag, and the panels follow it. Doing
+  // this imperatively is what react-resizable-panels asks for. (A drag is the
+  // one thing that does not write it — see `sidebarOnScreen` above.)
   usePanelCollapsed(sidebarRef, sidebarCollapsed);
   usePanelCollapsed(explorerRef, explorerCollapsed);
 
@@ -163,6 +171,13 @@ export function Shell() {
   }, [applyLayout, hasProject]);
 
   const onLayoutChanged = (next: Layout, meta: LayoutChangedMeta) => {
+    // Whether the sidebar is on screen is read from every layout, whoever
+    // caused it: the preference is not the only way it goes away. Dragging the
+    // explorer's divider far enough left takes the width out of the sidebar
+    // once the session is on its floor, and the panel goes to zero with the
+    // flag still saying open — and then the pane that reserves the traffic
+    // lights' room is the one that is no longer there (`leftmost` above).
+    setSidebarOnScreen((next.sidebar ?? 0) > 0);
     // Only a drag or a resize keypress is worth writing: mount and the
     // programmatic collapse above also fire here, and persisting those would
     // overwrite the user's sizes with whatever the collapse produced.

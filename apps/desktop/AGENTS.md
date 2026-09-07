@@ -45,7 +45,15 @@ not.
 - **Launch in the background.** `HARDCORE_LAUNCH_INACTIVE=1 npx electron .`
   shows the window without taking focus (`showInactive` in
   `src/main/index.ts`), so the relaunch does not interrupt whatever they are
-  doing. Run it detached (`nohup … &`) with stdout to a log file.
+  doing. Run it detached (`nohup … &`) with stdout to a log file. Never a bare
+  `npx electron .`: that one takes the screen.
+- **A test launch shows nothing at all.** `npm run e2e` sets
+  `HARDCORE_E2E_HIDDEN=1` (`playwright.config.ts`) and main then skips `show()`
+  entirely, so a suite run — a dozen windows — never appears over the person's
+  screen. Playwright still drives the renderer over the DevTools protocol:
+  screenshots, boxes, the mouse and the keyboard all work on an unshown
+  window. Any scratch Playwright or Electron script you write sets the same
+  variable, or `HARDCORE_LAUNCH_INACTIVE=1` if it has to be visible.
 
 ## Rules that are easy to break here
 
@@ -95,6 +103,15 @@ not.
   already installed, so a phase should not have to touch `package.json`.
 - **No symlinks, ever** (repo-wide law: installers disagree about them and one
   drops them silently).
+- **Nothing goes in the traffic lights' corner.** On macOS AppKit paints the
+  close/minimise/zoom buttons over the top-left of the window, so the leftmost
+  pane's strip reserves `--titlebar-inset` and no control may start inside it.
+  The inset is measured from Chromium's window-controls overlay
+  (`src/renderer/lib/titlebar.ts`), not typed into a stylesheet; the constant
+  in `src/shared/titlebar.ts` is the fallback, and `tests/e2e/titlebar.spec.ts`
+  fails when the two drift or when any state puts a control in the corner. A
+  new full-window route reserves the room itself, the way Settings does.
+
 - **No bottom panel.** The terminal is a fourth explorer tab kind. Everything
   secondary lives in the one strip.
 - **The explorer strip belongs to the project, not to a session.** A person

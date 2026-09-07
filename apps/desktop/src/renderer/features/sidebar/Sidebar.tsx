@@ -39,6 +39,7 @@ export function Sidebar() {
           panel is gone: the control never moves (Codex's placement). */}
       <div
         className="app-drag flex shrink-0 items-center"
+        data-sidebar-titlebar
         style={{ height: "var(--titlebar-height)", paddingLeft: "calc(var(--titlebar-inset) + 0.75rem)" }}
       >
         <SidebarToggle />

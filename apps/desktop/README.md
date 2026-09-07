@@ -40,8 +40,12 @@ Three environment variables matter in development:
 | `HARDCORE_NO_PLUGIN_INSTALL` | Skip the launch-time install of the Hardcore plugin into the user's agents. `NODE_ENV=test` implies it. |
 | `HARDCORE_PREWARM` | Under `NODE_ENV=test` the project pre-warm (viewer child + cadgen daemon on project open) is off; `1` turns it on, as `tests/e2e/prewarm.spec.ts` does. |
 | `HARDCORE_FAKE_AGENT` | Launch this stdio ACP agent instead of whatever the registry says, for every provider. The session and git suites point it at `tests/fake-agent/index.mjs`; a session needs an agent to exist at all, and a real one would make the suite a test of somebody's login state. |
-`HARDCORE_LAUNCH_INACTIVE=1` shows the window without taking focus, for a
-relaunch from a script while the person is working in another app.
+Two more decide whether the window is seen at all:
+
+| Variable | Effect |
+| --- | --- |
+| `HARDCORE_LAUNCH_INACTIVE` | `1` shows the window without taking focus, for a relaunch from a script while the person is working in another app. |
+| `HARDCORE_E2E_HIDDEN` | `1` never shows it. `playwright.config.ts` sets this for the whole suite (see Windows nobody sees, below); `HARDCORE_E2E_HIDDEN=0 npm run e2e` puts the windows back on screen. |
 
 ## Telemetry
 
@@ -88,8 +92,28 @@ exist — in a worktree, symlink them from a checkout that has run `npm install`
 in each (those two links are fine; only this app's own `node_modules` must be
 real, see above).
 
+### Windows nobody sees
+
+The suite's windows are never shown. Every spec launches the real app, and a
+run is a dozen launches: shown, they take over the screen of whoever is at the
+machine, and `showInactive` only stops them stealing the focus. So
+`playwright.config.ts` sets `HARDCORE_E2E_HIDDEN=1` and main skips `show()`
+altogether (`ready-to-show` in `src/main/index.ts`). Nothing else changes:
+Playwright drives the renderer over the DevTools protocol, so screenshots
+(taken by Chromium, not by the compositor on screen), bounding boxes, the
+mouse, the keyboard and `toBeVisible()` all behave as they did, and the
+screenshots below are the proof — they come back with the app fully painted on
+a window that was never on screen. `webPreferences.backgroundThrottling` is off
+so an unshown window keeps its frames and its timers. To watch a spec instead,
+`HARDCORE_E2E_HIDDEN=0 npm run e2e`.
+
+A manual relaunch is unaffected: `HARDCORE_LAUNCH_INACTIVE=1 npx electron .`
+still shows the window, without taking focus.
+
 `npm run e2e` writes `tests/e2e/__screenshots__/`: the shell in both themes,
-Settings, one per explorer surface — `file-markdown-preview`,
+Settings, the traffic lights' corner in the two states that own it
+(`titlebar-sidebar`, `titlebar-session`, `titlebar-settings` — the reserved
+rectangle drawn over it), one per explorer surface — `file-markdown-preview`,
 `file-markdown-source`, `file-markdown-editable` (the dirty dot on an edited
 document), `file-markdown-raw-blocks` (raw HTML kept as its own bytes),
 `file-tree-deep`, `file-crumb-menu` (a folder crumb's menu, open),
@@ -247,7 +271,7 @@ Three panes, in pixels (`PANE_LIMITS` in `src/shared/types.ts`, read by
 and never less — its transcript and composer are a 720px column centred in
 it — and the explorer takes whatever is left. The two fixed widths are the
 persisted preference (`settings.layout`); the explorer's is a consequence.
-The strips along the top are 32px, and whichever pane is leftmost makes room
+The strips along the top are 36px (`--titlebar-height`), and whichever pane is leftmost makes room
 for the macOS traffic lights (`--titlebar-inset`, keyed off `data-leftmost` on
 the shell — `sidebar` or `session`, and nothing else). The two pane toggles never move on screen (Codex's rule): the sidebar's
 sits right after the traffic lights — in the sidebar's title strip while it
@@ -256,6 +280,32 @@ explorer's sits at the window's right edge — in the session's title bar while
 the explorer is shut, at the end of the explorer's tab strip once it is open.
 The session's title bar and the explorer's tab strip carry a rule beneath
 them; the projects panel does not.
+
+**The traffic lights' room is measured, not guessed.** Main pins the cluster
+where the layout expects it (`trafficLightPosition`, vertically centred in the
+strip) and asks Chromium for the region the window controls occupy
+(`titleBarOverlay`); the renderer reads that region — the Window Controls
+Overlay geometry, which is also the CSS `env(titlebar-area-x)` — and writes it
+into `--titlebar-inset` (`src/renderer/lib/titlebar.ts`), following it when it
+changes. Pinning fixes where the buttons *start*; how wide the cluster is
+belongs to AppKit and has moved between macOS releases, so the number in the
+CSS (84px, `.platform-mac` in `globals.css`, beside the constant in
+`src/shared/titlebar.ts`) is only what the first frame paints with and what a
+window without an overlay falls back to. Fullscreen takes the buttons away and
+the inset goes to 0 with them. Windows and Linux keep their native frame and
+reserve nothing.
+
+Nothing interactive may start inside that inset, in any state: the sidebar open
+or dragged to its narrowest, the sidebar hidden with the session's bar at the
+window's edge, the window at its minimum size, Settings (which replaces the
+shell and reserves the room in its own header), the palette over any of them.
+`tests/e2e/titlebar.spec.ts` walks those states and fails on a control whose box
+reaches into the corner, on a leftmost bar whose first control starts inside it,
+on a strip that is not a drag region or a control that did not opt out of it,
+and on the measurement drifting from the constant — the last one being how a
+macOS that draws the buttons differently announces itself. Its screenshots
+(`titlebar-*.png`) draw the reserved rectangle over the corner, because the
+lights themselves are AppKit's and never appear in a screenshot of the page.
 
 **The sidebar and the explorer collapse; the session never does.** Its panel
 is not `collapsible` at all, so 560px is a floor the explorer's divider stops
