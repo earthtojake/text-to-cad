@@ -70,7 +70,7 @@ composer), so every one of those sites also calls `onReference` when the host
 gives one, once per copied line:
 
 ```js
-{ file: "models/STEP/bracket.step", selector: "o1.2", text: "bracket.step#o1.2" }
+{ file: "parts/STEP/bracket.step", selector: "o1.2", text: "bracket.step#o1.2" }
 ```
 
 `file` is the served-root-relative path of the file the reference belongs to
@@ -197,10 +197,22 @@ The surface is written entirely against **shadcn's token names**:
 already defines every one of them, and the surface adopts the host's theme
 rather than bringing its own — that is the point of using them.
 
-It also reads a `--ui-*` layer that has no shadcn equivalent: panels, glass,
-control and status colours (`--ui-panel`, `--ui-glass-*`, `--ui-text*`,
-`--ui-border*`, `--ui-status-*`, `--ui-shadow-*` and friends). These are
-declarations, not runtime values, and nothing sets them for you.
+Every panel is opaque and painted with those tokens — the sheets and the
+sidebar with `--sidebar`, the top bar and the toolbars likewise, popovers and
+menus with `--popover` — so the surface looks like the host's own chrome and
+never shows the scene through itself.
+
+It also reads a small viewer-owned layer that has no shadcn equivalent: the
+surface ladders (`--surface-sunken`, `--surface-base`, `--surface-elevated`,
+`--surface-paper` and their `-hover` / `-selected` steps), the numbered
+backgrounds and borders (`--background-1..3`, `--border-1..2`,
+`--border-primary`), the foreground variants (`--foreground-inverse`,
+`--foreground-muted`, `--foreground-passive`), `--selection` and
+`--selection-foreground`, the status colours (`--foreground-success`,
+`--background-success`, `--border-success` and the error / warning / info
+triples), and the loading veil over the scene (`--ui-loading-overlay`,
+`--ui-loading-overlay-strong`). These are declarations, not runtime values,
+and nothing sets them for you.
 
 So the consumer's token layer needs:
 
@@ -208,12 +220,14 @@ So the consumer's token layer needs:
    putting `.dark` on the root element, which `shadcn init` already sets up.
 2. Its own shadcn palette (or the viewer's, copied), for both `:root` and
    `.dark`.
-3. The `--ui-*` declarations from the `:root` and `.dark` blocks of
+3. The viewer-owned declarations from the `:root` and `.dark` blocks of
    this package's `src/client/styles/globals.css`, copied verbatim.
 
-The `--ui-*` layer being viewer-only is the one real coupling here; a consumer
-that changes its shadcn palette and copies the `--ui-*` block unchanged gets a
-surface whose panels do not follow its theme.
+That layer being viewer-only is the one real coupling here. Every value in it
+is derived from the shadcn tokens above it, so a consumer that changes its
+shadcn palette and copies the block unchanged gets panels that follow its
+theme; a consumer that renames a shadcn token has to carry the rename into
+the copy.
 
 ## Laying out inside a host
 
@@ -224,10 +238,12 @@ the sheet. In the standalone app the two are the same box; in a host pane
 they are not, and a layout computed for the window's width would leave a
 narrow pane with no viewport at all. Two more things follow for a host:
 
-- The render pane is `absolute inset-0` inside the root, so it fills the
-  surface and nothing else; the standalone shell gives the root the whole
-  viewport (`h-svh`), a host gives it `h-full min-h-0` (the `min-h-0` beats
-  the sidebar wrapper's own `min-h-svh`).
+- The WebGL canvas is exactly the area between the sidebar and the sheet —
+  the render pane fills that column and nothing else, so the camera fits and
+  centres the model in what is visible, and a sheet opening or closing reaches
+  the scene as a plain resize of the canvas. The standalone shell gives the
+  root the whole viewport (`h-svh`), a host gives it `h-full min-h-0` (the
+  `min-h-0` beats the sidebar wrapper's own `min-h-svh`).
 - Compact mode's file sheet is a drawer. Standalone it portals to `body`,
   modal, and closes on an outside click, as a drawer should. Embedded it
   portals into the surface's root instead (`FileSheetPortalContext`, set by
@@ -256,9 +272,8 @@ narrow pane with no viewport at all. Two more things follow for a host:
   `data-theme-preference`, `style.color-scheme`), because the viewer's own
   popovers and toolbars portal out of the surface and read them there. With
   `colorScheme` the direction reverses: the host's theme resolves the CAD
-  "system" preset, and the surface writes only `data-glass-tone` and
-  `--cad-scene-backdrop` (which its glass chrome reads) to the root. A host
-  that did not pass it would find a STEP file flipping its whole window light.
+  "system" preset and the surface writes nothing to the root. A host that did
+  not pass it would find a STEP file flipping its whole window light.
 - **One tessellation cache provider per page.** `setTessellationCacheProvider`
   in `cadgen-js` is a module singleton, so a page showing two backends at once
   shares one provider. Register it with the origin you care about:

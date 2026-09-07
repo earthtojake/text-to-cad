@@ -46,7 +46,6 @@ export {
   normalizeHostSheetWidth,
   resolveHostLayoutMode
 } from "./hostLayout.js";
-export const CAD_WORKSPACE_TOP_BAR_HEIGHT = 44;
 export const DEFAULT_LARGE_FILE_STATE = Object.freeze({
   selectableTopologyEnabled: false
 });

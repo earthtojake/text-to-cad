@@ -58,9 +58,7 @@ export default function TutorialTip({
         sideOffset={8}
         collisionPadding={16}
         // Inverted against the scene so a first-run tip reads as an overlay on
-        // the app rather than another panel of it. The glass surface is opted
-        // out of rather than overridden — it sets its background !important.
-        glass={false}
+        // the app rather than another panel of it.
         className={cn(
           "w-[min(44rem,calc(100vw-2rem))] border-transparent bg-foreground px-3 py-2.5 text-background shadow-lg shadow-black/25",
           className

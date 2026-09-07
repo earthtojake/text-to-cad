@@ -28,7 +28,7 @@ export default function CadWorkspaceAssemblyInspectPill({
         type="button"
         variant="outline"
         size="sm"
-        className="cad-glass-popover pointer-events-auto max-w-[min(32rem,calc(100vw-6rem))] rounded-full px-3 py-1.5 text-xs text-popover-foreground shadow-sm"
+        className="bg-popover pointer-events-auto max-w-[min(32rem,calc(100vw-6rem))] rounded-full px-3 py-1.5 text-xs text-popover-foreground shadow-sm"
         onClick={onExit}
         aria-label={canGoBack ? `Back to parent assembly from ${partLabel}` : `Exit focus for ${partLabel}`}
         title={canGoBack ? `Back to parent assembly from ${partLabel}` : `Exit focus for ${partLabel}`}

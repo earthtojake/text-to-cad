@@ -28,7 +28,6 @@ import {
   createTabRecord,
   isDirectorySessionThemeSlice,
   readCadDirectorySessionState,
-  readCadWorkspaceGlassTone,
   readThemeSettings,
   readThemeSettingsState,
   readDirectoryThemeSettingsState,
@@ -1024,10 +1023,6 @@ test("workspace global session state stores global panel open state and only cus
     fileSheetWidthPx: null,
     theme: null
   });
-});
-
-test("workspace glass tone defaults to inferred light tone", () => {
-  assert.equal(readCadWorkspaceGlassTone(), "light");
 });
 
 // Theme state is one active id plus at most one custom settings blob. Presets

@@ -53,8 +53,6 @@ export function useViewerRuntime({
   getViewerThemeValue,
   getPixelRatioCap,
   applySceneBackground,
-  applyCameraFrameInsets,
-  frameInsetsRef,
   applyInitialPerspective,
   updateGridHelper,
   clearSceneGroup,
@@ -512,7 +510,6 @@ export function useViewerRuntime({
         renderer.setSize(w, h);
         syncCameraViewport(perspectiveCamera, w, h);
         syncCameraViewport(orthographicCamera, w, h);
-        applyCameraFrameInsets?.(runtimeRef.current, frameInsetsRef?.current, { updateProjection: false });
         syncScreenSpaceLineMaterials();
         syncDrawingCanvasSize(runtimeRef.current);
         renderDrawingOverlay();
@@ -820,8 +817,6 @@ export function useViewerRuntime({
         refreshRenderQuality: () => {
           applyRenderQuality(interactionState.pixelRatioCap, { force: true });
         },
-        applyCameraFrameInsets,
-        frameInsetsRef,
         onManualCameraInteraction,
         onViewportResize,
         registerScreenSpaceLineMaterial,
@@ -830,7 +825,6 @@ export function useViewerRuntime({
       syncDrawingCanvasSize(runtimeRef.current);
       renderDrawingOverlay();
       applySceneBackground(runtimeRef.current, viewerTheme);
-      applyCameraFrameInsets?.(runtimeRef.current, frameInsetsRef?.current);
       applyInitialPerspective?.(runtimeRef.current);
       window.addEventListener("keydown", handleKeyDown);
       window.addEventListener("keyup", handleKeyUp);
