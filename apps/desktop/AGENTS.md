@@ -19,7 +19,7 @@ phase is not an oversight — it is the seam.
 | --- | --- |
 | P0 (done) | the project itself, `src/shared`, `src/preload`, `src/main/{index,menu,window-state,telemetry,updater}.ts`, `src/main/db`, `src/main/ipc`, the shell, the command palette, Settings' frame, `tests/` |
 | P1 (done) | `src/main/agents`, `src/main/acp`, `src/shared/acp`, `src/shared/agents.ts`, `src/shared/ipc/{acp,agents}.ts`, `src/main/ipc/{acp,agents}.ts`, `src/renderer/state/{acp,agents}.ts`, `scripts/acp-harness.mjs`, `tests/fake-agent`, `tests/fixtures/acp` |
-| P2 | `src/renderer/features/session` — the transcript, activity rows, composer chips, permissions, plan card |
+| P2 | `src/renderer/features/session` — the transcript, activity rows, composer chips, permissions, plan card — plus what the model and effort chips are drawn from before a session exists: `src/shared/acp/options.ts`, `src/{shared,main}/ipc/agent-options.ts`, `src/main/acp/agent-options.ts`, `src/renderer/state/agent-options.ts` |
 | P3 (done) | `src/main/explorer`, `src/main/ipc/{explorer,cad}.ts`, `src/shared/ipc/{explorer,cad}.ts`, `src/renderer/features/explorer` — file tab, tree, Monaco, review, browser, terminal |
 | P4 (done) | `apps/viewer`'s `CadFileView` and its `viewerOrigin` threading; P3's file tab renders it |
 | P5 (done) | `src/main/cad/`, `src/main/ipc/{cad,runtime,plugins}.ts`, `resources/`, `skills/hardcore-app-use`, `scripts/{build,build-plugin,build-mcp,cad-resources,bundle-runtime}.mjs`, `src/renderer/state/cad-commands.ts`, the `reveal` field of the explorer store and tree |
