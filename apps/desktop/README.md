@@ -99,7 +99,8 @@ under three scopes, before and after a commit, the sidebar's worktree glyph,
 Settings' per-project worktree card), the session states in both themes with
 the composer at 1280×800 and 1680×1050, `session-new-model-menu` (the model
 menu open on the new-session screen, a group per installed provider),
-`session-attach-menu` (the composer's `+`), and `codex-open-file` from the one
+`session-attach-menu` (the composer's `+`), `session-context` (the context
+breakdown open over the composer, and `-light`), and `codex-open-file` from the one
 test that runs a real agent (below). Look at them; they are the cheapest review of
 whether the app still looks like an app, and every defect found in P3's
 explorer — a tree that did not reveal the open file, a `+` that scrolled out
@@ -247,7 +248,7 @@ bar.
 
 **The explorer is closed until something opens it**, and the session then
 fills the window. Opening a file, a review, a browser or a terminal shows it —
-from the tree, the files-changed pill, the command palette or an agent's
+from the tree, the tab strip, the command palette or an agent's
 `open_file` — because every one of those goes through `state/explorer.ts`'s
 `open`/`openFile`. That state is the explorer store's rather than
 `settings.layout`'s and is remembered **per project** (localStorage), and only
@@ -365,9 +366,25 @@ agent a person's plugins had installed — behind a settings glyph. The
 composer is four decisions, not a settings panel.
 
 How full the context window is sits **above** the box, on a line of fixed
-height, so typing cannot move it. What a turn cost in dollars is gone: it is
-a number nobody acts on mid-thread, and a price tag on a box someone is about
-to type into is a poor thing to put in front of them.
+height, so typing cannot move it. Hovering that line opens the breakdown
+(`features/session/ContextLine.tsx`), and a click keeps it open: the window
+as a bar with its numbers, the agent's own categories when it sends any, and
+the session's token accounting — fresh input, cache reads, cache writes,
+output, summed across the thread and for the last turn. That accounting used
+to be a chip at the end of every turn and a `22 files changed` pill over the
+composer; the first put a number nobody reads mid-thread into the transcript
+once per turn, and the second said what the Review tab says.
+
+No adapter sends the categories today — Claude's `usage_update` is
+`used`/`size`/`cost` with a `_claude/origin` `_meta`, Codex's is `used` and
+`size`, and ACP has no field for a breakdown — so the reducer reads one out
+of `_meta` (any key ending in `breakdown`) and the popover shows no
+categories at all when there are none. Claude Code's own `/context`
+categories are computed inside that CLI and never cross the protocol.
+
+What a turn cost in dollars is in neither place: it is a number nobody acts
+on mid-thread, and a price tag on a box someone is about to type into is a
+poor thing to put in front of them.
 
 ## The explorer strip
 

@@ -54,7 +54,7 @@ describe("reduce: turns and chunks", () => {
     expect(state.status).toBe("idle");
     expect(state.turns[1]?.endedAt).toBe(at);
     expect(state.turns[1]?.stopReason).toBe("end_turn");
-    expect(state.turns[1]?.parts.at(-1)?.type).toBe("usage");
+    expect(state.turns[1]?.parts.map((part) => part.type)).not.toContain("usage");
     expect(state.lastTurnUsage?.totalTokens).toBe(3);
   });
 
@@ -223,7 +223,7 @@ describe("reduce: session-level facts", () => {
     });
     expect(state.currentModeId).toBe("plan");
     expect(state.availableCommands).toEqual([{ name: "review", description: "Review", hint: "what" }]);
-    expect(state.contextUsage).toEqual({ used: 10, size: 100, cost: { amount: 0.5, currency: "USD" } });
+    expect(state.contextUsage).toEqual({ used: 10, size: 100, cost: { amount: 0.5, currency: "USD" }, breakdown: null });
     expect(state.title).toBe("Hello");
     expect(state.configOptions).toMatchObject([
       { id: "model", type: "select", currentValue: "a", options: [{ value: "a", name: "A", group: "Group" }] },
@@ -231,6 +231,90 @@ describe("reduce: session-level facts", () => {
     ]);
     // No turn was open, so none of it became a part.
     expect(state.turns).toEqual([]);
+  });
+
+  it("adds every turn's usage up and keeps the last turn's", () => {
+    let state = connected();
+    const turn = (index: number, usage: Record<string, number>) => {
+      state = reduce(state, { type: "prompt/start", turnId: `t${index}`, content: [{ type: "text", text: "hi" }], at });
+      state = reduce(state, {
+        type: "prompt/end",
+        stopReason: "end_turn",
+        usage: {
+          thoughtTokens: null,
+          cachedReadTokens: null,
+          cachedWriteTokens: null,
+          ...usage,
+        } as never,
+        at,
+      });
+    };
+    expect(state.sessionUsage).toBeNull();
+    turn(1, { totalTokens: 100, inputTokens: 10, outputTokens: 20, cachedReadTokens: 30, cachedWriteTokens: 40 });
+    turn(2, { totalTokens: 7, inputTokens: 1, outputTokens: 2 });
+    expect(state.sessionUsage).toEqual({
+      turns: 2,
+      totalTokens: 107,
+      inputTokens: 11,
+      outputTokens: 22,
+      // The second turn reported neither cache field, which counts as zero.
+      cachedReadTokens: 30,
+      cachedWriteTokens: 40,
+    });
+    expect(state.lastTurnUsage?.totalTokens).toBe(7);
+    // A turn that reported nothing leaves both alone.
+    state = reduce(state, { type: "prompt/start", turnId: "t3", content: [{ type: "text", text: "hi" }], at });
+    state = reduce(state, { type: "prompt/end", stopReason: "cancelled", usage: null, at });
+    expect(state.sessionUsage?.turns).toBe(2);
+    expect(state.lastTurnUsage?.totalTokens).toBe(7);
+  });
+
+  it("reads a category breakdown out of usage_update's _meta, and none when there is none", () => {
+    // No adapter sends one today, so `_meta` is where one can arrive at all:
+    // any key ending in `breakdown`, bare or namespaced the way the Claude
+    // adapter namespaces its own metadata.
+    let state = update(connected(), {
+      sessionUpdate: "usage_update",
+      used: 31_500,
+      size: 258_400,
+      _meta: {
+        contextBreakdown: [
+          { id: "system_prompt", name: "System prompt", tokens: 2_800 },
+          { id: "messages", name: "Messages", tokens: 11_500 },
+          // Nothing in it is nothing to draw.
+          { id: "empty", name: "Empty", tokens: 0 },
+        ],
+      },
+    });
+    expect(state.contextUsage?.breakdown).toEqual([
+      { id: "system_prompt", name: "System prompt", tokens: 2_800 },
+      { id: "messages", name: "Messages", tokens: 11_500 },
+    ]);
+
+    // A namespaced key and a plain name → tokens map read the same way.
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 10,
+      size: 100,
+      _meta: { "_claude/contextBreakdown": { "System prompt": 4, Messages: 6 } },
+    });
+    expect(state.contextUsage?.breakdown).toEqual([
+      { id: "System prompt", name: "System prompt", tokens: 4 },
+      { id: "Messages", name: "Messages", tokens: 6 },
+    ]);
+
+    // The real shape of both adapters: no `_meta`, or one about something
+    // else. The popover then shows no categories rather than inventing any.
+    state = update(state, { sessionUpdate: "usage_update", used: 32_658, size: 1_000_000 });
+    expect(state.contextUsage?.breakdown).toBeNull();
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 32_658,
+      size: 1_000_000,
+      cost: { amount: 0.28, currency: "USD" },
+      _meta: { "_claude/origin": { kind: "human" } },
+    });
+    expect(state.contextUsage?.breakdown).toBeNull();
   });
 
   it("keeps the latest plan as one part per turn", () => {
@@ -332,7 +416,7 @@ describe("reduce: recorded adapter transcripts", () => {
     expect(state.modes.map((mode) => mode.id)).toEqual(["default", "acceptEdits", "plan", "auto", "bypassPermissions"]);
     expect(state.configOptions.map((option) => option.id)).toEqual(["mode", "model", "effort", "agent"]);
     expect(state.availableCommands.length).toBeGreaterThan(0);
-    expect(state.contextUsage).toEqual({ used: 0, size: 1_000_000, cost: { amount: 0, currency: "USD" } });
+    expect(state.contextUsage).toEqual({ used: 0, size: 1_000_000, cost: { amount: 0, currency: "USD" }, breakdown: null });
     const agentTurn = state.turns.find((turn) => turn.role === "agent");
     expect(agentTurn?.parts.map((part) => part.type)).toEqual(["available_commands", "available_commands", "error"]);
   });

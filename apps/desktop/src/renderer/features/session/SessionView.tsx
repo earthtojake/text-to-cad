@@ -12,7 +12,7 @@ import type { Session } from "@shared/types";
 import { AuthPrompt } from "./AuthPrompt";
 import { Composer } from "./Composer";
 import { ApprovalChip, EffortChip, ModeChip, ModelChip } from "./ComposerChips";
-import { FilesChangedPill } from "./FilesChangedPill";
+import { ContextLine } from "./ContextLine";
 import { TranscriptScopeContext, type TranscriptScope } from "./links/PathLink";
 import { PlanCard } from "./PlanCard";
 import { SessionHeader } from "./SessionHeader";
@@ -21,7 +21,7 @@ import { isAuthError } from "./view";
 
 /**
  * One thread, one agent (plan §3): the header, the transcript, the pinned
- * plan and the files-changed pill above the composer, the composer.
+ * plan and the context line above the composer, the composer.
  *
  * The session's live state comes from the acp store; a session picked from
  * the index with no snapshot yet is loaded here, which is the "connecting"
@@ -172,8 +172,11 @@ export function SessionView({ session }: { session: Session }) {
           {state?.plan && state.plan.length > 0 ? (
             <PlanCard entries={state.plan} running={running} startedAt={planTurn?.startedAt ?? null} />
           ) : null}
-          <FilesChangedPill deletions={session.deletions} files={session.changedFiles} insertions={session.insertions} />
-          <ContextLine usage={state?.contextUsage ?? null} />
+          <ContextLine
+            lastTurnUsage={state?.lastTurnUsage ?? null}
+            sessionUsage={state?.sessionUsage ?? null}
+            usage={state?.contextUsage ?? null}
+          />
           <Composer
             autoFocus
             chips={chips?.leading ?? null}
@@ -210,31 +213,6 @@ function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void
         <RotateCcw className="size-3.5" />
         Reconnect
       </Button>
-    </div>
-  );
-}
-
-/**
- * How full the context window is, **above** the box and always the same
- * height. Under it, the line appeared with the first turn and moved every
- * time the composer grew a row, so the thing you were reading walked up the
- * screen as you typed. A reserved line does not move, and an empty one costs
- * ten pixels.
- *
- * What a turn cost in dollars is not here. It is a number nobody acts on
- * mid-thread, and a price tag on a box someone is about to type into is a
- * poor thing to put in front of them.
- */
-function ContextLine({ usage }: { usage: { used: number; size: number } | null }) {
-  const percent = usage && usage.size > 0 ? Math.min(100, Math.round((usage.used / usage.size) * 100)) : null;
-  return (
-    <div
-      className="flex h-3.5 items-center justify-end px-2 font-mono text-[10px] text-muted-foreground/70 tabular-nums"
-      data-context-line
-    >
-      {percent === null || !usage ? null : (
-        <span title={`${usage.used} of ${usage.size} tokens`}>{percent}% context</span>
-      )}
     </div>
   );
 }

@@ -5,13 +5,13 @@ import {
   commandLine,
   foldSummary,
   formatDuration,
-  formatTokens,
   isAuthError,
   isEffortOption,
   partsView,
   statusLine,
   turnView,
 } from "@renderer/features/session/view";
+import { formatTokens } from "@renderer/features/session/ContextLine";
 import { initialSessionState, type Part, type SessionState, type ToolCallPart } from "@shared/acp/types";
 
 import codexSession from "../../fixtures/acp/codex-session.jsonl?raw";
@@ -166,18 +166,24 @@ describe("the recorded Codex session", () => {
     expect(row?.part.stream).toContain("hello.txt");
   });
 
-  it("ends each agent turn with the usage chip", () => {
+  it("ends no turn with a token chip — the accounting is the context popover's", () => {
     for (const turn of state.turns.filter((candidate) => candidate.role === "agent")) {
-      expect(turnView(turn).at(-1)?.kind).toBe("usage");
+      expect(turnView(turn).map((item) => item.kind)).not.toContain("usage");
     }
+    // What the chips used to say is in the state the popover renders.
+    expect(state.sessionUsage).toMatchObject({ turns: 2, totalTokens: 38_895 });
+    expect(state.lastTurnUsage?.totalTokens).toBe(19_598);
   });
 });
 
 describe("formatting", () => {
   it("rounds token counts and durations", () => {
+    // One decimal: the popover is where somebody went to see the numbers.
     expect(formatTokens(950)).toBe("950");
-    expect(formatTokens(19_598)).toBe("20k");
+    expect(formatTokens(19_598)).toBe("19.6k");
     expect(formatTokens(1_500)).toBe("1.5k");
+    expect(formatTokens(258_400)).toBe("258.4k");
+    expect(formatTokens(1_000_000)).toBe("1M");
     expect(formatTokens(2_400_000)).toBe("2.4M");
     expect(formatDuration(4_200)).toBe("4s");
     expect(formatDuration(72_000)).toBe("1m 12s");

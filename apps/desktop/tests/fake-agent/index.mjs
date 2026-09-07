@@ -20,6 +20,11 @@
  *                 a CAD reference, one in backticks — for the transcript's
  *                 links
  *   "subagent"    the draft subagent_spawned / child update / state_update
+ *   "context"     a usage_update carrying a category breakdown of the window
+ *                 in `_meta.contextBreakdown` — the shape the context
+ *                 popover reads. No shipping adapter sends one (Claude's
+ *                 `usage_update` is used/size/cost, Codex's is used/size),
+ *                 so this is the only place the categories exist
  *   "thought"     an agent_thought_chunk first
  *   "slow"        wait until cancelled
  *   "crash"       exit(3) mid-turn
@@ -257,6 +262,23 @@ async function script(conn, params) {
     await send({ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "thinking…" } });
   }
 
+  if (text.includes("context")) {
+    await send({
+      sessionUpdate: "usage_update",
+      used: 31_500,
+      size: 258_400,
+      _meta: {
+        contextBreakdown: [
+          { id: "system_prompt", name: "System prompt", tokens: 2_800 },
+          { id: "system_tools", name: "System tools", tokens: 11_200 },
+          { id: "mcp_tools", name: "MCP tools", tokens: 4_100 },
+          { id: "memory_files", name: "Memory files", tokens: 1_900 },
+          { id: "messages", name: "Messages", tokens: 11_500 },
+        ],
+      },
+    });
+  }
+
   if (text.includes("slow")) {
     await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "working" } });
     await new Promise((resolve) => {
@@ -355,7 +377,10 @@ async function script(conn, params) {
   await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "k" } });
   return {
     stopReason: cancelled ? "cancelled" : "end_turn",
-    usage: { totalTokens: 12, inputTokens: 10, outputTokens: 2 },
+    // Both cache fields, the way Claude's adapter reports a turn: the
+    // context popover has a row per field and leaves out the ones nobody
+    // sent, so a fake that only ever sent two would only ever test two.
+    usage: { totalTokens: 12, inputTokens: 10, outputTokens: 2, cachedReadTokens: 6, cachedWriteTokens: 4 },
   };
 }
 

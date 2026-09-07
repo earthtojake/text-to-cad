@@ -65,7 +65,6 @@ test("Codex writes a file, runs a command and answers", async () => {
   await shoot("session-codex-streaming.png");
   await expect(view).toHaveAttribute("data-session-status", "idle", { timeout: 180_000 });
   await expect(page.locator("[data-chip=model]")).toBeVisible();
-  await expect(page.locator("[data-part=usage]").last()).toContainText("tokens");
   await expect(page.locator("[data-context-line]")).toContainText("context");
   await shoot("session-codex.png");
 

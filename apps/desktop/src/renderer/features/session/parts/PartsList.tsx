@@ -8,7 +8,7 @@ import type { Part } from "@shared/acp/types";
 
 import { PathLink } from "../links/PathLink";
 import { remarkPathLinks } from "../links/remarkPathLinks";
-import { formatTokens, partsView, type ViewItem } from "../view";
+import { partsView, type ViewItem } from "../view";
 
 /**
  * The transcript's markdown: Streamdown's own plugins, then the one that
@@ -29,7 +29,7 @@ import { ThoughtPart } from "./ThoughtPart";
 /**
  * The parts of an agent turn (or of a subagent, or of a Claude tool call's
  * children) as transcript rows: prose, thoughts, activity rows, permission
- * cards, subagent rows, errors, usage. The mapping itself is `view.ts`;
+ * cards, subagent rows, errors. The mapping itself is `view.ts`;
  * this is only the dispatch to components.
  */
 export function PartsList({
@@ -109,19 +109,6 @@ function ViewItemView({
               Retry
             </Button>
           ) : null}
-        </div>
-      );
-    case "usage":
-      return (
-        <div className="not-prose mt-1 flex justify-end" data-part="usage">
-          <span
-            className="rounded-full border px-2 py-px font-mono text-[10px] text-muted-foreground tabular-nums"
-            title={`${item.usage.inputTokens} in · ${item.usage.outputTokens} out${
-              item.usage.cachedReadTokens ? ` · ${item.usage.cachedReadTokens} cached` : ""
-            }`}
-          >
-            {formatTokens(item.usage.totalTokens)} tokens
-          </span>
         </div>
       );
     case "image":
