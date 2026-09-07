@@ -27,6 +27,7 @@ import {
   AppInfoSchema,
   ProjectSchema,
   SessionSchema,
+  SettingsPatchSchema,
   SettingsSchema,
   WindowStateSchema,
 } from "../types";
@@ -103,8 +104,14 @@ export const ipcContract = defineIpc({
 
   settings: {
     get: invoke(z.void(), SettingsSchema),
-    /** Merges a partial update and answers with the whole settings object. */
-    set: invoke(SettingsSchema.partial(), SettingsSchema),
+    /**
+     * Merges a patch and answers with the whole settings object. The request
+     * is `SettingsPatchSchema`, not `SettingsSchema.partial()` — see the
+     * comment on it: `.partial()` keeps the defaults, and a "patch" carrying
+     * every default is a patch that resets everything the caller did not
+     * mention.
+     */
+    set: invoke(SettingsPatchSchema, SettingsSchema),
   },
 
   window: {

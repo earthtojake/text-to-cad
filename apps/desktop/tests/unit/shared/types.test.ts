@@ -5,6 +5,7 @@ import {
   REVIEW_SCOPE_LABELS,
   ReviewScopeSchema,
   SessionSchema,
+  SettingsPatchSchema,
   SettingsSchema,
   defaultSettings,
   diffScopeFor,
@@ -73,6 +74,42 @@ describe("Settings", () => {
     expect(SettingsSchema.safeParse({ accentColor: "chartreuse" }).success).toBe(false);
     expect(SettingsSchema.safeParse({ uiFontSize: "enormous" }).success).toBe(false);
     expect(SettingsSchema.safeParse({ worktreeKeepLimit: 0 }).success).toBe(false);
+  });
+
+  /**
+   * The patch schema, and the reason it is not `SettingsSchema.partial()`.
+   *
+   * zod's `.partial()` leaves each field's `.default()` inside the optional
+   * wrapper and the default still fires for an absent key, so a "patch" of
+   * one field arrived at main as a whole settings object — and main merges a
+   * patch over what is stored, so one drag of the sidebar reset the theme,
+   * the worktree root and the default agent to their defaults. This is the
+   * assertion that would have caught it.
+   */
+  it("passes a patch through with only the fields it was given", () => {
+    expect(SettingsPatchSchema.parse({ theme: "dark" })).toEqual({ theme: "dark" });
+    expect(SettingsPatchSchema.parse({})).toEqual({});
+    expect(SettingsSchema.partial().parse({ theme: "dark" })).toHaveProperty("worktreeKeepLimit");
+  });
+
+  it("still validates the fields a patch does carry", () => {
+    expect(SettingsPatchSchema.safeParse({ theme: "chartreuse" }).success).toBe(false);
+    expect(SettingsPatchSchema.safeParse({ worktreeKeepLimit: 0 }).success).toBe(false);
+    // Only the *top* level is stripped of defaults, which is the level main
+    // merges at. A nested object arrives complete — the stores that write one
+    // (`setSidebar`, `setLayout`) always spread the current value first, so
+    // its own defaults never decide anything.
+    const patched = SettingsPatchSchema.parse({ sidebar: { status: "archived" } });
+    expect(Object.keys(patched)).toEqual(["sidebar"]);
+    expect(patched.sidebar).toEqual({
+      status: "archived",
+      environment: "all",
+      groupBy: "project",
+      sortBy: "activity",
+      showEmptyGroups: true,
+      showBranch: false,
+      collapsedProjects: [],
+    });
   });
 
   it("drops keys it does not know, which is how window state hides in the same table", () => {

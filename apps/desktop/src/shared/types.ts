@@ -103,6 +103,14 @@ export const SessionSchema = z.object({
   /** Hidden from the sidebar; the row and the agent's transcript both stay. */
   archived: z.boolean().default(false),
   /**
+   * Lifted out of its project into the sidebar's `Pinned` section.
+   *
+   * A flag on the session rather than a list in the settings: pinning is a
+   * fact about the thread, and a list of ids in a settings blob would be a
+   * second place a deleted session has to be forgotten from.
+   */
+  pinned: z.boolean().default(false),
+  /**
    * The commit the working tree was at when the session was created, and when
    * the newest turn began (plan §2, the review's `Last Turn ▾`).
    *
@@ -415,6 +423,57 @@ export const PaneLayoutSchema = z.object({
 });
 export type PaneLayout = z.infer<typeof PaneLayoutSchema>;
 
+/* -------------------------------------------------------------------------- */
+/* The sidebar's sections                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** Which sessions the sidebar lists at all. */
+export const SidebarStatusFilterSchema = z.enum(["active", "archived", "all"]);
+export type SidebarStatusFilter = z.infer<typeof SidebarStatusFilterSchema>;
+
+/**
+ * Where a thread runs, as the filter names it: `local` is the project's own
+ * directory (`none` and `checkout` alike — see `GIT_MODE_LABELS`) and
+ * `worktree` is a folder of its own.
+ */
+export const SidebarEnvironmentFilterSchema = z.enum(["all", "local", "worktree"]);
+export type SidebarEnvironmentFilter = z.infer<typeof SidebarEnvironmentFilterSchema>;
+
+/** A section per project, or one flat list. */
+export const SidebarGroupBySchema = z.enum(["project", "none"]);
+export type SidebarGroupBy = z.infer<typeof SidebarGroupBySchema>;
+
+/** The order inside a section. */
+export const SidebarSortBySchema = z.enum(["activity", "created", "name"]);
+export type SidebarSortBy = z.infer<typeof SidebarSortBySchema>;
+
+/**
+ * The sidebar's filter menu — one global answer, reached from any project's
+ * header (the sliders glyph).
+ *
+ * Global rather than per project on purpose: "show me the archived ones" is a
+ * question about how the list is read, not about one folder, and a person who
+ * set it on one header and found the next header unchanged would have to set
+ * it once per project.
+ *
+ * `collapsedProjects` is the only per-project value here, and it lives in the
+ * settings rather than in `state/projects.ts` so a collapsed section is still
+ * collapsed after a relaunch. There is one copy of it: the store reads this.
+ */
+export const SidebarSettingsSchema = z.object({
+  status: SidebarStatusFilterSchema.default("active"),
+  environment: SidebarEnvironmentFilterSchema.default("all"),
+  groupBy: SidebarGroupBySchema.default("project"),
+  sortBy: SidebarSortBySchema.default("activity"),
+  /** Keep a project's header on screen when nothing under it matches. */
+  showEmptyGroups: z.boolean().default(true),
+  /** A faint branch (or worktree) name after a session's title. */
+  showBranch: z.boolean().default(false),
+  /** Project ids whose section is collapsed to its header. */
+  collapsedProjects: z.array(z.string()).default([]),
+});
+export type SidebarSettings = z.infer<typeof SidebarSettingsSchema>;
+
 /**
  * Everything Settings can change. Every field has a default, so a settings row
  * written by an older build parses into a complete object and the app never
@@ -453,6 +512,7 @@ export const SettingsSchema = z.object({
   /** macOS vibrancy behind the sidebar. Off: it costs a compositing pass. */
   translucentSidebar: z.boolean().default(false),
   layout: PaneLayoutSchema.default(PaneLayoutSchema.parse({})),
+  sidebar: SidebarSettingsSchema.default(SidebarSettingsSchema.parse({})),
 
   /* Agents */
   defaultAgentId: z.string().nullable().default(null),
@@ -484,6 +544,38 @@ export type Settings = z.infer<typeof SettingsSchema>;
 /** The all-defaults settings object. */
 export function defaultSettings(): Settings {
   return SettingsSchema.parse({});
+}
+
+/**
+ * A settings **patch**: the fields the caller is actually changing, and
+ * nothing else.
+ *
+ * Not `SettingsSchema.partial()`, which is what this used to be and is a
+ * trap: zod's `.partial()` leaves each field's `.default()` inside the
+ * optional wrapper, and a default still fires for a key that is absent. So
+ * `SettingsSchema.partial().parse({ theme: "dark" })` answers with a *whole*
+ * settings object — and main, which merges a patch over what is stored,
+ * merged every other field's default over the person's settings. One drag of
+ * the sidebar reset the theme, the worktree root and the default agent.
+ *
+ * `removeDefault()` before `optional()` is the fix: an absent key stays
+ * absent. The one cast is because zod cannot express "the same shape with
+ * every field optional" without re-deriving the type, and
+ * `tests/unit/shared/types.test.ts` pins the behaviour the cast claims.
+ */
+export const SettingsPatchSchema = patchSchemaOf(SettingsSchema);
+
+function patchSchemaOf<Shape extends z.ZodRawShape>(
+  schema: z.ZodObject<Shape>,
+): z.ZodType<Partial<z.infer<z.ZodObject<Shape>>>> {
+  const fields = schema.shape as unknown as Record<string, z.ZodTypeAny>;
+  const shape = Object.fromEntries(
+    Object.entries(fields).map(([key, field]) => [
+      key,
+      (field instanceof z.ZodDefault ? (field.removeDefault() as z.ZodTypeAny) : field).optional(),
+    ]),
+  );
+  return z.object(shape) as unknown as z.ZodType<Partial<z.infer<z.ZodObject<Shape>>>>;
 }
 
 /* -------------------------------------------------------------------------- */
