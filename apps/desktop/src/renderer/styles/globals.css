@@ -290,23 +290,40 @@
  *
  * `--titlebar-inset` is the room the macOS traffic lights need on the left of
  * the leftmost pane; `platform-mac` is set by main.tsx before the first paint.
+ * Nothing interactive may start inside it.
  */
 :root {
   --titlebar-height: 36px;
   --titlebar-inset: 0px;
 }
 
+/* 84px is the room the pinned cluster needs, measured on macOS 15 as the x of
+ * Chromium's titlebar-area rect (src/shared/titlebar.ts, and the pin itself is
+ * `trafficLightPosition` in src/main/index.ts). It is the value the first
+ * frame paints with, and the fallback for a window with no overlay to read:
+ * `lib/titlebar.ts` overwrites this custom property with the measurement as
+ * soon as there is one, and again whenever the geometry changes — the buttons'
+ * width is AppKit's, not ours, and a number typed in here on its own would be
+ * a guess about every macOS release after this one. */
 .platform-mac {
-  --titlebar-inset: 68px;
+  --titlebar-inset: 84px;
 }
 
 /* Whichever pane is leftmost makes room for the traffic lights: the sidebar
- * does it in its own header, and when it is hidden the session's title bar
+ * does it in its own top strip, and when it is hidden the session's title bar
  * takes over. Those are the only two — the session pane is never collapsed,
  * so the explorer's strip is never at the window's left edge. Set by `Shell`
- * from the same collapsed flag that decides who is leftmost. */
+ * from the same collapsed flag that decides who is leftmost. Settings replaces
+ * the shell entirely and reserves the same room itself (SettingsRoute). */
 [data-shell][data-leftmost="session"] [data-session-header] {
   padding-left: calc(var(--titlebar-inset) + 0.75rem);
+}
+
+/* The sidebar's own strip holds nothing at its left end — its collapse sits at
+ * the right — but the room is reserved all the same, so that a control added
+ * to that row later cannot land under the lights. */
+[data-shell][data-leftmost="sidebar"] [data-sidebar-titlebar] {
+  padding-left: var(--titlebar-inset);
 }
 
 /* Scrollbars, thin and quiet. The transcript, the file tree and the settings

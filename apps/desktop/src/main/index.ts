@@ -19,6 +19,7 @@ import { armQuitDeadline } from "./quit-deadline";
 import { disposeSettingsEffects } from "./settings-effects";
 import { initTelemetry, track } from "./telemetry";
 import { initUpdater, stopUpdater } from "./updater";
+import { TITLEBAR_HEIGHT, trafficLightPosition } from "../shared/titlebar";
 import { restoreWindowState, trackWindowState } from "./window-state";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -65,8 +66,21 @@ function createWindow() {
     // sidebar's top strip (--titlebar-height in globals.css). Other platforms
     // keep their native frame, because a hand-drawn one there is a liability.
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
-    // Centred in a 32px strip (12px lights: 10 above, 10 below).
-    trafficLightPosition: process.platform === "darwin" ? { x: 12, y: 12 } : undefined,
+    // Pinned, and vertically centred in the strip (src/shared/titlebar.ts).
+    // Pinning fixes where the cluster starts; how wide it is stays AppKit's
+    // business, which is why the renderer measures the rest rather than
+    // trusting a number typed into the CSS.
+    ...(process.platform === "darwin"
+      ? {
+          trafficLightPosition: trafficLightPosition(),
+          // Not a bar Electron draws — on macOS this only asks Chromium to
+          // publish the region the window controls occupy, as the Window
+          // Controls Overlay geometry. `src/renderer/lib/titlebar.ts` reads it
+          // and sets `--titlebar-inset` from it, so the leftmost pane's first
+          // control clears the lights on a macOS that draws them wider.
+          titleBarOverlay: { height: TITLEBAR_HEIGHT },
+        }
+      : {}),
     backgroundColor: "#0a0a0a",
     // Windows and Linux take the window's icon from here when unpackaged; a
     // packaged app has it in the executable and the desktop entry.
@@ -84,6 +98,11 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,
+      // A window that is not on screen is still a window the app is working
+      // in: an agent's stream, a terminal and the e2e suite's unshown window
+      // (above) all need frames and unthrottled timers. Chromium slows both
+      // to a crawl for a hidden window unless told otherwise.
+      backgroundThrottling: false,
       // The explorer's browser tab is an Electron `<webview>` (plan §7). The
       // tag is off by default and has to be asked for; the guest it creates
       // is its own process with node integration off, which is why a browser
@@ -97,9 +116,23 @@ function createWindow() {
   }
   trackWindowState(window);
 
-  // A launch from a terminal or a script may ask to stay out of the way:
-  // the window appears without taking focus from whatever is in front.
+  // How the window arrives, in the three ways this app is launched (README,
+  // "Windows nobody sees"):
+  //
+  // - `HARDCORE_E2E_HIDDEN=1`: never shown at all. The e2e suite drives the
+  //   renderer through the DevTools protocol, which does not need a window on
+  //   screen — and a suite that flashed one over the machine's screen for
+  //   every spec is a suite nobody runs while working. `backgroundThrottling`
+  //   is off below so the unshown window keeps painting and its timers keep
+  //   real time.
+  // - `HARDCORE_LAUNCH_INACTIVE=1`: shown, but without taking focus, for a
+  //   relaunch from a script while the person is working in another app.
+  // - otherwise: shown and focused, which is what a person double-clicking
+  //   the app asked for.
   window.once("ready-to-show", () => {
+    if (process.env.HARDCORE_E2E_HIDDEN === "1") {
+      return;
+    }
     if (process.env.HARDCORE_LAUNCH_INACTIVE === "1") {
       window.showInactive();
     } else {

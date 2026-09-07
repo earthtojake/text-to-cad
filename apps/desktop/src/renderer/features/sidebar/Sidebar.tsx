@@ -36,7 +36,11 @@ export function Sidebar() {
       {/* The traffic lights' strip on macOS — the row the session's and the
           explorer's bars share — with the panel's own collapse at its right
           end, level with those bars' controls. */}
-      <div className="app-drag flex shrink-0 items-center justify-end pr-1" style={{ height: "var(--titlebar-height)" }}>
+      <div
+        className="app-drag flex shrink-0 items-center justify-end pr-1"
+        data-sidebar-titlebar
+        style={{ height: "var(--titlebar-height)" }}
+      >
         <SidebarToggle />
       </div>
 
