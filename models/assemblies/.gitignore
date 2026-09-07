@@ -12,5 +12,6 @@
 !/GLB/imported/
 /3MF/*
 !/3MF/imported/
+/BREP/
 /tmp/
 __pycache__/

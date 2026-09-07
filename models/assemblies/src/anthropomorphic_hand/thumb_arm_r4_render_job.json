@@ -1,0 +1,20 @@
+{
+  "input": "models/assemblies/STEP/anthropomorphic_hand/thumb_reaction_arm_clearance_r4.step",
+  "outputs": [
+    {
+      "path": "tmp/anthropomorphic_hand/thumb_arm_r4_iso.png",
+      "camera": "iso"
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/thumb_arm_r4_back.png",
+      "camera": "225:30"
+    }
+  ],
+  "render": {
+    "sizeProfile": "presentation",
+    "tessellation": {
+      "chordTolerance": 0.003,
+      "angleTolerance": 0.18
+    }
+  }
+}
