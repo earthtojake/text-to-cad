@@ -10,8 +10,8 @@ import {
 // The framed area of a viewport with a top bar and no side sheets, then the same
 // window with a sheet open. Only the ratio between two scales is used, so these
 // read as "how much further back the camera has to sit than it did before".
-const wide = { aspect: 1120 / 756, height: 800, framedHeight: 756 };
-const narrow = { aspect: 355 / 756, height: 800, framedHeight: 756 };
+const wide = { aspect: 1120 / 756 };
+const narrow = { aspect: 355 / 756 };
 
 test("perspective fit scale is fixed while the framed area stays wider than tall", () => {
   // The vertical field of view is what frames the model, so extra width changes
@@ -30,10 +30,10 @@ test("perspective fit scale grows once the framed area is taller than wide", () 
   assert.ok(half / viewportFitScale({ fov: 48, aspect: 1 }) > 1.8);
 });
 
-test("orthographic fit scale tracks the smaller framed dimension", () => {
-  // R * height / min(framedWidth, framedHeight), expressed per unit radius.
-  assert.ok(Math.abs(viewportFitScale({ orthographic: true, ...wide }) - 800 / 756) < 1e-9);
-  assert.ok(Math.abs(viewportFitScale({ orthographic: true, ...narrow }) - 800 / 355) < 1e-9);
+test("orthographic fit scale tracks the smaller viewport dimension", () => {
+  // R / min(width, height) per unit height, expressed per unit radius.
+  assert.ok(Math.abs(viewportFitScale({ orthographic: true, ...wide }) - 1) < 1e-9);
+  assert.ok(Math.abs(viewportFitScale({ orthographic: true, ...narrow }) - 756 / 355) < 1e-9);
 });
 
 test("closing a sheet undoes the scale change that opening it made", () => {
@@ -50,8 +50,8 @@ test("degenerate viewports fall back instead of producing a non-finite scale", (
     {},
     { aspect: 0 },
     { aspect: Number.NaN },
-    { orthographic: true, aspect: 0, height: 0, framedHeight: 0 },
-    { orthographic: true, aspect: Number.NaN, height: Number.NaN, framedHeight: Number.NaN },
+    { orthographic: true, aspect: 0 },
+    { orthographic: true, aspect: Number.NaN },
     { fov: 0, aspect: 1 },
     { fov: Number.NaN, aspect: 1 }
   ]) {

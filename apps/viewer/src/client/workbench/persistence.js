@@ -2,9 +2,7 @@ import { clonePerspectiveSnapshot, perspectiveSnapshotEqual } from "cadgen-js/li
 import {
   CUSTOM_THEME_ID,
   DEFAULT_THEME_ID,
-  DEFAULT_THEME_PRESET,
   getThemePresetIdForSettings,
-  inferThemeSettingsSceneTone,
   normalizeThemeId,
   normalizeThemeSettings,
   resolveThemeSettingsForId
@@ -22,7 +20,6 @@ export const CAD_DIRECTORY_SESSION_STORAGE_KEY = `cad-viewer:directory-session:v
 export const CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH = 280;
 export const CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH = 365;
 export const CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH = 280;
-export const CAD_WORKSPACE_DEFAULT_GLASS_TONE = inferThemeSettingsSceneTone(DEFAULT_THEME_PRESET.settings);
 
 function hasOwn(object, key) {
   return Object.prototype.hasOwnProperty.call(object, key);
@@ -823,18 +820,6 @@ export function readDirectoryThemeSettingsState(options = {}) {
   return createThemeState(sessionTheme.themeId, sessionTheme.custom, resolveOptions);
 }
 
-
-export function normalizeCadWorkspaceGlassTone(value, fallback = CAD_WORKSPACE_DEFAULT_GLASS_TONE) {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (normalized === "dark" || normalized === "light") {
-    return normalized;
-  }
-  return fallback === "light" ? "light" : "dark";
-}
-
-export function readCadWorkspaceGlassTone() {
-  return CAD_WORKSPACE_DEFAULT_GLASS_TONE;
-}
 
 export function createTabSnapshot(overrides = {}) {
   return normalizeSchemaState(TAB_STATE_SCHEMA, overrides || {});

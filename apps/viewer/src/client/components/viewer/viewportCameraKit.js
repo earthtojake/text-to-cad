@@ -102,26 +102,13 @@ export function isTrackpadLikeWheelEvent(event) {
   return isPinchWheelEvent(event) || (event.deltaMode === 0 && Math.abs(event.deltaY) < 20);
 }
 
-export function normalizeViewportFrameInsets(value = {}) {
-  const normalizeInset = (inset) => {
-    const numericInset = Number(inset);
-    return Number.isFinite(numericInset) ? Math.max(0, numericInset) : 0;
-  };
-  return {
-    top: normalizeInset(value?.top),
-    right: normalizeInset(value?.right),
-    bottom: normalizeInset(value?.bottom),
-    left: normalizeInset(value?.left)
-  };
-}
-
 // How far back the camera has to sit (perspective) or how tall the orthographic
 // frustum has to be, per unit of model radius, for the model to be framed by the
 // given viewport. The absolute value is only meaningful against a radius; what
 // callers use is the RATIO between two viewports. Rescaling the camera by that
-// ratio keeps the model the same fraction of the framed area when the window
-// resizes or a side sheet opens or closes, which is what stops a wide model from
-// being cropped by a narrowing viewport.
+// ratio keeps the model the same fraction of the viewport when the canvas
+// resizes — the window, or a side sheet opening or closing beside it — which is
+// what stops a wide model from being cropped by a narrowing viewport.
 //
 // The formulas mirror getFitDistanceForBoundingSphere and
 // getOrthographicHalfHeightForBoundingSphere in CadViewer, so a viewport change
@@ -130,15 +117,11 @@ export function normalizeViewportFrameInsets(value = {}) {
 export function viewportFitScale({
   orthographic = false,
   fov = 48,
-  aspect = 1,
-  height = 1,
-  framedHeight = 1
+  aspect = 1
 } = {}) {
   const safeAspect = Math.max(finiteNumber(aspect, 1), 1e-3);
   if (orthographic) {
-    const safeHeight = Math.max(finiteNumber(height, 1), 1);
-    const safeFramedHeight = Math.max(finiteNumber(framedHeight, safeHeight), 1);
-    return (1 / Math.min(safeAspect, 1)) * (safeHeight / safeFramedHeight);
+    return 1 / Math.min(safeAspect, 1);
   }
   const verticalHalfFov = (Math.max(finiteNumber(fov, 48), 1e-3) * Math.PI) / 360;
   const horizontalHalfFov = Math.atan(Math.tan(verticalHalfFov) * safeAspect);

@@ -64,7 +64,7 @@ const SheetContent = React.forwardRef(function SheetContent({
         ref={ref}
         data-slot="sheet-content"
         className={cn(
-          "cad-glass-popover fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500",
+          "bg-popover fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500",
           side === "right" &&
             "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
           side === "left" &&

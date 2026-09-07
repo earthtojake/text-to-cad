@@ -1963,24 +1963,6 @@ export function inferThemeSettingsSceneTone(themeSettings, options = {}) {
   return dominantBackgroundLuminance(normalized) >= 0.3 ? "light" : "dark";
 }
 
-// The dominant backdrop color as a hex value, for UI chrome that tints toward
-// the active scene (glass surfaces). Mirrors the gradient handling of
-// dominantBackgroundLuminance.
-export function resolveThemeSettingsBackdropColor(themeSettings = {}, options = {}) {
-  const normalized = resolveThemeSettingsForColorMode(themeSettings, options);
-  const background = normalized.background || {};
-  if (background.type === "linear") {
-    return mixHexColors(background.linearStart, background.linearEnd);
-  }
-  if (background.type === "radial") {
-    return mixHexColors(background.radialInner, background.radialOuter);
-  }
-  return normalizeColor(
-    background.solidColor,
-    DEFAULT_THEME_SETTINGS?.background?.solidColor || "#ffffff"
-  );
-}
-
 export function getEnvironmentPresetById(presetId) {
   return ENVIRONMENT_PRESETS.find((preset) => preset.id === presetId) || ENVIRONMENT_PRESETS[0];
 }

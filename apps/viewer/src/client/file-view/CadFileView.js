@@ -71,7 +71,6 @@ import {
   getThemePresetIdForSettings,
   inferThemeSettingsSceneTone,
   normalizeThemeSettings,
-  resolveThemeSettingsBackdropColor,
   resolveThemeSettingsForColorMode
 } from "cadgen-js/lib/themeSettings";
 import {
@@ -301,7 +300,6 @@ import { normalizeViewerOrigin } from "./viewerOrigin.js";
 import { installViewerTessellationCacheProvider } from "./hostTessellationCache.js";
 import {
   ARTIFACT_GENERATING_LABEL,
-  CAD_WORKSPACE_TOP_BAR_HEIGHT,
   DEFAULT_LARGE_FILE_STATE,
   DEFAULT_SIDEBAR_WIDTH,
   DESKTOP_SIDEBAR_MAX_WIDTH,
@@ -625,11 +623,10 @@ function CadFileViewSurface({
     }
     return normalizeDisplayEdgeSettings();
   }, [resolvedThemeSettings]);
-  // App light/dark is inferred from the active theme's dominant background color
-  // (not a user preference). The nav/sidebars float over the transparent
-  // viewport, so their contrast must track whatever canvas sits behind them.
-  const cadWorkspaceGlassTone = useMemo(() => inferThemeSettingsSceneTone(resolvedThemeSettings), [resolvedThemeSettings]);
-  const resolvedColorSchemeMode = cadWorkspaceGlassTone === "dark"
+  // App light/dark is inferred from the active theme's dominant background
+  // color (not a user preference), so the chrome beside a dark scene is dark.
+  const sceneTone = useMemo(() => inferThemeSettingsSceneTone(resolvedThemeSettings), [resolvedThemeSettings]);
+  const resolvedColorSchemeMode = sceneTone === "dark"
     ? DARK_COLOR_SCHEME_ID
     : LIGHT_COLOR_SCHEME_ID;
   const updateDisplaySettings = useCallback((nextValue) => {
@@ -3129,25 +3126,6 @@ function CadFileViewSurface({
     }
     applyColorSchemeToDocument(resolvedColorSchemeMode, document.documentElement);
   }, [hostPrefersDark, resolvedColorSchemeMode]);
-
-  useEffect(() => {
-    document.documentElement.dataset.glassTone = cadWorkspaceGlassTone;
-    return () => {
-      delete document.documentElement.dataset.glassTone;
-    };
-  }, [cadWorkspaceGlassTone]);
-
-  // Glass chrome (navbar, toolbars, popovers) tints toward the active scene
-  // backdrop so the UI blends with whichever theme is selected.
-  useEffect(() => {
-    document.documentElement.style.setProperty(
-      "--cad-scene-backdrop",
-      resolveThemeSettingsBackdropColor(resolvedThemeSettings)
-    );
-    return () => {
-      document.documentElement.style.removeProperty("--cad-scene-backdrop");
-    };
-  }, [resolvedThemeSettings]);
 
   useEffect(() => {
     const handleStorage = (event) => {
@@ -6553,12 +6531,6 @@ function CadFileViewSurface({
         sheetMaxWidth: DESKTOP_TAB_TOOLS_MAX_WIDTH
       }).sidebarWidth
     : DEFAULT_SIDEBAR_WIDTH;
-  const viewportFrameInsets = {
-    top: previewMode ? 0 : CAD_WORKSPACE_TOP_BAR_HEIGHT,
-    right: activeSheetWidth,
-    bottom: 0,
-    left: activeSidebarWidth
-  };
   const floatingCadToolbarPosition = {
     top: "14px",
     right: "14px"
@@ -6593,8 +6565,7 @@ function CadFileViewSurface({
 
   // What an injected chrome slot is handed. This is the whole contract between
   // the file surface and a host's top bar / file sidebar / home screen: the
-  // surface owns the state (the viewport's insets are computed from it) and the
-  // host decides what to draw with it. Adding a field here is the only way to
+  // surface owns the state and the host decides what to draw with it. Adding a field here is the only way to
   // widen that contract.
   const chrome = {
     origin,
@@ -6641,118 +6612,121 @@ function CadFileViewSurface({
       onOpenChange={handleSidebarOpenChange}
       mobileOpen={effectiveSidebarOpen}
       onMobileOpenChange={handleSidebarOpenChange}
-      data-glass-tone={cadWorkspaceGlassTone}
       style={{ "--sidebar-width": `${sidebarShellWidth}px` }}
-      className={cn("relative h-svh overflow-hidden bg-transparent", className)}
+      className={cn("relative h-svh overflow-hidden bg-background", className)}
       ref={hostRef}
     >
-      <div className="absolute inset-0 z-0">
-        <CadRenderPane
-          viewerRef={viewerRef}
-          renderFormat={effectiveRenderFormat}
-          drawingThicknessScale={drawingThicknessScale}
-          planMode={selectedEntryIsDrawing && drawingViewMode === "2d"}
-          bendAxisX={selectedEntryIsDrawing ? selectedEntry?.bendAxisX || null : null}
-          drawingBendLines={selectedEntryIsDrawing ? drawingBendLines : null}
-          bendAnglesRad={selectedEntryIsDrawing ? drawingBendAnglesRad : null}
-          drawingBends={selectedEntryIsDrawing ? drawingBends : null}
-          drawingBendStyle={selectedEntryIsDrawing ? drawingBendStyle : "boxed"}
-          drawingBendRadiusMm={selectedEntryIsDrawing ? drawingBendRadiusMm : 0}
-          drawingKFactor={selectedEntryIsDrawing ? drawingKFactor : DXF_DEFAULT_KFACTOR}
-          drawingHiddenLayers={selectedEntryIsDrawing ? drawingHiddenLayers : null}
-          drawingOrientation={selectedEntryIsDrawing ? drawingOrientation : null}
-          drawingMaterialColor={selectedEntryIsDrawing ? dxfMaterialPreset(drawingMaterial).colorHex : null}
-          drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
-          drawingIsDocument={selectedEntryIsDrawingDocument}
-          drawingThicknessMm={selectedEntryIsDrawing ? drawingThicknessMm : 0}
-          onCameraZoomPercentChange={setViewerZoomPercent}
-          renderPartsIndividually={
-            isUrdfView || Boolean(selectedStepParameterRuntime) || Boolean(selectedAnimationRuntime)
-          }
-          stepParameters={selectedStepParameterRuntime}
-          stepAnimation={selectedAnimationRuntime}
-          selectedMeshData={selectedMeshData}
-          selectedKey={selectedKey}
-          missingFileRef={missingFileRef}
-          viewerServerInfo={viewerServerInfo}
-          viewerPerspective={viewerPerspective}
-          viewerPerspectiveRef={activePerspectiveRef}
-          themeSettings={resolvedThemeSettings}
-          displaySettings={renderDisplaySettings}
-          previewMode={previewMode}
-          viewportFrameInsets={viewportFrameInsets}
-          viewerLoading={viewerLoading}
-          viewerAlert={viewerAlert}
-          stepUpdateInProgress={effectiveRenderFormat === RENDER_FORMAT.STEP && stepUpdateInProgress}
-          referenceSelectionPending={referenceSelectionPending}
-          referenceSelectionUnavailable={referenceSelectionUnavailable}
-          referenceSelectionDeferred={selectedTopologyDeferredByCost}
-          viewPlaneOffsetRight={viewportFrameInsets.right + 16}
-          viewerMode={viewerMode}
-          assemblyPickingActive={viewerInAssemblyMode}
-          assemblyParts={viewerAssemblyRenderParts}
-          hiddenPartIds={viewerHiddenPartIds}
-          selectedPartIds={viewerSelectedPartIds}
-          hoveredPartId={viewerHoveredPartIds}
-          hoveredReferenceId={effectiveHoveredReferenceId}
-          selectedReferenceIds={selectedReferenceIds}
-          selectorRuntime={effectiveSelectorRuntime}
-          displayEdgeRuntime={selectedDisplayEdgeRuntime}
-          pickableFaces={viewerPickableFaces}
-          pickableEdges={viewerPickableEdges}
-          pickableVertices={viewerPickableVertices}
-          focusedPartIds={viewerFocusedPartIds}
-          boundsAnimationActive={robotBoundsAnimationActive}
-          drawToolActive={drawToolActive}
-          measureModeActive={measureModeActive}
-          drawingTool={drawingTool}
-          drawingStrokes={drawingStrokes}
-          handleDrawingStrokesChange={handleDrawingStrokesChange}
-          handlePerspectiveChange={handlePerspectiveChange}
-          handleModelHoverChange={handleModelHoverChange}
-          handleModelReferenceActivate={handleModelReferenceActivate}
-          handleModelReferenceDoubleActivate={handleModelReferenceDoubleActivate}
-          handleModelReferenceContext={handleModelReferenceContext}
-          onMeasurePick={handleMeasurePick}
-          onMeasureHoverPoint={handleMeasureHoverPoint}
-          activeMeasurementId={activeMeasureId}
-          measureState={measureRulerState}
-          viewerContextMenu={viewerContextMenu}
-          onViewerContextMenuClose={closeViewerContextMenu}
-          onViewerContextMenuCopyReference={copyViewerContextMenuReference}
-          onViewerContextMenuSelect={selectViewerContextMenuNode}
-          onViewerContextMenuFocus={focusViewerContextMenuNode}
-          onViewerContextMenuExitAllIsolate={handleExitIsolate}
-          onViewerContextMenuHideOther={hideOtherViewerContextMenuNode}
-          onViewerContextMenuHideAll={hideAllViewerContextMenuNodes}
-          onViewerContextMenuHide={hideViewerContextMenuNode}
-          onViewerContextMenuReveal={revealViewerContextMenuNode}
-          onViewerContextMenuResetZoom={resetZoomViewerContextMenu}
-          onViewerContextMenuZoomToFit={zoomToFitViewerContextMenu}
-          onViewerContextMenuExpandSelected={expandSelectedViewerContextMenuNodes}
-          onViewerContextMenuCollapseSelected={collapseSelectedViewerContextMenuNodes}
-          onViewerContextMenuExpandAll={expandAllViewerContextMenuNodes}
-          onViewerContextMenuCollapseAll={collapseAllViewerContextMenuNodes}
-          handleViewerAlertChange={handleViewerAlertChange}
-          handleStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
-          selectionCount={selectionCount}
-          copyButtonLabel={copyButtonLabel}
-          copyButtonCountLabel={copyButtonCountLabel}
-          copyReferenceTipActive={copyReferenceTipActive}
-          panToolActive={panToolActive}
-          handleCopySelection={handleCopySelection}
-          handleScreenshotCopy={handleScreenshotCopy}
-        />
-      </div>
-
-      <SidebarInset className="pointer-events-none relative z-10 h-full min-w-0 overflow-hidden bg-transparent">
+      <SidebarInset className="relative z-10 h-full min-w-0 overflow-hidden bg-transparent">
         {renderTopBar ? renderTopBar(chrome) : null}
 
-        <div className="pointer-events-none relative min-h-0 flex-1 overflow-hidden">
+        <div className="relative min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full min-w-0">
             {renderSidebar ? renderSidebar(chrome) : null}
 
+            {/* The render pane's box: the column between the sidebar and the
+                sheet, and nothing else. The WebGL canvas fills exactly this
+                area, so a camera fit centres in what is visible and a sheet
+                opening or closing reaches the scene as a plain resize. The
+                overlays after it (toolbar, home, loading) sit above it in the
+                same box and let the pointer through to it between them. */}
             <div className="pointer-events-none relative min-w-0 flex-1 overflow-hidden">
+              <div className="pointer-events-auto absolute inset-0 z-0">
+                <CadRenderPane
+                  viewerRef={viewerRef}
+                  renderFormat={effectiveRenderFormat}
+                  drawingThicknessScale={drawingThicknessScale}
+                  planMode={selectedEntryIsDrawing && drawingViewMode === "2d"}
+                  bendAxisX={selectedEntryIsDrawing ? selectedEntry?.bendAxisX || null : null}
+                  drawingBendLines={selectedEntryIsDrawing ? drawingBendLines : null}
+                  bendAnglesRad={selectedEntryIsDrawing ? drawingBendAnglesRad : null}
+                  drawingBends={selectedEntryIsDrawing ? drawingBends : null}
+                  drawingBendStyle={selectedEntryIsDrawing ? drawingBendStyle : "boxed"}
+                  drawingBendRadiusMm={selectedEntryIsDrawing ? drawingBendRadiusMm : 0}
+                  drawingKFactor={selectedEntryIsDrawing ? drawingKFactor : DXF_DEFAULT_KFACTOR}
+                  drawingHiddenLayers={selectedEntryIsDrawing ? drawingHiddenLayers : null}
+                  drawingOrientation={selectedEntryIsDrawing ? drawingOrientation : null}
+                  drawingMaterialColor={selectedEntryIsDrawing ? dxfMaterialPreset(drawingMaterial).colorHex : null}
+                  drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
+                  drawingIsDocument={selectedEntryIsDrawingDocument}
+                  drawingThicknessMm={selectedEntryIsDrawing ? drawingThicknessMm : 0}
+                  onCameraZoomPercentChange={setViewerZoomPercent}
+                  renderPartsIndividually={
+                    isUrdfView || Boolean(selectedStepParameterRuntime) || Boolean(selectedAnimationRuntime)
+                  }
+                  stepParameters={selectedStepParameterRuntime}
+                  stepAnimation={selectedAnimationRuntime}
+                  selectedMeshData={selectedMeshData}
+                  selectedKey={selectedKey}
+                  missingFileRef={missingFileRef}
+                  viewerServerInfo={viewerServerInfo}
+                  viewerPerspective={viewerPerspective}
+                  viewerPerspectiveRef={activePerspectiveRef}
+                  themeSettings={resolvedThemeSettings}
+                  displaySettings={renderDisplaySettings}
+                  previewMode={previewMode}
+                  viewerLoading={viewerLoading}
+                  viewerAlert={viewerAlert}
+                  stepUpdateInProgress={effectiveRenderFormat === RENDER_FORMAT.STEP && stepUpdateInProgress}
+                  referenceSelectionPending={referenceSelectionPending}
+                  referenceSelectionUnavailable={referenceSelectionUnavailable}
+                  referenceSelectionDeferred={selectedTopologyDeferredByCost}
+                  viewerMode={viewerMode}
+                  assemblyPickingActive={viewerInAssemblyMode}
+                  assemblyParts={viewerAssemblyRenderParts}
+                  hiddenPartIds={viewerHiddenPartIds}
+                  selectedPartIds={viewerSelectedPartIds}
+                  hoveredPartId={viewerHoveredPartIds}
+                  hoveredReferenceId={effectiveHoveredReferenceId}
+                  selectedReferenceIds={selectedReferenceIds}
+                  selectorRuntime={effectiveSelectorRuntime}
+                  displayEdgeRuntime={selectedDisplayEdgeRuntime}
+                  pickableFaces={viewerPickableFaces}
+                  pickableEdges={viewerPickableEdges}
+                  pickableVertices={viewerPickableVertices}
+                  focusedPartIds={viewerFocusedPartIds}
+                  boundsAnimationActive={robotBoundsAnimationActive}
+                  drawToolActive={drawToolActive}
+                  measureModeActive={measureModeActive}
+                  drawingTool={drawingTool}
+                  drawingStrokes={drawingStrokes}
+                  handleDrawingStrokesChange={handleDrawingStrokesChange}
+                  handlePerspectiveChange={handlePerspectiveChange}
+                  handleModelHoverChange={handleModelHoverChange}
+                  handleModelReferenceActivate={handleModelReferenceActivate}
+                  handleModelReferenceDoubleActivate={handleModelReferenceDoubleActivate}
+                  handleModelReferenceContext={handleModelReferenceContext}
+                  onMeasurePick={handleMeasurePick}
+                  onMeasureHoverPoint={handleMeasureHoverPoint}
+                  activeMeasurementId={activeMeasureId}
+                  measureState={measureRulerState}
+                  viewerContextMenu={viewerContextMenu}
+                  onViewerContextMenuClose={closeViewerContextMenu}
+                  onViewerContextMenuCopyReference={copyViewerContextMenuReference}
+                  onViewerContextMenuSelect={selectViewerContextMenuNode}
+                  onViewerContextMenuFocus={focusViewerContextMenuNode}
+                  onViewerContextMenuExitAllIsolate={handleExitIsolate}
+                  onViewerContextMenuHideOther={hideOtherViewerContextMenuNode}
+                  onViewerContextMenuHideAll={hideAllViewerContextMenuNodes}
+                  onViewerContextMenuHide={hideViewerContextMenuNode}
+                  onViewerContextMenuReveal={revealViewerContextMenuNode}
+                  onViewerContextMenuResetZoom={resetZoomViewerContextMenu}
+                  onViewerContextMenuZoomToFit={zoomToFitViewerContextMenu}
+                  onViewerContextMenuExpandSelected={expandSelectedViewerContextMenuNodes}
+                  onViewerContextMenuCollapseSelected={collapseSelectedViewerContextMenuNodes}
+                  onViewerContextMenuExpandAll={expandAllViewerContextMenuNodes}
+                  onViewerContextMenuCollapseAll={collapseAllViewerContextMenuNodes}
+                  handleViewerAlertChange={handleViewerAlertChange}
+                  handleStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
+                  selectionCount={selectionCount}
+                  copyButtonLabel={copyButtonLabel}
+                  copyButtonCountLabel={copyButtonCountLabel}
+                  copyReferenceTipActive={copyReferenceTipActive}
+                  panToolActive={panToolActive}
+                  handleCopySelection={handleCopySelection}
+                  handleScreenshotCopy={handleScreenshotCopy}
+                />
+              </div>
+
               <FloatingToolBar
                 previewMode={previewMode}
                 selectedEntry={selectedEntry}

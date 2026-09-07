@@ -16,7 +16,6 @@ import {
   normalizeThemeFillColors,
   normalizeThemeSettings,
   resolveThemeFillColor,
-  resolveThemeSettingsBackdropColor,
   resolveThemeSettingsForColorMode,
   resolveSystemThemePresetId,
   themeSettingsSupportsSystemColorMode,
@@ -426,13 +425,6 @@ test("disabled color cycling preserves palettes without rotating fills", () => {
   assert.deepEqual(normalized.materials.fillColors, ["#111111", "#222222", "#333333"]);
   assert.equal(resolveThemeFillColor(normalized.materials, 0), "#111111");
   assert.equal(resolveThemeFillColor(normalized.materials, 2), "#111111");
-});
-
-test("backdrop color resolves the dominant background for glass tinting", () => {
-  assert.equal(resolveThemeSettingsBackdropColor(cloneThemePresetSettings("workbench-light")), "#f0f4f9");
-  assert.equal(resolveThemeSettingsBackdropColor(cloneThemePresetSettings("workbench-dark")), "#181f28");
-  // Radial backgrounds resolve to the inner/outer midpoint.
-  assert.equal(resolveThemeSettingsBackdropColor(cloneThemePresetSettings("cinematic")), "#121216");
 });
 
 test("system default preset follows the OS preference for the first-load pick", () => {
