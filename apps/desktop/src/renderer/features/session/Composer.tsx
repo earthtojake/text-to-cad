@@ -115,8 +115,8 @@ export function Composer({
   const referenceScope = useMemo(() => {
     if (!project || (sessionId && (!session || session.projectId !== project.id))) return null;
     const cwd = session?.cwd ?? draftRoot ?? project.path;
-    return { projectId: project.id, root: cwd === project.path ? null : cwd };
-  }, [project, sessionId, session, draftRoot]);
+    return { projectId: project.id, root: cwd === project.path ? null : cwd, draftKey };
+  }, [project, sessionId, session, draftRoot, draftKey]);
   const text = useComposer((state) => state.drafts[draftKey] ?? "");
   const setDraft = useComposer((state) => state.setDraft);
   const setText = useCallback(

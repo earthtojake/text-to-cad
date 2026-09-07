@@ -103,6 +103,15 @@ export function findStepTreeNodeForSelector(root, selector) {
   return null;
 }
 
+/** Display-only part name; never substitute it for the canonical selector. */
+export function referenceLabel(selector, treeRoot) {
+  if (!selector || selector.includes(",")) return "";
+  const node = findStepTreeNodeForSelector(treeRoot, selector);
+  if (!node || String(node.nodeType || "").startsWith("topology-")) return "";
+  const label = String(node.displayName || node.label || node.name || "").trim();
+  return label === selector ? "" : label;
+}
+
 /**
  * A selector as the surface's selection machinery wants it.
  *

@@ -51,6 +51,8 @@ export type CadReference = {
   file: string;
   /** The selector list without its `#`, `""` for a bare file. */
   selector: string;
+  /** Optional display name from the viewer; never changes the prompt token. */
+  label?: string;
 };
 
 /**

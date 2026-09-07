@@ -37,6 +37,8 @@ export const newSessionKey = (projectId: string) => `${NEW_SESSION_KEY}:${projec
 type ComposerState = {
   queues: Record<string, QueuedPrompt[]>;
   drafts: Record<string, string>;
+  /** Display metadata belongs to the draft, not to another project's identical token. */
+  referenceLabels: Record<string, Record<string, string>>;
   /** Files the explorer attached, per draft key, until the composer takes them. */
   pendingFiles: Record<string, File[]>;
   /** A new draft with a CAD reference runs in that model’s workspace. */
@@ -64,6 +66,7 @@ let sequence = 0;
 export const useComposer = create<ComposerState>((set, get) => ({
   queues: {},
   drafts: {},
+  referenceLabels: {},
   pendingFiles: {},
   draftRoots: {},
   setDraftRoot: (key, root) => set((state) => {
@@ -116,8 +119,10 @@ export const useComposer = create<ComposerState>((set, get) => ({
   setDraft: (sessionId, text) =>
     set((state) => {
       const roots = { ...state.draftRoots };
+      const labels = { ...state.referenceLabels };
       if (!text.trim()) delete roots[sessionId];
-      return { drafts: { ...state.drafts, [sessionId]: text }, draftRoots: roots };
+      if (!text.trim()) delete labels[sessionId];
+      return { drafts: { ...state.drafts, [sessionId]: text }, draftRoots: roots, referenceLabels: labels };
     }),
 
   insertReference: (key, reference) =>
@@ -125,7 +130,9 @@ export const useComposer = create<ComposerState>((set, get) => ({
       const current = state.drafts[key] ?? "";
       const token = referenceText(reference);
       const separator = current === "" || /\s$/.test(current) ? "" : " ";
-      return { drafts: { ...state.drafts, [key]: `${current}${separator}${token} ` } };
+      const labels = { ...state.referenceLabels[key] };
+      if (reference.label?.trim()) labels[token] = reference.label.trim(); else delete labels[token];
+      return { drafts: { ...state.drafts, [key]: `${current}${separator}${token} ` }, referenceLabels: { ...state.referenceLabels, [key]: labels } };
     }),
 
   attachFile: (key, file) =>

@@ -55,7 +55,7 @@ type CadSurfaceProps = {
   onOpenFile: (path: string) => void;
   /** A reference to select once the model is up; `key` distinguishes repeats. */
   selectReference: { selector: string; key: number } | null;
-  onReference: (reference: { file: string; selector: string; text: string }) => void;
+  onReference: (reference: { file: string; selector: string; text: string; label?: string }) => void;
   onCapture: (capture: { blob: Blob; file: string }) => void;
   /**
    * A capture asked for from outside the viewport — the composer's `+` menu.
@@ -159,7 +159,7 @@ export function CadRenderer({
    * and as an image attachment (`state/composer.ts`). `file` is the tab's
    * root-relative path, which is what the agent can open.
    */
-  const onReference = useCallback((reference: { file: string; selector: string }) => {
+  const onReference = useCallback((reference: { file: string; selector: string; label?: string }) => {
     try {
       useComposer.getState().insertReference(cadDraftKey(projectId, root), reference);
     } catch (error) {

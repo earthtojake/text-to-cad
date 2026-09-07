@@ -289,7 +289,7 @@ import {
   normalizeParameterValues
 } from "cadgen-js/common/parameters.js";
 import { copyTextToClipboard, readTextFromClipboard } from "@/ui/clipboard";
-import { HostReferenceContext, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
+import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
 import {
   copyTargetsForFileAccessAsset,
   fileAccessAssetsForEntry,
@@ -4841,10 +4841,11 @@ function CadFileViewSurface({
     await copyTextToClipboard(text);
     if (typeof onReference === "function") {
       for (const reference of referencesFromCopyText(text, cadFileParamForEntry(selectedEntry))) {
-        onReference(reference);
+        const label = referenceLabel(reference.selector, displayStepTreeRoot || stepTreeRoot);
+        onReference({ ...reference, ...(label ? { label } : {}) });
       }
     }
-  }, [onReference, selectedEntry]);
+  }, [onReference, selectedEntry, displayStepTreeRoot, stepTreeRoot]);
   const hostReference = useMemo(
     () => (typeof onReference === "function" ? { deliverReference: deliverReferenceText } : null),
     [onReference, deliverReferenceText]

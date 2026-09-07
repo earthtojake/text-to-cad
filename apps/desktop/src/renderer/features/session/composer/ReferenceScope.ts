@@ -4,7 +4,7 @@ import { useExplorer } from "@renderer/state/explorer";
 import { isCadFile, type CadReference } from "@shared/cad-refs";
 import type { ExplorerRoot } from "@shared/types";
 
-export type ReferenceScope = { projectId: string; root: ExplorerRoot };
+export type ReferenceScope = { projectId: string; root: ExplorerRoot; draftKey?: string };
 export const ReferenceScopeContext = createContext<ReferenceScope | null>(null);
 
 /** A chip names a file in its draft's workspace, even when another tab is visible. */

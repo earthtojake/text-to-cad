@@ -50,7 +50,7 @@ declare module "@viewer/file-view" {
      * beside the clipboard. `file` is served-root-relative; `selector` is
      * the half after `#`, `""` for a whole file; `text` is what was copied.
      */
-    onReference?: (reference: { file: string; selector: string; text: string }) => void;
+    onReference?: (reference: { file: string; selector: string; text: string; label?: string }) => void;
     /** The viewport rendered to a PNG, from the toolbar's camera button (shown only when this is given). */
     onCapture?: (capture: { blob: Blob; file: string }) => void;
     /**

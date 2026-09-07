@@ -107,6 +107,16 @@ the next change rather than being dropped, and one already selected is
 revealed, not toggled off. Pass a new `key` to select the same reference
 again.
 
+Copied part references may also include `label`, the name from the loaded
+assembly tree. It is display metadata only: `file`, `selector` and `text`
+remain the exact reference. Unknown selectors, topology entities and selector
+lists omit the label. Hosts should retain the exact token in a tooltip and
+send it unchanged to the agent.
+
+The reference tutorial tip uses the file surface as its collision boundary,
+so an embedded viewer does not cover neighbouring panes. Close or Escape
+dismisses it and remembers that choice; clicking the scene does not.
+
 ## What the consumer's bundler needs
 
 ### 1. The JSX-in-`.js` loader

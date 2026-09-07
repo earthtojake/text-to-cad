@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Lightbulb, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/ui/utils";
 import { markTutorialTipSeen, tutorialTipSeen } from "@/workbench/persistence";
+import { FileSheetPortalContext } from "./FileSheet";
 
 // A one-shot coach mark pointing at a control the user has just made relevant.
 //
-// Only the close button retires it. Clicking away, pressing Escape, or losing
+// The close button or Escape retires it. Clicking away or losing
 // the selection do not count as "read", so the tip is recorded as seen on
 // dismissal and comes back on the next chance until then. The anchored control
 // stays fully clickable — this is not a trigger, so copying is one click away.
@@ -20,6 +21,7 @@ export default function TutorialTip({
   className,
   children
 }) {
+  const boundary = useContext(FileSheetPortalContext);
   const [open, setOpen] = useState(false);
   // Storage is only written on dismiss, so this also guards against reopening
   // within the session between the click and the next render.
@@ -56,36 +58,36 @@ export default function TutorialTip({
         side={side}
         align={align}
         sideOffset={8}
-        collisionPadding={16}
+        collisionBoundary={boundary}
+        collisionPadding={12}
+        data-reference-tip=""
         // Inverted against the scene so a first-run tip reads as an overlay on
         // the app rather than another panel of it. The glass surface is opted
         // out of rather than overridden — it sets its background !important.
         glass={false}
         className={cn(
-          "w-[min(44rem,calc(100vw-2rem))] border-transparent bg-foreground px-3 py-2.5 text-background shadow-lg shadow-black/25",
+          "w-72 max-w-[var(--radix-popover-content-available-width)] border-transparent bg-foreground px-3 py-2.5 text-background shadow-lg shadow-black/25",
           className
         )}
         // A coach mark must not steal focus from whatever the user is doing, and
         // it should never block a click on the control it is describing.
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => event.preventDefault()}
-        // Only the close button retires the tip. Radix would otherwise dismiss
+        // A click in the scene is what this tip invites. Radix would dismiss
         // it on the very first click into the scene — which is exactly what the
         // user is being invited to do — so every ambient close is refused.
         // Preventing these blocks the close, not the interaction itself.
         onPointerDownOutside={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
         onFocusOutside={(event) => event.preventDefault()}
-        onEscapeKeyDown={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => { event.preventDefault(); event.stopPropagation(); dismiss(); }}
       >
         <div className="flex items-start gap-2">
           <Lightbulb className="mt-px size-4 shrink-0 text-background/70" strokeWidth={2} aria-hidden="true" />
           <p className="min-w-0 flex-1 text-sm leading-snug">
-            Copy references into prompts to edit specific parts of a STEP file, e.g. &quot;Make the hole{" "}
-            <code className="rounded-sm bg-background/20 px-1 py-0.5 font-mono text-xs">bracket#o1.1</code>
-            {" "}twice as wide&quot;
+            Copy a part reference, then describe your edit in the prompt.
           </p>
-          {/* The only way out — nothing else closes the tip. */}
+          {/* Escape offers the same dismissal without moving focus here. */}
           <Button
             type="button"
             variant="ghost"

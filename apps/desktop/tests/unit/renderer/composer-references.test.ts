@@ -129,6 +129,18 @@ describe("the editor", () => {
 });
 
 describe("the composer store", () => {
+  it("keeps part names separate from prompt tokens and scoped to their draft", () => {
+    useComposer.setState({ drafts: {}, referenceLabels: {} });
+    const reference = { file: "models/car.step", selector: "o1.3", label: "wheel_front_left" };
+    useComposer.getState().insertReference("car", reference);
+    useComposer.getState().insertReference("other", { ...reference, label: "different_part" });
+    expect(useComposer.getState().drafts.car).toBe("models/car.step#o1.3 ");
+    expect(useComposer.getState().referenceLabels.car?.["models/car.step#o1.3"]).toBe("wheel_front_left");
+    expect(useComposer.getState().referenceLabels.other?.["models/car.step#o1.3"]).toBe("different_part");
+    useComposer.getState().setDraft("car", "");
+    expect(useComposer.getState().referenceLabels.car).toBeUndefined();
+    expect(useComposer.getState().referenceLabels.other).toBeDefined();
+  });
   it("appends a reference to the draft as its token, spaced", () => {
     useComposer.setState({ drafts: {}, pendingFiles: {} });
     useComposer.getState().insertReference(NEW_SESSION_KEY, { file: "models/x.step", selector: "o1.2" });

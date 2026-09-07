@@ -8,6 +8,7 @@ import test from "node:test";
 import {
   findStepTreeNodeForSelector,
   referenceFromCopyText,
+  referenceLabel,
   referencesFromCopyText,
   resolveSelectorSelection,
 } from "./hostReference.js";
@@ -52,6 +53,14 @@ const TREE = {
     },
   ],
 };
+
+test("referenceLabel: known parts have display names, unresolved or mixed selections do not", () => {
+  assert.equal(referenceLabel("o1.1", TREE), "bracket");
+  assert.equal(referenceLabel("o1.2", TREE), "shaft");
+  assert.equal(referenceLabel("o1.2.f3", TREE), "");
+  assert.equal(referenceLabel("o1.1,o1.2", TREE), "");
+  assert.equal(referenceLabel("o9", TREE), "");
+});
 
 test("findStepTreeNodeForSelector: by occurrence id, name, label and topology id", () => {
   assert.equal(findStepTreeNodeForSelector(TREE, "o1.1")?.name, "bracket");

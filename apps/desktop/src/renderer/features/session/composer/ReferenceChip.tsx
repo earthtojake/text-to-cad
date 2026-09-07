@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { cn } from "@renderer/lib/utils";
 import type { CadReference } from "@shared/cad-refs";
+import { useComposer } from "@renderer/state/composer";
 
 import { referenceToken } from "./references";
 import { openComposerReference, ReferenceScopeContext } from "./ReferenceScope";
@@ -23,6 +24,7 @@ export function ReferenceChip({ node, selected }: NodeViewProps) {
   const reference = node.attrs as CadReference;
   const name = reference.file ? (reference.file.split("/").pop() ?? reference.file) : "";
   const token = referenceToken(reference);
+  const label = useComposer((state) => scope?.draftKey ? state.referenceLabels[scope.draftKey]?.[token] : undefined);
   return (
     <NodeViewWrapper
       as="span"
@@ -38,7 +40,7 @@ export function ReferenceChip({ node, selected }: NodeViewProps) {
       title={scope ? `Show ${token} in viewer` : token}
     >
       <button
-        aria-label={`Show ${token} in viewer`}
+        aria-label={`Show ${label ? `${label} (${token})` : token} in viewer`}
         className="inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-px hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
         disabled={!scope}
         type="button"
@@ -54,15 +56,15 @@ export function ReferenceChip({ node, selected }: NodeViewProps) {
           }
         }}
       >
-        {name ? (
+        {label || name ? (
           <>
             <Box aria-hidden className="size-3 shrink-0 opacity-70" />
-            <span className="max-w-[160px] truncate">{name}</span>
+            <span className="max-w-[160px] truncate">{label || name}</span>
           </>
         ) : (
           <Hash aria-hidden className="size-3 shrink-0 opacity-70" />
         )}
-        {reference.selector ? (
+        {!label && reference.selector ? (
           <span className="rounded-sm bg-primary/10 px-1 font-mono text-[11px] text-primary" data-selector-badge>
             {reference.selector}
           </span>
