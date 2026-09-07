@@ -87,9 +87,10 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await expect(page.getByRole("heading", { name: `What should we build in ${projectName}?` })).toBeVisible();
   // The agent chip fills in once the detector has probed; sending before
   // that would have nothing to launch. The new-session context — project,
-  // git mode, model, effort — is a strip ABOVE the box; `+` and approval are
+  // git mode — is a strip ABOVE the box; `+`, approval, model and effort are
   // in the row UNDER it, the same row a live session has.
   const strip = page.locator("[data-context-strip]");
+  const actionRow = page.locator("[data-new-session] [data-composer-row]");
   await expect(strip.locator("[data-chip=project]")).toContainText(projectName);
   // Two choices behind the git chip, and a scratch directory that is not a
   // repository still runs: Local (plan §9).
@@ -97,8 +98,8 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   // The model and the effort, before there is a session — the chips the
   // agent dropdown was replaced by. They appear once the agent has been
   // probed for what it offers, which on a first run spawns the adapter.
-  await expect(strip.locator("[data-chip=model]")).toContainText("Fast", { timeout: 30_000 });
-  await expect(strip.locator("[data-chip=effort]")).toContainText("Medium");
+  await expect(actionRow.locator("[data-chip=model]")).toContainText("Fast", { timeout: 30_000 });
+  await expect(actionRow.locator("[data-chip=effort]")).toContainText("Medium");
   await expect(strip.locator("[data-chip=agent]")).toHaveCount(0);
   await expect(page.locator("[data-composer-row] [data-chip=approval]")).toContainText("Ask");
   await expect(page.locator("[data-composer] form [data-chip]")).toHaveCount(0);
@@ -120,7 +121,7 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   // The model menu is grouped by provider — one group per agent that
   // answered, `HARDCORE_FAKE_AGENT` making every installed one answer the
   // same two models — and lists names alone, with no paragraph under each.
-  await strip.locator("[data-chip=model]").click();
+  await actionRow.locator("[data-chip=model]").click();
   const menu = page.getByRole("menu");
   await expect(menu.getByRole("menuitemradio", { name: "Fast", exact: true }).first()).toBeVisible();
   await expect(menu.getByRole("menuitemradio", { name: "Smart", exact: true }).first()).toBeVisible();

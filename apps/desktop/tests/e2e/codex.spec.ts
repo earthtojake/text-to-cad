@@ -52,7 +52,7 @@ test("Codex writes a file, runs a command and answers", async () => {
   test.setTimeout(240_000);
   // Codex's models are what the model chip offers here: the chip is the
   // agent chip now, and only an installed provider contributes any.
-  await expect(page.locator("[data-context-strip] [data-chip=model]")).toBeVisible();
+  await expect(page.locator("[data-new-session] [data-composer-row] [data-chip=model]")).toBeVisible();
   const composer = page.getByPlaceholder("Do anything");
   await composer.fill(
     "Create a file named hello.txt containing the single line 'hello from codex', then run ls -la and tell me what you see. Keep the answer to two sentences.",

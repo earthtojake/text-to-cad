@@ -147,31 +147,27 @@ export function NewSession({ project }: { project: Project }) {
   };
 
   // What the session will be, as a strip above the box: where it runs, how
-  // it treats git, which model runs it and how hard it thinks. The first two
-  // cannot change once the session exists, which is why they are not in the
-  // composer's row; the last two are the same chips the live session has.
-  // Under the box is the same row the live session has — `+` and approval —
-  // so the two screens are one shape: the context above, the actions below.
+  // it treats git — the two things that cannot change once the session
+  // exists, so they sit above the box. Under the box is the live session's
+  // row exactly: `+` and approval on the left, the model and the effort on
+  // the right, so the two screens are one shape and a long model name has
+  // the row's width rather than the strip's.
   const context = (
     <div className="mb-1.5 flex items-center gap-1 px-1" data-context-strip>
       <ProjectChip onChange={setActiveProject} project={project} />
       <Dot />
       <GitModeChip gitMode={resolvedGitMode} info={gitInfo} onChange={setGitMode} />
-      {providers.length > 0 ? (
-        <>
-          <Dot />
-          <ModelChip agentId={pickedProvider?.agentId ?? null} onChange={chooseModel} providers={providers} />
-        </>
-      ) : null}
-      {effort ? (
-        <>
-          <Dot />
-          <EffortChip effort={effort} onChange={chooseEffort} />
-        </>
-      ) : null}
     </div>
   );
   const chips = <ApprovalChip mode={approval} onChange={setApprovalMode} />;
+  const trailing = (
+    <>
+      {providers.length > 0 ? (
+        <ModelChip agentId={pickedProvider?.agentId ?? null} onChange={chooseModel} providers={providers} />
+      ) : null}
+      {effort ? <EffortChip effort={effort} onChange={chooseEffort} /> : null}
+    </>
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 pb-10" data-new-session>
@@ -211,6 +207,7 @@ export function NewSession({ project }: { project: Project }) {
             placeholder={busy && agent ? `Starting ${agent.name}…` : "Do anything"}
             sessionId={null}
             status={busy ? "submitted" : "ready"}
+            trailing={trailing}
           />
         </div>
       </div>

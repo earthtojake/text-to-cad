@@ -64,21 +64,21 @@ test("a project and its session survive a quit and a relaunch", async () => {
   const first = await launch();
   await first.page.evaluate((dir) => window.hardcore.projects.addPath({ path: dir }), project);
   await expect(first.page.getByRole("heading", { name: `What should we build in ${projectName}?` })).toBeVisible();
-  const strip = first.page.locator("[data-context-strip]");
+  const row = first.page.locator("[data-new-session] [data-composer-row]");
   // The model and effort chips appear once the agent has been probed for
   // what it offers (`agentOptions.probe`), which on a first run means the
   // adapter is spawned, asked, and closed.
-  await expect(strip.locator("[data-chip=model]")).toContainText("Fast", { timeout: 30_000 });
-  await expect(strip.locator("[data-chip=effort]")).toContainText("Medium");
+  await expect(row.locator("[data-chip=model]")).toContainText("Fast", { timeout: 30_000 });
+  await expect(row.locator("[data-chip=effort]")).toContainText("Medium");
 
   // Pick the other model and a different effort. Both are stored against the
   // agent, and the second launch has to come back to them.
-  await strip.locator("[data-chip=model]").click();
+  await row.locator("[data-chip=model]").click();
   await first.page.getByRole("menuitemradio", { name: "Smart" }).first().click();
-  await expect(strip.locator("[data-chip=model]")).toContainText("Smart");
-  await strip.locator("[data-chip=effort]").click();
+  await expect(row.locator("[data-chip=model]")).toContainText("Smart");
+  await row.locator("[data-chip=effort]").click();
   await first.page.getByRole("menuitemradio", { name: "High" }).first().click();
-  await expect(strip.locator("[data-chip=effort]")).toContainText("High");
+  await expect(row.locator("[data-chip=effort]")).toContainText("High");
 
   const composer = first.page.getByPlaceholder("Do anything");
   await composer.fill("keep this one around");
@@ -107,7 +107,7 @@ test("a project and its session survive a quit and a relaunch", async () => {
     await expect(second.page.getByText(projectName).first()).toBeVisible();
     // The chips are drawn from the cache this time — no probe, no spawn —
     // and they are on the choice the first launch made.
-    const secondStrip = second.page.locator("[data-context-strip]");
+    const secondStrip = second.page.locator("[data-new-session] [data-composer-row]");
     await expect(secondStrip.locator("[data-chip=model]")).toContainText("Smart");
     await expect(secondStrip.locator("[data-chip=effort]")).toContainText("High");
     const row = second.page.locator("[data-session-row]");
