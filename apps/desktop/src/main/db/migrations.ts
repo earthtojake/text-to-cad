@@ -131,6 +131,28 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE sessions ADD COLUMN turn_started_at INTEGER;
     `,
   },
+  {
+    version: 6,
+    name: "agent-options",
+    // What each agent last said its session could be configured with, and
+    // what the person picked. The new-session screen draws a model and an
+    // effort chip before any agent is running, and only a snapshot taken
+    // from a real `session/new` can tell it which models that agent has.
+    //
+    // `options` is the ConfigOption[] as JSON: the wire shape changes with
+    // the adapters, and a cache is exactly the place not to freeze it into
+    // columns. It is a cache — a row that no longer parses is dropped and
+    // re-probed, never migrated.
+    up: `
+      CREATE TABLE agent_options (
+        agent_id        TEXT PRIMARY KEY,
+        options         TEXT,
+        options_at      INTEGER,
+        default_model   TEXT,
+        default_effort  TEXT
+      );
+    `,
+  },
 ];
 
 /**

@@ -81,12 +81,23 @@ describe("runMigrations", () => {
     expect(() => runMigrations(db, MIGRATIONS)).not.toThrow();
   });
 
-  it("creates the four tables the app indexes", () => {
+  it("creates the five tables the app indexes", () => {
     const { db, statements } = fakeDb();
     runMigrations(db, MIGRATIONS);
     const sql = statements.join("\n");
-    for (const table of ["projects", "sessions", "settings", "explorer_tabs"]) {
+    for (const table of ["projects", "sessions", "settings", "explorer_tabs", "agent_options"]) {
       expect(sql).toContain(`CREATE TABLE ${table}`);
+    }
+  });
+
+  it("gives agent_options a column for each thing the composer's chips need", () => {
+    const { db, statements } = fakeDb(5);
+    runMigrations(db, MIGRATIONS);
+    // Only migration 6 runs: an installed app is already at 5.
+    const sql = statements.join("\n");
+    expect(sql).not.toContain("CREATE TABLE sessions");
+    for (const column of ["agent_id", "options", "options_at", "default_model", "default_effort"]) {
+      expect(sql).toContain(column);
     }
   });
 });

@@ -1,5 +1,4 @@
 import {
-  Bot,
   Check,
   ChevronDown,
   Folder,
@@ -7,8 +6,8 @@ import {
   GitBranch,
   GitFork,
   ShieldCheck,
-  SlidersHorizontal,
   Sparkles,
+  Zap,
 } from "lucide-react";
 import { cn } from "cn";
 
@@ -24,21 +23,23 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { agentIcon } from "@renderer/lib/agent-icons";
 import { GIT_MODE_LABELS, gitModeAvailability, localGitMode } from "@renderer/lib/git-mode";
-import { useAgents, useInstalledAgents } from "@renderer/state/agents";
 import { useProjects } from "@renderer/state/projects";
-import { useUi } from "@renderer/state/ui";
-import type { ApprovalMode, ConfigOption, SessionMode } from "@shared/acp/types";
-import type { AgentStatus } from "@shared/agents";
+import { currentName, type SelectOption } from "@shared/acp/options";
+import type { ApprovalMode, SessionMode } from "@shared/acp/types";
 import type { ProjectGitInfo } from "@shared/ipc/git";
 import type { GitMode, Project } from "@shared/types";
 
 /**
  * The composer's context strip (plan §2, §6). Every chip is the same
- * shape: an icon, a short label, a chevron when it opens a menu. A new
- * session shows Project / Git mode / Agent in a strip above the composer and
- * Approval in it; a live session shows Approval and the agent's modes on the
- * left, the model and its other options on the right. What a session cannot
- * change — its agent, its project — is the title bar's and the sidebar's.
+ * shape: an icon, a short label, a chevron when it opens a menu.
+ *
+ * A new session shows Project / Git mode / Model / Effort in a strip above
+ * the composer and Approval in it; a live session shows Approval and the
+ * agent's modes on the left, the model and the effort on the right. The two
+ * screens draw the **same** model and effort chips: on the new-session screen
+ * the model menu lists every installed provider's models and picking one
+ * picks the agent, and in a live session it is scoped to that session's
+ * agent. What a session cannot change — its project — is the sidebar's.
  */
 export function Chip({
   icon,
@@ -85,7 +86,18 @@ export function Chip({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{body}</DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64" side="top">
+      {/*
+        Capped at what Radix measured is actually there and scrolled inside,
+        rather than at a fraction of the window: a model menu with a group
+        per installed provider is taller than the gap above the composer,
+        and an uncapped one flips below the chip and off the bottom edge.
+      */}
+      <DropdownMenuContent
+        align="start"
+        className="max-h-[var(--radix-dropdown-menu-content-available-height)] w-64 overflow-y-auto"
+        collisionPadding={12}
+        side="top"
+      >
         {menu}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -95,76 +107,6 @@ export function Chip({
 /* -------------------------------------------------------------------------- */
 /* New-session chips                                                           */
 /* -------------------------------------------------------------------------- */
-
-export function AgentChip({
-  agentId,
-  onChange,
-}: {
-  agentId: string | null;
-  onChange: (agentId: string) => void;
-}) {
-  const agents = useAgents((state) => state.agents);
-  const installed = useInstalledAgents();
-  const openSettings = useUi((state) => state.openSettings);
-  const current = agents.find((agent) => agent.id === agentId) ?? null;
-  const missing = agents.filter((agent) => !installed.includes(agent));
-
-  return (
-    <Chip
-      detail={current ? authDetail(current) : null}
-      icon={<Bot />}
-      label={current?.name ?? "Choose an agent"}
-      menu={
-        <>
-          <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">Installed</DropdownMenuLabel>
-          {installed.length === 0 ? (
-            <DropdownMenuItem disabled>No agents found on this machine</DropdownMenuItem>
-          ) : null}
-          <DropdownMenuRadioGroup onValueChange={onChange} value={agentId ?? ""}>
-            {installed.map((agent) => (
-              <DropdownMenuRadioItem key={agent.id} value={agent.id}>
-                <span className="flex min-w-0 flex-1 items-center gap-2">
-                  <span className="truncate">{agent.name}</span>
-                  <span className="ml-auto text-[11px] text-muted-foreground">{authDetail(agent) ?? agent.version ?? ""}</span>
-                </span>
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-          {missing.length > 0 ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => openSettings("agents")}>
-                <span className="flex flex-col">
-                  <span>Install another agent…</span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {missing
-                      .slice(0, 4)
-                      .map((agent) => agent.name)
-                      .join(", ")}
-                    {missing.length > 4 ? ` and ${missing.length - 4} more` : ""} in Settings › Agents
-                  </span>
-                </span>
-              </DropdownMenuItem>
-            </>
-          ) : null}
-        </>
-      }
-      maxWidth={150}
-      testId="agent"
-    />
-  );
-}
-
-function authDetail(agent: AgentStatus): string | null {
-  switch (agent.auth) {
-    case "unauthenticated":
-      return "not signed in";
-    case "authenticated":
-    case "not-required":
-    case "unknown":
-      return agent.installed ? null : "via npx";
-  }
-}
 
 export function ProjectChip({ project, onChange }: { project: Project | null; onChange: (id: string) => void }) {
   const projects = useProjects((state) => state.projects);
@@ -249,9 +191,6 @@ export function GitModeChip({
     />
   );
 }
-
-type SelectOption = Extract<ConfigOption, { type: "select" }>;
-type BooleanOption = Extract<ConfigOption, { type: "boolean" }>;
 
 export const APPROVAL_MODES: { value: ApprovalMode; label: string; description: string }[] = [
   { value: "ask", label: "Ask", description: "Every permission request waits for you" },
@@ -350,37 +289,116 @@ export function ModeChip({
   );
 }
 
+/** One installed provider's models, as the model menu groups them. */
+export type ModelProvider = {
+  agentId: string;
+  agentName: string;
+  /** The agent's registry `icon`; a sparkle stands in when it has none. */
+  icon?: string | null;
+  model: SelectOption;
+};
+
+/** The `fast` switch, whichever way the agent sends it (`shared/acp/options`). */
+export type FastSwitch = { id: string; name: string; on: boolean; value: string | boolean };
+
 /**
  * The model, with the mark of whoever runs it: `◇ GPT-6 Astra`. The icon is
  * the agent's own (`lib/agent-icons.ts`) — the model belongs to a provider,
  * and a row of identical sparkles says nothing about which one.
+ *
+ * One chip, two situations. In a live session `providers` is that session's
+ * agent alone and picking a model sets a config option on it. On the
+ * new-session screen it is every **installed** agent that has answered, a
+ * group each, and picking a model picks the agent the session will run —
+ * which is why the agent has no chip of its own any more. An agent that is
+ * not installed, or whose probe has not answered, contributes no group: a
+ * model that cannot be run is not offered.
+ *
+ * The agent's `fast` switch, when it has one, is the last row of this menu
+ * rather than a chip: it is a property of the model, not a second decision.
  */
 export function ModelChip({
-  model,
-  icon,
+  providers,
+  agentId,
   onChange,
+  fast,
+  onFastChange,
 }: {
-  model: SelectOption;
-  /** The agent's registry `icon`; a sparkle stands in when it has none. */
-  icon?: string | null;
-  onChange: (configId: string, value: string) => void;
+  providers: ModelProvider[];
+  /** Whose model is showing. */
+  agentId: string | null;
+  onChange: (agentId: string, value: string) => void;
+  fast?: FastSwitch | null;
+  onFastChange?: (configId: string, value: string | boolean) => void;
 }) {
-  const modelName = model.options.find((option) => option.value === model.currentValue)?.name ?? model.currentValue;
+  const current = providers.find((provider) => provider.agentId === agentId) ?? providers[0] ?? null;
+  if (!current) {
+    return null;
+  }
+  const many = providers.length > 1;
   return (
     <Chip
-      icon={<ProviderGlyph icon={icon} />}
-      label={modelName}
-      maxWidth={170}
+      icon={<ProviderGlyph icon={current.icon} />}
+      label={currentName(current.model)}
+      maxWidth={190}
       menu={
         <>
-          <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">{model.name}</DropdownMenuLabel>
-          <OptionGroup onChange={(value) => onChange(model.id, value)} option={model} />
+          <DropdownMenuRadioGroup
+            onValueChange={(value) => {
+              const [provider, model] = splitModelValue(value);
+              if (provider && model) {
+                onChange(provider, model);
+              }
+            }}
+            value={modelValue(current.agentId, current.model.currentValue)}
+          >
+            {providers.map((provider, index) => (
+              <div key={provider.agentId}>
+                {index > 0 ? <DropdownMenuSeparator /> : null}
+                <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">
+                  {many ? provider.agentName : provider.model.name}
+                </DropdownMenuLabel>
+                <OptionItems
+                  option={provider.model}
+                  valueFor={(value) => modelValue(provider.agentId, value)}
+                />
+              </div>
+            ))}
+          </DropdownMenuRadioGroup>
+          {fast && onFastChange ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  onFastChange(fast.id, fast.value);
+                }}
+              >
+                <span className="flex size-4 items-center justify-center">
+                  {fast.on ? <Check className="size-3.5" /> : <Zap className="size-3.5 opacity-50" />}
+                </span>
+                <span className="truncate">{fast.name}</span>
+              </DropdownMenuItem>
+            </>
+          ) : null}
         </>
       }
       testId="model"
-      title={model.description ?? model.name}
+      title={current.model.description ?? current.model.name}
     />
   );
+}
+
+const MODEL_SEPARATOR = "\u0000";
+
+/** Provider and model in one radio value, so one group can span every provider. */
+function modelValue(agentId: string, value: string): string {
+  return `${agentId}${MODEL_SEPARATOR}${value}`;
+}
+
+function splitModelValue(value: string): [string | null, string | null] {
+  const at = value.indexOf(MODEL_SEPARATOR);
+  return at < 0 ? [null, null] : [value.slice(0, at), value.slice(at + 1)];
 }
 
 /**
@@ -396,11 +414,10 @@ export function EffortChip({
   effort: SelectOption;
   onChange: (configId: string, value: string) => void;
 }) {
-  const current = effort.options.find((option) => option.value === effort.currentValue)?.name ?? effort.currentValue;
   return (
     <Chip
       icon={<Gauge />}
-      label={current}
+      label={currentName(effort)}
       maxWidth={130}
       menu={
         <>
@@ -427,108 +444,29 @@ function ProviderGlyph({ icon }: { icon?: string | null }) {
   );
 }
 
-/** Any other select option the agent exposes (Codex's collaboration mode, say). */
-export function ConfigOptionChip({
-  option,
-  onChange,
-}: {
-  option: SelectOption;
-  onChange: (configId: string, value: string) => void;
-}) {
-  const currentName = option.options.find((candidate) => candidate.value === option.currentValue)?.name ?? option.currentValue;
+function OptionGroup({ option, onChange }: { option: SelectOption; onChange: (value: string) => void }) {
   return (
-    <Chip
-      icon={<Sparkles />}
-      label={currentName}
-      menu={
-        <>
-          <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">{option.name}</DropdownMenuLabel>
-          <OptionGroup onChange={(value) => onChange(option.id, value)} option={option} />
-        </>
-      }
-      testId={`config-${option.id}`}
-      title={option.description ?? option.name}
-    />
+    <DropdownMenuRadioGroup onValueChange={onChange} value={option.currentValue}>
+      <OptionItems option={option} />
+    </DropdownMenuRadioGroup>
   );
 }
 
 /**
- * The rest of the agent's config options under one chip, a group each —
- * Codex's collaboration mode and web search, say. The composer stays at
- * Codex's width: context, approval, model, and this.
+ * One select's items, inside whichever radio group the caller opened. The
+ * agent's own grouping (a model family) is kept as a sub-label; its
+ * per-option `description` is not drawn — a menu of models is a list of
+ * names, and a paragraph under each one is a wall to read past rather than a
+ * choice to make.
  */
-export function OptionsChip({
-  selects,
-  booleans,
-  onSelect,
-  onToggle,
-}: {
-  selects: SelectOption[];
-  booleans: BooleanOption[];
-  onSelect: (configId: string, value: string) => void;
-  onToggle: (configId: string, value: boolean) => void;
-}) {
-  if (selects.length === 0 && booleans.length === 0) {
-    return null;
-  }
-  const changed = selects.filter((option) => option.currentValue !== option.options[0]?.value).length + booleans.filter((option) => option.currentValue).length;
-  return (
-    <Chip
-      icon={<SlidersHorizontal />}
-      label={changed > 0 ? `${changed}` : ""}
-      menu={
-        <>
-          {selects.map((option, index) => (
-            <div key={option.id}>
-              {index > 0 ? <DropdownMenuSeparator /> : null}
-              <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">{option.name}</DropdownMenuLabel>
-              <OptionGroup onChange={(value) => onSelect(option.id, value)} option={option} />
-            </div>
-          ))}
-          {booleans.length > 0 && selects.length > 0 ? <DropdownMenuSeparator /> : null}
-          {booleans.map((option) => (
-            <DropdownMenuItem key={option.id} onSelect={(event) => { event.preventDefault(); onToggle(option.id, !option.currentValue); }}>
-              <span className="flex size-4 items-center justify-center">{option.currentValue ? <Check className="size-3.5" /> : null}</span>
-              <span className="flex min-w-0 flex-col">
-                <span>{option.name}</span>
-                {option.description ? <span className="text-[11px] text-muted-foreground">{option.description}</span> : null}
-              </span>
-            </DropdownMenuItem>
-          ))}
-        </>
-      }
-      testId="options"
-      title="More options from the agent"
-    />
-  );
-}
-
-export function BooleanOptionChip({
+function OptionItems({
   option,
-  onChange,
+  valueFor = (value: string) => value,
 }: {
-  option: BooleanOption;
-  onChange: (configId: string, value: boolean) => void;
+  option: SelectOption;
+  /** The radio value an option's own value goes by (the model menu spans providers). */
+  valueFor?: (value: string) => string;
 }) {
-  return (
-    <button
-      aria-pressed={option.currentValue}
-      className={cn(
-        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] leading-none transition-colors hover:bg-accent",
-        option.currentValue ? "text-foreground" : "text-muted-foreground",
-      )}
-      data-chip={`config-${option.id}`}
-      onClick={() => onChange(option.id, !option.currentValue)}
-      title={option.description ?? undefined}
-      type="button"
-    >
-      {option.currentValue ? <Check className="size-3.5" /> : null}
-      {option.name}
-    </button>
-  );
-}
-
-function OptionGroup({ option, onChange }: { option: SelectOption; onChange: (value: string) => void }) {
   const groups = new Map<string | null, SelectOption["options"]>();
   for (const candidate of option.options) {
     const list = groups.get(candidate.group) ?? [];
@@ -536,24 +474,19 @@ function OptionGroup({ option, onChange }: { option: SelectOption; onChange: (va
     groups.set(candidate.group, list);
   }
   return (
-    <DropdownMenuRadioGroup onValueChange={onChange} value={option.currentValue}>
+    <>
       {[...groups.entries()].map(([group, options]) => (
         <div key={group ?? ""}>
           {group ? (
             <DropdownMenuLabel className="pt-2 text-[11px] font-normal text-muted-foreground">{group}</DropdownMenuLabel>
           ) : null}
           {options.map((candidate) => (
-            <DropdownMenuRadioItem key={candidate.value} value={candidate.value}>
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate">{candidate.name}</span>
-                {candidate.description ? (
-                  <span className="line-clamp-2 text-[11px] text-muted-foreground">{candidate.description}</span>
-                ) : null}
-              </span>
+            <DropdownMenuRadioItem key={candidate.value} value={valueFor(candidate.value)}>
+              <span className="truncate">{candidate.name}</span>
             </DropdownMenuRadioItem>
           ))}
         </div>
       ))}
-    </DropdownMenuRadioGroup>
+    </>
   );
 }

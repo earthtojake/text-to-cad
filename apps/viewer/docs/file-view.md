@@ -39,6 +39,7 @@ a build error or, worse, a silently unstyled surface.
 | `selectReference` | `null` | `{ selector, key }`: select a reference — `o1.2`, `label.f45`, `bracket`, a comma-separated list (its first member) — once the model is up. Applied once per `key`; a new `key` selects again. See "References and captures". |
 | `onReference` | `null` | `({ file, selector, text }) => void`. Called for every reference the person copies out of the surface, beside the clipboard write. `null` (standalone) means the clipboard alone. |
 | `onCapture` | `null` | `({ blob, file }) => void`. Given, the floating toolbar shows a camera button that renders the viewport to a PNG and hands it over; `null` shows no button. |
+| `captureRequest` | `null` | `{ key }`: take that same capture now, asked for from outside the viewport. Applied once per `key`, like `selectReference`; the picture goes to `onCapture`. |
 
 `origin` is also published through context:
 
@@ -86,6 +87,12 @@ gains a camera button ("Send view to chat") beside Copy screenshot, and
 clicking it renders the current viewport — the same composite the clipboard
 gets, drawings included — to a PNG `Blob` and calls `onCapture({ blob, file })`.
 Without it there is no button; standalone there is no chat.
+
+`captureRequest` is that same button pressed from outside the viewport: the
+host holds a nonce (`{ key }`) and bumps it, and the surface takes one
+picture per new key and hands it to `onCapture` exactly as the button does.
+The desktop app's composer offers `Capture from viewer` in its `+` menu
+this way, so there is one capture path and not two.
 
 `selectReference` goes the other way: a host holding a reference from
 elsewhere (a link in a transcript) asks the surface to select it. The

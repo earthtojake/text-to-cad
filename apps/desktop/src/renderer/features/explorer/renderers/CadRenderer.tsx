@@ -56,6 +56,13 @@ type CadSurfaceProps = {
   selectReference: { selector: string; key: number } | null;
   onReference: (reference: { file: string; selector: string; text: string }) => void;
   onCapture: (capture: { blob: Blob; file: string }) => void;
+  /**
+   * A capture asked for from outside the viewport — the composer's `+` menu.
+   * `key` distinguishes repeats, exactly as `selectReference`'s does; the
+   * picture goes to `onCapture` either way, so the toolbar's camera button
+   * and this are one path.
+   */
+  captureRequest: { key: number } | null;
 };
 
 /**
@@ -72,7 +79,17 @@ const CadSurface = lazy(async () => {
   // no declarations of its own.
   const { CadFileView, ViewerOriginProvider } = await import("@viewer/file-view");
   return {
-    default: ({ origin, file, width, colorScheme, onOpenFile, selectReference, onReference, onCapture }: CadSurfaceProps) => (
+    default: ({
+      origin,
+      file,
+      width,
+      colorScheme,
+      onOpenFile,
+      selectReference,
+      onReference,
+      onCapture,
+      captureRequest,
+    }: CadSurfaceProps) => (
       <ViewerOriginProvider origin={origin}>
         {/*
           A containing block for the surface's `position: fixed` parts. The
@@ -88,6 +105,7 @@ const CadSurface = lazy(async () => {
             // `min-h-0` beats the surface's own `min-h-svh`: the tab is shorter
             // than the window, and a surface that insists on the window's
             // height puts its bottom panels below the tab's edge.
+            captureRequest={captureRequest}
             className="h-full min-h-0"
             colorScheme={colorScheme}
             file={file}
@@ -130,6 +148,9 @@ export function CadRenderer({
     () => (selection ? { selector: selection.selector, key: selection.nonce } : null),
     [selection],
   );
+  // The composer's `+ Capture from viewer`, for this tab.
+  const capture = useExplorer((state) => (state.cadCapture?.tabId === tabId ? state.cadCapture : null));
+  const captureRequest = useMemo(() => (capture ? { key: capture.nonce } : null), [capture]);
 
   /**
    * The viewer's copies and captures go to the composer of the thread the
@@ -239,6 +260,7 @@ export function CadRenderer({
         }
       >
         <CadSurface
+          captureRequest={captureRequest}
           colorScheme={colorScheme}
           file={path}
           onCapture={onCapture}

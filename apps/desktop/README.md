@@ -97,7 +97,9 @@ hidden for it) and both again at 1280×800, `file-cad-measure`, `terminal`,
 kinds in light as `*-light` — the `git-*` set for the git modes (the review
 under three scopes, before and after a commit, the sidebar's worktree glyph,
 Settings' per-project worktree card), the session states in both themes with
-the composer at 1280×800 and 1680×1050, and `codex-open-file` from the one
+the composer at 1280×800 and 1680×1050, `session-new-model-menu` (the model
+menu open on the new-session screen, a group per installed provider),
+`session-attach-menu` (the composer's `+`), and `codex-open-file` from the one
 test that runs a real agent (below). Look at them; they are the cheapest review of
 whether the app still looks like an app, and every defect found in P3's
 explorer — a tree that did not reveal the open file, a `+` that scrolled out
@@ -304,6 +306,70 @@ chat", shown only inside the desktop) renders the viewport to a PNG and
 queues it on the composer store (`attachFile`), which the composer's
 attachments pick up and send as an ACP image block.
 
+The composer's own `+` is a menu of the three ways something gets into a
+prompt: `Attach files…`, `Attach image…` and `Capture from viewer`. The last
+is the viewer's own camera button pressed from here — the explorer store
+holds a nonce (`cadCapture`) which `CadRenderer` hands to `CadFileView` as
+`captureRequest`, so there is one capture path and not two — and it is
+disabled, not hidden, when no CAD file is open. There is no microphone
+beside send: there is no dictation backend behind one, macOS's own dictation
+already types into this box, and a permanently disabled button is a promise
+the app does not keep.
+
+## The model and the effort
+
+The composer has a chip for the model and one for how hard it should think,
+and **so does the new-session screen** — which is where the decision actually
+gets made, and where until recently there was only a list of vendors.
+
+An agent says which models it has in its `session/new` reply, so a screen
+with no session has nothing to draw. `src/main/acp/agent-options.ts` is the
+answer: every live session's config options are written to sqlite against its
+agent (migration 6, `agent_options`), on `session/new`, on `session/load` and
+on every `config_option_update`; an installed agent that has never run here is
+**probed** once — spawn the adapter, `initialize`, `session/new` in the
+project's directory with the same MCP servers a real session gets, keep the
+config options, close without prompting. One probe per agent at a time, and a
+probe never `npx`-fetches an adapter for an agent whose CLI is not on the
+machine: a session is something a person asked for and worth a download, a
+probe is speculative. An agent that cannot answer — not installed, not signed
+in, adapter will not start — contributes **no** models, which is the whole of
+"do not show models that cannot be run".
+
+So the new-session strip is project · git mode · model · effort, and the
+model chip **is** the agent chip: its menu is grouped by provider, one group
+per installed agent that answered, and picking `Opus` picks Claude Code the
+way picking `GPT-6-Astra` picks Codex. In a live session the same chip is
+scoped to that session's agent. Either way the choice is stored against the
+agent, so the next session starts where the last one was left, and
+`SessionManager.create` applies it: the model, **then** the effort (switching
+model is what changes which effort levels exist), then the agent's own
+auto-approval preset — `_meta.kind: auto_review`, which is Claude's `auto` and
+Codex's `agent` — instead of the adapter's most cautious default. Every one of
+those is best-effort: an adapter that refuses one logs and the session goes
+on. The app's own `approvalMode` ("ask" / "approve for me") is a separate
+decision and is untouched.
+
+Which option is which lives in `src/shared/acp/options.ts`, read by both
+processes, because main applies these answers and the chips draw them and one
+file is where the two agree. Neither dropdown prints the agent's
+per-option `description`: a menu of models is a list of names, and a paragraph
+under each is a wall to read past rather than a choice to make. The `fast`
+switch, when an agent has one, is the last row of the model menu — it is a
+property of the model, not a second decision.
+
+There is no options chip. It held whatever else the agent exposed, which in
+practice meant Claude's "main-thread agent persona" — a list of every custom
+agent a person's plugins had installed — behind a settings glyph. The
+composer is four decisions, not a settings panel.
+
+How full the context window is sits **above** the box, on a line of fixed
+height, so typing cannot move it. What a turn cost in dollars is gone: it is
+a number nobody acts on mid-thread, and a price tag on a box someone is about
+to type into is a poor thing to put in front of them.
+
+## The explorer strip
+
 The strip's `+` is one button and a menu of the four kinds, each with its
 binding — ⌘T file, ⇧⌘R review, ⇧⌘B browser, ⌃` terminal
 (`lib/shortcuts.ts` is the table the menu prints and `ExplorerPane` answers
@@ -458,8 +524,11 @@ src/main/                 the Electron main process: everything with a side effe
                           versions, auth), shell-env.ts, install.ts + auth.ts (pty jobs via jobs.ts)
   acp/                    connection.ts (adapter process + SDK + stream tap + reducer),
                           client.ts (fs/terminal/permission), terminals.ts (+ pty/process backends),
-                          sessions.ts (index + live connections)
+                          sessions.ts (index + live connections),
+                          agent-options.ts (what each agent's sessions can be configured
+                          with, cached between them — see The model and the effort)
   ipc/{acp,agents}.ts     the P1 handler branches, spread into ipc/index.ts
+  ipc/agent-options.ts    agentOptions.*: the cache, the probe and the stored defaults
   ipc/{plugins,runtime}.ts  the plugin and CAD runtime branches (P5's bodies, P6's shape)
   ipc/dialogs.ts          the native folder and file choosers Settings' path rows use
   ipc/{explorer,cad}.ts   P3's handler branches: files, terminals; cad.viewerOrigin + cad.warm + cad.reply (P5)
@@ -481,6 +550,9 @@ src/shared/               types.ts (domain types as zod schemas)
   ipc/define.ts           invoke / defineIpc and the types derived from a contract
   ipc/app.ts              the app.* branch: the updater's channels and its event
   ipc/acp.ts, ipc/agents.ts  the session and agent branches (P1)
+  ipc/agent-options.ts    agentOptions.* — the model and effort chips before a session exists
+  acp/options.ts          which option is the model, which is the effort, which mode is
+                          the agent's own auto preset (both processes read this one file)
   ipc/plugins.ts, ipc/runtime.ts, ipc/dialogs.ts  the plugin, CAD runtime and chooser branches (P6)
   agents.ts               provider and status schemas
   acp/types.ts, acp/reduce.ts  SessionState and the pure session/update reducer
@@ -493,7 +565,7 @@ src/renderer/
   features/session        the new-session state, the transcript, the composer
     view.ts               SessionState -> rows: activity-row labels, folding, the status line (pure)
     parts/                activity rows (+ Monaco diff, terminal), thoughts, permission cards, subagents
-    ComposerChips.tsx     agent / project / git mode / approval / model / options chips
+    ComposerChips.tsx     project / git mode / approval / mode / model / effort chips
   features/explorer       the one tab strip and its four kinds of tab
     markdown/document.ts  markdown <-> the editor's document, keeping every block the
                           person did not touch byte for byte (remark; read its header)

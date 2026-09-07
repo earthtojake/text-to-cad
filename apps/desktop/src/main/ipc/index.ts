@@ -14,6 +14,7 @@ import { viewers } from "../cad";
 import { track } from "../telemetry";
 import { applySettingsEffects } from "../settings-effects";
 import { acpHandlers } from "./acp";
+import { agentOptionsHandlers } from "./agent-options";
 import { agentsHandlers } from "./agents";
 import { appHandlers } from "./app";
 import { cadHandlers } from "./cad";
@@ -85,6 +86,9 @@ const handlers = {
 
   /** P1: the agent registry, detection, install and login. */
   ...agentsHandlers,
+
+  /** P2: what each agent's sessions can be configured with, between sessions. */
+  ...agentOptionsHandlers,
 
   /** P5: the bundled plugin's state per agent. */
   ...pluginsHandlers,

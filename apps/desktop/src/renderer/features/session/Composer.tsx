@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Mic, Plus, X } from "lucide-react";
+import { Camera, Image, Paperclip, Plus, X } from "lucide-react";
 import { cn } from "cn";
 import { toast } from "sonner";
 
@@ -34,23 +34,34 @@ import {
   QueueSectionTrigger,
 } from "@renderer/components/ai-elements/queue";
 import type { FileUIPart } from "@renderer/components/ai-elements/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@renderer/components/ui/dropdown-menu";
 import { NEW_SESSION_KEY, useComposer, useQueue } from "@renderer/state/composer";
+import { useExplorer } from "@renderer/state/explorer";
 import type { AvailableCommand, PromptBlock } from "@shared/acp/types";
 
+import { isCadPath } from "../explorer/renderers/registry";
 import { dataUrlOf, rememberFiles } from "./composer/attachments";
 import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEditor";
 
 /**
- * The composer (plan §2): "Do anything", `+` for attachments, the chips
- * the caller supplies, a mic placeholder, and send — which becomes stop
- * while a turn runs. Enter sends, Shift+Enter is a newline, Escape stops a
- * running turn, a pasted image becomes an attachment. Typing `/` opens the
- * agent's slash commands.
+ * The composer (plan §2): "Do anything", the `+` menu, the chips the caller
+ * supplies, and send — which becomes stop while a turn runs. Enter sends,
+ * Shift+Enter is a newline, Escape stops a running turn, a pasted image
+ * becomes an attachment. Typing `/` opens the agent's slash commands.
  *
  * One row, Codex's: `+` and the caller's `chips` on the left, the caller's
- * `trailing` chips (the model, the options glyph) then mic and send on the
- * right. Nothing wraps — the chips truncate — so the box is the same height
- * at 560px as at 1200px.
+ * `trailing` chips (the model, the effort) then send on the right. Nothing
+ * wraps — the chips truncate — so the box is the same height at 560px as at
+ * 1200px.
+ *
+ * There is no microphone. There is no dictation backend behind one, and on
+ * macOS the system's own dictation already types into this box; a button
+ * that is permanently disabled is a promise the app does not keep.
  *
  * Shared by the new-session state and the live session: the chips differ,
  * the rest does not. Submission hands back the text and the ACP content
@@ -229,15 +240,6 @@ export function Composer({
           </PromptInputTools>
           <div className="flex min-w-0 shrink-0 items-center gap-0.5">
             {trailing}
-            <PromptInputButton
-              aria-label="Voice input (coming later)"
-              className="size-7 text-muted-foreground"
-              disabled
-              size="icon-sm"
-              tooltip="Voice input is not available yet"
-            >
-              <Mic className="size-3.5" />
-            </PromptInputButton>
             <PromptInputSubmit
               className={cn("size-7 rounded-full", status === "streaming" && "bg-foreground text-background")}
               disabled={disabled || status === "submitted"}
@@ -314,42 +316,84 @@ function AttachmentSink({ draftKey }: { draftKey: string }) {
 }
 
 /**
- * The attach button, with a file input of its own rather than the vendored
- * component's: the files have to be remembered (`composer/attachments.ts`)
- * before they become blob URLs, and only this side can do that.
+ * The `+`: a menu of the three ways something gets into a prompt — a file
+ * from disk, an image from disk, and the view in the CAD tab.
+ *
+ * The file inputs are this component's own rather than the vendored form's:
+ * the files have to be remembered (`composer/attachments.ts`) before they
+ * become blob URLs, and only this side can do that. `Capture from viewer` is
+ * the same capture as the viewer's own camera button and lands in the same
+ * place — it is disabled, not hidden, when no CAD file is open, because the
+ * answer to "why can I not do that" should be visible.
  */
 function AttachButton({ disabled }: { disabled?: boolean }) {
   const attachments = usePromptInputAttachments();
-  const input = useRef<HTMLInputElement | null>(null);
+  const files = useRef<HTMLInputElement | null>(null);
+  const images = useRef<HTMLInputElement | null>(null);
+  const cadTabId = useExplorer((state) => state.tabs.find((tab) => tab.id === state.activeId && isCadTab(tab))?.id
+    ?? state.tabs.find(isCadTab)?.id
+    ?? null);
+  const captureCad = useExplorer((state) => state.captureCad);
+  const take = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = [...(event.currentTarget.files ?? [])];
+    event.currentTarget.value = "";
+    if (picked.length > 0) {
+      attachments.add(rememberFiles(picked));
+    }
+  };
   return (
     <>
+      <input aria-hidden className="hidden" multiple onChange={take} ref={files} tabIndex={-1} type="file" />
       <input
+        accept="image/*"
         aria-hidden
         className="hidden"
         multiple
-        onChange={(event) => {
-          const files = [...(event.currentTarget.files ?? [])];
-          event.currentTarget.value = "";
-          if (files.length > 0) {
-            attachments.add(rememberFiles(files));
-          }
-        }}
-        ref={input}
+        onChange={take}
+        ref={images}
         tabIndex={-1}
         type="file"
       />
-      <PromptInputButton
-        aria-label="Attach files"
-        className="size-7 text-muted-foreground"
-        disabled={disabled}
-        onClick={() => input.current?.click()}
-        size="icon-sm"
-        tooltip="Attach files or images"
-      >
-        <Plus className="size-4" />
-      </PromptInputButton>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <PromptInputButton
+            aria-label="Add to this prompt"
+            className="size-7 text-muted-foreground"
+            disabled={disabled}
+            size="icon-sm"
+          >
+            <Plus className="size-4" />
+          </PromptInputButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56" side="top">
+          <DropdownMenuItem onSelect={() => files.current?.click()}>
+            <Paperclip className="size-3.5" />
+            Attach files…
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => images.current?.click()}>
+            <Image className="size-3.5" />
+            Attach image…
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!cadTabId}
+            onSelect={() => {
+              if (cadTabId) {
+                captureCad(cadTabId);
+              }
+            }}
+          >
+            <Camera className="size-3.5" />
+            Capture from viewer
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </>
   );
+}
+
+/** A file tab the CAD viewer is rendering — the one a capture can come from. */
+function isCadTab(tab: { kind: string; path?: string | null }): boolean {
+  return tab.kind === "file" && !!tab.path && isCadPath(tab.path);
 }
 
 /** The files waiting to go with the next prompt, above the textarea. */

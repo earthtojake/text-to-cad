@@ -459,22 +459,17 @@ export function promptCount(state: SessionState): number {
 }
 
 /**
- * Whether a config option is the one that says how hard to think.
+ * Whether a config option is the one that says how hard to think — and, in
+ * the same file, which one is the model and which mode is the agent's own
+ * auto preset.
  *
- * The composer gives it a dropdown of its own beside the model's, so it has
- * to be found among options the agent named itself. ACP's `thought_level`
- * category is the answer when an adapter sets it; the ids are Codex's
- * (`reasoning_effort`) and Claude's (`effort`), which do not. Matching the
- * name as well would catch a boolean called "Effortless"; two known ids and a
- * category is the whole rule, and an agent that invents a third gets its
- * option under the options glyph, which is not a bug.
+ * These moved to `@shared/acp/options` when main started applying them too:
+ * a session is created with the stored model and effort and in the
+ * provider's auto mode, and the chips draw the same three answers. One file
+ * is where the two processes agree; this re-export is so the transcript's
+ * own module still reads as one surface.
  */
-export function isEffortOption(option: { id: string; category: string | null }): boolean {
-  return (
-    option.category === "thought_level" ||
-    ["reasoning_effort", "effort", "thinking_level", "thought_level"].includes(option.id)
-  );
-}
+export { isEffortOption } from "@shared/acp/options";
 
 export { errorMessage } from "@shared/ipc/errors";
 

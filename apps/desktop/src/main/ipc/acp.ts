@@ -11,10 +11,12 @@ import { IpcError, broadcast, type IpcContext } from "./register";
 import { detector } from "./agents";
 import type { IpcHandlers } from "../../shared/ipc";
 import type { acpContract } from "../../shared/ipc/acp";
+import type { ConfigOption } from "../../shared/acp/types";
 import { spawnPtyTerminal } from "../acp/pty-backend";
+import { AgentOptionStore } from "../acp/agent-options";
 import { SessionManager } from "../acp/sessions";
 import { forgetSession, mcpServersFor } from "../cad";
-import { projects, sessions, settings } from "../db/repositories";
+import { agentOptions as agentOptionsRepo, projects, sessions, settings } from "../db/repositories";
 import { head } from "../projects/git";
 import { releaseWorkspace, resolveWorkspace } from "../projects/workspace";
 import { pruneProjectWorktrees } from "./git";
@@ -26,13 +28,51 @@ import { pruneProjectWorktrees } from "./git";
  */
 const fakeAgent = app.isPackaged ? undefined : process.env.HARDCORE_FAKE_AGENT;
 
-export const sessionManager = new SessionManager({
+/**
+ * What each agent's sessions can be configured with, between sessions
+ * (`src/main/acp/agent-options.ts`): the snapshot the new-session screen's
+ * model and effort chips are drawn from, the defaults `create` applies, and
+ * the probe that takes a first snapshot from an agent nobody has run yet.
+ *
+ * Declared before the manager it calls into and closing over it lazily, so
+ * the two can refer to each other without a module cycle.
+ */
+export const agentOptions: AgentOptionStore = new AgentOptionStore({
+  read: () => agentOptionsRepo.list(),
+  get: (agentId) => agentOptionsRepo.get(agentId),
+  writeOptions: (agentId, options) => agentOptionsRepo.setOptions(agentId, options),
+  writeDefaults: (agentId, defaults) => agentOptionsRepo.setDefaults(agentId, defaults),
+  probe: async (agentId, projectId): Promise<ConfigOption[]> => {
+    const project = projectId
+      ? (projects.list().find((candidate) => candidate.id === projectId) ?? null)
+      : (projects.list()[0] ?? null);
+    if (!project) {
+      throw new Error("no project to probe in");
+    }
+    return sessionManager.probeOptions({ agentId, cwd: project.path, projectId: project.id });
+  },
+  onChange: (all) => broadcast("agentOptions.changed", all),
+  onProbeFailed: (agentId, error) => {
+    // Not installed, not signed in, no adapter: the new-session screen shows
+    // that provider nothing, which is the whole of what the person needs.
+    console.info(`[acp] ${agentId} answered no config options: ${String(error)}`);
+  },
+});
+
+export const sessionManager: SessionManager = new SessionManager({
   repo: sessions,
   detector,
   spawnTerminal: spawnPtyTerminal,
   broadcast,
   // Every session gets the Hardcore MCP server, with a token that names it.
   mcpServers: mcpServersFor,
+  forgetProbe: (probeId) => forgetSession(probeId, null),
+  agentOptions: {
+    defaults: (agentId) => agentOptions.defaults(agentId),
+    remember: (agentId, options) => agentOptions.remember(agentId, options),
+    rememberChoice: (agentId, configId, value, options) =>
+      agentOptions.rememberChoice(agentId, configId, value, options),
+  },
   clientVersion: app.isPackaged ? app.getVersion() : __APP_VERSION__,
   newId: () => randomUUID(),
   launchOverride: fakeAgent

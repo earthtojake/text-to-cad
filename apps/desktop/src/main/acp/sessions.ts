@@ -16,8 +16,10 @@ import nodePath from "node:path";
 
 import type { McpServer } from "@agentclientprotocol/sdk";
 
+import { autoModeId, autoModeValue, effortOption, modeOption, modelOption } from "../../shared/acp/options";
 import type {
   ApprovalMode,
+  ConfigOption,
   PromptBlock,
   SessionEvent,
   SessionState,
@@ -49,8 +51,32 @@ export type SessionManagerDeps = {
   detector: AgentDetector;
   spawnTerminal: SpawnTerminal;
   broadcast: <C extends IpcEventChannel>(channel: C, payload: IpcEventPayload<C>) => void;
-  /** The MCP servers a session gets: Hardcore's own, minted per session (src/main/cad). */
-  mcpServers?: (session: Session) => McpServer[];
+  /**
+   * The MCP servers a session gets: Hardcore's own, minted per session
+   * (src/main/cad). A probe (`probeOptions`) is minted one too, and revokes
+   * it when it is done: the adapter is spawned exactly as a real session's
+   * would be, or the options it reports are not the options it would have.
+   */
+  mcpServers?: (session: Pick<Session, "id" | "projectId" | "cwd">) => McpServer[];
+  /** Called when a probe's connection is closed, so its bridge token can be revoked. */
+  forgetProbe?: (probeId: string) => void;
+
+  /**
+   * P2: what the agents' sessions can be configured with, kept between
+   * sessions (`./agent-options.ts`). Injected: this file applies the stored
+   * defaults on create and writes back what it sees, and knows nothing about
+   * where they are stored.
+   */
+  agentOptions?: {
+    defaults(agentId: string): { model: string | null; effort: string | null };
+    remember(agentId: string, options: ConfigOption[]): void;
+    rememberChoice(
+      agentId: string,
+      configId: string,
+      value: string | boolean,
+      options: ConfigOption[],
+    ): void;
+  };
   clientVersion?: string;
   newId: () => string;
   /**
@@ -104,6 +130,15 @@ export function titleFromPrompt(content: PromptBlock[], max = 60): string {
 }
 
 type ChangeTally = { files: Set<string>; insertions: number; deletions: number };
+
+/** How long a config-option probe may take before it is abandoned. */
+const PROBE_TIMEOUT_MS = 60_000;
+
+function rejectAfter(ms: number, agentId: string): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    setTimeout(() => reject(new Error(`${agentId} did not answer session/new in ${ms}ms`)), ms).unref?.();
+  });
+}
 
 export class SessionManager {
   private readonly live = new Map<string, SessionConnection>();
@@ -197,9 +232,137 @@ export class SessionManager {
       this.broadcastIndex();
       throw error;
     }
+    // What the person last chose for this agent, and the agent's own
+    // auto-approval preset. Never a reason for the session to fail: a
+    // refused `set_config_option` leaves the session at the agent's own
+    // defaults, which is a working session.
+    await this.applyPreferences(session, connection);
     const updated = this.update(session.id, { acpSessionId: connection.acpSessionId, status: "idle" });
     this.deps.broadcast("session.state", { sessionId: session.id, state: connection.state });
     return updated;
+  }
+
+  /**
+   * The model, then the effort, then the agent's own auto mode — in that
+   * order, and the order matters: switching model is what changes which
+   * effort levels the agent offers, so an effort set first would be set
+   * against the outgoing model's list.
+   *
+   * Every step is best-effort. An adapter that refuses one of them logs and
+   * the session goes on.
+   */
+  private async applyPreferences(session: Session, connection: SessionConnection): Promise<void> {
+    const defaults = this.deps.agentOptions?.defaults(session.agentId) ?? { model: null, effort: null };
+    await this.applyConfigOption(connection, modelOption(connection.state.configOptions), defaults.model);
+    await this.applyConfigOption(connection, effortOption(connection.state.configOptions), defaults.effort);
+    await this.applyAutoMode(connection);
+    this.deps.agentOptions?.remember(session.agentId, connection.state.configOptions);
+  }
+
+  private async applyConfigOption(
+    connection: SessionConnection,
+    option: ReturnType<typeof modelOption>,
+    value: string | null,
+  ): Promise<void> {
+    if (!option || !value || option.currentValue === value) {
+      return;
+    }
+    // A model the agent no longer offers — an upgrade dropped it, or the
+    // default was stored against a different account. Leave the agent's own.
+    if (!option.options.some((candidate) => candidate.value === value)) {
+      return;
+    }
+    try {
+      await connection.setConfigOption(option.id, value);
+    } catch (error) {
+      console.warn(`[acp] ${option.id}=${value} was refused: ${String(error)}`);
+    }
+  }
+
+  /**
+   * Start in whatever the provider calls its own auto-approval preset —
+   * Claude's `Auto`, Codex's `Approve for me` — rather than in the adapter's
+   * most cautious default (`_meta.kind: auto_review`, `shared/acp/options`).
+   * The app's own `approvalMode` is a separate decision and is untouched.
+   */
+  private async applyAutoMode(connection: SessionConnection): Promise<void> {
+    try {
+      const modeId = autoModeId(connection.state.modes);
+      if (modeId) {
+        if (connection.state.currentModeId !== modeId) {
+          await connection.setMode(modeId);
+        }
+        return;
+      }
+      const option = modeOption(connection.state.configOptions);
+      const value = autoModeValue(option);
+      if (option && value && option.currentValue !== value) {
+        await connection.setConfigOption(option.id, value);
+      }
+    } catch (error) {
+      console.warn(`[acp] the agent's auto mode was refused: ${String(error)}`);
+    }
+  }
+
+  /**
+   * What one `session/new` with this agent would offer, without keeping the
+   * session: the adapter is spawned exactly as a real session's is — the same
+   * environment, the same MCP servers, the project's own directory — asked
+   * for a session, read, and killed. Nothing is prompted and no row is
+   * written.
+   *
+   * This is what the new-session screen's model and effort chips are drawn
+   * from before anything has run. An agent that is not installed or not
+   * signed in throws here, and the caller's answer to that is silence.
+   */
+  async probeOptions(input: {
+    agentId: string;
+    cwd: string;
+    projectId: string | null;
+  }): Promise<ConfigOption[]> {
+    const provider = agentProvider(input.agentId);
+    if (!provider) {
+      throw new Error(`unknown agent: ${input.agentId}`);
+    }
+    const launch = this.deps.launchOverride?.(provider.id) ?? null;
+    const status = this.deps.detector.list().find((candidate) => candidate.id === provider.id);
+    // Stricter than `connect`, on purpose. A session is something a person
+    // asked for and is worth an `npx -y` download; a probe is speculative,
+    // and eight `launchWithoutBinary` providers fetching their adapters on a
+    // first run — each to be told it is signed out — is a download storm
+    // nobody asked for. So: the CLI is on this machine, or nothing. (With a
+    // launch override in force every provider is the same test process, and
+    // the machine's PATH says nothing about it.)
+    if (!launch && !status?.installed) {
+      throw new Error(`${provider.name} is not installed`);
+    }
+    if (!existsSync(input.cwd)) {
+      throw new Error(`${input.cwd} does not exist`);
+    }
+    const probeId = `probe:${input.agentId}:${this.deps.newId()}`;
+    const env = await this.deps.detector.environment();
+    const connection = new SessionConnection({
+      sessionId: probeId,
+      agentId: input.agentId,
+      launch: launch ?? provider.launch,
+      env,
+      cwd: input.cwd,
+      mcpServers:
+        this.deps.mcpServers?.({ id: probeId, projectId: input.projectId ?? "", cwd: input.cwd }) ?? [],
+      spawnTerminal: this.deps.spawnTerminal,
+      clientVersion: this.deps.clientVersion,
+      onStderr: () => undefined,
+    });
+    try {
+      // An adapter that has to be fetched before it can answer (`npx -y …`)
+      // is slow but finite; one that never answers must not leave a process
+      // behind for the rest of the app's life.
+      await Promise.race([connection.newSession(), rejectAfter(PROBE_TIMEOUT_MS, input.agentId)]);
+      return connection.state.configOptions;
+    } finally {
+      connection.close();
+      this.deps.forgetProbe?.(probeId);
+    }
   }
 
   /** Resume: spawn and `session/load`. A live connection is returned as is. */
@@ -259,7 +422,18 @@ export class SessionManager {
   }
 
   async setConfigOption(id: string, configId: string, value: string | boolean): Promise<void> {
-    await this.requireLive(id).setConfigOption(configId, value);
+    const connection = this.requireLive(id);
+    const before = connection.state.configOptions;
+    await connection.setConfigOption(configId, value);
+    // The model or the effort changed here is what the next session with this
+    // agent starts as — a thread ends the way the last one was left, rather
+    // than back at the adapter's default. Matched against the options as they
+    // were *before* the call, because a model switch rewrites the effort list.
+    const session = this.deps.repo.get(id);
+    if (session) {
+      this.deps.agentOptions?.rememberChoice(session.agentId, configId, value, before);
+      this.deps.agentOptions?.remember(session.agentId, connection.state.configOptions);
+    }
   }
 
   respondPermission(id: string, requestId: string, optionId: string | null): void {
@@ -455,6 +629,20 @@ export class SessionManager {
 
   private onEvent(id: string, event: SessionEvent) {
     this.deps.broadcast("session.update", { sessionId: id, event });
+    // Every time the agent tells us what a session can be configured with —
+    // `session/new`, `session/load`, a `config_option_update` it sent on its
+    // own — that becomes this agent's snapshot for the new-session screen.
+    if (
+      event.type === "session/connected" ||
+      event.type === "config/updated" ||
+      (event.type === "session/update" && event.update.sessionUpdate === "config_option_update")
+    ) {
+      const session = this.deps.repo.get(id);
+      const state = this.live.get(id)?.state;
+      if (session && state) {
+        this.deps.agentOptions?.remember(session.agentId, state.configOptions);
+      }
+    }
     switch (event.type) {
       case "session/update":
         this.tallyUpdate(id, event.update as Record<string, unknown>);

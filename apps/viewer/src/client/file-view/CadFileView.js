@@ -375,6 +375,7 @@ export default function CadFileView({
   selectReference = null,
   onReference = null,
   onCapture = null,
+  captureRequest = null,
 }) {
   const viewerOrigin = normalizeViewerOrigin(origin);
   // The shared tessellation cache is reached through THIS origin's
@@ -403,6 +404,7 @@ export default function CadFileView({
         selectReference={selectReference}
         onReference={onReference}
         onCapture={onCapture}
+        captureRequest={captureRequest}
       />
     </ViewerOriginProvider>
   );
@@ -425,6 +427,7 @@ function CadFileViewSurface({
   selectReference,
   onReference,
   onCapture,
+  captureRequest,
 }) {
   // What the host pins, if anything (docs/file-view.md, "Laying out inside a
   // host"): the layout mode, the sheet's width, and which way the colour
@@ -6393,6 +6396,22 @@ function CadFileViewSurface({
       setScreenshotStatus(captureError instanceof Error ? captureError.message : "Capture failed");
     }
   }, [onCapture, selectedEntry]);
+
+  // A host asking for the same picture from outside the viewport — the
+  // desktop's composer has a `Capture from viewer` item beside its attach
+  // ones. `key` is a nonce, so two requests are two captures; the picture
+  // goes to `onCapture` either way, and there is one capture path.
+  const captureKey = captureRequest?.key ?? null;
+  useEffect(() => {
+    if (captureKey === null) {
+      return;
+    }
+    void handleCapture();
+    // Deliberately keyed on the nonce alone: re-running when `handleCapture`
+    // is rebuilt (a new selection, a new host callback) would take a second
+    // picture nobody asked for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captureKey]);
 
   const handleScreenshotCopy = useCallback(async () => {
     if (!selectedEntry) {

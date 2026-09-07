@@ -172,6 +172,13 @@ type ExplorerState = {
    * to the viewer's `selectReference` prop.
    */
   cadSelection: { tabId: string; selector: string; nonce: number } | null;
+  /**
+   * A request for a CAD tab to send its viewport to the composer — the
+   * composer's `+` menu asking for the same picture the viewer's own camera
+   * button takes. Nonce-keyed like `cadSelection`, so asking twice is two
+   * captures, and consumed by `CadRenderer` as the viewer's `captureRequest`.
+   */
+  cadCapture: { tabId: string; nonce: number } | null;
 
   bindProject: (projectId: string | null, root?: ExplorerRoot) => Promise<void>;
   /**
@@ -215,6 +222,8 @@ type ExplorerState = {
    */
   revealPath: (path: string, directory: boolean, root: ExplorerRoot) => void;
   selectCadReference: (tabId: string, selector: string) => void;
+  /** Ask a CAD tab for a capture of what it is showing. */
+  captureCad: (tabId: string) => void;
 };
 
 let sequence = 0;
@@ -297,6 +306,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   changedRoot: null,
   reveal: null,
   cadSelection: null,
+  cadCapture: null,
 
   bindProject: async (projectId, root = null) => {
     if (get().projectId === projectId && get().ready) {
@@ -534,6 +544,9 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
 
   selectCadReference: (tabId, selector) =>
     set((state) => ({ cadSelection: { tabId, selector, nonce: (state.cadSelection?.nonce ?? 0) + 1 } })),
+
+  captureCad: (tabId) =>
+    set((state) => ({ cadCapture: { tabId, nonce: (state.cadCapture?.nonce ?? 0) + 1 } })),
 
   receiveChanges: (projectId, root, paths) => {
     if (get().projectId !== projectId) {

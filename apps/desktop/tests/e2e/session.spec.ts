@@ -75,14 +75,34 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   // own row holds approval.
   const strip = page.locator("[data-context-strip]");
   await expect(strip.locator("[data-chip=project]")).toContainText(projectName);
-  await expect(strip.locator("[data-chip=agent]")).not.toContainText("Choose an agent");
   // Two choices behind the git chip, and a scratch directory that is not a
   // repository still runs: Local (plan §9).
   await expect(strip.locator("[data-chip=git-mode]")).toContainText("Local");
+  // The model and the effort, before there is a session — the chips the
+  // agent dropdown was replaced by. They appear once the agent has been
+  // probed for what it offers, which on a first run spawns the adapter.
+  await expect(strip.locator("[data-chip=model]")).toContainText("Fast", { timeout: 30_000 });
+  await expect(strip.locator("[data-chip=effort]")).toContainText("Medium");
+  await expect(strip.locator("[data-chip=agent]")).toHaveCount(0);
   await expect(page.locator("[data-composer] [data-chip=approval]")).toContainText("Ask");
   // The heading, the line under it, the strip and an empty box — nothing else.
   await expect(page.locator("[data-new-session] button", { hasText: "Explore this project" })).toHaveCount(0);
   await shoot("session-new.png");
+
+  // The model menu is grouped by provider — one group per agent that
+  // answered, `HARDCORE_FAKE_AGENT` making every installed one answer the
+  // same two models — and lists names alone, with no paragraph under each.
+  await strip.locator("[data-chip=model]").click();
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitemradio", { name: "Fast", exact: true }).first()).toBeVisible();
+  await expect(menu.getByRole("menuitemradio", { name: "Smart", exact: true }).first()).toBeVisible();
+  await expect(menu.getByText("Claude Code", { exact: true })).toBeVisible();
+  // Names only: an item is one line, so it is no taller than one row of text.
+  const item = menu.getByRole("menuitemradio").first();
+  expect((await item.boundingBox())!.height).toBeLessThan(36);
+  await shoot("session-new-model-menu.png");
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
   await setTheme("light");
   await shoot("session-new-light.png");
   await setTheme("dark");
@@ -140,6 +160,19 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   const composerRow = page.locator("[data-composer]");
   await expect(composerRow.locator("[data-chip=model]")).toContainText("Fast");
   await expect(composerRow.locator("[data-chip=effort]")).toContainText("Medium");
+  // No options chip and no microphone: the first was somebody else's plugin
+  // agents behind a settings glyph, the second a button that never worked.
+  await expect(composerRow.locator("[data-chip=options]")).toHaveCount(0);
+  await expect(composerRow.getByRole("button", { name: /voice/i })).toHaveCount(0);
+  // And the session started in the agent's own auto mode, not its default.
+  await expect(composerRow.locator("[data-chip=mode]")).toContainText("Auto");
+  // How full the context is sits ABOVE the box, so typing cannot move it.
+  const contextLine = page.locator("[data-context-line]");
+  await expect(contextLine).toContainText("% context");
+  await expect(contextLine).not.toContainText("$");
+  const lineBox = (await contextLine.boundingBox())!;
+  const boxTop = (await composerRow.boundingBox())!.y;
+  expect(lineBox.y + lineBox.height).toBeLessThanOrEqual(boxTop + 1);
   await expectOneRowComposer();
   // And still one row at the three window sizes the layout is designed for.
   for (const [width, height] of [[1280, 800], [1680, 1050]] as const) {
@@ -175,6 +208,22 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await setTheme("light");
   await shoot("session-expanded-light.png");
   await setTheme("dark");
+});
+
+test("the + is a menu of the three ways something gets into a prompt", async () => {
+  const plus = page.locator("[data-composer]").getByRole("button", { name: "Add to this prompt" });
+  await plus.click();
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitem", { name: "Attach files…" })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: "Attach image…" })).toBeVisible();
+  // No CAD file is open in this suite, so the capture is disabled rather
+  // than missing: the answer to "why can I not do that" should be visible.
+  const capture = menu.getByRole("menuitem", { name: "Capture from viewer" });
+  await expect(capture).toBeVisible();
+  await expect(capture).toHaveAttribute("data-disabled", "");
+  await shoot("session-attach-menu.png");
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
 });
 
 /**

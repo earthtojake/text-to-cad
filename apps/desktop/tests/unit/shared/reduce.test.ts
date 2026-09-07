@@ -19,7 +19,7 @@ function connected(state = initialSessionState("s1", "fake")): SessionState {
   return reduce(state, {
     type: "session/connected",
     acpSessionId: root,
-    modes: { currentModeId: "default", availableModes: [{ id: "default", name: "Default", description: null }] },
+    modes: { currentModeId: "default", availableModes: [{ id: "default", name: "Default", description: null, kind: null }] },
     configOptions: null,
     loading: false,
     at,

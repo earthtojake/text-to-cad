@@ -10,6 +10,7 @@ import type { IpcEventPayload } from "@shared/ipc";
 import type { ExplorerRoot } from "@shared/types";
 
 import { useAcp } from "./acp";
+import { useAgentOptions } from "./agent-options";
 import { useAgents } from "./agents";
 import { useComposer } from "./composer";
 import { performCadCommand } from "./cad-commands";
@@ -58,6 +59,9 @@ export function subscribeToMain(): () => void {
     }),
     window.hardcore.on("agents.output", (chunk) => {
       useAgents.getState().receiveOutput(chunk);
+    }),
+    window.hardcore.on("agentOptions.changed", (all) => {
+      useAgentOptions.getState().receive(all);
     }),
     window.hardcore.on("plugins.status", (statuses) => {
       usePlugins.getState().receive(statuses);
@@ -216,6 +220,7 @@ export async function hydrate(): Promise<void> {
     useSessions.getState().load(),
     useUpdates.getState().load(),
     useAgents.getState().load(),
+    useAgentOptions.getState().load(),
   ]);
   // The explorer's strip follows the active project, which the subscription
   // in `subscribeToMain` picks up as soon as `useProjects.load` resolves.

@@ -173,9 +173,22 @@ test("the viewer's Copy Reference lands a chip, and the camera an image", async 
 
   // The camera button: the viewport as a PNG attachment.
   await page.getByTestId("capture-to-chat").click();
-  await expect(page.locator("[data-composer]").getByText(/import-smoke-.*\.png/)).toBeVisible({ timeout: 15_000 });
+  const captures = page.locator("[data-composer]").getByText(/import-smoke-.*\.png/);
+  await expect(captures).toHaveCount(1, { timeout: 15_000 });
   await page.waitForTimeout(500);
   await page.screenshot({ path: path.join(screenshots, "composer-capture.png"), animations: "disabled" });
+
+  // And the same capture asked for from the composer's `+`, which is the
+  // path the desktop added (`captureRequest`): a CAD tab is open, so the
+  // item is live, and it lands a second picture in the same place.
+  await page.locator("[data-composer]").getByRole("button", { name: "Add to this prompt" }).click();
+  const capture = page.getByRole("menuitem", { name: "Capture from viewer" });
+  await expect(capture).not.toHaveAttribute("data-disabled", "");
+  await capture.click();
+  await expect(captures).toHaveCount(2, { timeout: 15_000 });
+  // One of the two goes back, so the assertions below still see one image.
+  await page.locator("[data-composer]").getByRole("button", { name: "Remove" }).last().click();
+  await expect(captures).toHaveCount(1);
 
   // Sent: the text carries the token, the image goes as an image block.
   // A click in the middle of the box lands on the chip and selects it (a
