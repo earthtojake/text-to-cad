@@ -122,6 +122,7 @@ export function TabStrip() {
       <div
         className="no-scrollbar app-no-drag flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
         ref={stripRef}
+        aria-label="Explorer tabs"
         role="tablist"
       >
         {tabs.map((tab, index) => (
@@ -157,6 +158,7 @@ export function TabStrip() {
           <DropdownMenuTrigger asChild>
             <Button
               aria-label="New tab"
+              title="New tab"
               className="size-6 text-muted-foreground"
               size="icon-xs"
               variant="ghost"
@@ -216,15 +218,16 @@ function TabButton({
   return (
     <div
       className={cn(
-        "group/tab relative flex h-[26px] max-w-[190px] shrink-0 items-center gap-1.5 rounded-md pr-0.5 pl-1.5 text-[13px] transition-colors",
+        "group/tab relative flex h-7 max-w-[190px] shrink-0 items-center gap-1.5 rounded-lg border pr-1 pl-2 text-[13px] transition-colors",
         active
-          ? "bg-accent text-accent-foreground"
-          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+          ? "border-border bg-accent/80 font-medium text-accent-foreground shadow-xs"
+          : "border-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground",
         dragging && "opacity-40",
         // The insertion point, drawn as a line rather than by shifting the
         // tabs: a strip whose tabs jump around under the cursor is hard to aim.
         dropBefore && "before:absolute before:inset-y-1 before:-left-0.5 before:w-0.5 before:rounded-full before:bg-primary",
       )}
+      aria-selected={active}
       data-tab={tab.id}
       draggable
       onDragEnd={onDragEnd}
@@ -248,7 +251,7 @@ function TabButton({
     >
       <button
         aria-selected={active}
-        className="flex min-w-0 items-center gap-1.5 outline-none"
+        className="flex min-w-0 items-center gap-1.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         onClick={onSelect}
         type="button"
       >
@@ -258,8 +261,8 @@ function TabButton({
       <button
         aria-label={`Close ${title}`}
         className={cn(
-          "flex size-4 shrink-0 items-center justify-center rounded-sm transition-opacity hover:bg-background/70",
-          active ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover/tab:opacity-100",
+          "flex size-5 shrink-0 items-center justify-center rounded-md outline-none transition-opacity hover:bg-background/70 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring",
+          active ? "opacity-60 hover:opacity-100" : "opacity-0 group-hover/tab:opacity-100 group-focus-within/tab:opacity-100",
         )}
         onClick={onClose}
         type="button"

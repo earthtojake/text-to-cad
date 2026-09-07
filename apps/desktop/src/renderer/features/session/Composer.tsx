@@ -424,13 +424,25 @@ function AttachmentStrip() {
   return (
     <PromptInputHeader className="px-2 pt-2">
       <Attachments variant="inline">
-        {attachments.files.map((file) => (
-          <Attachment className="h-7 text-[12px]" data={file} key={file.id} onRemove={() => attachments.remove(file.id)}>
-            <AttachmentPreview className="size-4" />
-            <AttachmentInfo className="max-w-[160px]" />
-            <AttachmentRemove className="size-4" />
-          </Attachment>
-        ))}
+        {attachments.files.map((file) => {
+          const isImage = file.mediaType?.startsWith("image/");
+          return (
+            <Attachment
+              className={cn(
+                "cursor-default text-[12px]",
+                isImage ? "h-auto w-[280px] max-w-full gap-2 rounded-xl bg-muted/30 p-2" : "h-8 max-w-full",
+              )}
+              data={file}
+              key={file.id}
+              onRemove={() => attachments.remove(file.id)}
+              title={file.filename}
+            >
+              <AttachmentPreview className={isImage ? "size-16 rounded-md border bg-background [&_img]:object-contain" : "size-4"} />
+              <AttachmentInfo className={isImage ? "min-w-0 text-[11px] leading-4" : "max-w-[160px]"} />
+              <AttachmentRemove className="size-6 opacity-60 hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring" />
+            </Attachment>
+          );
+        })}
       </Attachments>
     </PromptInputHeader>
   );
