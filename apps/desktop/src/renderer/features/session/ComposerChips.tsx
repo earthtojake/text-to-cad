@@ -355,8 +355,15 @@ export function ModelChip({
             {providers.map((provider, index) => (
               <div key={provider.agentId}>
                 {index > 0 ? <DropdownMenuSeparator /> : null}
-                <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">
-                  {many ? provider.agentName : provider.model.name}
+                <DropdownMenuLabel className="flex items-center gap-1.5 text-[11px] text-muted-foreground uppercase">
+                  {many ? (
+                    <>
+                      <ProviderGlyph icon={provider.icon} size="size-3" />
+                      {provider.agentName}
+                    </>
+                  ) : (
+                    provider.model.name
+                  )}
                 </DropdownMenuLabel>
                 <OptionItems
                   option={provider.model}
@@ -432,15 +439,15 @@ export function EffortChip({
 }
 
 /** The agent's mark at chip size, in `currentColor`, or a sparkle. */
-function ProviderGlyph({ icon }: { icon?: string | null }) {
+function ProviderGlyph({ icon, size = "size-3.5" }: { icon?: string | null; size?: "size-3" | "size-3.5" }) {
   const markup = agentIcon(icon);
   if (!markup) {
-    return <Sparkles />;
+    return <Sparkles className={size} />;
   }
   return (
     // Committed assets, checked by the script that downloads them — not user
     // input (see `features/settings/AgentMark.tsx`).
-    <span aria-hidden className="block size-3.5" dangerouslySetInnerHTML={{ __html: markup }} />
+    <span aria-hidden className={cn("block", size)} dangerouslySetInnerHTML={{ __html: markup }} />
   );
 }
 

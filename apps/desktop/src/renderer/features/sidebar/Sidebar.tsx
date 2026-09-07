@@ -1,6 +1,7 @@
 import { FolderPlus, MessageSquarePlus, Search, Settings } from "lucide-react";
 import { cn } from "cn";
 
+import { SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import {
@@ -36,7 +37,7 @@ export function Sidebar() {
       <div className="app-drag shrink-0" style={{ height: "var(--titlebar-height)" }} />
 
       <header className="app-drag flex shrink-0 items-center gap-1 pt-0.5 pr-2 pb-1 pl-3">
-        <span className="app-no-drag truncate text-[17px] font-semibold tracking-tight">Hardcore</span>
+        <span className="app-no-drag truncate text-xl font-semibold tracking-tight">Hardcore</span>
         <div className="flex-1" />
         <Button
           aria-label="Search"
@@ -47,6 +48,9 @@ export function Sidebar() {
         >
           <Search className="size-3.5" />
         </Button>
+        {/* The panel's own collapse, at its right edge: beside the session's
+            title bar, never beside the app's name. */}
+        <SidebarToggle />
       </header>
 
       <nav className="shrink-0 px-2 pb-2">

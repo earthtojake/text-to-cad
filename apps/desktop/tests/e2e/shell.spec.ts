@@ -74,16 +74,28 @@ test("the shell shows three panes, the explorer closed", async () => {
 });
 
 /**
- * The sidebar's collapse sits at the far left of the session's title bar,
- * open or closed; the sidebar's own header holds only the app's name. The
- * explorer's toggle stays on the right.
+ * The sidebar's collapse sits at the right edge of the sidebar's own header
+ * while the sidebar is open — beside the search, across the border from the
+ * session's title — and at the far left of that title bar once the sidebar
+ * is gone. The explorer's toggle stays on the right.
  */
-test("the sidebar's collapse is the title bar's first control", async () => {
+test("the sidebar's collapse is at its panel's right edge, then the title bar's left", async () => {
   const sidebar = page.locator("[data-panel]").first();
-  await expect(page.getByText("Hardcore", { exact: true })).toBeVisible();
-  await expect(sidebar.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(0);
-
   const header = page.locator("[data-session-header]");
+  const inSidebar = sidebar.getByRole("button", { name: "Toggle sidebar" });
+  await expect(inSidebar).toBeVisible();
+  await expect(header.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(0);
+  const [toggleBox, nameBox, searchBox] = await Promise.all([
+    inSidebar.boundingBox(),
+    page.getByText("Hardcore", { exact: true }).boundingBox(),
+    sidebar.getByRole("button", { name: "Search" }).boundingBox(),
+  ]);
+  expect(toggleBox!.x).toBeGreaterThan(nameBox!.x);
+  expect(toggleBox!.x).toBeGreaterThan(searchBox!.x);
+
+  await inSidebar.click();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBe(0);
+
   const collapse = header.getByRole("button", { name: "Toggle sidebar" });
   await expect(collapse).toBeVisible();
   const [collapseBox, titleBox, explorerToggleBox] = await Promise.all([
@@ -95,11 +107,8 @@ test("the sidebar's collapse is the title bar's first control", async () => {
   expect(explorerToggleBox!.x).toBeGreaterThan(titleBox!.x);
 
   await collapse.click();
-  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBe(0);
-  await expect(collapse).toBeVisible();
-
-  await collapse.click();
   await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThan(0);
+  await expect(inSidebar).toBeVisible();
 });
 
 test("the explorer opens and closes a tab", async () => {

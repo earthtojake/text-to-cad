@@ -1,10 +1,11 @@
 /**
  * The two buttons that open and close the side panes.
  *
- * They live here rather than in either feature because both sit in the
- * session's title bar — the sidebar's collapse at its far left, the
- * explorer's at its right — whatever the two panes are doing, and the
- * command palette and the shortcuts reach the same two actions.
+ * They live here rather than in either feature because the sidebar's collapse
+ * is drawn in two places: at the right edge of the sidebar's own header while
+ * the sidebar is open, and at the far left of the session's title bar once it
+ * is gone. The explorer's sits on the right of that title bar whatever the
+ * explorer is doing. One component, so the placements cannot drift.
  */
 import { PanelLeft, PanelRight } from "lucide-react";
 
