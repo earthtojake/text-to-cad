@@ -317,6 +317,14 @@ chat", shown only inside the desktop) renders the viewport to a PNG and
 queues it on the composer store (`attachFile`), which the composer's
 attachments pick up and send as an ACP image block.
 
+Click a composer reference chip, or focus its button with Tab and press
+Enter, to open its model and select the referenced geometry. The draft and
+its caret stay intact, and activating a chip never submits the prompt.
+References open relative to the chat’s workspace or the new draft’s pinned
+workspace. A bare selector requires a CAD tab in that same workspace;
+otherwise the app asks you to open the model first. This uses the viewer’s
+existing `selectReference` contract; hover does not alter its selection.
+
 The composer's own `+` is a menu of the three ways something gets into a
 prompt: `Attach files…`, `Attach image…` and `Capture from viewer`. The last
 is the viewer's own camera button pressed from here — the explorer store

@@ -42,11 +42,14 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { NEW_SESSION_KEY, useComposer, useQueue } from "@renderer/state/composer";
 import { useExplorer } from "@renderer/state/explorer";
+import { useProjects } from "@renderer/state/projects";
+import { useSessions } from "@renderer/state/sessions";
 import type { AvailableCommand, PromptBlock } from "@shared/acp/types";
 
 import { isCadPath } from "../explorer/renderers/registry";
 import { dataUrlOf, rememberFiles } from "./composer/attachments";
 import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEditor";
+import { ReferenceScopeContext } from "./composer/ReferenceScope";
 
 /**
  * The composer (plan §2): "Do anything", the `+` menu, the chips the caller
@@ -106,6 +109,14 @@ export function Composer({
   // sessions and back does not lose typed text and a suggestion card can
   // fill the box from outside.
   const draftKey = sessionId ?? newDraftKey ?? NEW_SESSION_KEY;
+  const project = useProjects((state) => state.projects.find((item) => item.id === state.activeId));
+  const session = useSessions((state) => state.sessions.find((item) => item.id === sessionId));
+  const draftRoot = useComposer((state) => state.draftRoots[draftKey]);
+  const referenceScope = useMemo(() => {
+    if (!project || (sessionId && (!session || session.projectId !== project.id))) return null;
+    const cwd = session?.cwd ?? draftRoot ?? project.path;
+    return { projectId: project.id, root: cwd === project.path ? null : cwd };
+  }, [project, sessionId, session, draftRoot]);
   const text = useComposer((state) => state.drafts[draftKey] ?? "");
   const setDraft = useComposer((state) => state.setDraft);
   const setText = useCallback(
@@ -205,36 +216,38 @@ export function Composer({
          * InputGroup's direct-child stacking selector does not see, and the
          * composer collapses to one row.
          */}
-        <ComposerEditorField
-          autoFocus={autoFocus}
-          disabled={disabled}
-          handle={textRef}
-          onChange={setText}
-          onKeyDown={(event) => {
-            if (!slash.open) {
-              if (event.key === "Escape" && status === "streaming" && onStop) {
+        <ReferenceScopeContext.Provider value={referenceScope}>
+          <ComposerEditorField
+            autoFocus={autoFocus}
+            disabled={disabled}
+            handle={textRef}
+            onChange={setText}
+            onKeyDown={(event) => {
+              if (!slash.open) {
+                if (event.key === "Escape" && status === "streaming" && onStop) {
+                  event.preventDefault();
+                  onStop();
+                }
+                return;
+              }
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                 event.preventDefault();
-                onStop();
+                slash.move(event.key === "ArrowDown" ? 1 : -1);
+              } else if ((event.key === "Enter" || event.key === "Tab") && slash.matches.length > 0) {
+                event.preventDefault();
+                const command = slash.matches[slash.selected];
+                if (command) {
+                  setText(`/${command.name} `);
+                }
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                slash.dismiss();
               }
-              return;
-            }
-            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-              event.preventDefault();
-              slash.move(event.key === "ArrowDown" ? 1 : -1);
-            } else if ((event.key === "Enter" || event.key === "Tab") && slash.matches.length > 0) {
-              event.preventDefault();
-              const command = slash.matches[slash.selected];
-              if (command) {
-                setText(`/${command.name} `);
-              }
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              slash.dismiss();
-            }
-          }}
-          placeholder={placeholder}
-          value={text}
-        />
+            }}
+            placeholder={placeholder}
+            value={text}
+          />
+        </ReferenceScopeContext.Provider>
         <PromptInputFooter className="flex-nowrap px-2 pb-1.5">
           <PromptInputTools className="min-w-0 flex-1 flex-nowrap gap-0.5 overflow-hidden">
             <AttachButton disabled={disabled} />

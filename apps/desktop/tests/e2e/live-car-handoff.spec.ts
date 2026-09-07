@@ -61,21 +61,36 @@ for (const agentId of ["codex", "claude-code"]) {
       await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 90_000 });
       await expect(page.locator("canvas").first()).toBeVisible({ timeout: 90_000 });
       await expect(page.getByRole("treeitem", { name: /Component chassis_body/ })).toBeVisible({ timeout: 60_000 });
-      await draft.fill("Change BODY_LENGTH from 160.0 to 170.0, keeping the other dimensions. The selected part is ");
-      await page.getByRole("treeitem", { name: /Component chassis_body/ }).click({ button: "right" });
+      await draft.fill("Make the wheels wider: change WHEEL_WIDTH from 14.0 to 18.0, keeping the other dimensions. One wheel is ");
+      const wheel = page.getByRole("treeitem", { name: /Component wheel_front_left/ });
+      await wheel.click({ button: "right" });
       await page.getByRole("menuitem", { name: "Copy Reference", exact: true }).click();
       const chip = page.locator("[data-composer] [data-reference-chip]");
       await expect(chip).toHaveCount(1);
       await expect(chip).toHaveAttribute("data-file", "models/car.step");
-      await expect(draft).toContainText("Change BODY_LENGTH");
+      await expect(draft).toContainText("Make the wheels wider");
+      // Return to the copied wheel after inspecting a different part. Clicking
+      // the chip must not send the prompt or replace any of its words.
+      await page.getByRole("treeitem", { name: /Component chassis_body/ }).click();
+      await chip.getByRole("button").click();
+      await expect(wheel).toHaveAttribute("aria-selected", "true");
+      await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle");
+      await expect(draft).toContainText("Make the wheels wider");
+      // Closing the model and activating by keyboard reopens the same worktree
+      // and selects the wheel, without submitting the draft.
+      await page.getByRole("button", { name: "Close car.step", exact: true }).click();
+      await chip.getByRole("button").focus();
+      await chip.getByRole("button").press("Enter");
+      await expect(wheel).toHaveAttribute("aria-selected", "true");
+      await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle");
       await draft.press("End");
       await page.keyboard.type(` Rebuild with the same command and open the updated STEP.`);
       await page.screenshot({ path: testInfo.outputPath("car-reference.png") });
       await draft.press("Enter");
       await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "running", { timeout: 15_000 });
       await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 150_000 });
-      expect(fs.readFileSync(path.join(session.cwd, "models/car.py"), "utf8")).toContain("BODY_LENGTH = 170.0");
-      expect(fs.readFileSync(path.join(project, "models/car.py"), "utf8")).toContain("BODY_LENGTH = 160.0");
+      expect(fs.readFileSync(path.join(session.cwd, "models/car.py"), "utf8")).toContain("WHEEL_WIDTH = 18.0");
+      expect(fs.readFileSync(path.join(project, "models/car.py"), "utf8")).toContain("WHEEL_WIDTH = 14.0");
       await page.screenshot({ path: testInfo.outputPath("car-edited.png") });
       await page.evaluate((id) => window.hardcore.sessions.close({ id }), session.id);
       await app.close();

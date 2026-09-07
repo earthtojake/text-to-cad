@@ -44,7 +44,7 @@ for (const scenario of ["project drafts", "new worktree"]) {
       } else {
         await page.locator("[data-context-strip]").getByRole("button", { name: "Local", exact: true }).click();
         await page.getByRole("menuitemradio", { name: /New worktree/ }).click();
-        await expect(page.locator("[data-context-strip]").getByRole("button", { name: "Claude Code", exact: true })).toBeVisible({ timeout: 30_000 });
+        await expect(page.locator('[data-context-strip] [data-chip="model"]')).toBeVisible({ timeout: 30_000 });
         await draft.fill("write a file");
         await draft.press("Enter");
         await expect(page.locator("[data-session-view]")).toBeVisible({ timeout: 30_000 });
