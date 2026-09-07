@@ -149,7 +149,7 @@ function BreadcrumbEntryMenuItem({
       data-active={active}
       className={cn(
         "min-w-0 max-w-80 text-xs focus:bg-sidebar-accent focus:text-sidebar-accent-foreground",
-        "data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground"
+        "data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
       )}
       title={title}
       disabled={!key || typeof onSelectEntry !== "function"}
@@ -329,7 +329,7 @@ function BreadcrumbNodeDropdown({
     const labelNode = (
       <span
         className={cn(
-          "inline-flex min-w-0 items-center gap-2 text-xs font-medium",
+          "inline-flex min-w-0 items-center gap-2 text-xs",
           current ? "max-w-[min(36rem,55vw)] text-foreground" : "max-w-32"
         )}
         title={title}
@@ -362,7 +362,7 @@ function BreadcrumbNodeDropdown({
     <button
       type="button"
       className={cn(
-        "inline-flex min-w-0 items-center gap-2 rounded-sm text-xs font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "inline-flex min-w-0 items-center gap-2 rounded-sm text-xs transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         current
           ? "max-w-[min(36rem,55vw)] text-foreground"
           : "max-w-32 text-muted-foreground"
@@ -447,7 +447,7 @@ function BreadcrumbEllipsisDropdown({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-6 min-w-7 items-center justify-center rounded-md px-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-6 min-w-7 items-center justify-center rounded-md px-1.5 text-xs text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Show collapsed path folders"
           title={menuTitle}
         >
@@ -739,9 +739,9 @@ function VersionTooltipRow({ label, version, action = null }) {
 
   return (
     <div className="flex min-w-0 flex-col items-start gap-1.5 px-0.5 text-left">
-      <span className="text-[11px] font-medium leading-none text-muted-foreground">{label}</span>
+      <span className="text-tiny leading-none text-muted-foreground">{label}</span>
       <div className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 text-left font-mono text-[12px] leading-5 text-foreground tabular-nums">
+        <span className="min-w-0 text-left font-mono text-xs leading-5 text-foreground tabular-nums">
           {normalizedVersion}
         </span>
         {action}
@@ -827,9 +827,9 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
       variant={updateAvailable ? "default" : "ghost"}
       size="xs"
       className={cn(
-        "inline-flex rounded-sm px-2 text-xs font-medium leading-none",
+        "inline-flex rounded-sm px-2 text-xs leading-none",
         updateAvailable
-          ? "h-6 px-2 text-[11px]"
+          ? "h-6 px-2 text-tiny"
           : "h-7 text-muted-foreground tabular-nums hover:text-sidebar-foreground"
       )}
       aria-label={label}
@@ -882,7 +882,7 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
                     asChild
                     variant="default"
                     size="xs"
-                    className="h-4 !min-h-0 rounded-sm !px-1.5 !py-0 text-[10px] font-medium leading-none"
+                    className="h-4 !min-h-0 rounded-sm !px-1.5 !py-0 text-micro leading-none"
                     aria-label={`Update CAD Viewer to ${latestVersion}`}
                   >
                     <a href={latestReleaseUrl} target="_blank" rel="noreferrer">
@@ -899,9 +899,9 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
             />
           )}
           <div className="flex min-w-0 flex-col gap-1.5">
-            <div className="px-0.5 text-[11px] font-medium leading-none text-muted-foreground">In your terminal</div>
+            <div className="px-0.5 text-tiny leading-none text-muted-foreground">In your terminal</div>
             <div className="flex h-8 min-w-0 items-center gap-2 rounded-sm border border-border/60 bg-muted/35 p-1 pl-2">
-              <code className="min-w-0 flex-1 whitespace-nowrap font-mono text-[11px] leading-5 text-foreground">
+              <code className="min-w-0 flex-1 whitespace-nowrap font-mono text-tiny leading-5 text-foreground">
                 {installCommand}
               </code>
               <Button
@@ -923,7 +923,7 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
           </div>
           <div className="flex min-w-0 flex-col gap-1.5">
             {/* The same update, handed to an agent instead of run in a terminal. */}
-            <div className="px-0.5 text-[11px] font-medium leading-none text-muted-foreground">
+            <div className="px-0.5 text-tiny leading-none text-muted-foreground">
               Or ask your agent
             </div>
             {/* Shows the message VERBATIM, wrapped rather than truncated: the row above it is
@@ -931,7 +931,7 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
                 agent were being sent something vaguer than the terminal option. It is not --
                 the same command is in it. The width cap is what makes it wrap. */}
             <div className="flex min-h-8 min-w-0 items-center gap-2 rounded-sm border border-border/60 bg-muted/35 p-1 pl-2">
-              <span className="min-w-0 max-w-[15.5rem] flex-1 text-[11px] leading-4 text-foreground">
+              <span className="min-w-0 max-w-[15.5rem] flex-1 text-tiny leading-4 text-foreground">
                 {updatePrompt}
               </span>
               <Button
@@ -953,10 +953,10 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
             </div>
           </div>
           {installCopyStatus === "failed" || promptCopyStatus === "failed" ? (
-            <div className="text-[11px] text-muted-foreground">Copy failed</div>
+            <div className="text-tiny text-muted-foreground">Copy failed</div>
           ) : null}
           {upToDate ? (
-            <div className="flex items-center gap-1.5 px-0.5 text-[11px] font-medium text-muted-foreground">
+            <div className="flex items-center gap-1.5 px-0.5 text-tiny text-muted-foreground">
               <CircleCheck className="size-3 text-primary" aria-hidden="true" />
               <span>You are up to date</span>
             </div>

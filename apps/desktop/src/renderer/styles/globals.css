@@ -1,0 +1,425 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+ * Hardcore's token layer is stock shadcn/ui v4 — neutral base colour, no
+ * custom palette. This is deliberate and load-bearing: `apps/viewer` carries
+ * the same stock block, so when P4 lifts `CadFileView` out of the viewer it
+ * inherits these tokens without a second theme appearing (plan §7).
+ * Anything that wants to look different should earn a token here, not a
+ * hex value at the call site.
+ */
+
+@source "../app";
+@source "../components";
+@source "../features";
+@source "../hooks";
+@source "../lib";
+@source "../state";
+@source "../main.tsx";
+@source "../index.html";
+/* The CAD Viewer's client, for when P4 renders it inside this app: Tailwind
+ * has to see those class names to emit their utilities. Harmless until then. */
+@source "../../../../viewer/src/client";
+/* Streamdown renders markdown with Tailwind classes of its own — the
+ * heading sizes, list indents, table rules — and they live in its dist, which
+ * is outside every path above. Without these lines a README's H1 is body
+ * text in bold. */
+@source "../../../node_modules/streamdown/dist/*.js";
+@source "../../../node_modules/@streamdown/code/dist/*.js";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  /* The viewer's two settings-sheet sizes (apps/viewer globals.css); its
+   * components are compiled by THIS Tailwind, so the tokens must exist here. */
+  --text-micro: 10px;
+  --text-micro--line-height: 1.2;
+  --text-tiny: 11px;
+  --text-tiny--line-height: 1.3;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  /* shadcn/ui v4 — neutral, light */
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+
+  /* ------------------------------------------------------------------ *
+   * The CAD Viewer's own token layer, copied verbatim from
+   * apps/viewer/src/client/styles/globals.css.
+   *
+   * `<CadFileView>` (the explorer's CAD renderer) is written against
+   * shadcn's names *and* against these — `--ui-glass-*`, `--surface-*`,
+   * `--background-N`, the status colours. Nothing sets them for you, and
+   * without them the surface renders with correct markup and no panels
+   * (apps/viewer/docs/file-view.md §5). They are all derived from the
+   * shadcn values above, so there is still one palette.
+   * ------------------------------------------------------------------ */
+
+  /* Tokens the viewer's components consume beyond shadcn's set, derived from
+   * the shadcn values above so no second palette appears. */
+  --background-1: var(--secondary);
+  --background-2: oklch(0.94 0 0);
+  --background-3: var(--border);
+  --foreground-inverse: var(--primary-foreground);
+  --foreground-muted: var(--muted-foreground);
+  --foreground-passive: var(--ring);
+  --border-1: var(--ring);
+  --border-2: var(--muted-foreground);
+  --border-primary: var(--primary);
+  --selection: var(--accent);
+  --selection-foreground: var(--accent-foreground);
+  --hc-cad-scene: var(--background);
+  --foreground-success: oklch(0.448 0.119 151.328);
+  --background-success: oklch(0.95 0.052 163.051);
+  --background-success-hover: oklch(0.925 0.06 163.051);
+  --border-success: oklch(0.8 0.1 155);
+  --foreground-error: oklch(0.505 0.213 27.518);
+  --background-error: oklch(0.936 0.032 17.717);
+  --background-error-hover: oklch(0.9 0.045 17.717);
+  --border-error: oklch(0.8 0.12 22);
+  --foreground-warning: oklch(0.473 0.137 46.201);
+  --background-warning: oklch(0.962 0.059 95.617);
+  --background-warning-hover: oklch(0.94 0.075 95.617);
+  --border-warning: oklch(0.85 0.13 85);
+  --foreground-info: oklch(0.488 0.243 264.376);
+  --background-info: oklch(0.95 0.03 264);
+  --background-info-hover: oklch(0.92 0.045 264);
+  --border-info: oklch(0.8 0.1 264);
+  --surface-sunken: var(--secondary);
+  --surface-sunken-hover: oklch(0.94 0 0);
+  --surface-sunken-selected: var(--border);
+  --surface-base: var(--background);
+  --surface-base-hover: var(--secondary);
+  --surface-base-selected: oklch(0.94 0 0);
+  --surface-elevated: var(--popover);
+  --surface-elevated-hover: var(--secondary);
+  --surface-elevated-selected: oklch(0.94 0 0);
+  --surface-paper: var(--background);
+  --surface-paper-hover: var(--secondary);
+  --surface-paper-selected: oklch(0.94 0 0);
+
+  /* Frosted glass over the 3D scene — viewer-owned. */
+  --cad-scene-backdrop: var(--hc-cad-scene);
+  --ui-glass-blur: 32px;
+  --ui-glass-saturation: 1.45;
+  --ui-glass-surface-tint: color-mix(in srgb, var(--cad-scene-backdrop) 60%, var(--sidebar));
+  --ui-glass-popover-tint: color-mix(in srgb, var(--cad-scene-backdrop) 45%, var(--popover));
+  --ui-glass-control-tint: color-mix(in srgb, var(--cad-scene-backdrop) 55%, var(--background));
+  --ui-glass-surface: color-mix(in srgb, var(--ui-glass-surface-tint) 42%, transparent);
+  --ui-glass-popover: color-mix(in srgb, var(--ui-glass-popover-tint) 56%, transparent);
+  --ui-glass-control: color-mix(in srgb, var(--ui-glass-control-tint) 34%, transparent);
+  --ui-loading-overlay: color-mix(in srgb, var(--background) 38%, transparent);
+  --ui-loading-overlay-strong: color-mix(in srgb, var(--background) 76%, transparent);
+}
+
+.dark {
+  /* shadcn/ui v4 — neutral, dark */
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+
+  /* The CAD Viewer's token layer, dark. See the note in `:root`. */
+
+  --background-1: var(--card);
+  --background-2: var(--secondary);
+  --background-3: oklch(0.32 0 0);
+  --foreground-inverse: var(--primary-foreground);
+  --foreground-muted: var(--muted-foreground);
+  --foreground-passive: var(--ring);
+  --border-1: var(--ring);
+  --border-2: var(--muted-foreground);
+  --border-primary: var(--primary);
+  --selection: var(--accent);
+  --selection-foreground: var(--accent-foreground);
+  --hc-cad-scene: var(--background);
+  --foreground-success: oklch(0.871 0.15 154.449);
+  --background-success: oklch(0.262 0.051 172.552);
+  --background-success-hover: oklch(0.3 0.06 172.552);
+  --border-success: oklch(0.45 0.1 160);
+  --foreground-error: oklch(0.808 0.114 19.571);
+  --background-error: oklch(0.258 0.092 26.042);
+  --background-error-hover: oklch(0.3 0.1 26.042);
+  --border-error: oklch(0.45 0.15 25);
+  --foreground-warning: oklch(0.879 0.169 91.605);
+  --background-warning: oklch(0.269 0.077 45.635);
+  --background-warning-hover: oklch(0.31 0.085 45.635);
+  --border-warning: oklch(0.5 0.12 70);
+  --foreground-info: oklch(0.75 0.15 264);
+  --background-info: oklch(0.27 0.06 264);
+  --background-info-hover: oklch(0.31 0.07 264);
+  --border-info: oklch(0.45 0.12 264);
+  --surface-sunken: var(--background);
+  --surface-sunken-hover: var(--card);
+  --surface-sunken-selected: var(--secondary);
+  --surface-base: var(--card);
+  --surface-base-hover: var(--secondary);
+  --surface-base-selected: oklch(0.32 0 0);
+  --surface-elevated: var(--secondary);
+  --surface-elevated-hover: oklch(0.32 0 0);
+  --surface-elevated-selected: oklch(0.37 0 0);
+  --surface-paper: var(--card);
+  --surface-paper-hover: var(--secondary);
+  --surface-paper-selected: oklch(0.32 0 0);
+
+  --ui-loading-overlay: rgb(20 20 20 / 40%);
+  --ui-loading-overlay-strong: rgb(20 20 20 / 78%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+      sans-serif;
+    /* A desktop chrome, not a document: the window itself never scrolls or
+     * rubber-bands, and text is not accidentally selectable. */
+    overflow: hidden;
+    overscroll-behavior: none;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"],
+  [data-selectable] {
+    user-select: text;
+  }
+}
+
+/* The strip Electron reserves for the window controls (titleBarStyle
+ * "hiddenInset" on macOS, the native frame elsewhere). Panes that reach the
+ * top of the window use these rather than each guessing a number.
+ *
+ * `--titlebar-inset` is the room the macOS traffic lights need on the left of
+ * the leftmost pane; `platform-mac` is set by main.tsx before the first paint.
+ */
+:root {
+  --titlebar-height: 36px;
+  --titlebar-inset: 0px;
+}
+
+.platform-mac {
+  --titlebar-inset: 68px;
+}
+
+/* Whichever pane is leftmost makes room for the traffic lights: the sidebar
+ * does it in its own header; when it is hidden the session's title bar takes
+ * over, and when the explorer has the whole window its strip does. Set by
+ * `Shell` from the same collapsed flags that decide who is leftmost. */
+[data-shell][data-leftmost="session"] [data-session-header] {
+  padding-left: calc(var(--titlebar-inset) + 0.75rem);
+}
+
+[data-shell][data-leftmost="explorer"] [data-tab-strip] {
+  padding-left: calc(var(--titlebar-inset) + 0.5rem);
+}
+
+/* Scrollbars, thin and quiet. The transcript, the file tree and the settings
+ * pages all scroll; a 15px grey gutter on each is the one thing that makes
+ * an Electron app look like a web page. Monaco and xterm draw their own. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--foreground) 16%, transparent);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--foreground) 30%, transparent);
+}
+
+/* A strip that scrolls sideways under its tabs shows no bar at all: the tabs
+ * themselves are the indication, and a bar under them reads as a defect. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.app-drag {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Settings › Appearance. Both classes are set on <html> by
+ * src/renderer/hooks/use-appearance.ts. */
+
+/* Reduce motion. The OS setting is honoured by the media query; this class is
+ * the app's own switch for someone whose OS is not set that way. `!important`
+ * because the utilities it is overriding are single-class rules of the same
+ * specificity that would otherwise win on order. */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Translucent sidebar. main sets the window's macOS vibrancy
+ * (src/main/settings-effects.ts); this is the half that lets it through. */
+.translucent-sidebar {
+  --sidebar: oklch(0.985 0 0 / 65%);
+}
+
+.translucent-sidebar.dark {
+  --sidebar: oklch(0.205 0 0 / 55%);
+}
+
+.translucent-sidebar [data-slot="sidebar"],
+.translucent-sidebar [data-translucent] {
+  backdrop-filter: saturate(140%) blur(20px);
+}
+
+/*
+ * The composer's editor (features/session/composer): the placeholder the
+ * Placeholder extension writes as a data attribute on the empty paragraph,
+ * and a chip under ProseMirror's node selection.
+ */
+.composer-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.composer-editor p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

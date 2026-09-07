@@ -234,14 +234,14 @@ function SdfMetadataList({ title, items, fields }) {
         {records.slice(0, 5).map((record, index) => (
           <div
             key={`${title}:${index}`}
-            className="truncate text-[11px] font-medium leading-4 text-foreground"
+            className="truncate text-tiny leading-4 text-foreground"
             title={record}
           >
             {record}
           </div>
         ))}
         {records.length > 5 ? (
-          <div className="text-[11px] leading-4 text-muted-foreground">{records.length - 5} more</div>
+          <div className="text-tiny leading-4 text-muted-foreground">{records.length - 5} more</div>
         ) : null}
       </div>
     </div>

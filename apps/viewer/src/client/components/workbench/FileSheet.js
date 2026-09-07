@@ -1,4 +1,4 @@
-import { Children, useEffect, useRef, useState } from "react";
+import { Children, createContext, useContext, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
@@ -41,12 +41,12 @@ const DESKTOP_FILE_SHEET_MIN_WIDTH = 240;
 const DESKTOP_FILE_SHEET_MAX_WIDTH = "min(28rem, calc(100vw - 0.75rem))";
 const MOBILE_FILE_SHEET_WIDTH = "min(24rem, calc(100vw - 0.75rem))";
 const FILE_SHEET_CONTROL_TEXT_CLASSES = [
-  "[&_[data-slot=input]]:!text-[11px]",
-  "[&_[data-slot=select-trigger]]:!text-[11px]",
-  "[&_[data-slot=color-picker-trigger]]:!text-[11px]"
+  "[&_[data-slot=input]]:!text-tiny",
+  "[&_[data-slot=select-trigger]]:!text-tiny",
+  "[&_[data-slot=color-picker-trigger]]:!text-tiny"
 ].join(" ");
 
-export const FILE_SHEET_SECTION_TRIGGER_CLASSES = "px-2 py-2 text-sm font-normal text-sidebar-foreground/90";
+export const FILE_SHEET_SECTION_TRIGGER_CLASSES = "px-2 py-2 text-sm text-sidebar-foreground/90";
 export const FILE_SHEET_SECTION_CONTENT_CLASSES = "py-2";
 export const FILE_SHEET_CONTROL_ROW_CLASSES = "space-y-1 px-2";
 export const FILE_SHEET_ROW_STACK_CLASSES = "space-y-3";
@@ -56,14 +56,23 @@ export const FILE_SHEET_INLINE_CONTROL_ROW_CLASSES = "px-2";
 // Section headers sit at the navbar's size (12px medium) — a sheet's headings
 // and the chrome above it read as the same level of structure. Row labels stay
 // 11px muted, so a header separates from its rows by both size and colour.
-export const FILE_SHEET_SECTION_TITLE_CLASSES = "text-xs font-medium text-sidebar-foreground";
-export const FILE_SHEET_FIELD_LABEL_CLASSES = "block min-w-0 truncate text-[11px] font-medium leading-4 text-muted-foreground";
-export const FILE_SHEET_STATUS_TEXT_CLASSES = "px-2 text-[11px] leading-4 text-muted-foreground";
-export const FILE_SHEET_UNIT_SUFFIX_CLASSES = "pointer-events-none absolute inset-y-0 right-2 flex items-center text-[10px] text-muted-foreground";
+export const FILE_SHEET_SECTION_TITLE_CLASSES = "text-xs text-sidebar-foreground";
+export const FILE_SHEET_FIELD_LABEL_CLASSES = "block min-w-0 truncate text-tiny leading-4 text-muted-foreground";
+export const FILE_SHEET_STATUS_TEXT_CLASSES = "px-2 text-tiny leading-4 text-muted-foreground";
+/**
+ * The element a compact-mode file sheet portals into. Null means `body`,
+ * which is right for the standalone viewer — its window IS the surface. A
+ * host that embeds <CadFileView> in one pane of a larger window provides
+ * its root here, so the drawer covers that pane rather than the host's
+ * whole window (file-view/CadFileView.js).
+ */
+export const FileSheetPortalContext = createContext(null);
+
+export const FILE_SHEET_UNIT_SUFFIX_CLASSES = "pointer-events-none absolute inset-y-0 right-2 flex items-center text-micro text-muted-foreground";
 // A trigger must clip and ellipsize its own value: the Radix trigger only sets
 // whitespace-nowrap, so without this a long option pushes its chevron out
 // through the border instead of truncating.
-const FILE_SHEET_SELECT_TRIGGER_BASE_CLASSES = "!h-7 px-2 !text-[11px] overflow-hidden [&_svg]:size-3.5 [&>span]:min-w-0 [&>span]:truncate";
+const FILE_SHEET_SELECT_TRIGGER_BASE_CLASSES = "!h-7 px-2 !text-tiny overflow-hidden [&_svg]:size-3.5 [&>span]:min-w-0 [&>span]:truncate";
 export const FILE_SHEET_SELECT_TRIGGER_CLASSES = `${FILE_SHEET_SELECT_TRIGGER_BASE_CLASSES} w-full`;
 // Inline triggers hug their value between two fixed bounds: never narrower than
 // the standard control (the 80px value input / colour swatch) so a column of
@@ -72,44 +81,42 @@ export const FILE_SHEET_SELECT_TRIGGER_CLASSES = `${FILE_SHEET_SELECT_TRIGGER_BA
 // is shrink-to-fit, so the percentage resolves against a width the trigger
 // itself determines.
 export const FILE_SHEET_INLINE_SELECT_TRIGGER_CLASSES = `${FILE_SHEET_SELECT_TRIGGER_BASE_CLASSES} w-fit min-w-20 max-w-44`;
-export const FILE_SHEET_VALUE_BADGE_CLASSES = "shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-medium leading-none tabular-nums text-muted-foreground";
+export const FILE_SHEET_VALUE_BADGE_CLASSES = "shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-micro leading-none tabular-nums text-muted-foreground";
 export const FILE_SHEET_VALUE_BADGE_INPUT_CLASSES = [
-  "h-7 w-20 shrink-0 rounded-md border border-input bg-transparent px-2 py-1 text-right text-[11px] font-medium leading-none tabular-nums text-foreground shadow-xs outline-none",
+  "h-7 w-20 shrink-0 rounded-md border border-input bg-transparent px-2 py-1 text-right text-tiny leading-none tabular-nums text-foreground shadow-xs outline-none",
   "m-0 box-border min-w-0 theme-none transition-[color,box-shadow,border-color] placeholder:text-muted-foreground",
   "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30"
 ].join(" ");
-export const FILE_SHEET_COMPACT_BUTTON_CLASSES = "h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground";
+export const FILE_SHEET_COMPACT_BUTTON_CLASSES = "h-7 px-2 text-tiny text-muted-foreground hover:text-foreground";
 export const FILE_SHEET_COMPACT_ICON_BUTTON_CLASSES = "size-7 text-muted-foreground hover:text-foreground";
-export const FILE_SHEET_COMPACT_INPUT_CLASSES = "!h-7 px-2 text-[11px] !text-foreground";
-export const FILE_SHEET_COMPACT_NUMERIC_INPUT_CLASSES = "h-7 px-2 !text-[11px] font-medium leading-none tabular-nums text-foreground";
-export const FILE_SHEET_COMPACT_JOINT_INPUT_CLASSES = "h-7 px-2 !text-[11px] font-medium leading-none tabular-nums text-foreground";
+export const FILE_SHEET_COMPACT_INPUT_CLASSES = "!h-7 px-2 text-tiny !text-foreground";
+export const FILE_SHEET_COMPACT_NUMERIC_INPUT_CLASSES = "h-7 px-2 !text-tiny leading-none tabular-nums text-foreground";
+export const FILE_SHEET_COMPACT_JOINT_INPUT_CLASSES = "h-7 px-2 !text-tiny leading-none tabular-nums text-foreground";
 export const FILE_SHEET_BOOLEAN_SWITCH_CLASSES = [
   "h-4 w-7 border shadow-none",
   "data-[state=checked]:border-primary/75 data-[state=checked]:bg-primary",
-  "data-[state=unchecked]:!border-[rgb(115_125_140_/_0.52)] data-[state=unchecked]:!bg-[rgb(115_125_140_/_0.22)]",
-  "dark:data-[state=unchecked]:!border-[rgb(148_163_184_/_0.44)] dark:data-[state=unchecked]:!bg-[rgb(148_163_184_/_0.18)]"
+  "data-[state=unchecked]:!border-border-1/50 data-[state=unchecked]:!bg-border-1/20"
 ].join(" ");
 export const FILE_SHEET_BOOLEAN_SWITCH_THUMB_CLASSES = [
   "!size-3 shadow-sm",
   "data-[state=checked]:!translate-x-3 data-[state=checked]:!bg-background",
-  "data-[state=unchecked]:!translate-x-0 data-[state=unchecked]:!bg-[rgb(115_125_140)]",
-  "dark:data-[state=unchecked]:!bg-[rgb(148_163_184)]"
+  "data-[state=unchecked]:!translate-x-0 data-[state=unchecked]:!bg-border-1"
 ].join(" ");
 export const FILE_SHEET_SEGMENTED_ITEM_CLASSES = [
   "text-muted-foreground hover:text-foreground",
-  "data-[state=on]:!bg-accent data-[state=on]:!text-foreground data-[state=on]:font-semibold",
+  "data-[state=on]:!bg-accent data-[state=on]:!text-foreground",
   "data-[state=on]:ring-1 data-[state=on]:ring-inset data-[state=on]:ring-border/80",
   "data-[state=on]:hover:!bg-accent data-[state=on]:hover:!text-foreground"
 ].join(" ");
 export const FILE_SHEET_PRECISION_SLIDER_CLASSES = [
   "h-4",
   "[&_[data-slot=slider-track]]:h-px",
-  "[&_[data-slot=slider-track]]:rounded-none",
+  "[&_[data-slot=slider-track]]:rounded-full",
   "[&_[data-slot=slider-track]]:bg-border",
   "[&_[data-slot=slider-range]]:bg-primary",
   "[&_[data-slot=slider-thumb]]:h-2.5",
   "[&_[data-slot=slider-thumb]]:w-1.5",
-  "[&_[data-slot=slider-thumb]]:rounded-[1px]",
+  "[&_[data-slot=slider-thumb]]:rounded-full",
   "[&_[data-slot=slider-thumb]]:border-primary",
   "[&_[data-slot=slider-thumb]]:bg-background",
   "[&_[data-slot=slider-thumb]]:shadow-none",
@@ -210,7 +217,7 @@ export function FileSheetItemGroup({ label, children, className }) {
   return (
     <div className={cn("space-y-1 [&:not(:first-child)]:mt-4", className)} data-file-sheet-item-group="">
       <div className="flex min-h-4 items-center px-2">
-        <span className="min-w-0 truncate text-[11px] font-medium leading-4 text-sidebar-foreground">
+        <span className="min-w-0 truncate text-tiny leading-4 text-sidebar-foreground">
           {label}
         </span>
       </div>
@@ -479,7 +486,7 @@ export function FileSheetInlineControlRow({
         <span className="shrink-0">{children}</span>
       </div>
       {description ? (
-        <p className="mt-0.5 max-w-[28rem] text-[11px] leading-4 text-muted-foreground">{description}</p>
+        <p className="mt-0.5 max-w-[28rem] text-tiny leading-4 text-muted-foreground">{description}</p>
       ) : null}
     </div>
   );
@@ -568,7 +575,7 @@ export function FileSheetValueField({ label, value, mono = false }) {
       <span className={FILE_SHEET_FIELD_LABEL_CLASSES}>{label}</span>
       <div
         className={cn(
-          "mt-1 min-h-7 truncate rounded-md border border-border/70 bg-muted/25 px-2 py-1 text-[11px] font-medium leading-4 text-foreground",
+          "mt-1 min-h-7 truncate rounded-md border border-border/70 bg-muted/25 px-2 py-1 text-tiny leading-4 text-foreground",
           mono && "font-mono tabular-nums"
         )}
         title={displayValue}
@@ -640,7 +647,7 @@ export function FileSheetSegmentedControl({ value, onChange, options, ariaLabel,
             value={option.value}
             disabled={option.disabled === true}
             className={cn(
-              "min-w-0 gap-1.5 !h-7 px-1.5 text-[11px]",
+              "min-w-0 gap-1.5 !h-7 px-1.5 text-tiny",
               fit && "!flex-none px-2",
               option.iconOnly && "px-1",
               FILE_SHEET_SEGMENTED_ITEM_CLASSES
@@ -710,7 +717,7 @@ export function FileSheetSelectRow({
               {ungrouped.map(renderItem)}
               {groupNames.map((groupName) => (
                 <SelectGroup key={groupName}>
-                  <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <SelectLabel className="text-micro uppercase tracking-wide text-muted-foreground">
                     {groupName}
                   </SelectLabel>
                   {options.filter((option) => option.group === groupName).map(renderItem)}
@@ -778,7 +785,7 @@ export function FileSheetCascadeSelectRow({
             aria-label={ariaLabel || (typeof label === "string" ? label : undefined)}
             className={cn(
               "flex !h-7 w-fit min-w-20 max-w-44 items-center justify-between gap-1 overflow-hidden",
-              "rounded-md border border-input bg-transparent px-2 !text-[11px] shadow-xs outline-none",
+              "rounded-md border border-input bg-transparent px-2 !text-tiny shadow-xs outline-none",
               "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
             )}
           >
@@ -863,6 +870,7 @@ export default function FileSheet({
   scrollBody = true,
   children
 }) {
+  const portalContainer = useContext(FileSheetPortalContext);
   const desktopWidth = `min(${normalizeFileSheetWidth(width)}px, ${DESKTOP_FILE_SHEET_MAX_WIDTH})`;
   const sheetStyle = isDesktop
     ? {
@@ -891,10 +899,18 @@ export default function FileSheet({
 
   if (!isDesktop) {
     return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      // Modal only where the window is ours: a modal dialog makes everything
+      // outside it inert, which inside a host application would be the
+      // host's whole window — its tab strip, its sidebar, its chat.
+      <Sheet open={open} onOpenChange={onOpenChange} modal={!portalContainer}>
         <SheetContent
           side="right"
           showCloseButton={false}
+          portalContainer={portalContainer}
+          // Non-modal, the drawer would close on any click outside it — in a
+          // host that is a click anywhere else in the application. It stays
+          // until the person closes it or the layout widens into the aside.
+          onInteractOutside={portalContainer ? (event) => event.preventDefault() : undefined}
           className="cad-glass-surface gap-0 p-0 text-sidebar-foreground"
           style={sheetStyle}
           aria-label={title}

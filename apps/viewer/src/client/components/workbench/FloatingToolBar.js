@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Camera,
   Focus,
   Hand,
   MousePointer2,
@@ -134,6 +135,7 @@ function DesktopFloatingToolBar({
   drawingStrokes,
   handleEnterPreviewMode,
   handleScreenshotCopy,
+  handleCapture = null,
   selectedEntry
 }) {
   // What this format can do, from the one capability table — never re-derived from
@@ -186,6 +188,21 @@ function DesktopFloatingToolBar({
     </ToolbarButton>
   );
 
+  // Only a host that takes captures gets the button (docs/file-view.md,
+  // `onCapture`): standalone there is no chat for the picture to go to.
+  const captureButton = typeof handleCapture === "function" ? (
+    <ToolbarButton
+      label="Send view to chat"
+      onClick={() => {
+        void handleCapture();
+      }}
+      disabled={captureDisabled}
+      data-testid="capture-to-chat"
+    >
+      <Camera className="size-3" strokeWidth={2} aria-hidden="true" />
+    </ToolbarButton>
+  ) : null;
+
   // A drawing's own toolbar, in its own pill to the LEFT of the shared one: 2D and 3D are a
   // property of the drawing being viewed, not a tool that acts on it, so grouping them with
   // select/pan/draw would read as a fourth mode of the same kind.
@@ -202,14 +219,14 @@ function DesktopFloatingToolBar({
         active={drawingViewMode === "2d"}
         onClick={() => onDrawingViewModeChange?.("2d")}
       >
-        <span className="text-[10px] font-medium leading-none">2D</span>
+        <span className="text-micro leading-none">2D</span>
       </ToolbarButton>
       <ToolbarButton
         label="3D view"
         active={drawingViewMode !== "2d"}
         onClick={() => onDrawingViewModeChange?.("3d")}
       >
-        <span className="text-[10px] font-medium leading-none">3D</span>
+        <span className="text-micro leading-none">3D</span>
       </ToolbarButton>
     </div>
   ) : null;
@@ -234,7 +251,9 @@ function DesktopFloatingToolBar({
       style={floatingCadToolbarPosition}
     >
       <TooltipProvider delayDuration={250}>
-        <div className="flex w-fit items-center gap-1 self-end">
+        {/* Wraps: in a host pane too narrow for the zoom pill beside the
+            tools, the pill drops under them rather than off the left edge. */}
+        <div className="flex w-fit flex-wrap items-center justify-end gap-1 self-end">
         {zoomToolbar}
         {drawingViewToolbar}
         <div
@@ -248,6 +267,7 @@ function DesktopFloatingToolBar({
             <>
               {animationButton}
               {screenshotButton}
+              {captureButton}
               <ToolbarButton label="Exit orbit" onClick={handleExitPreviewMode}>
                 <X className="size-3" strokeWidth={2} aria-hidden="true" />
               </ToolbarButton>
@@ -313,6 +333,7 @@ function DesktopFloatingToolBar({
               </ToolbarButton>
 
               {screenshotButton}
+              {captureButton}
             </>
           )}
         </div>

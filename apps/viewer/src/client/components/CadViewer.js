@@ -3007,17 +3007,21 @@ const CadViewer = forwardRef(function CadViewer({
     // Clipboard-only: the viewer never downloads artifact or screenshot bytes
     // through a URL — copy actions hand out paths and images instead.
     async captureScreenshot() {
+      return await copyImageBlobToClipboard(this.captureScreenshotBlob());
+    },
+    // The same composite the clipboard gets, as a PNG Blob for a host that
+    // wants the bytes rather than the clipboard (a chat attachment).
+    async captureScreenshotBlob() {
       const runtime = runtimeRef.current;
       if (!runtime?.renderer || !runtime?.scene || !runtime?.camera) {
         throw new Error("CAD Viewer not ready");
       }
 
       renderDrawingOverlay();
-      const blobPromise = buildCompositeScreenshotBlob(runtime, drawingCanvasRef.current, {
+      return await buildCompositeScreenshotBlob(runtime, drawingCanvasRef.current, {
         backgroundColor: resolveElementBackgroundColor(runtime.renderer.domElement),
         crop: getViewportFrameCrop(runtime, viewportFrameInsetsRef.current)
       });
-      return await copyImageBlobToClipboard(blobPromise);
     },
     // Viewport LOD sampler (design/unified-tessellation.md Phase 5): projection
     // parameters + live distances from the camera to model-space points. CAD
@@ -4930,7 +4934,7 @@ const CadViewer = forwardRef(function CadViewer({
         activateDefaultViewPlane={activateDefaultViewPlane}
       />
       {error ? (
-        <p className="cad-glass-popover pointer-events-none absolute left-4 top-24 z-20 rounded-[10px] border border-[var(--ui-error-bg)] px-4 py-3 text-sm text-[var(--ui-error-text)] shadow-[var(--ui-shadow-soft)] sm:top-20">
+        <p className="cad-glass-popover pointer-events-none absolute left-4 top-24 z-20 rounded-lg border border-error-border px-4 py-3 text-sm text-error shadow-sm sm:top-20">
           {error}
         </p>
       ) : null}

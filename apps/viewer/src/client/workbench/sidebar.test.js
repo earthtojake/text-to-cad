@@ -7,6 +7,7 @@ import {
   findSidebarDirectoryById,
   findEntryByUrlPath,
   missingFileRefForCatalog,
+  selectedEntryKeyForFile,
   selectedEntryKeyFromUrl,
   listSidebarItems,
   filenameLabelForEntry,
@@ -1596,6 +1597,50 @@ test("writeCadParam leaves the directory path untouched", () => {
     if (originalWindow === undefined) {
       delete globalThis.window;
     } else {
+      globalThis.window = originalWindow;
+    }
+  }
+});
+
+// The file surface is TOLD which file to show, so the selection rule has to work
+// off a plain path with no window in sight — that is the whole difference
+// between an embedded surface and the standalone app, whose `?file=` reaches the
+// same function through selectedEntryKeyFromUrl.
+test("selectedEntryKeyForFile selects from a path, with no window", () => {
+  const originalWindow = globalThis.window;
+  delete globalThis.window;
+  const entries = [
+    { file: "parts/sample_base.step", cadPath: "parts/sample_base", kind: "part" },
+    { file: "parts/sample_plate.step", cadPath: "parts/sample_plate", kind: "part" }
+  ];
+
+  try {
+    assert.equal(
+      selectedEntryKeyForFile(entries, "parts/sample_plate.step"),
+      "parts/sample_plate.step"
+    );
+    // Leading and trailing slashes are normalized away, exactly as a query
+    // param's are.
+    assert.equal(
+      selectedEntryKeyForFile(entries, "/parts/sample_plate.step"),
+      "parts/sample_plate.step"
+    );
+    assert.equal(selectedEntryKeyForFile(entries, "parts/missing.step"), "");
+    // No path and no configured default selects nothing rather than guessing.
+    assert.equal(selectedEntryKeyForFile(entries, "", { defaultFile: null }), "");
+    assert.equal(selectedEntryKeyForFile(entries, null, { defaultFile: null }), "");
+    // An empty path is what falls back to the build's default file.
+    assert.equal(
+      selectedEntryKeyForFile(entries, "", { defaultFile: "parts/sample_base.step" }),
+      "parts/sample_base.step"
+    );
+    // An explicit path that matches nothing does NOT fall back.
+    assert.equal(
+      selectedEntryKeyForFile(entries, "parts/missing.step", { defaultFile: "parts/sample_base.step" }),
+      ""
+    );
+  } finally {
+    if (originalWindow !== undefined) {
       globalThis.window = originalWindow;
     }
   }

@@ -29,8 +29,8 @@ const LEVEL_RENDER_META = Object.freeze({
   }
 });
 
-const STATUS_COUNT_BADGE_CLASSES = "h-4 min-w-4 self-center rounded-sm px-1 text-[10px] font-medium leading-none";
-const STATUS_LEVEL_BADGE_CLASSES = "h-4 self-center rounded-sm px-1.5 py-0 text-[10px] font-medium leading-none";
+const STATUS_COUNT_BADGE_CLASSES = "h-4 min-w-4 self-center rounded-sm px-1 text-micro leading-none";
+const STATUS_LEVEL_BADGE_CLASSES = "h-4 self-center rounded-sm px-1.5 py-0 text-micro leading-none";
 
 function renderMetaForLevel(level) {
   return LEVEL_RENDER_META[level] || LEVEL_RENDER_META[FILE_STATUS_LEVELS.INFO];
@@ -132,7 +132,7 @@ function FileStatusTabContent({ items = [] }) {
                   <Badge variant={itemMeta.badgeVariant} className={cn("shrink-0", STATUS_LEVEL_BADGE_CLASSES)}>
                     {fileStatusLevelLabel(item.level)}
                   </Badge>
-                  <div className="min-w-0 flex-1 truncate font-medium leading-4 text-sidebar-foreground" title={item.title}>{item.title}</div>
+                  <div className="min-w-0 flex-1 truncate leading-4 text-sidebar-foreground" title={item.title}>{item.title}</div>
                   <span className="ml-auto inline-flex h-5 shrink-0 items-center">
                     <Button
                       type="button"
@@ -152,20 +152,20 @@ function FileStatusTabContent({ items = [] }) {
                   </span>
                 </div>
                 {item.message ? (
-                  <div className="mt-1 line-clamp-2 min-w-0 break-words text-[11px] font-normal leading-4 text-muted-foreground">
+                  <div className="mt-1 line-clamp-2 min-w-0 break-words text-tiny leading-4 text-muted-foreground">
                     {item.message}
                   </div>
                 ) : null}
               </div>
               {hasDetails && expanded ? (
                 <div className="mt-2 space-y-2 pl-2">
-                  <dl className="space-y-1 text-[11px] leading-4">
+                  <dl className="space-y-1 text-tiny leading-4">
                     {details.map((detailItem, index) => (
                       <div key={`${item.id}:${detailItem.label}:${index}`} className="min-w-0">
                         <dt className="text-muted-foreground">{detailItem.label}</dt>
                         <dd className={cn(
                           "min-w-0 break-words text-sidebar-foreground",
-                          detailItem.mono && "break-all font-mono text-[10px] leading-4"
+                          detailItem.mono && "break-all font-mono text-micro leading-4"
                         )}>
                           {detailItem.value}
                         </dd>
@@ -176,7 +176,7 @@ function FileStatusTabContent({ items = [] }) {
                     type="button"
                     variant="ghost"
                     size="xs"
-                    className="h-auto rounded-sm px-0 py-0 text-[11px] font-medium text-muted-foreground hover:bg-transparent hover:text-sidebar-foreground"
+                    className="h-auto rounded-sm px-0 py-0 text-tiny text-muted-foreground hover:bg-transparent hover:text-sidebar-foreground"
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();

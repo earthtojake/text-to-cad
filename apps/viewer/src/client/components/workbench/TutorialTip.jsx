@@ -80,9 +80,9 @@ export default function TutorialTip({
       >
         <div className="flex items-start gap-2">
           <Lightbulb className="mt-px size-4 shrink-0 text-background/70" strokeWidth={2} aria-hidden="true" />
-          <p className="min-w-0 flex-1 text-[13px] leading-snug">
+          <p className="min-w-0 flex-1 text-sm leading-snug">
             Copy references into prompts to edit specific parts of a STEP file, e.g. &quot;Make the hole{" "}
-            <code className="rounded-sm bg-background/20 px-1 py-0.5 font-mono text-[12px]">bracket#o1.1</code>
+            <code className="rounded-sm bg-background/20 px-1 py-0.5 font-mono text-xs">bracket#o1.1</code>
             {" "}twice as wide&quot;
           </p>
           {/* The only way out — nothing else closes the tip. */}

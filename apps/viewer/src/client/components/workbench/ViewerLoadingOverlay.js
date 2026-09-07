@@ -53,11 +53,9 @@ export default function ViewerLoadingOverlay({
           className="relative z-10 flex w-[22rem] max-w-[min(90vw,28rem)] flex-col gap-2 text-popover-foreground"
         >
           <div className="flex items-baseline justify-between gap-4">
-            {/* smui: status text is uppercase with wide tracking. 11px is the skill's
-                `text-label` size; this app has not registered that token, so it is
-                written literally rather than adding a theme entry plus its
-                tailwind-merge classGroup for one call site. */}
-            <span className="truncate text-[11px] uppercase tracking-wider text-muted-foreground">
+            {/* smui: status text is uppercase with wide tracking, at the type scale's
+                text-tiny (11px). */}
+            <span className="truncate text-tiny uppercase tracking-wider text-muted-foreground">
               {status}
               {/* The sub-unit rides on the SAME line as the phase, in its authored case —
                   it is data ("airframe", "o1.7.3 nozzle_petal"), not a label, and shouting
@@ -70,7 +68,7 @@ export default function ViewerLoadingOverlay({
                 </span>
               ) : null}
             </span>
-            <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+            <span className="shrink-0 text-tiny tabular-nums text-muted-foreground">
               {frame?.counts || ""}
             </span>
           </div>

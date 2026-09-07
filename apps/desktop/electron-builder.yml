@@ -1,0 +1,150 @@
+appId: dev.texttocad.hardcore
+productName: Hardcore
+copyright: Copyright © text-to-cad contributors
+
+# `npm run build` (electron-vite) has to have run first: everything shipped
+# comes out of out/, plus the native modules electron-builder resolves from
+# `dependencies` in package.json. `scripts/package.mjs` does both in order and
+# is the only supported way in — it stamps the version and decides, from the
+# environment alone, whether this build is signed.
+directories:
+  buildResources: build
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+  - "!**/*.map"
+
+# What ships beside the app rather than inside the asar. Every directory here
+# is committed empty (a .gitkeep and a README) and `scripts/package.mjs`
+# recreates them before every build, so a checkout that never ran a build
+# script still has a source for each entry.
+#
+# Measured against electron-builder 26.15.3, not assumed: a MISSING source here
+# is tolerated (the build succeeds and copies nothing) and an EMPTY one produces
+# no directory in Resources. The placeholders are belt to that braces — a
+# tolerance is a thing a minor release can withdraw, and the alternative is a
+# conditional config generated per build.
+#
+#   resources/runtime/${os}-${arch}
+#                      THE CAD RUNTIME: a pinned Python with cadgen and its
+#                      whole dependency closure installed, one directory per
+#                      target (scripts/bundle-runtime.mjs). About 1.2 GB, and
+#                      the whole point of the app — a packaged Hardcore renders
+#                      CAD with nothing to download. `${os}` and `${arch}` are
+#                      the TARGET's (electron-builder expands them per arch of
+#                      a multi-arch build), so a mac build with --arm64 --x64
+#                      picks up mac-arm64/ and mac-x64/ for its two apps.
+#                      scripts/package.mjs refuses to package a target whose
+#                      runtime is missing. The layout inside the app is the same
+#                      as in the checkout — Resources/runtime/<os>-<arch>/ — so
+#                      src/main/cad/runtime.ts resolves both with one function.
+#   resources/cadgen   the cadgen wheel and its constraints file, which the
+#                      bundler installs from; kept beside the app so a person
+#                      can see what shipped (a couple of megabytes).
+#   resources/plugin   the composed Hardcore plugin (the cad plugin minus
+#                      cad-viewer, plus hardcore-app-use) installed into each agent.
+#
+# The runtime's executables keep their mode bits and their symlinks
+# (python/bin/python3 -> python3.13): electron-builder copies extraResources
+# with both, and the dmg and zip carry both. When mac signing lands, the
+# runtime's Mach-O files (bin/python3.13, lib/*.dylib, every *.so under
+# site-packages) are what `mac.binaries` or a walk in an afterSign hook has to
+# hand to codesign — Resources/ is a fine place for them as long as each one
+# is signed; nothing here has to move.
+extraResources:
+  - from: resources/runtime/${os}-${arch}
+    to: runtime/${os}-${arch}
+  - from: resources/cadgen
+    to: cadgen
+  - from: resources/plugin
+    to: plugin
+
+# One icon source, build/icon.png (scripts/make-icons.mjs copies the docs favicon;
+# committed). electron-builder derives the macOS .icns and Windows .ico from it.
+
+# The updater feed. `release-publish.yml` attaches the installers to the same
+# GitHub Release it tags (plan §11), so the feed is that repository, and
+# electron-updater reads the app-update.yml this block generates.
+publish:
+  provider: github
+  owner: earthtojake
+  repo: text-to-cad
+  releaseType: release
+
+# better-sqlite3 and node-pty are native. `npm run postinstall` runs
+# `electron-builder install-app-deps`, which rebuilds them against the Electron
+# version above; asarUnpack keeps their .node files outside the archive so
+# dlopen can find them at run time.
+asar: true
+asarUnpack:
+  - "**/*.node"
+  - node_modules/better-sqlite3/**
+  - node_modules/node-pty/**
+  # The Hardcore MCP server is run by the AGENT (Codex, Claude Code) as a
+  # script path in `session/new`, so it has to be a real file on disk, not an
+  # entry in the archive (src/main/cad/index.ts, mcpServerScript).
+  - out/hardcore-mcp/**
+
+# Every artifact is named the same way, so a GitHub Release reads as a table:
+# Hardcore-<version>-<os>-<arch>.<ext>.
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  darkModeSupport: true
+  # Signing and notarisation are driven by the environment and nothing else
+  # (scripts/package.mjs):
+  #   CSC_LINK + CSC_KEY_PASSWORD            -> the build is signed
+  #   APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD
+  #     + APPLE_TEAM_ID                      -> and notarised (--config.mac.notarize=true)
+  #   neither                                -> CSC_IDENTITY_AUTO_DISCOVERY=false
+  #
+  # `hardenedRuntime` and the entitlements stay on either way: they cost
+  # nothing on an unsigned build, and leaving them off would mean the first
+  # signed build is the first time they are exercised. `notarize` is false here
+  # and turned on by the packaging script, because a notarize attempt without
+  # credentials fails the whole run.
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  notarize: false
+  extendInfo:
+    NSHumanReadableCopyright: text-to-cad contributors
+
+dmg:
+  # ${arch} in a dmg name is the architecture of the app inside it, which is
+  # what someone downloading needs to tell the two apart.
+  artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  # The installer, not the app: `-setup` keeps it apart from the zip in a
+  # release's file list.
+  artifactName: ${productName}-${version}-${os}-${arch}-setup.${ext}
+
+linux:
+  category: Development
+  maintainer: text-to-cad contributors <noreply@github.com>
+  synopsis: A CAD-first agent workbench
+  # Best-effort and unsigned (plan §14). AppImage is the portable one; deb is a
+  # convenience for the distributions that want it.
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]

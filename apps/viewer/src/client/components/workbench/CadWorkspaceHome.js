@@ -102,7 +102,7 @@ export default function CadWorkspaceHome({
         aria-label="CAD Viewer home"
       >
         <div className="border-b border-sidebar-border px-5 py-4 sm:px-6">
-          <h1 className="text-lg font-medium leading-6 text-foreground sm:text-xl">
+          <h1 className="text-lg leading-6 text-foreground sm:text-xl">
             {heading}
           </h1>
         </div>
@@ -134,18 +134,18 @@ export default function CadWorkspaceHome({
                   className="size-4 shrink-0 text-muted-foreground group-hover:text-foreground"
                 />
                 <span className="min-w-0 flex-1">
-                  <span className="block min-w-0 truncate text-sm font-medium text-foreground">
+                  <span className="block min-w-0 truncate text-sm text-foreground">
                     {label}
                   </span>
                   {pathLabel ? (
-                    <span className="mt-0.5 block min-w-0 truncate text-[11px] font-normal text-muted-foreground">
+                    <span className="mt-0.5 block min-w-0 truncate text-tiny text-muted-foreground">
                       {pathLabel}
                     </span>
                   ) : null}
                 </span>
                 <span
                   className={cn(
-                    "shrink-0 rounded-md border border-sidebar-border px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none text-muted-foreground",
+                    "shrink-0 rounded-md border border-sidebar-border px-1.5 py-0.5 text-micro uppercase leading-none text-muted-foreground",
                     "max-sm:hidden"
                   )}
                 >
