@@ -91,9 +91,11 @@ Settings, one per explorer surface — `file-markdown-preview`,
 `file-markdown-source`, `file-markdown-editable` (the dirty dot on an edited
 document), `file-markdown-raw-blocks` (raw HTML kept as its own bytes),
 `file-tree-deep`, `file-image`, `file-cad-failed` (the runtime broken on
-purpose), `file-cad` (expanded), `file-cad-default` (the explorer at its default share, the tree
+purpose), `file-cad` (the explorer at its widest: the sidebar hidden and the
+session at its floor), `file-cad-default` (the explorer at its default share, the tree
 hidden for it) and both again at 1280×800, `file-cad-measure`, `terminal`,
-`browser-empty`, `browser`, `review`, `strip`, `expanded` — every one of those
+`browser-empty`, `browser`, `review`, `strip`, `strip-overflow` (seven tabs in
+a 320px pane, `+` pinned to the right edge) — every one of those
 kinds in light as `*-light` — the `git-*` set for the git modes (the review
 under three scopes, before and after a commit, the sidebar's worktree glyph,
 Settings' per-project worktree card), the session states in both themes with
@@ -241,11 +243,25 @@ it — and the explorer takes whatever is left. The two fixed widths are the
 persisted preference (`settings.layout`); the explorer's is a consequence.
 The strips along the top are 32px, and whichever pane is leftmost makes room
 for the macOS traffic lights (`--titlebar-inset`, keyed off `data-leftmost` on
-the shell). The sidebar's collapse sits at the right end of the sidebar's
-title strip — the traffic lights' row, level with the session's bar — while
-the sidebar is open, and at the far left of the session's title bar once it
-is gone. The explorer's toggle stays on the right of that
-bar.
+the shell — `sidebar` or `session`, and nothing else). The sidebar's collapse
+sits at the right end of the sidebar's title strip — the traffic lights' row,
+level with the session's bar — while the sidebar is open, and at the far left
+of the session's title bar once it is gone. The explorer's toggle stays on the
+right of that bar.
+
+**The sidebar and the explorer collapse; the session never does.** Its panel
+is not `collapsible` at all, so 560px is a floor the explorer's divider stops
+against rather than a threshold past which the pane disappears. There is no
+fullscreen explorer: the one control that could take the session away is gone,
+and the widest the explorer gets is the window less a hidden sidebar and that
+floor.
+
+**No project, no explorer.** The pane is a view of a directory: with none
+bound, `Shell` renders neither the panel nor its separator, the session has
+the window, and the toggle in the title bar, the palette's `Toggle explorer`
+row and `Mod+Alt+B` are all absent or inert (`toggleCollapsed` refuses a
+preference it has nowhere to file). A project brings the pane back with that
+project's own remembered state.
 
 **The explorer is closed until something opens it**, and the session then
 fills the window. Opening a file, a review, a browser or a terminal shows it —
@@ -392,7 +408,12 @@ poor thing to put in front of them.
 The strip's `+` is one button and a menu of the four kinds, each with its
 binding — ⌘T file, ⇧⌘R review, ⇧⌘B browser, ⌃` terminal
 (`lib/shortcuts.ts` is the table the menu prints and `ExplorerPane` answers
-to). The file tree's open folders and its listings live in the explorer
+to). It sits **after the last tab, inside the scrolling row**, and is
+`position: sticky` at its right edge: it slides along with the tabs until the
+row is longer than the pane, and then stops at the pane's edge with the tabs
+passing underneath it. In the flow alone it was the button that scrolled off
+at six tabs in a 45% pane; pinned outside the row it was always reachable and
+never part of it. The file tree's open folders and its listings live in the explorer
 store, not in the file tab, because opening a file makes a tab and the pane
 mounts one tab at a time.
 

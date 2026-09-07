@@ -44,8 +44,6 @@ const TREE_WIDTH_KEY = "hardcore.explorer.treeWidth";
 const TREE_COLLAPSED_KEY = "hardcore.explorer.treeCollapsed";
 /** Whether the pane itself is closed, per project id (see `collapsed`). */
 const PANE_COLLAPSED_KEY = "hardcore.explorer.collapsed";
-/** The key a window with no project chosen yet writes its choice under. */
-const NO_PROJECT = "__none__";
 export const TREE_MIN_WIDTH = 180;
 export const TREE_MAX_WIDTH = 480;
 export const TREE_DEFAULT_WIDTH = 248;
@@ -78,6 +76,9 @@ function writeLocal(key: string, value: string) {
  * folder is talked to. Opening a file, a review, a browser or a terminal
  * shows the pane without writing anything — the preference is what the person
  * chose, not what an agent's tool call did.
+ *
+ * There is no entry for "no project": without one the explorer is not drawn
+ * at all, so there is no choice to remember and nothing to remember it for.
  */
 function collapsedByProject(): Record<string, boolean> {
   return readLocal<Record<string, boolean>>(PANE_COLLAPSED_KEY, {}, (raw) => {
@@ -90,8 +91,8 @@ function collapsedByProject(): Record<string, boolean> {
   });
 }
 
-function collapsedFor(projectId: string | null): boolean {
-  return collapsedByProject()[projectId ?? NO_PROJECT] ?? true;
+function collapsedFor(projectId: string): boolean {
+  return collapsedByProject()[projectId] ?? true;
 }
 
 /** The open folders and the listings of one root's tree. */
@@ -128,12 +129,11 @@ type ExplorerState = {
   activeId: string | null;
   /** True once the strip has been loaded for `projectId`. */
   ready: boolean;
-  /** Codex's expand affordance: the explorer takes the whole window. */
-  expanded: boolean;
   /**
    * The pane's own state: closed until something opens it, and remembered for
    * the project once the person says otherwise. The session column fills the
-   * window while it is closed (`Shell`).
+   * window while it is closed, and with no project bound the pane is not
+   * rendered at all (`Shell`).
    */
   collapsed: boolean;
   /** The file tab's right-hand tree. */
@@ -200,8 +200,6 @@ type ExplorerState = {
   /** Drag reorder: move the tab with `id` to `toIndex`. */
   move: (id: string, toIndex: number) => void;
   update: (id: string, patch: Partial<ExplorerTab>) => void;
-  setExpanded: (expanded: boolean) => void;
-  toggleExpanded: () => void;
   /** A person's choice, remembered for the project they made it in. */
   setCollapsed: (collapsed: boolean) => void;
   toggleCollapsed: () => void;
@@ -296,8 +294,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   tabs: [],
   activeId: null,
   ready: false,
-  expanded: false,
-  collapsed: collapsedFor(null),
+  collapsed: true,
   treeCollapsed: readLocal(TREE_COLLAPSED_KEY, false, (raw) => raw === "true"),
   treeWidth: readLocal(TREE_WIDTH_KEY, TREE_DEFAULT_WIDTH, (raw) => Number(raw) || TREE_DEFAULT_WIDTH),
   trees: {},
@@ -335,7 +332,9 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       reveal: null,
       cadSelection: null,
       // Each project keeps its own answer to "is the pane worth the width".
-      collapsed: collapsedFor(projectId),
+      // Without a project there is no pane at all (`Shell`), and closed is
+      // the state it comes back to when one arrives.
+      collapsed: projectId ? collapsedFor(projectId) : true,
       // A different project is a different set of trees, with nothing to carry over.
       trees: {},
     });
@@ -476,11 +475,13 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     commit(set, projectId, next, activeId);
   },
 
-  setExpanded: (expanded) => set({ expanded }),
-  toggleExpanded: () => set((state) => ({ expanded: !state.expanded })),
-
   setCollapsed: (collapsed) => {
-    writeLocal(PANE_COLLAPSED_KEY, JSON.stringify({ ...collapsedByProject(), [get().projectId ?? NO_PROJECT]: collapsed }));
+    const { projectId } = get();
+    // No project, no explorer: there is nothing for a preference to be about.
+    if (!projectId) {
+      return;
+    }
+    writeLocal(PANE_COLLAPSED_KEY, JSON.stringify({ ...collapsedByProject(), [projectId]: collapsed }));
     set({ collapsed });
   },
 

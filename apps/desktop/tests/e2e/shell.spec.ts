@@ -3,7 +3,14 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import {
+  _electron as electron,
+  expect,
+  test,
+  type ElectronApplication,
+  type Locator,
+  type Page,
+} from "@playwright/test";
 
 /**
  * `page.evaluate` bodies run in the renderer, not here, so they see the
@@ -48,23 +55,29 @@ test.afterAll(async () => {
   fs.rmSync(userData, { recursive: true, force: true });
 });
 
-test("the shell shows three panes, the explorer closed", async () => {
-  // The panes are the app: sidebar, session, explorer, left to right.
+/**
+ * No project, no explorer. The strip is a view of a directory: with none
+ * bound the panel is not in the document at all, and neither is the control
+ * that would open it — the toggle in the title bar, or the palette's row.
+ */
+test("shows two panes and no explorer until a project is bound", async () => {
   const panes = page.locator("[data-panel]");
-  await expect(panes).toHaveCount(3);
+  await expect(panes).toHaveCount(2);
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
 
   await expect(page.getByRole("button", { name: "Add project" })).toBeVisible();
   await expect(page.getByText("Projects", { exact: true })).toBeVisible();
   await expect(page.getByText("Add a project to get started")).toBeVisible();
 
-  // The explorer starts closed and the session fills the window: it earns its
-  // width when something opens in it, not before.
-  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBe(0);
-  await openExplorer();
-  // The strip belongs to a project (P3), so an app with none has nothing to
-  // open a tab from and says so. Scoped to the pane: the session pane's
-  // composer carries a project chip that reads the same.
-  await expect(page.getByTestId("explorer").getByText("No project")).toBeVisible();
+  // Nor in the palette, and `Mod+Alt+B` has nothing to act on either.
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  await expect(page.getByPlaceholder("Search projects and commands…")).toBeVisible();
+  await expect(page.getByRole("option", { name: "Toggle sidebar" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Toggle explorer" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+Alt+b" : "Control+Alt+b");
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
 
   // Left to right, and the sidebar is the narrow one.
   const boxes = await panes.evaluateAll((nodes) =>
@@ -77,7 +90,8 @@ test("the shell shows three panes, the explorer closed", async () => {
  * The sidebar's collapse sits at the right end of the sidebar's title strip
  * while the sidebar is open — the traffic lights' row, level with the
  * session's title bar and above the app's name — and at the far left of that
- * title bar once the sidebar is gone. The explorer's toggle stays on the right.
+ * title bar once the sidebar is gone. (The explorer's toggle, which stays on
+ * the right of that bar, needs a project: the test below.)
  */
 test("the sidebar's collapse is level with the title bar, then at its left", async () => {
   const sidebar = page.locator("[data-panel]").first();
@@ -101,13 +115,11 @@ test("the sidebar's collapse is level with the title bar, then at its left", asy
 
   const collapse = header.getByRole("button", { name: "Toggle sidebar" });
   await expect(collapse).toBeVisible();
-  const [collapseBox, titleBox, explorerToggleBox] = await Promise.all([
+  const [collapseBox, titleBox] = await Promise.all([
     collapse.boundingBox(),
     header.locator("[data-session-title]").boundingBox(),
-    header.getByRole("button", { name: "Toggle explorer" }).boundingBox(),
   ]);
   expect(collapseBox!.x).toBeLessThan(titleBox!.x);
-  expect(explorerToggleBox!.x).toBeGreaterThan(titleBox!.x);
 
   await collapse.click();
   await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThan(0);
@@ -125,7 +137,19 @@ test("the explorer opens and closes a tab", async () => {
     (directory) => window.hardcore.projects.addPath({ path: directory }),
     fixture,
   );
-  // A new project starts with the pane closed, like every other one.
+  // A project brings the pane and its toggle back, on the right of the
+  // session's title bar and with the project's own remembered state — closed,
+  // for one nobody has opened it in.
+  const header = page.locator("[data-session-header]");
+  const toggle = header.getByRole("button", { name: "Toggle explorer" });
+  await expect(toggle).toBeVisible();
+  await expect(page.locator("[data-panel]")).toHaveCount(3);
+  const [toggleBox, titleBox] = await Promise.all([
+    toggle.boundingBox(),
+    header.locator("[data-session-title]").boundingBox(),
+  ]);
+  expect(toggleBox!.x).toBeGreaterThan(titleBox!.x);
+
   await openExplorer();
   await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeVisible();
 
@@ -136,7 +160,83 @@ test("the explorer opens and closes a tab", async () => {
   await page.getByRole("button", { name: "Close Untitled" }).click();
   await expect(page.getByText("Nothing open")).toBeVisible();
 
-  // Put the app back the way the rest of this file expects to find it.
+  // Put the app back the way the rest of this file expects to find it — and
+  // taking the project away takes the pane with it.
+  await page.evaluate((id) => window.hardcore.projects.remove({ id }), project.id);
+  await expect(page.getByText("Add a project to get started")).toBeVisible();
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
+  fs.rmSync(fixture, { recursive: true, force: true });
+});
+
+/**
+ * The strip under pressure, and the session's floor.
+ *
+ * `+` trails the last tab and sticks to the strip's right edge, so the button
+ * that opens the eighth tab is not the thing that scrolled off when the
+ * seventh was opened. And the session is not collapsible: dragging the
+ * explorer's divider as far left as it goes stops at 560px rather than
+ * squeezing the pane out of the window.
+ */
+test("keeps + at the strip's right edge, and the session above its floor", async () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-shell-strip-"));
+  const project = await page.evaluate(
+    (directory) => window.hardcore.projects.addPath({ path: directory }),
+    fixture,
+  );
+  await openExplorer();
+  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+
+  // The explorer at its 320px floor, which is the pane a person actually has
+  // this problem in: drag its separator as far right as it goes.
+  const separator = page.locator("[data-separator]").last();
+  const explorerWidth = async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0;
+  // Retried, not asserted on the first try: the layout is reapplied a frame
+  // after a project binds, and a drag aimed at where the separator was lands
+  // on nothing at all.
+  for (let attempt = 0; attempt < 4 && (await explorerWidth()) >= 360; attempt += 1) {
+    await dragSeparator(separator, 4000);
+  }
+  expect(await explorerWidth(), "the explorer would not narrow").toBeLessThan(360);
+
+  // Seven file tabs. Each is about a hundred pixels, so the row is twice the
+  // pane and the seventh `+` is exactly the button that used to scroll away.
+  for (let index = 0; index < 7; index += 1) {
+    await page.getByRole("button", { name: "New tab", exact: true }).click();
+    await page.getByRole("menuitem", { name: /^File/ }).click();
+  }
+  await expect(page.getByRole("tab")).toHaveCount(7);
+
+  const strip = page.locator("[data-tab-strip]");
+  const plus = page.locator("[data-new-tab]");
+  const [stripBox, plusBox, firstBox] = await Promise.all([
+    strip.boundingBox(),
+    plus.boundingBox(),
+    page.getByRole("tab").first().boundingBox(),
+  ]);
+  // The row really did overflow: the first tab is off the left edge of the
+  // strip. Without that this assertion proves nothing about sticky.
+  expect(firstBox!.x, "the strip did not overflow; the pin is untested").toBeLessThan(stripBox!.x);
+  // And `+` is inside the strip, at its right end.
+  expect(plusBox!.x).toBeGreaterThanOrEqual(stripBox!.x);
+  expect(plusBox!.x + plusBox!.width).toBeLessThanOrEqual(stripBox!.x + stripBox!.width + 1);
+  expect(plusBox!.x + plusBox!.width).toBeGreaterThan(stripBox!.x + stripBox!.width - 24);
+  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeVisible();
+  await shoot(page, "strip-overflow.png");
+
+  // The session's floor. Drag the same separator to the window's left edge:
+  // the session stops at its minimum instead of collapsing to nothing.
+  const session = page.getByTestId("session");
+  const sessionWidth = async () => (await session.boundingBox())?.width ?? 0;
+  const roomy = await sessionWidth();
+  for (let attempt = 0; attempt < 4 && (await sessionWidth()) >= roomy; attempt += 1) {
+    await dragSeparator(separator, -4000);
+  }
+  const floored = await sessionWidth();
+  expect(floored, "the divider did not move the session at all").toBeLessThan(roomy);
+  expect(floored, "the session was dragged under its minimum").toBeGreaterThanOrEqual(559);
+  await expect(page.locator("[data-session-header]")).toBeVisible();
+
   await page.evaluate((id) => window.hardcore.projects.remove({ id }), project.id);
   await expect(page.getByText("Add a project to get started")).toBeVisible();
   fs.rmSync(fixture, { recursive: true, force: true });
@@ -182,8 +282,9 @@ test("About reports the updater's state", async () => {
 });
 
 test("renders in both themes", async () => {
-  // The canonical shots are of the app as it opens: the explorer closed.
-  await closeExplorer();
+  // The canonical shots are of the app as it opens: no project, and so no
+  // explorer at all — two panes and the session filling the window.
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
 
   // Dark, then light, through the real setting — which round-trips through
   // sqlite in main, so this also proves settings persist.
@@ -206,12 +307,16 @@ async function openExplorer() {
   await expect.poll(async () => (await pane.boundingBox())?.width ?? 0).toBeGreaterThan(0);
 }
 
-async function closeExplorer() {
-  const pane = page.getByTestId("explorer");
-  if (((await pane.boundingBox())?.width ?? 0) > 0) {
-    await page.getByRole("button", { name: "Toggle explorer" }).click();
-  }
-  await expect.poll(async () => (await pane.boundingBox())?.width ?? 0).toBe(0);
+/** Drag one of the group's separators `by` pixels; the library clamps it. */
+async function dragSeparator(separator: Locator, by: number) {
+  const box = (await separator.boundingBox())!;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + by, y, { steps: 12 });
+  await page.mouse.up();
+  // The layout is reapplied on the next frame (`Shell`'s `applyLayout`).
+  await page.waitForTimeout(200);
 }
 
 async function setTheme(theme: "dark" | "light") {

@@ -312,15 +312,12 @@
 }
 
 /* Whichever pane is leftmost makes room for the traffic lights: the sidebar
- * does it in its own header; when it is hidden the session's title bar takes
- * over, and when the explorer has the whole window its strip does. Set by
- * `Shell` from the same collapsed flags that decide who is leftmost. */
+ * does it in its own header, and when it is hidden the session's title bar
+ * takes over. Those are the only two — the session pane is never collapsed,
+ * so the explorer's strip is never at the window's left edge. Set by `Shell`
+ * from the same collapsed flag that decides who is leftmost. */
 [data-shell][data-leftmost="session"] [data-session-header] {
   padding-left: calc(var(--titlebar-inset) + 0.75rem);
-}
-
-[data-shell][data-leftmost="explorer"] [data-tab-strip] {
-  padding-left: calc(var(--titlebar-inset) + 0.5rem);
 }
 
 /* Scrollbars, thin and quiet. The transcript, the file tree and the settings

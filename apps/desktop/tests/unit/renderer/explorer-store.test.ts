@@ -21,7 +21,6 @@ function reset() {
     tabs: [],
     activeId: null,
     ready: true,
-    expanded: false,
     collapsed: true,
     fsRevision: 0,
     changedPaths: [],
@@ -56,6 +55,27 @@ describe("the explorer strip", () => {
     useExplorer.setState({ projectId: null });
     expect(useExplorer.getState().open("file")).toBeNull();
     expect(useExplorer.getState().tabs).toHaveLength(0);
+  });
+
+  /**
+   * No project, no explorer: `Shell` does not render the pane, so the toggle
+   * is not drawn and the shortcut and the palette's command reach a store
+   * with nowhere to file a preference. It must not write one under a
+   * placeholder key that a real project would then never see.
+   */
+  it("has no explorer to toggle without a project", () => {
+    useExplorer.setState({ projectId: null, collapsed: true });
+    useExplorer.getState().toggleCollapsed();
+    expect(useExplorer.getState().collapsed).toBe(true);
+    expect(window.localStorage.getItem("hardcore.explorer.collapsed")).toBeNull();
+  });
+
+  it("remembers the toggle for the project it was made in", () => {
+    useExplorer.getState().toggleCollapsed();
+    expect(useExplorer.getState().collapsed).toBe(false);
+    expect(JSON.parse(window.localStorage.getItem("hardcore.explorer.collapsed") ?? "{}")).toEqual({
+      [PROJECT]: false,
+    });
   });
 
   it("selects the neighbour when the active tab closes", () => {
