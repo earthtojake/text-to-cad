@@ -194,6 +194,122 @@ test("expands three levels of the tree, and keeps them", async () => {
   await page.getByRole("tab", { name: /main\.jsx/ }).getByRole("button", { name: "Close main.jsx" }).click();
 });
 
+test("navigates by the breadcrumb's menus", async () => {
+  await newTab(page, "File");
+  await openFromTree("apps/viewer/src/client/main.jsx");
+  await expect(page.getByRole("tab", { name: /main\.jsx/ })).toBeVisible();
+
+  // The header is the breadcrumb, the view toggle and the files toggle. The
+  // copy button and the `Open ▾` menu are gone: their items live in the
+  // entry menus now (below).
+  const header = page.getByTestId("explorer").locator("header");
+  await expect(header.getByRole("button", { name: "Copy path" })).toHaveCount(0);
+  await expect(header.getByRole("button", { name: "Open", exact: true })).toHaveCount(0);
+  await expect(header.getByRole("button", { name: /^Open\b/ })).toHaveCount(0);
+
+  // Wide enough for every folder to be its own crumb: the default pane folds
+  // them into `…`, which is a menu of folders in its own right.
+  await page.getByRole("button", { name: "Expand explorer" }).click();
+  await expect(page.getByRole("button", { name: "Restore layout" })).toBeVisible();
+
+  // A folder crumb lists that folder, with the entry on the way to the open
+  // file marked; picking a file opens it in this tab.
+  // Radix names a menu after its trigger, so each one is addressed by the
+  // crumb that opened it — a menu on its way out is still in the DOM for
+  // the length of its exit animation.
+  await page.getByRole("button", { name: "Browse client", exact: true }).click();
+  const menu = page.getByRole("menu", { name: "Browse client" });
+  await expect(menu.getByRole("menuitem", { name: "main.jsx" })).toHaveAttribute("aria-current", "page");
+  await expect(menu.getByRole("menuitem", { name: "unboundIdentifiers.test.js" })).toBeVisible();
+  // Directories first: `workbench` is a submenu, above the files.
+  await expect(menu.getByRole("menuitem").first()).toHaveAttribute("aria-haspopup", "menu");
+  await shoot("file-crumb-menu.png", true);
+  await menu.getByRole("menuitem", { name: "unboundIdentifiers.test.js" }).click();
+  await expect(page.getByRole("tab", { name: /unboundIdentifiers\.test\.js/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Browse unboundIdentifiers.test.js", exact: true })).toBeVisible();
+  await expect(page.locator(".view-lines").first()).toBeVisible();
+  await expect(page.getByRole("tab", { name: /^main\.jsx/ })).toHaveCount(0);
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  // The file crumb lists its siblings, with itself marked; a sibling folder
+  // is a submenu of its own listing.
+  await page.getByRole("button", { name: "Browse unboundIdentifiers.test.js", exact: true }).click();
+  const siblings = page.getByRole("menu", { name: "Browse unboundIdentifiers.test.js" });
+  await expect(siblings.getByRole("menuitem", { name: "unboundIdentifiers.test.js" })).toHaveAttribute("aria-current", "page");
+  await siblings.getByRole("menuitem", { name: "workbench" }).hover();
+  const submenu = page.getByRole("menu", { name: "workbench" });
+  await expect(submenu.getByRole("menuitem", { name: "breadcrumbs.js", exact: true })).toBeVisible();
+  await submenu.getByRole("menuitem", { name: "breadcrumbs.js", exact: true }).click();
+  await expect(page.getByRole("tab", { name: /breadcrumbs\.js/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Browse breadcrumbs.js", exact: true })).toBeVisible();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  // The project crumb lists the root. Escape closes the menu.
+  await page.getByRole("button", { name: `Browse ${projectName}`, exact: true }).click();
+  await expect(page.getByRole("menu", { name: `Browse ${projectName}` }).getByRole("menuitem", { name: "apps" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Restore layout" }).click();
+  await page.getByRole("tab", { name: /breadcrumbs\.js/ }).getByRole("button", { name: "Close breadcrumbs.js" }).click();
+});
+
+test("keeps the files toggle where it is when the tree opens and shuts", async () => {
+  // The toggle is the right end of the header whether the tree is open or
+  // not. It used to move into the tree's own header when the tree opened.
+  const toggle = page.getByTestId("tree-toggle");
+  await expect(toggle).toHaveAttribute("aria-label", "Hide files");
+  const open = (await toggle.boundingBox())!;
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-label", "Show files");
+  await expect(page.getByLabel("Filter files")).toHaveCount(0);
+  const shut = (await toggle.boundingBox())!;
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-label", "Hide files");
+  await expect(page.getByLabel("Filter files")).toBeVisible();
+  const reopened = (await toggle.boundingBox())!;
+  for (const box of [shut, reopened]) {
+    expect(Math.abs(box.x - open.x)).toBeLessThan(1);
+    expect(Math.abs(box.y - open.y)).toBeLessThan(1);
+  }
+  // And the tree's own header is the filter, nothing else.
+  await expect(page.getByRole("button", { name: "Hide files" })).toHaveCount(1);
+});
+
+test("copies a relative path from a row's context menu", async () => {
+  await newTab(page, "File");
+  await openFromTree("apps/viewer/src/client/main.jsx");
+  const row = page.locator(`[role="treeitem"][data-path="apps/viewer/src/client/main.jsx"]`);
+  await expect(row).toBeVisible();
+
+  await row.click({ button: "right" });
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitem", { name: "Copy reference" })).toHaveCount(0);
+  await expect(menu.getByRole("menuitem", { name: "Move to Trash" })).toBeVisible();
+  await shoot("file-context-menu.png");
+  await pick("Copy relative path");
+  await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe("apps/viewer/src/client/main.jsx");
+
+  // Copy path is the absolute one, and Copy reference is there for a CAD file.
+  await row.click({ button: "right" });
+  await pick("Copy path");
+  await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe(
+    fs.realpathSync(path.join(repoRoot, "apps/viewer/src/client/main.jsx")),
+  );
+  await page.locator(`[role="treeitem"][data-path="apps/viewer/src/client"]`).click();
+  const step = page.locator(`[role="treeitem"][data-path="${STEP}"]`);
+  await page.getByLabel("Filter files").fill(STEP);
+  await page.getByRole("option", { name: STEP, exact: false }).first().click({ button: "right" });
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Copy reference" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByLabel("Filter files").fill("");
+  await expect(step).toHaveCount(0);
+  await page.getByRole("tab", { name: /main\.jsx/ }).getByRole("button", { name: "Close main.jsx" }).click();
+});
+
 test("opens an image with its dimensions", async () => {
   await newTab(page, "File");
   await openFromTree(IMAGE);
@@ -481,6 +597,65 @@ test("edits a markdown file in place and saves the lines it changed", async () =
 });
 
 /**
+ * Still in the docs directory: it is a scratch copy, so making, renaming
+ * and trashing things in it is fine, which it would not be in the checkout.
+ */
+test("makes a folder from the tree's menu, renames it, and moves it to the trash", async () => {
+  const tree = page.getByTestId("explorer").getByRole("tree");
+  const folder = (name: string) => page.locator(`[role="treeitem"][data-path="${name}"]`);
+  // The test above left its filter in the box; this one wants the tree.
+  await page.getByLabel("Filter files").fill("");
+  await expect(folder("README.md")).toBeVisible();
+
+  // The empty space under the rows is the root: New folder, typed in place.
+  await tree.click({ button: "right", position: { x: 40, y: 200 } });
+  await pick("New folder");
+  const field = page.getByLabel("New folder name");
+  await expect(field).toBeFocused();
+  await field.fill("parts");
+  await page.keyboard.press("Enter");
+  await expect(folder("parts")).toBeVisible();
+  expect(fs.statSync(path.join(docsDir, "parts")).isDirectory()).toBe(true);
+
+  // Rename, in the row. The stem is what is selected, so typing replaces it.
+  await folder("parts").click({ button: "right" });
+  await pick("Rename");
+  const rename = page.getByLabel("Rename parts");
+  await expect(rename).toBeFocused();
+  await rename.fill("assemblies");
+  await page.keyboard.press("Enter");
+  await expect(folder("assemblies")).toBeVisible();
+  await expect(folder("parts")).toHaveCount(0);
+  expect(fs.existsSync(path.join(docsDir, "assemblies"))).toBe(true);
+  expect(fs.existsSync(path.join(docsDir, "parts"))).toBe(false);
+
+  // A file inside it, from the folder's own menu, opens once it is made.
+  await folder("assemblies").click({ button: "right" });
+  await pick("New file");
+  await page.getByLabel("New file name").fill("notes.md");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("tab", { name: /notes\.md/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Browse notes.md", exact: true })).toBeVisible();
+  expect(fs.readFileSync(path.join(docsDir, "assemblies", "notes.md"), "utf8")).toBe("");
+
+  // F2 renames the cursor row from the keyboard, and Escape leaves it alone.
+  await folder("assemblies/notes.md").click();
+  await tree.focus();
+  await page.keyboard.press("F2");
+  await expect(page.getByLabel("Rename notes.md")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByLabel("Rename notes.md")).toHaveCount(0);
+  await expect(folder("assemblies/notes.md")).toBeVisible();
+
+  // Move to Trash: no dialog, the row goes, the tab that showed the file goes.
+  await folder("assemblies").click({ button: "right" });
+  await pick("Move to Trash");
+  await expect(folder("assemblies")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: /notes\.md/ })).toHaveCount(0);
+  await expect.poll(() => fs.existsSync(path.join(docsDir, "assemblies"))).toBe(false);
+});
+
+/**
  * Last, because it switches projects: the strip belongs to the project, so
  * this leaves a different one selected than every test above it expects.
  */
@@ -533,6 +708,16 @@ async function openFromTree(target: string) {
   if (await filter.isVisible()) {
     await filter.fill("");
   }
+}
+
+/**
+ * Pick an item from the open context menu, and wait for the menu to be
+ * gone. A menu on its way out is still in the DOM for its exit animation,
+ * and a right-click that lands during it is a dismiss, not a new menu.
+ */
+async function pick(item: string) {
+  await page.getByRole("menu").getByRole("menuitem", { name: item }).click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
 }
 
 /**

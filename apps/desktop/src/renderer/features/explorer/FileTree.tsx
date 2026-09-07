@@ -1,14 +1,19 @@
-import { ChevronDown, ChevronRight, FolderTree, Search, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, Search, X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { Button } from "@renderer/components/ui/button";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@renderer/components/ui/context-menu";
+import { isMac } from "@renderer/lib/platform";
 import { cn } from "@renderer/lib/utils";
 import { useExplorer, useTree } from "@renderer/state/explorer";
 import type { DirEntry } from "@shared/ipc/explorer";
 import type { ExplorerRoot } from "@shared/types";
 
+import { EntryMenuItems, useMenuFocusGuard } from "./EntryContextMenu";
+import { createEntry, currentPlatform, renameEntry, trashEntry, type EntryActionContext } from "./entry-actions";
+import type { MenuEntryTarget } from "./entry-menu";
 import { FileIcon, FolderIcon } from "./icons";
 import { fuzzyFilter } from "./fuzzy";
+import { InlineName } from "./InlineName";
 
 /**
  * The file tab's right-hand tree (Codex's layout: content left, tree right).
@@ -21,6 +26,11 @@ import { fuzzyFilter } from "./fuzzy";
  * tree: typing switches to a flat, fuzzy-ranked list of every path under the
  * root, because "find the file called x" and "see where x lives" are different
  * questions and the tree only answers the second one well.
+ *
+ * Every row has the entry menu (`EntryContextMenu.tsx`) on right-click, and
+ * the two items that need a field — Rename, New file/folder — draw it in
+ * the row (`InlineName`). The keyboard has the same two: F2 renames the
+ * cursor row, ⌘⌫ (Ctrl+Delete) moves it to the trash.
  */
 
 const ROW_HEIGHT = 28;
@@ -34,14 +44,26 @@ type Row = {
   expanded: boolean;
 };
 
+/** The one inline field the tree can show: a rename over a row, or a new entry in a folder. */
+export type TreeEditRequest =
+  | { mode: "rename"; entry: MenuEntryTarget }
+  | { mode: "create"; directory: string; kind: "file" | "directory" };
+type Editing = TreeEditRequest;
+
+/**
+ * An edit asked for from outside — a crumb's `Rename` or `New folder`
+ * (`FileTab`). The nonce makes asking twice two requests.
+ */
+export type TreeEdit = TreeEditRequest & { nonce: number };
+
 export function FileTree({
   projectId,
   root,
   projectName,
   activePath,
   reveal = null,
+  edit = null,
   onOpen,
-  onCollapse,
   fsRevision,
 }: {
   projectId: string;
@@ -56,13 +78,17 @@ export function FileTree({
    * and the scroll; the open file stays highlighted too.
    */
   reveal?: { path: string; directory: boolean; root: ExplorerRoot } | null;
+  /** A rename or a create the breadcrumb asked for; drawn as if from the row's own menu. */
+  edit?: TreeEdit | null;
   onOpen: (path: string) => void;
-  onCollapse: () => void;
   /** Bumped by `files.changed`; re-reads whatever is currently expanded. */
   fsRevision: number;
 }) {
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
+  /** The row the context menu is aimed at; the root when the empty space was clicked. */
+  const [menuTarget, setMenuTarget] = useState<MenuEntryTarget>({ path: "", kind: "directory" });
   const listRef = useRef<HTMLDivElement | null>(null);
 
   /**
@@ -267,6 +293,69 @@ export function FileTree({
     [expanded, load, setExpanded],
   );
 
+  /**
+   * The entry menu's context: what the tree draws for the two items that
+   * need a field, and where everything else goes (`entry-actions.ts`).
+   * `beginCreate` opens the folder first — a field inside a shut folder is
+   * a field nobody can see.
+   */
+  const ctx = useMemo<EntryActionContext>(
+    () => ({
+      projectId,
+      root,
+      platform: currentPlatform(),
+      beginRename: (entry) => setEditing({ mode: "rename", entry }),
+      beginCreate: (directory, kind) => {
+        if (directory !== "" && !expanded.has(directory)) {
+          setExpanded((current) => new Set([...current, directory]));
+          void load(directory);
+        }
+        setEditing({ mode: "create", directory, kind });
+      },
+    }),
+    [projectId, root, expanded, setExpanded, load],
+  );
+  const menuGuard = useMenuFocusGuard(ctx);
+
+  /**
+   * A crumb asked for an edit. The folders above it are opened and read
+   * first — a field in a folder the tree has shut is a field nobody sees —
+   * and the request is honoured once per nonce.
+   */
+  const honoured = useRef<number>(0);
+  useEffect(() => {
+    if (!edit || edit.nonce === honoured.current) {
+      return;
+    }
+    honoured.current = edit.nonce;
+    const target = edit.mode === "rename" ? edit.entry.path : edit.directory;
+    const segments = target === "" ? [] : target.split("/");
+    const ancestors = segments.slice(0, edit.mode === "rename" ? -1 : undefined).map((_, index, all) => all.slice(0, index + 1).join("/"));
+    if (ancestors.length > 0) {
+      setExpanded((current) =>
+        ancestors.every((directory) => current.has(directory)) ? current : new Set([...current, ...ancestors]),
+      );
+      for (const directory of ancestors) {
+        void load(directory);
+      }
+    }
+    setQuery("");
+    setEditing(edit.mode === "rename" ? { mode: "rename", entry: edit.entry } : { mode: "create", directory: edit.directory, kind: edit.kind });
+  }, [edit, setExpanded, load]);
+
+  /**
+   * When an inline field goes away the focus goes with it — to `body` —
+   * and the next F2 or arrow key would be lost. The list takes it back, so
+   * a rename from the keyboard ends where it began.
+   */
+  const wasEditing = useRef(false);
+  useEffect(() => {
+    if (wasEditing.current && editing === null) {
+      listRef.current?.focus();
+    }
+    wasEditing.current = editing !== null;
+  }, [editing]);
+
   /** The visible rows, flattened depth-first from what is expanded. */
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
@@ -288,6 +377,22 @@ export function FileTree({
     walk("", 0);
     return out;
   }, [children, isExpanded]);
+
+  /** Where the "new entry" field goes: first among its folder's children. */
+  const creatingAt = useMemo(() => {
+    if (editing?.mode !== "create") {
+      return -1;
+    }
+    if (editing.directory === "") {
+      return 0;
+    }
+    const at = rows.findIndex((row) => row.path === editing.directory);
+    return at < 0 ? -1 : at + 1;
+  }, [editing, rows]);
+  const creatingDepth =
+    editing?.mode === "create" && editing.directory !== ""
+      ? (rows.find((row) => row.path === editing.directory)?.depth ?? 0) + 1
+      : 0;
 
   const matches = useMemo(
     () => (filtering ? fuzzyFilter(corpus?.paths ?? [], query, 200) : []),
@@ -319,6 +424,23 @@ export function FileTree({
       return;
     }
     const row = rows.find((candidate) => candidate.path === cursorPath);
+    // The two edits the menu offers, from the keyboard: F2 and ⌘⌫ (Ctrl+Delete).
+    if (row && event.key === "F2") {
+      event.preventDefault();
+      setEditing({ mode: "rename", entry: { path: row.path, kind: row.kind } });
+      return;
+    }
+    if (
+      row &&
+      (event.key === "Backspace" || event.key === "Delete") &&
+      (isMac ? event.metaKey : event.ctrlKey) &&
+      !event.altKey &&
+      !event.shiftKey
+    ) {
+      event.preventDefault();
+      void trashEntry({ path: row.path, kind: row.kind }, ctx);
+      return;
+    }
     if (event.key === "ArrowRight" && row?.kind === "directory" && !row.expanded) {
       event.preventDefault();
       toggle(cursorPath);
@@ -338,6 +460,63 @@ export function FileTree({
       }
     }
   };
+
+  /**
+   * Aim the menu. A row's `onContextMenu` runs before the list's — the
+   * trigger — sees the same event, so the target is set by the time Radix
+   * opens the menu; the empty space under the rows is the root.
+   */
+  const aim = (event: React.MouseEvent) => {
+    const row = (event.target as HTMLElement).closest<HTMLElement>("[data-path]");
+    const path = row?.dataset.path ?? "";
+    const kind = row?.dataset.kind === "file" ? "file" : "directory";
+    setMenuTarget({ path, kind });
+    if (row && path) {
+      setCursor(path);
+    }
+  };
+
+  const finishRename = async (entry: MenuEntryTarget, name: string) => {
+    const renamed = await renameEntry(entry, name, ctx);
+    if (renamed !== null) {
+      setCursor(renamed);
+      setEditing(null);
+    }
+    return renamed !== null;
+  };
+
+  const finishCreate = async (directory: string, kind: "file" | "directory", name: string) => {
+    const created = await createEntry(directory, kind, name, ctx);
+    if (created !== null) {
+      setCursor(created);
+      setEditing(null);
+    }
+    return created !== null;
+  };
+
+  const newEntryRow =
+    editing?.mode === "create" ? (
+      <div
+        className="flex w-full items-center gap-1.5 pr-2"
+        key="__new__"
+        style={{ height: ROW_HEIGHT, paddingLeft: 6 + creatingDepth * INDENT }}
+      >
+        <span className="w-3 shrink-0" />
+        {editing.kind === "directory" ? (
+          <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" open={false} />
+        ) : (
+          <FileIcon className="size-3.5 shrink-0 text-muted-foreground" path="" />
+        )}
+        <InlineName
+          initial=""
+          kind={editing.kind}
+          label={editing.kind === "directory" ? "New folder name" : "New file name"}
+          onCancel={() => setEditing(null)}
+          onCommit={(name) => finishCreate(editing.directory, editing.kind, name)}
+          placeholder={editing.kind === "directory" ? "Folder name" : "File name"}
+        />
+      </div>
+    ) : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar/40">
@@ -364,66 +543,76 @@ export function FileTree({
             </button>
           ) : null}
         </div>
-        {/* The same glyph the header shows it with — see FileTab. */}
-        <Button
-          aria-label="Hide files"
-          className="size-6 shrink-0 text-muted-foreground"
-          onClick={onCollapse}
-          size="icon-xs"
-          title="Hide files"
-          variant="ghost"
-        >
-          <FolderTree className="size-3.5" />
-        </Button>
       </div>
 
-      <div
-        className="min-h-0 flex-1 overflow-auto py-1 outline-none"
-        onKeyDown={onKeyDown}
-        ref={listRef}
-        role="tree"
-        tabIndex={0}
-      >
-        {filtering ? (
-          matches.length === 0 ? (
-            <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-              {corpus === null ? "Searching…" : `No file matches “${query.trim()}”`}
-            </p>
-          ) : (
-            matches.map((match) => (
-              <FilterRow
-                active={match.path === activePath || match.path === reveal?.path}
-                cursor={match.path === cursorPath}
-                indices={match.indices}
-                key={match.path}
-                onOpen={() => onOpen(match.path)}
-                path={match.path}
-              />
-            ))
-          )
-        ) : rows.length === 0 ? (
-          <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-            {children[""] === undefined ? "Reading…" : `${projectName} is empty`}
-          </p>
-        ) : (
-          rows.map((row) => (
-            <TreeRow
-              active={row.path === activePath || row.path === reveal?.path}
-              cursor={row.path === cursorPath}
-              key={row.path}
-              onSelect={() => {
-                setCursor(row.path);
-                if (row.kind === "directory") {
-                  toggle(row.path);
-                } else {
-                  onOpen(row.path);
-                }
-              }}
-              row={row}
-            />
-          ))
-        )}
-      </div>
+      <ContextMenu modal={false}>
+        <ContextMenuTrigger asChild>
+          <div
+            className="min-h-0 flex-1 overflow-auto py-1 outline-none"
+            onContextMenu={aim}
+            onKeyDown={onKeyDown}
+            ref={listRef}
+            role="tree"
+            tabIndex={0}
+          >
+            {filtering ? (
+              matches.length === 0 ? (
+                <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  {corpus === null ? "Searching…" : `No file matches “${query.trim()}”`}
+                </p>
+              ) : (
+                matches.map((match) => (
+                  <FilterRow
+                    active={match.path === activePath || match.path === reveal?.path}
+                    cursor={match.path === cursorPath}
+                    indices={match.indices}
+                    key={match.path}
+                    onOpen={() => onOpen(match.path)}
+                    path={match.path}
+                  />
+                ))
+              )
+            ) : rows.length === 0 && !newEntryRow ? (
+              <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                {children[""] === undefined ? "Reading…" : `${projectName} is empty`}
+              </p>
+            ) : (
+              <>
+                {creatingAt === 0 ? newEntryRow : null}
+                {rows.map((row, index) => (
+                  <Fragment key={row.path}>
+                    <TreeRow
+                      active={row.path === activePath || row.path === reveal?.path}
+                      cursor={row.path === cursorPath}
+                      onRename={
+                        editing?.mode === "rename" && editing.entry.path === row.path
+                          ? {
+                              commit: (name) => finishRename(editing.entry, name),
+                              cancel: () => setEditing(null),
+                            }
+                          : null
+                      }
+                      onSelect={() => {
+                        setCursor(row.path);
+                        if (row.kind === "directory") {
+                          toggle(row.path);
+                        } else {
+                          onOpen(row.path);
+                        }
+                      }}
+                      row={row}
+                    />
+                    {creatingAt === index + 1 ? newEntryRow : null}
+                  </Fragment>
+                ))}
+              </>
+            )}
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-56" data-entry-menu={menuTarget.path} onCloseAutoFocus={menuGuard.onCloseAutoFocus}>
+          <EntryMenuItems ctx={menuGuard.ctx} entry={menuTarget} />
+        </ContextMenuContent>
+      </ContextMenu>
     </div>
   );
 }
@@ -433,12 +622,52 @@ function TreeRow({
   active,
   cursor,
   onSelect,
+  onRename,
 }: {
   row: Row;
   active: boolean;
   cursor: boolean;
   onSelect: () => void;
+  /** Set while this row is being renamed: the name becomes a field. */
+  onRename: { commit: (name: string) => Promise<boolean>; cancel: () => void } | null;
 }) {
+  const icon =
+    row.kind === "directory" ? (
+      <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" open={row.expanded} />
+    ) : (
+      <FileIcon className="size-3.5 shrink-0 text-muted-foreground" path={row.path} />
+    );
+  const chevron =
+    row.kind === "directory" ? (
+      row.expanded ? (
+        <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+      ) : (
+        <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
+      )
+    ) : (
+      <span className="w-3 shrink-0" />
+    );
+
+  if (onRename) {
+    return (
+      <div
+        className="flex w-full items-center gap-1.5 pr-2"
+        data-kind={row.kind}
+        data-path={row.path}
+        style={{ height: ROW_HEIGHT, paddingLeft: 6 + row.depth * INDENT }}
+      >
+        {chevron}
+        {icon}
+        <InlineName
+          initial={row.name}
+          kind={row.kind}
+          label={`Rename ${row.name}`}
+          onCancel={onRename.cancel}
+          onCommit={onRename.commit}
+        />
+      </div>
+    );
+  }
 
   return (
     <button
@@ -451,6 +680,7 @@ function TreeRow({
           : "text-foreground/80 hover:bg-accent/50",
         cursor && !active && "bg-accent/30",
       )}
+      data-kind={row.kind}
       data-path={row.path}
       onClick={onSelect}
       role="treeitem"
@@ -458,20 +688,8 @@ function TreeRow({
       title={row.path}
       type="button"
     >
-      {row.kind === "directory" ? (
-        row.expanded ? (
-          <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
-        )
-      ) : (
-        <span className="w-3 shrink-0" />
-      )}
-      {row.kind === "directory" ? (
-        <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" open={row.expanded} />
-      ) : (
-        <FileIcon className="size-3.5 shrink-0 text-muted-foreground" path={row.path} />
-      )}
+      {chevron}
+      {icon}
       <span className="truncate">{row.name}</span>
     </button>
   );
@@ -502,6 +720,8 @@ function FilterRow({
           : "text-foreground/80 hover:bg-accent/50",
         cursor && !active && "bg-accent/30",
       )}
+      data-kind="file"
+      data-path={path}
       onClick={onOpen}
       role="option"
       style={{ height: ROW_HEIGHT }}
