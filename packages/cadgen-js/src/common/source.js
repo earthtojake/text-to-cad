@@ -180,7 +180,25 @@ async function fetchComponentGlbBuffer(url, cid) {
   throw new Error(`Failed to load component GLB ${cid}: HTTP ${lastStatus}${hint}`);
 }
 
-async function loadPackageMeshData(packageInfo) {
+export function normalizeRenderTessellation(value) {
+  if (value === undefined || value === null) return {};
+  if (!isObject(value) || Array.isArray(value)) {
+    throw new Error("render.tessellation must be an object");
+  }
+  const result = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (!["chordTolerance", "angleTolerance"].includes(key)) {
+      throw new Error(`Unknown render.tessellation field: ${key}`);
+    }
+    if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
+      throw new Error(`render.tessellation.${key} must be a positive finite number`);
+    }
+    result[key] = raw;
+  }
+  return result;
+}
+
+async function loadPackageMeshData(packageInfo, tessellation = {}) {
   const descriptor = isObject(packageInfo.descriptor) ? packageInfo.descriptor : null;
   if (!descriptor) {
     throw new Error("Assembly render job is missing its tree (assembly.json)");
@@ -195,7 +213,7 @@ async function loadPackageMeshData(packageInfo) {
   // skips the .surf fetch entirely — on a 563-component warm model this
   // replaces ~2 requests per component with one request total. No provider,
   // batch-less host, or older entries degrade to the miss path below.
-  const cachedEntries = await getCachedComponentEntries(cids);
+  const cachedEntries = await getCachedComponentEntries(cids, tessellation);
   const misses = [];
   for (const cid of cids) {
     const decoded = cachedEntries.get(cid);
@@ -233,8 +251,8 @@ async function loadPackageMeshData(packageInfo) {
     if (decoded) {
       component = decoded.component;
     } else {
-      component = tessellateComponent(index, floats, {});
-      await writeBackComponentEntry(cid, {}, component, index);
+      component = tessellateComponent(index, floats, tessellation);
+      await writeBackComponentEntry(cid, tessellation, component, index);
     }
     componentMeshDataByCid[cid] = buildMeshDataFromSurf(index, floats, { component });
   };
@@ -390,6 +408,9 @@ export async function loadSource(input, options = {}) {
     typeof input === "string" ? sourceKindFromUrl(input) : ""
   );
   const kind = normalizeKind(rawKind);
+  const rawTessellation = inputObject.render?.tessellation;
+  const tessellation = normalizeRenderTessellation(rawTessellation);
+  assertStepOnlyOption(kind, rawTessellation, "render.tessellation");
   const kinematics = inputObject.kinematics ?? options.kinematics;
   const stepParameterUrl = String(
     inputObject.stepParameterUrl || resolved.stepParameterUrl || options.stepParameterUrl || ""
@@ -408,7 +429,7 @@ export async function loadSource(input, options = {}) {
     isObject(resolved.package) ? resolved.package : null
   );
   if (!meshData && packageInfo) {
-    meshData = await loadPackageMeshData(packageInfo);
+    meshData = await loadPackageMeshData(packageInfo, tessellation);
     const packageSelectorRuntime = inputObject.selectorRuntime || options.selectorRuntime || null;
     return {
       kind: "step",
@@ -430,6 +451,9 @@ export async function loadSource(input, options = {}) {
       glbUrl: "",
       cadPath
     };
+  }
+  if (rawTessellation !== undefined && rawTessellation !== null) {
+    throw new Error("render.tessellation requires an exact-surface STEP package; existing mesh data cannot be retessellated");
   }
   const glbUrl = String(inputObject.glbUrl || resolved.glbUrl || options.glbUrl || "").trim();
   const url = String(typeof input === "string" ? input : inputObject.url || resolved.url || glbUrl || "").trim();

@@ -343,8 +343,10 @@ function resolveSectionPlane(section = {}) {
 }
 
 function sectionSegments(meshData, section = {}) {
-  const vertices = meshData.vertices || new Float32Array(0);
-  const indices = meshData.indices || new Uint32Array(0);
+  const parts = Array.isArray(meshData.parts) ? meshData.parts : [];
+  const chunks = parts.length && parts.every((part) => part.sourceMesh)
+    ? parts.map((part) => ({ mesh: part.sourceMesh, transform: part.transform }))
+    : [{ mesh: meshData, transform: null }];
   const { normal, at, u, v } = resolveSectionPlane(section);
   const point = new THREE.Vector3();
   const tri = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
@@ -354,27 +356,35 @@ function sectionSegments(meshData, section = {}) {
     const relative = new THREE.Vector3().subVectors(candidate, at);
     return [relative.dot(u), relative.dot(v)];
   };
-  for (let index = 0; index + 2 < indices.length; index += 3) {
-    for (let corner = 0; corner < 3; corner += 1) {
-      const vertexIndex = Number(indices[index + corner]) * 3;
-      tri[corner].set(vertices[vertexIndex], vertices[vertexIndex + 1], vertices[vertexIndex + 2]);
-    }
-    const distances = tri.map((corner) => signedDistance(corner));
-    const intersections = [];
-    for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
-      const da = distances[a];
-      const db = distances[b];
-      if (Math.abs(da) < 1e-7) {
-        intersections.push(tri[a].clone());
+  for (const chunk of chunks) {
+    const vertices = chunk.mesh.vertices || new Float32Array(0);
+    const indices = chunk.mesh.indices || new Uint32Array(0);
+    const transform = Array.isArray(chunk.transform) && chunk.transform.length === 16
+      ? new THREE.Matrix4().set(...chunk.transform)
+      : null;
+    for (let index = 0; index + 2 < indices.length; index += 3) {
+      for (let corner = 0; corner < 3; corner += 1) {
+        const vertexIndex = Number(indices[index + corner]) * 3;
+        tri[corner].set(vertices[vertexIndex], vertices[vertexIndex + 1], vertices[vertexIndex + 2]);
+        if (transform) tri[corner].applyMatrix4(transform);
       }
-      if ((da < 0 && db > 0) || (da > 0 && db < 0)) {
-        const t = da / (da - db);
-        point.copy(tri[a]).lerp(tri[b], t);
-        intersections.push(point.clone());
+      const distances = tri.map((corner) => signedDistance(corner));
+      const intersections = [];
+      for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
+        const da = distances[a];
+        const db = distances[b];
+        if (Math.abs(da) < 1e-7) {
+          intersections.push(tri[a].clone());
+        }
+        if ((da < 0 && db > 0) || (da > 0 && db < 0)) {
+          const t = da / (da - db);
+          point.copy(tri[a]).lerp(tri[b], t);
+          intersections.push(point.clone());
+        }
       }
-    }
-    if (intersections.length >= 2) {
-      segments.push([project(intersections[0]), project(intersections[1])]);
+      if (intersections.length >= 2) {
+        segments.push([project(intersections[0]), project(intersections[1])]);
+      }
     }
   }
   return segments;

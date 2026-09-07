@@ -30,7 +30,10 @@ function scheduleIdle(task) {
 
 export function attachAcceleratedRaycast(mesh) {
   if (mesh?.isMesh) {
-    mesh.raycast = acceleratedRaycast;
+    mesh.raycast = function(raycaster,intersections){
+      if(this.userData?.cadTubeBeforeRaycast?.(raycaster)===false)return;
+      return acceleratedRaycast.call(this,raycaster,intersections);
+    };
   }
 }
 

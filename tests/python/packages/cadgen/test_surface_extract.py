@@ -476,6 +476,50 @@ class PeriodicSeamWindowTest(unittest.TestCase):
         self.assertTrue(nurbs.IsUPeriodic())
         return nurbs
 
+    def _swept_periodic_face(self):
+        import build123d as bd
+        from OCP.BRep import BRep_Tool
+        from OCP.Geom import Geom_BSplineSurface
+
+        path = bd.Wire([bd.Edge.make_bezier((0, 0, 0), (1, 3, 2), (2, 6, 0), (3, 9, 3))])
+        solid = bd.sweep(bd.Plane(origin=(0, 0, 0), z_dir=path.tangent_at(0)) * bd.Circle(.7), path=path)
+        for face in solid.faces():
+            surface = BRep_Tool.Surface_s(face.wrapped)
+            if isinstance(surface, Geom_BSplineSurface) and surface.IsUPeriodic():
+                return face.wrapped, surface
+        self.fail("fixture must contain a periodic swept NURBS surface")
+
+    def test_extension_knots_do_not_shift_an_in_domain_face(self) -> None:
+        from cadgen._internal import surface_extract
+
+        face, surface = self._swept_periodic_face()
+        copy = surface.Copy()
+        copy.SetUNotPeriodic()
+        self.assertLess(copy.UKnot(1), copy.Bounds()[0])
+        bin_out = surface_extract._Bin()
+        payload = surface_extract._surface_payload(face, bin_out)
+        window = surface_extract.BRepTools.UVBounds_s(face)
+        surface_extract._assert_surface_covers_face(payload, *window, bin_out)
+        rebuilt = _rebuild_bspline_surface(payload, bin_out.payload())
+        u0, u1, v0, v1 = window
+        for a in (.1, .5, .9):
+            for b in (.1, .5, .9):
+                u, v = u0 + a * (u1-u0), v0 + b * (v1-v0)
+                self.assertLess(surface.Value(u, v).Distance(rebuilt.Value(u, v)), 2e-6)
+
+    def test_coverage_guard_uses_active_domain_between_extension_knots(self) -> None:
+        from cadgen._internal import surface_extract
+
+        face, surface = self._swept_periodic_face()
+        copy = surface.Copy()
+        copy.SetUNotPeriodic()
+        surface_extract._shift_knots(surface.UPeriod(), copy.NbUKnots, copy.UKnot, copy.SetUKnot)
+        bin_out = surface_extract._Bin()
+        payload = surface_extract._nurbs_surface_payload(copy, bin_out)
+        window = surface_extract.BRepTools.UVBounds_s(face)
+        with self.assertRaisesRegex(surface_extract.Unextractable, "extrapolate"):
+            surface_extract._assert_surface_covers_face(payload, *window, bin_out)
+
     def test_seam_straddling_window_is_covered_in_the_face_frame(self) -> None:
         from unittest import mock
 

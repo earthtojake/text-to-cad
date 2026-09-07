@@ -375,6 +375,13 @@ export function createHttpTessellationCacheProvider({
       }
     },
     async put(key, bytes) {
+      // A browser debugging transport may include the binary POST as escaped
+      // text in one protocol message. A 92 MB mesh reproducibly exceeds Node's
+      // 512 MB string limit there and kills the whole renderer. Cache writes
+      // are optional: retain the complete mesh in memory and skip this upload.
+      // Filesystem providers and reads of already cached large meshes remain
+      // unrestricted. 32 MiB leaves room for escaping and protocol overhead.
+      if (bytes.byteLength > 32 * 1024 * 1024) return;
       try {
         await fetch(entryUrl(key), { method: "POST", body: bytes, headers });
       } catch {

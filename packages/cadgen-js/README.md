@@ -33,7 +33,9 @@ snapshot renderer and the node builders in `bin/`).
   (`animationRuntime.js`) evaluates the sidecar's copied `.anim.js` text
   with the `m.get(target)` handle contract (premultiplying calls, reset to
   rest every frame, pure in t). Neither half references the other; they
-  meet only in the effect records.
+  meet only in the effect records. Flexible swept bodies use
+  [tube deformation](docs/tube-deformation.md), deforming the original STEP
+  tessellation through analytic centerlines in that same shared effects pass.
 - **Byte determinism**: the tessellator and mesh serializers here produce
   the shipped export bytes — same geometry in, same bytes out.
 - **Loud failure**: unresolved refs, unknown labels, and unknown presets
@@ -69,6 +71,20 @@ Contract mirrors that must stay in lockstep (each has a sync test):
 tessellation cache keys ↔ `cadgen/_internal/cache_paths.py`;
 `apps/viewer/server/store_paths.py` ↔ `cadgen/_internal/`
 schema constants.
+
+Browser mesh-cache uploads are best effort and limited to 32 MiB per entry.
+Larger tessellations stay available to render at full quality; their optional
+upload is skipped because browser debugging transports can expand binary
+POSTs beyond Node's string limit. Filesystem cache writes and existing large
+cache reads retain their normal behavior.
+
+Scene geometry shares immutable component normal and surface-edge buffers.
+Effects that change vertex positions or normals acquire writable attributes
+before deforming them; material refreshes leave component data unchanged. This
+keeps large assemblies from duplicating these buffers for display.
+Assemblies keep geometry in their component buffers; they allocate no combined
+copy of all positions, normals and indices. Rendering and section views visit
+the placed components directly, and the Viewer accepts that component geometry.
 
 ## Working on cadgen-js
 

@@ -27,6 +27,7 @@ import {
 } from "cadgen-js/lib/perspective";
 import { VIEWER_PICK_MODE } from "cadgen-js/lib/viewer/constants";
 import { resolveScenePartRendering } from "cadgen-js/lib/viewer/partRendering";
+import { hasMeshGeometry } from "cadgen-js/lib/render/meshCost";
 import { normalizeStepClipSettings } from "cadgen-js/lib/viewer/clipPlane";
 import {
   buildDrawingPoint,
@@ -3588,7 +3589,7 @@ const CadViewer = forwardRef(function CadViewer({
       return;
     }
 
-    if (!meshData || !isNumericArray(meshData.vertices, 3) || !isNumericArray(meshData.indices, 3)) {
+    if (!hasMeshGeometry(meshData)) {
       clearDisplayedModel();
       return;
     }
@@ -4121,7 +4122,7 @@ const CadViewer = forwardRef(function CadViewer({
       updateTransformedRuntimeState(setTransformedSelectorRuntime, null);
       updateTransformedRuntimeState(setTransformedDisplayEdgeRuntime, null);
       runtime.topologyDisplayEdgeTransformByRecord = explodedViewActive;
-      resetStepModuleRecordEffects(runtime.displayRecords);
+      resetStepModuleRecordEffects(runtime.displayRecords, THREE);
       for (const record of runtime.displayRecords) {
         applyDisplayRecordTransform(runtime.THREE, record, runtime.modelRadius || 1);
       }

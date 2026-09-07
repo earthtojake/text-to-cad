@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { parseSurf } from "./container.js";
 import { DEFAULT_OPTIONS, TESSELLATION_VERSION, tessellateComponent } from "./tessellate.js";
 import {
+  createHttpTessellationCacheProvider,
   decodeComponentTessellation,
   decodeTessellationCacheBatch,
   edgeClassesFromSurfIndex,
@@ -25,6 +26,29 @@ import {
 } from "./tessellationCache.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+test("HTTP cache avoids oversized debugger POSTs without changing mesh bytes or reads", async (t) => {
+  const calls=[];
+  const original=globalThis.fetch;
+  t.after(()=>{globalThis.fetch=original;});
+  const large=new Uint8Array(32*1024*1024+1);
+  large[0]=17;large[large.length-1]=29;
+  globalThis.fetch=async(url,options)=>{
+    calls.push({url,options});
+    return {ok:true,arrayBuffer:async()=>large.buffer};
+  };
+  const provider=createHttpTessellationCacheProvider();
+  await provider.put("large",large);
+  assert.equal(calls.length,0,"optional write must not reach the debugger transport");
+  assert.equal(large[0],17);assert.equal(large[large.length-1],29);
+  const boundary=large.subarray(0,32*1024*1024);
+  await provider.put("boundary",boundary);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].options.body,boundary,"accepted bytes are sent unchanged");
+  const hit=await provider.get("large");
+  assert.equal(hit.byteLength,large.byteLength,"existing large cache hits remain usable");
+  assert.equal(hit.buffer,large.buffer);
+});
 
 function loadFixture(name) {
   const buffer = fs.readFileSync(path.join(HERE, "fixtures", `${name}.surf`));
