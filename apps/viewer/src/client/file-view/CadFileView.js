@@ -4831,25 +4831,24 @@ function CadFileViewSurface({
     setCopyStatus("");
   }, []);
 
-  /**
-   * Every reference the surface copies goes through here: to the clipboard,
-   * as it always did, and — embedded — to the host's `onReference`, one call
-   * per line, with the file the reference belongs to (hostReference.js).
-   * Standalone the second half is nothing.
-   */
-  const deliverReferenceText = useCallback(async (text) => {
-    await copyTextToClipboard(text);
-    if (typeof onReference === "function") {
-      for (const reference of referencesFromCopyText(text, cadFileParamForEntry(selectedEntry))) {
-        const label = referenceLabel(reference.selector, displayStepTreeRoot || stepTreeRoot);
-        onReference({ ...reference, ...(label ? { label } : {}) });
-      }
-    }
-  }, [onReference, selectedEntry, displayStepTreeRoot, stepTreeRoot]);
+  // Copy is clipboard-only. Adding context is an explicit host action.
+  const deliverReferenceText = useCallback((text) => copyTextToClipboard(text), []);
+  const referencesForHost = useCallback((text) =>
+    referencesFromCopyText(text, cadFileParamForEntry(selectedEntry)).map((reference) => {
+      const label = referenceLabel(reference.selector, displayStepTreeRoot || stepTreeRoot);
+      return { ...reference, ...(label ? { label } : {}) };
+    }), [selectedEntry, displayStepTreeRoot, stepTreeRoot]);
+  const addReferenceText = useCallback((text) => {
+    if (stepUpdateInProgress) return;
+    for (const reference of referencesForHost(text)) onReference?.(reference);
+  }, [onReference, referencesForHost, stepUpdateInProgress]);
   const hostReference = useMemo(
-    () => (typeof onReference === "function" ? { deliverReference: deliverReferenceText } : null),
-    [onReference, deliverReferenceText]
+    () => (typeof onReference === "function" ? { deliverReference: deliverReferenceText, addReference: addReferenceText } : null),
+    [onReference, deliverReferenceText, addReferenceText]
   );
+  const handleAddSelection = useCallback(() => {
+    addReferenceText(canonicalCopySelectionLines.join("\n"));
+  }, [addReferenceText, canonicalCopySelectionLines]);
 
   const handleCopySelection = useCallback(async () => {
     setScreenshotStatus("");
@@ -5875,7 +5874,7 @@ function CadFileViewSurface({
     }
   }, [deliverReferenceText]);
 
-  const copyStepTreeContextMenuReference = useCallback(async (id, { topology = false } = {}) => {
+  const copyStepTreeContextMenuReference = useCallback(async (id, { topology = false, toPrompt = false } = {}) => {
     const normalizedId = String(id || "").trim();
     if (!normalizedId) {
       setCopyStatus("No selector ref is available for this node");
@@ -5932,13 +5931,17 @@ function CadFileViewSurface({
       return;
     }
     try {
-      await deliverReferenceText(copyText);
-      setCopyStatus("Copied reference");
+      if (toPrompt) addReferenceText(copyText);
+      else {
+        await deliverReferenceText(copyText);
+        setCopyStatus("Copied reference");
+      }
     } catch (error) {
       setCopyStatus(error instanceof Error ? error.message : "Failed to copy reference");
     }
   }, [
     deliverReferenceText,
+    addReferenceText,
     assemblyPartMap,
     displayStepTreeRoot,
     effectiveActiveReferenceMap,
@@ -6264,19 +6267,13 @@ function CadFileViewSurface({
       }
 
       await copyTextToClipboard(copyText);
-      // The host hears a file reference for every kind — a viewer link most
-      // of all, because a link is the one thing an agent inside the host
-      // cannot use, and the file it points at is what it wants.
-      if (typeof onReference === "function") {
-        onReference({ file: cadFileParamForEntry(entry), selector: "", text: cadFileParamForEntry(entry) });
-      }
       const filename = String(resolvedAsset?.filename || "").trim();
       // Naming the file after "Copied filename" would just repeat what was copied.
       setCopyStatus(filename && copyText !== filename ? `${statusLabel} for ${filename}` : statusLabel);
     } catch (error) {
       setCopyStatus(error instanceof Error ? error.message : "Failed to copy file reference");
     }
-  }, [onReference, origin, viewerServerInfo]);
+  }, [origin, viewerServerInfo]);
 
   const handleDrawingStrokesChange = useCallback((nextStrokes) => {
     const normalized = cloneDrawingStrokes(nextStrokes);
@@ -6388,18 +6385,20 @@ function CadFileViewSurface({
       if (!viewerRef.current?.captureScreenshotBlob) {
         throw new Error("CAD Viewer not ready");
       }
+      // Freeze selection before waiting for the image; deliver both as one bundle.
+      const references = referencesForHost(canonicalCopySelectionLines.join("\n"));
       const blob = await viewerRef.current.captureScreenshotBlob();
-      onCapture({ blob, file: cadFileParamForEntry(selectedEntry) });
+      onCapture({ blob, file: cadFileParamForEntry(selectedEntry), references });
       setCopyStatus("");
-      setScreenshotStatus("Sent the view to the chat");
+      setScreenshotStatus("View captured");
     } catch (captureError) {
       setCopyStatus("");
       setScreenshotStatus(captureError instanceof Error ? captureError.message : "Capture failed");
     }
-  }, [onCapture, selectedEntry]);
+  }, [onCapture, selectedEntry, referencesForHost, canonicalCopySelectionLines]);
 
   // A host asking for the same picture from outside the viewport — the
-  // desktop's composer has a `Capture from viewer` item beside its attach
+  // desktop's composer has a `Ask about this view` item beside its attach
   // ones. `key` is a nonce, so two requests are two captures; the picture
   // goes to `onCapture` either way, and there is one capture path.
   const captureKey = captureRequest?.key ?? null;
@@ -6742,6 +6741,7 @@ function CadFileViewSurface({
           copyReferenceTipActive={copyReferenceTipActive}
           panToolActive={panToolActive}
           handleCopySelection={handleCopySelection}
+          handleAddSelection={typeof onReference === "function" ? handleAddSelection : null}
           handleScreenshotCopy={handleScreenshotCopy}
         />
       </div>

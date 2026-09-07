@@ -1,14 +1,9 @@
 // What a host gets from the surface, and what it can ask of it, about
 // references (docs/file-view.md, "References and captures").
 //
-// Standalone, a copied reference goes to the clipboard and nowhere else.
-// Embedded, the host wants it too — the desktop app puts it in its composer —
-// so every copy site hands the copied text to `onReference` as well, in the
-// shape below. The other direction is `selectReference`: a host that has a
-// reference from elsewhere (a link in a transcript) asks the surface to
-// select it, and the resolver here maps a selector back onto the ids the
-// surface's own selection machinery uses. Both halves are pure so a test can
-// read them without a viewer.
+// Copy actions write only to the clipboard. Explicit Add to prompt actions
+// send references to the host. In the other direction, selectReference asks
+// the surface to select geometry named by a reference from the host.
 import { createContext, useContext } from "react";
 
 import { isNativeCadSelector, parseCadRefToken } from "cadgen-js/lib/cadRefs.js";
@@ -54,11 +49,7 @@ export function referencesFromCopyText(text, file) {
     .map((line) => referenceFromCopyText(line, file));
 }
 
-/**
- * `{ deliverReference(text) }` when a host is listening, else null. The
- * sheet's own copy buttons (StepReferenceSection) read it, so a reference
- * copied from anywhere in the surface reaches the host.
- */
+/** Clipboard delivery and explicit add-to-prompt, when a host is listening. */
 export const HostReferenceContext = createContext(null);
 
 export function useHostReference() {

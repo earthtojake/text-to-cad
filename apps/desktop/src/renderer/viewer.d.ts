@@ -45,17 +45,15 @@ declare module "@viewer/file-view" {
      */
     selectReference?: { selector: string; key: number } | null;
     /**
-     * A reference the person copied from the surface — the render pane's
-     * Copy Reference, the tree's, the sheet's, the file menu's Copy Link —
-     * beside the clipboard. `file` is served-root-relative; `selector` is
-     * the half after `#`, `""` for a whole file; `text` is what was copied.
+     * A reference explicitly added to the prompt. Copy actions stay on the clipboard.
+     * `file` is served-root-relative; `selector` is the half after `#`.
      */
     onReference?: (reference: { file: string; selector: string; text: string; label?: string }) => void;
     /** The viewport rendered to a PNG, from the toolbar's camera button (shown only when this is given). */
-    onCapture?: (capture: { blob: Blob; file: string }) => void;
+    onCapture?: (capture: { blob: Blob; file: string; references?: { file: string; selector: string; label?: string }[] }) => void;
     /**
      * The same capture, asked for from outside the viewport — this app's
-     * composer has `Capture from viewer` in its `+` menu. A new `key` takes
+     * composer has `Ask about this view` in its `+` menu. A new `key` takes
      * another picture; the result goes to `onCapture` either way.
      */
     captureRequest?: { key: number } | null;

@@ -1,3 +1,4 @@
+import type { IDisposable } from "monaco-editor";
 import { DiffEditor } from "@monaco-editor/react";
 import {
   ChevronDown,
@@ -28,6 +29,7 @@ import { Textarea } from "@renderer/components/ui/textarea";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
 import { useProjectGitInfo } from "@renderer/lib/git-mode";
 import { cn } from "@renderer/lib/utils";
+import { addToDraft } from "@renderer/state/cad-draft";
 import { useExplorer } from "@renderer/state/explorer";
 import { useSessions } from "@renderer/state/sessions";
 import { useSettings } from "@renderer/state/settings";
@@ -337,6 +339,7 @@ function ReviewBody({
                   }
                 }}
                 request={request}
+                root={target?.cwd ?? null}
                 scope={scope}
               />
             ))}
@@ -409,6 +412,7 @@ function RailRow({ file, onSelect }: { file: ChangedFile; onSelect: () => void }
 }
 
 function FileSection({
+  root,
   file,
   request,
   scope,
@@ -416,6 +420,7 @@ function FileSection({
   onToggle,
   ref,
 }: {
+  root: string | null;
   file: ChangedFile;
   request: ReviewRequest;
   scope: ReviewScope;
@@ -424,6 +429,14 @@ function FileSection({
   ref: (node: HTMLElement | null) => void;
 }) {
   const [diff, setDiff] = useState<FileDiff | null>(null);
+  const selection = useRef<{ side: string; start: number; end: number; text: string } | null>(null);
+  const listeners = useRef<IDisposable[]>([]);
+  useEffect(() => () => { listeners.current.forEach((listener) => listener.dispose()); }, []);
+  const requestRevision = () => {
+    const selected = selection.current;
+    const excerpt = selected ? `\nSelected ${selected.side} lines ${selected.start}–${selected.end}:\n\`\`\`\n${selected.text}\n\`\`\`\n` : "";
+    addToDraft(request.projectId, root, { text: `Please revise ${file.path} (${REVIEW_SCOPE_LABELS[scope]}).\n${excerpt}Requested change: ` });
+  };
   const theme = useResolvedTheme();
   setupMonaco();
 
@@ -450,30 +463,37 @@ function FileSection({
 
   return (
     <section className="border-b" ref={ref}>
-      <button
-        className="flex w-full items-center gap-2 bg-card/60 px-3 py-2 text-left transition-colors hover:bg-accent/40"
-        onClick={onToggle}
-        type="button"
-      >
-        {open ? (
-          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-        )}
-        <span className={cn("shrink-0 font-mono text-[11px] font-semibold", badge.className)}>
-          {badge.letter}
-        </span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[12px]" title={file.path}>
-          {file.oldPath ? (
-            <>
-              <span className="text-muted-foreground line-through">{file.oldPath}</span>
-              <span className="text-muted-foreground"> → </span>
-            </>
-          ) : null}
-          {file.path}
-        </span>
-        <Totals deletions={file.deletions} insertions={file.insertions} />
-      </button>
+      <div className="bg-card/60">
+        <button
+          className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-accent/40"
+          onClick={onToggle}
+          type="button"
+        >
+          {open ? (
+            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+          )}
+          <span className={cn("shrink-0 font-mono text-[11px] font-semibold", badge.className)}>
+            {badge.letter}
+          </span>
+          <span className="min-w-0 flex-1 truncate font-mono text-[12px]" title={file.path}>
+            {file.oldPath ? (
+              <>
+                <span className="text-muted-foreground line-through">{file.oldPath}</span>
+                <span className="text-muted-foreground"> → </span>
+              </>
+            ) : null}
+            {file.path}
+          </span>
+          <Totals deletions={file.deletions} insertions={file.insertions} />
+        </button>
+        <div className="flex justify-end px-2 pb-1">
+          <Button aria-label={`Request revision for ${file.path}`} className="h-6 shrink-0 px-2 text-xs" onMouseDown={(event) => event.preventDefault()} onClick={requestRevision} size="sm" variant="ghost">
+            Request revision
+          </Button>
+        </div>
+      </div>
 
       {open ? (
         file.binary ? (
@@ -483,6 +503,21 @@ function FileSection({
         ) : diff ? (
           <div style={{ height }}>
             <DiffEditor
+              onMount={(editor) => {
+                listeners.current.forEach((listener) => listener.dispose());
+                selection.current = null;
+                listeners.current = ([
+                  ["original", editor.getOriginalEditor()],
+                  ["modified", editor.getModifiedEditor()],
+                ] as const).flatMap(([side, code]) => {
+                  const remember = () => {
+                    const range = code.getSelection();
+                    const text = range && !range.isEmpty() ? code.getModel()?.getValueInRange(range) : "";
+                    selection.current = range && text ? { side, text, start: range.startLineNumber, end: range.endLineNumber } : null;
+                  };
+                  return [code.onDidChangeCursorSelection(remember), code.onDidFocusEditorText(remember)];
+                });
+              }}
               language={languageFor(file.path)}
               modified={diff.after ?? ""}
               options={{

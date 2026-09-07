@@ -1,3 +1,4 @@
+import { useHostReference } from "../../file-view/hostReference";
 import { useEffect, useMemo, useRef } from "react";
 import { Box, Boxes, ChevronRight, Eye, EyeOff, X } from "lucide-react";
 import { cn } from "@/ui/utils";
@@ -441,6 +442,7 @@ export default function StepFileSheet({
   openSectionIds = [],
   onOpenSectionIdsChange
 }) {
+  const hostReference = useHostReference();
   const rowRefs = useRef(new Map());
   const lastActiveTreeNodeScrollKeyRef = useRef("");
   const selectedIds = Array.isArray(selectedPartIds) ? selectedPartIds : [];
@@ -1047,6 +1049,7 @@ export default function StepFileSheet({
                           collapseSelectedDisabled={collapseSelectedDisabled}
                           expandAllDisabled={expandAllDisabled}
                           collapseAllDisabled={collapseAllDisabled}
+                          onAddToPrompt={hostReference ? () => onCopyTreeNodeReference?.(copyReferenceTargetId, { topology: topologyRow, toPrompt: true }) : undefined}
                           onCopyReference={() => {
                             onCopyTreeNodeReference?.(copyReferenceTargetId, { topology: topologyRow });
                           }}

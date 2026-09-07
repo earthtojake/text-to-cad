@@ -127,6 +127,10 @@ export function Composer({
     [draftKey, setDraft],
   );
   const textRef = useRef<ComposerEditorHandle | null>(null);
+  const focusRequest = useComposer((state) => state.focusRequest?.key === draftKey ? state.focusRequest.nonce : null);
+  useEffect(() => {
+    if (focusRequest !== null) textRef.current?.focus();
+  }, [focusRequest]);
   const queue = useQueue(sessionId);
   const dequeue = useComposer((state) => state.dequeue);
 
@@ -336,7 +340,7 @@ function AttachmentSink({ draftKey }: { draftKey: string }) {
  *
  * The file inputs are this component's own rather than the vendored form's:
  * the files have to be remembered (`composer/attachments.ts`) before they
- * become blob URLs, and only this side can do that. `Capture from viewer` is
+ * become blob URLs, and only this side can do that. `Ask about this view` is
  * the same capture as the viewer's own camera button and lands in the same
  * place — it is disabled, not hidden, when no CAD file is open, because the
  * answer to "why can I not do that" should be visible.
@@ -398,7 +402,7 @@ function AttachButton({ disabled }: { disabled?: boolean }) {
             }}
           >
             <Camera className="size-3.5" />
-            Capture from viewer
+            Ask about this view
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

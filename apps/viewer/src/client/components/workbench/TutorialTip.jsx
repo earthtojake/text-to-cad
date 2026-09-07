@@ -1,3 +1,4 @@
+import { useHostReference } from "../../file-view/hostReference";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Lightbulb, X } from "lucide-react";
 
@@ -21,6 +22,7 @@ export default function TutorialTip({
   className,
   children
 }) {
+  const hostReference = useHostReference();
   const boundary = useContext(FileSheetPortalContext);
   const [open, setOpen] = useState(false);
   // Storage is only written on dismiss, so this also guards against reopening
@@ -85,7 +87,7 @@ export default function TutorialTip({
         <div className="flex items-start gap-2">
           <Lightbulb className="mt-px size-4 shrink-0 text-background/70" strokeWidth={2} aria-hidden="true" />
           <p className="min-w-0 flex-1 text-sm leading-snug">
-            Copy a part reference, then describe your edit in the prompt.
+            {hostReference ? "Add the selected part to your prompt, then describe your edit." : "Copy a part reference, then describe your edit in the prompt."}
           </p>
           {/* Escape offers the same dismissal without moving focus here. */}
           <Button

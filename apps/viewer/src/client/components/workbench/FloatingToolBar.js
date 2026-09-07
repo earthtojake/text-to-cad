@@ -192,7 +192,7 @@ function DesktopFloatingToolBar({
   // `onCapture`): standalone there is no chat for the picture to go to.
   const captureButton = typeof handleCapture === "function" ? (
     <ToolbarButton
-      label="Send view to chat"
+      label="Ask about this view"
       onClick={() => {
         void handleCapture();
       }}

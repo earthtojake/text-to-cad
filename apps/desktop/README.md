@@ -302,8 +302,8 @@ are relative to the thread's root — its worktree when it has one.
 **The composer is an editor, not a textarea** (`features/session/composer`).
 A CAD reference typed into it — `models/bracket.step#o1.2`, `#label.f45`,
 `bracket.step` — becomes a chip the moment the space after it lands, a
-pasted prompt's references become chips at once, and the viewer's Copy
-Reference and Copy Link land a chip in the box beside the clipboard
+pasted prompt's references become chips at once, and the viewer's Add to
+prompt action places a chip in the box and focuses it
 (`CadFileView`'s `onReference`). The chip is an inline atom in a
 one-paragraph ProseMirror document: Backspace removes it whole, the arrow
 keys step over it and select it as a unit, and it prints back to its plain
@@ -312,9 +312,9 @@ the composer store stays the source of truth; the editor is a view of it
 (`references.ts` is the two functions between them, and the unit test is
 the round trip). AI Elements' `PromptInput` is untouched — its form,
 attachments and footer are as vendored — because the editor keeps the
-form's `message` field for it. The viewer's camera button ("Send view to
-chat", shown only inside the desktop) renders the viewport to a PNG and
-queues it on the composer store (`attachFile`), which the composer's
+form's `message` field for it. The viewer's camera button ("Ask about this
+view", shown only inside the desktop) renders the viewport to a PNG and
+queues it together with selected references on the composer store (`addContext`), which the composer's
 attachments pick up and send as an ACP image block.
 
 Click a composer reference chip, or focus its button with Tab and press
@@ -325,11 +325,21 @@ workspace. A bare selector requires a CAD tab in that same workspace;
 otherwise the app asks you to open the model first. This uses the viewer’s
 existing `selectReference` contract; hover does not alter its selection.
 
-References copied from a named part show its assembly name in the chip. The
+References added from a named part show its assembly name in the chip. The
 full file/selector remains in the tooltip and is still the text sent to the
 agent. Names are optional display metadata scoped to the draft; typed or
 unresolved references keep their file/selector fallback. The viewer’s compact
 reference hint stays inside its surface and dismisses with Close or Escape.
+
+Copy Reference and Copy Link remain clipboard-only. Ask about this view adds
+the image and selected part references together, without duplicating existing
+chips. A workspace mismatch offers **Start chat here**, which creates a chat
+in the context's workspace, carries the pending context over and preserves the
+old draft. Nothing is sent until the user submits.
+
+Each changed file in Review has **Request revision**. It appends the file and
+review scope to the draft, plus selected original or modified code and its line
+numbers when present, and focuses the composer for the requested change.
 
 `reference-ux.spec.ts` checks this with the toy car STEP: set
 `HARDCORE_E2E_CAD_MODEL` and `CAD_DESKTOP_PYTHON`. It uses the fake agent to
@@ -337,7 +347,7 @@ verify the exact outgoing token, plus the real viewer to check the label,
 reopening, hint bounds and remembered dismissal.
 
 The composer's own `+` is a menu of the three ways something gets into a
-prompt: `Attach files…`, `Attach image…` and `Capture from viewer`. The last
+prompt: `Attach files…`, `Attach image…` and `Ask about this view`. The last
 is the viewer's own camera button pressed from here — the explorer store
 holds a nonce (`cadCapture`) which `CadRenderer` hands to `CadFileView` as
 `captureRequest`, so there is one capture path and not two — and it is

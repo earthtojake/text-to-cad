@@ -1,3 +1,4 @@
+import { useHostReference } from "../../file-view/hostReference";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CadViewer from "../CadViewer";
 import { CircleAlert, X } from "lucide-react";
@@ -101,6 +102,7 @@ function ViewerContextMenu({
   onExpandAll,
   onCollapseAll
 }) {
+  const hostReference = useHostReference();
   if (!menu || !positionStyle) {
     return null;
   }
@@ -207,6 +209,7 @@ function ViewerContextMenu({
             isolated={focused}
             hidden={hidden}
             actionCount={menu.actionCount}
+            onAddToPrompt={hostReference ? () => handleAction((item) => hostReference.addReference(item.copyText)) : undefined}
             copyReferenceDisabled={!String(menu.copyText || "").trim()}
             selectDisabled={menu.selectDisabled === true}
             showIsolate={menu.showIsolate !== false}
@@ -344,6 +347,7 @@ export default function CadRenderPane({
   copyReferenceTipActive = false,
   panToolActive = false,
   handleCopySelection,
+  handleAddSelection = null,
   handleScreenshotCopy,
 }) {
   // The clock is the ONE thing that changes per frame during playback, and this
@@ -424,6 +428,8 @@ export default function CadRenderPane({
   };
   const ctaOverlayStyle = {
     ...bottomOverlayStyle,
+    // In an embedded split pane, reserve the bottom corner for orientation.
+    ...(handleAddSelection ? { bottom: "9rem" } : {}),
     left: `calc(${viewportInsetPx(viewportFrameInsets?.left)}px + 1rem)`,
     right: `calc(${viewportInsetPx(viewportFrameInsets?.right)}px + 1rem)`
   };
@@ -436,7 +442,8 @@ export default function CadRenderPane({
   // the ref back in, and so on.
   const ctaFullLabelRef = useRef(null);
   const [ctaLabelFits, setCtaLabelFits] = useState(true);
-  const ctaRefLabel = ctaMode === "screenshot" ? "Copy Screenshot" : copyButtonLabel;
+  const ctaMetricsClass = handleAddSelection ? "h-9 w-fit min-w-0 max-w-full shrink overflow-hidden px-4 text-xs" : CTA_METRICS_CLASS;
+  const ctaRefLabel = ctaMode === "screenshot" ? "Copy Screenshot" : handleAddSelection ? "Add to prompt" : copyButtonLabel;
   useLayoutEffect(() => {
     const ruler = ctaFullLabelRef.current;
     if (!ruler) {
@@ -458,11 +465,11 @@ export default function CadRenderPane({
       observer?.disconnect();
     };
   }, [ctaRefLabel]);
-  const ctaLabel = ctaLabelFits || !copyButtonCountLabel || ctaMode === "screenshot"
+  const ctaLabel = handleAddSelection || ctaLabelFits || !copyButtonCountLabel || ctaMode === "screenshot"
     ? ctaRefLabel
     : copyButtonCountLabel;
   // The title always carries the full ref, so the truncated case is still discoverable.
-  const ctaTitle = ctaMode === "screenshot" ? "Copy screenshot to clipboard" : copyButtonLabel;
+  const ctaTitle = ctaMode === "screenshot" ? "Copy screenshot to clipboard" : ctaRefLabel;
   const ctaDisabled = ctaMode === "screenshot"
     ? viewerLoading || !viewportHasRenderableContent
     : false;
@@ -695,7 +702,7 @@ export default function CadRenderPane({
               visible label instead would latch, because swapping in the shorter count label
               shrinks the box and makes the ref look permanently too wide. Kept outside the
               button so the button's textContent stays exactly its label. */}
-          <span aria-hidden="true" className={cn("pointer-events-none invisible absolute left-0 top-0", CTA_METRICS_CLASS)}>
+          <span aria-hidden="true" className={cn("pointer-events-none invisible absolute left-0 top-0", ctaMetricsClass)}>
             <span ref={ctaFullLabelRef} className="block min-w-0 max-w-full truncate">{ctaRefLabel}</span>
           </span>
           <TutorialTip
@@ -710,7 +717,7 @@ export default function CadRenderPane({
               size="sm"
               className={cn(
                 "pointer-events-auto border border-primary/20 bg-primary/85 text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/75 focus-visible:ring-primary/35",
-                CTA_METRICS_CLASS
+                ctaMetricsClass
               )}
               disabled={ctaDisabled}
               onClick={() => {
@@ -718,7 +725,8 @@ export default function CadRenderPane({
                   void handleScreenshotCopy?.();
                   return;
                 }
-                void handleCopySelection();
+                if (handleAddSelection) handleAddSelection();
+                else void handleCopySelection();
               }}
               title={ctaTitle}
             >

@@ -17,7 +17,7 @@ import { referenceText, type CadReference } from "@shared/cad-refs";
  * idle.
  *
  * The explorer writes into the composer too (item 4 of the CAD review): a
- * reference copied in the viewer lands in the draft as its token, which the
+ * reference added from the viewer lands in the draft as its token, which the
  * editor draws as a chip (`features/session/composer`), and a capture of the
  * viewport is queued as a file for the composer's attachments to pick up —
  * they live inside AI Elements' `PromptInput`, which nothing outside it can
@@ -34,7 +34,11 @@ export type QueuedPrompt = {
 export const NEW_SESSION_KEY = "__new__";
 export const newSessionKey = (projectId: string) => `${NEW_SESSION_KEY}:${projectId}`;
 
+export type DraftContext = { text?: string; references?: CadReference[]; files?: File[] };
+
 type ComposerState = {
+  focusRequest: { key: string; nonce: number } | null;
+  addContext: (key: string, context: DraftContext) => void;
   queues: Record<string, QueuedPrompt[]>;
   drafts: Record<string, string>;
   /** Display metadata belongs to the draft, not to another project's identical token. */
@@ -64,6 +68,23 @@ type ComposerState = {
 let sequence = 0;
 
 export const useComposer = create<ComposerState>((set, get) => ({
+  focusRequest: null,
+  addContext: (key, context) => set((state) => {
+    let text = state.drafts[key] ?? "";
+    const labels = { ...state.referenceLabels[key] };
+    for (const reference of context.references ?? []) {
+      const token = referenceText(reference);
+      if (!text.split(/\s+/).includes(token)) text += `${text && !/\s$/.test(text) ? " " : ""}${token} `;
+      if (reference.label?.trim()) labels[token] = reference.label.trim();
+    }
+    if (context.text) text += `${text.trim() ? "\n\n" : ""}${context.text}`;
+    return {
+      drafts: { ...state.drafts, [key]: text },
+      referenceLabels: { ...state.referenceLabels, [key]: labels },
+      pendingFiles: { ...state.pendingFiles, [key]: [...(state.pendingFiles[key] ?? []), ...(context.files ?? [])] },
+      focusRequest: { key, nonce: ++sequence },
+    };
+  }),
   queues: {},
   drafts: {},
   referenceLabels: {},

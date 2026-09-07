@@ -13,7 +13,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
  *     are words.
  *   - A person types a reference into the composer and it becomes a chip
  *     (`features/session/composer`), sent as the plain token; the viewer's
- *     Copy Reference lands one in the box; the viewer's camera button
+ *     Add to prompt lands one in the box; the viewer's camera button
  *     attaches the viewport as an image.
  *
  * The project is this repository, as in explorer.spec.ts, so the STEP
@@ -144,7 +144,7 @@ test("a typed reference is a chip, and is sent as its text", async () => {
   await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 15_000 });
 });
 
-test("the viewer's Copy Reference lands a chip, and the camera an image", async () => {
+test("the viewer's Add to prompt lands a chip, and the camera an image", async () => {
   const status = await page.evaluate(() => window.hardcore.runtime.status());
   test.skip(status.state !== "ready", "no CAD runtime on this machine");
   test.setTimeout(240_000);
@@ -160,12 +160,11 @@ test("the viewer's Copy Reference lands a chip, and the camera an image", async 
   await expect(tree).toBeVisible({ timeout: 90_000 });
   await tree.click();
 
-  // Copy Reference from the tree's context menu: the clipboard as before,
-  // and a chip in the composer, naming the file by its full path.
+  // Add to prompt from the tree's context menu names the file by its full path.
   const row = page.getByRole("treeitem").first();
   await expect(row).toBeVisible({ timeout: 30_000 });
   await row.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Copy Reference" }).click();
+  await page.getByRole("menuitem", { name: "Add to prompt" }).click();
   const chip = page.locator("[data-composer] [data-reference-chip]");
   await expect(chip).toHaveCount(1);
   await expect(chip).toHaveAttribute("data-file", STEP);
@@ -182,7 +181,7 @@ test("the viewer's Copy Reference lands a chip, and the camera an image", async 
   // path the desktop added (`captureRequest`): a CAD tab is open, so the
   // item is live, and it lands a second picture in the same place.
   await page.locator("[data-composer]").getByRole("button", { name: "Add to this prompt" }).click();
-  const capture = page.getByRole("menuitem", { name: "Capture from viewer" });
+  const capture = page.getByRole("menuitem", { name: "Ask about this view" });
   await expect(capture).not.toHaveAttribute("data-disabled", "");
   await capture.click();
   await expect(captures).toHaveCount(2, { timeout: 15_000 });

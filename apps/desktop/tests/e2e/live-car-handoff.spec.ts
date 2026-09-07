@@ -64,7 +64,7 @@ for (const agentId of ["codex", "claude-code"]) {
       await draft.fill("Make the wheels wider: change WHEEL_WIDTH from 14.0 to 18.0, keeping the other dimensions. One wheel is ");
       const wheel = page.getByRole("treeitem", { name: /Component wheel_front_left/ });
       await wheel.click({ button: "right" });
-      await page.getByRole("menuitem", { name: "Copy Reference", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Add to prompt", exact: true }).click();
       const chip = page.locator("[data-composer] [data-reference-chip]");
       await expect(chip).toHaveCount(1);
       await expect(chip).toHaveAttribute("data-file", "models/car.step");

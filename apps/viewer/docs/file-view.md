@@ -37,8 +37,8 @@ a build error or, worse, a silently unstyled surface.
 | `sceneBackground` | `null` | A hex colour to paint the scene on instead of the theme's own backdrop, so the model sits on the host's ground; lights, grid, floor and materials are the theme's. |
 | `colorScheme` | `null` | `"light"` or `"dark"`: the host's resolved theme. The CAD "system" preset resolves the same way and the surface stops writing `.dark` / `color-scheme` to the document — the host owns those. `null` is the standalone case: the surface follows the OS and writes the document itself. |
 | `selectReference` | `null` | `{ selector, key }`: select a reference — `o1.2`, `label.f45`, `bracket`, a comma-separated list (its first member) — once the model is up. Applied once per `key`; a new `key` selects again. See "References and captures". |
-| `onReference` | `null` | `({ file, selector, text }) => void`. Called for every reference the person copies out of the surface, beside the clipboard write. `null` (standalone) means the clipboard alone. |
-| `onCapture` | `null` | `({ blob, file }) => void`. Given, the floating toolbar shows a camera button that renders the viewport to a PNG and hands it over; `null` shows no button. |
+| `onReference` | `null` | `({ file, selector, text, label? }) => void`. Called by explicit Add to prompt actions. Copy actions only write to the clipboard. `null` hides Add to prompt. |
+| `onCapture` | `null` | `({ blob, file, references }) => void`. Given, the floating toolbar shows a camera button that renders the viewport to a PNG and hands it over; `null` shows no button. |
 | `captureRequest` | `null` | `{ key }`: take that same capture now, asked for from outside the viewport. Applied once per `key`, like `selectReference`; the picture goes to `onCapture`. |
 
 `origin` is also published through context:
@@ -62,12 +62,10 @@ because every `cadgen viewer` reads and writes the one store.
 
 ## References and captures
 
-The surface copies references — the render pane's Copy Reference button, the
-tree's and the viewport's context menus, the reference sheet's copy buttons,
-the file menu's Copy Link — to the clipboard, and standalone that is the end
-of it. A host usually wants them somewhere of its own (the desktop app's
-composer), so every one of those sites also calls `onReference` when the host
-gives one, once per copied line:
+Copy Reference, the reference sheet's copy buttons and Copy Link write only
+to the clipboard. With `onReference`, the selection button becomes **Add to
+prompt**, and the tree and viewport context menus offer it beside Copy
+Reference. Only Add to prompt calls the host, once per reference:
 
 ```js
 { file: "models/STEP/bracket.step", selector: "o1.2", text: "bracket.step#o1.2" }
@@ -77,21 +75,22 @@ gives one, once per copied line:
 (what `?file=` would carry), always in full — the prefix on the copied `text`
 is the viewer's shortest-unique suffix, right for a prompt and wrong for a
 host that wants to open the file. `selector` is the half after `#` without
-it, `""` for a whole file. Copy Link hands over the file with no selector
-rather than the URL: a viewer link is the one thing an agent inside a host
-cannot use. `hostReference.js` holds the parser (`referenceFromCopyText`,
-exported from the entry) and the context the sheet's copy buttons read.
+it, `""` for a whole file. An optional `label` names a known part for display;
+it never replaces the canonical selector. `hostReference.js` holds the
+parser and the context exposing separate copy and add actions.
 
 `onCapture` is the other direction for pictures: given, the floating toolbar
-gains a camera button ("Send view to chat") beside Copy screenshot, and
+gains a camera button ("Ask about this view") beside Copy screenshot, and
 clicking it renders the current viewport — the same composite the clipboard
-gets, drawings included — to a PNG `Blob` and calls `onCapture({ blob, file })`.
+gets, drawings included — to a PNG `Blob` and calls `onCapture({ blob, file, references })`. The selected references are
+snapshotted before awaiting the image, so the host can add them and the
+picture as one draft operation.
 Without it there is no button; standalone there is no chat.
 
 `captureRequest` is that same button pressed from outside the viewport: the
 host holds a nonce (`{ key }`) and bumps it, and the surface takes one
 picture per new key and hands it to `onCapture` exactly as the button does.
-The desktop app's composer offers `Capture from viewer` in its `+` menu
+The desktop app's composer offers `Ask about this view` in its `+` menu
 this way, so there is one capture path and not two.
 
 `selectReference` goes the other way: a host holding a reference from

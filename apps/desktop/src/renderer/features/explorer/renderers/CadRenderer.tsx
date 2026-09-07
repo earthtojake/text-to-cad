@@ -1,4 +1,3 @@
-import { toast } from "sonner";
 import { Box, RefreshCw, Settings2 } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -6,11 +5,11 @@ import { Button } from "@renderer/components/ui/button";
 import { Spinner } from "@renderer/components/ui/spinner";
 import { useElementWidth } from "@renderer/hooks/use-element-width";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
-import { useComposer } from "@renderer/state/composer";
 import { useExplorer } from "@renderer/state/explorer";
-import { cadDraftKey } from "@renderer/state/cad-draft";
+import { addToDraft } from "@renderer/state/cad-draft";
 import { useUi } from "@renderer/state/ui";
 import type { ViewerOrigin } from "@shared/ipc/cad";
+import type { CadReference } from "@shared/cad-refs";
 import type { ExplorerRoot } from "@shared/types";
 
 import { cadSceneBackgroundFor, cadSheetWidthFor } from "../cad-layout";
@@ -56,7 +55,7 @@ type CadSurfaceProps = {
   /** A reference to select once the model is up; `key` distinguishes repeats. */
   selectReference: { selector: string; key: number } | null;
   onReference: (reference: { file: string; selector: string; text: string; label?: string }) => void;
-  onCapture: (capture: { blob: Blob; file: string }) => void;
+  onCapture: (capture: { blob: Blob; file: string; references?: CadReference[] }) => void;
   /**
    * A capture asked for from outside the viewport — the composer's `+` menu.
    * `key` distinguishes repeats, exactly as `selectReference`'s does; the
@@ -149,31 +148,23 @@ export function CadRenderer({
     () => (selection ? { selector: selection.selector, key: selection.nonce } : null),
     [selection],
   );
-  // The composer's `+ Capture from viewer`, for this tab.
+  // The composer's `+ Ask about this view`, for this tab.
   const capture = useExplorer((state) => (state.cadCapture?.tabId === tabId ? state.cadCapture : null));
   const captureRequest = useMemo(() => (capture ? { key: capture.nonce } : null), [capture]);
 
   /**
-   * The viewer's copies and captures go to the composer of the thread the
+   * The viewer's prompt references and captures go to the composer of the thread the
    * person is in — or the new-session box when there is none — as a chip
    * and as an image attachment (`state/composer.ts`). `file` is the tab's
    * root-relative path, which is what the agent can open.
    */
   const onReference = useCallback((reference: { file: string; selector: string; label?: string }) => {
-    try {
-      useComposer.getState().insertReference(cadDraftKey(projectId, root), reference);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    }
+    addToDraft(projectId, root, { references: [reference] });
   }, [projectId, root]);
-  const onCapture = useCallback(({ blob, file }: { blob: Blob; file: string }) => {
+  const onCapture = useCallback(({ blob, file, references }: { blob: Blob; file: string; references?: CadReference[] }) => {
     const stem = (file.split("/").pop() ?? "view").replace(/\.[^.]+$/, "");
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    try {
-      useComposer.getState().attachFile(cadDraftKey(projectId, root), new File([blob], `${stem}-${stamp}.png`, { type: "image/png" }));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    }
+    addToDraft(projectId, root, { references, files: [new File([blob], `${stem}-${stamp}.png`, { type: "image/png" })] });
   }, [projectId, root]);
   const openSettings = useUi((state) => state.openSettings);
   const colorScheme = useResolvedTheme();
