@@ -208,9 +208,11 @@ test("navigates by the breadcrumb's menus", async () => {
   await expect(header.getByRole("button", { name: /^Open\b/ })).toHaveCount(0);
 
   // Wide enough for every folder to be its own crumb: the default pane folds
-  // them into `…`, which is a menu of folders in its own right.
-  await page.getByRole("button", { name: "Expand explorer" }).click();
-  await expect(page.getByRole("button", { name: "Restore layout" })).toBeVisible();
+  // them into `…`, which is a menu of folders in its own right. The session
+  // keeps its floor whatever the divider does, so the room comes from the
+  // window as well as from the sidebar.
+  await resizeWindow(1680, 1050);
+  await widenExplorer();
 
   // A folder crumb lists that folder, with the entry on the way to the open
   // file marked; picking a file opens it in this tab.
@@ -253,7 +255,8 @@ test("navigates by the breadcrumb's menus", async () => {
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Restore layout" }).click();
+  await restoreLayout();
+  await resizeWindow(1440, 900);
   await page.getByRole("tab", { name: /breadcrumbs\.js/ }).getByRole("button", { name: "Close breadcrumbs.js" }).click();
 });
 

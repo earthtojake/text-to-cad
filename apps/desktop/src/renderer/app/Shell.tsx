@@ -96,24 +96,37 @@ export function Shell() {
       if (width <= 0) {
         return;
       }
+      const group = groupRef.current;
+      if (!group) {
+        return;
+      }
+      // The panels the group holds NOW, not the ones this closure was made
+      // for: a project arriving or leaving between the effect and this frame
+      // mounts or unmounts the explorer, and a layout with the wrong number
+      // of shares is an exception the library throws — which took the whole
+      // renderer down when a session was opened before its project had
+      // loaded. The effect for the change re-applies once it has settled.
+      const withExplorer = "explorer" in group.getLayout();
       // Shares are of the width the panels divide: the group less its
       // separators, which are two with the explorer and one without. Against
       // the whole width the sidebar lands a pixel short.
       const shares = paneShares({
-        width: width - separatorsFor(hasProject) * SEPARATOR_PX,
+        width: width - separatorsFor(withExplorer) * SEPARATOR_PX,
         sidebarWidth,
         sessionWidth,
         sidebarCollapsed,
-        explorerCollapsed,
+        explorerCollapsed: withExplorer ? explorerCollapsed : true,
       });
       // A share for a panel that is not mounted is a share the library has
       // nowhere to put. The explorer's is zero in that case anyway, so the
       // other two already add up to a hundred without it.
-      groupRef.current?.setLayout(
-        hasProject ? shares : { sidebar: shares.sidebar, session: shares.session },
-      );
+      try {
+        group.setLayout(withExplorer ? shares : { sidebar: shares.sidebar, session: shares.session });
+      } catch {
+        // The group is between panel counts; the next applyLayout lands.
+      }
     });
-  }, [hasProject, sidebarCollapsed, explorerCollapsed, sidebarWidth, sessionWidth]);
+  }, [sidebarCollapsed, explorerCollapsed, sidebarWidth, sessionWidth]);
 
   useEffect(() => {
     const element = groupElementRef.current;
@@ -140,6 +153,14 @@ export function Shell() {
   useEffect(() => {
     applyLayout();
   }, [applyLayout]);
+  // The explorer mounting with a project is a third panel the group has to
+  // make room for; applyLayout reads the mounted panels itself, so this
+  // only has to run again once the mount has happened.
+  useEffect(() => {
+    if (hasProject) {
+      applyLayout();
+    }
+  }, [applyLayout, hasProject]);
 
   const onLayoutChanged = (next: Layout, meta: LayoutChangedMeta) => {
     // Only a drag or a resize keypress is worth writing: mount and the

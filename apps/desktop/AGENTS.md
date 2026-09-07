@@ -33,6 +33,20 @@ with its handlers in `src/main/ipc/<branch>.ts` spread into
 `src/main/ipc/index.ts`, is expected; reshaping the shell to fit one feature is
 not.
 
+## Running it for the person
+
+- **When a workstream lands, rebuild and relaunch the app for them.** A
+  running Electron keeps the code it started with; a merge that is not
+  followed by a restart is a merge they cannot see. The sequence is: stop
+  the instance you launched (`pkill -TERM -f 'Electron\.app/Contents/MacOS/Electron \.$'`
+  — only the dev instance, never a packaged Hardcore.app), `npm run build`,
+  then relaunch. Close every Playwright or debugging instance you started
+  first, so the one window left is the current build.
+- **Launch in the background.** `HARDCORE_LAUNCH_INACTIVE=1 npx electron .`
+  shows the window without taking focus (`showInactive` in
+  `src/main/index.ts`), so the relaunch does not interrupt whatever they are
+  doing. Run it detached (`nohup … &`) with stdout to a log file.
+
 ## Rules that are easy to break here
 
 - **The renderer imports from `src/main` never, and from `src/shared` types

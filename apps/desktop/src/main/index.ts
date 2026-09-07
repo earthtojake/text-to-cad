@@ -97,7 +97,15 @@ function createWindow() {
   }
   trackWindowState(window);
 
-  window.once("ready-to-show", () => window.show());
+  // A launch from a terminal or a script may ask to stay out of the way:
+  // the window appears without taking focus from whatever is in front.
+  window.once("ready-to-show", () => {
+    if (process.env.HARDCORE_LAUNCH_INACTIVE === "1") {
+      window.showInactive();
+    } else {
+      window.show();
+    }
+  });
 
   // A link in agent output, a file the viewer renders, an ad in a webview:
   // none of them get to open an Electron window. http(s) goes to the user's

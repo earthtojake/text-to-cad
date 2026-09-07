@@ -40,6 +40,8 @@ Three environment variables matter in development:
 | `HARDCORE_NO_PLUGIN_INSTALL` | Skip the launch-time install of the Hardcore plugin into the user's agents. `NODE_ENV=test` implies it. |
 | `HARDCORE_PREWARM` | Under `NODE_ENV=test` the project pre-warm (viewer child + cadgen daemon on project open) is off; `1` turns it on, as `tests/e2e/prewarm.spec.ts` does. |
 | `HARDCORE_FAKE_AGENT` | Launch this stdio ACP agent instead of whatever the registry says, for every provider. The session and git suites point it at `tests/fake-agent/index.mjs`; a session needs an agent to exist at all, and a real one would make the suite a test of somebody's login state. |
+`HARDCORE_LAUNCH_INACTIVE=1` shows the window without taking focus, for a
+relaunch from a script while the person is working in another app.
 
 ## Telemetry
 
