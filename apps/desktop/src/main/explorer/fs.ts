@@ -562,6 +562,145 @@ export async function readBinaryFile(root: string, target: string): Promise<Bina
 }
 
 /* -------------------------------------------------------------------------- */
+/* Creating, renaming, duplicating                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The tree's own edits: what the context menu offers besides opening.
+ *
+ * Each one resolves its target against the root the way every read does, and
+ * none of them ever produces a path outside it — a rename takes a *name*, not
+ * a path, so `../` cannot be smuggled in through the field, and a duplicate
+ * lands beside its source. Trashing is not here: `shell.trashItem` is
+ * Electron's, and this module stays plain Node (`src/main/ipc/explorer.ts`
+ * resolves the path through `resolveInRoot` and hands it over).
+ */
+
+/** A name the tree can create or rename to: one path segment, nothing hidden in it. */
+export function assertEntryName(name: string): void {
+  if (name === "" || name === "." || name === "..") {
+    throw new FsError("that is not a name");
+  }
+  if (/[\\/]/.test(name)) {
+    throw new FsError("a name cannot contain a slash");
+  }
+  if (name.includes("\0")) {
+    throw new FsError("that is not a name");
+  }
+}
+
+/** The root-relative path of a would-be child of `directory`. */
+function childPath(directory: string, name: string): string {
+  return directory === "" ? name : `${directory}/${name}`;
+}
+
+/**
+ * The first free name in a directory, Finder's way: `part.step`, then
+ * `part copy.step`, `part copy 2.step`, … The extension stays at the end,
+ * where the OS reads it; a directory has no extension to keep.
+ */
+export async function uniqueName(
+  absoluteDirectory: string,
+  name: string,
+  isDirectory: boolean,
+  suffix = "copy",
+): Promise<string> {
+  const extension = isDirectory ? "" : path.extname(name);
+  const stem = extension ? name.slice(0, -extension.length) : name;
+  const taken = new Set(await fs.readdir(absoluteDirectory).catch(() => [] as string[]));
+  if (!taken.has(name)) {
+    return name;
+  }
+  for (let count = 1; ; count += 1) {
+    const candidate = `${stem} ${suffix}${count > 1 ? ` ${count}` : ""}${extension}`;
+    if (!taken.has(candidate)) {
+      return candidate;
+    }
+  }
+}
+
+/**
+ * A new, empty file. Refused rather than truncated when something is already
+ * there: "New file" over an existing one is a bug in the caller, not a request
+ * to empty it.
+ */
+export async function createFile(root: string, directory: string, name: string): Promise<{ path: string }> {
+  assertEntryName(name);
+  const parent = await resolveInRoot(root, directory);
+  const absolute = path.join(parent, name);
+  try {
+    await fs.writeFile(absolute, "", { flag: "wx" });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new FsError("something with that name is already there");
+    }
+    throw error;
+  }
+  return { path: childPath(toRelative(await fs.realpath(root).catch(() => root), parent), name) };
+}
+
+export async function createDirectory(root: string, directory: string, name: string): Promise<{ path: string }> {
+  assertEntryName(name);
+  const parent = await resolveInRoot(root, directory);
+  const absolute = path.join(parent, name);
+  if (await fs.lstat(absolute).catch(() => null)) {
+    throw new FsError("something with that name is already there");
+  }
+  await fs.mkdir(absolute);
+  return { path: childPath(toRelative(await fs.realpath(root).catch(() => root), parent), name) };
+}
+
+/**
+ * Rename in place. The new name has to be a name — one segment — so the
+ * entry stays in its directory; moving is a different verb with a different
+ * UI. A rename onto an existing entry is refused rather than resolved by
+ * `rename(2)`'s own rule, which on POSIX replaces the target silently.
+ */
+export async function renameEntry(root: string, target: string, name: string): Promise<{ path: string }> {
+  assertEntryName(name);
+  const absolute = await resolveInRoot(root, target);
+  const realRoot = await fs.realpath(root).catch(() => path.resolve(root));
+  if (absolute === realRoot) {
+    throw new FsError("the project itself cannot be renamed here");
+  }
+  const destination = path.join(path.dirname(absolute), name);
+  if (destination === absolute) {
+    return { path: toRelative(realRoot, absolute) };
+  }
+  // A case-only rename on a case-insensitive filesystem stats as "exists";
+  // it is the one legitimate rename onto an existing name.
+  const caseOnly = destination.toLowerCase() === absolute.toLowerCase();
+  if (!caseOnly && (await fs.lstat(destination).catch(() => null))) {
+    throw new FsError("something with that name is already there");
+  }
+  await fs.rename(absolute, destination);
+  return { path: toRelative(realRoot, destination) };
+}
+
+/**
+ * A copy beside the original, named Finder's way. Directories copy whole;
+ * symlinks inside them are copied as links, not followed, because a link
+ * pointing up the tree is otherwise a copy that never ends.
+ */
+export async function duplicateEntry(root: string, target: string): Promise<{ path: string }> {
+  const absolute = await resolveInRoot(root, target);
+  const realRoot = await fs.realpath(root).catch(() => path.resolve(root));
+  if (absolute === realRoot) {
+    throw new FsError("the project itself cannot be duplicated here");
+  }
+  const stats = await fs.stat(absolute);
+  const parent = path.dirname(absolute);
+  const name = await uniqueName(parent, path.basename(absolute), stats.isDirectory());
+  const destination = path.join(parent, name);
+  if (stats.isDirectory()) {
+    await fs.cp(absolute, destination, { recursive: true, verbatimSymlinks: true, errorOnExist: true, force: false });
+  } else {
+    await fs.copyFile(absolute, destination, fs.constants.COPYFILE_EXCL);
+  }
+  return { path: toRelative(realRoot, destination) };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Watching                                                                    */
 /* -------------------------------------------------------------------------- */
 
