@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Archive, Folder, MoreHorizontal, Pencil, Trash2, Unplug } from "lucide-react";
+import { Archive, MoreHorizontal, Pencil, Trash2, Unplug } from "lucide-react";
 
 import { ExplorerToggle, HistoryNav, SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
@@ -13,6 +13,7 @@ import {
 import { useAcp } from "@renderer/state/acp";
 import { useSessions } from "@renderer/state/sessions";
 import { useExplorer } from "@renderer/state/explorer";
+import { useProjects } from "@renderer/state/projects";
 import { useSettings } from "@renderer/state/settings";
 import type { Session } from "@shared/types";
 
@@ -43,6 +44,9 @@ export function SessionHeader({
   const closeSession = useAcp((state) => state.close);
   const sidebarCollapsed = useSettings((state) => state.settings?.layout.sidebarCollapsed ?? false);
   const explorerCollapsed = useExplorer((state) => state.collapsed);
+  const projectName = useProjects(
+    (state) => state.projects.find((project) => project.id === session?.projectId)?.name ?? null,
+  );
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
 
@@ -76,7 +80,6 @@ export function SessionHeader({
         </div>
       ) : null}
       <div className="app-no-drag flex min-w-0 items-center gap-2">
-        <Folder className="size-3.5 shrink-0 text-muted-foreground" />
         {editing && session ? (
           <input
             aria-label="Session title"
@@ -105,6 +108,17 @@ export function SessionHeader({
             {title}
           </button>
         )}
+        {/* Where the session lives, as a badge after its name — the way a
+            thread is titled in Claude Code. The new-session screen's title is
+            the project already, so it carries none. */}
+        {session && projectName ? (
+          <span
+            className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] leading-4 text-muted-foreground"
+            data-session-project
+          >
+            {projectName}
+          </span>
+        ) : null}
         {session ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
