@@ -1,5 +1,6 @@
-import { Sparkles, ChevronDown } from "lucide-react";
+import { Loader2, ChevronDown } from "lucide-react";
 import { cn } from "cn";
+import { GlyphIcon } from "../glyphs";
 
 import {
   Reasoning,
@@ -34,8 +35,8 @@ function TriggerBody() {
       : `Thought for ${duration}s`;
   return (
     <>
-      <span className="flex size-4 items-center justify-center text-muted-foreground">
-        <Sparkles className="size-3.5" />
+      <span aria-hidden className="flex size-4 items-center justify-center text-muted-foreground">
+        {isStreaming ? <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" /> : <GlyphIcon glyph="think" />}
       </span>
       <span className="min-w-0 flex-1 truncate text-left">{message}</span>
       <ChevronDown className={cn("size-3.5 transition-transform", isOpen ? "rotate-180" : "rotate-0")} />

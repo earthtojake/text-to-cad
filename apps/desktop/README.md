@@ -299,6 +299,8 @@ a selector (`bracket.step#o1.2`, `#label.f45`) opens the file in the
 viewer and hands the selector to `CadFileView`'s `selectReference`. Paths
 are relative to the thread's root — its worktree when it has one.
 
+Activity summaries stay neutral even when a call fails. A separate red failure count marks a folded group, and its failed rows show a red **Failed** indicator; expand a row for the original error. Completed thinking rows use an ellipsis, with a spinner while thinking is active. Status comes from the agent’s tool-call status, not from words in its output.
+
 **The composer is an editor, not a textarea** (`features/session/composer`).
 A CAD reference typed into it — `models/bracket.step#o1.2`, `#label.f45`,
 `bracket.step` — becomes a chip the moment the space after it lands, a

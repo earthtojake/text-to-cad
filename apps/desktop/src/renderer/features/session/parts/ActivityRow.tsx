@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState } from "react";
-import { ChevronRight, Loader2 } from "lucide-react";
+import { CircleAlert, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "cn";
 
 import { Terminal } from "@renderer/components/ai-elements/terminal";
@@ -25,7 +25,7 @@ type ActivityItem = Extract<ViewItem, { kind: "activity" }>;
 export function ActivityGroup({ item, sessionId }: { item: ActivityItem; sessionId: string }) {
   const [open, setOpen] = useState(false);
   const active = item.rows.some((row) => row.status === "pending" || row.status === "in_progress");
-  const failed = item.rows.some((row) => row.status === "failed");
+  const failureCount = item.rows.filter((row) => row.status === "failed").length;
 
   if (item.summary === null) {
     return <ActivityRowView row={item.rows[0]!} sessionId={sessionId} />;
@@ -35,7 +35,6 @@ export function ActivityGroup({ item, sessionId }: { item: ActivityItem; session
     <div className="not-prose" data-activity-group data-open={open}>
       <RowButton
         active={active}
-        failed={failed}
         onClick={() => setOpen((value) => !value)}
         open={open}
       >
@@ -47,6 +46,7 @@ export function ActivityGroup({ item, sessionId }: { item: ActivityItem; session
           )}
         </span>
         <span className="min-w-0 flex-1 truncate">{item.summary}</span>
+        {failureCount > 0 ? <FailureIndicator count={failureCount} /> : null}
       </RowButton>
       {open ? (
         <div className="ml-2 border-l pl-2">
@@ -70,7 +70,6 @@ export function ActivityRowView({ row, sessionId }: { row: ActivityRow; sessionI
     <div className="not-prose" data-activity-row={row.id} data-status={row.status}>
       <RowButton
         active={active}
-        failed={failed}
         onClick={() => setOpen((value) => !value)}
         open={open}
         title={row.path ?? row.command ?? row.part.title}
@@ -86,6 +85,7 @@ export function ActivityRowView({ row, sessionId }: { row: ActivityRow; sessionI
             <span className="min-w-0 truncate font-mono text-[12px] text-foreground/80">{command}</span>
           ) : null}
         </span>
+        {failed ? <FailureIndicator /> : null}
         {row.insertions + row.deletions > 0 ? (
           <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">
             +{row.insertions} −{row.deletions}
@@ -97,18 +97,26 @@ export function ActivityRowView({ row, sessionId }: { row: ActivityRow; sessionI
   );
 }
 
+/** A failure belongs to the affected call, not to every word in the group. */
+function FailureIndicator({ count }: { count?: number }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-destructive" data-activity-failures>
+      <CircleAlert aria-hidden className="size-3" />
+      {count === undefined ? "Failed" : `${count} failed`}
+    </span>
+  );
+}
+
 function RowButton({
   children,
   open,
   active,
-  failed,
   onClick,
   title,
 }: {
   children: React.ReactNode;
   open: boolean;
   active: boolean;
-  failed: boolean;
   onClick: () => void;
   title?: string;
 }) {
@@ -117,7 +125,7 @@ function RowButton({
       aria-expanded={open}
       className={cn(
         "flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[13px] leading-5 transition-colors hover:bg-accent/60",
-        failed ? "text-destructive" : "text-muted-foreground",
+        "text-muted-foreground",
         active && "text-foreground/80",
       )}
       onClick={onClick}

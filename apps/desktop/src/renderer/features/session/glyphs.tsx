@@ -5,7 +5,7 @@ import {
   Globe,
   Image as ImageIcon,
   Pencil,
-  Sparkles,
+  Ellipsis,
   SquareTerminal,
   ToggleLeft,
   Wrench,
@@ -17,7 +17,7 @@ import type { SubagentState } from "@shared/acp/types";
 
 /**
  * The leading glyph of an activity row (plan §2): pencil for an edit, book
- * for a read, terminal for a command, globe for the web, sparkle for a
+ * for a read, terminal for a command, globe for the web, ellipsis for a
  * thought. One map, so every row and every folded line agree.
  */
 export function GlyphIcon({ glyph, className }: { glyph: Glyph; className?: string }) {
@@ -33,7 +33,7 @@ export function GlyphIcon({ glyph, className }: { glyph: Glyph; className?: stri
     case "fetch":
       return <Globe {...props} />;
     case "think":
-      return <Sparkles {...props} />;
+      return <Ellipsis {...props} />;
     case "image":
       return <ImageIcon {...props} />;
     case "delete":

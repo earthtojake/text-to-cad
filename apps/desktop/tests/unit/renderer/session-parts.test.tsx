@@ -55,6 +55,29 @@ describe("ActivityGroup", () => {
     expect(screen.getByText("ls -la")).toBeInTheDocument();
   });
 
+  it("keeps a mixed group neutral and names its failed calls separately", async () => {
+    const user = userEvent.setup();
+    const rows = [
+      call({ id: "ok", kind: "execute", title: "python build.py", input: { command: "python build.py" } }),
+      call({ id: "bad", kind: "execute", title: "python check.py", input: { command: "python check.py" }, status: "failed", output: "Missing dependency" }),
+    ].map(activityRow);
+    const { rerender } = wrap(<ActivityGroup item={{ kind: "activity", key: "g", rows, summary: foldSummary(rows) }} sessionId="s1" />);
+    const group = screen.getByRole("button", { name: /Ran 2 commands.*1 failed/ });
+    expect(group).not.toHaveClass("text-destructive");
+    expect(screen.getByText("1 failed")).toHaveClass("text-destructive");
+    await user.click(group);
+    expect(screen.getByRole("button", { name: /python build.py/ })).not.toHaveTextContent("Failed");
+    const failed = screen.getByRole("button", { name: /python check.py.*Failed/ });
+    expect(failed).not.toHaveClass("text-destructive");
+    await user.click(failed);
+    expect(screen.getByText("Missing dependency")).toBeVisible();
+    // A corrected status removes the warning; output text alone never decides failure.
+    const updated = rows.map((row) => ({ ...row, status: "completed" as const }));
+    rerender(<ActivityGroup item={{ kind: "activity", key: "g", rows: updated, summary: foldSummary(updated) }} sessionId="s1" />);
+    expect(screen.queryByText("1 failed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+  });
+
   it("opens a command row to its output", async () => {
     const user = userEvent.setup();
     const rows = [call({ id: "c1", kind: "execute", title: "ls", input: { command: "ls" }, output: { formatted_output: "a.py\nb.py\n" } })].map(activityRow);
