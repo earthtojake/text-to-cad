@@ -240,9 +240,10 @@ it — and the explorer takes whatever is left. The two fixed widths are the
 persisted preference (`settings.layout`); the explorer's is a consequence.
 The strips along the top are 32px, and whichever pane is leftmost makes room
 for the macOS traffic lights (`--titlebar-inset`, keyed off `data-leftmost` on
-the shell). The sidebar's collapse sits at the right edge of the sidebar's
-header while the sidebar is open, and at the far left of the session's
-title bar once it is gone. The explorer's toggle stays on the right of that
+the shell). The sidebar's collapse sits at the right end of the sidebar's
+title strip — the traffic lights' row, level with the session's bar — while
+the sidebar is open, and at the far left of the session's title bar once it
+is gone. The explorer's toggle stays on the right of that
 bar.
 
 **The explorer is closed until something opens it**, and the session then

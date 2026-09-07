@@ -21,8 +21,8 @@ import type { Session } from "@shared/types";
  * right. The strip is the window's drag region, so the controls opt out of it.
  *
  * The sidebar's toggle is here only while the sidebar is hidden: open, it
- * sits at the right edge of the sidebar's own header, just across the
- * border from this bar, so the control stays put when the panel closes.
+ * sits at the right end of the sidebar's title strip, level with this bar,
+ * so the control stays on the same line when the panel closes.
  */
 export function SessionHeader({
   session,

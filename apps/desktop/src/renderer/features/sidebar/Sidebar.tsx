@@ -33,8 +33,12 @@ export function Sidebar() {
 
   return (
     <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
-      {/* The traffic lights' strip on macOS: drag region, and nothing else. */}
-      <div className="app-drag shrink-0" style={{ height: "var(--titlebar-height)" }} />
+      {/* The traffic lights' strip on macOS — the row the session's and the
+          explorer's bars share — with the panel's own collapse at its right
+          end, level with those bars' controls. */}
+      <div className="app-drag flex shrink-0 items-center justify-end pr-1" style={{ height: "var(--titlebar-height)" }}>
+        <SidebarToggle />
+      </div>
 
       <header className="app-drag flex shrink-0 items-center gap-1 pt-0.5 pr-2 pb-1 pl-3">
         <span className="app-no-drag truncate text-xl font-semibold tracking-tight">Hardcore</span>
@@ -48,9 +52,6 @@ export function Sidebar() {
         >
           <Search className="size-3.5" />
         </Button>
-        {/* The panel's own collapse, at its right edge: beside the session's
-            title bar, never beside the app's name. */}
-        <SidebarToggle />
       </header>
 
       <nav className="shrink-0 px-2 pb-2">

@@ -74,24 +74,27 @@ test("the shell shows three panes, the explorer closed", async () => {
 });
 
 /**
- * The sidebar's collapse sits at the right edge of the sidebar's own header
- * while the sidebar is open — beside the search, across the border from the
- * session's title — and at the far left of that title bar once the sidebar
- * is gone. The explorer's toggle stays on the right.
+ * The sidebar's collapse sits at the right end of the sidebar's title strip
+ * while the sidebar is open — the traffic lights' row, level with the
+ * session's title bar and above the app's name — and at the far left of that
+ * title bar once the sidebar is gone. The explorer's toggle stays on the right.
  */
-test("the sidebar's collapse is at its panel's right edge, then the title bar's left", async () => {
+test("the sidebar's collapse is level with the title bar, then at its left", async () => {
   const sidebar = page.locator("[data-panel]").first();
   const header = page.locator("[data-session-header]");
   const inSidebar = sidebar.getByRole("button", { name: "Toggle sidebar" });
   await expect(inSidebar).toBeVisible();
   await expect(header.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(0);
-  const [toggleBox, nameBox, searchBox] = await Promise.all([
+  const [toggleBox, nameBox, openTitleBox] = await Promise.all([
     inSidebar.boundingBox(),
     page.getByText("Hardcore", { exact: true }).boundingBox(),
-    sidebar.getByRole("button", { name: "Search" }).boundingBox(),
+    header.locator("[data-session-title]").boundingBox(),
   ]);
   expect(toggleBox!.x).toBeGreaterThan(nameBox!.x);
-  expect(toggleBox!.x).toBeGreaterThan(searchBox!.x);
+  expect(toggleBox!.y + toggleBox!.height).toBeLessThanOrEqual(nameBox!.y + 1);
+  const toggleMid = toggleBox!.y + toggleBox!.height / 2;
+  const titleMid = openTitleBox!.y + openTitleBox!.height / 2;
+  expect(Math.abs(toggleMid - titleMid)).toBeLessThan(6);
 
   await inSidebar.click();
   await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBe(0);
