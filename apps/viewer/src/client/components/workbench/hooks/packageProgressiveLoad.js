@@ -13,20 +13,27 @@ import { buildComposedPackageMeshData } from "cadgen-js/lib/assembly/meshData.js
 import { estimateMeshRenderCost } from "cadgen-js/lib/render/meshCost.js";
 
 // A batch publishes as soon as EITHER ceiling is crossed by the components
-// that arrived since the previous publish — whichever comes first.
+// that arrived since the previous publish — whichever comes first — and both
+// ceilings DOUBLE after each publish, from the first pair to the last.
 //
-// Component ceiling: never more than this many unpublished components. Bounds
-// the wait for the first paint on models of many small parts (fasteners), where
-// the byte budget alone would hold hundreds of them back. ~866/32 ≈ 27
-// recompositions for the tendon hand; each is a reference-based walk of the
-// occurrence list (see the timing test), not a geometry copy.
-export const PROGRESSIVE_PUBLISH_MAX_COMPONENTS = 32;
-// Byte ceiling on the mesh typed arrays (estimateMeshRenderCost) held back
-// since the previous publish. Large components upload their GPU buffers as
-// soon as they are published instead of piling up unpainted on the main thread;
-// 64 MB is roughly the cost of a scene rebuild the viewer already absorbs on a
-// LOD swap, so a publish this size does not stall interaction noticeably.
-export const PROGRESSIVE_PUBLISH_MAX_BYTES = 64 * 1024 * 1024;
+// A publish costs a recomposition plus a walk of every occurrence already on
+// screen, so its cost grows with the model while a fixed batch size keeps the
+// publish COUNT growing with it too: the hand recomposed 28 times and spent
+// longer republishing what was already drawn than decoding what was not.
+// Doubling makes the count logarithmic (the hand publishes 8 times) without
+// making the first paint wait: the first batch is SMALLER than the old fixed
+// one, so first geometry arrives sooner than it did.
+//
+// First ceilings. The load order puts the model's six extreme components first,
+// so eight components already span it for the one camera framing.
+export const PROGRESSIVE_PUBLISH_FIRST_COMPONENTS = 8;
+export const PROGRESSIVE_PUBLISH_FIRST_BYTES = 8 * 1024 * 1024;
+// Last ceilings, once doubling reaches them. A batch this size is roughly the
+// cost of a scene rebuild the viewer already absorbs on an LOD swap, so it does
+// not stall interaction noticeably; the byte ceiling also bounds how much
+// decoded geometry sits on the main thread unpainted, waiting to be uploaded.
+export const PROGRESSIVE_PUBLISH_MAX_COMPONENTS = 256;
+export const PROGRESSIVE_PUBLISH_MAX_BYTES = 128 * 1024 * 1024;
 
 // Load-time admission (the peak that killed the tab): a component decodes in a
 // surf worker whose intermediates count against the renderer process, and a
@@ -172,11 +179,28 @@ function abortError() {
   return error;
 }
 
-export function progressivePublishDue(
-  { pendingComponents, pendingBytes },
-  { maxComponents = PROGRESSIVE_PUBLISH_MAX_COMPONENTS, maxBytes = PROGRESSIVE_PUBLISH_MAX_BYTES } = {}
+// The ceilings this batch publishes at, `publishCount` publishes into the load.
+// A caller that pins the last ceilings below the first ones (small fixtures,
+// tests) gets that size flat, never a batch above what it asked for.
+export function progressivePublishCeilings(
+  publishCount,
+  {
+    firstComponents = PROGRESSIVE_PUBLISH_FIRST_COMPONENTS,
+    firstBytes = PROGRESSIVE_PUBLISH_FIRST_BYTES,
+    maxComponents = PROGRESSIVE_PUBLISH_MAX_COMPONENTS,
+    maxBytes = PROGRESSIVE_PUBLISH_MAX_BYTES
+  } = {}
 ) {
-  return pendingComponents >= maxComponents || pendingBytes >= maxBytes;
+  const growth = 2 ** Math.max(0, Math.min(30, Number(publishCount) || 0));
+  return {
+    components: Math.max(1, Math.min(maxComponents, firstComponents * growth)),
+    bytes: Math.max(1, Math.min(maxBytes, firstBytes * growth))
+  };
+}
+
+export function progressivePublishDue({ pendingComponents, pendingBytes, publishCount = 0 }, options = {}) {
+  const ceilings = progressivePublishCeilings(publishCount, options);
+  return pendingComponents >= ceilings.components || pendingBytes >= ceilings.bytes;
 }
 
 function occurrenceTranslation(transform) {
@@ -260,6 +284,8 @@ export function createProgressivePackageLoader({
   maxInFlightBytes = PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
   swappedComponents = () => null,
   onPublish,
+  firstComponents = PROGRESSIVE_PUBLISH_FIRST_COMPONENTS,
+  firstBytes = PROGRESSIVE_PUBLISH_FIRST_BYTES,
   maxComponents = PROGRESSIVE_PUBLISH_MAX_COMPONENTS,
   maxBytes = PROGRESSIVE_PUBLISH_MAX_BYTES
 }) {
@@ -379,7 +405,10 @@ export function createProgressivePackageLoader({
     pendingComponents += 1;
     pendingBytes += decodedBytes;
     const final = loaded === total;
-    if (final || progressivePublishDue({ pendingComponents, pendingBytes }, { maxComponents, maxBytes })) {
+    if (final || progressivePublishDue(
+      { pendingComponents, pendingBytes, publishCount: publishes },
+      { firstComponents, firstBytes, maxComponents, maxBytes }
+    )) {
       publish(final);
     }
   }

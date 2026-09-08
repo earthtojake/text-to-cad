@@ -74,3 +74,51 @@ test("ensureFacePickBvh rebuilds when the proxy index array identity changes", a
   assert.ok(second && second !== first, "index identity change rebuilds the BVH");
   assert.equal(second.__builtFromIndexArray, proxy.faceIndices);
 });
+
+test("a component released while its BVH was queued never gets a tree built for it", async () => {
+  const kept = indexedGeometry();
+  const released = indexedGeometry();
+  const meshOf = (geometry) => {
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+    mesh.updateMatrixWorld();
+    return mesh;
+  };
+  scheduleRuntimeRaycastBvh({ displayRecords: [{ mesh: meshOf(kept) }, { mesh: meshOf(released) }] });
+  assert.equal(released.userData.__bvhQueued, true, "both are queued before any idle slice runs");
+
+  // The publish that drops every occurrence of a component: cadScene's
+  // releaseUnusedRecordGeometry disposes the geometry and clears the flag. It
+  // cannot reach the already-scheduled queue, so the queue must notice.
+  delete released.userData.__bvhQueued;
+  released.dispose();
+
+  await tick();
+  await tick();
+  assert.ok(kept.boundsTree, "the component still on screen gets its tree");
+  assert.equal(released.boundsTree, undefined, "the released one does not");
+});
+
+test("a geometry queued twice builds once", async () => {
+  const geometry = indexedGeometry();
+  const meshOf = () => {
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+    mesh.updateMatrixWorld();
+    return mesh;
+  };
+  scheduleRuntimeRaycastBvh({ displayRecords: [{ mesh: meshOf() }] });
+  // Released and re-adopted by a later publish while the first queue still
+  // holds it: the second schedule sees no flag and queues it again.
+  delete geometry.userData.__bvhQueued;
+  scheduleRuntimeRaycastBvh({ displayRecords: [{ mesh: meshOf() }] });
+  let builds = 0;
+  let tree = undefined;
+  Object.defineProperty(geometry, "boundsTree", {
+    configurable: true,
+    get: () => tree,
+    set: (value) => { tree = value; builds += 1; }
+  });
+  await tick();
+  await tick();
+  await tick();
+  assert.equal(builds, 1, "one tree, not one per queue entry");
+});

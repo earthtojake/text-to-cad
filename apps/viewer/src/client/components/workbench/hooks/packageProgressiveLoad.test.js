@@ -7,11 +7,14 @@ import test from "node:test";
 import { buildComposedPackageMeshData } from "cadgen-js/lib/assembly/meshData.js";
 
 import {
+  PROGRESSIVE_PUBLISH_FIRST_BYTES,
+  PROGRESSIVE_PUBLISH_FIRST_COMPONENTS,
   PROGRESSIVE_PUBLISH_MAX_BYTES,
   PROGRESSIVE_PUBLISH_MAX_COMPONENTS,
   createProgressivePackageLoader,
   orderComponentsForProgressiveLoad,
   progressiveLoadStage,
+  progressivePublishCeilings,
   progressivePublishDue,
   publishMeshCostAccounting,
   meshStateIsComplete,
@@ -80,12 +83,24 @@ function makeLoader(descriptor, { componentFloats = () => 9 } = {}) {
   return { loadComponent, all };
 }
 
-test("policy constants: a batch publishes at either ceiling, whichever first", () => {
-  assert.equal(PROGRESSIVE_PUBLISH_MAX_COMPONENTS, 32);
-  assert.equal(PROGRESSIVE_PUBLISH_MAX_BYTES, 64 * 1024 * 1024);
-  assert.equal(progressivePublishDue({ pendingComponents: 31, pendingBytes: 0 }), false);
-  assert.equal(progressivePublishDue({ pendingComponents: 32, pendingBytes: 0 }), true);
-  assert.equal(progressivePublishDue({ pendingComponents: 1, pendingBytes: PROGRESSIVE_PUBLISH_MAX_BYTES }), true);
+test("policy constants: a batch publishes at either ceiling, and the ceilings double", () => {
+  assert.equal(PROGRESSIVE_PUBLISH_FIRST_COMPONENTS, 8);
+  assert.equal(PROGRESSIVE_PUBLISH_FIRST_BYTES, 8 * 1024 * 1024);
+  assert.equal(PROGRESSIVE_PUBLISH_MAX_COMPONENTS, 256);
+  assert.equal(PROGRESSIVE_PUBLISH_MAX_BYTES, 128 * 1024 * 1024);
+  // The first batch is the smallest, so first geometry arrives soonest.
+  assert.equal(progressivePublishDue({ pendingComponents: 7, pendingBytes: 0, publishCount: 0 }), false);
+  assert.equal(progressivePublishDue({ pendingComponents: 8, pendingBytes: 0, publishCount: 0 }), true);
+  assert.equal(progressivePublishDue({ pendingComponents: 8, pendingBytes: 0, publishCount: 1 }), false);
+  assert.equal(progressivePublishDue({ pendingComponents: 16, pendingBytes: 0, publishCount: 1 }), true);
+  assert.equal(progressivePublishDue({ pendingComponents: 1, pendingBytes: PROGRESSIVE_PUBLISH_FIRST_BYTES, publishCount: 0 }), true);
+  assert.equal(progressivePublishDue({ pendingComponents: 1, pendingBytes: PROGRESSIVE_PUBLISH_FIRST_BYTES, publishCount: 1 }), false);
+  // Doubling stops at the last ceilings and stays there.
+  assert.deepEqual(progressivePublishCeilings(5), { components: 256, bytes: 128 * 1024 * 1024 });
+  assert.deepEqual(progressivePublishCeilings(99), { components: 256, bytes: 128 * 1024 * 1024 });
+  // A caller pinning the last ceiling below the first gets that size flat.
+  assert.deepEqual(progressivePublishCeilings(0, { maxComponents: 4, maxBytes: 10 }), { components: 4, bytes: 10 });
+  assert.deepEqual(progressivePublishCeilings(9, { maxComponents: 4, maxBytes: 10 }), { components: 4, bytes: 10 });
   assert.equal(progressivePublishDue({ pendingComponents: 1, pendingBytes: 10 }, { maxComponents: 4, maxBytes: 10 }), true);
   assert.equal(progressiveLoadStage(3, 12), "loading components 3/12");
 });
@@ -306,7 +321,9 @@ test("recomposition cost per publish: 3000 occurrences / 800 components", async 
   const started = performance.now();
   const result = await loader.run();
   const totalMs = performance.now() - started;
-  assert.equal(result.publishes, Math.ceil(800 / PROGRESSIVE_PUBLISH_MAX_COMPONENTS));
+  // 8 + 16 + 32 + 64 + 128 + 256 + 256 covers 760 of the 800; the remaining 40
+  // publish as the final batch. Doubling turns 800/32 = 25 recompositions into 8.
+  assert.equal(result.publishes, 8);
   // Per-frame animation binding (label index over every part) at this size —
   // the cost the render module pays on each publish/frame, not a separate attach.
   let bindMs = 0;
@@ -460,74 +477,4 @@ test("byte-aware admission: decodes in flight stay under the byte budget, and un
   estimator.observe(10, 300);
   assert.equal(estimator.estimate(20), 600, "hint scaled by the measured ratio");
   assert.equal(estimator.estimate(null), 300, "no hint: running mean");
-});
-
-test("recomposition cost per publish: 3000 occurrences / 800 components", async (t) => {
-  const descriptor = makeDescriptor({
-    componentCount: 800,
-    occurrenceCount: 3000,
-    transformFor: (i) => translation((i % 37) * 10, (i % 53) * 7, (i % 11) * 3)
-  });
-  const { loadComponent } = makeLoader(descriptor);
-  const composeMs = [];
-  const loader = createProgressivePackageLoader({
-    descriptor,
-    loadComponent,
-    concurrency: 8,
-    onPublish: (publish) => composeMs.push(publish.composeMs)
-  });
-  const started = performance.now();
-  const result = await loader.run();
-  const totalMs = performance.now() - started;
-  assert.equal(result.publishes, Math.ceil(800 / PROGRESSIVE_PUBLISH_MAX_COMPONENTS));
-  // Per-frame animation binding (label index over every part) at this size —
-  // the cost the render module pays on each publish/frame, not a separate attach.
-  let bindMs = 0;
-  {
-    const lastPublish = buildComposedPackageMeshData(descriptor, Object.fromEntries(
-      Object.keys(descriptor.components).map((cid) => [cid, fakeComponent(cid)])
-    ));
-    const t0 = performance.now();
-    for (let i = 0; i < 5; i += 1) createAnimationFrame(THREE, lastPublish);
-    bindMs = (performance.now() - t0) / 5;
-  }
-  const max = Math.max(...composeMs);
-  const mean = composeMs.reduce((sum, ms) => sum + ms, 0) / composeMs.length;
-  const last = composeMs.at(-1);
-  t.diagnostic(`recompose per publish: mean ${mean.toFixed(2)} ms, max ${max.toFixed(2)} ms, final ${last.toFixed(2)} ms, ${composeMs.length} publishes, run ${totalMs.toFixed(0)} ms; animation label bind over 3000 parts ${bindMs.toFixed(2)} ms`);
-  // Generous ceiling: a publish is a reference walk of the occurrence list.
-  assert.ok(max < 500, `max recompose ${max} ms`);
-});
-
-test("window.__cadMeshCost updates on every publish and clears on cancel", async () => {
-  assert.equal(publishMeshCostAccounting({ meshData: {}, componentMeshDataByCid: {}, loaded: 0, total: 0, publishCount: 0, final: false }), null, "no window: harmless");
-  globalThis.window = {};
-  try {
-    const descriptor = makeDescriptor({ componentCount: 6, occurrenceCount: 12 });
-    const { loadComponent } = makeLoader(descriptor, { componentFloats: () => 12 });
-    const seen = [];
-    await createProgressivePackageLoader({
-      descriptor,
-      loadComponent,
-      concurrency: 1,
-      maxComponents: 2,
-      onPublish: (publish) => {
-        publishMeshCostAccounting(publish);
-        seen.push({ ...window.__cadMeshCost });
-      }
-    }).run();
-    assert.deepEqual(seen.map((cost) => cost.publishCount), [1, 2, 3]);
-    assert.deepEqual(seen.map((cost) => cost.componentCount), [2, 4, 6]);
-    assert.deepEqual(seen.map((cost) => cost.final), [false, false, true]);
-    assert.equal(seen.at(-1).totalComponents, 6);
-    // 12 floats * 4 B + 36 B normals + 12 B indices = 96 B per component; one triangle each.
-    assert.deepEqual(seen.map((cost) => cost.componentTotalBytes), [192, 384, 576]);
-    assert.deepEqual(seen.map((cost) => cost.componentTotalTriangles), [2, 4, 6]);
-    assert.equal(seen.at(-1).composed.triangleCount, 12, "composed cost counts every occurrence");
-    assert.ok(seen[1].at >= seen[0].at);
-    publishMeshCostAccounting(null);
-    assert.equal(window.__cadMeshCost, null);
-  } finally {
-    delete globalThis.window;
-  }
 });

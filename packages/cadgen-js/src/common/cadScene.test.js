@@ -1275,3 +1275,57 @@ test("departed components free their GPU buffers, BVH and edge draw; a returning
   assert.deepEqual(disposedAtEnd.sort(), ["A", "B"]);
   assert.equal(scene.displayRecords.length, 0);
 });
+
+test("a deformed tube's private edges keep per-class thickness", () => {
+  const sourceMesh = surfComponentMeshData();
+  const meshData = {
+    vertices: new Float32Array(0), indices: new Uint32Array(0),
+    bounds: sourceMesh.bounds,
+    parts: [{ id: "tube", sourceMeshKey: "tube", sourceMesh, vertexCount: 4, triangleCount: 2, bounds: sourceMesh.bounds }]
+  };
+  const scene = buildModel(THREE, meshData, {
+    renderPartsIndividually: true,
+    edgeRendering: { LineSegments2, LineSegmentsGeometry, LineMaterial },
+    theme: {
+      edges: {
+        ...DEFAULT_DISPLAY_EDGE_SETTINGS,
+        classes: {
+          ...DEFAULT_DISPLAY_EDGE_SETTINGS.classes,
+          feature: { ...DEFAULT_DISPLAY_EDGE_SETTINGS.classes.feature, thickness: 2.5 },
+          tangent: { ...DEFAULT_DISPLAY_EDGE_SETTINGS.classes.tangent, thickness: 0.75 }
+        }
+      }
+    }
+  });
+  const record = scene.displayRecords[0];
+  const set = record.edgeInstance.set;
+  assert.equal(set.uniforms.cadClassWidth.value.x, 2.5, "instanced feature edges take the class width");
+  record.gpuTubeDeformationAllowed = false;
+  const rest = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 0], end: [3, 0, 0] }] };
+  const path = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 2], end: [0, 3, 2] }] };
+  applyRecordTubeDeformation(THREE, record, normalizeTubeDeformation({ rest, path, maxSegmentLength: 1000 }));
+
+  // The private draw is one screen-space fat line PER DRAWN CLASS, at that
+  // class's width — the thing a single vertex-coloured GL_LINES cannot do.
+  assert.equal(record.edgeInstance, null);
+  assert.equal(record.edges.isGroup, true);
+  assert.deepEqual(record.edges.children.map((line) => line instanceof LineSegments2), [true, true]);
+  assert.deepEqual(record.edgeMaterials.map((material) => material.linewidth), [2.5, 0.75]);
+  assert.ok(
+    record.edgeMaterials.every((material) => scene.runtime.screenSpaceLineMaterials.has(material)),
+    "both are resolution-synced with the viewport"
+  );
+  // Deformation moves the fat lines' own endpoint attributes.
+  const bent = record.edges.children[0].geometry.attributes.instanceStart;
+  assert.ok(bent, "screen-space geometry carries instanceStart/instanceEnd");
+  assert.notDeepEqual(Array.from(bent.data.array).slice(0, 3), [0, 0, 0]);
+
+  // Back at rest the private lines stay (see attachCadEdgeInstance: a publish
+  // resets the pose, so rejoining there would rebuild them every publish) and
+  // return to the component's own points at their class widths.
+  applyRecordTubeDeformation(THREE, record, null);
+  assert.equal(record.edges.isGroup, true);
+  assert.deepEqual(record.edgeMaterials.map((material) => material.linewidth), [2.5, 0.75]);
+  assert.deepEqual(Array.from(record.edges.children[0].geometry.attributes.instanceStart.data.array).slice(0, 3), [0, 0, 0]);
+  scene.dispose();
+});

@@ -293,6 +293,14 @@ export async function loadRenderSurf(url, { signal } = {}) {
   return meshData;
 }
 
+// Hand the surf worker pool's isolates back once nothing is loading. The pool
+// is lazily imported, so a caller that never loaded a .surf never pulls the
+// module in just to release it.
+export async function releaseSurfWorkers() {
+  const { releaseSurfWorkerPool } = await import("./surf/surfWorkerClient.js");
+  return releaseSurfWorkerPool();
+}
+
 export async function loadRenderStl(url, { signal } = {}) {
   const meshData = await loadCached(stlCache, url, async () => {
     const workerMeshData = loadStlMeshDataInWorker(url, { signal });

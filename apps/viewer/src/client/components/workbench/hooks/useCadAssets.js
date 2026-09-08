@@ -46,6 +46,7 @@ import {
   loadRenderMeshByUrl,
   peekRenderMeshByUrl
 } from "cadgen-js/lib/render/meshLoaders";
+import { releaseSurfWorkers } from "cadgen-js/lib/renderAssetClient";
 import { shouldUseGlbMeshWorkerForEntry } from "cadgen-js/lib/render/meshCost";
 import { RENDER_FORMAT, entrySourceFormat } from "cadgen-js/lib/fileFormats";
 import { buildDisplayEdgeRuntime, buildSelectorRuntime } from "cadgen-js/lib/selectors/runtime";
@@ -662,7 +663,16 @@ export function useCadAssets({
             }
           });
           setMeshLoadStage(progressiveLoadStage(0, loader.total));
-          await loader.run();
+          try {
+            await loader.run();
+          } finally {
+            // Nothing tessellates once the load ends — a later LOD refinement
+            // builds a fresh pool — so the workers' isolates go back to the
+            // process instead of holding the heap each grew for the largest
+            // component it decoded. Also on the failure path: an aborted load
+            // is exactly when the memory is most worth returning.
+            releaseSurfWorkers().catch(() => {});
+          }
           return;
         }
         // Every STEP model is a component-GLB package (handled above). A missing/non-package

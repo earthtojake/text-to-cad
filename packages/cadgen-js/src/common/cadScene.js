@@ -17,6 +17,7 @@ import {
 import {
   createCadEdgeLineSegments,
   createDisplayEdgeObject,
+  createScreenSpaceLineSegments,
   syncRecordEdgeMaterials,
   syncScreenSpaceLineMaterialResolution,
   topologyLineDepthBiasForWidth
@@ -1638,19 +1639,76 @@ function cadEdgeLineGeometry(THREE, runtime, cadEdges) {
   return geometry;
 }
 
-// A private GL_LINES edge object for one record (a deformed tube): transforms,
-// visibility, highlight render order and tube deformation treat it exactly
-// like the GLB-era derived line.
+// One drawn class's segments as the flat endpoint pairs a screen-space line
+// geometry takes (it has no index buffer of its own).
+function cadEdgeClassPositions(cadEdges, range) {
+  const positions = new Float32Array(range.segmentCount * 6);
+  for (let segment = 0; segment < range.segmentCount; segment += 1) {
+    for (let end = 0; end < 2; end += 1) {
+      const point = cadEdges.indices[(range.segmentStart + segment) * 2 + end] * 3;
+      positions[segment * 6 + end * 3] = cadEdges.positions[point];
+      positions[segment * 6 + end * 3 + 1] = cadEdges.positions[point + 1];
+      positions[segment * 6 + end * 3 + 2] = cadEdges.positions[point + 2];
+    }
+  }
+  return positions;
+}
+
+// A private edge object for one record (a deformed tube): its points move per
+// pose, so it cannot ride the component's instanced draw. One screen-space fat
+// line PER DRAWN CLASS, because a class's width is a material property and the
+// instanced path honours `display.edges.classes[*].thickness` — a tube drawn
+// with one vertex-coloured GL_LINES would be the only geometry in the model
+// whose edges ignore the thickness control, and on this model the tubes are
+// the tendons, the thing being looked at. Deformation recurses into the group
+// and moves LineSegments2 instanceStart/instanceEnd exactly as it moves plain
+// positions. Without the Line2 constructors (a host that renders basic lines
+// only) the old single vertex-coloured draw still stands.
 function addCadEdgeObject(THREE, runtime, record, cadEdges) {
+  const depthTest = runtime.edgeSettings?.depthTest !== false;
+  // One bias for every class: the coplanar (seam/tangent) value, the larger.
+  const depthBias = topologyLineDepthBiasForWidth(1, { visibilityClass: "seam" });
+  const { drawn } = drawnCadEdgeClasses(THREE, runtime, cadEdges);
+  if (!drawn.length) {
+    return;
+  }
+  const group = new THREE.Group();
+  const materials = [];
+  for (const { range, style } of drawn) {
+    const line = createScreenSpaceLineSegments(runtime, cadEdgeClassPositions(cadEdges, range), {
+      color: style.color,
+      opacity: style.opacity,
+      lineWidth: style.thickness,
+      renderOrder: CAD_EDGE_LINE_RENDER_ORDER,
+      depthTest,
+      depthBias
+    }, runtime.screenSpaceLineMaterials);
+    if (!line) {
+      materials.length = 0;
+      break;
+    }
+    line.userData.partId = record.partId;
+    materials.push(line.material);
+    group.add(line);
+  }
+  if (materials.length) {
+    group.userData.partId = record.partId;
+    record.edges = group;
+    record.edgeMaterials = materials;
+    for (const material of materials) {
+      syncMaterialClipPlanes(material, runtime.activeClipPlanes);
+    }
+    runtime.edgesGroup.add(group);
+    return;
+  }
   const geometry = cadEdgeLineGeometry(THREE, runtime, cadEdges);
   if (!geometry) {
     return;
   }
   const line = createCadEdgeLineSegments(THREE, geometry, {
-    depthTest: runtime.edgeSettings?.depthTest !== false,
+    depthTest,
     renderOrder: CAD_EDGE_LINE_RENDER_ORDER,
-    // One bias for every class: the coplanar (seam/tangent) value, the larger.
-    depthBias: topologyLineDepthBiasForWidth(1, { visibilityClass: "seam" })
+    depthBias
   });
   line.userData.partId = record.partId;
   record.edges = line;
@@ -1721,9 +1779,7 @@ function attachCadEdgeInstance(THREE, runtime, record, cadEdges) {
   if (!set) {
     return;
   }
-  const slot = set.allocate();
-  record.edgeInstance = { set, slot };
-  record.detachEdgeInstance = () => {
+  const detach = () => {
     if (!record.edgeInstance) {
       return;
     }
@@ -1735,6 +1791,15 @@ function attachCadEdgeInstance(THREE, runtime, record, cadEdges) {
       applyDisplayRecordTransform(THREE, record);
     }
   };
+  // There is deliberately no way back. A record that has bent once keeps its
+  // private line for the life of the record, because "no deformation this
+  // frame" is not "done bending": every publish resets the pose before the
+  // scene module re-applies it, so rejoining the set there would dispose and
+  // rebuild each tube's line geometry on every publish of the load. The cost of
+  // staying out is one draw call per tube that has ever bent (48 on the tendon
+  // hand against 866 component draws), which is the cheaper side of the trade.
+  record.edgeInstance = { set, slot: set.allocate() };
+  record.detachEdgeInstance = detach;
 }
 
 function disposeCadEdgeInstanceSet(runtime, set) {

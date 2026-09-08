@@ -267,14 +267,24 @@ function sampleProcesses(profileDir) {
     if (!ours.has(row.pid)) continue;
     const typeMatch = row.cmd.match(/--type=([a-zA-Z-]+)/);
     const type = typeMatch ? typeMatch[1] : "browser";
-    byType[type] = byType[type] || { rssBytes: 0, pids: new Set() };
+    byType[type] = byType[type] || { rssBytes: 0, largestPidBytes: 0, pids: new Set() };
     byType[type].rssBytes += row.rssBytes;
+    // A tab dies on ITS OWN process footprint, so the number the memory gate
+    // is about is the largest single process of a type, not the type's sum.
+    // Chromium runs more than one renderer here (the page plus its own
+    // about:blank), and summing them reported a peak the page never reached.
+    byType[type].largestPidBytes = Math.max(byType[type].largestPidBytes, row.rssBytes);
     byType[type].pids.add(row.pid);
   }
-  const result = { all: { rssBytes: 0, processCount: ours.size } };
+  const result = { all: { rssBytes: 0, largestPidBytes: 0, processCount: ours.size } };
   for (const [type, value] of Object.entries(byType)) {
-    result[type] = { rssBytes: value.rssBytes, processCount: value.pids.size };
+    result[type] = {
+      rssBytes: value.rssBytes,
+      largestPidBytes: value.largestPidBytes,
+      processCount: value.pids.size
+    };
     result.all.rssBytes += value.rssBytes;
+    result.all.largestPidBytes = Math.max(result.all.largestPidBytes, value.largestPidBytes);
   }
   return result;
 }
@@ -285,6 +295,7 @@ function mergePeak(peak, sample) {
     const current = peak[type] || { rssBytes: 0, processCount: 0 };
     peak[type] = {
       rssBytes: Math.max(current.rssBytes, value.rssBytes),
+      largestPidBytes: Math.max(current.largestPidBytes || 0, value.largestPidBytes || 0),
       processCount: Math.max(current.processCount, value.processCount)
     };
   }
@@ -453,6 +464,25 @@ async function runOnce(runIndex) {
           record.firstGeometryFrameMs = settled.firstGeometry.firstGeometryFrameMs;
         }
       } catch { /* a crash during settle is already recorded by the handler */ }
+      // Separate garbage from retention. The peak is what decides whether the
+      // tab survives, but a peak made of uncollected churn is fixed by
+      // allocating less per publish, while a peak made of retained bytes is
+      // fixed by holding less — different work. A forced collection, then a
+      // settle for the worker isolates and the allocator to give memory back,
+      // reads the second number.
+      try {
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send("HeapProfiler.enable").catch(() => {});
+        await cdp.send("HeapProfiler.collectGarbage");
+        await cdp.detach().catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        record.afterGc = {
+          rss: sampleProcesses(profileDir),
+          heapUsed: await page.evaluate(
+            () => (performance.memory ? performance.memory.usedJSHeapSize : 0)
+          ).catch(() => 0)
+        };
+      } catch { /* no CDP: the after-GC reading is simply absent */ }
     }
     mergePeak(peakRss, sampleProcesses(profileDir));
   } finally {
@@ -475,7 +505,11 @@ for (let run = 1; run <= args.runs; run += 1) {
     `  ttfp=${record.timeToFirstPaintMs ?? "n/a"} ms  ttloaded=${record.timeToLoadedMs ?? "n/a"} ms`,
     `  heap used peak=${fmt(record.heap?.peakUsed)} total peak=${fmt(record.heap?.peakTotal)}`,
     `  gpu buffers peak=${fmt(record.gpu?.peakBytes)} live=${fmt(record.gpu?.liveBytes)} count=${record.gpu?.peakBufferCount ?? "n/a"} uploads=${record.gpu?.uploadCount ?? "n/a"}`,
-    `  peak RSS renderer=${fmt(renderer)} gpu-process=${fmt(gpuProcess)} all-processes=${fmt(record.peakRss.all?.rssBytes)}`,
+    `  peak RSS renderer=${fmt(renderer)} (largest single renderer ${fmt(record.peakRss.renderer?.largestPidBytes)}) `
+      + `gpu-process=${fmt(gpuProcess)} all-processes=${fmt(record.peakRss.all?.rssBytes)}`,
+    record.afterGc
+      ? `  after GC   renderer=${fmt(record.afterGc.rss.renderer?.rssBytes)} (largest ${fmt(record.afterGc.rss.renderer?.largestPidBytes)}) gpu-process=${fmt(record.afterGc.rss["gpu-process"]?.rssBytes)} all=${fmt(record.afterGc.rss.all?.rssBytes)} heap=${fmt(record.afterGc.heapUsed)}`
+      : "  after GC   (not read)",
     `  lod events=${record.lodEventCount ?? "n/a"} stage="${record.lastStageText}"`,
     `  first publish=${record.timeToFirstPublishMs ?? "n/a"} ms  publishes=${record.meshCostRamp.length}  meshCost=${record.meshCost ? JSON.stringify(record.meshCost) : "ABSENT (old client)"}`,
     record.meshCostRamp.length

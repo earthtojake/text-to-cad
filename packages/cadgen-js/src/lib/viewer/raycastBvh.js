@@ -88,8 +88,17 @@ export function scheduleRuntimeRaycastBvh(runtime, { maxTriangles = DEFAULT_MAX_
     if (!geometry) {
       return;
     }
-    delete geometry.userData.__bvhQueued;
-    buildGeometryBvh(geometry, maxTriangles);
+    // The flag is the queue entry's liveness token, not a bookkeeping detail.
+    // A publish that drops every occurrence of a component releases its
+    // geometry and clears the flag (cadScene's releaseUnusedRecordGeometry),
+    // but cannot reach into this closure's queue; building now would allocate
+    // a tree — and hold the arrays — for something nothing draws. Clearing it
+    // on build also makes a geometry queued twice (released, then re-adopted
+    // by a later publish while the older queue still holds it) build once.
+    if (geometry.userData.__bvhQueued) {
+      delete geometry.userData.__bvhQueued;
+      buildGeometryBvh(geometry, maxTriangles);
+    }
     if (pending.length) {
       scheduleIdle(step);
     }
