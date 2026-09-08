@@ -66,10 +66,15 @@ export default function CadWorkspace({
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    // The window's height, split between this app's bar and the surface. The
+    // surface is one viewport tall by default (`h-svh`), which is right when it
+    // IS the page and wrong the moment anything sits above it — so it is told
+    // to fill what is left instead, the same override the desktop app passes.
+    <div className="flex h-svh flex-col overflow-hidden">
       <ViewerTopBar />
       <div className="min-h-0 flex-1">
         <CadFileView
+          className="h-full min-h-0"
           origin=""
           file={file}
           onOpenFile={handleOpenFile}
