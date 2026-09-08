@@ -142,19 +142,39 @@ test("opens a markdown file as a preview, then as source", async () => {
   await page.getByLabel("Filter files").fill(MARKDOWN);
   await page.getByRole("option", { name: MARKDOWN, exact: false }).first().click();
 
-  // The breadcrumb names the project and the file, Codex-style.
-  await expect(page.getByText(projectName, { exact: true }).last()).toBeVisible();
+  // The breadcrumb names the file, and nothing above the root: a root crumb's
+  // menu would be files outside the project.
+  await expect(page.getByRole("button", { name: `Browse ${MARKDOWN}`, exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: `Browse ${projectName}`, exact: true })).toHaveCount(0);
   // Rendered markdown: the heading is an H1, not a line beginning with `#`.
   await expect(page.getByRole("heading", { level: 1, name: "AGENTS.md" })).toBeVisible();
   await shoot("file-markdown-preview.png");
 
-  await page.getByRole("button", { name: "View source" }).click();
+  /*
+    The source view is markdown's one PANEL (`renderers/panels.ts`), declared
+    the same way a CAD file declares its two: an icon button with
+    `aria-pressed`, at the right end of the row and immediately left of the
+    files toggle, which stays last. It used to be a special case in the
+    header with its own label.
+  */
+  const toggle = page.getByTestId("tree-toggle");
+  const source = page.getByRole("button", { name: "View source" });
+  const [toggleBox, sourceBox] = await Promise.all([toggle.boundingBox(), source.boundingBox()]);
+  expect(sourceBox!.x + sourceBox!.width).toBeLessThanOrEqual(toggleBox!.x + 1);
+  await expect(source).toHaveAttribute("aria-pressed", "false");
+  await expect(source).toHaveAttribute("data-file-panel", "source");
+
+  await source.click();
   // Monaco is up, and it is showing the raw text — the `#` the preview ate.
   await expect(page.locator(".monaco-editor").first()).toBeVisible();
   await expect(page.locator(".view-lines").first()).toContainText("# AGENTS.md");
+  // The panel is open, and the files toggle did not move to make room.
+  const preview = page.getByRole("button", { name: "View preview" });
+  await expect(preview).toHaveAttribute("aria-pressed", "true");
+  expect(Math.abs((await toggle.boundingBox())!.x - toggleBox!.x)).toBeLessThan(1);
   await shoot("file-markdown-source.png");
 
-  await page.getByRole("button", { name: "View preview" }).click();
+  await preview.click();
   await expect(page.getByRole("heading", { level: 1, name: "AGENTS.md" })).toBeVisible();
 });
 
@@ -214,46 +234,79 @@ test("navigates by the breadcrumb's menus", async () => {
   await resizeWindow(1680, 1050);
   await widenExplorer();
 
-  // A folder crumb lists that folder, with the entry on the way to the open
-  // file marked; picking a file opens it in this tab.
+  // There is no root crumb: the crumbs are the segments below the root, so
+  // `apps` is the first of them and the project's own name is not a crumb at
+  // all. A crumb for the root would have to list the root's neighbours, which
+  // are outside the project.
+  // `apps › viewer › src › client › main.jsx`, and no sixth crumb for the
+  // project the five of them are in.
+  const nav = header.getByRole("navigation", { name: "Breadcrumb" });
+  await expect(nav.getByRole("button", { name: /^Browse / })).toHaveCount(5);
+  await expect(nav.getByRole("button", { name: "Browse apps", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: `Browse ${projectName}`, exact: true })).toHaveCount(0);
+
+  // A folder crumb lists its NEIGHBOURS — its parent's listing — with itself
+  // marked; picking one navigates there.
   // Radix names a menu after its trigger, so each one is addressed by the
   // crumb that opened it — a menu on its way out is still in the DOM for
   // the length of its exit animation.
   await page.getByRole("button", { name: "Browse client", exact: true }).click();
   const menu = page.getByRole("menu", { name: "Browse client" });
-  await expect(menu.getByRole("menuitem", { name: "main.jsx" })).toHaveAttribute("aria-current", "page");
-  await expect(menu.getByRole("menuitem", { name: "unboundIdentifiers.test.js" })).toBeVisible();
-  // Directories first: `workbench` is a submenu, above the files.
+  // `client` lives in `apps/viewer/src`, so the menu is that folder: itself
+  // marked, and `shared` beside it.
+  await expect(menu.getByRole("menuitem", { name: "client", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(menu.getByRole("menuitem", { name: "shared", exact: true })).toBeVisible();
+  // Not its own children, which is what it used to list.
+  await expect(menu.getByRole("menuitem", { name: "main.jsx", exact: true })).toHaveCount(0);
+  // Directories first: every one of these is a submenu, above any files.
   await expect(menu.getByRole("menuitem").first()).toHaveAttribute("aria-haspopup", "menu");
   await shoot("file-crumb-menu.png", true);
-  await menu.getByRole("menuitem", { name: "unboundIdentifiers.test.js" }).click();
-  await expect(page.getByRole("tab", { name: /unboundIdentifiers\.test\.js/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Browse unboundIdentifiers.test.js", exact: true })).toBeVisible();
-  await expect(page.locator(".view-lines").first()).toBeVisible();
-  await expect(page.getByRole("tab", { name: /^main\.jsx/ })).toHaveCount(0);
+  // Picking a neighbour navigates: its own listing is a submenu of it.
+  await menu.getByRole("menuitem", { name: "shared", exact: true }).hover();
+  const shared = page.getByRole("menu", { name: "shared" });
+  await expect(shared.getByRole("menuitem").first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
 
   // The file crumb lists its siblings, with itself marked; a sibling folder
-  // is a submenu of its own listing.
-  await page.getByRole("button", { name: "Browse unboundIdentifiers.test.js", exact: true }).click();
-  const siblings = page.getByRole("menu", { name: "Browse unboundIdentifiers.test.js" });
-  await expect(siblings.getByRole("menuitem", { name: "unboundIdentifiers.test.js" })).toHaveAttribute("aria-current", "page");
+  // is a submenu of its own listing, and picking a file opens it in this tab.
+  await page.getByRole("button", { name: "Browse main.jsx", exact: true }).click();
+  const siblings = page.getByRole("menu", { name: "Browse main.jsx" });
+  await expect(siblings.getByRole("menuitem", { name: "main.jsx", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(siblings.getByRole("menuitem", { name: "unboundIdentifiers.test.js" })).toBeVisible();
   await siblings.getByRole("menuitem", { name: "workbench" }).hover();
   const submenu = page.getByRole("menu", { name: "workbench" });
   await expect(submenu.getByRole("menuitem", { name: "breadcrumbs.js", exact: true })).toBeVisible();
   await submenu.getByRole("menuitem", { name: "breadcrumbs.js", exact: true }).click();
   await expect(page.getByRole("tab", { name: /breadcrumbs\.js/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Browse breadcrumbs.js", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /^main\.jsx/ })).toHaveCount(0);
+  await expect(page.locator(".view-lines").first()).toBeVisible();
   await expect(page.getByRole("menu")).toHaveCount(0);
 
-  // The project crumb lists the root. Escape closes the menu.
-  await page.getByRole("button", { name: `Browse ${projectName}`, exact: true }).click();
-  await expect(page.getByRole("menu", { name: `Browse ${projectName}` }).getByRole("menuitem", { name: "apps" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  // The file crumb's `⋯` opens the entry menu a right-click opens — the same
+  // table, drawn as a dropdown — and it has no `Open`, because the crumb IS
+  // the open file.
+  await page.getByTestId("crumb-actions").click();
+  const actions = page.getByRole("menu");
+  await expect(actions.getByRole("menuitem", { name: "Open", exact: true })).toHaveCount(0);
+  await expect(actions.getByRole("menuitem", { name: "Move to Trash" })).toBeVisible();
+  await pick("Copy relative path");
+  await expect
+    .poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
+    .toBe("apps/viewer/src/client/workbench/breadcrumbs.js");
+
+  // Escape closes a crumb's menu.
+  await page.getByRole("button", { name: "Browse workbench", exact: true }).click();
+  await expect(page.getByRole("menu", { name: "Browse workbench" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
+
+  // A code file declares no panels, so the row's right end is the files
+  // toggle alone (`renderers/panels.ts`).
+  await expect(header.locator("[data-file-panel]")).toHaveCount(0);
+  await expect(header.getByTestId("tree-toggle")).toBeVisible();
 
   await restoreLayout();
   await resizeWindow(1440, 900);
@@ -281,6 +334,7 @@ test("keeps the files toggle where it is when the tree opens and shuts", async (
   // And the tree's own header is the filter, nothing else.
   await expect(page.getByRole("button", { name: "Hide files" })).toHaveCount(1);
 });
+
 
 test("copies a relative path from a row's context menu", async () => {
   await newTab(page, "File");
@@ -345,6 +399,11 @@ test("shows the runtime's own error for a STEP file when the runtime cannot star
   await expect(page.locator("[data-cad-failure=runtime-not-ready]")).toContainText("/nowhere/python");
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Runtime status" })).toBeVisible();
+  // And no panel toggles: the surface that draws those panels never came up,
+  // so the CAD declaration offers none (`renderers/panels.ts`). Two lit
+  // buttons over a failure card would open nothing.
+  await expect(page.locator("[data-file-panel]")).toHaveCount(0);
+  await expect(page.getByTestId("tree-toggle")).toBeVisible();
   await shoot("file-cad-failed.png");
 
   // With the override gone the runtime is whatever the app resolves; Try
@@ -479,6 +538,56 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(page.getByRole("tab", { name: "Measure" })).toHaveAttribute("aria-selected", "true");
   await shoot("file-cad-measure.png", true);
   await tree.click();
+
+  /*
+    A CAD file's two panels (`renderers/panels.ts`): the viewer's theme editor
+    and its file sheet, which `layout="desktop"` had left with no door in this
+    app because that layout hides the top bar their toggles live in. Both sit
+    left of the files toggle, which stays last and does not move for them, and
+    each is highlighted while its panel is up. They are one panel with two
+    contents, so opening either closes the other — the surface says so and the
+    highlight follows.
+  */
+  const filesToggle = page.getByTestId("tree-toggle");
+  const themePanel = page.locator("header [data-file-panel='cad-theme']");
+  const sheetPanel = page.locator("header [data-file-panel='cad-file-sheet']");
+  await expect(themePanel).toHaveAttribute("aria-label", "Theme settings");
+  await expect(sheetPanel).toHaveAttribute("aria-label", "File sheet");
+  const parked = (await filesToggle.boundingBox())!;
+  for (const panel of [themePanel, sheetPanel]) {
+    const box = (await panel.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(parked.x + 1);
+  }
+  // Declaration order: theme, then the sheet, then the files toggle.
+  expect((await themePanel.boundingBox())!.x).toBeLessThan((await sheetPanel.boundingBox())!.x);
+
+  // The sheet is open at this point (its Tree/Measure tabs are on screen), so
+  // its toggle is the pressed one.
+  await expect(sheetPanel).toHaveAttribute("aria-pressed", "true");
+  await expect(themePanel).toHaveAttribute("aria-pressed", "false");
+
+  // The theme toggle opens the theme panel — the one thing this app had no
+  // way to reach — and takes the highlight off the sheet.
+  await themePanel.click();
+  await expect(themePanel).toHaveAttribute("aria-pressed", "true");
+  await expect(sheetPanel).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("tab", { name: "Tree" })).toHaveCount(0);
+  // The theme panel takes the sheet's place: same aside, different contents.
+  await expect(page.getByRole("complementary", { name: "Theme" })).toBeVisible();
+  await shoot("file-cad-theme.png", true);
+  expect(Math.abs((await filesToggle.boundingBox())!.x - parked.x)).toBeLessThan(1);
+
+  // Opening the sheet closes the theme panel and swaps the highlight back,
+  // and its sections are the STEP file's as before.
+  await sheetPanel.click();
+  await expect(sheetPanel).toHaveAttribute("aria-pressed", "true");
+  await expect(themePanel).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("tab", { name: "Tree" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Measure" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Theme" })).toHaveCount(0);
+  await expectSheetBesideModel();
+  expect(Math.abs((await filesToggle.boundingBox())!.x - parked.x)).toBeLessThan(1);
+
   await restoreLayout();
 });
 

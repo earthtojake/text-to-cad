@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { buildCrumbs, menuEntries, parentOf, stepToward } from "@renderer/features/explorer/crumbs";
+import { buildCrumbs, menuEntries, parentOf, stepToward, worktreeMark } from "@renderer/features/explorer/crumbs";
 import type { DirEntry } from "@shared/ipc/explorer";
 
 /**
  * The breadcrumb as data: which crumbs a path makes, what each one's menu
  * lists, and which entry that menu marks.
+ *
+ * The rule under test: a crumb is a segment BELOW the root, and its menu is
+ * its PARENT's listing — its neighbours. So there is no crumb for the
+ * project or the worktree, because a root's neighbours are outside the
+ * project and the pane may not list them.
  */
 
 const entry = (path: string, kind: "file" | "directory"): DirEntry => ({
@@ -18,62 +23,89 @@ const entry = (path: string, kind: "file" | "directory"): DirEntry => ({
 });
 
 describe("buildCrumbs", () => {
-  it("makes a crumb per segment, each listing what it names", () => {
-    const crumbs = buildCrumbs({ projectName: "text-to-cad", root: null, path: "apps/viewer/src/main.jsx", narrow: false });
+  it("makes a crumb per segment below the root, each listing its neighbours", () => {
+    const crumbs = buildCrumbs({ path: "apps/viewer/src/main.jsx", narrow: false });
     expect(crumbs.map((crumb) => [crumb.kind, crumb.label, crumb.menu, crumb.current])).toEqual([
-      ["project", "text-to-cad", "", "apps"],
-      ["directory", "apps", "apps", "apps/viewer"],
-      ["directory", "viewer", "apps/viewer", "apps/viewer/src"],
-      ["directory", "src", "apps/viewer/src", "apps/viewer/src/main.jsx"],
+      // The first crumb's neighbours are the root's entries.
+      ["directory", "apps", "", "apps"],
+      ["directory", "viewer", "apps", "apps/viewer"],
+      ["directory", "src", "apps/viewer", "apps/viewer/src"],
       // The file crumb lists its siblings — its folder — with itself marked.
       ["file", "main.jsx", "apps/viewer/src", "apps/viewer/src/main.jsx"],
     ]);
   });
 
-  it("lists the root for a file at the root", () => {
-    const crumbs = buildCrumbs({ projectName: "p", root: null, path: "README.md", narrow: false });
-    expect(crumbs.map((crumb) => [crumb.kind, crumb.menu])).toEqual([
-      ["project", ""],
-      ["file", ""],
-    ]);
+  it("has no crumb for the root, whatever the root is", () => {
+    // Jake's `STL/link_plate.stl` under `tom-cad`: two crumbs, not three.
+    const crumbs = buildCrumbs({ path: "STL/link_plate.stl", narrow: false });
+    expect(crumbs.map((crumb) => crumb.label)).toEqual(["STL", "link_plate.stl"]);
+    // No crumb names the root, and no crumb's menu is above it: `""` is the
+    // deepest a menu goes, and nothing is `null` except the ellipsis.
+    expect(crumbs.every((crumb) => crumb.path !== "")).toBe(true);
+    expect(crumbs.map((crumb) => crumb.menu)).toEqual(["", "STL"]);
   });
 
-  it("is just the project for an empty tab", () => {
-    expect(buildCrumbs({ projectName: "p", root: null, path: null, narrow: false })).toEqual([
-      expect.objectContaining({ kind: "project", label: "p", menu: "", current: null }),
-    ]);
+  it("lists the root for a file at the root", () => {
+    const crumbs = buildCrumbs({ path: "README.md", narrow: false });
+    expect(crumbs.map((crumb) => [crumb.kind, crumb.label, crumb.menu])).toEqual([["file", "README.md", ""]]);
+  });
+
+  it("is nothing at all for an empty tab", () => {
+    expect(buildCrumbs({ path: null, narrow: false })).toEqual([]);
+    expect(buildCrumbs({ path: "", narrow: false })).toEqual([]);
+  });
+
+  it("every crumb's menu is its parent, and marks the crumb itself", () => {
+    // The redundancy is the point: `current` is the rule written down, and
+    // it has to agree with what the component computes from the open file.
+    const path = "a/b/c/d/e.step";
+    for (const crumb of buildCrumbs({ path, narrow: false })) {
+      expect(crumb.menu).toBe(parentOf(crumb.path));
+      expect(crumb.current).toBe(crumb.path);
+      expect(stepToward(crumb.menu!, path)).toBe(crumb.current);
+    }
   });
 
   it("folds the folders into one ellipsis in a narrow pane, and keeps the file", () => {
-    const crumbs = buildCrumbs({ projectName: "p", root: null, path: "a/b/c/d.step", narrow: true });
-    expect(crumbs.map((crumb) => crumb.kind)).toEqual(["project", "ellipsis", "file"]);
-    const ellipsis = crumbs[1]!;
+    const crumbs = buildCrumbs({ path: "a/b/c/d.step", narrow: true });
+    expect(crumbs.map((crumb) => crumb.kind)).toEqual(["ellipsis", "file"]);
+    const ellipsis = crumbs[0]!;
     expect(ellipsis.menu).toBeNull();
     expect(ellipsis.hidden.map((folder) => folder.path)).toEqual(["a", "a/b", "a/b/c"]);
     expect(ellipsis.title).toBe("a/b/c");
+    // The file keeps its own menu — its siblings — through the fold.
+    expect(crumbs[1]!.menu).toBe("a/b/c");
     // One folder is not worth folding.
-    expect(buildCrumbs({ projectName: "p", root: null, path: "a/d.step", narrow: true }).map((c) => c.kind)).toEqual([
-      "project",
-      "directory",
-      "file",
-    ]);
+    expect(buildCrumbs({ path: "a/d.step", narrow: true }).map((c) => c.kind)).toEqual(["directory", "file"]);
+    // Nor is none.
+    expect(buildCrumbs({ path: "d.step", narrow: true }).map((c) => c.kind)).toEqual(["file"]);
   });
 
-  it("gives a worktree tab a worktree crumb that lists the worktree's root", () => {
-    const crumbs = buildCrumbs({
-      projectName: "p",
-      root: "/home/me/.hardcore/worktrees/p/wrist",
-      path: "models/wrist.step",
-      narrow: true,
-    });
-    expect(crumbs.map((crumb) => [crumb.kind, crumb.label, crumb.menu])).toEqual([
-      // The project's own listing is another tree's: no menu.
-      ["project", "p", null],
-      ["worktree", "wrist", ""],
-      ["directory", "models", "models"],
-      ["file", "wrist.step", "models"],
+  it("is the same crumbs in a worktree: the root never appears", () => {
+    // A worktree tab's paths are the worktree's, and the worktree is the
+    // root — so it is not a crumb either, and the crumbs do not depend on
+    // which copy of the tree they came from.
+    expect(buildCrumbs({ path: "models/wrist.step", narrow: false })).toEqual(
+      buildCrumbs({ path: "models/wrist.step", narrow: false }),
+    );
+    expect(buildCrumbs({ path: "models/wrist.step", narrow: false }).map((crumb) => crumb.label)).toEqual([
+      "models",
+      "wrist.step",
     ]);
-    expect(crumbs[1]!.current).toBe("models");
+  });
+});
+
+describe("worktreeMark", () => {
+  it("names the worktree a file is in, and nothing for the project", () => {
+    // A label rather than a crumb: it names the root, and a root has no menu
+    // here. But which copy of the tree a file is in is the one thing its
+    // name does not say, so it is still drawn.
+    expect(worktreeMark("/home/me/.hardcore/worktrees/p/wrist")).toEqual({
+      label: "wrist",
+      title: "/home/me/.hardcore/worktrees/p/wrist",
+    });
+    expect(worktreeMark("C:\\Users\\me\\.hardcore\\worktrees\\p\\wrist")?.label).toBe("wrist");
+    expect(worktreeMark(null)).toBeNull();
   });
 });
 

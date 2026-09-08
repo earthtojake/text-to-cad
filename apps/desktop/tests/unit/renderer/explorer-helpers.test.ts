@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { resolveAddress } from "@renderer/features/explorer/BrowserTab";
 import { fuzzyFilter, fuzzyMatch } from "@renderer/features/explorer/fuzzy";
 import { languageFor } from "@renderer/features/explorer/monaco";
+import { CAD_PANEL, toggleCadPanel } from "@renderer/features/explorer/renderers/panels";
 import { isCadPath, rendererForPath } from "@renderer/features/explorer/renderers/registry";
 
 describe("the tree's fuzzy filter", () => {
@@ -81,9 +82,81 @@ describe("the renderer registry", () => {
     }
   });
 
-  it("gives markdown, and only markdown, a source toggle", () => {
-    expect(rendererForPath("README.md")).toMatchObject({ id: "markdown", sourceToggle: true });
-    expect(rendererForPath("src/index.ts")).toMatchObject({ id: "code", sourceToggle: false });
+  /**
+   * The panels contract (`renderers/panels.ts`): a renderer declares what
+   * the nav row draws for it, and the row has no per-kind special case left
+   * in it. Markdown's source toggle is one of these now.
+   */
+  it("gives markdown one panel, a CAD file two, and code none", () => {
+    const context = {
+      viewSource: false,
+      setViewSource: () => {},
+      open: {},
+      setOpen: () => {},
+      ready: true,
+    };
+
+    const markdown = rendererForPath("README.md");
+    expect(markdown.id).toBe("markdown");
+    expect(markdown.panels?.(context).map((panel) => [panel.id, panel.label, panel.open])).toEqual([
+      ["source", "View source", false],
+    ]);
+    // The label is the action and `open` is "source is showing", so the two
+    // flip together.
+    expect(markdown.panels?.({ ...context, viewSource: true }).map((panel) => [panel.label, panel.open])).toEqual([
+      ["View preview", true],
+    ]);
+
+    const cad = rendererForPath("models/part.step");
+    expect(cad.id).toBe("cad");
+    expect(cad.panels?.(context).map((panel) => [panel.id, panel.label])).toEqual([
+      ["cad-theme", "Theme settings"],
+      ["cad-file-sheet", "File sheet"],
+    ]);
+    // Each reads its own flag out of the record the tab keeps.
+    expect(cad.panels?.({ ...context, open: { "cad-theme": true } }).map((panel) => panel.open)).toEqual([true, false]);
+    // And there are none at all until the surface behind them is up: two
+    // toggles over the runtime's failure card would open nothing.
+    expect(cad.panels?.({ ...context, ready: false })).toEqual([]);
+
+    expect(rendererForPath("src/index.ts").id).toBe("code");
+    expect(rendererForPath("src/index.ts").panels).toBeNull();
+    expect(rendererForPath("build/icon.png").panels).toBeNull();
+  });
+
+  it("closes one CAD panel as it opens the other", () => {
+    // They are one panel in the viewer's surface, so a press writes both
+    // flags at once: the record never has two open, and closing the one you
+    // opened leaves nothing open.
+    expect(toggleCadPanel({}, CAD_PANEL.theme)).toEqual({ "cad-theme": true, "cad-file-sheet": false });
+    expect(toggleCadPanel({ "cad-theme": true }, CAD_PANEL.theme)).toEqual({
+      "cad-theme": false,
+      "cad-file-sheet": false,
+    });
+    // A press while the OTHER is up opens this one — the gesture is "show me
+    // this instead", not "close something already closed".
+    expect(toggleCadPanel({ "cad-file-sheet": true }, CAD_PANEL.theme)).toEqual({
+      "cad-theme": true,
+      "cad-file-sheet": false,
+    });
+    expect(toggleCadPanel({ "cad-theme": true }, CAD_PANEL.fileSheet)).toEqual({
+      "cad-theme": false,
+      "cad-file-sheet": true,
+    });
+  });
+
+  it("drives the pair through the declaration's own toggles", () => {
+    const open: Record<string, boolean> = { "cad-file-sheet": true };
+    const panels = rendererForPath("part.step").panels!({
+      viewSource: false,
+      setViewSource: () => {},
+      open,
+      setOpen: (patch) => Object.assign(open, patch),
+      ready: true,
+    });
+    expect(panels.map((panel) => panel.open)).toEqual([false, true]);
+    panels[0]!.onToggle();
+    expect(open).toEqual({ "cad-theme": true, "cad-file-sheet": false });
   });
 });
 

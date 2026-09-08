@@ -116,11 +116,14 @@ Settings, the traffic lights' corner in the two states that own it
 rectangle drawn over it), one per explorer surface — `file-markdown-preview`,
 `file-markdown-source`, `file-markdown-editable` (the dirty dot on an edited
 document), `file-markdown-raw-blocks` (raw HTML kept as its own bytes),
-`file-tree-deep`, `file-crumb-menu` (a folder crumb's menu, open),
+`file-tree-deep`, `file-crumb-menu` (a folder crumb's menu of its
+neighbours, open),
 `file-context-menu` (a tree row's), `file-image`, `file-cad-failed` (the runtime broken on
 purpose), `file-cad` (the explorer at its widest: the sidebar hidden and the
 session at its floor), `file-cad-default` (the explorer at its default width, the tree
-hidden for it) and both again at 1280×800, `file-cad-measure`, `terminal`,
+hidden for it) and both again at 1280×800, `file-cad-measure`,
+`file-cad-theme` (the theme panel open from the nav row's toggle, in the
+sheet's place), `terminal`,
 `browser-empty`, `browser`, `review`, `strip`, `strip-overflow` (seven tabs in
 a pane at its floor, `+` pinned to the right edge), `panes-sidebar-collapsed`
 (the sidebar closed by a drag past its minimum, with the toggle that brings it
@@ -670,23 +673,37 @@ mounts one tab at a time.
 
 ### The file tab's nav
 
-One row: the breadcrumb, `View source` for markdown, and the files toggle at
-the right end — which stays there whether the tree is open or shut (it used
-to move into the tree's own header when the tree opened; the tree's header
-is now the filter and nothing else). There is no `Copy path` button and no
-`Open ▾`: those are items in the entry menus.
+One row: the breadcrumb, the open file's panel toggles, and the files toggle
+at the right end — which stays there whether the tree is open or shut, and
+whether the file has panels or not (it used to move into the tree's own
+header when the tree opened; the tree's header is now the filter and nothing
+else). There is no `Copy path` button and no `Open ▾`: those are items in the
+entry menus.
 
-**Every crumb is a menu** (`features/explorer/Breadcrumbs.tsx`, the model in
-`crumbs.ts`), the way the CAD Viewer's breadcrumb is. The project crumb
-lists the root, a folder crumb lists that folder, the file crumb lists its
-siblings, and every menu marks the entry on the way to the open file.
-Directories come first, each a submenu of its own listing read when it is
-opened; picking a file opens it *in this tab* — the crumb is the tab's
-address bar, unlike the tree's rows, which open tabs. In a narrow pane the
-folders fold into a `…` crumb whose menu is those folders. The listings are
-the tree's own (`useTree`), so a folder the tree has read costs the menu
-nothing and the two never disagree. A worktree tab's project crumb has no
-menu: its listing is another root's.
+**Every crumb is a menu of its neighbours** (`features/explorer/Breadcrumbs.tsx`,
+the model in `crumbs.ts`), the way the CAD Viewer's breadcrumb is. The crumbs
+are the path's segments **below the root** — `STL/link_plate.stl` is `STL ›
+link_plate.stl` — and each one's menu is its **parent's** listing with the
+crumb itself marked: the first crumb drops down the root's entries, a folder
+crumb drops down what sits beside that folder, and the file crumb drops down
+its siblings. There is no crumb for the project or the worktree, and that is
+the rule rather than an omission: a root's neighbours are outside the project,
+and a menu in this pane never lists anything above the root. A file at the
+root is one crumb, listing the root. A worktree tab keeps a **branch label**
+before the crumbs — it names the root, so it has no menu, but which copy of
+the tree a file is in is the one thing its name does not say. Directories
+come first, each a submenu
+of its own listing read when it is opened; picking a file opens it *in this
+tab* — the crumb is the tab's address bar, unlike the tree's rows, which open
+tabs. In a narrow pane the folders fold into a `…` crumb whose menu is those
+folders. The listings are the tree's own (`useTree`), so a folder the tree
+has read costs the menu nothing and the two never disagree.
+
+**The file crumb carries a `⋯`** immediately after its name ("File actions"),
+which opens the same entry menu the right-click does — one table
+(`entry-menu.ts`), one set of actions, drawn as a dropdown instead of a
+context menu. A right-click is not a control anybody can see, and the file's
+own menu is the one worth pointing at.
 
 **Right-click a crumb or a tree row** for the entry menu
 (`entry-menu.ts` is the table, `entry-actions.ts` what each item does,
@@ -713,6 +730,38 @@ own Open With on Windows — in `src/main/ipc/explorer.ts`). A rename or a
 trash keeps the strip honest: tabs showing the file or anything under the
 folder are re-pointed or closed. `Open in terminal` on a folder is the one
 `terminal.create` whose `cwd` is under a root rather than a root.
+
+### The panels a file has
+
+**A renderer declares its panels; the nav row draws them**
+(`features/explorer/renderers/panels.ts`, declared in `registry.ts` as
+`traits.panels`). Each is an icon button with `aria-pressed`, highlighted
+while its panel is open, and they sit at the right end of the row in
+declaration order immediately **left of the files toggle** — which is last
+and never moves, so the one control that is always there is always in the
+same place. This is the standalone viewer's top bar, ported: a toggle per
+panel, lit while its panel is up.
+
+Markdown declares one, the two readings of the same bytes (`View source` /
+`View preview`, which used to be the row's one special case and is now
+just a panel). A CAD file declares two, **Theme settings** and **File
+sheet** — the viewer's own right-hand panel, which `layout="desktop"` had
+left with no door at all in this app, because that layout hides the top
+bar those toggles live in. Code, images and PDFs declare none and put
+nothing in the row.
+
+The tab owns the state and the renderer says what it means, for the reason
+`viewSource` already worked that way: the toggle is in the header and the
+panel is in the body, and two owners of one flag is how the two come to
+disagree. `viewSource` is a field of the tab and survives a reload; the
+CAD panels are session state keyed on the open file. The CAD pair is
+*controlled* in the viewer's surface (`themeEditing` /
+`onThemeEditingChange`, `fileSheetOpen` / `onFileSheetOpenChange` — see
+the file-view doc): the surface still enforces that the two are one panel
+and reports the close it makes itself, so the highlight follows what is on
+screen instead of guessing at the rule. A CAD tab whose runtime did not
+start declares no panels: two toggles over the failure card would open
+nothing.
 
 ## Quitting
 
@@ -1042,8 +1091,9 @@ worktrees.
   because the checkout and a worktree are different trees with the same
   names in them.
 - A file tab carries the root it was opened in (`FileTabSchema.root`) and
-  keeps it after the person switches threads; the breadcrumb shows the
-  worktree's name with a branch glyph. A terminal opened while a worktree
+  keeps it after the person switches threads; the nav row shows the
+  worktree's name with a branch glyph, before the crumbs and without a menu
+  of its own. A terminal opened while a worktree
   thread is active starts there (`TerminalTab.cwd`). An unpinned review's
   `All changes` follows a worktree thread into its directory. The CAD tab
   asks `cad.viewerOrigin` for its root, and main runs one `cadgen viewer`

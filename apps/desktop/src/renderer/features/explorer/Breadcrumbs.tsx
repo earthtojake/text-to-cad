@@ -1,4 +1,4 @@
-import { Check, GitBranch } from "lucide-react";
+import { Check, EllipsisVertical } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import {
@@ -15,20 +15,25 @@ import { useExplorer, useTree } from "@renderer/state/explorer";
 import type { DirEntry } from "@shared/ipc/explorer";
 
 import { menuEntries, nameOf, stepToward, type Crumb } from "./crumbs";
-import { EntryContextMenu } from "./EntryContextMenu";
+import { EntryContextMenu, EntryMenuItems, useMenuFocusGuard } from "./EntryContextMenu";
 import { renameEntry, requestAt, type EntryActionContext } from "./entry-actions";
 import { FileIcon, FolderIcon } from "./icons";
 import { InlineName } from "./InlineName";
 
 /**
- * The file tab's breadcrumb: every crumb is a menu.
+ * The file tab's breadcrumb: every crumb is a menu of its NEIGHBOURS.
  *
- * Click the project and the root's entries drop down; click a folder and
- * that folder's entries do; click the file and its siblings do, with the
- * open one marked. A folder inside a menu is a submenu of its own listing,
- * fetched when it is opened and kept in the explorer store beside the
- * tree's — the same cache, so a folder the tree already read costs the menu
- * nothing. Right-click any crumb for the entry menu the tree's rows have.
+ * A crumb's menu is its parent directory's listing, so the first crumb drops
+ * down the root's entries, a folder crumb drops down what sits beside that
+ * folder, and the file crumb drops down its siblings — with the crumb itself
+ * marked in each. The rule and the reason there is no crumb for the root are
+ * in `crumbs.ts`. A folder inside a menu is a submenu of its own listing,
+ * fetched when it is opened and kept in the explorer store beside the tree's
+ * — the same cache, so a folder the tree already read costs the menu nothing.
+ *
+ * Right-click any crumb for the entry menu the tree's rows have; the file
+ * crumb also carries a `⋯` that opens the same menu by click, because a
+ * right-click is not a control anybody can see.
  *
  * The listings are the tree's (`useTree`), which is what makes this a view
  * over the same data rather than a second tree with a second idea of what
@@ -83,12 +88,49 @@ export function Breadcrumbs({
                 }}
               />
             ) : (
-              <CrumbButton activePath={activePath} crumb={crumb} ctx={ctx} last={last} onOpen={onOpen} />
+              <>
+                <CrumbButton activePath={activePath} crumb={crumb} ctx={ctx} last={last} onOpen={onOpen} />
+                {/*
+                  The file's own actions, immediately after its name. The
+                  same menu the right-click opens, drawn as a dropdown — one
+                  table (`entry-menu.ts`), one set of actions, two doors.
+                */}
+                {crumb.kind === "file" ? <CrumbActions crumb={crumb} ctx={ctx} /> : null}
+              </>
             )}
           </span>
         );
       })}
     </>
+  );
+}
+
+function CrumbActions({ crumb, ctx }: { crumb: Crumb; ctx: EntryActionContext }) {
+  const guard = useMenuFocusGuard(ctx);
+  const entry = { path: crumb.path, kind: "file" as const, surface: "crumb" as const };
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          aria-label="File actions"
+          className="flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+          data-testid="crumb-actions"
+          title="File actions"
+          type="button"
+        >
+          <EllipsisVertical className="size-3.5" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="w-56"
+        data-entry-menu={entry.path}
+        onCloseAutoFocus={guard.onCloseAutoFocus}
+        sideOffset={6}
+      >
+        <EntryMenuItems ctx={guard.ctx} entry={entry} surface="dropdown" />
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -105,28 +147,12 @@ function CrumbButton({
   activePath: string | null;
   onOpen: (path: string) => void;
 }) {
-  const label = (
-    <>
-      {crumb.kind === "worktree" ? <GitBranch aria-label="Worktree" className="size-3 shrink-0" /> : null}
-      <span className="truncate">{crumb.label}</span>
-    </>
-  );
+  const label = <span className="truncate">{crumb.label}</span>;
   const className = cn(
     "flex min-w-0 items-center gap-1 truncate rounded-sm px-0.5 outline-none transition-colors",
     last ? "max-w-[60vw] font-medium text-foreground" : "text-muted-foreground",
     "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:text-foreground",
   );
-  const hasMenu = crumb.menu !== null || crumb.kind === "ellipsis";
-
-  // A crumb with nothing to list is a label: the project crumb of a
-  // worktree tab, whose listing is another root's.
-  if (!hasMenu) {
-    return (
-      <span className={className} data-crumb={crumb.kind} title={crumb.title}>
-        {label}
-      </span>
-    );
-  }
 
   const trigger = (
     <DropdownMenuTrigger asChild>
@@ -142,9 +168,8 @@ function CrumbButton({
     </DropdownMenuTrigger>
   );
 
-  // The project crumb is the root directory, and so is the worktree crumb
-  // in its own tree. The ellipsis stands for several folders and has no
-  // menu of its own.
+  // The ellipsis stands for several folders at once, so it names no entry
+  // and has no entry menu; every other crumb names exactly one.
   const entry =
     crumb.kind === "ellipsis"
       ? null
