@@ -32,9 +32,10 @@ export function normalizeHostSheetWidth(value) {
   return Math.round(Math.min(DESKTOP_TAB_TOOLS_MAX_WIDTH, Math.max(DESKTOP_TAB_TOOLS_MIN_WIDTH, width)));
 }
 
-// `"dark"` / `"light"` from a host resolve the "system" CAD theme preset and
-// stop the surface writing the colour scheme to the document; null leaves
-// both to the surface (the standalone case).
+// `"dark"` / `"light"` from a host resolve the "system" CAD theme — its
+// light/dark half AND the chrome background it paints the scene on
+// (chromeBackdrop.js) — and stop the surface writing the colour scheme to the
+// document; null leaves all of it to the surface (the standalone case).
 export function hostPrefersDarkForColorScheme(colorScheme) {
   const normalized = String(colorScheme || "").trim().toLowerCase();
   if (normalized === "dark") {
@@ -42,26 +43,6 @@ export function hostPrefersDarkForColorScheme(colorScheme) {
   }
   if (normalized === "light") {
     return false;
-  }
-  return null;
-}
-
-/**
- * A host's scene backdrop, or null for the theme's own. Hex only: the theme
- * model stores colours as hex, and a host that has an oklch token converts
- * before asking. `#rgb` is expanded so one shorthand does not silently fall
- * back to the theme.
- */
-export function normalizeHostSceneBackground(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim().toLowerCase();
-  if (/^#[0-9a-f]{6}$/.test(trimmed)) {
-    return trimmed;
-  }
-  if (/^#[0-9a-f]{3}$/.test(trimmed)) {
-    return "#" + [...trimmed.slice(1)].map((c) => c + c).join("");
   }
   return null;
 }
