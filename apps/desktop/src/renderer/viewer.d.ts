@@ -207,9 +207,11 @@ declare module "cad-viewer/shell" {
 
 /** Small standalone entry; importing a loader must not eagerly load the CAD surface. */
 declare module "cad-viewer/loading-icon" {
+  import type { ReactElement } from "react";
+
   export default function LoadingIcon(props: {
     active?: boolean;
     size?: number;
     className?: string;
-  }): import("react").ReactElement;
+  }): ReactElement;
 }
