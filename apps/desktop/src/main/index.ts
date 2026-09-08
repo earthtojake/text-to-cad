@@ -12,7 +12,7 @@ import { endTrackedChildren, killTrackedChildren } from "./children";
 import { closeDb, databaseFile, db } from "./db";
 import { settings as settingsRepository } from "./db/repositories";
 import { broadcast, registerIpcHandlers } from "./ipc";
-import { shutdownAcp } from "./ipc/acp";
+import { prewarmAgents, shutdownAcp } from "./ipc/acp";
 import { shutdownAgents } from "./ipc/agents";
 import { disposeExplorerServices } from "./ipc/explorer";
 import { installMenu } from "./menu";
@@ -226,6 +226,10 @@ if (!app.requestSingleInstanceLock()) {
     initTelemetry();
     createWindow();
     initUpdater();
+    // One idle adapter per agent the index says is in use, a second and a
+    // half from now: the first session opened then costs a `session/load`
+    // and not a spawn (src/main/acp/warm.ts).
+    prewarmAgents();
     track({ name: "app_launched" });
 
     app.on("activate", () => {

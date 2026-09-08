@@ -222,6 +222,49 @@ export const sessions = {
 };
 
 /* -------------------------------------------------------------------------- */
+/* Session state snapshots                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The picture of a session's transcript that paints while its agent is
+ * reconnecting (migration 10, `src/main/acp/snapshots.ts`).
+ *
+ * The JSON is parsed here and validated by the caller — this repository does
+ * not know what a `SessionState` is, and the writer treats a row that no
+ * longer matches the schema as a cache miss.
+ */
+export const sessionStates = {
+  read(sessionId: string): unknown | null {
+    const row = db()
+      .prepare("SELECT state FROM session_state WHERE session_id = ?")
+      .get(sessionId) as { state: string } | undefined;
+    if (!row) {
+      return null;
+    }
+    try {
+      return JSON.parse(row.state);
+    } catch {
+      // Not JSON at all: the row is worse than useless, so it goes.
+      sessionStates.remove(sessionId);
+      return null;
+    }
+  },
+
+  write(sessionId: string, json: string): void {
+    db()
+      .prepare(
+        `INSERT INTO session_state (session_id, state, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at`,
+      )
+      .run(sessionId, json, Date.now());
+  },
+
+  remove(sessionId: string): void {
+    db().prepare("DELETE FROM session_state WHERE session_id = ?").run(sessionId);
+  },
+};
+
+/* -------------------------------------------------------------------------- */
 /* Agent options                                                               */
 /* -------------------------------------------------------------------------- */
 

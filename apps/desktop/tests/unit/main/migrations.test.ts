@@ -128,8 +128,8 @@ describe("runMigrations", () => {
    */
   it("re-keys the effort by model without rebuilding the table", () => {
     const { db, statements, version } = fakeDb(8);
-    expect(runMigrations(db, MIGRATIONS)).toBe(9);
-    expect(version()).toBe(9);
+    expect(runMigrations(db, MIGRATIONS)).toBe(MIGRATIONS.at(-1)!.version);
+    expect(version()).toBe(MIGRATIONS.at(-1)!.version);
     const sql = statements.join("\n");
     expect(sql).not.toContain("CREATE TABLE agent_options");
     expect(sql).not.toContain("DROP TABLE agent_options");
@@ -170,5 +170,22 @@ describe("runMigrations", () => {
     const sql = statements.join("\n");
     expect(sql).not.toContain("CREATE TABLE sessions");
     expect(sql).toContain("ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
+  });
+
+  /**
+   * The snapshot each session's transcript paints from while its agent
+   * reconnects (src/main/acp/snapshots.ts). A table of its own, keyed by the
+   * session and cascading with it: the sidebar reads the `sessions` row for
+   * every title it lists, and a half-megabyte JSON blob does not belong in
+   * that read.
+   */
+  it("adds the session_state table without touching the sessions table", () => {
+    const { db, statements, version } = fakeDb(9);
+    expect(runMigrations(db, MIGRATIONS)).toBe(MIGRATIONS.at(-1)!.version);
+    expect(version()).toBe(MIGRATIONS.at(-1)!.version);
+    const sql = statements.join("\n");
+    expect(sql).toContain("CREATE TABLE session_state");
+    expect(sql).toContain("REFERENCES sessions(id) ON DELETE CASCADE");
+    expect(sql).not.toContain("ALTER TABLE sessions");
   });
 });

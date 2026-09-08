@@ -550,10 +550,16 @@ test("a crashed agent is an inline error with retry, and reconnecting resumes th
   await shoot("session-error.png");
 
   await page.getByRole("button", { name: "Reconnect" }).click();
+  // A reconnect never replaces the transcript with a loading screen: what
+  // is on screen is still worth reading, and the agent coming back is a line
+  // in the composer's row (README, "Opening a session";
+  // `tests/e2e/reconnect.spec.ts` is that mechanism on its own).
+  await expect(page.locator("[data-connecting]")).toHaveCount(0);
   // The fake's `session/load` replays one earlier exchange.
   await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle");
   await expect(page.locator("[data-turn][data-role=user]").first()).toContainText("earlier prompt");
   await expect(page.getByText("earlier reply")).toBeVisible();
+  await expect(page.locator("[data-reconnecting]")).toHaveCount(0);
   await shoot("session-resumed.png");
 });
 

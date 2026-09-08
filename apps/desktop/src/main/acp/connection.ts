@@ -168,13 +168,19 @@ export class SessionConnection {
     });
     void this.exited.then((exit) => this.onProcessExit(exit));
 
-    this.terminals = new TerminalManager(options.spawnTerminal, options.onTerminalOutput);
+    // The four listeners are read at call time rather than captured, because
+    // `adopt` re-points them: a warm adapter is spawned before the session it
+    // will belong to exists, and the events it produces have to reach that
+    // session's manager and not the pool's placeholder.
+    this.terminals = new TerminalManager(options.spawnTerminal, (terminalId, data, exit) =>
+      this.options.onTerminalOutput?.(terminalId, data, exit),
+    );
     this.client = new AcpClient({
       cwd: options.cwd,
       env: { ...options.env, ...options.launch.env },
       terminals: this.terminals,
       dispatch: (event) => this.dispatch(event),
-      onFilesChanged: options.onFilesChanged,
+      onFilesChanged: (paths) => this.options.onFilesChanged?.(paths),
     });
 
     this.agent = new ClientSideConnection(() => this.client, this.tappedStream());
@@ -205,6 +211,43 @@ export class SessionConnection {
   /** The agent's session id, once `session/new` or `session/load` has answered. */
   get acpSessionId(): string | null {
     return this.stateValue.acpSessionId;
+  }
+
+  /** Where this adapter was spawned. Fixed for its life; the warm pool matches on it. */
+  get cwd(): string {
+    return this.options.cwd;
+  }
+
+  /**
+   * Point an idle, already-initialized adapter at a real session (the warm
+   * pool, `./warm.ts`). Everything a session brings with it arrives here —
+   * its id, its MCP servers, its preamble, and the listeners its manager
+   * wants the events on — and everything the adapter cannot change is
+   * absent: the directory it was spawned in, its environment and its skills
+   * root are the same for every session, which is what makes one adapter
+   * interchangeable with another.
+   *
+   * Only before `session/new` or `session/load`: an adapter that already
+   * holds a session is that session's, and re-pointing it would give two
+   * threads one transcript.
+   */
+  adopt(
+    options: Pick<
+      SessionConnectionOptions,
+      | "sessionId"
+      | "mcpServers"
+      | "preamble"
+      | "onEvent"
+      | "onTerminalOutput"
+      | "onFilesChanged"
+      | "onStderr"
+    >,
+  ): void {
+    if (this.stateValue.acpSessionId) {
+      throw new Error("this adapter already holds a session");
+    }
+    Object.assign(this.options, options);
+    this.stateValue = initialSessionState(options.sessionId, this.options.agentId);
   }
 
   dispatch(event: SessionEvent): void {

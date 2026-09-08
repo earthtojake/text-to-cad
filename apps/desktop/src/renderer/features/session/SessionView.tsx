@@ -28,10 +28,17 @@ import { isAuthError } from "./view";
  * the index with no snapshot yet is loaded here, which is the "connecting"
  * and the "resumed from history" states. A reconnect that fails is the
  * error state, with the agent's login surfaced when that is the cause.
+ *
+ * The full-pane spinner is now the *last* resort, not the first (README,
+ * "Opening a session"). A session whose transcript main has a snapshot of
+ * paints it immediately and says `Reconnecting…` in the composer's row while
+ * the agent comes back; only a session with no snapshot at all — one created
+ * before there were snapshots — still waits behind "Connecting to …".
  */
 export function SessionView({ session }: { session: Session }) {
   const state = useAcp((store) => store.sessions[session.id] ?? null);
   const loading = useAcp((store) => store.loading[session.id] ?? false);
+  const reconnecting = useAcp((store) => store.reconnecting[session.id] ?? false);
   const loadError = useAcp((store) => store.loadErrors[session.id] ?? null);
   const ensureLoaded = useAcp((store) => store.ensureLoaded);
   const load = useAcp((store) => store.load);
@@ -63,9 +70,13 @@ export function SessionView({ session }: { session: Session }) {
   };
 
   const running = state?.status === "running" || state?.status === "waiting";
+  // A reconnect behind a painted transcript is not the composer's business:
+  // a prompt sent now is queued against the load and goes out when it lands
+  // (`ensureLive` in src/main/acp/sessions.ts), so the box stays live and the
+  // row under it says what is happening instead.
   const composerStatus: "ready" | "submitted" | "streaming" = running
     ? "streaming"
-    : state?.status === "connecting" || loading
+    : (state?.status === "connecting" || loading) && !reconnecting
       ? "submitted"
       : "ready";
 
@@ -175,12 +186,34 @@ export function SessionView({ session }: { session: Session }) {
           {showErrorBanner && state?.error && isAuthError(state.error) ? (
             <AuthPrompt agent={agent} message={state.error} onRetry={() => void load(session.id)} />
           ) : null}
+          {/* A reconnect that failed behind a painted transcript: the
+              transcript is still worth reading, so the failure is a line
+              above the composer rather than a screen in place of it. */}
+          {state && loadError && !loading ? (
+            isAuthError(loadError) ? (
+              <AuthPrompt agent={agent} message={loadError} onRetry={() => void load(session.id)} />
+            ) : (
+              <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px] leading-5" data-reconnect-failed role="status">
+                <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+                <span className="min-w-0 flex-1 whitespace-pre-wrap">{loadError}</span>
+                <Button className="h-6 gap-1 px-2 text-[12px]" onClick={() => void load(session.id)} size="sm" variant="outline">
+                  <RotateCcw className="size-3" />
+                  Reconnect
+                </Button>
+              </div>
+            )
+          ) : null}
           {state?.plan && state.plan.length > 0 ? (
             <PlanCard entries={state.plan} running={running} startedAt={planTurn?.startedAt ?? null} />
           ) : null}
           <Composer
             autoFocus
-            chips={chips?.leading ?? null}
+            chips={
+              <>
+                {chips?.leading ?? null}
+                {reconnecting ? <Reconnecting /> : null}
+              </>
+            }
             commands={state?.availableCommands ?? []}
             disabled={!state || state.status === "connecting" || state.status === "closed"}
             onStop={() => void cancel(session.id)}
@@ -193,6 +226,26 @@ export function SessionView({ session }: { session: Session }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The agent is coming back behind a transcript that is already on screen.
+ *
+ * Deliberately small and in the composer's row, beside the mode chip: the
+ * transcript is readable, the box takes a prompt, and the only thing missing
+ * is an adapter — which is a line of text's worth of news, not a screen's.
+ */
+function Reconnecting() {
+  return (
+    <span
+      className="flex shrink-0 items-center gap-1 px-1 text-[12px] text-muted-foreground"
+      data-reconnecting
+      role="status"
+    >
+      <Loader2 className="size-3 animate-spin" />
+      Reconnecting…
+    </span>
   );
 }
 

@@ -31,7 +31,7 @@ declare const window: {
     sessions: {
       create(request: { projectId: string; agentId: string; gitMode: string; cwd: string }): Promise<{ id: string }>;
       prompt(request: { id: string; content: { type: "text"; text: string }[] }): Promise<{ stopReason: string }>;
-      state(input: { id: string }): Promise<{ turns: Array<{ role: string; parts: Array<Record<string, unknown>> }> } | null>;
+      state(input: { id: string }): Promise<{ state: { turns: Array<{ role: string; parts: Array<Record<string, unknown>> }> }; live: boolean } | null>;
     };
   };
 };
@@ -85,7 +85,7 @@ test.afterAll(async () => {
 /** The parts of the newest user turn. */
 async function lastUserTurn() {
   const state = await page.evaluate((id) => window.hardcore.sessions.state({ id }), sessionId);
-  const turns = state?.turns.filter((turn) => turn.role === "user") ?? [];
+  const turns = state?.state.turns.filter((turn) => turn.role === "user") ?? [];
   return turns.at(-1)?.parts ?? [];
 }
 

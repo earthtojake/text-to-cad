@@ -30,7 +30,7 @@ declare const window: {
       create(input: { projectId: string; agentId: string; cwd: string; gitMode: "none" }): Promise<{ id: string }>;
       setMode(input: { id: string; modeId: string }): Promise<void>;
       prompt(input: { id: string; content: Array<{ type: "text"; text: string }> }): Promise<{ stopReason: string }>;
-      state(input: { id: string }): Promise<{ turns: Array<{ role: string; parts: Array<Record<string, unknown>> }> } | null>;
+      state(input: { id: string }): Promise<{ state: { turns: Array<{ role: string; parts: Array<Record<string, unknown>> }> }; live: boolean } | null>;
       close(input: { id: string }): Promise<void>;
     };
   };
@@ -136,7 +136,7 @@ test("a Codex session opens a STEP in the explorer through open_file", async () 
 
   // And the session recorded the tool call, with the server's answer in it.
   const state = await page.evaluate((id) => window.hardcore.sessions.state({ id }), session.id);
-  const parts = state?.turns.flatMap((turn) => turn.parts) ?? [];
+  const parts = state?.state.turns.flatMap((turn) => turn.parts) ?? [];
   const toolCalls = parts.filter((part) => part.type === "tool_call") as Array<{ title: string; name: string | null; status: string; output: unknown }>;
   const openFile = toolCalls.find((call) => /open_file/.test(`${call.title} ${call.name ?? ""}`));
   expect(openFile, JSON.stringify(toolCalls.map((call) => ({ title: call.title, name: call.name, status: call.status })))).toBeDefined();

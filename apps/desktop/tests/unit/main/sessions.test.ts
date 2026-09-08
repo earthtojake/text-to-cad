@@ -14,6 +14,7 @@ import {
   type SessionManagerDeps,
   type SessionRepository,
 } from "@main/acp/sessions";
+import type { SnapshotStore } from "@main/acp/snapshots";
 import type { AgentProvider } from "@shared/agents";
 import type { IpcEventChannel } from "@shared/ipc";
 import type { Session } from "@shared/types";
@@ -55,6 +56,24 @@ function memoryRepo(): SessionRepository & { rows: Map<string, Session> } {
     upsert: (session) => {
       rows.set(session.id, session);
       return session;
+    },
+    remove: (id) => {
+      rows.delete(id);
+    },
+  };
+}
+
+/** The snapshot store, in a Map (sqlite's `session_state` in the app). */
+function memorySnapshots(): SnapshotStore & { rows: Map<string, string> } {
+  const rows = new Map<string, string>();
+  return {
+    rows,
+    read: (id) => {
+      const json = rows.get(id);
+      return json === undefined ? null : JSON.parse(json);
+    },
+    write: (id, json) => {
+      rows.set(id, json);
     },
     remove: (id) => {
       rows.delete(id);
@@ -133,7 +152,7 @@ describe("SessionManager", () => {
     const { repo, broadcasts, manager, cwd } = await setup();
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
     expect(session).toMatchObject({ id: "session-1", status: "idle", acpSessionId: "fake-session-1", title: "New session" });
-    expect(manager.state(session.id)?.status).toBe("idle");
+    expect(manager.state(session.id)?.state.status).toBe("idle");
     expect(broadcasts.some((b) => b.channel === "session.state")).toBe(true);
 
     const target = path.join(cwd, "made.txt");
@@ -183,6 +202,128 @@ describe("SessionManager", () => {
     manager.delete(session.id);
     expect(repo.get(session.id)).toBeNull();
     expect(manager.state(session.id)).toBeNull();
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* Opening a session: the snapshot, the keep-alive, the warm adapter   */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * The snapshot is what a session paints from while its agent reconnects
+   * (README, "Opening a session"). `close` files it at once, because the
+   * adapter is gone and the next click has nothing else to draw.
+   */
+  it("files a snapshot of the transcript, and state() answers from it once the adapter is gone", async () => {
+    const store = memorySnapshots();
+    const { manager, cwd } = await setup({ snapshots: store });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    await manager.prompt(session.id, [{ type: "text", text: "hello there" }]);
+
+    // Live: the connection's own state, and nothing about a snapshot.
+    expect(manager.state(session.id)).toMatchObject({ live: true });
+
+    manager.close(session.id);
+    const painted = manager.state(session.id);
+    expect(painted?.live).toBe(false);
+    expect(painted?.state.turns.map((turn) => turn.role)).toEqual(["user", "agent"]);
+    // The stored status is never `closed`: the composer of a session that is
+    // about to be live must not be greyed out (src/main/acp/snapshots.ts).
+    expect(painted?.state.status).toBe("idle");
+
+    // Deleting the session takes its picture with it.
+    await manager.delete(session.id);
+    expect(store.rows.has(session.id)).toBe(false);
+  });
+
+  /**
+   * The renderer starts a load behind the painted snapshot, and a prompt
+   * typed into that snapshot's composer arrives while it is still running.
+   * Two spawns for one session, and a `session/prompt` in the middle of a
+   * `session/load`, is what the in-flight map prevents.
+   */
+  it("joins a load already in flight rather than spawning a second adapter", async () => {
+    const { manager, cwd } = await setup({ snapshots: memorySnapshots() });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    manager.close(session.id);
+
+    const [first, second] = await Promise.all([manager.load(session.id), manager.load(session.id)]);
+    expect(first).toBe(second);
+    expect(first.status).toBe("idle");
+
+    // A prompt sent while a load runs waits for it and lands on the same
+    // connection, rather than being sent into the middle of the replay.
+    manager.close(session.id);
+    const loading = manager.load(session.id);
+    const { stopReason } = await manager.prompt(session.id, [{ type: "text", text: "hello again" }]);
+    await loading;
+    expect(stopReason).toBe("end_turn");
+  });
+
+  it("has no snapshot for a session that never connected, so the spinner stays", async () => {
+    const { manager } = await setup({ snapshots: memorySnapshots() });
+    expect(manager.state("session-does-not-exist")).toBeNull();
+  });
+
+  /**
+   * Selecting another session does not close the one before it: switching
+   * back is a paint with no spawn, no `initialize` and no replay
+   * (src/main/acp/live.ts).
+   */
+  it("keeps the previous session's adapter alive when another is loaded", async () => {
+    const { repo, manager, cwd } = await setup();
+    const first = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    const second = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    await manager.load(first.id);
+    expect(manager.state(first.id)?.live).toBe(true);
+    expect(manager.state(second.id)?.live).toBe(true);
+    expect(repo.get(second.id)?.status).not.toBe("closed");
+  });
+
+  /** The oldest beyond the limit goes, and its row goes to `closed` so the next click reconnects it. */
+  it("closes the oldest adapter beyond the keep-alive limit and marks its row", async () => {
+    const { repo, manager, cwd } = await setup({ keepAlive: 1, snapshots: memorySnapshots() });
+    const first = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    const second = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    expect(manager.state(second.id)?.live).toBe(true);
+    expect(repo.get(first.id)?.status).toBe("closed");
+    // Evicted, not forgotten: the row is there and the snapshot paints it.
+    expect(manager.state(first.id)?.live).toBe(false);
+    // And it comes back on demand, which is what the row's `closed` is for.
+    const reloaded = await manager.load(first.id);
+    expect(reloaded.status).toBe("idle");
+  });
+
+  /**
+   * The warm adapter is spawned before any session exists and adopted by the
+   * first one that wants that agent in that directory — which is where a
+   * Codex session's whole `initialize` goes (README, "Opening a session").
+   * A second session finds the pool empty and spawns its own.
+   */
+  it("hands the warm adapter to the first session and spawns for the second", async () => {
+    const { manager, cwd } = await setup();
+    await manager.warmAgents();
+    // Nothing to warm: an empty index says which agents are in use, and it
+    // is empty. So a session first, then a warm, then a load of it.
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    manager.close(session.id);
+    await manager.warmAgents();
+    await until(() => (manager.warmed("claude-code") ? true : undefined));
+
+    const state = await manager.load(session.id);
+    expect(state.status).toBe("idle");
+    expect(state.turns.map((turn) => turn.role)).toEqual(["user", "agent"]);
+    // Handed out once: the pool's replacement is a different process, and
+    // the adapter this load adopted is the session's now.
+    expect(manager.state(session.id)?.live).toBe(true);
+  });
+
+  it("skips warming an agent whose directory is gone", async () => {
+    const { manager, repo, cwd } = await setup();
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    manager.close(session.id);
+    repo.upsert({ ...repo.get(session.id)!, cwd: path.join(cwd, "removed") });
+    await manager.warmAgents();
+    expect(manager.warmed("claude-code")).toBe(false);
   });
 
   it("refuses an unknown agent and lists by project", async () => {
@@ -357,7 +498,7 @@ describe("SessionManager", () => {
   /** The fake agent's current model and effort, as it reports them (tests/fake-agent, `settings`). */
   async function settingsIn(manager: SessionManager, sessionId: string): Promise<string> {
     await manager.prompt(sessionId, [{ type: "text", text: "settings" }]);
-    const parts = manager.state(sessionId)!.turns.at(-1)!.parts;
+    const parts = manager.state(sessionId)!.state.turns.at(-1)!.parts;
     const text = parts.find((part) => part.type === "text");
     return text?.type === "text" ? text.text : "";
   }
@@ -365,7 +506,7 @@ describe("SessionManager", () => {
   /** What the fake agent says it was configured with, in order (tests/fake-agent). */
   async function appliedIn(manager: SessionManager, sessionId: string): Promise<string> {
     await manager.prompt(sessionId, [{ type: "text", text: "applied" }]);
-    const parts = manager.state(sessionId)!.turns.at(-1)!.parts;
+    const parts = manager.state(sessionId)!.state.turns.at(-1)!.parts;
     const text = parts.find((part) => part.type === "text");
     return text?.type === "text" ? text.text : "";
   }
@@ -383,7 +524,7 @@ describe("SessionManager", () => {
     // Asked about `smart`, after it landed — not about `fast`, where the
     // session started.
     expect(recorder.asked).toEqual(["smart"]);
-    const state = manager.state(session.id)!;
+    const state = manager.state(session.id)!.state;
     expect(state.configOptions.find((option) => option.id === "model")?.currentValue).toBe("smart");
     expect(state.currentModeId).toBe("auto");
     // And the session's own snapshot went to the cache — the modes with the
@@ -452,7 +593,7 @@ describe("SessionManager", () => {
     // refused model must not drag the wanted model's level in behind it.
     expect(await appliedIn(manager, session.id)).toBe("applied: reasoning_effort,mode:auto in auto");
     expect(recorder.asked).toEqual(["fast"]);
-    expect(manager.state(session.id)!.configOptions.find((option) => option.id === "reasoning_effort")?.currentValue).toBe(
+    expect(manager.state(session.id)!.state.configOptions.find((option) => option.id === "reasoning_effort")?.currentValue).toBe(
       "low",
     );
   });

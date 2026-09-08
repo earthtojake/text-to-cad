@@ -37,7 +37,7 @@ Three environment variables matter in development:
 | --- | --- |
 | `HARDCORE_APTABASE_KEY` | Read at BUILD time and compiled in (see Telemetry). Unset means no network call is ever attempted. |
 | `CAD_DESKTOP_PYTHON` | An interpreter with cadgen installed, used instead of the bundled runtime (see CAD runtime below). A developer's knob; the e2e suite breaks and clears the equivalent setting on purpose. |
-| `HARDCORE_PREWARM` | Under `NODE_ENV=test` the project pre-warm (viewer child + cadgen daemon on project open) is off; `1` turns it on, as `tests/e2e/prewarm.spec.ts` does. |
+| `HARDCORE_PREWARM` | Under `NODE_ENV=test` both pre-warms are off — the project's (viewer child + cadgen daemon on project open) and the agents' (one idle adapter per agent in the index, see "Opening a session"); `1` turns them on, as `tests/e2e/prewarm.spec.ts` and `tests/e2e/reconnect.spec.ts` do. |
 | `HARDCORE_FAKE_AGENT` | Launch this stdio ACP agent instead of whatever the registry says, for every provider. The session and git suites point it at `tests/fake-agent/index.mjs`; a session needs an agent to exist at all, and a real one would make the suite a test of somebody's login state. |
 Two more decide whether the window is seen at all:
 
@@ -191,7 +191,14 @@ watched, a shell, a session and the CAD viewer all running, and fails above
 two seconds (see Quitting, below). `persistence.spec.ts` launches the app
 twice against one user-data directory — a project, a session with the fake
 agent, `app.quit()`, relaunch — and asserts both come back and the session's
-transcript resumes through `session/load`.
+transcript resumes through `session/load`. `reconnect.spec.ts` is what a
+click on a session row costs (see "Opening a session", under ACP): a
+disconnected thread painted from its snapshot inside 300 ms with the
+reconnecting line under it, switching between two threads with no spinner
+either way, and — across two launches against one user-data directory, with
+`HARDCORE_PREWARM=1` — the first load adopting the warm adapter, asserted
+from main's own timing line. Its fake agent runs with `--load-delay`, because
+an instant reconnect is a state nobody can look at.
 
 The CAD tests run against whatever runtime the app resolves on its own (see
 CAD runtime, below): the bundled one once `npm run bundle:runtime` has run,
@@ -1218,6 +1225,60 @@ Two things learned from the real adapters that the code now depends on:
   marker. The Claude fixture on this machine is the auth-failure exchange for
   that reason (`claude-code-auth-required.jsonl`); a machine with a signed-in
   `claude` (`claude auth status` → `loggedIn: true`) records a full session.
+
+### Opening a session
+
+The agent owns the transcript, so a session that is not connected has
+nothing to draw and getting it back is a spawn, an `initialize` and a
+`session/load`. Measured on this machine with the npx cache warm, per phase
+(`src/main/acp/timing.ts` logs the same line at every load):
+
+| | spawn + `initialize` | `session/load` | cold total | with a warm adapter |
+| --- | --- | --- | --- | --- |
+| Claude Code | 0.95–1.16 s | 1.41–1.47 s | **2.2–2.6 s** | 1.29 s |
+| Codex | 0.66–0.72 s | 0.15–0.20 s | **0.8–0.9 s** | 0.20 s |
+
+That was a spinner over the whole pane, and what replaces it is a paint in
+**30–40 ms** with the reconnect underneath. Three mechanisms, each a module
+beside `sessions.ts`:
+
+- **The snapshot** (`acp/snapshots.ts`, migration 10). Every reduced state
+  main sees is written to sqlite, debounced by 750 ms, and clicking a
+  disconnected row paints *that* — 30–40 ms, measured by
+  `tests/e2e/reconnect.spec.ts` — with `Reconnecting…` in the composer's row
+  while the real load runs behind it. The live state replaces the picture
+  when it lands, and the replay's reducer events are dropped in the meantime
+  (`reconnecting` in `state/acp.ts`) or every turn would arrive twice. The
+  cap is **4 KB per bulk field of a tool call** (`stream`, each text or diff
+  in `content`, and `input`/`output`, which are dropped rather than
+  truncated) and **512 KB of JSON per session**, met by dropping the oldest
+  turns; both apply to the snapshot only, never to the live state or to
+  anything the agent is told. A session created before this migration has no
+  snapshot and still waits behind "Connecting to …".
+- **The keep-alive** (`acp/live.ts`). Selecting another session closes
+  nothing: four adapters stay alive behind the sessions that are not on
+  screen, so switching back is a paint with no load at all. The oldest
+  beyond four is closed and its row goes to `closed`, which is what makes
+  the next click on it reconnect. A turn in flight is never evicted — the
+  limit is exceeded until it ends.
+- **The warm pool** (`acp/warm.ts`). A second and a half after launch, one
+  idle adapter per agent the index says is in use is spawned and
+  `initialize`d, and the first `create` or `load` for that agent adopts it
+  instead of spawning (`warm=yes` in the timing line). It is worth the
+  machinery because that is where the seconds are: measured against the real
+  adapters, a load drops from 2.16 s to 1.29 s for Claude and from 0.90 s to
+  0.20 s for Codex. The `spawn()` call itself is a millisecond — what costs
+  is the adapter's own boot, and it shows up inside the `initialize` round
+  trip.
+  One per agent, handed out once and replaced. An adapter cannot be moved
+  between directories, so it is matched on the `cwd` it was spawned in: a
+  worktree session spawns its own. There are no sessions in the index on a
+  first launch, so this does nothing until the second — and it is gated the
+  way the CAD pre-warm is (`HARDCORE_PREWARM=1` under `NODE_ENV=test`).
+
+What is left of the seconds is the `session/load` replay itself, which is
+the agent's own work and is now behind a transcript rather than in front of
+one.
 
 ## Git modes and worktrees
 
