@@ -28,7 +28,7 @@ declare const window: {
     settings: { set(patch: Record<string, unknown>): Promise<unknown> };
     sessions: {
       create(input: { projectId: string; agentId: string; cwd: string; gitMode: "none" }): Promise<{ id: string }>;
-      setApprovalMode(input: { id: string; mode: "approve-for-me" }): Promise<void>;
+      setMode(input: { id: string; modeId: string }): Promise<void>;
       prompt(input: { id: string; content: Array<{ type: "text"; text: string }> }): Promise<{ stopReason: string }>;
       state(input: { id: string }): Promise<{ turns: Array<{ role: string; parts: Array<Record<string, unknown>> }> } | null>;
       close(input: { id: string }): Promise<void>;
@@ -113,7 +113,10 @@ test("a Codex session opens a STEP in the explorer through open_file", async () 
     { projectId: added.id, cwd: project },
   );
   sessionId = session.id;
-  await page.evaluate((id) => window.hardcore.sessions.setApprovalMode({ id, mode: "approve-for-me" }), session.id);
+  // Full access, so the one thing that could stop this run — a permission
+  // request nobody is here to answer — is never asked. The session's mode is
+  // the only control over that; the app answers nothing on its own.
+  await page.evaluate((id) => window.hardcore.sessions.setMode({ id, modeId: "agent-full-access" }), session.id);
 
   // The prompt names the tool, so the run is about the plumbing rather than
   // about whether the model chooses to look at a file.

@@ -1,14 +1,15 @@
 /**
  * What each agent's sessions can be configured with, remembered between them.
  *
- * The composer's model and effort chips are drawn from a live session's
- * `configOptions`, which is the only place an agent says which models it has.
- * The new-session screen has no session, so it reads this instead: every
- * connected session's options are written here against its agent, an agent
- * that has never run in this app is **probed** once — spawn the adapter,
- * `initialize`, `session/new`, keep the config options, close without
- * prompting — and the model and effort chosen anywhere are stored as that
- * agent's defaults, which `SessionManager.create` applies to the next one.
+ * The composer's model, effort and mode chips are drawn from a live session's
+ * `configOptions` and `modes`, which is the only place an agent says which
+ * models and which modes it has. The new-session screen has no session, so it
+ * reads this instead: every connected session's options and modes are written
+ * here against its agent, an agent that has never run in this app is
+ * **probed** once — spawn the adapter, `initialize`, `session/new`, keep what
+ * it answered, close without prompting — and the model, effort and mode
+ * chosen anywhere are stored as that agent's defaults, which
+ * `SessionManager.create` applies to the next one.
  *
  * A probe that fails is silence, not an error: an agent that is not installed
  * or not signed in contributes no models to the new-session menu, which is
@@ -19,17 +20,23 @@
  * Dependencies are injected — storage, the probe, the broadcast — so this file
  * has no Electron, no sqlite and no adapter of its own.
  */
-import type { ConfigOption } from "../../shared/acp/types";
-import { effortOption, modelOption } from "../../shared/acp/options";
+import type { ConfigOption, SessionMode } from "../../shared/acp/types";
+import { effortOption, modeOption, modelOption } from "../../shared/acp/options";
 import type { AgentOptions } from "../../shared/ipc/agent-options";
+
+/** What an agent last said a session of its own can be configured with. */
+export type AgentSnapshot = { configOptions: ConfigOption[]; modes: SessionMode[] };
 
 export type AgentOptionsDeps = {
   read(): AgentOptions[];
   get(agentId: string): AgentOptions | null;
-  writeOptions(agentId: string, options: ConfigOption[]): void;
-  writeDefaults(agentId: string, defaults: { model?: string | null; effort?: string | null }): void;
+  writeOptions(agentId: string, options: ConfigOption[], modes: SessionMode[]): void;
+  writeDefaults(
+    agentId: string,
+    defaults: { model?: string | null; effort?: string | null; mode?: string | null },
+  ): void;
   /** Spawn the agent far enough to read its `session/new` reply. */
-  probe(agentId: string, projectId: string | null): Promise<ConfigOption[]>;
+  probe(agentId: string, projectId: string | null): Promise<AgentSnapshot>;
   onChange(all: AgentOptions[]): void;
   /** Failures land here rather than anywhere a person can see them. */
   onProbeFailed?: (agentId: string, error: unknown) => void;
@@ -51,32 +58,41 @@ export class AgentOptionStore {
   }
 
   /** The values a new session with this agent should start at. */
-  defaults(agentId: string): { model: string | null; effort: string | null } {
+  defaults(agentId: string): { model: string | null; effort: string | null; mode: string | null } {
     const row = this.deps.get(agentId);
-    return { model: row?.defaultModel ?? null, effort: row?.defaultEffort ?? null };
+    return {
+      model: row?.defaultModel ?? null,
+      effort: row?.defaultEffort ?? null,
+      mode: row?.defaultMode ?? null,
+    };
   }
 
   /**
-   * A live session's options, against its agent. Called on `session/new`,
-   * `session/load` and every `config_option_update`, so the cache is a
-   * snapshot of the last session anyone actually ran.
+   * A live session's options and modes, against its agent. Called on
+   * `session/new`, `session/load` and every `config_option_update`, so the
+   * cache is a snapshot of the last session anyone actually ran.
    */
-  remember(agentId: string, options: ConfigOption[]): void {
-    if (options.length === 0) {
+  remember(agentId: string, options: ConfigOption[], modes: SessionMode[] = []): void {
+    if (options.length === 0 && modes.length === 0) {
       return;
     }
     const before = this.deps.get(agentId);
-    this.deps.writeOptions(agentId, options);
+    this.deps.writeOptions(agentId, options, modes);
     this.failed.delete(agentId);
-    if (!sameOptions(before?.options ?? [], options)) {
+    if (!same(before?.options ?? [], options) || !same(before?.modes ?? [], modes)) {
       this.deps.onChange(this.list());
     }
   }
 
   /**
-   * The model or effort a session was just switched to, so the next session
-   * starts where the last one ended. Anything else the agent exposes is
-   * session-scoped and is not remembered.
+   * The model, effort or mode a session was just switched to, so the next
+   * session starts where the last one ended. Anything else the agent exposes
+   * is session-scoped and is not remembered.
+   *
+   * The mode is here as well as in `rememberMode` because an agent that
+   * sends its modes as a `mode` config option (Codex) switches them through
+   * `set_config_option`, and one that sends `modes` (Claude) through
+   * `set_mode`; the chip is the same chip either way.
    */
   rememberChoice(agentId: string, configId: string, value: string | boolean, options: ConfigOption[]): void {
     if (typeof value !== "string") {
@@ -84,14 +100,25 @@ export class AgentOptionStore {
     }
     const model = modelOption(options);
     const effort = effortOption(options);
+    const mode = modeOption(options);
     if (model && configId === model.id) {
       this.setDefaults(agentId, { model: value });
     } else if (effort && configId === effort.id) {
       this.setDefaults(agentId, { effort: value });
+    } else if (mode && configId === mode.id) {
+      this.setDefaults(agentId, { mode: value });
     }
   }
 
-  setDefaults(agentId: string, defaults: { model?: string | null; effort?: string | null }): AgentOptions[] {
+  /** The mode a live session was switched into, through `session/set_mode`. */
+  rememberMode(agentId: string, modeId: string): void {
+    this.setDefaults(agentId, { mode: modeId });
+  }
+
+  setDefaults(
+    agentId: string,
+    defaults: { model?: string | null; effort?: string | null; mode?: string | null },
+  ): AgentOptions[] {
     this.deps.writeDefaults(agentId, defaults);
     const all = this.list();
     this.deps.onChange(all);
@@ -114,9 +141,9 @@ export class AgentOptionStore {
     }
     const probe = this.deps
       .probe(agentId, projectId)
-      .then((options) => {
-        if (options.length > 0) {
-          this.remember(agentId, options);
+      .then((snapshot) => {
+        if (snapshot.configOptions.length > 0 || snapshot.modes.length > 0) {
+          this.remember(agentId, snapshot.configOptions, snapshot.modes);
         } else {
           this.failed.add(agentId);
         }
@@ -138,6 +165,6 @@ export class AgentOptionStore {
   }
 }
 
-function sameOptions(before: ConfigOption[], after: ConfigOption[]): boolean {
+function same(before: unknown, after: unknown): boolean {
   return JSON.stringify(before) === JSON.stringify(after);
 }

@@ -14,7 +14,7 @@ import { Code2, Eye, Palette, PanelRight } from "lucide-react";
 
 import type { FileKind, FileStat } from "@shared/ipc/explorer";
 
-import { CAD_PANEL, panelOpen, toggleCadPanel, type PanelsFor } from "./panels";
+import { CAD_PANEL, SOURCE_PANEL, type PanelsFor } from "./panels";
 
 /** The renderers, in the order a reader should meet them. */
 export type RendererId = "markdown" | "code" | "image" | "pdf" | "cad" | "binary";
@@ -39,9 +39,10 @@ const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
  *
  * `panels` is what puts toggles in the nav row (`panels.ts`): markdown has
  * one, the two readings of the same bytes; a CAD file has two, the theme
- * editor and the file sheet, which the viewer's surface draws and this app
- * drives because it hides that surface's own top bar. Code, images and PDFs
- * have none, and a kind with none puts nothing in the row.
+ * editor and the file sheet, which the viewer's surface draws into this
+ * app's panel column and this app drives, because that surface's own top bar
+ * — where its toggles live standalone — is hidden here. Code, images and
+ * PDFs declare none, and a kind with none has the tree alone in the row.
  *
  * CAD files have an XML source too (`.urdf` and friends), and still no source
  * panel: the surface that renders them is a 3D scene, and a second editor
@@ -56,45 +57,45 @@ export type RendererTraits = {
 };
 
 /**
- * Markdown's one panel: the same bytes read as a document or as source. The
- * label is what pressing it does, and `open` is "source is showing" — the
- * files toggle at the end of the row is named the same way.
+ * Markdown's one panel: the same bytes read as a document or as source.
+ *
+ * The one panel that is not a column — the source IS the body — and still
+ * one of the list, so opening it closes the tree the way opening the tree
+ * closes it. The label is what pressing it does.
  */
-const markdownPanels: PanelsFor = ({ viewSource, setViewSource }) => [
+const markdownPanels: PanelsFor = ({ open }) => [
   {
-    id: "source",
-    label: viewSource ? "View preview" : "View source",
-    icon: viewSource ? Eye : Code2,
-    open: viewSource,
-    onToggle: () => setViewSource(!viewSource),
+    id: SOURCE_PANEL,
+    label: open === SOURCE_PANEL ? "View preview" : "View source",
+    icon: open === SOURCE_PANEL ? Eye : Code2,
+    content: "body",
   },
 ];
 
 /**
- * A CAD file's two: the viewer's theme editor and its file sheet. They are
- * one right-hand panel with two contents, and the surface is what enforces
- * that — opening either closes the other and says so, and the record these
- * read follows what it says rather than guessing.
+ * A CAD file's two: the viewer's theme editor and its file sheet, drawn by
+ * the viewer's surface into the panel column this app owns (`panelSlot`).
+ * The sheet is what a CAD tab opens with — a STEP file's tree and its
+ * measurements are the reason the tab is open.
  *
  * Nothing until the surface is up: a CAD tab whose runtime did not start
  * shows a failure card, and two toggles over a card would open nothing.
  */
-const cadPanels: PanelsFor = ({ open, setOpen, ready }) =>
+const cadPanels: PanelsFor = ({ ready }) =>
   ready
     ? [
         {
           id: CAD_PANEL.theme,
           label: "Theme settings",
           icon: Palette,
-          open: panelOpen(open, CAD_PANEL.theme),
-          onToggle: () => setOpen(toggleCadPanel(open, CAD_PANEL.theme)),
+          content: "slot",
         },
         {
           id: CAD_PANEL.fileSheet,
           label: "File sheet",
           icon: PanelRight,
-          open: panelOpen(open, CAD_PANEL.fileSheet),
-          onToggle: () => setOpen(toggleCadPanel(open, CAD_PANEL.fileSheet)),
+          content: "slot",
+          defaultOpen: true,
         },
       ]
     : [];

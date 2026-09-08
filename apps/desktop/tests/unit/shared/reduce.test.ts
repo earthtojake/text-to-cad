@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { allToolCalls, lastAgentText, reduce } from "@shared/acp/reduce";
 import {
+  SessionEventSchema,
   SessionStateSchema,
   initialSessionState,
   type SessionEvent,
@@ -204,6 +205,19 @@ describe("reduce: permissions", () => {
     state = reduce(state, { type: "prompt/end", stopReason: "cancelled", usage: null, at });
     expect(state.pendingPermissions).toEqual([]);
     expect(state.status).toBe("idle");
+  });
+
+  /**
+   * There is no app-side approval level any more: the session's mode is the
+   * whole of what the person decides, so a state that carried an
+   * `approvalMode` and an event that changed it would be a second answer to
+   * a question that has one.
+   */
+  it("has no approval mode of its own, in the state or in the events", () => {
+    expect(initialSessionState("s1", "fake")).not.toHaveProperty("approvalMode");
+    expect(
+      SessionEventSchema.safeParse({ type: "approval", mode: "approve-for-me", at }).success,
+    ).toBe(false);
   });
 });
 

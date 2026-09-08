@@ -5,11 +5,23 @@
  *
  *   node tests/fake-agent/index.mjs                       the built-in script
  *   node tests/fake-agent/index.mjs --fixture <file.jsonl> replay a recording
+ *   node tests/fake-agent/index.mjs --mode-option           modes as a `mode`
+ *                                                          config option
+ *
+ * `--mode-option` is the second shape ACP allows for the same thing: the
+ * session answers with **no** `modes` and a `mode`-category select config
+ * option instead, switched by `session/set_config_option` — which is how the
+ * app's one mode chip has to work for an adapter that sends it that way
+ * (`src/shared/acp/options.ts`, `modeChoice`). Everything else is identical,
+ * including which mode asks about what.
  *
  * The built-in script reacts to words in the prompt so a test can ask for
  * exactly the behaviour it is checking:
  *
- *   "permission"  ask session/request_permission before the tool call
+ *   "permission"  ask session/request_permission before the tool call —
+ *                 unless the session is in the full-access mode, which asks
+ *                 about nothing, the way Claude's `Bypass permissions` and
+ *                 Codex's `Full access` do
  *   "terminal"    create a terminal (`echo` + args), poll it, wait, release
  *   "read"        fs/read_text_file on the path after "read "
  *   "write"       fs/write_text_file "hello" to the path after "write "
@@ -45,10 +57,11 @@
  *   "which"       run `command -v cadgen` in a terminal, so a test can see
  *                 what a session's PATH resolves `cadgen` to
  *   "applied"     reply with what the client configured on this session and
- *                 in which order — `model,reasoning_effort,mode:auto` — so a
- *                 test can assert that a new session applies the stored
- *                 model before the effort (the model decides which efforts
- *                 exist) and lands in the agent's own auto mode
+ *                 in which order — `model,reasoning_effort,mode:auto` — plus
+ *                 the mode it ended in, so a test can assert that a new
+ *                 session applies the stored model before the effort (the
+ *                 model decides which efforts exist) and lands in the mode
+ *                 the new-session screen's chip was on
  *
  * and always ends with the text "ok" and `end_turn` (or `cancelled`).
  *
@@ -93,6 +106,8 @@ function record(kind, params) {
 
 const fixturePath = args.includes("--fixture") ? args[args.indexOf("--fixture") + 1] : null;
 const fixture = fixturePath ? loadFixture(fixturePath) : null;
+/** Codex's shape: no `modes`, a `mode` config option carrying the same list. */
+const modeAsOption = args.includes("--mode-option");
 
 const stream = ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin));
 
@@ -114,20 +129,42 @@ const applied = [];
 const refuse = process.env.FAKE_AGENT_REFUSE || null;
 
 /**
- * The session's modes. `auto` carries ACP's `_meta.kind: auto_review`, which
- * is how both real adapters name their own auto-approval preset — and how
- * the app finds it without knowing either provider's id for it.
+ * The session's modes, named the way Claude names its own. `auto` carries
+ * ACP's `_meta.kind: auto_review`, which is how both real adapters name their
+ * own auto-approval preset — and how the app finds it without knowing either
+ * provider's id for it; `full` carries `full_access`, the one mode that asks
+ * about nothing at all, and the one the menu says so under.
  */
-function availableModes() {
+function modeList() {
   return [
-    { id: "default", name: "Default", _meta: { kind: "standard" } },
+    { id: "default", name: "Manual", _meta: { kind: "standard" } },
     { id: "plan", name: "Plan", description: "Read only", _meta: { kind: "plan" } },
     { id: "auto", name: "Auto", description: "Answers its own permission requests", _meta: { kind: "auto_review" } },
+    { id: "full", name: "Full access", description: "Never asks", _meta: { kind: "full_access" } },
   ];
+}
+
+/** The `mode` config option, for the `--mode-option` shape only. */
+function modeConfigOption() {
+  return {
+    id: "mode",
+    name: "Mode",
+    description: "Approval and sandboxing preset for the session",
+    category: "mode",
+    type: "select",
+    currentValue: currentModeId,
+    options: modeList().map((mode) => ({
+      value: mode.id,
+      name: mode.name,
+      description: mode.description,
+      _meta: mode._meta,
+    })),
+  };
 }
 
 function configOptions() {
   return [
+    ...(modeAsOption ? [modeConfigOption()] : []),
     {
       id: "model",
       name: "Model",
@@ -191,7 +228,7 @@ new AgentSideConnection((conn) => ({
     applied.length = 0;
     return {
       sessionId: SESSION_ID,
-      modes: { currentModeId, availableModes: availableModes() },
+      ...(modeAsOption ? {} : { modes: { currentModeId, availableModes: modeList() } }),
       configOptions: configOptions(),
     };
   },
@@ -210,7 +247,9 @@ new AgentSideConnection((conn) => ({
       sessionId: params.sessionId,
       update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "earlier reply" } },
     });
-    return { modes: { currentModeId, availableModes: availableModes() } };
+    return modeAsOption
+      ? { configOptions: configOptions() }
+      : { modes: { currentModeId, availableModes: modeList() } };
   },
 
   async setSessionMode(params) {
@@ -227,9 +266,12 @@ new AgentSideConnection((conn) => ({
     if (refuse && params.configId === refuse) {
       throw RequestError.invalidParams(`${params.configId} is not available`);
     }
-    applied.push(params.configId);
+    applied.push(params.configId === "mode" ? `mode:${params.value}` : params.configId);
     if (params.configId in chosen) {
       chosen[params.configId] = String(params.value);
+    }
+    if (params.configId === "mode") {
+      currentModeId = String(params.value);
     }
     // Both adapters also announce the new set on the session; the client
     // caches it against the agent, so the notification is part of the shape.
@@ -424,6 +466,15 @@ async function script(conn, params) {
 
   if (text.includes("permission")) {
     await send({ sessionUpdate: "tool_call", toolCallId: "cmd-1", title: "Run ls", kind: "execute", status: "pending", rawInput: { command: "ls" } });
+    // Full access asks about nothing: the command just runs. This is the
+    // whole point of the mode being the permission control — the app answers
+    // no requests on anybody's behalf, so a mode that does not ask is the
+    // only way nothing is asked.
+    if (currentModeId === "full") {
+      await send({ sessionUpdate: "tool_call_update", toolCallId: "cmd-1", status: "completed", rawOutput: { selected: "full-access" } });
+      await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "ok" } });
+      return { stopReason: "end_turn" };
+    }
     const answer = await conn.requestPermission({
       sessionId,
       toolCall: { toolCallId: "cmd-1", title: "Run ls", kind: "execute", status: "pending", rawInput: { command: "ls" } },

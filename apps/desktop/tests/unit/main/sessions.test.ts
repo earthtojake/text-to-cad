@@ -162,15 +162,6 @@ describe("SessionManager", () => {
     expect(manager.get(session.id)?.status).toBe("idle");
   });
 
-  it("approval mode set before connecting applies to the connection", async () => {
-    const { manager, cwd } = await setup();
-    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
-    manager.setApprovalMode(session.id, "approve-for-me");
-    const { stopReason } = await manager.prompt(session.id, [{ type: "text", text: "needs permission" }]);
-    expect(stopReason).toBe("end_turn");
-    expect(manager.state(session.id)?.approvalMode).toBe("approve-for-me");
-  });
-
   it("close keeps the row, load reconnects through session/load, delete forgets it", async () => {
     const { repo, manager, cwd } = await setup();
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
@@ -314,23 +305,36 @@ describe("SessionManager", () => {
   });
 
   /* ------------------------------------------------------------------ */
-  /* P2: the model, the effort and the agent's own auto mode             */
+  /* P2: the model, the effort and the mode                              */
   /* ------------------------------------------------------------------ */
 
   /** A stand-in for the option store, recording what the manager asked it. */
-  function optionRecorder(defaults: { model: string | null; effort: string | null }) {
-    const remembered: { agentId: string; ids: string[] }[] = [];
+  function optionRecorder(defaults: {
+    model: string | null;
+    effort: string | null;
+    mode?: string | null;
+  }) {
+    const remembered: { agentId: string; ids: string[]; modes: string[] }[] = [];
     const choices: { agentId: string; configId: string; value: string | boolean }[] = [];
+    const modes: { agentId: string; modeId: string }[] = [];
     return {
       remembered,
       choices,
+      modes,
       deps: {
-        defaults: () => defaults,
-        remember: (agentId: string, options: { id: string }[]) => {
-          remembered.push({ agentId, ids: options.map((option) => option.id) });
+        defaults: () => ({ ...defaults, mode: defaults.mode ?? null }),
+        remember: (agentId: string, options: { id: string }[], sessionModes: { id: string }[]) => {
+          remembered.push({
+            agentId,
+            ids: options.map((option) => option.id),
+            modes: sessionModes.map((mode) => mode.id),
+          });
         },
         rememberChoice: (agentId: string, configId: string, value: string | boolean) => {
           choices.push({ agentId, configId, value });
+        },
+        rememberMode: (agentId: string, modeId: string) => {
+          modes.push({ agentId, modeId });
         },
       },
     };
@@ -357,8 +361,42 @@ describe("SessionManager", () => {
     const state = manager.state(session.id)!;
     expect(state.configOptions.find((option) => option.id === "model")?.currentValue).toBe("smart");
     expect(state.currentModeId).toBe("auto");
-    // And the session's own snapshot went to the cache.
+    // And the session's own snapshot went to the cache — the modes with the
+    // options, because the new-session screen's mode chip is drawn from them.
     expect(recorder.remembered.at(-1)?.ids).toContain("model");
+    expect(recorder.remembered.at(-1)?.modes).toEqual(["default", "plan", "auto", "full"]);
+  });
+
+  /**
+   * The mode the person left this agent in wins over the auto preset: the
+   * new-session screen's chip is a default like the model and the effort,
+   * and `create` is where it is applied.
+   */
+  it("creates the session in the stored mode rather than the auto one", async () => {
+    const recorder = optionRecorder({ model: null, effort: null, mode: "plan" });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    expect(await appliedIn(manager, session.id)).toBe("applied: mode:plan in plan");
+  });
+
+  /**
+   * The fake starts in `default`, which is what "Manual" is: a stored
+   * default of it means the session is created with no `set_mode` at all,
+   * rather than being moved to the auto preset.
+   */
+  it("leaves the agent where it starts when that is the stored mode", async () => {
+    const recorder = optionRecorder({ model: null, effort: null, mode: "default" });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    expect(await appliedIn(manager, session.id)).toBe("applied:  in default");
+  });
+
+  /** A mode the agent dropped is not a mode; the auto preset is the fallback. */
+  it("ignores a stored mode the agent no longer offers", async () => {
+    const recorder = optionRecorder({ model: null, effort: null, mode: "yolo" });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    expect(await appliedIn(manager, session.id)).toBe("applied: mode:auto in auto");
   });
 
   it("sets nothing it does not have to: no defaults, and a mode already auto", async () => {
@@ -388,7 +426,7 @@ describe("SessionManager", () => {
     expect(await appliedIn(manager, session.id)).toBe("applied: reasoning_effort,mode:auto in auto");
   });
 
-  it("remembers the model and effort a live session was switched to", async () => {
+  it("remembers the model, effort and mode a live session was switched to", async () => {
     const recorder = optionRecorder({ model: null, effort: null });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
@@ -398,6 +436,10 @@ describe("SessionManager", () => {
       { agentId: "claude-code", configId: "model", value: "smart" },
       { agentId: "claude-code", configId: "reasoning_effort", value: "low" },
     ]);
+    // Switching the mode mid-thread is the same decision as making it on the
+    // new-session screen, so it becomes this agent's default too.
+    await manager.setMode(session.id, "plan");
+    expect(recorder.modes).toEqual([{ agentId: "claude-code", modeId: "plan" }]);
   });
 
   it("probes an agent for its config options without leaving a session behind", async () => {
@@ -405,8 +447,11 @@ describe("SessionManager", () => {
     // launch override — which is also the rule: a probe never `npx`-fetches an
     // adapter for an agent whose CLI is not on the machine.
     const { manager, repo, cwd } = await setup({ launchOverride: () => fakeProvider.launch });
-    const options = await manager.probeOptions({ agentId: "claude-code", cwd, projectId: "p1" });
-    expect(options.map((option) => option.id)).toEqual(["model", "reasoning_effort"]);
+    const snapshot = await manager.probeOptions({ agentId: "claude-code", cwd, projectId: "p1" });
+    expect(snapshot.configOptions.map((option) => option.id)).toEqual(["model", "reasoning_effort"]);
+    // The modes come back too: they are the other half of what a session
+    // with no `mode` config option would draw its one mode chip from.
+    expect(snapshot.modes.map((mode) => mode.id)).toEqual(["default", "plan", "auto", "full"]);
     expect(repo.list()).toHaveLength(0);
     expect(manager.list()).toHaveLength(0);
   });

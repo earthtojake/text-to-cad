@@ -87,8 +87,8 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await expect(page.getByRole("heading", { name: `What should we build in ${projectName}?` })).toBeVisible();
   // The agent chip fills in once the detector has probed; sending before
   // that would have nothing to launch. The new-session context — project,
-  // git mode — is a strip ABOVE the box; `+`, approval, model and effort are
-  // in the row UNDER it, the same row a live session has.
+  // git mode — is a strip ABOVE the box; `+`, the mode, the model and the
+  // effort are in the row UNDER it, the same row a live session has.
   const strip = page.locator("[data-context-strip]");
   const actionRow = page.locator("[data-new-session] [data-composer-row]");
   await expect(strip.locator("[data-chip=project]")).toContainText(projectName);
@@ -101,7 +101,13 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await expect(actionRow.locator("[data-chip=model]")).toContainText("Fast", { timeout: 30_000 });
   await expect(actionRow.locator("[data-chip=effort]")).toContainText("Medium");
   await expect(strip.locator("[data-chip=agent]")).toHaveCount(0);
-  await expect(page.locator("[data-composer-row] [data-chip=approval]")).toContainText("Ask");
+  // The mode: the app's one permission control, here as in a live thread,
+  // preselected at the agent's own auto preset. Nothing is left of the
+  // second, app-side approval level it replaced.
+  await expect(actionRow.locator("[data-chip=mode]")).toContainText("Auto");
+  await expect(page.locator("[data-chip=approval]")).toHaveCount(0);
+  await expect(page.getByText("Approve for me")).toHaveCount(0);
+  await expect(page.getByText("Ask", { exact: true })).toHaveCount(0);
   await expect(page.locator("[data-composer] form [data-chip]")).toHaveCount(0);
   {
     // Strip above the box, row below it: the same shape as a live session's.
@@ -184,7 +190,7 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await expect(row).toHaveAttribute("data-status", "idle");
   await shoot("session-completed.png");
 
-  // The composer's row is one line UNDER the box: `+` and approval on the
+  // The composer's row is one line UNDER the box: `+` and the mode on the
   // left, the model, the effort and the context ring on the right, nothing
   // wrapped. The fake agent exposes a model and an effort, so the
   // right-hand chips are there to measure.
@@ -566,6 +572,101 @@ test("the sidebar renames and archives a session", async () => {
   await row.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Archive" }).click();
   await expect(row).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /What should we build in/ })).toBeVisible();
+});
+
+
+/**
+ * The mode is the app's one permission control, and it is on the
+ * new-session screen too: what the session will be created in.
+ *
+ * There used to be two levels — the agent's mode *and* an "Ask / Approve for
+ * me" chip of Hardcore's own over the top of it — which is two answers to
+ * one question and no way to tell which one stopped a request. This is the
+ * one that is left, and these are the two ends of it: Manual, where the
+ * agent asks and the transcript waits, and full access, where nothing is
+ * asked because nothing asks.
+ */
+test("the new session is created in the mode its chip is on, and Manual waits", async () => {
+  const actionRow = page.locator("[data-new-session] [data-composer-row]");
+  const chip = actionRow.locator("[data-chip=mode]");
+  // Preselected at the agent's own auto preset, the way the model and the
+  // effort chips are preselected at what it last ran with.
+  await expect(chip).toContainText("Auto");
+  await chip.click();
+  const menu = page.getByRole("menu");
+  // The agent's own names, and no paragraph under any of them...
+  for (const name of ["Manual", "Plan", "Auto"]) {
+    const row = menu.getByRole("menuitemradio", { name, exact: true });
+    await expect(row).toBeVisible();
+    expect((await row.boundingBox())!.height).toBeLessThan(36);
+  }
+  // ...except the one that removes every checkpoint, which says so.
+  const full = menu.getByRole("menuitemradio", { name: /Full access/ });
+  await expect(full).toContainText("Never asks");
+  await expect(menu.locator("[data-mode-full-access]")).toHaveCount(1);
+  await shoot("session-new-mode-menu.png");
+
+  await menu.getByRole("menuitemradio", { name: "Manual", exact: true }).click();
+  await expect(chip).toContainText("Manual");
+  await expectNoChevrons();
+
+  const composer = page.getByPlaceholder("Do anything");
+  await composer.fill("permission to run ls");
+  await composer.press("Enter");
+
+  // Manual: the agent asks, the request is in the transcript, and the thread
+  // waits for the person — nothing in the app answers it.
+  const permission = page.locator("[data-permission][data-outcome=pending]");
+  await expect(permission).toBeVisible();
+  await expect(page.locator("[data-status-line]")).toContainText("Waiting for your approval");
+  await expect(page.locator("[data-composer-row] [data-chip=mode]")).toContainText("Manual");
+  await permission.getByRole("button", { name: "Yes", exact: true }).click();
+  await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
+
+  // And it was created in Manual: the fake reports what the client set on it
+  // and which mode it ended in, so no `mode:` at all is the assertion —
+  // `default` is where it starts and where the chip said to leave it.
+  await composer.fill("applied");
+  await composer.press("Enter");
+  await expect(page.locator("[data-turn][data-role=agent]").last()).toContainText("in default");
+  await expect(page.locator("[data-turn][data-role=agent]").last()).not.toContainText("mode:");
+});
+
+test("the full-access mode is never asked anything", async () => {
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  const chip = page.locator("[data-new-session] [data-composer-row] [data-chip=mode]");
+  // On one of the agent's own modes — the one it was last left in for this
+  // agent, else its auto preset (which is which is asserted per agent in
+  // `tests/unit/renderer/agent-options-store.test.tsx`).
+  await expect(chip).toContainText(/Manual|Plan|Auto|Full access/);
+  await chip.click();
+  await page.getByRole("menu").getByRole("menuitemradio", { name: /Full access/ }).click();
+  await expect(chip).toContainText("Full access");
+
+  const composer = page.getByPlaceholder("Do anything");
+  await composer.fill("permission to run ls");
+  await composer.press("Enter");
+  await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
+  // The same prompt as the test above, and no card: the request was never
+  // made. Nothing here auto-answered one.
+  await expect(page.locator("[data-permission]")).toHaveCount(0);
+  await expect(page.locator("[data-status-line]")).toHaveCount(0);
+  await composer.fill("applied");
+  await composer.press("Enter");
+  await expect(page.locator("[data-turn][data-role=agent]").last()).toContainText("mode:full in full");
+
+  // Left as the tests after this expect the sidebar: no rows under the
+  // project (the archive test before this left it that way).
+  const rows = page.locator("[data-session-row]");
+  // The first one, over and over: a list of handles taken before the first
+  // delete is a list of rows that no longer exist after it.
+  while ((await rows.count()) > 0) {
+    await rows.first().getByRole("button", { name: /actions$/ }).click();
+    await page.getByRole("menuitem", { name: "Delete" }).click();
+    await expect(page.getByRole("menuitem", { name: "Delete" })).toBeHidden();
+  }
+  await expect(rows).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /What should we build in/ })).toBeVisible();
 });
 

@@ -28,6 +28,7 @@ import {
 
 declare const window: {
   innerWidth: number;
+  localStorage: { getItem(key: string): string | null };
   hardcore: {
     projects: { addPath(request: { path: string }): Promise<{ id: string; name: string }> };
     settings: { set(patch: { theme?: string; cadPythonOverride?: string | null }): Promise<unknown> };
@@ -163,6 +164,9 @@ test("opens a markdown file as a preview, then as source", async () => {
   expect(sourceBox!.x + sourceBox!.width).toBeLessThanOrEqual(toggleBox!.x + 1);
   await expect(source).toHaveAttribute("aria-pressed", "false");
   await expect(source).toHaveAttribute("data-file-panel", "source");
+  // The tree is the open panel, and there is one panel column in the tab.
+  await expect(panels(page)).toHaveCount(1);
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
 
   await source.click();
   // Monaco is up, and it is showing the raw text — the `#` the preview ate.
@@ -172,10 +176,23 @@ test("opens a markdown file as a preview, then as source", async () => {
   const preview = page.getByRole("button", { name: "View preview" });
   await expect(preview).toHaveAttribute("aria-pressed", "true");
   expect(Math.abs((await toggle.boundingBox())!.x - toggleBox!.x)).toBeLessThan(1);
+  /*
+    ONE panel at a time, the tree included (the user's rule): the source view
+    is a panel of this list, so opening it closed the tree, and the files
+    toggle is no longer the pressed one. The tree used to be exempt — a
+    second column beside the renderer's panels, with a design of its own.
+  */
+  await expect(panels(page)).toHaveCount(0);
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(toggle).toHaveAttribute("aria-label", "Show files");
   await shoot("file-markdown-source.png");
 
-  await preview.click();
+  // ...and taking the tree back closes the source: back to the preview,
+  // without pressing the source toggle at all.
+  await toggle.click();
+  await expect(panels(page)).toHaveCount(1);
   await expect(page.getByRole("heading", { level: 1, name: "AGENTS.md" })).toBeVisible();
+  await expect(source).toHaveAttribute("aria-pressed", "false");
 });
 
 test("expands three levels of the tree, and keeps them", async () => {
@@ -303,9 +320,10 @@ test("navigates by the breadcrumb's menus", async () => {
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
 
-  // A code file declares no panels, so the row's right end is the files
-  // toggle alone (`renderers/panels.ts`).
-  await expect(header.locator("[data-file-panel]")).toHaveCount(0);
+  // A code file declares no panels of its own, so the tree is the whole list
+  // and the row's right end is the files toggle alone (`renderers/panels.ts`).
+  await expect(header.locator("[data-file-panel]")).toHaveCount(1);
+  await expect(header.locator("[data-file-panel]")).toHaveAttribute("data-file-panel", "tree");
   await expect(header.getByTestId("tree-toggle")).toBeVisible();
 
   await restoreLayout();
@@ -399,11 +417,18 @@ test("shows the runtime's own error for a STEP file when the runtime cannot star
   await expect(page.locator("[data-cad-failure=runtime-not-ready]")).toContainText("/nowhere/python");
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Runtime status" })).toBeVisible();
-  // And no panel toggles: the surface that draws those panels never came up,
-  // so the CAD declaration offers none (`renderers/panels.ts`). Two lit
-  // buttons over a failure card would open nothing.
-  await expect(page.locator("[data-file-panel]")).toHaveCount(0);
+  // And no CAD panel toggles: the surface that draws those panels never came
+  // up, so the CAD declaration offers none (`renderers/panels.ts`) and the
+  // tree is the whole list. Two lit buttons over a failure card would open
+  // nothing.
+  await expect(page.locator("[data-file-panel]")).toHaveCount(1);
+  await expect(page.locator("[data-file-panel]")).toHaveAttribute("data-file-panel", "tree");
   await expect(page.getByTestId("tree-toggle")).toBeVisible();
+  // ...so what the one panel column holds is the tree: the default falls to
+  // it when the renderer has declared nothing, rather than leaving a column
+  // with a panel in it that cannot be drawn.
+  await expect(panels(page)).toHaveCount(1);
+  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "tree");
   await shoot("file-cad-failed.png");
 
   // With the override gone the runtime is whatever the app resolves; Try
@@ -500,10 +525,14 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(tree).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole("tab", { name: "Measure" })).toBeVisible();
 
-  // At the explorer's default share the pane is too narrow for a model, a
-  // sheet and the file tree: the tree hides itself for this file (the
-  // header's toggle brings it back) and the sheet is a column to the right
-  // of the model — never a drawer over it — at 1440×900 and at 1280×800.
+  /*
+    A CAD tab opens with the viewer's file sheet as its ONE panel — a STEP
+    file's tree and its measurements are why the tab is open — so the files
+    toggle offers the tree rather than hiding it. The sheet is drawn in this
+    app's panel column (`panelSlot`), which is the same column the tree
+    would be in, to the right of the model and never a drawer over it, at
+    1440×900 and at 1280×800.
+  */
   await expect(page.getByRole("button", { name: "Show files" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Hide files" })).toHaveCount(0);
   await expect(page.getByRole("tree").first()).toBeVisible({ timeout: 120_000 });
@@ -513,11 +542,24 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await resizeWindow(1280, 800);
   await expectSheetBesideModel();
   await shoot("file-cad-default-1280x800.png", true);
-  // The toggle brings the tree back for this file, and it stays back.
+  /*
+    The files toggle puts the tree in that column, which closes the sheet:
+    one panel, one column, whatever is in it. The tree used to open BESIDE
+    the sheet — two columns, two designs — and this pane was too narrow to
+    hold both, which is why the tree used to hide itself here.
+  */
   await page.getByRole("button", { name: "Show files" }).click();
   await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
+  await expect(page.getByLabel("Filter files")).toBeVisible();
+  await expect(panels(page)).toHaveCount(1);
+  await expect(page.getByRole("tab", { name: "Measure" })).toHaveCount(0);
+  await shoot("file-cad-tree.png", true);
+  // ...and the sheet's own toggle brings it back, closing the tree.
+  await page.locator("header [data-file-panel='cad-file-sheet']").click();
+  await expect(page.getByRole("tab", { name: "Measure" })).toBeVisible();
+  await expect(page.getByLabel("Filter files")).toHaveCount(0);
+  await expect(panels(page)).toHaveCount(1);
   await resizeWindow(1440, 900);
-  await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
 
   // At the explorer's widest — the sidebar hidden and the session at its
   // 560px floor — the surface holds everything at once, which is how a person
@@ -544,9 +586,11 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
     and its file sheet, which `layout="desktop"` had left with no door in this
     app because that layout hides the top bar their toggles live in. Both sit
     left of the files toggle, which stays last and does not move for them, and
-    each is highlighted while its panel is up. They are one panel with two
-    contents, so opening either closes the other — the surface says so and the
-    highlight follows.
+    each is highlighted while its panel is up.
+
+    They and the file tree are ONE panel column with one design (the user's
+    rule): whichever is up, there is exactly one container in the tab, and
+    opening any of the three closes the other two.
   */
   const filesToggle = page.getByTestId("tree-toggle");
   const themePanel = page.locator("header [data-file-panel='cad-theme']");
@@ -572,10 +616,33 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(themePanel).toHaveAttribute("aria-pressed", "true");
   await expect(sheetPanel).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("tab", { name: "Tree" })).toHaveCount(0);
-  // The theme panel takes the sheet's place: same aside, different contents.
-  await expect(page.getByRole("complementary", { name: "Theme" })).toBeVisible();
+  // The theme panel takes the sheet's place in the SAME column: the viewer
+  // portals it into this app's panel container, so there is one of those and
+  // it names the panel that is in it.
+  await expect(panels(page)).toHaveCount(1);
+  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "cad-theme");
+  // The viewer's own panel, inside this app's frame: the surface names what
+  // it portaled, and it drew no aside of its own to put it in.
+  await expect(page.locator("[data-file-sheet='Theme']")).toBeVisible();
+  await expect(page.locator("[data-cad-surface] aside")).toHaveCount(0);
   await shoot("file-cad-theme.png", true);
   expect(Math.abs((await filesToggle.boundingBox())!.x - parked.x)).toBeLessThan(1);
+
+  // The files toggle takes that column for the tree, which closes the theme
+  // panel — the tree is one of these panels now, not a column beside them.
+  await filesToggle.click();
+  await expect(themePanel).toHaveAttribute("aria-pressed", "false");
+  await expect(filesToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(panels(page)).toHaveCount(1);
+  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "tree");
+  await expect(page.getByLabel("Filter files")).toBeVisible();
+  await shoot("file-cad-files.png", true);
+
+  // ...and the theme toggle takes it straight back off the tree.
+  await themePanel.click();
+  await expect(filesToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByLabel("Filter files")).toHaveCount(0);
+  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "cad-theme");
 
   // Opening the sheet closes the theme panel and swaps the highlight back,
   // and its sections are the STEP file's as before.
@@ -584,9 +651,57 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(themePanel).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("tab", { name: "Tree" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Measure" })).toBeVisible();
-  await expect(page.getByRole("complementary", { name: "Theme" })).toHaveCount(0);
+  await expect(panels(page)).toHaveCount(1);
+  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "cad-file-sheet");
   await expectSheetBesideModel();
   expect(Math.abs((await filesToggle.boundingBox())!.x - parked.x)).toBeLessThan(1);
+
+  /*
+    The CAD theme paints the SCENE and nothing else (the user's rule), and the
+    app's colour scheme paints the chrome. So a dark studio inside a light
+    window is a legal picture — and used to be an impossible one: the theme's
+    background luminance wrote `.dark` on the document, so opening a STEP file
+    under a dark preset repainted every panel, tab strip and menu in the app.
+
+    Cinematic is the test case: a real dark stage — charcoal glossy floor,
+    warm key light, dark materials — picked from the theme panel this app
+    now draws in its own column.
+  */
+  await themePanel.click();
+  const preset = panels(page).getByRole("combobox").first();
+  await expect(preset).toContainText("System");
+  await preset.click();
+  await page.getByRole("option", { name: "Cinematic" }).click();
+  await expect(preset).toContainText("Cinematic");
+  const paint = () => panels(page).evaluate((node) => node.ownerDocument.defaultView!.getComputedStyle(node).backgroundColor);
+  // The theme is dark and the chrome did NOT follow it: still the app's own
+  // dark, which is what it was before the preset changed.
+  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+  const themeBefore = await activeCadTheme(page);
+  expect(themeBefore, "the preset is stored by the viewer").toContain("cinematic");
+  const panelDark = await paint();
+
+  await page.evaluate(() => window.hardcore.settings.set({ theme: "light" }));
+  await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
+  // The panel's chrome went light with the app...
+  await expect.poll(paint).not.toBe(panelDark);
+  // ...and the theme did not move: the same dark stage under light chrome.
+  // (The scene's BACKDROP is the app's ground on purpose —
+  // `cadSceneBackgroundFor`, the surface's `sceneBackground` prop — so what
+  // must not change is the theme itself: its floor, grid, lights and
+  // materials.)
+  expect(await activeCadTheme(page)).toEqual(themeBefore);
+  await expect(preset).toContainText("Cinematic");
+  await shoot("file-cad-light-chrome.png", true);
+
+  // Back to the app's dark and the theme it came in with.
+  await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
+  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+  await expect.poll(paint).toBe(panelDark);
+  await preset.click();
+  await page.getByRole("option", { name: "System" }).click();
+  await expect(preset).toContainText("System");
+  await sheetPanel.click();
 
   await restoreLayout();
 });
@@ -933,19 +1048,40 @@ async function resizeWindow(width: number, height: number) {
  * width, and its right edge is the surface's. A drawer over the model would
  * fail the first; a sheet pinned to the window would fail the second.
  */
+/** The file tab's panel column — one of them, whatever panel is in it. */
+function panels(target: Page) {
+  return target.locator("[data-file-panel-container]");
+}
+
+/**
+ * The sheet is a column beside the model, never a drawer over it.
+ *
+ * It is the app's own panel column now (`FilePanel.tsx`) with the viewer's
+ * sheet portaled into it, so it sits BESIDE the surface rather than inside
+ * it: the model gets the whole surface and the pane is what the column takes
+ * its width from.
+ */
 async function expectSheetBesideModel() {
   const surface = page.locator("[data-cad-surface]");
-  const sheet = page.getByRole("tab", { name: "Tree" }).locator("xpath=ancestor::aside[1]");
-  await expect(sheet).toBeVisible();
+  const sheet = panels(page);
+  await expect(sheet).toHaveAttribute("data-file-panel-container", "cad-file-sheet");
+  await expect(page.getByRole("tab", { name: "Tree" })).toBeVisible();
   const surfaceBox = (await surface.boundingBox())!;
   const sheetBox = (await sheet.boundingBox())!;
   const where = `surface ${JSON.stringify(surfaceBox)} sheet ${JSON.stringify(sheetBox)}`;
-  expect(sheetBox.width, where).toBeGreaterThanOrEqual(240);
-  // The model keeps the rest of the surface: at 1280 the pane is 487px and
-  // the model 247, which is a model, not a sliver.
-  expect(sheetBox.x, where).toBeGreaterThan(surfaceBox.x + 200);
-  expect(Math.abs(sheetBox.x + sheetBox.width - (surfaceBox.x + surfaceBox.width)), where).toBeLessThan(2);
+  expect(sheetBox.width, where).toBeGreaterThanOrEqual(180);
+  // The model keeps the whole surface, and the sheet is to the right of it.
+  expect(sheetBox.x, where).toBeGreaterThanOrEqual(surfaceBox.x + surfaceBox.width - 2);
+  expect(surfaceBox.width, where).toBeGreaterThan(200);
   expect(sheetBox.height, where).toBeGreaterThan(surfaceBox.height * 0.9);
+}
+
+/**
+ * The CAD theme as the viewer stores it — the scene's settings, which the
+ * app's light/dark must not touch.
+ */
+async function activeCadTheme(target: Page): Promise<string | null> {
+  return target.evaluate(() => window.localStorage.getItem("cad-viewer:theme"));
 }
 
 /**

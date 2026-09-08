@@ -97,9 +97,36 @@ describe("runMigrations", () => {
     // already at 5, so only the migrations above it run.
     const sql = statements.join("\n");
     expect(sql).not.toContain("CREATE TABLE sessions");
-    for (const column of ["agent_id", "options", "options_at", "default_model", "default_effort"]) {
+    for (const column of [
+      "agent_id",
+      "options",
+      "options_at",
+      "default_model",
+      "default_effort",
+      // The one mode chip is drawn on the new-session screen too, so the
+      // modes and the mode picked for the next session are cached with them
+      // (migration 8).
+      "modes",
+      "default_mode",
+    ]) {
       expect(sql).toContain(column);
     }
+  });
+
+  /**
+   * The modes, added to a database that already has an `agent_options` row
+   * per agent: the mode chip is the app's one permission control and it is
+   * drawn before a session exists, so the cache needs the half of the
+   * `session/new` reply it was not keeping.
+   */
+  it("adds the modes columns to a database that already caches options", () => {
+    const { db, statements, version } = fakeDb(7);
+    expect(runMigrations(db, MIGRATIONS)).toBe(8);
+    expect(version()).toBe(8);
+    const sql = statements.join("\n");
+    expect(sql).not.toContain("CREATE TABLE agent_options");
+    expect(sql).toContain("ALTER TABLE agent_options ADD COLUMN modes TEXT");
+    expect(sql).toContain("ALTER TABLE agent_options ADD COLUMN default_mode TEXT");
   });
 
   /**
@@ -110,8 +137,8 @@ describe("runMigrations", () => {
    */
   it("adds the pinned column to a database that already has sessions", () => {
     const { db, statements, version } = fakeDb(6);
-    expect(runMigrations(db, MIGRATIONS)).toBe(7);
-    expect(version()).toBe(7);
+    expect(runMigrations(db, MIGRATIONS)).toBe(MIGRATIONS.at(-1)!.version);
+    expect(version()).toBe(MIGRATIONS.at(-1)!.version);
     const sql = statements.join("\n");
     expect(sql).not.toContain("CREATE TABLE sessions");
     expect(sql).toContain("ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 import type { DirEntry } from "@shared/ipc/explorer";
-import { PANE_LIMITS } from "@shared/types";
+import { FILE_PANEL_TREE, PANE_LIMITS } from "@shared/types";
 import type {
   BrowserTab,
   ExplorerRoot,
@@ -40,16 +40,20 @@ import type {
 /** How long a burst of changes is collected before it reaches sqlite. */
 const SAVE_DEBOUNCE_MS = 400;
 
-/** The file tree's geometry — a preference, not a per-tab property. */
-const TREE_WIDTH_KEY = "hardcore.explorer.treeWidth";
-const TREE_COLLAPSED_KEY = "hardcore.explorer.treeCollapsed";
+/**
+ * The file tab's panel column, in pixels — one width for every panel that
+ * can be in it (the tree, the CAD theme editor, the CAD file sheet), because
+ * it is one column. A preference, not a per-tab property; WHICH panel is
+ * open is per tab (`FileTabSchema.panel`).
+ */
+const PANEL_WIDTH_KEY = "hardcore.explorer.panelWidth";
 /** Whether the pane itself is closed, per project id (see `collapsed`). */
 const PANE_COLLAPSED_KEY = "hardcore.explorer.collapsed";
 /** How wide it is when it is open, per project id (see `width`). */
 const PANE_WIDTH_KEY = "hardcore.explorer.width";
-export const TREE_MIN_WIDTH = 180;
-export const TREE_MAX_WIDTH = 480;
-export const TREE_DEFAULT_WIDTH = 248;
+export const PANEL_MIN_WIDTH = 180;
+export const PANEL_MAX_WIDTH = 480;
+export const PANEL_DEFAULT_WIDTH = 248;
 
 function readLocal<T>(key: string, fallback: T, parse: (raw: string) => T): T {
   try {
@@ -125,7 +129,7 @@ const EMPTY_TREE: TreeState = { open: new Set([""]), listings: {} };
 
 /** Initial state for a new tab of each kind. */
 type TabInit = {
-  file: Partial<Pick<FileTab, "path" | "root" | "viewSource">>;
+  file: Partial<Pick<FileTab, "path" | "root" | "panel">>;
   review: Partial<Pick<ReviewTab, "scope" | "sessionId">>;
   browser: Partial<Pick<BrowserTab, "url">>;
   terminal: Partial<Pick<TerminalTab, "cwd" | "readOnly">>;
@@ -156,9 +160,8 @@ type ExplorerState = {
    * pane back at it. Per project, like `collapsed`.
    */
   width: number;
-  /** The file tab's right-hand tree. */
-  treeCollapsed: boolean;
-  treeWidth: number;
+  /** How wide the file tab's panel column is, whichever panel is in it. */
+  panelWidth: number;
   /**
    * Which folders each root's tree has open, and the listing behind each one,
    * keyed by `treeKey(root)`.
@@ -227,8 +230,8 @@ type ExplorerState = {
   setWidth: (width: number) => void;
   /** Something opened: show the pane, leaving the stored preference alone. */
   show: () => void;
-  setTreeCollapsed: (collapsed: boolean) => void;
-  setTreeWidth: (width: number) => void;
+  /** A drag of the panel column's handle; it clamps. */
+  setPanelWidth: (width: number) => void;
   /** Open or shut folders in a root's tree. The updater sees the current set. */
   setTreeOpen: (root: ExplorerRoot, next: (current: ReadonlySet<string>) => ReadonlySet<string>) => void;
   /** File one directory's listing in a root's tree. */
@@ -258,7 +261,7 @@ function blankTab(
   const base = { id: nextId(), projectId, order };
   switch (kind) {
     case "file":
-      return { ...base, kind: "file", path: null, root: null, viewSource: false, ...init } as FileTab;
+      return { ...base, kind: "file", path: null, root: null, panel: null, ...init } as FileTab;
     case "review":
       return { ...base, kind: "review", scope: "all" as const, sessionId: null, ...init };
     case "browser":
@@ -348,8 +351,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   ready: false,
   collapsed: true,
   width: PANE_LIMITS.explorer.default,
-  treeCollapsed: readLocal(TREE_COLLAPSED_KEY, false, (raw) => raw === "true"),
-  treeWidth: readLocal(TREE_WIDTH_KEY, TREE_DEFAULT_WIDTH, (raw) => Number(raw) || TREE_DEFAULT_WIDTH),
+  panelWidth: readLocal(PANEL_WIDTH_KEY, PANEL_DEFAULT_WIDTH, (raw) => Number(raw) || PANEL_DEFAULT_WIDTH),
   trees: {},
   fsRevision: 0,
   changedPaths: [],
@@ -569,15 +571,10 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     }
   },
 
-  setTreeCollapsed: (treeCollapsed) => {
-    writeLocal(TREE_COLLAPSED_KEY, String(treeCollapsed));
-    set({ treeCollapsed });
-  },
-
-  setTreeWidth: (width) => {
-    const treeWidth = Math.round(Math.max(TREE_MIN_WIDTH, Math.min(TREE_MAX_WIDTH, width)));
-    writeLocal(TREE_WIDTH_KEY, String(treeWidth));
-    set({ treeWidth });
+  setPanelWidth: (width) => {
+    const panelWidth = Math.round(Math.max(PANEL_MIN_WIDTH, Math.min(PANEL_MAX_WIDTH, width)));
+    writeLocal(PANEL_WIDTH_KEY, String(panelWidth));
+    set({ panelWidth });
   },
 
   setTreeOpen: (root, next) =>
@@ -613,8 +610,11 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     } else {
       explorer.open("file", { root });
     }
-    if (explorer.treeCollapsed) {
-      explorer.setTreeCollapsed(false);
+    // The tree is the panel that can show a path, so revealing one opens it
+    // — over whatever else that tab had open, because one panel is open at a
+    // time (`FileTabSchema.panel`).
+    if (fileTab) {
+      explorer.update(fileTab.id, { panel: FILE_PANEL_TREE });
     }
     set({ reveal: { path, directory, root } });
   },

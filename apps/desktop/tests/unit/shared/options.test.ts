@@ -7,20 +7,22 @@ import { describe, expect, it } from "vitest";
 import { configOptions, sessionModes } from "@shared/acp/reduce";
 import {
   autoModeId,
-  autoModeValue,
+  defaultModeId,
   effortOption,
   fastOption,
   isEffortOption,
+  isFullAccessMode,
+  modeChoice,
   modeOption,
   modelOption,
   withCurrentValue,
 } from "@shared/acp/options";
 
 /**
- * Which option is the model, which is the effort, and which mode is the
- * agent's own auto-approval preset — checked against the **recorded** replies
- * of both adapters, because the whole point of these predicates is that
- * neither adapter agrees with the other about ids.
+ * Which option is the model, which is the effort, and where the one mode
+ * chip's modes come from — checked against the **recorded** replies of both
+ * adapters, because the whole point of these predicates is that neither
+ * adapter agrees with the other about ids.
  */
 const fixtures = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "fixtures", "acp");
 
@@ -93,15 +95,92 @@ describe("the agent's own auto mode", () => {
     expect(autoModeId(sessionModes(codex.availableModes))).toBe("agent");
   });
 
-  it("is the same preset among the mode option's values", () => {
-    expect(autoModeValue(modeOption(configOptions(CLAUDE_CONFIG)))).toBe("auto");
-    expect(autoModeValue(modeOption(configOptions(codexNewSession().configOptions)))).toBe("agent");
-  });
-
   it("falls back to a mode plainly called auto, and is null when there is none", () => {
     expect(autoModeId(sessionModes([{ id: "auto", name: "Automatic" }]))).toBe("auto");
     expect(autoModeId(sessionModes([{ id: "default", name: "Default" }]))).toBeNull();
-    expect(autoModeValue(null)).toBeNull();
+  });
+
+  it("starts Claude Code and Codex in their own auto presets by name, and falls back to the kind", () => {
+    const codex = codexNewSession().modes as { availableModes: unknown };
+    expect(defaultModeId("claude-code", sessionModes(CLAUDE_MODES))).toBe("auto");
+    expect(defaultModeId("codex", sessionModes(codex.availableModes))).toBe("agent");
+    // An override the agent does not offer is not forced on it.
+    expect(defaultModeId("codex", sessionModes([{ id: "default", name: "Default" }, { id: "auto", name: "Auto" }]))).toBe("auto");
+    // Providers without an override use the auto-review rule.
+    expect(defaultModeId("gemini-cli", sessionModes(codex.availableModes))).toBe("agent");
+    expect(defaultModeId(null, sessionModes([{ id: "default", name: "Default" }]))).toBeNull();
+  });
+});
+
+/**
+ * The one chip's source. Both adapters answer with `modes` *and* a `mode`
+ * config option; `modes` is the protocol's own field and the one their
+ * `current_mode_update` reports against, so it wins — and an agent that
+ * sends only the option is read through the same shape, so the chip, the
+ * create-time default and these tests speak one language.
+ */
+describe("where the mode chip's modes come from", () => {
+  it("prefers the session's modes over the mode config option", () => {
+    const choice = modeChoice({
+      modes: sessionModes(CLAUDE_MODES),
+      configOptions: configOptions(CLAUDE_CONFIG),
+      currentModeId: "plan",
+    })!;
+    expect(choice.source).toBe("modes");
+    expect(choice.configId).toBeNull();
+    expect(choice.currentModeId).toBe("plan");
+    expect(choice.modes.map((mode) => mode.id)).toEqual(CLAUDE_MODES.map((mode) => mode.id));
+    expect(autoModeId(choice.modes)).toBe("auto");
+  });
+
+  it("reads a mode-category select as modes for an agent that sends no modes", () => {
+    const choice = modeChoice({
+      modes: [],
+      configOptions: configOptions(codexNewSession().configOptions),
+      currentModeId: null,
+    })!;
+    expect(choice.source).toBe("config_option");
+    expect(choice.configId).toBe("mode");
+    // Its current value is the mode the session is in, and the values are
+    // modes: `_meta.kind` and all, so the auto preset is still findable.
+    expect(choice.currentModeId).toBe("agent");
+    expect(choice.modes.map((mode) => mode.id)).toEqual(["read-only", "agent", "agent-full-access"]);
+    expect(autoModeId(choice.modes)).toBe("agent");
+  });
+
+  it("is nothing when there is nothing to choose between", () => {
+    expect(modeChoice({ modes: [], configOptions: [], currentModeId: null })).toBeNull();
+    // One mode is not a decision, and neither is a one-value select.
+    expect(
+      modeChoice({
+        modes: sessionModes([{ id: "default", name: "Default" }]),
+        configOptions: [],
+        currentModeId: "default",
+      }),
+    ).toBeNull();
+    expect(
+      modeChoice({
+        modes: [],
+        configOptions: configOptions([
+          { id: "mode", name: "Mode", category: "mode", type: "select", currentValue: "a", options: [{ value: "a", name: "A" }] },
+        ]),
+        currentModeId: null,
+      }),
+    ).toBeNull();
+  });
+
+  it("names the one mode that asks about nothing, in either provider's words", () => {
+    const claude = sessionModes(CLAUDE_MODES);
+    expect(claude.filter(isFullAccessMode).map((mode) => mode.id)).toEqual(["bypassPermissions"]);
+    const codex = modeChoice({
+      modes: [],
+      configOptions: configOptions(codexNewSession().configOptions),
+      currentModeId: null,
+    })!;
+    expect(codex.modes.filter(isFullAccessMode).map((mode) => mode.id)).toEqual(["agent-full-access"]);
+    // An adapter that sends no `_meta.kind` is caught by the name it shows.
+    expect(isFullAccessMode({ id: "x", name: "Full access", description: null, kind: null })).toBe(true);
+    expect(isFullAccessMode({ id: "y", name: "Accept edits", description: null, kind: null })).toBe(false);
   });
 });
 

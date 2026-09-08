@@ -172,9 +172,6 @@ export function reduce(state: SessionState, event: SessionEvent): SessionState {
 
     case "status":
       return { ...state, status: event.status, error: event.error };
-
-    case "approval":
-      return { ...state, approvalMode: event.mode };
   }
 }
 

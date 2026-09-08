@@ -50,7 +50,6 @@ import {
 import { configOptions, reduce, sessionModes } from "../../shared/acp/reduce";
 import {
   initialSessionState,
-  type ApprovalMode,
   type PromptBlock,
   type RawSessionUpdate,
   type SessionEvent,
@@ -103,7 +102,6 @@ export type SessionConnectionOptions = {
    */
   preamble?: string | null;
   spawnTerminal: SpawnTerminal;
-  approvalMode?: ApprovalMode;
   clientVersion?: string;
   onEvent?: (event: SessionEvent, state: SessionState) => void;
   onTerminalOutput?: TerminalOutputListener;
@@ -132,13 +130,6 @@ export class SessionConnection {
 
   constructor(private readonly options: SessionConnectionOptions) {
     this.stateValue = initialSessionState(options.sessionId, options.agentId);
-    if (options.approvalMode) {
-      this.stateValue = reduce(this.stateValue, {
-        type: "approval",
-        mode: options.approvalMode,
-        at: Date.now(),
-      });
-    }
 
     this.process = trackChild(
       spawn(options.launch.command, options.launch.args, {
@@ -184,7 +175,6 @@ export class SessionConnection {
       terminals: this.terminals,
       dispatch: (event) => this.dispatch(event),
       onFilesChanged: options.onFilesChanged,
-      approvalMode: options.approvalMode,
     });
 
     this.agent = new ClientSideConnection(() => this.client, this.tappedStream());
@@ -420,11 +410,6 @@ export class SessionConnection {
 
   respondPermission(requestId: string, optionId: string | null): boolean {
     return this.client.respondPermission(requestId, optionId);
-  }
-
-  setApprovalMode(mode: ApprovalMode): void {
-    this.client.approvalMode = mode;
-    this.dispatch({ type: "approval", mode, at: Date.now() });
   }
 
   /** Kill the adapter. Idempotent. */

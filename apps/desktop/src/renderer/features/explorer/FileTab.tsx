@@ -1,36 +1,40 @@
-import { FileText, FolderTree, GitBranch, RotateCw } from "lucide-react";
+import { FileText, GitBranch, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { Spinner } from "@renderer/components/ui/spinner";
 import { useElementWidth } from "@renderer/hooks/use-element-width";
-import {
-  TREE_MAX_WIDTH,
-  TREE_MIN_WIDTH,
-  useExplorer,
-} from "@renderer/state/explorer";
-import type { ExplorerRoot, Project } from "@shared/types";
+import { useExplorer } from "@renderer/state/explorer";
+import { FILE_PANEL_TREE, type ExplorerRoot, type Project } from "@shared/types";
 import type { FileStat, TextFileResult } from "./types";
 
 import { buildCrumbs, worktreeMark } from "./crumbs";
 import { Breadcrumbs } from "./Breadcrumbs";
-import { cadTabHidesTree } from "./cad-layout";
 import { EmptyState } from "./EmptyState";
 import { currentPlatform, type EntryActionContext } from "./entry-actions";
+import { FilePanel } from "./FilePanel";
 import { FileTree, type TreeEdit, type TreeEditRequest } from "./FileTree";
 import { BinaryRenderer } from "./renderers/BinaryRenderer";
 import { CadRenderer } from "./renderers/CadRenderer";
 import { CodeRenderer } from "./renderers/CodeRenderer";
 import { ImageRenderer } from "./renderers/ImageRenderer";
 import { MarkdownRenderer } from "./renderers/MarkdownRenderer";
-import { CAD_PANEL, type FilePanel } from "./renderers/panels";
+import {
+  CAD_PANEL,
+  nextOpenPanel,
+  panelsFor,
+  resolveOpenPanel,
+  SOURCE_PANEL,
+} from "./renderers/panels";
 import { PdfRenderer } from "./renderers/PdfRenderer";
 import { rendererFor } from "./renderers/registry";
 
 /**
  * One file, laid out the way Codex lays one out: a header row with the
- * breadcrumb and the actions, the content on the left, and a collapsible file
- * tree on the right.
+ * breadcrumb and the actions, the content on the left, and ONE panel column
+ * on the right — the file tree, or the CAD surface's theme editor, or its
+ * file sheet, or markdown's source over the content itself. Exactly one of
+ * them, or none (`renderers/panels.ts`, `FilePanel.tsx`).
  *
  * The state machine is small but has one subtlety worth naming. The editor is
  * uncontrolled (see `CodeRenderer`), so "the file on disk changed" cannot be
@@ -50,9 +54,6 @@ import { rendererFor } from "./renderers/registry";
 const PANEL_TOGGLE_CLASSES =
   "size-6 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground";
 
-/** A tab whose panel record is another file's has no panels open. */
-const EMPTY_PANELS: Record<string, boolean> = {};
-
 type Loaded =
   | { state: "empty" }
   | { state: "loading" }
@@ -67,21 +68,20 @@ export function FileTab({
   project,
   root,
   path,
-  viewSource,
+  panel,
 }: {
   tabId: string;
   project: Project;
   /** The directory `path` is relative to: null for the project, else a worktree (plan §9). */
   root: ExplorerRoot;
   path: string | null;
-  viewSource: boolean;
+  /** Which panel this tab has open, by id; null is the renderer's default. */
+  panel: string | null;
 }) {
   const update = useExplorer((state) => state.update);
   const openFile = useExplorer((state) => state.openFile);
-  const treeCollapsed = useExplorer((state) => state.treeCollapsed);
-  const setTreeCollapsed = useExplorer((state) => state.setTreeCollapsed);
-  const treeWidth = useExplorer((state) => state.treeWidth);
-  const setTreeWidth = useExplorer((state) => state.setTreeWidth);
+  const panelWidth = useExplorer((state) => state.panelWidth);
+  const setPanelWidth = useExplorer((state) => state.setPanelWidth);
   const fsRevision = useExplorer((state) => state.fsRevision);
   const treeReveal = useExplorer((state) => state.reveal);
 
@@ -260,104 +260,51 @@ export function FileTab({
   }, [path, at]);
 
   /* ---------------------------------------------------------------------- */
-  /* The tree's drag handle                                                  */
-  /* ---------------------------------------------------------------------- */
-
-  const dragging = useRef(false);
-  const onHandleDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    dragging.current = true;
-    const surface = event.currentTarget.parentElement;
-    const onMove = (move: PointerEvent) => {
-      if (!dragging.current || !surface) {
-        return;
-      }
-      // Width is measured from the right edge: the tree is anchored there and
-      // the handle drags its left border.
-      setTreeWidth(surface.getBoundingClientRect().right - move.clientX);
-    };
-    const onUp = () => {
-      dragging.current = false;
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  };
-
-  /* ---------------------------------------------------------------------- */
   /* Render                                                                  */
   /* ---------------------------------------------------------------------- */
 
   const traits = "stat" in loaded ? rendererFor(loaded.stat) : null;
-  const showingSource = traits?.id !== "markdown" || viewSource;
 
   /**
-   * The renderer's panels (`renderers/panels.ts`).
+   * The tab's panels, and which one is open (`renderers/panels.ts`).
    *
-   * The tab owns the state and the renderer declares what it means, the way
-   * `viewSource` already worked — the toggle is in the header and the panel
-   * is in the body, and two owners of one flag is how the two come to
-   * disagree. `viewSource` is a field of the tab and persists; everything
-   * else is session state keyed on the open file, so it does not outlive it.
+   * One open panel, held as one id in one persisted field of the tab, so the
+   * toggles cannot disagree with the column and a reload comes back to the
+   * panel the person left up. `null` — nobody has said — resolves to the
+   * renderer's own default: the file sheet for a CAD file, the tree for
+   * everything else.
    *
    * `ready` says the body is the renderer's own surface: a CAD tab whose
    * runtime did not start shows a failure card, and the CAD declaration
    * answers with no panels at all rather than two dead controls.
    */
-  const [panelState, setPanelState] = useState<{ key: string; open: Record<string, boolean> }>({
-    key,
-    open: {},
-  });
   const [readyFor, setReadyFor] = useState<string | null>(null);
-  const openPanels = panelState.key === key ? panelState.open : EMPTY_PANELS;
-  const setPanelOpen = useCallback(
-    (patch: Record<string, boolean>) => {
-      setPanelState((current) => ({
-        key,
-        open: { ...(current.key === key ? current.open : {}), ...patch },
-      }));
-    },
-    [key],
-  );
   const onSurfaceReady = useCallback(
     (ready: boolean) => setReadyFor((current) => (ready ? key : current === key ? null : current)),
     [key],
   );
-  const panels: FilePanel[] =
-    traits?.panels?.({
-      viewSource,
-      setViewSource: (next) => update(tabId, { viewSource: next }),
-      open: openPanels,
-      setOpen: setPanelOpen,
-      ready: readyFor === key,
-    }) ?? [];
-
+  const openId = useMemo(() => {
+    const declared = traits?.panels?.({ open: panel ?? "", ready: readyFor === key }) ?? [];
+    return resolveOpenPanel(panelsFor(declared, panel ?? ""), panel)?.id ?? "";
+  }, [key, panel, readyFor, traits]);
+  // Named a second time with the open id settled, so a declaration reading
+  // `open` — markdown's source toggle, which is `View source` or `View
+  // preview` — is drawn with the answer rather than with the raw field.
+  const panels = panelsFor(traits?.panels?.({ open: openId, ready: readyFor === key }) ?? [], openId);
+  const openPanel = panels.find((entry) => entry.id === openId) ?? null;
+  const setPanel = useCallback(
+    (next: string) => update(tabId, { panel: next }),
+    [tabId, update],
+  );
+  const showingSource = traits?.id !== "markdown" || openId === SOURCE_PANEL;
   /**
-   * A CAD file in a narrow pane hides the tree.
-   *
-   * The viewer's surface wants 560px for a model and its sheet side by side
-   * (`cad-layout.ts`), and the default explorer minus a 248px tree is less.
-   * The tree is hidden for *this file*, not collapsed as a preference: the
-   * header's toggle brings it straight back, and the next markdown file
-   * opens with the tree where it was. Derived during render rather than set
-   * from an effect; the one piece of state is the person's own "show it
-   * anyway", keyed on the file so it does not outlive it.
+   * The box the file's renderer draws its own panel into — the CAD surface
+   * portals its theme editor and its file sheet there (`panelSlot`). State
+   * rather than a ref, because the renderer has to be told when it attaches.
    */
-  const [treeShownFor, setTreeShownFor] = useState<string | null>(null);
-  const narrowForCad = loaded.state === "cad" && cadTabHidesTree(paneWidth, treeWidth);
-  const treeHidden = treeCollapsed || (narrowForCad && treeShownFor !== key);
-  const showTree = () => {
-    setTreeShownFor(key);
-    setTreeCollapsed(false);
-  };
-  const toggleTree = () => {
-    if (treeHidden) {
-      showTree();
-    } else {
-      setTreeCollapsed(true);
-    }
-  };
+  const [panelSlot, setPanelSlot] = useState<HTMLDivElement | null>(null);
+  /** How much of the pane the panel column is taking: zero when none is drawn. */
+  const panelColumnWidth = openPanel && openPanel.content !== "body" ? panelWidth : 0;
 
   /**
    * The breadcrumb's entry menus. `Rename` on the file crumb is the one
@@ -382,14 +329,19 @@ export function FileTab({
         setActive(existing.id);
         return;
       }
-      update(tabId, { path: next, viewSource: false });
+      // A different file is a different renderer with different panels, so
+      // the choice does not carry: `null` opens the new file the way opening
+      // it in a fresh tab would.
+      update(tabId, { path: next, panel: null });
     },
     [tabId, root, update],
   );
   const crumbCtx = useMemo<EntryActionContext>(() => {
+    // The tree is where a row can be typed into, so an edit asked for from a
+    // crumb opens it — over whatever panel was up, because one is open at a
+    // time.
     const askTree = (edit: TreeEditRequest) => {
-      setTreeShownFor(key);
-      setTreeCollapsed(false);
+      update(tabId, { panel: FILE_PANEL_TREE });
       setTreeEdit((previous) => ({ ...edit, nonce: (previous?.nonce ?? 0) + 1 }));
     };
     return {
@@ -405,7 +357,7 @@ export function FileTab({
       },
       beginCreate: (directory, kind) => askTree({ mode: "create", directory, kind }),
     };
-  }, [project.id, root, path, key, setTreeCollapsed]);
+  }, [project.id, root, path, tabId, update]);
 
   /**
    * The breadcrumb: the path's segments below the root, each a menu of its
@@ -420,9 +372,9 @@ export function FileTab({
     () =>
       buildCrumbs({
         path,
-        narrow: paneWidth > 0 && paneWidth - (treeHidden ? 0 : treeWidth) < 720,
+        narrow: paneWidth > 0 && paneWidth - panelColumnWidth < 720,
       }),
-    [path, paneWidth, treeHidden, treeWidth],
+    [path, paneWidth, panelColumnWidth],
   );
   const worktree = useMemo(() => worktreeMark(root), [root]);
 
@@ -481,48 +433,30 @@ export function FileTab({
 
         {/*
           The actions that used to be here — Copy path, Open ▾ — live in the
-          entry menus now (right-click a crumb or a row). What is left is the
-          toggles: the renderer's panels in declaration order, then the files
-          toggle, which never moves. It is the right end of this row whether
-          the tree is open or shut, and whether this file has panels or not,
-          so it is the one control in the pane a person can always find in
+          entry menus now (right-click a crumb or a row). What is left is one
+          toggle per panel this file has, in declaration order with the files
+          toggle last, and never any other order: the right end of this row
+          is the same control whatever is open and whatever kind of file this
+          is, so it is the one thing in the pane a person can always find in
           the same place.
         */}
         <div className="flex shrink-0 items-center gap-0.5">
-          {panels.map((panel) => (
+          {panels.map((entry) => (
             <Button
-              aria-label={panel.label}
-              aria-pressed={panel.open}
+              aria-label={entry.label}
+              aria-pressed={entry.id === openId}
               className={PANEL_TOGGLE_CLASSES}
-              data-file-panel={panel.id}
-              key={panel.id}
-              onClick={panel.onToggle}
+              data-file-panel={entry.id}
+              {...(entry.id === FILE_PANEL_TREE ? { "data-testid": "tree-toggle" } : {})}
+              key={entry.id}
+              onClick={() => setPanel(nextOpenPanel(openId, entry.id))}
               size="icon-xs"
-              title={panel.label}
+              title={entry.label}
               variant="ghost"
             >
-              <panel.icon className="size-3.5" />
+              <entry.icon className="size-3.5" />
             </Button>
           ))}
-
-          {/*
-            The files toggle. A folder-tree glyph rather than a panel one:
-            the button is named by what comes back, not by the fact that a
-            panel slides — a panel icon in a row of file actions reads as a
-            layout control and was skipped over.
-          */}
-          <Button
-            aria-label={treeHidden ? "Show files" : "Hide files"}
-            aria-pressed={!treeHidden}
-            className={PANEL_TOGGLE_CLASSES}
-            data-testid="tree-toggle"
-            onClick={toggleTree}
-            size="icon-xs"
-            title={treeHidden ? "Show files" : "Hide files"}
-            variant="ghost"
-          >
-            <FolderTree className="size-3.5" />
-          </Button>
         </div>
       </header>
 
@@ -557,9 +491,10 @@ export function FileTab({
             onChange={setDraft}
             onOpenExternally={openExternally}
             onOpenFile={(next) => openFile(next, root)}
-            onPanelOpen={setPanelOpen}
+            onPanelOpen={setPanel}
             onSurfaceReady={onSurfaceReady}
-            openPanels={openPanels}
+            openPanel={openId}
+            panelSlot={panelSlot}
             projectId={project.id}
             reloadToken={reloadToken}
             root={root}
@@ -569,22 +504,20 @@ export function FileTab({
           />
         </div>
 
-        {treeHidden ? null : (
-          <>
-            <div
-              aria-label="Resize file tree"
-              aria-orientation="vertical"
-              aria-valuemax={TREE_MAX_WIDTH}
-              aria-valuemin={TREE_MIN_WIDTH}
-              aria-valuenow={treeWidth}
-              className="w-px shrink-0 cursor-col-resize bg-border transition-colors hover:bg-ring data-[dragging=true]:bg-ring"
-              onPointerDown={onHandleDown}
-              role="separator"
-              // A 1px border is the right *look* and a terrible target, so the
-              // hit area is widened outward without moving the line.
-              style={{ boxShadow: "0 0 0 3px transparent" }}
-            />
-            <div className="shrink-0 overflow-hidden border-l" style={{ width: treeWidth }}>
+        {/*
+          The one panel column, whatever is in it (`FilePanel.tsx`). A panel
+          whose content IS the body — markdown's source — draws no column;
+          everything else gets this frame, and the file's renderer that draws
+          its own panel gets the box to draw into.
+        */}
+        {openPanel && openPanel.content !== "body" ? (
+          <FilePanel
+            id={openPanel.id}
+            label={openPanel.label}
+            onWidthChange={setPanelWidth}
+            width={panelWidth}
+          >
+            {openPanel.content === "tree" ? (
               <FileTree
                 activePath={path}
                 edit={treeEdit}
@@ -599,9 +532,11 @@ export function FileTab({
                 reveal={treeReveal}
                 root={root}
               />
-            </div>
-          </>
-        )}
+            ) : (
+              <div className="h-full min-h-0" ref={setPanelSlot} />
+            )}
+          </FilePanel>
+        ) : null}
       </div>
     </div>
   );
@@ -615,7 +550,8 @@ function Body({
   projectId,
   root,
   tabId,
-  openPanels,
+  openPanel,
+  panelSlot,
   onChange,
   save,
   onOpenFile,
@@ -630,13 +566,16 @@ function Body({
   projectId: string;
   root: ExplorerRoot;
   tabId: string;
-  /** The nav row's panel flags; a renderer with panels reads its own. */
-  openPanels: Readonly<Record<string, boolean>>;
+  /** The id of the tab's open panel; a renderer with panels reads its own. */
+  openPanel: string;
+  /** The panel column's box, when the open panel is one the renderer draws. */
+  panelSlot: HTMLElement | null;
   onChange: (next: string) => void;
   save: () => void;
   onOpenFile: (path: string) => void;
   onOpenExternally: () => void;
-  onPanelOpen: (patch: Record<string, boolean>) => void;
+  /** Open a panel by id, or `""` for none — what the toggles do. */
+  onPanelOpen: (id: string) => void;
   onSurfaceReady: (ready: boolean) => void;
 }) {
   switch (loaded.state) {
@@ -664,26 +603,26 @@ function Body({
       return (
         <CadRenderer
           /*
-            `null` until the surface has said what it opened with: a STEP
-            file opens with its sheet up, and which default that is belongs
-            to the surface, not to a second copy of the rule over here. The
-            first report fills the record and the pair is controlled from
-            then on (`apps/viewer/docs/file-view.md`).
+            The surface's two panels are this tab's, driven as controlled
+            props: one id is open here, so at most one of these is true and
+            the surface never has a flag of its own to disagree with
+            (`apps/viewer/docs/file-view.md`).
           */
-          fileSheetOpen={openPanels[CAD_PANEL.fileSheet] ?? null}
-          // What the surface did on its own — the sheet opening for a
-          // measurement, or a panel closing because the other one opened —
-          // lands in the same record the toggles read, so the highlight
+          fileSheetOpen={openPanel === CAD_PANEL.fileSheet}
+          // What the surface does on its own — the sheet opening because a
+          // measurement landed — comes back through here and becomes the
+          // tab's open panel, closing whatever else was up. So the highlight
           // follows the screen rather than the last press.
-          onFileSheetOpenChange={(next) => onPanelOpen({ [CAD_PANEL.fileSheet]: next })}
+          onFileSheetOpenChange={(next) => onPanelOpen(closedBy(next, openPanel, CAD_PANEL.fileSheet))}
           onOpenFile={onOpenFile}
           onSurfaceReady={onSurfaceReady}
-          onThemeEditingChange={(next) => onPanelOpen({ [CAD_PANEL.theme]: next })}
+          onThemeEditingChange={(next) => onPanelOpen(closedBy(next, openPanel, CAD_PANEL.theme))}
+          panelSlot={panelSlot}
           path={loaded.stat.path}
           projectId={projectId}
           root={root}
           tabId={tabId}
-          themeEditing={openPanels[CAD_PANEL.theme] ?? null}
+          themeEditing={openPanel === CAD_PANEL.theme}
         />
       );
 
@@ -728,6 +667,22 @@ function Body({
         />
       );
   }
+}
+
+/**
+ * What the tab's panel becomes when the surface reports one of its own open
+ * or shut.
+ *
+ * `true` opens it, over whatever was up. `false` is only ever about the
+ * panel it names: the surface reports both of its flags on every change, so
+ * a "the sheet is shut" arriving while the file TREE is the open panel must
+ * leave the tree alone rather than close the column.
+ */
+function closedBy(open: boolean, current: string, id: string): string {
+  if (open) {
+    return id;
+  }
+  return current === id ? "" : current;
 }
 
 function messageOf(error: unknown): string {

@@ -12,7 +12,7 @@ async function scratch() {
   return realpath(await mkdtemp(path.join(os.tmpdir(), "hardcore-client-")));
 }
 
-function client(cwd: string, approvalMode: "ask" | "approve-for-me" = "ask") {
+function client(cwd: string) {
   const events: SessionEvent[] = [];
   const changed: string[][] = [];
   const instance = new AcpClient({
@@ -23,7 +23,6 @@ function client(cwd: string, approvalMode: "ask" | "approve-for-me" = "ask") {
     }),
     dispatch: (event) => events.push(event),
     onFilesChanged: (paths) => changed.push(paths),
-    approvalMode,
   });
   return { instance, events, changed };
 }
@@ -61,22 +60,19 @@ describe("AcpClient permissions", () => {
     expect(await second).toEqual({ outcome: { outcome: "cancelled" } });
   });
 
-  it("approve-for-me picks the allow_once option itself, but still asks when there is none", async () => {
-    const { instance, events } = client("/tmp", "approve-for-me");
-    expect(await instance.requestPermission(permission)).toEqual({ outcome: { outcome: "selected", optionId: "allow-once" } });
-    expect(events.map((event) => event.type)).toEqual(["permission/request", "permission/resolve"]);
-
-    const onlyAlways = { ...permission, options: permission.options.filter((o) => o.kind !== "allow_once") };
-    const pending = instance.requestPermission(onlyAlways);
-    expect(instance.pendingPermissionIds).toEqual(["perm-2"]);
-    instance.respondPermission("perm-2", "reject");
-    expect(await pending).toEqual({ outcome: { outcome: "selected", optionId: "reject" } });
-  });
-
-  it("can switch modes between requests", async () => {
-    const { instance } = client("/tmp");
-    instance.approvalMode = "approve-for-me";
-    expect(await instance.requestPermission(permission)).toEqual({ outcome: { outcome: "selected", optionId: "allow-once" } });
+  /**
+   * Nothing here answers for the person. The app's own approval setting is
+   * gone — the session's mode is what decides whether the agent asks at all
+   * — so every request that arrives waits, however inviting its options are.
+   */
+  it("answers nothing on its own, even a request with an allow-once option", async () => {
+    const { instance, events } = client("/tmp");
+    const answer = instance.requestPermission(permission);
+    await Promise.resolve();
+    expect(events.map((event) => event.type)).toEqual(["permission/request"]);
+    expect(instance.pendingPermissionIds).toEqual(["perm-1"]);
+    instance.respondPermission("perm-1", "allow-once");
+    expect(await answer).toEqual({ outcome: { outcome: "selected", optionId: "allow-once" } });
   });
 });
 

@@ -21,10 +21,11 @@ export const agentOptionsHandlers = {
     probe: ({ agentId, projectId }) => {
       void agentOptions.ensure(agentId, projectId ?? null);
     },
-    setDefaults: ({ agentId, model, effort }) =>
+    setDefaults: ({ agentId, model, effort, mode }) =>
       agentOptions.setDefaults(agentId, {
         ...(model === undefined ? {} : { model }),
         ...(effort === undefined ? {} : { effort }),
+        ...(mode === undefined ? {} : { mode }),
       }),
   },
 } satisfies IpcHandlers<typeof agentOptionsContract, IpcContext>;
