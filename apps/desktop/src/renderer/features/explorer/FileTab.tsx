@@ -1,4 +1,4 @@
-import { Code2, Eye, FileText, FolderTree, RotateCw } from "lucide-react";
+import { FileText, FolderTree, GitBranch, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@renderer/components/ui/button";
@@ -12,7 +12,7 @@ import {
 import type { ExplorerRoot, Project } from "@shared/types";
 import type { FileStat, TextFileResult } from "./types";
 
-import { buildCrumbs } from "./crumbs";
+import { buildCrumbs, worktreeMark } from "./crumbs";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { cadTabHidesTree } from "./cad-layout";
 import { EmptyState } from "./EmptyState";
@@ -23,6 +23,7 @@ import { CadRenderer } from "./renderers/CadRenderer";
 import { CodeRenderer } from "./renderers/CodeRenderer";
 import { ImageRenderer } from "./renderers/ImageRenderer";
 import { MarkdownRenderer } from "./renderers/MarkdownRenderer";
+import { CAD_PANEL, type FilePanel } from "./renderers/panels";
 import { PdfRenderer } from "./renderers/PdfRenderer";
 import { rendererFor } from "./renderers/registry";
 
@@ -39,6 +40,18 @@ import { rendererFor } from "./renderers/registry";
  * no unsaved edits reloads on its own, because there is nothing to lose and a
  * prompt for that is noise.
  */
+
+/**
+ * One class for every toggle at the end of the nav row — the renderer's
+ * panels and the files toggle — so "highlighted while its panel is open"
+ * looks the same on all of them, and the same as the standalone viewer's
+ * top-bar toggles (`activeIconButtonClasses` there).
+ */
+const PANEL_TOGGLE_CLASSES =
+  "size-6 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground";
+
+/** A tab whose panel record is another file's has no panels open. */
+const EMPTY_PANELS: Record<string, boolean> = {};
 
 type Loaded =
   | { state: "empty" }
@@ -276,8 +289,49 @@ export function FileTab({
   /* Render                                                                  */
   /* ---------------------------------------------------------------------- */
 
-  const traits = loaded.state === "text" ? rendererFor(loaded.stat) : null;
+  const traits = "stat" in loaded ? rendererFor(loaded.stat) : null;
   const showingSource = traits?.id !== "markdown" || viewSource;
+
+  /**
+   * The renderer's panels (`renderers/panels.ts`).
+   *
+   * The tab owns the state and the renderer declares what it means, the way
+   * `viewSource` already worked — the toggle is in the header and the panel
+   * is in the body, and two owners of one flag is how the two come to
+   * disagree. `viewSource` is a field of the tab and persists; everything
+   * else is session state keyed on the open file, so it does not outlive it.
+   *
+   * `ready` says the body is the renderer's own surface: a CAD tab whose
+   * runtime did not start shows a failure card, and the CAD declaration
+   * answers with no panels at all rather than two dead controls.
+   */
+  const [panelState, setPanelState] = useState<{ key: string; open: Record<string, boolean> }>({
+    key,
+    open: {},
+  });
+  const [readyFor, setReadyFor] = useState<string | null>(null);
+  const openPanels = panelState.key === key ? panelState.open : EMPTY_PANELS;
+  const setPanelOpen = useCallback(
+    (patch: Record<string, boolean>) => {
+      setPanelState((current) => ({
+        key,
+        open: { ...(current.key === key ? current.open : {}), ...patch },
+      }));
+    },
+    [key],
+  );
+  const onSurfaceReady = useCallback(
+    (ready: boolean) => setReadyFor((current) => (ready ? key : current === key ? null : current)),
+    [key],
+  );
+  const panels: FilePanel[] =
+    traits?.panels?.({
+      viewSource,
+      setViewSource: (next) => update(tabId, { viewSource: next }),
+      open: openPanels,
+      setOpen: setPanelOpen,
+      ready: readyFor === key,
+    }) ?? [];
 
   /**
    * A CAD file in a narrow pane hides the tree.
@@ -354,23 +408,23 @@ export function FileTab({
   }, [project.id, root, path, key, setTreeCollapsed]);
 
   /**
-   * The breadcrumb: project, the worktree when the file is in one, folders,
-   * file — each a menu (`Breadcrumbs.tsx`). In a pane too narrow for the
-   * folders they fold into one `…` (Codex does the same) rather than each
-   * truncating to two letters; the full path is the tooltip either way. The
-   * worktree crumb survives the fold: which copy of the tree a file is in
-   * is the one thing a person cannot tell from its name.
+   * The breadcrumb: the path's segments below the root, each a menu of its
+   * neighbours (`crumbs.ts` for the rule, `Breadcrumbs.tsx` for the drawing).
+   * There is no crumb for the project or the worktree — a root's neighbours
+   * are outside the project, which this pane may not list. In a pane too
+   * narrow for the folders they fold into one `…` (Codex does the same)
+   * rather than each truncating to two letters; the full path is the tooltip
+   * either way.
    */
   const crumbs = useMemo(
     () =>
       buildCrumbs({
-        projectName: project.name,
-        root,
         path,
         narrow: paneWidth > 0 && paneWidth - (treeHidden ? 0 : treeWidth) < 720,
       }),
-    [project.name, root, path, paneWidth, treeHidden, treeWidth],
+    [path, paneWidth, treeHidden, treeWidth],
   );
+  const worktree = useMemo(() => worktreeMark(root), [root]);
 
   return (
     <div className="flex h-full min-h-0 flex-col" ref={rootRef}>
@@ -386,6 +440,27 @@ export function FileTab({
           aria-label="Breadcrumb"
           className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-[13px]"
         >
+          {/*
+            The worktree this file is in, when it is in one — a label, not a
+            crumb (`worktreeMark` in `crumbs.ts` for why it has no menu).
+          */}
+          {worktree ? (
+            <>
+              <span
+                className="flex shrink items-center gap-1 truncate rounded-sm px-0.5 text-muted-foreground"
+                data-crumb="worktree"
+                title={worktree.title}
+              >
+                <GitBranch aria-label="Worktree" className="size-3 shrink-0" />
+                <span className="truncate">{worktree.label}</span>
+              </span>
+              {crumbs.length > 0 ? (
+                <span className="shrink-0 text-muted-foreground/60" aria-hidden>
+                  ›
+                </span>
+              ) : null}
+            </>
+          ) : null}
           <Breadcrumbs
             activePath={path}
             crumbs={crumbs}
@@ -406,23 +481,29 @@ export function FileTab({
 
         {/*
           The actions that used to be here — Copy path, Open ▾ — live in the
-          entry menus now (right-click a crumb or a row). What is left is
-          the one toggle that is about the view, not the file, and the files
-          toggle, which never moves: it is the right end of this row whether
-          the tree is open or shut.
+          entry menus now (right-click a crumb or a row). What is left is the
+          toggles: the renderer's panels in declaration order, then the files
+          toggle, which never moves. It is the right end of this row whether
+          the tree is open or shut, and whether this file has panels or not,
+          so it is the one control in the pane a person can always find in
+          the same place.
         */}
         <div className="flex shrink-0 items-center gap-0.5">
-          {traits?.sourceToggle ? (
+          {panels.map((panel) => (
             <Button
-              className="h-6 gap-1.5 px-2 text-[12px] text-muted-foreground"
-              onClick={() => update(tabId, { viewSource: !viewSource })}
-              size="sm"
+              aria-label={panel.label}
+              aria-pressed={panel.open}
+              className={PANEL_TOGGLE_CLASSES}
+              data-file-panel={panel.id}
+              key={panel.id}
+              onClick={panel.onToggle}
+              size="icon-xs"
+              title={panel.label}
               variant="ghost"
             >
-              {viewSource ? <Eye className="size-3.5" /> : <Code2 className="size-3.5" />}
-              {viewSource ? "View preview" : "View source"}
+              <panel.icon className="size-3.5" />
             </Button>
-          ) : null}
+          ))}
 
           {/*
             The files toggle. A folder-tree glyph rather than a panel one:
@@ -433,7 +514,7 @@ export function FileTab({
           <Button
             aria-label={treeHidden ? "Show files" : "Hide files"}
             aria-pressed={!treeHidden}
-            className="size-6 text-muted-foreground aria-pressed:text-foreground"
+            className={PANEL_TOGGLE_CLASSES}
             data-testid="tree-toggle"
             onClick={toggleTree}
             size="icon-xs"
@@ -476,6 +557,9 @@ export function FileTab({
             onChange={setDraft}
             onOpenExternally={openExternally}
             onOpenFile={(next) => openFile(next, root)}
+            onPanelOpen={setPanelOpen}
+            onSurfaceReady={onSurfaceReady}
+            openPanels={openPanels}
             projectId={project.id}
             reloadToken={reloadToken}
             root={root}
@@ -531,10 +615,13 @@ function Body({
   projectId,
   root,
   tabId,
+  openPanels,
   onChange,
   save,
   onOpenFile,
   onOpenExternally,
+  onPanelOpen,
+  onSurfaceReady,
 }: {
   loaded: Loaded;
   draft: string | null;
@@ -543,10 +630,14 @@ function Body({
   projectId: string;
   root: ExplorerRoot;
   tabId: string;
+  /** The nav row's panel flags; a renderer with panels reads its own. */
+  openPanels: Readonly<Record<string, boolean>>;
   onChange: (next: string) => void;
   save: () => void;
   onOpenFile: (path: string) => void;
   onOpenExternally: () => void;
+  onPanelOpen: (patch: Record<string, boolean>) => void;
+  onSurfaceReady: (ready: boolean) => void;
 }) {
   switch (loaded.state) {
     case "empty":
@@ -570,7 +661,31 @@ function Body({
       return <EmptyState description={loaded.message} icon={FileText} title="Could not open that file" tone="warn" />;
 
     case "cad":
-      return <CadRenderer onOpenFile={onOpenFile} path={loaded.stat.path} projectId={projectId} root={root} tabId={tabId} />;
+      return (
+        <CadRenderer
+          /*
+            `null` until the surface has said what it opened with: a STEP
+            file opens with its sheet up, and which default that is belongs
+            to the surface, not to a second copy of the rule over here. The
+            first report fills the record and the pair is controlled from
+            then on (`apps/viewer/docs/file-view.md`).
+          */
+          fileSheetOpen={openPanels[CAD_PANEL.fileSheet] ?? null}
+          // What the surface did on its own — the sheet opening for a
+          // measurement, or a panel closing because the other one opened —
+          // lands in the same record the toggles read, so the highlight
+          // follows the screen rather than the last press.
+          onFileSheetOpenChange={(next) => onPanelOpen({ [CAD_PANEL.fileSheet]: next })}
+          onOpenFile={onOpenFile}
+          onSurfaceReady={onSurfaceReady}
+          onThemeEditingChange={(next) => onPanelOpen({ [CAD_PANEL.theme]: next })}
+          path={loaded.stat.path}
+          projectId={projectId}
+          root={root}
+          tabId={tabId}
+          themeEditing={openPanels[CAD_PANEL.theme] ?? null}
+        />
+      );
 
     case "binary":
       return loaded.stat.fileKind === "pdf" ? (

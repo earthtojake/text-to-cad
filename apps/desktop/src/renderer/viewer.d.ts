@@ -59,6 +59,19 @@ declare module "@viewer/file-view" {
      * another picture; the result goes to `onCapture` either way.
      */
     captureRequest?: { key: number } | null;
+    /**
+     * The surface's two right-hand panels, driven from here.
+     *
+     * A boolean makes that panel controlled: the surface stops keeping its
+     * own flag and reports every change through the matching callback,
+     * including the one it makes itself — the two are one panel, so opening
+     * either closes the other. `layout="desktop"` hides the surface's own
+     * top bar, so these are the only door this app has to them.
+     */
+    themeEditing?: boolean | null;
+    onThemeEditingChange?: (next: boolean) => void;
+    fileSheetOpen?: boolean | null;
+    onFileSheetOpenChange?: (next: boolean) => void;
   }>;
 
   /** Publishes `origin` to the subtree; `useViewerOrigin` reads it back. */

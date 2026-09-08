@@ -63,6 +63,20 @@ type CadSurfaceProps = {
    * and this are one path.
    */
   captureRequest: { key: number } | null;
+  /**
+   * The surface's two right-hand panels, driven from here.
+   *
+   * `layout="desktop"` hides the surface's own top bar, which is where the
+   * theme and file-sheet toggles live standalone — so without these the
+   * theme panel had no door at all in this app. They are controlled props
+   * (`apps/viewer/docs/file-view.md`): the surface keeps enforcing that the
+   * two are one panel, and tells us when opening one closed the other, so
+   * the nav row's highlight follows the surface rather than guessing.
+   */
+  themeEditing: boolean | null;
+  onThemeEditingChange: (next: boolean) => void;
+  fileSheetOpen: boolean | null;
+  onFileSheetOpenChange: (next: boolean) => void;
 };
 
 /**
@@ -89,6 +103,10 @@ const CadSurface = lazy(async () => {
       onReference,
       onCapture,
       captureRequest,
+      themeEditing,
+      onThemeEditingChange,
+      fileSheetOpen,
+      onFileSheetOpenChange,
     }: CadSurfaceProps) => (
       <ViewerOriginProvider origin={origin}>
         {/*
@@ -109,16 +127,20 @@ const CadSurface = lazy(async () => {
             className="h-full min-h-0"
             colorScheme={colorScheme}
             file={file}
+            fileSheetOpen={fileSheetOpen}
             fileSheetWidth={cadSheetWidthFor(width)}
             layout="desktop"
             // The desktop window owns its own title; the surface must not write it.
             manageDocumentTitle={false}
             onCapture={onCapture}
+            onFileSheetOpenChange={onFileSheetOpenChange}
             onOpenFile={(next) => onOpenFile(next)}
             onReference={onReference}
+            onThemeEditingChange={onThemeEditingChange}
             origin={origin}
             sceneBackground={cadSceneBackgroundFor(colorScheme)}
             selectReference={selectReference}
+            themeEditing={themeEditing}
           />
         </div>
       </ViewerOriginProvider>
@@ -132,6 +154,11 @@ export function CadRenderer({
   root,
   path,
   onOpenFile,
+  themeEditing,
+  onThemeEditingChange,
+  fileSheetOpen,
+  onFileSheetOpenChange,
+  onSurfaceReady,
 }: {
   tabId: string;
   projectId: string;
@@ -140,6 +167,22 @@ export function CadRenderer({
   /** Root-relative: the same path the viewer's `?file=` carries. */
   path: string;
   onOpenFile: (path: string) => void;
+  /**
+   * The nav row's two panel toggles (`renderers/panels.ts`), driven into the
+   * surface. `null` means "you still own it, tell me what it is" — which is
+   * how a tab starts, so the sheet opens the way the surface opens it.
+   */
+  themeEditing: boolean | null;
+  onThemeEditingChange: (next: boolean) => void;
+  fileSheetOpen: boolean | null;
+  onFileSheetOpenChange: (next: boolean) => void;
+  /**
+   * Whether the surface — the thing that draws those panels — is up at all.
+   * False while the origin is being asked for and false for good if it never
+   * came: the tab draws no panel toggles then, because there is nothing
+   * behind them but a failure card.
+   */
+  onSurfaceReady: (ready: boolean) => void;
 }) {
   const [answer, setAnswer] = useState<ViewerOrigin | null>(null);
   // A transcript link's `#selector` for this tab (`explorer.selectCadReference`).
@@ -196,6 +239,15 @@ export function CadRenderer({
       cancelled = true;
     };
   }, [projectId, root, attempt]);
+
+  // The panels exist exactly while the surface does. Reported rather than
+  // derived by the tab, because "did the viewer come up" is this component's
+  // answer and nobody else's.
+  const surfaceUp = !!answer?.origin;
+  useEffect(() => {
+    onSurfaceReady(surfaceUp);
+    return () => onSurfaceReady(false);
+  }, [onSurfaceReady, surfaceUp]);
 
   if (!answer) {
     return (
@@ -263,11 +315,15 @@ export function CadRenderer({
           captureRequest={captureRequest}
           colorScheme={colorScheme}
           file={path}
+          fileSheetOpen={fileSheetOpen}
           onCapture={onCapture}
+          onFileSheetOpenChange={onFileSheetOpenChange}
           onOpenFile={onOpenFile}
           onReference={onReference}
+          onThemeEditingChange={onThemeEditingChange}
           origin={answer.origin}
           selectReference={selectReference}
+          themeEditing={themeEditing}
           width={width}
         />
       </Suspense>

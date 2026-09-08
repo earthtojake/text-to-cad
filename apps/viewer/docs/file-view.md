@@ -40,6 +40,8 @@ a build error or, worse, a silently unstyled surface.
 | `onReference` | `null` | `({ file, selector, text }) => void`. Called for every reference the person copies out of the surface, beside the clipboard write. `null` (standalone) means the clipboard alone. |
 | `onCapture` | `null` | `({ blob, file }) => void`. Given, the floating toolbar shows a camera button that renders the viewport to a PNG and hands it over; `null` shows no button. |
 | `captureRequest` | `null` | `{ key }`: take that same capture now, asked for from outside the viewport. Applied once per `key`, like `selectReference`; the picture goes to `onCapture`. |
+| `themeEditing` / `onThemeEditingChange` | `null` / — | The theme panel's open flag, and every change to it. A boolean makes the panel controlled; `null` leaves it to the surface. See "Driving the panels from a host". |
+| `fileSheetOpen` / `onFileSheetOpenChange` | `null` / — | The file sheet's open flag and its changes, the same way. |
 
 `origin` is also published through context:
 
@@ -106,6 +108,54 @@ and its topology arrive, so a selector for a face not yet loaded waits for
 the next change rather than being dropped, and one already selected is
 revealed, not toggled off. Pass a new `key` to select the same reference
 again.
+
+## Driving the panels from a host
+
+The surface has two right-hand panels — the **theme editor** and the **file
+sheet** (STEP, mesh, URDF/SRDF/SDF, DXF) — and they are one panel with two
+contents: one width, one resize handle, one inset on the 3D viewport. So
+opening either closes the other, and the surface enforces that wherever a
+panel is opened.
+
+Standalone, the workspace top bar carries a toggle for each and the surface
+keeps both flags. A host that hides that top bar — `layout="desktop"` does —
+has to draw its own toggles, and a toggle needs to know whether its panel is
+open. Four props make that possible:
+
+```jsx
+<CadFileView
+  themeEditing={themeOpen}
+  onThemeEditingChange={setThemeOpen}
+  fileSheetOpen={sheetOpen}
+  onFileSheetOpenChange={setSheetOpen}
+  …
+/>
+```
+
+- **A boolean makes that panel controlled.** The surface stops keeping its own
+  flag for it and reads the prop instead, so the host's state is the one
+  answer. `null`/omitted is uncontrolled and is the standalone case, unchanged.
+- **A callback with no value is *observing*.** The surface still owns the flag
+  and reports it, its opening value included — so a host can start at `null`,
+  hear what the surface opened with (a STEP file opens with its sheet up, at a
+  width the surface decides), echo that back, and be controlling from then on.
+  That is one report on mount, not a copy of the default over on the host's
+  side. It is how the desktop app's CAD tab starts.
+- **The callback fires on every change**, including the changes the surface
+  makes itself: opening the sheet reports `themeEditing` false as well as
+  `fileSheetOpen` true, and the sheet opens on its own when a measurement
+  lands. A host that only ever echoes its callbacks into its own state stays
+  in step with the surface without knowing any of those rules.
+- **The two are controlled separately.** Controlling one and leaving the other
+  alone works: the surface keeps its own flag for whichever it still owns and
+  the exclusion still holds across the pair.
+- **Nothing new persists.** The theme itself is a user preference and already
+  persists in the viewer's own storage; these props are about which panel is
+  showing, which is a property of the moment.
+
+A host that ignores its own callback is a host whose toggle does nothing —
+the usual bargain of a controlled component. The rule and the resolution live
+in `hostPanels.js`, which is pure and tested (`hostPanels.test.js`).
 
 ## What the consumer's bundler needs
 

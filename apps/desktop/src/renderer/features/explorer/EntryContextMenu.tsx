@@ -23,6 +23,11 @@ import {
   ContextMenuShortcut,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+} from "@renderer/components/ui/dropdown-menu";
 
 import { performEntryAction, type EntryActionContext } from "./entry-actions";
 import { entryMenu, type EntryAction, type MenuEntryTarget } from "./entry-menu";
@@ -36,7 +41,19 @@ import { entryMenu, type EntryAction, type MenuEntryTarget } from "./entry-menu"
  * `EntryMenuItems` is exported on its own because the tree does not wrap
  * every row in a menu of its own: one menu over the whole list, aimed at
  * whichever row was clicked, is one Radix root instead of three hundred.
+ * It also draws in a dropdown (`surface="dropdown"`) for the file crumb's
+ * `⋯` button, which opens by click rather than by right-click: Radix's two
+ * menu primitives take the same item props, so one table and one set of
+ * actions serve both doors.
  */
+
+const SURFACES = {
+  context: { Item: ContextMenuItem, Separator: ContextMenuSeparator, Shortcut: ContextMenuShortcut },
+  dropdown: { Item: DropdownMenuItem, Separator: DropdownMenuSeparator, Shortcut: DropdownMenuShortcut },
+} as const;
+
+/** Which Radix primitive draws the items — a right-click menu, or a dropdown. */
+export type EntryMenuSurface = keyof typeof SURFACES;
 
 const ICONS: Record<EntryAction, LucideIcon> = {
   open: Eye,
@@ -92,15 +109,24 @@ export function useMenuFocusGuard(ctx: EntryActionContext): {
   );
 }
 
-export function EntryMenuItems({ entry, ctx }: { entry: MenuEntryTarget; ctx: EntryActionContext }) {
+export function EntryMenuItems({
+  entry,
+  ctx,
+  surface = "context",
+}: {
+  entry: MenuEntryTarget;
+  ctx: EntryActionContext;
+  surface?: EntryMenuSurface;
+}) {
   const sections = entryMenu(entry, ctx.platform);
+  const { Item, Separator, Shortcut } = SURFACES[surface];
   return (
     <>
       {sections.map((section, index) => (
         <Fragment key={index}>
-          {index > 0 ? <ContextMenuSeparator /> : null}
+          {index > 0 ? <Separator /> : null}
           {section.map((item) => (
-            <ContextMenuItem
+            <Item
               className="text-[13px]"
               data-action={item.action}
               key={item.action}
@@ -109,8 +135,8 @@ export function EntryMenuItems({ entry, ctx }: { entry: MenuEntryTarget; ctx: En
             >
               {createElement(ICONS[item.action], { className: "size-3.5" })}
               {item.label}
-              {item.shortcut ? <ContextMenuShortcut>{item.shortcut}</ContextMenuShortcut> : null}
-            </ContextMenuItem>
+              {item.shortcut ? <Shortcut>{item.shortcut}</Shortcut> : null}
+            </Item>
           ))}
         </Fragment>
       ))}
