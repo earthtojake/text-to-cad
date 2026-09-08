@@ -285,7 +285,12 @@ export async function loadRenderSurf(url, { signal } = {}) {
   const meshData = await loadCached(glbCache, url, async () => {
     return (await loadSurfPayload(url, { signal })).meshData;
   }, { cachePending: !signal });
-  return finalizeCached(glbCache, url, meshData);
+  finalizeCached(glbCache, url, meshData);
+  // On the surf leash too: the package's componentMeshDataByCid owns the
+  // displayed arrays, and a pinned entry here kept a previous model's
+  // geometry alive across a file switch.
+  retainSurfEntry(glbCache, url);
+  return meshData;
 }
 
 export async function loadRenderStl(url, { signal } = {}) {
@@ -563,15 +568,85 @@ export function peekRenderDisplayEdgeBundle(glbUrl) {
 
 const surfPayloadCache = new Map();
 
-// Non-default tessellation levels (viewport LOD) live under level-suffixed
-// keys in the SAME cache but on a bounded LRU leash: a zoom tour of a large
-// assembly must not accumulate a finest-level copy of every component. The
-// default-level entries keep their load-path lifetime. This keying —
-// url + l<chord>-a<angle> — deliberately mirrors the on-disk tessellation
-// cache tier (`<cid>-l<chord>-a<angle>`); when that shared codec lands, this
-// function is the seam where it plugs in.
-const SURF_LOD_CACHE_LIMIT = 8;
-const surfLodKeys = [];
+// Every surf entry — a component's payload at any level, its selector bundle,
+// its display-edge bundle — lives on ONE bounded LRU leash. The consumers own
+// what they keep: the package's componentMeshDataByCid holds every displayed
+// meshData, the reference composition holds the bundles of the occurrences it
+// composed, the LOD working set holds its swapped levels. Retaining a second
+// reference here for the load's lifetime pinned every component's decoded
+// selector bundle (manifest rows + edge polylines) for the whole session; a
+// miss re-decodes from the shared tessellation cache in a worker. Level keys
+// (url + l<chord>-a<angle>) mirror the on-disk tessellation cache tier
+// (`<cid>-l<chord>-a<angle>`).
+const SURF_CACHE_LIMIT = 24;
+const surfEntries = [];
+
+function retainSurfEntry(cache, key) {
+  const existing = surfEntries.findIndex((entry) => entry.cache === cache && entry.key === key);
+  if (existing !== -1) {
+    surfEntries.splice(existing, 1);
+  }
+  surfEntries.push({ cache, key });
+  while (surfEntries.length > SURF_CACHE_LIMIT) {
+    const evicted = surfEntries.shift();
+    if (evicted.cache.get(evicted.key)?.then === undefined) {
+      evicted.cache.delete(evicted.key);
+      releaseAssetSourceScope(evicted.cache, evicted.key);
+    }
+  }
+}
+
+function typedArrayBytesOf(value, seen) {
+  if (!value || typeof value !== "object") {
+    return 0;
+  }
+  if (ArrayBuffer.isView(value)) {
+    if (seen.has(value.buffer)) {
+      return 0;
+    }
+    seen.add(value.buffer);
+    return value.byteLength;
+  }
+  let total = 0;
+  for (const child of Object.values(value)) {
+    if (child && typeof child === "object" && !Array.isArray(child)) {
+      total += typedArrayBytesOf(child, seen);
+    }
+  }
+  return total;
+}
+
+// Byte attribution of what these caches retain, for the memory harness:
+// typed-array bytes (each buffer counted once) and manifest row counts per
+// cache. Pending entries count as zero.
+export function renderAssetCacheStats() {
+  const seen = new Set();
+  const stats = {};
+  for (const [name, cache] of [
+    ["surfPayload", surfPayloadCache],
+    ["selector", selectorCache],
+    ["displayEdge", displayEdgeCache],
+    ["glb", glbCache],
+  ]) {
+    let typedBytes = 0;
+    let manifestRows = 0;
+    let entries = 0;
+    for (const value of cache.values()) {
+      if (!value || typeof value.then === "function") {
+        continue;
+      }
+      entries += 1;
+      typedBytes += typedArrayBytesOf(value, seen);
+      const manifest = value.manifest || value.bundle?.manifest;
+      for (const rows of [manifest?.faces, manifest?.edges, manifest?.shapes, manifest?.occurrences]) {
+        manifestRows += Array.isArray(rows) ? rows.length : 0;
+      }
+    }
+    stats[name] = { entries, typedBytes, manifestRows };
+  }
+  stats.surfLeash = { entries: surfEntries.length, limit: SURF_CACHE_LIMIT };
+  return stats;
+}
 
 export function surfTessellationCacheKey(url, tessellation) {
   if (!tessellation || typeof tessellation !== "object") {
@@ -585,17 +660,6 @@ export function surfTessellationCacheKey(url, tessellation) {
   const num = (value, fallback) =>
     (Number.isFinite(value) ? value : fallback).toExponential(6);
   return `${url}#l${num(chord, NaN)}-a${num(angle, NaN)}`;
-}
-
-function retainSurfLodEntry(cacheKey) {
-  const existing = surfLodKeys.indexOf(cacheKey);
-  if (existing !== -1) {
-    surfLodKeys.splice(existing, 1);
-  }
-  surfLodKeys.push(cacheKey);
-  while (surfLodKeys.length > SURF_LOD_CACHE_LIMIT) {
-    surfPayloadCache.delete(surfLodKeys.shift());
-  }
 }
 
 async function loadSurfPayloadInline(url, { signal, tessellation } = {}) {
@@ -646,10 +710,9 @@ async function loadSurfPayload(url, { signal, tessellation } = {}) {
     }
     return loadSurfPayloadInline(url, { signal, tessellation });
   }, { cachePending: !signal });
-  if (cacheKey !== url) {
-    retainSurfLodEntry(cacheKey);
-  }
-  return finalizeCached(surfPayloadCache, cacheKey, payload);
+  finalizeCached(surfPayloadCache, cacheKey, payload);
+  retainSurfEntry(surfPayloadCache, cacheKey);
+  return payload;
 }
 
 /**
@@ -666,7 +729,9 @@ export async function loadRenderSurfSelectorBundle(surfUrl, { signal } = {}) {
   const bundle = await loadCached(selectorCache, surfUrl, async () => {
     return (await loadSurfPayload(surfUrl, { signal })).bundle;
   }, { cachePending: !signal });
-  return finalizeCached(selectorCache, surfUrl, bundle);
+  finalizeCached(selectorCache, surfUrl, bundle);
+  retainSurfEntry(selectorCache, surfUrl);
+  return bundle;
 }
 
 export async function loadRenderSurfDisplayEdgeBundle(surfUrl, { signal } = {}) {
@@ -685,7 +750,9 @@ export async function loadRenderSurfDisplayEdgeBundle(surfUrl, { signal } = {}) 
       buffers: {},
     };
   }, { cachePending: !signal });
-  return finalizeCached(displayEdgeCache, surfUrl, bundle);
+  finalizeCached(displayEdgeCache, surfUrl, bundle);
+  retainSurfEntry(displayEdgeCache, surfUrl);
+  return bundle;
 }
 
 const dxfMeshCache = new Map();

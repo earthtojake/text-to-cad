@@ -7053,6 +7053,7 @@ export default function CadWorkspace({
           previewMode={previewMode}
           viewportFrameInsets={viewportFrameInsets}
           viewerLoading={viewerLoading}
+          progressiveLoadActive={selectedMeshMatches && meshState?.assemblyInteractionReady === false}
           viewerAlert={viewerAlert}
           stepUpdateInProgress={effectiveRenderFormat === RENDER_FORMAT.STEP && stepUpdateInProgress}
           referenceSelectionPending={referenceSelectionPending}

@@ -266,6 +266,7 @@ export default function CadRenderPane({
   previewMode,
   viewportFrameInsets,
   viewerLoading,
+  progressiveLoadActive = false,
   viewerAlert,
   stepUpdateInProgress,
   referenceSelectionPending = false,
@@ -518,6 +519,7 @@ export default function CadRenderPane({
         compactViewPlane={false}
         viewportFrameInsets={viewportFrameInsets}
         isLoading={viewerLoading}
+        progressiveLoadActive={progressiveLoadActive}
         pickMode={!hasTopology && !hasParts && !measureModeActive
           ? VIEWER_PICK_MODE.NONE
           : viewerPickModeForRenderPane({

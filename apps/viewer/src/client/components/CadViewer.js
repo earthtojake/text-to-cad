@@ -123,6 +123,7 @@ import {
   syncSelectorPickGroups
 } from "cadgen-js/lib/viewer/selectorPickGroups";
 import { scheduleRuntimeRaycastBvh } from "cadgen-js/lib/viewer/raycastBvh";
+import { renderMemoryAccounting } from "../render/renderMemoryAccounting";
 import {
   buildSurfaceLinePositions,
   projectPointToSurfaceUv,
@@ -1598,6 +1599,7 @@ const CadViewer = forwardRef(function CadViewer({
   compactViewPlane = false,
   viewportFrameInsets = null,
   isLoading = false,
+  progressiveLoadActive = false,
   pickMode = VIEWER_PICK_MODE.AUTO,
   panToolActive = false,
   renderPartsIndividually = false,
@@ -1679,6 +1681,22 @@ const CadViewer = forwardRef(function CadViewer({
   const suppressPerspectiveEventsRef = useRef(0);
   const drawingIdRef = useRef(0);
   const runtimeRef = useRef(null);
+  // A progressive package load throttles the render loop (useViewerRuntime
+  // reads runtime.progressiveLoadActive); the final publish clears the flag
+  // and the next frame renders at once. The ref lets the model-build effect,
+  // which runs per publish, re-assert the flag without depending on it.
+  const progressiveLoadActiveRef = useRef(progressiveLoadActive === true);
+  progressiveLoadActiveRef.current = progressiveLoadActive === true;
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime) {
+      return;
+    }
+    runtime.progressiveLoadActive = progressiveLoadActive === true;
+    if (!progressiveLoadActive) {
+      runtime.requestRender?.();
+    }
+  }, [progressiveLoadActive]);
   const explodedViewAnimationRef = useRef({
     rafId: 0,
     progress: 0,
@@ -3841,6 +3859,11 @@ const CadViewer = forwardRef(function CadViewer({
     syncSelectorPickGroups(runtime, displaySelectorRuntime, modelOffset, { clearSceneGroup });
     scheduleRuntimeRaycastBvh(runtime);
     syncRuntimeStepClipPlane(runtime, clipSettingsRef.current);
+    runtime.progressiveLoadActive = progressiveLoadActiveRef.current;
+    if (typeof window !== "undefined") {
+      // Byte attribution for the headless memory harness (read, never polled here).
+      window.__cadRenderMemoryProbe = () => renderMemoryAccounting(runtimeRef.current);
+    }
 
     const currentPartVisualState = partVisualStateRef.current;
     applyPartVisualState(THREE, runtime.displayRecords, shouldRenderParts
