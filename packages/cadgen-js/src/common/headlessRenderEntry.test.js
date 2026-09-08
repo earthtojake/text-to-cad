@@ -209,13 +209,29 @@ test("the camera frames the whole clip, not one pose of it", () => {
     const plan = resolveVideoPlan({ fps: 4, seconds: 4 }, SLIDE_CLIPS.slide);
     const bounds = sequenceFrameBounds(model, stepAnimation, plan);
     // Left starts at x 0..1 and the last frame (t = 3.75) slides it to 3.75..4.75,
-    // so the union reaches past the resting model's own 0..3.
-    assert.deepEqual(bounds.min, [0, 0, 0]);
-    assert.deepEqual(bounds.max, [4.75, 1, 0]);
+    // so the union reaches past the resting model's own 0..3. It is padded by a
+    // hair (sequenceFrameBounds samples rather than walking every frame), so the
+    // union must CONTAIN the true extent and sit close outside it, not equal it.
+    const margin = 0.01 * 4.75;
+    for (const axis of [0, 1, 2]) {
+      const low = [0, 0, 0][axis];
+      const high = [4.75, 1, 0][axis];
+      assert.ok(bounds.min[axis] <= low && bounds.min[axis] >= low - margin - 1e-9,
+        `min[${axis}] ${bounds.min[axis]} brackets ${low}`);
+      assert.ok(bounds.max[axis] >= high && bounds.max[axis] <= high + margin + 1e-9,
+        `max[${axis}] ${bounds.max[axis]} brackets ${high}`);
+    }
     // Fitting to frame 0 alone would have framed 0..3 and let the clip walk out
     // of shot; fitting per frame would have moved the camera on every one.
     const firstFrameBounds = poseSequenceFrame(model, stepAnimation, 0).bounds;
     assert.deepEqual(firstFrameBounds.max, [3, 1, 0]);
+    // A long clip samples instead of enumerating: the pre-pass must not grow
+    // with the frame count, or a 1,800-frame render pays for 1,800 poses of a
+    // clip whose extent moved smoothly the whole time.
+    let posed = 0;
+    const counting = { ...model, update: (settings) => { posed += 1; return model.update(settings); } };
+    sequenceFrameBounds(counting, stepAnimation, resolveVideoPlan({ fps: 60, seconds: 30 }, SLIDE_CLIPS.slide));
+    assert.ok(posed <= 192, `sampled ${posed} poses for an 1800-frame plan`);
   } finally {
     model.dispose();
   }

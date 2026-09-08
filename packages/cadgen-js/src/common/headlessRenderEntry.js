@@ -246,17 +246,37 @@ export function poseSequenceFrame(model, stepAnimation, elapsedSec) {
  * still — the clip travels out of shot wherever it moves furthest. So the
  * camera is fitted once, to the union, and this pre-pass pays one effects pass
  * per frame (no GL, no readback) to know what that union is. */
+// How many poses the union is measured over. It SAMPLES rather than walking
+// every frame: a clip's extent moves smoothly, so a couple of hundred poses
+// bound it as well as thousands do — and a frame is not free (the tendon hand
+// re-solves 48 swept centerlines per pose, at which point enumerating 1,800
+// frames costs more than the render). The first and last frame are always
+// included, and the result is padded by a hair so a pose between two samples
+// cannot poke outside the frame the camera is then locked to.
+const SEQUENCE_BOUNDS_SAMPLES = 192;
+const SEQUENCE_BOUNDS_MARGIN = 0.01;
+
 export function sequenceFrameBounds(model, stepAnimation, plan) {
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
-  for (let index = 0; index < plan.frameCount; index += 1) {
+  const samples = Math.min(plan.frameCount, SEQUENCE_BOUNDS_SAMPLES);
+  const last = plan.frameCount - 1;
+  for (let sample = 0; sample < samples; sample += 1) {
+    const index = samples === 1 ? 0 : Math.round((sample * last) / (samples - 1));
     const bounds = poseSequenceFrame(model, stepAnimation, videoFrameElapsedSec(plan, index)).bounds;
     for (let axis = 0; axis < 3; axis += 1) {
       min[axis] = Math.min(min[axis], Number(bounds?.min?.[axis] ?? 0));
       max[axis] = Math.max(max[axis], Number(bounds?.max?.[axis] ?? 0));
     }
   }
-  return { min, max };
+  const margin = SEQUENCE_BOUNDS_MARGIN * Math.max(
+    ...[0, 1, 2].map((axis) => (Number.isFinite(max[axis] - min[axis]) ? max[axis] - min[axis] : 0)),
+    1
+  );
+  return {
+    min: min.map((value) => value - margin),
+    max: max.map((value) => value + margin)
+  };
 }
 
 let activeRenderSequence = null;
