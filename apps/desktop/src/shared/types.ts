@@ -194,7 +194,7 @@ export const FileTabSchema = z.object({
    * id rather than a flag per panel; `""` is "nothing open".
    *
    * `null` is "the person has not said", which resolves to the renderer's
-   * own default — the tree for a document, the file sheet for a CAD file.
+   * own default — the tree for a document, the Inspector for a CAD file.
    * It is not the same as `""`: a tab whose panels were all closed on
    * purpose must come back closed.
    */

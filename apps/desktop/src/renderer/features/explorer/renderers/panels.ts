@@ -4,10 +4,10 @@
  * ONE panel column, one width, one border, one resize handle — and a list of
  * things that can be in it: the file tree, and whatever the open file's
  * renderer declares (markdown's source view, a CAD file's theme editor and
- * file sheet). The nav row draws one icon button per panel, in declaration
+ * Inspector). The nav row draws one icon button per panel, in declaration
  * order with the tree last, and highlights the open one; pressing a toggle
  * opens that panel and closes whatever was open. This is the shape the
- * theme editor and the file sheet already had inside the viewer's surface,
+ * theme editor and the Inspector already had inside the viewer's surface,
  * now the shape of all of them: the tree is an entry in this list, not a
  * second column beside it with a design of its own.
  *
@@ -30,7 +30,7 @@ import { FILE_PANEL_TREE } from "@shared/types";
  *
  * `"tree"` and `"slot"` are both the panel column: the app's own file tree,
  * or a box handed to the file's renderer to draw into (the CAD surface
- * portals its theme editor and its file sheet there, `panelSlot` in the
+ * portals its theme editor and its Inspector there, `panelSlot` in the
  * viewer's file-view docs). `"body"` is the one panel that is not a column
  * at all — markdown's source view is the same bytes read differently, so it
  * replaces the content instead of sitting beside it. It is still in this
@@ -49,7 +49,7 @@ export type FilePanel = {
   /**
    * The panel a tab opens with when the person has not said (`panel: null`).
    * The FIRST declaration that claims it wins, and the tree is last, so a
-   * CAD file opens with its file sheet and everything else with the tree.
+   * CAD file opens with its Inspector and everything else with the tree.
    */
   defaultOpen?: boolean;
 };

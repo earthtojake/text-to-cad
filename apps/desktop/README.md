@@ -120,12 +120,13 @@ neighbours, open),
 `file-context-menu` (a tree row's), `file-image`, `file-cad-failed` (the runtime broken on
 purpose), `file-cad` (the explorer at its widest: the sidebar hidden and the
 session at its floor), `file-cad-default` (the explorer at its default
-width, the file sheet as the tab's one panel) and both again at 1280×800,
+width, the Inspector as the tab's one panel) and both again at 1280×800,
 `file-cad-measure`, `file-cad-theme` (the theme panel in the tab's panel
 column, from the nav row's toggle), `file-cad-tree` and `file-cad-files`
-(the file tree in that same column, which is what closing the sheet or the
-theme panel shows), `file-cad-light-chrome` (the app light over the
-Cinematic theme's dark stage: the theme paints the scene and nothing else),
+(the file tree in that same column, which is what closing the Inspector or
+the theme panel shows), `file-cad-light-chrome` (the app light over the
+Cinematic theme's dark stage, background included: the theme paints the
+scene and nothing else, and only the System theme follows the app),
 `terminal`,
 `browser-empty`, `browser`, `review`, `strip`, `strip-overflow` (seven tabs in
 a pane at its floor, `+` pinned to the right edge), `panes-sidebar-collapsed`
@@ -474,12 +475,13 @@ the pane's width, and only a person's own toggle or drag writes it: an agent
 opening a file shows the pane without deciding anything for next time.
 
 A CAD file in the explorer is laid out by the desktop, not measured by the
-viewer (`features/explorer/cad-layout.ts`): the surface is pinned to its
-desktop layout so nothing is ever a drawer over the model, its panels are
-drawn in the file tab's own panel column (so their width is that column's —
-see "The panels a file has"), and light/dark is the app's colour scheme
-rather than the CAD theme's, with the app's `--background` handed to the
-scene as the model's ground.
+viewer (`renderers/CadRenderer.tsx`): the surface is pinned to its desktop
+layout so nothing is ever a drawer over the model, its panels are drawn in
+the file tab's own panel column (so their width is that column's — see "The
+panels a file has"), and light/dark is the app's colour scheme rather than
+the CAD theme's. The scene's background is the theme's own; only the theme
+called **System** follows the app, and it reads this window's
+`--background` for itself.
 
 A markdown file opens as a document you can type in — a ProseMirror editor
 over TipTap's schema, saved with `Cmd/Ctrl+S` like any other file, with
@@ -793,11 +795,15 @@ closes whatever was open. This is the standalone viewer's top bar, ported,
 with the app's own tree folded into it.
 
 Markdown declares one, the two readings of the same bytes (`View source` /
-`View preview`). A CAD file declares two, **Theme settings** and **File
-sheet** — the viewer's own panels, which `layout="desktop"` had left with no
-door at all in this app, because that layout hides the top bar those toggles
-live in. Code, images and PDFs declare none, and then the tree is the whole
-list.
+`View preview`). A CAD file declares two, **Theme settings** and
+**Inspector** — the viewer's own panels, which `layout="desktop"` had left
+with no door at all in this app, because that layout hides the top bar those
+toggles live in. The Inspector is the file's tree, measurements and
+parameters; its toggle is the sliders glyph the standalone viewer's top bar
+uses for the same panel, so it is one control with one look in both. Its id
+stays `cad-file-sheet` — the tab's stored `panel` field holds it, and the
+viewer's host contract calls it `fileSheetOpen`. Code, images and PDFs
+declare none, and then the tree is the whole list.
 
 **Where each panel's content comes from** is the one thing a declaration
 says beyond its name: `tree` is the app's file tree, `slot` is a box handed
@@ -805,34 +811,45 @@ to the file's renderer to draw into, and `body` is the panel that is not a
 column at all — markdown's source view replaces the content, because it is
 the same bytes read differently. The CAD pair is `slot`: the viewer's
 surface portals the open one into this column (`panelSlot`, in the file-view
-doc) and draws no column of its own, so the theme editor, the file sheet and
+doc) and draws no column of its own, so the theme editor, the Inspector and
 the tree share one border, one width, one resize handle and one header
-treatment (each panel's own top row — the tree's filter, the sheet's tabs,
-the theme editor's preset select). Before this they were two columns of two
+treatment (each panel's own top row — the tree's filter, the Inspector's
+tabs, the theme editor's preset select). Before this they were two columns of two
 designs, and the pane was too narrow for both, which is why a CAD tab used
 to hide the tree.
 
 **The tab owns which panel is open**, as one id in one field of the row
 (`FileTabSchema.panel`), so it persists like any other tab state and two
 panels cannot be open however the writes interleave. `null` is "nobody has
-said" and resolves to the renderer's own default — the file sheet for a CAD
+said" and resolves to the renderer's own default — the Inspector for a CAD
 file, the tree for everything else; `""` is nothing open, which a tab closed
 on purpose comes back to. The CAD pair is *controlled* in the viewer's
 surface (`themeEditing` / `onThemeEditingChange`, `fileSheetOpen` /
 `onFileSheetOpenChange`): at most one of the two is ever true, and the
 surface reports the changes it makes itself — a measurement landing opens
-the sheet — so the highlight follows what is on screen. A CAD tab whose
+the Inspector — so the highlight follows what is on screen. A CAD tab whose
 runtime did not start declares no panels: two toggles over the failure card
 would open nothing, and the column falls back to the tree.
 
 **A CAD theme paints the scene, never the chrome.** The panel column, the
 toolbars and the tab strip are this app's tokens at this app's colour scheme
 (`colorScheme`); the theme owns the background, lights, materials, edges,
-grid and projection, and the app's own `--background` is handed to it as the
-model's ground (`cadSceneBackgroundFor`). So a light window over a dark
-studio renders, which it did not before: the theme's backdrop luminance used
-to write `.dark` on the document, and opening a STEP file repainted the whole
-window (`tests/e2e/explorer.spec.ts` asserts the two move independently).
+grid and projection. So a light window over a dark studio renders, which it
+did not before: the theme's backdrop luminance used to write `.dark` on the
+document, and opening a STEP file repainted the whole window
+(`tests/e2e/explorer.spec.ts` asserts the two move independently).
+
+**And the background is the theme's too — except for one.** The theme called
+**System** means "follow the app", so it paints the scene on this window's
+own `--background`, which is why a model under it sits on the same ground as
+the chrome instead of in a framed studio. Every other preset, and a custom
+theme, paints what its own settings say: picking Cinematic in the theme panel
+turns the background charcoal here exactly as it does in the standalone
+viewer, and switching the app light or dark then leaves it alone. The app
+used to hand its background to the surface for every theme, which made eight
+presets one colour in this window; the surface reads the token itself now
+(`apps/viewer/src/client/file-view/chromeBackdrop.js`), so there is nothing
+for this app to pass.
 
 ## Quitting
 

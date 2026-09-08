@@ -10,7 +10,7 @@
  * two agree by construction — this table takes main's `FileKind` as its input
  * and only splits `text` further, into markdown and everything else.
  */
-import { Code2, Eye, Palette, PanelRight } from "lucide-react";
+import { Code2, Eye, Palette, SlidersHorizontal } from "lucide-react";
 
 import type { FileKind, FileStat } from "@shared/ipc/explorer";
 
@@ -39,7 +39,7 @@ const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
  *
  * `panels` is what puts toggles in the nav row (`panels.ts`): markdown has
  * one, the two readings of the same bytes; a CAD file has two, the theme
- * editor and the file sheet, which the viewer's surface draws into this
+ * editor and the Inspector, which the viewer's surface draws into this
  * app's panel column and this app drives, because that surface's own top bar
  * — where its toggles live standalone — is hidden here. Code, images and
  * PDFs declare none, and a kind with none has the tree alone in the row.
@@ -73,10 +73,17 @@ const markdownPanels: PanelsFor = ({ open }) => [
 ];
 
 /**
- * A CAD file's two: the viewer's theme editor and its file sheet, drawn by
- * the viewer's surface into the panel column this app owns (`panelSlot`).
- * The sheet is what a CAD tab opens with — a STEP file's tree and its
- * measurements are the reason the tab is open.
+ * A CAD file's two: the viewer's theme editor and its **Inspector** — the
+ * file's tree, its measurements, its parameters — drawn by the viewer's
+ * surface into the panel column this app owns (`panelSlot`). The Inspector is
+ * what a CAD tab opens with; a STEP file's tree and its measurements are the
+ * reason the tab is open.
+ *
+ * "Inspector" is the name a person sees. The id stays `cad-file-sheet`
+ * because the tab's stored `panel` field holds it and the viewer's host
+ * contract calls the same panel `fileSheetOpen`; the sliders glyph is the one
+ * the standalone viewer's top bar uses for this panel, so the control is the
+ * same control in both.
  *
  * Nothing until the surface is up: a CAD tab whose runtime did not start
  * shows a failure card, and two toggles over a card would open nothing.
@@ -92,8 +99,8 @@ const cadPanels: PanelsFor = ({ ready }) =>
         },
         {
           id: CAD_PANEL.fileSheet,
-          label: "File sheet",
-          icon: PanelRight,
+          label: "Inspector",
+          icon: SlidersHorizontal,
           content: "slot",
           defaultOpen: true,
         },

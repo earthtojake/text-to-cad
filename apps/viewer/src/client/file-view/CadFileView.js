@@ -73,7 +73,8 @@ import {
   CUSTOM_THEME_ID,
   getThemePresetIdForSettings,
   normalizeThemeSettings,
-  resolveThemeSettingsForColorMode
+  resolveThemeSettingsForColorMode,
+  SYSTEM_THEME_ID
 } from "cadgen-js/lib/themeSettings";
 import {
   displayModeForcesEdges,
@@ -319,7 +320,6 @@ import {
   capitalizeFirst,
   entryWithoutRenderAssets,
   hostPrefersDarkForColorScheme,
-  normalizeHostSceneBackground,
   normalizeHostSheetWidth,
   normalizeLargeFileState,
   resolveHostLayoutMode,
@@ -331,6 +331,11 @@ import {
   readViewerViewportWidth,
   statusOnlyFileSheetTitle
 } from "./fileViewState.js";
+import {
+  readChromeBackgroundToken,
+  resolveChromeBackdropColor,
+  sceneBackdropEdgeColor
+} from "./chromeBackdrop.js";
 import {
   addReferenceLookupKeys,
   buildStepTreeCopyReferenceMap,
@@ -379,7 +384,6 @@ export default function CadFileView({
   fileSheetWidth = null,
   panelSlot = null,
   colorScheme = null,
-  sceneBackground = null,
   selectReference = null,
   onReference = null,
   onCapture = null,
@@ -413,7 +417,6 @@ export default function CadFileView({
         fileSheetWidth={fileSheetWidth}
         panelSlot={panelSlot}
         colorScheme={colorScheme}
-        sceneBackground={sceneBackground}
         selectReference={selectReference}
         onReference={onReference}
         onCapture={onCapture}
@@ -425,6 +428,36 @@ export default function CadFileView({
       />
     </ViewerOriginProvider>
   );
+}
+
+/**
+ * The chrome's own background colour, live.
+ *
+ * The "System" CAD theme paints the scene on it (chromeBackdrop.js), so it has
+ * to survive the app switching light and dark — and the app that owns the
+ * `--background` token is not this surface. A host toggles `.dark` on the
+ * document in an effect of its own, and effects run child-first, so reading
+ * the token in an effect here would read the class as it was BEFORE the
+ * switch. Hence the observer: whatever moves the token — a host's class, this
+ * surface's own colour-scheme write, a stylesheet swapped at runtime — is a
+ * mutation on `<html>`, and the read happens after it.
+ *
+ * `prefersDark` is a dependency as well, so the first paint of a scheme change
+ * already has the right colour when the token and the class move together.
+ */
+function useChromeBackdropColor(prefersDark) {
+  const [token, setToken] = useState(readChromeBackgroundToken);
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof MutationObserver === "undefined") {
+      return undefined;
+    }
+    const read = () => setToken(readChromeBackgroundToken());
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, { attributeFilter: ["class", "style"] });
+    return () => observer.disconnect();
+  }, [prefersDark]);
+  return useMemo(() => resolveChromeBackdropColor({ token, prefersDark }), [prefersDark, token]);
 }
 
 function CadFileViewSurface({
@@ -441,7 +474,6 @@ function CadFileViewSurface({
   fileSheetWidth,
   panelSlot,
   colorScheme,
-  sceneBackground,
   selectReference,
   onReference,
   onCapture,
@@ -461,7 +493,6 @@ function CadFileViewSurface({
   // one over, else the column this surface draws (hostPanelSlot.js).
   const { slot: hostPanelSlot, drawsOwnColumn: drawsOwnPanelColumn } = resolveHostPanelPlacement(panelSlot);
   const hostPrefersDark = hostPrefersDarkForColorScheme(colorScheme);
-  const hostSceneBackground = normalizeHostSceneBackground(sceneBackground);
   /*
     The app's light/dark — the CHROME's, and only ever the chrome's.
 
@@ -609,6 +640,9 @@ function CadFileViewSurface({
   }, [themeReadOptions]);
   const themeSettings = themeState.settings;
   const themeId = themeState.themeId;
+  // What the "System" theme paints the scene on: the chrome's `--background`,
+  // or the written-out pair where there is no chrome (chromeBackdrop.js).
+  const chromeBackdropColor = useChromeBackdropColor(uiPrefersDark);
   // Whether the theme panel is up. A host that draws its own toggle drives it
   // through the `themeEditing` prop and hears about every change; without the
   // prop this own flag IS the answer (hostPanels.js).
@@ -669,17 +703,27 @@ function CadFileViewSurface({
     const resolved = resolveThemeSettingsForColorMode(themeSettings, {
       prefersDark: uiPrefersDark
     });
-    if (!hostSceneBackground) {
+    if (themeId !== SYSTEM_THEME_ID) {
       return resolved;
     }
-    // A host that embeds the surface paints the scene on its own ground so
-    // the model sits in the app rather than in a framed picture of a studio;
-    // the theme keeps its lights, grid, floor and materials.
+    // "System" is the ONE theme that follows the app, and following it means
+    // the app's ground as well as its light/dark: the model sits in the
+    // window rather than in a framed picture of a studio. Every other preset
+    // — and the custom theme — keeps the backdrop its own settings ask for,
+    // in a host and standalone alike, so picking Cinematic changes what you
+    // see. This used to be a host prop (`sceneBackground`) applied to every
+    // theme, which made the theme panel's background half inert in the
+    // desktop app: eight presets, one colour.
     return {
       ...resolved,
-      background: { ...(resolved.background || {}), type: "solid", solidColor: hostSceneBackground }
+      background: { ...(resolved.background || {}), type: "solid", solidColor: chromeBackdropColor }
     };
-  }, [hostSceneBackground, themeSettings, uiPrefersDark]);
+  }, [chromeBackdropColor, themeId, themeSettings, uiPrefersDark]);
+  // The colour behind the canvas, which is the scene's own at its edges.
+  const sceneBackdrop = useMemo(
+    () => sceneBackdropEdgeColor(resolvedThemeSettings.background, chromeBackdropColor),
+    [chromeBackdropColor, resolvedThemeSettings]
+  );
   const resolvedDisplayEdgeSettings = useMemo(() => {
     // Edge theme — colour, opacity, thickness — is fixed, not a user
     // setting. It comes from the cadgen-js defaults, or from a theme that styles its
@@ -6751,8 +6795,19 @@ function CadFileViewSurface({
                 area, so a camera fit centres in what is visible and a sheet
                 opening or closing reaches the scene as a plain resize. The
                 overlays after it (toolbar, home, loading) sit above it in the
-                same box and let the pointer through to it between them. */}
-            <div className="pointer-events-none relative min-w-0 flex-1 overflow-hidden">
+                same box and let the pointer through to it between them.
+
+                Its own background is the scene's edge colour, not the app's:
+                the canvas is opaque and covers all of this, but it is resized
+                on the next frame, and one frame of the chrome's background
+                showing above a dark stage is a visible band. It is also the
+                only place outside the renderer where the chosen backdrop can
+                be read (chromeBackdrop.js). */}
+            <div
+              className="pointer-events-none relative min-w-0 flex-1 overflow-hidden"
+              data-cad-scene-backdrop={sceneBackdrop}
+              style={{ backgroundColor: sceneBackdrop }}
+            >
               <div className="pointer-events-auto absolute inset-0 z-0">
                 <CadRenderPane
                   viewerRef={viewerRef}

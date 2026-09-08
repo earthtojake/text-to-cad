@@ -36,8 +36,7 @@ a build error or, worse, a silently unstyled surface.
 | `layout` | `"auto"` | `"desktop"` pins the desktop layout — the file sheet is a column beside the model, never a drawer over it — however narrow the root is. `"auto"` measures the root and picks desktop or compact. |
 | `fileSheetWidth` | `null` | The sheet's width in px, when the host sizes it for its pane. Clamped to the sheet's own range (240–448) and not resizable from inside the surface. `null` uses the stored width. Ignored when `panelSlot` is given — the host's frame owns the width then. |
 | `panelSlot` | `null` | A DOM element the open panel's content is drawn into. Given one, the surface portals the theme editor or the file sheet there and draws no column of its own; without one it draws the column, which is the standalone case. See "Where the panels are drawn". |
-| `sceneBackground` | `null` | A hex colour to paint the scene on instead of the theme's own backdrop, so the model sits on the host's ground; lights, grid, floor and materials are the theme's. |
-| `colorScheme` | `null` | `"light"` or `"dark"`: the host's resolved colour scheme, which is the chrome's light/dark. The CAD "system" preset resolves the same way and the surface stops writing `.dark` / `color-scheme` to the document — the host owns those. `null` is the standalone case: the surface follows its own colour-scheme preference and the OS, and writes the document itself. Never the CAD theme, in either case: see "Theme is the scene". |
+| `colorScheme` | `null` | `"light"` or `"dark"`: the host's resolved colour scheme, which is the chrome's light/dark. The CAD "system" theme resolves the same way — its light/dark half and the background it borrows from the host's chrome — and the surface stops writing `.dark` / `color-scheme` to the document, because the host owns those. `null` is the standalone case: the surface follows its own colour-scheme preference and the OS, and writes the document itself. Never the CAD theme, in either case: see "Theme is the scene". |
 | `selectReference` | `null` | `{ selector, key }`: select a reference — `o1.2`, `label.f45`, `bracket`, a comma-separated list (its first member) — once the model is up. Applied once per `key`; a new `key` selects again. See "References and captures". |
 | `onReference` | `null` | `({ file, selector, text }) => void`. Called for every reference the person copies out of the surface, beside the clipboard write. `null` (standalone) means the clipboard alone. |
 | `onCapture` | `null` | `({ blob, file }) => void`. Given, the floating toolbar shows a camera button that renders the viewport to a PNG and hands it over; `null` shows no button. |
@@ -113,11 +112,16 @@ again.
 
 ## Driving the panels from a host
 
-The surface has two right-hand panels — the **theme editor** and the **file
-sheet** (STEP, mesh, URDF/SRDF/SDF, DXF) — and they are one panel with two
+The surface has two right-hand panels — the **theme editor** and the file's
+own sheet (STEP, mesh, URDF/SRDF/SDF, DXF) — and they are one panel with two
 contents: one width, one resize handle, one inset on the 3D viewport. So
 opening either closes the other, and the surface enforces that wherever a
 panel is opened.
+
+That second panel is `fileSheet*` in this contract and in the code. What a
+person is shown calling it is the app's to choose: standalone its toggle is
+named for the file it is reading ("Expand STEP details"), and the desktop app
+calls it the **Inspector**. Renaming it here would rename a prop.
 
 Standalone, the workspace top bar carries a toggle for each and the surface
 keeps both flags. A host that hides that top bar — `layout="desktop"` does —
@@ -196,7 +200,7 @@ const [slot, setSlot] = useState(null);
   panels.
 
 The desktop app does exactly this: its file tab has one panel column and one
-list of panels — the file tree, the theme editor, the file sheet — with one
+list of panels — the file tree, the theme editor, the Inspector — with one
 toggle each, and the surface's two are drawn in that column.
 
 `normalizeHostPanelSlot` / `resolveHostPanelPlacement` in `hostPanelSlot.js`
@@ -220,11 +224,44 @@ and every later one agree.
 
 What a theme still reaches, in a host as well as standalone:
 
-- everything in the scene, including `sceneBackground` when a host asks for
-  its own ground under the model;
+- everything in the scene, the background included;
 - which colour bucket the theme editor writes to, for a theme whose
   `colorMode` is `"system"`: that follows the app's colour scheme, so editing
   a colour in a light window edits the light one.
+
+### The one theme that follows the app
+
+The theme named **System** is the exception, and it is an exception about the
+*background* only. It means "follow the app", so it paints the scene on the
+chrome's own ground: the computed `--background` custom property on
+`documentElement`, which the standalone viewer's token layer and a host's
+both define, with the shadcn neutral pair (`#ffffff` / `#0a0a0a`) written out
+as the fallback for a page that has no such token. Its light/dark half comes
+from the app's colour scheme — `colorScheme` from a host, the resolved
+preference standalone — never from the theme.
+
+Every other preset, and a custom theme, paints the backdrop its own settings
+ask for. So picking Cinematic changes the background, in a host exactly as it
+does standalone, and switching the app between light and dark then leaves
+that background alone.
+
+A host passes nothing for this. The surface reads the token itself
+(`chromeBackdrop.js`, pure and tested in `chromeBackdrop.test.js`) and
+watches `documentElement` for the class or style change that swaps it, so a
+host flipping light and dark needs no prop and no callback. There used to be
+one — a hex colour a host handed over — and it applied to every theme, which
+made a theme picker's presets one colour inside a host.
+
+The third context is a headless render: `cadgen step snapshot` runs the same
+theme model with no document and no stylesheet. There is no token to read
+there, so System resolves to the written-out pair — the same colours the
+tokens compute to, so one theme is one background whether it is on screen or
+in a rendered picture.
+
+The box the canvas fills is painted the scene's edge colour too — a
+gradient's outer stop, a solid's colour — because the canvas is resized on
+the frame after its box is, and one frame of the app's background above a
+dark stage is a visible band.
 
 ## What the consumer's bundler needs
 
