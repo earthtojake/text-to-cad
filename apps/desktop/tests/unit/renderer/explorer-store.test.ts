@@ -292,10 +292,10 @@ describe("the explorer strip", () => {
 
   it("titles a tab by what a person would call it", () => {
     const base = { id: "t", projectId: PROJECT, order: 0 } as const;
-    expect(tabTitle({ ...base, kind: "file", path: "src/wrist.step", root: null, viewSource: false })).toBe(
+    expect(tabTitle({ ...base, kind: "file", path: "src/wrist.step", root: null, panel: null })).toBe(
       "wrist.step",
     );
-    expect(tabTitle({ ...base, kind: "file", path: null, root: null, viewSource: false })).toBe("Untitled");
+    expect(tabTitle({ ...base, kind: "file", path: null, root: null, panel: null })).toBe("Untitled");
     expect(tabTitle({ ...base, kind: "browser", url: "https://example.com/a/b" })).toBe(
       "example.com",
     );

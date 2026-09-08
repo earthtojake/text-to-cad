@@ -150,7 +150,10 @@ describe("ExplorerTab", () => {
       kind: "file",
       path: "/tmp/a.step",
     });
-    expect(file.kind === "file" && file.viewSource).toBe(false);
+    // No panel choice yet: which one a tab opens with is the renderer's
+    // default, resolved when the file's kind is known, not a value stamped
+    // on the row (`features/explorer/renderers/panels.ts`).
+    expect(file.kind === "file" ? file.panel : "missing").toBeNull();
 
     const terminal = ExplorerTabSchema.parse({
       id: "t2",
