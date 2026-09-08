@@ -1,56 +1,70 @@
 /**
- * The panels a renderer has, and the toggles the file tab draws for them.
+ * A file tab's panels: the list, and the rule that only one is open.
  *
- * A file kind that shows something beside its content — markdown's source
- * view, a CAD file's theme editor and file sheet — declares it here, and the
- * nav row draws one icon button per declaration, in declaration order, at
- * the right end of the row immediately LEFT of the files toggle (which stays
- * last and never moves). This is the same shape as the standalone viewer's
- * top bar, where a toggle is highlighted while its panel is open.
+ * ONE panel column, one width, one border, one resize handle — and a list of
+ * things that can be in it: the file tree, and whatever the open file's
+ * renderer declares (markdown's source view, a CAD file's theme editor and
+ * file sheet). The nav row draws one icon button per panel, in declaration
+ * order with the tree last, and highlights the open one; pressing a toggle
+ * opens that panel and closes whatever was open. This is the shape the
+ * theme editor and the file sheet already had inside the viewer's surface,
+ * now the shape of all of them: the tree is an entry in this list, not a
+ * second column beside it with a design of its own.
  *
- * The tab owns the state, not the renderer, for the same reason it owns
- * `viewSource`: the toggle is in the header and the panel is in the body, and
- * two owners of one flag is how a toggle and a panel come to disagree. A
- * declaration is handed the state it may read and the two setters it may
- * call, and returns what to draw.
+ * The tab owns which one is open, not the renderer and not the surface: the
+ * toggle is in the header and the panel is in the body, and two owners of one
+ * flag is how a toggle and a panel come to disagree. It is one field of the
+ * tab (`FileTabSchema.panel`), so it persists, and it is a single id, so two
+ * panels cannot both be open however the writes interleave.
  *
- * `traits.panels` is where this reaches `FileTab` (`registry.ts`). There is no
- * per-panel special case in the header: markdown's source toggle is one of
- * these, not the exception it used to be.
+ * `traits.panels` is where a renderer's declarations reach `FileTab`
+ * (`registry.ts`); `FilePanel.tsx` is the column they are drawn in.
  */
 import type { LucideIcon } from "lucide-react";
+import { FolderTree } from "lucide-react";
 
-/** One toggle in the nav row, ready to draw. */
+import { FILE_PANEL_TREE } from "@shared/types";
+
+/**
+ * Where a panel's content comes from — which is who draws it.
+ *
+ * `"tree"` and `"slot"` are both the panel column: the app's own file tree,
+ * or a box handed to the file's renderer to draw into (the CAD surface
+ * portals its theme editor and its file sheet there, `panelSlot` in the
+ * viewer's file-view docs). `"body"` is the one panel that is not a column
+ * at all — markdown's source view is the same bytes read differently, so it
+ * replaces the content instead of sitting beside it. It is still in this
+ * list, and still exclusive with the others: one panel open at a time means
+ * opening the source closes the tree.
+ */
+export type FilePanelContent = "tree" | "slot" | "body";
+
+/** One panel: its toggle in the nav row, and where its content comes from. */
 export type FilePanel = {
   id: string;
   /** The accessible name and the tooltip — what pressing it does. */
   label: string;
   icon: LucideIcon;
-  open: boolean;
-  onToggle: () => void;
+  content: FilePanelContent;
+  /**
+   * The panel a tab opens with when the person has not said (`panel: null`).
+   * The FIRST declaration that claims it wins, and the tree is last, so a
+   * CAD file opens with its file sheet and everything else with the tree.
+   */
+  defaultOpen?: boolean;
 };
 
 /**
  * What a declaration is given.
  *
- * `viewSource` is the one panel state that persists (it is a field of the
- * tab, so a reload comes back to the same reading of the file); `open` is
- * session state, per open file, keyed by panel id. `ready` is false while
- * the body is not the renderer's own surface — a CAD tab whose runtime did
- * not start shows a failure card, and a toggle over a card that cannot open
- * a panel is a dead control.
+ * `open` is the id of the open panel, resolved — a declaration reads it to
+ * name itself by what pressing it does (`View source` / `View preview`).
+ * `ready` is false while the body is not the renderer's own surface: a CAD
+ * tab whose runtime did not start shows a failure card, and a toggle over a
+ * card that cannot open a panel is a dead control.
  */
 export type FilePanelContext = {
-  viewSource: boolean;
-  setViewSource: (next: boolean) => void;
-  open: Readonly<Record<string, boolean>>;
-  /**
-   * Several flags at once, because a declaration whose panels exclude each
-   * other has to close one as it opens the other — in one write, or the
-   * record spends a render with two panels open and the toggles disagree
-   * with the screen.
-   */
-  setOpen: (patch: Record<string, boolean>) => void;
+  open: string;
   ready: boolean;
 };
 
@@ -58,47 +72,68 @@ export type FilePanelContext = {
 export type PanelsFor = (context: FilePanelContext) => FilePanel[];
 
 /**
- * The panel ids. Shared, because the declaration in `registry.ts` names them
- * and the renderer that draws the panels reads the same record.
+ * The panel ids a renderer declares. The tree's is `FILE_PANEL_TREE`, in
+ * `@shared/types`, because the explorer store names that one too.
  */
 export const CAD_PANEL = {
   theme: "cad-theme",
   fileSheet: "cad-file-sheet",
 } as const;
 
+/** Markdown's source view — its own id, since the tab's field holds ids. */
+export const SOURCE_PANEL = "source";
+
 /**
- * Read one panel's flag out of the tab's record.
+ * The file tree, as the last entry in every file tab's panel list.
  *
- * A missing entry is closed *for the toggle*, which is all this answers. It
- * is not the same as "closed" for the renderer: the CAD pair starts with no
- * entry on purpose, so the viewer's surface still owns the flag and reports
- * what it opened with — the record is read raw there
- * (`openPanels[id] ?? null`) to keep that third state.
+ * A folder-tree glyph rather than a panel one: the button is named by what
+ * comes back, not by the fact that a panel slides — a panel icon in a row of
+ * file actions reads as a layout control and was skipped over. Last and
+ * never moving, so it is the one control in the pane a person can always
+ * find in the same place.
  */
-export function panelOpen(open: Readonly<Record<string, boolean>>, id: string): boolean {
-  return open[id] === true;
+export function treePanel(open: string): FilePanel {
+  return {
+    id: FILE_PANEL_TREE,
+    label: open === FILE_PANEL_TREE ? "Hide files" : "Show files",
+    icon: FolderTree,
+    content: "tree",
+    defaultOpen: true,
+  };
 }
 
 /**
- * The CAD pair after pressing one of its toggles.
- *
- * They are ONE panel with two contents in the viewer's surface — one width,
- * one resize handle, one inset on the 3D viewport — so opening either closes
- * the other outright, and closing the one you opened leaves nothing open. A
- * press while the OTHER is up opens this one rather than closing something
- * already closed: the gesture reads as "show me this instead".
- *
- * The surface enforces the same rule for the controls it draws itself and
- * reports what it did (`onThemeEditingChange` / `onFileSheetOpenChange`),
- * which is how this record stays in step when the sheet opens on its own —
- * a measurement landing does that. This function is for the presses that
- * start here, where the surface has nothing to report yet.
+ * Every panel a tab has, in the order the nav row draws them: the renderer's,
+ * then the tree.
  */
-export function toggleCadPanel(
-  open: Readonly<Record<string, boolean>>,
-  id: (typeof CAD_PANEL)[keyof typeof CAD_PANEL],
-): Record<string, boolean> {
-  const other = id === CAD_PANEL.theme ? CAD_PANEL.fileSheet : CAD_PANEL.theme;
-  const next = panelOpen(open, other) || !panelOpen(open, id);
-  return { [id]: next, [other]: false };
+export function panelsFor(declared: FilePanel[], open: string): FilePanel[] {
+  return [...declared, treePanel(open)];
+}
+
+/**
+ * Which panel is open, given the tab's field and the panels it has.
+ *
+ * `null` — nobody has said — is the first panel claiming `defaultOpen`.
+ * `""` is nothing open, and an id no panel in this list has is nothing open
+ * too: a tab that was showing markdown's source and is pointed at a `.step`,
+ * or a CAD tab whose surface has not come up, has a field naming a panel
+ * that is not there, and the honest answer is that nothing is.
+ */
+export function resolveOpenPanel(panels: FilePanel[], panel: string | null): FilePanel | null {
+  if (panel === null) {
+    return panels.find((entry) => entry.defaultOpen) ?? null;
+  }
+  return panels.find((entry) => entry.id === panel) ?? null;
+}
+
+/**
+ * The tab's field after pressing one panel's toggle.
+ *
+ * Opening one closes whatever was open, and pressing the open one closes it
+ * — which is the whole rule, because the field is one id. A press while
+ * another panel is up reads as "show me this instead" and never blinks the
+ * column shut on the way.
+ */
+export function nextOpenPanel(open: string, id: string): string {
+  return open === id ? "" : id;
 }
