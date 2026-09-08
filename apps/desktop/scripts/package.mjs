@@ -5,7 +5,7 @@
  *
  * Three things this does that a bare `electron-builder` invocation would not:
  *
- * 1. Builds first (`scripts/build.mjs`: the composed plugin, `electron-vite
+ * 1. Builds first (`scripts/build.mjs`: the composed skills, `electron-vite
  *    build`, the bundled MCP server), because electron-builder ships `out/`
  *    and has no opinion about how it got there.
  * 2. Stamps the repository's VERSION as `extraMetadata.version`. package.json
@@ -50,7 +50,7 @@ if (targets.length === 0) {
  * not there. `resources/runtime/<target>` is checked, not created: an empty
  * one would package an app that cannot render CAD.
  */
-const EXTRA_RESOURCE_DIRS = ["resources/cadgen", "resources/plugin", "resources/runtime"];
+const EXTRA_RESOURCE_DIRS = ["resources/cadgen", "resources/skills", "resources/runtime"];
 
 /**
  * The `<os>-<arch>` runtimes this invocation needs: one per app electron-builder
@@ -154,7 +154,7 @@ const run = (command, args) => {
 
 const npx = process.platform === "win32" ? "npx.cmd" : "npx";
 
-// The same build `npm run build` does: the composed plugin, electron-vite,
+// The same build `npm run build` does: the composed skills, electron-vite,
 // the bundled MCP server (scripts/build.mjs).
 run(process.execPath, [path.join(appRoot, "scripts", "build.mjs")]);
 run(npx, [

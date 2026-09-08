@@ -7,12 +7,12 @@ import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, app, nativeImage, shell } from "electron";
 
-import { initCad, pluginManager, shutdownCad } from "./cad";
+import { initCad, shutdownCad } from "./cad";
 import { endTrackedChildren, killTrackedChildren } from "./children";
 import { closeDb, databaseFile, db } from "./db";
 import { broadcast, registerIpcHandlers } from "./ipc";
 import { shutdownAcp } from "./ipc/acp";
-import { detector, shutdownAgents } from "./ipc/agents";
+import { shutdownAgents } from "./ipc/agents";
 import { disposeExplorerServices } from "./ipc/explorer";
 import { installMenu } from "./menu";
 import { armQuitDeadline } from "./quit-deadline";
@@ -193,11 +193,11 @@ if (!app.requestSingleInstanceLock()) {
     db();
     console.info(`[db] ${databaseFile()}`);
     registerIpcHandlers();
-    // The CAD runtime, the viewer manager and the MCP bridge, before the
-    // first window: the file tab's first `cad.viewerOrigin` and the first
-    // session's `mcpServers` both need them up.
-    await initCad({ detector, sendCommand: (command) => broadcast("cad.command", command) });
-    schedulePluginInstall();
+    // The CAD runtime, the skills root, the viewer manager and the MCP
+    // bridge, before the first window: the file tab's first
+    // `cad.viewerOrigin` and the first session's `mcpServers` and
+    // `additionalDirectories` all need them up.
+    await initCad({ sendCommand: (command) => broadcast("cad.command", command) });
     installMenu(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
     initTelemetry();
     createWindow();
@@ -251,33 +251,3 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 
-/**
- * First launch and every app update (plan §8): install the bundled plugin
- * into each agent that is on the machine and has not been given this
- * version. Once the detector has probed, so "is Codex installed" has an
- * answer; off the launch path, because a `claude plugin install` takes
- * seconds and the window should not wait for it. Off entirely under test —
- * the e2e suite runs with a throwaway user-data directory but the user's
- * real `~/.claude` and `~/.codex`, and must not write to them.
- */
-function schedulePluginInstall() {
-  if (process.env.NODE_ENV === "test" || process.env.HARDCORE_NO_PLUGIN_INSTALL) {
-    return;
-  }
-  const off = detector.onChange(() => {
-    off();
-    void pluginManager()
-      .ensureInstalled()
-      .then((installed) => {
-        if (installed.length > 0) {
-          console.info(
-            `[plugin] ${installed.map((status) => `${status.agentId}: ${status.state}${status.message ? ` (${status.message})` : ""}`).join(", ")}`,
-          );
-          return pluginManager().statusAll().then((all) => broadcast("plugins.status", all));
-        }
-        return undefined;
-      })
-      .catch((error: unknown) => console.error("[plugin] install on launch failed", error));
-  });
-  detector.list();
-}

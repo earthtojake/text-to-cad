@@ -50,6 +50,12 @@
  *                 permission request that waits for the answer, a subagent,
  *                 prose — with small delays so the streaming states can be
  *                 seen
+ *   "skills"      call the Hardcore MCP server's `list_skills`, and
+ *                 `read_skill` on the `cad` skill, and reply with what came
+ *                 back — the universal path an agent with no skill-root
+ *                 feature takes
+ *   "which"       run `command -v cadgen` in a terminal, so a test can see
+ *                 what a session's PATH resolves `cadgen` to
  *   "applied"     reply with what the client configured on this session and
  *                 in which order — `model,reasoning_effort,mode:auto` — plus
  *                 the mode it ended in, so a test can assert that a new
@@ -71,6 +77,11 @@
  * `FAKE_AGENT_REFUSE=<configId>` makes `session/set_config_option` throw for
  * that option, the way an adapter refuses a model an account cannot use.
  *
+ * `FAKE_AGENT_RECORD=<file.jsonl>` appends one JSON line per session/new,
+ * session/load and prompt — the params as they arrived, and the adapter's own
+ * `PATH` — so a spec can assert what the client sent. Appended, not
+ * overwritten: a suite runs several of these processes against one file.
+ *
  * A cwd containing a `.fake-auth-required` file makes `session/new` answer
  * "Authentication required", the way an adapter whose CLI is signed out does.
  *
@@ -79,7 +90,7 @@
  * re-issued and awaited (terminal ids are mapped from the recorded response
  * to the live one), and the recorded prompt response is returned.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 
@@ -88,6 +99,20 @@ import { Client as McpClient } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const args = process.argv.slice(2);
+const recordFile = process.env.FAKE_AGENT_RECORD || null;
+
+/** One line per client request worth asserting on. Best effort. */
+function record(kind, params) {
+  if (!recordFile) {
+    return;
+  }
+  try {
+    appendFileSync(recordFile, `${JSON.stringify({ kind, at: Date.now(), pid: process.pid, params })}\n`);
+  } catch {
+    /* a test's record file is not worth failing a turn over */
+  }
+}
+
 const fixturePath = args.includes("--fixture") ? args[args.indexOf("--fixture") + 1] : null;
 const fixture = fixturePath ? loadFixture(fixturePath) : null;
 /** Codex's shape: no `modes`, a `mode` config option carrying the same list. */
@@ -219,6 +244,7 @@ new AgentSideConnection((conn) => ({
   },
 
   async newSession(params) {
+    record("session/new", { ...params, PATH: process.env.PATH ?? null });
     if (fixture?.newSession) {
       return fixture.newSession;
     }
@@ -236,6 +262,7 @@ new AgentSideConnection((conn) => ({
   },
 
   async loadSession(params) {
+    record("session/load", params);
     if (fixture?.load) {
       await replay(conn, fixture.load.frames, params.sessionId);
       return fixture.load.response ?? {};
@@ -291,6 +318,7 @@ new AgentSideConnection((conn) => ({
   },
 
   async prompt(params) {
+    record("prompt", params);
     cancelled = false;
     if (fixture) {
       const turn = fixture.turns.shift();
@@ -315,10 +343,11 @@ new AgentSideConnection((conn) => ({
 
 async function script(conn, params) {
   const sessionId = params.sessionId;
-  const text = params.prompt
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
-    .join("\n");
+  // The LAST text block, not all of them joined: a session with an agent that
+  // does not load skill roots carries Hardcore's preamble in front of the
+  // person's first prompt, and its prose ("read the one that fits…") would
+  // otherwise trigger half the keywords below.
+  const text = params.prompt.filter((block) => block.type === "text").map((block) => block.text).at(-1) ?? "";
   const words = text.split(/\s+/);
   const after = (word) => words[words.indexOf(word) + 1];
   const send = (update) => conn.sessionUpdate({ sessionId, update });
@@ -435,6 +464,47 @@ async function script(conn, params) {
     } catch (error) {
       await send({ sessionUpdate: "tool_call_update", toolCallId: "open-1", status: "failed", content: [{ type: "content", content: { type: "text", text: String(error.message ?? error) } }] });
     }
+  }
+
+  if (text.includes("skills")) {
+    // The universal path: the skills the app put on disk, read through its own
+    // MCP server rather than through any skill-root feature of the agent's.
+    await send({ sessionUpdate: "tool_call", toolCallId: "skills-1", title: "list_skills", kind: "other", status: "in_progress" });
+    try {
+      const listed = await callHardcoreTool("list_skills", {});
+      const read = await callHardcoreTool("read_skill", { name: "cad" });
+      const answer = JSON.parse(listed.content[0].text);
+      const names = answer.skills.map((skill) => skill.name);
+      record("skills", { root: answer.root, names, cad: JSON.parse(read.content[0].text) });
+      await send({ sessionUpdate: "tool_call_update", toolCallId: "skills-1", status: "completed", rawOutput: { names } });
+      await send({
+        sessionUpdate: "agent_message_chunk",
+        content: {
+          type: "text",
+          text: `skills: ${names.join(",")} · cad starts ${JSON.parse(read.content[0].text).text.slice(0, 3)}`,
+        },
+      });
+    } catch (error) {
+      await send({ sessionUpdate: "tool_call_update", toolCallId: "skills-1", status: "failed", content: [{ type: "content", content: { type: "text", text: String(error.message ?? error) } }] });
+    }
+  }
+
+  if (text.includes("which")) {
+    // What this session's PATH resolves `cadgen` to. `sh -c`, not `-lc`: a
+    // login shell would rebuild PATH from the person's dotfiles and answer a
+    // different question.
+    const { terminalId } = await conn.request("terminal/create", {
+      sessionId,
+      command: "sh",
+      args: ["-c", "command -v cadgen || echo none"],
+      outputByteLimit: 4096,
+    });
+    await conn.request("terminal/wait_for_exit", { sessionId, terminalId });
+    const output = await conn.request("terminal/output", { sessionId, terminalId });
+    await conn.request("terminal/release", { sessionId, terminalId });
+    const resolved = String(output.output ?? "").trim();
+    record("which", { cadgen: resolved, PATH: process.env.PATH ?? null });
+    await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: `cadgen: ${resolved}` } });
   }
 
   if (text.includes("permission")) {

@@ -8,6 +8,7 @@ import { configOptions, sessionModes } from "@shared/acp/reduce";
 import {
   NO_MODEL,
   autoModeId,
+  defaultModeId,
   effortModelKey,
   effortOption,
   effortOptionFor,
@@ -102,6 +103,17 @@ describe("the agent's own auto mode", () => {
   it("falls back to a mode plainly called auto, and is null when there is none", () => {
     expect(autoModeId(sessionModes([{ id: "auto", name: "Automatic" }]))).toBe("auto");
     expect(autoModeId(sessionModes([{ id: "default", name: "Default" }]))).toBeNull();
+  });
+
+  it("starts Claude Code and Codex in their own auto presets by name, and falls back to the kind", () => {
+    const codex = codexNewSession().modes as { availableModes: unknown };
+    expect(defaultModeId("claude-code", sessionModes(CLAUDE_MODES))).toBe("auto");
+    expect(defaultModeId("codex", sessionModes(codex.availableModes))).toBe("agent");
+    // An override the agent does not offer is not forced on it.
+    expect(defaultModeId("codex", sessionModes([{ id: "default", name: "Default" }, { id: "auto", name: "Auto" }]))).toBe("auto");
+    // Providers without an override use the auto-review rule.
+    expect(defaultModeId("gemini-cli", sessionModes(codex.availableModes))).toBe("agent");
+    expect(defaultModeId(null, sessionModes([{ id: "default", name: "Default" }]))).toBeNull();
   });
 });
 
@@ -254,13 +266,17 @@ describe("the remembered model, effort and mode", () => {
     expect(preferredEffort(null, efforts, "sonnet")).toBeNull();
   });
 
-  it("starts in the mode the provider was left in, else its own auto preset", () => {
+  it("starts in the mode the provider was left in, else the one it opens in", () => {
     const modes = sessionModes(CLAUDE_MODES);
-    expect(preferredMode(modes, "plan")).toBe("plan");
+    expect(preferredMode("claude-code", modes, "plan")).toBe("plan");
     // A mode the agent dropped is not a mode.
-    expect(preferredMode(modes, "yolo")).toBe("auto");
-    expect(preferredMode(modes, null)).toBe("auto");
-    // And an agent with no auto preset is left alone rather than guessed at.
-    expect(preferredMode(sessionModes([{ id: "a", name: "A" }, { id: "b", name: "B" }]), null)).toBeNull();
+    expect(preferredMode("claude-code", modes, "yolo")).toBe("auto");
+    // Nothing remembered: the provider's own opening mode (`defaultModeId`).
+    expect(preferredMode("claude-code", modes, null)).toBe("auto");
+    expect(preferredMode("claude-code", modes, null)).toBe(defaultModeId("claude-code", modes));
+    // And an agent with no such mode is left alone rather than guessed at.
+    const plain = sessionModes([{ id: "a", name: "A" }, { id: "b", name: "B" }]);
+    expect(preferredMode("gemini-cli", plain, null)).toBeNull();
+    expect(preferredMode(null, plain, "b")).toBe("b");
   });
 });

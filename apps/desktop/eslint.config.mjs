@@ -16,9 +16,9 @@ export default tseslint.config(
       "dist/**",
       "node_modules/**",
       "tests/e2e/__screenshots__/**",
-      // Build outputs: the composed plugin and the bundled CAD runtime, which
+      // Build outputs: the composed skills and the bundled CAD runtime, which
       // carries JavaScript of its own inside site-packages.
-      "resources/plugin/**",
+      "resources/skills/**",
       "resources/runtime/**",
       // Vendored, not authored: shadcn/ui and AI Elements are copied in from
       // their registries and re-copied when they are updated. Linting them

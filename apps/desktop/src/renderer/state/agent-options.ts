@@ -165,7 +165,7 @@ export function useProviderMode(agentId: string | null): ModeChoice | null {
     }
     return {
       ...choice,
-      currentModeId: preferredMode(choice.modes, cached.defaultMode) ?? choice.currentModeId,
+      currentModeId: preferredMode(agentId, choice.modes, cached.defaultMode) ?? choice.currentModeId,
     };
-  }, [cached]);
+  }, [cached, agentId]);
 }

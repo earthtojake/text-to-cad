@@ -32,6 +32,14 @@ declare module "@viewer/file-view" {
     /** The sheet's width in px, when the host sizes it; null for the surface's own. */
     fileSheetWidth?: number | null;
     /**
+     * The element the open panel's content is drawn into. Given one, the
+     * surface portals its theme editor / file sheet there and draws no
+     * column of its own — this app's file tab has ONE panel column, shared
+     * with its file tree, so the width, the border, the resize handle and
+     * the toggle are the tab's (`features/explorer/FilePanel.tsx`).
+     */
+    panelSlot?: HTMLElement | null;
+    /**
      * The host's resolved theme. Resolves the CAD "system" preset the same
      * way and stops the surface writing `.dark` to the document — the host
      * owns that.
@@ -60,13 +68,13 @@ declare module "@viewer/file-view" {
      */
     captureRequest?: { key: number } | null;
     /**
-     * The surface's two right-hand panels, driven from here.
+     * The surface's two panels, driven from here and drawn into `panelSlot`.
      *
      * A boolean makes that panel controlled: the surface stops keeping its
      * own flag and reports every change through the matching callback,
-     * including the one it makes itself — the two are one panel, so opening
-     * either closes the other. `layout="desktop"` hides the surface's own
-     * top bar, so these are the only door this app has to them.
+     * including the one it makes itself — a measurement landing opens the
+     * sheet. `layout="desktop"` hides the surface's own top bar, so the nav
+     * row's toggles are the only door this app has to them.
      */
     themeEditing?: boolean | null;
     onThemeEditingChange?: (next: boolean) => void;

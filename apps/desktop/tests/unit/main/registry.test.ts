@@ -71,22 +71,16 @@ describe("the agent registry", () => {
     }
   });
 
-  it("names the skills directory and the plugin commands for the agents that have them", () => {
-    const claude = agentProvider("claude-code")!;
-    expect(claude.skillsDir).toBe("~/.claude/skills");
-    expect(claude.pluginInstall).toEqual({
-      marketplaceAdd: ["plugin", "marketplace", "add", "<path>"],
-      marketplaceUpdate: ["plugin", "marketplace", "update", "<marketplace>"],
-      install: ["plugin", "install", "<plugin>"],
-      update: ["plugin", "update", "<plugin>"],
-    });
-    const codex = agentProvider("codex")!;
-    expect(codex.skillsDir).toBe("~/.codex/skills");
-    expect(codex.pluginInstall).toEqual({
-      marketplaceAdd: ["plugin", "marketplace", "add", "<path>"],
-      install: ["plugin", "add", "<plugin>"],
-    });
-    expect(agentProvider("gemini-cli")?.skillsDir).toBe("~/.gemini/skills");
+  it("says which agents load the skills root Hardcore names, and which need telling", () => {
+    // The two adapters that read `additionalDirectories` / `_meta.additionalRoots`
+    // and load `<root>/.claude/skills` and `<root>/.agents/skills` themselves.
+    expect(agentProvider("claude-code")?.skillRoots).toBe("native");
+    expect(agentProvider("codex")?.skillRoots).toBe("native");
+    // Gemini's ACP `newSession` ignores additional directories; the rest are
+    // assumed to as well, so they get the preamble.
+    expect(agentProvider("gemini-cli")?.skillRoots).toBe("preamble");
+    const preamble = AGENT_PROVIDERS.filter((provider) => provider.skillRoots === "preamble");
+    expect(preamble.length).toBe(AGENT_PROVIDERS.length - 2);
   });
 
   it("describes auth as cli-login, api-key or none, with the env vars an api-key needs", () => {

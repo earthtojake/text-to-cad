@@ -94,6 +94,26 @@ export function fastOption(
  * Null when the agent has no such preset, which is the case worth leaving
  * alone rather than guessing at.
  */
+/**
+ * The mode a provider starts in unless the person has chosen one. Claude Code
+ * and Codex both open in their own auto-approval preset in their own apps,
+ * so Hardcore does the same by name; any other provider gets the
+ * `auto_review` rule below, and an override that names a mode the agent did
+ * not offer falls through to it.
+ */
+export const PROVIDER_DEFAULT_MODES: Readonly<Record<string, string>> = {
+  "claude-code": "auto",
+  codex: "agent",
+};
+
+export function defaultModeId(agentId: string | null | undefined, modes: SessionMode[]): string | null {
+  const override = agentId ? PROVIDER_DEFAULT_MODES[agentId] : undefined;
+  if (override && modes.some((mode) => mode.id === override)) {
+    return override;
+  }
+  return autoModeId(modes);
+}
+
 export function autoModeId(modes: SessionMode[]): string | null {
   const byKind = modes.find((mode) => mode.kind === AUTO_REVIEW_KIND);
   if (byKind) {
@@ -248,14 +268,18 @@ export function preferredEffort(
 
 /**
  * The mode a session with this agent starts in: the mode the person last
- * left it in, while the agent still offers it, else the provider's own
- * auto-approval preset. Shared, because the new-session screen's chip is a
- * statement about what `SessionManager.create` is about to do and the two
- * have to agree.
+ * left the provider in, while the agent still offers it, else the mode that
+ * provider opens in on its own (`defaultModeId`). Shared, because the
+ * new-session screen's chip is a statement about what
+ * `SessionManager.create` is about to do and the two have to agree.
  */
-export function preferredMode(modes: SessionMode[], remembered: string | null): string | null {
+export function preferredMode(
+  agentId: string | null | undefined,
+  modes: SessionMode[],
+  remembered: string | null,
+): string | null {
   return (
     (remembered && modes.some((mode) => mode.id === remembered) ? remembered : null) ??
-    autoModeId(modes)
+    defaultModeId(agentId, modes)
   );
 }

@@ -23,16 +23,21 @@ import type { McpServer } from "@agentclientprotocol/sdk";
 
 import type { CadCommand } from "../../shared/ipc/cad";
 import type { Session } from "../../shared/types";
-import { AGENT_PROVIDERS } from "../agents/registry";
-import type { AgentDetector } from "../agents/detect";
 import { projects, sessions, settings } from "../db/repositories";
 import { rootBelongsToProject } from "../projects/workspace";
 import * as git from "../projects/git";
 import { createActions, RendererCommands } from "./actions";
 import { DaemonWarmer } from "./daemon";
 import { McpBridge, type BridgeSession } from "./mcp-bridge";
-import { PluginManager } from "./plugin";
-import { CadRuntime, execCommand, nodeHost, runtimeLogPath } from "./runtime";
+import {
+  EMPTY_SKILLS,
+  materialiseSkillsRoot,
+  skillsPreamble,
+  SKILLS_ROOT_ENV,
+  type SkillSummary,
+  type SkillsRoot,
+} from "./skills";
+import { CadRuntime, nodeHost, runtimeLogPath } from "./runtime";
 import { ViewerManager } from "./viewer";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -64,13 +69,19 @@ export function mcpServerScript(): { command: string; args: string[]; env: Recor
   const script = app.isPackaged
     ? path.join(appRoot().replace(/app\.asar$/, "app.asar.unpacked"), "out", "hardcore-mcp", "server.mjs")
     : path.join(appRoot(), "resources", "hardcore-mcp", "server.mjs");
-  return { command: process.execPath, args: [script], env: { ELECTRON_RUN_AS_NODE: "1" } };
+  // The skills root travels in the environment: `list_skills` and
+  // `read_skill` read it directly, without a round trip through main.
+  const env: Record<string, string> = { ELECTRON_RUN_AS_NODE: "1" };
+  if (skillsInstance.root) {
+    env[SKILLS_ROOT_ENV] = skillsInstance.root;
+  }
+  return { command: process.execPath, args: [script], env };
 }
 
 let runtimeInstance: CadRuntime | null = null;
 let viewersInstance: ViewerManager | null = null;
 let bridgeInstance: McpBridge | null = null;
-let pluginsInstance: PluginManager | null = null;
+let skillsInstance: SkillsRoot = EMPTY_SKILLS;
 let commandsInstance: RendererCommands | null = null;
 let daemonInstance: DaemonWarmer | null = null;
 
@@ -88,11 +99,32 @@ export function viewers(): ViewerManager {
   return viewersInstance;
 }
 
-export function pluginManager(): PluginManager {
-  if (!pluginsInstance) {
-    throw new Error("the CAD runtime is not initialised");
-  }
-  return pluginsInstance;
+/** The materialised skills root, or null when no skills were composed into the app. */
+export function skillsRoot(): string | null {
+  return skillsInstance.root;
+}
+
+/** What that root holds — the Settings page's list, and the preamble's. */
+export function skillSummaries(): SkillSummary[] {
+  return skillsInstance.skills;
+}
+
+/**
+ * The text block in front of the first prompt of a session with an agent that
+ * ignores additional directories (`skillRoots: "preamble"`).
+ */
+export function sessionPreamble(): string | null {
+  return skillsInstance.root ? skillsPreamble(skillsInstance.root, skillsInstance.skills) : null;
+}
+
+/**
+ * What goes in front of a session's `PATH`: the resolved runtime's `cadgen`
+ * and `python` (`CadRuntime.sessionPath`). Empty rather than a throw when the
+ * runtime is not up yet — a session that starts early gets the person's own
+ * PATH, not an error.
+ */
+export function sessionRuntimePath(): string[] {
+  return runtimeInstance?.sessionPath() ?? [];
 }
 
 export function rendererCommands(): RendererCommands {
@@ -131,7 +163,6 @@ export async function warmCad(root: string): Promise<void> {
 }
 
 export type CadDeps = {
-  detector: AgentDetector;
   sendCommand: (command: CadCommand) => void;
 };
 
@@ -147,6 +178,12 @@ export async function initCad(deps: CadDeps): Promise<void> {
       overrideSetting: () => settings.get().cadPythonOverride,
     }),
   );
+
+  // The skills every session is handed, laid out for both native loaders
+  // under one versioned directory (`./skills.ts`). Before the bridge, whose
+  // MCP server reads the root out of its environment, and before the first
+  // session can ask for it.
+  skillsInstance = materialiseSkills(userData);
 
   viewersInstance = new ViewerManager({
     runtime: () => runtimeInstance!.ready(),
@@ -176,20 +213,35 @@ export async function initCad(deps: CadDeps): Promise<void> {
 
   bridgeInstance = new McpBridge(createActions({ sessionRoot, send: deps.sendCommand, newId: () => randomUUID() }, commandsInstance), mcpServerScript);
   await bridgeInstance.start();
+}
 
-  pluginsInstance = new PluginManager({
-    appVersion: appVersion(),
-    pluginDir: path.join(resourcesDir(), "plugin"),
-    homeDir: app.getPath("home"),
-    stateFile: path.join(userData, "plugin-installs.json"),
-    providers: AGENT_PROVIDERS,
-    agent: async (agentId) => {
-      const status = deps.detector.list().find((candidate) => candidate.id === agentId);
-      return { installed: status?.installed ?? false, binaryPath: status?.binaryPath ?? null };
-    },
-    env: () => deps.detector.environment(),
-    exec: (file, args, env) => execCommand(file, args, { env, timeoutMs: 120_000 }),
-  });
+/**
+ * The skills root for this app version, rebuilt when the version (or the
+ * composed set) has changed and left alone otherwise. A failure here is not
+ * fatal: sessions then get no additional directory and no preamble, and the
+ * reason goes to the runtime log.
+ */
+function materialiseSkills(userData: string): SkillsRoot {
+  // A leftover from the version of this app that installed a plugin into each
+  // agent's global configuration. There is no such thing now (README, "Skills
+  // and tools in a session"), so the record it kept is deleted on sight.
+  fs.rmSync(path.join(userData, "plugin-installs.json"), { force: true });
+  try {
+    const composed = materialiseSkillsRoot({
+      source: path.join(resourcesDir(), "skills"),
+      base: path.join(userData, "skills"),
+      version: appVersion(),
+    });
+    if (!composed.root) {
+      console.info("[skills] nothing composed into resources/skills; run npm run build");
+    }
+    return composed;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[skills] could not materialise the skills root: ${message}`);
+    void runtimeInstance?.log(`[skills] ${message}`);
+    return EMPTY_SKILLS;
+  }
 }
 
 /**

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 // The script is what `npm run build` runs; the test composes into a temporary
 // directory from this repository, so what is asserted is what ships.
-import { APP_SKILL, EXCLUDED_SKILLS, MARKETPLACE_NAME, PLUGIN_NAME, buildPlugin, planSkills } from "../../../scripts/build-plugin.mjs";
+import { APP_SKILL, EXCLUDED_SKILLS, buildSkills, planSkills } from "../../../scripts/build-skills.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const repoRoot = path.resolve(appRoot, "..", "..");
@@ -34,7 +34,7 @@ function walk(root: string): Array<{ path: string; link: boolean }> {
   return out;
 }
 
-describe("the composed plugin", () => {
+describe("the composed skills", () => {
   it("is every repo skill but cad-viewer, plus hardcore-app-use", () => {
     const names = planSkills(repoRoot, appRoot).map((skill: { name: string }) => skill.name);
     const repoSkills = fs
@@ -51,53 +51,51 @@ describe("the composed plugin", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it("lands as copies, with the three manifests renamed and versioned", () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-plugin-out-"));
+  it("lands as copies, one directory per skill, with nothing else in it", () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-skills-out-"));
     temps.push(out);
     fs.writeFileSync(path.join(out, ".gitkeep"), "");
     fs.writeFileSync(path.join(out, "stale.txt"), "from a previous build");
 
-    const result = buildPlugin({ repoRoot, out, version: "1.2.3", desktopRoot: appRoot });
-    expect(result.version).toBe("1.2.3");
+    const result = buildSkills({ repoRoot, out, desktopRoot: appRoot });
 
     const files = walk(out);
-    // Copies, never symlinks: Codex drops links silently.
+    // Copies, never symlinks: some installers drop links silently.
     expect(files.filter((file) => file.link)).toEqual([]);
     // A clean slate, keeping the placeholder git needs.
     expect(fs.existsSync(path.join(out, "stale.txt"))).toBe(false);
     expect(fs.existsSync(path.join(out, ".gitkeep"))).toBe(true);
 
-    expect(fs.existsSync(path.join(out, "skills", "cad", "SKILL.md"))).toBe(true);
-    expect(fs.existsSync(path.join(out, "skills", APP_SKILL, "SKILL.md"))).toBe(true);
-    expect(fs.existsSync(path.join(out, "skills", "cad-viewer"))).toBe(false);
+    expect(fs.existsSync(path.join(out, "cad", "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(out, APP_SKILL, "SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(out, "cad-viewer"))).toBe(false);
     // The cad skill's references travel with it.
-    expect(fs.existsSync(path.join(out, "skills", "cad", "references"))).toBe(true);
+    expect(fs.existsSync(path.join(out, "cad", "references"))).toBe(true);
     // Nothing a checkout leaves behind travels.
     expect(files.some((file) => /(^|\/)(node_modules|__pycache__|\.venv)(\/|$)/.test(file.path))).toBe(false);
 
-    const claude = JSON.parse(fs.readFileSync(path.join(out, ".claude-plugin", "plugin.json"), "utf8"));
-    expect(claude).toMatchObject({ name: PLUGIN_NAME, version: "1.2.3", skills: "./skills/" });
-    const marketplace = JSON.parse(fs.readFileSync(path.join(out, ".claude-plugin", "marketplace.json"), "utf8"));
-    expect(marketplace.name).toBe(MARKETPLACE_NAME);
-    expect(marketplace.version).toBe("1.2.3");
-    expect(marketplace.plugins).toHaveLength(1);
-    expect(marketplace.plugins[0]).toMatchObject({ name: PLUGIN_NAME, source: "./", version: "1.2.3" });
-    const codex = JSON.parse(fs.readFileSync(path.join(out, ".codex-plugin", "plugin.json"), "utf8"));
-    expect(codex).toMatchObject({ name: PLUGIN_NAME, version: "1.2.3", skills: "./skills/" });
-
-    const manifest = JSON.parse(fs.readFileSync(path.join(out, "hardcore-plugin.json"), "utf8"));
-    expect(manifest).toMatchObject({ name: PLUGIN_NAME, marketplace: MARKETPLACE_NAME, version: "1.2.3" });
-    expect(manifest.skills).toEqual(result.skills);
+    // No plugin manifest, no marketplace, no version stamp: the app hands
+    // these directories to a session itself.
+    const top = fs
+      .readdirSync(out, { withFileTypes: true })
+      .filter((entry) => entry.name !== ".gitkeep")
+      .map((entry) => ({ name: entry.name, directory: entry.isDirectory() }));
+    expect(top.every((entry) => entry.directory)).toBe(true);
+    expect(top.map((entry) => entry.name).sort()).toEqual([...result.skills].sort());
   });
 
   it("keeps the hardcore-app-use skill short and pointed at the tools", () => {
     const skill = fs.readFileSync(path.join(appRoot, "skills", APP_SKILL, "SKILL.md"), "utf8");
-    expect(skill.split("\n").length).toBeLessThanOrEqual(120);
+    expect(skill.split("\n").length).toBeLessThanOrEqual(130);
     expect(skill).toMatch(/^name: hardcore-app-use$/m);
     for (const tool of ["open_file", "reveal", "attach_snapshot", "list_open_tabs", "viewer_state", "open_url"]) {
       expect(skill).toContain(`\`${tool}`);
     }
     expect(skill).toContain("cadgen viewer");
     expect(skill).toContain("$cad-viewer");
+    // The runtime ships with the app and is already on the session's PATH.
+    expect(skill).toMatch(/never install cadgen/i);
+    // Nothing about a plugin: the app installs nothing into an agent.
+    expect(skill.toLowerCase()).not.toContain("plugin");
   });
 });

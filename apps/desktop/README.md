@@ -37,7 +37,6 @@ Three environment variables matter in development:
 | --- | --- |
 | `HARDCORE_APTABASE_KEY` | Read at BUILD time and compiled in (see Telemetry). Unset means no network call is ever attempted. |
 | `CAD_DESKTOP_PYTHON` | An interpreter with cadgen installed, used instead of the bundled runtime (see CAD runtime below). A developer's knob; the e2e suite breaks and clears the equivalent setting on purpose. |
-| `HARDCORE_NO_PLUGIN_INSTALL` | Skip the launch-time install of the Hardcore plugin into the user's agents. `NODE_ENV=test` implies it. |
 | `HARDCORE_PREWARM` | Under `NODE_ENV=test` the project pre-warm (viewer child + cadgen daemon on project open) is off; `1` turns it on, as `tests/e2e/prewarm.spec.ts` does. |
 | `HARDCORE_FAKE_AGENT` | Launch this stdio ACP agent instead of whatever the registry says, for every provider. The session and git suites point it at `tests/fake-agent/index.mjs`; a session needs an agent to exist at all, and a real one would make the suite a test of somebody's login state. |
 Two more decide whether the window is seen at all:
@@ -78,12 +77,12 @@ carries a path, a file name, a project name, a prompt, or an agent's output.
 npm run typecheck    # tsc over both projects: node (main/preload/shared) and web (renderer)
 npm test             # vitest: tests/unit/{main,shared} in node, tests/unit/renderer in jsdom
 npm run lint         # eslint flat config
-npm run build        # scripts/build.mjs: compose the plugin, electron-vite build -> out/, bundle the MCP server
+npm run build        # scripts/build.mjs: compose the skills, electron-vite build -> out/, bundle the MCP server
 npm run e2e          # playwright _electron against out/ — run `npm run build` first
 ```
 
 `npm run build` is three steps in one script (`scripts/build.mjs`): the
-Hardcore plugin is composed into `resources/plugin/` (`build:plugin`),
+app's skills are composed into `resources/skills/` (`build:skills`),
 electron-vite builds main, preload and renderer into `out/`, and the MCP
 server is bundled into `out/hardcore-mcp/` (`build:mcp`). Packaging runs the
 same script. The renderer step compiles the CAD Viewer's client from source,
@@ -120,10 +119,14 @@ document), `file-markdown-raw-blocks` (raw HTML kept as its own bytes),
 neighbours, open),
 `file-context-menu` (a tree row's), `file-image`, `file-cad-failed` (the runtime broken on
 purpose), `file-cad` (the explorer at its widest: the sidebar hidden and the
-session at its floor), `file-cad-default` (the explorer at its default width, the tree
-hidden for it) and both again at 1280×800, `file-cad-measure`,
-`file-cad-theme` (the theme panel open from the nav row's toggle, in the
-sheet's place), `terminal`,
+session at its floor), `file-cad-default` (the explorer at its default
+width, the file sheet as the tab's one panel) and both again at 1280×800,
+`file-cad-measure`, `file-cad-theme` (the theme panel in the tab's panel
+column, from the nav row's toggle), `file-cad-tree` and `file-cad-files`
+(the file tree in that same column, which is what closing the sheet or the
+theme panel shows), `file-cad-light-chrome` (the app light over the
+Cinematic theme's dark stage: the theme paints the scene and nothing else),
+`terminal`,
 `browser-empty`, `browser`, `review`, `strip`, `strip-overflow` (seven tabs in
 a pane at its floor, `+` pinned to the right edge), `panes-sidebar-collapsed`
 (the sidebar closed by a drag past its minimum, with the toggle that brings it
@@ -323,9 +326,9 @@ Development builds report `unsupported` and check nothing.
 
 `resources/runtime/<os>-<arch>/` (the CAD runtime: a pinned Python with
 cadgen and its whole closure installed), `resources/cadgen/` (the wheel and
-its constraints) and `resources/plugin/` (the composed plugin) ship beside
+its constraints) and `resources/skills/` (the composed skills) ship beside
 the app as `extraResources`; all three are build outputs, gitignored under a
-committed `.gitkeep`. `npm run build` fills the plugin; `npm run
+committed `.gitkeep`. `npm run build` fills the skills; `npm run
 cad:resources` fills the wheel directory from a checkout (the release
 workflow drops the wheel it just built into it instead); `npm run
 bundle:runtime` fills the runtime from those two (the release workflow runs
@@ -472,10 +475,11 @@ opening a file shows the pane without deciding anything for next time.
 
 A CAD file in the explorer is laid out by the desktop, not measured by the
 viewer (`features/explorer/cad-layout.ts`): the surface is pinned to its
-desktop layout with the sheet a column beside the model at any pane width,
-the sheet is `clamp(36% of the pane, 240, 365)`, the file tree hides itself
-for that tab when the pane cannot hold all three (its toggle brings it
-back), and light/dark is the app's theme rather than the CAD theme's.
+desktop layout so nothing is ever a drawer over the model, its panels are
+drawn in the file tab's own panel column (so their width is that column's —
+see "The panels a file has"), and light/dark is the app's colour scheme
+rather than the CAD theme's, with the app's `--background` handed to the
+scene as the model's ground.
 
 A markdown file opens as a document you can type in — a ProseMirror editor
 over TipTap's schema, saved with `Cmd/Ctrl+S` like any other file, with
@@ -718,12 +722,12 @@ mounts one tab at a time.
 
 ### The file tab's nav
 
-One row: the breadcrumb, the open file's panel toggles, and the files toggle
-at the right end — which stays there whether the tree is open or shut, and
-whether the file has panels or not (it used to move into the tree's own
-header when the tree opened; the tree's header is now the filter and nothing
-else). There is no `Copy path` button and no `Open ▾`: those are items in the
-entry menus.
+One row: the breadcrumb, then one toggle per panel this file has — the
+renderer's, then the files toggle at the right end, which stays there
+whatever is open and whatever kind of file it is (it used to move into the
+tree's own header when the tree opened; the tree's header is the filter and
+nothing else). There is no `Copy path` button and no `Open ▾`: those are
+items in the entry menus.
 
 **Every crumb is a menu of its neighbours** (`features/explorer/Breadcrumbs.tsx`,
 the model in `crumbs.ts`), the way the CAD Viewer's breadcrumb is. The crumbs
@@ -778,35 +782,57 @@ folder are re-pointed or closed. `Open in terminal` on a folder is the one
 
 ### The panels a file has
 
-**A renderer declares its panels; the nav row draws them**
-(`features/explorer/renderers/panels.ts`, declared in `registry.ts` as
-`traits.panels`). Each is an icon button with `aria-pressed`, highlighted
-while its panel is open, and they sit at the right end of the row in
-declaration order immediately **left of the files toggle** — which is last
-and never moves, so the one control that is always there is always in the
-same place. This is the standalone viewer's top bar, ported: a toggle per
-panel, lit while its panel is up.
+**One panel column, one list of panels, one open at a time**
+(`features/explorer/renderers/panels.ts`; the column is `FilePanel.tsx`).
+The list is what the open file's renderer declares plus the **file tree**,
+which is the last entry and not a special case; the nav row draws one icon
+button per entry with `aria-pressed`, highlighted while its panel is open,
+in that order — so the files toggle is last and never moves, and the one
+control that is always there is always in the same place. Opening any panel
+closes whatever was open. This is the standalone viewer's top bar, ported,
+with the app's own tree folded into it.
 
 Markdown declares one, the two readings of the same bytes (`View source` /
-`View preview`, which used to be the row's one special case and is now
-just a panel). A CAD file declares two, **Theme settings** and **File
-sheet** — the viewer's own right-hand panel, which `layout="desktop"` had
-left with no door at all in this app, because that layout hides the top
-bar those toggles live in. Code, images and PDFs declare none and put
-nothing in the row.
+`View preview`). A CAD file declares two, **Theme settings** and **File
+sheet** — the viewer's own panels, which `layout="desktop"` had left with no
+door at all in this app, because that layout hides the top bar those toggles
+live in. Code, images and PDFs declare none, and then the tree is the whole
+list.
 
-The tab owns the state and the renderer says what it means, for the reason
-`viewSource` already worked that way: the toggle is in the header and the
-panel is in the body, and two owners of one flag is how the two come to
-disagree. `viewSource` is a field of the tab and survives a reload; the
-CAD panels are session state keyed on the open file. The CAD pair is
-*controlled* in the viewer's surface (`themeEditing` /
-`onThemeEditingChange`, `fileSheetOpen` / `onFileSheetOpenChange` — see
-the file-view doc): the surface still enforces that the two are one panel
-and reports the close it makes itself, so the highlight follows what is on
-screen instead of guessing at the rule. A CAD tab whose runtime did not
-start declares no panels: two toggles over the failure card would open
-nothing.
+**Where each panel's content comes from** is the one thing a declaration
+says beyond its name: `tree` is the app's file tree, `slot` is a box handed
+to the file's renderer to draw into, and `body` is the panel that is not a
+column at all — markdown's source view replaces the content, because it is
+the same bytes read differently. The CAD pair is `slot`: the viewer's
+surface portals the open one into this column (`panelSlot`, in the file-view
+doc) and draws no column of its own, so the theme editor, the file sheet and
+the tree share one border, one width, one resize handle and one header
+treatment (each panel's own top row — the tree's filter, the sheet's tabs,
+the theme editor's preset select). Before this they were two columns of two
+designs, and the pane was too narrow for both, which is why a CAD tab used
+to hide the tree.
+
+**The tab owns which panel is open**, as one id in one field of the row
+(`FileTabSchema.panel`), so it persists like any other tab state and two
+panels cannot be open however the writes interleave. `null` is "nobody has
+said" and resolves to the renderer's own default — the file sheet for a CAD
+file, the tree for everything else; `""` is nothing open, which a tab closed
+on purpose comes back to. The CAD pair is *controlled* in the viewer's
+surface (`themeEditing` / `onThemeEditingChange`, `fileSheetOpen` /
+`onFileSheetOpenChange`): at most one of the two is ever true, and the
+surface reports the changes it makes itself — a measurement landing opens
+the sheet — so the highlight follows what is on screen. A CAD tab whose
+runtime did not start declares no panels: two toggles over the failure card
+would open nothing, and the column falls back to the tree.
+
+**A CAD theme paints the scene, never the chrome.** The panel column, the
+toolbars and the tab strip are this app's tokens at this app's colour scheme
+(`colorScheme`); the theme owns the background, lights, materials, edges,
+grid and projection, and the app's own `--background` is handed to it as the
+model's ground (`cadSceneBackgroundFor`). So a light window over a dark
+studio renders, which it did not before: the theme's backdrop luminance used
+to write `.dark` on the document, and opening a STEP file repainted the whole
+window (`tests/e2e/explorer.spec.ts` asserts the two move independently).
 
 ## Quitting
 
@@ -863,8 +889,8 @@ a packaged app is sure to have is its own Electron binary run as Node.
 
 There is nothing to install and no "installing" state. Settings › About &
 Updates carries a read-only block — the runtime (source and interpreter),
-cadgen's version against the app's, the viewer backend, the Hardcore plugin
-per installed agent — and Repair, which forgets the probe and looks again.
+cadgen's version against the app's, the viewer backend, the skills root
+every session is handed — and Repair, which forgets the probe and looks again.
 A CAD tab whose runtime did not start shows the interpreter's words, the
 log (`userData/cad-runtime.log`: every failed probe, every viewer launch
 that did not come up, the viewer's stderr) and Try again; it never asks the
@@ -890,38 +916,85 @@ after launch had paid 0.9 s for the probe and the viewer and ~3 s for the
 daemon's start inside its first compile; warmed at project open both are done
 before the click, and `viewerOrigin` shares the launch already in flight.
 
-## The plugin and the MCP server
+## Skills and tools in a session
 
-Two things reach the agent from the app (plan §8), and `src/main/cad/`
-owns both:
+Two things reach the agent from the app (plan §8), and `src/main/cad/` owns
+both. Neither is installed: **nothing Hardcore does writes to an agent's own
+configuration** — no plugin, no marketplace, no copy into `~/.claude/skills`.
+Every session is given what it needs when it is created, and a session that
+ends leaves nothing behind.
 
-**The Hardcore plugin** — `resources/plugin/`, composed by
-`scripts/build-plugin.mjs`: the repository's skills minus `cad-viewer` (the
-viewer is beside the chat here) plus `skills/hardcore-app-use` (which replaces
-the `cad` skill's `$cad-viewer` hand-off), with `.claude-plugin/plugin.json`,
-`.claude-plugin/marketplace.json` and `.codex-plugin/plugin.json` naming the
-plugin `cad`, the marketplace `hardcore` and the version the app's. Copies,
-never symlinks. `src/main/cad/plugin.ts` installs it per agent, on first
-launch and after every app update (`userData/plugin-installs.json` records
-which version each agent has), and from the Agents drawer's Plugins block:
+**The skills** — `resources/skills/`, composed by `scripts/build-skills.mjs`:
+the repository's skills minus `cad-viewer` (the viewer is beside the chat here)
+plus `skills/hardcore-app-use` (which replaces the `cad` skill's `$cad-viewer`
+hand-off), one directory each, copies and never symlinks.
 
-| Agent | Install | Read back |
-| --- | --- | --- |
-| Claude Code | `claude plugin marketplace add <resources/plugin>`, `claude plugin marketplace update hardcore`, `claude plugin install cad@hardcore` (then `claude plugin update cad@hardcore` when install says "already installed") — lands in `~/.claude/plugins/cache/hardcore/cad/<version>/` | `claude plugin list --json` |
-| Codex | `codex plugin marketplace add <resources/plugin>`, `codex plugin add cad@hardcore` (idempotent) — `[marketplaces.hardcore]` in `~/.codex/config.toml`, files in `~/.codex/plugins/cache/hardcore/cad/<version>/` | `codex plugin list --json` |
-| agents with only a skills directory | the skills copied to `<skillsDir>/hardcore/<skill>/` beside a `hardcore-plugin.json` version marker | that marker |
+At launch `src/main/cad/skills.ts` materialises them into
+`<userData>/skills/<appVersion>/`, twice, because the two native loaders read
+two layouts:
 
-The user's other plugins and skills are never touched.
+```
+<userData>/skills/<version>/.claude/skills/<skill>/SKILL.md   what Claude Code reads
+<userData>/skills/<version>/.agents/skills/<skill>/SKILL.md   what Codex reads
+```
+
+Real copies both times (packaging and some agents drop symlinks — repo
+`AGENTS.md`), rebuilt when the app's version or the composed set changes,
+idempotent otherwise, and every other version's directory is removed. A
+`hardcore-skills.json` written last is the marker of a complete root.
+
+That one directory is then handed to **every** session, whatever the agent:
+`session/new` and `session/load` both carry it as `additionalDirectories:
+[root]` (ACP's field, SDK 1.4.0) *and* as `_meta: { additionalRoots: [root] }`
+(the older spelling). Both, always: an adapter reads whichever it knows and
+ignores the other, and which one a given version reads is not something this
+app can detect.
+
+Two agents pick the skills up from there by themselves — the registry's
+`skillRoots: "native"`:
+
+| Agent | What it does with the root |
+| --- | --- |
+| Claude Code | `claude-agent-acp` reads `additionalDirectories ?? _meta.additionalRoots` and passes them to the Agent SDK, which loads `<dir>/.claude/skills/<name>/SKILL.md`. Verified on this machine with `claude -p --add-dir`: the skill appears by name, unprefixed |
+| Codex | `codex-acp` reads the same two fields and registers `<root>/.agents/skills` with the Codex app server (`skills/extraRoots/set`), then refreshes its skill list |
+
+Every other agent (`skillRoots: "preamble"` — Gemini CLI's `newSession`
+ignores additional directories, and the rest are assumed to) gets the same
+files by two paths that need nothing of the agent:
+
+- **A preamble.** The first prompt of a session created here carries one text
+  block in front of the person's words: the root's path, the skills with a
+  clipped line of description each, and to read `cad`'s SKILL.md before CAD
+  work. Under 1.5k characters, sent once — never on a later turn, and never on
+  a resumed session, because the transcript already holds it. It is not in the
+  app's transcript: the person sees what they typed.
+- **The MCP server's own tools.** `list_skills()` and `read_skill(name, path?)`
+  read the same root (the server is given it as `HARDCORE_SKILLS_ROOT`), so an
+  agent that ignores everything else can still ask.
+
+**The runtime on the session's PATH.** The environment every adapter is
+spawned with — and so every command a session runs — has the resolved CAD
+runtime in front of its `PATH` (`CadRuntime.sessionPath`,
+`SessionManager.environment`): `cadgen` and `python` inside a session are the
+app's own, pinned to its version, and `hardcore-app-use` tells the agent never
+to install cadgen. A checkout's `.venv/bin` has the console script pip
+installed; the bundled runtime does not (it is a `pip install --target`, and
+the bundler prunes the scripts pip wrote there because their shebang names the
+build machine), so the app writes `<userData>/bin/cadgen` — one line running
+`python -m cadgen.cli`, the same dispatcher the console script runs — and puts
+that directory first.
 
 **The Hardcore MCP server** — `resources/hardcore-mcp/server.mjs`, a stdio
 server on `@modelcontextprotocol/sdk` that every `session/new` carries
 (`SessionManager.deps.mcpServers`). The agent spawns it — this app's own
 Electron binary as Node (`ELECTRON_RUN_AS_NODE=1`), the source in a checkout,
 the bundle in `out/hardcore-mcp/` when packaged — with a per-session token
-and the session's cwd in its environment. Its tools: `open_file(path)`,
-`reveal(path)`, `open_url(url)`, `list_open_tabs()`, `viewer_state()`,
-`attach_snapshot(path)` (returned as image content, so the transcript shows
-the PNG). Each call is one `POST /rpc` to `src/main/cad/mcp-bridge.ts`, a
+and the session's cwd and skills root in its environment. Its tools:
+`open_file(path)`, `reveal(path)`, `open_url(url)`, `list_open_tabs()`,
+`viewer_state()`, `attach_snapshot(path)` (returned as image content, so the
+transcript shows the PNG), and the two that read the skills root without
+touching main — `list_skills()`, `read_skill(name, path?)`. Every other call
+is one `POST /rpc` to `src/main/cad/mcp-bridge.ts`, a
 loopback HTTP listener that refuses anything without a live session's
 token; main resolves the path inside the session's project and relays the
 explorer actions to the renderer as `cad.command`, which
@@ -929,7 +1002,7 @@ explorer actions to the renderer as `cad.command`, which
 on `cad.reply`. Snapshots are read in main. Neither adapter wants a `type`
 field on a stdio entry: claude-agent-acp reads one as http/sse.
 
-`tests/unit/main/{cad-runtime,viewer,plugin,build-plugin,mcp-server,mcp-bridge}.test.ts`
+`tests/unit/main/{cad-runtime,viewer,skills,build-skills,mcp-server,mcp-bridge}.test.ts`
 cover each piece with a fake machine, a fake child, a fake CLI, the real
 build script into a temp directory, the SDK's client over an in-memory
 transport, and the bridge over real loopback HTTP.
@@ -960,7 +1033,7 @@ src/main/                 the Electron main process: everything with a side effe
                           with, cached between them — see The model and the effort)
   ipc/{acp,agents}.ts     the P1 handler branches, spread into ipc/index.ts
   ipc/agent-options.ts    agentOptions.*: the cache, the probe and the stored defaults
-  ipc/{plugins,runtime}.ts  the plugin and CAD runtime branches (P5's bodies, P6's shape)
+  ipc/{skills,runtime}.ts   the skills root and CAD runtime branches (P5's bodies, P6's shape)
   ipc/dialogs.ts          the native folder and file choosers Settings' path rows use
   ipc/{explorer,cad}.ts   P3's handler branches: files, terminals; cad.viewerOrigin + cad.warm + cad.reply (P5)
   ipc/git.ts              P7's: the review's reads in a session's directory, the
@@ -969,7 +1042,7 @@ src/main/                 the Electron main process: everything with a side effe
                           terminal.ts (node-pty sessions + scrollback)
   cad/                    runtime.ts (which Python: override, bundled, checkout), viewer.ts (one viewer per project root),
                           daemon.ts (the warm build daemon, started at project open),
-                          plugin.ts (the composed plugin into each agent), mcp-bridge.ts + actions.ts
+                          skills.ts (the skills root every session is handed), mcp-bridge.ts + actions.ts
                           (the MCP server's way into the explorer), index.ts (the wiring)
   projects/git.ts         status, per-file diff, commit and push; then repository
                           detection, worktrees, the keep-limit sweep and `gh pr create`
@@ -984,7 +1057,7 @@ src/shared/               types.ts (domain types as zod schemas)
   ipc/agent-options.ts    agentOptions.* — the model and effort chips before a session exists
   acp/options.ts          which option is the model, which is the effort, which mode is
                           the agent's own auto preset (both processes read this one file)
-  ipc/plugins.ts, ipc/runtime.ts, ipc/dialogs.ts  the plugin, CAD runtime and chooser branches (P6)
+  ipc/skills.ts, ipc/runtime.ts, ipc/dialogs.ts  the skills, CAD runtime and chooser branches (P6)
   agents.ts               provider and status schemas
   acp/types.ts, acp/reduce.ts  SessionState and the pure session/update reducer
   ipc/explorer.ts         explorer.* terminal.* and their events (P3)
@@ -1028,7 +1101,7 @@ tests/e2e/                playwright, against the built app
 tests/fake-agent/         a scripted ACP agent on stdio (SDK agent side), also replays fixtures
 tests/fixtures/acp/       recorded adapter transcripts (jsonl), written by the harness
 scripts/acp-harness.mjs   run a real ACP session from the terminal; --record writes a fixture
-scripts/build.mjs         npm run build: build-plugin.mjs + electron-vite + build-mcp.mjs
+scripts/build.mjs         npm run build: build-skills.mjs + electron-vite + build-mcp.mjs
 scripts/cad-resources.mjs the cadgen wheel and constraints into resources/cadgen, from a checkout
 scripts/bundle-runtime.mjs the CAD runtime into resources/runtime/<os>-<arch>: the pinned Python
                           (scripts/python-build.json) with cadgen's closure installed, per target
@@ -1036,7 +1109,7 @@ scripts/make-brand.mjs    npm run brand: the wordmark and the H monogram into re
 scripts/make-icons.mjs    npm run icons: that monogram onto its tile -> build/icon.png
 resources/brand/          the committed marks, and the JetBrains Mono face they are set in
 resources/hardcore-mcp/   the MCP server's source (bundled into out/hardcore-mcp by the build)
-skills/hardcore-app-use/      the skill only this app installs; composed into resources/plugin
+skills/hardcore-app-use/      the skill only this app ships; composed into resources/skills
 ```
 
 ## ACP

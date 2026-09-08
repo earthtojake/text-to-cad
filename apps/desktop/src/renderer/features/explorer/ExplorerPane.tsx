@@ -79,11 +79,11 @@ function TabBody({ tab, project }: { tab: ExplorerTab; project: Project }) {
     case "file":
       return (
         <FileTab
+          panel={tab.panel}
           path={tab.path}
           project={project}
           root={tab.root}
           tabId={tab.id}
-          viewSource={tab.viewSource}
         />
       );
     case "review":

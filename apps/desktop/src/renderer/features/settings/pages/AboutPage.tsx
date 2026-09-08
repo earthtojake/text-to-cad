@@ -15,7 +15,6 @@ import {
   SettingRow,
   SwitchRow,
   ValueRow,
-  useRowMatch,
 } from "@renderer/features/settings/SettingCard";
 import {
   useSettingsPatch,
@@ -23,11 +22,9 @@ import {
 } from "@renderer/features/settings/settings-value";
 import { StatusLabel, type Tone } from "@renderer/features/settings/StatusDot";
 import { useAppInfo } from "@renderer/features/settings/use-app-info";
-import { useAgents } from "@renderer/state/agents";
-import { usePlugins } from "@renderer/state/plugins";
+import { useSkills } from "@renderer/features/settings/use-skills";
 import { useRuntime } from "@renderer/state/runtime";
 import { useUpdates } from "@renderer/state/updates";
-import type { PluginStatus } from "@shared/ipc/plugins";
 import type { RuntimeSource, RuntimeState } from "@shared/ipc/runtime";
 
 const REPOSITORY = "https://github.com/earthtojake/text-to-cad";
@@ -204,25 +201,21 @@ const SOURCE_LABEL: Record<RuntimeSource, string> = {
 };
 
 /**
- * `cad:check` as four rows: the runtime, cadgen, the viewer, and the plugin
- * per installed agent. Read-only apart from Repair, which is a fresh probe —
- * there is nothing to install.
+ * `cad:check` as four rows: the runtime, cadgen, the viewer, and the skills
+ * every session is handed. Read-only apart from Repair, which is a fresh
+ * probe — there is nothing to install.
  */
 function RuntimeCard({ appVersion }: { appVersion: string | null }) {
   const status = useRuntime((state) => state.status);
   const busy = useRuntime((state) => state.busy);
   const load = useRuntime((state) => state.load);
   const repair = useRuntime((state) => state.repair);
-  const agents = useAgents((state) => state.agents);
-  const pluginStatuses = usePlugins((state) => state.statuses);
-  const loadPlugins = usePlugins((state) => state.load);
+  const skills = useSkills();
 
   useEffect(() => {
     void load();
-    void loadPlugins();
-  }, [load, loadPlugins]);
+  }, [load]);
 
-  const installed = agents.filter((agent) => agent.installed);
   const cadgenMatches =
     status?.cadgenVersion != null && appVersion !== null && status.cadgenVersion === appVersion;
 
@@ -285,49 +278,27 @@ function RuntimeCard({ appVersion }: { appVersion: string | null }) {
         title="Viewer"
       />
 
-      {installed.length === 0 ? (
-        <EmptyPluginsRow />
-      ) : (
-        installed.map((agent) => (
-          <PluginRow key={agent.id} name={agent.name} status={pluginStatuses[agent.id] ?? null} />
-        ))
-      )}
+      <SettingRow
+        control={
+          <StatusLabel tone={skills && skills.skills.length > 0 ? "ok" : "idle"}>
+            {skills && skills.skills.length > 0 ? `${skills.skills.length} skills` : "—"}
+          </StatusLabel>
+        }
+        description={
+          skills?.root ??
+          "The CAD, drawing, mesh and robot-description skills every session in this app is handed."
+        }
+        keywords="skills cad hardcore-app-use additional directories preamble"
+        title="Skills"
+      >
+        {skills?.root ? (
+          <p className="text-[11px] text-muted-foreground">
+            Handed to every session as an extra directory. Nothing is installed into an
+            agent&apos;s own configuration.
+          </p>
+        ) : null}
+      </SettingRow>
     </SettingCard>
   );
 }
 
-function EmptyPluginsRow() {
-  const matched = useRowMatch("Plugin", "No agents installed", "skills cad hardcore-app-use");
-  if (!matched) {
-    return null;
-  }
-  return (
-    <p className="px-4 py-3 text-sm text-muted-foreground">
-      No agents are installed yet. The Hardcore plugin is installed into each agent that is.
-    </p>
-  );
-}
-
-/** The Hardcore plugin — the cad skills and hardcore-app-use — in one agent. */
-function PluginRow({ name, status }: { name: string; status: PluginStatus | null }) {
-  const state = status?.state ?? "not-installed";
-  const tone: Tone =
-    state === "installed" ? "ok" : state === "update-available" ? "warn" : "idle";
-  const label =
-    state === "installed"
-      ? `Installed ${status?.installedVersion ?? ""}`.trim()
-      : state === "update-available"
-        ? "Update available"
-        : state === "unsupported"
-          ? "No plugin system"
-          : "Not installed";
-
-  return (
-    <SettingRow
-      control={<StatusLabel tone={tone}>{label}</StatusLabel>}
-      description="The Hardcore plugin: the cad skills and hardcore-app-use."
-      keywords="hardcore plugin skills marketplace cad"
-      title={`Plugin in ${name}`}
-    />
-  );
-}

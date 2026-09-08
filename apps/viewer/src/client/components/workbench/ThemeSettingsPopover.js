@@ -34,6 +34,7 @@ import {
 import { Input } from "../ui/input";
 import { Slider } from "../ui/slider";
 import { cn } from "@/ui/utils";
+import { useSystemPrefersDark } from "@/ui/useSystemPrefersDark";
 import {
   CUSTOM_THEME_ID,
   DEFAULT_FILL_LIGHT_SETTINGS,
@@ -484,25 +485,10 @@ function customThemePreview(themeSettings) {
 }
 
 // Tracks the OS light/dark preference so the System entry can name the preset it
-// currently resolves to.
+// currently resolves to. The same hook the surface resolves its chrome with
+// (@/ui/useSystemPrefersDark) — one watcher, one answer.
 export function useSystemDefaultThemePresetId() {
-  const [prefersDark, setPrefersDark] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return undefined;
-    }
-    let query;
-    try {
-      query = window.matchMedia("(prefers-color-scheme: dark)");
-    } catch {
-      return undefined;
-    }
-    const sync = () => setPrefersDark(query.matches === true);
-    sync();
-    query.addEventListener?.("change", sync);
-    return () => query.removeEventListener?.("change", sync);
-  }, []);
-  return resolveSystemThemePresetId({ prefersDark });
+  return resolveSystemThemePresetId({ prefersDark: useSystemPrefersDark() });
 }
 
 // The theme picker: System, then the built-in presets. Presets are read-only, so

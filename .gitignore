@@ -33,12 +33,12 @@ apps/desktop/release/
 test-results/
 # scripts/perf-cad.mjs's raw numbers.
 apps/desktop/tests/perf/
-# Build outputs of apps/desktop's resources: the composed plugin
-# (scripts/build-plugin.mjs) and the cadgen wheel + constraints
+# Build outputs of apps/desktop's resources: the composed skills
+# (scripts/build-skills.mjs) and the cadgen wheel + constraints
 # (scripts/cad-resources.mjs, or the release workflow). The directories stay
 # (.gitkeep) so electron-builder's extraResources always has a source.
-apps/desktop/resources/plugin/*
-!apps/desktop/resources/plugin/.gitkeep
+apps/desktop/resources/skills/*
+!apps/desktop/resources/skills/.gitkeep
 apps/desktop/resources/cadgen/*
 !apps/desktop/resources/cadgen/.gitkeep
 # The bundled CAD runtime (scripts/bundle-runtime.mjs): a pinned Python with
