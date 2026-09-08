@@ -46,31 +46,28 @@ const VIEWPORT_ISSUE_META = Object.freeze({
   }
 });
 
-function viewportInsetPx(value) {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0;
-}
-
 function viewportIssueMetaForAlert(alert) {
   return alert?.severity === "warning"
     ? VIEWPORT_ISSUE_META.warning
     : VIEWPORT_ISSUE_META.error;
 }
 
-function viewerContextMenuAnchorStyle(menu, viewportFrameInsets) {
+// The menu anchors at the pointer, in window coordinates, kept a margin in
+// from the window's edges so the menu has somewhere to open.
+function viewerContextMenuAnchorStyle(menu) {
   if (!menu) {
     return null;
   }
   const margin = 8;
   const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 0;
   const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 0;
-  const minX = viewportInsetPx(viewportFrameInsets?.left) + margin;
-  const minY = viewportInsetPx(viewportFrameInsets?.top) + margin;
+  const minX = margin;
+  const minY = margin;
   const maxX = viewportWidth > 0
-    ? Math.max(minX, viewportWidth - viewportInsetPx(viewportFrameInsets?.right) - margin)
+    ? Math.max(minX, viewportWidth - margin)
     : Number(menu.x) || minX;
   const maxY = viewportHeight > 0
-    ? Math.max(minY, viewportHeight - viewportInsetPx(viewportFrameInsets?.bottom) - margin)
+    ? Math.max(minY, viewportHeight - margin)
     : Number(menu.y) || minY;
   const x = Math.min(Math.max(Number(menu.x) || minX, minX), maxX);
   const y = Math.min(Math.max(Number(menu.y) || minY, minY), maxY);
@@ -267,7 +264,6 @@ export default function CadRenderPane({
   viewerPerspectiveRef,
   themeSettings,
   previewMode,
-  viewportFrameInsets,
   viewerLoading,
   viewerAlert,
   stepUpdateInProgress,
@@ -290,7 +286,6 @@ export default function CadRenderPane({
   drawingIsDocument = false,
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
-  viewPlaneOffsetRight = 16,
   viewerMode,
   assemblyPickingActive = false,
   assemblyParts,
@@ -412,27 +407,6 @@ export default function CadRenderPane({
     : (hasParts || hasTopology) && selectionCount > 0
       ? "selection"
       : "";
-  const bottomOverlayStyle = {
-    bottom: "1rem"
-  };
-  const modelViewportOverlayStyle = {
-    left: `${viewportInsetPx(viewportFrameInsets?.left)}px`,
-    right: `${viewportInsetPx(viewportFrameInsets?.right)}px`,
-    top: `${viewportInsetPx(viewportFrameInsets?.top)}px`,
-    bottom: `${viewportInsetPx(viewportFrameInsets?.bottom)}px`
-  };
-  const modelViewportBottomOverlayStyle = {
-    left: `${viewportInsetPx(viewportFrameInsets?.left)}px`,
-    right: `${viewportInsetPx(viewportFrameInsets?.right)}px`,
-    bottom: `calc(${viewportInsetPx(viewportFrameInsets?.bottom)}px + 1rem)`
-  };
-  const ctaOverlayStyle = {
-    ...bottomOverlayStyle,
-    // In an embedded split pane, reserve the bottom corner for orientation.
-    ...(handleAddSelection ? { bottom: "9rem" } : {}),
-    left: `calc(${viewportInsetPx(viewportFrameInsets?.left)}px + 1rem)`,
-    right: `calc(${viewportInsetPx(viewportFrameInsets?.right)}px + 1rem)`
-  };
   // A ref cut off mid-token reads like a broken ref rather than a long one, so when it does
   // not fit we show the count instead. Whether it fits depends on the viewport, not the
   // string, so it is measured rather than guessed from a length threshold.
@@ -482,8 +456,8 @@ export default function CadRenderPane({
     : null;
   const viewportIssueMeta = viewportIssueMetaForAlert(blockingViewerAlert);
   const viewerContextMenuStyle = useMemo(
-    () => viewerContextMenuAnchorStyle(viewerContextMenu, viewportFrameInsets),
-    [viewerContextMenu, viewportFrameInsets]
+    () => viewerContextMenuAnchorStyle(viewerContextMenu),
+    [viewerContextMenu]
   );
 
 
@@ -520,10 +494,8 @@ export default function CadRenderPane({
         previewMode={previewMode}
         showViewPlane={!previewMode}
         scale={capabilities.sceneScale === "urdf" ? VIEWER_SCENE_SCALE.URDF : VIEWER_SCENE_SCALE.CAD}
-        viewPlaneOffsetRight={viewPlaneOffsetRight}
         viewPlaneOffsetBottom="1rem"
         compactViewPlane={false}
-        viewportFrameInsets={viewportFrameInsets}
         isLoading={viewerLoading}
         pickMode={!hasTopology && !hasParts && !measureModeActive
           ? VIEWER_PICK_MODE.NONE
@@ -603,13 +575,10 @@ export default function CadRenderPane({
         />
       ) : null}
       {!previewMode && missingFileLabel ? (
-        <div
-          className="pointer-events-none absolute z-30 flex min-w-0 items-center justify-center px-4 py-4"
-          style={modelViewportOverlayStyle}
-        >
+        <div className="pointer-events-none absolute inset-0 z-30 flex min-w-0 items-center justify-center px-4 py-4">
           <Alert
             variant="destructive"
-            className="cad-glass-popover pointer-events-auto w-full max-w-xl min-w-0 p-4 text-center shadow-lg"
+            className="bg-popover pointer-events-auto w-full max-w-xl min-w-0 p-4 text-center shadow-lg"
           >
             <p className="col-start-1 text-tiny uppercase tracking-[0.16em] text-destructive">
               {missingFileOutsideRoot ? "Outside this viewer's root" : "File does not exist"}
@@ -633,16 +602,13 @@ export default function CadRenderPane({
         </div>
       ) : null}
       {!previewMode && blockingViewerAlert ? (
-        <div
-          className="pointer-events-none absolute z-30 flex min-w-0 items-center justify-center px-3 py-3 sm:px-4"
-          style={modelViewportOverlayStyle}
-        >
+        <div className="pointer-events-none absolute inset-0 z-30 flex min-w-0 items-center justify-center px-3 py-3 sm:px-4">
           <div
             role="alert"
             aria-label={viewerAlertIconLabel}
             title={viewerAlertIconLabel}
             className={cn(
-              "cad-glass-popover pointer-events-auto flex w-full max-w-sm min-w-0 flex-col items-center gap-2 rounded-md border px-4 py-3 text-center shadow-md",
+              "bg-popover pointer-events-auto flex w-full max-w-sm min-w-0 flex-col items-center gap-2 rounded-md border px-4 py-3 text-center shadow-md",
               viewportIssueMeta.borderClassName
             )}
           >
@@ -672,30 +638,27 @@ export default function CadRenderPane({
         </div>
       ) : null}
       {!previewMode && stepUpdateInProgress ? (
-        <div className="pointer-events-none absolute z-20 flex justify-center px-4" style={modelViewportBottomOverlayStyle}>
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
           <Alert
             role="status"
-            className="cad-glass-popover w-auto px-3 py-1.5 text-tiny text-popover-foreground shadow-sm"
+            className="bg-popover w-auto px-3 py-1.5 text-tiny text-popover-foreground shadow-sm"
           >
             STEP changed. Updating/regenerating references...
           </Alert>
         </div>
       ) : null}
       {!previewMode && !stepUpdateInProgress && topologySelectionPending ? (
-        <div className="pointer-events-none absolute z-20 flex justify-center px-4" style={modelViewportBottomOverlayStyle}>
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
           <Alert
             role="status"
-            className="cad-glass-popover w-auto px-3 py-1.5 text-tiny text-popover-foreground shadow-sm"
+            className="bg-popover w-auto px-3 py-1.5 text-tiny text-popover-foreground shadow-sm"
           >
             Preparing selectable topology...
           </Alert>
         </div>
       ) : null}
       {!previewMode && ctaMode && !stepUpdateInProgress && !topologySelectionPending && !topologySelectionUnavailable && !topologySelectionDeferred ? (
-        <div
-          className="pointer-events-none absolute z-20 flex min-w-0 justify-center"
-          style={ctaOverlayStyle}
-        >
+        <div className={cn("pointer-events-none absolute inset-x-4 z-20 flex min-w-0 justify-center", handleAddSelection ? "bottom-36" : "bottom-4")}>
           {/* A hidden ruler carrying the FULL ref label under the same width constraints as
               the button. Measured to decide whether the button can show the ref at all.
               Deliberately independent of what the button currently displays: measuring the

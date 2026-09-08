@@ -36,15 +36,17 @@ for (const scenario of ["project drafts", "new worktree"]) {
       if (scenario === "project drafts") {
         await draft.fill("Round the car body");
         await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), other);
-        await page.getByRole("button", { name: "Other project", exact: true }).first().click();
+        await page.locator('[data-context-strip] [data-chip="project"]').click();
+        await page.getByRole("menuitem", { name: "Other project", exact: true }).click();
         await expect(page.getByRole("heading", { name: "What should we build in Other project?" })).toBeVisible();
         await expect(draft).toHaveText("");
-        await page.getByRole("button", { name: "Car project", exact: true }).first().click();
+        await page.locator('[data-context-strip] [data-chip="project"]').click();
+        await page.getByRole("menuitem", { name: "Car project", exact: true }).click();
         await expect(draft).toHaveText("Round the car body");
       } else {
         await page.locator("[data-context-strip]").getByRole("button", { name: "Local", exact: true }).click();
         await page.getByRole("menuitemradio", { name: /New worktree/ }).click();
-        await expect(page.locator('[data-context-strip] [data-chip="model"]')).toBeVisible({ timeout: 30_000 });
+        await expect(page.locator('[data-composer-row] [data-chip="model"]')).toBeVisible({ timeout: 30_000 });
         await draft.fill("write a file");
         await draft.press("Enter");
         await expect(page.locator("[data-session-view]")).toBeVisible({ timeout: 30_000 });

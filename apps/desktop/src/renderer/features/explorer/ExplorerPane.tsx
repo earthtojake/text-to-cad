@@ -1,4 +1,4 @@
-import { FolderOpen, PanelsTopLeft, Plus } from "lucide-react";
+import { PanelsTopLeft, Plus } from "lucide-react";
 import { useEffect } from "react";
 
 import { Button } from "@renderer/components/ui/button";
@@ -34,16 +34,12 @@ export function ExplorerPane() {
 
   useExplorerShortcuts();
 
+  // `Shell` does not mount this pane without a project — the strip belongs to
+  // a directory and there is none — so this is the type's guard rather than a
+  // state a person can reach. There is deliberately no "No project" view: an
+  // explorer with nothing to explore is a pane worth its width to nobody.
   if (!project) {
-    return (
-      <Frame>
-        <EmptyState
-          description="Files, reviews, browsers and terminals open here, in one strip — once there is a project to open them from."
-          icon={FolderOpen}
-          title="No project"
-        />
-      </Frame>
-    );
+    return null;
   }
 
   return (
@@ -83,11 +79,11 @@ function TabBody({ tab, project }: { tab: ExplorerTab; project: Project }) {
     case "file":
       return (
         <FileTab
+          panel={tab.panel}
           path={tab.path}
           project={project}
           root={tab.root}
           tabId={tab.id}
-          viewSource={tab.viewSource}
         />
       );
     case "review":

@@ -1,6 +1,6 @@
 /**
  * Which of an agent's config options is the model, which is the effort, and
- * which of its modes is its own auto-approval preset.
+ * where its modes come from.
  *
  * Every agent invents its own ids — Claude's `model` / `effort` / `auto`,
  * Codex's `model` / `reasoning_effort` / `agent` — so the app matches on the
@@ -8,6 +8,11 @@
  * ids the two adapters actually ship. Shared: main applies these when a
  * session is created (`src/main/acp/sessions.ts`), the renderer draws the
  * chips from the same answers, and the tests check both against one file.
+ *
+ * The mode is the app's **only** permission control (README, "Permissions"):
+ * there is no second, app-side approval setting over the top of it, so
+ * whichever of the two shapes an agent sends its modes in has to reach one
+ * chip. `modeChoice` is that answer.
  *
  * No Node, no React, no zod: pure predicates over the parsed state.
  */
@@ -18,6 +23,8 @@ export type BooleanOption = Extract<ConfigOption, { type: "boolean" }>;
 
 /** ACP's `_meta.kind` for a provider's own auto-approval preset. */
 export const AUTO_REVIEW_KIND = "auto_review";
+/** ACP's `_meta.kind` for the mode that asks about nothing at all. */
+export const FULL_ACCESS_KIND = "full_access";
 
 const EFFORT_IDS = ["reasoning_effort", "effort", "thinking_level", "thought_level"];
 /** The one-switch speed option: Claude's `fast`, Codex's `fast-mode`. */
@@ -45,7 +52,12 @@ export function effortOption(options: ConfigOption[]): SelectOption | null {
   return selectOptions(options).find(isEffortOption) ?? null;
 }
 
-/** The agent's approval preset as a config option (Codex; Claude has one too). */
+/**
+ * The mode as a config option — both adapters ship one. Read through
+ * `modeChoice` rather than directly: which of the two shapes an agent's
+ * modes come in is that function's decision, and one caller reading this
+ * alone is how the chip ends up disagreeing with the setter.
+ */
 export function modeOption(options: ConfigOption[]): SelectOption | null {
   return selectOptions(options).find((option) => option.category === "mode") ?? null;
 }
@@ -82,6 +94,26 @@ export function fastOption(
  * Null when the agent has no such preset, which is the case worth leaving
  * alone rather than guessing at.
  */
+/**
+ * The mode a provider starts in unless the person has chosen one. Claude Code
+ * and Codex both open in their own auto-approval preset in their own apps,
+ * so Hardcore does the same by name; any other provider gets the
+ * `auto_review` rule below, and an override that names a mode the agent did
+ * not offer falls through to it.
+ */
+export const PROVIDER_DEFAULT_MODES: Readonly<Record<string, string>> = {
+  "claude-code": "auto",
+  codex: "agent",
+};
+
+export function defaultModeId(agentId: string | null | undefined, modes: SessionMode[]): string | null {
+  const override = agentId ? PROVIDER_DEFAULT_MODES[agentId] : undefined;
+  if (override && modes.some((mode) => mode.id === override)) {
+    return override;
+  }
+  return autoModeId(modes);
+}
+
 export function autoModeId(modes: SessionMode[]): string | null {
   const byKind = modes.find((mode) => mode.kind === AUTO_REVIEW_KIND);
   if (byKind) {
@@ -90,19 +122,62 @@ export function autoModeId(modes: SessionMode[]): string | null {
   return modes.find((mode) => /^auto$/i.test(mode.id) || /^auto$/i.test(mode.name))?.id ?? null;
 }
 
-/** The same preset as a value of the `mode` config option, for an agent that has no modes. */
-export function autoModeValue(option: SelectOption | null): string | null {
-  if (!option) {
-    return null;
+/**
+ * Where one agent's modes live, as one shape.
+ *
+ * ACP grew two ways of saying the same thing and the adapters use both:
+ * Claude and Codex each answer `session/new` with `modes` — switched by
+ * `session/set_mode` — *and* with a `mode`-category select config option,
+ * switched by `session/set_config_option`. `modes` wins where both are
+ * there: it is the protocol's own field, and the one every adapter's
+ * `current_mode_update` reports against. An agent with a single mode has no
+ * decision to offer and gets no chip.
+ *
+ * `modes` is the vocabulary either way — a config option's values are read
+ * as modes — so the chip, the create-time default and the tests speak one
+ * language and only the setter differs.
+ */
+export type ModeChoice = {
+  /** Which call changes it: `session/set_mode`, or `session/set_config_option`. */
+  source: "modes" | "config_option";
+  /** The option's id when `source` is `config_option`; null for `modes`. */
+  configId: string | null;
+  modes: SessionMode[];
+  currentModeId: string | null;
+};
+
+export function modeChoice(input: {
+  modes: SessionMode[];
+  configOptions: ConfigOption[];
+  currentModeId: string | null;
+}): ModeChoice | null {
+  if (input.modes.length > 1) {
+    return { source: "modes", configId: null, modes: input.modes, currentModeId: input.currentModeId };
   }
-  const byKind = option.options.find((candidate) => candidate.kind === AUTO_REVIEW_KIND);
-  if (byKind) {
-    return byKind.value;
+  const option = modeOption(input.configOptions);
+  if (option && option.options.length > 1) {
+    return {
+      source: "config_option",
+      configId: option.id,
+      modes: option.options.map((candidate) => ({
+        id: candidate.value,
+        name: candidate.name,
+        description: candidate.description,
+        kind: candidate.kind,
+      })),
+      currentModeId: option.currentValue,
+    };
   }
-  return (
-    option.options.find((candidate) => /^auto$/i.test(candidate.value) || /^auto$/i.test(candidate.name))
-      ?.value ?? null
-  );
+  return null;
+}
+
+/**
+ * The mode that asks about nothing — Claude's `Bypass permissions`, Codex's
+ * `Full access`. The one mode the menu says something extra about, because
+ * it is the one choice that removes every checkpoint.
+ */
+export function isFullAccessMode(mode: SessionMode): boolean {
+  return mode.kind === FULL_ACCESS_KIND || /^(full access|bypass permissions)$/i.test(mode.name);
 }
 
 /** The name an option's current value goes by, for a chip's label. */
@@ -120,4 +195,91 @@ export function withCurrentValue(option: SelectOption, value: string | null | un
     return option;
   }
   return { ...option, currentValue: value };
+}
+
+/* -------------------------------------------------------------------------- */
+/* What is remembered, and how it resolves                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The key an effort is remembered against for an agent that offers no model
+ * dropdown at all: there is one effort to remember and no model to hang it
+ * on. Every other key is a model option's `value`.
+ */
+export const NO_MODEL = "";
+
+/**
+ * Which model a set of options describes — the key its effort levels, and
+ * the effort picked while it was current, are remembered under.
+ *
+ * The effort option is **per model** on Claude: `Xhigh` exists for one model
+ * and not for the next, and the agent only ever reports the list belonging to
+ * the model the session is on. A snapshot therefore describes one model's
+ * levels, this says which, and the cache keeps a map of them rather than a
+ * single option (`src/main/acp/agent-options.ts`).
+ */
+export function effortModelKey(options: ConfigOption[]): string {
+  return modelOption(options)?.currentValue ?? NO_MODEL;
+}
+
+/**
+ * The effort dropdown to draw for one model: the option as last reported
+ * while that model was current, else the snapshot's own — which belongs to
+ * whichever model was current when it was taken, and is the best there is
+ * for a model nobody has run yet.
+ *
+ * Null when the agent has no effort option at all, which is when no chip is
+ * drawn.
+ */
+export function effortOptionFor(
+  options: ConfigOption[],
+  perModel: Record<string, ConfigOption>,
+  model: string | null,
+): SelectOption | null {
+  const stored = perModel[model ?? NO_MODEL];
+  if (stored && stored.type === "select") {
+    return stored;
+  }
+  return effortOption(options);
+}
+
+/**
+ * The level the effort chip sits at for one model: the level last picked for
+ * **that** model, while it still exists, else the level the agent reports
+ * for it.
+ *
+ * Switching model swaps this, which is the whole point of keying the memory
+ * by model — one effort per agent carries the outgoing model's level onto the
+ * incoming one and forgets the earlier pick.
+ */
+export function preferredEffort(
+  option: SelectOption | null,
+  efforts: Record<string, string>,
+  model: string | null,
+): string | null {
+  if (!option) {
+    return null;
+  }
+  const remembered = efforts[model ?? NO_MODEL];
+  return remembered && option.options.some((candidate) => candidate.value === remembered)
+    ? remembered
+    : option.currentValue;
+}
+
+/**
+ * The mode a session with this agent starts in: the mode the person last
+ * left the provider in, while the agent still offers it, else the mode that
+ * provider opens in on its own (`defaultModeId`). Shared, because the
+ * new-session screen's chip is a statement about what
+ * `SessionManager.create` is about to do and the two have to agree.
+ */
+export function preferredMode(
+  agentId: string | null | undefined,
+  modes: SessionMode[],
+  remembered: string | null,
+): string | null {
+  return (
+    (remembered && modes.some((mode) => mode.id === remembered) ? remembered : null) ??
+    defaultModeId(agentId, modes)
+  );
 }

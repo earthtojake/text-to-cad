@@ -11,11 +11,11 @@ import { IpcError, broadcast, type IpcContext } from "./register";
 import { detector } from "./agents";
 import type { IpcHandlers } from "../../shared/ipc";
 import type { acpContract } from "../../shared/ipc/acp";
-import type { ConfigOption } from "../../shared/acp/types";
+import type { AgentSnapshot } from "../acp/agent-options";
 import { spawnPtyTerminal } from "../acp/pty-backend";
 import { AgentOptionStore } from "../acp/agent-options";
 import { SessionManager } from "../acp/sessions";
-import { forgetSession, mcpServersFor } from "../cad";
+import { forgetSession, mcpServersFor, sessionPreamble, sessionRuntimePath, skillsRoot } from "../cad";
 import { agentOptions as agentOptionsRepo, projects, sessions, settings } from "../db/repositories";
 import { head } from "../projects/git";
 import { releaseWorkspace, resolveWorkspace } from "../projects/workspace";
@@ -40,9 +40,10 @@ const fakeAgent = app.isPackaged ? undefined : process.env.HARDCORE_FAKE_AGENT;
 export const agentOptions: AgentOptionStore = new AgentOptionStore({
   read: () => agentOptionsRepo.list(),
   get: (agentId) => agentOptionsRepo.get(agentId),
-  writeOptions: (agentId, options) => agentOptionsRepo.setOptions(agentId, options),
+  writeOptions: (agentId, options, modes) => agentOptionsRepo.setOptions(agentId, options, modes),
   writeDefaults: (agentId, defaults) => agentOptionsRepo.setDefaults(agentId, defaults),
-  probe: async (agentId, projectId): Promise<ConfigOption[]> => {
+  writeEffort: (agentId, model, effort) => agentOptionsRepo.setEffort(agentId, model, effort),
+  probe: async (agentId, projectId): Promise<AgentSnapshot> => {
     const project = projectId
       ? (projects.list().find((candidate) => candidate.id === projectId) ?? null)
       : (projects.list()[0] ?? null);
@@ -67,11 +68,18 @@ export const sessionManager: SessionManager = new SessionManager({
   // Every session gets the Hardcore MCP server, with a token that names it.
   mcpServers: mcpServersFor,
   forgetProbe: (probeId) => forgetSession(probeId, null),
+  // …the app's skills as an additional directory, and the preamble for an
+  // agent that will not read one (src/main/cad/skills.ts)…
+  skills: { root: skillsRoot, preamble: sessionPreamble },
+  // …and the bundled runtime's `cadgen` and `python` in front of its PATH.
+  runtimePath: sessionRuntimePath,
   agentOptions: {
     defaults: (agentId) => agentOptions.defaults(agentId),
-    remember: (agentId, options) => agentOptions.remember(agentId, options),
+    effortFor: (agentId, model) => agentOptions.effortFor(agentId, model),
+    remember: (agentId, options, modes) => agentOptions.remember(agentId, options, modes),
     rememberChoice: (agentId, configId, value, options) =>
       agentOptions.rememberChoice(agentId, configId, value, options),
+    rememberMode: (agentId, modeId) => agentOptions.rememberMode(agentId, modeId),
   },
   clientVersion: app.isPackaged ? app.getVersion() : __APP_VERSION__,
   newId: () => randomUUID(),
@@ -146,9 +154,9 @@ export const acpHandlers = {
       surfacing(() => sessionManager.setConfigOption(id, configId, value)),
     respondPermission: ({ id, requestId, optionId }) =>
       surfacing(() => sessionManager.respondPermission(id, requestId, optionId)),
-    setApprovalMode: ({ id, mode }) => surfacing(() => sessionManager.setApprovalMode(id, mode)),
     rename: ({ id, title }) => surfacing(() => sessionManager.rename(id, title)),
     archive: ({ id, archived }) => surfacing(() => sessionManager.archive(id, archived)),
+    setPinned: ({ id, pinned }) => surfacing(() => sessionManager.setPinned(id, pinned)),
     close: ({ id }) => surfacing(() => sessionManager.close(id)),
     delete: ({ id }) =>
       surfacing(async () => {

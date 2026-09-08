@@ -1,5 +1,5 @@
 /**
- * Which renderer a file gets.
+ * Which renderer a file gets, and which panels it has.
  *
  * One table, keyed by extension and mime, so the answer to "what will happen
  * when I open this" is in one place — and so the header knows whether to offer
@@ -10,7 +10,11 @@
  * two agree by construction — this table takes main's `FileKind` as its input
  * and only splits `text` further, into markdown and everything else.
  */
+import { Code2, Eye, Palette, SlidersHorizontal } from "lucide-react";
+
 import type { FileKind, FileStat } from "@shared/ipc/explorer";
+
+import { CAD_PANEL, SOURCE_PANEL, type PanelsFor } from "./panels";
 
 /** The renderers, in the order a reader should meet them. */
 export type RendererId = "markdown" | "code" | "image" | "pdf" | "cad" | "binary";
@@ -33,27 +37,83 @@ const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
 /**
  * A renderer's traits, as the file tab's header needs them.
  *
- * `sourceToggle` is what puts `View source` in the header: markdown is the
- * only kind with two readings of the same bytes. CAD files have an XML source
- * too (`.urdf` and friends), but the surface that renders them is a 3D scene
- * with its own panels — a source toggle there would be a second editor
- * competing with it, and P4/P5 own that surface.
+ * `panels` is what puts toggles in the nav row (`panels.ts`): markdown has
+ * one, the two readings of the same bytes; a CAD file has two, the theme
+ * editor and the Inspector, which the viewer's surface draws into this
+ * app's panel column and this app drives, because that surface's own top bar
+ * — where its toggles live standalone — is hidden here. Code, images and
+ * PDFs declare none, and a kind with none has the tree alone in the row.
+ *
+ * CAD files have an XML source too (`.urdf` and friends), and still no source
+ * panel: the surface that renders them is a 3D scene, and a second editor
+ * competing with it is not a second reading of the file.
  */
 export type RendererTraits = {
   id: RendererId;
-  /** True when the renderer can be flipped to Monaco with `View source`. */
-  sourceToggle: boolean;
+  /** The panels this kind has, in the order the nav row draws them. */
+  panels: PanelsFor | null;
   /** True when the renderer writes back (the save path, the dirty dot). */
   editable: boolean;
 };
 
+/**
+ * Markdown's one panel: the same bytes read as a document or as source.
+ *
+ * The one panel that is not a column — the source IS the body — and still
+ * one of the list, so opening it closes the tree the way opening the tree
+ * closes it. The label is what pressing it does.
+ */
+const markdownPanels: PanelsFor = ({ open }) => [
+  {
+    id: SOURCE_PANEL,
+    label: open === SOURCE_PANEL ? "View preview" : "View source",
+    icon: open === SOURCE_PANEL ? Eye : Code2,
+    content: "body",
+  },
+];
+
+/**
+ * A CAD file's two: the viewer's theme editor and its **Inspector** — the
+ * file's tree, its measurements, its parameters — drawn by the viewer's
+ * surface into the panel column this app owns (`panelSlot`). The Inspector is
+ * what a CAD tab opens with; a STEP file's tree and its measurements are the
+ * reason the tab is open.
+ *
+ * "Inspector" is the name a person sees. The id stays `cad-file-sheet`
+ * because the tab's stored `panel` field holds it and the viewer's host
+ * contract calls the same panel `fileSheetOpen`; the sliders glyph is the one
+ * the standalone viewer's top bar uses for this panel, so the control is the
+ * same control in both.
+ *
+ * Nothing until the surface is up: a CAD tab whose runtime did not start
+ * shows a failure card, and two toggles over a card would open nothing.
+ */
+const cadPanels: PanelsFor = ({ ready }) =>
+  ready
+    ? [
+        {
+          id: CAD_PANEL.theme,
+          label: "Theme settings",
+          icon: Palette,
+          content: "slot",
+        },
+        {
+          id: CAD_PANEL.fileSheet,
+          label: "Inspector",
+          icon: SlidersHorizontal,
+          content: "slot",
+          defaultOpen: true,
+        },
+      ]
+    : [];
+
 const TRAITS: Record<RendererId, RendererTraits> = {
-  markdown: { id: "markdown", sourceToggle: true, editable: true },
-  code: { id: "code", sourceToggle: false, editable: true },
-  image: { id: "image", sourceToggle: false, editable: false },
-  pdf: { id: "pdf", sourceToggle: false, editable: false },
-  cad: { id: "cad", sourceToggle: false, editable: false },
-  binary: { id: "binary", sourceToggle: false, editable: false },
+  markdown: { id: "markdown", panels: markdownPanels, editable: true },
+  code: { id: "code", panels: null, editable: true },
+  image: { id: "image", panels: null, editable: false },
+  pdf: { id: "pdf", panels: null, editable: false },
+  cad: { id: "cad", panels: cadPanels, editable: false },
+  binary: { id: "binary", panels: null, editable: false },
 };
 
 /** Lowercase extension without the dot; `""` when there is none. */

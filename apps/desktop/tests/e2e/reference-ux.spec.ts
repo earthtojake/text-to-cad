@@ -34,10 +34,11 @@ test("viewer context and revision requests stay with the right draft and workspa
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1280, 800));
     const added = await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), project);
     await expect(page.getByText(added.name).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
     const session = await page.evaluate((projectId) => window.hardcore.sessions.create({ projectId, agentId: "claude-code", gitMode: "none" }), added.id);
     await page.locator(`[data-session-row="${session.id}"]`).getByRole("button").first().click();
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+t" : "Control+t");
+    await page.getByRole("button", { name: "Toggle explorer", exact: true }).click();
+    await page.getByRole("button", { name: "New tab", exact: true }).click();
+    await page.getByRole("menuitem", { name: "File", exact: false }).click();
     await page.getByLabel("Filter files").fill("models/car.step");
     await page.getByRole("option", { name: "models/car.step", exact: false }).first().click();
     const wheel = page.getByRole("treeitem", { name: /Component wheel_front_left/ });
@@ -80,8 +81,7 @@ test("viewer context and revision requests stay with the right draft and workspa
     await expect(chip).toHaveText("wheel_front_left");
     await page.mouse.move(350, 80);
     await page.screenshot({ path: test.info().outputPath("named-wheel-reference.png"), animations: "disabled" });
-    await page.locator("[data-composer]").getByRole("button", { name: "Add to this prompt" }).click();
-    await page.getByRole("menuitem", { name: "Ask about this view" }).click();
+    await page.getByTestId("capture-to-chat").click();
     await expect(page.locator("[data-composer]").getByText(/car-.*\.png/)).toHaveCount(1);
     await expect(chip).toHaveCount(1);
     await expect(draft).toBeFocused();
@@ -114,7 +114,8 @@ test("viewer context and revision requests stay with the right draft and workspa
     }).toMatchObject({ type: "text", text: `Make this wheel wider: ${token}` });
     const submitted = await page.evaluate((id) => window.hardcore.sessions.state({ id }), session.id);
     expect(submitted?.turns.find((turn) => turn.role === "user")?.parts.some((part) => part.type === "image")).toBe(true);
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+Shift+r" : "Control+Shift+r");
+    await page.getByRole("button", { name: "New tab", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Review", exact: false }).click();
     const revision = page.getByRole("button", { name: "Request revision for models/car.py", exact: true });
     await expect(revision).toBeVisible();
     await draft.fill("Keep the wheel centered.");

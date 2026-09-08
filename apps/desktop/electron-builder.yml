@@ -43,8 +43,8 @@ files:
 #   resources/cadgen   the cadgen wheel and its constraints file, which the
 #                      bundler installs from; kept beside the app so a person
 #                      can see what shipped (a couple of megabytes).
-#   resources/plugin   the composed Hardcore plugin (the cad plugin minus
-#                      cad-viewer, plus hardcore-app-use) installed into each agent.
+#   resources/skills   the app's skills (the repo's, minus cad-viewer, plus
+#                      hardcore-app-use), handed to every session as a directory.
 #
 # The runtime's executables keep their mode bits and their symlinks
 # (python/bin/python3 -> python3.13): electron-builder copies extraResources
@@ -58,8 +58,8 @@ extraResources:
     to: runtime/${os}-${arch}
   - from: resources/cadgen
     to: cadgen
-  - from: resources/plugin
-    to: plugin
+  - from: resources/skills
+    to: skills
 
 # One icon source, build/icon.png (scripts/make-icons.mjs copies the docs favicon;
 # committed). electron-builder derives the macOS .icns and Windows .ico from it.

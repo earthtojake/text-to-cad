@@ -55,7 +55,13 @@ Object.defineProperty(window, "hardcore", {
       remove: vi.fn(),
       rename: vi.fn(),
     },
-    sessions: { list: vi.fn(async () => []) },
+    sessions: {
+      list: vi.fn(async () => []),
+      rename: vi.fn(async () => undefined),
+      archive: vi.fn(async () => undefined),
+      setPinned: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    },
     agents: {
       list: vi.fn(async () => []),
       refresh: vi.fn(async () => []),
@@ -64,10 +70,8 @@ Object.defineProperty(window, "hardcore", {
       writeJob: vi.fn(),
       cancelJob: vi.fn(),
     },
-    plugins: {
-      status: vi.fn(),
-      statusAll: vi.fn(async () => []),
-      install: vi.fn(),
+    skills: {
+      info: vi.fn(async () => ({ root: null, skills: [] })),
     },
     runtime: {
       status: vi.fn(async () => ({
@@ -93,6 +97,15 @@ Object.defineProperty(window, "hardcore", {
       readBinary: vi.fn(),
       absolutePath: vi.fn(async ({ path }: { path: string }) => ({ path })),
       openDefault: vi.fn(),
+      openWith: vi.fn(async () => undefined),
+      reveal: vi.fn(async () => undefined),
+      createFile: vi.fn(async ({ path, name }: { path: string; name: string }) => ({ path: path ? `${path}/${name}` : name })),
+      createDirectory: vi.fn(async ({ path, name }: { path: string; name: string }) => ({ path: path ? `${path}/${name}` : name })),
+      rename: vi.fn(async ({ path, name }: { path: string; name: string }) => ({
+        path: [...path.split("/").slice(0, -1), name].join("/"),
+      })),
+      duplicate: vi.fn(async ({ path }: { path: string }) => ({ path: `${path} copy` })),
+      trash: vi.fn(async () => undefined),
       watch: vi.fn(async () => undefined),
       unwatch: vi.fn(async () => undefined),
       loadTabs: vi.fn(async () => []),

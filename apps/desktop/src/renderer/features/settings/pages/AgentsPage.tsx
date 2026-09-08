@@ -20,13 +20,12 @@ import { StatusDot, type Tone } from "@renderer/features/settings/StatusDot";
 import { matchesQuery } from "@renderer/features/settings/search";
 import { useAppInfo } from "@renderer/features/settings/use-app-info";
 import { useAgents } from "@renderer/state/agents";
-import { usePlugins } from "@renderer/state/plugins";
 import type { AgentStatus, Platform } from "@shared/agents";
 
 /**
- * The four the app is built around: two with a plugin system Hardcore's skills
- * install into, and two whose ACP support is first-party. Recommending is not
- * ranking — everything else is in the same list, one group down.
+ * The four the app is built around: two that load the skills Hardcore hands a
+ * session by themselves, and two whose ACP support is first-party. Recommending
+ * is not ranking — everything else is in the same list, one group down.
  */
 const RECOMMENDED = new Set(["claude-code", "codex", "gemini-cli", "github-copilot"]);
 
@@ -41,7 +40,6 @@ export function AgentsPage() {
   const ready = useAgents((state) => state.ready);
   const load = useAgents((state) => state.load);
   const refresh = useAgents((state) => state.refresh);
-  const loadPlugins = usePlugins((state) => state.load);
   const info = useAppInfo();
   const [filter, setFilter] = useState("");
   const [refreshing, setRefreshing] = useState(false);
@@ -53,8 +51,7 @@ export function AgentsPage() {
 
   useEffect(() => {
     void load();
-    void loadPlugins();
-  }, [load, loadPlugins]);
+  }, [load]);
 
   const platform = info ? (PLATFORMS[info.platform] ?? "linux") : "macos";
 

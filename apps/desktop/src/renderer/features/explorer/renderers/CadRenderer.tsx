@@ -3,7 +3,6 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react
 
 import { Button } from "@renderer/components/ui/button";
 import { Spinner } from "@renderer/components/ui/spinner";
-import { useElementWidth } from "@renderer/hooks/use-element-width";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
 import { useExplorer } from "@renderer/state/explorer";
 import { addToDraft } from "@renderer/state/cad-draft";
@@ -12,7 +11,6 @@ import type { ViewerOrigin } from "@shared/ipc/cad";
 import type { CadReference } from "@shared/cad-refs";
 import type { ExplorerRoot } from "@shared/types";
 
-import { cadSceneBackgroundFor, cadSheetWidthFor } from "../cad-layout";
 import { EmptyState } from "../EmptyState";
 
 /**
@@ -40,16 +38,30 @@ import { EmptyState } from "../EmptyState";
  * status and Repair live.
  *
  * Three things are the desktop's to decide, not the surface's, and are passed
- * in (`cad-layout.ts`): the layout is always the desktop one — the sheet is a
- * column beside the model at any pane width, never a drawer over it — the
- * sheet's width follows the pane, and light/dark is the app's theme. Without
- * the last, opening a STEP file flipped the whole window to the CAD theme's
- * scheme.
+ * in: WHERE its panels are drawn (`panelSlot` — the file tab's one panel
+ * column, so the theme editor and the Inspector share the frame, the width
+ * and the toggles of the tab's own panels), the layout (always the desktop
+ * one, so nothing is ever a drawer over the model), and light/dark
+ * (`colorScheme`, the app's theme — the CAD theme paints the scene and
+ * nothing around it).
+ *
+ * `layout="desktop"` is a pin, not a measurement: the surface measures its
+ * own root and drops into compact mode — the Inspector as a drawer over the
+ * model — below 1024px, and every explorer pane is narrower than that. Its
+ * panels are drawn in the tab's panel column, so their width is that
+ * column's and this app has no other opinion about the layout.
+ *
+ * The scene's BACKDROP is not one of the three either. It belongs to the CAD
+ * theme, and only the theme named "System" follows this window: the surface
+ * reads the `--background` token off the document for that one and leaves
+ * every other preset its own. This app used to hand the colour over for every
+ * theme (a `sceneBackground` prop and a `cadSceneBackgroundFor` beside it),
+ * which is why picking Cinematic here changed the lights and the floor but
+ * never the background.
  */
 type CadSurfaceProps = {
   origin: string;
   file: string;
-  width: number;
   colorScheme: "light" | "dark";
   onOpenFile: (path: string) => void;
   /** A reference to select once the model is up; `key` distinguishes repeats. */
@@ -57,12 +69,33 @@ type CadSurfaceProps = {
   onReference: (reference: { file: string; selector: string; text: string; label?: string }) => void;
   onCapture: (capture: { blob: Blob; file: string; references?: CadReference[] }) => void;
   /**
-   * A capture asked for from outside the viewport — the composer's `+` menu.
+   * A capture requested by the host from outside the viewport.
    * `key` distinguishes repeats, exactly as `selectReference`'s does; the
    * picture goes to `onCapture` either way, so the toolbar's camera button
    * and this are one path.
    */
   captureRequest: { key: number } | null;
+  /**
+   * The surface's two panels, driven from here and drawn into `panelSlot`.
+   *
+   * `layout="desktop"` hides the surface's own top bar, which is where the
+   * theme and Inspector toggles live standalone — so without these the
+   * theme panel had no door at all in this app. They are controlled props
+   * (`apps/viewer/docs/file-view.md`): the file tab has one open panel, so
+   * at most one of these is ever true, and the surface reports the changes
+   * it makes itself (a measurement opening the sheet) so the nav row's
+   * highlight follows the screen.
+   */
+  themeEditing: boolean;
+  onThemeEditingChange: (next: boolean) => void;
+  fileSheetOpen: boolean;
+  onFileSheetOpenChange: (next: boolean) => void;
+  /**
+   * The box in the tab's panel column the open panel is drawn into. Null —
+   * the tab has another panel open, or none — and the surface draws no panel
+   * at all, which is right: this app's column is showing something else.
+   */
+  panelSlot: HTMLElement | null;
 };
 
 /**
@@ -82,23 +115,27 @@ const CadSurface = lazy(async () => {
     default: ({
       origin,
       file,
-      width,
       colorScheme,
       onOpenFile,
       selectReference,
       onReference,
       onCapture,
       captureRequest,
+      themeEditing,
+      onThemeEditingChange,
+      fileSheetOpen,
+      onFileSheetOpenChange,
+      panelSlot,
     }: CadSurfaceProps) => (
       <ViewerOriginProvider origin={origin}>
         {/*
-          A containing block for the surface's `position: fixed` parts. The
-          viewer's right-hand sheet is a shadcn Sidebar — `fixed inset-y-0
-          right-0` — which in the standalone app coincides with the window and
-          in this tab would pin itself to the window's edge, over the tab
-          strip and the file tree. A transform on an ancestor makes fixed
-          descendants position against it instead; popovers portal to `body`
-          and are unaffected.
+          A containing block for any `position: fixed` part of the surface
+          that is still drawn inside it. Its panels are not — they are
+          portaled into the tab's panel column — but a compact-mode drawer
+          would be, and a transform on an ancestor makes a fixed descendant
+          position against this box rather than the window, so nothing can
+          pin itself over the tab strip. Popovers portal to `body` and are
+          unaffected.
         */}
         <div className="relative h-full min-h-0" style={{ transform: "translateZ(0)" }}>
           <CadFileView
@@ -109,16 +146,19 @@ const CadSurface = lazy(async () => {
             className="h-full min-h-0"
             colorScheme={colorScheme}
             file={file}
-            fileSheetWidth={cadSheetWidthFor(width)}
+            fileSheetOpen={fileSheetOpen}
             layout="desktop"
             // The desktop window owns its own title; the surface must not write it.
             manageDocumentTitle={false}
             onCapture={onCapture}
+            onFileSheetOpenChange={onFileSheetOpenChange}
             onOpenFile={(next) => onOpenFile(next)}
             onReference={onReference}
+            onThemeEditingChange={onThemeEditingChange}
             origin={origin}
-            sceneBackground={cadSceneBackgroundFor(colorScheme)}
+            panelSlot={panelSlot}
             selectReference={selectReference}
+            themeEditing={themeEditing}
           />
         </div>
       </ViewerOriginProvider>
@@ -132,6 +172,12 @@ export function CadRenderer({
   root,
   path,
   onOpenFile,
+  themeEditing,
+  onThemeEditingChange,
+  fileSheetOpen,
+  onFileSheetOpenChange,
+  panelSlot,
+  onSurfaceReady,
 }: {
   tabId: string;
   projectId: string;
@@ -140,6 +186,23 @@ export function CadRenderer({
   /** Root-relative: the same path the viewer's `?file=` carries. */
   path: string;
   onOpenFile: (path: string) => void;
+  /**
+   * The tab's two CAD panel toggles (`renderers/panels.ts`), driven into the
+   * surface, which draws the open one into `panelSlot`.
+   */
+  themeEditing: boolean;
+  onThemeEditingChange: (next: boolean) => void;
+  fileSheetOpen: boolean;
+  onFileSheetOpenChange: (next: boolean) => void;
+  /** The tab's panel column, when the open panel is one of these two. */
+  panelSlot: HTMLElement | null;
+  /**
+   * Whether the surface — the thing that draws those panels — is up at all.
+   * False while the origin is being asked for and false for good if it never
+   * came: the tab draws no panel toggles then, because there is nothing
+   * behind them but a failure card.
+   */
+  onSurfaceReady: (ready: boolean) => void;
 }) {
   const [answer, setAnswer] = useState<ViewerOrigin | null>(null);
   // A transcript link's `#selector` for this tab (`explorer.selectCadReference`).
@@ -148,7 +211,7 @@ export function CadRenderer({
     () => (selection ? { selector: selection.selector, key: selection.nonce } : null),
     [selection],
   );
-  // The composer's `+ Ask about this view`, for this tab.
+  // A host-requested capture for this tab.
   const capture = useExplorer((state) => (state.cadCapture?.tabId === tabId ? state.cadCapture : null));
   const captureRequest = useMemo(() => (capture ? { key: capture.nonce } : null), [capture]);
 
@@ -168,7 +231,6 @@ export function CadRenderer({
   }, [projectId, root]);
   const openSettings = useUi((state) => state.openSettings);
   const colorScheme = useResolvedTheme();
-  const [hostRef, width] = useElementWidth();
 
   // Asked once per mount, and again on Retry. A tab's project cannot change
   // under it — a project change rebuilds the strip — so there is nothing
@@ -196,6 +258,15 @@ export function CadRenderer({
       cancelled = true;
     };
   }, [projectId, root, attempt]);
+
+  // The panels exist exactly while the surface does. Reported rather than
+  // derived by the tab, because "did the viewer come up" is this component's
+  // answer and nobody else's.
+  const surfaceUp = !!answer?.origin;
+  useEffect(() => {
+    onSurfaceReady(surfaceUp);
+    return () => onSurfaceReady(false);
+  }, [onSurfaceReady, surfaceUp]);
 
   if (!answer) {
     return (
@@ -250,7 +321,7 @@ export function CadRenderer({
   }
 
   return (
-    <div className="h-full min-h-0" data-cad-surface ref={hostRef}>
+    <div className="h-full min-h-0" data-cad-surface>
       <Suspense
         fallback={
           <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground">
@@ -263,12 +334,16 @@ export function CadRenderer({
           captureRequest={captureRequest}
           colorScheme={colorScheme}
           file={path}
+          fileSheetOpen={fileSheetOpen}
           onCapture={onCapture}
+          onFileSheetOpenChange={onFileSheetOpenChange}
           onOpenFile={onOpenFile}
           onReference={onReference}
+          onThemeEditingChange={onThemeEditingChange}
           origin={answer.origin}
+          panelSlot={panelSlot}
           selectReference={selectReference}
-          width={width}
+          themeEditing={themeEditing}
         />
       </Suspense>
     </div>

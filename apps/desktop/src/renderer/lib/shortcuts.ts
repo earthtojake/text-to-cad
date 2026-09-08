@@ -33,6 +33,10 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "close-settings", group: "Application", label: "Close Settings or the palette", binding: "Escape" },
   { id: "toggle-sidebar", group: "Application", label: "Toggle sidebar", binding: "Mod+B" },
   { id: "toggle-explorer", group: "Application", label: "Toggle explorer", binding: "Mod+Alt+B" },
+  // The top level only: the threads and new-session screens the session pane
+  // has shown. The explorer's tabs have their own strip and are not in it.
+  { id: "navigate-back", group: "Application", label: "Back", binding: "Mod+[" },
+  { id: "navigate-forward", group: "Application", label: "Forward", binding: "Mod+]" },
 
   { id: "send", group: "Session", label: "Send", binding: "Enter" },
   {

@@ -3,7 +3,6 @@ import { create } from "zustand";
 import { reduce } from "@shared/acp/reduce";
 import { errorMessage } from "@shared/ipc/errors";
 import type {
-  ApprovalMode,
   PendingPermission,
   PromptBlock,
   SessionEvent,
@@ -54,7 +53,6 @@ type AcpState = {
   setMode: (sessionId: string, modeId: string) => Promise<void>;
   setConfigOption: (sessionId: string, configId: string, value: string | boolean) => Promise<void>;
   respondPermission: (sessionId: string, requestId: string, optionId: string | null) => Promise<void>;
-  setApprovalMode: (sessionId: string, mode: ApprovalMode) => Promise<void>;
   close: (sessionId: string) => Promise<void>;
 };
 
@@ -145,9 +143,6 @@ export const useAcp = create<AcpState>((set, get) => ({
 
   respondPermission: (sessionId, requestId, optionId) =>
     window.hardcore.sessions.respondPermission({ id: sessionId, requestId, optionId }),
-
-  setApprovalMode: (sessionId, mode) =>
-    window.hardcore.sessions.setApprovalMode({ id: sessionId, mode }),
 
   close: async (sessionId) => {
     await window.hardcore.sessions.close({ id: sessionId });

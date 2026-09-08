@@ -1,6 +1,6 @@
 ---
 name: hardcore-app-use
-description: How to work inside the Hardcore desktop app, where the CAD Viewer is beside the chat and files are shown with the `open_file` tool. Installed only by Hardcore; replaces the `cad` skill's `$cad-viewer` hand-off. Use whenever a CAD, drawing, mesh, or robot-description file is created, changed, or reviewed in a Hardcore session.
+description: How to work inside the Hardcore desktop app, where the CAD Viewer is beside the chat and files are shown with the `open_file` tool. Ships with Hardcore only; replaces the `cad` skill's `$cad-viewer` hand-off. Use whenever a CAD, drawing, mesh, or robot-description file is created, changed, or reviewed in a Hardcore session.
 ---
 
 # Working inside Hardcore
@@ -30,6 +30,15 @@ and `gcode` skills still say how to build the files.
   or a part. A path that does not exist stays plain text, so name outputs
   after they are written.
 
+## cadgen is already here
+
+The CAD runtime ships inside Hardcore and is on this session's PATH: `cadgen`
+and `python` are the app's own, pinned to its version. **Never install cadgen,
+never create or activate a virtualenv for it, and never `pip install` anything
+to make it work.** Run `cadgen …` directly. If a cadgen command is missing or
+fails to import, say so and stop — it is a fault in the app, not something to
+fix with an install.
+
 ## The tools Hardcore gives you
 
 | Tool | Call it when |
@@ -40,6 +49,7 @@ and `gcode` skills still say how to build the files.
 | `list_open_tabs()` | You need to know what the person is already looking at before opening more. |
 | `viewer_state()` | You want the file currently in the viewer before acting on "this part" or "that face". |
 | `open_url(url)` | A datasheet, a docs page or a step.parts listing belongs beside the work. |
+| `list_skills()` / `read_skill(name, path?)` | You need the skills Hardcore ships and cannot see them in your own skill list. They are files on disk here; read `cad` before CAD work. |
 
 Call `open_file` on the artifact (`STEP/bracket.step`), not on the script that
 made it. Open the file the person asked about, not every file you touched.

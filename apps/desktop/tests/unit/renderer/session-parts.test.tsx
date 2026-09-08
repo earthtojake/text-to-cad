@@ -7,12 +7,9 @@ import { ActivityGroup } from "@renderer/features/session/parts/ActivityRow";
 import { PermissionCard } from "@renderer/features/session/parts/PermissionCard";
 import { PlanCard } from "@renderer/features/session/PlanCard";
 import { activityRow, foldSummary } from "@renderer/features/session/view";
-import { Sidebar } from "@renderer/features/sidebar/Sidebar";
 import { useAcp } from "@renderer/state/acp";
-import { useProjects } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
 import type { PermissionRequestPart, ToolCallPart } from "@shared/acp/types";
-import type { Session } from "@shared/types";
 
 const wrap = (ui: React.ReactNode) => render(<TooltipProvider>{ui}</TooltipProvider>);
 
@@ -35,7 +32,6 @@ function call(overrides: Partial<ToolCallPart> & { id: string }): ToolCallPart {
 
 beforeEach(() => {
   useAcp.setState({ sessions: {}, terminalOutput: {}, loading: {}, loadErrors: {} });
-  useProjects.setState({ projects: [], ready: true, activeId: null, collapsed: new Set() });
   useSessions.setState({ sessions: [], ready: true, activeId: null });
 });
 
@@ -137,62 +133,5 @@ describe("PlanCard", () => {
     );
     expect(screen.getByText("Write the script")).toBeInTheDocument();
     expect(screen.getByText("1 of 3 done")).toBeInTheDocument();
-  });
-});
-
-describe("Sidebar sessions", () => {
-  const session = (overrides: Partial<Session> & { id: string; title: string }): Session => ({
-    projectId: "p1",
-    agentId: "codex",
-    cwd: "/repo",
-    gitMode: "none",
-    createdAt: 0,
-    updatedAt: 0,
-    status: "idle",
-    acpSessionId: "acp",
-    changedFiles: 0,
-    insertions: 0,
-    deletions: 0,
-    archived: false,
-    sessionHead: null,
-    turnHead: null,
-    turnStartedAt: null,
-    ...overrides,
-  });
-
-  it("lists five newest first, offers the rest behind Show more, and hides archived ones", async () => {
-    const user = userEvent.setup();
-    useProjects.setState({ projects: [{ id: "p1", name: "text-to-cad", path: "/repo", createdAt: 0 }], ready: true, activeId: "p1", collapsed: new Set() });
-    useSessions.setState({
-      sessions: [
-        ...Array.from({ length: 7 }, (_, index) => session({ id: `s${index}`, title: `Session ${index}`, updatedAt: index })),
-        session({ id: "gone", title: "Archived one", archived: true, updatedAt: 100 }),
-      ],
-      ready: true,
-      activeId: "s6",
-    });
-    wrap(<Sidebar />);
-    const rows = screen.getAllByText(/^Session \d$/).map((node) => node.textContent);
-    expect(rows).toEqual(["Session 6", "Session 5", "Session 4", "Session 3", "Session 2"]);
-    expect(screen.queryByText("Archived one")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Show 2 more" }));
-    expect(screen.getByText("Session 0")).toBeInTheDocument();
-  });
-
-  it("shows the running spinner and the worktree glyph", () => {
-    useProjects.setState({ projects: [{ id: "p1", name: "text-to-cad", path: "/repo", createdAt: 0 }], ready: true, activeId: "p1", collapsed: new Set() });
-    useSessions.setState({
-      sessions: [
-        session({ id: "a", title: "Busy", status: "running" }),
-        session({ id: "b", title: "Tree", gitMode: "worktree", branch: "hardcore/x" }),
-        session({ id: "c", title: "Branch", gitMode: "checkout", branch: "main" }),
-      ],
-      ready: true,
-      activeId: null,
-    });
-    wrap(<Sidebar />);
-    expect(screen.getByLabelText("Working")).toBeInTheDocument();
-    expect(screen.getByLabelText(/^Worktree/)).toBeInTheDocument();
-    expect(screen.getByLabelText("main")).toBeInTheDocument();
   });
 });

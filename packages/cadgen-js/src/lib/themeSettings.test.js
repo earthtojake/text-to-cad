@@ -7,7 +7,6 @@ import {
   DEFAULT_THEME_PRESET_ID,
   DEFAULT_THEME_SETTINGS,
   getThemePresetIdForSettings,
-  inferThemeSettingsSceneTone,
   MAX_FLOOR_GRID_DENSITY,
   THEME_COLOR_MODES,
   THEME_FLOOR_MODES,
@@ -16,7 +15,6 @@ import {
   normalizeThemeFillColors,
   normalizeThemeSettings,
   resolveThemeFillColor,
-  resolveThemeSettingsBackdropColor,
   resolveThemeSettingsForColorMode,
   resolveSystemThemePresetId,
   themeSettingsSupportsSystemColorMode,
@@ -152,7 +150,6 @@ test("workbench-dark preset uses the workbench dark color treatment", () => {
   assert.equal(dark.lighting.point.color, "#bfd8f0");
   assert.equal(dark.lighting.ambient.color, "#dfe7f0");
   assert.equal(dark.lighting.hemisphere.groundColor, "#333d4b");
-  assert.equal(inferThemeSettingsSceneTone(dark), "dark");
   assert.equal(getThemePresetIdForSettings(dark), "workbench-dark");
 });
 
@@ -179,7 +176,6 @@ test("vibrant ships as a bright photoreal stage after cinematic", () => {
   assert.equal(vibrant.environment.enabled, true);
   assert.equal(vibrant.environment.presetId, "studio-hdri-43");
   assert.equal(vibrant.lighting.rim.enabled, true);
-  assert.equal(inferThemeSettingsSceneTone(vibrant), "light");
   assert.equal(getThemePresetIdForSettings(vibrant), "vibrant");
 });
 
@@ -258,7 +254,6 @@ test("cinematic ships as a real dark studio preset, not an alias", () => {
   assert.equal(cinematic.lighting.fill.enabled, true);
   assert.equal(cinematic.lighting.fill.color, "#a6a9ad");
   assert.equal(cinematic.lighting.rim.intensity, 1.3);
-  assert.equal(inferThemeSettingsSceneTone(cinematic), "dark");
   assert.equal(getThemePresetIdForSettings(cinematic), "cinematic");
 });
 
@@ -428,41 +423,26 @@ test("disabled color cycling preserves palettes without rotating fills", () => {
   assert.equal(resolveThemeFillColor(normalized.materials, 2), "#111111");
 });
 
-test("backdrop color resolves the dominant background for glass tinting", () => {
-  assert.equal(resolveThemeSettingsBackdropColor(cloneThemePresetSettings("workbench-light")), "#f0f4f9");
-  assert.equal(resolveThemeSettingsBackdropColor(cloneThemePresetSettings("workbench-dark")), "#181f28");
-  // Radial backgrounds resolve to the inner/outer midpoint.
-  assert.equal(resolveThemeSettingsBackdropColor(cloneThemePresetSettings("cinematic")), "#121216");
-});
-
 test("system default preset follows the OS preference for the first-load pick", () => {
   assert.equal(resolveSystemThemePresetId({ prefersDark: false }), "workbench-light");
   assert.equal(resolveSystemThemePresetId({ prefersDark: true }), "workbench-dark");
 });
 
-test("scene tone is inferred from the dominant background color", () => {
-  assert.equal(inferThemeSettingsSceneTone(cloneThemePresetSettings("workbench-light")), "light");
-  assert.equal(inferThemeSettingsSceneTone(cloneThemePresetSettings("workbench-dark")), "dark");
-  assert.equal(inferThemeSettingsSceneTone(cloneThemePresetSettings("workbench-dark")), "dark");
-  assert.equal(inferThemeSettingsSceneTone(cloneThemePresetSettings("blue")), "dark");
-  assert.equal(inferThemeSettingsSceneTone(cloneThemePresetSettings("clay-sunrise")), "light");
-  // The background drives tone, not the floor: a dark-canvas theme reads dark
-  // even when given a light floor color.
-  assert.equal(inferThemeSettingsSceneTone({
-    ...cloneThemePresetSettings("workbench-dark"),
-    floor: {
-      ...cloneThemePresetSettings("workbench-dark").floor,
-      color: "#f8fafc"
-    }
-  }), "dark");
-  // ...and a light-canvas theme reads light even with a dark floor color.
-  assert.equal(inferThemeSettingsSceneTone({
-    ...cloneThemePresetSettings("workbench-light"),
-    floor: {
-      ...cloneThemePresetSettings("workbench-light").floor,
-      color: "#030914"
-    }
-  }), "light");
+test("a preset describes the scene and nothing outside it", () => {
+  // A theme's reach ends at the render pane. It used to end further: the
+  // luminance of the background above decided the app's light/dark chrome
+  // (`inferThemeSettingsSceneTone`, deleted), so a dark scene could not be
+  // looked at through a light window. Nothing here answers a question about
+  // chrome, and the preset carries no field that only tinted it — `preview`
+  // is a picture OF the scene, for the picker's swatch.
+  for (const preset of THEME_PRESETS) {
+    assert.deepEqual(
+      Object.keys(preset).sort(),
+      ["id", "label", "preview", "settings"],
+      preset.id
+    );
+    assert.deepEqual(Object.keys(preset.preview).sort(), ["background", "modelColor"], preset.id);
+  }
 });
 
 test("no built-in preset declares a system color mode", () => {

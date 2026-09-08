@@ -5,11 +5,23 @@
  *
  *   node tests/fake-agent/index.mjs                       the built-in script
  *   node tests/fake-agent/index.mjs --fixture <file.jsonl> replay a recording
+ *   node tests/fake-agent/index.mjs --mode-option           modes as a `mode`
+ *                                                          config option
+ *
+ * `--mode-option` is the second shape ACP allows for the same thing: the
+ * session answers with **no** `modes` and a `mode`-category select config
+ * option instead, switched by `session/set_config_option` — which is how the
+ * app's one mode chip has to work for an adapter that sends it that way
+ * (`src/shared/acp/options.ts`, `modeChoice`). Everything else is identical,
+ * including which mode asks about what.
  *
  * The built-in script reacts to words in the prompt so a test can ask for
  * exactly the behaviour it is checking:
  *
- *   "permission"  ask session/request_permission before the tool call
+ *   "permission"  ask session/request_permission before the tool call —
+ *                 unless the session is in the full-access mode, which asks
+ *                 about nothing, the way Claude's `Bypass permissions` and
+ *                 Codex's `Full access` do
  *   "terminal"    create a terminal (`echo` + args), poll it, wait, release
  *   "read"        fs/read_text_file on the path after "read "
  *   "write"       fs/write_text_file "hello" to the path after "write "
@@ -20,6 +32,16 @@
  *                 a CAD reference, one in backticks — for the transcript's
  *                 links
  *   "subagent"    the draft subagent_spawned / child update / state_update
+ *   "context"     a usage_update carrying a category breakdown of the window
+ *                 in `_meta.contextBreakdown` — the shape the context
+ *                 popover reads. No shipping adapter sends one (Claude's
+ *                 `usage_update` is used/size/cost, Codex's is used/size),
+ *                 so this is the only place the categories exist
+ *   "limits"      three usage_updates carrying `_meta._claude/rateLimit` —
+ *                 the SDK's `rate_limit_event` as the Claude adapter
+ *                 forwards it, one limit type per event, in the SDK's own
+ *                 units (`utilization` 0…1, `resetsAt` epoch seconds) — so
+ *                 the panel's plan rows have something to draw
  *   "thought"     an agent_thought_chunk first
  *   "slow"        wait until cancelled
  *   "crash"       exit(3) mid-turn
@@ -28,16 +50,37 @@
  *                 permission request that waits for the answer, a subagent,
  *                 prose — with small delays so the streaming states can be
  *                 seen
+ *   "skills"      call the Hardcore MCP server's `list_skills`, and
+ *                 `read_skill` on the `cad` skill, and reply with what came
+ *                 back — the universal path an agent with no skill-root
+ *                 feature takes
+ *   "which"       run `command -v cadgen` in a terminal, so a test can see
+ *                 what a session's PATH resolves `cadgen` to
  *   "applied"     reply with what the client configured on this session and
- *                 in which order — `model,reasoning_effort,mode:auto` — so a
- *                 test can assert that a new session applies the stored
- *                 model before the effort (the model decides which efforts
- *                 exist) and lands in the agent's own auto mode
+ *                 in which order — `model,reasoning_effort,mode:auto` — plus
+ *                 the mode it ended in, so a test can assert that a new
+ *                 session applies the stored model before the effort (the
+ *                 model decides which efforts exist) and lands in the mode
+ *                 the new-session screen's chip was on
+ *   "settings"    reply with the model and effort the session ended up on —
+ *                 `settings: model=smart effort=xhigh` — which is what the
+ *                 agent itself thinks, so a test can prove the client sent
+ *                 the level remembered for THAT model rather than another's
+ *
+ * The two models do not have the same effort levels: `Fast` offers Low,
+ * Medium and High, `Smart` those plus `Xhigh`, the way Claude's do. A model
+ * switch resets the agent's own level to Medium, so the only thing that can
+ * bring `Xhigh` back on reselecting `Smart` is the app's memory of it.
  *
  * and always ends with the text "ok" and `end_turn` (or `cancelled`).
  *
  * `FAKE_AGENT_REFUSE=<configId>` makes `session/set_config_option` throw for
  * that option, the way an adapter refuses a model an account cannot use.
+ *
+ * `FAKE_AGENT_RECORD=<file.jsonl>` appends one JSON line per session/new,
+ * session/load and prompt — the params as they arrived, and the adapter's own
+ * `PATH` — so a spec can assert what the client sent. Appended, not
+ * overwritten: a suite runs several of these processes against one file.
  *
  * A cwd containing a `.fake-auth-required` file makes `session/new` answer
  * "Authentication required", the way an adapter whose CLI is signed out does.
@@ -47,7 +90,7 @@
  * re-issued and awaited (terminal ids are mapped from the recorded response
  * to the live one), and the recorded prompt response is returned.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 
@@ -56,8 +99,24 @@ import { Client as McpClient } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const args = process.argv.slice(2);
+const recordFile = process.env.FAKE_AGENT_RECORD || null;
+
+/** One line per client request worth asserting on. Best effort. */
+function record(kind, params) {
+  if (!recordFile) {
+    return;
+  }
+  try {
+    appendFileSync(recordFile, `${JSON.stringify({ kind, at: Date.now(), pid: process.pid, params })}\n`);
+  } catch {
+    /* a test's record file is not worth failing a turn over */
+  }
+}
+
 const fixturePath = args.includes("--fixture") ? args[args.indexOf("--fixture") + 1] : null;
 const fixture = fixturePath ? loadFixture(fixturePath) : null;
+/** Codex's shape: no `modes`, a `mode` config option carrying the same list. */
+const modeAsOption = args.includes("--mode-option");
 
 const stream = ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin));
 
@@ -68,6 +127,29 @@ const stream = ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(proce
  * the session now is, which is what the agents do.
  */
 const chosen = { model: "fast", reasoning_effort: "medium" };
+
+/**
+ * The effort levels, **per model**, the way Claude reports them: the option
+ * describes whichever model the session is on, and the bigger model has a
+ * level the smaller one does not.
+ *
+ * The agent's own current level resets to `medium` on a model switch, so it
+ * cannot be the thing that brings `xhigh` back — only the app's memory of
+ * what was picked for `smart` can (`agent_options.default_efforts`).
+ */
+const EFFORT_LEVELS = {
+  fast: [
+    { value: "low", name: "Low" },
+    { value: "medium", name: "Medium" },
+    { value: "high", name: "High" },
+  ],
+  smart: [
+    { value: "low", name: "Low" },
+    { value: "medium", name: "Medium" },
+    { value: "high", name: "High" },
+    { value: "xhigh", name: "Xhigh" },
+  ],
+};
 /**
  * Which mode the session is in, and every configuration the client applied,
  * in order (`applied` above). A real session starts in the adapter's own
@@ -79,20 +161,42 @@ const applied = [];
 const refuse = process.env.FAKE_AGENT_REFUSE || null;
 
 /**
- * The session's modes. `auto` carries ACP's `_meta.kind: auto_review`, which
- * is how both real adapters name their own auto-approval preset — and how
- * the app finds it without knowing either provider's id for it.
+ * The session's modes, named the way Claude names its own. `auto` carries
+ * ACP's `_meta.kind: auto_review`, which is how both real adapters name their
+ * own auto-approval preset — and how the app finds it without knowing either
+ * provider's id for it; `full` carries `full_access`, the one mode that asks
+ * about nothing at all, and the one the menu says so under.
  */
-function availableModes() {
+function modeList() {
   return [
-    { id: "default", name: "Default", _meta: { kind: "standard" } },
+    { id: "default", name: "Manual", _meta: { kind: "standard" } },
     { id: "plan", name: "Plan", description: "Read only", _meta: { kind: "plan" } },
     { id: "auto", name: "Auto", description: "Answers its own permission requests", _meta: { kind: "auto_review" } },
+    { id: "full", name: "Full access", description: "Never asks", _meta: { kind: "full_access" } },
   ];
+}
+
+/** The `mode` config option, for the `--mode-option` shape only. */
+function modeConfigOption() {
+  return {
+    id: "mode",
+    name: "Mode",
+    description: "Approval and sandboxing preset for the session",
+    category: "mode",
+    type: "select",
+    currentValue: currentModeId,
+    options: modeList().map((mode) => ({
+      value: mode.id,
+      name: mode.name,
+      description: mode.description,
+      _meta: mode._meta,
+    })),
+  };
 }
 
 function configOptions() {
   return [
+    ...(modeAsOption ? [modeConfigOption()] : []),
     {
       id: "model",
       name: "Model",
@@ -110,11 +214,7 @@ function configOptions() {
       category: "thought_level",
       type: "select",
       currentValue: chosen.reasoning_effort,
-      options: [
-        { value: "low", name: "Low" },
-        { value: "medium", name: "Medium" },
-        { value: "high", name: "High" },
-      ],
+      options: EFFORT_LEVELS[chosen.model] ?? EFFORT_LEVELS.fast,
     },
   ];
 }
@@ -144,6 +244,7 @@ new AgentSideConnection((conn) => ({
   },
 
   async newSession(params) {
+    record("session/new", { ...params, PATH: process.env.PATH ?? null });
     if (fixture?.newSession) {
       return fixture.newSession;
     }
@@ -155,12 +256,13 @@ new AgentSideConnection((conn) => ({
     applied.length = 0;
     return {
       sessionId: SESSION_ID,
-      modes: { currentModeId, availableModes: availableModes() },
+      ...(modeAsOption ? {} : { modes: { currentModeId, availableModes: modeList() } }),
       configOptions: configOptions(),
     };
   },
 
   async loadSession(params) {
+    record("session/load", params);
     if (fixture?.load) {
       await replay(conn, fixture.load.frames, params.sessionId);
       return fixture.load.response ?? {};
@@ -173,7 +275,9 @@ new AgentSideConnection((conn) => ({
       sessionId: params.sessionId,
       update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "earlier reply" } },
     });
-    return { modes: { currentModeId, availableModes: availableModes() } };
+    return modeAsOption
+      ? { configOptions: configOptions() }
+      : { modes: { currentModeId, availableModes: modeList() } };
   },
 
   async setSessionMode(params) {
@@ -190,9 +294,19 @@ new AgentSideConnection((conn) => ({
     if (refuse && params.configId === refuse) {
       throw RequestError.invalidParams(`${params.configId} is not available`);
     }
-    applied.push(params.configId);
+    applied.push(params.configId === "mode" ? `mode:${params.value}` : params.configId);
     if (params.configId in chosen) {
       chosen[params.configId] = String(params.value);
+    }
+    if (params.configId === "model") {
+      // A model switch rewrites the effort list and the agent's own level
+      // goes back to this model's default — the way Claude's does, and the
+      // reason a level remembered per agent could never bring the earlier
+      // pick back.
+      chosen.reasoning_effort = "medium";
+    }
+    if (params.configId === "mode") {
+      currentModeId = String(params.value);
     }
     // Both adapters also announce the new set on the session; the client
     // caches it against the agent, so the notification is part of the shape.
@@ -204,6 +318,7 @@ new AgentSideConnection((conn) => ({
   },
 
   async prompt(params) {
+    record("prompt", params);
     cancelled = false;
     if (fixture) {
       const turn = fixture.turns.shift();
@@ -228,10 +343,11 @@ new AgentSideConnection((conn) => ({
 
 async function script(conn, params) {
   const sessionId = params.sessionId;
-  const text = params.prompt
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
-    .join("\n");
+  // The LAST text block, not all of them joined: a session with an agent that
+  // does not load skill roots carries Hardcore's preamble in front of the
+  // person's first prompt, and its prose ("read the one that fits…") would
+  // otherwise trigger half the keywords below.
+  const text = params.prompt.filter((block) => block.type === "text").map((block) => block.text).at(-1) ?? "";
   const words = text.split(/\s+/);
   const after = (word) => words[words.indexOf(word) + 1];
   const send = (update) => conn.sessionUpdate({ sessionId, update });
@@ -253,8 +369,53 @@ async function script(conn, params) {
     return { stopReason: "end_turn" };
   }
 
+  if (text.includes("settings")) {
+    await send({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: `settings: model=${chosen.model} effort=${chosen.reasoning_effort}` },
+    });
+    return { stopReason: "end_turn" };
+  }
+
   if (text.includes("thought")) {
     await send({ sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "thinking…" } });
+  }
+
+  if (text.includes("context")) {
+    await send({
+      sessionUpdate: "usage_update",
+      used: 31_500,
+      size: 258_400,
+      _meta: {
+        contextBreakdown: [
+          { id: "system_prompt", name: "System prompt", tokens: 2_800 },
+          { id: "system_tools", name: "System tools", tokens: 11_200 },
+          { id: "mcp_tools", name: "MCP tools", tokens: 4_100 },
+          { id: "memory_files", name: "Memory files", tokens: 1_900 },
+          { id: "messages", name: "Messages", tokens: 11_500 },
+        ],
+      },
+    });
+  }
+
+  if (text.includes("limits")) {
+    // One event per limit type, the way the SDK sends them: the adapter
+    // attaches the window it last saw to each. `resetsAt` is epoch seconds
+    // and `utilization` a fraction — the units the renderer normalises.
+    const seconds = Math.floor(Date.now() / 1000);
+    for (const rateLimit of [
+      { status: "allowed", rateLimitType: "five_hour", utilization: 0.17, resetsAt: seconds + 4 * 3600 + 300 },
+      { status: "allowed", rateLimitType: "seven_day", utilization: 0.63, resetsAt: seconds + 3 * 86_400 },
+      {
+        status: "allowed_warning",
+        rateLimitType: "seven_day_opus",
+        utilization: 0.96,
+        resetsAt: seconds + 3 * 86_400,
+        isUsingOverage: true,
+      },
+    ]) {
+      await send({ sessionUpdate: "usage_update", used: 292_300, size: 1_000_000, _meta: { "_claude/rateLimit": rateLimit } });
+    }
   }
 
   if (text.includes("slow")) {
@@ -305,8 +466,58 @@ async function script(conn, params) {
     }
   }
 
+  if (text.includes("skills")) {
+    // The universal path: the skills the app put on disk, read through its own
+    // MCP server rather than through any skill-root feature of the agent's.
+    await send({ sessionUpdate: "tool_call", toolCallId: "skills-1", title: "list_skills", kind: "other", status: "in_progress" });
+    try {
+      const listed = await callHardcoreTool("list_skills", {});
+      const read = await callHardcoreTool("read_skill", { name: "cad" });
+      const answer = JSON.parse(listed.content[0].text);
+      const names = answer.skills.map((skill) => skill.name);
+      record("skills", { root: answer.root, names, cad: JSON.parse(read.content[0].text) });
+      await send({ sessionUpdate: "tool_call_update", toolCallId: "skills-1", status: "completed", rawOutput: { names } });
+      await send({
+        sessionUpdate: "agent_message_chunk",
+        content: {
+          type: "text",
+          text: `skills: ${names.join(",")} · cad starts ${JSON.parse(read.content[0].text).text.slice(0, 3)}`,
+        },
+      });
+    } catch (error) {
+      await send({ sessionUpdate: "tool_call_update", toolCallId: "skills-1", status: "failed", content: [{ type: "content", content: { type: "text", text: String(error.message ?? error) } }] });
+    }
+  }
+
+  if (text.includes("which")) {
+    // What this session's PATH resolves `cadgen` to. `sh -c`, not `-lc`: a
+    // login shell would rebuild PATH from the person's dotfiles and answer a
+    // different question.
+    const { terminalId } = await conn.request("terminal/create", {
+      sessionId,
+      command: "sh",
+      args: ["-c", "command -v cadgen || echo none"],
+      outputByteLimit: 4096,
+    });
+    await conn.request("terminal/wait_for_exit", { sessionId, terminalId });
+    const output = await conn.request("terminal/output", { sessionId, terminalId });
+    await conn.request("terminal/release", { sessionId, terminalId });
+    const resolved = String(output.output ?? "").trim();
+    record("which", { cadgen: resolved, PATH: process.env.PATH ?? null });
+    await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: `cadgen: ${resolved}` } });
+  }
+
   if (text.includes("permission")) {
     await send({ sessionUpdate: "tool_call", toolCallId: "cmd-1", title: "Run ls", kind: "execute", status: "pending", rawInput: { command: "ls" } });
+    // Full access asks about nothing: the command just runs. This is the
+    // whole point of the mode being the permission control — the app answers
+    // no requests on anybody's behalf, so a mode that does not ask is the
+    // only way nothing is asked.
+    if (currentModeId === "full") {
+      await send({ sessionUpdate: "tool_call_update", toolCallId: "cmd-1", status: "completed", rawOutput: { selected: "full-access" } });
+      await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "ok" } });
+      return { stopReason: "end_turn" };
+    }
     const answer = await conn.requestPermission({
       sessionId,
       toolCall: { toolCallId: "cmd-1", title: "Run ls", kind: "execute", status: "pending", rawInput: { command: "ls" } },
@@ -355,7 +566,10 @@ async function script(conn, params) {
   await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "k" } });
   return {
     stopReason: cancelled ? "cancelled" : "end_turn",
-    usage: { totalTokens: 12, inputTokens: 10, outputTokens: 2 },
+    // Both cache fields, the way Claude's adapter reports a turn: the
+    // context popover has a row per field and leaves out the ones nobody
+    // sent, so a fake that only ever sent two would only ever test two.
+    usage: { totalTokens: 12, inputTokens: 10, outputTokens: 2, cachedReadTokens: 6, cachedWriteTokens: 4 },
   };
 }
 

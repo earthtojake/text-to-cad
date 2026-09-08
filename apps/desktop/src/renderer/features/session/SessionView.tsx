@@ -5,14 +5,14 @@ import { Button } from "@renderer/components/ui/button";
 import { useAcp } from "@renderer/state/acp";
 import { useAgents } from "@renderer/state/agents";
 import { useComposer } from "@renderer/state/composer";
-import { effortOption, fastOption, modeOption, modelOption } from "@shared/acp/options";
+import { effortOption, fastOption, modeChoice, modelOption } from "@shared/acp/options";
 import type { PromptBlock, SessionState } from "@shared/acp/types";
 import type { Session } from "@shared/types";
 
 import { AuthPrompt } from "./AuthPrompt";
 import { Composer } from "./Composer";
-import { ApprovalChip, EffortChip, ModeChip, ModelChip } from "./ComposerChips";
-import { FilesChangedPill } from "./FilesChangedPill";
+import { EffortChip, ModeChip, ModelChip } from "./ComposerChips";
+import { ContextMeter } from "./ContextMeter";
 import { TranscriptScopeContext, type TranscriptScope } from "./links/PathLink";
 import { PlanCard } from "./PlanCard";
 import { SessionHeader } from "./SessionHeader";
@@ -21,7 +21,8 @@ import { isAuthError } from "./view";
 
 /**
  * One thread, one agent (plan §3): the header, the transcript, the pinned
- * plan and the files-changed pill above the composer, the composer.
+ * plan above the composer, the composer — whose row under the box ends in
+ * the context ring.
  *
  * The session's live state comes from the acp store; a session picked from
  * the index with no snapshot yet is loaded here, which is the "connecting"
@@ -37,7 +38,6 @@ export function SessionView({ session }: { session: Session }) {
   const cancel = useAcp((store) => store.cancel);
   const setMode = useAcp((store) => store.setMode);
   const setConfigOption = useAcp((store) => store.setConfigOption);
-  const setApprovalMode = useAcp((store) => store.setApprovalMode);
   const submit = useComposer((store) => store.submit);
   const agents = useAgents((store) => store.agents);
   const agent = agents.find((candidate) => candidate.id === session.agentId) ?? null;
@@ -75,33 +75,32 @@ export function SessionView({ session }: { session: Session }) {
     }
     const model = modelOption(state.configOptions);
     const effort = effortOption(state.configOptions);
-    const preset = modeOption(state.configOptions);
+    const mode = modeChoice(state);
     const fast = fastOption(state.configOptions);
     const setOption = (configId: string, value: string | boolean) => void setConfigOption(session.id, configId, value);
-    // Codex's row, left to right: `+`, approval; then on the right the model
-    // and the effort beside it, then send. The agent and the project are the
-    // title bar's and the sidebar's, not the composer's. An agent with modes
-    // but no `mode` config option (Claude) gets its modes as a chip of their
-    // own, beside approval. Everything else the agent exposes is the agent's
+    // One chip, two calls: `session/set_mode` for an agent that sends
+    // `modes`, its `mode` config option for one that sends that instead.
+    const chooseMode = (modeId: string) => {
+      if (!mode) {
+        return;
+      }
+      if (mode.source === "modes") {
+        void setMode(session.id, modeId);
+      } else if (mode.configId) {
+        setOption(mode.configId, modeId);
+      }
+    };
+    // The row under the box, left to right: `+`, the mode; then on the right
+    // the model, the effort and how full the window is. The agent and the
+    // project are the title bar's and the sidebar's. The mode is the one
+    // permission control — the app has none of its own over the top of it —
+    // and it is set through whichever of the two calls this agent answers
+    // to (`modeChoice`). Everything else the agent exposes is the agent's
     // business: the composer is four decisions, not a settings panel.
     return {
-      leading: (
-        <>
-          <ApprovalChip
-            mode={state.approvalMode}
-            onChange={(mode) => void setApprovalMode(session.id, mode)}
-            onPresetChange={setOption}
-            preset={preset}
-          />
-          {state.modes.length > 1 && !preset ? (
-            <ModeChip
-              currentModeId={state.currentModeId}
-              modes={state.modes}
-              onChange={(modeId) => void setMode(session.id, modeId)}
-            />
-          ) : null}
-        </>
-      ),
+      leading: mode ? (
+        <ModeChip currentModeId={mode.currentModeId} modes={mode.modes} onChange={chooseMode} />
+      ) : null,
       trailing: (
         <>
           {model ? (
@@ -121,10 +120,17 @@ export function SessionView({ session }: { session: Session }) {
             />
           ) : null}
           {effort ? <EffortChip effort={effort} onChange={setOption} /> : null}
+          <ContextMeter
+            lastTurnUsage={state.lastTurnUsage}
+            rateLimits={state.rateLimits}
+            sessionId={session.id}
+            sessionUsage={state.sessionUsage}
+            usage={state.contextUsage}
+          />
         </>
       ),
     };
-  }, [state, session.id, session.agentId, agent?.icon, agent?.name, setApprovalMode, setMode, setConfigOption]);
+  }, [state, session.id, session.agentId, agent?.icon, agent?.name, setMode, setConfigOption]);
 
   const planTurn =
     state?.turns.findLast((turn) => turn.role === "agent" && turn.parts.some((part) => part.type === "plan")) ?? null;
@@ -172,8 +178,6 @@ export function SessionView({ session }: { session: Session }) {
           {state?.plan && state.plan.length > 0 ? (
             <PlanCard entries={state.plan} running={running} startedAt={planTurn?.startedAt ?? null} />
           ) : null}
-          <FilesChangedPill deletions={session.deletions} files={session.changedFiles} insertions={session.insertions} />
-          <ContextLine usage={state?.contextUsage ?? null} />
           <Composer
             autoFocus
             chips={chips?.leading ?? null}
@@ -210,31 +214,6 @@ function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void
         <RotateCcw className="size-3.5" />
         Reconnect
       </Button>
-    </div>
-  );
-}
-
-/**
- * How full the context window is, **above** the box and always the same
- * height. Under it, the line appeared with the first turn and moved every
- * time the composer grew a row, so the thing you were reading walked up the
- * screen as you typed. A reserved line does not move, and an empty one costs
- * ten pixels.
- *
- * What a turn cost in dollars is not here. It is a number nobody acts on
- * mid-thread, and a price tag on a box someone is about to type into is a
- * poor thing to put in front of them.
- */
-function ContextLine({ usage }: { usage: { used: number; size: number } | null }) {
-  const percent = usage && usage.size > 0 ? Math.min(100, Math.round((usage.used / usage.size) * 100)) : null;
-  return (
-    <div
-      className="flex h-3.5 items-center justify-end px-2 font-mono text-[10px] text-muted-foreground/70 tabular-nums"
-      data-context-line
-    >
-      {percent === null || !usage ? null : (
-        <span title={`${usage.used} of ${usage.size} tokens`}>{percent}% context</span>
-      )}
     </div>
   );
 }

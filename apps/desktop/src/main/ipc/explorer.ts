@@ -9,19 +9,25 @@
  * project is gone, which is the honest answer to "read this file in a project
  * I removed" and stops a stale tab from reading an arbitrary path.
  */
+import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
 import path from "node:path";
 
-import { shell } from "electron";
+import { BrowserWindow, dialog, shell } from "electron";
 
 import { explorerTabs, projects, settings } from "../db/repositories";
 import {
   FileWatchers,
   FsError,
+  createDirectory,
+  createFile,
+  duplicateEntry,
   listDirectory,
   listPaths,
   pathKinds,
   readBinaryFile,
   readTextFile,
+  renameEntry,
   resolveInRoot,
   statFile,
   writeTextFile,
@@ -31,7 +37,7 @@ import { Terminals } from "../explorer/terminal";
 import * as git from "../projects/git";
 import { projectWorktreeDir, resolveProjectRoot } from "../projects/workspace";
 import type { ExplorerTab, IpcEventChannel, IpcEventPayload } from "../../shared";
-import { IpcError } from "./register";
+import { IpcError, type IpcContext } from "./register";
 
 /* -------------------------------------------------------------------------- */
 /* The services                                                                */
@@ -166,6 +172,90 @@ function isErrno(error: unknown, code: string): boolean {
   );
 }
 
+/**
+ * A terminal's working directory: a root, or a directory under one.
+ *
+ * `Open in terminal` on a folder in the tree asks for that folder, which is
+ * neither the project nor a worktree. The check is still the root check —
+ * the directory has to be inside the project or inside one of its worktrees
+ * — and then `resolveInRoot` against whichever it is, so a symlink out of
+ * the tree is caught the way it is for a read.
+ */
+async function terminalDirectory(projectId: string, cwd: string | undefined): Promise<string> {
+  if (!cwd) {
+    return rootOf(projectId, null);
+  }
+  const absolute = path.resolve(cwd);
+  try {
+    return rootOf(projectId, absolute);
+  } catch (error) {
+    const project = projects.list().find((candidate) => candidate.id === projectId);
+    if (!project) {
+      throw error;
+    }
+    const worktreeDir = projectWorktreeDir(settings.get(), project);
+    const root = git.isUnder(project.path, absolute)
+      ? project.path
+      : git.isUnder(worktreeDir, absolute)
+        ? rootOf(projectId, path.join(worktreeDir, path.relative(worktreeDir, absolute).split(path.sep)[0] ?? ""))
+        : null;
+    if (!root) {
+      throw error;
+    }
+    const resolved = await resolveInRoot(root, absolute);
+    if (!(await fs.stat(resolved)).isDirectory()) {
+      throw new FsError("that is not a directory");
+    }
+    return resolved;
+  }
+}
+
+/**
+ * The platform's "open with" for one file.
+ *
+ * macOS: a chooser over `/Applications`, then `open -a`. Windows: the
+ * shell's own Open With dialog, which is the one a person knows. Linux: a
+ * chooser for a program, run with the file — there is no portable picker.
+ */
+async function openWith(absolute: string, ctx: IpcContext): Promise<void> {
+  const run = (command: string, args: string[]) =>
+    new Promise<void>((resolve, reject) => {
+      execFile(command, args, (error) => (error ? reject(error) : resolve()));
+    });
+
+  if (process.platform === "win32") {
+    await run("rundll32.exe", ["shell32.dll,OpenAs_RunDLL", absolute]);
+    return;
+  }
+
+  const window = BrowserWindow.fromWebContents(ctx.sender);
+  const options: Electron.OpenDialogOptions =
+    process.platform === "darwin"
+      ? {
+          title: "Open with",
+          buttonLabel: "Open",
+          defaultPath: "/Applications",
+          filters: [{ name: "Applications", extensions: ["app"] }],
+          properties: ["openFile"],
+        }
+      : {
+          title: "Open with",
+          buttonLabel: "Open",
+          defaultPath: "/usr/bin",
+          properties: ["openFile"],
+        };
+  const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
+  const chosen = result.canceled ? undefined : result.filePaths[0];
+  if (!chosen) {
+    return;
+  }
+  if (process.platform === "darwin") {
+    await run("open", ["-a", chosen, absolute]);
+  } else {
+    await run(chosen, [absolute]);
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Handlers                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -245,6 +335,45 @@ export const explorerHandlers = {
         }
       }),
 
+    openWith: ({ projectId, root, path: target }: AtPath, ctx: IpcContext) =>
+      fsCall(async () => {
+        const absolute = await resolveInRoot(rootOf(projectId, root), target);
+        try {
+          await openWith(absolute, ctx);
+        } catch (error) {
+          throw new IpcError(`could not open the file that way: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }),
+
+    reveal: ({ projectId, root, path: target }: AtPath) =>
+      fsCall(async () => {
+        shell.showItemInFolder(await resolveInRoot(rootOf(projectId, root), target));
+      }),
+
+    createFile: ({ projectId, root, path: directory, name }: AtPath & { name: string }) =>
+      fsCall(() => createFile(rootOf(projectId, root), directory, name)),
+
+    createDirectory: ({ projectId, root, path: directory, name }: AtPath & { name: string }) =>
+      fsCall(() => createDirectory(rootOf(projectId, root), directory, name)),
+
+    rename: ({ projectId, root, path: target, name }: AtPath & { name: string }) =>
+      fsCall(() => renameEntry(rootOf(projectId, root), target, name)),
+
+    duplicate: ({ projectId, root, path: target }: AtPath) =>
+      fsCall(() => duplicateEntry(rootOf(projectId, root), target)),
+
+    trash: ({ projectId, root, path: target }: AtPath) =>
+      fsCall(async () => {
+        const base = rootOf(projectId, root);
+        const absolute = await resolveInRoot(base, target);
+        // The root is the project: trashing it from its own tree is never
+        // what a click on a menu item meant.
+        if (absolute === (await fs.realpath(base).catch(() => path.resolve(base)))) {
+          throw new IpcError("the project itself cannot be trashed here");
+        }
+        await shell.trashItem(absolute);
+      }),
+
     watch: ({ projectId, root }: { projectId: string; root?: string }) =>
       fsCall(() => services().watchers.watch(rootOf(projectId, root))),
 
@@ -276,9 +405,10 @@ export const explorerHandlers = {
     }) =>
       fsCall(async () => {
         // A worktree is outside the project directory by design (plan §9), so
-        // this is not `resolveInRoot`; it is the root check, which admits the
-        // project and its own worktrees and nothing else.
-        const directory = rootOf(projectId, cwd ? path.resolve(cwd) : null);
+        // this is not `resolveInRoot` alone; it is the root check first, which
+        // admits the project and its own worktrees, and then a directory under
+        // whichever of those it is (`Open in terminal` on a folder).
+        const directory = await terminalDirectory(projectId, cwd);
         return services().terminals.create({
           cwd: directory,
           ...(cols === undefined ? {} : { cols }),

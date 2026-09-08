@@ -5,6 +5,7 @@ import {
   REVIEW_SCOPE_LABELS,
   ReviewScopeSchema,
   SessionSchema,
+  SettingsPatchSchema,
   SettingsSchema,
   defaultSettings,
   diffScopeFor,
@@ -18,8 +19,9 @@ describe("Settings", () => {
     expect(settings.theme).toBe("system");
     expect(settings.defaultGitMode).toBe("checkout");
     expect(settings.branchPrefix).toBe("hardcore/");
-    // Pixels, Codex's proportions: a 230px sidebar and a 560px session column.
-    expect(settings.layout).toMatchObject({ sidebarWidth: 230, sessionWidth: 560, sidebarCollapsed: false });
+    // Pixels, and only the sidebar's pair: the session is elastic and the
+    // explorer's width is per project, in the renderer.
+    expect(settings.layout).toEqual({ sidebarWidth: 230, sidebarCollapsed: false });
   });
 
   it("has telemetry on with an opt-out (plan §14)", () => {
@@ -74,6 +76,42 @@ describe("Settings", () => {
     expect(SettingsSchema.safeParse({ worktreeKeepLimit: 0 }).success).toBe(false);
   });
 
+  /**
+   * The patch schema, and the reason it is not `SettingsSchema.partial()`.
+   *
+   * zod's `.partial()` leaves each field's `.default()` inside the optional
+   * wrapper and the default still fires for an absent key, so a "patch" of
+   * one field arrived at main as a whole settings object — and main merges a
+   * patch over what is stored, so one drag of the sidebar reset the theme,
+   * the worktree root and the default agent to their defaults. This is the
+   * assertion that would have caught it.
+   */
+  it("passes a patch through with only the fields it was given", () => {
+    expect(SettingsPatchSchema.parse({ theme: "dark" })).toEqual({ theme: "dark" });
+    expect(SettingsPatchSchema.parse({})).toEqual({});
+    expect(SettingsSchema.partial().parse({ theme: "dark" })).toHaveProperty("worktreeKeepLimit");
+  });
+
+  it("still validates the fields a patch does carry", () => {
+    expect(SettingsPatchSchema.safeParse({ theme: "chartreuse" }).success).toBe(false);
+    expect(SettingsPatchSchema.safeParse({ worktreeKeepLimit: 0 }).success).toBe(false);
+    // Only the *top* level is stripped of defaults, which is the level main
+    // merges at. A nested object arrives complete — the stores that write one
+    // (`setSidebar`, `setLayout`) always spread the current value first, so
+    // its own defaults never decide anything.
+    const patched = SettingsPatchSchema.parse({ sidebar: { status: "archived" } });
+    expect(Object.keys(patched)).toEqual(["sidebar"]);
+    expect(patched.sidebar).toEqual({
+      status: "archived",
+      environment: "all",
+      groupBy: "project",
+      sortBy: "activity",
+      showEmptyGroups: true,
+      showBranch: false,
+      collapsedProjects: [],
+    });
+  });
+
   it("drops keys it does not know, which is how window state hides in the same table", () => {
     const parsed = SettingsSchema.parse({ __window: { width: 800, height: 600 } });
     expect("__window" in parsed).toBe(false);
@@ -112,7 +150,10 @@ describe("ExplorerTab", () => {
       kind: "file",
       path: "/tmp/a.step",
     });
-    expect(file.kind === "file" && file.viewSource).toBe(false);
+    // No panel choice yet: which one a tab opens with is the renderer's
+    // default, resolved when the file's kind is known, not a value stamped
+    // on the row (`features/explorer/renderers/panels.ts`).
+    expect(file.kind === "file" ? file.panel : "missing").toBeNull();
 
     const terminal = ExplorerTabSchema.parse({
       id: "t2",

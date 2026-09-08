@@ -7,18 +7,19 @@ import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, app, nativeImage, shell } from "electron";
 
-import { initCad, pluginManager, shutdownCad } from "./cad";
+import { initCad, shutdownCad } from "./cad";
 import { endTrackedChildren, killTrackedChildren } from "./children";
 import { closeDb, databaseFile, db } from "./db";
 import { broadcast, registerIpcHandlers } from "./ipc";
 import { shutdownAcp } from "./ipc/acp";
-import { detector, shutdownAgents } from "./ipc/agents";
+import { shutdownAgents } from "./ipc/agents";
 import { disposeExplorerServices } from "./ipc/explorer";
 import { installMenu } from "./menu";
 import { armQuitDeadline } from "./quit-deadline";
 import { disposeSettingsEffects } from "./settings-effects";
 import { initTelemetry, track } from "./telemetry";
 import { initUpdater, stopUpdater } from "./updater";
+import { TITLEBAR_HEIGHT, trafficLightPosition } from "../shared/titlebar";
 import { restoreWindowState, trackWindowState } from "./window-state";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -65,8 +66,21 @@ function createWindow() {
     // sidebar's top strip (--titlebar-height in globals.css). Other platforms
     // keep their native frame, because a hand-drawn one there is a liability.
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
-    // Centred in a 32px strip (12px lights: 10 above, 10 below).
-    trafficLightPosition: process.platform === "darwin" ? { x: 12, y: 12 } : undefined,
+    // Pinned, and vertically centred in the strip (src/shared/titlebar.ts).
+    // Pinning fixes where the cluster starts; how wide it is stays AppKit's
+    // business, which is why the renderer measures the rest rather than
+    // trusting a number typed into the CSS.
+    ...(process.platform === "darwin"
+      ? {
+          trafficLightPosition: trafficLightPosition(),
+          // Not a bar Electron draws — on macOS this only asks Chromium to
+          // publish the region the window controls occupy, as the Window
+          // Controls Overlay geometry. `src/renderer/lib/titlebar.ts` reads it
+          // and sets `--titlebar-inset` from it, so the leftmost pane's first
+          // control clears the lights on a macOS that draws them wider.
+          titleBarOverlay: { height: TITLEBAR_HEIGHT },
+        }
+      : {}),
     backgroundColor: "#0a0a0a",
     // Windows and Linux take the window's icon from here when unpackaged; a
     // packaged app has it in the executable and the desktop entry.
@@ -84,6 +98,11 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,
+      // A window that is not on screen is still a window the app is working
+      // in: an agent's stream, a terminal and the e2e suite's unshown window
+      // (above) all need frames and unthrottled timers. Chromium slows both
+      // to a crawl for a hidden window unless told otherwise.
+      backgroundThrottling: false,
       // The explorer's browser tab is an Electron `<webview>` (plan §7). The
       // tag is off by default and has to be asked for; the guest it creates
       // is its own process with node integration off, which is why a browser
@@ -97,7 +116,29 @@ function createWindow() {
   }
   trackWindowState(window);
 
-  window.once("ready-to-show", () => window.show());
+  // How the window arrives, in the three ways this app is launched (README,
+  // "Windows nobody sees"):
+  //
+  // - `HARDCORE_E2E_HIDDEN=1`: never shown at all. The e2e suite drives the
+  //   renderer through the DevTools protocol, which does not need a window on
+  //   screen — and a suite that flashed one over the machine's screen for
+  //   every spec is a suite nobody runs while working. `backgroundThrottling`
+  //   is off below so the unshown window keeps painting and its timers keep
+  //   real time.
+  // - `HARDCORE_LAUNCH_INACTIVE=1`: shown, but without taking focus, for a
+  //   relaunch from a script while the person is working in another app.
+  // - otherwise: shown and focused, which is what a person double-clicking
+  //   the app asked for.
+  window.once("ready-to-show", () => {
+    if (process.env.HARDCORE_E2E_HIDDEN === "1") {
+      return;
+    }
+    if (process.env.HARDCORE_LAUNCH_INACTIVE === "1" || process.env.NODE_ENV === "test") {
+      window.showInactive();
+    } else {
+      window.show();
+    }
+  });
 
   // A link in agent output, a file the viewer renders, an ad in a webview:
   // none of them get to open an Electron window. http(s) goes to the user's
@@ -152,11 +193,11 @@ if (!app.requestSingleInstanceLock()) {
     db();
     console.info(`[db] ${databaseFile()}`);
     registerIpcHandlers();
-    // The CAD runtime, the viewer manager and the MCP bridge, before the
-    // first window: the file tab's first `cad.viewerOrigin` and the first
-    // session's `mcpServers` both need them up.
-    await initCad({ detector, sendCommand: (command) => broadcast("cad.command", command) });
-    schedulePluginInstall();
+    // The CAD runtime, the skills root, the viewer manager and the MCP
+    // bridge, before the first window: the file tab's first
+    // `cad.viewerOrigin` and the first session's `mcpServers` and
+    // `additionalDirectories` all need them up.
+    await initCad({ sendCommand: (command) => broadcast("cad.command", command) });
     installMenu(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
     initTelemetry();
     createWindow();
@@ -210,33 +251,3 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 
-/**
- * First launch and every app update (plan §8): install the bundled plugin
- * into each agent that is on the machine and has not been given this
- * version. Once the detector has probed, so "is Codex installed" has an
- * answer; off the launch path, because a `claude plugin install` takes
- * seconds and the window should not wait for it. Off entirely under test —
- * the e2e suite runs with a throwaway user-data directory but the user's
- * real `~/.claude` and `~/.codex`, and must not write to them.
- */
-function schedulePluginInstall() {
-  if (process.env.NODE_ENV === "test" || process.env.HARDCORE_NO_PLUGIN_INSTALL) {
-    return;
-  }
-  const off = detector.onChange(() => {
-    off();
-    void pluginManager()
-      .ensureInstalled()
-      .then((installed) => {
-        if (installed.length > 0) {
-          console.info(
-            `[plugin] ${installed.map((status) => `${status.agentId}: ${status.state}${status.message ? ` (${status.message})` : ""}`).join(", ")}`,
-          );
-          return pluginManager().statusAll().then((all) => broadcast("plugins.status", all));
-        }
-        return undefined;
-      })
-      .catch((error: unknown) => console.error("[plugin] install on launch failed", error));
-  });
-  detector.list();
-}

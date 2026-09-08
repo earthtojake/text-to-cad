@@ -26,22 +26,26 @@
 import {
   type AvailableCommand,
   type ConfigOption,
+  type ContextBreakdownEntry,
   type Part,
   type PendingPermission,
   type PermissionOption,
   type PlanEntry,
   type PromptBlock,
+  type RateLimit,
   type RawSessionUpdate,
   type SessionEvent,
   type SessionMode,
   type SessionState,
   type SubagentState,
+  type TokenTotals,
   type ToolCallPart,
   type ToolCallStatus,
   type ToolContent,
   type ToolKind,
   type ToolLocation,
   type Turn,
+  type TurnUsage,
   ToolCallStatusSchema,
   ToolKindSchema,
 } from "./types";
@@ -96,18 +100,12 @@ export function reduce(state: SessionState, event: SessionEvent): SessionState {
     }
 
     case "prompt/end": {
-      let next = state;
-      if (event.usage) {
-        next = withRootParts(next, event.at, (parts) => [
-          ...parts,
-          { type: "usage", usage: event.usage! },
-        ]);
-      }
-      next = closeOpenTurn(next, event.at, event.stopReason);
+      const next = closeOpenTurn(state, event.at, event.stopReason);
       return {
         ...next,
         status: "idle",
         lastTurnUsage: event.usage ?? next.lastTurnUsage,
+        sessionUsage: event.usage ? addTurnUsage(next.sessionUsage, event.usage) : next.sessionUsage,
         // A cancelled turn takes its unanswered permission requests with it.
         pendingPermissions: [],
       };
@@ -174,9 +172,6 @@ export function reduce(state: SessionState, event: SessionEvent): SessionState {
 
     case "status":
       return { ...state, status: event.status, error: event.error };
-
-    case "approval":
-      return { ...state, approvalMode: event.mode };
   }
 }
 
@@ -278,20 +273,30 @@ function applyUpdate(
     }
 
     case "usage_update": {
+      // A `usage_update` carries two independent things: the window, and —
+      // when the Claude adapter is forwarding a `rate_limit_event` — one of
+      // the account's plan limits. Either can be there without the other, so
+      // the limit is folded first and a window that did not parse does not
+      // throw the limit away with it.
+      const limit = rateLimit(u._meta);
+      const withLimit = limit
+        ? { ...state, rateLimits: { ...state.rateLimits, [limit.type]: limit } }
+        : state;
       const used = asNumber(u.used);
       const size = asNumber(u.size);
       if (used === null || size === null) {
-        return state;
+        return withLimit;
       }
       const cost = asRecord(u.cost);
       const amount = cost ? asNumber(cost.amount) : null;
       const currency = cost ? asString(cost.currency) : null;
       return {
-        ...state,
+        ...withLimit,
         contextUsage: {
           used,
           size,
           cost: amount !== null && currency !== null ? { amount, currency } : null,
+          breakdown: contextBreakdown(u._meta),
         },
       };
     }
@@ -948,6 +953,133 @@ function asString(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Token accounting                                                            */
+/* -------------------------------------------------------------------------- */
+
+/** Add one turn's `usage` to the session's running totals. */
+function addTurnUsage(totals: TokenTotals | null, usage: TurnUsage): TokenTotals {
+  const base = totals ?? {
+    turns: 0,
+    totalTokens: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedReadTokens: 0,
+    cachedWriteTokens: 0,
+  };
+  return {
+    turns: base.turns + 1,
+    totalTokens: base.totalTokens + usage.totalTokens,
+    inputTokens: base.inputTokens + usage.inputTokens,
+    outputTokens: base.outputTokens + usage.outputTokens,
+    cachedReadTokens: base.cachedReadTokens + (usage.cachedReadTokens ?? 0),
+    cachedWriteTokens: base.cachedWriteTokens + (usage.cachedWriteTokens ?? 0),
+  };
+}
+
+/**
+ * The category breakdown of a `usage_update`, out of its `_meta`.
+ *
+ * ACP has no field for one and neither adapter sends one today, so this
+ * reads an extension: any `_meta` key whose name ends in `breakdown` — bare,
+ * `contextBreakdown`, or namespaced the way the Claude adapter namespaces its
+ * own (`_claude/contextBreakdown`) — holding either a list of
+ * `{ id, name, tokens }` or a plain `name: tokens` map. Anything else, and
+ * anything that adds up to nothing, reads as no breakdown at all: the popover
+ * then shows the window and the token counts and says nothing about
+ * categories, which is the honest answer when the agent did not say.
+ */
+function contextBreakdown(meta: unknown): ContextBreakdownEntry[] | null {
+  const record = asRecord(meta);
+  if (!record) {
+    return null;
+  }
+  const key = Object.keys(record).find((candidate) => candidate.toLowerCase().endsWith("breakdown"));
+  if (key === undefined) {
+    return null;
+  }
+  const raw = record[key];
+  const entries: ContextBreakdownEntry[] = [];
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const fields = asRecord(item);
+      if (!fields) {
+        continue;
+      }
+      const tokens = asNumber(fields.tokens) ?? asNumber(fields.used) ?? asNumber(fields.value);
+      const name = asString(fields.name) ?? asString(fields.label) ?? asString(fields.title);
+      const id = asString(fields.id) ?? name;
+      if (tokens === null || tokens <= 0 || id === null) {
+        continue;
+      }
+      entries.push({ id, name: name ?? id, tokens });
+    }
+  } else {
+    const fields = asRecord(raw);
+    if (!fields) {
+      return null;
+    }
+    for (const [id, value] of Object.entries(fields)) {
+      const tokens = asNumber(value);
+      if (tokens === null || tokens <= 0) {
+        continue;
+      }
+      entries.push({ id, name: id, tokens });
+    }
+  }
+  return entries.length > 0 ? entries : null;
+}
+
+/**
+ * One plan limit out of a `usage_update`'s `_meta`.
+ *
+ * The Claude adapter forwards the SDK's `rate_limit_event` verbatim under
+ * `_claude/rateLimit`; the key is matched loosely (any `_meta` key ending in
+ * `ratelimit`) for the same reason the breakdown is, and every field is read
+ * defensively — an event this build does not understand is ignored, never
+ * thrown on. Two units are normalised here so nothing downstream has to
+ * guess:
+ *
+ *   - `utilization` becomes a fraction of the limit. The SDK sends 0…1; a
+ *     value above 1 is read as a percentage, because the only other thing a
+ *     number like `63` can mean is 63%.
+ *   - `resetsAt` becomes epoch **milliseconds**. The SDK sends epoch
+ *     seconds, so anything past the year 2001 in milliseconds (`> 1e12`) is
+ *     already milliseconds and is left alone.
+ *
+ * A limit with no `rateLimitType` is dropped: `rateLimits` is keyed by type,
+ * and an unnamed limit has nowhere to go and nothing to be labelled with.
+ */
+function rateLimit(meta: unknown): RateLimit | null {
+  const record = asRecord(meta);
+  if (!record) {
+    return null;
+  }
+  const key = Object.keys(record).find((candidate) => candidate.toLowerCase().endsWith("ratelimit"));
+  if (key === undefined) {
+    return null;
+  }
+  const fields = asRecord(record[key]);
+  if (!fields) {
+    return null;
+  }
+  const type = asString(fields.rateLimitType);
+  const raw = asNumber(fields.utilization);
+  if (type === null || type === "" || raw === null) {
+    return null;
+  }
+  const fraction = raw > 1 ? raw / 100 : raw;
+  const resets = asNumber(fields.resetsAt);
+  const status = asString(fields.status);
+  return {
+    type,
+    status: status === "allowed_warning" || status === "rejected" ? status : "allowed",
+    utilization: Math.max(0, Math.min(1, fraction)),
+    resetsAt: resets === null || resets <= 0 ? null : resets > 1e12 ? resets : resets * 1000,
+    isUsingOverage: typeof fields.isUsingOverage === "boolean" ? fields.isUsingOverage : null,
+  };
 }
 
 /* -------------------------------------------------------------------------- */

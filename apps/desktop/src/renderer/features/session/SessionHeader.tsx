@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Archive, Folder, MoreHorizontal, Pencil, Trash2, Unplug } from "lucide-react";
+import { Archive, MoreHorizontal, Pencil, Trash2, Unplug } from "lucide-react";
 
-import { ExplorerToggle, SidebarToggle } from "@renderer/app/PaneToggles";
+import { ExplorerToggle, HistoryNav, SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -12,6 +12,9 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { useAcp } from "@renderer/state/acp";
 import { useSessions } from "@renderer/state/sessions";
+import { useExplorer } from "@renderer/state/explorer";
+import { useProjects } from "@renderer/state/projects";
+import { useSettings } from "@renderer/state/settings";
 import type { Session } from "@shared/types";
 
 /**
@@ -19,9 +22,13 @@ import type { Session } from "@shared/types";
  * first prompt; click to edit), a `…` menu; the explorer's toggle on the
  * right. The strip is the window's drag region, so the controls opt out of it.
  *
- * The sidebar's toggle is the first thing on the left, whether the sidebar is
- * open or not: the title bar's left edge is where the person's eye goes to
- * change the panes, and the sidebar's own header holds only the app's name.
+ * The controls of the title row keep their places on screen whatever the
+ * panes do (Codex's rule): the sidebar's toggle and the history's two arrows
+ * are right after the traffic lights — in the sidebar's own title strip while
+ * it is open, here once it is gone — and the explorer's toggle is at the
+ * window's right edge — here while the explorer is shut, in the explorer's
+ * tab strip once it is open. A collapsed pane is not rendered at all, so each
+ * toggle is in the document exactly once.
  */
 export function SessionHeader({
   session,
@@ -35,6 +42,11 @@ export function SessionHeader({
   const archive = useSessions((state) => state.archive);
   const remove = useSessions((state) => state.remove);
   const closeSession = useAcp((state) => state.close);
+  const sidebarCollapsed = useSettings((state) => state.settings?.layout.sidebarCollapsed ?? false);
+  const explorerCollapsed = useExplorer((state) => state.collapsed);
+  const projectName = useProjects(
+    (state) => state.projects.find((project) => project.id === session?.projectId)?.name ?? null,
+  );
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
 
@@ -54,13 +66,20 @@ export function SessionHeader({
 
   return (
     <header
-      className="app-drag flex shrink-0 items-center gap-2 px-3"
+      className="app-drag flex shrink-0 items-center gap-2 border-b px-3"
       data-session-header
       style={{ height: "var(--titlebar-height)" }}
     >
-      <SidebarToggle />
+      {/* The window's left edge once the sidebar is gone: its toggle and the
+          history's two arrows, in the order and at the x they had in the
+          sidebar's own strip. */}
+      {sidebarCollapsed ? (
+        <div className="flex shrink-0 items-center">
+          <SidebarToggle />
+          <HistoryNav />
+        </div>
+      ) : null}
       <div className="app-no-drag flex min-w-0 items-center gap-2">
-        <Folder className="size-3.5 shrink-0 text-muted-foreground" />
         {editing && session ? (
           <input
             aria-label="Session title"
@@ -89,6 +108,17 @@ export function SessionHeader({
             {title}
           </button>
         )}
+        {/* Where the session lives, as a badge after its name — the way a
+            thread is titled in Claude Code. The new-session screen's title is
+            the project already, so it carries none. */}
+        {session && projectName ? (
+          <span
+            className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] leading-4 text-muted-foreground"
+            data-session-project
+          >
+            {projectName}
+          </span>
+        ) : null}
         {session ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -128,9 +158,13 @@ export function SessionHeader({
         ) : null}
       </div>
       <div className="flex-1" />
-      <div className="app-no-drag flex items-center gap-0.5">
-        <ExplorerToggle />
-      </div>
+      {/* The window's right edge while the explorer is shut; open, the
+          explorer's own strip holds the toggle at that same edge. */}
+      {explorerCollapsed ? (
+        <div className="app-no-drag flex items-center gap-0.5">
+          <ExplorerToggle />
+        </div>
+      ) : null}
     </header>
   );
 }

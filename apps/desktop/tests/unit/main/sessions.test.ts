@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -79,8 +79,7 @@ const fakeProvider: AgentProvider = {
   authProbe: { files: [], envVars: [], checkArgs: null },
   launch: { command: process.execPath, args: [FAKE_AGENT], env: {} },
   capabilities: { subagents: true, terminals: true, modes: true, configOptions: true, loadSession: true },
-  skillsDir: null,
-  pluginInstall: null,
+  skillRoots: "preamble",
 };
 
 const managers: SessionManager[] = [];
@@ -161,15 +160,6 @@ describe("SessionManager", () => {
     manager.respondPermission(session.id, requestId, "allow-once");
     await turn;
     expect(manager.get(session.id)?.status).toBe("idle");
-  });
-
-  it("approval mode set before connecting applies to the connection", async () => {
-    const { manager, cwd } = await setup();
-    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
-    manager.setApprovalMode(session.id, "approve-for-me");
-    const { stopReason } = await manager.prompt(session.id, [{ type: "text", text: "needs permission" }]);
-    expect(stopReason).toBe("end_turn");
-    expect(manager.state(session.id)?.approvalMode).toBe("approve-for-me");
   });
 
   it("close keeps the row, load reconnects through session/load, delete forgets it", async () => {
@@ -315,26 +305,61 @@ describe("SessionManager", () => {
   });
 
   /* ------------------------------------------------------------------ */
-  /* P2: the model, the effort and the agent's own auto mode             */
+  /* P2: the model, the effort and the mode                              */
   /* ------------------------------------------------------------------ */
 
-  /** A stand-in for the option store, recording what the manager asked it. */
-  function optionRecorder(defaults: { model: string | null; effort: string | null }) {
-    const remembered: { agentId: string; ids: string[] }[] = [];
+  /**
+   * A stand-in for the option store, recording what the manager asked it.
+   *
+   * `efforts` is a map from model value to level, the way the store keeps it
+   * (migration 9): the manager asks for the effort of the model the session
+   * ended up on, so a recorder with one level for the whole agent could not
+   * show that it asked about the right one. `asked` is every model it asked
+   * about, in order.
+   */
+  function optionRecorder(defaults: {
+    model: string | null;
+    efforts?: Record<string, string>;
+    mode?: string | null;
+  }) {
+    const remembered: { agentId: string; ids: string[]; modes: string[] }[] = [];
     const choices: { agentId: string; configId: string; value: string | boolean }[] = [];
+    const modes: { agentId: string; modeId: string }[] = [];
+    const asked: (string | null)[] = [];
     return {
       remembered,
       choices,
+      modes,
+      asked,
       deps: {
-        defaults: () => defaults,
-        remember: (agentId: string, options: { id: string }[]) => {
-          remembered.push({ agentId, ids: options.map((option) => option.id) });
+        defaults: () => ({ model: defaults.model, mode: defaults.mode ?? null }),
+        effortFor: (_agentId: string, model: string | null) => {
+          asked.push(model);
+          return defaults.efforts?.[model ?? ""] ?? null;
+        },
+        remember: (agentId: string, options: { id: string }[], sessionModes: { id: string }[]) => {
+          remembered.push({
+            agentId,
+            ids: options.map((option) => option.id),
+            modes: sessionModes.map((mode) => mode.id),
+          });
         },
         rememberChoice: (agentId: string, configId: string, value: string | boolean) => {
           choices.push({ agentId, configId, value });
         },
+        rememberMode: (agentId: string, modeId: string) => {
+          modes.push({ agentId, modeId });
+        },
       },
     };
+  }
+
+  /** The fake agent's current model and effort, as it reports them (tests/fake-agent, `settings`). */
+  async function settingsIn(manager: SessionManager, sessionId: string): Promise<string> {
+    await manager.prompt(sessionId, [{ type: "text", text: "settings" }]);
+    const parts = manager.state(sessionId)!.turns.at(-1)!.parts;
+    const text = parts.find((part) => part.type === "text");
+    return text?.type === "text" ? text.text : "";
   }
 
   /** What the fake agent says it was configured with, in order (tests/fake-agent). */
@@ -346,31 +371,68 @@ describe("SessionManager", () => {
   }
 
   it("applies the stored model before the effort, then the agent's own auto mode", async () => {
-    const recorder = optionRecorder({ model: "smart", effort: "high" });
+    const recorder = optionRecorder({ model: "smart", efforts: { smart: "high" } });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
 
     // The order is the assertion: the model decides which effort levels the
-    // agent has, so an effort set first would be set against the old list.
-    // The mode is last, and is the fake's `auto_review` preset — not the
-    // `default` it starts in.
+    // agent has *and* which effort was remembered, so an effort read or set
+    // first would be the outgoing model's. The mode is last, and is the
+    // fake's `auto_review` preset — not the `default` it starts in.
     expect(await appliedIn(manager, session.id)).toBe("applied: model,reasoning_effort,mode:auto in auto");
+    // Asked about `smart`, after it landed — not about `fast`, where the
+    // session started.
+    expect(recorder.asked).toEqual(["smart"]);
     const state = manager.state(session.id)!;
     expect(state.configOptions.find((option) => option.id === "model")?.currentValue).toBe("smart");
     expect(state.currentModeId).toBe("auto");
-    // And the session's own snapshot went to the cache.
+    // And the session's own snapshot went to the cache — the modes with the
+    // options, because the new-session screen's mode chip is drawn from them.
     expect(recorder.remembered.at(-1)?.ids).toContain("model");
+    expect(recorder.remembered.at(-1)?.modes).toEqual(["default", "plan", "auto", "full"]);
+  });
+
+  /**
+   * The mode the person left this agent in wins over the auto preset: the
+   * new-session screen's chip is a default like the model and the effort,
+   * and `create` is where it is applied.
+   */
+  it("creates the session in the stored mode rather than the auto one", async () => {
+    const recorder = optionRecorder({ model: null, mode: "plan" });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    expect(await appliedIn(manager, session.id)).toBe("applied: mode:plan in plan");
+  });
+
+  /**
+   * The fake starts in `default`, which is what "Manual" is: a stored
+   * default of it means the session is created with no `set_mode` at all,
+   * rather than being moved to the auto preset.
+   */
+  it("leaves the agent where it starts when that is the stored mode", async () => {
+    const recorder = optionRecorder({ model: null, mode: "default" });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    expect(await appliedIn(manager, session.id)).toBe("applied:  in default");
+  });
+
+  /** A mode the agent dropped is not a mode; the auto preset is the fallback. */
+  it("ignores a stored mode the agent no longer offers", async () => {
+    const recorder = optionRecorder({ model: null, mode: "yolo" });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    expect(await appliedIn(manager, session.id)).toBe("applied: mode:auto in auto");
   });
 
   it("sets nothing it does not have to: no defaults, and a mode already auto", async () => {
-    const recorder = optionRecorder({ model: null, effort: null });
+    const recorder = optionRecorder({ model: null });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
     expect(await appliedIn(manager, session.id)).toBe("applied: mode:auto in auto");
   });
 
   it("ignores a stored model the agent no longer offers", async () => {
-    const recorder = optionRecorder({ model: "gpt-9", effort: null });
+    const recorder = optionRecorder({ model: "gpt-9" });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
     expect(await appliedIn(manager, session.id)).toBe("applied: mode:auto in auto");
@@ -381,16 +443,22 @@ describe("SessionManager", () => {
     // an account cannot use.
     const refusing = { ...fakeProvider.launch, env: { FAKE_AGENT_REFUSE: "model" } };
     (claude as { launch: AgentProvider["launch"] }).launch = refusing;
-    const recorder = optionRecorder({ model: "smart", effort: "high" });
+    const recorder = optionRecorder({ model: "smart", efforts: { smart: "high", fast: "low" } });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
     expect(session.status).toBe("idle");
-    // The effort and the mode still landed; only the model did not.
+    // The effort and the mode still landed; only the model did not — and the
+    // effort is `fast`'s, because that is the model the session is on. A
+    // refused model must not drag the wanted model's level in behind it.
     expect(await appliedIn(manager, session.id)).toBe("applied: reasoning_effort,mode:auto in auto");
+    expect(recorder.asked).toEqual(["fast"]);
+    expect(manager.state(session.id)!.configOptions.find((option) => option.id === "reasoning_effort")?.currentValue).toBe(
+      "low",
+    );
   });
 
-  it("remembers the model and effort a live session was switched to", async () => {
-    const recorder = optionRecorder({ model: null, effort: null });
+  it("remembers the model, effort and mode a live session was switched to", async () => {
+    const recorder = optionRecorder({ model: null });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
     await manager.setConfigOption(session.id, "model", "smart");
@@ -399,6 +467,24 @@ describe("SessionManager", () => {
       { agentId: "claude-code", configId: "model", value: "smart" },
       { agentId: "claude-code", configId: "reasoning_effort", value: "low" },
     ]);
+    // Switching the mode mid-thread is the same decision as making it on the
+    // new-session screen, so it becomes this agent's default too.
+    await manager.setMode(session.id, "plan");
+    expect(recorder.modes).toEqual([{ agentId: "claude-code", modeId: "plan" }]);
+  });
+
+  it("brings a model's remembered effort along when the model is switched mid-thread", async () => {
+    // The fake agent resets its level to Medium on every model switch, so
+    // only the app's memory can put Xhigh back.
+    const recorder = optionRecorder({ model: null, efforts: { smart: "xhigh" } });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    await manager.setConfigOption(session.id, "model", "smart");
+    expect(recorder.asked).toContain("smart");
+    expect(await settingsIn(manager, session.id)).toMatch(/model=smart effort=xhigh/);
+    // A model with nothing remembered keeps whatever the agent gave it.
+    await manager.setConfigOption(session.id, "model", "fast");
+    expect(await settingsIn(manager, session.id)).toMatch(/model=fast effort=medium/);
   });
 
   it("probes an agent for its config options without leaving a session behind", async () => {
@@ -406,8 +492,11 @@ describe("SessionManager", () => {
     // launch override — which is also the rule: a probe never `npx`-fetches an
     // adapter for an agent whose CLI is not on the machine.
     const { manager, repo, cwd } = await setup({ launchOverride: () => fakeProvider.launch });
-    const options = await manager.probeOptions({ agentId: "claude-code", cwd, projectId: "p1" });
-    expect(options.map((option) => option.id)).toEqual(["model", "reasoning_effort"]);
+    const snapshot = await manager.probeOptions({ agentId: "claude-code", cwd, projectId: "p1" });
+    expect(snapshot.configOptions.map((option) => option.id)).toEqual(["model", "reasoning_effort"]);
+    // The modes come back too: they are the other half of what a session
+    // with no `mode` config option would draw its one mode chip from.
+    expect(snapshot.modes.map((mode) => mode.id)).toEqual(["default", "plan", "auto", "full"]);
     expect(repo.list()).toHaveLength(0);
     expect(manager.list()).toHaveLength(0);
   });
@@ -438,6 +527,63 @@ describe("SessionManager", () => {
           (entry.payload as { error: string | null }).error?.includes("no longer exists"),
       ),
     ).toBe(true);
+  });
+});
+
+/**
+ * What the app gives a session: the skills root in `session/new`, the preamble
+ * only to an agent that will not read one, and the runtime's `cadgen` in front
+ * of the adapter's PATH. Read back out of the fake agent's record file
+ * (`FAKE_AGENT_RECORD`), which is the wire as the agent received it.
+ */
+describe("what a session is given", () => {
+  async function recorded(agentId: string, deps: Partial<SessionManagerDeps> = {}) {
+    const file = path.join(await mkdtemp(path.join(os.tmpdir(), "hardcore-record-")), "frames.jsonl");
+    const { manager, cwd } = await setup({
+      launchOverride: () => ({ ...fakeProvider.launch, env: { FAKE_AGENT_RECORD: file } }),
+      skills: { root: () => "/data/skills/1.2.3", preamble: () => "SKILLS: /data/skills/1.2.3" },
+      runtimePath: () => ["/app/bin", "/app/runtime/python/bin"],
+      ...deps,
+    });
+    const session = await manager.create({ projectId: "p1", agentId, cwd, gitMode: "none" });
+    await manager.prompt(session.id, [{ type: "text", text: "first" }]);
+    await manager.prompt(session.id, [{ type: "text", text: "second" }]);
+    const lines = (await readFile(file, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as { kind: string; params: Record<string, unknown> });
+    return { manager, session, lines };
+  }
+
+  it("names the skills root in session/new and puts the runtime in front of PATH", async () => {
+    const { lines } = await recorded("claude-code");
+    const params = lines.find((line) => line.kind === "session/new")!.params;
+    expect(params.additionalDirectories).toEqual(["/data/skills/1.2.3"]);
+    expect(params._meta).toMatchObject({ additionalRoots: ["/data/skills/1.2.3"] });
+    // The adapter's own environment: what every command in the session inherits.
+    expect(String(params.PATH).split(path.delimiter).slice(0, 2)).toEqual(["/app/bin", "/app/runtime/python/bin"]);
+  });
+
+  it("leaves PATH alone when there is no runtime", async () => {
+    const { lines } = await recorded("claude-code", { runtimePath: () => [] });
+    const params = lines.find((line) => line.kind === "session/new")!.params;
+    expect(String(params.PATH)).toBe(process.env.PATH ?? "");
+  });
+
+  it("sends no preamble to an agent that loads the root itself", async () => {
+    // claude-code is `skillRoots: "native"` in the registry.
+    const { lines } = await recorded("claude-code");
+    const prompts = lines.filter((line) => line.kind === "prompt");
+    expect(prompts).toHaveLength(2);
+    expect(JSON.stringify(prompts[0]!.params.prompt)).not.toContain("SKILLS:");
+  });
+
+  it("sends it once to an agent that does not, and not on the turn after", async () => {
+    // gemini-cli is `skillRoots: "preamble"`.
+    const { lines } = await recorded("gemini-cli");
+    const prompts = lines.filter((line) => line.kind === "prompt");
+    expect(prompts[0]!.params.prompt).toEqual([
+      { type: "text", text: "SKILLS: /data/skills/1.2.3" },
+      { type: "text", text: "first" },
+    ]);
+    expect(prompts[1]!.params.prompt).toEqual([{ type: "text", text: "second" }]);
   });
 });
 

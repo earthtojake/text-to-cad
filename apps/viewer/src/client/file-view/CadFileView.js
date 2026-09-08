@@ -40,7 +40,7 @@ import {
 } from "../components/workbench/DxfSettingsSection";
 import { buildDxfLayersTab } from "../components/workbench/DxfLayersSection";
 import StepFileSheet from "../components/workbench/StepFileSheet";
-import { FileSheetPortalContext } from "../components/workbench/FileSheet";
+import { FileSheetPortalContext, HostPanelSlotContext } from "../components/workbench/FileSheet";
 import { poseValuesForPreset } from "../components/workbench/PoseControlsSection";
 import StatusToast from "../components/workbench/StatusToast";
 import UrdfFileSheet from "../components/workbench/UrdfFileSheet";
@@ -64,15 +64,17 @@ import { useCadWorkspaceShortcuts } from "../components/workbench/hooks/useCadWo
 import {
   applyColorSchemeToDocument,
   DARK_COLOR_SCHEME_ID,
-  LIGHT_COLOR_SCHEME_ID
+  LIGHT_COLOR_SCHEME_ID,
+  readColorSchemePreference,
+  resolveColorSchemeMode
 } from "@/ui/colorScheme";
+import { useSystemPrefersDark } from "@/ui/useSystemPrefersDark";
 import {
   CUSTOM_THEME_ID,
   getThemePresetIdForSettings,
-  inferThemeSettingsSceneTone,
   normalizeThemeSettings,
-  resolveThemeSettingsBackdropColor,
-  resolveThemeSettingsForColorMode
+  resolveThemeSettingsForColorMode,
+  SYSTEM_THEME_ID
 } from "cadgen-js/lib/themeSettings";
 import {
   displayModeForcesEdges,
@@ -289,6 +291,13 @@ import {
   normalizeParameterValues
 } from "cadgen-js/common/parameters.js";
 import { copyTextToClipboard, readTextFromClipboard } from "@/ui/clipboard";
+import {
+  HOST_PANEL,
+  isHostPanelControlled,
+  nextPanelState,
+  resolveHostPanelOpen
+} from "./hostPanels.js";
+import { resolveHostPanelPlacement } from "./hostPanelSlot.js";
 import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
 import {
   copyTargetsForFileAccessAsset,
@@ -301,7 +310,6 @@ import { normalizeViewerOrigin } from "./viewerOrigin.js";
 import { installViewerTessellationCacheProvider } from "./hostTessellationCache.js";
 import {
   ARTIFACT_GENERATING_LABEL,
-  CAD_WORKSPACE_TOP_BAR_HEIGHT,
   DEFAULT_LARGE_FILE_STATE,
   DEFAULT_SIDEBAR_WIDTH,
   DESKTOP_SIDEBAR_MAX_WIDTH,
@@ -312,7 +320,6 @@ import {
   capitalizeFirst,
   entryWithoutRenderAssets,
   hostPrefersDarkForColorScheme,
-  normalizeHostSceneBackground,
   normalizeHostSheetWidth,
   normalizeLargeFileState,
   resolveHostLayoutMode,
@@ -324,6 +331,11 @@ import {
   readViewerViewportWidth,
   statusOnlyFileSheetTitle
 } from "./fileViewState.js";
+import {
+  readChromeBackgroundToken,
+  resolveChromeBackdropColor,
+  sceneBackdropEdgeColor
+} from "./chromeBackdrop.js";
 import {
   addReferenceLookupKeys,
   buildStepTreeCopyReferenceMap,
@@ -370,12 +382,16 @@ export default function CadFileView({
   renderHome = null,
   layout = "auto",
   fileSheetWidth = null,
+  panelSlot = null,
   colorScheme = null,
-  sceneBackground = null,
   selectReference = null,
   onReference = null,
   onCapture = null,
   captureRequest = null,
+  themeEditing = null,
+  onThemeEditingChange = null,
+  fileSheetOpen = null,
+  onFileSheetOpenChange = null,
 }) {
   const viewerOrigin = normalizeViewerOrigin(origin);
   // The shared tessellation cache is reached through THIS origin's
@@ -399,15 +415,49 @@ export default function CadFileView({
         renderHome={renderHome}
         layout={layout}
         fileSheetWidth={fileSheetWidth}
+        panelSlot={panelSlot}
         colorScheme={colorScheme}
-        sceneBackground={sceneBackground}
         selectReference={selectReference}
         onReference={onReference}
         onCapture={onCapture}
         captureRequest={captureRequest}
+        hostThemeEditing={themeEditing}
+        onThemeEditingChange={onThemeEditingChange}
+        hostFileSheetOpen={fileSheetOpen}
+        onFileSheetOpenChange={onFileSheetOpenChange}
       />
     </ViewerOriginProvider>
   );
+}
+
+/**
+ * The chrome's own background colour, live.
+ *
+ * The "System" CAD theme paints the scene on it (chromeBackdrop.js), so it has
+ * to survive the app switching light and dark — and the app that owns the
+ * `--background` token is not this surface. A host toggles `.dark` on the
+ * document in an effect of its own, and effects run child-first, so reading
+ * the token in an effect here would read the class as it was BEFORE the
+ * switch. Hence the observer: whatever moves the token — a host's class, this
+ * surface's own colour-scheme write, a stylesheet swapped at runtime — is a
+ * mutation on `<html>`, and the read happens after it.
+ *
+ * `prefersDark` is a dependency as well, so the first paint of a scheme change
+ * already has the right colour when the token and the class move together.
+ */
+function useChromeBackdropColor(prefersDark) {
+  const [token, setToken] = useState(readChromeBackgroundToken);
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof MutationObserver === "undefined") {
+      return undefined;
+    }
+    const read = () => setToken(readChromeBackgroundToken());
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, { attributeFilter: ["class", "style"] });
+    return () => observer.disconnect();
+  }, [prefersDark]);
+  return useMemo(() => resolveChromeBackdropColor({ token, prefersDark }), [prefersDark, token]);
 }
 
 function CadFileViewSurface({
@@ -422,12 +472,16 @@ function CadFileViewSurface({
   renderHome,
   layout,
   fileSheetWidth,
+  panelSlot,
   colorScheme,
-  sceneBackground,
   selectReference,
   onReference,
   onCapture,
   captureRequest,
+  hostThemeEditing,
+  onThemeEditingChange,
+  hostFileSheetOpen,
+  onFileSheetOpenChange,
 }) {
   // What the host pins, if anything (docs/file-view.md, "Laying out inside a
   // host"): the layout mode, the sheet's width, and which way the colour
@@ -435,12 +489,32 @@ function CadFileViewSurface({
   // the viewport and whose theme is its own.
   const hostLayoutMode = resolveHostLayoutMode(layout);
   const hostSheetWidth = normalizeHostSheetWidth(fileSheetWidth);
+  // Where the open panel is drawn: the host's own panel column when it hands
+  // one over, else the column this surface draws (hostPanelSlot.js).
+  const { slot: hostPanelSlot, drawsOwnColumn: drawsOwnPanelColumn } = resolveHostPanelPlacement(panelSlot);
   const hostPrefersDark = hostPrefersDarkForColorScheme(colorScheme);
-  const hostSceneBackground = normalizeHostSceneBackground(sceneBackground);
-  const themeReadOptions = useMemo(
-    () => (hostPrefersDark === null ? {} : { prefersDark: hostPrefersDark }),
-    [hostPrefersDark]
-  );
+  /*
+    The app's light/dark — the CHROME's, and only ever the chrome's.
+
+    The host's when it passes one; otherwise this app's own colour-scheme
+    preference resolved against the OS, which is the pair `index.html` paints
+    the first frame from, so React no longer repaints what the document
+    already says. The CAD theme has no vote here: it paints the scene —
+    background, lighting, materials, edges, grid, projection — and a dark
+    studio inside a light window is a legal picture. The theme used to decide
+    this, by the luminance of its own backdrop, so opening a cinematic STEP
+    turned every panel, toolbar and menu around it dark and there was no way
+    to have one without the other.
+  */
+  const systemPrefersDark = useSystemPrefersDark();
+  const [colorSchemePreference, setColorSchemePreference] = useState(readColorSchemePreference);
+  const resolvedColorSchemeMode = hostPrefersDark === null
+    ? resolveColorSchemeMode(colorSchemePreference, { prefersDark: systemPrefersDark })
+    : (hostPrefersDark ? DARK_COLOR_SCHEME_ID : LIGHT_COLOR_SCHEME_ID);
+  const uiPrefersDark = resolvedColorSchemeMode === DARK_COLOR_SCHEME_ID;
+  // The CAD "system" PRESET resolves against that same answer, in a host and
+  // standalone alike: "the light one when the app is light".
+  const themeReadOptions = useMemo(() => ({ prefersDark: uiPrefersDark }), [uiPrefersDark]);
   // The catalog comes from the host when it already has one (the standalone app
   // subscribes in main.jsx and hands it down), and otherwise straight from this
   // origin's store — so an embedded surface needs nothing but `origin` and
@@ -566,7 +640,34 @@ function CadFileViewSurface({
   }, [themeReadOptions]);
   const themeSettings = themeState.settings;
   const themeId = themeState.themeId;
-  const [themeEditing, setThemeEditing] = useState(false);
+  // What the "System" theme paints the scene on: the chrome's `--background`,
+  // or the written-out pair where there is no chrome (chromeBackdrop.js).
+  const chromeBackdropColor = useChromeBackdropColor(uiPrefersDark);
+  // Whether the theme panel is up. A host that draws its own toggle drives it
+  // through the `themeEditing` prop and hears about every change; without the
+  // prop this own flag IS the answer (hostPanels.js).
+  const [ownThemeEditing, setOwnThemeEditing] = useState(false);
+  const themeEditing = resolveHostPanelOpen(hostThemeEditing, ownThemeEditing);
+  // The setter stays identity-stable — it reads the live values off a ref
+  // rather than closing over them. Two dozen callbacks and effects in this
+  // file list it as a dependency; a setter that changed on every open would
+  // re-run all of them for a panel toggle.
+  const themePanelRef = useRef(null);
+  themePanelRef.current = {
+    open: themeEditing,
+    controlled: isHostPanelControlled(hostThemeEditing),
+    notify: onThemeEditingChange
+  };
+  const setThemeEditing = useCallback((value) => {
+    const { open, controlled, notify } = themePanelRef.current;
+    const next = typeof value === "function" ? value(open) === true : value === true;
+    if (!controlled) {
+      setOwnThemeEditing(next);
+    }
+    if (next !== open) {
+      notify?.(next);
+    }
+  }, []);
   // Which way a drawing is being looked at. Session state on purpose: it is a way of looking
   // at the model open right now, not a preference worth outliving the tab.
   const [drawingViewMode, setDrawingViewMode] = useState("3d");
@@ -596,20 +697,33 @@ function CadFileViewSurface({
   const drawingGeometryCacheRef = useRef(new Map());
   const [drawingGeometry, setDrawingGeometry] = useState(null);
   const resolvedThemeSettings = useMemo(() => {
+    // `colorMode: "system"` in a theme means "follow the app", which is the
+    // app's colour scheme — not `hostPrefersDark === true`, which read as
+    // light on every standalone page whatever the OS said.
     const resolved = resolveThemeSettingsForColorMode(themeSettings, {
-      prefersDark: hostPrefersDark === true
+      prefersDark: uiPrefersDark
     });
-    if (!hostSceneBackground) {
+    if (themeId !== SYSTEM_THEME_ID) {
       return resolved;
     }
-    // A host that embeds the surface paints the scene on its own ground so
-    // the model sits in the app rather than in a framed picture of a studio;
-    // the theme keeps its lights, grid, floor and materials.
+    // "System" is the ONE theme that follows the app, and following it means
+    // the app's ground as well as its light/dark: the model sits in the
+    // window rather than in a framed picture of a studio. Every other preset
+    // — and the custom theme — keeps the backdrop its own settings ask for,
+    // in a host and standalone alike, so picking Cinematic changes what you
+    // see. This used to be a host prop (`sceneBackground`) applied to every
+    // theme, which made the theme panel's background half inert in the
+    // desktop app: eight presets, one colour.
     return {
       ...resolved,
-      background: { ...(resolved.background || {}), type: "solid", solidColor: hostSceneBackground }
+      background: { ...(resolved.background || {}), type: "solid", solidColor: chromeBackdropColor }
     };
-  }, [hostPrefersDark, hostSceneBackground, themeSettings]);
+  }, [chromeBackdropColor, themeId, themeSettings, uiPrefersDark]);
+  // The colour behind the canvas, which is the scene's own at its edges.
+  const sceneBackdrop = useMemo(
+    () => sceneBackdropEdgeColor(resolvedThemeSettings.background, chromeBackdropColor),
+    [chromeBackdropColor, resolvedThemeSettings]
+  );
   const resolvedDisplayEdgeSettings = useMemo(() => {
     // Edge theme — colour, opacity, thickness — is fixed, not a user
     // setting. It comes from the cadgen-js defaults, or from a theme that styles its
@@ -625,13 +739,6 @@ function CadFileViewSurface({
     }
     return normalizeDisplayEdgeSettings();
   }, [resolvedThemeSettings]);
-  // App light/dark is inferred from the active theme's dominant background color
-  // (not a user preference). The nav/sidebars float over the transparent
-  // viewport, so their contrast must track whatever canvas sits behind them.
-  const cadWorkspaceGlassTone = useMemo(() => inferThemeSettingsSceneTone(resolvedThemeSettings), [resolvedThemeSettings]);
-  const resolvedColorSchemeMode = cadWorkspaceGlassTone === "dark"
-    ? DARK_COLOR_SCHEME_ID
-    : LIGHT_COLOR_SCHEME_ID;
   const updateDisplaySettings = useCallback((nextValue) => {
     setDisplaySettings((current) => normalizeDisplaySettings(
       typeof nextValue === "function" ? nextValue(current) : nextValue
@@ -2101,7 +2208,17 @@ function CadFileViewSurface({
     openTabsRef.current = openTabs;
   }, [openTabs]);
 
-  const tabToolsOpen = fileSheetOpenIntent;
+  // The file sheet's open flag, the theme panel's twin: a host that draws its
+  // own toggle drives it through `fileSheetOpen` and hears every change,
+  // otherwise the surface's own intent is the answer (hostPanels.js). The
+  // setter reads this ref for the same reason the theme's does.
+  const tabToolsOpen = resolveHostPanelOpen(hostFileSheetOpen, fileSheetOpenIntent);
+  const fileSheetPanelRef = useRef(null);
+  fileSheetPanelRef.current = {
+    open: tabToolsOpen,
+    controlled: isHostPanelControlled(hostFileSheetOpen),
+    notify: onFileSheetOpenChange
+  };
   const fileViewerExpandedDirectoryIdList = useMemo(() => (
     [...expandedDirectoryIds].sort((a, b) => a.localeCompare(b, undefined, {
       numeric: true,
@@ -2114,10 +2231,33 @@ function CadFileViewSurface({
   );
 
   const setTabToolsOpen = useCallback((value) => {
-    setFileSheetOpenIntent((current) => (
-      typeof value === "function" ? value(current) : value
-    ));
+    const { open, controlled, notify } = fileSheetPanelRef.current;
+    const next = typeof value === "function" ? value(open) === true : value === true;
+    if (!controlled) {
+      setFileSheetOpenIntent(next);
+    }
+    if (next !== open) {
+      notify?.(next);
+    }
   }, []);
+  /**
+   * A host that listens without driving is OBSERVING: it hears the flag it
+   * does not own, its opening value included, so its own toggle can be
+   * highlighted from the surface's default rather than from a copy of the
+   * rule that produces it. The desktop app starts here and becomes
+   * controlling as soon as it echoes the first report back — at which point
+   * `controlled` is true and this stops reporting.
+   */
+  useEffect(() => {
+    if (!isHostPanelControlled(hostFileSheetOpen)) {
+      onFileSheetOpenChange?.(tabToolsOpen);
+    }
+  }, [hostFileSheetOpen, onFileSheetOpenChange, tabToolsOpen]);
+  useEffect(() => {
+    if (!isHostPanelControlled(hostThemeEditing)) {
+      onThemeEditingChange?.(themeEditing);
+    }
+  }, [hostThemeEditing, onThemeEditingChange, themeEditing]);
   const directorySessionThemeSlice = useMemo(
     () => createDirectorySessionThemeSlice(themeState),
     [themeState]
@@ -2156,7 +2296,12 @@ function CadFileViewSurface({
   // The file sheet and the theme sidebar are the same right-hand panel with
   // different contents: one open flag, one width, one resize handle, one inset
   // on the 3D viewport. Anything that sizes or offsets the panel uses this.
-  const desktopRightPanelOpen = isDesktop && !previewMode && (
+  //
+  // A host that owns the frame (`panelSlot`) makes this false whatever is
+  // open: the panel is drawn in the host's column, so there is nothing here
+  // to size, to resize or to inset the viewport by — the viewport is the
+  // whole surface and the host's pane is what got narrower.
+  const desktopRightPanelOpen = drawsOwnPanelColumn && isDesktop && !previewMode && (
     themeEditing ||
     (tabToolsOpen && !!selectedFileSheetKind && selectedFileSheetHasSections)
   );
@@ -2390,15 +2535,17 @@ function CadFileViewSurface({
   }, [drawingViewMode]);
 
   const handleToggleThemeEditor = useCallback(() => {
-    setThemeEditing((current) => {
-      if (current) {
-        return false;
-      }
+    const next = nextPanelState({ themeEditing, fileSheetOpen: tabToolsOpen }, HOST_PANEL.THEME);
+    if (next.themeEditing) {
       setViewerAlertOpen(false);
-      setTabToolsOpen(false);
-      return true;
-    });
-  }, [setTabToolsOpen]);
+    }
+    // The sheet first: it is the panel being given up, and a host that owns
+    // both flags should hear "closed" before it hears "the theme is open".
+    if (next.fileSheetOpen !== tabToolsOpen) {
+      setTabToolsOpen(next.fileSheetOpen);
+    }
+    setThemeEditing(next.themeEditing);
+  }, [setTabToolsOpen, tabToolsOpen, themeEditing]);
 
   const handleViewerAlertChange = useCallback((nextAlert) => {
     setViewerRuntimeAlert(nextAlert || null);
@@ -2515,7 +2662,10 @@ function CadFileViewSurface({
     setFileSheetWidthIsCustom,
     tabToolsWidth
   ]);
-  const fileSheetResizeHandler = hostSheetWidth == null ? handleStartFileSheetResize : null;
+  // No handle when the width is not this surface's to change: pinned by the
+  // host (`fileSheetWidth`), or drawn in the host's own frame (`panelSlot`),
+  // which carries its own.
+  const fileSheetResizeHandler = hostSheetWidth == null && drawsOwnPanelColumn ? handleStartFileSheetResize : null;
 
   const resetSelectionForStepUpdate = useCallback(() => {
     selectedPartIdsRef.current = [];
@@ -3122,37 +3272,30 @@ function CadFileViewSurface({
   }, [flushActiveFileSession]);
 
   useEffect(() => {
-    // Embedded, the host's theme drives the document and the CAD theme
-    // follows it (through `colorScheme`), not the other way round.
+    // Embedded, the host owns the document: it passed `colorScheme`, and its
+    // own design system paints the chrome. Standalone the surface writes the
+    // app's colour-scheme preference — the preference and the OS, never the
+    // theme.
     if (hostPrefersDark !== null) {
       return;
     }
-    applyColorSchemeToDocument(resolvedColorSchemeMode, document.documentElement);
-  }, [hostPrefersDark, resolvedColorSchemeMode]);
-
-  useEffect(() => {
-    document.documentElement.dataset.glassTone = cadWorkspaceGlassTone;
-    return () => {
-      delete document.documentElement.dataset.glassTone;
-    };
-  }, [cadWorkspaceGlassTone]);
-
-  // Glass chrome (navbar, toolbars, popovers) tints toward the active scene
-  // backdrop so the UI blends with whichever theme is selected.
-  useEffect(() => {
-    document.documentElement.style.setProperty(
-      "--cad-scene-backdrop",
-      resolveThemeSettingsBackdropColor(resolvedThemeSettings)
-    );
-    return () => {
-      document.documentElement.style.removeProperty("--cad-scene-backdrop");
-    };
-  }, [resolvedThemeSettings]);
+    applyColorSchemeToDocument(colorSchemePreference, document.documentElement, {
+      prefersDark: systemPrefersDark
+    });
+  }, [colorSchemePreference, hostPrefersDark, systemPrefersDark]);
 
   useEffect(() => {
     const handleStorage = (event) => {
       const action = cadDirectoryStorageEventAction(event.key);
       if (action === CAD_DIRECTORY_STORAGE_EVENT_ACTION.IGNORE) {
+        return;
+      }
+      // The colour scheme is the chrome's and the theme is the scene's, so
+      // the two are read back separately — a tab that changed the scheme has
+      // not touched the theme, and a tab that changed the theme must not
+      // repaint this one's chrome.
+      if (action === CAD_DIRECTORY_STORAGE_EVENT_ACTION.COLOR_SCHEME) {
+        setColorSchemePreference(readColorSchemePreference());
         return;
       }
       try {
@@ -6202,23 +6345,23 @@ function CadFileViewSurface({
       return;
     }
     setViewerAlertOpen(false);
-    // Opening the file sheet while the theme sidebar is up replaces it.
-    if (themeEditing) {
-      setThemeEditing(false);
-      setTabToolsOpen(true);
-      if (!isDesktop) {
-        setSidebarOpen(false);
-      }
-      return;
+    // Opening the file sheet while the theme sidebar is up replaces it —
+    // they are one panel, so the press means "show me this instead".
+    const next = nextPanelState({ themeEditing, fileSheetOpen: tabToolsOpen }, HOST_PANEL.FILE_SHEET);
+    if (next.themeEditing !== themeEditing) {
+      setThemeEditing(next.themeEditing);
     }
-    setTabToolsOpen((current) => {
-      const nextOpen = !current;
-      if (nextOpen && !isDesktop) {
-        setSidebarOpen(false);
-      }
-      return nextOpen;
-    });
-  }, [themeEditing, isDesktop, selectedFileSheetKind, setTabToolsOpen]);
+    setTabToolsOpen(next.fileSheetOpen);
+    if (next.fileSheetOpen && !isDesktop) {
+      setSidebarOpen(false);
+    }
+  }, [
+    isDesktop,
+    selectedFileSheetKind,
+    setTabToolsOpen,
+    tabToolsOpen,
+    themeEditing
+  ]);
 
   const handleCopyFileAssetReference = useCallback(async (entry, asset = "output", assetInfo = null, referenceKind = "path") => {
     const fileRef = entry ? fileKey(entry) : "";
@@ -6460,6 +6603,7 @@ function CadFileViewSurface({
     selectedViewportContent,
     tabToolMode,
     tabToolsOpen,
+    themeEditing,
     viewerAlertOpen,
     viewerLoading
   ]);
@@ -6553,12 +6697,6 @@ function CadFileViewSurface({
         sheetMaxWidth: DESKTOP_TAB_TOOLS_MAX_WIDTH
       }).sidebarWidth
     : DEFAULT_SIDEBAR_WIDTH;
-  const viewportFrameInsets = {
-    top: previewMode ? 0 : CAD_WORKSPACE_TOP_BAR_HEIGHT,
-    right: activeSheetWidth,
-    bottom: 0,
-    left: activeSidebarWidth
-  };
   const floatingCadToolbarPosition = {
     top: "14px",
     right: "14px"
@@ -6593,8 +6731,7 @@ function CadFileViewSurface({
 
   // What an injected chrome slot is handed. This is the whole contract between
   // the file surface and a host's top bar / file sidebar / home screen: the
-  // surface owns the state (the viewport's insets are computed from it) and the
-  // host decides what to draw with it. Adding a field here is the only way to
+  // surface owns the state and the host decides what to draw with it. Adding a field here is the only way to
   // widen that contract.
   const chrome = {
     origin,
@@ -6634,6 +6771,7 @@ function CadFileViewSurface({
   };
 
   return (
+    <HostPanelSlotContext.Provider value={hostPanelSlot}>
     <FileSheetPortalContext.Provider value={hostElement}>
     <HostReferenceContext.Provider value={hostReference}>
     <SidebarProvider
@@ -6641,119 +6779,133 @@ function CadFileViewSurface({
       onOpenChange={handleSidebarOpenChange}
       mobileOpen={effectiveSidebarOpen}
       onMobileOpenChange={handleSidebarOpenChange}
-      data-glass-tone={cadWorkspaceGlassTone}
       style={{ "--sidebar-width": `${sidebarShellWidth}px` }}
-      className={cn("relative h-svh overflow-hidden bg-transparent", className)}
+      className={cn("relative h-svh overflow-hidden bg-background", className)}
       ref={hostRef}
     >
-      <div className="absolute inset-0 z-0">
-        <CadRenderPane
-          viewerRef={viewerRef}
-          renderFormat={effectiveRenderFormat}
-          drawingThicknessScale={drawingThicknessScale}
-          planMode={selectedEntryIsDrawing && drawingViewMode === "2d"}
-          bendAxisX={selectedEntryIsDrawing ? selectedEntry?.bendAxisX || null : null}
-          drawingBendLines={selectedEntryIsDrawing ? drawingBendLines : null}
-          bendAnglesRad={selectedEntryIsDrawing ? drawingBendAnglesRad : null}
-          drawingBends={selectedEntryIsDrawing ? drawingBends : null}
-          drawingBendStyle={selectedEntryIsDrawing ? drawingBendStyle : "boxed"}
-          drawingBendRadiusMm={selectedEntryIsDrawing ? drawingBendRadiusMm : 0}
-          drawingKFactor={selectedEntryIsDrawing ? drawingKFactor : DXF_DEFAULT_KFACTOR}
-          drawingHiddenLayers={selectedEntryIsDrawing ? drawingHiddenLayers : null}
-          drawingOrientation={selectedEntryIsDrawing ? drawingOrientation : null}
-          drawingMaterialColor={selectedEntryIsDrawing ? dxfMaterialPreset(drawingMaterial).colorHex : null}
-          drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
-          drawingIsDocument={selectedEntryIsDrawingDocument}
-          drawingThicknessMm={selectedEntryIsDrawing ? drawingThicknessMm : 0}
-          onCameraZoomPercentChange={setViewerZoomPercent}
-          renderPartsIndividually={
-            isUrdfView || Boolean(selectedStepParameterRuntime) || Boolean(selectedAnimationRuntime)
-          }
-          stepParameters={selectedStepParameterRuntime}
-          stepAnimation={selectedAnimationRuntime}
-          selectedMeshData={selectedMeshData}
-          selectedKey={selectedKey}
-          missingFileRef={missingFileRef}
-          viewerServerInfo={viewerServerInfo}
-          viewerPerspective={viewerPerspective}
-          viewerPerspectiveRef={activePerspectiveRef}
-          themeSettings={resolvedThemeSettings}
-          displaySettings={renderDisplaySettings}
-          previewMode={previewMode}
-          viewportFrameInsets={viewportFrameInsets}
-          viewerLoading={viewerLoading}
-          viewerAlert={viewerAlert}
-          stepUpdateInProgress={effectiveRenderFormat === RENDER_FORMAT.STEP && stepUpdateInProgress}
-          referenceSelectionPending={referenceSelectionPending}
-          referenceSelectionUnavailable={referenceSelectionUnavailable}
-          referenceSelectionDeferred={selectedTopologyDeferredByCost}
-          viewPlaneOffsetRight={viewportFrameInsets.right + 16}
-          viewerMode={viewerMode}
-          assemblyPickingActive={viewerInAssemblyMode}
-          assemblyParts={viewerAssemblyRenderParts}
-          hiddenPartIds={viewerHiddenPartIds}
-          selectedPartIds={viewerSelectedPartIds}
-          hoveredPartId={viewerHoveredPartIds}
-          hoveredReferenceId={effectiveHoveredReferenceId}
-          selectedReferenceIds={selectedReferenceIds}
-          selectorRuntime={effectiveSelectorRuntime}
-          displayEdgeRuntime={selectedDisplayEdgeRuntime}
-          pickableFaces={viewerPickableFaces}
-          pickableEdges={viewerPickableEdges}
-          pickableVertices={viewerPickableVertices}
-          focusedPartIds={viewerFocusedPartIds}
-          boundsAnimationActive={robotBoundsAnimationActive}
-          drawToolActive={drawToolActive}
-          measureModeActive={measureModeActive}
-          drawingTool={drawingTool}
-          drawingStrokes={drawingStrokes}
-          handleDrawingStrokesChange={handleDrawingStrokesChange}
-          handlePerspectiveChange={handlePerspectiveChange}
-          handleModelHoverChange={handleModelHoverChange}
-          handleModelReferenceActivate={handleModelReferenceActivate}
-          handleModelReferenceDoubleActivate={handleModelReferenceDoubleActivate}
-          handleModelReferenceContext={handleModelReferenceContext}
-          onMeasurePick={handleMeasurePick}
-          onMeasureHoverPoint={handleMeasureHoverPoint}
-          activeMeasurementId={activeMeasureId}
-          measureState={measureRulerState}
-          viewerContextMenu={viewerContextMenu}
-          onViewerContextMenuClose={closeViewerContextMenu}
-          onViewerContextMenuCopyReference={copyViewerContextMenuReference}
-          onViewerContextMenuSelect={selectViewerContextMenuNode}
-          onViewerContextMenuFocus={focusViewerContextMenuNode}
-          onViewerContextMenuExitAllIsolate={handleExitIsolate}
-          onViewerContextMenuHideOther={hideOtherViewerContextMenuNode}
-          onViewerContextMenuHideAll={hideAllViewerContextMenuNodes}
-          onViewerContextMenuHide={hideViewerContextMenuNode}
-          onViewerContextMenuReveal={revealViewerContextMenuNode}
-          onViewerContextMenuResetZoom={resetZoomViewerContextMenu}
-          onViewerContextMenuZoomToFit={zoomToFitViewerContextMenu}
-          onViewerContextMenuExpandSelected={expandSelectedViewerContextMenuNodes}
-          onViewerContextMenuCollapseSelected={collapseSelectedViewerContextMenuNodes}
-          onViewerContextMenuExpandAll={expandAllViewerContextMenuNodes}
-          onViewerContextMenuCollapseAll={collapseAllViewerContextMenuNodes}
-          handleViewerAlertChange={handleViewerAlertChange}
-          handleStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
-          selectionCount={selectionCount}
-          copyButtonLabel={copyButtonLabel}
-          copyButtonCountLabel={copyButtonCountLabel}
-          copyReferenceTipActive={copyReferenceTipActive}
-          panToolActive={panToolActive}
-          handleCopySelection={handleCopySelection}
-          handleAddSelection={typeof onReference === "function" ? handleAddSelection : null}
-          handleScreenshotCopy={handleScreenshotCopy}
-        />
-      </div>
-
-      <SidebarInset className="pointer-events-none relative z-10 h-full min-w-0 overflow-hidden bg-transparent">
+      <SidebarInset className="relative z-10 h-full min-w-0 overflow-hidden bg-transparent">
         {renderTopBar ? renderTopBar(chrome) : null}
 
-        <div className="pointer-events-none relative min-h-0 flex-1 overflow-hidden">
+        <div className="relative min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full min-w-0">
             {renderSidebar ? renderSidebar(chrome) : null}
 
-            <div className="pointer-events-none relative min-w-0 flex-1 overflow-hidden">
+            {/* The render pane's box: the column between the sidebar and the
+                sheet, and nothing else. The WebGL canvas fills exactly this
+                area, so a camera fit centres in what is visible and a sheet
+                opening or closing reaches the scene as a plain resize. The
+                overlays after it (toolbar, home, loading) sit above it in the
+                same box and let the pointer through to it between them.
+
+                Its own background is the scene's edge colour, not the app's:
+                the canvas is opaque and covers all of this, but it is resized
+                on the next frame, and one frame of the chrome's background
+                showing above a dark stage is a visible band. It is also the
+                only place outside the renderer where the chosen backdrop can
+                be read (chromeBackdrop.js). */}
+            <div
+              className="pointer-events-none relative min-w-0 flex-1 overflow-hidden"
+              data-cad-scene-backdrop={sceneBackdrop}
+              style={{ backgroundColor: sceneBackdrop }}
+            >
+              <div className="pointer-events-auto absolute inset-0 z-0">
+                <CadRenderPane
+                  viewerRef={viewerRef}
+                  renderFormat={effectiveRenderFormat}
+                  drawingThicknessScale={drawingThicknessScale}
+                  planMode={selectedEntryIsDrawing && drawingViewMode === "2d"}
+                  bendAxisX={selectedEntryIsDrawing ? selectedEntry?.bendAxisX || null : null}
+                  drawingBendLines={selectedEntryIsDrawing ? drawingBendLines : null}
+                  bendAnglesRad={selectedEntryIsDrawing ? drawingBendAnglesRad : null}
+                  drawingBends={selectedEntryIsDrawing ? drawingBends : null}
+                  drawingBendStyle={selectedEntryIsDrawing ? drawingBendStyle : "boxed"}
+                  drawingBendRadiusMm={selectedEntryIsDrawing ? drawingBendRadiusMm : 0}
+                  drawingKFactor={selectedEntryIsDrawing ? drawingKFactor : DXF_DEFAULT_KFACTOR}
+                  drawingHiddenLayers={selectedEntryIsDrawing ? drawingHiddenLayers : null}
+                  drawingOrientation={selectedEntryIsDrawing ? drawingOrientation : null}
+                  drawingMaterialColor={selectedEntryIsDrawing ? dxfMaterialPreset(drawingMaterial).colorHex : null}
+                  drawingGeometry={selectedEntryIsDrawing ? drawingGeometry : null}
+                  drawingIsDocument={selectedEntryIsDrawingDocument}
+                  drawingThicknessMm={selectedEntryIsDrawing ? drawingThicknessMm : 0}
+                  onCameraZoomPercentChange={setViewerZoomPercent}
+                  renderPartsIndividually={
+                    isUrdfView || Boolean(selectedStepParameterRuntime) || Boolean(selectedAnimationRuntime)
+                  }
+                  stepParameters={selectedStepParameterRuntime}
+                  stepAnimation={selectedAnimationRuntime}
+                  selectedMeshData={selectedMeshData}
+                  selectedKey={selectedKey}
+                  missingFileRef={missingFileRef}
+                  viewerServerInfo={viewerServerInfo}
+                  viewerPerspective={viewerPerspective}
+                  viewerPerspectiveRef={activePerspectiveRef}
+                  themeSettings={resolvedThemeSettings}
+                  displaySettings={renderDisplaySettings}
+                  previewMode={previewMode}
+                  viewerLoading={viewerLoading}
+                  viewerAlert={viewerAlert}
+                  stepUpdateInProgress={effectiveRenderFormat === RENDER_FORMAT.STEP && stepUpdateInProgress}
+                  referenceSelectionPending={referenceSelectionPending}
+                  referenceSelectionUnavailable={referenceSelectionUnavailable}
+                  referenceSelectionDeferred={selectedTopologyDeferredByCost}
+                  viewerMode={viewerMode}
+                  assemblyPickingActive={viewerInAssemblyMode}
+                  assemblyParts={viewerAssemblyRenderParts}
+                  hiddenPartIds={viewerHiddenPartIds}
+                  selectedPartIds={viewerSelectedPartIds}
+                  hoveredPartId={viewerHoveredPartIds}
+                  hoveredReferenceId={effectiveHoveredReferenceId}
+                  selectedReferenceIds={selectedReferenceIds}
+                  selectorRuntime={effectiveSelectorRuntime}
+                  displayEdgeRuntime={selectedDisplayEdgeRuntime}
+                  pickableFaces={viewerPickableFaces}
+                  pickableEdges={viewerPickableEdges}
+                  pickableVertices={viewerPickableVertices}
+                  focusedPartIds={viewerFocusedPartIds}
+                  boundsAnimationActive={robotBoundsAnimationActive}
+                  drawToolActive={drawToolActive}
+                  measureModeActive={measureModeActive}
+                  drawingTool={drawingTool}
+                  drawingStrokes={drawingStrokes}
+                  handleDrawingStrokesChange={handleDrawingStrokesChange}
+                  handlePerspectiveChange={handlePerspectiveChange}
+                  handleModelHoverChange={handleModelHoverChange}
+                  handleModelReferenceActivate={handleModelReferenceActivate}
+                  handleModelReferenceDoubleActivate={handleModelReferenceDoubleActivate}
+                  handleModelReferenceContext={handleModelReferenceContext}
+                  onMeasurePick={handleMeasurePick}
+                  onMeasureHoverPoint={handleMeasureHoverPoint}
+                  activeMeasurementId={activeMeasureId}
+                  measureState={measureRulerState}
+                  viewerContextMenu={viewerContextMenu}
+                  onViewerContextMenuClose={closeViewerContextMenu}
+                  onViewerContextMenuCopyReference={copyViewerContextMenuReference}
+                  onViewerContextMenuSelect={selectViewerContextMenuNode}
+                  onViewerContextMenuFocus={focusViewerContextMenuNode}
+                  onViewerContextMenuExitAllIsolate={handleExitIsolate}
+                  onViewerContextMenuHideOther={hideOtherViewerContextMenuNode}
+                  onViewerContextMenuHideAll={hideAllViewerContextMenuNodes}
+                  onViewerContextMenuHide={hideViewerContextMenuNode}
+                  onViewerContextMenuReveal={revealViewerContextMenuNode}
+                  onViewerContextMenuResetZoom={resetZoomViewerContextMenu}
+                  onViewerContextMenuZoomToFit={zoomToFitViewerContextMenu}
+                  onViewerContextMenuExpandSelected={expandSelectedViewerContextMenuNodes}
+                  onViewerContextMenuCollapseSelected={collapseSelectedViewerContextMenuNodes}
+                  onViewerContextMenuExpandAll={expandAllViewerContextMenuNodes}
+                  onViewerContextMenuCollapseAll={collapseAllViewerContextMenuNodes}
+                  handleViewerAlertChange={handleViewerAlertChange}
+                  handleStepModuleTransformDetectedChange={handleStepModuleTransformDetectedChange}
+                  selectionCount={selectionCount}
+                  copyButtonLabel={copyButtonLabel}
+                  copyButtonCountLabel={copyButtonCountLabel}
+                  copyReferenceTipActive={copyReferenceTipActive}
+                  panToolActive={panToolActive}
+                  handleCopySelection={handleCopySelection}
+                  handleAddSelection={typeof onReference === "function" ? handleAddSelection : null}
+                  handleScreenshotCopy={handleScreenshotCopy}
+                />
+              </div>
+
               <FloatingToolBar
                 previewMode={previewMode}
                 selectedEntry={selectedEntry}
@@ -7041,5 +7193,6 @@ function CadFileViewSurface({
     </SidebarProvider>
     </HostReferenceContext.Provider>
     </FileSheetPortalContext.Provider>
+    </HostPanelSlotContext.Provider>
   );
 }

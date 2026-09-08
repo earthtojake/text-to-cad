@@ -7,7 +7,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   FsError,
   IgnoreRules,
+  assertEntryName,
+  createDirectory,
+  createFile,
   detectType,
+  duplicateEntry,
   extensionOf,
   isInside,
   listDirectory,
@@ -15,10 +19,12 @@ import {
   looksBinary,
   pathKinds,
   readTextFile,
+  renameEntry,
   resolveInRoot,
   revisionOf,
   sortEntries,
   toRelative,
+  uniqueName,
   writeTextFile,
 } from "@main/explorer/fs";
 
@@ -240,5 +246,77 @@ describe("pathKinds", () => {
     expect(answers["/etc/passwd"]).toBeNull();
     // Answered under the key it was asked by, however it was spelled.
     expect(answers["src/../README.md"]).toBe("file");
+  });
+});
+
+/**
+ * The tree's edits — the context menu's New file, New folder, Rename and
+ * Duplicate. Each one stays inside the root: a directory outside it is
+ * refused before anything is written, and a name is one segment, so
+ * `../` cannot arrive through the field either.
+ */
+describe("creating, renaming and duplicating", () => {
+  let edits: string;
+
+  beforeAll(async () => {
+    edits = path.join(root, "edits");
+    await fs.mkdir(path.join(edits, "nested"), { recursive: true });
+    await fs.writeFile(path.join(edits, "part.step"), "ISO-10303-21;\n");
+    await fs.writeFile(path.join(edits, "nested", "note.md"), "# note\n");
+    // A door out of the root: a symlink to the machine's temp directory.
+    await fs.symlink(os.tmpdir(), path.join(edits, "escape"));
+  });
+
+  it("creates a file and a folder, answering root-relative paths", async () => {
+    expect(await createFile(root, "edits", "new.txt")).toEqual({ path: "edits/new.txt" });
+    expect(await fs.readFile(path.join(edits, "new.txt"), "utf8")).toBe("");
+    expect(await createDirectory(root, "edits/nested", "deeper")).toEqual({ path: "edits/nested/deeper" });
+    expect((await fs.stat(path.join(edits, "nested", "deeper"))).isDirectory()).toBe(true);
+    // At the root itself, the directory is "".
+    expect(await createFile(root, "", "top.txt")).toEqual({ path: "top.txt" });
+  });
+
+  it("refuses to create over something that is there", async () => {
+    await expect(createFile(root, "edits", "part.step")).rejects.toBeInstanceOf(FsError);
+    await expect(createDirectory(root, "edits", "nested")).rejects.toBeInstanceOf(FsError);
+    expect(await fs.readFile(path.join(edits, "part.step"), "utf8")).toBe("ISO-10303-21;\n");
+  });
+
+  it("refuses a directory outside the root, a symlink out of it included", async () => {
+    await expect(createFile(root, "../", "x.txt")).rejects.toBeInstanceOf(FsError);
+    await expect(createFile(root, os.tmpdir(), "x.txt")).rejects.toBeInstanceOf(FsError);
+    await expect(createDirectory(root, "edits/escape", "x")).rejects.toBeInstanceOf(FsError);
+    await expect(renameEntry(root, "../something", "y")).rejects.toBeInstanceOf(FsError);
+    await expect(duplicateEntry(root, "/etc/hosts")).rejects.toBeInstanceOf(FsError);
+  });
+
+  it("refuses a name that is not one segment", async () => {
+    for (const name of ["", ".", "..", "a/b", "..\\x", "../escape.txt"]) {
+      await expect(createFile(root, "edits", name)).rejects.toBeInstanceOf(FsError);
+      await expect(renameEntry(root, "edits/part.step", name)).rejects.toBeInstanceOf(FsError);
+    }
+    expect(() => assertEntryName("fine name.txt")).not.toThrow();
+  });
+
+  it("renames in place and refuses to replace a neighbour", async () => {
+    expect(await renameEntry(root, "edits/nested/note.md", "notes.md")).toEqual({ path: "edits/nested/notes.md" });
+    expect(await fs.readFile(path.join(edits, "nested", "notes.md"), "utf8")).toBe("# note\n");
+    await expect(renameEntry(root, "edits/nested/notes.md", "deeper")).rejects.toBeInstanceOf(FsError);
+    // The root cannot be renamed from inside itself.
+    await expect(renameEntry(root, "", "other")).rejects.toBeInstanceOf(FsError);
+  });
+
+  it("duplicates beside the original, Finder's way", async () => {
+    expect(await duplicateEntry(root, "edits/part.step")).toEqual({ path: "edits/part copy.step" });
+    expect(await duplicateEntry(root, "edits/part.step")).toEqual({ path: "edits/part copy 2.step" });
+    expect(await fs.readFile(path.join(edits, "part copy 2.step"), "utf8")).toBe("ISO-10303-21;\n");
+    expect(await duplicateEntry(root, "edits/nested")).toEqual({ path: "edits/nested copy" });
+    expect(await fs.readFile(path.join(edits, "nested copy", "notes.md"), "utf8")).toBe("# note\n");
+  });
+
+  it("picks the first free name", async () => {
+    expect(await uniqueName(edits, "brand-new.txt", false)).toBe("brand-new.txt");
+    expect(await uniqueName(edits, "part.step", false)).toBe("part copy 3.step");
+    expect(await uniqueName(edits, "nested", true)).toBe("nested copy 2");
   });
 });

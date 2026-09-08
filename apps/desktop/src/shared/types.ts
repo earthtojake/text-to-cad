@@ -103,6 +103,14 @@ export const SessionSchema = z.object({
   /** Hidden from the sidebar; the row and the agent's transcript both stay. */
   archived: z.boolean().default(false),
   /**
+   * Lifted out of its project into the sidebar's `Pinned` section.
+   *
+   * A flag on the session rather than a list in the settings: pinning is a
+   * fact about the thread, and a list of ids in a settings blob would be a
+   * second place a deleted session has to be forgotten from.
+   */
+  pinned: z.boolean().default(false),
+  /**
    * The commit the working tree was at when the session was created, and when
    * the newest turn began (plan §2, the review's `Last Turn ▾`).
    *
@@ -175,9 +183,32 @@ export const FileTabSchema = z.object({
   path: z.string().nullable(),
   /** The directory `path` is relative to; null is the project (see `ExplorerRootSchema`). */
   root: ExplorerRootSchema.default(null),
-  /** Markdown opens as a preview; `View source` flips this. */
-  viewSource: z.boolean().default(false),
+  /**
+   * Which of the tab's panels is open, by id — and only one is
+   * (`features/explorer/renderers/panels.ts`).
+   *
+   * A file tab has one panel column and a list of things that can be in it:
+   * the file tree (`FILE_PANEL_TREE`), and whatever the file's renderer
+   * declares — markdown's source view, a CAD file's theme editor and file
+   * sheet. Opening one closes whatever was open, so the answer is a single
+   * id rather than a flag per panel; `""` is "nothing open".
+   *
+   * `null` is "the person has not said", which resolves to the renderer's
+   * own default — the tree for a document, the Inspector for a CAD file.
+   * It is not the same as `""`: a tab whose panels were all closed on
+   * purpose must come back closed.
+   */
+  panel: z.string().nullable().default(null),
 });
+
+/**
+ * The file tree's id as one of a file tab's panels.
+ *
+ * Here rather than beside the other panel ids because the explorer store
+ * names it too (`revealPath` opens the tree for the file it reveals), and the
+ * store may not import the renderer's feature code.
+ */
+export const FILE_PANEL_TREE = "tree";
 
 /**
  * What a review is taken against.
@@ -377,37 +408,94 @@ export const AgentOverrideSchema = z.object({
 export type AgentOverride = z.infer<typeof AgentOverrideSchema>;
 
 /**
- * Pane geometry, persisted so the window comes back the way it was left.
- * The three numbers are react-resizable-panels percentages and always sum to
- * 100 for the panes that are open.
- */
-/**
- * The panes' fixed widths, in pixels. The sidebar's and the session's are
- * preferences; the explorer's is whatever the window has left, so it is not
- * one. Codex keeps its sidebar at one width whatever the window does, and its
- * session column has a floor the transcript needs (a 720px reading column
- * with margins fits from 560px up). The shell reads the same table for its
- * limits, so a stored width outside them is clamped by the panel, not
- * trusted.
+ * The two side panes' widths, in pixels, and the floor the session keeps.
+ *
+ * The shell is a flex row: the sidebar and the explorer are each `width: Npx`
+ * (a preference), and the session takes what is left with `min-width` of its
+ * floor. Only the two side panes have a stored width, because only they are
+ * dragged; the session's number here is a floor, not a size.
+ *
+ * `overshoot` is how far *past* a pane's minimum a drag has to go before the
+ * pane collapses. Below the minimum the drag stops dead at it; 40px further
+ * and the pane closes and its toggle appears. The gap is deliberate: a pane
+ * that collapsed the instant a drag touched its minimum closed itself on
+ * every stray pixel of a drag that meant "as narrow as it goes", which is the
+ * defect this table's comment exists to prevent coming back.
  */
 export const PANE_LIMITS = {
-  sidebar: { default: 230, min: 180, max: 360 },
-  session: { default: 560, min: 560 },
-  explorer: { min: 320 },
+  sidebar: { default: 230, min: 180, max: 480 },
+  /** A floor, not a width: the session is flexible and never collapses. */
+  session: { min: 320 },
+  /** The maximum is the window less the session's floor and the sidebar. */
+  explorer: { default: 560, min: 280 },
+  overshoot: 40,
 } as const;
 
 /**
- * The explorer's own collapse is not here: it is closed by default and
- * remembered per project by the renderer (`state/explorer.ts`), because
- * whether the right-hand pane earns its width is a fact about the project
- * rather than about the app.
+ * The sidebar's half of the layout — its width and whether it is on screen,
+ * and nothing else. The explorer's pair of the same two values is per project
+ * and lives in the renderer (`state/explorer.ts`), because whether the
+ * right-hand pane earns its width is a fact about the project rather than
+ * about the app. There is no third value anywhere: what is rendered, where
+ * the toggles are and which pane makes room for the traffic lights are all
+ * derived from these two pairs.
  */
 export const PaneLayoutSchema = z.object({
   sidebarWidth: z.number().min(0).default(PANE_LIMITS.sidebar.default),
-  sessionWidth: z.number().min(0).default(PANE_LIMITS.session.default),
   sidebarCollapsed: z.boolean().default(false),
 });
 export type PaneLayout = z.infer<typeof PaneLayoutSchema>;
+
+/* -------------------------------------------------------------------------- */
+/* The sidebar's sections                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** Which sessions the sidebar lists at all. */
+export const SidebarStatusFilterSchema = z.enum(["active", "archived", "all"]);
+export type SidebarStatusFilter = z.infer<typeof SidebarStatusFilterSchema>;
+
+/**
+ * Where a thread runs, as the filter names it: `local` is the project's own
+ * directory (`none` and `checkout` alike — see `GIT_MODE_LABELS`) and
+ * `worktree` is a folder of its own.
+ */
+export const SidebarEnvironmentFilterSchema = z.enum(["all", "local", "worktree"]);
+export type SidebarEnvironmentFilter = z.infer<typeof SidebarEnvironmentFilterSchema>;
+
+/** A section per project, or one flat list. */
+export const SidebarGroupBySchema = z.enum(["project", "none"]);
+export type SidebarGroupBy = z.infer<typeof SidebarGroupBySchema>;
+
+/** The order inside a section. */
+export const SidebarSortBySchema = z.enum(["activity", "created", "name"]);
+export type SidebarSortBy = z.infer<typeof SidebarSortBySchema>;
+
+/**
+ * The sidebar's filter menu — one global answer, reached from any project's
+ * header (the sliders glyph).
+ *
+ * Global rather than per project on purpose: "show me the archived ones" is a
+ * question about how the list is read, not about one folder, and a person who
+ * set it on one header and found the next header unchanged would have to set
+ * it once per project.
+ *
+ * `collapsedProjects` is the only per-project value here, and it lives in the
+ * settings rather than in `state/projects.ts` so a collapsed section is still
+ * collapsed after a relaunch. There is one copy of it: the store reads this.
+ */
+export const SidebarSettingsSchema = z.object({
+  status: SidebarStatusFilterSchema.default("active"),
+  environment: SidebarEnvironmentFilterSchema.default("all"),
+  groupBy: SidebarGroupBySchema.default("project"),
+  sortBy: SidebarSortBySchema.default("activity"),
+  /** Keep a project's header on screen when nothing under it matches. */
+  showEmptyGroups: z.boolean().default(true),
+  /** A faint branch (or worktree) name after a session's title. */
+  showBranch: z.boolean().default(false),
+  /** Project ids whose section is collapsed to its header. */
+  collapsedProjects: z.array(z.string()).default([]),
+});
+export type SidebarSettings = z.infer<typeof SidebarSettingsSchema>;
 
 /**
  * Everything Settings can change. Every field has a default, so a settings row
@@ -447,6 +535,7 @@ export const SettingsSchema = z.object({
   /** macOS vibrancy behind the sidebar. Off: it costs a compositing pass. */
   translucentSidebar: z.boolean().default(false),
   layout: PaneLayoutSchema.default(PaneLayoutSchema.parse({})),
+  sidebar: SidebarSettingsSchema.default(SidebarSettingsSchema.parse({})),
 
   /* Agents */
   defaultAgentId: z.string().nullable().default(null),
@@ -478,6 +567,38 @@ export type Settings = z.infer<typeof SettingsSchema>;
 /** The all-defaults settings object. */
 export function defaultSettings(): Settings {
   return SettingsSchema.parse({});
+}
+
+/**
+ * A settings **patch**: the fields the caller is actually changing, and
+ * nothing else.
+ *
+ * Not `SettingsSchema.partial()`, which is what this used to be and is a
+ * trap: zod's `.partial()` leaves each field's `.default()` inside the
+ * optional wrapper, and a default still fires for a key that is absent. So
+ * `SettingsSchema.partial().parse({ theme: "dark" })` answers with a *whole*
+ * settings object — and main, which merges a patch over what is stored,
+ * merged every other field's default over the person's settings. One drag of
+ * the sidebar reset the theme, the worktree root and the default agent.
+ *
+ * `removeDefault()` before `optional()` is the fix: an absent key stays
+ * absent. The one cast is because zod cannot express "the same shape with
+ * every field optional" without re-deriving the type, and
+ * `tests/unit/shared/types.test.ts` pins the behaviour the cast claims.
+ */
+export const SettingsPatchSchema = patchSchemaOf(SettingsSchema);
+
+function patchSchemaOf<Shape extends z.ZodRawShape>(
+  schema: z.ZodObject<Shape>,
+): z.ZodType<Partial<z.infer<z.ZodObject<Shape>>>> {
+  const fields = schema.shape as unknown as Record<string, z.ZodTypeAny>;
+  const shape = Object.fromEntries(
+    Object.entries(fields).map(([key, field]) => [
+      key,
+      (field instanceof z.ZodDefault ? (field.removeDefault() as z.ZodTypeAny) : field).optional(),
+    ]),
+  );
+  return z.object(shape) as unknown as z.ZodType<Partial<z.infer<z.ZodObject<Shape>>>>;
 }
 
 /* -------------------------------------------------------------------------- */

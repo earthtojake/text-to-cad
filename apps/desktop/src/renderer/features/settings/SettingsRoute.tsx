@@ -65,11 +65,17 @@ export function SettingsRoute() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
+      {/* Settings replaces the shell, so this bar is the window's top-left:
+          it reserves the traffic lights' room itself, the same way the
+          leftmost pane does (globals.css). */}
       <header
         className="app-drag flex shrink-0 items-center gap-3 px-3"
-        style={{ height: "var(--titlebar-height)" }}
+        data-settings-header
+        style={{
+          height: "var(--titlebar-height)",
+          paddingLeft: "calc(var(--titlebar-inset) + 0.75rem)",
+        }}
       >
-        <div style={{ width: "var(--titlebar-inset)" }} />
         <Button
           className="app-no-drag h-7 gap-1.5 px-2 text-xs"
           onClick={close}

@@ -73,7 +73,7 @@ export type RuntimeHost = {
 
 const PROBE_TIMEOUT_MS = 60_000;
 
-/** Run a program to completion; the runtime's, the viewer's and the plugin manager's one exec. */
+/** Run a program to completion; the runtime's and the viewer's one exec. */
 export function execCommand(
   file: string,
   args: string[],
@@ -160,6 +160,25 @@ export function bundledPaths(resourcesDir: string, platform: NodeJS.Platform, ar
         : path.join(root, "python", "bin", "python3"),
     marker: path.join(root, "runtime.json"),
   };
+}
+
+/**
+ * Where an interpreter's console scripts live — the directory that holds
+ * `cadgen` beside `python`. On posix that is the interpreter's own directory
+ * (`<bundle>/python/bin/`, `.venv/bin/`); on Windows pip writes them to
+ * `Scripts/` beside the interpreter, except in a venv where the interpreter
+ * is already in `Scripts/`. Prepended to a session's `PATH`
+ * (`src/main/acp/sessions.ts`).
+ */
+export function runtimeBinDir(python: string, platform: NodeJS.Platform): string {
+  // The platform's own flavour, so a Windows path is read as one wherever
+  // this runs (the unit test checks all four cases from one machine).
+  const flavour = platform === "win32" ? path.win32 : path.posix;
+  const dir = flavour.dirname(python);
+  if (platform !== "win32") {
+    return dir;
+  }
+  return flavour.basename(dir).toLowerCase() === "scripts" ? dir : flavour.join(dir, "Scripts");
 }
 
 /** What `scripts/bundle-runtime.mjs` records about a bundle. */
@@ -301,6 +320,70 @@ export class CadRuntime {
     const src = path.join(root, "packages", "cadgen", "src");
     const existing = this.host.env.PYTHONPATH;
     return { PYTHONPATH: existing ? `${src}${path.delimiter}${existing}` : src };
+  }
+
+  /**
+   * What goes in front of a session's `PATH` (`src/main/acp/sessions.ts`), so
+   * that `cadgen` and `python` inside an agent's session are the app's own:
+   * the resolved interpreter's bin directory, and — when that directory has no
+   * `cadgen` — a launcher this app writes for it.
+   *
+   * A checkout's `.venv/bin` has the console script pip installed. The bundled
+   * runtime does not: it is a `pip install --target` and
+   * `scripts/bundle-runtime.mjs` prunes the scripts pip wrote there, because
+   * their shebang names the machine that built the bundle. So the launcher is
+   * written instead — one line that runs the resolved interpreter's
+   * `python -m cadgen.cli`, the same dispatcher the console script runs.
+   *
+   * Resolution only, never a probe: this is asked for on every session
+   * connect, and a session that starts is not the place to wait sixty seconds
+   * for `import cadgen`.
+   */
+  sessionPath(): string[] {
+    const resolved = this.resolve();
+    if (!resolved) {
+      return [];
+    }
+    const bin = runtimeBinDir(resolved.python, this.host.platform);
+    const executable = this.host.platform === "win32" ? "cadgen.exe" : "cadgen";
+    if (fs.existsSync(path.join(bin, executable))) {
+      return [bin];
+    }
+    const launcher = this.writeCadgenLauncher(resolved.python);
+    return launcher ? [launcher, bin] : [bin];
+  }
+
+  /**
+   * `<userData>/bin/cadgen`, pointed at `python`. Rewritten only when its
+   * contents would change — the interpreter moved, or the app was updated —
+   * so a launch that changes nothing writes nothing.
+   */
+  private writeCadgenLauncher(python: string): string | null {
+    const dir = path.join(this.host.userData, "bin");
+    const windows = this.host.platform === "win32";
+    const file = path.join(dir, windows ? "cadgen.cmd" : "cadgen");
+    const script = windows
+      ? `@echo off\r\n"${python}" -m cadgen.cli %*\r\n`
+      : `#!/bin/sh\nexec "${python}" -m cadgen.cli "$@"\n`;
+    try {
+      if (fs.readFileSync(file, "utf8") === script) {
+        return dir;
+      }
+    } catch {
+      /* not written yet, or unreadable: write it below */
+    }
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(file, script, { mode: 0o755 });
+      // An existing file keeps its old mode through writeFileSync.
+      if (!windows) {
+        fs.chmodSync(file, 0o755);
+      }
+      return dir;
+    } catch (error) {
+      void this.log(`[launcher] ${file}: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
   }
 
   /** The bundled runtime's layout on this machine. */

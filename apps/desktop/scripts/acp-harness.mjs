@@ -6,21 +6,28 @@
  *
  *   node scripts/acp-harness.mjs <agentId> <cwd> "<prompt>" ["<prompt>"...]
  *       [--record tests/fixtures/acp/<name>.jsonl]   write every wire frame
- *       [--approval ask|approve-for-me]              default approve-for-me
  *       [--load <acpSessionId>]                      session/load instead of session/new
+ *       [--skills <dir>]                             hand a skills root to the session,
+ *                                                    the way the app does (plan §8): the
+ *                                                    dir is sent as additionalDirectories
+ *                                                    and _meta.additionalRoots
  *       [--json]                                     print raw updates as JSON
  *
  * Prints every session update as it arrives, the permission requests it
- * auto-answers, terminal output, and a summary of the reduced SessionState
- * at the end. With `--approval ask` a permission request is answered from
- * stdin (type the option id).
+ * answers, terminal output, and a summary of the reduced SessionState at the
+ * end.
+ *
+ * The app answers no permission request on anybody's behalf — the session's
+ * mode is the only thing that decides what an agent asks about, and in the
+ * app a request that arrives is answered in the transcript. There is no
+ * transcript here, so this script picks the agent's own allow-once option
+ * itself and says that it did; a recording run is unattended.
  *
  * The TypeScript sources are loaded through Vite's SSR module loader so the
  * harness needs no build step and no extra dependency.
  */
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { createServer } from "vite";
@@ -32,21 +39,21 @@ function usage(message) {
     console.error(message);
   }
   console.error(
-    'usage: acp-harness.mjs <agentId> <cwd> "<prompt>" [...] [--record file] [--approval ask|approve-for-me] [--load id] [--json]',
+    'usage: acp-harness.mjs <agentId> <cwd> "<prompt>" [...] [--record file] [--load id] [--skills dir] [--json]',
   );
   process.exit(2);
 }
 
 const positional = [];
-const flags = { record: null, approval: "approve-for-me", load: null, json: false };
+const flags = { record: null, load: null, skills: null, json: false };
 for (let i = 2; i < process.argv.length; i += 1) {
   const arg = process.argv[i];
   if (arg === "--record") {
     flags.record = process.argv[++i];
-  } else if (arg === "--approval") {
-    flags.approval = process.argv[++i];
   } else if (arg === "--load") {
     flags.load = process.argv[++i];
+  } else if (arg === "--skills") {
+    flags.skills = path.resolve(process.argv[++i]);
   } else if (arg === "--json") {
     flags.json = true;
   } else if (arg.startsWith("--")) {
@@ -58,9 +65,6 @@ for (let i = 2; i < process.argv.length; i += 1) {
 const [agentId, cwdArg, ...prompts] = positional;
 if (!agentId || !cwdArg || (prompts.length === 0 && !flags.load)) {
   usage();
-}
-if (flags.approval !== "ask" && flags.approval !== "approve-for-me") {
-  usage("--approval must be ask or approve-for-me");
 }
 const cwd = path.resolve(cwdArg);
 
@@ -102,20 +106,14 @@ try {
     writeFileSync(flags.record, "");
   }
 
-  const rl = flags.approval === "ask" ? readline.createInterface({ input: process.stdin }) : null;
-  const askLine = (question) =>
-    new Promise((resolve) => {
-      rl.question(question, resolve);
-    });
-
   connection = new acp.SessionConnection({
     sessionId: "harness",
     agentId,
     launch: provider.launch,
     env,
     cwd,
+    skillsRoot: flags.skills,
     spawnTerminal: acp.spawnProcessTerminal,
-    approvalMode: flags.approval,
     clientVersion: "harness",
     onStderr: (line) => console.error(`[${agentId} stderr] ${line}`),
     onTerminalOutput: (terminalId, data, exit) => {
@@ -132,14 +130,11 @@ try {
       : undefined,
     onEvent: (event) => {
       printEvent(event);
-      if (event.type === "permission/request" && flags.approval === "ask") {
+      if (event.type === "permission/request") {
         const { request } = event;
-        const options = request.options.map((o) => `${o.optionId} (${o.kind}: ${o.name})`).join("\n    ");
-        void askLine(`  answer [${request.options.map((o) => o.optionId).join("|")}|cancel]:\n    ${options}\n  > `).then(
-          (answer) => {
-            connection.respondPermission(request.requestId, answer.trim() === "cancel" ? null : answer.trim());
-          },
-        );
+        const allowOnce = request.options.find((option) => option.kind === "allow_once") ?? request.options[0];
+        console.log(`  answering ${allowOnce ? allowOnce.optionId : "cancel"}`);
+        connection.respondPermission(request.requestId, allowOnce ? allowOnce.optionId : null);
       }
     },
   });
@@ -179,7 +174,6 @@ try {
   console.log(`[state] last text: ${JSON.stringify(reduce.lastAgentText(state))}`);
   console.log(`[state] tool calls: ${reduce.allToolCalls(state).map((t) => `${t.kind}:${t.title}:${t.status}`).join(", ")}`);
 
-  rl?.close();
   connection.close();
   await connection.exited;
 } finally {

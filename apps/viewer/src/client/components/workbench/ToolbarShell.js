@@ -6,7 +6,7 @@ export default function ToolbarShell({ className, children }) {
   return (
     <div
       className={cn(
-        "cad-glass-surface pointer-events-auto flex min-h-0 flex-col overflow-hidden rounded-md border border-sidebar-border text-sidebar-foreground shadow-sm",
+        "bg-background pointer-events-auto flex min-h-0 flex-col overflow-hidden rounded-md border border-border text-foreground shadow-sm",
         className
       )}
     >

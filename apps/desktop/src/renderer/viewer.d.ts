@@ -25,20 +25,28 @@ declare module "@viewer/file-view" {
     manageDocumentTitle?: boolean;
     onOpenFile?: (path: string, meta: { history?: string }) => void;
     /**
-     * `"desktop"` pins the desktop layout — the sheet beside the model, never
-     * a drawer over it — however narrow the pane; `"auto"` measures.
+     * `"desktop"` pins the desktop layout — the Inspector beside the model,
+     * never a drawer over it — however narrow the pane; `"auto"` measures.
      */
     layout?: "auto" | "desktop";
-    /** The sheet's width in px, when the host sizes it; null for the surface's own. */
+    /** The Inspector's width in px, when the host sizes it; null for the surface's own. */
     fileSheetWidth?: number | null;
     /**
-     * The host's resolved theme. Resolves the CAD "system" preset the same
-     * way and stops the surface writing `.dark` to the document — the host
-     * owns that.
+     * The element the open panel's content is drawn into. Given one, the
+     * surface portals its theme editor / Inspector there and draws no
+     * column of its own — this app's file tab has ONE panel column, shared
+     * with its file tree, so the width, the border, the resize handle and
+     * the toggle are the tab's (`features/explorer/FilePanel.tsx`).
+     */
+    panelSlot?: HTMLElement | null;
+    /**
+     * The host's resolved theme. Resolves the CAD "system" theme the same
+     * way — its light/dark half, and the `--background` it paints the scene
+     * on — and stops the surface writing `.dark` to the document, because
+     * the host owns that. There is no backdrop prop: the surface reads this
+     * app's token itself, and only for that one theme.
      */
     colorScheme?: "light" | "dark" | null;
-    /** Hex colour the scene is painted on, so the model sits on this app's ground. */
-    sceneBackground?: string | null;
     /**
      * Select a reference — `o1.2`, `label.f45`, a comma-separated list — once
      * the model is up. A new `key` selects again; null selects nothing.
@@ -57,6 +65,19 @@ declare module "@viewer/file-view" {
      * another picture; the result goes to `onCapture` either way.
      */
     captureRequest?: { key: number } | null;
+    /**
+     * The surface's two panels, driven from here and drawn into `panelSlot`.
+     *
+     * A boolean makes that panel controlled: the surface stops keeping its
+     * own flag and reports every change through the matching callback,
+     * including the one it makes itself — a measurement landing opens the
+     * Inspector. `layout="desktop"` hides the surface's own top bar, so the
+     * nav row's toggles are the only door this app has to them.
+     */
+    themeEditing?: boolean | null;
+    onThemeEditingChange?: (next: boolean) => void;
+    fileSheetOpen?: boolean | null;
+    onFileSheetOpenChange?: (next: boolean) => void;
   }>;
 
   /** Publishes `origin` to the subtree; `useViewerOrigin` reads it back. */

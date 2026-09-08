@@ -10,6 +10,12 @@
  * and the client's own narration — goes through `dispatch`, which reduces
  * and then tells whoever is listening (the IPC layer, the harness).
  *
+ * Every session is also handed what this app gives an agent (plan §8): the
+ * Hardcore MCP server in `mcpServers`, and the skills root as an additional
+ * directory — `additionalDirectories` and `_meta.additionalRoots` both, on
+ * `session/new` and `session/load` alike. For an agent that does not read
+ * either, `preamble` rides in front of the first prompt instead.
+ *
  * Two things happen at the stream level rather than through the SDK:
  *
  *   - Every frame in both directions can be recorded (the harness writes
@@ -44,7 +50,6 @@ import {
 import { configOptions, reduce, sessionModes } from "../../shared/acp/reduce";
 import {
   initialSessionState,
-  type ApprovalMode,
   type PromptBlock,
   type RawSessionUpdate,
   type SessionEvent,
@@ -84,8 +89,19 @@ export type SessionConnectionOptions = {
   cwd: string;
   /** Passed to `session/new` and `session/load`; P5 adds the Hardcore server. */
   mcpServers?: McpServer[];
+  /**
+   * The skills root (`src/main/cad/skills.ts`), named in `session/new` and
+   * `session/load` as an additional directory — under both spellings, always
+   * (see `sessionRoots` below).
+   */
+  skillsRoot?: string | null;
+  /**
+   * Text put in front of the FIRST prompt of a session created here, for an
+   * agent that does not load the skills root by itself. Sent once: a resumed
+   * session already has it in its transcript.
+   */
+  preamble?: string | null;
   spawnTerminal: SpawnTerminal;
-  approvalMode?: ApprovalMode;
   clientVersion?: string;
   onEvent?: (event: SessionEvent, state: SessionState) => void;
   onTerminalOutput?: TerminalOutputListener;
@@ -106,19 +122,14 @@ export class SessionConnection {
 
   private stateValue: SessionState;
   private initializeResponse: InitializeResponse | null = null;
+  /** The preamble, until the first prompt has carried it. */
+  private pendingPreamble: string | null = null;
   private closing = false;
   private exit: ProcessExit | null = null;
   private readonly stderrTail: string[] = [];
 
   constructor(private readonly options: SessionConnectionOptions) {
     this.stateValue = initialSessionState(options.sessionId, options.agentId);
-    if (options.approvalMode) {
-      this.stateValue = reduce(this.stateValue, {
-        type: "approval",
-        mode: options.approvalMode,
-        at: Date.now(),
-      });
-    }
 
     this.process = trackChild(
       spawn(options.launch.command, options.launch.args, {
@@ -164,7 +175,6 @@ export class SessionConnection {
       terminals: this.terminals,
       dispatch: (event) => this.dispatch(event),
       onFilesChanged: options.onFilesChanged,
-      approvalMode: options.approvalMode,
     });
 
     this.agent = new ClientSideConnection(() => this.client, this.tappedStream());
@@ -243,10 +253,14 @@ export class SessionConnection {
       response = await this.agent.newSession({
         cwd: this.options.cwd,
         mcpServers: this.options.mcpServers ?? [],
+        ...this.sessionRoots(),
       });
     } catch (error) {
       throw this.describe(error, "session/new");
     }
+    // A session this app created: its first prompt carries the preamble, if
+    // the agent needs one. `loadSession` never sets it.
+    this.pendingPreamble = this.options.preamble ?? null;
     this.dispatch({
       type: "session/connected",
       acpSessionId: response.sessionId,
@@ -282,6 +296,7 @@ export class SessionConnection {
         sessionId: acpSessionId,
         cwd: this.options.cwd,
         mcpServers: this.options.mcpServers ?? [],
+        ...this.sessionRoots(),
       });
     } catch (error) {
       const described = this.describe(error, "session/load");
@@ -307,14 +322,36 @@ export class SessionConnection {
     return response;
   }
 
+  /**
+   * The skills root, in the two spellings the adapters read: the standard
+   * `additionalDirectories` (ACP, SDK 1.4.0) and the older
+   * `_meta.additionalRoots` extension. Both, always, for every agent — an
+   * adapter reads whichever it knows and ignores the other, and which one a
+   * given version reads is not something this app can detect.
+   */
+  private sessionRoots(): { additionalDirectories: string[]; _meta: { additionalRoots: string[] } } | Record<string, never> {
+    const root = this.options.skillsRoot;
+    if (!root) {
+      return {};
+    }
+    return { additionalDirectories: [root], _meta: { additionalRoots: [root] } };
+  }
+
   /** Send a turn. Resolves with the stop reason; rejects (after dispatching `prompt/error`) on failure. */
   async prompt(content: PromptBlock[], turnId = `turn-${Date.now()}`): Promise<PromptResponse> {
     const acpSessionId = this.requireSession();
+    // The transcript shows what the person wrote; the preamble is a block the
+    // AGENT gets, once, in front of it.
+    const preamble = this.pendingPreamble;
+    this.pendingPreamble = null;
     this.dispatch({ type: "prompt/start", turnId, content, at: Date.now() });
     try {
       const response = await this.agent.prompt({
         sessionId: acpSessionId,
-        prompt: content.map(toContentBlock),
+        prompt: [
+          ...(preamble ? [{ type: "text" as const, text: preamble }] : []),
+          ...content.map(toContentBlock),
+        ],
       });
       this.dispatch({
         type: "prompt/end",
@@ -373,11 +410,6 @@ export class SessionConnection {
 
   respondPermission(requestId: string, optionId: string | null): boolean {
     return this.client.respondPermission(requestId, optionId);
-  }
-
-  setApprovalMode(mode: ApprovalMode): void {
-    this.client.approvalMode = mode;
-    this.dispatch({ type: "approval", mode, at: Date.now() });
   }
 
   /** Kill the adapter. Idempotent. */

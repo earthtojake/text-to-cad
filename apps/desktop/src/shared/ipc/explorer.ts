@@ -133,10 +133,30 @@ export const explorerIpc = {
     ),
     /** Images and PDFs, as a `data:` URL the renderer can put in a `src`. */
     readBinary: invoke(AtPath, BinaryFileSchema),
-    /** The absolute path, for the breadcrumb's copy action and `Open ▾`. */
+    /** The absolute path, for the menus' `Copy path`. */
     absolutePath: invoke(AtPath, z.object({ path: z.string() })),
     /** Open a file in the OS's default application for its type. */
     openDefault: invoke(AtPath, z.void()),
+    /**
+     * `Open with…`: the platform's application picker, then the file in what
+     * was picked. Cancelling the picker is an ordinary outcome, not an error.
+     */
+    openWith: invoke(AtPath, z.void()),
+    /** Show the entry in Finder / Explorer / the file manager. */
+    reveal: invoke(AtPath, z.void()),
+
+    /*
+     * The tree's edits (the context menus). `path` names the directory for
+     * the two creates and the entry for the rest; a rename takes a *name*,
+     * one segment, so the entry stays where it is. Each answers with the
+     * root-relative path of what it made, which the tree selects.
+     */
+    createFile: invoke(AtPath.extend({ name: z.string().min(1) }), z.object({ path: z.string() })),
+    createDirectory: invoke(AtPath.extend({ name: z.string().min(1) }), z.object({ path: z.string() })),
+    rename: invoke(AtPath.extend({ name: z.string().min(1) }), z.object({ path: z.string() })),
+    duplicate: invoke(AtPath, z.object({ path: z.string() })),
+    /** The OS trash, never `rm`: the one destructive item is the reversible one. */
+    trash: invoke(AtPath, z.void()),
 
     /** Start (or join) the root's watcher. Refcounted in main. */
     watch: invoke(InRoot, z.void()),
@@ -152,8 +172,9 @@ export const explorerIpc = {
       InProject.extend({
         /**
          * Defaults to the project root; a tab opened while a worktree
-         * session is active passes that worktree. Checked like a root: the
-         * project or one of its worktrees, nothing else.
+         * session is active passes that worktree, and `Open in terminal` on
+         * a folder passes that folder. Checked against the roots: the
+         * project, one of its worktrees, or a directory under either.
          */
         cwd: z.string().optional(),
         cols: z.number().int().positive().optional(),

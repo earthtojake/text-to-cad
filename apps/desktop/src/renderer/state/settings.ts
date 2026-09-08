@@ -1,6 +1,12 @@
 import { create } from "zustand";
 
-import type { PaneLayout, Settings, ThemePreference } from "@shared/types";
+import {
+  SidebarSettingsSchema,
+  type PaneLayout,
+  type Settings,
+  type SidebarSettings,
+  type ThemePreference,
+} from "@shared/types";
 
 /**
  * Settings live in main's sqlite, not in the renderer. This store is a cache
@@ -16,6 +22,8 @@ type SettingsState = {
   patch: (patch: Partial<Settings>) => Promise<void>;
   setTheme: (theme: ThemePreference) => Promise<void>;
   setLayout: (layout: Partial<PaneLayout>) => Promise<void>;
+  /** The sidebar's filter menu and its collapsed sections. */
+  setSidebar: (sidebar: Partial<SidebarSettings>) => Promise<void>;
   /** Applied by the `settings.changed` subscription in `subscribeToMain`. */
   receive: (settings: Settings) => void;
 };
@@ -50,5 +58,28 @@ export const useSettings = create<SettingsState>((set, get) => ({
     return get().patch({ layout: { ...current.layout, ...layout } });
   },
 
+  setSidebar: (sidebar) => {
+    const current = get().settings;
+    if (!current) {
+      return Promise.resolve();
+    }
+    return get().patch({ sidebar: { ...current.sidebar, ...sidebar } });
+  },
+
   receive: (settings) => set({ settings, ready: true }),
 }));
+
+/**
+ * The sidebar's settings, defaulted.
+ *
+ * The shell renders before the first read lands (`ready`), and the sidebar is
+ * the first thing on screen — so the answer for "not loaded yet" is the same
+ * all-defaults object the schema produces rather than a null the components
+ * would each have to guard. Frozen once, because it is compared by identity:
+ * a fresh object per call would re-render every row on every keystroke.
+ */
+const DEFAULT_SIDEBAR: SidebarSettings = SidebarSettingsSchema.parse({});
+
+export function useSidebarSettings(): SidebarSettings {
+  return useSettings((state) => state.settings?.sidebar ?? DEFAULT_SIDEBAR);
+}

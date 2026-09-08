@@ -62,7 +62,7 @@ function mount(props: Partial<Parameters<typeof FileTree>[0]> = {}) {
     <FileTree
       activePath={null}
       fsRevision={0}
-      onCollapse={() => {}}
+      
       onOpen={() => {}}
       projectId="p1"
       projectName="text-to-cad"
@@ -136,7 +136,7 @@ describe("FileTree", () => {
       <FileTree
         activePath="apps/viewer/src/main.jsx"
         fsRevision={0}
-        onCollapse={() => {}}
+        
         onOpen={() => {}}
         projectId="p1"
         projectName="text-to-cad"
@@ -164,6 +164,52 @@ describe("FileTree", () => {
     view.unmount();
     mount({ activePath: "README.md" });
     await waitFor(() => expect(rowExists("apps/viewer/src")).toBe(true));
+  });
+
+  it("aims one context menu at the row that was clicked, and at the root elsewhere", async () => {
+    const user = userEvent.setup();
+    mount();
+    await waitFor(() => expect(rowExists("README.md")).toBe(true));
+
+    // A file's menu on a file row…
+    await user.pointer({ keys: "[MouseRight]", target: row("README.md") });
+    await waitFor(() => expect(screen.getByRole("menu")).toBeInTheDocument());
+    expect(screen.getByRole("menu")).toHaveAttribute("data-entry-menu", "README.md");
+    expect(screen.getByRole("menuitem", { name: /Duplicate/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /New folder/ })).toBeNull();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+
+    // …and the root's on the space under the rows.
+    await user.pointer({ keys: "[MouseRight]", target: screen.getByRole("tree") });
+    await waitFor(() => expect(screen.getByRole("menu")).toBeInTheDocument());
+    expect(screen.getByRole("menu")).toHaveAttribute("data-entry-menu", "");
+    expect(screen.getByRole("menuitem", { name: /New folder/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Move to Trash/ })).toBeNull();
+    await user.keyboard("{Escape}");
+  });
+
+  it("renames the cursor row on F2 and puts the name back on Escape", async () => {
+    const user = userEvent.setup();
+    mount();
+    await waitFor(() => expect(rowExists("README.md")).toBe(true));
+
+    await user.click(row("README.md"));
+    screen.getByRole("tree").focus();
+    await user.keyboard("{F2}");
+    const field = await screen.findByLabelText("Rename README.md");
+    expect(field).toHaveFocus();
+    // The stem is selected, not the extension.
+    expect((field as HTMLInputElement).selectionStart).toBe(0);
+    expect((field as HTMLInputElement).selectionEnd).toBe("README".length);
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByLabelText("Rename README.md")).toBeNull());
+    expect(window.hardcore.explorer.rename).not.toHaveBeenCalled();
+
+    // Enter commits through main, and the row follows the answer.
+    await user.keyboard("{F2}");
+    await user.keyboard("{Control>}a{/Control}NOTES.md{Enter}");
+    await waitFor(() => expect(window.hardcore.explorer.rename).toHaveBeenCalledWith({ projectId: "p1", path: "README.md", name: "NOTES.md" }));
   });
 
   it("filters to a flat list of paths", async () => {

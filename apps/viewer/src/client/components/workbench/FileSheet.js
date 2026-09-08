@@ -1,4 +1,5 @@
 import { Children, createContext, useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
@@ -67,6 +68,18 @@ export const FILE_SHEET_STATUS_TEXT_CLASSES = "px-2 text-tiny leading-4 text-mut
  * whole window (file-view/CadFileView.js).
  */
 export const FileSheetPortalContext = createContext(null);
+
+/**
+ * The element the open panel's CONTENT is drawn in, when a host owns the
+ * frame around it (file-view/hostPanelSlot.js, `panelSlot`).
+ *
+ * Null — the standalone viewer — means this component draws the frame
+ * itself: the aside below, with its width, its border and its resize
+ * handle. An element means the host has a panel column of its own, shared
+ * with its own panels, and every sheet becomes just its body inside it. The
+ * difference is a frame, not a content: one implementation either way.
+ */
+export const HostPanelSlotContext = createContext(null);
 
 export const FILE_SHEET_UNIT_SUFFIX_CLASSES = "pointer-events-none absolute inset-y-0 right-2 flex items-center text-micro text-muted-foreground";
 // A trigger must clip and ellipsize its own value: the Radix trigger only sets
@@ -871,6 +884,7 @@ export default function FileSheet({
   children
 }) {
   const portalContainer = useContext(FileSheetPortalContext);
+  const hostPanelSlot = useContext(HostPanelSlotContext);
   const desktopWidth = `min(${normalizeFileSheetWidth(width)}px, ${DESKTOP_FILE_SHEET_MAX_WIDTH})`;
   const sheetStyle = isDesktop
     ? {
@@ -897,6 +911,22 @@ export default function FileSheet({
     </div>
   );
 
+  // A host owns the frame: this sheet is its body and nothing else. No aside,
+  // no width, no resize handle and no drawer — the host's panel column has
+  // one of each, shared with its own panels, which is the whole point of
+  // handing the box over (file-view/hostPanelSlot.js). Compact mode is the
+  // host's problem too: its pane, its breakpoints.
+  if (hostPanelSlot) {
+    return open
+      ? createPortal(
+        <div className="flex h-full min-h-0 flex-col" data-file-sheet={title || ""}>
+          {sheetBody}
+        </div>,
+        hostPanelSlot
+      )
+      : null;
+  }
+
   if (!isDesktop) {
     return (
       // Modal only where the window is ours: a modal dialog makes everything
@@ -911,7 +941,7 @@ export default function FileSheet({
           // host that is a click anywhere else in the application. It stays
           // until the person closes it or the layout widens into the aside.
           onInteractOutside={portalContainer ? (event) => event.preventDefault() : undefined}
-          className="cad-glass-surface gap-0 p-0 text-sidebar-foreground"
+          className="bg-background gap-0 p-0 text-foreground"
           style={sheetStyle}
           aria-label={title}
         >
@@ -932,7 +962,7 @@ export default function FileSheet({
   return (
     <aside
       className={cn(
-        "cad-glass-surface pointer-events-auto z-30 flex h-full max-w-[calc(100vw_-_0.75rem)] flex-col border-l border-sidebar-border text-sidebar-foreground",
+        "bg-background pointer-events-auto z-30 flex h-full max-w-[calc(100vw_-_0.75rem)] flex-col border-l border-border text-foreground",
         isDesktop
           ? "relative shrink-0"
           : "absolute inset-y-0 right-0 shadow-xl"

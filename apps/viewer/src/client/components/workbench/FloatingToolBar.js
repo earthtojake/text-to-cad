@@ -22,7 +22,7 @@ import { ZoomControl } from "../viewer/ZoomControl";
 import { CAD_WORKSPACE_TOOLBAR_DESKTOP_WIDTH_CLASS } from "./ToolbarShell";
 
 const FLOATING_TOOL_BAR_SURFACE_CLASS =
-  "cad-glass-surface border border-sidebar-border text-sidebar-foreground shadow-sm";
+  "bg-background border border-border text-foreground shadow-sm";
 const PREVIEW_TOOLBAR_HIDE_DELAY_MS = 2500;
 
 // In orbit/preview mode the toolbar stays available but auto-hides: it appears

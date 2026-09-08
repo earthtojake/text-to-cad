@@ -169,7 +169,6 @@ import {
   isPinchWheelEvent,
   isTrackpadLikeWheelEvent,
   KEYBOARD_ORBIT_NUDGE_RAD,
-  normalizeViewportFrameInsets,
   readViewPlaneOrientation,
   stepKeyboardOrbit,
   WHEEL_PINCH_DELTA_BOOST,
@@ -238,7 +237,7 @@ const CAMERA_TRANSITION_EASING = Object.freeze({
 const AUTO_ZOOM_PADDING = DEFAULT_AUTO_ZOOM_PADDING;
 const CAD_COORDINATE_SYSTEM = "cad-z-up-v1";
 const ROBOT_COORDINATE_SYSTEM = "cad-z-up-robot-framing-v2";
-const DISPLAY_TOOLBAR_CLASSES = "cad-glass-surface pointer-events-auto absolute z-30 inline-flex h-8 w-fit items-center gap-0.5 rounded-md border border-sidebar-border p-1 text-sidebar-foreground shadow-sm";
+const DISPLAY_TOOLBAR_CLASSES = "bg-background pointer-events-auto absolute z-30 inline-flex h-8 w-fit items-center gap-0.5 rounded-md border border-border p-1 text-foreground shadow-sm";
 const DISPLAY_TOOLBAR_BUTTON_CLASSES = "grid size-6 shrink-0 place-items-center rounded-sm text-sidebar-foreground/70 transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 disabled:pointer-events-none disabled:opacity-50";
 const VIEW_PLANE_CONTROL_SIZE = "7.5rem";
 const VIEW_PLANE_CONTROL_GAP = "0.5rem";
@@ -514,7 +513,6 @@ function setRuntimeZoomPercent(runtime, percent) {
     runtime.zoomBaseHalfHeight = normalizedBaseHalfHeight;
     camera.zoom = nextZoom * (halfHeight / normalizedBaseHalfHeight);
     camera.updateProjectionMatrix?.();
-    reapplyRuntimeCameraFrameInsets(runtime);
   } else {
     const target = runtime.controls.target;
     const offset = camera.position.clone().sub(target);
@@ -537,7 +535,6 @@ function setRuntimeZoomPercent(runtime, percent) {
     camera.position.copy(target.clone().add(direction.multiplyScalar(nextDistance)));
     camera.zoom = 1;
     camera.updateProjectionMatrix?.();
-    reapplyRuntimeCameraFrameInsets(runtime);
   }
   camera.lookAt(runtime.controls.target);
   runtime.controls.update?.();
@@ -662,80 +659,13 @@ function updateStageEffects(runtime, viewerTheme, themeSettings, radius, floorZ 
   }
 }
 
-function getViewportFrameMetrics(runtime, frameInsets = {}) {
+// The canvas IS the viewport: it fills the box between the sidebar and the
+// sheet and nothing else, so the camera frames and centres in the whole of it.
+function getViewportMetrics(runtime) {
   const canvas = runtime?.renderer?.domElement;
   const width = Math.max(1, canvas?.clientWidth || canvas?.parentElement?.clientWidth || 1);
   const height = Math.max(1, canvas?.clientHeight || canvas?.parentElement?.clientHeight || 1);
-  const normalizedInsets = normalizeViewportFrameInsets(frameInsets);
-  const left = clamp(normalizedInsets.left, 0, Math.max(width - 1, 0));
-  const right = clamp(normalizedInsets.right, 0, Math.max(width - left - 1, 0));
-  const top = clamp(normalizedInsets.top, 0, Math.max(height - 1, 0));
-  const bottom = clamp(normalizedInsets.bottom, 0, Math.max(height - top - 1, 0));
-  const framedWidth = Math.max(1, width - left - right);
-  const framedHeight = Math.max(1, height - top - bottom);
-  const centerX = left + framedWidth / 2;
-  const centerY = top + framedHeight / 2;
-
-  return {
-    width,
-    height,
-    top,
-    right,
-    bottom,
-    left,
-    framedWidth,
-    framedHeight,
-    aspect: framedWidth / framedHeight,
-    offsetNdcX: (centerX / width) * 2 - 1,
-    offsetNdcY: 1 - (centerY / height) * 2
-  };
-}
-
-function getViewportFrameCrop(runtime, frameInsets = {}) {
-  const canvas = runtime?.renderer?.domElement;
-  const metrics = getViewportFrameMetrics(runtime, frameInsets);
-  const pixelWidth = Math.max(1, canvas?.width || metrics.width);
-  const pixelHeight = Math.max(1, canvas?.height || metrics.height);
-  const scaleX = pixelWidth / Math.max(metrics.width, 1);
-  const scaleY = pixelHeight / Math.max(metrics.height, 1);
-  const x = Math.round(metrics.left * scaleX);
-  const y = Math.round(metrics.top * scaleY);
-  const right = Math.round(metrics.right * scaleX);
-  const bottom = Math.round(metrics.bottom * scaleY);
-
-  return {
-    x,
-    y,
-    width: Math.max(1, pixelWidth - x - right),
-    height: Math.max(1, pixelHeight - y - bottom)
-  };
-}
-
-function applyCameraFrameInsets(runtime, frameInsets = {}, { updateProjection = true } = {}) {
-  const camera = runtime?.camera;
-  if (!camera?.projectionMatrix?.elements) {
-    return;
-  }
-  const metrics = getViewportFrameMetrics(runtime, frameInsets);
-  const offsetX = (metrics.right - metrics.left) / 2;
-  const offsetY = (metrics.bottom - metrics.top) / 2;
-  if ((Math.abs(offsetX) > 1e-6 || Math.abs(offsetY) > 1e-6) && typeof camera.setViewOffset === "function") {
-    camera.setViewOffset(metrics.width, metrics.height, offsetX, offsetY, metrics.width, metrics.height);
-  } else if (typeof camera.clearViewOffset === "function") {
-    camera.clearViewOffset();
-  } else if (updateProjection) {
-    camera.updateProjectionMatrix();
-  }
-  if (camera.projectionMatrixInverse?.copy) {
-    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
-  }
-}
-
-function reapplyRuntimeCameraFrameInsets(runtime, { updateProjection = false } = {}) {
-  if (typeof runtime?.applyCameraFrameInsets !== "function") {
-    return;
-  }
-  runtime.applyCameraFrameInsets(runtime, runtime.frameInsetsRef?.current, { updateProjection });
+  return { width, height, aspect: width / height };
 }
 
 function getFitDistanceForBoundingSphere(camera, radius, sceneScaleMode, frameAspect = camera.aspect) {
@@ -763,9 +693,7 @@ function syncRuntimeCameraClipPlanes(runtime, near, far) {
 function getOrthographicHalfHeightForBoundingSphere(radius, sceneScaleMode, frameMetrics = {}, padding = AUTO_ZOOM_PADDING) {
   const safeRadius = Math.max(radius * padding, getSceneScaleSettings(sceneScaleMode).minModelRadius);
   const frameAspect = Math.max(Number(frameMetrics.aspect) || 1, 1e-3);
-  const viewportHeight = Math.max(Number(frameMetrics.height) || 1, 1);
-  const framedHeight = Math.max(Number(frameMetrics.framedHeight) || viewportHeight, 1);
-  return (safeRadius / Math.min(frameAspect, 1)) * (viewportHeight / framedHeight);
+  return safeRadius / Math.min(frameAspect, 1);
 }
 
 function setOrthographicCameraHalfHeight(runtime, halfHeight, frameMetrics = null) {
@@ -773,7 +701,7 @@ function setOrthographicCameraHalfHeight(runtime, halfHeight, frameMetrics = nul
   if (!camera?.isOrthographicCamera) {
     return false;
   }
-  const metrics = frameMetrics || getViewportFrameMetrics(runtime, runtime?.frameInsetsRef?.current);
+  const metrics = frameMetrics || getViewportMetrics(runtime);
   const nextHalfHeight = Math.max(Number(halfHeight) || 0, 1e-3);
   const previousHalfHeight = Number(camera.userData?.cadHalfHeight);
   const previousLeft = Number(camera.left);
@@ -792,7 +720,7 @@ function setOrthographicCameraHalfHeight(runtime, halfHeight, frameMetrics = nul
 }
 
 function syncOrthographicCameraFrame(runtime, radius, sceneScaleMode, frameMetrics = null) {
-  const metrics = frameMetrics || getViewportFrameMetrics(runtime, runtime?.frameInsetsRef?.current);
+  const metrics = frameMetrics || getViewportMetrics(runtime);
   return setOrthographicCameraHalfHeight(
     runtime,
     getOrthographicHalfHeightForBoundingSphere(radius, sceneScaleMode, metrics),
@@ -811,7 +739,6 @@ function frameRuntimeCameraForBoundingSphere(runtime, radius, sceneScaleMode, fr
   } else {
     activeCamera?.updateProjectionMatrix?.();
   }
-  applyCameraFrameInsets(runtime, runtime?.frameInsetsRef?.current, { updateProjection: false });
   return fitDistance;
 }
 
@@ -821,9 +748,7 @@ function runtimeViewportFitScale(runtime, frameMetrics) {
   return viewportFitScale({
     orthographic: camera?.isOrthographicCamera === true,
     fov: Number(fitCamera?.fov) || 48,
-    aspect: frameMetrics?.aspect,
-    height: frameMetrics?.height,
-    framedHeight: frameMetrics?.framedHeight
+    aspect: frameMetrics?.aspect
   });
 }
 
@@ -834,7 +759,7 @@ function captureRuntimeViewportFitScale(runtime, frameMetrics = null) {
   if (!runtime?.camera) {
     return;
   }
-  const metrics = frameMetrics || getViewportFrameMetrics(runtime, runtime.frameInsetsRef?.current);
+  const metrics = frameMetrics || getViewportMetrics(runtime);
   runtime.viewportFitScale = runtimeViewportFitScale(runtime, metrics);
 }
 
@@ -852,9 +777,9 @@ function scaleRuntimeZoomBaseline(runtime, ratio) {
   }
 }
 
-// A viewport change -- the window resizing, a side sheet opening, closing or
-// being dragged wider -- leaves the camera framed for the viewport it no longer
-// has. The vertical field of view is fixed and the orthographic half-height is
+// A viewport change -- the window resizing, or a side sheet opening, closing or
+// being dragged wider and resizing the canvas beside it -- leaves the camera
+// framed for the viewport it no longer has. The vertical field of view is fixed and the orthographic half-height is
 // held constant across an aspect change, so a narrowing viewport crops a wide
 // model instead of shrinking it. Rescale the camera by the change in fit scale so
 // the model keeps its share of the framed area.
@@ -867,7 +792,7 @@ function syncRuntimeViewportFraming(runtime, frameMetrics = null) {
   if (!runtime?.camera) {
     return false;
   }
-  const metrics = frameMetrics || getViewportFrameMetrics(runtime, runtime.frameInsetsRef?.current);
+  const metrics = frameMetrics || getViewportMetrics(runtime);
   const previousFitScale = Number(runtime.viewportFitScale);
   const nextFitScale = runtimeViewportFitScale(runtime, metrics);
   // Claim the new viewport up front, including on the paths that bail below: the
@@ -918,7 +843,6 @@ function syncRuntimeViewportFraming(runtime, frameMetrics = null) {
     camera.lookAt(target);
   }
   scaleRuntimeZoomBaseline(runtime, appliedRatio);
-  reapplyRuntimeCameraFrameInsets(runtime);
   // Bare controls.update() ticks OrbitControls' auto-rotate branch, so a resize
   // during a preview orbit would nudge the camera an extra step.
   if (runtime.controls) {
@@ -960,7 +884,7 @@ function syncRuntimeCameraProjection(runtime, projection, { scheduleIdle = true,
     runtime.controls.object = nextCamera;
   }
   runtime.projection = nextProjection;
-  const frameMetrics = getViewportFrameMetrics(runtime, runtime.frameInsetsRef?.current);
+  const frameMetrics = getViewportMetrics(runtime);
   if (nextCamera.isOrthographicCamera && previousCamera !== nextCamera) {
     const previousOrthographicHalfHeight = Number(previousCamera?.userData?.cadHalfHeight);
     const preservedHalfHeight = Number.isFinite(previousPerspectiveHalfHeight) && previousPerspectiveHalfHeight > 0
@@ -974,7 +898,6 @@ function syncRuntimeCameraProjection(runtime, projection, { scheduleIdle = true,
   } else {
     runtime.syncCameraViewport?.(nextCamera, frameMetrics.width, frameMetrics.height);
   }
-  applyCameraFrameInsets(runtime, runtime.frameInsetsRef?.current, { updateProjection: false });
   // The switch preserves the framing rather than re-fitting, but perspective and
   // orthographic measure the viewport differently, so the reference a later
   // resize compares against has to be re-read in the new projection's terms.
@@ -1068,7 +991,6 @@ function applyPerspectiveSnapshot(runtime, perspective, { scheduleIdle = true } 
   if (Number.isFinite(nextPerspective.zoom) && nextPerspective.zoom > 0) {
     runtime.camera.zoom = nextPerspective.zoom;
     runtime.camera.updateProjectionMatrix?.();
-    reapplyRuntimeCameraFrameInsets(runtime);
   }
   runtime.camera.lookAt(runtime.controls.target);
   runtime.controls.update();
@@ -1257,7 +1179,7 @@ function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
   if (!normalizedBounds) {
     return false;
   }
-  const frameMetrics = getViewportFrameMetrics(runtime, runtime.frameInsetsRef?.current);
+  const frameMetrics = getViewportMetrics(runtime);
   const frame = autoZoomFrameForBounds(runtime.THREE, {
     camera: runtime.camera,
     controls: runtime.controls,
@@ -1344,7 +1266,6 @@ function stepCameraTransition(runtime, timestamp) {
   }
   const startOrthographicHalfHeight = Number(transition.startOrthographicHalfHeight);
   const endOrthographicHalfHeight = Number(transition.endOrthographicHalfHeight);
-  let projectionUpdated = false;
   if (
     runtime.camera?.isOrthographicCamera &&
     Number.isFinite(startOrthographicHalfHeight) &&
@@ -1353,15 +1274,10 @@ function stepCameraTransition(runtime, timestamp) {
   ) {
     const nextHalfHeight = startOrthographicHalfHeight + ((endOrthographicHalfHeight - startOrthographicHalfHeight) * eased);
     setOrthographicCameraHalfHeight(runtime, nextHalfHeight);
-    reapplyRuntimeCameraFrameInsets(runtime);
-    projectionUpdated = true;
   }
   if (Number.isFinite(transition.startZoom) && Number.isFinite(transition.endZoom)) {
     runtime.camera.zoom = transition.startZoom + ((transition.endZoom - transition.startZoom) * eased);
     runtime.camera.updateProjectionMatrix?.();
-    if (!projectionUpdated) {
-      reapplyRuntimeCameraFrameInsets(runtime);
-    }
   }
   runtime.camera.lookAt(target);
 
@@ -1595,7 +1511,6 @@ const CadViewer = forwardRef(function CadViewer({
   viewPlaneOffsetBottom = 16,
   viewPlaneHeader = null,
   compactViewPlane = false,
-  viewportFrameInsets = null,
   isLoading = false,
   pickMode = VIEWER_PICK_MODE.AUTO,
   panToolActive = false,
@@ -1650,15 +1565,6 @@ const CadViewer = forwardRef(function CadViewer({
     ? meshData.geometrySource
     : meshData;
   const defaultGridRadius = defaultSceneGridRadius(normalizedSceneScaleMode);
-  const normalizedViewportFrameInsets = useMemo(
-    () => normalizeViewportFrameInsets(viewportFrameInsets),
-    [
-      viewportFrameInsets?.top,
-      viewportFrameInsets?.right,
-      viewportFrameInsets?.bottom,
-      viewportFrameInsets?.left
-    ]
-  );
   const interactionHostRef = useRef(null);
   const mountRef = useRef(null);
   const drawingCanvasRef = useRef(null);
@@ -1685,7 +1591,6 @@ const CadViewer = forwardRef(function CadViewer({
     enabled: false,
     layout: null
   });
-  const viewportFrameInsetsRef = useRef(normalizedViewportFrameInsets);
   const framedModelKeyRef = useRef("");
   const modelTransformRef = useRef({
     modelKey: "",
@@ -1989,28 +1894,6 @@ const CadViewer = forwardRef(function CadViewer({
   perspectivePropRef.current = perspective;
   modelKeyRef.current = modelKey;
   sceneScaleModeRef.current = normalizedSceneScaleMode;
-  useLayoutEffect(() => {
-    viewportFrameInsetsRef.current = normalizedViewportFrameInsets;
-    const runtime = runtimeRef.current;
-    if (!runtime) {
-      return;
-    }
-    // Sheets and the sidebar do not resize the canvas -- they inset the framed
-    // area over it -- so a sheet opening never reaches the resize path. It still
-    // shrinks the space the model has to live in, and needs the same reframing.
-    if (syncRuntimeViewportFraming(runtime)) {
-      syncCameraZoomPercent(runtime);
-      emitPerspectiveChange(runtime);
-    }
-    applyCameraFrameInsets(runtime, normalizedViewportFrameInsets);
-    runtime.requestRender?.();
-  }, [
-    normalizedViewportFrameInsets.top,
-    normalizedViewportFrameInsets.right,
-    normalizedViewportFrameInsets.bottom,
-    normalizedViewportFrameInsets.left,
-    viewerReadyTick
-  ]);
   // The pan tool remaps the primary drag from orbit to pan. Right-drag stays
   // pan either way, so the habitual gesture keeps working while the tool is on.
   //
@@ -3019,8 +2902,7 @@ const CadViewer = forwardRef(function CadViewer({
 
       renderDrawingOverlay();
       return await buildCompositeScreenshotBlob(runtime, drawingCanvasRef.current, {
-        backgroundColor: resolveElementBackgroundColor(runtime.renderer.domElement),
-        crop: getViewportFrameCrop(runtime, viewportFrameInsetsRef.current)
+        backgroundColor: resolveElementBackgroundColor(runtime.renderer.domElement)
       });
     },
     // Viewport LOD sampler (design/unified-tessellation.md Phase 5): projection
@@ -3257,8 +3139,6 @@ const CadViewer = forwardRef(function CadViewer({
     getViewerThemeValue,
     getPixelRatioCap,
     applySceneBackground: applyActiveSceneBackground,
-    applyCameraFrameInsets,
-    frameInsetsRef: viewportFrameInsetsRef,
     onViewportResize: handleViewportResize,
     applyInitialPerspective,
     updateGridHelper: updateActiveGridHelper,
@@ -3858,7 +3738,6 @@ const CadViewer = forwardRef(function CadViewer({
     edgesGroup.updateMatrixWorld(true);
 
     syncRuntimeCameraClipPlanes(runtime, Math.max(radius / 1200, 0.01), Math.max(radius * 600, 2000));
-    applyCameraFrameInsets(runtime, viewportFrameInsetsRef.current, { updateProjection: false });
     controls.minDistance = Math.max(radius / 2200, 0.02);
     controls.maxDistance = Math.max(radius * 140, 50);
     controls.zoomSpeed = DEFAULT_ZOOM_SPEED;
@@ -3883,14 +3762,13 @@ const CadViewer = forwardRef(function CadViewer({
           !applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false })
         ) {
           cancelCameraTransition(runtime);
-          const frameMetrics = getViewportFrameMetrics(runtime, viewportFrameInsetsRef.current);
+          const frameMetrics = getViewportMetrics(runtime);
           const camera = runtime.camera;
           const fitDistance = frameRuntimeCameraForBoundingSphere(runtime, radius, normalizedSceneScaleMode, frameMetrics);
           const viewDirection = new THREE.Vector3(...DEFAULT_VIEW_DIRECTION).normalize();
           camera.zoom = 1;
           camera.up.set(...WORLD_UP);
           frameRuntimeCameraForBoundingSphere(runtime, radius, normalizedSceneScaleMode, frameMetrics);
-          applyCameraFrameInsets(runtime, viewportFrameInsetsRef.current, { updateProjection: false });
           // The model is at its authored coordinates, so the camera frames the
           // model's WORLD bounds centre — the model is never moved to the camera.
           const worldCenter = center.clone().add(modelOffset);
@@ -4934,7 +4812,7 @@ const CadViewer = forwardRef(function CadViewer({
         activateDefaultViewPlane={activateDefaultViewPlane}
       />
       {error ? (
-        <p className="cad-glass-popover pointer-events-none absolute left-4 top-24 z-20 rounded-lg border border-error-border px-4 py-3 text-sm text-error shadow-sm sm:top-20">
+        <p className="bg-popover pointer-events-none absolute left-4 top-24 z-20 rounded-lg border border-error-border px-4 py-3 text-sm text-error shadow-sm sm:top-20">
           {error}
         </p>
       ) : null}

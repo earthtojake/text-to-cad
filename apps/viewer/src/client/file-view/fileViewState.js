@@ -42,11 +42,9 @@ export {
   DESKTOP_TAB_TOOLS_MAX_WIDTH,
   DESKTOP_TAB_TOOLS_MIN_WIDTH,
   hostPrefersDarkForColorScheme,
-  normalizeHostSceneBackground,
   normalizeHostSheetWidth,
   resolveHostLayoutMode
 } from "./hostLayout.js";
-export const CAD_WORKSPACE_TOP_BAR_HEIGHT = 44;
 export const DEFAULT_LARGE_FILE_STATE = Object.freeze({
   selectableTopologyEnabled: false
 });

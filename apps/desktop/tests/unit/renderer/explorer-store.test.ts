@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { tabTitle, useExplorer } from "@renderer/state/explorer";
+import { dedupeFileTabs, tabTitle, useExplorer } from "@renderer/state/explorer";
 
 /**
  * The strip's behaviour, without React.
@@ -21,7 +21,6 @@ function reset() {
     tabs: [],
     activeId: null,
     ready: true,
-    expanded: false,
     collapsed: true,
     fsRevision: 0,
     changedPaths: [],
@@ -56,6 +55,27 @@ describe("the explorer strip", () => {
     useExplorer.setState({ projectId: null });
     expect(useExplorer.getState().open("file")).toBeNull();
     expect(useExplorer.getState().tabs).toHaveLength(0);
+  });
+
+  /**
+   * No project, no explorer: `Shell` does not render the pane, so the toggle
+   * is not drawn and the shortcut and the palette's command reach a store
+   * with nowhere to file a preference. It must not write one under a
+   * placeholder key that a real project would then never see.
+   */
+  it("has no explorer to toggle without a project", () => {
+    useExplorer.setState({ projectId: null, collapsed: true });
+    useExplorer.getState().toggleCollapsed();
+    expect(useExplorer.getState().collapsed).toBe(true);
+    expect(window.localStorage.getItem("hardcore.explorer.collapsed")).toBeNull();
+  });
+
+  it("remembers the toggle for the project it was made in", () => {
+    useExplorer.getState().toggleCollapsed();
+    expect(useExplorer.getState().collapsed).toBe(false);
+    expect(JSON.parse(window.localStorage.getItem("hardcore.explorer.collapsed") ?? "{}")).toEqual({
+      [PROJECT]: false,
+    });
   });
 
   it("selects the neighbour when the active tab closes", () => {
@@ -101,6 +121,29 @@ describe("the explorer strip", () => {
     const again = useExplorer.getState().openFile("README.md");
     expect(again!.id).toBe(first!.id);
     expect(useExplorer.getState().tabs).toHaveLength(1);
+  });
+
+  it("never holds two tabs for one file, whichever door opened it", () => {
+    const { open, openFile } = useExplorer.getState();
+    const first = openFile("src/a.ts");
+    const again = open("file", { path: "src/a.ts", root: null });
+    expect(again?.id).toBe(first?.id);
+    expect(useExplorer.getState().tabs).toHaveLength(1);
+    // The same path in another root is another file.
+    open("file", { path: "src/a.ts", root: "/tmp/worktree" });
+    expect(useExplorer.getState().tabs).toHaveLength(2);
+  });
+
+  it("drops a duplicate that reaches the strip by any other path, keeping the selection", () => {
+    const tabs = [
+      { id: "t1", kind: "file", path: "a.ts", root: null },
+      { id: "t2", kind: "file", path: "a.ts", root: null },
+      { id: "t3", kind: "file", path: null, root: null },
+      { id: "t4", kind: "file", path: null, root: null },
+    ] as never[];
+    const result = dedupeFileTabs(tabs, "t2");
+    expect(result.tabs.map((tab: { id: string }) => tab.id)).toEqual(["t1", "t3", "t4"]);
+    expect(result.activeId).toBe("t1");
   });
 
   it("fills the blank tab the + button made instead of stacking one", () => {
@@ -249,10 +292,10 @@ describe("the explorer strip", () => {
 
   it("titles a tab by what a person would call it", () => {
     const base = { id: "t", projectId: PROJECT, order: 0 } as const;
-    expect(tabTitle({ ...base, kind: "file", path: "src/wrist.step", root: null, viewSource: false })).toBe(
+    expect(tabTitle({ ...base, kind: "file", path: "src/wrist.step", root: null, panel: null })).toBe(
       "wrist.step",
     );
-    expect(tabTitle({ ...base, kind: "file", path: null, root: null, viewSource: false })).toBe("Untitled");
+    expect(tabTitle({ ...base, kind: "file", path: null, root: null, panel: null })).toBe("Untitled");
     expect(tabTitle({ ...base, kind: "browser", url: "https://example.com/a/b" })).toBe(
       "example.com",
     );

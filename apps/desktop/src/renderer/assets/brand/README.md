@@ -1,6 +1,6 @@
 # Sidebar mark
 
-This asset embeds the original blue app icon (`apps/desktop/build/icon.png`)
+This asset embeds the original blue app icon (the star from `apps/docs/public/favicon.png`, also used as the desktop icon before the reorganization)
 unchanged. An SVG saturation filter removes its color, and an exterior clip
 removes the surrounding app-icon tile. All of the original star facets are
 preserved; the mark is not regenerated or redrawn.

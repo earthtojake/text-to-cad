@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
@@ -29,8 +33,31 @@ afterEach(async () => {
   }
 });
 
-async function connect(bridge: (method: string, params: unknown) => Promise<unknown>) {
-  const server = createServer(bridge, { version: "9.9.9", cwd: "/proj" });
+const temps: string[] = [];
+afterEach(() => {
+  for (const dir of temps.splice(0)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/** A materialised skills root, in the layout this server reads. */
+function skillsRoot(skills: Record<string, string>): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-mcp-skills-"));
+  temps.push(root);
+  for (const [name, description] of Object.entries(skills)) {
+    const dir = path.join(root, ".claude", "skills", name);
+    fs.mkdirSync(path.join(dir, "references"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: ${description}\n---\n\nbody\n`);
+    fs.writeFileSync(path.join(dir, "references", "selectors.md"), "the references page\n");
+  }
+  return root;
+}
+
+async function connect(
+  bridge: (method: string, params: unknown) => Promise<unknown>,
+  options: { skillsRoot?: string | null } = {},
+) {
+  const server = createServer(bridge, { version: "9.9.9", cwd: "/proj", skillsRoot: options.skillsRoot ?? null });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   const client = new Client({ name: "test", version: "0" });
@@ -40,11 +67,20 @@ async function connect(bridge: (method: string, params: unknown) => Promise<unkn
 }
 
 describe("the Hardcore MCP server", () => {
-  it("lists the six tools with descriptions written for an agent", async () => {
+  it("lists its tools with descriptions written for an agent", async () => {
     const client = await connect(fakeBridge().bridge);
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual(
-      ["attach_snapshot", "list_open_tabs", "open_file", "open_url", "reveal", "viewer_state"].sort(),
+      [
+        "attach_snapshot",
+        "list_open_tabs",
+        "list_skills",
+        "open_file",
+        "open_url",
+        "read_skill",
+        "reveal",
+        "viewer_state",
+      ].sort(),
     );
     const openFile = tools.find((tool) => tool.name === "open_file")!;
     expect(openFile.description).toContain("never");
@@ -126,5 +162,65 @@ describe("httpBridge", () => {
     } finally {
       globalThis.fetch = realFetch;
     }
+  });
+});
+
+describe("the skills tools", () => {
+  it("lists what the app put on disk, and tells the agent to read cad first", async () => {
+    const root = skillsRoot({ cad: "Make CAD.", "hardcore-app-use": "Use this app." });
+    const client = await connect(fakeBridge().bridge, { skillsRoot: root });
+
+    const tools = (await client.listTools()).tools;
+    const list = tools.find((tool) => tool.name === "list_skills")!;
+    expect(list.description).toMatch(/read `?cad`? before any CAD/i);
+    expect(tools.find((tool) => tool.name === "read_skill")!.description).toContain("hardcore-app-use");
+
+    const result = await client.callTool({ name: "list_skills", arguments: {} });
+    expect(result.isError).toBeFalsy();
+    const answer = JSON.parse((result.content as Array<{ text: string }>)[0]!.text);
+    expect(answer.root).toBe(path.join(root, ".claude", "skills"));
+    expect(answer.skills).toEqual([
+      { name: "cad", description: "Make CAD." },
+      { name: "hardcore-app-use", description: "Use this app." },
+    ]);
+  });
+
+  it("reads a SKILL.md, and a file inside the skill", async () => {
+    const root = skillsRoot({ cad: "Make CAD." });
+    const client = await connect(fakeBridge().bridge, { skillsRoot: root });
+
+    const skill = await client.callTool({ name: "read_skill", arguments: { name: "cad" } });
+    const first = JSON.parse((skill.content as Array<{ text: string }>)[0]!.text);
+    expect(first.path).toBe(path.join("cad", "SKILL.md"));
+    expect(first.text).toContain("description: Make CAD.");
+
+    const reference = await client.callTool({
+      name: "read_skill",
+      arguments: { name: "cad", path: "references/selectors.md" },
+    });
+    expect(JSON.parse((reference.content as Array<{ text: string }>)[0]!.text).text).toBe("the references page\n");
+  });
+
+  it("refuses a skill that does not exist, a path outside one, and a session with no root", async () => {
+    const root = skillsRoot({ cad: "Make CAD." });
+    const client = await connect(fakeBridge().bridge, { skillsRoot: root });
+
+    const missing = await client.callTool({ name: "read_skill", arguments: { name: "nope" } });
+    expect(missing.isError).toBe(true);
+    expect((missing.content as Array<{ text: string }>)[0]!.text).toContain("list_skills");
+
+    const escape = await client.callTool({
+      name: "read_skill",
+      arguments: { name: "cad", path: "../hardcore-app-use/SKILL.md" },
+    });
+    expect(escape.isError).toBe(true);
+
+    const traversal = await client.callTool({ name: "read_skill", arguments: { name: "../..", path: "SKILL.md" } });
+    expect(traversal.isError).toBe(true);
+
+    const bare = await connect(fakeBridge().bridge, { skillsRoot: null });
+    const listed = await bare.callTool({ name: "list_skills", arguments: {} });
+    expect(listed.isError).toBe(true);
+    expect((await bare.callTool({ name: "read_skill", arguments: { name: "cad" } })).isError).toBe(true);
   });
 });

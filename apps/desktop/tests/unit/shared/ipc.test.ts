@@ -51,9 +51,9 @@ describe("the contract", () => {
       "sessions.setMode",
       "sessions.setConfigOption",
       "sessions.respondPermission",
-      "sessions.setApprovalMode",
       "sessions.rename",
       "sessions.archive",
+      "sessions.setPinned",
       "sessions.close",
       "sessions.delete",
       "agents.list",
@@ -65,9 +65,8 @@ describe("the contract", () => {
       "agentOptions.list",
       "agentOptions.probe",
       "agentOptions.setDefaults",
-      "plugins.status",
-      "plugins.statusAll",
-      "plugins.install",
+      "agentOptions.setEffort",
+      "skills.info",
       "runtime.status",
       "runtime.repair",
       "dialogs.chooseDirectory",
@@ -87,6 +86,13 @@ describe("the contract", () => {
       "explorer.readBinary",
       "explorer.absolutePath",
       "explorer.openDefault",
+      "explorer.openWith",
+      "explorer.reveal",
+      "explorer.createFile",
+      "explorer.createDirectory",
+      "explorer.rename",
+      "explorer.duplicate",
+      "explorer.trash",
       "explorer.watch",
       "explorer.unwatch",
       "explorer.loadTabs",
@@ -115,10 +121,16 @@ describe("the contract", () => {
   it("makes every explorer read name the project its path is relative to", () => {
     // A path on its own would be a request to read any file on the machine.
     const channels = Object.fromEntries(ipcChannels(ipcContract));
-    for (const name of ["explorer.readText", "explorer.stat", "explorer.readBinary"]) {
+    for (const name of ["explorer.readText", "explorer.stat", "explorer.readBinary", "explorer.trash", "explorer.duplicate", "explorer.reveal"]) {
       const channel = channels[name];
       expect(channel?.request.safeParse({ path: "a.txt" }).success).toBe(false);
       expect(channel?.request.safeParse({ projectId: "p1", path: "a.txt" }).success).toBe(true);
+    }
+    // The edits that take a name take a non-empty one.
+    for (const name of ["explorer.createFile", "explorer.createDirectory", "explorer.rename"]) {
+      const channel = channels[name];
+      expect(channel?.request.safeParse({ projectId: "p1", path: "a", name: "" }).success).toBe(false);
+      expect(channel?.request.safeParse({ projectId: "p1", path: "a", name: "b.txt" }).success).toBe(true);
     }
   });
 

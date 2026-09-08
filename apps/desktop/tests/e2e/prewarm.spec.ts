@@ -37,7 +37,6 @@ test("opening a project starts the viewer and the daemon before any file is open
   const env = {
     ...inherited,
     NODE_ENV: "test",
-    HARDCORE_NO_PLUGIN_INSTALL: "1",
     // Pre-warming is off under test for every other spec; this one is about it.
     HARDCORE_PREWARM: "1",
     ...(process.platform === "win32" ? {} : { CADGEN_DAEMON_SOCKET: path.join(socketDir, "d.sock") }),
@@ -57,7 +56,7 @@ test("opening a project starts the viewer and the daemon before any file is open
 
     await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repoRoot);
     // The strip binds to the project on its own; binding is what warms.
-    await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+    await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 
     await expect.poll(() => lines.some((line) => /\[viewer\] (started|reused) http:\/\/127\.0\.0\.1:\d+ for /.test(line)), { timeout: 90_000 }).toBe(true);
     await expect.poll(() => lines.some((line) => /\[daemon\] warming /.test(line)), { timeout: 30_000 }).toBe(true);

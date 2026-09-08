@@ -27,6 +27,7 @@ import {
   AppInfoSchema,
   ProjectSchema,
   SessionSchema,
+  SettingsPatchSchema,
   SettingsSchema,
   WindowStateSchema,
 } from "../types";
@@ -42,8 +43,8 @@ import { acpContract, acpEvents } from "./acp";
 import { agentOptionsContract, agentOptionsEvents } from "./agent-options";
 import { agentsContract, agentsEvents } from "./agents";
 import { dialogsContract } from "./dialogs";
-import { pluginsContract, pluginsEvents } from "./plugins";
 import { runtimeContract, runtimeEvents } from "./runtime";
+import { skillsContract } from "./skills";
 import { cadEvents, cadIpc } from "./cad";
 import { explorerEvents, explorerIpc } from "./explorer";
 import { gitIpc } from "./git";
@@ -92,8 +93,8 @@ export const ipcContract = defineIpc({
   /** P2: `agentOptions.*` — the model and effort chips before a session exists. */
   ...agentOptionsContract,
 
-  /** P6, stubbed until P5: the bundled plugin's state per agent. */
-  ...pluginsContract,
+  /** P5: the skills root every session is handed. */
+  ...skillsContract,
 
   /** P6, stubbed until P5: the managed Python and cadgen runtime. */
   ...runtimeContract,
@@ -103,8 +104,14 @@ export const ipcContract = defineIpc({
 
   settings: {
     get: invoke(z.void(), SettingsSchema),
-    /** Merges a partial update and answers with the whole settings object. */
-    set: invoke(SettingsSchema.partial(), SettingsSchema),
+    /**
+     * Merges a patch and answers with the whole settings object. The request
+     * is `SettingsPatchSchema`, not `SettingsSchema.partial()` — see the
+     * comment on it: `.partial()` keeps the defaults, and a "patch" carrying
+     * every default is a patch that resets everything the caller did not
+     * mention.
+     */
+    set: invoke(SettingsPatchSchema, SettingsSchema),
   },
 
   window: {
@@ -157,6 +164,13 @@ export const ipcEvents = {
       "toggle-explorer",
       "new-session",
       "command-palette",
+      /**
+       * The top level's history: the project new-session screens and the
+       * threads the session pane has shown (`state/history.ts`). Not the
+       * explorer's tabs.
+       */
+      "navigate-back",
+      "navigate-forward",
       /** The files-changed pill: show the session's diff in the explorer's Review tab (P3). */
       "open-review",
     ]),
@@ -174,7 +188,6 @@ export const ipcEvents = {
   ...acpEvents,
   ...agentsEvents,
   ...agentOptionsEvents,
-  ...pluginsEvents,
   ...runtimeEvents,
   // `files.changed`, `terminal.data` and `terminal.exit` (P3).
   ...explorerEvents,

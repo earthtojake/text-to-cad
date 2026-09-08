@@ -21,8 +21,8 @@ import { cadHandlers } from "./cad";
 import { dialogsHandlers } from "./dialogs";
 import { explorerHandlers, initExplorerServices } from "./explorer";
 import { gitHandlers } from "./git";
-import { pluginsHandlers } from "./plugins";
 import { runtimeHandlers } from "./runtime";
+import { skillsHandlers } from "./skills";
 import { IpcError, broadcast, registerIpc, type IpcContext } from "./register";
 
 export { broadcast } from "./register";
@@ -90,8 +90,8 @@ const handlers = {
   /** P2: what each agent's sessions can be configured with, between sessions. */
   ...agentOptionsHandlers,
 
-  /** P5: the bundled plugin's state per agent. */
-  ...pluginsHandlers,
+  /** P5: the skills root every session is handed. */
+  ...skillsHandlers,
 
   /** P5: the managed Python and cadgen runtime. */
   ...runtimeHandlers,
@@ -153,9 +153,11 @@ const handlers = {
   ...cadHandlers,
 } satisfies Parameters<typeof registerIpc<IpcContract>>[1];
 
+// The words on the native chooser are the words on the control that opened
+// it — `Open folder…`, on the project chip's menu and the two empty states.
 const openProjectDialog = {
-  title: "Add project",
-  buttonLabel: "Add project",
+  title: "Open folder",
+  buttonLabel: "Open folder",
   properties: ["openDirectory", "createDirectory"],
 } as const satisfies Electron.OpenDialogOptions;
 

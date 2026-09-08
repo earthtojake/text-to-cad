@@ -65,7 +65,7 @@ test.beforeAll(async () => {
 
   const project = await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repoRoot);
   await expect(page.getByText(projectName).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 
   const session = await page.evaluate(
     ({ projectId, cwd }) => window.hardcore.sessions.create({ projectId, agentId: "claude-code", gitMode: "none", cwd }),
@@ -176,18 +176,6 @@ test("the viewer's Add to prompt lands a chip, and the camera an image", async (
   await expect(captures).toHaveCount(1, { timeout: 15_000 });
   await page.waitForTimeout(500);
   await page.screenshot({ path: path.join(screenshots, "composer-capture.png"), animations: "disabled" });
-
-  // And the same capture asked for from the composer's `+`, which is the
-  // path the desktop added (`captureRequest`): a CAD tab is open, so the
-  // item is live, and it lands a second picture in the same place.
-  await page.locator("[data-composer]").getByRole("button", { name: "Add to this prompt" }).click();
-  const capture = page.getByRole("menuitem", { name: "Ask about this view" });
-  await expect(capture).not.toHaveAttribute("data-disabled", "");
-  await capture.click();
-  await expect(captures).toHaveCount(2, { timeout: 15_000 });
-  // One of the two goes back, so the assertions below still see one image.
-  await page.locator("[data-composer]").getByRole("button", { name: "Remove" }).last().click();
-  await expect(captures).toHaveCount(1);
 
   // Sent: the text carries the token, the image goes as an image block.
   // A click in the middle of the box lands on the chip and selects it (a

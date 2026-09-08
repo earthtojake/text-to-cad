@@ -38,18 +38,28 @@ type UiState = {
   route: "app" | "settings";
   settingsSection: SettingsSection;
   commandPaletteOpen: boolean;
+  /**
+   * What is in the palette's box.
+   *
+   * The palette has no filter of its own beyond that box — every row carries
+   * a `value` and cmdk scores the query against it. One way to narrow the
+   * list, and it is the one the person can see the shape of.
+   */
+  commandPaletteQuery: string;
 
   openSettings: (section?: SettingsSection) => void;
   closeSettings: () => void;
   setSettingsSection: (section: SettingsSection) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   toggleCommandPalette: () => void;
+  setCommandPaletteQuery: (query: string) => void;
 };
 
 export const useUi = create<UiState>((set) => ({
   route: "app",
   settingsSection: "general",
   commandPaletteOpen: false,
+  commandPaletteQuery: "",
 
   openSettings: (section) =>
     set((state) => ({
@@ -59,7 +69,13 @@ export const useUi = create<UiState>((set) => ({
     })),
   closeSettings: () => set({ route: "app" }),
   setSettingsSection: (settingsSection) => set({ settingsSection }),
-  setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
+  setCommandPaletteOpen: (commandPaletteOpen) =>
+    set(commandPaletteOpen ? { commandPaletteOpen } : { commandPaletteOpen, commandPaletteQuery: "" }),
   toggleCommandPalette: () =>
-    set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),
+    set((state) =>
+      state.commandPaletteOpen
+        ? { commandPaletteOpen: false, commandPaletteQuery: "" }
+        : { commandPaletteOpen: true },
+    ),
+  setCommandPaletteQuery: (commandPaletteQuery) => set({ commandPaletteQuery }),
 }));

@@ -864,7 +864,7 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
       <TooltipContent
         side="bottom"
         sideOffset={6}
-        className="cad-glass-popover w-fit max-w-[calc(100vw-1rem)] border border-border bg-popover p-2 text-left text-popover-foreground shadow-lg shadow-black/10"
+        className="w-fit max-w-[calc(100vw-1rem)] border border-border bg-popover p-2 text-left text-popover-foreground shadow-lg shadow-black/10"
         arrowClassName="bg-popover fill-popover"
       >
         <div className="inline-flex max-w-full flex-col gap-3">
@@ -1040,7 +1040,7 @@ export default function CadWorkspaceTopBar({
 
   return (
     <header
-      className="cad-glass-surface pointer-events-auto flex h-11 shrink-0 items-center gap-2 border-b border-sidebar-border px-2 text-sidebar-foreground"
+      className="bg-background pointer-events-auto flex h-11 shrink-0 items-center gap-2 border-b border-border px-2 text-foreground"
     >
       {navigationAvailable ? (
         <SidebarTrigger

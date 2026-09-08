@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Image, Paperclip, Plus, X } from "lucide-react";
+import { Paperclip, X } from "lucide-react";
 import { cn } from "cn";
 import { toast } from "sonner";
 
@@ -13,10 +13,8 @@ import {
 import {
   PromptInput,
   PromptInputButton,
-  PromptInputFooter,
   PromptInputHeader,
   PromptInputSubmit,
-  PromptInputTools,
   usePromptInputAttachments,
   type PromptInputMessage,
 } from "@renderer/components/ai-elements/prompt-input";
@@ -34,19 +32,11 @@ import {
   QueueSectionTrigger,
 } from "@renderer/components/ai-elements/queue";
 import type { FileUIPart } from "@renderer/components/ai-elements/types";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@renderer/components/ui/dropdown-menu";
 import { NEW_SESSION_KEY, useComposer, useQueue } from "@renderer/state/composer";
-import { useExplorer } from "@renderer/state/explorer";
 import { useProjects } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
 import type { AvailableCommand, PromptBlock } from "@shared/acp/types";
 
-import { isCadPath } from "../explorer/renderers/registry";
 import { dataUrlOf, rememberFiles } from "./composer/attachments";
 import { AttachmentImagePreview } from "./composer/AttachmentImagePreview";
 import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEditor";
@@ -58,10 +48,18 @@ import { ReferenceScopeContext } from "./composer/ReferenceScope";
  * Shift+Enter is a newline, Escape stops a running turn, a pasted image
  * becomes an attachment. Typing `/` opens the agent's slash commands.
  *
- * One row, Codex's: `+` and the caller's `chips` on the left, the caller's
- * `trailing` chips (the model, the effort) then send on the right. Nothing
- * wraps — the chips truncate — so the box is the same height at 560px as at
- * 1200px.
+ * The box holds the sentence and send, and nothing else. Everything the
+ * caller supplies — `+`, `chips` on the left, `trailing` on the right — is
+ * one row **under** the box (Claude Code's), so the thing being typed into
+ * is a box with writing in it rather than a box with a toolbar in it.
+ * Nothing wraps — the chips truncate — so that row is the same height at
+ * 560px as at 1200px.
+ *
+ * **The box is one row until there is more to show.** Empty, it is a single
+ * line with send centred at its right end; it grows with the sentence to
+ * eight lines and then scrolls inside (the min and the max are the editor's,
+ * `composer/ComposerEditor`). A composer that starts three lines tall is
+ * three lines of nothing, and the prompt most people send is short.
  *
  * There is no microphone. There is no dictation backend behind one, and on
  * macOS the system's own dictation already types into this box; a button
@@ -75,8 +73,9 @@ import { ReferenceScopeContext } from "./composer/ReferenceScope";
  * The input is `composer/ComposerEditor`, not AI Elements' textarea: a CAD
  * reference typed, pasted or copied in from the viewer is drawn as a chip in
  * the sentence and sent as its plain token. `PromptInput` itself — the form,
- * the attachments, the footer — is untouched; the editor keeps the form's
- * `message` field for it.
+ * its attachments, its submit — is untouched; the editor keeps the form's
+ * `message` field for it. Its footer is not used: send sits beside the
+ * sentence, not under it.
  */
 export function Composer({
   sessionId,
@@ -95,7 +94,7 @@ export function Composer({
   sessionId: string | null;
   newDraftKey?: string;
   chips: React.ReactNode;
-  /** Chips on the right, before the mic and send. */
+  /** The row's right-hand end: the model, the effort, the context ring. */
   trailing?: React.ReactNode;
   commands: AvailableCommand[];
   /** `streaming` shows stop; `submitted` shows a spinner (the session is being created). */
@@ -132,6 +131,9 @@ export function Composer({
   useEffect(() => {
     if (focusRequest !== null) textRef.current?.focus();
   }, [focusRequest]);
+
+  // The form's attachments, for the `+` that now sits outside the form.
+  const attachmentsRef = useRef<AttachmentsHandle | null>(null);
   const queue = useQueue(sessionId);
   const dequeue = useComposer((state) => state.dequeue);
 
@@ -207,72 +209,127 @@ export function Composer({
         />
       ) : null}
 
-      <PromptInput
-        className={cn("rounded-2xl shadow-xs", disabled && "opacity-70")}
-        maxFileSize={20 * 1024 * 1024}
-        multiple
-        onError={(error) => toast.error(error.message)}
-        onSubmit={handleSubmit}
-      >
-        <AttachmentStrip />
-        <AttachmentSink draftKey={draftKey} />
-        {/*
-         * No <PromptInputBody>: it renders `display: contents`, which the
-         * InputGroup's direct-child stacking selector does not see, and the
-         * composer collapses to one row.
-         */}
-        <ReferenceScopeContext.Provider value={referenceScope}>
-          <ComposerEditorField
-            autoFocus={autoFocus}
-            disabled={disabled}
-            handle={textRef}
-            onChange={setText}
-            onKeyDown={(event) => {
-              if (!slash.open) {
-                if (event.key === "Escape" && status === "streaming" && onStop) {
-                  event.preventDefault();
-                  onStop();
-                }
-                return;
-              }
-              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                event.preventDefault();
-                slash.move(event.key === "ArrowDown" ? 1 : -1);
-              } else if ((event.key === "Enter" || event.key === "Tab") && slash.matches.length > 0) {
-                event.preventDefault();
-                const command = slash.matches[slash.selected];
-                if (command) {
-                  setText(`/${command.name} `);
-                }
-              } else if (event.key === "Escape") {
-                event.preventDefault();
-                slash.dismiss();
-              }
-            }}
-            placeholder={placeholder}
-            value={text}
-          />
-        </ReferenceScopeContext.Provider>
-        <PromptInputFooter className="flex-nowrap px-2 pb-1.5">
-          <PromptInputTools className="min-w-0 flex-1 flex-nowrap gap-0.5 overflow-hidden">
-            <AttachButton disabled={disabled} />
-            {chips}
-          </PromptInputTools>
-          <div className="flex min-w-0 shrink-0 items-center gap-0.5">
-            {trailing}
+      <div className="flex flex-col gap-1">
+        <PromptInput
+          className={cn(
+            "rounded-2xl shadow-xs",
+            // shadcn's `input-group` is a fixed `h-9` unless one of its own
+            // children is a textarea or a block-aligned addon. The editor is
+            // neither, and send is now on its row rather than in a footer, so
+            // without this the box is 36px tall whatever is in it — and
+            // `overflow-hidden` on the group means the second line is simply
+            // not drawn. The height comes from the editor's min/max instead.
+            "[&>[data-slot=input-group]]:h-auto",
+            disabled && "opacity-70",
+          )}
+          maxFileSize={20 * 1024 * 1024}
+          multiple
+          onError={(error) => toast.error(error.message)}
+          onSubmit={handleSubmit}
+        >
+          <AttachmentStrip />
+          <AttachmentSink draftKey={draftKey} />
+          <AttachmentBridge targetRef={attachmentsRef} />
+          {/*
+           * No <PromptInputBody>: it renders `display: contents`, which the
+           * InputGroup's direct-child stacking selector does not see, and the
+           * composer collapses to one row.
+           */}
+          {/*
+           * The sentence and send share one row, so an empty composer is one
+           * line tall with send centred on it (Codex's, Claude Code's). Send
+           * in a footer under the box made the smallest possible composer two
+           * rows: a line to type in and a line holding one button.
+           */}
+          <div className="flex w-full min-w-0 items-center gap-1 pr-1.5">
+            <ReferenceScopeContext.Provider value={referenceScope}>
+              <ComposerEditorField
+                autoFocus={autoFocus}
+                disabled={disabled}
+                handle={textRef}
+                onChange={setText}
+                onKeyDown={(event) => {
+                  if (!slash.open) {
+                    if (event.key === "Escape" && status === "streaming" && onStop) {
+                      event.preventDefault();
+                      onStop();
+                    }
+                    return;
+                  }
+                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                    event.preventDefault();
+                    slash.move(event.key === "ArrowDown" ? 1 : -1);
+                  } else if ((event.key === "Enter" || event.key === "Tab") && slash.matches.length > 0) {
+                    event.preventDefault();
+                    const command = slash.matches[slash.selected];
+                    if (command) {
+                      setText(`/${command.name} `);
+                    }
+                  } else if (event.key === "Escape") {
+                    event.preventDefault();
+                    slash.dismiss();
+                  }
+                }}
+                placeholder={placeholder}
+                value={text}
+              />
+            </ReferenceScopeContext.Provider>
             <PromptInputSubmit
-              className={cn("size-7 rounded-full", status === "streaming" && "bg-foreground text-background")}
+              className={cn(
+                "size-7 shrink-0 rounded-full",
+                status === "streaming" && "bg-foreground text-background",
+              )}
               disabled={disabled || status === "submitted"}
               onStop={onStop}
               size="icon-sm"
               status={status}
             />
           </div>
-        </PromptInputFooter>
-      </PromptInput>
+        </PromptInput>
+
+        {/*
+         * The row, under the box. `+` and the caller's chips on the left,
+         * the caller's `trailing` on the right with a wider gap between its
+         * items — the model, the effort and the ring are three separate
+         * things, and reading them as one run of text is the thing the gap
+         * prevents.
+         */}
+        <div className="flex h-7 items-center gap-1 px-0.5" data-composer-row>
+          <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
+            <AttachButton attachmentsRef={attachmentsRef} disabled={disabled} />
+            {chips}
+          </div>
+          <div className="flex min-w-0 shrink-0 items-center gap-2">{trailing}</div>
+        </div>
+      </div>
     </div>
   );
 }
+
+/**
+ * The form's attachments, reachable from outside the form.
+ *
+ * `usePromptInputAttachments` only answers inside `<PromptInput>`, and the
+ * `+` is no longer inside it. Rather than lift the vendored component's
+ * state into a provider — which swaps its validated `add` (the size limit,
+ * the accept list) for the provider's unchecked one — this renders nothing
+ * inside the form and hands the context out through a ref. The `+` reads it
+ * when it is clicked, which is always after this has mounted.
+ */
+function AttachmentBridge({ targetRef }: { targetRef: React.RefObject<AttachmentsHandle | null> }) {
+  const attachments = usePromptInputAttachments();
+  useEffect(() => {
+    targetRef.current = attachments;
+    return () => {
+      if (targetRef.current === attachments) {
+        targetRef.current = null;
+      }
+    };
+  }, [attachments, targetRef]);
+  return null;
+}
+
+type AttachmentsHandle = ReturnType<typeof usePromptInputAttachments>;
 
 /**
  * The editor, with the three things the textarea did for the form: Enter
@@ -336,84 +393,45 @@ function AttachmentSink({ draftKey }: { draftKey: string }) {
 }
 
 /**
- * The `+`: a menu of the three ways something gets into a prompt — a file
- * from disk, an image from disk, and the view in the CAD tab.
+ * The paperclip: files and photos from disk, in one picker. The input is this
+ * component's own rather than the vendored form's: the files have to be
+ * remembered (`composer/attachments.ts`) before they become blob URLs, and
+ * only this side can do that. A capture of the CAD view comes from the
+ * viewer's own camera button and lands in the same place.
  *
- * The file inputs are this component's own rather than the vendored form's:
- * the files have to be remembered (`composer/attachments.ts`) before they
- * become blob URLs, and only this side can do that. `Ask about this view` is
- * the same capture as the viewer's own camera button and lands in the same
- * place — it is disabled, not hidden, when no CAD file is open, because the
- * answer to "why can I not do that" should be visible.
+ * It sits in the row under the box, so the form's attachments reach it
+ * through `AttachmentBridge`'s ref rather than through the form's context.
  */
-function AttachButton({ disabled }: { disabled?: boolean }) {
-  const attachments = usePromptInputAttachments();
+function AttachButton({
+  attachmentsRef,
+  disabled,
+}: {
+  attachmentsRef: React.RefObject<AttachmentsHandle | null>;
+  disabled?: boolean;
+}) {
   const files = useRef<HTMLInputElement | null>(null);
-  const images = useRef<HTMLInputElement | null>(null);
-  const cadTabId = useExplorer((state) => state.tabs.find((tab) => tab.id === state.activeId && isCadTab(tab))?.id
-    ?? state.tabs.find(isCadTab)?.id
-    ?? null);
-  const captureCad = useExplorer((state) => state.captureCad);
   const take = (event: React.ChangeEvent<HTMLInputElement>) => {
     const picked = [...(event.currentTarget.files ?? [])];
     event.currentTarget.value = "";
     if (picked.length > 0) {
-      attachments.add(rememberFiles(picked));
+      attachmentsRef.current?.add(rememberFiles(picked));
     }
   };
   return (
     <>
-      <input aria-hidden className="hidden" multiple onChange={take} ref={files} tabIndex={-1} type="file" />
-      <input
-        accept="image/*"
-        aria-hidden
-        className="hidden"
-        multiple
-        onChange={take}
-        ref={images}
-        tabIndex={-1}
-        type="file"
-      />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <PromptInputButton
-            aria-label="Add to this prompt"
-            className="size-7 text-muted-foreground"
-            disabled={disabled}
-            size="icon-sm"
-          >
-            <Plus className="size-4" />
-          </PromptInputButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56" side="top">
-          <DropdownMenuItem onSelect={() => files.current?.click()}>
-            <Paperclip className="size-3.5" />
-            Attach files…
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => images.current?.click()}>
-            <Image className="size-3.5" />
-            Attach image…
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!cadTabId}
-            onSelect={() => {
-              if (cadTabId) {
-                captureCad(cadTabId);
-              }
-            }}
-          >
-            <Camera className="size-3.5" />
-            Ask about this view
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <input aria-hidden className="hidden" data-attach-input multiple onChange={take} ref={files} tabIndex={-1} type="file" />
+      <PromptInputButton
+        aria-label="Attach files or photos"
+        className="size-7 text-muted-foreground"
+        disabled={disabled}
+        onClick={() => files.current?.click()}
+        size="icon-sm"
+        title="Attach files or photos"
+      >
+        <Paperclip className="size-4" />
+      </PromptInputButton>
     </>
   );
-}
-
-/** A file tab the CAD viewer is rendering — the one a capture can come from. */
-function isCadTab(tab: { kind: string; path?: string | null }): boolean {
-  return tab.kind === "file" && !!tab.path && isCadPath(tab.path);
 }
 
 /** The files waiting to go with the next prompt, above the textarea. */

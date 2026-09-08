@@ -1,16 +1,8 @@
-import {
-  FileText,
-  GitCompare,
-  Globe,
-  Maximize2,
-  Minimize2,
-  Plus,
-  SquareTerminal,
-  X,
-} from "lucide-react";
+import { FileText, GitCompare, Globe, Plus, SquareTerminal, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createElement, useEffect, useRef, useState } from "react";
 
+import { ExplorerToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -37,15 +29,25 @@ import { FileIcon } from "./icons";
  * wants a file tab has the shortcut. One button, one menu, and the binding
  * printed on every row.
  *
+ * `+` **trails the last tab and sticks to the right edge.** It scrolls with
+ * the strip, so it reads as the end of the row rather than as a separate
+ * control bolted to the corner — and `position: sticky` in the scrolling row
+ * means that once the tabs overflow, it stops at the pane's right edge with
+ * the tabs sliding underneath it instead of scrolling away with them. Pinning
+ * it outside the scroller made it always visible but never part of the row;
+ * leaving it in the flow made it part of the row and unreachable at six tabs
+ * in a 45% pane. Sticky is both.
+ *
  * Reordering is a plain HTML5 drag, not a library. What a tab strip needs is
  * "pick up a tab, drop it between two others"; `dragover` on a tab and an
  * index swap is the whole behaviour, and a drag-and-drop library here would be
  * 40 KB to do the same thing with more state.
  *
- * Far right: Codex has expand and split. Expand is implemented — the explorer
- * takes the window and the other two panes collapse. Split is not: two strips
- * would mean two selections, two persisted orders and a second answer to "what
- * does Cmd+1 mean", and the plan asks for one strip.
+ * Neither of Codex's far-right controls is here. Fullscreen is gone: it was
+ * the one thing in the app that could take the session pane away, and the
+ * session is the app. Split was never built — two strips would mean two
+ * selections, two persisted orders and a second answer to "what does Cmd+1
+ * mean", and the plan asks for one strip.
  */
 
 const KIND_ICONS: Record<ExplorerTabKind, LucideIcon> = {
@@ -95,12 +97,25 @@ export function TabStrip() {
   const close = useExplorer((state) => state.close);
   const setActive = useExplorer((state) => state.setActive);
   const move = useExplorer((state) => state.move);
-  const expanded = useExplorer((state) => state.expanded);
-  const toggleExpanded = useExplorer((state) => state.toggleExpanded);
 
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const stripRef = useRef<HTMLDivElement | null>(null);
+  // Whether the row is longer than the pane. Only then does `+` hold tabs
+  // back, and only then is the fade to its left drawn — over a row that
+  // fits, the fade would dim the last tab's edge for nothing.
+  const [overflowing, setOverflowing] = useState(false);
+  useEffect(() => {
+    const element = stripRef.current;
+    if (!element) {
+      return;
+    }
+    const measure = () => setOverflowing(element.scrollWidth > element.clientWidth + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [tabs.length]);
 
   // A strip wider than the pane scrolls, and Cmd+5 selecting a tab that is
   // off the left edge would otherwise change the pane's contents with nothing
@@ -115,78 +130,91 @@ export function TabStrip() {
 
   return (
     <div
-      className="app-drag flex shrink-0 items-center gap-1 border-b pr-1.5 pl-2"
+      className="app-drag flex shrink-0 items-center border-b pr-3 pl-2"
       data-tab-strip
       style={{ height: "var(--titlebar-height)" }}
     >
-      <div
-        className="no-scrollbar app-no-drag flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
-        ref={stripRef}
-        aria-label="Explorer tabs"
-        role="tablist"
-      >
-        {tabs.map((tab, index) => (
-          <TabButton
-            active={tab.id === activeId}
-            dragging={tab.id === draggingId}
-            dropBefore={dropIndex === index && draggingId !== null && draggingId !== tab.id}
-            key={tab.id}
-            onClose={() => close(tab.id)}
-            onDragEnd={() => {
-              if (draggingId !== null && dropIndex !== null) {
-                move(draggingId, dropIndex);
-              }
-              setDraggingId(null);
-              setDropIndex(null);
-            }}
-            onDragOver={() => setDropIndex(index)}
-            onDragStart={() => setDraggingId(tab.id)}
-            onSelect={() => setActive(tab.id)}
-            tab={tab}
-          />
-        ))}
-      </div>
-
       {/*
-        `+` is pinned rather than trailing the tabs. Codex puts it in the flow,
-        which is fine in a full-width window and unusable in a 45% pane: with
-        six tabs open the strip scrolls and the button that opens the seventh
-        is the thing that scrolls off.
+        `scroll-pr-10` is what keeps the selected tab out from under the
+        pinned `+`: the scroll below aims for "nearest", and without the
+        padding nearest is half a tab beneath it.
       */}
-      <div className="app-no-drag flex shrink-0 items-center gap-0.5 border-l pl-1.5">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              aria-label="New tab"
-              title="New tab"
-              className="size-6 text-muted-foreground"
-              size="icon-xs"
-              variant="ghost"
-            >
-              <Plus className="size-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            {KINDS.map(({ kind, label, shortcut }) => (
-              <DropdownMenuItem key={kind} onSelect={() => open(kind)}>
-                <KindIcon className="size-3.5" kind={kind} />
-                {label}
-                <DropdownMenuShortcut>{bindingOf(shortcut)}</DropdownMenuShortcut>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <div
+        className="no-scrollbar app-drag flex min-w-0 flex-1 scroll-pr-10 items-center overflow-x-auto"
+        ref={stripRef}
+      >
+        {/* Only tabs are in the tablist; `+` is a control that follows it. */}
+        <div className="app-no-drag flex shrink-0 items-center gap-0.5" aria-label="Explorer tabs" role="tablist">
+          {tabs.map((tab, index) => (
+            <TabButton
+              active={tab.id === activeId}
+              dragging={tab.id === draggingId}
+              dropBefore={dropIndex === index && draggingId !== null && draggingId !== tab.id}
+              key={tab.id}
+              onClose={() => close(tab.id)}
+              onDragEnd={() => {
+                if (draggingId !== null && dropIndex !== null) {
+                  move(draggingId, dropIndex);
+                }
+                setDraggingId(null);
+                setDropIndex(null);
+              }}
+              onDragOver={() => setDropIndex(index)}
+              onDragStart={() => setDraggingId(tab.id)}
+              onSelect={() => setActive(tab.id)}
+              tab={tab}
+            />
+          ))}
+        </div>
 
-        <Button
-          aria-label={expanded ? "Restore layout" : "Expand explorer"}
-          className="ml-0.5 size-6 text-muted-foreground"
-          onClick={toggleExpanded}
-          size="icon-xs"
-          title={expanded ? "Restore layout" : "Expand explorer"}
-          variant="ghost"
+        {/*
+          The end of the row, and the right edge of the pane once the row is
+          longer than the pane. `sticky right-0` is the whole mechanism; the
+          background is what stops the tabs it is holding back from showing
+          through, and the gradient to its left is what they fade into rather
+          than being cut off against a hard edge.
+        */}
+        <div
+          className={cn(
+            "app-no-drag sticky right-0 z-10 flex shrink-0 items-center bg-background pr-0.5 pl-1",
+            overflowing &&
+              "before:pointer-events-none before:absolute before:top-0 before:right-full before:h-full before:w-5 before:bg-gradient-to-r before:from-transparent before:to-background",
+          )}
+          data-overflowing={overflowing ? "true" : undefined}
+          data-new-tab
         >
-          {expanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-        </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                aria-label="New tab"
+                className="size-6 text-muted-foreground"
+                size="icon-xs"
+                variant="ghost"
+              >
+                <Plus className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {KINDS.map(({ kind, label, shortcut }) => (
+                <DropdownMenuItem key={kind} onSelect={() => open(kind)}>
+                  <KindIcon className="size-3.5" kind={kind} />
+                  {label}
+                  <DropdownMenuShortcut>{bindingOf(shortcut)}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+      {/* The window's right edge while the explorer is open — outside the
+          scrolling row, since `+` follows the last tab and only pins to the
+          edge on overflow — the same spot the session's title bar holds this
+          toggle in while the explorer is shut, so it never moves. A shut
+          explorer is not rendered at all (`Shell`), so this strip existing is
+          the same fact as the pane being open: there is never a second copy
+          of this button hidden in a pane nobody can see. */}
+      <div className="app-no-drag flex shrink-0 items-center pl-1">
+        <ExplorerToggle />
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { allToolCalls, lastAgentText, reduce } from "@shared/acp/reduce";
 import {
+  SessionEventSchema,
   SessionStateSchema,
   initialSessionState,
   type SessionEvent,
@@ -54,7 +55,7 @@ describe("reduce: turns and chunks", () => {
     expect(state.status).toBe("idle");
     expect(state.turns[1]?.endedAt).toBe(at);
     expect(state.turns[1]?.stopReason).toBe("end_turn");
-    expect(state.turns[1]?.parts.at(-1)?.type).toBe("usage");
+    expect(state.turns[1]?.parts.map((part) => part.type)).not.toContain("usage");
     expect(state.lastTurnUsage?.totalTokens).toBe(3);
   });
 
@@ -205,6 +206,19 @@ describe("reduce: permissions", () => {
     expect(state.pendingPermissions).toEqual([]);
     expect(state.status).toBe("idle");
   });
+
+  /**
+   * There is no app-side approval level any more: the session's mode is the
+   * whole of what the person decides, so a state that carried an
+   * `approvalMode` and an event that changed it would be a second answer to
+   * a question that has one.
+   */
+  it("has no approval mode of its own, in the state or in the events", () => {
+    expect(initialSessionState("s1", "fake")).not.toHaveProperty("approvalMode");
+    expect(
+      SessionEventSchema.safeParse({ type: "approval", mode: "approve-for-me", at }).success,
+    ).toBe(false);
+  });
 });
 
 describe("reduce: session-level facts", () => {
@@ -223,7 +237,7 @@ describe("reduce: session-level facts", () => {
     });
     expect(state.currentModeId).toBe("plan");
     expect(state.availableCommands).toEqual([{ name: "review", description: "Review", hint: "what" }]);
-    expect(state.contextUsage).toEqual({ used: 10, size: 100, cost: { amount: 0.5, currency: "USD" } });
+    expect(state.contextUsage).toEqual({ used: 10, size: 100, cost: { amount: 0.5, currency: "USD" }, breakdown: null });
     expect(state.title).toBe("Hello");
     expect(state.configOptions).toMatchObject([
       { id: "model", type: "select", currentValue: "a", options: [{ value: "a", name: "A", group: "Group" }] },
@@ -231,6 +245,211 @@ describe("reduce: session-level facts", () => {
     ]);
     // No turn was open, so none of it became a part.
     expect(state.turns).toEqual([]);
+  });
+
+  it("adds every turn's usage up and keeps the last turn's", () => {
+    let state = connected();
+    const turn = (index: number, usage: Record<string, number>) => {
+      state = reduce(state, { type: "prompt/start", turnId: `t${index}`, content: [{ type: "text", text: "hi" }], at });
+      state = reduce(state, {
+        type: "prompt/end",
+        stopReason: "end_turn",
+        usage: {
+          thoughtTokens: null,
+          cachedReadTokens: null,
+          cachedWriteTokens: null,
+          ...usage,
+        } as never,
+        at,
+      });
+    };
+    expect(state.sessionUsage).toBeNull();
+    turn(1, { totalTokens: 100, inputTokens: 10, outputTokens: 20, cachedReadTokens: 30, cachedWriteTokens: 40 });
+    turn(2, { totalTokens: 7, inputTokens: 1, outputTokens: 2 });
+    expect(state.sessionUsage).toEqual({
+      turns: 2,
+      totalTokens: 107,
+      inputTokens: 11,
+      outputTokens: 22,
+      // The second turn reported neither cache field, which counts as zero.
+      cachedReadTokens: 30,
+      cachedWriteTokens: 40,
+    });
+    expect(state.lastTurnUsage?.totalTokens).toBe(7);
+    // A turn that reported nothing leaves both alone.
+    state = reduce(state, { type: "prompt/start", turnId: "t3", content: [{ type: "text", text: "hi" }], at });
+    state = reduce(state, { type: "prompt/end", stopReason: "cancelled", usage: null, at });
+    expect(state.sessionUsage?.turns).toBe(2);
+    expect(state.lastTurnUsage?.totalTokens).toBe(7);
+  });
+
+  it("reads a category breakdown out of usage_update's _meta, and none when there is none", () => {
+    // No adapter sends one today, so `_meta` is where one can arrive at all:
+    // any key ending in `breakdown`, bare or namespaced the way the Claude
+    // adapter namespaces its own metadata.
+    let state = update(connected(), {
+      sessionUpdate: "usage_update",
+      used: 31_500,
+      size: 258_400,
+      _meta: {
+        contextBreakdown: [
+          { id: "system_prompt", name: "System prompt", tokens: 2_800 },
+          { id: "messages", name: "Messages", tokens: 11_500 },
+          // Nothing in it is nothing to draw.
+          { id: "empty", name: "Empty", tokens: 0 },
+        ],
+      },
+    });
+    expect(state.contextUsage?.breakdown).toEqual([
+      { id: "system_prompt", name: "System prompt", tokens: 2_800 },
+      { id: "messages", name: "Messages", tokens: 11_500 },
+    ]);
+
+    // A namespaced key and a plain name → tokens map read the same way.
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 10,
+      size: 100,
+      _meta: { "_claude/contextBreakdown": { "System prompt": 4, Messages: 6 } },
+    });
+    expect(state.contextUsage?.breakdown).toEqual([
+      { id: "System prompt", name: "System prompt", tokens: 4 },
+      { id: "Messages", name: "Messages", tokens: 6 },
+    ]);
+
+    // The real shape of both adapters: no `_meta`, or one about something
+    // else. The popover then shows no categories rather than inventing any.
+    state = update(state, { sessionUpdate: "usage_update", used: 32_658, size: 1_000_000 });
+    expect(state.contextUsage?.breakdown).toBeNull();
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 32_658,
+      size: 1_000_000,
+      cost: { amount: 0.28, currency: "USD" },
+      _meta: { "_claude/origin": { kind: "human" } },
+    });
+    expect(state.contextUsage?.breakdown).toBeNull();
+  });
+
+  it("keeps the latest of each plan limit out of usage_update's _meta", () => {
+    // What the Claude adapter forwards: the SDK's `rate_limit_event`
+    // verbatim under `_claude/rateLimit`, on a `usage_update` carrying the
+    // window. One event is one limit type.
+    let state = update(connected(), {
+      sessionUpdate: "usage_update",
+      used: 292_300,
+      size: 1_000_000,
+      _meta: {
+        "_claude/rateLimit": {
+          status: "allowed",
+          rateLimitType: "five_hour",
+          utilization: 0.17,
+          resetsAt: 1_800_000_000,
+        },
+      },
+    });
+    expect(state.rateLimits.five_hour).toEqual({
+      type: "five_hour",
+      status: "allowed",
+      utilization: 0.17,
+      // Epoch seconds on the wire, epoch milliseconds in the state.
+      resetsAt: 1_800_000_000_000,
+      isUsingOverage: null,
+    });
+    // The window came along with it and is not lost to the limit.
+    expect(state.contextUsage?.used).toBe(292_300);
+
+    // A second type is a second row, and a second event of a type replaces
+    // it rather than adding to it.
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 292_300,
+      size: 1_000_000,
+      _meta: {
+        "_claude/rateLimit": {
+          status: "allowed_warning",
+          rateLimitType: "seven_day",
+          utilization: 0.63,
+          isUsingOverage: true,
+        },
+      },
+    });
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 292_300,
+      size: 1_000_000,
+      _meta: {
+        "_claude/rateLimit": { status: "rejected", rateLimitType: "seven_day", utilization: 0.96 },
+      },
+    });
+    expect(Object.keys(state.rateLimits).sort()).toEqual(["five_hour", "seven_day"]);
+    expect(state.rateLimits.seven_day).toMatchObject({ status: "rejected", utilization: 0.96 });
+    expect(state.rateLimits.five_hour?.utilization).toBe(0.17);
+
+    // Milliseconds already, and a percentage where a fraction was expected:
+    // both are read for what they can only mean.
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 1,
+      size: 2,
+      _meta: {
+        "_claude/rateLimit": {
+          status: "allowed",
+          rateLimitType: "seven_day_opus",
+          utilization: 96,
+          resetsAt: 1_800_000_000_000,
+        },
+      },
+    });
+    expect(state.rateLimits.seven_day_opus).toMatchObject({
+      utilization: 0.96,
+      resetsAt: 1_800_000_000_000,
+    });
+  });
+
+  it("ignores a malformed rate limit rather than throwing on it", () => {
+    const before = update(connected(), {
+      sessionUpdate: "usage_update",
+      used: 10,
+      size: 100,
+      _meta: { "_claude/rateLimit": { status: "allowed", rateLimitType: "five_hour", utilization: 0.4 } },
+    });
+    const malformed = [
+      // No type: `rateLimits` is keyed by it and there is nowhere to put this.
+      { status: "allowed", utilization: 0.4 },
+      // No utilization: a bar with no length.
+      { status: "allowed", rateLimitType: "five_hour" },
+      // The wrong shapes entirely.
+      { rateLimitType: 7, utilization: "lots" },
+      "rejected",
+      null,
+      [],
+    ];
+    for (const value of malformed) {
+      const after = update(before, {
+        sessionUpdate: "usage_update",
+        used: 10,
+        size: 100,
+        _meta: { "_claude/rateLimit": value },
+      });
+      expect(after.rateLimits).toEqual(before.rateLimits);
+    }
+    // An unknown status is the harmless one; the rest of the event stands.
+    const odd = update(before, {
+      sessionUpdate: "usage_update",
+      used: 10,
+      size: 100,
+      _meta: { "_claude/rateLimit": { status: "hmm", rateLimitType: "overage", utilization: 150 } },
+    });
+    // An unreadable status reads as `allowed` and a bar cannot run past its end.
+    expect(odd.rateLimits.overage).toMatchObject({ status: "allowed", utilization: 1 });
+    // And an update with no window at all still lands its limit.
+    const windowless = update(before, {
+      sessionUpdate: "usage_update",
+      _meta: { "_claude/rateLimit": { status: "allowed", rateLimitType: "seven_day", utilization: 0.5 } },
+    });
+    expect(windowless.rateLimits.seven_day?.utilization).toBe(0.5);
+    expect(windowless.contextUsage).toEqual(before.contextUsage);
   });
 
   it("keeps the latest plan as one part per turn", () => {
@@ -332,7 +551,7 @@ describe("reduce: recorded adapter transcripts", () => {
     expect(state.modes.map((mode) => mode.id)).toEqual(["default", "acceptEdits", "plan", "auto", "bypassPermissions"]);
     expect(state.configOptions.map((option) => option.id)).toEqual(["mode", "model", "effort", "agent"]);
     expect(state.availableCommands.length).toBeGreaterThan(0);
-    expect(state.contextUsage).toEqual({ used: 0, size: 1_000_000, cost: { amount: 0, currency: "USD" } });
+    expect(state.contextUsage).toEqual({ used: 0, size: 1_000_000, cost: { amount: 0, currency: "USD" }, breakdown: null });
     const agentTurn = state.turns.find((turn) => turn.role === "agent");
     expect(agentTurn?.parts.map((part) => part.type)).toEqual(["available_commands", "available_commands", "error"]);
   });

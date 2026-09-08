@@ -18,7 +18,8 @@ const open: SessionConnection[] = [];
 function connect(options: {
   cwd: string;
   fixture?: string;
-  approvalMode?: "ask" | "approve-for-me";
+  skillsRoot?: string | null;
+  preamble?: string | null;
   onEvent?: (event: SessionEvent) => void;
   record?: (frame: RecordedFrame) => void;
   onTerminalOutput?: (terminalId: string, data: string) => void;
@@ -31,8 +32,9 @@ function connect(options: {
     launch: { command: process.execPath, args, env: {} },
     env: { PATH: process.env.PATH ?? "" },
     cwd: options.cwd,
+    skillsRoot: options.skillsRoot ?? null,
+    preamble: options.preamble ?? null,
     spawnTerminal: spawnProcessTerminal,
-    approvalMode: options.approvalMode,
     onEvent: options.onEvent,
     record: options.record,
     onTerminalOutput: options.onTerminalOutput,
@@ -121,14 +123,22 @@ describe("SessionConnection against the fake agent", () => {
     expect(lastAgentText(connection.state)).toBe("ok");
   });
 
-  it("approve-for-me answers allow_once without waiting", async () => {
-    const connection = connect({ cwd: await scratch(), approvalMode: "approve-for-me" });
+  /**
+   * The only way nothing is asked. The client answers no request on
+   * anybody's behalf, so a turn with no permission request in it is a turn
+   * the agent chose not to ask about — here because the session is in the
+   * fake's full-access mode, the way Claude's `Bypass permissions` and
+   * Codex's `Full access` behave.
+   */
+  it("a full-access session gets no permission request at all", async () => {
+    const connection = connect({ cwd: await scratch() });
     await connection.newSession();
+    await connection.setMode("full");
     const response = await connection.prompt([{ type: "text", text: "needs permission" }]);
     expect(response.stopReason).toBe("end_turn");
     expect(connection.state.pendingPermissions).toEqual([]);
-    const permissionPart = connection.state.turns[1]?.parts.find((part) => part.type === "permission_request");
-    expect(permissionPart).toMatchObject({ outcome: { state: "selected", optionId: "allow-once" } });
+    expect(connection.state.turns[1]?.parts.some((part) => part.type === "permission_request")).toBe(false);
+    expect(allToolCalls(connection.state)[0]).toMatchObject({ id: "cmd-1", status: "completed" });
   });
 
   it("a rejected permission fails the tool call", async () => {
@@ -300,3 +310,91 @@ async function waitFor<T extends SessionEvent["type"]>(
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }
+
+/** The params of one outbound request, from the recorded frames. */
+function sent(frames: RecordedFrame[], method: string): Record<string, unknown> | undefined {
+  const frame = frames.find(
+    (candidate) => candidate.dir === "out" && (candidate.msg as { method?: string }).method === method,
+  );
+  return frame ? ((frame.msg as { params?: Record<string, unknown> }).params ?? {}) : undefined;
+}
+
+function allSent(frames: RecordedFrame[], method: string): Array<Record<string, unknown>> {
+  return frames
+    .filter((candidate) => candidate.dir === "out" && (candidate.msg as { method?: string }).method === method)
+    .map((candidate) => (candidate.msg as { params?: Record<string, unknown> }).params ?? {});
+}
+
+describe("the skills root and the preamble", () => {
+  it("names the root in session/new under both spellings, beside the MCP servers", async () => {
+    const frames: RecordedFrame[] = [];
+    const connection = connect({ cwd: await scratch(), skillsRoot: "/data/skills/1.2.3", record: (frame) => frames.push(frame) });
+    await connection.newSession();
+
+    const params = sent(frames, "session/new")!;
+    expect(params.additionalDirectories).toEqual(["/data/skills/1.2.3"]);
+    expect(params._meta).toMatchObject({ additionalRoots: ["/data/skills/1.2.3"] });
+    expect(params.mcpServers).toEqual([]);
+  });
+
+  it("names it in session/load too", async () => {
+    const frames: RecordedFrame[] = [];
+    const connection = connect({ cwd: await scratch(), skillsRoot: "/data/skills/1.2.3", record: (frame) => frames.push(frame) });
+    await connection.loadSession("fake-session-1");
+
+    const params = sent(frames, "session/load")!;
+    expect(params.additionalDirectories).toEqual(["/data/skills/1.2.3"]);
+    expect(params._meta).toMatchObject({ additionalRoots: ["/data/skills/1.2.3"] });
+  });
+
+  it("sends no root at all when the app has none", async () => {
+    const frames: RecordedFrame[] = [];
+    const connection = connect({ cwd: await scratch(), record: (frame) => frames.push(frame) });
+    await connection.newSession();
+
+    const params = sent(frames, "session/new")!;
+    expect(params).not.toHaveProperty("additionalDirectories");
+    expect(params).not.toHaveProperty("_meta");
+  });
+
+  it("puts the preamble in front of the first prompt of a new session, and never again", async () => {
+    const frames: RecordedFrame[] = [];
+    const events: SessionEvent[] = [];
+    const connection = connect({
+      cwd: await scratch(),
+      skillsRoot: "/data/skills/1.2.3",
+      preamble: "The skills are at /data/skills/1.2.3.",
+      record: (frame) => frames.push(frame),
+      onEvent: (event) => events.push(event),
+    });
+    await connection.newSession();
+    await connection.prompt([{ type: "text", text: "hello" }]);
+    await connection.prompt([{ type: "text", text: "again" }]);
+
+    const prompts = allSent(frames, "session/prompt");
+    expect(prompts).toHaveLength(2);
+    expect(prompts[0]!.prompt).toEqual([
+      { type: "text", text: "The skills are at /data/skills/1.2.3." },
+      { type: "text", text: "hello" },
+    ]);
+    expect(prompts[1]!.prompt).toEqual([{ type: "text", text: "again" }]);
+
+    // The transcript is what the person wrote; the preamble is not in it.
+    const started = events.filter((event) => event.type === "prompt/start");
+    expect(started[0]).toMatchObject({ content: [{ type: "text", text: "hello" }] });
+  });
+
+  it("never sends the preamble on a resumed session — the transcript already has it", async () => {
+    const frames: RecordedFrame[] = [];
+    const connection = connect({
+      cwd: await scratch(),
+      skillsRoot: "/data/skills/1.2.3",
+      preamble: "The skills are at /data/skills/1.2.3.",
+      record: (frame) => frames.push(frame),
+    });
+    await connection.loadSession("fake-session-1");
+    await connection.prompt([{ type: "text", text: "hello" }]);
+
+    expect(allSent(frames, "session/prompt")[0]!.prompt).toEqual([{ type: "text", text: "hello" }]);
+  });
+});

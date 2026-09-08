@@ -83,7 +83,7 @@ test.beforeAll(async () => {
   const project = await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), repo);
   projectId = project.id;
   await expect(page.getByText(projectName).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeEnabled();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
 });
 
 test.afterAll(async () => {

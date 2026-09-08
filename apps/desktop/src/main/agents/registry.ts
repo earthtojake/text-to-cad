@@ -42,7 +42,6 @@ const uvTool = (pkg: string): InstallCommand => ({
   command: `uv tool install ${pkg}`,
 });
 
-const noPlugins = null;
 const noAuthCheck = null;
 
 const CAPS = {
@@ -82,16 +81,11 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     // An explicit tag prevents npx selecting an older global adapter and its bundled SDK.
     launch: { command: NPX, args: ["-y", "@agentclientprotocol/claude-agent-acp@latest"], env: {} },
     capabilities: CAPS.full,
-    skillsDir: "~/.claude/skills",
-    // `marketplace add` keeps the snapshot it first took and `install` answers
-    // "already installed" at the old version, so an update is the two extra
-    // verbs (src/main/cad/plugin.ts).
-    pluginInstall: {
-      marketplaceAdd: ["plugin", "marketplace", "add", "<path>"],
-      marketplaceUpdate: ["plugin", "marketplace", "update", "<marketplace>"],
-      install: ["plugin", "install", "<plugin>"],
-      update: ["plugin", "update", "<plugin>"],
-    },
+    // The adapter reads `additionalDirectories` (or `_meta.additionalRoots`)
+    // and passes them to the Agent SDK, which loads
+    // `<dir>/.claude/skills/<name>/SKILL.md`. Verified on this machine with
+    // `claude -p --add-dir`: the skill appears by name, unprefixed.
+    skillRoots: "native",
   },
   {
     id: "codex",
@@ -123,11 +117,10 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     },
     launch: { command: NPX, args: ["-y", "@agentclientprotocol/codex-acp@latest"], env: {} },
     capabilities: CAPS.full,
-    skillsDir: "~/.codex/skills",
-    pluginInstall: {
-      marketplaceAdd: ["plugin", "marketplace", "add", "<path>"],
-      install: ["plugin", "add", "<plugin>"],
-    },
+    // codex-acp reads `additionalDirectories`, falls back to
+    // `_meta.additionalRoots`, and registers `<root>/.agents/skills` with the
+    // app server (`skills/extraRoots/set`) before refreshing its skill list.
+    skillRoots: "native",
   },
   {
     id: "gemini-cli",
@@ -156,8 +149,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     },
     launch: { command: "gemini", args: ["--acp"], env: {} },
     capabilities: { subagents: false, terminals: true, modes: true, configOptions: false, loadSession: false },
-    skillsDir: "~/.gemini/skills",
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "github-copilot",
@@ -182,8 +174,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: ["GH_TOKEN", "GITHUB_TOKEN"], checkArgs: noAuthCheck },
     launch: { command: "copilot", args: ["--acp"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: "~/.copilot/skills",
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "opencode",
@@ -216,8 +207,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     },
     launch: { command: "opencode", args: ["acp"], env: {} },
     capabilities: { subagents: false, terminals: true, modes: true, configOptions: false, loadSession: false },
-    skillsDir: "~/.config/opencode/skills",
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "amp",
@@ -242,8 +232,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: ["AMP_API_KEY"], checkArgs: noAuthCheck },
     launch: { command: NPX, args: ["-y", "amp-acp"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: "~/.config/amp/skills",
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "qwen-code",
@@ -268,8 +257,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [".qwen/oauth_creds.json"], envVars: ["OPENAI_API_KEY"], checkArgs: noAuthCheck },
     launch: { command: "qwen", args: ["--acp", "--experimental-skills"], env: {} },
     capabilities: { subagents: false, terminals: true, modes: true, configOptions: false, loadSession: false },
-    skillsDir: "~/.qwen/skills",
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "kiro",
@@ -291,8 +279,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: [], checkArgs: noAuthCheck },
     launch: { command: "kiro-cli", args: ["acp"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "auggie",
@@ -317,8 +304,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [".augment/session.json"], envVars: ["AUGMENT_SESSION_AUTH"], checkArgs: noAuthCheck },
     launch: { command: "auggie", args: ["--acp"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "goose",
@@ -354,8 +340,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     },
     launch: { command: "goose", args: ["acp"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "mistral-vibe",
@@ -380,8 +365,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [".vibe/config.toml"], envVars: ["MISTRAL_API_KEY"], checkArgs: noAuthCheck },
     launch: { command: "vibe-acp", args: [], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "cursor-agent",
@@ -406,8 +390,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: ["CURSOR_API_KEY"], checkArgs: ["status"] },
     launch: { command: "cursor-agent", args: ["acp"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: "~/.cursor/skills",
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "droid",
@@ -432,8 +415,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: ["FACTORY_API_KEY"], checkArgs: noAuthCheck },
     launch: { command: "droid", args: ["exec", "--output-format", "acp-daemon"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: "~/.factory/skills",
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "hermes",
@@ -466,8 +448,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     },
     launch: { command: "hermes", args: ["acp"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "cline",
@@ -500,8 +481,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     },
     launch: { command: NPX, args: ["-y", "cline", "--acp"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "kimi",
@@ -526,8 +506,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: ["KIMI_API_KEY", "MOONSHOT_API_KEY"], checkArgs: noAuthCheck },
     launch: { command: "kimi", args: ["acp"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "kilo",
@@ -552,8 +531,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: ["KILOCODE_API_KEY"], checkArgs: noAuthCheck },
     launch: { command: NPX, args: ["-y", "@kilocode/cli", "acp"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "qoder",
@@ -575,8 +553,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: [], checkArgs: noAuthCheck },
     launch: { command: NPX, args: ["-y", "@qoder-ai/qodercli", "--acp"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "grok-build",
@@ -601,8 +578,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: ["XAI_API_KEY"], checkArgs: noAuthCheck },
     launch: { command: NPX, args: ["-y", "@xai-official/grok", "agent", "stdio"], env: {} },
     capabilities: CAPS.basic,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "deepagents",
@@ -626,8 +602,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"], checkArgs: noAuthCheck },
     launch: { command: NPX, args: ["-y", "deepagents-acp"], env: {} },
     capabilities: CAPS.none,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "fast-agent",
@@ -651,8 +626,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"], checkArgs: noAuthCheck },
     launch: { command: "uvx", args: ["fast-agent-acp", "-x"], env: {} },
     capabilities: CAPS.none,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "junie",
@@ -670,8 +644,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: [], checkArgs: noAuthCheck },
     launch: { command: "junie", args: [], env: {} },
     capabilities: CAPS.none,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
   {
     id: "devin",
@@ -692,8 +665,7 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     authProbe: { files: [], envVars: ["DEVIN_API_KEY"], checkArgs: noAuthCheck },
     launch: { command: "devin", args: ["acp"], env: {} },
     capabilities: CAPS.none,
-    skillsDir: null,
-    pluginInstall: noPlugins,
+    skillRoots: "preamble",
   },
 ].map((provider) => AgentProviderSchema.parse(provider));
 

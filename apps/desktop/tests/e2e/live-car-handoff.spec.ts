@@ -37,7 +37,6 @@ for (const agentId of ["codex", "claude-code"]) {
       await page.evaluate((root) => window.hardcore.settings.set({ worktreeRoot: root, fetchBeforeCreate: false }), path.join(base, "worktrees"));
       const added = await page.evaluate((root) => window.hardcore.projects.addPath({ path: root }), project);
       const session = await page.evaluate(({ projectId, agentId }) => window.hardcore.sessions.create({ projectId, agentId, gitMode: "worktree", name: "car-ux-check" }), { projectId: added.id, agentId });
-      await page.evaluate((id) => window.hardcore.sessions.setApprovalMode({ id, mode: "approve-for-me" }), session.id);
       await page.locator(`[data-session-row="${session.id}"]`).getByRole("button").first().click();
       for (const directory of [".agents", ".claude"]) {
         const skills = path.join(session.cwd, directory, "skills", "hardcore-app-use");

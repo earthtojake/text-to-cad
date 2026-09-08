@@ -157,13 +157,74 @@ export const TurnUsageSchema = z.object({
 });
 export type TurnUsage = z.infer<typeof TurnUsageSchema>;
 
+/**
+ * Every turn's `usage` added up, and how many turns went into it. The
+ * per-turn fields the adapters leave out count as zero here — a sum of
+ * "some turns reported cache writes" is still a number.
+ */
+export const TokenTotalsSchema = z.object({
+  turns: z.number(),
+  totalTokens: z.number(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cachedReadTokens: z.number(),
+  cachedWriteTokens: z.number(),
+});
+export type TokenTotals = z.infer<typeof TokenTotalsSchema>;
+
+/**
+ * One category of what is in the window: Claude Code's own `/context` view
+ * names system prompt, system tools, MCP tools, custom agents, memory files,
+ * messages, free space and an autocompact buffer.
+ *
+ * Neither adapter sends one today (the Claude adapter's `usage_update` is
+ * `used`, `size`, `cost` and a `_claude/origin` or `_claude/rateLimit`
+ * `_meta`; Codex's is `used` and `size`), and ACP has no field for it — so
+ * this is read out of `_meta` and is usually absent. When it is absent the
+ * popover shows no categories rather than guessing at any.
+ */
+export const ContextBreakdownEntrySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  tokens: z.number(),
+});
+export type ContextBreakdownEntry = z.infer<typeof ContextBreakdownEntrySchema>;
+
 /** `usage_update`: how full the context window is. */
 export const ContextUsageSchema = z.object({
   used: z.number(),
   size: z.number(),
   cost: z.object({ amount: z.number(), currency: z.string() }).nullable().default(null),
+  /** `_meta`'s category breakdown of `used`, when the agent sends one. */
+  breakdown: z.array(ContextBreakdownEntrySchema).nullable().default(null),
 });
 export type ContextUsage = z.infer<typeof ContextUsageSchema>;
+
+/**
+ * One of the account's plan limits, as the Claude adapter forwards the SDK's
+ * `rate_limit_event`: `_meta["_claude/rateLimit"]` on a `usage_update`. One
+ * event carries one limit, so a session keeps the latest of each `type`.
+ *
+ * `type` is the SDK's `rateLimitType`, kept as a plain string rather than an
+ * enum: the vocabulary belongs to the subscription and grows with the plans,
+ * and a limit whose name arrived after this build should draw with a label
+ * derived from its name rather than vanish.
+ *
+ * The units are normalised on the way in (`reduce.ts`): `utilization` is a
+ * fraction of the limit between 0 and 1, and `resetsAt` is epoch
+ * **milliseconds**. Codex sends nothing of the kind, so a Codex session's
+ * `rateLimits` stays empty and the panel says nothing about plans.
+ */
+export const RateLimitSchema = z.object({
+  type: z.string(),
+  status: z.enum(["allowed", "allowed_warning", "rejected"]),
+  /** 0 to 1. */
+  utilization: z.number(),
+  /** Epoch milliseconds, or null when the event did not say. */
+  resetsAt: z.number().nullable().default(null),
+  isUsingOverage: z.boolean().nullable().default(null),
+});
+export type RateLimit = z.infer<typeof RateLimitSchema>;
 
 export const StopReasonSchema = z.enum([
   "end_turn",
@@ -266,7 +327,6 @@ export type Part =
     }
   | { type: "mode_change"; modeId: string }
   | { type: "available_commands"; commands: AvailableCommand[] }
-  | { type: "usage"; usage: TurnUsage }
   | { type: "error"; message: string }
   | { type: "image"; data: string; mimeType: string }
   | { type: "resource_link"; uri: string; name: string };
@@ -315,7 +375,6 @@ export const PartSchema: z.ZodType<Part> = z.lazy(() =>
     }),
     z.object({ type: z.literal("mode_change"), modeId: z.string() }),
     z.object({ type: z.literal("available_commands"), commands: z.array(AvailableCommandSchema) }),
-    z.object({ type: z.literal("usage"), usage: TurnUsageSchema }),
     z.object({ type: z.literal("error"), message: z.string() }),
     z.object({ type: z.literal("image"), data: z.string(), mimeType: z.string() }),
     z.object({ type: z.literal("resource_link"), uri: z.string(), name: z.string() }),
@@ -351,9 +410,6 @@ export const LiveStatusSchema = z.enum([
 ]);
 export type LiveStatus = z.infer<typeof LiveStatusSchema>;
 
-export const ApprovalModeSchema = z.enum(["ask", "approve-for-me"]);
-export type ApprovalMode = z.infer<typeof ApprovalModeSchema>;
-
 /** A permission request the user has not answered yet. */
 export const PendingPermissionSchema = z.object({
   requestId: z.string(),
@@ -377,7 +433,6 @@ export const SessionStateSchema = z.object({
   status: LiveStatusSchema,
   /** Set while `status` is `error`. */
   error: z.string().nullable(),
-  approvalMode: ApprovalModeSchema,
   /** From `session_info_update`; the sidebar prefers the first prompt. */
   title: z.string().nullable(),
   turns: z.array(TurnSchema),
@@ -388,7 +443,11 @@ export const SessionStateSchema = z.object({
   /** The latest plan the agent reported, or null once it removed it. */
   plan: z.array(PlanEntrySchema).nullable(),
   contextUsage: ContextUsageSchema.nullable(),
+  /** The last turn's `usage`, and every turn's added up. Both null until one reports. */
   lastTurnUsage: TurnUsageSchema.nullable(),
+  sessionUsage: TokenTotalsSchema.nullable(),
+  /** The account's plan limits by `type`, latest of each; empty for an agent that reports none. */
+  rateLimits: z.record(z.string(), RateLimitSchema),
   pendingPermissions: z.array(PendingPermissionSchema),
   /** Every subagent session id seen, mapped to the root session's part path. */
   subagentSessionIds: z.array(z.string()),
@@ -402,7 +461,6 @@ export function initialSessionState(sessionId: string, agentId: string): Session
     acpSessionId: null,
     status: "connecting",
     error: null,
-    approvalMode: "ask",
     title: null,
     turns: [],
     currentModeId: null,
@@ -412,6 +470,8 @@ export function initialSessionState(sessionId: string, agentId: string): Session
     plan: null,
     contextUsage: null,
     lastTurnUsage: null,
+    sessionUsage: null,
+    rateLimits: {},
     pendingPermissions: [],
     subagentSessionIds: [],
   };
@@ -490,6 +550,5 @@ export const SessionEventSchema = z.discriminatedUnion("type", [
     error: z.string().nullable(),
     at: z.number(),
   }),
-  z.object({ type: z.literal("approval"), mode: ApprovalModeSchema, at: z.number() }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEventSchema>;

@@ -3,7 +3,16 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import {
+  _electron as electron,
+  expect,
+  test,
+  type ElectronApplication,
+  type Locator,
+  type Page,
+} from "@playwright/test";
+
+import { PANE_LIMITS } from "../../src/shared/types";
 
 /**
  * `page.evaluate` bodies run in the renderer, not here, so they see the
@@ -48,23 +57,42 @@ test.afterAll(async () => {
   fs.rmSync(userData, { recursive: true, force: true });
 });
 
-test("the shell shows three panes, the explorer closed", async () => {
-  // The panes are the app: sidebar, session, explorer, left to right.
+/**
+ * No project, no explorer. The strip is a view of a directory: with none
+ * bound the panel is not in the document at all, and neither is the control
+ * that would open it — the toggle in the title bar, or the palette's row.
+ */
+test("shows two panes and no explorer until a project is bound", async () => {
   const panes = page.locator("[data-panel]");
-  await expect(panes).toHaveCount(3);
+  await expect(panes).toHaveCount(2);
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
 
-  await expect(page.getByRole("button", { name: "Add project" })).toBeVisible();
-  await expect(page.getByText("Projects", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New", exact: true })).toBeVisible();
+  // With no project there is no project chip to open `Open folder…` from, so
+  // both halves of this screen offer the chooser themselves. `Add project`
+  // is gone: adding a folder is picking one, and it lives at the bottom of
+  // the chip's menu everywhere else.
+  await expect(page.getByRole("button", { name: "Add project" })).toHaveCount(0);
   await expect(page.getByText("Add a project to get started")).toBeVisible();
+  await expect(
+    page.getByTestId("sidebar").getByRole("button", { name: "Open folder…" }),
+  ).toBeVisible();
+  await expect(
+    page.locator("[data-no-project]").getByRole("button", { name: "Open folder…" }),
+  ).toBeVisible();
 
-  // The explorer starts closed and the session fills the window: it earns its
-  // width when something opens in it, not before.
-  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBe(0);
-  await openExplorer();
-  // The strip belongs to a project (P3), so an app with none has nothing to
-  // open a tab from and says so. Scoped to the pane: the session pane's
-  // composer carries a project chip that reads the same.
-  await expect(page.getByTestId("explorer").getByText("No project")).toBeVisible();
+  // Nor in the palette, and `Mod+Alt+B` has nothing to act on either.
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+  await expect(page.getByPlaceholder("Search projects and commands…")).toBeVisible();
+  await expect(page.getByRole("option", { name: "Toggle sidebar" })).toBeVisible();
+  // The keyboard's way to the chooser, which is the palette's job now that
+  // the sidebar has no row for it.
+  await expect(page.getByRole("option", { name: "Open folder…" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Toggle explorer" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+Alt+b" : "Control+Alt+b");
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
 
   // Left to right, and the sidebar is the narrow one.
   const boxes = await panes.evaluateAll((nodes) =>
@@ -74,32 +102,50 @@ test("the shell shows three panes, the explorer closed", async () => {
 });
 
 /**
- * The sidebar's collapse sits at the far left of the session's title bar,
- * open or closed; the sidebar's own header holds only the app's name. The
- * explorer's toggle stays on the right.
+ * The sidebar's collapse sits at the right end of the sidebar's title strip
+ * while the sidebar is open — the traffic lights' row, level with the
+ * session's title bar and above the app's name — and at the far left of that
+ * title bar once the sidebar is gone. (The explorer's toggle, which stays on
+ * the right of that bar, needs a project: the test below.)
  */
-test("the sidebar's collapse is the title bar's first control", async () => {
-  const sidebar = page.locator("[data-panel]").first();
-  await expect(page.getByText("Hardcore", { exact: true })).toBeVisible();
-  await expect(sidebar.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(0);
-
+test("the sidebar's collapse is right after the traffic lights, open or shut", async () => {
+  const sidebar = page.getByTestId("sidebar");
   const header = page.locator("[data-session-header]");
+  const inSidebar = sidebar.getByRole("button", { name: "Toggle sidebar" });
+  await expect(inSidebar).toBeVisible();
+  await expect(header.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(0);
+  const [toggleBox, nameBox, openTitleBox] = await Promise.all([
+    inSidebar.boundingBox(),
+    page.getByRole("img", { name: "Hardcore" }).locator("visible=true").boundingBox(),
+    header.locator("[data-session-title]").boundingBox(),
+  ]);
+  // In the title strip above the name, level with the session's bar.
+  expect(toggleBox!.y + toggleBox!.height).toBeLessThanOrEqual(nameBox!.y + 1);
+  const toggleMid = toggleBox!.y + toggleBox!.height / 2;
+  const titleMid = openTitleBox!.y + openTitleBox!.height / 2;
+  expect(Math.abs(toggleMid - titleMid)).toBeLessThan(6);
+
+  await inSidebar.click();
+  // A collapsed pane is not rendered at all — the point of there being one
+  // flag: no zero-width sidebar is left in the document holding a copy of
+  // this button that nobody can click.
+  await expect(sidebar).toHaveCount(0);
+
+  // Gone, the same control is in the session's title bar — at the same
+  // place on screen, so the eye and the pointer find it where it was.
   const collapse = header.getByRole("button", { name: "Toggle sidebar" });
   await expect(collapse).toBeVisible();
-  const [collapseBox, titleBox, explorerToggleBox] = await Promise.all([
+  const [collapseBox, titleBox] = await Promise.all([
     collapse.boundingBox(),
     header.locator("[data-session-title]").boundingBox(),
-    header.getByRole("button", { name: "Toggle explorer" }).boundingBox(),
   ]);
   expect(collapseBox!.x).toBeLessThan(titleBox!.x);
-  expect(explorerToggleBox!.x).toBeGreaterThan(titleBox!.x);
+  expect(Math.abs(collapseBox!.x - toggleBox!.x)).toBeLessThan(4);
+  expect(Math.abs(collapseBox!.y - toggleBox!.y)).toBeLessThan(4);
 
   await collapse.click();
-  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBe(0);
-  await expect(collapse).toBeVisible();
-
-  await collapse.click();
-  await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThan(0);
+  await expect(sidebar).toHaveCount(1);
+  await expect(inSidebar).toBeVisible();
 });
 
 test("the explorer opens and closes a tab", async () => {
@@ -113,18 +159,137 @@ test("the explorer opens and closes a tab", async () => {
     (directory) => window.hardcore.projects.addPath({ path: directory }),
     fixture,
   );
-  // A new project starts with the pane closed, like every other one.
+  // A project brings the pane and its toggle back, on the right of the
+  // session's title bar and with the project's own remembered state — closed,
+  // for one nobody has opened it in.
+  const header = page.locator("[data-session-header]");
+  const toggle = header.getByRole("button", { name: "Toggle explorer" });
+  await expect(toggle).toBeVisible();
+  // Two panes, not three at a zero width: the explorer is closed for a
+  // project nobody has opened it in, and a closed pane is not in the document.
+  await expect(page.locator("[data-panel]")).toHaveCount(2);
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
+  const [toggleBox, titleBox] = await Promise.all([
+    toggle.boundingBox(),
+    header.locator("[data-session-title]").boundingBox(),
+  ]);
+  expect(toggleBox!.x).toBeGreaterThan(titleBox!.x);
+
   await openExplorer();
   await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeVisible();
+  // Open, the toggle is the explorer's strip's last control — at the same
+  // place on screen it had in the title bar, the window's right edge.
+  await expect(header.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
+  const inStrip = page.locator("[data-tab-strip]").getByRole("button", { name: "Toggle explorer" });
+  await expect(inStrip).toBeVisible();
+  const stripBox = (await inStrip.boundingBox())!;
+  expect(Math.abs(stripBox.x - toggleBox!.x)).toBeLessThan(4);
+  expect(Math.abs(stripBox.y - toggleBox!.y)).toBeLessThan(4);
 
   // `+` is a menu of the four kinds now.
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await page.getByRole("menuitem", { name: /^File/ }).click();
   await expect(page.getByRole("button", { name: "Close Untitled" })).toBeVisible();
+
+  // The toggle answers in every state, from wherever it is drawn — with a tab
+  // open, with the sidebar hidden, and from the palette. There is one of it in
+  // the document at a time, so "the toggle did nothing" cannot be a state.
+  await inStrip.click();
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
+  await header.getByRole("button", { name: "Toggle explorer" }).click();
+  await expect(page.getByTestId("explorer")).toHaveCount(1);
+  await page.getByTestId("sidebar").getByRole("button", { name: "Toggle sidebar" }).click();
+  await expect(page.getByTestId("sidebar")).toHaveCount(0);
+  await page.locator("[data-tab-strip]").getByRole("button", { name: "Toggle explorer" }).click();
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+Alt+b" : "Control+Alt+b");
+  await expect(page.getByTestId("explorer")).toHaveCount(1);
+  await page.locator("[data-session-header]").getByRole("button", { name: "Toggle sidebar" }).click();
+  await expect(page.getByTestId("sidebar")).toHaveCount(1);
+
   await page.getByRole("button", { name: "Close Untitled" }).click();
   await expect(page.getByText("Nothing open")).toBeVisible();
 
-  // Put the app back the way the rest of this file expects to find it.
+  // Put the app back the way the rest of this file expects to find it — and
+  // taking the project away takes the pane with it.
+  await page.evaluate((id) => window.hardcore.projects.remove({ id }), project.id);
+  await expect(page.getByText("Add a project to get started")).toBeVisible();
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
+  fs.rmSync(fixture, { recursive: true, force: true });
+});
+
+/**
+ * The strip under pressure, and the session's floor.
+ *
+ * `+` trails the last tab and sticks to the strip's right edge, so the button
+ * that opens the eighth tab is not the thing that scrolled off when the
+ * seventh was opened. And the session never collapses: dragging the explorer's
+ * divider as far left as it goes stops at the session's 320px floor rather
+ * than squeezing the pane out of the window.
+ */
+test("keeps + at the strip's right edge, and the session above its floor", async () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-shell-strip-"));
+  const project = await page.evaluate(
+    (directory) => window.hardcore.projects.addPath({ path: directory }),
+    fixture,
+  );
+  await openExplorer();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+
+  // The explorer at its floor, which is the pane a person actually has this
+  // problem in: drag its separator right until it stops. Not by four thousand
+  // pixels — 40px past the floor is a collapse now — but by the distance to
+  // the floor and a little more, which clamps.
+  const separator = page.locator("[data-separator=explorer]");
+  await dragSeparator(separator, (await explorerWidth()) - PANE_LIMITS.explorer.min + 20);
+  expect(await explorerWidth(), "the explorer would not narrow").toBeLessThan(360);
+  expect(await explorerWidth(), "the explorer went under its floor").toBe(PANE_LIMITS.explorer.min);
+
+  // Seven file tabs. Each is about a hundred pixels, so the row is twice the
+  // pane and the seventh `+` is exactly the button that used to scroll away.
+  for (let index = 0; index < 7; index += 1) {
+    await page.getByRole("button", { name: "New tab", exact: true }).click();
+    await page.getByRole("menuitem", { name: /^File/ }).click();
+  }
+  await expect(page.getByRole("tab")).toHaveCount(7);
+
+  const strip = page.locator("[data-tab-strip]");
+  const plus = page.locator("[data-new-tab]");
+  const [stripBox, plusBox, firstBox] = await Promise.all([
+    strip.boundingBox(),
+    plus.boundingBox(),
+    page.getByRole("tab").first().boundingBox(),
+  ]);
+  // The row really did overflow: the first tab is off the left edge of the
+  // strip. Without that this assertion proves nothing about sticky.
+  expect(firstBox!.x, "the strip did not overflow; the pin is untested").toBeLessThan(stripBox!.x);
+  // And `+` is inside the strip, at its right end.
+  expect(plusBox!.x).toBeGreaterThanOrEqual(stripBox!.x);
+  // `+` ends where the explorer's toggle begins: that toggle is the strip's
+  // last control, pinned to the window's right edge, and `+` sits just
+  // inside it.
+  const toggleBox = (await strip.getByRole("button", { name: "Toggle explorer" }).boundingBox())!;
+  expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(stripBox!.x + stripBox!.width + 1);
+  expect(plusBox!.x + plusBox!.width).toBeLessThanOrEqual(toggleBox.x + 1);
+  expect(plusBox!.x + plusBox!.width).toBeGreaterThan(toggleBox.x - 24);
+  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeVisible();
+  await shoot(page, "strip-overflow.png");
+
+  // The session's floor. Drag the same separator to the window's left edge:
+  // the session stops at its 320px minimum instead of collapsing to nothing,
+  // and the explorer stops growing there. The session is the app; it has no
+  // collapse to reach.
+  const sessionWidth = async () => (await page.getByTestId("session").boundingBox())?.width ?? 0;
+  const roomy = await sessionWidth();
+  await dragSeparator(separator, -4000);
+  const floored = await sessionWidth();
+  expect(floored, "the divider did not move the session at all").toBeLessThan(roomy);
+  expect(floored, "the session was dragged under its minimum").toBeGreaterThanOrEqual(PANE_LIMITS.session.min);
+  expect(floored, "the session kept more than its floor").toBeLessThanOrEqual(PANE_LIMITS.session.min + 2);
+  await expect(page.locator("[data-session-header]")).toBeVisible();
+  await expect(page.getByTestId("explorer")).toHaveCount(1);
+
   await page.evaluate((id) => window.hardcore.projects.remove({ id }), project.id);
   await expect(page.getByText("Add a project to get started")).toBeVisible();
   fs.rmSync(fixture, { recursive: true, force: true });
@@ -170,8 +335,9 @@ test("About reports the updater's state", async () => {
 });
 
 test("renders in both themes", async () => {
-  // The canonical shots are of the app as it opens: the explorer closed.
-  await closeExplorer();
+  // The canonical shots are of the app as it opens: no project, and so no
+  // explorer at all — two panes and the session filling the window.
+  await expect(page.getByTestId("explorer")).toHaveCount(0);
 
   // Dark, then light, through the real setting — which round-trips through
   // sqlite in main, so this also proves settings persist.
@@ -185,21 +351,36 @@ test("renders in both themes", async () => {
   await shoot(page, "shell.png");
 });
 
-/** Open the explorer pane if it is closed — it starts that way (plan §3). */
-async function openExplorer() {
+/**
+ * The explorer's width, and zero when it is closed: a closed pane is not in
+ * the document, so there is nothing to measure rather than a zero-width box.
+ */
+async function explorerWidth() {
   const pane = page.getByTestId("explorer");
-  if (((await pane.boundingBox())?.width ?? 0) === 0) {
-    await page.getByRole("button", { name: "Toggle explorer" }).click();
-  }
-  await expect.poll(async () => (await pane.boundingBox())?.width ?? 0).toBeGreaterThan(0);
+  return (await pane.count()) === 0 ? 0 : ((await pane.boundingBox())?.width ?? 0);
 }
 
-async function closeExplorer() {
-  const pane = page.getByTestId("explorer");
-  if (((await pane.boundingBox())?.width ?? 0) > 0) {
+/** Open the explorer pane if it is closed — it starts that way (plan §3). */
+async function openExplorer() {
+  if ((await explorerWidth()) === 0) {
     await page.getByRole("button", { name: "Toggle explorer" }).click();
   }
-  await expect.poll(async () => (await pane.boundingBox())?.width ?? 0).toBe(0);
+  await expect.poll(explorerWidth).toBeGreaterThan(0);
+}
+
+/**
+ * Drag a separator `by` pixels. A pane clamps at its minimum, and 40px past
+ * it (`PANE_LIMITS.overshoot`) collapses instead — so a drag meant to reach a
+ * floor aims at the floor rather than at infinity.
+ */
+async function dragSeparator(separator: Locator, by: number) {
+  const box = (await separator.boundingBox())!;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + by, y, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(120);
 }
 
 async function setTheme(theme: "dark" | "light") {

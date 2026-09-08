@@ -9,6 +9,12 @@
  * `src/main/cad/mcp-bridge.ts`). Main does the work; this file is the
  * agent-facing description of it.
  *
+ * Two tools are answered here instead: `list_skills` and `read_skill` read the
+ * skills root the app materialised (`HARDCORE_SKILLS_ROOT`,
+ * `src/main/cad/skills.ts`), which is static files on disk and needs neither
+ * main nor a window. They are how an agent that does not load an additional
+ * directory's skills by itself reaches the same files.
+ *
  * `createServer` is exported so the unit test can drive the same tools over
  * an in-memory transport against a fake bridge; the stdio wiring at the
  * bottom runs only when this file is the entry point. In a packaged app the
@@ -30,6 +36,91 @@ export const BRIDGE_ENV = {
   cwd: "HARDCORE_CWD",
   session: "HARDCORE_SESSION_ID",
 };
+
+/** Where the app put its skills. Shared with `src/main/cad/skills.ts` by name. */
+export const SKILLS_ROOT_ENV = "HARDCORE_SKILLS_ROOT";
+
+/** The layout inside the skills root that this server reads. */
+const SKILLS_LAYOUT = path.join(".claude", "skills");
+
+/** The `name` and `description` of a SKILL.md's front matter, folded onto one line. */
+export function skillFrontmatter(text) {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  if (!match) {
+    return {};
+  }
+  const fields = {};
+  let key = null;
+  for (const line of match[1].split(/\r?\n/)) {
+    const start = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
+    if (start) {
+      key = start[1];
+      fields[key] = start[2] ?? "";
+    } else if (key && /^\s+\S/.test(line)) {
+      fields[key] = `${fields[key]} ${line.trim()}`.trim();
+    } else {
+      key = null;
+    }
+  }
+  const unquote = (value) => (value ? value.replace(/^['"]|['"]$/g, "").trim() : "");
+  return { name: unquote(fields.name), description: unquote(fields.description) };
+}
+
+/**
+ * The skills on disk, or an empty list when the app did not name a root. The
+ * directory name is the skill's identity; the description comes out of its
+ * SKILL.md.
+ */
+export function readSkills(root) {
+  if (!root) {
+    return [];
+  }
+  const directory = path.join(root, SKILLS_LAYOUT);
+  let entries;
+  try {
+    entries = fs.readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const skills = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    const file = path.join(directory, entry.name, "SKILL.md");
+    if (!fs.existsSync(file)) {
+      continue;
+    }
+    skills.push({ name: entry.name, description: skillFrontmatter(fs.readFileSync(file, "utf8")).description ?? "" });
+  }
+  return skills.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * A file inside one skill, refused outside it. `relative` defaults to the
+ * SKILL.md; a skill's `references/*.md` is the other thing worth reading.
+ */
+export function readSkillFile(root, name, relative = "SKILL.md") {
+  if (!root) {
+    throw new Error("this session was given no skills root");
+  }
+  const directory = path.resolve(path.join(root, SKILLS_LAYOUT, name));
+  const skillRoot = path.resolve(path.join(root, SKILLS_LAYOUT));
+  if (path.relative(skillRoot, directory).split(path.sep)[0] === "..") {
+    throw new Error(`${name} is not a skill`);
+  }
+  if (!fs.existsSync(path.join(directory, "SKILL.md"))) {
+    throw new Error(`no skill named ${name}; call list_skills`);
+  }
+  const target = path.resolve(directory, relative);
+  if (path.relative(directory, target).split(path.sep)[0] === "..") {
+    throw new Error(`${relative} is outside the ${name} skill`);
+  }
+  if (!fs.existsSync(target) || !fs.statSync(target).isFile()) {
+    throw new Error(`${relative} is not a file in the ${name} skill`);
+  }
+  return { path: path.join(name, relative), text: fs.readFileSync(target, "utf8") };
+}
 
 /** A bridge over HTTP, from the environment. */
 export function httpBridge(env = process.env) {
@@ -72,6 +163,7 @@ const failure = (error) => ({
  */
 export function createServer(bridge, options = {}) {
   const cwd = options.cwd ?? process.env[BRIDGE_ENV.cwd] ?? process.cwd();
+  const skillsRoot = options.skillsRoot ?? process.env[SKILLS_ROOT_ENV] ?? null;
   const server = new McpServer({ name: "hardcore", version: options.version ?? "0.0.0" });
 
   const pathField = z
@@ -169,6 +261,52 @@ export function createServer(bridge, options = {}) {
           { type: "text", text: `Attached ${result.path}` },
         ],
       })),
+  );
+
+  server.registerTool(
+    "list_skills",
+    {
+      title: "List the skills Hardcore ships",
+      description:
+        "The skills this app carries, by name, with what each is for. They are files on disk inside Hardcore — " +
+        "not installed into your configuration — so nothing loads them for you: read the one that fits before you start. " +
+        "Read `cad` before any CAD, STEP, DXF, mesh or robot-description work, and `hardcore-app-use` before showing " +
+        "the person a file or otherwise acting on this app. Call this first in a session that touches either.",
+      inputSchema: {},
+    },
+    () => {
+      const skills = readSkills(skillsRoot);
+      if (skills.length === 0) {
+        return failure(new Error("this session was given no skills"));
+      }
+      return text({ root: path.join(skillsRoot, SKILLS_LAYOUT), skills });
+    },
+  );
+
+  server.registerTool(
+    "read_skill",
+    {
+      title: "Read a skill",
+      description:
+        "The text of a skill's SKILL.md, or of a file inside that skill (its `references/…` pages, its scripts). " +
+        "This is the instruction set you are expected to follow for that kind of work — read `cad` before CAD work " +
+        "and `hardcore-app-use` before touching this app, and follow what they say over your own defaults.",
+      inputSchema: {
+        name: z.string().min(1).describe("A skill's name, as `list_skills` reports it."),
+        path: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("A file inside the skill, relative to its directory. Defaults to SKILL.md."),
+      },
+    },
+    ({ name, path: relative }) => {
+      try {
+        return text(readSkillFile(skillsRoot, name, relative));
+      } catch (error) {
+        return failure(error);
+      }
+    },
   );
 
   return server;

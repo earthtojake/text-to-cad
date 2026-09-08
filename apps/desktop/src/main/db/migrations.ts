@@ -153,6 +153,63 @@ export const MIGRATIONS: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 7,
+    name: "pinned-sessions",
+    // The sidebar's `Pinned` section. A column on the session rather than a
+    // list of ids in the settings blob: the row already goes away when the
+    // thread is deleted, and a list would be a second place to forget it
+    // from.
+    up: `
+      ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
+    version: 8,
+    name: "agent-modes",
+    // The mode is the app's one permission control, drawn on the new-session
+    // screen as well as in a live thread, so the cache has to keep the other
+    // half of what `session/new` answers: Claude sends its modes in `modes`
+    // rather than as a config option, and a screen with no session would
+    // have nothing to draw them from. `default_mode` is the mode the next
+    // session starts in, beside the model and the effort it starts with;
+    // null means the agent's own auto-approval preset.
+    //
+    // `modes` is JSON for the same reason `options` is (migration 6): it is
+    // a cache of a wire shape, and a row that no longer parses is re-probed
+    // rather than migrated.
+    up: `
+      ALTER TABLE agent_options ADD COLUMN modes TEXT;
+      ALTER TABLE agent_options ADD COLUMN default_mode TEXT;
+    `,
+  },
+  {
+    version: 9,
+    name: "agent-effort-per-model",
+    // The effort belongs to the model, not to the agent. Claude's `effort`
+    // option is reported for whichever model the session is on and its
+    // levels change with it — `Xhigh` exists for one model and not the next
+    // — so one `default_effort` per agent carried the outgoing model's level
+    // onto the incoming one and forgot the earlier pick. It becomes a map:
+    //
+    //   default_efforts  {"<model value>": "<effort value>"}
+    //   effort_options   {"<model value>": <the effort ConfigOption>}
+    //
+    // `default_efforts` is what the person picked, per model; `effort_options`
+    // is the levels each model offers, filled in whenever a live session
+    // reports its options — the only place a model's list is ever said. Both
+    // are JSON for the reason `options` is (migration 6): a cache of a wire
+    // shape, re-probed rather than migrated when it stops parsing.
+    //
+    // The old column goes, with nothing left behind to read it: a level
+    // stored against no model is not an answer to "which effort for this
+    // model", and a shim that guessed one would be a wrong answer.
+    up: `
+      ALTER TABLE agent_options ADD COLUMN default_efforts TEXT;
+      ALTER TABLE agent_options ADD COLUMN effort_options TEXT;
+      ALTER TABLE agent_options DROP COLUMN default_effort;
+    `,
+  },
 ];
 
 /**
