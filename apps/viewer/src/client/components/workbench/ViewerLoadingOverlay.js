@@ -1,4 +1,5 @@
 import { Progress } from "@/components/ui/progress";
+import LoadingIcon from "./LoadingIcon.js";
 import { formatArtifactProgress } from "@/workbench/artifactProgress.js";
 
 // Two words, max. Anything longer starts wrapping over the 3D scene and stops being
@@ -8,7 +9,8 @@ const DEFAULT_STATUS = "Loading";
 /**
  * The one loading indicator: what is happening on the left, how far along on the right, bar.
  *
- * Two lines, never more. The status line is as SPECIFIC as the build can make it — the phase
+ * The decorative brand animation sits above the same two-line progress block.
+ * The status line is as SPECIFIC as the build can make it — the phase
  * plus the sub-unit in flight, on one line ("Building geometry · airframe") — because the
  * phase alone goes stale for minutes at a time on a big model, and a status that has not
  * changed in twenty minutes is the failure this whole pipeline exists to fix. Putting the
@@ -50,8 +52,9 @@ export default function ViewerLoadingOverlay({
         <div
           role="status"
           aria-live="polite"
-          className="relative z-10 flex w-[22rem] max-w-[min(90vw,28rem)] flex-col gap-2 text-popover-foreground"
+          className="relative z-10 flex w-[22rem] max-w-full flex-col gap-2 text-popover-foreground"
         >
+          <LoadingIcon className="mx-auto mb-3" />
           <div className="flex items-baseline justify-between gap-4">
             {/* smui: status text is uppercase with wide tracking, at the type scale's
                 text-tiny (11px). */}

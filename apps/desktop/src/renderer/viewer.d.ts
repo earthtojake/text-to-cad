@@ -204,3 +204,12 @@ declare module "cad-viewer/shell" {
   /** An element's width through a `ResizeObserver`; `0` until first measured. */
   export function useElementWidth(): [(element: HTMLElement | null) => void, number];
 }
+
+/** Small standalone entry; importing a loader must not eagerly load the CAD surface. */
+declare module "cad-viewer/loading-icon" {
+  export default function LoadingIcon(props: {
+    active?: boolean;
+    size?: number;
+    className?: string;
+  }): import("react").ReactElement;
+}

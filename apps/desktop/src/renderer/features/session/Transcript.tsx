@@ -25,7 +25,6 @@ export function Transcript({
   onReconnect: () => void;
 }) {
   const status = statusLine(state);
-  const lastTurn = state.turns.at(-1);
 
   return (
     <Conversation className="min-h-0 min-w-0 flex-1" data-transcript>
@@ -40,8 +39,7 @@ export function Transcript({
             turn={turn}
           />
         ))}
-        {status && lastTurn?.role === "agent" ? <StatusLine text={status} /> : null}
-        {status && lastTurn?.role !== "agent" ? <StatusLine text={status} /> : null}
+        {status ? <StatusLine active={state.status !== "waiting"} text={status} /> : null}
       </ConversationContent>
       <JumpToLatest />
     </Conversation>

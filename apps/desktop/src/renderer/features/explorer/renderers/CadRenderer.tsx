@@ -2,7 +2,7 @@ import { Box, RefreshCw, Settings2 } from "lucide-react";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@renderer/components/ui/button";
-import { Spinner } from "@renderer/components/ui/spinner";
+import LoadingIcon from "cad-viewer/loading-icon";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
 import { useExplorer } from "@renderer/state/explorer";
 import { addToDraft } from "@renderer/state/cad-draft";
@@ -270,8 +270,8 @@ export function CadRenderer({
 
   if (!answer) {
     return (
-      <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground">
-        <Spinner className="size-3.5" />
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-xs text-muted-foreground">
+        <LoadingIcon />
         Starting the CAD runtime…
       </div>
     );
@@ -324,8 +324,8 @@ export function CadRenderer({
     <div className="h-full min-h-0" data-cad-surface>
       <Suspense
         fallback={
-          <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground">
-            <Spinner className="size-3.5" />
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-xs text-muted-foreground">
+            <LoadingIcon />
             Loading the CAD viewer…
           </div>
         }
