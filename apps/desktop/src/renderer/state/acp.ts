@@ -23,6 +23,16 @@ import type {
  * `loading` and `loadErrors` are the renderer's own: they cover the gap
  * between selecting a session from the index and its snapshot arriving,
  * which is where the connecting and the reconnect-failed states live.
+ *
+ * That gap is a second or two of spawn, `initialize` and replay (README,
+ * "Opening a session"), and `reconnecting` is what makes it invisible: a
+ * session with no live connection is painted from the snapshot main filed
+ * on disk and then reconnected behind the transcript, with `Reconnecting…`
+ * in the composer's row instead of a spinner over the pane. While that flag
+ * is up the reducer events are dropped — they are the agent replaying a
+ * history the snapshot already shows, and folding them onto it would double
+ * every turn — and the authoritative state that ends every `load` replaces
+ * the picture.
  */
 type AcpState = {
   sessions: Record<string, SessionState>;
@@ -30,6 +40,12 @@ type AcpState = {
   terminalOutput: Record<string, string>;
   /** Sessions whose `load` is in flight. */
   loading: Record<string, true>;
+  /**
+   * Sessions being loaded *behind a painted state* — a snapshot, or the
+   * state of a connection that has since been closed. Their reducer events
+   * are dropped until the load answers.
+   */
+  reconnecting: Record<string, true>;
   /** The last `load` failure per session, cleared by the next attempt. */
   loadErrors: Record<string, string>;
 
@@ -46,7 +62,11 @@ type AcpState = {
     branch?: string;
   }) => Promise<string>;
   load: (sessionId: string) => Promise<void>;
-  /** `load` unless a snapshot is already here or a load is already running. */
+  /**
+   * What a click on a session row costs: nothing when its adapter is still
+   * alive, a paint from the stored snapshot plus a background `load` when it
+   * is not, and the spinner only for a session that has neither.
+   */
   ensureLoaded: (sessionId: string) => Promise<void>;
   prompt: (sessionId: string, content: PromptBlock[] | string) => Promise<string>;
   cancel: (sessionId: string) => Promise<void>;
@@ -62,6 +82,7 @@ export const useAcp = create<AcpState>((set, get) => ({
   sessions: {},
   terminalOutput: {},
   loading: {},
+  reconnecting: {},
   loadErrors: {},
 
   receiveState: (sessionId, state) =>
@@ -73,6 +94,12 @@ export const useAcp = create<AcpState>((set, get) => ({
       // Events for a session we have no snapshot of are dropped: the
       // snapshot that follows a connect carries everything up to that point.
       if (!state) {
+        return current;
+      }
+      // A session painted from disk while its agent reconnects: what arrives
+      // now is that agent replaying the history already on screen, and the
+      // state at the end of the load is what replaces it.
+      if (current.reconnecting[sessionId]) {
         return current;
       }
       return { sessions: { ...current.sessions, [sessionId]: reduce(state, event) } };
@@ -91,7 +118,9 @@ export const useAcp = create<AcpState>((set, get) => ({
       delete sessions[sessionId];
       const loadErrors = { ...current.loadErrors };
       delete loadErrors[sessionId];
-      return { sessions, loadErrors };
+      const reconnecting = { ...current.reconnecting };
+      delete reconnecting[sessionId];
+      return { sessions, loadErrors, reconnecting };
     }),
 
   create: async (input) => {
@@ -103,7 +132,13 @@ export const useAcp = create<AcpState>((set, get) => ({
     set((current) => {
       const loadErrors = { ...current.loadErrors };
       delete loadErrors[sessionId];
-      return { loading: { ...current.loading, [sessionId]: true }, loadErrors };
+      return {
+        loading: { ...current.loading, [sessionId]: true },
+        // A load with something already on screen is a reconnect: the events
+        // it produces are a replay of that, and are dropped.
+        ...(current.sessions[sessionId] ? { reconnecting: { ...current.reconnecting, [sessionId]: true as const } } : {}),
+        loadErrors,
+      };
     });
     try {
       const state = await window.hardcore.sessions.load({ id: sessionId });
@@ -114,15 +149,43 @@ export const useAcp = create<AcpState>((set, get) => ({
       set((current) => {
         const loading = { ...current.loading };
         delete loading[sessionId];
-        return { loading };
+        const reconnecting = { ...current.reconnecting };
+        delete reconnecting[sessionId];
+        return { loading, reconnecting };
       });
     }
   },
 
   ensureLoaded: async (sessionId) => {
     const { sessions, loading } = get();
-    if (sessions[sessionId] || loading[sessionId]) {
+    if (loading[sessionId]) {
       return;
+    }
+    const held = sessions[sessionId];
+    // A connection that is still up: this is a paint and nothing else.
+    // `closed` is the adapter the keep-alive evicted (src/main/acp/live.ts)
+    // or one that was disconnected by hand — the transcript is still right,
+    // and the agent behind it has to come back.
+    if (held && held.status !== "closed") {
+      return;
+    }
+    if (!held) {
+      // The snapshot main filed for this session, if it has one: painted
+      // before the load starts, so the transcript is on screen in a frame
+      // rather than in two seconds. `live: true` means main's connection
+      // outlived the renderer's copy of it and there is nothing to reconnect.
+      try {
+        const painted = await window.hardcore.sessions.state({ id: sessionId });
+        // A load that started while this was in flight owns the session now.
+        if (painted && !get().sessions[sessionId] && !get().loading[sessionId]) {
+          get().receiveState(sessionId, painted.state);
+          if (painted.live) {
+            return;
+          }
+        }
+      } catch {
+        /* no snapshot: the spinner, as before */
+      }
     }
     await get().load(sessionId);
   },
