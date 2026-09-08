@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 
 import {
-  autoModeId,
+  defaultModeId,
   effortOption,
   modeChoice,
   modelOption,
@@ -143,6 +143,6 @@ export function useProviderMode(agentId: string | null): ModeChoice | null {
     const stored = choice.modes.some((mode) => mode.id === cached.defaultMode)
       ? cached.defaultMode
       : null;
-    return { ...choice, currentModeId: stored ?? autoModeId(choice.modes) ?? choice.currentModeId };
-  }, [cached]);
+    return { ...choice, currentModeId: stored ?? defaultModeId(agentId, choice.modes) ?? choice.currentModeId };
+  }, [cached, agentId]);
 }

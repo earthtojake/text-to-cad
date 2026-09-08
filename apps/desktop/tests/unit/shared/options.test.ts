@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { configOptions, sessionModes } from "@shared/acp/reduce";
 import {
   autoModeId,
+  defaultModeId,
   effortOption,
   fastOption,
   isEffortOption,
@@ -97,6 +98,17 @@ describe("the agent's own auto mode", () => {
   it("falls back to a mode plainly called auto, and is null when there is none", () => {
     expect(autoModeId(sessionModes([{ id: "auto", name: "Automatic" }]))).toBe("auto");
     expect(autoModeId(sessionModes([{ id: "default", name: "Default" }]))).toBeNull();
+  });
+
+  it("starts Claude Code and Codex in their own auto presets by name, and falls back to the kind", () => {
+    const codex = codexNewSession().modes as { availableModes: unknown };
+    expect(defaultModeId("claude-code", sessionModes(CLAUDE_MODES))).toBe("auto");
+    expect(defaultModeId("codex", sessionModes(codex.availableModes))).toBe("agent");
+    // An override the agent does not offer is not forced on it.
+    expect(defaultModeId("codex", sessionModes([{ id: "default", name: "Default" }, { id: "auto", name: "Auto" }]))).toBe("auto");
+    // Providers without an override use the auto-review rule.
+    expect(defaultModeId("gemini-cli", sessionModes(codex.availableModes))).toBe("agent");
+    expect(defaultModeId(null, sessionModes([{ id: "default", name: "Default" }]))).toBeNull();
   });
 });
 

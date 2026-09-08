@@ -94,6 +94,26 @@ export function fastOption(
  * Null when the agent has no such preset, which is the case worth leaving
  * alone rather than guessing at.
  */
+/**
+ * The mode a provider starts in unless the person has chosen one. Claude Code
+ * and Codex both open in their own auto-approval preset in their own apps,
+ * so Hardcore does the same by name; any other provider gets the
+ * `auto_review` rule below, and an override that names a mode the agent did
+ * not offer falls through to it.
+ */
+export const PROVIDER_DEFAULT_MODES: Readonly<Record<string, string>> = {
+  "claude-code": "auto",
+  codex: "agent",
+};
+
+export function defaultModeId(agentId: string | null | undefined, modes: SessionMode[]): string | null {
+  const override = agentId ? PROVIDER_DEFAULT_MODES[agentId] : undefined;
+  if (override && modes.some((mode) => mode.id === override)) {
+    return override;
+  }
+  return autoModeId(modes);
+}
+
 export function autoModeId(modes: SessionMode[]): string | null {
   const byKind = modes.find((mode) => mode.kind === AUTO_REVIEW_KIND);
   if (byKind) {

@@ -16,7 +16,7 @@ import nodePath from "node:path";
 
 import type { McpServer } from "@agentclientprotocol/sdk";
 
-import { autoModeId, effortOption, modeChoice, modelOption } from "../../shared/acp/options";
+import { defaultModeId, effortOption, modeChoice, modelOption } from "../../shared/acp/options";
 import type {
   ConfigOption,
   PromptBlock,
@@ -258,7 +258,7 @@ export class SessionManager {
       this.deps.agentOptions?.defaults(session.agentId) ?? { model: null, effort: null, mode: null };
     await this.applyConfigOption(connection, modelOption(connection.state.configOptions), defaults.model);
     await this.applyConfigOption(connection, effortOption(connection.state.configOptions), defaults.effort);
-    await this.applyMode(connection, defaults.mode);
+    await this.applyMode(connection, defaults.mode, session.agentId);
     this.deps.agentOptions?.remember(
       session.agentId,
       connection.state.configOptions,
@@ -296,7 +296,7 @@ export class SessionManager {
    * answer goes: `session/set_mode`, or the `mode` config option
    * (`shared/acp/options`).
    */
-  private async applyMode(connection: SessionConnection, preferred: string | null): Promise<void> {
+  private async applyMode(connection: SessionConnection, preferred: string | null, agentId: string): Promise<void> {
     try {
       const choice = modeChoice(connection.state);
       if (!choice) {
@@ -304,7 +304,7 @@ export class SessionManager {
       }
       const wanted =
         (preferred && choice.modes.some((mode) => mode.id === preferred) ? preferred : null) ??
-        autoModeId(choice.modes);
+        defaultModeId(agentId, choice.modes);
       if (!wanted || wanted === choice.currentModeId) {
         return;
       }
