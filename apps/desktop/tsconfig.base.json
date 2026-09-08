@@ -19,8 +19,7 @@
       "@main/*": ["src/main/*"],
       "@preload/*": ["src/preload/*"],
       "@renderer/*": ["src/renderer/*"],
-      "@shared/*": ["src/shared/*"],
-      "@viewer/*": ["../viewer/src/client/*"]
+      "@shared/*": ["src/shared/*"]
     }
   }
 }

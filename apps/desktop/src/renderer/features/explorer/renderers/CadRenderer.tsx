@@ -110,7 +110,7 @@ type CadSurfaceProps = {
 const CadSurface = lazy(async () => {
   // Typed by src/renderer/viewer.d.ts — the entry is JSX-in-`.js` source with
   // no declarations of its own.
-  const { CadFileView, ViewerOriginProvider } = await import("@viewer/file-view");
+  const { CadFileView, ViewerOriginProvider } = await import("cad-viewer/file-view");
   return {
     default: ({
       origin,

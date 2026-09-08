@@ -1,16 +1,16 @@
 /**
- * `@viewer/file-view` — the CAD Viewer's per-file surface.
+ * `cad-viewer/file-view` — the CAD Viewer's per-file surface.
  *
  * `apps/viewer` exports that entry as **source**: JSX in `.js` files, with no
  * types and no build step (`apps/viewer/docs/file-view.md`). This app's
  * bundler compiles it; the compiler needs to be told what it is.
  *
  * Declared narrowly on purpose — the props this app passes, and nothing else.
- * A `declare module "@viewer/file-view";` with no body would type the whole
+ * A `declare module "cad-viewer/file-view";` with no body would type the whole
  * surface as `any` and lose the one thing a declaration is for: catching a
  * prop that was renamed on the viewer's side.
  */
-declare module "@viewer/file-view" {
+declare module "cad-viewer/file-view" {
   import type { ComponentType, ReactNode } from "react";
 
   /**
