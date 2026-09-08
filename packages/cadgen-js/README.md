@@ -23,16 +23,19 @@ snapshot renderer and the node builders in `bin/`).
 ## The laws that live here
 
 - **Viewer three-input law**: a client renders from the file, its sidecar
-  (`<name>.step.json`), and the cache — never source, never a build. The
+  (`<name>.step.json`), its optional adjacent render module
+  (`<name>.step.js`), and the cache — never source, never a build. The
   code in this package must be writable against exactly those inputs.
 - **Kinematics is data, choreography is JS, independently**: the FK
   evaluator (`kinematicsRuntime.js`) folds sidecar mate data into
   transforms and is the operation-for-operation twin of the Python
   evaluator (`cadgen/_internal/kinematics_fk.py`) — a viewer slider and an
   exported bake agree to the bit. The animation runtime
-  (`animationRuntime.js`) evaluates the sidecar's copied `.anim.js` text
-  with the `m.get(target)` handle contract (premultiplying calls, reset to
-  rest every frame, pure in t). Neither half references the other; they
+  (`animationRuntime.js`) evaluates the `clips` the render module beside the
+  document (`<name>.step.js`, loaded by `renderModule.js`) exports, with the
+  `m.get(target)` handle contract (premultiplying calls, reset to rest every
+  frame, pure in t). That module is authored, never generated: editing it is
+  a reload, never a rebuild. Neither half references the other; they
   meet only in the effect records. Flexible swept bodies use
   [tube deformation](docs/tube-deformation.md), deforming the original STEP
   tessellation through analytic centerlines in that same shared effects pass.
@@ -72,11 +75,15 @@ tessellation cache keys ↔ `cadgen/_internal/cache_paths.py`;
 `apps/viewer/server/store_paths.py` ↔ `cadgen/_internal/`
 schema constants.
 
-Browser mesh-cache uploads are best effort and limited to 32 MiB per entry.
-Larger tessellations stay available to render at full quality; their optional
-upload is skipped because browser debugging transports can expand binary
-POSTs beyond Node's string limit. Filesystem cache writes and existing large
-cache reads retain their normal behavior.
+Browser mesh-cache traffic is best effort and unrestricted in size, but it
+must reach its host without passing through a debugging transport: an
+intercepted request's body is handed to the driver as escaped text in one
+message, which a large tessellation overruns. `createHttpTessellationCacheProvider`
+therefore takes an `origin` for hosts whose cache is not on the page's own
+origin (the snapshot renderer's loopback asset server passes one; the viewer
+serves the cache itself and leaves it empty). Batched reads are split by key
+count and by the bytes the host returns per entry, so no single response has
+to be allocated whole.
 
 Scene geometry shares immutable component normal and surface-edge buffers.
 Effects that change vertex positions or normals acquire writable attributes

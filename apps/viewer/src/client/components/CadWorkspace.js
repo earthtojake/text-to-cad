@@ -1682,10 +1682,11 @@ export default function CadWorkspace({
     };
   }, [fileSessionNamespace, selectedEntry, selectedStepModuleCadPath, selectedStepModuleUrl]);
 
-  // The animation half of the same sidecar, loaded on its own: the copied
-  // .anim.js text compiles to clips through a Blob import. A model with no
-  // animation section resolves to no clips and no Animation tab, and a broken
-  // one reports its own error without disturbing the Pose tab.
+  // The animation half, loaded on its own from the render module beside the
+  // document (<name>.step.js): its text compiles to clips through a Blob
+  // import. A document with no render module resolves to no clips and no
+  // Animation tab, and a broken one reports its own error without disturbing
+  // the Pose tab.
   useEffect(() => {
     let cancelled = false;
     const resetAnimation = () => {

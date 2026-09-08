@@ -10,6 +10,7 @@ bypass, atomic best-effort writes, and read-your-write round-trips.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import unittest
 from pathlib import Path
@@ -21,6 +22,8 @@ add_repo_path("packages/cadgen/src")
 
 from cadgen.snapshot_core import (  # noqa: E402
     TESS_CACHE_BATCH_MAGIC,
+    BatchSnapshotRenderer,
+    SnapshotError,
     TESS_CACHE_BATCH_PATH,
     TESS_CACHE_BATCH_VERSION,
     TESS_CACHE_ROUTE_PREFIX,
@@ -30,6 +33,31 @@ from cadgen.snapshot_core import (  # noqa: E402
     read_tessellation_cache_entry,
     write_tessellation_cache_entry,
 )
+
+
+class AssetServerIsMandatoryTest(unittest.TestCase):
+    """The loopback server is the only transport for bulk mesh bytes.
+
+    The old behaviour was a silent fallback to Playwright's route, which hands
+    an intercepted request's body to the driver as escaped text in one protocol
+    message — that killed the renderer on real assemblies and reported it as a
+    lost driver connection. A snapshot that cannot bind a local socket has to
+    say so.
+    """
+
+    def test_start_fails_loudly_when_the_loopback_server_cannot_bind(self):
+        renderer = BatchSnapshotRenderer(Path("."))
+        with mock.patch(
+            "cadgen.snapshot_core.SnapshotAssetServer",
+            side_effect=OSError("Address family not supported"),
+        ):
+            with self.assertRaises(SnapshotError) as caught:
+                asyncio.run(renderer.start())
+        message = str(caught.exception)
+        self.assertIn("loopback HTTP server", message)
+        self.assertIn("Address family not supported", message)
+        self.assertFalse(renderer.started)
+        self.assertIsNone(renderer.asset_server)
 
 
 class LargeHttpBodyTest(unittest.TestCase):

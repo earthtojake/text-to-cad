@@ -22,7 +22,7 @@ test('analytic line/arc lengths, tangent joins, signed arcs and nearest points',
   near(sampleTubePath(path,path.length).point,[5,5,0]);
   near(sampleTubePath(path,path.length).tangent,[0,1,0]);
   assert.ok(Math.abs(projectTubePath(path,[5,5,2]).distance-path.length)<1e-12);
-  const negative=compileTubePath({segments:[{kind:'arc',center:[0,5,0],axis:[0,0,1],start:[0,0,0],sweepDeg:-90}]});
+  const negative=compileTubePath({normal:[0,0,1],segments:[{kind:'arc',center:[0,5,0],axis:[0,0,1],start:[0,0,0],sweepDeg:-90}]});
   near(sampleTubePath(negative,negative.length).point,[-5,5,0]);
 });
 test('continuous STEP mesh deforms in place, retains normals and never mutates shared source',()=>{
@@ -98,7 +98,7 @@ test('conservative projection pruning agrees with exhaustive segments on a multi
     const a=j*Math.PI/2,b=a+Math.PI/2,z=j*.2;
     segments.push({kind:'bezier',points:[[r*Math.cos(a),r*Math.sin(a),z],[r*(Math.cos(a)-k*Math.sin(a)),r*(Math.sin(a)+k*Math.cos(a)),z+.2/3],[r*(Math.cos(b)+k*Math.sin(b)),r*(Math.sin(b)-k*Math.cos(b)),z+.4/3],[r*Math.cos(b),r*Math.sin(b),z+.2]]});
   }
-  const path=compileTubePath({segments});
+  const path=compileTubePath({normal:[0,0,1],segments});
   const exhaustive={...path,segments:path.segments.map(s=>({...s,bounds:{min:[-Infinity,-Infinity,-Infinity],max:[Infinity,Infinity,Infinity]}}))};
   for(let j=0;j<81;j++) {
     const frame=sampleTubePath(path,path.length*j/80),p=frame.point.map((v,i)=>v+.3*frame.normal[i]);
@@ -108,11 +108,13 @@ test('conservative projection pruning agrees with exhaustive segments on a multi
   }
 });
 test('broken centerlines and unknown keys fail loudly rather than drawing plausible wrong ropes',()=>{
-  assert.throws(()=>compileTubePath({segments:[line([0,0,0],[1,0,0]),line([2,0,0],[3,0,0])]}),/discontinuity/);
-  assert.throws(()=>compileTubePath({segments:[line([0,0,0],[1,0,0]),line([1,0,0],[1,1,0])]}),/tangent-continuous/);
+  assert.throws(()=>compileTubePath({normal:[0,0,1],segments:[line([0,0,0],[1,0,0]),line([2,0,0],[3,0,0])]}),/discontinuity/);
+  assert.throws(()=>compileTubePath({normal:[0,0,1],segments:[line([0,0,0],[1,0,0]),line([1,0,0],[1,1,0])]}),/tangent-continuous/);
+  assert.throws(()=>compileTubePath({segments:[line([0,0,0],[1,0,0])]}),/deformTube: path normal is required.*both the rest and the posed path/);
+  assert.throws(()=>compileTubePath({normal:[1,0,0],segments:[line([0,0,0],[1,0,0])]}),/transverse to first tangent/);
   assert.throws(()=>normalizeTubeDeformation({rest:straight,path:straight,typo:1}),/unknown deformation key/);
-  assert.throws(()=>compileTubePath({segments:[{...elbow.segments[0],center:[0,5,1]}]}),/normal plane/);
-  assert.throws(()=>compileTubePath({segments:[line([0,0,0],[0,0,0])]}),/nonzero/);
+  assert.throws(()=>compileTubePath({normal:[0,0,1],segments:[{...elbow.segments[0],center:[0,5,1]}]}),/normal plane/);
+  assert.throws(()=>compileTubePath({normal:[0,0,1],segments:[line([0,0,0],[0,0,0])]}),/nonzero/);
 });
 test('endpoint-only cylinder tessellation acquires continuous bend rings and remains watertight',()=>{
   const source=new THREE.CylinderGeometry(.2,.2,10,24,1,false);

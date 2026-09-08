@@ -1,12 +1,21 @@
+import {
+  TUBE_BRAID_STAGE,
+  TUBE_GPU_STAGE,
+  TUBE_MATERIAL_ATTRIBUTE,
+  TUBE_MATERIAL_VARYING,
+  ensureTubeMaterialStage
+} from "./tubeMaterialShader.js";
+
 // A braid is a procedural surface finish on the real STEP tube, not additional
-// collision geometry. Rest material coordinates survive mesh deformation.
+// collision geometry. Rest material coordinates (arc length, transverse offsets)
+// survive mesh deformation: the CPU path stores them in an attribute, the GPU
+// path derives them from its mapping texture; both write the shared varying.
 const PARS = `
 uniform vec3 cadBraidParameters;
 uniform float cadBraidEnabled;
-varying vec3 vCadTubeMaterial;
 float cadBraidHeight() {
-  float angle = atan(vCadTubeMaterial.z, vCadTubeMaterial.y);
-  float turns = vCadTubeMaterial.x / cadBraidParameters.x;
+  float angle = atan(${TUBE_MATERIAL_VARYING}.z, ${TUBE_MATERIAL_VARYING}.y);
+  float turns = ${TUBE_MATERIAL_VARYING}.x / cadBraidParameters.x;
   float carrierA = cadBraidParameters.z * (angle / 6.28318530718 + turns);
   float carrierB = cadBraidParameters.z * (angle / 6.28318530718 - turns);
   float a = fract(carrierA), b = fract(carrierB);
@@ -26,26 +35,41 @@ vec3 cadBraidNormal(vec3 surfacePosition, vec3 surfaceNormal, float height) {
 }
 `;
 
-export function applyTubeBraidMaterial(THREE, material, braid) {
-  if (!material) return;
-  let state=material.userData.cadTubeBraid;
-  if(!state && !braid)return;
-  if(!state) {
-    const originalCompile=material.onBeforeCompile,originalKey=material.customProgramCacheKey;
-    state=material.userData.cadTubeBraid={parameters:{value:new THREE.Vector3(1,0,8)},enabled:{value:0}};
-    material.onBeforeCompile=function(shader,renderer) {
-      originalCompile.call(this,shader,renderer);
-      shader.uniforms.cadBraidParameters=state.parameters;
-      shader.uniforms.cadBraidEnabled=state.enabled;
-      shader.vertexShader=shader.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 cadTubeMaterial;\nvarying vec3 vCadTubeMaterial;');
-      shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvCadTubeMaterial = cadTubeMaterial;');
-      shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>\n${PARS}`);
-      shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>',`#include <color_fragment>\nfloat cadBraidRelief = cadBraidHeight();\ndiffuseColor.rgb *= 1.0 + 0.22 * cadBraidRelief / max(cadBraidParameters.y, 0.000001);`);
-      shader.fragmentShader=shader.fragmentShader.replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nif (cadBraidEnabled > 0.5) normal = cadBraidNormal(-vViewPosition, normal, cadBraidRelief);');
-    };
-    material.customProgramCacheKey=function(){return `${originalKey.call(this)}:cad-tube-braid-v1`;};
-    material.needsUpdate=true;
+function applyBraidStage(shader, stages) {
+  if (!stages[TUBE_GPU_STAGE]) {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", `#include <common>\nattribute vec3 ${TUBE_MATERIAL_ATTRIBUTE};`)
+      .replace("#include <begin_vertex>", `#include <begin_vertex>\n${TUBE_MATERIAL_VARYING} = ${TUBE_MATERIAL_ATTRIBUTE};`);
   }
-  state.enabled.value=braid?1:0;
-  if(braid)state.parameters.value.set(braid.pitch,braid.depth,braid.strands);
+  shader.fragmentShader = shader.fragmentShader
+    .replace("#include <common>", `#include <common>\n${PARS}`)
+    .replace(
+      "#include <color_fragment>",
+      "#include <color_fragment>\nfloat cadBraidRelief = cadBraidHeight();\n"
+        + "diffuseColor.rgb *= 1.0 + 0.22 * cadBraidRelief / max(cadBraidParameters.y, 0.000001);"
+    )
+    .replace(
+      "#include <normal_fragment_maps>",
+      "#include <normal_fragment_maps>\nif (cadBraidEnabled > 0.5) normal = cadBraidNormal(-vViewPosition, normal, cadBraidRelief);"
+    );
+}
+
+export function applyTubeBraidMaterial(THREE, material, braid) {
+  if (!material) {
+    return;
+  }
+  if (!braid && !material.userData.cadTubeShader?.stages[TUBE_BRAID_STAGE]) {
+    return;
+  }
+  const stage = ensureTubeMaterialStage(material, TUBE_BRAID_STAGE, () => ({
+    uniforms: {
+      cadBraidParameters: { value: new THREE.Vector3(1, 0, 8) },
+      cadBraidEnabled: { value: 0 }
+    },
+    apply: applyBraidStage
+  }));
+  stage.uniforms.cadBraidEnabled.value = braid ? 1 : 0;
+  if (braid) {
+    stage.uniforms.cadBraidParameters.value.set(braid.pitch, braid.depth, braid.strands);
+  }
 }

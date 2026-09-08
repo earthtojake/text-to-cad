@@ -157,6 +157,22 @@ def flatten(tree_hash: str, *, memo: dict[str, dict[str, Any]] | None = None) ->
     tree = get_tree(tree_hash)
     if tree is None:
         return None
+    return flatten_tree(tree, tree_hash=tree_hash, memo=memo)
+
+
+def flatten_tree(
+    tree: dict[str, Any],
+    *,
+    tree_hash: str | None = None,
+    memo: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """:func:`flatten` of a tree held in memory — one not (yet) in the store.
+
+    The build flattens its own result before it is published, to assemble the
+    STEP it then re-reads (``cadgen.store.build``); the links inside it resolve
+    against the store as usual. ``tree_hash`` is recorded on the descriptor when
+    known and memoizes the result."""
+    memo = memo if memo is not None else {}
 
     components: dict[str, Any] = {cid: dict(entry) for cid, entry in (tree.get("components") or {}).items()}
     occurrences: list[dict[str, Any]] = [dict(occ) for occ in tree.get("occurrences") or []]
@@ -219,7 +235,8 @@ def flatten(tree_hash: str, *, memo: dict[str, dict[str, Any]] | None = None) ->
         if key not in {"kind", "components", "occurrences", "links", "assembly"}
     }
     descriptor["kind"] = FLAT_KIND
-    descriptor["tree"] = tree_hash
+    if tree_hash is not None:
+        descriptor["tree"] = tree_hash
     descriptor["entryKind"] = tree_kind(tree)
     descriptor["components"] = components
     root = (tree.get("assembly") or {}).get("root")
@@ -231,5 +248,6 @@ def flatten(tree_hash: str, *, memo: dict[str, dict[str, Any]] | None = None) ->
     stats["occurrenceCount"] = len(occurrences)
     stats["shapeCount"] = len(occurrences)
     descriptor["stats"] = stats
-    memo[tree_hash] = json.loads(json.dumps(descriptor))
+    if tree_hash is not None:
+        memo[tree_hash] = json.loads(json.dumps(descriptor))
     return descriptor

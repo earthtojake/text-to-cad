@@ -34,8 +34,36 @@ Scope and placement:
   wrapper while a miss preserved the live one made geometry depend on cache
   state (the juno shin chamfered on a disk hit and not on a cold run).
 
+Sub-shape identity is by CONTENT while the memo is installed. Canonical
+reconstruction has a price: every op result is a fresh read-back, so a
+sub-shape the op did not touch still comes out with a new TShape, and
+build123d's identity is the TShape pointer (``Shape.is_same`` is OCCT
+``IsSame``; ``__eq__`` routes through it; ``__hash__`` is the pointer hash).
+Model code that holds a sub-shape across an op and re-selects it afterwards --
+``edge.is_same(candidate)``, ``edge in shape.edges()``, a ``set`` of edges, a
+sequential fillet loop that re-finds each junction edge in the current solid --
+silently found nothing (twelve junction edges, plain build123d filleted six,
+under the memo one). So ``install()`` also patches ``Shape.is_same``,
+``__eq__`` and ``__hash__``: the TShape+location check stays the fast path, and
+on a mismatch the two shapes compare by a GEOMETRIC SIGNATURE -- shape type,
+sub-shape counts, and the world-space vertex points plus one sample point per
+face (or per edge, below faces), rounded to 1e-6 (``_signature``). Not the
+BREP bytes the memo keys with: those are a function of how a shape's location
+chain is SPLIT between its TShape and its ``Location()``, and neither
+``BRepBuilderAPI_Copy`` (input protection) nor a BinTools round trip
+(reconstruction) preserves that split for located sub-shapes -- on a 236
+sub-shape test part, Copy kept 114 sub-shapes byte-identical and a second
+round trip 219 -- so bytes tell one edge apart from itself. World geometry
+is what survives every re-expression, and rounding absorbs the ULP noise a
+re-composed rotation leaves. Orientation is not in the signature, matching
+``IsSame``. The hash is the signature's, so sets and dicts agree with ``==``.
+Two coincident, identical sub-shapes (an edge fused onto itself, two faces
+sharing one plane and outline) therefore compare equal, where the pointer
+check told them apart; that is the semantics a model sees under the memo.
+
 Kill switch: ``CADGEN_OP_MEMO=0`` (and ``CADGEN_OP_MEMO_DISK=0`` for just the
-disk tier).
+disk tier). It disables the identity shims too: without the memo every op
+returns its live result and pointer identity holds on its own.
 
 Anything unkeyable — an argument type the normalizer does not understand, a
 shape that fails to serialize — falls through to the original call, uncached.
@@ -323,6 +351,105 @@ def _disk_get(key: tuple):
         _resolve_shape_class(entry["cls"])
         return _StoredShape(entry["cls"], read_object(digest), entry["recipe"])
     except Exception:
+        _stats["errors"] += 1
+        return None
+
+
+# --- pure VALUES over the same tiers -----------------------------------------
+#
+# Not every memoizable kernel result is a shape. A measurement of a placed
+# shape -- a bounding box, an area -- is a pure function of the same inputs an
+# op patch keys on, and it wants the same two tiers: the memory cache a warm
+# worker keeps and the disk entry a cold process reads. Values ride the ``op``
+# index as ``{"value": ...}`` rather than an object reference, because they are
+# smaller than the digest that would point at them.
+#
+# Keying is the op patches' own: ``_build_key`` through ``_normalize``, so the
+# key parts must be normalizable (numbers, strings, bytes, sequences, maps,
+# build123d value types, shapes). Callers keying on a PLACED shape want
+# ``placed_shape_key``. An op_name identifies the FUNCTION, so a caller that
+# changes what it computes must change its op_name (or _OP_MEMO_VERSION moves
+# every key at once).
+
+
+def placed_shape_key(wrapped) -> tuple:
+    """Key parts for a placed ``TopoDS_Shape``: the location-stripped content
+    digest plus the location matrix -- the same two an op patch keys a shape
+    input by, minus orientation, which no measurement depends on."""
+    return (_tshape_digest(wrapped), _location_key(wrapped))
+
+
+def memoized_value(op_name: str, key_args: tuple, compute):
+    """``compute()``, memoized on ``key_args`` in memory and on disk.
+
+    ``compute`` must be pure and return something JSON-round-trippable (the
+    disk tier is a JSON entry); it takes no arguments, so its shape inputs stay
+    out of the key and the caller states the key exactly. Anything unkeyable,
+    or a disabled memo, calls straight through -- correctness never depends on
+    a hit.
+    """
+    if not _enabled():
+        return compute()
+    try:
+        key = _build_key(op_name, tuple(key_args), {})
+    except _Unkeyable:
+        _stats["unkeyable"] += 1
+        return compute()
+    except Exception:  # noqa: BLE001 - an unkeyable call is still a correct call
+        _stats["errors"] += 1
+        return compute()
+
+    with _lock:
+        if key in _cache:
+            _cache.move_to_end(key)
+            _stats["hits"] += 1
+            return _cache[key]
+    from_disk = _value_disk_get(key)
+    if from_disk is not None:
+        value = from_disk[0]
+        with _lock:
+            _cache[key] = value
+            _cache.move_to_end(key)
+        _stats["disk_hits"] += 1
+        _stats["hits"] += 1
+        return value
+
+    value = compute()
+    _stats["misses"] += 1
+    with _lock:
+        _cache[key] = value
+        _cache.move_to_end(key)
+        capacity = _capacity()
+        while len(_cache) > capacity:
+            _cache.popitem(last=False)
+            _stats["evicted"] += 1
+    _value_disk_put(key, value)
+    return value
+
+
+def _value_disk_put(key: tuple, value) -> None:
+    if not _disk_enabled():
+        return
+    try:
+        from cadgen.store.index import write_entry
+
+        write_entry("op", _op_index_key(key), {"value": value})
+    except Exception:  # noqa: BLE001 - a store that cannot be written still computes
+        _stats["errors"] += 1
+
+
+def _value_disk_get(key: tuple):
+    """``(value,)`` on a hit, None on a miss -- so a stored ``None`` is a hit."""
+    if not _disk_enabled():
+        return None
+    try:
+        from cadgen.store.index import read_entry
+
+        entry = read_entry("op", _op_index_key(key))
+        if not entry or "value" not in entry:
+            return None
+        return (entry["value"],)
+    except Exception:  # noqa: BLE001
         _stats["errors"] += 1
         return None
 
@@ -785,6 +912,124 @@ _CLASSMETHOD_TARGETS = (
 )
 
 
+# --- sub-shape identity ------------------------------------------------------
+#
+# The memo's reconstructions give untouched sub-shapes new TShapes, so the
+# pointer identity build123d compares by no longer survives an op (module
+# docstring). These replace ``Shape.is_same``/``__eq__``/``__hash__`` with
+# geometric identity: the pointer check first, the signature on a mismatch.
+# Vertex keeps determinism.py's coordinate hash -- equal signatures imply equal
+# coordinates, so it stays consistent with this ``__eq__``.
+
+_SIGNATURE_DECIMALS = 6
+
+
+def _signature(wrapped) -> tuple:
+    """World-space geometric signature of a TopoDS_Shape (module docstring).
+
+    ``(shape type, (vertices, edges, faces), sorted vertex points, sorted
+    sample points)``, every coordinate rounded to ``_SIGNATURE_DECIMALS``. The
+    samples are the mid-parameter point of each face's surface, or of each
+    edge's curve when the shape has no faces: the vertices fix a shape's
+    corners, the samples fix what runs between them (an arc and its chord,
+    a plane and a bulge share vertices and nothing else). ``BRepAdaptor``
+    evaluates in world coordinates, location applied, so two expressions of
+    the same geometry sign identically however their locations are split."""
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
+    from OCP.TopAbs import TopAbs_ShapeEnum
+    from OCP.TopExp import TopExp
+    from OCP.TopoDS import TopoDS
+    from OCP.TopTools import TopTools_IndexedMapOfShape
+
+    def rounded(point) -> tuple:
+        return (
+            round(point.X(), _SIGNATURE_DECIMALS),
+            round(point.Y(), _SIGNATURE_DECIMALS),
+            round(point.Z(), _SIGNATURE_DECIMALS),
+        )
+
+    def sub_shapes(kind):
+        found = TopTools_IndexedMapOfShape()
+        TopExp.MapShapes_s(wrapped, kind, found)
+        return [found.FindKey(i) for i in range(1, found.Extent() + 1)]
+
+    vertices = sub_shapes(TopAbs_ShapeEnum.TopAbs_VERTEX)
+    edges = sub_shapes(TopAbs_ShapeEnum.TopAbs_EDGE)
+    faces = sub_shapes(TopAbs_ShapeEnum.TopAbs_FACE)
+    points = sorted(rounded(BRep_Tool.Pnt_s(TopoDS.Vertex_s(v))) for v in vertices)
+    samples = []
+    if faces:
+        for face in faces:
+            surface = BRepAdaptor_Surface(TopoDS.Face_s(face))
+            samples.append(rounded(surface.Value(
+                (surface.FirstUParameter() + surface.LastUParameter()) / 2,
+                (surface.FirstVParameter() + surface.LastVParameter()) / 2,
+            )))
+    else:
+        for edge in edges:
+            edge = TopoDS.Edge_s(edge)
+            if BRep_Tool.Degenerated_s(edge):
+                continue
+            curve = BRepAdaptor_Curve(edge)
+            samples.append(rounded(curve.Value(
+                (curve.FirstParameter() + curve.LastParameter()) / 2
+            )))
+    return (
+        int(wrapped.ShapeType()),
+        (len(vertices), len(edges), len(faces)),
+        tuple(points),
+        tuple(sorted(samples)),
+    )
+
+
+def _identity(attr: str, original):
+    """One identity method, passing through to build123d's when disabled."""
+    import functools
+
+    def is_same(self, other) -> bool:
+        if not _enabled():
+            return original(self, other)
+        if self._wrapped is None or not other:
+            return False
+        mine, theirs = self.wrapped, other.wrapped
+        if mine.IsSame(theirs):
+            return True
+        if mine.ShapeType() != theirs.ShapeType():
+            return False
+        try:
+            return _signature(mine) == _signature(theirs)
+        except Exception:  # a shape that will not evaluate is only itself
+            return False
+
+    def eq(self, other):
+        if not _enabled():
+            return original(self, other)
+        from build123d.topology import Shape
+
+        if isinstance(other, Shape):
+            return self.is_same(other)
+        return NotImplemented
+
+    def hash_(self) -> int:
+        if self._wrapped is None:
+            return 0
+        if not _enabled():
+            return original(self)
+        try:
+            return hash(_signature(self.wrapped))
+        except Exception:
+            return hash(self.wrapped)
+
+    method = {"is_same": is_same, "__eq__": eq, "__hash__": hash_}[attr]
+    functools.update_wrapper(method, original)
+    method.__op_memo__ = True
+    return method
+
+
+_IDENTITY_TARGETS = ("is_same", "__eq__", "__hash__")
+
+
 def install() -> bool:
     """Idempotently patch the build123d choke points. Returns installed-now."""
     global _installed
@@ -815,7 +1060,42 @@ def install() -> bool:
                 continue
             setattr(cls, attr, classmethod(_memoized(label, fn, is_classmethod=True)))
 
+        for attr in _IDENTITY_TARGETS:
+            fn = inspect.getattr_static(topology.Shape, attr, None)
+            if fn is None or getattr(fn, "__op_memo__", False):
+                continue
+            setattr(topology.Shape, attr, _identity(attr, fn))
+
         _installed = True
+        return True
+
+
+def uninstall() -> bool:
+    """Restore every build123d attribute ``install()`` replaced. Returns
+    uninstalled-now. The caches are left alone (``clear()`` empties them)."""
+    global _installed
+    with _lock:
+        if not _installed:
+            return False
+        import inspect
+
+        from build123d import topology
+
+        for cls_name, attr, _label in _INSTANCE_TARGETS + _CLASSMETHOD_TARGETS:
+            cls = getattr(topology, cls_name, None)
+            static = None if cls is None else inspect.getattr_static(cls, attr, None)
+            fn = static.__func__ if isinstance(static, classmethod) else static
+            if fn is None or not getattr(fn, "__op_memo__", False):
+                continue
+            original = fn.__wrapped__
+            setattr(cls, attr, classmethod(original) if isinstance(static, classmethod) else original)
+
+        for attr in _IDENTITY_TARGETS:
+            fn = inspect.getattr_static(topology.Shape, attr, None)
+            if fn is not None and getattr(fn, "__op_memo__", False):
+                setattr(topology.Shape, attr, fn.__wrapped__)
+
+        _installed = False
         return True
 
 

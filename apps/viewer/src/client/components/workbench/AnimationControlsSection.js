@@ -24,9 +24,9 @@ import {
 // The ANIMATION tab: pick a clip, play it, scrub it.
 //
 // The other half of the pose/animation split. Clips are choreography compiled
-// from the sidecar's copied .anim.js text and are pure functions of t, which is
-// why scrub and pause need nothing but a number. This section never reads a
-// DOF, a mate or a preset.
+// from the render module beside the document (<name>.step.js) and are pure
+// functions of t, which is why scrub and pause need nothing but a number. This
+// section never reads a DOF, a mate or a preset.
 
 const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
 

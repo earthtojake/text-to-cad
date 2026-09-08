@@ -220,7 +220,8 @@ def parse_animation_option(raw_animation: object, raw_time: object = None) -> di
     Already an object when it came from a ``<format>.snapshot(animation={...})``
     call; from argv it is one string, told apart by shape the way ``--kinematics``
     is: text that opens with ``{`` is the inline JSON request, anything else is
-    the NAME of a clip the model's ``.anim.js`` declares. ``--time`` is the
+    the NAME of a clip the document's render module (``<name>.step.js``)
+    declares. ``--time`` is the
     second half of the same request — the moment, in seconds, defaulting to 0 —
     and is folded in here, so the job carries ONE field either way. Resolving
     the name needs the sidecar, which only the resolver has loaded, so it travels

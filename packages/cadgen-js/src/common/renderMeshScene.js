@@ -756,7 +756,7 @@ export function renderJobContext(meshData, job = {}) {
     depthTest: displayModeShowsThroughEdges(displayMode) ? false : baseEdgeSettings.depthTest
   };
   const wireframeMode = displayModeIsWireframe(displayMode);
-  const edgesVisible = stepDisplayEnabled && displayModeShowsEdges(displayMode, edgeSettings);
+  const edgesVisible = stepDisplayEnabled && displayModeShowsEdges(displayMode);
   const selectorRuntime = job.stepParameters?.selectorRuntime || job.selectorRuntime || null;
   const displayEdgeRuntime = job.stepParameters?.displayEdgeRuntime || job.displayEdgeRuntime || null;
   const topologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({

@@ -1843,7 +1843,7 @@ const CadViewer = forwardRef(function CadViewer({
     );
   }, [normalizedThemeSettings.floor]);
   const applyActiveSceneBackground = applySceneBackground;
-  const edgesVisible = showEdges && shouldUseCadEdgeSource && displayModeShowsEdges(normalizedDisplayMode, visualEdgeSettings);
+  const edgesVisible = showEdges && shouldUseCadEdgeSource && displayModeShowsEdges(normalizedDisplayMode);
   const topologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
     edgesVisible,
     wireframeMode,

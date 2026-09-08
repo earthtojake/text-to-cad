@@ -338,3 +338,131 @@ class OpMemoAttributeParityTest(unittest.TestCase):
         other.topo_parent = Solid.make_box(3, 3, 3)
         self.assertIs(op_memo._thaw_result(stored, [other]).topo_parent, other.topo_parent)
 
+
+
+def _junction_fillets():
+    """The sequential-fillet pattern that lost identity under the memo: hold
+    the boss's junction edges, then re-find each one in the CURRENT solid
+    before filleting it. Returns (fillets applied, result)."""
+    from build123d import Box, Pos
+
+    shape = Box(10, 10, 10).fuse(Pos(5, 0, 0) * Box(10, 6, 6))
+    roots = [e for e in shape.edges() if 4 < e.length < 6.5]
+    roots.sort(key=lambda e: tuple(round(v, 5) for v in e.center()))
+    applied = 0
+    for edge in roots:
+        current = next((c for c in shape.edges() if edge.is_same(c)), None)
+        if current is None:
+            continue
+        shape = shape.fillet(0.5, [current])
+        applied += 1
+    return applied, shape
+
+
+class OpMemoSubShapeIdentityTest(unittest.TestCase):
+    """Sub-shape identity survives an op under the memo (module docstring).
+
+    Canonical reconstruction gives every untouched sub-shape a new TShape, so
+    build123d's pointer identity (``is_same``/``==``/``__hash__``) found
+    nothing after an op: of twelve junction edges the plain kernel filleted
+    six and the memo one. Identity is geometric while the shims are
+    installed, and off with the kill switch."""
+
+    def setUp(self):
+        import tempfile
+
+        op_memo.install()
+        op_memo.clear()
+        self._tmp = tempfile.TemporaryDirectory()
+        os.environ["CADGEN_OP_MEMO"] = "1"
+        os.environ["CADGEN_OP_MEMO_DISK"] = "0"
+        self._prev_store = os.environ.get("CADGEN_CACHE_DIR")
+        os.environ["CADGEN_CACHE_DIR"] = self._tmp.name
+
+    def tearDown(self):
+        op_memo.install()  # a test that uninstalled leaves the shims in place
+        op_memo.clear()
+        os.environ.pop("CADGEN_OP_MEMO", None)
+        os.environ.pop("CADGEN_OP_MEMO_DISK", None)
+        if self._prev_store is None:
+            os.environ.pop("CADGEN_CACHE_DIR", None)
+        else:
+            os.environ["CADGEN_CACHE_DIR"] = self._prev_store
+        self._tmp.cleanup()
+
+    @staticmethod
+    def _bored():
+        """A box with a bore, and one edge held from BEFORE the cut."""
+        from build123d import Box, Cylinder, Pos
+
+        box = Pos(3, 4, 5) * Box(20, 20, 8)
+        held = box.edges().sort_by(lambda e: e.center().X)[0]
+        return held, box.cut(Cylinder(3, 12))
+
+    def test_sequential_fillets_match_the_unmemoized_kernel(self):
+        os.environ["CADGEN_OP_MEMO"] = "0"
+        plain_count, plain = _junction_fillets()
+        os.environ["CADGEN_OP_MEMO"] = "1"
+        cold_count, cold = _junction_fillets()
+        warm_count, warm = _junction_fillets()
+        self.assertEqual(plain_count, 6)
+        self.assertEqual((cold_count, warm_count), (6, 6))
+        self.assertEqual(len(cold.faces()), len(plain.faces()))
+        self.assertAlmostEqual(cold.volume, plain.volume, places=9)
+        # Cache purity: cold and warm are byte-identical. Memo-off bytes are
+        # not compared: input protection re-expresses located sub-shapes, the
+        # accepted versioned difference documented on _StoredShape.
+        self.assertEqual(_digest(cold), _digest(warm))
+
+    def test_identity_survives_an_op(self):
+        held, bored = self._bored()
+        matches = [e for e in bored.edges() if held.is_same(e)]
+        self.assertEqual(len(matches), 1)
+        self.assertIsNot(held.wrapped.TShape(), matches[0].wrapped.TShape())
+        self.assertEqual(held, matches[0])
+        self.assertIn(held, bored.edges())
+        self.assertIn(held, set(bored.edges()))
+        self.assertIs({matches[0]: "found"}[held], "found")
+        self.assertIn(held.vertices()[0], set(bored.vertices()))
+
+    def test_different_edges_stay_different(self):
+        from build123d import Pos
+
+        held, bored = self._bored()
+        others = [e for e in bored.edges() if not held.is_same(e)]
+        self.assertEqual(len(others), len(bored.edges()) - 1)
+        self.assertNotEqual(held, others[0])
+        self.assertFalse(held.is_same(others[0]))
+        self.assertNotEqual(held, Pos(0, 0, 1) * held)  # same TShape, moved
+        self.assertNotEqual(held, held.faces() or bored.faces()[0])  # other kind
+
+    def test_kill_switch_restores_pointer_identity(self):
+        os.environ["CADGEN_OP_MEMO"] = "0"
+        held, bored = self._bored()
+        # Without the memo the kernel keeps the untouched TShape, so pointer
+        # identity holds on its own and the shims pass through to build123d.
+        self.assertTrue(any(held.is_same(e) for e in bored.edges()))
+        self.assertEqual(hash(held), hash(held.wrapped))
+
+    def test_uninstall_restores_build123d(self):
+        from build123d.topology import Mixin3D, Shape, Solid
+
+        self.assertTrue(op_memo.uninstall())
+        self.assertFalse(op_memo.uninstall())
+        for attr in ("is_same", "__eq__", "__hash__"):
+            self.assertFalse(getattr(getattr(Shape, attr), "__op_memo__", False), attr)
+        self.assertFalse(getattr(Mixin3D.fillet, "__op_memo__", False))
+        self.assertFalse(getattr(Solid.extrude.__func__, "__op_memo__", False))
+        # Pointer identity again: a byte-identical twin on a new TShape is a
+        # different edge to build123d, and the same one to the shims.
+        from build123d.topology import Edge
+
+        held, _bored = self._bored()
+        twin = Edge(op_memo._downcast(op_memo._read_brep(op_memo._write_brep(held.wrapped))))
+        self.assertFalse(held.is_same(twin))
+        self.assertNotEqual(held, twin)
+        self.assertTrue(op_memo.install())
+        self.assertTrue(getattr(Shape.is_same, "__op_memo__", False))
+        self.assertTrue(held.is_same(twin))
+        self.assertEqual(held, twin)
+        self.assertEqual(hash(held), hash(twin))

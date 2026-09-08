@@ -180,6 +180,20 @@ async function fetchComponentGlbBuffer(url, cid) {
   throw new Error(`Failed to load component GLB ${cid}: HTTP ${lastStatus}${hint}`);
 }
 
+// Floors for an explicit macro tessellation request. Chord tolerance is
+// RELATIVE to the component's bounding diagonal and angle tolerance is
+// radians, so these sit ~100x finer than the tessellator's own defaults
+// (1.5e-3 / 0.35 rad) — beyond any display need at any output size. Below
+// them a job is not a render, it is a memory bomb: the page tessellates until
+// the renderer dies, which reaches the caller as an opaque lost driver
+// connection instead of a rejected request. Mirrored as
+// MIN_RENDER_TESSELLATION in cadgen/snapshot_core.py, which refuses the same
+// job before a browser is even launched (parity-tested from the Python side).
+export const RENDER_TESSELLATION_FLOORS = Object.freeze({
+  chordTolerance: 1e-5,
+  angleTolerance: 5e-3
+});
+
 export function normalizeRenderTessellation(value) {
   if (value === undefined || value === null) return {};
   if (!isObject(value) || Array.isArray(value)) {
@@ -187,11 +201,17 @@ export function normalizeRenderTessellation(value) {
   }
   const result = {};
   for (const [key, raw] of Object.entries(value)) {
-    if (!["chordTolerance", "angleTolerance"].includes(key)) {
+    if (!Object.hasOwn(RENDER_TESSELLATION_FLOORS, key)) {
       throw new Error(`Unknown render.tessellation field: ${key}`);
     }
     if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
       throw new Error(`render.tessellation.${key} must be a positive finite number`);
+    }
+    if (raw < RENDER_TESSELLATION_FLOORS[key]) {
+      throw new Error(
+        `render.tessellation.${key} must be at least ${RENDER_TESSELLATION_FLOORS[key]}; ` +
+        "finer sampling exhausts the renderer instead of improving the image"
+      );
     }
     result[key] = raw;
   }

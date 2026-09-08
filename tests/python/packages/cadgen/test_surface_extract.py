@@ -376,6 +376,48 @@ class SurfaceExtractTest(unittest.TestCase):
             read_surf(b"GLBX" + bytes(self.data[4:]))
 
 
+class TightBoundsTest(unittest.TestCase):
+    """A face's or edge's reported bbox must bound the SURFACE, not its poles.
+
+    ``BRepBndLib::Add`` bounds a B-spline by its control polygon: a NURBS
+    circle of radius r reports r/cos(22.5 deg) = 1.082 r, so every rounded
+    surface came back ~8% too big and `inspect refs --facts` bounds could
+    invent a clash that is not there (PR #370 bug record 004).
+    """
+
+    def _nurbs_cylinder(self, radius: float, height: float):
+        import build123d as bd
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert
+
+        solid = bd.Cylinder(radius=radius, height=height)
+        return BRepBuilderAPI_NurbsConvert(solid.wrapped, True).Shape()
+
+    def test_nurbs_cylinder_face_bounds_match_the_radius(self) -> None:
+        from cadgen._internal.surface_extract import extract_surface_component, read_surf
+
+        radius, height = 7.5, 4.0
+        index, _ = read_surf(bytes(extract_surface_component(self._nurbs_cylinder(radius, height))))
+        lateral = [f for f in index["faces"] if f["surface"]["kind"] == "nurbs" and f["bbox"][5] - f["bbox"][2] > height / 2]
+        self.assertTrue(lateral, "fixture must produce a NURBS lateral face")
+        for face in lateral:
+            xmin, ymin, _zmin, xmax, ymax, _zmax = face["bbox"]
+            for value in (xmax, ymax, -xmin, -ymin):
+                self.assertAlmostEqual(value, radius, places=4)
+
+    def test_component_bounds_match_the_radius(self) -> None:
+        from cadgen._internal.surface_extract import extract_surface_component, read_surf
+        from cadgen._internal.surf_tables import selector_bundle_from_surf_index
+
+        radius, height = 7.5, 4.0
+        index, _ = read_surf(bytes(extract_surface_component(self._nurbs_cylinder(radius, height))))
+        bundle = selector_bundle_from_surf_index(index)
+        bbox = bundle.manifest["bbox"]
+        self.assertAlmostEqual(bbox["max"][0], radius, places=4)
+        self.assertAlmostEqual(bbox["max"][1], radius, places=4)
+        self.assertAlmostEqual(bbox["min"][0], -radius, places=4)
+        self.assertAlmostEqual(bbox["max"][2], height / 2, places=4)
+
+
 class ClampedUvBoundsTest(unittest.TestCase):
     """UVBounds_s can return a bound a floating-point hair OUTSIDE the
     surface's own domain (vendor STEPs: -0.0 vs 0.0, a few 1e-6 past a

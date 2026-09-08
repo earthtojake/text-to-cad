@@ -80,12 +80,26 @@ def _selector_curve_params(adaptor) -> dict[str, Any]:
 
 
 def _bnd_box(topo) -> list[float] | None:
+    """The face's or edge's own bounding box, TIGHT.
+
+    ``BRepBndLib::Add`` bounds a B-spline by its CONTROL POLYGON, which for a
+    NURBS circle of radius r reaches r/cos(22.5 deg) = 1.082 r -- an 8% overshoot
+    on every rounded surface. These boxes are what ``inspect refs --facts``
+    reports as bounds and what a caller measures clearance against, so they must
+    describe the surface, not its poles: ``AddOptimal`` subdivides instead.
+    ``useTriangulation=False`` throughout, because meshing here would mutate the
+    shared ``TShape`` and break content-addressed component dedup.
+    """
     try:
         from OCP.Bnd import Bnd_Box
         from OCP.BRepBndLib import BRepBndLib
 
         box = Bnd_Box()
-        BRepBndLib.Add_s(topo, box, False)
+        try:
+            BRepBndLib.AddOptimal_s(topo, box, False, False)
+        except Exception:
+            box = Bnd_Box()
+            BRepBndLib.Add_s(topo, box, False)
         if box.IsVoid():
             return None
         xmin, ymin, zmin, xmax, ymax, zmax = box.Get()

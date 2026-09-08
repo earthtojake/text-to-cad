@@ -117,14 +117,33 @@ def tree_tag(shape: Any) -> str | None:
 def materialize(tree_hash: str, *, label: str | None = None) -> Any:
     """A ``Compound`` for the tree. Raises FileNotFoundError when the tree or a
     component object is missing (the gate should have said stale)."""
-    from build123d import Compound
-
     descriptor = flatten(tree_hash)
     if descriptor is None:
         raise FileNotFoundError(f"tree object missing: {tree_hash}")
+    return materialize_descriptor(descriptor, label=label, tree_hash=tree_hash)
+
+
+def materialize_descriptor(
+    descriptor: dict[str, Any],
+    *,
+    shapes: dict[str, Any] | None = None,
+    label: str | None = None,
+    tree_hash: str | None = None,
+) -> Any:
+    """:func:`materialize` of a FLATTENED descriptor (``flatten``/``flatten_tree``).
+
+    ``shapes`` supplies unlocated build123d shapes by cid for components that
+    are not in the store yet — the build's own, before it publishes them
+    (``cadgen.store.build`` assembles the STEP it writes from exactly this);
+    every other component is read from its ``brep`` object. The result is
+    tagged as a materialized tree only when ``tree_hash`` names one."""
+    from build123d import Compound
+
     components = descriptor.get("components") or {}
-    shapes: dict[str, Any] = {}
+    shapes = dict(shapes or {})
     for cid, entry in components.items():
+        if cid in shapes:
+            continue
         brep = str((entry or {}).get("brep") or "")
         if not brep:
             raise FileNotFoundError(f"tree {tree_hash}: component {cid} has no brep object")
@@ -164,6 +183,8 @@ def materialize(tree_hash: str, *, label: str | None = None) -> Any:
     color = _color_from_entry(descriptor)
     if color is not None and getattr(compound, "color", None) is None:
         compound.color = color
+    if tree_hash is None:
+        return compound
     # The tag names the tree; the partner handle lets the build tell "placed"
     # (same TShape, different location: IsPartner) from "modified" (a boolean,
     # a mirror — a new TShape). Both survive moved()/located(), which copy the

@@ -5,7 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-import { loadSource, normalizeRenderTessellation } from "./source.js";
+import { RENDER_TESSELLATION_FLOORS, loadSource, normalizeRenderTessellation } from "./source.js";
 import { renderAssetSourceScope } from "../lib/renderAssetSourceScope.js";
 import { setTessellationCacheProvider } from "../lib/surf/tessellationCache.js";
 
@@ -80,6 +80,11 @@ test("snapshot tessellation is explicit, finite and restricted to exact surfaces
   }
   assert.throws(() => normalizeRenderTessellation({ quality: "high" }), /Unknown/);
   assert.throws(() => normalizeRenderTessellation([]), /must be an object/);
+  // A floor, not a preference: below it the page tessellates until the
+  // renderer dies and the caller only sees a lost driver connection.
+  assert.throws(() => normalizeRenderTessellation({ chordTolerance: 1e-12 }), /at least 0.00001/);
+  assert.throws(() => normalizeRenderTessellation({ angleTolerance: 1e-6 }), /at least 0.005/);
+  assert.deepEqual(normalizeRenderTessellation(RENDER_TESSELLATION_FLOORS), { ...RENDER_TESSELLATION_FLOORS });
   await assert.rejects(() => loadSource({ kind: "glb", meshData: meshData(),
     render: { tessellation: { chordTolerance: .001 } } }), /only for STEP/);
   await assert.rejects(() => loadSource({ kind: "step", meshData: meshData(),

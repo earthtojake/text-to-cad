@@ -30,9 +30,14 @@ function scheduleIdle(task) {
 
 export function attachAcceleratedRaycast(mesh) {
   if (mesh?.isMesh) {
-    mesh.raycast = function(raycaster,intersections){
-      if(this.userData?.cadTubeBeforeRaycast?.(raycaster)===false)return;
-      return acceleratedRaycast.call(this,raycaster,intersections);
+    // A mesh whose displayed vertices are produced on the GPU (tube deformation)
+    // installs userData.cadBeforeRaycast to reject far rays cheaply and to
+    // materialize exact CPU positions before the intersection test.
+    mesh.raycast = function (raycaster, intersections) {
+      if (this.userData?.cadBeforeRaycast?.(raycaster) === false) {
+        return;
+      }
+      return acceleratedRaycast.call(this, raycaster, intersections);
     };
   }
 }

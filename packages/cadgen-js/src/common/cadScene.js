@@ -1284,9 +1284,12 @@ export function applyPartVisualState(THREE, records, {
 
     record.mesh.visible = !effectHidden;
     if (record.edges) {
-      const wasVisible=record.edges.visible;
+      const wasVisible = record.edges.visible;
       record.edges.visible = showEdges && !effectHidden;
-      if(!wasVisible && record.edges.visible && record.effectDeformation)applyRecordTubeDeformation(THREE,record,record.effectDeformation);
+      // Hidden edges skip deformation; catch up to the current pose when shown.
+      if (!wasVisible && record.edges.visible && record.effectDeformation) {
+        applyRecordTubeDeformation(THREE, record, record.effectDeformation);
+      }
     }
     if (record.silhouette) {
       record.silhouette.visible = !effectHidden;

@@ -27,27 +27,57 @@ import {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
-test("HTTP cache avoids oversized debugger POSTs without changing mesh bytes or reads", async (t) => {
+// An `origin` puts every request on the host's own server instead of the
+// page's origin, which is what keeps a large upload off a debugging transport
+// that would escape the whole body into one protocol message. Size is not
+// capped: the mesh has to persist or every later cold render re-tessellates it.
+test("HTTP cache addresses an absolute host origin and uploads any size", async (t) => {
   const calls=[];
   const original=globalThis.fetch;
   t.after(()=>{globalThis.fetch=original;});
-  const large=new Uint8Array(32*1024*1024+1);
+  const large=new Uint8Array(40*1024*1024);
   large[0]=17;large[large.length-1]=29;
   globalThis.fetch=async(url,options)=>{
     calls.push({url,options});
     return {ok:true,arrayBuffer:async()=>large.buffer};
   };
-  const provider=createHttpTessellationCacheProvider();
+  const provider=createHttpTessellationCacheProvider({origin:"http://127.0.0.1:54321"});
   await provider.put("large",large);
-  assert.equal(calls.length,0,"optional write must not reach the debugger transport");
-  assert.equal(large[0],17);assert.equal(large[large.length-1],29);
-  const boundary=large.subarray(0,32*1024*1024);
-  await provider.put("boundary",boundary);
   assert.equal(calls.length,1);
-  assert.equal(calls[0].options.body,boundary,"accepted bytes are sent unchanged");
+  assert.equal(calls[0].url,"http://127.0.0.1:54321/__tess_cache/large.tess");
+  assert.equal(calls[0].options.body,large,"bytes are sent unchanged, whatever the size");
+  assert.equal(large[0],17);assert.equal(large[large.length-1],29);
   const hit=await provider.get("large");
-  assert.equal(hit.byteLength,large.byteLength,"existing large cache hits remain usable");
-  assert.equal(hit.buffer,large.buffer);
+  assert.equal(hit.byteLength,large.byteLength);
+  assert.equal(calls[1].url,"http://127.0.0.1:54321/__tess_cache/large.tess");
+  // The viewer serves the cache from the page's own origin: no origin, no change.
+  const relative=createHttpTessellationCacheProvider();
+  await relative.get("k");
+  assert.equal(calls[2].url,"/__tess_cache/k.tess");
+});
+
+// One response is one arrayBuffer allocation, so a whole assembly's hit set
+// must not be requested at once: the page dies allocating it. The chunk size
+// adapts to what this host returns per entry.
+test("batched reads are split by key count and by the host's entry size", async (t) => {
+  const original=globalThis.fetch;
+  t.after(()=>{globalThis.fetch=original;});
+  const entry=new Uint8Array(1024*1024);
+  const requested=[];
+  globalThis.fetch=async(url,options)=>{
+    const names=JSON.parse(options.body).names;
+    requested.push(names.length);
+    const body=encodeTessellationCacheBatch(names.map(()=>entry));
+    return {ok:true,arrayBuffer:async()=>body.buffer};
+  };
+  const provider=createHttpTessellationCacheProvider({origin:"http://127.0.0.1:1"});
+  const keys=Array.from({length:260},(_,index)=>`c${index}`);
+  const entries=await provider.getMany(keys);
+  assert.equal(entries.length,keys.length,"every key still gets an answer");
+  assert.equal(entries[0].byteLength,entry.byteLength);
+  // 128 keys first (the key cap), then 63 — 1 MiB per entry measured against
+  // the 64 MiB response target — and the remainder.
+  assert.deepEqual(requested,[128,63,63,6]);
 });
 
 function loadFixture(name) {

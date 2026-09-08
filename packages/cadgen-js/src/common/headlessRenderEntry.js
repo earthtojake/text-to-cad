@@ -119,13 +119,27 @@ export async function runHeadlessRenderJob(job) {
 if (typeof window !== "undefined") {
   window.__snapshotRender = runHeadlessRenderJob;
   // The snapshot host (cadgen's snapshot driver) serves the shared component-
-  // tessellation cache (~/.cache/cadgen/meshes) on /__tess_cache/ through its
-  // Playwright route, so repeat snapshots — and any component an export
+  // tessellation cache (~/.cache/cadgen/meshes) on /__tess_cache/ from its
+  // loopback asset server, so repeat snapshots — and any component an export
   // already tessellated — skip tessellation entirely, and a snapshot miss
   // warms the cache for later exports. Both directions are best-effort: a
   // host without the route (404) or a disabled cache degrades to plain
   // in-page tessellation.
+  //
+  // That server is addressed by its ABSOLUTE origin, injected before this
+  // bundle runs. A page-relative /__tess_cache/ URL is intercepted by the
+  // host's Playwright route first, and interception hands the whole POST body
+  // to the driver as escaped text in one protocol message — a 92 MB write-back
+  // exceeded Node's string limit there and killed the renderer. Redirecting
+  // the request to loopback could not save it: the body had already crossed
+  // the pipe. The host raises when it cannot start the server, so the origin
+  // is always here; a build talking to some other host degrades to relative
+  // URLs and says so.
   // The shared fetch-backed provider: single-entry GET/POST plus the batched
-  // POST /__tess_cache/batch — one round trip for a whole assembly's hit set.
-  setTessellationCacheProvider(createHttpTessellationCacheProvider());
+  // POST /__tess_cache/batch — bounded round trips for a whole assembly's hit set.
+  const assetOrigin = String(window.__cadgenSnapshotAssetOrigin || "").replace(/\/+$/, "");
+  if (!assetOrigin) {
+    console.warn("snapshot asset origin missing: bulk cache transfers fall back to the host's route");
+  }
+  setTessellationCacheProvider(createHttpTessellationCacheProvider({ origin: assetOrigin }));
 }

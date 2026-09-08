@@ -23,11 +23,13 @@ const bent = {
 m.get('tendon').deformTube({rest, path: bent, twistDeg: 360 * t});
 ```
 
-Each path is `{normal?, segments}`. `normal` is a transverse seed for the
-first frame, projected perpendicular to its tangent; later frames use parallel
-transport. Give matching explicit seeds to rest and posed paths when their
-first tangents change. Every segment must meet the next at the same position
-and tangent. Discontinuities and corners throw a teaching error.
+Each path is `{normal, segments}`. `normal` is REQUIRED on both the rest and
+the posed path: it seeds the transverse frame at the first point (projected
+perpendicular to the first tangent; later frames use parallel transport). There
+is no default — a guessed seed would flip as the first tangent turns during an
+animation and twist the tube by 90 degrees in one frame — so an omitted or
+tangent-parallel `normal` throws. Every segment must meet the next at the same
+position and tangent. Discontinuities and corners throw a teaching error.
 
 The closed segment vocabulary is:
 
@@ -81,4 +83,8 @@ CAD fiber bodies or collision geometry**; it remains inside the nominal core's
 rendered envelope. No image texture is fetched and no helical solids are
 created. The finish is scoped to that occurrence's material and disabled when
 the effect is omitted. The original material's source color and shader hooks
-remain in force.
+remain in force. Both shader stages — the GPU vertex transport and the braid
+finish — install through one shared hook (`tubeMaterialShader.js`) that runs
+them in a fixed order and hands the braid its rest coordinates through one
+varying, so enabling the braid on a later frame than the deformation renders
+the same as enabling both at once.

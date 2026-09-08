@@ -102,6 +102,16 @@ Avoid fragile topology order when possible. Select by:
 
 For source operations, prefer robust selectors such as top/bottom by axis or position rather than arbitrary list indexes.
 
+Sub-shape identity survives ops during a cadgen build. Holding an edge or
+face, running a boolean, fillet or chamfer, and re-finding it in the result
+(`edge.is_same(candidate)`, `edge in shape.edges()`, a `set` of edges, a
+dict keyed by faces) works exactly as it does in plain build123d, because
+during a build `is_same`, `==` and `hash()` compare by geometry (shape type,
+vertex points and a sample point per face or edge, world coordinates rounded
+to 1e-6), not by kernel object identity — the build's op cache hands back
+reconstructions, and the pointer would otherwise miss. The one visible
+consequence is that two coincident, identical sub-shapes compare equal.
+
 
 ## Assemblies and positioning
 

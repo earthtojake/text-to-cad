@@ -23,6 +23,16 @@ import { linearRgbToHex } from "../color.js";
 
 export const PACKAGE_MESH_EXPORT_FORMATS = ["stl", "glb", "3mf"];
 
+// Largest primitive this module emits. Both the GLB writer's vertex weld and
+// the 3MF writer's vertex table key every corner of ONE primitive in a JS Map,
+// and V8 caps a Map at 2^24 entries ("Map maximum size exceeded"). A 19M-
+// triangle single-colour assembly has 58M corners, so a colour group is cut
+// into runs of at most this many triangles (2^22 -> 12.6M corners, under the
+// cap even with zero welding). Below the cap the output is unchanged; above it
+// a colour simply spans several same-material primitives, split at face-range
+// boundaries in occurrence order, so bytes stay deterministic.
+export const MAX_PRIMITIVE_TRIANGLES = 4_194_304;
+
 // Authored sRGB already, not a linear colour: it goes into the same hex slot the
 // encoded colours do, so it must NOT run through linearRgbToHex.
 const DEFAULT_COLOR_HEX = "#d4d4d8";
@@ -93,8 +103,9 @@ export function buildPackageMeshPrimitives(descriptor, componentTessellations, o
   // on large single-colour assemblies. Rounding is unchanged — every value was
   // already converted to float32 at primitive build, and nothing reads a value
   // back after writing it.
+  const maxPrimitiveTriangles = Math.max(1, Math.floor(Number(options.maxPrimitiveTriangles) || MAX_PRIMITIVE_TRIANGLES));
   const jobs = [];
-  const groupSizes = new Map(); // colorHex -> float count
+  const chunksByColor = new Map(); // colorHex -> [{ triangles, floatCount, positions, normals, offset }]
   for (const occurrence of descriptor.occurrences || []) {
     const cid = String(occurrence.component || "");
     const tessellation = componentTessellations.get(cid);
@@ -114,24 +125,32 @@ export function buildPackageMeshPrimitives(descriptor, componentTessellations, o
       const triangles = Math.max(0, Math.ceil(indexCount / 3));
       if (!triangles) continue;
       const color = linearRgbToHex(range.color) || fallback;
-      groupSizes.set(color, (groupSizes.get(color) || 0) + triangles * 9);
-      jobs.push({ tessellation, range, color, transform: identity ? null : transform, mirrored, nm });
+      let chunks = chunksByColor.get(color);
+      if (!chunks) chunksByColor.set(color, (chunks = []));
+      let chunk = chunks[chunks.length - 1];
+      // A face range never splits: one range larger than the cap becomes its
+      // own oversized chunk (and would still hit the Map cap downstream).
+      if (!chunk || chunk.triangles + triangles > maxPrimitiveTriangles) {
+        chunk = { triangles: 0, floatCount: 0, positions: null, normals: null, offset: 0 };
+        chunks.push(chunk);
+      }
+      chunk.triangles += triangles;
+      chunk.floatCount += triangles * 9;
+      jobs.push({ tessellation, range, color, chunk, transform: identity ? null : transform, mirrored, nm });
     }
   }
 
-  const groups = new Map(); // colorHex -> { positions: Float32Array, normals: Float32Array, offset }
-  for (const [color, floatCount] of groupSizes) {
-    groups.set(color, {
-      positions: new Float32Array(floatCount),
-      normals: new Float32Array(floatCount),
-      offset: 0,
-    });
+  for (const chunks of chunksByColor.values()) {
+    for (const chunk of chunks) {
+      chunk.positions = new Float32Array(chunk.floatCount);
+      chunk.normals = new Float32Array(chunk.floatCount);
+    }
   }
 
   for (const job of jobs) {
     const { positions, normals, indices } = job.tessellation;
     const { range, transform, mirrored, nm } = job;
-    const group = groups.get(job.color);
+    const group = job.chunk;
     const out = group.positions;
     const outNormals = group.normals;
     let base = group.offset;
@@ -174,13 +193,13 @@ export function buildPackageMeshPrimitives(descriptor, componentTessellations, o
     group.offset = base;
   }
 
-  const primitives = [...groups.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : 1)) // deterministic order
-    .map(([color, group]) => ({
+  const primitives = [...chunksByColor.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1)) // deterministic order: colour, then run order
+    .flatMap(([color, chunks]) => chunks.map((chunk) => ({
       color,
-      positions: group.positions,
-      normals: group.normals,
-    }))
+      positions: chunk.positions,
+      normals: chunk.normals,
+    })))
     .filter((primitive) => primitive.positions.length >= 9);
   const triangleCount = primitives.reduce((sum, p) => sum + p.positions.length / 9, 0);
   return { primitives, triangleCount };

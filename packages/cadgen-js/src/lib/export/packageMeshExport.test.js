@@ -7,6 +7,7 @@ import test from "node:test";
 import zlib from "node:zlib";
 
 import {
+  MAX_PRIMITIVE_TRIANGLES,
   buildPackageMeshPrimitives,
   packageMeshTo3mf,
   packageMeshToFormat,
@@ -300,3 +301,31 @@ test("packageMeshToFormat maps formats and rejects unknown ones", () => {
 // zlib is imported to keep this suite honest if zipStore ever grows deflate
 // support: stored entries must remain readable without inflation.
 void zlib;
+
+test("a colour run larger than the primitive cap splits into same-colour primitives", () => {
+  // The default cap keeps every primitive's corner count under V8's 2^24 Map
+  // limit, which both the GLB weld and the 3MF vertex table key into.
+  assert.ok(MAX_PRIMITIVE_TRIANGLES * 3 < 2 ** 24);
+  const descriptor = descriptorWith([
+    { id: "o1", component: "c0", transform: IDENTITY },
+    { id: "o2", component: "c0", transform: IDENTITY },
+    { id: "o3", component: "c0", transform: IDENTITY },
+  ]);
+  const tessellations = new Map([["c0", triangleTessellation()]]);
+  const capped = buildPackageMeshPrimitives(descriptor, tessellations, { maxPrimitiveTriangles: 2 });
+  assert.equal(capped.triangleCount, 3);
+  assert.deepEqual(capped.primitives.map((p) => [p.color, p.positions.length / 9]), [["#d4d4d8", 2], ["#d4d4d8", 1]]);
+  // Below the cap the output is exactly what an uncapped build produces (byte determinism).
+  const single = buildPackageMeshPrimitives(descriptor, tessellations);
+  assert.equal(single.primitives.length, 1);
+  assert.deepEqual(packageMeshToStl(capped), packageMeshToStl(single));
+  // Both Map-keyed writers accept the split: two GLB primitives (the writer
+  // keeps its one-material-per-primitive layout), two 3MF objects.
+  const glb = packageMeshToGlb(capped);
+  const jsonLength = new DataView(glb.buffer, glb.byteOffset).getUint32(12, true);
+  const gltf = JSON.parse(new TextDecoder().decode(glb.subarray(20, 20 + jsonLength)));
+  assert.equal(gltf.meshes.flatMap((mesh) => mesh.primitives).length, 2);
+  const xml = new TextDecoder("latin1").decode(packageMeshTo3mf(capped));
+  assert.equal((xml.match(/<object /g) || []).length, 2);
+  assert.match(xml, /object id="3" type="model" pid="1" pindex="1"/);
+});

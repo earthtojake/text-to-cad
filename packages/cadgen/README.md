@@ -40,8 +40,10 @@ never from source. Deleting every `.py` in a project must not change what
 renders.
 
 - Nothing a renderer reads references the source tree: the sidecar's
-  kinematics are resolved numbers and labels, its animation is COPIED
-  module text; a tree and its components carry no path, script or record key
+  kinematics are resolved numbers and labels, and choreography is the
+  authored render module beside the document (`<name>.step.js`), read live
+  by the renderer and never copied into the sidecar; a tree and its
+  components carry no path, script or record key
   ([`STORE.md`](STORE.md) §2, the two-sides law).
 - A door never refuses a document and never auto-rebuilds: whether a
   document is behind its script is the model's record's question, answered

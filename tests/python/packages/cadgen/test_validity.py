@@ -11,6 +11,7 @@ from build123d import Box, Compound, Location, Pos, Shell, Solid
 from OCP.TopoDS import TopoDS
 
 from cadgen.validity import (
+    REASON_INVALID_TOPOLOGY,
     REASON_NON_POSITIVE_VOLUME,
     REASON_NO_SOLID,
     REASON_OPEN_SHELL,
@@ -107,6 +108,62 @@ def _occurrences(scene):
     from cadgen.interference import occurrences_from_scene
 
     return occurrences_from_scene(scene)
+
+
+class NonRigidPlacementTest(unittest.TestCase):
+    """A location is not always rigid, and the placed copy then libels a sound
+    body (PR #370 bug record 021). A scale factor leaves the geometry's tolerances behind,
+    so ``BRepCheck_Analyzer`` calls the placed shape invalidTopology; a mirror
+    has a negative determinant, so the signed volume comes back negative and a
+    good solid reports nonPositiveVolume. The body is checked in its own frame.
+    """
+
+    @staticmethod
+    def _placed(shape, trsf):
+        from OCP.TopLoc import TopLoc_Location
+
+        return shape.wrapped.Moved(TopLoc_Location(trsf))
+
+    @staticmethod
+    def _scale(factor):
+        from OCP.gp import gp_Pnt, gp_Trsf
+
+        trsf = gp_Trsf()
+        trsf.SetScale(gp_Pnt(0, 0, 0), factor)
+        return trsf
+
+    @staticmethod
+    def _mirror():
+        from OCP.gp import gp_Ax2, gp_Dir, gp_Pnt, gp_Trsf
+
+        trsf = gp_Trsf()
+        trsf.SetMirror(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(1, 0, 0)))
+        return trsf
+
+    def test_a_mirrored_placement_of_a_sound_solid_passes(self):
+        result = check_occurrence_shape(self._placed(Box(40, 30, 20), self._mirror()))
+        self.assertEqual(result["reasons"], [])
+        self.assertAlmostEqual(result["volumes"][0], 24000.0, delta=1.0)
+
+    def test_a_scaled_placement_of_a_sound_solid_passes(self):
+        result = check_occurrence_shape(self._placed(Box(40, 30, 20), self._scale(2.0)))
+        self.assertNotIn(REASON_INVALID_TOPOLOGY, result["reasons"])
+        self.assertEqual(result["reasons"], [])
+
+    def test_a_mirrored_placement_does_not_launder_an_inverted_solid(self):
+        # The strip must not turn the sign check into a coin flip: the body is
+        # inverted in its own frame, mirrored placement or not.
+        result = check_occurrence_shape(self._placed(reversed_box(), self._mirror()))
+        self.assertIn(REASON_NON_POSITIVE_VOLUME, result["reasons"])
+
+    def test_a_scaled_placement_does_not_launder_broken_topology(self):
+        broken = Compound([Box(10, 10, 10), Shell(Box(4, 4, 4).faces()[1:])])
+        placed = check_occurrence_shape(
+            self._placed(broken, self._scale(2.0)), check_self_intersection=False
+        )
+        unplaced = check_occurrence_shape(broken.wrapped, check_self_intersection=False)
+        self.assertEqual(sorted(placed["reasons"]), sorted(unplaced["reasons"]))
+        self.assertIn(REASON_OPEN_SHELL, placed["reasons"])
 
 
 class PrototypeDedupTest(unittest.TestCase):

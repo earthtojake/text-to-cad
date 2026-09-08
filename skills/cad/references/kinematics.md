@@ -113,9 +113,11 @@ if __name__ == "__main__":
 A document with no model script gets its kinematics from
 `cadgen step build IN OUT`, whose `--kinematics` takes the whole SPACE — the
 same `{mates, couplings, poses, at}` vocabulary, as inline JSON or a `.json`
-path — and whose `--animation` copies a `.js` module's text into OUT's sidecar.
-The input is read with OCCT and re-emitted by the canonical writer, so OUT's
-bytes are deterministic whichever kernel wrote IN:
+path. Choreography is not a build argument at all: write the render module
+`OUT.js` beside the document you wrote (see "Animation: the render module"
+below), and the renderer loads it live. The input is read with OCCT and
+re-emitted by the canonical writer, so OUT's bytes are deterministic whichever
+kernel wrote IN:
 
 ```bash
 cadgen step build vendor/hinge.step STEP/hinge.step \
@@ -167,10 +169,12 @@ export const clips = {
   `.opacity(0..1)`, `.visible(bool)`, and
   `.deformTube({rest, path, twistDeg: 0, maxSegmentLength: 1})`. The latter
   deforms an existing continuous swept STEP body using rest and posed
-  centerlines in assembly coordinates. Each path is `{normal?, segments}`;
+  centerlines in assembly coordinates. Each path is `{normal, segments}`;
   segments are tangent-connected `{kind:"line",start,end}`,
   `{kind:"arc",center,axis,start,sweepDeg}`, or
-  `{kind:"bezier",points:[p0,p1,p2,p3]}`. Normal is a transverse frame seed;
+  `{kind:"bezier",points:[p0,p1,p2,p3]}`. `normal` is the transverse frame
+  seed and is REQUIRED on both paths (omitting it throws; there is no guessed
+  default, which would twist the tube when the first tangent turns);
   coordinates are vec3 millimetres and circle angles are degrees. Normalized
   arc length maps rest to pose; solve tendon length, bend radius and collision
   constraints separately. `twistDeg` rotates authored braid cross-sections;

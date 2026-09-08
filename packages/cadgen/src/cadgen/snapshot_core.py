@@ -29,6 +29,7 @@ import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from hashlib import sha256
+from math import isfinite
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote, urlparse
@@ -95,6 +96,36 @@ SUPPORTED_JOB_KEYS = frozenset(
         "timeoutSeconds",
     }
 )
+# `render` gets the job's closed-schema treatment for the same reason the job
+# level has it: every key here is read by this module or by `job.render.*` in
+# cadgen-js, and a render key nobody reads is a typo that costs a full-price
+# render of the wrong thing. `render.tesselation` (one l) used to tessellate at
+# the default tolerance and say nothing — exit 0, a faceted image, no hint.
+SUPPORTED_RENDER_KEYS = frozenset(
+    {
+        "sizeProfile",
+        "padding",
+        "paddingPercent",
+        "viewLabels",
+        "tightFrame",
+        "transparent",
+        "renderScale",
+        "scale",
+        "sceneScale",
+        "sceneScaleMode",
+        "tessellation",
+    }
+)
+# Floors for `render.tessellation`. Chord tolerance is RELATIVE to each
+# component's bounding diagonal and angle tolerance is radians, so these are
+# ~100x finer than the tessellator's defaults (1.5e-3 / 0.35 rad) and past any
+# display need at any output size. Below them the page tessellates until the
+# renderer dies, and the caller sees a lost Playwright driver connection rather
+# than a rejected request — so the request is rejected here, before a browser
+# is launched. Mirrored as RENDER_TESSELLATION_FLOORS in
+# packages/cadgen-js/src/common/source.js (that file validates the same job in
+# the page; the parity is tested).
+MIN_RENDER_TESSELLATION = {"chordTolerance": 1e-5, "angleTolerance": 5e-3}
 SUPPORTED_OUTPUT_KEYS = frozenset(
     {
         "path",
@@ -278,6 +309,21 @@ def validate_display_settings_values(payload: Mapping[str, object], *, source_la
             raise SnapshotError(
                 f"--display mode must be one of: {supported}; got {payload.get('mode')!r} ({source_label})"
             )
+    edges = payload.get("edges")
+    if is_plain_object(edges) and "enabled" in edges:
+        # The display MODE is the edge switch, so `edges.enabled` can never change a
+        # snapshot: solid/transparent/hidden_edges/hidden_lines_removed always draw
+        # CAD linework and rendered/unshaded never do. A snapshot is one shot at a
+        # still image, so a setting that silently does nothing is a wrong image with
+        # no error. (Scoped to the snapshot parser: the CAD Viewer's own edge toggle
+        # legitimately reads `enabled` for its live scene.)
+        raise SnapshotError(
+            "display edges has no enabled key: the display MODE is the edge switch. "
+            "solid, transparent, hidden_edges and hidden_lines_removed always draw CAD "
+            "linework and wireframe draws only linework; for shaded surfaces with no "
+            "linework set display mode to rendered (or unshaded). display edges styles "
+            f"the linework the mode draws -- color, thickness, opacity, classes ({source_label})"
+        )
     exploded = payload.get("exploded")
     if is_plain_object(exploded):
         # The exploded view is enabled + amount only; the layout is automatic.
@@ -630,6 +676,34 @@ def normalize_snapshot_job_packet(raw_payload: object) -> tuple[bool, list[objec
     if is_plain_object(raw_payload) and isinstance(raw_payload.get("jobs"), list):
         return False, list(raw_payload["jobs"])
     return True, [raw_payload]
+def validate_render_tessellation(value: object) -> None:
+    """Refuse an unusable ``render.tessellation`` here, where the caller still
+    gets a message. The page validates the same field (source.js) because it
+    also serves the viewer, but by then the cost of an absurd request is a dead
+    renderer and no explanation."""
+    if value is None:
+        return
+    if not is_plain_object(value):
+        raise SnapshotError("render.tessellation must be an object of chordTolerance/angleTolerance")
+    unknown = sorted(set(value) - set(MIN_RENDER_TESSELLATION))
+    if unknown:
+        raise SnapshotError(
+            f"render.tessellation has unknown key(s): {', '.join(unknown)}; "
+            f"supported keys: {', '.join(sorted(MIN_RENDER_TESSELLATION))}"
+        )
+    for key, floor in MIN_RENDER_TESSELLATION.items():
+        if key not in value:
+            continue
+        raw = value[key]
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not isfinite(float(raw)) or float(raw) <= 0:
+            raise SnapshotError(f"render.tessellation.{key} must be a positive finite number")
+        if float(raw) < floor:
+            raise SnapshotError(
+                f"render.tessellation.{key} must be at least {floor}; finer sampling "
+                "exhausts the renderer instead of improving the image"
+            )
+
+
 def normalize_common_job(
     job: dict[str, object],
     *,
@@ -680,6 +754,13 @@ def normalize_common_job(
         job["theme"] = load_theme_option(raw_theme, cwd=resolved_cwd)
 
     normalized_render = dict(job.get("render") if is_plain_object(job.get("render")) else {})
+    unknown_render_keys = sorted(set(normalized_render) - SUPPORTED_RENDER_KEYS)
+    if unknown_render_keys:
+        raise SnapshotError(
+            f"render has unknown key(s): {', '.join(unknown_render_keys)}; "
+            f"supported render keys: {', '.join(sorted(SUPPORTED_RENDER_KEYS))}"
+        )
+    validate_render_tessellation(normalized_render.get("tessellation"))
     raw_scale = str(
         normalized_render.get("scale")
         or normalized_render.get("sceneScale")
@@ -909,15 +990,24 @@ def route_file(pathname: str, prefix: str, root: Path) -> Path:
 # off. Entries are opaque bytes here: Python never decodes them, it only
 # stores and serves what the one JS codec produced.
 #
-# TRANSPORT: bulk bytes must NOT go through Playwright's route.fulfill. CDP
-# serializes every fulfilled body as base64 over the devtools pipe at
-# ~20 MB/s, which made a warm moonwatch snapshot spend ~8s moving ~180 MB of
-# surfs + cache entries. So the renderer runs a loopback HTTP server and the
-# intercepted snapshot.local routes for /__render_asset/ and /__tess_cache/
-# answer with a 307 to it — the tiny redirect crosses CDP, the payload rides
-# Chromium's native network stack. The page's origin stays snapshot.local, so
-# the loopback responses carry CORS headers for that origin (and answer the
-# preflight the redirected POST triggers).
+# TRANSPORT: bulk bytes must NOT go through Playwright at all. CDP serializes
+# every fulfilled body as base64 over the devtools pipe at ~20 MB/s, which made
+# a warm moonwatch snapshot spend ~8s moving ~180 MB of surfs + cache entries.
+# Worse, INTERCEPTION alone costs the pipe in the other direction: a routed
+# request's body reaches the driver as escaped text in one protocol message, so
+# a 92 MB cache write-back exceeded Node's string limit and killed the renderer
+# (reported to the caller as a lost driver connection). A 307 to loopback
+# cannot save such a request — by then the body has already crossed.
+#
+# So the renderer runs a loopback HTTP server and the page addresses it by its
+# ABSOLUTE origin for the cache (window.__cadgenSnapshotAssetOrigin, injected
+# in BatchSnapshotRenderer.start): those requests are never intercepted, in
+# either direction, at any size. Page-relative asset URLs (/__render_asset/,
+# the store prefix) are GET-only, so they stay intercepted and answer with a
+# tiny 307 to the same server. The page's origin stays snapshot.local, so the
+# loopback responses carry CORS headers for it (and answer the preflight a
+# cross-origin JSON POST triggers). Without that server there is no working
+# transport, so start() raises instead of degrading.
 
 TESS_CACHE_ROUTE_PREFIX = "/__tess_cache/"
 # <cid>-t<tessellator-version>-l<chord>-a<angle>.tess with exponential-notation
@@ -1010,11 +1100,13 @@ class SnapshotAssetServer:
     """Loopback HTTP server for the snapshot page's BULK bytes.
 
     Serves exactly two path families — ``/__render_asset/`` (files under the
-    active render root, same containment rule as the CDP route) and
-    ``/__tess_cache/`` (the shared tessellation cache) — to whatever origin
-    the snapshot page runs as (CORS ``*``; the socket is loopback-only and
-    carries the same files the CDP route already served). ``root_provider``
-    is read per request so one server follows the renderer across jobs.
+    active render root, same containment rule as the CDP route for the page
+    itself) and ``/__tess_cache/`` (the shared tessellation cache) — to
+    whatever origin the snapshot page runs as (CORS ``*``; the socket is
+    loopback-only and serves only what the page may already read).
+    ``root_provider`` is read per request so one server follows the renderer
+    across jobs. There is no fallback: the renderer refuses to start without
+    this server, because the CDP transport cannot carry these payloads.
     """
 
     def __init__(self, root_provider) -> None:
@@ -1177,10 +1269,19 @@ class BatchSnapshotRenderer:
         try:
             try:
                 self.asset_server = SnapshotAssetServer(lambda: self.active_root_path)
-            except OSError:
-                # No loopback socket (sandboxed run): bulk bytes fall back to
-                # the CDP route below — slower, never wrong.
-                self.asset_server = None
+            except OSError as exc:
+                # The loopback server is the ONLY transport for bulk mesh bytes.
+                # The old fallback (Playwright's route) hands every intercepted
+                # body to the driver as escaped text in one protocol message, so
+                # a large assembly killed the renderer with ERR_STRING_TOO_LONG
+                # and reported it as a lost driver connection. A snapshot that
+                # cannot bind a loopback socket must say so, not silently take
+                # the transport that fails on real models.
+                raise SnapshotError(
+                    "CAD snapshot needs a loopback HTTP server on 127.0.0.1 for its mesh "
+                    f"bytes and could not start one: {exc}. Allow a local socket "
+                    "(the port is ephemeral and never leaves this machine) and retry."
+                ) from exc
             try:
                 from playwright.async_api import async_playwright
             except ImportError as exc:
@@ -1224,6 +1325,13 @@ class BatchSnapshotRenderer:
                 device_scale_factor=1,
             )
             self.page = await self.context.new_page()
+            # The page addresses the cache server DIRECTLY. Injected before any
+            # page script so the runtime's provider is built with it (see the
+            # transport note above: an intercepted URL costs the pipe, even
+            # when the route only answers with a redirect).
+            await self.context.add_init_script(
+                f"window.__cadgenSnapshotAssetOrigin = {json.dumps(self.asset_server.base_url)};"
+            )
             await self.page.route(SNAPSHOT_ROUTE_GLOB, self.handle_route)
             await self.page.goto(SNAPSHOT_RENDER_URL, wait_until="load", timeout=DEFAULT_TIMEOUT_SECONDS * 1000)
             await self.page.wait_for_function(
@@ -1239,22 +1347,20 @@ class BatchSnapshotRenderer:
         request = route.request
         parsed = urlparse(request.url)
         bulk = (
-            parsed.path.startswith(TESS_CACHE_ROUTE_PREFIX)
-            or parsed.path.startswith(RENDER_ASSET_ROUTE_PREFIX)
+            parsed.path.startswith(RENDER_ASSET_ROUTE_PREFIX)
             or parsed.path.startswith(STORE_ASSET_ROUTE_PREFIX)
         )
-        if bulk and self.asset_server is not None and request.url.startswith(SNAPSHOT_ORIGIN):
-            # 307 preserves method and body, so the cache write-back POST
-            # redirects too; the payload then rides the loopback socket
-            # instead of the CDP pipe (see the transport note above).
+        if bulk and request.url.startswith(SNAPSHOT_ORIGIN):
+            # These asset URLs are page-relative (the job names files, not
+            # origins), so they are intercepted and redirected: a tiny 307
+            # crosses the pipe and the payload rides the loopback socket. GETs
+            # only — nothing POSTs a body here, which is why the redirect is
+            # enough for them and not for the cache (see the transport note).
             await route.fulfill(
                 status=307,
                 headers={"location": f"{self.asset_server.base_url}{parsed.path}"},
                 body="",
             )
-            return
-        if parsed.path.startswith(TESS_CACHE_ROUTE_PREFIX):
-            await self.handle_tess_cache_route(route, request, parsed.path)
             return
         if request.method != "GET":
             await route.fulfill(status=405, content_type="text/plain; charset=utf-8", body="method not allowed")
@@ -1280,45 +1386,6 @@ class BatchSnapshotRenderer:
             headers={"cache-control": "no-store"},
             body=file_path.read_bytes(),
         )
-
-    async def handle_tess_cache_route(self, route: Any, request: Any, pathname: str) -> None:
-        # Same origin gate the file routes get; the cache lives outside any
-        # model root, so it must never be reachable through a bad name.
-        if not request.url.startswith(SNAPSHOT_ORIGIN):
-            await route.fulfill(status=403, content_type="text/plain; charset=utf-8", body="forbidden")
-            return
-        if request.method == "GET":
-            body = read_tessellation_cache_entry(pathname)
-            if body is None:
-                await route.fulfill(status=404, content_type="text/plain; charset=utf-8", body="miss")
-                return
-            await route.fulfill(
-                status=200,
-                content_type="application/octet-stream",
-                headers={"cache-control": "no-store"},
-                body=body,
-            )
-            return
-        if request.method == "POST":
-            if pathname == TESS_CACHE_BATCH_PATH:
-                # CDP fallback for the batch route (no loopback server). The
-                # container crosses the slow fulfill path, but it is still one
-                # round trip instead of N.
-                batch = read_tessellation_cache_batch(request.post_data_buffer)
-                if batch is None:
-                    await route.fulfill(status=400, content_type="text/plain; charset=utf-8", body="bad batch request")
-                    return
-                await route.fulfill(
-                    status=200,
-                    content_type="application/octet-stream",
-                    headers={"cache-control": "no-store"},
-                    body=batch,
-                )
-                return
-            accepted = write_tessellation_cache_entry(pathname, request.post_data_buffer)
-            await route.fulfill(status=204 if accepted else 403, content_type="text/plain; charset=utf-8", body="")
-            return
-        await route.fulfill(status=405, content_type="text/plain; charset=utf-8", body="method not allowed")
 
     async def render(self, job: Mapping[str, object]) -> dict[str, object]:
         await self.start()

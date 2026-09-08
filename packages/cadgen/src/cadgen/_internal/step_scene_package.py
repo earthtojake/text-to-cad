@@ -8,7 +8,10 @@ each component's ``.surf`` index. So the tree IS the warm-load cache —
 there is no second geometry store. ``load_step_scene_cached`` keeps its name
 and contract (warm loads skip the text-STEP parse) but now reads the tree;
 a STEP with no current tree pays one full parse, and the tree the entry
-build then writes makes the next load warm.
+build then writes makes the next load warm. A warm load is the document's
+geometry, not a build's: a model's tree holds the prototypes re-read from the
+STEP it wrote (``cadgen.store.build.build_tree_through_step``), so this path
+and the parse it replaces return the same shapes.
 """
 
 from __future__ import annotations

@@ -448,8 +448,9 @@ A STEP written by another kernel round-trips through cadgen with
 canonical writer emits it, so OUT's bytes are deterministic and identical on
 every run. The same command ANNOTATES a document that has no model script —
 `--kinematics` takes the whole space (`{mates, couplings, poses, at}`, the same
-vocabulary the decorator takes, as inline JSON or a `.json` path) and
-`--animation` copies a `.js` module's text into OUT's sidecar.
+vocabulary the decorator takes, as inline JSON or a `.json` path). Choreography
+is not a build argument: it lives in the render module written beside OUT
+(`OUT.js`) and is read live by the renderer — see `kinematics.md`.
 
 ```bash
 cadgen step build vendor/hinge.step STEP/hinge.step \

@@ -425,14 +425,35 @@ def _generate_part_outputs(
         }
         # Objects first: components + tree. Harmless if this build ends up not
         # publishing its record (publish rule below) — content-addressed and GC'd.
-        with logger.timed("tree: components"):
-            tree_hash, tree, stats = build_tree_from_compound(
-                shape,
-                root_name=spec.step_path.stem,
-                force=force,
-                progress=progress,
-                extra=tree_extra,
-            )
+        writes_step = generated and bool(spec.step_output)
+        exported_hash: str | None = None
+        if writes_step:
+            # The tree of what the STEP HOLDS: assemble and write the document,
+            # re-read it, publish its prototypes as the components
+            # (cadgen.store.build.build_tree_through_step). Costs the build one
+            # text-STEP parse of its own output.
+            from cadgen.store.build import build_tree_through_step
+
+            spec.step_path.parent.mkdir(parents=True, exist_ok=True)
+            with logger.timed("tree: components"):
+                tree_hash, tree, stats, exported_hash = build_tree_through_step(
+                    shape,
+                    spec.step_path,
+                    root_name=spec.step_path.stem,
+                    force=force,
+                    progress=progress,
+                    extra=tree_extra,
+                    logger=logger,
+                )
+        else:
+            with logger.timed("tree: components"):
+                tree_hash, tree, stats = build_tree_from_compound(
+                    shape,
+                    root_name=spec.step_path.stem,
+                    force=force,
+                    progress=progress,
+                    extra=tree_extra,
+                )
         stats["tree"] = tree_hash
 
         model_path = _model_for_spec(spec)
@@ -461,15 +482,7 @@ def _generate_part_outputs(
                 sidecar_payload["kinematics"] = resolved_block
             if spec.step_output:
                 write_source_sidecar(spec.entry_path, sidecar_payload)
-
-                from cadgen.store.materialize import materialize
-                from cadgen.step_export import export_build123d_step_file
-
-                spec.step_path.parent.mkdir(parents=True, exist_ok=True)
-                with logger.timed("tree: assemble STEP"):
-                    exported_hash = export_build123d_step_file(
-                        materialize(tree_hash, label=spec.step_path.stem), spec.step_path, logger=logger
-                    )
+                assert exported_hash is not None  # written by build_tree_through_step above
                 from cadgen.catalog import seed_artifact_hash
 
                 seed_artifact_hash(spec.step_path, exported_hash)
