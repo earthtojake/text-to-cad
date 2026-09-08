@@ -63,11 +63,11 @@ footprint — and Chromium runs more than one renderer here.
 
 | metric | baseline (old client) | at `fb1632c5b` | now |
 |---|---|---|---|
-| first geometry on screen | ~86 s | 4.7 s | **4.9 s** |
+| first geometry on screen | ~86 s | 4.7 s | **4.9–5.9 s** |
 | time to fully loaded | 86–90 s | 186 s | **147 s** |
-| renderer RSS peak | 4.5 GB | 3.4–3.6 GB | **2.69 GB** (largest single 2.62 GB) |
-| renderer RSS after a forced GC | — | — | **2.18 GB** |
-| JS heap peak | 3.3 GB | 2.2–2.4 GB | **1.76 GB** |
+| renderer RSS peak | 4.5 GB | 3.4–3.6 GB | **2.65 GB** (largest single 2.58 GB) |
+| renderer RSS after a forced GC | — | — | **2.22 GB** (heap 1.18 GB) |
+| JS heap peak | 3.3 GB | 2.2–2.4 GB | **1.72 GB** |
 | GPU buffer bytes | 2418 MiB | 524 MiB | **507 MiB** |
 | publishes | 1 | 28 | **8** |
 | draw calls over the load | — | 368k | **98k** |
@@ -97,17 +97,27 @@ occurrences, JS heap 1.22 GB settled.
 
 ## 4. What is left
 
-**Memory.** 2.69 GB peak against the previous session's "well under 2 GB" gate.
-That is 25% below the 3.6 GB that crashed the user's Chrome twice, and the model
-loads in a real browser now, but the gate is not met. After a forced GC the
-renderer still holds 2.18 GB, of which the probe accounts for only ~712 MB
-(surface 530 MB, BVH 158 MB, edges 23 MB), so ~1.4 GB is unattributed. Candidates
-nobody has measured: the composed selector runtime (per-component picking
-topology, not in `__cadRenderMemoryProbe`), the 3,259 per-occurrence materials,
-and the per-occurrence `faceIds` arrays that `buildGlbFaceIdsForPart` allocates
-once selector topology exists for an occurrence (98.5 M occurrence-triangles ×
-4 B = ~394 MB if it ever covers the whole model). Extend the probe to attribute
-those before optimising anything.
+**Memory.** 2.65 GB peak (largest single renderer 2.58 GB) against the previous
+session's "well under 2 GB" gate. That is 25% below the 3.6 GB that crashed the
+user's Chrome twice, and the model loads in a real browser now, but the gate is
+not met. After a forced GC the renderer still holds 2.22 GB (largest 2.15 GB)
+with a 1.18 GB JS heap, while the probe accounts for 712 MB (surface 530 MB, BVH
+158 MB, edges 23 MB).
+
+PICKING IS NOT THE GAP, and the probe now proves it rather than leaving it a
+suspect: `faceIdBytes` and `pickBytes` are both ZERO after a full load of the
+hand. Selector topology is lazy — nothing loads it until something is picked —
+so `buildGlbFaceIdsForPart`'s per-occurrence triangle -> face-row map (98.5 M
+occurrence-triangles, ~394 MB if it ever covered the model) and the merged pick
+proxies cost nothing on a plain load. Do not go looking there again; go looking
+at picking only if you make selector topology eager.
+
+What is left points at the PER-OCCURRENCE OBJECT GRAPH: 3,259 meshes, 5,061
+materials and 1,839 geometries, each with its own three.js WebGLProperties entry
+and uniform list, none of which the byte accounting can see because none of it
+is a typed array. That is the same thing the remaining draw calls are — one
+surface draw per occurrence — so instancing surface meshes per component is one
+change against both. Confirm it with a heap snapshot before building it.
 
 **Load time.** 147 s against an 86 s baseline. It is NOT transport: the viewer's
 `/__tess_cache/` route serves 315 MiB/s to one reader and 681 MiB/s across
