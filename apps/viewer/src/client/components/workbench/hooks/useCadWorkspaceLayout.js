@@ -2,16 +2,7 @@ import { useEffect } from "react";
 
 import { getCadWorkspaceLayoutMode } from "../../../workbench/breakpoints.js";
 
-const SIDEBAR_WRAPPER_SELECTOR = "[data-slot='sidebar-wrapper']";
 export const CAD_WORKSPACE_MIN_MODEL_VIEWPORT_WIDTH = 700;
-
-function sidebarWrapperElement() {
-  return document.querySelector(SIDEBAR_WRAPPER_SELECTOR);
-}
-
-function applySidebarWidth(width) {
-  sidebarWrapperElement()?.style.setProperty("--sidebar-width", `${width}px`);
-}
 
 function readWindowViewportWidth(fallback = 1600) {
   const width = Number(window.innerWidth);
@@ -20,7 +11,7 @@ function readWindowViewportWidth(fallback = 1600) {
 
 // The width the layout is laid out IN. The standalone viewer owns the window,
 // so that is the window; an embedded surface (the desktop app's file tab) is
-// one pane of a larger window, and laying its sidebar and sheet out for the
+// one pane of a larger window, and laying its panel column out for the
 // window's width leaves no viewport at all in a narrow pane. When a host
 // element is given, its own width is the viewport.
 function readHostViewportWidth(host, fallback = 1600) {
@@ -93,65 +84,35 @@ export function canFitDesktopPanels(viewportWidth, panelMinWidths = []) {
   return numericViewportWidth >= CAD_WORKSPACE_MIN_MODEL_VIEWPORT_WIDTH + totalPanelMinWidth;
 }
 
-export function resolveDesktopPanelWidths({
-  viewportWidth,
-  sidebarOpen = false,
-  sheetOpen = false,
-  sidebarWidth = 0,
-  sheetWidth = 0,
-  sidebarMinWidth = 0,
-  sheetMinWidth = 0,
-  sidebarMaxWidth = 0,
-  sheetMaxWidth = 0
+/**
+ * The panel column's width, clamped to its own range.
+ *
+ * There is ONE panel column now — the surface's theme editor, its Inspector
+ * and the file tree take turns in it (`cad-viewer/shell`'s `panels.js`), and
+ * before that there were two, a file list on the left and this one on the
+ * right. This used to solve for both at once and answer with a pair; with one
+ * column the answer is one number, and the model viewport's reserve is
+ * deliberately NOT enforced here: a person who drags a panel wider than the
+ * reserve means it.
+ */
+export function resolveDesktopPanelWidth({
+  open = false,
+  width = 0,
+  minWidth = 0,
+  maxWidth = 0
 } = {}) {
-  if (!sidebarOpen && !sheetOpen) {
-    return { sidebarWidth: 0, sheetWidth: 0 };
-  }
-
-  const sidebarMax = Number(sidebarMaxWidth);
-  const sheetMax = Number(sheetMaxWidth);
-
-  if (sidebarOpen && !sheetOpen) {
-    return {
-      sidebarWidth: clampPanelWidthForLayout(sidebarWidth, sidebarMinWidth, sidebarMax),
-      sheetWidth: 0
-    };
-  }
-
-  if (!sidebarOpen && sheetOpen) {
-    return {
-      sidebarWidth: 0,
-      sheetWidth: clampPanelWidthForLayout(sheetWidth, sheetMinWidth, sheetMax)
-    };
-  }
-
-  const sidebarMin = Math.max(0, Number(sidebarMinWidth) || 0);
-  const sheetMin = Math.max(0, Number(sheetMinWidth) || 0);
-  let nextSidebarWidth = clampPanelWidthForLayout(sidebarWidth, sidebarMin, sidebarMax);
-  let nextSheetWidth = clampPanelWidthForLayout(sheetWidth, sheetMin, sheetMax);
-
-  return {
-    sidebarWidth: nextSidebarWidth,
-    sheetWidth: nextSheetWidth
-  };
+  return open ? clampPanelWidthForLayout(width, minWidth, Number(maxWidth)) : 0;
 }
 
 export function useCadWorkspaceLayout({
   isDesktop,
   setLayoutMode,
-  setSidebarOpen,
   setTabToolsOpen,
   setLayoutViewportWidth,
-  clampSidebarWidth,
   clampTabToolsWidth,
-  setSidebarWidth,
   setTabToolsWidth,
-  panelResizeStateRef,
   tabToolsResizeStateRef,
-  defaultSidebarWidth,
-  sidebarMinWidth,
   tabToolsMinWidth,
-  endPanelResize,
   endTabToolsResize,
   /** The element the surface is laid out in; null means the window. */
   hostRef = null
@@ -171,76 +132,14 @@ export function useCadWorkspaceLayout({
     const host = hostRef?.current ?? null;
     return watchViewport(host, () => {
       setLayoutViewportWidth((current) => readHostViewportWidth(host, current));
-      setSidebarWidth((current) => preferredPanelWidthAfterViewportSync(current, sidebarMinWidth));
       setTabToolsWidth((current) => preferredPanelWidthAfterViewportSync(current, tabToolsMinWidth));
     });
   }, [
     hostRef,
     isDesktop,
     setLayoutViewportWidth,
-    setSidebarWidth,
     setTabToolsWidth,
-    sidebarMinWidth,
     tabToolsMinWidth
-  ]);
-
-  useEffect(() => {
-    const handlePointerMove = (event) => {
-      const resizeState = panelResizeStateRef.current;
-      if (!resizeState) {
-        return;
-      }
-
-      const rawWidth = resizeState.startWidth + (event.clientX - resizeState.startX);
-      if (rawWidth < sidebarMinWidth) {
-        applySidebarWidth(defaultSidebarWidth);
-        setSidebarWidth(defaultSidebarWidth);
-        setSidebarOpen(false);
-        endPanelResize();
-        return;
-      }
-
-      const nextWidth = clampSidebarWidth(rawWidth);
-      resizeState.latestWidth = nextWidth;
-      applySidebarWidth(nextWidth);
-      setSidebarWidth(nextWidth);
-    };
-
-    const endResize = () => {
-      const resizeState = panelResizeStateRef.current;
-      if (!resizeState) {
-        return;
-      }
-      const nextWidth = Math.max(
-        sidebarMinWidth,
-        clampSidebarWidth(resizeState.latestWidth ?? resizeState.startWidth)
-      );
-      applySidebarWidth(nextWidth);
-      setSidebarWidth(nextWidth);
-      endPanelResize();
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", endResize);
-    window.addEventListener("pointercancel", endResize);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", endResize);
-      window.removeEventListener("pointercancel", endResize);
-      if (!tabToolsResizeStateRef.current) {
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
-    };
-  }, [
-    clampSidebarWidth,
-    endPanelResize,
-    panelResizeStateRef,
-    defaultSidebarWidth,
-    setSidebarOpen,
-    setSidebarWidth,
-    sidebarMinWidth,
-    tabToolsResizeStateRef
   ]);
 
   useEffect(() => {
@@ -274,15 +173,12 @@ export function useCadWorkspaceLayout({
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", endResize);
       window.removeEventListener("pointercancel", endResize);
-      if (!panelResizeStateRef.current) {
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
     };
   }, [
     clampTabToolsWidth,
     endTabToolsResize,
-    panelResizeStateRef,
     setTabToolsOpen,
     setTabToolsWidth,
     tabToolsMinWidth,

@@ -2,7 +2,7 @@ import { ExternalLink, FileQuestion } from "lucide-react";
 
 import { Button } from "@renderer/components/ui/button";
 
-import { EmptyState } from "../EmptyState";
+import { EmptyState } from "cad-viewer/shell";
 import { formatBytes } from "./ImageRenderer";
 
 /**

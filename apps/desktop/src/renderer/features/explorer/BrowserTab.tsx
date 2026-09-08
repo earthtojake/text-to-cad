@@ -10,7 +10,7 @@ import { Button } from "@renderer/components/ui/button";
 import { cn } from "@renderer/lib/utils";
 import { useExplorer } from "@renderer/state/explorer";
 
-import { EmptyState } from "./EmptyState";
+import { EmptyState } from "cad-viewer/shell";
 
 /**
  * A browser, as a tab in the one strip.

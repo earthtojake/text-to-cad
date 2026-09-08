@@ -185,10 +185,10 @@ export const FileTabSchema = z.object({
   root: ExplorerRootSchema.default(null),
   /**
    * Which of the tab's panels is open, by id — and only one is
-   * (`features/explorer/renderers/panels.ts`).
+   * (`cad-viewer/shell`'s `panels.js`).
    *
    * A file tab has one panel column and a list of things that can be in it:
-   * the file tree (`FILE_PANEL_TREE`), and whatever the file's renderer
+   * the file tree (`FILE_PANEL_TREE`, in the shared shell), and whatever the file's renderer
    * declares — markdown's source view, a CAD file's theme editor and file
    * sheet. Opening one closes whatever was open, so the answer is a single
    * id rather than a flag per panel; `""` is "nothing open".
@@ -200,15 +200,6 @@ export const FileTabSchema = z.object({
    */
   panel: z.string().nullable().default(null),
 });
-
-/**
- * The file tree's id as one of a file tab's panels.
- *
- * Here rather than beside the other panel ids because the explorer store
- * names it too (`revealPath` opens the tree for the file it reveals), and the
- * store may not import the renderer's feature code.
- */
-export const FILE_PANEL_TREE = "tree";
 
 /**
  * What a review is taken against.

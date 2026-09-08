@@ -8,10 +8,17 @@ or in the host's ("Where the panels are drawn"). The standalone viewer's shell
 (`src/client/components/CadWorkspace.js`) is one consumer; a host application
 (the desktop app's explorer tab) is the other. There is one implementation.
 
-What it is NOT: the nav row above the surface, the file sidebar and the home
-screen. Those are chrome around it, and a host that wants them injects them
-through the render slots below. The nav row is shared in its own right —
-`cad-viewer/shell`, see `shell.md` — so the two apps draw one breadcrumb.
+What it is NOT: the nav row above the surface, and the panel column beside it.
+Those are chrome around it, and a host that wants them injects them through the
+two render slots below. Both are shared in their own right — `cad-viewer/shell`,
+see `shell.md` — so the two apps draw one breadcrumb, one panel column, one
+file tree and one entry menu.
+
+There is no file-list slot and no home-screen slot. The standalone viewer used
+to have both: a left sidebar with its own trigger, and a "Select a file" screen
+that listed a handful of entries. The list is now the shared **file tree**, one
+of the panels in the column, and a surface with nothing open draws the shared
+`EmptyState` — the same one the desktop app's empty file tab shows.
 
 ## The entry point
 
@@ -33,7 +40,7 @@ a build error or, worse, a silently unstyled surface.
 | `className` | `""` | Merged onto the surface's root (`tailwind-merge`, so `h-full` beats the default `h-svh`). |
 | `catalog` | `null` | `{ entries, revision, hydrated, refreshing, error }` when the host already subscribes to the catalog. Omit it and the surface reads the store for `origin` itself — which is all an embedded consumer needs. |
 | `manageDocumentTitle` | `true` | Whether the surface writes `document.title`. Pass `false` from a host that owns its own window. |
-| `renderTopBar` / `renderSidebar` / `renderHome` | `null` | Render slots for injected chrome; each is called with the `chrome` object and placed in the surface's layout. Omit all three for a bare file surface. Without `renderSidebar` there is no sidebar and the viewport owns the full width. |
+| `renderTopBar` / `renderPanel` | `null` | Render slots for injected chrome; each is called with the `chrome` object and placed in the surface's layout — the nav row above the file, and the panel column at the right end of the body row. Omit both for a bare file surface. There is no slot for a file LIST and none for a home screen: the list is the shared file tree, one of the panels in that column (`cad-viewer/shell`'s `panels.js`), and a surface with nothing open draws the shared `EmptyState`. |
 | `layout` | `"auto"` | `"desktop"` pins the desktop layout — the file sheet is a column beside the model, never a drawer over it — however narrow the root is. `"auto"` measures the root and picks desktop or compact. |
 | `fileSheetWidth` | `null` | The sheet's width in px, when the host sizes it for its pane. Clamped to the sheet's own range (240–448) and not resizable from inside the surface. `null` uses the stored width. Ignored when `panelSlot` is given — the host's frame owns the width then. |
 | `panelSlot` | `null` | A DOM element the open panel's content is drawn into. Given one, the surface portals the theme editor or the file sheet there and draws no column of its own; without one it draws the column, which is the standalone case. See "Where the panels are drawn". |
@@ -402,17 +409,17 @@ the copy.
 
 The surface lays itself out against **its own root**, not the window: the
 layout hook measures the root element (a `ResizeObserver`, plus the window's
-resize events) to pick desktop or compact mode and to size the sidebar and
-the sheet. In the standalone app the two are the same box; in a host pane
+resize events) to pick desktop or compact mode and to size
+the panel column. In the standalone app the two are the same box; in a host pane
 they are not, and a layout computed for the window's width would leave a
 narrow pane with no viewport at all. Two more things follow for a host:
 
-- The WebGL canvas is exactly the area between the sidebar and the sheet —
+- The WebGL canvas is exactly the area left of the panel column —
   the render pane fills that column and nothing else, so the camera fits and
   centres the model in what is visible, and a sheet opening or closing reaches
   the scene as a plain resize of the canvas. The standalone shell gives the
-  root the whole viewport (`h-svh`), a host gives it `h-full min-h-0` (the
-  `min-h-0` beats the sidebar wrapper's own `min-h-svh`).
+  root the whole viewport (`h-svh`), a host gives it `h-full min-h-0` (which
+  beats the surface's own `h-svh`).
 - Compact mode's file sheet is a drawer — when the surface is drawing the
   panel at all. With a `panelSlot` there is no drawer and no breakpoint for
   one: the host's column is the panel at every width. Standalone it portals to `body`,

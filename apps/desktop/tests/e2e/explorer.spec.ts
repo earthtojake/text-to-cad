@@ -152,7 +152,7 @@ test("opens a markdown file as a preview, then as source", async () => {
   await shoot("file-markdown-preview.png");
 
   /*
-    The source view is markdown's one PANEL (`renderers/panels.ts`), declared
+    The source view is markdown's one PANEL (`cad-viewer/shell`'s `panels.js`), declared
     the same way a CAD file declares its two: an icon button with
     `aria-pressed`, at the right end of the row and immediately left of the
     files toggle, which stays last. It used to be a special case in the
@@ -321,7 +321,7 @@ test("navigates by the breadcrumb's menus", async () => {
   await expect(page.getByRole("menu")).toHaveCount(0);
 
   // A code file declares no panels of its own, so the tree is the whole list
-  // and the row's right end is the files toggle alone (`renderers/panels.ts`).
+  // and the row's right end is the files toggle alone (`cad-viewer/shell`'s `panels.js`).
   await expect(header.locator("[data-file-panel]")).toHaveCount(1);
   await expect(header.locator("[data-file-panel]")).toHaveAttribute("data-file-panel", "tree");
   await expect(header.getByTestId("tree-toggle")).toBeVisible();
@@ -418,7 +418,7 @@ test("shows the runtime's own error for a STEP file when the runtime cannot star
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Runtime status" })).toBeVisible();
   // And no CAD panel toggles: the surface that draws those panels never came
-  // up, so the CAD declaration offers none (`renderers/panels.ts`) and the
+  // up, so the CAD declaration offers none (`cad-viewer/shell`'s `panels.js`) and the
   // tree is the whole list. Two lit buttons over a failure card would open
   // nothing.
   await expect(page.locator("[data-file-panel]")).toHaveCount(1);
@@ -582,7 +582,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await tree.click();
 
   /*
-    A CAD file's two panels (`renderers/panels.ts`): the viewer's theme editor
+    A CAD file's two panels (`cad-viewer/shell`'s `panels.js`): the viewer's theme editor
     and its Inspector, which `layout="desktop"` had left with no door in this
     app because that layout hides the top bar their toggles live in. Both sit
     left of the files toggle, which stays last and does not move for them, and
@@ -1109,7 +1109,7 @@ function panels(target: Page) {
 /**
  * The Inspector is a column beside the model, never a drawer over it.
  *
- * It is the app's own panel column now (`FilePanel.tsx`) with the viewer's
+ * It is the app's own panel column now (`cad-viewer/shell`'s `FilePanelColumn.jsx`) with the viewer's
  * panel portaled into it, so it sits BESIDE the surface rather than inside
  * it: the model gets the whole surface and the pane is what the column takes
  * its width from.

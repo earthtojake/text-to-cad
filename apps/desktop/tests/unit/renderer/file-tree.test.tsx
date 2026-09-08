@@ -1,14 +1,23 @@
+import { FileTree } from "cad-viewer/shell";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FileTree } from "@renderer/features/explorer/FileTree";
+import { currentPlatform } from "@renderer/features/explorer/entry-actions";
+import { useExplorerTreeSource } from "@renderer/features/explorer/tree-source";
 import { useExplorer } from "@renderer/state/explorer";
 import type { DirEntry } from "@shared/ipc/explorer";
 
 /**
- * The tree against a small project listed one level at a time, the way
- * `src/main/explorer/fs.ts` lists one.
+ * The SHARED tree (`cad-viewer/shell`) over THIS app's source adapter
+ * (`features/explorer/tree-source.ts`), against a small project listed one
+ * level at a time, the way `src/main/explorer/fs.ts` lists one.
+ *
+ * The component is the standalone CAD Viewer's too, and its pure halves are
+ * tested beside it (`apps/viewer/src/client/shell/*.test.js`). What is under
+ * test here is the half that needs a DOM and an IPC bridge: that this app's
+ * adapter reads the directories the tree asks for, and that the rows, the
+ * menus and the keyboard behave over it.
  *
  * The bug these cover: expanding a folder more than one level down did
  * nothing. The cause was two sources of truth for "is this folder open" — an
@@ -57,19 +66,26 @@ beforeEach(() => {
   });
 });
 
-function mount(props: Partial<Parameters<typeof FileTree>[0]> = {}) {
-  return render(
-    <FileTree
-      activePath={null}
-      fsRevision={0}
-      
-      onOpen={() => {}}
-      projectId="p1"
-      projectName="text-to-cad"
-      root={null}
-      {...props}
-    />,
-  );
+/**
+ * The tree as the file tab draws it: the shared component over this app's
+ * adapter. A component rather than a call, because the adapter is a hook.
+ */
+function Tree({ activePath = null }: { activePath?: string | null }) {
+  const source = useExplorerTreeSource({
+    ctx: {
+      projectId: "p1",
+      root: null,
+      platform: currentPlatform(),
+      beginRename: () => {},
+      beginCreate: () => {},
+    },
+    projectName: "text-to-cad",
+  });
+  return <FileTree activePath={activePath} onOpen={() => {}} source={source} />;
+}
+
+function mount(props: { activePath?: string | null } = {}) {
+  return render(<Tree {...props} />);
 }
 
 /** A row by its path, which is what a nested folder is keyed by. */
@@ -132,17 +148,7 @@ describe("FileTree", () => {
 
     // Opening a file under it has to bring it back, or the tree marks a row
     // as selected inside a subtree it is not showing.
-    view.rerender(
-      <FileTree
-        activePath="apps/viewer/src/main.jsx"
-        fsRevision={0}
-        
-        onOpen={() => {}}
-        projectId="p1"
-        projectName="text-to-cad"
-        root={null}
-      />,
-    );
+    view.rerender(<Tree activePath="apps/viewer/src/main.jsx" />);
     await waitFor(() => expect(rowExists("apps/viewer/src/main.jsx")).toBe(true));
     expect(row("apps/viewer/src/main.jsx")).toHaveAttribute("aria-selected", "true");
   });

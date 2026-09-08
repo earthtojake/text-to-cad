@@ -1,22 +1,18 @@
 import { ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@renderer/components/ui/context-menu";
-import { isMac } from "@renderer/lib/platform";
-import { cn } from "@renderer/lib/utils";
-import { useExplorer, useTree } from "@renderer/state/explorer";
-import type { DirEntry } from "@shared/ipc/explorer";
-import type { ExplorerRoot } from "@shared/types";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { cn } from "@/ui/utils";
 
-import { EntryMenuItems, useMenuFocusGuard } from "./EntryContextMenu";
-import { createEntry, currentPlatform, renameEntry, trashEntry, type EntryActionContext } from "./entry-actions";
-import type { MenuEntryTarget } from "./entry-menu";
-import { FileIcon, FolderIcon } from "cad-viewer/shell";
-import { fuzzyFilter } from "./fuzzy";
-import { InlineName } from "./InlineName";
+import { EntryMenuItems, useEntryMenuFocusGuard } from "./EntryMenu.jsx";
+import { ALL_ENTRY_CAPABILITIES } from "./entry-menu.js";
+import { fuzzyFilter } from "./fuzzy.js";
+import { FileIcon, FolderIcon } from "./icons.jsx";
+import { InlineName } from "./InlineName.jsx";
 
 /**
- * The file tab's right-hand tree (Codex's layout: content left, tree right).
+ * The file surface's tree — the rightmost panel in the nav row's list, in
+ * BOTH apps (`panels.js`).
  *
  * Lazy: a directory's children are fetched when it is first expanded and kept
  * afterwards. A recursive read of a repository with `node_modules` in it costs
@@ -27,206 +23,185 @@ import { InlineName } from "./InlineName";
  * root, because "find the file called x" and "see where x lives" are different
  * questions and the tree only answers the second one well.
  *
- * Every row has the entry menu (`EntryContextMenu.tsx`) on right-click, and
- * the two items that need a field — Rename, New file/folder — draw it in
- * the row (`InlineName`). The keyboard has the same two: F2 renames the
- * cursor row, ⌘⌫ (Ctrl+Delete) moves it to the trash.
+ * Every row has the entry menu (`EntryMenu.jsx`) on right-click, filtered by
+ * what the host can actually do, and the two items that need a field — Rename,
+ * New file/folder — draw it in the row (`InlineName`). The keyboard has the
+ * same two: F2 renames the cursor row, ⌘⌫ (Ctrl+Delete) moves it to the trash.
+ * Both are capabilities, so in a browser tab neither key does anything and
+ * neither item is in the menu.
+ *
+ * ## The source adapter
+ *
+ * Where a listing comes from is the one thing the two hosts do not share, so
+ * it is a prop rather than an import — the same shape `Breadcrumbs.jsx` takes,
+ * for the same reason. The desktop reads a directory at a time over IPC with
+ * gitignore semantics and a watcher behind it; the standalone viewer walks the
+ * catalog directory tree it already holds in memory
+ * (`catalogTreeSource.js`), so its tree shows the CAD files the catalog knows
+ * and the directories containing them. That is the honest web subset and the
+ * one place the two trees legitimately differ in CONTENT — the rows, the
+ * glyphs, the indentation, the expand/collapse, the keyboard and the filter
+ * box are this file, and are the same in both.
+ *
+ * @typedef {object} TreeEntry
+ * @property {string} path Root-relative.
+ * @property {string} name
+ * @property {"file"|"directory"} kind
+ *
+ * @typedef {object} FileTreeSource
+ * @property {string} rootName Named in the "… is empty" line.
+ * @property {ReadonlySet<string>} expanded Which directories are open.
+ * @property {(update: (current: ReadonlySet<string>) => ReadonlySet<string>) => void} setExpanded
+ * @property {Record<string, readonly TreeEntry[]>} listings
+ *   Directory id to its entries. A directory absent from this map has not been
+ *   read yet; `""` absent is the whole tree still loading.
+ * @property {(directory: string) => void} load
+ *   Ask for one directory's entries. Called on mount for the root, on every
+ *   expansion, on every reveal, and for the open directories when `revision`
+ *   moves. A host that holds everything already may make it a no-op.
+ * @property {number} revision
+ *   Bumped when the filesystem — or the catalog — has moved on. Re-reads
+ *   whatever is currently expanded, and retires the filter's corpus.
+ * @property {() => Promise<readonly string[]>} paths
+ *   Every file path under the root, flat: the corpus the filter ranks. Fetched
+ *   on the first keystroke, not before.
+ * @property {import("./entry-menu.js").Platform} platform
+ * @property {ReadonlySet<import("./entry-menu.js").EntryAction>} [capabilities]
+ * @property {(action: import("./entry-menu.js").EntryAction, entry: import("./entry-menu.js").MenuEntryTarget) => void} onAction
+ *   Everything the menu offers EXCEPT the three that start an inline field:
+ *   the tree draws that field itself and finishes it through `rename` /
+ *   `create` below, because a field belongs to the row it is in.
+ * @property {(entry: import("./entry-menu.js").MenuEntryTarget, name: string) => Promise<string|null>} [rename]
+ *   The new path, or null to keep the field up so the name can be fixed.
+ * @property {(directory: string, kind: "file"|"directory", name: string) => Promise<string|null>} [create]
+ * @property {(entry: import("./entry-menu.js").MenuEntryTarget) => Promise<boolean>} [trash]
  */
 
 const ROW_HEIGHT = 28;
 const INDENT = 12;
 
-type Row = {
-  path: string;
-  name: string;
-  kind: "file" | "directory";
-  depth: number;
-  expanded: boolean;
-};
-
-/** The one inline field the tree can show: a rename over a row, or a new entry in a folder. */
-export type TreeEditRequest =
-  | { mode: "rename"; entry: MenuEntryTarget }
-  | { mode: "create"; directory: string; kind: "file" | "directory" };
-type Editing = TreeEditRequest;
+/**
+ * The one inline field the tree can show: a rename over a row, or a new entry
+ * in a folder. An edit asked for from OUTSIDE — a crumb's `Rename` or `New
+ * folder` — arrives as the same thing plus a nonce, so asking twice is two
+ * requests.
+ *
+ * @typedef {{ mode: "rename", entry: import("./entry-menu.js").MenuEntryTarget }
+ *   | { mode: "create", directory: string, kind: "file"|"directory" }} TreeEditRequest
+ * @typedef {TreeEditRequest & { nonce: number }} TreeEdit
+ */
 
 /**
- * An edit asked for from outside — a crumb's `Rename` or `New folder`
- * (`FileTab`). The nonce makes asking twice two requests.
+ * @param {object} props
+ * @param {FileTreeSource} props.source
+ * @param {string|null} props.activePath The file the surface is showing, highlighted in the tree.
+ * @param {{ path: string, directory: boolean }|null} [props.reveal]
+ *   A path to expand to and select without opening it. Wins over `activePath`
+ *   for the reveal and the scroll; the open file stays highlighted too.
+ * @param {TreeEdit|null} [props.edit] A rename or a create the breadcrumb asked for.
+ * @param {(path: string) => void} props.onOpen
  */
-export type TreeEdit = TreeEditRequest & { nonce: number };
-
-export function FileTree({
-  projectId,
-  root,
-  projectName,
-  activePath,
-  reveal = null,
-  edit = null,
-  onOpen,
-  fsRevision,
-}: {
-  projectId: string;
-  /** The directory listed: null for the project, else one of its worktrees (plan §9). */
-  root: ExplorerRoot;
-  projectName: string;
-  /** The file the tab is showing, highlighted in the tree. */
-  activePath: string | null;
-  /**
-   * A path to expand to and select without opening it — an agent's `reveal`
-   * (src/renderer/state/explorer.ts). Wins over `activePath` for the reveal
-   * and the scroll; the open file stays highlighted too.
-   */
-  reveal?: { path: string; directory: boolean; root: ExplorerRoot } | null;
-  /** A rename or a create the breadcrumb asked for; drawn as if from the row's own menu. */
-  edit?: TreeEdit | null;
-  onOpen: (path: string) => void;
-  /** Bumped by `files.changed`; re-reads whatever is currently expanded. */
-  fsRevision: number;
-}) {
+export function FileTree({ source, activePath, reveal = null, edit = null, onOpen }) {
   const [query, setQuery] = useState("");
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Editing | null>(null);
+  const [cursor, setCursor] = useState(null);
+  /** @type {[TreeEditRequest|null, Function]} */
+  const [editing, setEditing] = useState(null);
   /** The row the context menu is aimed at; the root when the empty space was clicked. */
-  const [menuTarget, setMenuTarget] = useState<MenuEntryTarget>({ path: "", kind: "directory" });
-  const listRef = useRef<HTMLDivElement | null>(null);
+  const [menuTarget, setMenuTarget] = useState({ path: "", kind: "directory" });
+  const listRef = useRef(null);
 
-  /**
-   * Which folders are open, and what is in them. One set, one cache, and both
-   * in the store rather than in this component.
-   *
-   * They used to be local state, and "which folders are open" used to be an
-   * *override map* over a default derived from the open file. Both halves of
-   * that were wrong, and together they are why expanding a folder two levels
-   * down did nothing:
-   *
-   * - The component is remounted whenever another tab is selected, and opening
-   *   a file *makes a tab* — so the three levels a person had just expanded to
-   *   reach a file were thrown away by the click that opened it.
-   * - In the tree that came back, the ancestors of the open file were "open"
-   *   by derivation with no entry in the override map, so a click on one read
-   *   `opening = !isExpanded(dir)` as `false`, wrote "closed" and issued no
-   *   `explorer.list`. Clicking the folders again collapsed the tree instead
-   *   of opening them.
-   *
-   * One set, written by the person and by `reveal` alike, says both things
-   * without disagreeing with itself.
-   */
-  const { open: expanded, listings: children } = useTree(root);
-  const setTreeOpen = useExplorer((state) => state.setTreeOpen);
-  const setTreeListing = useExplorer((state) => state.setTreeListing);
-  const setExpanded = useCallback(
-    (next: (current: ReadonlySet<string>) => ReadonlySet<string>) => setTreeOpen(root, next),
-    [root, setTreeOpen],
-  );
-  const setListing = useCallback(
-    (directory: string, entries: DirEntry[]) => setTreeListing(root, directory, entries),
-    [root, setTreeListing],
-  );
-  // The request every read here makes: the project, and the root within it.
-  const at = useMemo(() => ({ projectId, ...(root ? { root } : {}) }), [projectId, root]);
+  const {
+    rootName,
+    expanded,
+    setExpanded,
+    listings: children,
+    load,
+    revision,
+    paths,
+    platform,
+    capabilities = ALL_ENTRY_CAPABILITIES
+  } = source;
 
-  // A reveal into another root's tree is not this tree's business.
-  const revealTarget = (reveal && reveal.root === root ? reveal.path : null) ?? activePath;
+  // A reveal is answered by whichever tree is on screen; the host decides
+  // whether one aimed elsewhere reaches this one at all.
+  const revealTarget = reveal?.path ?? activePath;
   const revealed = useMemo(() => {
     if (!revealTarget) {
-      return new Set<string>();
+      return new Set();
     }
     // A revealed folder is opened as well as shown; a file only its ancestors.
     const parts = revealTarget.split("/");
-    const segments = reveal?.directory && reveal.root === root && reveal.path === revealTarget ? parts : parts.slice(0, -1);
+    const segments = reveal?.directory && reveal.path === revealTarget ? parts : parts.slice(0, -1);
     return new Set(segments.map((_, index) => segments.slice(0, index + 1).join("/")));
-  }, [revealTarget, reveal, root]);
+  }, [revealTarget, reveal]);
 
-  const isExpanded = useCallback((directory: string) => expanded.has(directory), [expanded]);
+  const isExpanded = useCallback((directory) => expanded.has(directory), [expanded]);
 
-  /**
-   * Read one directory's children.
-   *
-   * A promise chain rather than `async`/`await`: the state is set from a
-   * callback, which is the shape that says "this is an answer arriving", and
-   * the shape React's rules can see. The same code written with `await` reads
-   * to a linter as a synchronous setState inside whichever effect called it.
-   */
-  const load = useCallback(
-    (directory: string) =>
-      window.hardcore.explorer
-        .list({ ...at, path: directory })
-        .then((entries: DirEntry[]) => setListing(directory, entries))
-        .catch(() => {}),
-    [at, setListing],
-  );
-
-  // The root, on every mount: the listings survive a remount, but a tree that
-  // trusted a cache taken before the last `git checkout` would show files that
-  // are not there.
+  // The root, on every mount: the listings may survive a remount, but a tree
+  // that trusted a cache taken before the last `git checkout` would show files
+  // that are not there.
   useEffect(() => {
-    void load("");
+    load("");
   }, [load]);
 
   /**
    * The watcher fired: re-read every directory that is currently open.
    *
-   * A store subscription rather than an effect over `fsRevision`, because it
-   * is a reaction to an event. `expanded` is read at that moment from the ref
-   * below; as an effect dependency it would re-read the whole open tree every
-   * time a folder was expanded.
+   * Keyed on the revision ALONE, with the open set read from a ref, because it
+   * is a reaction to an event. As an effect over `expanded` it would re-read
+   * the whole open tree every time a single folder was expanded.
    */
   const openDirectories = useMemo(
     () => Object.keys(children).filter((directory) => isExpanded(directory)),
-    [children, isExpanded],
+    [children, isExpanded]
   );
   const openRef = useRef(openDirectories);
   useEffect(() => {
     openRef.current = openDirectories;
   }, [openDirectories]);
 
-  useEffect(
-    () =>
-      useExplorer.subscribe((state, previous) => {
-        // A batch from another root's watcher changed another tree.
-        if (state.fsRevision !== previous.fsRevision && state.changedRoot === root) {
-          for (const directory of openRef.current) {
-            void load(directory);
-          }
-        }
-      }),
-    [load, root],
-  );
+  const firstRevision = useRef(revision);
+  useEffect(() => {
+    if (revision === firstRevision.current) {
+      return;
+    }
+    for (const directory of openRef.current) {
+      load(directory);
+    }
+  }, [revision, load]);
 
   /**
    * The flat corpus behind the filter, fetched on the first keystroke and
-   * again whenever the filesystem has moved on since it was taken.
+   * again whenever the source has moved on since it was taken.
    *
    * Stamped with the revision it was read at rather than cleared by the
    * watcher: clearing is a synchronous setState in an effect, and the stamp
    * says the same thing without one.
    */
-  const [corpus, setCorpus] = useState<{ revision: number; paths: string[] } | null>(null);
+  const [corpus, setCorpus] = useState(null);
   const filtering = query.trim() !== "";
-  const corpusStale = corpus === null || corpus.revision !== fsRevision;
+  const corpusStale = corpus === null || corpus.revision !== revision;
 
   useEffect(() => {
     if (!filtering || !corpusStale) {
       return;
     }
     let cancelled = false;
-    void window.hardcore.explorer
-      .paths({ ...at, path: "" })
+    void Promise.resolve(paths())
       .then((result) => {
         if (!cancelled) {
-          setCorpus({ revision: fsRevision, paths: result.paths });
+          setCorpus({ revision, paths: [...result] });
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setCorpus({ revision: fsRevision, paths: [] });
+          setCorpus({ revision, paths: [] });
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [filtering, corpusStale, fsRevision, at]);
+  }, [filtering, corpusStale, revision, paths]);
 
   /**
    * Reveal: open every ancestor of the revealed path and read them.
@@ -245,11 +220,11 @@ export function FileTree({
       setExpanded((current) =>
         [...revealed].every((directory) => current.has(directory))
           ? current
-          : new Set([...current, ...revealed]),
+          : new Set([...current, ...revealed])
       );
     }
     for (const directory of revealed) {
-      void load(directory);
+      load(directory);
     }
   }, [revealed, load, setExpanded]);
 
@@ -275,7 +250,7 @@ export function FileTree({
    * children still unknown (a reveal, or a listing that failed).
    */
   const toggle = useCallback(
-    (directory: string) => {
+    (directory) => {
       const opening = !expanded.has(directory);
       setExpanded((current) => {
         const next = new Set(current);
@@ -287,42 +262,53 @@ export function FileTree({
         return next;
       });
       if (opening) {
-        void load(directory);
+        load(directory);
       }
     },
-    [expanded, load, setExpanded],
+    [expanded, load, setExpanded]
   );
 
   /**
-   * The entry menu's context: what the tree draws for the two items that
-   * need a field, and where everything else goes (`entry-actions.ts`).
-   * `beginCreate` opens the folder first — a field inside a shut folder is
-   * a field nobody can see.
+   * Begin a new entry in a folder: the folder is opened first, because a field
+   * inside a shut folder is a field nobody can see.
    */
-  const ctx = useMemo<EntryActionContext>(
-    () => ({
-      projectId,
-      root,
-      platform: currentPlatform(),
-      beginRename: (entry) => setEditing({ mode: "rename", entry }),
-      beginCreate: (directory, kind) => {
-        if (directory !== "" && !expanded.has(directory)) {
-          setExpanded((current) => new Set([...current, directory]));
-          void load(directory);
-        }
-        setEditing({ mode: "create", directory, kind });
-      },
-    }),
-    [projectId, root, expanded, setExpanded, load],
+  const beginCreate = useCallback(
+    (directory, kind) => {
+      if (directory !== "" && !expanded.has(directory)) {
+        setExpanded((current) => new Set([...current, directory]));
+        load(directory);
+      }
+      setEditing({ mode: "create", directory, kind });
+    },
+    [expanded, load, setExpanded]
   );
-  const menuGuard = useMenuFocusGuard(ctx);
 
   /**
-   * A crumb asked for an edit. The folders above it are opened and read
-   * first — a field in a folder the tree has shut is a field nobody sees —
-   * and the request is honoured once per nonce.
+   * The menu's one handler. The three items that start a field are the tree's
+   * own business and never leave it; everything else is the host's.
    */
-  const honoured = useRef<number>(0);
+  const onMenuAction = useCallback(
+    (action, entry) => {
+      if (action === "rename") {
+        setEditing({ mode: "rename", entry });
+        return;
+      }
+      if (action === "new-file" || action === "new-folder") {
+        beginCreate(entry.path, action === "new-file" ? "file" : "directory");
+        return;
+      }
+      source.onAction(action, entry);
+    },
+    [beginCreate, source]
+  );
+  const menuGuard = useEntryMenuFocusGuard(onMenuAction);
+
+  /**
+   * A crumb asked for an edit. The folders above it are opened and read first
+   * — a field in a folder the tree has shut is a field nobody sees — and the
+   * request is honoured once per nonce.
+   */
+  const honoured = useRef(0);
   useEffect(() => {
     if (!edit || edit.nonce === honoured.current) {
       return;
@@ -330,23 +316,31 @@ export function FileTree({
     honoured.current = edit.nonce;
     const target = edit.mode === "rename" ? edit.entry.path : edit.directory;
     const segments = target === "" ? [] : target.split("/");
-    const ancestors = segments.slice(0, edit.mode === "rename" ? -1 : undefined).map((_, index, all) => all.slice(0, index + 1).join("/"));
+    const ancestors = segments
+      .slice(0, edit.mode === "rename" ? -1 : undefined)
+      .map((_, index, all) => all.slice(0, index + 1).join("/"));
     if (ancestors.length > 0) {
       setExpanded((current) =>
-        ancestors.every((directory) => current.has(directory)) ? current : new Set([...current, ...ancestors]),
+        ancestors.every((directory) => current.has(directory))
+          ? current
+          : new Set([...current, ...ancestors])
       );
       for (const directory of ancestors) {
-        void load(directory);
+        load(directory);
       }
     }
     setQuery("");
-    setEditing(edit.mode === "rename" ? { mode: "rename", entry: edit.entry } : { mode: "create", directory: edit.directory, kind: edit.kind });
+    setEditing(
+      edit.mode === "rename"
+        ? { mode: "rename", entry: edit.entry }
+        : { mode: "create", directory: edit.directory, kind: edit.kind }
+    );
   }, [edit, setExpanded, load]);
 
   /**
-   * When an inline field goes away the focus goes with it — to `body` —
-   * and the next F2 or arrow key would be lost. The list takes it back, so
-   * a rename from the keyboard ends where it began.
+   * When an inline field goes away the focus goes with it — to `body` — and
+   * the next F2 or arrow key would be lost. The list takes it back, so a
+   * rename from the keyboard ends where it began.
    */
   const wasEditing = useRef(false);
   useEffect(() => {
@@ -357,9 +351,9 @@ export function FileTree({
   }, [editing]);
 
   /** The visible rows, flattened depth-first from what is expanded. */
-  const rows = useMemo<Row[]>(() => {
-    const out: Row[] = [];
-    const walk = (directory: string, depth: number) => {
+  const rows = useMemo(() => {
+    const out = [];
+    const walk = (directory, depth) => {
       for (const entry of children[directory] ?? []) {
         const open = entry.kind === "directory" && isExpanded(entry.path);
         out.push({
@@ -367,7 +361,7 @@ export function FileTree({
           name: entry.name,
           kind: entry.kind,
           depth,
-          expanded: open,
+          expanded: open
         });
         if (open) {
           walk(entry.path, depth + 1);
@@ -396,7 +390,7 @@ export function FileTree({
 
   const matches = useMemo(
     () => (filtering ? fuzzyFilter(corpus?.paths ?? [], query, 200) : []),
-    [corpus, filtering, query],
+    [corpus, filtering, query]
   );
 
   const visible = filtering ? matches.map((match) => match.path) : rows.map((row) => row.path);
@@ -405,7 +399,7 @@ export function FileTree({
   // would move a selection nobody can see.
   const cursorPath = cursor && visible.includes(cursor) ? cursor : (visible[0] ?? null);
 
-  const onKeyDown = (event: React.KeyboardEvent) => {
+  const onKeyDown = (event) => {
     if (visible.length === 0) {
       return;
     }
@@ -424,21 +418,23 @@ export function FileTree({
       return;
     }
     const row = rows.find((candidate) => candidate.path === cursorPath);
-    // The two edits the menu offers, from the keyboard: F2 and ⌘⌫ (Ctrl+Delete).
-    if (row && event.key === "F2") {
+    // The two edits the menu offers, from the keyboard: F2 and ⌘⌫
+    // (Ctrl+Delete). Both only where the host offers the menu item too.
+    if (row && event.key === "F2" && capabilities.has("rename")) {
       event.preventDefault();
       setEditing({ mode: "rename", entry: { path: row.path, kind: row.kind } });
       return;
     }
     if (
       row &&
+      capabilities.has("trash") &&
       (event.key === "Backspace" || event.key === "Delete") &&
-      (isMac ? event.metaKey : event.ctrlKey) &&
+      (platform === "darwin" ? event.metaKey : event.ctrlKey) &&
       !event.altKey &&
       !event.shiftKey
     ) {
       event.preventDefault();
-      void trashEntry({ path: row.path, kind: row.kind }, ctx);
+      void source.trash?.({ path: row.path, kind: row.kind });
       return;
     }
     if (event.key === "ArrowRight" && row?.kind === "directory" && !row.expanded) {
@@ -462,12 +458,12 @@ export function FileTree({
   };
 
   /**
-   * Aim the menu. A row's `onContextMenu` runs before the list's — the
-   * trigger — sees the same event, so the target is set by the time Radix
-   * opens the menu; the empty space under the rows is the root.
+   * Aim the menu. A row's `onContextMenu` runs before the list's — the trigger
+   * — sees the same event, so the target is set by the time Radix opens the
+   * menu; the empty space under the rows is the root.
    */
-  const aim = (event: React.MouseEvent) => {
-    const row = (event.target as HTMLElement).closest<HTMLElement>("[data-path]");
+  const aim = (event) => {
+    const row = event.target.closest?.("[data-path]");
     const path = row?.dataset.path ?? "";
     const kind = row?.dataset.kind === "file" ? "file" : "directory";
     setMenuTarget({ path, kind });
@@ -476,8 +472,8 @@ export function FileTree({
     }
   };
 
-  const finishRename = async (entry: MenuEntryTarget, name: string) => {
-    const renamed = await renameEntry(entry, name, ctx);
+  const finishRename = async (entry, name) => {
+    const renamed = (await source.rename?.(entry, name)) ?? null;
     if (renamed !== null) {
       setCursor(renamed);
       setEditing(null);
@@ -485,8 +481,8 @@ export function FileTree({
     return renamed !== null;
   };
 
-  const finishCreate = async (directory: string, kind: "file" | "directory", name: string) => {
-    const created = await createEntry(directory, kind, name, ctx);
+  const finishCreate = async (directory, kind, name) => {
+    const created = (await source.create?.(directory, kind, name)) ?? null;
     if (created !== null) {
       setCursor(created);
       setEditing(null);
@@ -574,7 +570,7 @@ export function FileTree({
               )
             ) : rows.length === 0 && !newEntryRow ? (
               <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-                {children[""] === undefined ? "Reading…" : `${projectName} is empty`}
+                {children[""] === undefined ? "Reading…" : `${rootName} is empty`}
               </p>
             ) : (
               <>
@@ -587,9 +583,9 @@ export function FileTree({
                       onRename={
                         editing?.mode === "rename" && editing.entry.path === row.path
                           ? {
-                              commit: (name) => finishRename(editing.entry, name),
-                              cancel: () => setEditing(null),
-                            }
+                            commit: (name) => finishRename(editing.entry, name),
+                            cancel: () => setEditing(null)
+                          }
                           : null
                       }
                       onSelect={() => {
@@ -609,28 +605,24 @@ export function FileTree({
             )}
           </div>
         </ContextMenuTrigger>
-        <ContextMenuContent className="w-56" data-entry-menu={menuTarget.path} onCloseAutoFocus={menuGuard.onCloseAutoFocus}>
-          <EntryMenuItems ctx={menuGuard.ctx} entry={menuTarget} />
+        <ContextMenuContent
+          className="w-56"
+          data-entry-menu={menuTarget.path}
+          onCloseAutoFocus={menuGuard.onCloseAutoFocus}
+        >
+          <EntryMenuItems
+            capabilities={capabilities}
+            entry={menuTarget}
+            onAction={menuGuard.onAction}
+            platform={platform}
+          />
         </ContextMenuContent>
       </ContextMenu>
     </div>
   );
 }
 
-function TreeRow({
-  row,
-  active,
-  cursor,
-  onSelect,
-  onRename,
-}: {
-  row: Row;
-  active: boolean;
-  cursor: boolean;
-  onSelect: () => void;
-  /** Set while this row is being renamed: the name becomes a field. */
-  onRename: { commit: (name: string) => Promise<boolean>; cancel: () => void } | null;
-}) {
+function TreeRow({ row, active, cursor, onSelect, onRename }) {
   const icon =
     row.kind === "directory" ? (
       <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" open={row.expanded} />
@@ -678,7 +670,7 @@ function TreeRow({
         active
           ? "bg-accent font-medium text-accent-foreground"
           : "text-foreground/80 hover:bg-accent/50",
-        cursor && !active && "bg-accent/30",
+        cursor && !active && "bg-accent/30"
       )}
       data-kind={row.kind}
       data-path={row.path}
@@ -695,19 +687,7 @@ function TreeRow({
   );
 }
 
-function FilterRow({
-  path,
-  indices,
-  active,
-  cursor,
-  onOpen,
-}: {
-  path: string;
-  indices: number[];
-  active: boolean;
-  cursor: boolean;
-  onOpen: () => void;
-}) {
+function FilterRow({ path, indices, active, cursor, onOpen }) {
   const lastSlash = path.lastIndexOf("/");
   const directory = lastSlash < 0 ? "" : path.slice(0, lastSlash + 1);
   return (
@@ -718,7 +698,7 @@ function FilterRow({
         active
           ? "bg-accent font-medium text-accent-foreground"
           : "text-foreground/80 hover:bg-accent/50",
-        cursor && !active && "bg-accent/30",
+        cursor && !active && "bg-accent/30"
       )}
       data-kind="file"
       data-path={path}
@@ -738,15 +718,7 @@ function FilterRow({
 }
 
 /** The matched characters, bolded. The reason `fuzzyMatch` returns indices. */
-function Highlight({
-  text,
-  indices,
-  from,
-}: {
-  text: string;
-  indices: number[];
-  from: number;
-}) {
+function Highlight({ text, indices, from }) {
   const hits = new Set(indices.map((index) => index - from));
   return (
     <>
@@ -757,7 +729,7 @@ function Highlight({
           </span>
         ) : (
           <span key={index}>{character}</span>
-        ),
+        )
       )}
     </>
   );

@@ -2,8 +2,14 @@
 
 import * as THREE from "three";
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeftRight, ArrowRight, Circle, Eraser, Minus, PaintBucket, PenTool, Square } from "lucide-react";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { ArrowLeftRight, ArrowRight, Circle, Eraser, FileText, Minus, PaintBucket, PenTool, Square } from "lucide-react";
+import {
+  CAD_PANEL,
+  EmptyState,
+  FILE_PANEL_TREE,
+  clampPanelWidth,
+  nextOpenPanel
+} from "@/shell/index.js";
 import { cn } from "@/ui/cn";
 import CadRenderPane from "../components/workbench/CadRenderPane";
 import { useViewportLod } from "../render/useViewportLod";
@@ -54,7 +60,7 @@ import {
 import FloatingToolBar from "../components/workbench/FloatingToolBar";
 import { useCadAssets } from "../components/workbench/hooks/useCadAssets";
 import {
-  resolveDesktopPanelWidths,
+  resolveDesktopPanelWidth,
   useCadWorkspaceLayout
 } from "../components/workbench/hooks/useCadWorkspaceLayout";
 import { useCadWorkspaceSelection } from "../components/workbench/hooks/useCadWorkspaceSelection";
@@ -290,12 +296,7 @@ import {
   normalizeParameterValues
 } from "cadgen-js/common/parameters.js";
 import { copyTextToClipboard, readTextFromClipboard } from "@/ui/clipboard";
-import {
-  HOST_PANEL,
-  isHostPanelControlled,
-  nextPanelState,
-  resolveHostPanelOpen
-} from "./hostPanels.js";
+import { isHostPanelControlled, resolveHostPanelOpen } from "./hostPanels.js";
 import { resolveHostPanelPlacement } from "./hostPanelSlot.js";
 import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
 import {
@@ -310,9 +311,6 @@ import { installViewerTessellationCacheProvider } from "./hostTessellationCache.
 import {
   ARTIFACT_GENERATING_LABEL,
   DEFAULT_LARGE_FILE_STATE,
-  DEFAULT_SIDEBAR_WIDTH,
-  DESKTOP_SIDEBAR_MAX_WIDTH,
-  DESKTOP_SIDEBAR_MIN_WIDTH,
   DESKTOP_TAB_TOOLS_MAX_WIDTH,
   DESKTOP_TAB_TOOLS_MIN_WIDTH,
   EMPTY_LIST,
@@ -362,14 +360,22 @@ import {
 // chrome, or the surface settling on the configured default file. `origin` is
 // the backend those paths live on ("" = same origin, the standalone case).
 //
-// The workspace chrome — top bar, file sidebar, home screen — is NOT part of
-// this: a host injects it through the three render slots, which receive the
-// `chrome` object below and place it inside this surface's layout. The
-// standalone shell (components/CadWorkspace.js) is the one caller that does.
+// The workspace chrome — the nav row above the file and the panel column
+// beside it — is NOT part of this: a host injects it through the two render
+// slots, which receive the `chrome` object below and place it inside this
+// surface's layout. The standalone shell (components/CadWorkspace.js) is the
+// one caller that does; the desktop app draws its own row and column around
+// the surface instead and passes `panelSlot`.
 //
-// State the chrome shares with the file (which entry is selected, whether its
-// sheet is open, the sidebar's width, preview mode) is owned HERE because the
-// viewport's insets are computed from it; there is one owner, not two.
+// There is no third slot for a file LIST and no fourth for a home screen. The
+// list is one of the panels in the column (`cad-viewer/shell`'s `panels.js`),
+// the same file tree the desktop draws, and a surface with no file open is the
+// shared `EmptyState` — the same one the desktop's empty tab shows.
+//
+// State the chrome shares with the file (which entry is selected, which panel
+// is open, how wide the column is, preview mode) is owned HERE because the
+// viewport's insets and the session record are computed from it; there is one
+// owner, not two.
 export default function CadFileView({
   origin = "",
   file = "",
@@ -378,8 +384,7 @@ export default function CadFileView({
   catalog = null,
   manageDocumentTitle = true,
   renderTopBar = null,
-  renderSidebar = null,
-  renderHome = null,
+  renderPanel = null,
   layout = "auto",
   fileSheetWidth = null,
   panelSlot = null,
@@ -411,8 +416,7 @@ export default function CadFileView({
         catalog={catalog}
         manageDocumentTitle={manageDocumentTitle}
         renderTopBar={renderTopBar}
-        renderSidebar={renderSidebar}
-        renderHome={renderHome}
+        renderPanel={renderPanel}
         layout={layout}
         fileSheetWidth={fileSheetWidth}
         panelSlot={panelSlot}
@@ -468,8 +472,7 @@ function CadFileViewSurface({
   catalog,
   manageDocumentTitle,
   renderTopBar,
-  renderSidebar,
-  renderHome,
+  renderPanel,
   layout,
   fileSheetWidth,
   panelSlot,
@@ -539,9 +542,6 @@ function CadFileViewSurface({
   const catalogRefreshing = resolvedCatalog.refreshing === true;
   const catalogError = String(resolvedCatalog.error || "");
   const catalogEntries = manifestEntries;
-  // A sidebar exists only when the host injects one; without it the viewport
-  // owns the full width and the sidebar's own state never reaches the layout.
-  const sidebarEnabled = typeof renderSidebar === "function";
   const explicitFileParam = normalizeCadFileQueryParam(file) || null;
   // The two halves of "which file is open", against the host rather than the
   // URL: the standalone shell maps them onto `?file=` and nothing else has to
@@ -569,21 +569,18 @@ function CadFileViewSurface({
   // HOST's origin, where two backends would otherwise share one namespace — so
   // the backend origin is the name.
   const catalogRootDir = origin;
-  const [query, setQuery] = useState("");
-  const initialFileViewerDirectoryStateRef = useRef(null);
-  if (!initialFileViewerDirectoryStateRef.current) {
-    const storedExpandedDirectoryIds = readDirectorySessionState().fileViewerExpandedDirectoryIds;
-    initialFileViewerDirectoryStateRef.current = {
-      hasStoredState: Array.isArray(storedExpandedDirectoryIds),
-      expandedDirectoryIds: Array.isArray(storedExpandedDirectoryIds) ? storedExpandedDirectoryIds : []
-    };
-  }
-  const [expandedDirectoryIds, setExpandedDirectoryIds] = useState(() => (
-    new Set(initialFileViewerDirectoryStateRef.current.expandedDirectoryIds)
-  ));
-  const [fileViewerDirectoryStateInitialized, setFileViewerDirectoryStateInitialized] = useState(() => (
-    initialFileViewerDirectoryStateRef.current.hasStoredState
-  ));
+  /**
+   * Which folders the file tree has open (`cad-viewer/shell`'s `FileTree`).
+   *
+   * Here rather than in the tree because it is session state and this is the
+   * one writer of the session record: two writers of one record clobber each
+   * other. The tree reads it and writes it back through the source adapter the
+   * standalone shell builds (`shell/catalogTreeSource.js`).
+   */
+  const [expandedDirectoryIds, setExpandedDirectoryIds] = useState(() => {
+    const stored = readDirectorySessionState().fileViewerExpandedDirectoryIds;
+    return new Set(Array.isArray(stored) ? stored : []);
+  });
   const [openTabs, setOpenTabs] = useState([]);
   const [viewerServerInfo, setViewerServerInfo] = useState(null);
   const viewerServerBackend = String(viewerServerInfo?.backend || "").trim().toLowerCase();
@@ -613,11 +610,23 @@ function CadFileViewSurface({
   const [screenshotStatus, setScreenshotStatus] = useState("");
   const [persistenceStatus, setPersistenceStatus] = useState("");
   const [viewerLayoutMode, setViewerLayoutMode] = useState(readViewerLayoutMode);
-  const [sidebarOpen, setSidebarOpen] = useState(() => (
+  /**
+   * Is the FILE TREE the open panel? `null` is "nobody has said".
+   *
+   * One of the three the panel column can hold — the tree, the theme editor,
+   * the Inspector — and opening any of them closes the others, which is the
+   * whole rule (`cad-viewer/shell`'s `panels.js`). Kept as its own flag beside
+   * the other two rather than as a single id because the other two are already
+   * a host-controllable pair with a contract of their own (`hostPanels.js`);
+   * `openPanelId` below is the one answer the chrome is given.
+   *
+   * Nullable like the sheet's own flag, and for the same reason: a first visit
+   * has to resolve to the panel list's default — the tree, unless the open
+   * file's Inspector claims it — and a person who CLOSED the tree must come
+   * back to it closed. A plain boolean cannot tell those two apart.
+   */
+  const [filesPanelIntent, setFilesPanelOpen] = useState(() => (
     readDirectorySessionState().fileViewerOpen
-  ));
-  const [sidebarWidth, setSidebarWidth] = useState(() => (
-    readDirectorySessionState().fileViewerWidthPx || DEFAULT_SIDEBAR_WIDTH
   ));
   const [layoutViewportWidth, setLayoutViewportWidth] = useState(readViewerViewportWidth);
   const isDesktop = hostLayoutMode === CAD_WORKSPACE_LAYOUT_MODE.DESKTOP ||
@@ -863,26 +872,13 @@ function CadFileViewSurface({
     buildNormalizedReferenceState,
   });
 
-  const filteredEntries = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) {
-      return catalogEntries;
-    }
-    return catalogEntries.filter((entry) => {
-      return (
-        sidebarLabelForEntry(entry).toLowerCase().includes(q) ||
-        String(entry.kind || "").toLowerCase().includes(q) ||
-        fileKey(entry).toLowerCase().includes(q)
-      );
-    });
-  }, [catalogEntries, query]);
+  // The catalog as a directory tree: what the breadcrumb's menus walk and what
+  // the file tree lists. There is no second, filtered copy of it — the shared
+  // tree's `Filter files…` box ranks a flat corpus of paths instead of
+  // rebuilding the tree on every keystroke.
   const allEntriesTree = useMemo(
     () => buildSidebarDirectoryTree(catalogEntries),
     [catalogEntries]
-  );
-  const filteredEntriesTree = useMemo(
-    () => buildSidebarDirectoryTree(filteredEntries),
-    [filteredEntries]
   );
   const allDirectoryIds = useMemo(() => collectSidebarDirectoryIds(allEntriesTree), [allEntriesTree]);
 
@@ -2045,10 +2041,6 @@ function CadFileViewSurface({
   // decoded, and an entry sitting un-built is NOT loading (nothing loads in a static
   // list), so this is deliberately the SELECTED entry while the viewer is busy rather
   // than "every entry without an artifact".
-  const viewerLoadingFiles = useMemo(
-    () => (effectiveViewerLoading && catalogSelectedEntry ? [fileKey(catalogSelectedEntry)] : []),
-    [effectiveViewerLoading, catalogSelectedEntry]
-  );
   const assemblySidebarLoading =
     isAssemblyView &&
     selectedMeshMatches &&
@@ -2196,7 +2188,6 @@ function CadFileViewSurface({
     applyComponentLodPayload
   });
   const previewUiStateRef = useRef(null);
-  const panelResizeStateRef = useRef(null);
   const fileSessionSaveTimerRef = useRef(0);
   const openTabsRef = useRef(openTabs);
   const activePerspectiveRef = useRef(null);
@@ -2219,7 +2210,7 @@ function CadFileViewSurface({
     controlled: isHostPanelControlled(hostFileSheetOpen),
     notify: onFileSheetOpenChange
   };
-  const fileViewerExpandedDirectoryIdList = useMemo(() => (
+  const treeExpandedDirectoryIdList = useMemo(() => (
     [...expandedDirectoryIds].sort((a, b) => a.localeCompare(b, undefined, {
       numeric: true,
       sensitivity: "base"
@@ -2264,9 +2255,8 @@ function CadFileViewSurface({
   );
   useEffect(() => {
     writeCadDirectorySessionState({
-      fileViewerOpen: sidebarOpen,
-      fileViewerExpandedDirectoryIds: fileViewerDirectoryStateInitialized ? fileViewerExpandedDirectoryIdList : null,
-      fileViewerWidthPx: sidebarWidth,
+      fileViewerOpen: filesPanelIntent,
+      fileViewerExpandedDirectoryIds: treeExpandedDirectoryIdList,
       fileSheetOpen: tabToolsOpen,
       fileSheetWidthPx: fileSheetWidthIsCustom ? tabToolsWidth : defaultFileSheetWidth,
       theme: directorySessionThemeSlice
@@ -2276,12 +2266,10 @@ function CadFileViewSurface({
     });
   }, [
     defaultFileSheetWidth,
-    fileViewerDirectoryStateInitialized,
-    fileViewerExpandedDirectoryIdList,
+    treeExpandedDirectoryIdList,
     fileSheetWidthIsCustom,
     handlePersistenceWriteError,
-    sidebarOpen,
-    sidebarWidth,
+    filesPanelIntent,
     tabToolsOpen,
     tabToolsWidth,
     directorySessionThemeSlice
@@ -2305,8 +2293,6 @@ function CadFileViewSurface({
     themeEditing ||
     (tabToolsOpen && !!selectedFileSheetKind && selectedFileSheetHasSections)
   );
-  const effectiveSidebarOpen = sidebarEnabled && sidebarOpen && !previewMode;
-  const desktopSidebarOpen = sidebarEnabled && isDesktop && effectiveSidebarOpen && !previewMode;
 
   // Selecting a preset (or System) is the only "reset": it swaps the active
   // theme wholesale. The custom slot is kept so the user can flip back to it.
@@ -2534,95 +2520,20 @@ function CadFileViewSurface({
     }
   }, [drawingViewMode]);
 
-  const handleToggleThemeEditor = useCallback(() => {
-    const next = nextPanelState({ themeEditing, fileSheetOpen: tabToolsOpen }, HOST_PANEL.THEME);
-    if (next.themeEditing) {
-      setViewerAlertOpen(false);
-    }
-    // The sheet first: it is the panel being given up, and a host that owns
-    // both flags should hear "closed" before it hears "the theme is open".
-    if (next.fileSheetOpen !== tabToolsOpen) {
-      setTabToolsOpen(next.fileSheetOpen);
-    }
-    setThemeEditing(next.themeEditing);
-  }, [setTabToolsOpen, tabToolsOpen, themeEditing]);
+  // Nothing toggles one panel on its own any more: the panel column has one
+  // open id, and `handleTogglePanel` below is the single write that moves it.
+  // A pair of per-panel toggles beside it would be a second way to say the
+  // same thing, and the two would disagree the moment the tree joined them.
 
   const handleViewerAlertChange = useCallback((nextAlert) => {
     setViewerRuntimeAlert(nextAlert || null);
   }, []);
 
-  const endPanelResize = useCallback(() => {
-    document.querySelector("[data-slot='sidebar-wrapper']")?.removeAttribute("data-sidebar-resizing");
-    panelResizeStateRef.current = null;
-    if (!tabToolsResizeStateRef.current) {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    }
-  }, []);
-
   const endTabToolsResize = useCallback(() => {
     tabToolsResizeStateRef.current = null;
-    if (!panelResizeStateRef.current) {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    }
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
   }, []);
-
-  const handleStartSidebarResize = useCallback((event) => {
-    if (event.button !== 0) {
-      return;
-    }
-    if (!isDesktop || !effectiveSidebarOpen) {
-      return;
-    }
-
-    event.preventDefault();
-    const nextWidth = resolveDesktopPanelWidths({
-      viewportWidth: layoutViewportWidth,
-      sidebarOpen: desktopSidebarOpen,
-      sheetOpen: desktopRightPanelOpen,
-      sidebarWidth,
-      sheetWidth: tabToolsWidth,
-      sidebarMinWidth: DESKTOP_SIDEBAR_MIN_WIDTH,
-      sheetMinWidth: DESKTOP_TAB_TOOLS_MIN_WIDTH,
-      sidebarMaxWidth: DESKTOP_SIDEBAR_MAX_WIDTH,
-      sheetMaxWidth: DESKTOP_TAB_TOOLS_MAX_WIDTH
-    }).sidebarWidth;
-    document.querySelector("[data-slot='sidebar-wrapper']")?.setAttribute("data-sidebar-resizing", "true");
-    panelResizeStateRef.current = {
-      startX: event.clientX,
-      startWidth: nextWidth,
-      latestWidth: nextWidth
-    };
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-  }, [
-    desktopRightPanelOpen,
-    desktopSidebarOpen,
-    effectiveSidebarOpen,
-    isDesktop,
-    layoutViewportWidth,
-    sidebarWidth,
-    tabToolsWidth
-  ]);
-
-  const handleSidebarOpenChange = useCallback((value) => {
-    setSidebarOpen((current) => {
-      const nextOpen = typeof value === "function" ? value(current) : value;
-      if (nextOpen && !isDesktop) {
-        setTabToolsOpen(false);
-      }
-      if (!current && nextOpen) {
-        setSidebarWidth((currentWidth) => {
-          const numericWidth = Number(currentWidth);
-          return Number.isFinite(numericWidth) && numericWidth >= DESKTOP_SIDEBAR_MIN_WIDTH
-            ? currentWidth
-            : DEFAULT_SIDEBAR_WIDTH;
-        });
-      }
-      return nextOpen;
-    });
-  }, [isDesktop, setTabToolsOpen]);
 
   const handleStartFileSheetResize = useCallback((event) => {
     if (hostSheetWidth != null) {
@@ -2636,17 +2547,12 @@ function CadFileViewSurface({
 
     event.preventDefault();
     setFileSheetWidthIsCustom(true);
-    const nextWidth = resolveDesktopPanelWidths({
-      viewportWidth: layoutViewportWidth,
-      sidebarOpen: desktopSidebarOpen,
-      sheetOpen: desktopRightPanelOpen,
-      sidebarWidth,
-      sheetWidth: tabToolsWidth,
-      sidebarMinWidth: DESKTOP_SIDEBAR_MIN_WIDTH,
-      sheetMinWidth: DESKTOP_TAB_TOOLS_MIN_WIDTH,
-      sidebarMaxWidth: DESKTOP_SIDEBAR_MAX_WIDTH,
-      sheetMaxWidth: DESKTOP_TAB_TOOLS_MAX_WIDTH
-    }).sheetWidth;
+    const nextWidth = resolveDesktopPanelWidth({
+      open: desktopRightPanelOpen,
+      width: tabToolsWidth,
+      minWidth: DESKTOP_TAB_TOOLS_MIN_WIDTH,
+      maxWidth: DESKTOP_TAB_TOOLS_MAX_WIDTH
+    });
     tabToolsResizeStateRef.current = {
       startX: event.clientX,
       startWidth: nextWidth
@@ -2655,10 +2561,7 @@ function CadFileViewSurface({
     document.body.style.userSelect = "none";
   }, [
     desktopRightPanelOpen,
-    desktopSidebarOpen,
     hostSheetWidth,
-    layoutViewportWidth,
-    sidebarWidth,
     setFileSheetWidthIsCustom,
     tabToolsWidth
   ]);
@@ -3232,8 +3135,6 @@ function CadFileViewSurface({
     buildActiveTabSnapshot,
     catalogEntries,
     manifestRevision,
-    defaultSidebarWidth: DEFAULT_SIDEBAR_WIDTH,
-    sidebarMinWidth: DESKTOP_SIDEBAR_MIN_WIDTH,
     readCadParam,
     activateEntryTab,
     resetActiveDirectory,
@@ -3432,68 +3333,24 @@ function CadFileViewSurface({
     setViewerRuntimeAlert(null);
   }, [selectedKey]);
 
-  const resolvedDesktopPanelWidths = useMemo(() => resolveDesktopPanelWidths({
-    viewportWidth: layoutViewportWidth,
-    sidebarOpen: desktopSidebarOpen,
-    sheetOpen: desktopRightPanelOpen,
-    sidebarWidth,
-    sheetWidth: tabToolsWidth,
-    sidebarMinWidth: DESKTOP_SIDEBAR_MIN_WIDTH,
-    sheetMinWidth: DESKTOP_TAB_TOOLS_MIN_WIDTH,
-    sidebarMaxWidth: DESKTOP_SIDEBAR_MAX_WIDTH,
-    sheetMaxWidth: DESKTOP_TAB_TOOLS_MAX_WIDTH
-  }), [
-    desktopRightPanelOpen,
-    desktopSidebarOpen,
-    layoutViewportWidth,
-    sidebarWidth,
-    tabToolsWidth
-  ]);
-
-  const clampSidebarWidth = useCallback((value) => {
-    return resolveDesktopPanelWidths({
-      viewportWidth: layoutViewportWidth,
-      sidebarOpen: desktopSidebarOpen,
-      sheetOpen: desktopRightPanelOpen,
-      sidebarWidth: value,
-      sheetWidth: tabToolsWidth,
-      sidebarMinWidth: DESKTOP_SIDEBAR_MIN_WIDTH,
-      sheetMinWidth: DESKTOP_TAB_TOOLS_MIN_WIDTH,
-      sidebarMaxWidth: DESKTOP_SIDEBAR_MAX_WIDTH,
-      sheetMaxWidth: DESKTOP_TAB_TOOLS_MAX_WIDTH
-    }).sidebarWidth;
-  }, [desktopRightPanelOpen, desktopSidebarOpen, layoutViewportWidth, tabToolsWidth]);
-
   const clampTabToolsWidth = useCallback((value) => {
-    return resolveDesktopPanelWidths({
-      viewportWidth: layoutViewportWidth,
-      sidebarOpen: desktopSidebarOpen,
-      sheetOpen: desktopRightPanelOpen,
-      sidebarWidth,
-      sheetWidth: value,
-      sidebarMinWidth: DESKTOP_SIDEBAR_MIN_WIDTH,
-      sheetMinWidth: DESKTOP_TAB_TOOLS_MIN_WIDTH,
-      sidebarMaxWidth: DESKTOP_SIDEBAR_MAX_WIDTH,
-      sheetMaxWidth: DESKTOP_TAB_TOOLS_MAX_WIDTH
-    }).sheetWidth;
-  }, [desktopRightPanelOpen, desktopSidebarOpen, layoutViewportWidth, sidebarWidth]);
+    return resolveDesktopPanelWidth({
+      open: desktopRightPanelOpen,
+      width: value,
+      minWidth: DESKTOP_TAB_TOOLS_MIN_WIDTH,
+      maxWidth: DESKTOP_TAB_TOOLS_MAX_WIDTH
+    });
+  }, [desktopRightPanelOpen]);
 
   useCadWorkspaceLayout({
     isDesktop,
     setLayoutMode: setViewerLayoutMode,
-    setSidebarOpen,
     setTabToolsOpen,
     setLayoutViewportWidth,
-    clampSidebarWidth,
     clampTabToolsWidth,
-    setSidebarWidth,
     setTabToolsWidth,
-    panelResizeStateRef,
     tabToolsResizeStateRef,
-    defaultSidebarWidth: DEFAULT_SIDEBAR_WIDTH,
-    sidebarMinWidth: DESKTOP_SIDEBAR_MIN_WIDTH,
     tabToolsMinWidth: DESKTOP_TAB_TOOLS_MIN_WIDTH,
-    endPanelResize,
     endTabToolsResize,
     hostRef
   });
@@ -3516,32 +3373,6 @@ function CadFileViewSurface({
     });
   }, [entryMap]);
 
-  const expandFileViewerTreeToEntry = useCallback((entry) => {
-    const directoryId = sidebarDirectoryIdForEntry(entry);
-    if (!directoryId) {
-      return;
-    }
-
-    const ancestorIds = collectAncestorDirectoryIds(directoryId);
-    if (!ancestorIds.length) {
-      return;
-    }
-
-    setExpandedDirectoryIds((current) => {
-      let changed = false;
-      const next = new Set(current);
-
-      for (const directoryId of ancestorIds) {
-        if (!next.has(directoryId)) {
-          next.add(directoryId);
-          changed = true;
-        }
-      }
-
-      return changed ? next : current;
-    });
-  }, []);
-
   useEffect(() => {
     if (!catalogHydrated && !catalogEntries.length) {
       return;
@@ -3562,19 +3393,9 @@ function CadFileViewSurface({
     });
   }, [allDirectoryIds, catalogEntries.length, catalogHydrated]);
 
-  useEffect(() => {
-    if (
-      initialFileViewerDirectoryStateRef.current.hasStoredState ||
-      initialFileViewerDirectoryStateRef.current.initialRevealDone ||
-      !selectedEntry
-    ) {
-      return;
-    }
-
-    initialFileViewerDirectoryStateRef.current.initialRevealDone = true;
-    setFileViewerDirectoryStateInitialized(true);
-    expandFileViewerTreeToEntry(selectedEntry);
-  }, [expandFileViewerTreeToEntry, selectedEntry]);
+  // Nothing expands the tree to the open file from here any more: the shared
+  // tree reveals its own `activePath`, opening every ancestor and scrolling to
+  // it, and a second opinion about which folders should be open would fight it.
 
   // The render-artifact (re)build + freshness flow now lives entirely in useArtifact (see
   // selectedArtifact above): it GETs /__cad/artifact for freshness and POSTs to (re)build when
@@ -4930,7 +4751,7 @@ function CadFileViewSurface({
       ? (normalizedReferenceId ? [normalizedReferenceId] : [])
       : computeNextSelectionIds(selectedReferenceIdsRef.current, normalizedReferenceId, { multiSelect });
     if (next.length && !isDesktop) {
-      setSidebarOpen(false);
+      setFilesPanelOpen(false);
     }
     setSelectedWholeEntryCadRefToken("");
     if (!multiSelect && selectedPartIdsRef.current.length) {
@@ -5172,7 +4993,7 @@ function CadFileViewSurface({
       ? (normalizedPartId ? [normalizedPartId] : [])
       : computeNextSelectionIds(selectedPartIdsRef.current, partId, { multiSelect });
     if (next.length && !isDesktop) {
-      setSidebarOpen(false);
+      setFilesPanelOpen(false);
     }
     setSelectedWholeEntryCadRefToken("");
     if (!multiSelect && selectedReferenceIdsRef.current.length) {
@@ -6284,32 +6105,25 @@ function CadFileViewSurface({
     }
     activateEntryTab(key);
     if (!isDesktop) {
-      setSidebarOpen(false);
+      setFilesPanelOpen(false);
     }
   }, [activateEntryTab, entryMap, isDesktop, writeCadParam]);
 
-  const handleRevealEntryInExplorerView = useCallback((entry) => {
-    const targetKey = fileKey(entry);
-    if (!targetKey || !entryMap.has(targetKey)) {
-      return;
+  /**
+   * Open a file the file tree named, by its path.
+   *
+   * The tree deals in paths — it is a tree of paths — while everything else
+   * here deals in catalog keys, so this is the one place the two meet. An
+   * unknown path is ignored rather than written to the URL: the tree only
+   * lists what the catalog holds, so a path it does not know is a catalog that
+   * has moved on underneath it.
+   */
+  const handleOpenCatalogPath = useCallback((path) => {
+    const entry = findEntryByUrlPath(catalogEntries, path);
+    if (entry) {
+      handleSelectEntry(fileKey(entry));
     }
-
-    setQuery("");
-    setFileViewerDirectoryStateInitialized(true);
-    expandFileViewerTreeToEntry(entry);
-    if (targetKey !== selectedKey) {
-      writeCadParam(cadFileParamForEntry(entry), { history: "push" });
-      activateEntryTab(targetKey);
-    }
-    handleSidebarOpenChange(true);
-  }, [
-    activateEntryTab,
-    entryMap,
-    expandFileViewerTreeToEntry,
-    handleSidebarOpenChange,
-    selectedKey,
-    writeCadParam
-  ]);
+  }, [catalogEntries, handleSelectEntry]);
 
   const handleSelectTabToolMode = useCallback((mode) => {
     setViewerAlertOpen(false);
@@ -6338,28 +6152,50 @@ function CadFileViewSurface({
     setTabToolMode(TAB_TOOL_MODE.REFERENCES);
   }, [selectedEntry, selectedEntryHasReferences]);
 
-  const handleToggleFileSheet = useCallback(() => {
-    if (!selectedFileSheetKind) {
-      return;
-    }
+  /**
+   * Which panel the column is showing, as ONE id — the shared vocabulary
+   * (`cad-viewer/shell`'s `panels.js`), which is what the nav row's toggles
+   * are drawn from and what the desktop app persists per tab.
+   *
+   * Derived rather than stored because two of the three already exist as
+   * host-controllable flags with a contract of their own (`hostPanels.js`):
+   * the theme editor and the Inspector. This is the single answer they and the
+   * file tree add up to, and `handleTogglePanel` below is the single write.
+   */
+  const inspectorOpen = tabToolsOpen && selectedFileSheetHasSections && !!selectedFileSheetKind;
+  // Nobody has said: the tree, unless the file's own Inspector has the default
+  // — which is `panelsFor`'s rule, read here against the two flags that
+  // implement it rather than against the list.
+  const filesPanelOpen = filesPanelIntent === null
+    ? !inspectorOpen && !themeEditing
+    : filesPanelIntent;
+  const openPanelId = themeEditing
+    ? CAD_PANEL.theme
+    : inspectorOpen
+      ? CAD_PANEL.fileSheet
+      : filesPanelOpen
+        ? FILE_PANEL_TREE
+        : "";
+
+  /**
+   * Press one panel's toggle: open it, closing whatever was open, or close it
+   * if it was the open one (`nextOpenPanel`). One write, so two panels cannot
+   * both end up open however the state updates interleave.
+   */
+  const handleTogglePanel = useCallback((id) => {
+    const next = nextOpenPanel(openPanelId, id);
     setViewerAlertOpen(false);
-    // Opening the file sheet while the theme sidebar is up replaces it —
-    // they are one panel, so the press means "show me this instead".
-    const next = nextPanelState({ themeEditing, fileSheetOpen: tabToolsOpen }, HOST_PANEL.FILE_SHEET);
-    if (next.themeEditing !== themeEditing) {
-      setThemeEditing(next.themeEditing);
+    setFilesPanelOpen(next === FILE_PANEL_TREE);
+    if (themeEditing !== (next === CAD_PANEL.theme)) {
+      setThemeEditing(next === CAD_PANEL.theme);
     }
-    setTabToolsOpen(next.fileSheetOpen);
-    if (next.fileSheetOpen && !isDesktop) {
-      setSidebarOpen(false);
-    }
-  }, [
-    isDesktop,
-    selectedFileSheetKind,
-    setTabToolsOpen,
-    tabToolsOpen,
-    themeEditing
-  ]);
+    setTabToolsOpen(next === CAD_PANEL.fileSheet);
+  }, [openPanelId, setTabToolsOpen, themeEditing]);
+
+  const handlePanelWidthChange = useCallback((width) => {
+    setFileSheetWidthIsCustom(true);
+    setTabToolsWidth(clampPanelWidth(width));
+  }, [setFileSheetWidthIsCustom]);
 
   const handleCopyFileAssetReference = useCallback(async (entry, asset = "output", assetInfo = null, referenceKind = "path") => {
     const fileRef = entry ? fileKey(entry) : "";
@@ -6498,7 +6334,7 @@ function CadFileViewSurface({
     themeSheetOpen: false,
     tabToolsOpen,
     isDesktop,
-    sidebarOpen,
+    filesPanelOpen,
     previewUiStateRef,
     tabToolMode,
     measureDraftActive: Boolean(measureRulerState?.draft?.anchor),
@@ -6511,7 +6347,7 @@ function CadFileViewSurface({
     setViewerAlertOpen,
     setThemeEditing,
     setTabToolsOpen,
-    setSidebarOpen,
+    setFilesPanelOpen,
     setTabToolMode
   });
 
@@ -6578,7 +6414,7 @@ function CadFileViewSurface({
       return;
     }
     previewUiStateRef.current = {
-      sidebarOpen,
+      filesPanelOpen,
       tabToolsOpen,
       tabToolMode,
       themeEditing,
@@ -6591,12 +6427,12 @@ function CadFileViewSurface({
     setDrawingRedoStack([]);
     setViewerAlertOpen(false);
     setThemeEditing(false);
-    setSidebarOpen(false);
+    setFilesPanelOpen(false);
     setTabToolsOpen(false);
     setPreviewMode(true);
   }, [
     previewMode,
-    sidebarOpen,
+    filesPanelOpen,
     setTabToolsOpen,
     selectedViewportContent,
     tabToolMode,
@@ -6619,30 +6455,18 @@ function CadFileViewSurface({
     if (previousUiState) {
       setViewerAlertOpen(previousUiState.viewerAlertOpen);
       setThemeEditing(previousUiState.themeEditing);
-      setSidebarOpen(previousUiState.sidebarOpen);
+      setFilesPanelOpen(previousUiState.filesPanelOpen);
       setTabToolsOpen(previousUiState.tabToolsOpen);
       setTabToolMode(previousUiState.tabToolMode);
     }
   }, [
     previewMode,
-    setSidebarOpen,
+    setFilesPanelOpen,
     setTabToolMode,
     setTabToolsOpen,
     setViewerAlertOpen
   ]);
 
-  const toggleDirectory = (directoryId) => {
-    setFileViewerDirectoryStateInitialized(true);
-    setExpandedDirectoryIds((current) => {
-      const next = new Set(current);
-      if (next.has(directoryId)) {
-        next.delete(directoryId);
-      } else {
-        next.add(directoryId);
-      }
-      return next;
-    });
-  };
   const selectionToolActive = hasCapability(effectiveRenderFormat, "topology") &&
     tabToolMode === TAB_TOOL_MODE.REFERENCES;
   const drawToolActive = drawModeActive;
@@ -6674,27 +6498,22 @@ function CadFileViewSurface({
   const canUndoDrawing = drawingUndoStack.length > 0;
   const canRedoDrawing = drawingRedoStack.length > 0;
   const fileSheetOpen = !!selectedFileSheetKind && selectedFileSheetHasSections && tabToolsOpen && !previewMode && !themeEditing;
-  const activeSidebarWidth = desktopSidebarOpen
-    ? resolvedDesktopPanelWidths.sidebarWidth
-    : 0;
-  const activeSheetWidth = desktopRightPanelOpen
-    ? resolvedDesktopPanelWidths.sheetWidth
-    : 0;
-  const sidebarShellWidth = isDesktop && desktopSidebarOpen
-    ? activeSidebarWidth
-    : isDesktop
-      ? resolveDesktopPanelWidths({
-        viewportWidth: layoutViewportWidth,
-        sidebarOpen: true,
-        sheetOpen: false,
-        sidebarWidth,
-        sheetWidth: 0,
-        sidebarMinWidth: DESKTOP_SIDEBAR_MIN_WIDTH,
-        sheetMinWidth: DESKTOP_TAB_TOOLS_MIN_WIDTH,
-        sidebarMaxWidth: DESKTOP_SIDEBAR_MAX_WIDTH,
-        sheetMaxWidth: DESKTOP_TAB_TOOLS_MAX_WIDTH
-      }).sidebarWidth
-    : DEFAULT_SIDEBAR_WIDTH;
+  /**
+   * Nothing open, and nothing on its way in: the shared empty state, drawn
+   * over the render pane's box.
+   *
+   * The same condition the "home screen" used to have — this is what replaced
+   * it. A file that is still being resolved out of the catalog, or one named
+   * in the URL that the catalog does not have, are both something else and
+   * have their own answers.
+   */
+  const emptyVisible = !previewMode && !selectedEntry && !missingFileRef && !fileParamSelectionPending;
+  const activeSheetWidth = resolveDesktopPanelWidth({
+    open: desktopRightPanelOpen,
+    width: tabToolsWidth,
+    minWidth: DESKTOP_TAB_TOOLS_MIN_WIDTH,
+    maxWidth: DESKTOP_TAB_TOOLS_MAX_WIDTH
+  });
   const floatingCadToolbarPosition = {
     top: "14px",
     right: "14px"
@@ -6727,69 +6546,61 @@ function CadFileViewSurface({
       : null
   ].filter(Boolean);
 
-  // What an injected chrome slot is handed. This is the whole contract between
-  // the file surface and a host's top bar / file sidebar / home screen: the
-  // surface owns the state and the host decides what to draw with it. Adding a field here is the only way to
-  // widen that contract.
+  /**
+   * What an injected chrome slot is handed: the whole contract between the
+   * file surface and a host's nav row and panel column. The surface owns the
+   * state and the host decides what to draw with it; adding a field here is
+   * the only way to widen that contract.
+   *
+   * There is no file-list half of it any more. The list is the file tree, one
+   * of the panels in the column (`cad-viewer/shell`'s `panels.js`), and it
+   * reads the catalog's directory tree and the tree's own open folders —
+   * `allEntriesTree`, `treeExpanded` — rather than a filtered second copy of
+   * the catalog and a query the surface holds.
+   */
   const chrome = {
-    origin,
     previewMode,
-    isDesktop,
-    selectedKey,
+    // The open file, and the catalog the tree and the crumb menus list.
     selectedEntry,
     catalogEntries,
-    catalogHydrated,
-    catalogRefreshing,
-    catalogError,
     allEntriesTree,
-    filteredEntries,
-    filteredEntriesTree,
-    query,
-    onQueryChange: setQuery,
-    expandedDirectoryIds,
-    onToggleDirectory: toggleDirectory,
-    onSelectEntry: handleSelectEntry,
-    onRevealInExplorerView: handleRevealEntryInExplorerView,
+    // Which folders the tree has open. Session state, so the surface holds it
+    // and the tree reads it back through the source adapter.
+    treeExpanded: expandedDirectoryIds,
+    onTreeExpandedChange: setExpandedDirectoryIds,
+    // Opening a file, and the two clipboard actions a browser tab can perform.
+    onOpenPath: handleOpenCatalogPath,
     onCopyFileAssetReference: handleCopyFileAssetReference,
     canCopyFileAssetPaths: filePathCopyAvailable,
-    activeStepArtifactGenerationFiles,
-    viewerLoadingFiles,
-    stepArtifactGenerationAvailable,
+    // The small mark after the file's name while it is busy.
     filenameLoadActivity,
-    selectedStepSourceStatus,
+    // Empty when the open file has no Inspector to show, which is what makes
+    // the panel list offer the tree alone.
     fileSheetKind: selectedFileSheetHasSections ? selectedFileSheetKind : "",
-    fileSheetOpen,
-    onToggleFileSheet: handleToggleFileSheet,
-    themeEditing,
-    onToggleThemeEditor: handleToggleThemeEditor,
-    sidebarResizable: isDesktop,
-    onStartSidebarResize: handleStartSidebarResize,
-    // The home screen shows when nothing is open and nothing is on its way in.
-    homeVisible: !previewMode && !selectedEntry && !missingFileRef && !fileParamSelectionPending
+    // The panel column: which panel is open, how wide it is, and how to change
+    // either. One id, so two panels cannot both be open.
+    openPanel: openPanelId,
+    onTogglePanel: handleTogglePanel,
+    panelWidth: tabToolsWidth,
+    onPanelWidthChange: handlePanelWidthChange
   };
 
   return (
     <HostPanelSlotContext.Provider value={hostPanelSlot}>
     <FileSheetPortalContext.Provider value={hostElement}>
     <HostReferenceContext.Provider value={hostReference}>
-    <SidebarProvider
-      open={effectiveSidebarOpen}
-      onOpenChange={handleSidebarOpenChange}
-      mobileOpen={effectiveSidebarOpen}
-      onMobileOpenChange={handleSidebarOpenChange}
-      style={{ "--sidebar-width": `${sidebarShellWidth}px` }}
-      className={cn("relative h-svh overflow-hidden bg-background", className)}
+    <div
+      className={cn("relative flex h-svh flex-col overflow-hidden bg-background text-foreground", className)}
+      data-slot="cad-file-view"
       ref={hostRef}
     >
-      <SidebarInset className="relative z-10 h-full min-w-0 overflow-hidden bg-transparent">
+      <div className="relative z-10 flex h-full min-w-0 flex-col overflow-hidden bg-transparent">
         {renderTopBar ? renderTopBar(chrome) : null}
 
         <div className="relative min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full min-w-0">
-            {renderSidebar ? renderSidebar(chrome) : null}
-
-            {/* The render pane's box: the column between the sidebar and the
-                sheet, and nothing else. The WebGL canvas fills exactly this
+            {/* The render pane's box: the column left of the panel column, and
+                nothing else. The WebGL canvas fills exactly this
                 area, so a camera fit centres in what is visible and a sheet
                 opening or closing reaches the scene as a plain resize. The
                 overlays after it (toolbar, home, loading) sit above it in the
@@ -6946,7 +6757,23 @@ function CadFileViewSurface({
                 handleCapture={typeof onCapture === "function" ? handleCapture : null}
               />
 
-              {chrome.homeVisible && renderHome ? renderHome(chrome) : null}
+              {/*
+                Nothing open: the shared empty state, which is the one the
+                desktop app's empty file tab draws too (`cad-viewer/shell`).
+                There used to be a "home screen" here with a handful of files
+                picked out of the catalog — a second, worse file list beside
+                the real one. The real one is a panel away, and the toggle for
+                it is the last button in the nav row, which is what this says.
+              */}
+              {emptyVisible ? (
+                <div className="pointer-events-auto absolute inset-0 z-10 bg-background">
+                  <EmptyState
+                    description="Pick one from the tree on the right, or filter by name."
+                    icon={FileText}
+                    title="No file open"
+                  />
+                </div>
+              ) : null}
 
               <ViewerLoadingOverlay
                 viewerLoading={effectiveViewerLoading}
@@ -7165,6 +6992,17 @@ function CadFileViewSurface({
                 updateThemeSettings={updateThemeSettings}
               />
             ) : null}
+
+            {/*
+              The host's panel column, at the right end of the body row and
+              nowhere else. The host draws the frame — one border, one width,
+              one resize handle (`cad-viewer/shell`'s `FilePanelColumn`) — and
+              hands the box back as `panelSlot`, so the surface's own theme
+              editor and Inspector are portaled into the same column its file
+              tree uses. That is why there is no left sidebar to draw: the file
+              list is a panel in here.
+            */}
+            {renderPanel ? renderPanel(chrome) : null}
           </div>
         </div>
 
@@ -7187,8 +7025,8 @@ function CadFileViewSurface({
           previewMode={previewMode}
           setViewerAlertOpen={setViewerAlertOpen}
         />
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </div>
     </HostReferenceContext.Provider>
     </FileSheetPortalContext.Provider>
     </HostPanelSlotContext.Provider>

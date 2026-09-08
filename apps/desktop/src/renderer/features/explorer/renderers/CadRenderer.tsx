@@ -11,7 +11,7 @@ import type { ViewerOrigin } from "@shared/ipc/cad";
 import type { CadReference } from "@shared/cad-refs";
 import type { ExplorerRoot } from "@shared/types";
 
-import { EmptyState } from "../EmptyState";
+import { EmptyState } from "cad-viewer/shell";
 
 /**
  * A CAD file, rendered by the CAD Viewer's own per-file surface.
@@ -187,7 +187,7 @@ export function CadRenderer({
   path: string;
   onOpenFile: (path: string) => void;
   /**
-   * The tab's two CAD panel toggles (`renderers/panels.ts`), driven into the
+   * The tab's two CAD panel toggles (`cad-viewer/shell`'s `panels.js`), driven into the
    * surface, which draws the open one into `panelSlot`.
    */
   themeEditing: boolean;

@@ -1,8 +1,11 @@
 /**
- * What each item of the entry menu does (`entry-menu.ts` says what there is).
+ * What each item of the entry menu does — this app's half.
  *
- * The tree's rows and the breadcrumb's crumbs share these, so the two menus
- * do not just look alike, they are the same code. Everything that touches
+ * What there IS in the menu is `cad-viewer/shell`'s `entry-menu.js`, shared
+ * with the standalone CAD Viewer; what an item does is per host, because
+ * "copy this path" is an IPC round trip here and a clipboard write in a
+ * browser tab. The tree's rows and the breadcrumb's crumbs share these, so
+ * the two menus do not just look alike, they are the same code. Everything that touches
  * the disk goes through main (`explorer.*`), which resolves every path
  * against the root and refuses one outside it; what is left here is the
  * clipboard, the composer, and keeping the strip and the tree honest about
@@ -20,8 +23,8 @@ import { useSessions } from "@renderer/state/sessions";
 import type { DirEntry } from "@shared/ipc/explorer";
 import type { ExplorerRoot, ExplorerTab } from "@shared/types";
 
+import type { EntryAction, MenuEntryTarget, Platform } from "cad-viewer/shell";
 import { parentOf } from "cad-viewer/shell";
-import type { EntryAction, MenuEntryTarget, Platform } from "./entry-menu";
 
 export type EntryActionContext = {
   projectId: string;

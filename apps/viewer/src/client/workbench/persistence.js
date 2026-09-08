@@ -17,7 +17,6 @@ export const THEME_STORAGE_VERSION = 13;
 
 export const CAD_DIRECTORY_SESSION_STORAGE_VERSION = 1;
 export const CAD_DIRECTORY_SESSION_STORAGE_KEY = `cad-viewer:directory-session:v${CAD_DIRECTORY_SESSION_STORAGE_VERSION}`;
-export const CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH = 280;
 export const CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH = 365;
 export const CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH = 280;
 
@@ -72,18 +71,6 @@ export function fileSheetWidthPxForSessionState(value, defaultWidth = CAD_WORKSP
   const normalizedDefaultWidth = (
     normalizeNullablePositiveInteger(defaultWidth) ||
     normalizeNullablePositiveInteger(CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH)
-  );
-  if (!normalizedWidth || normalizedWidth === normalizedDefaultWidth) {
-    return null;
-  }
-  return normalizedWidth;
-}
-
-export function fileViewerWidthPxForSessionState(value, defaultWidth = CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH) {
-  const normalizedWidth = normalizeNullablePositiveInteger(value);
-  const normalizedDefaultWidth = (
-    normalizeNullablePositiveInteger(defaultWidth) ||
-    normalizeNullablePositiveInteger(CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH)
   );
   if (!normalizedWidth || normalizedWidth === normalizedDefaultWidth) {
     return null;
@@ -499,12 +486,13 @@ function browserSessionStorage() {
 
 export function createCadDirectorySessionState(overrides = {}, options = {}) {
   return {
-    fileViewerOpen: normalizeBoolean(overrides?.fileViewerOpen, false),
+    // Nullable, exactly like `fileSheetOpen`: null is "nobody has said", which
+    // resolves to the panel list's own default (`cad-viewer/shell`'s
+    // `panels.js` — the file tree, unless the open file's Inspector claims it).
+    // A stored `false` is a person who closed the panel and must come back to
+    // it closed, which a plain boolean could not tell apart from a first visit.
+    fileViewerOpen: normalizeNullableBoolean(overrides?.fileViewerOpen),
     fileViewerExpandedDirectoryIds: normalizeNullableUniqueStringList(overrides?.fileViewerExpandedDirectoryIds),
-    fileViewerWidthPx: fileViewerWidthPxForSessionState(
-      overrides?.fileViewerWidthPx,
-      options.defaultFileViewerWidthPx
-    ),
     fileSheetOpen: normalizeNullableBoolean(overrides?.fileSheetOpen),
     fileSheetWidthPx: fileSheetWidthPxForSessionState(
       overrides?.fileSheetWidthPx,
@@ -519,14 +507,11 @@ function buildCadDirectorySessionStoragePayload(state = {}, options = {}) {
   const payload = {
     version: CAD_DIRECTORY_SESSION_STORAGE_VERSION
   };
-  if (normalizedState.fileViewerOpen || hasOwn(state || {}, "fileViewerOpen")) {
+  if (typeof normalizedState.fileViewerOpen === "boolean") {
     payload.fileViewerOpen = normalizedState.fileViewerOpen;
   }
   if (Array.isArray(normalizedState.fileViewerExpandedDirectoryIds)) {
     payload.fileViewerExpandedDirectoryIds = normalizedState.fileViewerExpandedDirectoryIds;
-  }
-  if (normalizedState.fileViewerWidthPx) {
-    payload.fileViewerWidthPx = normalizedState.fileViewerWidthPx;
   }
   if (typeof normalizedState.fileSheetOpen === "boolean") {
     payload.fileSheetOpen = normalizedState.fileSheetOpen;

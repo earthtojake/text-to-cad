@@ -1,51 +1,47 @@
 import { useMemo } from "react";
-import { FolderTree, LoaderCircle, Palette, SlidersHorizontal } from "lucide-react";
+import { EllipsisVertical, LoaderCircle } from "lucide-react";
 
-import { useSidebar } from "@/components/ui/sidebar";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import {
+  EntryContextMenu,
+  EntryMenuItems,
+  FileNavRow,
+  PanelToggle,
   buildCrumbs,
   createCatalogFileSource,
-  FileNavRow,
-  PanelToggle
+  useEntryMenuFocusGuard
 } from "@/shell/index.js";
-import { cadFileParamForEntry, fileKey } from "@/workbench/sidebar";
+import { cadFileParamForEntry } from "@/workbench/sidebar";
 
-import FileAccessContextMenu from "./FileAccessContextMenu";
+import { useStandaloneEntryActions, webEntryCapabilities } from "./standaloneEntryActions.js";
+import { useWorkspacePanels } from "./workspacePanels.js";
 import ViewerLinks from "./ViewerLinks";
 
 /**
  * The standalone viewer's nav row.
  *
- * The row itself, the breadcrumb in it and the menus that breadcrumb drops
- * down are `cad-viewer/shell` — the same code the desktop app's file tab
- * draws, so the two are one bar and not two that resemble each other. What is
- * left here is the standalone's own half: where the listings come from (its
- * catalog, walked in place), the links only a web build has, and the toggles
- * for the two panels the surface owns.
+ * The row itself, the breadcrumb in it, the menus that breadcrumb drops down,
+ * the `⋯` after the file's name and the panel toggles at the right end are all
+ * `cad-viewer/shell` — the same code the desktop app's file tab draws, so the
+ * two are one bar and not two that resemble each other. What is left here is
+ * the standalone's own half: where the listings come from (its catalog, walked
+ * in place) and the links only a web build has.
  *
- * The listings are the catalog's, so the menus list what this app can OPEN —
- * every CAD file the served directory holds, and nothing else. The desktop
- * lists a directory as it is on disk, because it can open anything in it.
+ * The links are the ONE visible difference between this row and the desktop
+ * app's: Discord, GitHub and the version, after the toggles. The toggles
+ * themselves are the shared panel list in declaration order with the file tree
+ * last, which is the desktop's rule and the reason the control a person
+ * reaches for is in the same place in both.
+ *
+ * The listings are the catalog's, so the menus and the tree list what this app
+ * can OPEN — every CAD file the served directory holds, and nothing else. The
+ * desktop lists a directory as it is on disk, because it can open anything in
+ * it.
  */
-
-function fileSheetLabel(fileSheetKind) {
-  if (fileSheetKind === "dxf") {
-    return "DXF sheet";
-  }
-  if (fileSheetKind === "urdf") {
-    return "URDF sheet";
-  }
-  if (fileSheetKind === "srdf") {
-    return "SRDF sheet";
-  }
-  if (fileSheetKind === "sdf") {
-    return "SDF sheet";
-  }
-  if (fileSheetKind === "step") {
-    return "STEP sheet";
-  }
-  return "file sheet";
-}
 
 /**
  * A bare spinner after the filename. No chip, no text, no percent.
@@ -74,24 +70,67 @@ function FilenameLoadStatus({ activity }) {
   );
 }
 
-export default function CadWorkspaceTopBar({
-  previewMode,
-  directoryTree = null,
-  selectedEntry,
-  onSelectEntry,
-  filenameLoadActivity = null,
-  selectedStepSourceStatus = null,
-  canCopyFileAssetPaths = false,
-  onRevealInExplorerView,
-  onCopyFileAssetReference,
-  fileSheetKind = "",
-  fileSheetOpen = false,
-  onToggleFileSheet,
-  themeEditing = false,
-  onToggleThemeEditor,
-  navigationAvailable = true
-}) {
-  const { open: sidebarOpen, toggleSidebar } = useSidebar();
+/**
+ * The file crumb's `⋯`: the menu the right-click opens, drawn as a dropdown.
+ *
+ * One table, one set of actions, two doors — because a right-click is not a
+ * control anybody can see. The desktop app draws the same button, in the same
+ * place, over the same table; the only difference is which items survive the
+ * capability filter.
+ */
+function CrumbActions({ path, capabilities, platform, onAction }) {
+  const guard = useEntryMenuFocusGuard(onAction);
+  const entry = { path, kind: "file", surface: "crumb" };
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          aria-label="File actions"
+          className="flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+          data-testid="crumb-actions"
+          title="File actions"
+          type="button"
+        >
+          <EllipsisVertical className="size-3.5" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="w-56"
+        data-entry-menu={entry.path}
+        onCloseAutoFocus={guard.onCloseAutoFocus}
+        sideOffset={6}
+      >
+        <EntryMenuItems
+          capabilities={capabilities}
+          entry={entry}
+          onAction={guard.onAction}
+          platform={platform}
+          surface="dropdown"
+        />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export default function CadWorkspaceTopBar({ chrome }) {
+  const {
+    previewMode,
+    selectedEntry,
+    allEntriesTree,
+    filenameLoadActivity,
+    canCopyFileAssetPaths,
+    openPanel,
+    onTogglePanel
+  } = chrome;
+
+  const panels = useWorkspacePanels(chrome);
+  const { onAction, platform } = useStandaloneEntryActions(chrome);
+  const capabilities = useMemo(
+    () => webEntryCapabilities(canCopyFileAssetPaths),
+    [canCopyFileAssetPaths]
+  );
+
   // The open file in the crumb path space: served-root-relative, which is what
   // `?file=` carries and what the catalog's directory ids extend.
   const activePath = selectedEntry ? cadFileParamForEntry(selectedEntry) : null;
@@ -104,54 +143,43 @@ export default function CadWorkspaceTopBar({
   );
 
   const source = useMemo(
-    () => ({
-      ...createCatalogFileSource({ directoryTree: navigationAvailable ? directoryTree : null }),
-      // The file crumb's right-click: copy this file's paths, reveal it. The
-      // desktop's crumbs carry its own entry menu in the same slot.
-      wrapCrumb: ({ crumb, children }) =>
-        crumb.kind === "file" && selectedEntry ? (
-          <FileAccessContextMenu
-            entry={selectedEntry}
-            stepSourceStatus={selectedStepSourceStatus}
-            canCopyFileAssetPaths={canCopyFileAssetPaths}
-            onRevealInExplorerView={onRevealInExplorerView}
-            onCopyFileAssetReference={onCopyFileAssetReference}
+    () => createCatalogFileSource({
+      directoryTree: allEntriesTree,
+      slots: {
+        // A crumb's right-click and the file crumb's `⋯`: the shared entry
+        // menu, filtered to what a browser tab can do.
+        wrapCrumb: ({ crumb, children }) => (
+          <EntryContextMenu
+            capabilities={capabilities}
+            entry={{ path: crumb.path, kind: crumb.kind === "file" ? "file" : "directory", surface: "crumb" }}
+            onAction={onAction}
+            platform={platform}
           >
             {children}
-          </FileAccessContextMenu>
-        ) : (
-          children
+          </EntryContextMenu>
+        ),
+        renderCrumbActions: ({ crumb }) => (
+          <CrumbActions
+            capabilities={capabilities}
+            onAction={onAction}
+            path={crumb.path}
+            platform={platform}
+          />
         )
+      }
     }),
-    [
-      directoryTree,
-      navigationAvailable,
-      selectedEntry,
-      selectedStepSourceStatus,
-      canCopyFileAssetPaths,
-      onRevealInExplorerView,
-      onCopyFileAssetReference
-    ]
+    [allEntriesTree, capabilities, onAction, platform]
   );
 
   if (previewMode) {
     return null;
   }
 
-  // A file picked from a crumb's menu is a catalog entry the menu already
-  // carried, so it opens by key rather than by a second lookup on its path.
-  const openEntry = (path, item) => {
-    const entry = item?.value;
-    if (entry && typeof onSelectEntry === "function") {
-      onSelectEntry(fileKey(entry));
-    }
+  // A file picked from a crumb's menu opens by path, the same door the tree's
+  // rows use — the surface maps it back to the catalog entry it came from.
+  const openEntry = (path) => {
+    chrome.onOpenPath(path);
   };
-
-  const showFileSheetToggle = !!fileSheetKind && typeof onToggleFileSheet === "function";
-  const fileSheetToggleLabel = fileSheetOpen
-    ? `Collapse ${fileSheetLabel(fileSheetKind)}`
-    : `Expand ${fileSheetLabel(fileSheetKind)}`;
-  const themeToggleLabel = themeEditing ? "Close theme settings" : "Open theme settings";
 
   return (
     <FileNavRow
@@ -162,42 +190,25 @@ export default function CadWorkspaceTopBar({
       status={<FilenameLoadStatus activity={filenameLoadActivity} />}
       trailing={
         <>
-          <ViewerLinks previewMode={previewMode} />
-          {/* The same glyph the desktop's theme panel declares, so one row of
-              toggles does not read as two designs. */}
-          <PanelToggle
-            active={themeEditing}
-            icon={Palette}
-            id="cad-theme"
-            label={themeToggleLabel}
-            onClick={onToggleThemeEditor}
-          />
-          {showFileSheetToggle ? (
-            <PanelToggle
-              active={fileSheetOpen && !themeEditing}
-              icon={SlidersHorizontal}
-              id="cad-file-sheet"
-              label={fileSheetToggleLabel}
-              onClick={onToggleFileSheet}
-            />
-          ) : null}
           {/*
-            The file list, last and never moving — the desktop's rule, and the
-            one control a person can always find in the same place. What it
-            opens here is still the LEFT sidebar; folding that into this row's
-            panel column is the next piece of work, and the toggle is in its
-            final place already so it does not move twice.
+            One toggle per panel, in declaration order with the files toggle
+            last, and never any other order: the right end of this row is the
+            same control whatever is open, so it is the one thing a person can
+            always find in the same place — in this app and in the desktop one.
           */}
-          {navigationAvailable ? (
+          {panels.map((panel) => (
             <PanelToggle
-              active={sidebarOpen}
-              icon={FolderTree}
-              id="files"
-              label={sidebarOpen ? "Hide files" : "Show files"}
-              onClick={toggleSidebar}
-              testId="tree-toggle"
+              active={panel.id === openPanel}
+              icon={panel.icon}
+              id={panel.id}
+              key={panel.id}
+              label={panel.label}
+              onClick={() => onTogglePanel(panel.id)}
+              testId={panel.content === "tree" ? "tree-toggle" : undefined}
             />
-          ) : null}
+          ))}
+          {/* The one thing the desktop app's row does not have. */}
+          <ViewerLinks previewMode={previewMode} />
         </>
       }
     />

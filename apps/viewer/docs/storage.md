@@ -57,15 +57,19 @@ cad-viewer:active-dir:v1
 
 Current `cad-viewer:directory-session:v1` fields:
 
-- `fileViewerOpen`: app-wide file viewer open/closed state.
-- `fileViewerExpandedDirectoryIds`: app-wide open folder ids for the file
-  viewer tree. When absent, the first selected file on page load seeds the
-  initial expanded folder tree; an empty array means all folders are closed.
-- `fileViewerWidthPx`: app-wide custom file viewer width, stored only when it
-  differs from the default.
-- `fileSheetOpen`: app-wide file sheet open/closed state.
-- `fileSheetWidthPx`: app-wide custom file sheet width, stored only when it
-  differs from the default.
+- `fileViewerOpen`: whether the **file tree** is the open panel. Nullable:
+  absent is "nobody has said", which resolves to the shared panel list's own
+  default (`cad-viewer/shell`'s `panels.js` — the tree, unless the open file's
+  Inspector claims it). A stored `false` is a person who closed the panel and
+  must come back to it closed, which a plain boolean could not tell apart from
+  a first visit.
+- `fileViewerExpandedDirectoryIds`: the file tree's open folder ids. Absent is
+  a tree that has never been touched; an empty array means all folders are
+  closed. The tree reveals the open file's own ancestors either way.
+- `fileSheetOpen`: whether the **Inspector** is the open panel, the same way.
+- `fileSheetWidthPx`: the panel column's custom width, stored only when it
+  differs from the default. There is one column and so one width — the file
+  tree, the theme editor and the Inspector all take it.
 - `theme`: a directory-level theme override for the current tab, in the same
   `{themeId, custom}` shape as the global key. The global theme itself belongs
   to `localStorage`.

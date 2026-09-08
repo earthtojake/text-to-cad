@@ -1,7 +1,8 @@
+import { FILE_PANEL_TREE, PANEL_DEFAULT_WIDTH, clampPanelWidth } from "cad-viewer/shell";
 import { create } from "zustand";
 
 import type { DirEntry } from "@shared/ipc/explorer";
-import { FILE_PANEL_TREE, PANE_LIMITS } from "@shared/types";
+import { PANE_LIMITS } from "@shared/types";
 import type {
   BrowserTab,
   ExplorerRoot,
@@ -51,9 +52,12 @@ const PANEL_WIDTH_KEY = "hardcore.explorer.panelWidth";
 const PANE_COLLAPSED_KEY = "hardcore.explorer.collapsed";
 /** How wide it is when it is open, per project id (see `width`). */
 const PANE_WIDTH_KEY = "hardcore.explorer.width";
-export const PANEL_MIN_WIDTH = 180;
-export const PANEL_MAX_WIDTH = 480;
-export const PANEL_DEFAULT_WIDTH = 248;
+/**
+ * The column's range and its default are the shared shell's
+ * (`FilePanelColumn.jsx`), which is the component that draws it — so the
+ * standalone CAD Viewer's panel is the same size as this one rather than a
+ * second opinion about how wide a panel should be.
+ */
 
 function readLocal<T>(key: string, fallback: T, parse: (raw: string) => T): T {
   try {
@@ -572,7 +576,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   },
 
   setPanelWidth: (width) => {
-    const panelWidth = Math.round(Math.max(PANEL_MIN_WIDTH, Math.min(PANEL_MAX_WIDTH, width)));
+    const panelWidth = clampPanelWidth(width);
     writeLocal(PANEL_WIDTH_KEY, String(panelWidth));
     set({ panelWidth });
   },

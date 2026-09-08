@@ -1,40 +1,54 @@
-import { buildCrumbs, FileNavRow, PanelToggle, useElementWidth, worktreeMark } from "cad-viewer/shell";
+import {
+  buildCrumbs,
+  CAD_PANEL,
+  EmptyState,
+  FILE_PANEL_TREE,
+  FileNavRow,
+  FilePanelColumn,
+  FileTree,
+  nextOpenPanel,
+  panelClosedBy,
+  PanelToggle,
+  panelsFor,
+  resolveOpenPanel,
+  SOURCE_PANEL,
+  useElementWidth,
+  worktreeMark,
+  type TreeEdit,
+  type TreeEditRequest,
+} from "cad-viewer/shell";
 import { FileText, GitBranch, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { Spinner } from "@renderer/components/ui/spinner";
 import { useExplorer } from "@renderer/state/explorer";
-import { FILE_PANEL_TREE, type ExplorerRoot, type Project } from "@shared/types";
+import type { ExplorerRoot, Project } from "@shared/types";
 import type { FileStat, TextFileResult } from "./types";
 
 import { useExplorerCrumbSource } from "./crumb-source";
-import { EmptyState } from "./EmptyState";
 import { currentPlatform, type EntryActionContext } from "./entry-actions";
-import { FilePanel } from "./FilePanel";
-import { FileTree, type TreeEdit, type TreeEditRequest } from "./FileTree";
 import { BinaryRenderer } from "./renderers/BinaryRenderer";
 import { CadRenderer } from "./renderers/CadRenderer";
 import { CodeRenderer } from "./renderers/CodeRenderer";
 import { ImageRenderer } from "./renderers/ImageRenderer";
 import { MarkdownRenderer } from "./renderers/MarkdownRenderer";
-import {
-  CAD_PANEL,
-  nextOpenPanel,
-  panelsFor,
-  resolveOpenPanel,
-  SOURCE_PANEL,
-} from "./renderers/panels";
 import { PdfRenderer } from "./renderers/PdfRenderer";
 import { rendererFor } from "./renderers/registry";
+import { useExplorerTreeSource } from "./tree-source";
 
 /**
  * One file, laid out the way Codex lays one out: a header row with the
- * breadcrumb and the actions (`FileNavRow`, which the standalone CAD Viewer
- * draws too — `cad-viewer/shell`), the content on the left, and ONE panel column
- * on the right — the file tree, or the CAD surface's theme editor, or its
- * Inspector, or markdown's source over the content itself. Exactly one of
- * them, or none (`renderers/panels.ts`, `FilePanel.tsx`).
+ * breadcrumb and the actions (`FileNavRow`), the content on the left, and ONE
+ * panel column on the right — the file tree, or the CAD surface's theme
+ * editor, or its Inspector, or markdown's source over the content itself.
+ * Exactly one of them, or none.
+ *
+ * The row, the panel list, the column and the tree in it are all
+ * `cad-viewer/shell` — the standalone CAD Viewer draws the same ones, so the
+ * two apps are one file explorer and not two that resemble each other. What
+ * is left here is this host's half: what a listing costs (an IPC read), what
+ * an entry menu's items do, and the tab machinery around it.
  *
  * The state machine is small but has one subtlety worth naming. The editor is
  * uncontrolled (see `CodeRenderer`), so "the file on disk changed" cannot be
@@ -73,7 +87,6 @@ export function FileTab({
   const openFile = useExplorer((state) => state.openFile);
   const panelWidth = useExplorer((state) => state.panelWidth);
   const setPanelWidth = useExplorer((state) => state.setPanelWidth);
-  const fsRevision = useExplorer((state) => state.fsRevision);
   const treeReveal = useExplorer((state) => state.reveal);
 
   const [reloadToken, setReloadToken] = useState(0);
@@ -257,7 +270,7 @@ export function FileTab({
   const traits = "stat" in loaded ? rendererFor(loaded.stat) : null;
 
   /**
-   * The tab's panels, and which one is open (`renderers/panels.ts`).
+   * The tab's panels, and which one is open (`cad-viewer/shell`'s `panels.js`).
    *
    * One open panel, held as one id in one persisted field of the tab, so the
    * toggles cannot disagree with the column and a reload comes back to the
@@ -380,6 +393,18 @@ export function FileTab({
     onRenameEnd: () => setRenamingCrumb(false),
   });
 
+  /**
+   * The tree's own context. It differs from the crumb's in one place: a
+   * rename asked for from a ROW is drawn in that row, so the tree keeps it
+   * to itself and never calls `beginRename` at all — the callbacks below are
+   * for the actions the tree forwards, and they behave as the crumb's do.
+   */
+  const treeCtx = useMemo<EntryActionContext>(
+    () => ({ ...crumbCtx, beginRename: () => {}, beginCreate: () => {} }),
+    [crumbCtx],
+  );
+  const treeSource = useExplorerTreeSource({ ctx: treeCtx, projectName: project.name });
+
   return (
     <div className="flex h-full min-h-0 flex-col" ref={rootRef}>
       <FileNavRow
@@ -488,13 +513,13 @@ export function FileTab({
         </div>
 
         {/*
-          The one panel column, whatever is in it (`FilePanel.tsx`). A panel
+          The one panel column, whatever is in it (`cad-viewer/shell`'s `FilePanelColumn.jsx`). A panel
           whose content IS the body — markdown's source — draws no column;
           everything else gets this frame, and the file's renderer that draws
           its own panel gets the box to draw into.
         */}
         {openPanel && openPanel.content !== "body" ? (
-          <FilePanel
+          <FilePanelColumn
             id={openPanel.id}
             label={openPanel.label}
             onWidthChange={setPanelWidth}
@@ -504,21 +529,19 @@ export function FileTab({
               <FileTree
                 activePath={path}
                 edit={treeEdit}
-                fsRevision={fsRevision}
                 // A different project or root is a different tree. The
                 // state is the store's, per root; the key keeps the filter
                 // and the cursor from crossing over with it.
                 key={`${project.id}:${root ?? ""}`}
                 onOpen={(next) => openFile(next, root)}
-                projectId={project.id}
-                projectName={project.name}
-                reveal={treeReveal}
-                root={root}
+                // A reveal into another root's tree is not this tree's business.
+                reveal={treeReveal && treeReveal.root === root ? treeReveal : null}
+                source={treeSource}
               />
             ) : (
               <div className="h-full min-h-0" ref={setPanelSlot} />
             )}
-          </FilePanel>
+          </FilePanelColumn>
         ) : null}
       </div>
     </div>
@@ -596,10 +619,10 @@ function Body({
           // measurement landed — comes back through here and becomes the
           // tab's open panel, closing whatever else was up. So the highlight
           // follows the screen rather than the last press.
-          onFileSheetOpenChange={(next) => onPanelOpen(closedBy(next, openPanel, CAD_PANEL.fileSheet))}
+          onFileSheetOpenChange={(next) => onPanelOpen(panelClosedBy(next, openPanel, CAD_PANEL.fileSheet))}
           onOpenFile={onOpenFile}
           onSurfaceReady={onSurfaceReady}
-          onThemeEditingChange={(next) => onPanelOpen(closedBy(next, openPanel, CAD_PANEL.theme))}
+          onThemeEditingChange={(next) => onPanelOpen(panelClosedBy(next, openPanel, CAD_PANEL.theme))}
           panelSlot={panelSlot}
           path={loaded.stat.path}
           projectId={projectId}
@@ -650,22 +673,6 @@ function Body({
         />
       );
   }
-}
-
-/**
- * What the tab's panel becomes when the surface reports one of its own open
- * or shut.
- *
- * `true` opens it, over whatever was up. `false` is only ever about the
- * panel it names: the surface reports both of its flags on every change, so
- * a "the sheet is shut" arriving while the file TREE is the open panel must
- * leave the tree alone rather than close the column.
- */
-function closedBy(open: boolean, current: string, id: string): string {
-  if (open) {
-    return id;
-  }
-  return current === id ? "" : current;
 }
 
 function messageOf(error: unknown): string {

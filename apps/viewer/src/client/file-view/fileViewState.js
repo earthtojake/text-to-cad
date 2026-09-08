@@ -7,8 +7,7 @@ import {
 } from "@/workbench/breakpoints";
 import {
   cadWorkspaceDefaultFileSheetWidthForViewport,
-  readCadDirectorySessionState,
-  CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH
+  readCadDirectorySessionState
 } from "@/workbench/persistence";
 import { renderFormatLabel } from "cadgen-js/lib/renderCapabilities";
 
@@ -33,9 +32,8 @@ export function capitalizeFirst(value) {
 
 export const ARTIFACT_GENERATING_LABEL = "Generating artifacts";
 export const EMPTY_LIST = Object.freeze([]);
-export const DESKTOP_SIDEBAR_MIN_WIDTH = 150;
-export const DESKTOP_SIDEBAR_MAX_WIDTH = 520;
-export const DEFAULT_SIDEBAR_WIDTH = CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH;
+// There is no left sidebar and so no width for one: the panel column is the
+// one column, and its range is `cad-viewer/shell`'s `FilePanelColumn`.
 // The sheet's range and what a host may pin live in hostLayout.js (a module
 // with no bundler aliases, so its tests run under plain node).
 export {

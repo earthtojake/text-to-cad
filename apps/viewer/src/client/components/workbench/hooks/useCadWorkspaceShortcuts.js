@@ -12,7 +12,7 @@ export function useCadWorkspaceShortcuts({
   themeSheetOpen,
   tabToolsOpen,
   isDesktop,
-  sidebarOpen,
+  filesPanelOpen,
   previewUiStateRef,
   tabToolMode,
   measureDraftActive = false,
@@ -25,7 +25,7 @@ export function useCadWorkspaceShortcuts({
   setViewerAlertOpen,
   setThemeEditing,
   setTabToolsOpen,
-  setSidebarOpen,
+  setFilesPanelOpen,
   setTabToolMode
 }) {
   useEffect(() => {
@@ -40,7 +40,7 @@ export function useCadWorkspaceShortcuts({
   }, [copyStatus, screenshotStatus, setCopyStatus, setScreenshotStatus]);
 
   useEffect(() => {
-    if (!(previewMode || viewerAlertOpen || themeSheetOpen || tabToolsOpen || (!isDesktop && sidebarOpen) || tabToolMode === TAB_TOOL_MODE.MEASURE)) {
+    if (!(previewMode || viewerAlertOpen || themeSheetOpen || tabToolsOpen || (!isDesktop && filesPanelOpen) || tabToolMode === TAB_TOOL_MODE.MEASURE)) {
       return undefined;
     }
 
@@ -77,7 +77,7 @@ export function useCadWorkspaceShortcuts({
           if (previousUiState) {
             setViewerAlertOpen(previousUiState.viewerAlertOpen);
             setThemeEditing(previousUiState.themeEditing);
-            setSidebarOpen(previousUiState.sidebarOpen);
+            setFilesPanelOpen(previousUiState.filesPanelOpen);
             setTabToolsOpen(previousUiState.tabToolsOpen);
             setTabToolMode(previousUiState.tabToolMode);
           }
@@ -98,7 +98,7 @@ export function useCadWorkspaceShortcuts({
         setThemeEditing(false);
         setTabToolsOpen(false);
         if (!isDesktop) {
-          setSidebarOpen(false);
+          setFilesPanelOpen(false);
         }
       }
     };
@@ -118,11 +118,11 @@ export function useCadWorkspaceShortcuts({
     previewUiStateRef,
     setThemeEditing,
     setPreviewMode,
-    setSidebarOpen,
+    setFilesPanelOpen,
     setTabToolMode,
     setTabToolsOpen,
     setViewerAlertOpen,
-    sidebarOpen,
+    filesPanelOpen,
     measureDraftActive,
     onCancelMeasureDraft,
     tabToolMode,

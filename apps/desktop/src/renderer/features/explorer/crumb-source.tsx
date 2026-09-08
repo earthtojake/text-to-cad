@@ -3,8 +3,8 @@
  *
  * The crumbs, their menus and their icons are `cad-viewer/shell` — the same
  * code the standalone CAD Viewer draws. The one thing the two hosts do not
- * agree on is where a directory listing comes from, and the two entry menus
- * only this app has, so both are handed over as a source adapter.
+ * agree on is where a directory listing comes from, and what an entry menu's
+ * items DO, so both are handed over as a source adapter.
  *
  * Listings are the tree's (`useTree`), read one directory at a time over IPC
  * and kept in the explorer store beside the tree's own — the same cache, so a
@@ -13,9 +13,18 @@
  * question out of a catalog it already holds
  * (`apps/viewer/src/client/shell/catalogFileSource.js`).
  */
-import type { CrumbSource } from "cad-viewer/shell";
+import {
+  ALL_ENTRY_CAPABILITIES,
+  EntryContextMenu,
+  EntryMenuItems,
+  InlineName,
+  useEntryMenuFocusGuard,
+  type CrumbSource,
+  type EntryAction,
+  type MenuEntryTarget,
+} from "cad-viewer/shell";
 import { EllipsisVertical } from "lucide-react";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 
 import {
   DropdownMenu,
@@ -25,9 +34,10 @@ import {
 import { useExplorer, useTree } from "@renderer/state/explorer";
 import type { DirEntry } from "@shared/ipc/explorer";
 
-import { EntryContextMenu, EntryMenuItems, useMenuFocusGuard } from "./EntryContextMenu";
-import { renameEntry, requestAt, type EntryActionContext } from "./entry-actions";
-import { InlineName } from "./InlineName";
+import { performEntryAction, renameEntry, requestAt, type EntryActionContext } from "./entry-actions";
+
+/** The one handler the shared menu calls: an item was chosen. */
+type MenuAction = (action: EntryAction, entry: MenuEntryTarget) => void;
 
 /**
  * One directory's listing, read through the explorer store and fetched when
@@ -68,11 +78,21 @@ function useListing(ctx: Pick<EntryActionContext, "projectId" | "root">, directo
 
 /**
  * The file crumb's `⋯`: the menu the right-click opens, drawn as a dropdown —
- * one table (`entry-menu.ts`), one set of actions, two doors, because a
- * right-click is not a control anybody can see.
+ * one table (`cad-viewer/shell`'s `entry-menu.js`), one set of actions, two
+ * doors, because a right-click is not a control anybody can see. The
+ * standalone viewer draws the same button over the same table, minus the
+ * items a browser tab cannot perform.
  */
-function CrumbActions({ path, ctx }: { path: string; ctx: EntryActionContext }) {
-  const guard = useMenuFocusGuard(ctx);
+function CrumbActions({
+  path,
+  onAction,
+  ctx,
+}: {
+  path: string;
+  onAction: MenuAction;
+  ctx: EntryActionContext;
+}) {
+  const guard = useEntryMenuFocusGuard(onAction);
   const entry = { path, kind: "file" as const, surface: "crumb" as const };
   return (
     <DropdownMenu modal={false}>
@@ -94,7 +114,13 @@ function CrumbActions({ path, ctx }: { path: string; ctx: EntryActionContext }) 
         onCloseAutoFocus={guard.onCloseAutoFocus}
         sideOffset={6}
       >
-        <EntryMenuItems ctx={guard.ctx} entry={entry} surface="dropdown" />
+        <EntryMenuItems
+          capabilities={ALL_ENTRY_CAPABILITIES}
+          entry={entry}
+          onAction={guard.onAction}
+          platform={ctx.platform}
+          surface="dropdown"
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -120,21 +146,34 @@ export function useExplorerCrumbSource({
   onRenamed: (path: string) => void;
   onRenameEnd: () => void;
 }): CrumbSource {
+  /*
+    Everything a crumb's menu offers, the three field-starting items included:
+    a crumb is not a row, so `Rename` and the two `New …` go to the context,
+    which draws a field over the crumb or asks the tree for one. The tree
+    handles those itself and never forwards them.
+  */
+  const onAction = useCallback<MenuAction>(
+    (action, entry) => void performEntryAction(action, entry, ctx),
+    [ctx],
+  );
+
   return {
     useListing: (directory) => useListing(ctx, directory),
     wrapCrumb: ({ crumb, children }) => (
       <EntryContextMenu
-        ctx={ctx}
+        capabilities={ALL_ENTRY_CAPABILITIES}
         entry={{
           path: crumb.path,
           kind: crumb.kind === "file" ? "file" : "directory",
           surface: "crumb",
         }}
+        onAction={onAction}
+        platform={ctx.platform}
       >
         {children}
       </EntryContextMenu>
     ),
-    renderCrumbActions: ({ crumb }) => <CrumbActions ctx={ctx} path={crumb.path} />,
+    renderCrumbActions: ({ crumb }) => <CrumbActions ctx={ctx} onAction={onAction} path={crumb.path} />,
     renderRename: ({ crumb }) =>
       renaming ? (
         <InlineName

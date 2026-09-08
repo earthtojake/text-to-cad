@@ -6,6 +6,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = path.resolve(appRoot, '../..');
+// Playwright REQUIRES the first argument to be a destructuring pattern, and this
+// test drives Electron rather than a page, so it takes no fixture from it. The
+// empty pattern is the framework's contract, not an oversight.
+// eslint-disable-next-line no-empty-pattern
 test('CAD toolbar compacts to its scene and restores every tool on widening', async ({}, testInfo) => {
   test.setTimeout(120000);
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'hardcore-toolbar-'));

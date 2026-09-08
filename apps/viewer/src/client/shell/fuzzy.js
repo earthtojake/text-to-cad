@@ -1,9 +1,9 @@
 /**
- * Subsequence matching for the tree's `Filter files…` box.
+ * Subsequence matching for the shared file tree's `Filter files…` box.
  *
  * Not a general fuzzy matcher: the corpus is file paths, and the only thing a
  * person typing into that box wants is for `srexfs` to find
- * `src/main/explorer/fs.ts`. So the score rewards exactly what makes that
+ * `src/main/explorer/fs.ts` in the desktop app. So the score rewards exactly what makes that
  * work — matches on a path segment's first character, runs of consecutive
  * characters, and a match late in the path (the filename) over one early in it
  * (a directory nobody was thinking about).
@@ -11,12 +11,11 @@
  * Pure, and exported, because it is the part with edge cases worth a test.
  */
 
-export type FuzzyMatch = {
-  /** Higher is better. */
-  score: number;
-  /** Indices in the haystack that the needle matched, for highlighting. */
-  indices: number[];
-};
+/**
+ * @typedef {object} FuzzyMatch
+ * @property {number} score Higher is better.
+ * @property {number[]} indices Indices in the haystack the needle matched, for highlighting.
+ */
 
 const BOUNDARIES = new Set(["/", "-", "_", ".", " "]);
 
@@ -27,14 +26,20 @@ const BOUNDARIES = new Set(["/", "-", "_", ".", " "]);
  * a person means, and an optimal search over a 20 000-path corpus on every
  * keystroke is not worth the milliseconds.
  */
-export function fuzzyMatch(needle: string, haystack: string): FuzzyMatch | null {
+/**
+ * @param {string} needle
+ * @param {string} haystack
+ * @returns {FuzzyMatch|null}
+ */
+export function fuzzyMatch(needle, haystack) {
   if (needle === "") {
     return { score: 0, indices: [] };
   }
   const lowerNeedle = needle.toLowerCase();
   const lowerHaystack = haystack.toLowerCase();
 
-  const indices: number[] = [];
+  /** @type {number[]} */
+  const indices = [];
   let score = 0;
   let cursor = 0;
   let previousIndex = -2;
@@ -95,16 +100,19 @@ export function fuzzyMatch(needle: string, haystack: string): FuzzyMatch | null 
 }
 
 /** Rank `paths` against `query`, best first, capped at `limit`. */
-export function fuzzyFilter(
-  paths: readonly string[],
-  query: string,
-  limit = 300,
-): { path: string; indices: number[] }[] {
+/**
+ * @param {readonly string[]} paths
+ * @param {string} query
+ * @param {number} [limit]
+ * @returns {{ path: string, indices: number[] }[]}
+ */
+export function fuzzyFilter(paths, query, limit = 300) {
   const trimmed = query.trim();
   if (trimmed === "") {
     return paths.slice(0, limit).map((path) => ({ path, indices: [] }));
   }
-  const scored: { path: string; score: number; indices: number[] }[] = [];
+  /** @type {{ path: string, score: number, indices: number[] }[]} */
+  const scored = [];
   for (const path of paths) {
     const match = fuzzyMatch(trimmed, path);
     if (match) {

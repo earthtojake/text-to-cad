@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
-import { cn } from "@renderer/lib/utils";
+import { cn } from "@/ui/utils";
 
 /**
- * The field a name is typed into, in place: a rename over a row or a crumb,
- * a new file or folder in the tree.
+ * The field a name is typed into, in place: a rename over a tree row or a
+ * crumb, a new file or folder in the tree.
  *
  * Finder's rules. The stem is selected and the extension is not, because
  * renaming `bracket.step` is nearly always about `bracket`. Enter commits,
@@ -12,6 +12,20 @@ import { cn } from "@renderer/lib/utils";
  * half-typed name is a worse outcome than a rename the person can undo.
  * The commit hands the name to the caller and stays up until it answers,
  * so a refused name (a slash, a name already taken) is still there to fix.
+ *
+ * A host with no filesystem never draws one: `rename` and the two `New …`
+ * are capabilities (`entry-menu.js`), and a host without them has no item
+ * that starts a field.
+ *
+ * @param {object} props
+ * @param {string} props.initial
+ * @param {"file"|"directory"} props.kind
+ * @param {string} [props.placeholder]
+ * @param {string} [props.className]
+ * @param {(name: string) => Promise<boolean>} props.onCommit
+ *   Resolve true to close the field; false keeps it up with the value intact.
+ * @param {() => void} props.onCancel
+ * @param {string} [props.label]
  */
 export function InlineName({
   initial,
@@ -20,20 +34,11 @@ export function InlineName({
   className,
   onCommit,
   onCancel,
-  label = "Name",
-}: {
-  initial: string;
-  kind: "file" | "directory";
-  placeholder?: string;
-  className?: string;
-  /** Resolve true to close the field; false keeps it up with the value intact. */
-  onCommit: (name: string) => Promise<boolean>;
-  onCancel: () => void;
-  label?: string;
+  label = "Name"
 }) {
   const [value, setValue] = useState(initial);
   const [busy, setBusy] = useState(false);
-  const input = useRef<HTMLInputElement | null>(null);
+  const input = useRef(null);
   // Set by Escape before the blur it causes, so the blur does not commit.
   const cancelled = useRef(false);
   const done = useRef(false);
@@ -75,7 +80,7 @@ export function InlineName({
       className={cn(
         "h-5 min-w-0 flex-1 rounded-sm border border-ring bg-background px-1 text-[13px] text-foreground outline-none",
         busy && "opacity-60",
-        className,
+        className
       )}
       data-inline-name
       disabled={busy}

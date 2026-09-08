@@ -43,7 +43,7 @@ import {
 } from "@shared/types";
 import type { Project } from "@shared/types";
 
-import { EmptyState } from "./EmptyState";
+import { EmptyState } from "cad-viewer/shell";
 import { FileIcon } from "cad-viewer/shell";
 import { SHARED_EDITOR_OPTIONS, languageFor, monacoTheme } from "./monaco";
 import { setupMonaco } from "./monaco-setup";

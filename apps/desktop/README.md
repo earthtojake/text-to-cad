@@ -828,12 +828,12 @@ has read costs the menu nothing and the two never disagree.
 
 **The file crumb carries a `⋯`** immediately after its name ("File actions"),
 which opens the same entry menu the right-click does — one table
-(`entry-menu.ts`), one set of actions, drawn as a dropdown instead of a
+(`cad-viewer/shell`'s `entry-menu.js`), one set of actions, drawn as a dropdown instead of a
 context menu. A right-click is not a control anybody can see, and the file's
 own menu is the one worth pointing at.
 
 **Right-click a crumb or a tree row** for the entry menu
-(`entry-menu.ts` is the table, `entry-actions.ts` what each item does,
+(`cad-viewer/shell`'s `entry-menu.js` is the table, `entry-actions.ts` what each item does,
 `EntryContextMenu.tsx` draws one from the other; the tree has one menu over
 the whole list aimed at the row that was clicked, and the empty space under
 the rows is the root). A file: Open (tree rows only — a crumb is the open
@@ -861,7 +861,7 @@ folder are re-pointed or closed. `Open in terminal` on a folder is the one
 ### The panels a file has
 
 **One panel column, one list of panels, one open at a time**
-(`features/explorer/renderers/panels.ts`; the column is `FilePanel.tsx`).
+(`cad-viewer/shell`'s `panels.js`; the column is its `FilePanelColumn.jsx`).
 The list is what the open file's renderer declares plus the **file tree**,
 which is the last entry and not a special case; the nav row draws one icon
 button per entry with `aria-pressed`, highlighted while its panel is open,
