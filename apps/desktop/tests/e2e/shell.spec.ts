@@ -116,7 +116,7 @@ test("the sidebar's collapse is right after the traffic lights, open or shut", a
   await expect(header.getByRole("button", { name: "Toggle sidebar" })).toHaveCount(0);
   const [toggleBox, nameBox, openTitleBox] = await Promise.all([
     inSidebar.boundingBox(),
-    page.getByText("Hardcore", { exact: true }).boundingBox(),
+    page.getByRole("img", { name: "Hardcore" }).locator("visible=true").boundingBox(),
     header.locator("[data-session-title]").boundingBox(),
   ]);
   // In the title strip above the name, level with the session's bar.

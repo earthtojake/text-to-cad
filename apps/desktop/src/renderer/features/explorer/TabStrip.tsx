@@ -101,6 +101,21 @@ export function TabStrip() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const stripRef = useRef<HTMLDivElement | null>(null);
+  // Whether the row is longer than the pane. Only then does `+` hold tabs
+  // back, and only then is the fade to its left drawn — over a row that
+  // fits, the fade would dim the last tab's edge for nothing.
+  const [overflowing, setOverflowing] = useState(false);
+  useEffect(() => {
+    const element = stripRef.current;
+    if (!element) {
+      return;
+    }
+    const measure = () => setOverflowing(element.scrollWidth > element.clientWidth + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [tabs.length]);
 
   // A strip wider than the pane scrolls, and Cmd+5 selecting a tab that is
   // off the left edge would otherwise change the pane's contents with nothing
@@ -125,11 +140,11 @@ export function TabStrip() {
         padding nearest is half a tab beneath it.
       */}
       <div
-        className="no-scrollbar app-no-drag flex min-w-0 flex-1 scroll-pr-10 items-center overflow-x-auto"
+        className="no-scrollbar app-drag flex min-w-0 flex-1 scroll-pr-10 items-center overflow-x-auto"
         ref={stripRef}
       >
         {/* Only tabs are in the tablist; `+` is a control that follows it. */}
-        <div className="flex shrink-0 items-center gap-0.5" role="tablist">
+        <div className="app-no-drag flex shrink-0 items-center gap-0.5" role="tablist">
           {tabs.map((tab, index) => (
             <TabButton
               active={tab.id === activeId}
@@ -160,7 +175,12 @@ export function TabStrip() {
           than being cut off against a hard edge.
         */}
         <div
-          className="sticky right-0 z-10 flex shrink-0 items-center bg-background pr-0.5 pl-1 before:pointer-events-none before:absolute before:top-0 before:right-full before:h-full before:w-5 before:bg-gradient-to-r before:from-transparent before:to-background"
+          className={cn(
+            "app-no-drag sticky right-0 z-10 flex shrink-0 items-center bg-background pr-0.5 pl-1",
+            overflowing &&
+              "before:pointer-events-none before:absolute before:top-0 before:right-full before:h-full before:w-5 before:bg-gradient-to-r before:from-transparent before:to-background",
+          )}
+          data-overflowing={overflowing ? "true" : undefined}
           data-new-tab
         >
           <DropdownMenu>

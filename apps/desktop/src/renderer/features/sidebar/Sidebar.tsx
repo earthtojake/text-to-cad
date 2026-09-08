@@ -1,6 +1,8 @@
 import { CirclePlus, Search, Settings } from "lucide-react";
 import { cn } from "cn";
 
+import wordmarkDark from "../../../../resources/brand/hardcore-wordmark-dark@2x.png";
+import wordmarkLight from "../../../../resources/brand/hardcore-wordmark-light@2x.png";
 import { HistoryNav, SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
@@ -58,7 +60,10 @@ export function Sidebar() {
       </div>
 
       <header className="app-drag flex shrink-0 items-center gap-1 pt-0.5 pr-2 pb-1 pl-3">
-        <span className="app-no-drag truncate text-xl font-semibold tracking-tight">Hardcore</span>
+        {/* The wordmark (resources/brand, `npm run brand`): one image per
+            scheme, since the ink flips and the blue does not. */}
+        <img alt="Hardcore" className="app-no-drag h-[18px] w-auto select-none dark:hidden" draggable={false} src={wordmarkLight} />
+        <img alt="Hardcore" className="app-no-drag hidden h-[18px] w-auto select-none dark:block" draggable={false} src={wordmarkDark} />
         <div className="flex-1" />
         <Button
           aria-label="Search"
