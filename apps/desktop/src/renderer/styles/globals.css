@@ -352,10 +352,9 @@
 /* The wordmark, drawn live rather than as the PNG so it can move: JetBrains
  * Mono ExtraBold Italic (resources/brand/fonts, OFL), the ink over a copy in
  * the icon's blue offset down-right by 9% of the cap height — the same
- * geometry `scripts/make-brand.mjs` renders. The shadow is one span per
- * letter (features/sidebar/Wordmark.tsx); hovering runs each letter through
- * the neon palette on its own hue (`--h`), pace (`--t`) and phase (`--d`),
- * offset unchanged, ink still. `.reduce-motion` stills every animation. */
+ * geometry `scripts/make-brand.mjs` renders. Hovering runs the shadow through
+ * red, green and blue as one colour across the word, fast; the offset and the
+ * ink hold still. `.reduce-motion` stills every animation, this one too. */
 @font-face {
   font-family: "JetBrains Mono Brand";
   font-style: italic;
@@ -395,24 +394,15 @@
   z-index: 1;
 }
 
-.brand-wordmark-shadow > span {
-  display: inline-block;
+.brand-wordmark:hover .brand-wordmark-shadow {
+  animation: brand-rgb 0.24s steps(1, end) infinite;
 }
 
-.brand-wordmark:hover .brand-wordmark-shadow > span {
-  animation: brand-neon var(--t, 1.2s) steps(1, end) var(--d, 0s) infinite;
-  filter: hue-rotate(var(--h, 0deg));
-}
-
-/* Six neons before each letter's own hue turns them. */
-@keyframes brand-neon {
-  0% { color: #39ff14; }
-  17% { color: #ff2079; }
-  34% { color: #00f0ff; }
-  51% { color: #ffea00; }
-  68% { color: #bc13fe; }
-  85% { color: #ff6a00; }
-  100% { color: #39ff14; }
+@keyframes brand-rgb {
+  0% { color: #ff3b30; }
+  33% { color: #34c759; }
+  66% { color: #3b82f6; }
+  100% { color: #ff3b30; }
 }
 
 /* Scrollbars, thin and quiet. The transcript, the file tree and the settings
