@@ -1,9 +1,10 @@
 # Embedding the file view
 
 `<CadFileView>` is the CAD Viewer's per-file surface — the render pane, the
-floating toolbar, the right-hand file sheets (STEP, mesh, URDF/SRDF/SDF, DXF),
-the theme editor panel, the loading overlay, the status toasts and the alert
-dialog — for exactly one file. The standalone viewer's shell
+floating toolbar, the file sheets (STEP, mesh, URDF/SRDF/SDF, DXF), the theme
+editor panel, the loading overlay, the status toasts and the alert dialog —
+for exactly one file. The panels are drawn in a right-hand column of its own,
+or in the host's ("Where the panels are drawn"). The standalone viewer's shell
 (`src/client/components/CadWorkspace.js`) is one consumer; a host application
 (the desktop app's explorer tab) is the other. There is one implementation.
 
@@ -33,9 +34,10 @@ a build error or, worse, a silently unstyled surface.
 | `manageDocumentTitle` | `true` | Whether the surface writes `document.title`. Pass `false` from a host that owns its own window. |
 | `renderTopBar` / `renderSidebar` / `renderHome` | `null` | Render slots for injected chrome; each is called with the `chrome` object and placed in the surface's layout. Omit all three for a bare file surface. Without `renderSidebar` there is no sidebar and the viewport owns the full width. |
 | `layout` | `"auto"` | `"desktop"` pins the desktop layout — the file sheet is a column beside the model, never a drawer over it — however narrow the root is. `"auto"` measures the root and picks desktop or compact. |
-| `fileSheetWidth` | `null` | The sheet's width in px, when the host sizes it for its pane. Clamped to the sheet's own range (240–448) and not resizable from inside the surface. `null` uses the stored width. |
+| `fileSheetWidth` | `null` | The sheet's width in px, when the host sizes it for its pane. Clamped to the sheet's own range (240–448) and not resizable from inside the surface. `null` uses the stored width. Ignored when `panelSlot` is given — the host's frame owns the width then. |
+| `panelSlot` | `null` | A DOM element the open panel's content is drawn into. Given one, the surface portals the theme editor or the file sheet there and draws no column of its own; without one it draws the column, which is the standalone case. See "Where the panels are drawn". |
 | `sceneBackground` | `null` | A hex colour to paint the scene on instead of the theme's own backdrop, so the model sits on the host's ground; lights, grid, floor and materials are the theme's. |
-| `colorScheme` | `null` | `"light"` or `"dark"`: the host's resolved theme. The CAD "system" preset resolves the same way and the surface stops writing `.dark` / `color-scheme` to the document — the host owns those. `null` is the standalone case: the surface follows the OS and writes the document itself. |
+| `colorScheme` | `null` | `"light"` or `"dark"`: the host's resolved colour scheme, which is the chrome's light/dark. The CAD "system" preset resolves the same way and the surface stops writing `.dark` / `color-scheme` to the document — the host owns those. `null` is the standalone case: the surface follows its own colour-scheme preference and the OS, and writes the document itself. Never the CAD theme, in either case: see "Theme is the scene". |
 | `selectReference` | `null` | `{ selector, key }`: select a reference — `o1.2`, `label.f45`, `bracket`, a comma-separated list (its first member) — once the model is up. Applied once per `key`; a new `key` selects again. See "References and captures". |
 | `onReference` | `null` | `({ file, selector, text }) => void`. Called for every reference the person copies out of the surface, beside the clipboard write. `null` (standalone) means the clipboard alone. |
 | `onCapture` | `null` | `({ blob, file }) => void`. Given, the floating toolbar shows a camera button that renders the viewport to a PNG and hands it over; `null` shows no button. |
@@ -140,7 +142,9 @@ open. Four props make that possible:
   hear what the surface opened with (a STEP file opens with its sheet up, at a
   width the surface decides), echo that back, and be controlling from then on.
   That is one report on mount, not a copy of the default over on the host's
-  side. It is how the desktop app's CAD tab starts.
+  side. A host with a default of its own — the desktop app decides which of
+  its panels a CAD tab opens with — passes booleans from the first render
+  instead, and never sees the surface's.
 - **The callback fires on every change**, including the changes the surface
   makes itself: opening the sheet reports `themeEditing` false as well as
   `fileSheetOpen` true, and the sheet opens on its own when a measurement
@@ -156,6 +160,71 @@ open. Four props make that possible:
 A host that ignores its own callback is a host whose toggle does nothing —
 the usual bargain of a controlled component. The rule and the resolution live
 in `hostPanels.js`, which is pure and tested (`hostPanels.test.js`).
+
+## Where the panels are drawn
+
+Standalone, the surface draws the column those panels sit in: a width, a
+border, a resize handle, and an inset on the 3D viewport. A host application
+usually has panels of its own beside them — a file tree, an outline — and two
+columns of two designs, each with its own width and its own header, is the
+first thing a person notices. So a host may hand over the box:
+
+```jsx
+const [slot, setSlot] = useState(null);
+
+<aside className="w-72 border-l">     {/* the host's frame: one width, one border */}
+  <div className="h-full" ref={setSlot} />
+</aside>
+
+<CadFileView panelSlot={slot} … />
+```
+
+- **With a slot**, the open panel's content is portaled into it and the
+  surface draws no column at all: no aside, no width, no resize handle, no
+  drawer in compact mode, and no inset on the viewport — the render pane is
+  the whole surface, and the host's pane is what got narrower. The host's
+  frame is the only frame, so the panel looks like the host's own chrome.
+- **Without one** — `null`, or a ref that has not attached yet — nothing
+  changes: the surface draws its column exactly as before.
+- **The slot does not decide what is open.** `themeEditing` and
+  `fileSheetOpen` still do, and the exclusivity between the two still holds.
+  A host that keeps one open panel across its own panels and the surface's
+  gets the whole rule for free: at most one of the two props is ever true.
+- **Give the slot a box to fill.** The content lays itself out as a flex
+  column filling its parent; a slot with no height shows nothing.
+- Popovers, menus and toasts still portal to `body` — they are overlays, not
+  panels.
+
+The desktop app does exactly this: its file tab has one panel column and one
+list of panels — the file tree, the theme editor, the file sheet — with one
+toggle each, and the surface's two are drawn in that column.
+
+`normalizeHostPanelSlot` / `resolveHostPanelPlacement` in `hostPanelSlot.js`
+are the pure half, tested in `hostPanelSlot.test.js`.
+
+## Theme is the scene
+
+A CAD theme paints the **scene** and nothing else: the background, the
+lighting rig, the materials, the linework, the floor and its grid, the
+projection. It does not paint chrome — not the panels, not the toolbars, not
+the document's light/dark.
+
+That used to be false. The theme's dominant background luminance was read as
+a "scene tone" and written onto `documentElement`, so opening a file under a
+dark preset repainted every panel and menu on the page, and a light window
+over a dark studio was not a thing you could have. The chrome now follows the
+app: `colorScheme` when a host passes one, and otherwise the viewer's own
+colour-scheme preference resolved against `prefers-color-scheme` — which is
+the pair the pre-paint script in `index.html` already used, so the first frame
+and every later one agree.
+
+What a theme still reaches, in a host as well as standalone:
+
+- everything in the scene, including `sceneBackground` when a host asks for
+  its own ground under the model;
+- which colour bucket the theme editor writes to, for a theme whose
+  `colorMode` is `"system"`: that follows the app's colour scheme, so editing
+  a colour in a light window edits the light one.
 
 ## What the consumer's bundler needs
 
@@ -209,10 +278,13 @@ server: { fs: { allow: [repoRoot] } },
 
 ### 3. Peer dependencies
 
-The whole `./file-view` closure (113 modules) reaches exactly these packages:
+The whole `./file-view` closure reaches exactly these packages:
 
-`react`, `three`, `radix-ui`, `lucide-react`, `class-variance-authority`,
-`clsx`, `tailwind-merge`, and `cadgen-js`.
+`react`, `react-dom`, `three`, `radix-ui`, `lucide-react`,
+`class-variance-authority`, `clsx`, `tailwind-merge`, and `cadgen-js`.
+
+`react-dom` is there for `createPortal`: a panel drawn into a host's
+`panelSlot`, and a compact-mode drawer, are both portals.
 
 Keep `three` on a single copy — `0.185.1`, the version this package and
 the cadgen-js runtime both pin. Two copies of three.js in one bundle is a
@@ -294,7 +366,9 @@ narrow pane with no viewport at all. Two more things follow for a host:
   the scene as a plain resize of the canvas. The standalone shell gives the
   root the whole viewport (`h-svh`), a host gives it `h-full min-h-0` (the
   `min-h-0` beats the sidebar wrapper's own `min-h-svh`).
-- Compact mode's file sheet is a drawer. Standalone it portals to `body`,
+- Compact mode's file sheet is a drawer — when the surface is drawing the
+  panel at all. With a `panelSlot` there is no drawer and no breakpoint for
+  one: the host's column is the panel at every width. Standalone it portals to `body`,
   modal, and closes on an outside click, as a drawer should. Embedded it
   portals into the surface's root instead (`FileSheetPortalContext`, set by
   `<CadFileView>` itself), is not modal — a modal dialog would make the rest of
@@ -307,23 +381,25 @@ narrow pane with no viewport at all. Two more things follow for a host:
   beside it, and asks for its backend's store by origin.
 - A host whose pane can be narrower than the compact breakpoint but still
   wants the sheet beside the model — a review pane in a three-column window —
-  passes `layout="desktop"` and sizes the sheet itself with `fileSheetWidth`.
-  The desktop app does exactly this: the sheet is `clamp(36% of the pane,
-  240, 365)`, and the app's own file tree hides itself for a CAD tab in a pane
-  too narrow to hold both. The surface still measures its root for everything
-  else (the viewport, the toolbar), so the pinned layout is never wider than
-  the pane.
+  passes `layout="desktop"`, and either sizes the sheet itself with
+  `fileSheetWidth` or draws the frame itself with `panelSlot`. The desktop app
+  passes `layout="desktop"` and a `panelSlot`: its file tab has one panel
+  column, so the sheet's width is that column's and nothing is ever a drawer
+  over the model. The surface still measures its root for everything else
+  (the viewport, the toolbar), so the pinned layout is never wider than the
+  pane.
 
 ## Known consequences of embedding
 
 - **The surface writes to `document.documentElement`** — unless the host
-  passes `colorScheme`. Standalone, the active CAD theme decides light/dark and
-  the surface applies it to the root element (`.dark`, `data-theme`,
-  `data-theme-preference`, `style.color-scheme`), because the viewer's own
-  popovers and toolbars portal out of the surface and read them there. With
-  `colorScheme` the direction reverses: the host's theme resolves the CAD
-  "system" preset and the surface writes nothing to the root. A host that did
-  not pass it would find a STEP file flipping its whole window light.
+  passes `colorScheme`. Standalone, the viewer's colour-scheme preference and
+  the OS decide light/dark and the surface applies it to the root element
+  (`.dark`, `data-theme`, `data-theme-preference`, `style.color-scheme`),
+  because the viewer's own popovers and toolbars portal out of the surface and
+  read them there. With `colorScheme` the direction reverses: the host's
+  scheme resolves the CAD "system" preset and the surface writes nothing to
+  the root. The CAD theme is not part of this in either case ("Theme is the
+  scene").
 - **One tessellation cache provider per page.** `setTessellationCacheProvider`
   in `cadgen-js` is a module singleton, so a page showing two backends at once
   shares one provider. Register it with the origin you care about:
@@ -331,4 +407,5 @@ narrow pane with no viewport at all. Two more things follow for a host:
 - **Session state is namespaced by `origin`**, so two backends' per-file session
   state (open sections, pose, camera) cannot collide in one `localStorage`.
 - **Theme choice is global**, shared by every surface on the page — it is a user
-  preference, not a property of a file.
+  preference, not a property of a file. So is the colour scheme, and they are
+  two preferences, not one: a page may be light with a dark scene in it.

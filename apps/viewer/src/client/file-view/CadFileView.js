@@ -40,7 +40,7 @@ import {
 } from "../components/workbench/DxfSettingsSection";
 import { buildDxfLayersTab } from "../components/workbench/DxfLayersSection";
 import StepFileSheet from "../components/workbench/StepFileSheet";
-import { FileSheetPortalContext } from "../components/workbench/FileSheet";
+import { FileSheetPortalContext, HostPanelSlotContext } from "../components/workbench/FileSheet";
 import { poseValuesForPreset } from "../components/workbench/PoseControlsSection";
 import StatusToast from "../components/workbench/StatusToast";
 import UrdfFileSheet from "../components/workbench/UrdfFileSheet";
@@ -64,12 +64,14 @@ import { useCadWorkspaceShortcuts } from "../components/workbench/hooks/useCadWo
 import {
   applyColorSchemeToDocument,
   DARK_COLOR_SCHEME_ID,
-  LIGHT_COLOR_SCHEME_ID
+  LIGHT_COLOR_SCHEME_ID,
+  readColorSchemePreference,
+  resolveColorSchemeMode
 } from "@/ui/colorScheme";
+import { useSystemPrefersDark } from "@/ui/useSystemPrefersDark";
 import {
   CUSTOM_THEME_ID,
   getThemePresetIdForSettings,
-  inferThemeSettingsSceneTone,
   normalizeThemeSettings,
   resolveThemeSettingsForColorMode
 } from "cadgen-js/lib/themeSettings";
@@ -294,6 +296,7 @@ import {
   nextPanelState,
   resolveHostPanelOpen
 } from "./hostPanels.js";
+import { resolveHostPanelPlacement } from "./hostPanelSlot.js";
 import { HostReferenceContext, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
 import {
   copyTargetsForFileAccessAsset,
@@ -374,6 +377,7 @@ export default function CadFileView({
   renderHome = null,
   layout = "auto",
   fileSheetWidth = null,
+  panelSlot = null,
   colorScheme = null,
   sceneBackground = null,
   selectReference = null,
@@ -407,6 +411,7 @@ export default function CadFileView({
         renderHome={renderHome}
         layout={layout}
         fileSheetWidth={fileSheetWidth}
+        panelSlot={panelSlot}
         colorScheme={colorScheme}
         sceneBackground={sceneBackground}
         selectReference={selectReference}
@@ -434,6 +439,7 @@ function CadFileViewSurface({
   renderHome,
   layout,
   fileSheetWidth,
+  panelSlot,
   colorScheme,
   sceneBackground,
   selectReference,
@@ -451,12 +457,33 @@ function CadFileViewSurface({
   // the viewport and whose theme is its own.
   const hostLayoutMode = resolveHostLayoutMode(layout);
   const hostSheetWidth = normalizeHostSheetWidth(fileSheetWidth);
+  // Where the open panel is drawn: the host's own panel column when it hands
+  // one over, else the column this surface draws (hostPanelSlot.js).
+  const { slot: hostPanelSlot, drawsOwnColumn: drawsOwnPanelColumn } = resolveHostPanelPlacement(panelSlot);
   const hostPrefersDark = hostPrefersDarkForColorScheme(colorScheme);
   const hostSceneBackground = normalizeHostSceneBackground(sceneBackground);
-  const themeReadOptions = useMemo(
-    () => (hostPrefersDark === null ? {} : { prefersDark: hostPrefersDark }),
-    [hostPrefersDark]
-  );
+  /*
+    The app's light/dark — the CHROME's, and only ever the chrome's.
+
+    The host's when it passes one; otherwise this app's own colour-scheme
+    preference resolved against the OS, which is the pair `index.html` paints
+    the first frame from, so React no longer repaints what the document
+    already says. The CAD theme has no vote here: it paints the scene —
+    background, lighting, materials, edges, grid, projection — and a dark
+    studio inside a light window is a legal picture. The theme used to decide
+    this, by the luminance of its own backdrop, so opening a cinematic STEP
+    turned every panel, toolbar and menu around it dark and there was no way
+    to have one without the other.
+  */
+  const systemPrefersDark = useSystemPrefersDark();
+  const [colorSchemePreference, setColorSchemePreference] = useState(readColorSchemePreference);
+  const resolvedColorSchemeMode = hostPrefersDark === null
+    ? resolveColorSchemeMode(colorSchemePreference, { prefersDark: systemPrefersDark })
+    : (hostPrefersDark ? DARK_COLOR_SCHEME_ID : LIGHT_COLOR_SCHEME_ID);
+  const uiPrefersDark = resolvedColorSchemeMode === DARK_COLOR_SCHEME_ID;
+  // The CAD "system" PRESET resolves against that same answer, in a host and
+  // standalone alike: "the light one when the app is light".
+  const themeReadOptions = useMemo(() => ({ prefersDark: uiPrefersDark }), [uiPrefersDark]);
   // The catalog comes from the host when it already has one (the standalone app
   // subscribes in main.jsx and hands it down), and otherwise straight from this
   // origin's store — so an embedded surface needs nothing but `origin` and
@@ -636,8 +663,11 @@ function CadFileViewSurface({
   const drawingGeometryCacheRef = useRef(new Map());
   const [drawingGeometry, setDrawingGeometry] = useState(null);
   const resolvedThemeSettings = useMemo(() => {
+    // `colorMode: "system"` in a theme means "follow the app", which is the
+    // app's colour scheme — not `hostPrefersDark === true`, which read as
+    // light on every standalone page whatever the OS said.
     const resolved = resolveThemeSettingsForColorMode(themeSettings, {
-      prefersDark: hostPrefersDark === true
+      prefersDark: uiPrefersDark
     });
     if (!hostSceneBackground) {
       return resolved;
@@ -649,7 +679,7 @@ function CadFileViewSurface({
       ...resolved,
       background: { ...(resolved.background || {}), type: "solid", solidColor: hostSceneBackground }
     };
-  }, [hostPrefersDark, hostSceneBackground, themeSettings]);
+  }, [hostSceneBackground, themeSettings, uiPrefersDark]);
   const resolvedDisplayEdgeSettings = useMemo(() => {
     // Edge theme — colour, opacity, thickness — is fixed, not a user
     // setting. It comes from the cadgen-js defaults, or from a theme that styles its
@@ -665,12 +695,6 @@ function CadFileViewSurface({
     }
     return normalizeDisplayEdgeSettings();
   }, [resolvedThemeSettings]);
-  // App light/dark is inferred from the active theme's dominant background
-  // color (not a user preference), so the chrome beside a dark scene is dark.
-  const sceneTone = useMemo(() => inferThemeSettingsSceneTone(resolvedThemeSettings), [resolvedThemeSettings]);
-  const resolvedColorSchemeMode = sceneTone === "dark"
-    ? DARK_COLOR_SCHEME_ID
-    : LIGHT_COLOR_SCHEME_ID;
   const updateDisplaySettings = useCallback((nextValue) => {
     setDisplaySettings((current) => normalizeDisplaySettings(
       typeof nextValue === "function" ? nextValue(current) : nextValue
@@ -2228,7 +2252,12 @@ function CadFileViewSurface({
   // The file sheet and the theme sidebar are the same right-hand panel with
   // different contents: one open flag, one width, one resize handle, one inset
   // on the 3D viewport. Anything that sizes or offsets the panel uses this.
-  const desktopRightPanelOpen = isDesktop && !previewMode && (
+  //
+  // A host that owns the frame (`panelSlot`) makes this false whatever is
+  // open: the panel is drawn in the host's column, so there is nothing here
+  // to size, to resize or to inset the viewport by — the viewport is the
+  // whole surface and the host's pane is what got narrower.
+  const desktopRightPanelOpen = drawsOwnPanelColumn && isDesktop && !previewMode && (
     themeEditing ||
     (tabToolsOpen && !!selectedFileSheetKind && selectedFileSheetHasSections)
   );
@@ -2589,7 +2618,10 @@ function CadFileViewSurface({
     setFileSheetWidthIsCustom,
     tabToolsWidth
   ]);
-  const fileSheetResizeHandler = hostSheetWidth == null ? handleStartFileSheetResize : null;
+  // No handle when the width is not this surface's to change: pinned by the
+  // host (`fileSheetWidth`), or drawn in the host's own frame (`panelSlot`),
+  // which carries its own.
+  const fileSheetResizeHandler = hostSheetWidth == null && drawsOwnPanelColumn ? handleStartFileSheetResize : null;
 
   const resetSelectionForStepUpdate = useCallback(() => {
     selectedPartIdsRef.current = [];
@@ -3196,18 +3228,30 @@ function CadFileViewSurface({
   }, [flushActiveFileSession]);
 
   useEffect(() => {
-    // Embedded, the host's theme drives the document and the CAD theme
-    // follows it (through `colorScheme`), not the other way round.
+    // Embedded, the host owns the document: it passed `colorScheme`, and its
+    // own design system paints the chrome. Standalone the surface writes the
+    // app's colour-scheme preference — the preference and the OS, never the
+    // theme.
     if (hostPrefersDark !== null) {
       return;
     }
-    applyColorSchemeToDocument(resolvedColorSchemeMode, document.documentElement);
-  }, [hostPrefersDark, resolvedColorSchemeMode]);
+    applyColorSchemeToDocument(colorSchemePreference, document.documentElement, {
+      prefersDark: systemPrefersDark
+    });
+  }, [colorSchemePreference, hostPrefersDark, systemPrefersDark]);
 
   useEffect(() => {
     const handleStorage = (event) => {
       const action = cadDirectoryStorageEventAction(event.key);
       if (action === CAD_DIRECTORY_STORAGE_EVENT_ACTION.IGNORE) {
+        return;
+      }
+      // The colour scheme is the chrome's and the theme is the scene's, so
+      // the two are read back separately — a tab that changed the scheme has
+      // not touched the theme, and a tab that changed the theme must not
+      // repaint this one's chrome.
+      if (action === CAD_DIRECTORY_STORAGE_EVENT_ACTION.COLOR_SCHEME) {
+        setColorSchemePreference(readColorSchemePreference());
         return;
       }
       try {
@@ -6683,6 +6727,7 @@ function CadFileViewSurface({
   };
 
   return (
+    <HostPanelSlotContext.Provider value={hostPanelSlot}>
     <FileSheetPortalContext.Provider value={hostElement}>
     <HostReferenceContext.Provider value={hostReference}>
     <SidebarProvider
@@ -7092,5 +7137,6 @@ function CadFileViewSurface({
     </SidebarProvider>
     </HostReferenceContext.Provider>
     </FileSheetPortalContext.Provider>
+    </HostPanelSlotContext.Provider>
   );
 }

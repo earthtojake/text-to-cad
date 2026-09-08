@@ -1429,88 +1429,72 @@ export const THEME_PRESETS = Object.freeze([
   {
     id: "workbench-light",
     label: "Light",
-    description: "Balanced CAD workbench lighting on a light canvas.",
     preview: {
       background: "#f0f4f9",
-      modelColor: "#b6c4ce",
-      accentColor: "#4ea7d8"
+      modelColor: "#b6c4ce"
     },
     settings: WORKBENCH_LIGHT_THEME_PRESET_SETTINGS
   },
   {
     id: "workbench-dark",
     label: "Dark",
-    description: "Balanced CAD workbench lighting on a deep blue-slate canvas.",
     preview: {
       background: "#181f28",
-      modelColor: "#b6c4ce",
-      accentColor: "#4ea7d8"
+      modelColor: "#b6c4ce"
     },
     settings: WORKBENCH_DARK_THEME_PRESET_SETTINGS
   },
   {
     id: "cinematic",
     label: "Cinematic",
-    description: "Filmic studio stage with warm key lighting, copper accents, and a glossy charcoal floor.",
     preview: {
       background: "radial-gradient(circle at 42% 32%, #23242a 0%, #0a0a0d 78%)",
-      modelColor: "#c9c2bb",
-      accentColor: "#c98d55"
+      modelColor: "#c9c2bb"
     },
     settings: CINEMATIC_STUDIO_THEME_PRESET_SETTINGS
   },
   {
     id: "vibrant",
     label: "Vibrant",
-    description: "Bright studio cove with punchy color and photoreal reflections.",
     preview: {
       background: "radial-gradient(circle at 42% 32%, #ffffff 0%, #dbe0e7 78%)",
-      modelColor: "#3b82f6",
-      accentColor: "#f97352"
+      modelColor: "#3b82f6"
     },
     settings: VIBRANT_STUDIO_THEME_PRESET_SETTINGS
   },
   {
     id: "blue",
     label: "Blue",
-    description: "Single cyan fill on a deep-navy stage with cyan rim lighting.",
     preview: {
       background: BLUE_FILL_COLORS[0],
-      modelColor: BLUE_FILL_COLORS[0],
-      accentColor: BLUE_FILL_COLORS[0]
+      modelColor: BLUE_FILL_COLORS[0]
     },
     settings: BLUE_THEME_PRESET_SETTINGS
   },
   {
     id: "pink",
     label: "Magenta",
-    description: "Saturated magenta fill on a near-black stage with magenta rim glow.",
     preview: {
       background: MAGENTA_FILL_COLORS[0],
-      modelColor: MAGENTA_FILL_COLORS[0],
-      accentColor: MAGENTA_FILL_COLORS[0]
+      modelColor: MAGENTA_FILL_COLORS[0]
     },
     settings: PINK_THEME_PRESET_SETTINGS
   },
   {
     id: "clay-sunrise",
     label: "Clay",
-    description: "Warm clay fill on a satin terracotta stage with golden-hour light.",
     preview: {
       background: CLAY_FILL_COLORS[0],
-      modelColor: CLAY_FILL_COLORS[0],
-      accentColor: CLAY_FILL_COLORS[0]
+      modelColor: CLAY_FILL_COLORS[0]
     },
     settings: CLAY_SUNRISE_THEME_PRESET_SETTINGS
   },
   {
     id: "terminal",
     label: "Terminal",
-    description: "Phosphor-green linework on a glossy black stage with a green grid floor.",
     preview: {
       background: TERMINAL_FILL_COLORS[0],
-      modelColor: TERMINAL_FILL_COLORS[0],
-      accentColor: TERMINAL_FILL_COLORS[0]
+      modelColor: TERMINAL_FILL_COLORS[0]
     },
     settings: TERMINAL_THEME_PRESET_SETTINGS
   }
@@ -1547,11 +1531,9 @@ const SNAPSHOT_THEME_SETTINGS = Object.freeze({
 const SNAPSHOT_THEME_PRESET = Object.freeze({
   id: SNAPSHOT_THEME_ID,
   label: "Snapshot",
-  description: "Workbench Light with the grid and origin axis removed, for headless renders.",
   preview: {
     background: "#f0f4f9",
-    modelColor: "#b6c4ce",
-    accentColor: "#4ea7d8"
+    modelColor: "#b6c4ce"
   },
   settings: SNAPSHOT_THEME_SETTINGS
 });
@@ -1933,34 +1915,6 @@ export function resolveThemeSettingsForColorMode(themeSettings = {}, options = {
 export function themeSettingsSupportsSystemColorMode(themeSettings = {}) {
   const normalized = normalizeThemeSettings(themeSettings);
   return normalized.colorMode === THEME_COLOR_MODES.SYSTEM;
-}
-
-// The dominant background color drives the app's light/dark chrome, because the
-// nav/sidebars float over the (transparent) viewport: their contrast depends on
-// what is behind them, not on the floor or fills.
-function dominantBackgroundLuminance(themeSettings = {}) {
-  const background = themeSettings.background || {};
-  const type = background.type || "solid";
-  const fallback =
-    DEFAULT_THEME_SETTINGS?.background?.solidColor || "#ffffff";
-  if (type === "linear") {
-    return (
-      relativeLuminance(background.linearStart, fallback) +
-      relativeLuminance(background.linearEnd, fallback)
-    ) / 2;
-  }
-  if (type === "radial") {
-    return (
-      relativeLuminance(background.radialInner, fallback) +
-      relativeLuminance(background.radialOuter, fallback)
-    ) / 2;
-  }
-  return relativeLuminance(background.solidColor, fallback);
-}
-
-export function inferThemeSettingsSceneTone(themeSettings, options = {}) {
-  const normalized = resolveThemeSettingsForColorMode(themeSettings, options);
-  return dominantBackgroundLuminance(normalized) >= 0.3 ? "light" : "dark";
 }
 
 export function getEnvironmentPresetById(presetId) {
