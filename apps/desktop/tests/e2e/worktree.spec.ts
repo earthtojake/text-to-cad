@@ -34,7 +34,7 @@ declare const window: {
         name?: string;
       }): Promise<{ id: string; cwd: string; branch?: string; worktreePath?: string }>;
       prompt(request: { id: string; content: { type: "text"; text: string }[] }): Promise<{ stopReason: string }>;
-      state(input: { id: string }): Promise<{ turns: Array<{ role: string; parts: Array<Record<string, unknown>> }> } | null>;
+      state(input: { id: string }): Promise<{ state: { turns: Array<{ role: string; parts: Array<Record<string, unknown>> }> }; live: boolean } | null>;
     };
   };
 };
@@ -122,7 +122,7 @@ test("an agent in a worktree opens the file it wrote there, and the explorer roo
   // The tool call completed — the bridge accepted the path, which is outside
   // the project directory and inside the session's worktree.
   const state = await page.evaluate((id) => window.hardcore.sessions.state({ id }), session.id);
-  const parts = state?.turns.flatMap((turn) => turn.parts) ?? [];
+  const parts = state?.state.turns.flatMap((turn) => turn.parts) ?? [];
   const openFile = parts.find((part) => part.type === "tool_call" && /open_file/.test(String(part.title))) as
     | { status: string; output: unknown }
     | undefined;

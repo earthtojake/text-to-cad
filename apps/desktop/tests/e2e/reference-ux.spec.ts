@@ -106,14 +106,14 @@ test("viewer context and revision requests stay with the right draft and workspa
     await expect(preview).toHaveCount(0);
     await expect(enlarge).toBeFocused();
     const unsent = await page.evaluate((id) => window.hardcore.sessions.state({ id }), session.id);
-    expect(unsent?.turns).toHaveLength(0);
+    expect(unsent?.state.turns).toHaveLength(0);
     await draft.press("Enter");
     await expect.poll(async () => {
       const state = await page.evaluate((id) => window.hardcore.sessions.state({ id }), session.id);
-      return state?.turns.find((turn) => turn.role === "user")?.parts.find((part) => part.type === "text");
+      return state?.state.turns.find((turn) => turn.role === "user")?.parts.find((part) => part.type === "text");
     }).toMatchObject({ type: "text", text: `Make this wheel wider: ${token}` });
     const submitted = await page.evaluate((id) => window.hardcore.sessions.state({ id }), session.id);
-    expect(submitted?.turns.find((turn) => turn.role === "user")?.parts.some((part) => part.type === "image")).toBe(true);
+    expect(submitted?.state.turns.find((turn) => turn.role === "user")?.parts.some((part) => part.type === "image")).toBe(true);
     await page.getByRole("button", { name: "New tab", exact: true }).click();
     await page.getByRole("menuitem", { name: "Review", exact: false }).click();
     const revision = page.getByRole("button", { name: "Request revision for models/car.py", exact: true });
@@ -151,7 +151,7 @@ test("viewer context and revision requests stay with the right draft and workspa
     const sessions = await page.evaluate((projectId) => window.hardcore.sessions.list({ projectId }), added.id);
     const created = sessions.find((item) => item.id !== session.id && item.id !== other.id);
     expect(created?.cwd).toBe(project);
-    expect((await page.evaluate((id) => window.hardcore.sessions.state({ id }), created!.id))?.turns).toHaveLength(0);
+    expect((await page.evaluate((id) => window.hardcore.sessions.state({ id }), created!.id))?.state.turns).toHaveLength(0);
     await page.screenshot({ path: test.info().outputPath("view-in-correct-workspace.png"), animations: "disabled" });
     await page.locator("[data-composer]").getByRole("button", { name: "Remove", exact: true }).click();
     await expect(page.getByRole("button", { name: /^Enlarge car-/ })).toHaveCount(0);

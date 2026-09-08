@@ -7,6 +7,8 @@
  *   node tests/fake-agent/index.mjs --fixture <file.jsonl> replay a recording
  *   node tests/fake-agent/index.mjs --mode-option           modes as a `mode`
  *                                                          config option
+ *   node tests/fake-agent/index.mjs --load-delay 1200       hold session/load
+ *                                                          for that long
  *
  * `--mode-option` is the second shape ACP allows for the same thing: the
  * session answers with **no** `modes` and a `mode`-category select config
@@ -117,6 +119,17 @@ const fixturePath = args.includes("--fixture") ? args[args.indexOf("--fixture") 
 const fixture = fixturePath ? loadFixture(fixturePath) : null;
 /** Codex's shape: no `modes`, a `mode` config option carrying the same list. */
 const modeAsOption = args.includes("--mode-option");
+
+/**
+ * How long `session/load` takes to answer. Zero by default — the fake agent
+ * is instant, which is the point of it everywhere else — but a real adapter
+ * spends one to one and a half seconds replaying a transcript (README,
+ * "Opening a session"), and the state a session is in for that second and a
+ * half is the thing `reconnect.spec.ts` is about: its transcript painted
+ * from the snapshot with `Reconnecting…` under it. Instant, there is nothing
+ * to look at.
+ */
+const loadDelayMs = args.includes("--load-delay") ? Number(args[args.indexOf("--load-delay") + 1]) : 0;
 
 const stream = ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin));
 
@@ -263,6 +276,9 @@ new AgentSideConnection((conn) => ({
 
   async loadSession(params) {
     record("session/load", params);
+    if (loadDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, loadDelayMs));
+    }
     if (fixture?.load) {
       await replay(conn, fixture.load.frames, params.sessionId);
       return fixture.load.response ?? {};

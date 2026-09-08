@@ -44,7 +44,7 @@ for (const agentId of ["codex", "claude-code"]) {
         fs.copyFileSync(path.join(appRoot, "skills/hardcore-app-use/SKILL.md"), path.join(skills, "SKILL.md"));
       }
       const state = await page.evaluate((id) => window.hardcore.sessions.state({ id }), session.id);
-      const model = state?.configOptions.find((option) => option.id === "model" && option.type === "select");
+      const model = state?.state.configOptions.find((option) => option.id === "model" && option.type === "select");
       if (model?.type === "select") {
         const choice = model.options.find((option) => /sonnet|gpt-5\.4/.test(option.value));
         if (choice) await page.evaluate(({ id, value }) => window.hardcore.sessions.setConfigOption({ id, configId: "model", value }), { id: session.id, value: choice.value });
