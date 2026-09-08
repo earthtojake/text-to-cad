@@ -11,7 +11,12 @@ import path from "node:path";
 
 import { z } from "zod";
 
-import { ConfigOptionSchema, type ConfigOption } from "../../shared/acp/types";
+import {
+  ConfigOptionSchema,
+  SessionModeSchema,
+  type ConfigOption,
+  type SessionMode,
+} from "../../shared/acp/types";
 import type { AgentOptions } from "../../shared/ipc/agent-options";
 import {
   ExplorerTabSchema,
@@ -222,9 +227,11 @@ export const sessions = {
 type AgentOptionsRow = {
   agent_id: string;
   options: string | null;
+  modes: string | null;
   options_at: number | null;
   default_model: string | null;
   default_effort: string | null;
+  default_mode: string | null;
 };
 
 /**
@@ -235,16 +242,20 @@ type AgentOptionsRow = {
  */
 const toAgentOptions = (row: AgentOptionsRow): AgentOptions => {
   const parsed = z.array(ConfigOptionSchema).safeParse(safeJson(row.options ?? "null"));
+  const modes = z.array(SessionModeSchema).safeParse(safeJson(row.modes ?? "null"));
   return {
     agentId: row.agent_id,
     options: parsed.success ? parsed.data : [],
+    modes: modes.success ? modes.data : [],
     updatedAt: parsed.success ? row.options_at : null,
     defaultModel: row.default_model,
     defaultEffort: row.default_effort,
+    defaultMode: row.default_mode,
   };
 };
 
-const AGENT_OPTIONS_COLUMNS = "agent_id, options, options_at, default_model, default_effort";
+const AGENT_OPTIONS_COLUMNS =
+  "agent_id, options, modes, options_at, default_model, default_effort, default_mode";
 
 export const agentOptions = {
   list(): AgentOptions[] {
@@ -261,18 +272,22 @@ export const agentOptions = {
     return row ? toAgentOptions(row) : null;
   },
 
-  /** Replace the snapshot; the defaults on the row are untouched. */
-  setOptions(agentId: string, options: ConfigOption[], at = Date.now()): void {
+  /** Replace the snapshot — options and modes together; the defaults are untouched. */
+  setOptions(agentId: string, options: ConfigOption[], modes: SessionMode[] = [], at = Date.now()): void {
     db()
       .prepare(
-        `INSERT INTO agent_options (agent_id, options, options_at) VALUES (?, ?, ?)
-         ON CONFLICT(agent_id) DO UPDATE SET options = excluded.options, options_at = excluded.options_at`,
+        `INSERT INTO agent_options (agent_id, options, modes, options_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(agent_id) DO UPDATE SET options = excluded.options, modes = excluded.modes,
+           options_at = excluded.options_at`,
       )
-      .run(agentId, JSON.stringify(options), at);
+      .run(agentId, JSON.stringify(options), JSON.stringify(modes), at);
   },
 
   /** Set the defaults given; an absent key leaves that default as it was. */
-  setDefaults(agentId: string, defaults: { model?: string | null; effort?: string | null }): void {
+  setDefaults(
+    agentId: string,
+    defaults: { model?: string | null; effort?: string | null; mode?: string | null },
+  ): void {
     const connection = db();
     connection
       .prepare("INSERT INTO agent_options (agent_id) VALUES (?) ON CONFLICT(agent_id) DO NOTHING")
@@ -286,6 +301,11 @@ export const agentOptions = {
       connection
         .prepare("UPDATE agent_options SET default_effort = ? WHERE agent_id = ?")
         .run(defaults.effort, agentId);
+    }
+    if (defaults.mode !== undefined) {
+      connection
+        .prepare("UPDATE agent_options SET default_mode = ? WHERE agent_id = ?")
+        .run(defaults.mode, agentId);
     }
   },
 };

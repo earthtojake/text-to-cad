@@ -9,7 +9,6 @@
 import { z } from "zod";
 
 import {
-  ApprovalModeSchema,
   PendingPermissionSchema,
   PromptBlockSchema,
   SessionEventSchema,
@@ -61,6 +60,11 @@ export const acpContract = {
       z.object({ stopReason: z.string() }),
     ),
     cancel: invoke(Id, z.void()),
+    /**
+     * The session's mode — the app's one permission control. Also becomes
+     * this agent's default, so the next thread starts where this one was
+     * left (`agentOptions.setDefaults`).
+     */
     setMode: invoke(Id.extend({ modeId: z.string().min(1) }), z.void()),
     setConfigOption: invoke(
       Id.extend({ configId: z.string().min(1), value: z.union([z.string(), z.boolean()]) }),
@@ -74,7 +78,6 @@ export const acpContract = {
       }),
       z.void(),
     ),
-    setApprovalMode: invoke(Id.extend({ mode: ApprovalModeSchema }), z.void()),
     /** The sidebar title. Set by the first prompt (Codex's convention) until the user renames. */
     rename: invoke(Id.extend({ title: z.string().min(1).max(200) }), SessionSchema),
     /** Hide from (or restore to) the sidebar. Archiving closes the adapter. */

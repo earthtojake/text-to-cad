@@ -6,9 +6,10 @@
  *     `onFilesChanged` so the explorer refreshes what it has open.
  *   - `terminal/*`: `TerminalManager`.
  *   - `session/request_permission`: parked in a pending map until the
- *     renderer answers, unless the approval mode is `approve-for-me`, which
- *     answers the agent's `allow_once` option itself. Either way the
- *     transcript gets the request and its outcome as events.
+ *     renderer answers. Nothing here answers for the person — which mode
+ *     the session is in decides what the agent asks about at all, and a
+ *     request that arrives is a request the transcript shows. Both the
+ *     request and its outcome are dispatched as events.
  *   - `session/update`: nothing. The connection reads every update off the
  *     wire before the SDK parses it (`connection.ts`), so the reducer sees
  *     the raw payload and draft update kinds the SDK does not know yet.
@@ -20,7 +21,7 @@ import { RequestError } from "@agentclientprotocol/sdk";
 import type * as acp from "@agentclientprotocol/sdk";
 
 import { pendingPermissionFromRequest } from "../../shared/acp/reduce";
-import type { ApprovalMode, PendingPermission, SessionEvent } from "../../shared/acp/types";
+import type { SessionEvent } from "../../shared/acp/types";
 import type { TerminalManager } from "./terminals";
 
 type PermissionOutcome = Extract<SessionEvent, { type: "permission/resolve" }>["outcome"];
@@ -33,17 +34,13 @@ export type AcpClientOptions = {
   terminals: TerminalManager;
   dispatch: (event: SessionEvent) => void;
   onFilesChanged?: (paths: string[]) => void;
-  approvalMode?: ApprovalMode;
 };
 
 export class AcpClient implements acp.Client {
-  approvalMode: ApprovalMode;
   private readonly pending = new Map<string, (outcome: PermissionOutcome) => void>();
   private counter = 0;
 
-  constructor(private readonly options: AcpClientOptions) {
-    this.approvalMode = options.approvalMode ?? "ask";
-  }
+  constructor(private readonly options: AcpClientOptions) {}
 
   /* ---------------------------------------------------------------------- */
   /* session/*                                                               */
@@ -63,12 +60,6 @@ export class AcpClient implements acp.Client {
     }
     this.options.dispatch({ type: "permission/request", request, at: Date.now() });
 
-    const auto = this.autoAnswer(request);
-    if (auto) {
-      this.options.dispatch({ type: "permission/resolve", requestId, outcome: auto, at: Date.now() });
-      return toResponse(auto);
-    }
-
     return new Promise((resolve) => {
       this.pending.set(requestId, (outcome) => {
         this.pending.delete(requestId);
@@ -76,15 +67,6 @@ export class AcpClient implements acp.Client {
         resolve(toResponse(outcome));
       });
     });
-  }
-
-  /** `approve-for-me` answers the agent's own allow-once option; anything else asks. */
-  private autoAnswer(request: PendingPermission): PermissionOutcome | null {
-    if (this.approvalMode !== "approve-for-me") {
-      return null;
-    }
-    const allowOnce = request.options.find((option) => option.kind === "allow_once");
-    return allowOnce ? { state: "selected", optionId: allowOnce.optionId } : null;
   }
 
   /** The renderer's answer. Unknown or already-answered ids are ignored. */

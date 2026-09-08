@@ -164,6 +164,25 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 8,
+    name: "agent-modes",
+    // The mode is the app's one permission control, drawn on the new-session
+    // screen as well as in a live thread, so the cache has to keep the other
+    // half of what `session/new` answers: Claude sends its modes in `modes`
+    // rather than as a config option, and a screen with no session would
+    // have nothing to draw them from. `default_mode` is the mode the next
+    // session starts in, beside the model and the effort it starts with;
+    // null means the agent's own auto-approval preset.
+    //
+    // `modes` is JSON for the same reason `options` is (migration 6): it is
+    // a cache of a wire shape, and a row that no longer parses is re-probed
+    // rather than migrated.
+    up: `
+      ALTER TABLE agent_options ADD COLUMN modes TEXT;
+      ALTER TABLE agent_options ADD COLUMN default_mode TEXT;
+    `,
+  },
 ];
 
 /**

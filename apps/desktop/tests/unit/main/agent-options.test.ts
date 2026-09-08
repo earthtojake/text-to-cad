@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AgentOptionStore, type AgentOptionsDeps } from "@main/acp/agent-options";
-import type { ConfigOption } from "@shared/acp/types";
+import { AgentOptionStore, type AgentOptionsDeps, type AgentSnapshot } from "@main/acp/agent-options";
+import type { ConfigOption, SessionMode } from "@shared/acp/types";
 import type { AgentOptions } from "@shared/ipc/agent-options";
 
 /**
- * The per-agent cache the new-session screen's model and effort chips are
- * drawn from: what a live session reported, what a probe took from an agent
- * nobody has run, and the defaults the next session starts at.
+ * The per-agent cache the new-session screen's model, effort and mode chips
+ * are drawn from: what a live session reported, what a probe took from an
+ * agent nobody has run, and the defaults the next session starts at.
  */
 
 const model = (currentValue = "fast"): ConfigOption => ({
@@ -37,6 +37,33 @@ const effort = (currentValue = "medium"): ConfigOption => ({
   ],
 });
 
+const modes: SessionMode[] = [
+  { id: "default", name: "Manual", description: null, kind: "standard" },
+  { id: "auto", name: "Auto", description: null, kind: "auto_review" },
+];
+
+/** Codex's shape: the same list as a `mode`-category config option. */
+const modeOption = (currentValue = "auto"): ConfigOption => ({
+  id: "mode",
+  name: "Mode",
+  description: null,
+  category: "mode",
+  type: "select",
+  currentValue,
+  options: modes.map((mode) => ({
+    value: mode.id,
+    name: mode.name,
+    description: null,
+    group: null,
+    kind: mode.kind,
+  })),
+});
+
+const snapshot = (
+  configOptions: ConfigOption[] = [],
+  sessionModes: SessionMode[] = [],
+): AgentSnapshot => ({ configOptions, modes: sessionModes });
+
 /** An in-memory stand-in for the sqlite rows, with the same read/write shape. */
 function store(overrides: Partial<AgentOptionsDeps> = {}) {
   const rows = new Map<string, AgentOptions>();
@@ -45,15 +72,17 @@ function store(overrides: Partial<AgentOptionsDeps> = {}) {
     rows.get(agentId) ?? {
       agentId,
       options: [],
+      modes: [],
       updatedAt: null,
       defaultModel: null,
       defaultEffort: null,
+      defaultMode: null,
     };
   const deps: AgentOptionsDeps = {
     read: () => [...rows.values()],
     get: (agentId) => rows.get(agentId) ?? null,
-    writeOptions: (agentId, options) => {
-      rows.set(agentId, { ...row(agentId), options, updatedAt: 1 });
+    writeOptions: (agentId, options, agentModes) => {
+      rows.set(agentId, { ...row(agentId), options, modes: agentModes, updatedAt: 1 });
     },
     writeDefaults: (agentId, defaults) => {
       const current = row(agentId);
@@ -61,9 +90,10 @@ function store(overrides: Partial<AgentOptionsDeps> = {}) {
         ...current,
         ...(defaults.model === undefined ? {} : { defaultModel: defaults.model }),
         ...(defaults.effort === undefined ? {} : { defaultEffort: defaults.effort }),
+        ...(defaults.mode === undefined ? {} : { defaultMode: defaults.mode }),
       });
     },
-    probe: async () => [],
+    probe: async () => snapshot(),
     onChange: (all) => changes.push(all),
     ...overrides,
   };
@@ -73,43 +103,59 @@ function store(overrides: Partial<AgentOptionsDeps> = {}) {
 describe("AgentOptionStore", () => {
   it("keeps what a live session reported, and broadcasts only when it changed", () => {
     const { subject, changes, rows } = store();
-    subject.remember("codex", [model(), effort()]);
+    subject.remember("codex", [model(), effort()], modes);
     expect(rows.get("codex")?.options).toHaveLength(2);
+    expect(rows.get("codex")?.modes).toEqual(modes);
     expect(changes).toHaveLength(1);
 
     // The same options again — a `config_option_update` that changed nothing
     // else, or a second session with the same agent.
-    subject.remember("codex", [model(), effort()]);
+    subject.remember("codex", [model(), effort()], modes);
     expect(changes).toHaveLength(1);
 
-    subject.remember("codex", [model("smart"), effort()]);
+    subject.remember("codex", [model("smart"), effort()], modes);
     expect(changes).toHaveLength(2);
+
+    // The modes alone changing is a change too: they are half of what the
+    // new-session screen draws.
+    subject.remember("codex", [model("smart"), effort()], [modes[0]!]);
+    expect(changes).toHaveLength(3);
   });
 
   it("ignores an empty snapshot rather than forgetting the one it has", () => {
     const { subject, rows } = store();
-    subject.remember("codex", [model()]);
-    subject.remember("codex", []);
+    subject.remember("codex", [model()], modes);
+    subject.remember("codex", [], []);
     expect(rows.get("codex")?.options).toHaveLength(1);
+    expect(rows.get("codex")?.modes).toEqual(modes);
   });
 
-  it("remembers a model or an effort chosen in a session, and nothing else", () => {
+  it("remembers a model, an effort or a mode chosen in a session, and nothing else", () => {
     const { subject, rows } = store();
-    const options = [model(), effort()];
+    const options = [model(), effort(), modeOption()];
     subject.rememberChoice("codex", "model", "smart", options);
     subject.rememberChoice("codex", "reasoning_effort", "high", options);
-    // A boolean, and an option that is neither: session-scoped, not a default.
+    // The `mode` option is the mode chip for an agent that sends its modes
+    // that way, so the mode it was switched to is the next session's too.
+    subject.rememberChoice("codex", "mode", "default", options);
+    // A boolean, and an option that is none of the three: session-scoped.
     subject.rememberChoice("codex", "web_search", true, options);
     subject.rememberChoice("codex", "collaboration_mode", "plan", options);
-    expect(subject.defaults("codex")).toEqual({ model: "smart", effort: "high" });
+    expect(subject.defaults("codex")).toEqual({ model: "smart", effort: "high", mode: "default" });
     expect(rows.get("codex")?.options).toEqual([]);
   });
 
+  it("remembers the mode a live session was switched into", () => {
+    const { subject } = store();
+    subject.rememberMode("claude-code", "plan");
+    expect(subject.defaults("claude-code").mode).toBe("plan");
+  });
+
   it("probes an agent with no snapshot, once, however many callers ask", async () => {
-    let resolve: ((options: ConfigOption[]) => void) | null = null;
+    let resolve: ((snapshot: AgentSnapshot) => void) | null = null;
     const probe = vi.fn(
       () =>
-        new Promise<ConfigOption[]>((done) => {
+        new Promise<AgentSnapshot>((done) => {
           resolve = done;
         }),
     );
@@ -117,9 +163,12 @@ describe("AgentOptionStore", () => {
     const first = subject.ensure("claude-code", "p1");
     const second = subject.ensure("claude-code", "p1");
     expect(probe).toHaveBeenCalledTimes(1);
-    resolve!([model()]);
+    resolve!(snapshot([model()], modes));
     await Promise.all([first, second]);
     expect(rows.get("claude-code")?.options).toHaveLength(1);
+    // Claude's modes come in the same `session/new` reply as its options, and
+    // the probe is the only place a screen with no session can get them.
+    expect(rows.get("claude-code")?.modes).toEqual(modes);
 
     // And never again once there is a snapshot.
     await subject.ensure("claude-code", "p1");
@@ -145,8 +194,8 @@ describe("AgentOptionStore", () => {
     expect(probe).toHaveBeenCalledTimes(2);
   });
 
-  it("treats an agent that answers with no options as one that did not answer", async () => {
-    const probe = vi.fn(async () => []);
+  it("treats an agent that answers with nothing as one that did not answer", async () => {
+    const probe = vi.fn(async () => snapshot());
     const { subject, rows } = store({ probe });
     await subject.ensure("codex", null);
     expect(rows.get("codex")).toBeUndefined();
@@ -154,12 +203,13 @@ describe("AgentOptionStore", () => {
     expect(probe).toHaveBeenCalledTimes(1);
   });
 
-  it("sets one default without clearing the other", () => {
+  it("sets one default without clearing the others", () => {
     const { subject } = store();
     subject.setDefaults("codex", { model: "smart" });
     subject.setDefaults("codex", { effort: "high" });
-    expect(subject.defaults("codex")).toEqual({ model: "smart", effort: "high" });
+    subject.setDefaults("codex", { mode: "plan" });
+    expect(subject.defaults("codex")).toEqual({ model: "smart", effort: "high", mode: "plan" });
     subject.setDefaults("codex", { model: null });
-    expect(subject.defaults("codex")).toEqual({ model: null, effort: "high" });
+    expect(subject.defaults("codex")).toEqual({ model: null, effort: "high", mode: "plan" });
   });
 });

@@ -4,25 +4,30 @@ import { AlertCircle } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
 import { resolveGitMode, useProjectGitInfo } from "@renderer/lib/git-mode";
 import { useAcp } from "@renderer/state/acp";
-import { useAgentOptions, useProviderEffort, useProviderModels } from "@renderer/state/agent-options";
+import {
+  useAgentOptions,
+  useProviderEffort,
+  useProviderMode,
+  useProviderModels,
+} from "@renderer/state/agent-options";
 import { useAgents, useInstalledAgents } from "@renderer/state/agents";
 import { useComposer } from "@renderer/state/composer";
 import { useProjects } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
 import { useSettings } from "@renderer/state/settings";
-import type { ApprovalMode, PromptBlock } from "@shared/acp/types";
+import type { PromptBlock } from "@shared/acp/types";
 import type { GitMode, Project } from "@shared/types";
 
 import { AuthPrompt } from "./AuthPrompt";
 import { Composer } from "./Composer";
-import { ApprovalChip, EffortChip, GitModeChip, ModelChip, ProjectChip } from "./ComposerChips";
+import { EffortChip, GitModeChip, ModeChip, ModelChip, ProjectChip } from "./ComposerChips";
 import { errorMessage, isAuthError } from "./view";
 
 /**
  * The new-session state (plan §2): "What should we build in <project>?",
- * a line saying what a session is, the context strip — project · git mode ·
- * model · effort — and an empty composer with `+` and approval in the row
- * under its box. Nothing
+ * a line saying what a session is, the context strip — project · git mode —
+ * and an empty composer with `+`, the mode, the model and the effort in the
+ * row under its box. Nothing
  * else: a grid of canned prompts under the box is four guesses at what
  * somebody came here to do. Sending creates the session — `sessions.create`
  * spawns the agent — selects it, and sends the first prompt; the transcript
@@ -37,6 +42,13 @@ import { errorMessage, isAuthError } from "./view";
  * installed — or not signed in, or whose adapter will not start — contributes
  * no models rather than models that cannot be run.
  *
+ * **The mode chip is the permission control**, here as in a live thread: the
+ * mode this session will be created in, from the same cached snapshot,
+ * starting at the provider's own auto-approval preset until somebody picks
+ * something else. There is no second, app-side approval setting — what the
+ * agent asks about is what its mode says, and a request that arrives is
+ * answered in the transcript.
+ *
  * Creation can fail before there is a session to show it in: the agent is
  * not signed in, or its adapter would not start. Those land here, above
  * the composer, with the agent's login as the action.
@@ -48,7 +60,6 @@ export function NewSession({ project }: { project: Project }) {
   const setActiveProject = useProjects((state) => state.setActive);
   const setActiveSession = useSessions((state) => state.setActive);
   const create = useAcp((state) => state.create);
-  const setApproval = useAcp((state) => state.setApprovalMode);
   const submitPrompt = useComposer((state) => state.submit);
   const setDraft = useComposer((state) => state.setDraft);
   const probeOptions = useAgentOptions((state) => state.probe);
@@ -56,7 +67,6 @@ export function NewSession({ project }: { project: Project }) {
 
   const [agentId, setAgentId] = useState<string | null>(null);
   const [gitMode, setGitMode] = useState<GitMode | null>(null);
-  const [approval, setApprovalMode] = useState<ApprovalMode>("ask");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<{ message: string; auth: boolean } | null>(null);
 
@@ -93,6 +103,12 @@ export function NewSession({ project }: { project: Project }) {
   const pickedProvider =
     providers.find((provider) => provider.agentId === resolvedAgentId) ?? providers[0] ?? null;
   const effort = useProviderEffort(pickedProvider?.agentId ?? null);
+  // The mode the session will be created in: this agent's stored default,
+  // else its own auto-approval preset — which is what main applies right
+  // after `session/new` (`applyPreferences`), so the chip is a statement
+  // about what will happen rather than a control that has to be wired
+  // through `create`.
+  const mode = useProviderMode(pickedProvider?.agentId ?? null);
   // Who will actually run this: the model chip's provider, because that is
   // the choice the person made. Everything that names the agent — the
   // placeholder, the sign-in prompt when creation fails — names this one.
@@ -111,6 +127,20 @@ export function NewSession({ project }: { project: Project }) {
     }
   };
 
+  const chooseMode = (modeId: string) => {
+    if (!pickedProvider) {
+      return;
+    }
+    // Pinned to the agent the chips are showing, the way picking a model
+    // pins it. Which agent this screen starts with is otherwise still
+    // moving — the detector answers each one's login in its own time, and
+    // `resolvedAgentId` follows it — so a mode stored against whoever was
+    // showing at the click and a session created with whoever is showing at
+    // send is a session in a mode nobody chose.
+    setAgentId(pickedProvider.agentId);
+    void setAgentDefaults(pickedProvider.agentId, { mode: modeId });
+  };
+
   const start = async (text: string, content: PromptBlock[]) => {
     if (!startingAgentId) {
       setFailure({ message: "Install an agent first — Settings › Agents lists what Hardcore can run.", auth: false });
@@ -120,9 +150,10 @@ export function NewSession({ project }: { project: Project }) {
     setFailure(null);
     let sessionId: string;
     try {
-      // The model and the effort are not passed: they are this agent's stored
-      // defaults, and main applies them to the session it just created — in
-      // that order, because the model decides which efforts exist.
+      // The model, the effort and the mode are not passed: they are this
+      // agent's stored defaults, and main applies them to the session it
+      // just created — in that order, because the model decides which
+      // efforts exist.
       sessionId = await create({
         projectId: project.id,
         agentId: startingAgentId,
@@ -137,9 +168,6 @@ export function NewSession({ project }: { project: Project }) {
       setBusy(false);
       return;
     }
-    if (approval !== "ask") {
-      void setApproval(sessionId, approval);
-    }
     setDraft("__new__", "");
     setActiveSession(sessionId);
     setBusy(false);
@@ -149,7 +177,7 @@ export function NewSession({ project }: { project: Project }) {
   // What the session will be, as a strip above the box: where it runs, how
   // it treats git — the two things that cannot change once the session
   // exists, so they sit above the box. Under the box is the live session's
-  // row exactly: `+` and approval on the left, the model and the effort on
+  // row exactly: `+` and the mode on the left, the model and the effort on
   // the right, so the two screens are one shape and a long model name has
   // the row's width rather than the strip's.
   const context = (
@@ -159,7 +187,9 @@ export function NewSession({ project }: { project: Project }) {
       <GitModeChip gitMode={resolvedGitMode} info={gitInfo} onChange={setGitMode} />
     </div>
   );
-  const chips = <ApprovalChip mode={approval} onChange={setApprovalMode} />;
+  const chips = mode ? (
+    <ModeChip currentModeId={mode.currentModeId} modes={mode.modes} onChange={chooseMode} />
+  ) : null;
   const trailing = (
     <>
       {providers.length > 0 ? (

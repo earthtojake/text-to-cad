@@ -410,9 +410,6 @@ export const LiveStatusSchema = z.enum([
 ]);
 export type LiveStatus = z.infer<typeof LiveStatusSchema>;
 
-export const ApprovalModeSchema = z.enum(["ask", "approve-for-me"]);
-export type ApprovalMode = z.infer<typeof ApprovalModeSchema>;
-
 /** A permission request the user has not answered yet. */
 export const PendingPermissionSchema = z.object({
   requestId: z.string(),
@@ -436,7 +433,6 @@ export const SessionStateSchema = z.object({
   status: LiveStatusSchema,
   /** Set while `status` is `error`. */
   error: z.string().nullable(),
-  approvalMode: ApprovalModeSchema,
   /** From `session_info_update`; the sidebar prefers the first prompt. */
   title: z.string().nullable(),
   turns: z.array(TurnSchema),
@@ -465,7 +461,6 @@ export function initialSessionState(sessionId: string, agentId: string): Session
     acpSessionId: null,
     status: "connecting",
     error: null,
-    approvalMode: "ask",
     title: null,
     turns: [],
     currentModeId: null,
@@ -555,6 +550,5 @@ export const SessionEventSchema = z.discriminatedUnion("type", [
     error: z.string().nullable(),
     at: z.number(),
   }),
-  z.object({ type: z.literal("approval"), mode: ApprovalModeSchema, at: z.number() }),
 ]);
 export type SessionEvent = z.infer<typeof SessionEventSchema>;
