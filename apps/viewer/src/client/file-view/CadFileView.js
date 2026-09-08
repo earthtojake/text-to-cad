@@ -288,6 +288,12 @@ import {
   normalizeParameterValues
 } from "cadgen-js/common/parameters.js";
 import { copyTextToClipboard, readTextFromClipboard } from "@/ui/clipboard";
+import {
+  HOST_PANEL,
+  isHostPanelControlled,
+  nextPanelState,
+  resolveHostPanelOpen
+} from "./hostPanels.js";
 import { HostReferenceContext, referencesFromCopyText, resolveSelectorSelection } from "./hostReference.js";
 import {
   copyTargetsForFileAccessAsset,
@@ -374,6 +380,10 @@ export default function CadFileView({
   onReference = null,
   onCapture = null,
   captureRequest = null,
+  themeEditing = null,
+  onThemeEditingChange = null,
+  fileSheetOpen = null,
+  onFileSheetOpenChange = null,
 }) {
   const viewerOrigin = normalizeViewerOrigin(origin);
   // The shared tessellation cache is reached through THIS origin's
@@ -403,6 +413,10 @@ export default function CadFileView({
         onReference={onReference}
         onCapture={onCapture}
         captureRequest={captureRequest}
+        hostThemeEditing={themeEditing}
+        onThemeEditingChange={onThemeEditingChange}
+        hostFileSheetOpen={fileSheetOpen}
+        onFileSheetOpenChange={onFileSheetOpenChange}
       />
     </ViewerOriginProvider>
   );
@@ -426,6 +440,10 @@ function CadFileViewSurface({
   onReference,
   onCapture,
   captureRequest,
+  hostThemeEditing,
+  onThemeEditingChange,
+  hostFileSheetOpen,
+  onFileSheetOpenChange,
 }) {
   // What the host pins, if anything (docs/file-view.md, "Laying out inside a
   // host"): the layout mode, the sheet's width, and which way the colour
@@ -564,7 +582,31 @@ function CadFileViewSurface({
   }, [themeReadOptions]);
   const themeSettings = themeState.settings;
   const themeId = themeState.themeId;
-  const [themeEditing, setThemeEditing] = useState(false);
+  // Whether the theme panel is up. A host that draws its own toggle drives it
+  // through the `themeEditing` prop and hears about every change; without the
+  // prop this own flag IS the answer (hostPanels.js).
+  const [ownThemeEditing, setOwnThemeEditing] = useState(false);
+  const themeEditing = resolveHostPanelOpen(hostThemeEditing, ownThemeEditing);
+  // The setter stays identity-stable — it reads the live values off a ref
+  // rather than closing over them. Two dozen callbacks and effects in this
+  // file list it as a dependency; a setter that changed on every open would
+  // re-run all of them for a panel toggle.
+  const themePanelRef = useRef(null);
+  themePanelRef.current = {
+    open: themeEditing,
+    controlled: isHostPanelControlled(hostThemeEditing),
+    notify: onThemeEditingChange
+  };
+  const setThemeEditing = useCallback((value) => {
+    const { open, controlled, notify } = themePanelRef.current;
+    const next = typeof value === "function" ? value(open) === true : value === true;
+    if (!controlled) {
+      setOwnThemeEditing(next);
+    }
+    if (next !== open) {
+      notify?.(next);
+    }
+  }, []);
   // Which way a drawing is being looked at. Session state on purpose: it is a way of looking
   // at the model open right now, not a preference worth outliving the tab.
   const [drawingViewMode, setDrawingViewMode] = useState("3d");
@@ -2098,7 +2140,17 @@ function CadFileViewSurface({
     openTabsRef.current = openTabs;
   }, [openTabs]);
 
-  const tabToolsOpen = fileSheetOpenIntent;
+  // The file sheet's open flag, the theme panel's twin: a host that draws its
+  // own toggle drives it through `fileSheetOpen` and hears every change,
+  // otherwise the surface's own intent is the answer (hostPanels.js). The
+  // setter reads this ref for the same reason the theme's does.
+  const tabToolsOpen = resolveHostPanelOpen(hostFileSheetOpen, fileSheetOpenIntent);
+  const fileSheetPanelRef = useRef(null);
+  fileSheetPanelRef.current = {
+    open: tabToolsOpen,
+    controlled: isHostPanelControlled(hostFileSheetOpen),
+    notify: onFileSheetOpenChange
+  };
   const fileViewerExpandedDirectoryIdList = useMemo(() => (
     [...expandedDirectoryIds].sort((a, b) => a.localeCompare(b, undefined, {
       numeric: true,
@@ -2111,10 +2163,33 @@ function CadFileViewSurface({
   );
 
   const setTabToolsOpen = useCallback((value) => {
-    setFileSheetOpenIntent((current) => (
-      typeof value === "function" ? value(current) : value
-    ));
+    const { open, controlled, notify } = fileSheetPanelRef.current;
+    const next = typeof value === "function" ? value(open) === true : value === true;
+    if (!controlled) {
+      setFileSheetOpenIntent(next);
+    }
+    if (next !== open) {
+      notify?.(next);
+    }
   }, []);
+  /**
+   * A host that listens without driving is OBSERVING: it hears the flag it
+   * does not own, its opening value included, so its own toggle can be
+   * highlighted from the surface's default rather than from a copy of the
+   * rule that produces it. The desktop app starts here and becomes
+   * controlling as soon as it echoes the first report back — at which point
+   * `controlled` is true and this stops reporting.
+   */
+  useEffect(() => {
+    if (!isHostPanelControlled(hostFileSheetOpen)) {
+      onFileSheetOpenChange?.(tabToolsOpen);
+    }
+  }, [hostFileSheetOpen, onFileSheetOpenChange, tabToolsOpen]);
+  useEffect(() => {
+    if (!isHostPanelControlled(hostThemeEditing)) {
+      onThemeEditingChange?.(themeEditing);
+    }
+  }, [hostThemeEditing, onThemeEditingChange, themeEditing]);
   const directorySessionThemeSlice = useMemo(
     () => createDirectorySessionThemeSlice(themeState),
     [themeState]
@@ -2387,15 +2462,17 @@ function CadFileViewSurface({
   }, [drawingViewMode]);
 
   const handleToggleThemeEditor = useCallback(() => {
-    setThemeEditing((current) => {
-      if (current) {
-        return false;
-      }
+    const next = nextPanelState({ themeEditing, fileSheetOpen: tabToolsOpen }, HOST_PANEL.THEME);
+    if (next.themeEditing) {
       setViewerAlertOpen(false);
-      setTabToolsOpen(false);
-      return true;
-    });
-  }, [setTabToolsOpen]);
+    }
+    // The sheet first: it is the panel being given up, and a host that owns
+    // both flags should hear "closed" before it hears "the theme is open".
+    if (next.fileSheetOpen !== tabToolsOpen) {
+      setTabToolsOpen(next.fileSheetOpen);
+    }
+    setThemeEditing(next.themeEditing);
+  }, [setTabToolsOpen, tabToolsOpen, themeEditing]);
 
   const handleViewerAlertChange = useCallback((nextAlert) => {
     setViewerRuntimeAlert(nextAlert || null);
@@ -6176,23 +6253,23 @@ function CadFileViewSurface({
       return;
     }
     setViewerAlertOpen(false);
-    // Opening the file sheet while the theme sidebar is up replaces it.
-    if (themeEditing) {
-      setThemeEditing(false);
-      setTabToolsOpen(true);
-      if (!isDesktop) {
-        setSidebarOpen(false);
-      }
-      return;
+    // Opening the file sheet while the theme sidebar is up replaces it —
+    // they are one panel, so the press means "show me this instead".
+    const next = nextPanelState({ themeEditing, fileSheetOpen: tabToolsOpen }, HOST_PANEL.FILE_SHEET);
+    if (next.themeEditing !== themeEditing) {
+      setThemeEditing(next.themeEditing);
     }
-    setTabToolsOpen((current) => {
-      const nextOpen = !current;
-      if (nextOpen && !isDesktop) {
-        setSidebarOpen(false);
-      }
-      return nextOpen;
-    });
-  }, [themeEditing, isDesktop, selectedFileSheetKind, setTabToolsOpen]);
+    setTabToolsOpen(next.fileSheetOpen);
+    if (next.fileSheetOpen && !isDesktop) {
+      setSidebarOpen(false);
+    }
+  }, [
+    isDesktop,
+    selectedFileSheetKind,
+    setTabToolsOpen,
+    tabToolsOpen,
+    themeEditing
+  ]);
 
   const handleCopyFileAssetReference = useCallback(async (entry, asset = "output", assetInfo = null, referenceKind = "path") => {
     const fileRef = entry ? fileKey(entry) : "";
@@ -6438,6 +6515,7 @@ function CadFileViewSurface({
     selectedViewportContent,
     tabToolMode,
     tabToolsOpen,
+    themeEditing,
     viewerAlertOpen,
     viewerLoading
   ]);
