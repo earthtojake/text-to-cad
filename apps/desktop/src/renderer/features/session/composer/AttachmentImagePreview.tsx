@@ -12,7 +12,7 @@ export function AttachmentImagePreview({ file }: { file: FileUIPart }) {
       <DialogTrigger asChild>
         <button
           aria-label={`Enlarge ${name}`}
-          className="group/preview relative shrink-0 cursor-zoom-in rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="ui-preview-trigger group/preview relative shrink-0 cursor-zoom-in rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           title="Click to enlarge"
           type="button"
         >
@@ -24,7 +24,7 @@ export function AttachmentImagePreview({ file }: { file: FileUIPart }) {
       </DialogTrigger>
       <DialogContent
         aria-describedby={undefined}
-        className="flex max-h-[calc(100dvh-2rem)] w-[min(960px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
+        className="ui-image-preview flex max-h-[calc(100dvh-2rem)] w-[min(960px,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
         onEscapeKeyDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >

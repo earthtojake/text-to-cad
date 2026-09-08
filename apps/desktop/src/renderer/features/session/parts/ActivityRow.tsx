@@ -49,7 +49,7 @@ export function ActivityGroup({ item, sessionId }: { item: ActivityItem; session
         {failureCount > 0 ? <FailureIndicator count={failureCount} /> : null}
       </RowButton>
       {open ? (
-        <div className="ml-2 border-l pl-2">
+        <div className="ui-reveal ml-2 border-l pl-2">
           {item.rows.map((row) => (
             <ActivityRowView key={row.id} row={row} sessionId={sessionId} />
           ))}
@@ -159,7 +159,7 @@ export function ToolDetail({ part, sessionId }: { part: ToolCallPart; sessionId:
       : null;
 
   return (
-    <div className="mt-1 mb-2 ml-6 flex min-w-0 flex-col gap-2 text-[13px]" data-tool-detail>
+    <div className="ui-reveal mt-1 mb-2 ml-6 flex min-w-0 flex-col gap-2 text-[13px]" data-tool-detail>
       {command !== null ? (
         <pre className="overflow-x-auto rounded-md bg-muted/60 px-3 py-2 font-mono text-[12px] leading-5 whitespace-pre-wrap">
           {command}

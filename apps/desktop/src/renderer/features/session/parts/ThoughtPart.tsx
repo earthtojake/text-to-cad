@@ -21,7 +21,7 @@ export function ThoughtPart({ text, streaming }: { text: string; streaming: bool
       <ReasoningTrigger className="rounded-md px-1.5 py-0.5 text-[13px] leading-5 hover:bg-accent/60 hover:text-foreground">
         <TriggerBody />
       </ReasoningTrigger>
-      <ReasoningContent className="mt-1 ml-6 min-w-0 [overflow-wrap:anywhere] text-[13px] leading-6">{text}</ReasoningContent>
+      <ReasoningContent className="ui-disclosure mt-1 ml-6 min-w-0 [overflow-wrap:anywhere] text-[13px] leading-6">{text}</ReasoningContent>
     </Reasoning>
   );
 }

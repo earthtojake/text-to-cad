@@ -29,7 +29,7 @@ export function ReferenceChip({ node, selected }: NodeViewProps) {
     <NodeViewWrapper
       as="span"
       className={cn(
-        "mx-px inline-flex max-w-full rounded-md border bg-secondary/70 align-baseline text-[12px] leading-4 text-secondary-foreground select-none",
+        "ui-reference-enter mx-px inline-flex max-w-full rounded-md border bg-secondary/70 align-baseline text-[12px] leading-4 text-secondary-foreground select-none",
         selected && "ring-2 ring-ring ring-offset-1 ring-offset-background",
       )}
       contentEditable={false}
@@ -41,7 +41,7 @@ export function ReferenceChip({ node, selected }: NodeViewProps) {
     >
       <button
         aria-label={`Show ${label ? `${label} (${token})` : token} in viewer`}
-        className="inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-px hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+        className="inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-px transition-colors duration-120 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
         disabled={!scope}
         type="button"
         onMouseDown={(event) => event.preventDefault()}

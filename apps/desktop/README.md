@@ -73,6 +73,12 @@ carries a path, a file name, a project name, a prompt, or an agent's output.
 
 ## Checks
 
+Interaction motion is scoped to activity/thought reveals, composer reference
+chips, and attachment previews: 100–160 ms, with at most 3 px of travel and a
+small scale change. It does not animate streamed text, pane dimensions, or CAD
+geometry. The OS reduced-motion preference and Settings › Appearance's Reduce
+motion switch both suppress these transitions.
+
 ```sh
 npm run typecheck    # tsc over both projects: node (main/preload/shared) and web (renderer)
 npm test             # vitest: tests/unit/{main,shared} in node, tests/unit/renderer in jsdom

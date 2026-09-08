@@ -413,6 +413,64 @@
   -webkit-app-region: no-drag;
 }
 
+/* Small, one-shot feedback at interaction boundaries. Only opacity and
+ * transforms animate: streaming text and CAD layout never animate per update.
+ * No forwards fill, so a finished reveal leaves no containing block behind. */
+@keyframes ui-reveal {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ui-dismiss {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes ui-reference-enter {
+  from { opacity: 0; scale: 0.97; }
+  to { opacity: 1; scale: 1; }
+}
+
+@keyframes ui-preview-enter {
+  from { opacity: 0; scale: 0.985; }
+  to { opacity: 1; scale: 1; }
+}
+
+@keyframes ui-preview-exit {
+  from { opacity: 1; scale: 1; }
+  to { opacity: 0; scale: 0.985; }
+}
+
+.ui-reveal,
+.ui-disclosure[data-state="open"] {
+  animation: ui-reveal 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ui-disclosure[data-state="closed"] {
+  animation: ui-dismiss 100ms ease-out;
+}
+
+.ui-reference-enter {
+  transform-origin: left center;
+  animation: ui-reference-enter 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ui-preview-trigger {
+  transition: transform 120ms ease-out;
+}
+
+.ui-preview-trigger:hover {
+  transform: translateY(-1px);
+}
+
+.ui-image-preview[data-state="open"] {
+  animation: ui-preview-enter 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ui-image-preview[data-state="closed"] {
+  animation: ui-preview-exit 100ms ease-out;
+}
+
 /* Settings › Appearance. Both classes are set on <html> by
  * src/renderer/hooks/use-appearance.ts. */
 
@@ -429,7 +487,15 @@
   scroll-behavior: auto !important;
 }
 
+.reduce-motion .ui-preview-trigger:hover {
+  transform: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .ui-preview-trigger:hover {
+    transform: none;
+  }
+
   *,
   *::before,
   *::after {
