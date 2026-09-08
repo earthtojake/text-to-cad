@@ -27,7 +27,24 @@ export function buildAll({ env = process.env } = {}) {
   console.info(`composed ${skills.skills.length} skills -> resources/skills`);
 
   const npx = process.platform === "win32" ? "npx.cmd" : "npx";
-  const result = spawnSync(npx, ["electron-vite", "build"], { cwd: appRoot, stdio: "inherit", env });
+  // Rollup holds the whole renderer graph in memory, and this renderer is a
+  // large one — Monaco, three.js, shiki's grammars, the CAD Viewer's client.
+  // A build peaks around 4.6 GB, which is over Node's default old-space cap on
+  // a 64-bit host, so the bundler gets an explicit ceiling rather than the
+  // implicit one it was quietly exceeding on CI ("Reached heap limit").
+  // Whatever the caller already asked for wins.
+  const heap = "--max-old-space-size=6144";
+  const nodeOptions = env.NODE_OPTIONS ?? "";
+  const result = spawnSync(npx, ["electron-vite", "build"], {
+    cwd: appRoot,
+    stdio: "inherit",
+    env: {
+      ...env,
+      NODE_OPTIONS: nodeOptions.includes("--max-old-space-size")
+        ? nodeOptions
+        : `${nodeOptions} ${heap}`.trim(),
+    },
+  });
   if (result.error) {
     throw result.error;
   }
