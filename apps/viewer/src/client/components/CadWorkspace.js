@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import CadFileView from "../file-view/CadFileView.js";
 import CadWorkspaceTopBar from "./workbench/CadWorkspaceTopBar";
+import ViewerTopBar from "./workbench/ViewerTopBar";
 import { FilePanelColumn, FileTree, useCatalogTreeSource } from "@/shell/index.js";
 import {
   cadFileParamForEntry,
@@ -65,27 +66,32 @@ export default function CadWorkspace({
   }, []);
 
   return (
-    <CadFileView
-      origin=""
-      file={file}
-      onOpenFile={handleOpenFile}
-      panelSlot={panelSlot}
-      catalog={{
-        entries: manifestEntries,
-        revision: manifestRevision,
-        hydrated: catalogHydrated,
-        refreshing: catalogRefreshing,
-        error: catalogError
-      }}
-      renderTopBar={(chrome) => <CadWorkspaceTopBar chrome={chrome} />}
-      renderPanel={(chrome) => (
-        <WorkspacePanelColumn
-          chrome={chrome}
-          manifestRevision={manifestRevision}
-          onSlotChange={setPanelSlot}
+    <div className="flex h-full min-h-0 flex-col">
+      <ViewerTopBar />
+      <div className="min-h-0 flex-1">
+        <CadFileView
+          origin=""
+          file={file}
+          onOpenFile={handleOpenFile}
+          panelSlot={panelSlot}
+          catalog={{
+            entries: manifestEntries,
+            revision: manifestRevision,
+            hydrated: catalogHydrated,
+            refreshing: catalogRefreshing,
+            error: catalogError
+          }}
+          renderTopBar={(chrome) => <CadWorkspaceTopBar chrome={chrome} />}
+          renderPanel={(chrome) => (
+            <WorkspacePanelColumn
+              chrome={chrome}
+              manifestRevision={manifestRevision}
+              onSlotChange={setPanelSlot}
+            />
+          )}
         />
-      )}
-    />
+      </div>
+    </div>
   );
 }
 

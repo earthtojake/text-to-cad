@@ -19,7 +19,6 @@ import { cadFileParamForEntry } from "@/workbench/sidebar";
 
 import { useStandaloneEntryActions, webEntryCapabilities } from "./standaloneEntryActions.js";
 import { useWorkspacePanels } from "./workspacePanels.js";
-import ViewerLinks from "./ViewerLinks";
 
 /**
  * The standalone viewer's nav row.
@@ -207,8 +206,6 @@ export default function CadWorkspaceTopBar({ chrome }) {
               testId={panel.content === "tree" ? "tree-toggle" : undefined}
             />
           ))}
-          {/* The one thing the desktop app's row does not have. */}
-          <ViewerLinks previewMode={previewMode} />
         </>
       }
     />
