@@ -178,7 +178,11 @@ cadgen step snapshot assemblies/STEP/anthropomorphic_hand/hand_mechanical_candid
   --camera '{"direction":[0.5318,-0.7595,0.3746],"zoom":1.3}' --width 1920 --height 1080
 ```
 
-1,800 frames at 1080p in about five minutes. A browser-thrown error (an unknown
+1,800 frames at 1080p in about five minutes with a cheap clip; the hand's driven
+tour is 1,440 frames in 15.5 min, because each frame re-solves 48 swept
+centerlines. The framing pre-pass SAMPLES at most 192 poses rather than walking
+every frame — it used to walk them, and a driven render died on
+`video preparation timed out after 300s` before rendering anything. A browser-thrown error (an unknown
 clip, a `start` past the end) still surfaces as a raw Playwright `Page.evaluate`
 trace with a minified stack rather than the clean `SnapshotError` the Python-side
 refusals get — that is how the STILL path has always reported them too, so it is
@@ -192,11 +196,36 @@ one fix for both, not a video regression.
 datums and evaluates `lib.layout.assembled_transforms` in JavaScript, so the
 choreography is exact forward kinematics rather than eyeballed rotations.
 
-The tendons do NOT bend: a posed route is a routing solve, and moving each route
-group rigidly with its own frame tears the centerline apart by up to 100 mm,
-which `deformTube` rightly refuses. They are shown at rest and faded through
-motion instead. Making them bend means re-solving all 48 routes per keyframe in
-Python and embedding the samples — the one real follow-up on the animation.
+THE TENDONS AND ACTUATORS DRIVE IT. `lib.hand_routing.full_tendon_routes` takes
+a pose and returns all 48 posed centerlines, asserting its own joins, and at
+pose zero reproduces the frozen `NEUTRAL_ROUTES` to the bit — so the generator
+solves the tour on a 4 Hz grid and bakes it rather than approximating anything,
+and the module interpolates. The capstans turn by
+`lib.actuator_payout.solve_rotation`, the mechanism's own constant-length
+equation, and the 672 moving actuator parts follow a port of
+`lib.actuator_kinematics.actuator_transform` that ACTUATOR_SAMPLES pins against
+the Python at load.
+
+Three constraints the geometry imposes, all of which fail loudly rather than
+shipping a wrong picture:
+
+- Arcs cannot be interpolated (center + axis + start + sweep do not blend into
+  a valid arc), so the generator flattens each to FOUR Beziers — a fixed four,
+  because a sweep-derived count changes between keyframes.
+- The segment structure must not change across poses; `build` asserts it. That
+  assert is why the forearm wrap is not re-cut at the payout angle:
+  `forearm_route` emits 16 Bezier segments below zero rotation and 15 above.
+- Blending preserves joins exactly but not tangents, so each join is sealed onto
+  the bisector of its two handles — control points move, endpoints never do.
+
+The WRIST is out of the tour: `full_tendon_routes` needs a wrist packet measured
+for the pose, and that transport solve is the expensive checkpointed job.
+
+Cost: 97 keyframes solve in 8-9 min across ten cores, cached on the routing
+sources and the timeline (`showcase_routes.cache.json.gz`, gitignored) so
+re-emitting is instant. A frame costs ~350 ms, nearly all of it compiling the 48
+posed centerlines — the clip is better exported than scrubbed live, which is
+what `--video` is for.
 
 ## 7. Before merging
 
