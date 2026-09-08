@@ -57,7 +57,35 @@ _TIMED_OUT = object()
 # script's own folder (``PYTHONPATH=src``), and a build must resolve imports exactly as
 # ``python script.py`` run by the client would. Entries are absolutized against the
 # client's cwd, because the worker runs elsewhere.
-FORWARDED_ENV_VARS = ("CADGEN_CACHE_DIR", "XDG_CACHE_HOME", "LOCALAPPDATA", "PYTHONPATH")
+# CADGEN_FFMPEG is the same kind of per-client choice: `snapshot --video` encodes
+# with the ffmpeg the CALLER has, and a warm worker's ambient PATH is whatever
+# shell happened to start the daemon.
+FORWARDED_ENV_VARS = (
+    "CADGEN_CACHE_DIR",
+    "XDG_CACHE_HOME",
+    "LOCALAPPDATA",
+    "PYTHONPATH",
+    "CADGEN_FFMPEG",
+)
+
+# The client's own ffmpeg, looked up once per process. Resolved HERE rather than
+# in the worker because a PATH lookup only answers for the process that does it:
+# `cadgen step snapshot` always runs in a resident worker whose PATH belongs to
+# whatever first spawned the daemon -- an editor, an agent session, a cron run --
+# so an ffmpeg the caller can run was reported as not installed, and installing
+# one after the daemon started never helped. Whenever the caller has one, the
+# ABSOLUTE path travels and the worker looks nothing up; the worker keeps its own
+# PATH fallback for the callers that never came through here.
+_ffmpeg_on_path: str | None = None
+
+
+def _client_ffmpeg() -> str:
+    global _ffmpeg_on_path
+    if _ffmpeg_on_path is None:
+        import shutil
+
+        _ffmpeg_on_path = shutil.which("ffmpeg") or ""
+    return _ffmpeg_on_path
 
 
 def forwarded_env() -> dict[str, str]:
@@ -66,6 +94,12 @@ def forwarded_env() -> dict[str, str]:
     if "PYTHONPATH" in env:
         entries = [os.path.abspath(e) for e in env["PYTHONPATH"].split(os.pathsep) if e]
         env["PYTHONPATH"] = os.pathsep.join(entries)
+    # An explicit CADGEN_FFMPEG is the caller's answer and stands; otherwise the
+    # caller's PATH is asked here, where it is the caller's.
+    if not env.get("CADGEN_FFMPEG"):
+        found = _client_ffmpeg()
+        if found:
+            env["CADGEN_FFMPEG"] = found
     return env
 
 

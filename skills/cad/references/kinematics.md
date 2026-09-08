@@ -223,7 +223,7 @@ cadgen step snapshot STEP/arm.step tmp/open.png --kinematics open
 
 For still evidence of a CLIP, freeze one frame: `--animation` names a clip
 the document's render module (`STEP/arm.step.js`) declares and `--time` the
-moment in seconds (default 0). One frame, one clip, one time — there is no sequence output. The frame
+moment in seconds (default 0). The frame
 is composed exactly as the viewer composes it: `--kinematics` sets the base
 pose, and the clip's `update(t, m)` is evaluated at that time on top of it.
 A clip name the model does not declare fails with the clips it has:
@@ -237,6 +237,68 @@ In a JSON job the request is one field, `"animation": {"clip": "demo",
 "time": 2.0}`, beside `"kinematics"`; the Python door takes the same object
 (`step.snapshot(..., animation={"clip": "demo", "time": 2.0})`) or the clip
 name with `time=`.
+
+### Rendering the whole clip
+
+`--video` renders the SPAN instead of a moment, into the `.mp4` or `.gif` the
+OUT names. Everything else is unchanged — same theme, display settings, camera
+and size profile as a still, and the same `--kinematics` base pose underneath:
+
+```bash
+cadgen step snapshot STEP/arm.step tmp/demo.mp4 --animation demo --video '{"fps": 30}'
+cadgen step snapshot STEP/arm.step tmp/demo.gif --animation demo \
+  --video '{"fps": 12, "seconds": 3, "start": 1.5, "quality": "draft"}'
+```
+
+The request's keys, all optional:
+
+| key | default | meaning |
+| --- | --- | --- |
+| `fps` | `30` | frames per second, a whole number 1..120 |
+| `seconds` | what is left of the clip from `start` | how much of the clip to render |
+| `start` | `0` | seconds into the clip where the video begins; must be inside it |
+| `quality` | `review` | `draft`, `review`, or `high` |
+| `loop` | `true` | GIF only — an `.mp4` that sets it is refused |
+
+The span is measured against the clip rather than trusted, because the clip
+evaluator ANSWERS a time past the end instead of refusing it: a clip that does
+not loop holds its final pose, so an overrunning span buys frames that are all
+one still image, and a looping clip wraps, so it renders a different span than
+the one asked for. A `start` at or past the end is refused; an explicit
+`seconds` that overruns a clip which does not loop renders and warns. Hence the
+default: a looping clip gets one whole cycle from wherever it starts, and a clip
+that stops gets the part of it that is left. `fps * seconds` is capped at 7200
+frames — every frame is a full-size PNG on disk before ffmpeg runs.
+
+Width and height come from `--width`/`--height`/`--size-profile` like any
+other render; there is no size key here. `--video` needs `--animation` (it
+renders a clip) and refuses `--time` (that freezes one frame instead), and it
+needs **ffmpeg** on `PATH` — or `CADGEN_FFMPEG` pointing at one. A missing
+encoder is reported before the first frame is drawn, never after minutes of
+rendering. A GIF stores its frame delay in hundredths of a second, so a player
+shows the nearest rate to the one asked for; `.mp4` is exact.
+
+The camera is fitted ONCE, to everything the clip covers, so the model moves
+and the frame does not. That is why a long clip is worth trimming with
+`start`/`seconds`: framing the whole of a clip that travels a long way leaves
+the interesting part small.
+
+In a JSON job the request is a `"video"` object beside `"animation"`, and a
+video job carries exactly one output:
+
+```json
+{
+  "input": "STEP/arm.step",
+  "animation": { "clip": "demo" },
+  "video": { "fps": 24, "quality": "high" },
+  "outputs": [{ "path": "tmp/demo.mp4", "camera": "iso" }]
+}
+```
+
+The result names the file and what it covers — `saved video: tmp/demo.mp4
+(120 frames, 30 fps, 4s)` — so a wrong clip or a wrong span shows up without
+opening it. Still snapshots remain the evidence for a POSE; a video is for
+motion a still cannot show.
 
 Identify fixed pivots, link lengths, gear ratios, and joint limits BEFORE
 declaring mates; pivot every rotation about its hinge bore or mate face —

@@ -129,12 +129,12 @@ class MeshExportResult:
 
 @dataclass(frozen=True)
 class SnapshotFile:
-    """One image a snapshot run wrote."""
+    """One file a snapshot run wrote: a still, or a video of an animation clip."""
 
     path: Path
-    #: The encoding the render produced: ``png``, or whatever suffix a text
-    #: output carried. It follows the RENDER, not the request — an SVG served
-    #: under a ``.png`` name still reports ``svg``.
+    #: The encoding the render produced: ``png``, ``mp4``, ``gif``, or whatever
+    #: suffix a text output carried. It follows the RENDER, not the request — an
+    #: SVG served under a ``.png`` name still reports ``svg``.
     kind: str
     #: What this output framed: the camera preset, ``azimuth:elevation`` pair, or
     #: view label the output declared. Empty when the job named none.
@@ -148,6 +148,11 @@ class SnapshotFile:
     #: between them. Empty for inputs that render without a tree (meshes,
     #: drawings, robot descriptions).
     tree: str = ""
+    #: ``--video`` only: what the sequence covers. A still leaves all three at
+    #: zero. The frames themselves are never here — they are the file.
+    frames: int = 0
+    fps: int = 0
+    seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -194,7 +199,16 @@ class SnapshotResult:
         # agent, so it stays one compact JSON line.
         if not self.files:
             return [json.dumps(list(self.parts), separators=(",", ":"))]
-        lines = [f"saved snapshot: {entry.path}" for entry in self.files]
+        lines = [
+            # A video says what it covers: the path alone cannot be checked
+            # against the clip the caller asked for, and the frame count is the
+            # first thing that is wrong when the request was.
+            f"saved video: {entry.path} ({entry.frames} frames, {entry.fps} fps, "
+            f"{entry.seconds:g}s)"
+            if entry.frames
+            else f"saved snapshot: {entry.path}"
+            for entry in self.files
+        ]
         lines += [f"warning: {warning}" for warning in self.warnings]
         return lines
 

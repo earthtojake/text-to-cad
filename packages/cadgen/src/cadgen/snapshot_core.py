@@ -53,6 +53,13 @@ DEFAULT_RENDER_THEME_ID = "snapshot"
 # The viewer theme `snapshot` is derived from, and the id its default dimensions follow.
 VIEWER_DEFAULT_THEME_ID = "workbench-light"
 DEFAULT_TIMEOUT_SECONDS = 300
+# Tearing a video sequence down is one dispose call over objects already in
+# hand, so it gets a short deadline of its own rather than the job's: the
+# failure it is bounded against is a frame that already blew ITS timeout and
+# left JavaScript running, which this call would then queue behind forever.
+VIDEO_TEARDOWN_TIMEOUT_SECONDS = 30
+# How often a video says where it is when nothing is painting a progress bar.
+VIDEO_NARRATE_INTERVAL_SECONDS = 15.0
 RENDER_BROWSER_STARTUP_TIMEOUT_MS = 15_000
 SUPPORTED_RENDER_MODES = {"view", "section", "list"}
 MESH_INPUT_KINDS = {"glb", "stl", "3mf"}
@@ -87,6 +94,10 @@ SUPPORTED_JOB_KEYS = frozenset(
         # Layered over the kinematics pose exactly as the viewer layers its
         # Animation tab.
         "animation",
+        # The SPAN of that choreography rather than one moment of it:
+        # {fps, seconds, start, quality, loop}, encoded to the .mp4/.gif the
+        # output names. Meaningless without `animation` (cadgen.snapshot_video).
+        "video",
         "sizeProfile",
         "width",
         "height",
@@ -727,16 +738,35 @@ def normalize_common_job(
     if mode != "list" and not outputs:
         raise SnapshotError("render job must include outputs for non-list modes")
 
-    # GIF export is deleted: snapshot writes PNG stills only. Refuse the
-    # output up front so an old recipe fails loudly instead of rendering a
-    # still into a .gif name.
-    for output in outputs:
-        output_path_text = str((output.get("path") if is_plain_object(output) else output) or "")
-        if output_path_text.strip().lower().endswith(".gif"):
+    # What an output may be named follows from whether this job asked for a
+    # sequence. A still writes PNG, so a VIDEO name is refused up front: writing
+    # a PNG into one answers a motion question with a frozen image under a name
+    # no player opens, at exit 0. A video writes exactly one file, and its
+    # extension picks the container. Both halves read the same table, so the
+    # names a video may be given and the names a still may not cannot drift.
+    video = job.get("video")
+    if video is not None:
+        from cadgen.snapshot_video import validate_video_output
+
+        if len(outputs) != 1:
             raise SnapshotError(
-                "snapshot renders PNG stills: name a .png output "
-                "(motion review lives in the CAD Viewer)"
+                f"a video renders one clip to one file; this job declares {len(outputs)} "
+                "outputs (split the cameras into their own jobs)"
             )
+        # `video` is the NORMALIZED request by the time it gets here (the kind
+        # resolver validated its shape), so only the output half is left.
+        validate_video_output(video, declared_output_path(outputs[0]))
+    else:
+        from cadgen.snapshot_video import VIDEO_CONTAINERS
+
+        for output in outputs:
+            output_path_text = str((output.get("path") if is_plain_object(output) else output) or "")
+            if Path(output_path_text.strip()).suffix.lower() in VIDEO_CONTAINERS:
+                raise SnapshotError(
+                    f"snapshot renders PNG stills: {output_path_text.strip()} names a video "
+                    "container, so name a .png output, or pass --video with --animation to "
+                    "render the clip into it"
+                )
 
     # A job's own `theme` string gets the SAME treatment as the
     # `--theme` flag: a saved-theme name stays a name, but a path or an
@@ -901,6 +931,10 @@ def resolve_mesh_render_job(
         raise SnapshotError(
             f"an animation frame requires a STEP document with a render module beside it; "
             f"{label} mesh inputs have no clips"
+        )
+    if job.get("video") is not None:
+        raise SnapshotError(
+            f"a video renders an animation clip; {label} mesh inputs have no clips to render"
         )
 
     mode = str(job.get("mode") or "view").strip().lower()
@@ -1335,7 +1369,8 @@ class BatchSnapshotRenderer:
             await self.page.route(SNAPSHOT_ROUTE_GLOB, self.handle_route)
             await self.page.goto(SNAPSHOT_RENDER_URL, wait_until="load", timeout=DEFAULT_TIMEOUT_SECONDS * 1000)
             await self.page.wait_for_function(
-                "typeof window.__snapshotRender === 'function'",
+                "typeof window.__snapshotRender === 'function' && "
+                "typeof window.__snapshotRenderSequence === 'function'",
                 timeout=DEFAULT_TIMEOUT_SECONDS * 1000,
             )
             self.started = True
@@ -1403,6 +1438,166 @@ class BatchSnapshotRenderer:
             raise SnapshotError(str(message or "unknown browser snapshot failure"))
         return result
 
+    async def render_video(
+        self,
+        job: Mapping[str, object],
+        *,
+        progress: object | None = None,
+        narrate: object | None = None,
+    ) -> dict[str, object]:
+        """Render one job's animation clip as a video and report what was written.
+
+        The page prepares the source, the render module and the model ONCE and
+        then answers one capture request per frame: fetching and tessellating a
+        document 1800 times is not a slower video, it is no video at all. The
+        frames come back a PNG at a time for the same reason the mesh bytes ride
+        a loopback socket (see the transport note above) -- an array of every
+        frame is a protocol message no driver pipe can carry.
+
+        The frames land in a temp directory and ffmpeg encodes them. Neither the
+        frames nor their bytes appear in the result: what a caller gets is the
+        path, which is what it asked for.
+
+        ``narrate`` is how a video says what it is doing where nothing paints a
+        bar. This is the one render whose work is measured in thousands of units
+        and tens of minutes, and the door that serves it (``cadgen step
+        snapshot``) always runs in a daemon worker, whose stderr is a frame relay
+        and not a tty -- so the frame counter below reaches nobody there. A
+        caller that IS painting passes nothing and gets none of these lines.
+        """
+        import tempfile
+
+        from cadgen.snapshot_video import (
+            VIDEO_FRAME_PATTERN,
+            encode_video,
+            video_container_for_path,
+        )
+
+        await self.start()
+        report = resolve_progress(progress)
+        say = narrate if callable(narrate) else (lambda message: None)
+        resolved = job.get("resolved") if is_plain_object(job.get("resolved")) else {}
+        self.active_root_path = Path(str(resolved.get("rootPath") or "")).resolve()
+        width, height = max_output_size(job)
+        await self.page.set_viewport_size({"width": width, "height": height})
+        timeout_seconds = job.get("timeoutSeconds") or DEFAULT_TIMEOUT_SECONDS
+        video = job["video"] if is_plain_object(job.get("video")) else {}
+        output = job["outputs"][0]
+        output_path = Path(str(output.get("path") or ""))
+        container = video_container_for_path(str(output_path))
+
+        # The preparation loads, builds, and walks the clip once to find the
+        # bounds the camera is locked to, so on a very long clip it is the one
+        # call whose cost grows with the frame count. It shares the job's
+        # `timeoutSeconds` with everything else; a clip that needs longer than
+        # that to be MEASURED raises it there.
+        report.detail(f"{job.get('input') or ''} (preparing)")
+        say(f"video: preparing {job.get('input') or ''}")
+        prepared = await with_snapshot_timeout(
+            self.page.evaluate("(renderJob) => window.__snapshotRenderSequence(renderJob)", dict(job)),
+            timeout_seconds,
+            "video preparation",
+        )
+        if not is_plain_object(prepared) or not prepared.get("ok"):
+            raise SnapshotError("the browser could not prepare the video sequence")
+        # The frame count comes from the PAGE because the clip does: choreography
+        # is JavaScript, so the duration and the loop flag that decide the default
+        # span are only readable there.
+        frames = int(prepared.get("frames") or 0)
+        fps = int(prepared.get("fps") or video.get("fps") or 0)
+        seconds = float(prepared.get("seconds") or 0.0)
+        warnings: list[str] = []
+        # The camera the PAGE resolved, reported the way a still reports it. The
+        # request is not a substitute: an explicit-position camera is an object,
+        # and echoing it puts a Python repr in a machine-readable field.
+        resolved_camera = ""
+        # Said before frame 0, because it is the only disclosure of how long this
+        # will run: a typo'd `{"seconds": 300, "fps": 120}` and a deliberate 20 s
+        # clip look identical from outside until the frame total is named.
+        say(f"video: {frames} frames at {fps} fps ({seconds:g}s) -> {output_path}")
+        counted_at = time.perf_counter()
+        try:
+            with tempfile.TemporaryDirectory(prefix="cadgen-video-") as frames_dir:
+                frames_path = Path(frames_dir)
+                # A frame is a unit of work the caller can watch. Under the
+                # packet's job counter a 1800-frame render reports 0/1 for
+                # minutes; the packet loop restores its own total afterwards.
+                report.phase(PHASE_RENDER, total=frames, detail=str(job.get("input") or ""))
+                for index in range(frames):
+                    frame = await with_snapshot_timeout(
+                        self.page.evaluate(
+                            "(index) => window.__snapshotRenderSequenceFrame(index)", index
+                        ),
+                        timeout_seconds,
+                        f"video frame {index}",
+                    )
+                    if not is_plain_object(frame) or not frame.get("dataUrl"):
+                        raise SnapshotError(f"the browser returned no image for video frame {index}")
+                    match = re.match(r"^data:([^;]+);base64,(.+)$", str(frame["dataUrl"]))
+                    if not match:
+                        raise SnapshotError(f"video frame {index} did not include a base64 data URL")
+                    (frames_path / (VIDEO_FRAME_PATTERN % index)).write_bytes(
+                        base64.b64decode(match.group(2))
+                    )
+                    resolved_camera = resolved_camera or str(frame.get("camera") or "")
+                    report.advance()
+                    # On the clock rather than every N frames: one frame is
+                    # milliseconds on a bracket and seconds on an assembly, and
+                    # what a watcher needs is evidence of movement at a human
+                    # rate either way.
+                    if time.perf_counter() - counted_at >= VIDEO_NARRATE_INTERVAL_SECONDS:
+                        counted_at = time.perf_counter()
+                        say(f"video: frame {index + 1}/{frames}")
+                say(f"video: encoding {frames} frames as {container}")
+                encode_video(
+                    frames_path,
+                    output_path=output_path,
+                    fps=fps,
+                    container=container,
+                    quality=str(video.get("quality") or ""),
+                    loop=bool(video.get("loop", True)),
+                )
+        finally:
+            # The prepared model holds GPU buffers for the whole encode, so it is
+            # freed whatever happened -- and a teardown that fails must not mask
+            # the failure that got us here. It is on a timeout of its own for the
+            # same reason: cancelling a frame's await does not stop the
+            # JavaScript it was waiting on, so a clip that wedges inside
+            # `update` leaves this call queued behind it, and an untimed await
+            # here would swallow the frame timeout the caller needs to see.
+            try:
+                teardown = await with_snapshot_timeout(
+                    self.page.evaluate("() => window.__snapshotRenderSequenceDispose()"),
+                    VIDEO_TEARDOWN_TIMEOUT_SECONDS,
+                    "video teardown",
+                )
+            except Exception:  # noqa: BLE001 - best-effort teardown
+                teardown = None
+            if is_plain_object(teardown):
+                warnings = [str(warning) for warning in (teardown.get("warnings") or [])]
+        return {
+            "ok": True,
+            "mode": "view",
+            "outputs": [
+                {
+                    "path": str(output_path),
+                    "camera": resolved_camera,
+                    "width": width,
+                    "height": height,
+                    "mimeType": f"video/{container}",
+                    # The encoder already wrote the file, so this output carries
+                    # a DESCRIPTION rather than bytes -- see write_output_payload.
+                    "video": {
+                        "frames": frames,
+                        "fps": fps,
+                        "seconds": seconds,
+                        "start": float(prepared.get("start") or 0.0),
+                    },
+                }
+            ],
+            "warnings": warnings,
+        }
+
     async def close(self) -> None:
         if self.asset_server is not None:
             try:
@@ -1448,6 +1643,7 @@ async def render_resolved_job_packet(
     runtime_dir: Path,
     renderer: BatchSnapshotRenderer | None = None,
     progress: object | None = None,
+    narrate: object | None = None,
 ) -> dict[str, object]:
     snapshot_renderer = renderer or BatchSnapshotRenderer(runtime_dir)
     # The CLI already cleared these before resolution; repeating it costs an
@@ -1462,9 +1658,20 @@ async def render_resolved_job_packet(
     # than a number formatted into a phase name. Same shape as meshing components.
     report.phase(PHASE_RENDER, total=total)
     try:
-        for job in packet["jobs"]:
+        for index, job in enumerate(packet["jobs"]):
             report.detail(str(job.get("input") or ""))
-            result = await snapshot_renderer.render(job)
+            if job.get("video") is not None:
+                result = await snapshot_renderer.render_video(
+                    job, progress=report, narrate=narrate
+                )
+                # A video counts FRAMES, not jobs, so render_video re-entered
+                # the phase with its own total; the packet's counter is restored
+                # here with the jobs already finished credited to it.
+                report.phase(PHASE_RENDER, total=total, detail=str(job.get("input") or ""))
+                report.advance(index + 1)
+            else:
+                result = await snapshot_renderer.render(job)
+                report.advance()
             # The browser result knows nothing about artifact resolution; --debug
             # diagnostics are attached at resolve time, so merge them into the
             # emitted result here or they never reach --json output.
@@ -1473,7 +1680,6 @@ async def render_resolved_job_packet(
             if is_plain_object(debug_info) and is_plain_object(result):
                 result = {**result, "debug": debug_info}
             results.append(result if packet["single"] else {"input": job.get("input"), **result})
-            report.advance()
     finally:
         await snapshot_renderer.close()
     if packet["single"]:
@@ -1497,6 +1703,12 @@ def write_output_payload(output: Mapping[str, object]) -> None:
     """
     output_path = str(output.get("path") or "")
     if not output_path:
+        return
+    if is_plain_object(output.get("video")):
+        # A video was written by the encoder, through this same temp-plus-rename
+        # contract, as the last step of its render. The output carries what the
+        # file IS -- frames, fps, seconds -- and no bytes at all, which is the
+        # point: a 1800-frame sequence has no payload that could ride a result.
         return
     path = Path(output_path)
     text = output.get("text")
@@ -1605,6 +1817,9 @@ def snapshot_result(
             if not is_plain_object(output) or not output.get("path"):
                 continue
             path = Path(str(output["path"]))
+            # A video's span, or zeros for a still. The frames are the FILE, so
+            # nothing here carries their bytes (see the note above).
+            video = output.get("video") if is_plain_object(output.get("video")) else {}
             files.append(
                 SnapshotFile(
                     path=path,
@@ -1617,6 +1832,9 @@ def snapshot_result(
                     ),
                     input=input_text,
                     tree=document_hash,
+                    frames=int(video.get("frames") or 0),
+                    fps=int(video.get("fps") or 0),
+                    seconds=float(video.get("seconds") or 0.0),
                 )
             )
         parts.extend(part for part in (job_result.get("parts") or []) if is_plain_object(part))
@@ -1646,6 +1864,7 @@ async def render_snapshot(
     runtime_dir: Path,
     renderer: BatchSnapshotRenderer | None = None,
     progress: object | None = None,
+    narrate: object | None = None,
 ) -> SnapshotResult:
     """Render a resolved packet, write its outputs, and report what was written.
 
@@ -1657,7 +1876,11 @@ async def render_snapshot(
     """
     started = time.perf_counter()
     result = await render_resolved_job_packet(
-        packet, runtime_dir=runtime_dir, renderer=renderer, progress=progress
+        packet,
+        runtime_dir=runtime_dir,
+        renderer=renderer,
+        progress=progress,
+        narrate=narrate,
     )
     write_render_outputs(result)
     return snapshot_result(

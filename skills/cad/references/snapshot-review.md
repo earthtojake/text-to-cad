@@ -4,7 +4,7 @@ Read this file when choosing saved CAD `cadgen step snapshot` outputs for primar
 
 ## Policy
 
-Snapshot validation is mandatory. Every created or visibly updated primary STEP/STP part or assembly gets at least one reviewed PNG snapshot; deterministic checks passing is not a reason to skip. Use CAD `cadgen step snapshot` rather than opening the viewer manually or using Playwright; snapshots are faster, lighter, more precise, and more agent-friendly. Snapshots are PNG stills; review motion interactively in the viewer. For still evidence of a pose or of one moment in a clip, pass `--kinematics` and/or `--animation CLIP --time SECONDS` (see `kinematics.md`, "Reviewing motion") — one frame, never a sequence.
+Snapshot validation is mandatory. Every created or visibly updated primary STEP/STP part or assembly gets at least one reviewed PNG snapshot; deterministic checks passing is not a reason to skip. Use CAD `cadgen step snapshot` rather than opening the viewer manually or using Playwright; snapshots are faster, lighter, more precise, and more agent-friendly. Review evidence is a PNG still. For still evidence of a pose or of one moment in a clip, pass `--kinematics` and/or `--animation CLIP --time SECONDS` (see `kinematics.md`, "Reviewing motion"). A clip that a still cannot show renders as a video with `--animation CLIP --video '{...}'` into an `.mp4`/`.gif` OUT — that is for motion, not a substitute for the reviewed still.
 
 Skip saved snapshots only when no visible geometry was created or updated, or no valid artifact exists:
 
@@ -90,6 +90,13 @@ job carries it as one `animation` object — `time` is not a top-level job key:
 `time` is seconds, finite and >= 0, defaulting to 0. A bare clip name is the
 FLAG's spelling, not the job's: `"animation": "demo"` is refused, as is any key
 the job does not support — the error lists the supported set.
+
+A `"video"` object beside it renders the clip's SPAN into the `.mp4` or `.gif`
+the single output names, instead of one frame: `{"fps": 30, "seconds": <what is
+left of the clip>, "start": 0, "quality": "review", "loop": true}`, every key
+optional and every other key refused. It needs `animation`, refuses an
+`animation.time`, refuses a `start` past the end of the clip, and needs ffmpeg
+installed. See `kinematics.md`, "Rendering the whole clip".
 
 ## Output paths
 

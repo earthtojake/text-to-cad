@@ -16,7 +16,7 @@ import {
   sourceIsStep,
   stepParameterRuntime
 } from "./source.js";
-import { resolveAnimationFrame } from "./animationClock.js";
+import { animationClipDuration, resolveAnimationFrame } from "./animationClock.js";
 import { loadRenderModule } from "./renderModule.js";
 import {
   createHttpTessellationCacheProvider,
@@ -87,7 +87,11 @@ async function loadStepAnimation(job, source) {
   return resolveAnimationFrame(renderModule.clips, request);
 }
 
-export async function runHeadlessRenderJob(job) {
+// Everything a render needs before a single pixel is drawn: the fetched and
+// tessellated source, the compiled clip frame, and the job carrying the runtime
+// objects the shared render path reads. A still pays for this once and throws it
+// away; a video pays for it once and keeps it (see prepareHeadlessRenderSequence).
+async function prepareRenderJob(job) {
   const loadStarted = performance.now();
   const source = await loadSource(job);
   const stepAnimation = await loadStepAnimation(job, source);
@@ -107,17 +111,242 @@ export async function runHeadlessRenderJob(job) {
   if (stepParameterSource && explicitParams && String(job.mode || "view").toLowerCase() !== "view") {
     throw new Error("kinematics values support only view mode; set display.mode for display-style changes");
   }
-  const renderJobWithStepParameters = stepParameterSource
-    ? {
-        ...renderJob,
-        stepParameters: stepParameterRuntime(stepParameterSource)
-      }
-    : renderJob;
-  return capturePreparedSource(source, renderJobWithStepParameters);
+  return {
+    source,
+    stepAnimation,
+    renderJob: stepParameterSource
+      ? {
+          ...renderJob,
+          stepParameters: stepParameterRuntime(stepParameterSource)
+        }
+      : renderJob
+  };
+}
+
+export async function runHeadlessRenderJob(job) {
+  const { source, renderJob } = await prepareRenderJob(job);
+  return capturePreparedSource(source, renderJob);
+}
+
+// --- video: prepare once, then move only the clock -------------------------
+//
+// A still throws its source and model away when it is done. Rendering a clip
+// that way would re-fetch and re-tessellate the whole document for every frame
+// — minutes of load per second of video — so a sequence prepares ONCE and then
+// answers per-frame capture requests against the model already on the GPU.
+//
+// The per-frame update is a merged `callbacks.animation` and nothing else:
+// cadScene's `settingsSignature` reads materials, edge style and display mode,
+// none of which move, so `update()` re-runs the effects pass over the records
+// it already built instead of rebuilding them. That seam is the whole reason a
+// video is affordable, and `sequencePoseState` is the one place it is used.
+//
+// The host drives it a frame at a time (`__snapshotRenderSequenceFrame(index)`)
+// rather than collecting an array: a 30 s 60 fps render is 1800 PNGs, and the
+// driver pipe cannot carry that in one protocol message.
+
+export const VIDEO_FPS_MIN = 1;
+export const VIDEO_FPS_MAX = 120;
+// The schedule's ceiling, mirroring cadgen's MAX_VIDEO_FRAMES: an fps bound
+// alone bounds nothing, because the frame count is fps TIMES seconds and every
+// frame is a full-size PNG written to disk before ffmpeg sees one of them.
+// 7200 frames is four minutes of review at 30 fps and tens of gigabytes of
+// frames at the default size; past that the request is a typo, not a video.
+export const VIDEO_MAX_FRAMES = 7200;
+
+function formatSeconds(value) {
+  return `${Number(value.toFixed(3))}s`;
+}
+
+/** The frame schedule a `video` request implies over one clip.
+ *
+ * `seconds` defaults to the span the clip still HAS from `start`, and the frame
+ * count is `seconds * fps` rounded, so the last frame sits one interval BEFORE
+ * `start + seconds`. That is what makes a looping clip loop cleanly: the frame
+ * at `start + seconds` is the frame at `start` again, and rendering both
+ * stutters on every repeat.
+ *
+ * Every time is measured against the clip, because `evaluateAnimationClip`
+ * ANSWERS a time past the end rather than refusing it: a non-looping clip
+ * clamps, so the tail of the video is one still image repeated, and a looping
+ * one wraps, so it renders a different span than the one asked for. Both are
+ * exit-0 wrong answers that nothing downstream can tell from a right one. */
+export function resolveVideoPlan(request, clip) {
+  const raw = request && typeof request === "object" ? request : {};
+  const fps = Number(raw.fps ?? 30);
+  if (!Number.isInteger(fps) || fps < VIDEO_FPS_MIN || fps > VIDEO_FPS_MAX) {
+    throw new Error(`video fps must be a whole number ${VIDEO_FPS_MIN}..${VIDEO_FPS_MAX}, got ${JSON.stringify(raw.fps)}`);
+  }
+  const start = raw.start === undefined || raw.start === null ? 0 : Number(raw.start);
+  if (!Number.isFinite(start) || start < 0) {
+    throw new Error(`video start must be seconds >= 0, got ${JSON.stringify(raw.start)}`);
+  }
+  const duration = animationClipDuration(clip);
+  if (start >= duration) {
+    throw new Error(
+      `video start ${formatSeconds(start)} is at or past the end of a ${formatSeconds(duration)} clip: `
+      + "every frame would be the same one"
+    );
+  }
+  const looping = clip?.loop !== false;
+  const seconds = raw.seconds === undefined || raw.seconds === null
+    // A looping clip's default is one whole cycle from wherever it starts; a
+    // clip that stops at its end has only the part of it that is left.
+    ? (looping ? duration : duration - start)
+    : Number(raw.seconds);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new Error(`video seconds must be a positive number, got ${JSON.stringify(raw.seconds)}`);
+  }
+  const frameCount = Math.max(1, Math.round(seconds * fps));
+  if (frameCount > VIDEO_MAX_FRAMES) {
+    throw new Error(
+      `video ${formatSeconds(seconds)} at ${fps} fps schedules ${frameCount} frames, `
+      + `past the ${VIDEO_MAX_FRAMES}-frame ceiling`
+    );
+  }
+  const warnings = [];
+  // An explicit span that overruns a clip which does not loop is the caller's
+  // to make, but the frames it buys past the end are all the final pose, and
+  // nothing in the finished file says so.
+  if (!looping && (start + seconds) - duration > 1e-9) {
+    warnings.push(
+      `video covers ${formatSeconds(start)}..${formatSeconds(start + seconds)} of a `
+      + `${formatSeconds(duration)} clip that does not loop: every frame past its end is the same final pose`
+    );
+  }
+  return { fps, seconds, start, frameCount, warnings };
+}
+
+export function videoFrameElapsedSec(plan, index) {
+  return plan.start + (index / plan.fps);
+}
+
+/** The `update` patch that poses a prepared model at one moment of its clip.
+ *
+ * The merged `callbacks.animation` is the only thing that changes, so applying
+ * it re-runs the effects pass over the existing records; nothing rebuilds. */
+export function sequencePoseState(stepAnimation, elapsedSec) {
+  return {
+    callbacks: {
+      animation: { ...stepAnimation, elapsedSec }
+    }
+  };
+}
+
+/** Re-pose a prepared model at one moment of its clip. */
+export function poseSequenceFrame(model, stepAnimation, elapsedSec) {
+  return model.update(sequencePoseState(stepAnimation, elapsedSec));
+}
+
+/** Bounds containing every frame of the plan.
+ *
+ * `captureModel` fits the camera to the bounds the model has AT CAPTURE TIME,
+ * which is right for a still and wrong for a sequence: a moving model would
+ * make the camera breathe frame to frame. Fitting to frame 0 alone is worse
+ * still — the clip travels out of shot wherever it moves furthest. So the
+ * camera is fitted once, to the union, and this pre-pass pays one effects pass
+ * per frame (no GL, no readback) to know what that union is. */
+export function sequenceFrameBounds(model, stepAnimation, plan) {
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (let index = 0; index < plan.frameCount; index += 1) {
+    const bounds = poseSequenceFrame(model, stepAnimation, videoFrameElapsedSec(plan, index)).bounds;
+    for (let axis = 0; axis < 3; axis += 1) {
+      min[axis] = Math.min(min[axis], Number(bounds?.min?.[axis] ?? 0));
+      max[axis] = Math.max(max[axis], Number(bounds?.max?.[axis] ?? 0));
+    }
+  }
+  return { min, max };
+}
+
+let activeRenderSequence = null;
+
+export async function prepareHeadlessRenderSequence(job) {
+  disposeHeadlessRenderSequence();
+  const { source, stepAnimation, renderJob } = await prepareRenderJob(job);
+  if (!stepAnimation) {
+    throw new Error("a video renders a clip: the job needs an animation request beside its video request");
+  }
+  const context = renderJobContext(source.meshData, renderJob);
+  const model = buildModel(THREE, source, modelOptionsForRenderJob(context, renderJob));
+  let viewport = null;
+  try {
+    const plan = resolveVideoPlan(renderJob.video, stepAnimation.clip);
+    // The union is measured BEFORE the scene is built, because the stage floor
+    // and grid are sized to the bounds `renderModel` is handed while the camera
+    // is locked to this union: built from the t = 0 pose they end up inside the
+    // frame, and a travelling part walks off the shadow catcher mid-clip.
+    const frameBounds = sequenceFrameBounds(model, stepAnimation, plan);
+    context.warnings.push(...plan.warnings);
+    viewport = renderModel(THREE, model, { job: renderJob, context, floorBounds: frameBounds });
+    activeRenderSequence = { job: renderJob, model, viewport, stepAnimation, plan, frameBounds };
+  } catch (error) {
+    // Whichever of the two exists owns the GPU buffers: a viewport disposes the
+    // model it was built over, and before that the model is on its own.
+    (viewport || model).dispose();
+    throw error;
+  }
+  return {
+    ok: true,
+    frames: activeRenderSequence.plan.frameCount,
+    fps: activeRenderSequence.plan.fps,
+    seconds: activeRenderSequence.plan.seconds,
+    start: activeRenderSequence.plan.start
+  };
+}
+
+export async function captureHeadlessRenderSequenceFrame(index) {
+  const session = activeRenderSequence;
+  if (!session) {
+    throw new Error("no prepared render sequence: call __snapshotRenderSequence(job) first");
+  }
+  if (!Number.isInteger(index) || index < 0 || index >= session.plan.frameCount) {
+    throw new Error(`render sequence frame ${JSON.stringify(index)} is outside 0..${session.plan.frameCount - 1}`);
+  }
+  const captured = await captureModel(session.viewport, {
+    job: session.job,
+    frameBounds: session.frameBounds,
+    // The pose rides INTO captureModel's own `update` rather than being applied
+    // just before it: captureModel updates the model itself, so posing
+    // separately ran the clip evaluator and the whole effects pass twice on
+    // every frame — the largest per-frame cost a video pays, doubled.
+    modelState: sequencePoseState(session.stepAnimation, videoFrameElapsedSec(session.plan, index))
+  });
+  const output = captured?.outputs?.[0];
+  if (!output?.dataUrl) {
+    throw new Error(`render sequence frame ${index} produced no image`);
+  }
+  return {
+    ok: true,
+    index,
+    dataUrl: output.dataUrl,
+    width: output.width,
+    height: output.height,
+    // The camera the page RESOLVED, as a still reports it. The host builds the
+    // video's output record itself and would otherwise echo the request, which
+    // for an explicit-position camera is an object, not a name.
+    camera: output.camera
+  };
+}
+
+export function disposeHeadlessRenderSequence() {
+  const session = activeRenderSequence;
+  activeRenderSequence = null;
+  if (!session) {
+    return { ok: true, warnings: [] };
+  }
+  // One context serves every frame, so a warning raised on frame 0 is still in
+  // the list on frame 1799: report the SET, once, as the sequence is torn down.
+  const warnings = Array.from(new Set(session.viewport.context.warnings.map(String)));
+  session.viewport.dispose();
+  return { ok: true, warnings };
 }
 
 if (typeof window !== "undefined") {
   window.__snapshotRender = runHeadlessRenderJob;
+  window.__snapshotRenderSequence = prepareHeadlessRenderSequence;
+  window.__snapshotRenderSequenceFrame = captureHeadlessRenderSequenceFrame;
+  window.__snapshotRenderSequenceDispose = disposeHeadlessRenderSequence;
   // The snapshot host (cadgen's snapshot driver) serves the shared component-
   // tessellation cache (~/.cache/cadgen/meshes) on /__tess_cache/ from its
   // loopback asset server, so repeat snapshots — and any component an export

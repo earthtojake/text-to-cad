@@ -254,7 +254,11 @@ export class CadEdgeInstances {
     this.slotCount = 0;
     this.liveCount = 0;
     this.highlightedCount = 0;
-    this.freeSlots = [];
+    // A SET, not an array: releasing every occurrence of a component walks the
+    // trailing slots one at a time in syncCounts, and an array turned that into
+    // an includes + indexOf + splice per step — quadratic in the occurrence
+    // count of the component being torn down, on every publish that drops one.
+    this.freeSlots = new Set();
     this.instanceData = new Float32Array(0);
     this.instanceTexture = null;
     this.disposed = false;
@@ -312,8 +316,9 @@ export class CadEdgeInstances {
 
   allocate() {
     let slot;
-    if (this.freeSlots.length) {
-      slot = this.freeSlots.pop();
+    if (this.freeSlots.size) {
+      slot = this.freeSlots.values().next().value;
+      this.freeSlots.delete(slot);
     } else {
       if (this.slotCount >= this.capacity) {
         this.grow(Math.max(MIN_CAPACITY, this.capacity * 2));
@@ -345,7 +350,7 @@ export class CadEdgeInstances {
       this.highlightedCount -= 1;
     }
     this.instanceData.fill(0, base, base + INSTANCE_FLOATS);
-    this.freeSlots.push(slot);
+    this.freeSlots.add(slot);
     this.liveCount -= 1;
     this.syncCounts();
     this.instanceTexture.needsUpdate = true;
@@ -353,8 +358,8 @@ export class CadEdgeInstances {
 
   syncCounts() {
     // Trailing freed slots shrink the draw; interior ones are collapsed by the shader.
-    while (this.slotCount > 0 && this.freeSlots.includes(this.slotCount - 1)) {
-      this.freeSlots.splice(this.freeSlots.indexOf(this.slotCount - 1), 1);
+    while (this.slotCount > 0 && this.freeSlots.has(this.slotCount - 1)) {
+      this.freeSlots.delete(this.slotCount - 1);
       this.slotCount -= 1;
     }
     this.geometry.instanceCount = this.segments.segmentCount * this.slotCount;
