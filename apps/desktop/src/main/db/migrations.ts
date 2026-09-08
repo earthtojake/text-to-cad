@@ -210,6 +210,30 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE agent_options DROP COLUMN default_effort;
     `,
   },
+  {
+    version: 10,
+    name: "session-state-snapshots",
+    // The last reduced `SessionState` of each session, so clicking a row
+    // paints its transcript at once instead of showing a spinner for the two
+    // seconds a spawn, an `initialize` and a `session/load` take
+    // (src/main/acp/snapshots.ts, README "Opening a session").
+    //
+    // A table of its own rather than a column on `sessions`: every read of
+    // that row goes through the sidebar's list, and a half-megabyte JSON
+    // blob per session is not something to carry into a list of titles.
+    //
+    // `state` is the SessionState as JSON, capped by the writer. It is a
+    // cache — a row that no longer parses is dropped and the session falls
+    // back to the spinner, never migrated — and it goes with its session
+    // (ON DELETE CASCADE).
+    up: `
+      CREATE TABLE session_state (
+        session_id  TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+        state       TEXT NOT NULL,
+        updated_at  INTEGER NOT NULL
+      );
+    `,
+  },
 ];
 
 /**

@@ -8,6 +8,15 @@
  * that dies stays in the index with `status: error`; the next `prompt` or
  * `load` spawns a fresh adapter and loads the transcript back.
  *
+ * Opening a session used to be that whole sequence with a spinner over it —
+ * two and a half seconds for Claude Code, one for Codex, measured by the
+ * timing line `load` logs (`./timing.ts`). Three things stand between a
+ * click and a transcript now, and each is its own small module:
+ *
+ *   - `./snapshots.ts`  the last state, on disk, painted immediately
+ *   - `./live.ts`       the adapters of the last few sessions, still running
+ *   - `./warm.ts`       one idle adapter per agent, spawned in advance
+ *
  * Dependencies are injected so this file has no Electron import of its own:
  * main wires it to the sqlite repository, node-pty and the IPC broadcaster.
  */
@@ -29,8 +38,12 @@ import type { Launch } from "../../shared/agents";
 import type { GitMode, Session, SessionStatus } from "../../shared/types";
 import type { AgentDetector } from "../agents/detect";
 import { agentProvider } from "../agents/registry";
-import { SessionConnection } from "./connection";
+import { SessionConnection, type SessionConnectionOptions } from "./connection";
+import { LiveConnections } from "./live";
+import { SessionSnapshotWriter, type SnapshotStore } from "./snapshots";
 import type { SpawnTerminal } from "./terminals";
+import { createTimer, loadTimer } from "./timing";
+import { WarmAdapterPool } from "./warm";
 
 export interface SessionRepository {
   list(projectId?: string): Session[];
@@ -140,6 +153,23 @@ export type SessionManagerDeps = {
 
   /** P7: remove the session's worktree on delete, if the settings allow it. */
   releaseWorkspace?: (session: Session) => Promise<void>;
+
+  /**
+   * Where the painted-on-select snapshot of each session's transcript is
+   * kept (`./snapshots.ts`; sqlite's `session_state` in the app). Without
+   * one — the unit tests — a session with no live connection is the spinner
+   * it always was.
+   */
+  snapshots?: SnapshotStore;
+
+  /**
+   * How many adapters stay alive behind the sessions that are not on screen
+   * (`KEEP_ALIVE_LIMIT` in `./live.ts`). A constant rather than a setting:
+   * it is a number about this machine's memory, not a preference, and four
+   * covers "the two or three threads I am switching between" with room to
+   * spare.
+   */
+  keepAlive?: number;
 };
 
 /** Codex's convention: the first line of the first prompt, trimmed to fit a sidebar row. */
@@ -168,10 +198,42 @@ function rejectAfter(ms: number, agentId: string): Promise<never> {
 }
 
 export class SessionManager {
-  private readonly live = new Map<string, SessionConnection>();
+  /**
+   * The adapters still running, most recently used last. Selecting another
+   * session does not close the one before it (`./live.ts`); the oldest
+   * beyond the limit is closed, and its row goes to `closed` so the next
+   * click reconnects it.
+   */
+  private readonly live: LiveConnections<SessionConnection>;
   private readonly tallies = new Map<string, ChangeTally>();
+  /** The `load` in flight per session, so two callers wait on one spawn. */
+  private readonly loads = new Map<string, Promise<SessionState>>();
+  private readonly snapshots: SessionSnapshotWriter | null;
+  private readonly warm: WarmAdapterPool<SessionConnection>;
 
-  constructor(private readonly deps: SessionManagerDeps) {}
+  constructor(private readonly deps: SessionManagerDeps) {
+    this.live = new LiveConnections({
+      ...(deps.keepAlive === undefined ? {} : { limit: deps.keepAlive }),
+      // A turn in flight is never evicted: the work and the reason for it
+      // would both be lost, and the limit comes back down when it ends.
+      busy: (connection) =>
+        connection.state.status === "running" || connection.state.status === "waiting",
+      onEvict: (sessionId) => {
+        console.info(`[acp] ${sessionId.slice(0, 8)} was closed to keep the adapter count at the limit`);
+        // The snapshot, now: the adapter is gone and a click on that row has
+        // only the picture to paint (`./snapshots.ts`).
+        this.snapshots?.flush(sessionId);
+        if (this.deps.repo.get(sessionId)) {
+          this.setStatus(sessionId, "closed");
+        }
+      },
+    });
+    this.snapshots = deps.snapshots ? new SessionSnapshotWriter({ store: deps.snapshots }) : null;
+    this.warm = new WarmAdapterPool({
+      spawn: (agentId, cwd) => this.spawnWarm(agentId, cwd),
+      log: (line) => console.info(line),
+    });
+  }
 
   /* ---------------------------------------------------------------------- */
   /* Index                                                                    */
@@ -185,8 +247,25 @@ export class SessionManager {
     return this.deps.repo.get(id);
   }
 
-  state(id: string): SessionState | null {
-    return this.live.get(id)?.state ?? null;
+  /**
+   * What to draw for this session right now, and whether it is the truth.
+   *
+   * `live: true` is the state of a connected adapter and needs nothing else.
+   * `live: false` is the stored snapshot (`./snapshots.ts`) — the renderer
+   * paints it at once, says "Reconnecting…" in the composer's row, and
+   * replaces it with what `load` answers. Null is a session with neither: it
+   * gets the spinner, the way every session did before migration 10.
+   */
+  state(id: string): { state: SessionState; live: boolean } | null {
+    const connection = this.live.get(id);
+    // `acpSessionId`, not merely `alive`: a connection that is spawned but
+    // still replaying holds an empty state, and the snapshot is a better
+    // picture of the session than the beginning of its own reload.
+    if (connection?.alive && connection.acpSessionId) {
+      return { state: connection.state, live: true };
+    }
+    const stored = this.snapshots?.read(id) ?? null;
+    return stored ? { state: stored, live: false } : null;
   }
 
   /* ---------------------------------------------------------------------- */
@@ -246,15 +325,27 @@ export class SessionManager {
     this.deps.repo.upsert(session);
     this.broadcastIndex();
 
+    const timer = createTimer();
+    let warmed = false;
     let connection: SessionConnection;
     try {
-      connection = await this.connect(session);
+      connection = await this.connect(session, {
+        onWarm: () => {
+          warmed = true;
+        },
+      });
+      timer.mark("spawn");
+      await connection.initialize();
+      timer.mark("initialize");
       await connection.newSession();
+      timer.mark("session/new");
+      console.info(
+        `[acp] create ${session.id.slice(0, 8)} ${session.agentId} warm=${warmed ? "yes" : "no"} ${timer.format()}`,
+      );
     } catch (error) {
       // A row with no agent session id can never be loaded; the renderer
       // shows the failure (sign in, install) and the user creates again.
-      this.live.get(session.id)?.close();
-      this.live.delete(session.id);
+      this.live.delete(session.id)?.close();
       this.deps.repo.remove(session.id);
       this.broadcastIndex();
       throw error;
@@ -407,34 +498,126 @@ export class SessionManager {
     }
   }
 
-  /** Resume: spawn and `session/load`. A live connection is returned as is. */
+  /**
+   * Resume: spawn and `session/load`. A live connection is returned as is —
+   * which, with the keep-alive set (`./live.ts`), is what switching back to
+   * a session you were just in costs: nothing.
+   *
+   * The phases are timed and logged once per load, because they are the
+   * whole reason this file has three caches in it and because they are not
+   * the same shape for the two adapters (README, "Opening a session").
+   */
   async load(id: string): Promise<SessionState> {
+    // One load per session at a time. The renderer starts one behind the
+    // painted snapshot, and a prompt typed into that snapshot's composer
+    // arrives while it is still running — two spawns for one session, and a
+    // `session/prompt` sent into the middle of a `session/load`.
+    const inflight = this.loads.get(id);
+    if (inflight) {
+      return inflight;
+    }
     const existing = this.live.get(id);
-    if (existing?.alive) {
+    if (existing?.alive && existing.acpSessionId) {
+      this.live.touch(id);
       this.deps.broadcast("session.state", { sessionId: id, state: existing.state });
       return existing.state;
     }
+    const work = this.loadNow(id).finally(() => {
+      this.loads.delete(id);
+    });
+    this.loads.set(id, work);
+    return work;
+  }
+
+  private async loadNow(id: string): Promise<SessionState> {
     const session = this.require(id);
     if (!session.acpSessionId) {
       throw new Error("this session never connected; create it again");
     }
-    const connection = await this.connect(session);
+    const timer = loadTimer();
+    let warmed = false;
+    // Held by reference and cleared below: after the load, every update of
+    // this session's life would otherwise go through a mark nobody reads.
+    const replay: { onReplayUpdate?: () => void } = {
+      onReplayUpdate: () => timer.mark("firstUpdate"),
+    };
+    const connection = await this.connect(session, {
+      onWarm: () => {
+        warmed = true;
+      },
+      replay,
+    });
+    timer.mark("spawn");
     try {
+      await connection.initialize();
+      timer.mark("initialize");
       await connection.loadSession(session.acpSessionId);
     } catch (error) {
       this.setStatus(id, "error");
       connection.close();
       this.live.delete(id);
       throw error;
+    } finally {
+      replay.onReplayUpdate = undefined;
     }
+    timer.mark("replay");
+    console.info(
+      `[acp] load ${id.slice(0, 8)} ${session.agentId} warm=${warmed ? "yes" : "no"} ${timer.format()}`,
+    );
     this.update(id, { status: "idle" });
     this.deps.broadcast("session.state", { sessionId: id, state: connection.state });
     return connection.state;
   }
 
+  /**
+   * Have an adapter ready for the agents the index says are in use, before
+   * anyone clicks anything (`./warm.ts`).
+   *
+   * One per agent, in the directory of that agent's most recent session —
+   * which is the project for every mode but `worktree`, and a worktree
+   * thread spawns its own (an adapter cannot be moved between directories).
+   * An agent that is not installed or not signed in is skipped: there is
+   * nothing to spawn and a download storm is not a pre-warm.
+   */
+  async warmAgents(): Promise<void> {
+    const statuses = this.deps.detector.list();
+    const wanted = new Map<string, string>();
+    for (const session of this.deps.repo.list()) {
+      if (session.archived || wanted.has(session.agentId) || !existsSync(session.cwd)) {
+        continue;
+      }
+      const provider = agentProvider(session.agentId);
+      if (!provider) {
+        continue;
+      }
+      const status = statuses.find((candidate) => candidate.id === session.agentId);
+      // The same rule `connect` applies, and no stricter: an adapter fetched
+      // by `npx -y` is usable with nothing on the PATH, and this agent has a
+      // session in the index, so it has already run here once. A provider
+      // `connect` would refuse, or one the person is signed out of, is
+      // skipped — warming it would buy an error message in advance.
+      if (!provider.launchWithoutBinary && status && !status.installed) {
+        continue;
+      }
+      if (status?.auth === "unauthenticated") {
+        continue;
+      }
+      wanted.set(session.agentId, session.cwd);
+    }
+    await Promise.all([...wanted].map(([agentId, cwd]) => this.warm.warm(agentId, cwd)));
+  }
+
+  /** Whether an idle adapter is waiting for this agent (the tests, and the timing log). */
+  warmed(agentId: string): boolean {
+    return this.warm.has(agentId);
+  }
+
   async prompt(id: string, content: PromptBlock[]): Promise<{ stopReason: string }> {
     const session = this.require(id);
     const connection = await this.ensureLive(session);
+    // The session being prompted is the one in use: it goes to the front of
+    // the keep-alive queue and is never what an eviction closes.
+    this.live.touch(id);
     if (session.title === "New session") {
       this.update(id, { title: titleFromPrompt(content) });
     }
@@ -539,11 +722,10 @@ export class SessionManager {
   }
 
   close(id: string): void {
-    const connection = this.live.get(id);
-    if (connection) {
-      connection.close();
-      this.live.delete(id);
-    }
+    this.live.delete(id)?.close();
+    // The transcript as it stood, written now rather than in a second: the
+    // adapter is gone and the next click has only the snapshot to paint.
+    this.snapshots?.flush(id);
     if (this.deps.repo.get(id)) {
       this.setStatus(id, "closed");
     }
@@ -561,9 +743,11 @@ export class SessionManager {
    */
   async delete(id: string): Promise<void> {
     const session = this.deps.repo.get(id);
-    this.live.get(id)?.close();
-    this.live.delete(id);
+    this.live.delete(id)?.close();
     this.tallies.delete(id);
+    // The snapshot row goes with the session's own (ON DELETE CASCADE); this
+    // cancels the pending write that would otherwise put it back.
+    this.snapshots?.forget(id);
     this.deps.repo.remove(id);
     this.broadcastIndex();
     if (session) {
@@ -571,11 +755,18 @@ export class SessionManager {
     }
   }
 
-  /** On quit: kill every adapter. */
+  /**
+   * On quit: kill every adapter, the idle ones included, and file the
+   * snapshots still waiting on their debounce — a session that was streaming
+   * when the app was quit paints where it left off rather than where it was
+   * a minute earlier.
+   */
   closeAll(): void {
-    for (const id of [...this.live.keys()]) {
+    this.warm.closeAll();
+    for (const id of this.live.keys()) {
       this.close(id);
     }
+    this.snapshots?.flushAll();
   }
 
   /* ---------------------------------------------------------------------- */
@@ -633,10 +824,22 @@ export class SessionManager {
     return connection;
   }
 
-  /** A live connection, reconnecting (and loading) after a crash or a close. */
+  /**
+   * A live connection, reconnecting (and loading) after a crash or a close.
+   *
+   * A load already running is waited for rather than joined: the connection
+   * exists from the moment it is spawned, and prompting one that is still
+   * replaying its transcript would put a turn in the middle of a
+   * `session/load`.
+   */
   private async ensureLive(session: Session): Promise<SessionConnection> {
+    const inflight = this.loads.get(session.id);
+    if (inflight) {
+      await inflight;
+      return this.requireLive(session.id);
+    }
     const existing = this.live.get(session.id);
-    if (existing?.alive) {
+    if (existing?.alive && existing.acpSessionId) {
       return existing;
     }
     await this.load(session.id);
@@ -663,43 +866,70 @@ export class SessionManager {
     return { ...env, [key]: existing ? `${prefix}${nodePath.delimiter}${existing}` : prefix };
   }
 
-  private async connect(session: Session): Promise<SessionConnection> {
-    const provider = agentProvider(session.agentId);
+  /**
+   * The half of an adapter's options that is the same for every session of
+   * one agent in one directory — which is exactly what makes a warm adapter
+   * interchangeable (`./warm.ts`). Everything a session brings with it is in
+   * `sessionOptions` below.
+   */
+  private async adapterOptions(
+    agentId: string,
+    cwd: string,
+  ): Promise<
+    Pick<
+      SessionConnectionOptions,
+      "agentId" | "launch" | "env" | "cwd" | "skillsRoot" | "spawnTerminal" | "clientVersion"
+    >
+  > {
+    const provider = agentProvider(agentId);
     if (!provider) {
-      throw new Error(`unknown agent: ${session.agentId}`);
+      throw new Error(`unknown agent: ${agentId}`);
     }
-    const status = this.deps.detector.list().find((candidate) => candidate.id === provider.id);
-    if (!provider.launchWithoutBinary && status && !status.installed) {
-      throw new Error(`${provider.name} is not installed`);
-    }
-    // A worktree removed from Settings, or from a terminal, while its thread
-    // was closed. The adapter would fail to spawn with an ENOENT naming an
-    // absolute path; this says what actually happened.
-    if (!existsSync(session.cwd)) {
-      const message =
-        session.gitMode === "worktree"
-          ? "This session's worktree has been deleted"
-          : "This session's directory no longer exists";
-      this.setStatus(session.id, "error", message);
-      throw new Error(message);
-    }
-    this.live.get(session.id)?.close();
-    this.setStatus(session.id, "connecting");
-
-    const connection = new SessionConnection({
-      sessionId: session.id,
-      agentId: session.agentId,
+    return {
+      agentId,
       launch: this.deps.launchOverride?.(provider.id) ?? provider.launch,
       env: await this.environment(),
-      cwd: session.cwd,
-      mcpServers: this.deps.mcpServers?.(session) ?? [],
-      // The skills root, to every agent; the preamble only to the ones that
-      // do not load it themselves (plan §8, as revised).
+      cwd,
+      // The skills root, to every agent (plan §8, as revised).
       skillsRoot: this.deps.skills?.root() ?? null,
-      preamble: provider.skillRoots === "preamble" ? (this.deps.skills?.preamble() ?? null) : null,
       spawnTerminal: this.deps.spawnTerminal,
-      clientVersion: this.deps.clientVersion,
-      onEvent: (event) => this.onEvent(session.id, event),
+      ...(this.deps.clientVersion === undefined ? {} : { clientVersion: this.deps.clientVersion }),
+    };
+  }
+
+  /**
+   * The half that is this session's: its id, the MCP server minted for it,
+   * the preamble, and the four listeners its events have to arrive on. An
+   * adopted warm adapter is given exactly this set
+   * (`SessionConnection.adopt`).
+   */
+  private sessionOptions(
+    session: Session,
+    /** Held by reference: `loadNow` clears its hook when the replay is over. */
+    replay: { onReplayUpdate?: () => void } = {},
+  ): Pick<
+    SessionConnectionOptions,
+    | "sessionId"
+    | "mcpServers"
+    | "preamble"
+    | "onEvent"
+    | "onTerminalOutput"
+    | "onFilesChanged"
+    | "onStderr"
+  > {
+    const provider = agentProvider(session.agentId);
+    return {
+      sessionId: session.id,
+      mcpServers: this.deps.mcpServers?.(session) ?? [],
+      // The preamble only to the agents that do not load the skills root
+      // themselves (plan §8, as revised).
+      preamble: provider?.skillRoots === "preamble" ? (this.deps.skills?.preamble() ?? null) : null,
+      onEvent: (event) => {
+        if (event.type === "session/update") {
+          replay.onReplayUpdate?.();
+        }
+        this.onEvent(session.id, event);
+      },
       onTerminalOutput: (terminalId, data, exit) =>
         this.deps.broadcast("terminal.output", { sessionId: session.id, terminalId, data, exit }),
       onFilesChanged: (paths) => {
@@ -722,13 +952,87 @@ export class SessionManager {
         });
       },
       onStderr: (line) => console.info(`[${session.agentId}:${session.id.slice(0, 8)}] ${line}`),
+    };
+  }
+
+  /**
+   * An adapter for this session: the warm one if the pool has it in the
+   * right directory, else a fresh spawn. The caller calls `initialize`
+   * itself (it is a no-op on an adopted adapter, which is the point) and
+   * then `session/new` or `session/load`.
+   */
+  private async connect(
+    session: Session,
+    hooks: { onWarm?: () => void; replay?: { onReplayUpdate?: () => void } } = {},
+  ): Promise<SessionConnection> {
+    const provider = agentProvider(session.agentId);
+    if (!provider) {
+      throw new Error(`unknown agent: ${session.agentId}`);
+    }
+    const status = this.deps.detector.list().find((candidate) => candidate.id === provider.id);
+    if (!provider.launchWithoutBinary && status && !status.installed) {
+      throw new Error(`${provider.name} is not installed`);
+    }
+    // A worktree removed from Settings, or from a terminal, while its thread
+    // was closed. The adapter would fail to spawn with an ENOENT naming an
+    // absolute path; this says what actually happened.
+    if (!existsSync(session.cwd)) {
+      const message =
+        session.gitMode === "worktree"
+          ? "This session's worktree has been deleted"
+          : "This session's directory no longer exists";
+      this.setStatus(session.id, "error", message);
+      throw new Error(message);
+    }
+    this.live.delete(session.id)?.close();
+    this.setStatus(session.id, "connecting");
+
+    const sessionOptions = this.sessionOptions(session, hooks.replay ?? {});
+    const warm = this.warm.take(session.agentId, session.cwd);
+    if (warm) {
+      warm.adopt(sessionOptions);
+      hooks.onWarm?.();
+      this.live.set(session.id, warm);
+      return warm;
+    }
+    const connection = new SessionConnection({
+      ...(await this.adapterOptions(session.agentId, session.cwd)),
+      ...sessionOptions,
     });
     this.live.set(session.id, connection);
     return connection;
   }
 
+  /**
+   * One idle adapter, spawned and initialized, belonging to no session. The
+   * pool's `spawn` (`./warm.ts`); the events it produces before it is
+   * adopted go to the log and nowhere else, because there is no session for
+   * them to belong to.
+   */
+  private async spawnWarm(agentId: string, cwd: string): Promise<SessionConnection> {
+    const connection = new SessionConnection({
+      ...(await this.adapterOptions(agentId, cwd)),
+      sessionId: `warm:${agentId}`,
+      onStderr: (line) => console.info(`[${agentId}:warm] ${line}`),
+    });
+    try {
+      await connection.initialize();
+    } catch (error) {
+      connection.close();
+      throw error;
+    }
+    return connection;
+  }
+
   private onEvent(id: string, event: SessionEvent) {
     this.deps.broadcast("session.update", { sessionId: id, event });
+    // Every state main sees is a state the next click could paint from
+    // (`./snapshots.ts`). Debounced there, so a streaming turn is one write
+    // when it stops rather than one per token.
+    const current = this.live.get(id)?.state;
+    if (current && this.deps.repo.get(id)) {
+      this.snapshots?.save(id, current);
+    }
     // Every time the agent tells us what a session can be configured with —
     // `session/new`, `session/load`, a `config_option_update` it sent on its
     // own — that becomes this agent's snapshot for the new-session screen.

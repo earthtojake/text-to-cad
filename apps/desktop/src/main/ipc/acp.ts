@@ -16,7 +16,13 @@ import { spawnPtyTerminal } from "../acp/pty-backend";
 import { AgentOptionStore } from "../acp/agent-options";
 import { SessionManager } from "../acp/sessions";
 import { forgetSession, mcpServersFor, sessionPreamble, sessionRuntimePath, skillsRoot } from "../cad";
-import { agentOptions as agentOptionsRepo, projects, sessions, settings } from "../db/repositories";
+import {
+  agentOptions as agentOptionsRepo,
+  projects,
+  sessions,
+  sessionStates,
+  settings,
+} from "../db/repositories";
 import { head } from "../projects/git";
 import { releaseWorkspace, resolveWorkspace } from "../projects/workspace";
 import { pruneProjectWorktrees } from "./git";
@@ -83,6 +89,9 @@ export const sessionManager: SessionManager = new SessionManager({
   },
   clientVersion: app.isPackaged ? app.getVersion() : __APP_VERSION__,
   newId: () => randomUUID(),
+  // The transcript on this machine, so a row clicked paints before its agent
+  // has said a word (migration 10, `src/main/acp/snapshots.ts`).
+  snapshots: sessionStates,
   launchOverride: fakeAgent
     ? () => ({
         // Electron's own binary, told to be plain Node.
@@ -169,4 +178,35 @@ export const acpHandlers = {
 
 export function shutdownAcp() {
   sessionManager.closeAll();
+}
+
+/** How long after launch the idle adapters are spawned. */
+const PREWARM_DELAY_MS = 1_500;
+
+/**
+ * Spawn one idle adapter per agent the session index says is in use, so the
+ * first session opened does not pay for the spawn (`src/main/acp/warm.ts`,
+ * README "Opening a session").
+ *
+ * The index is read straight from sqlite: which agents are worth an adapter,
+ * and the directory to spawn each in, are facts about the rows rather than
+ * about anything the renderer has bound yet — so nothing waits for a window.
+ * Delayed, so the spawn does not compete with the first paint, and gated the
+ * way the CAD pre-warm is (`./cad.ts`): under `NODE_ENV=test` a dozen
+ * launches spawning idle adapters is load no spec sees a result from, so
+ * only `HARDCORE_PREWARM=1` asks for it.
+ */
+export function prewarmAgents(): void {
+  if (process.env.NODE_ENV === "test" && process.env.HARDCORE_PREWARM !== "1") {
+    return;
+  }
+  const timer = setTimeout(() => {
+    void detector
+      .refresh(false)
+      .then(() => sessionManager.warmAgents())
+      .catch((error: unknown) => {
+        console.info(`[acp] the idle adapters were not warmed: ${String(error)}`);
+      });
+  }, PREWARM_DELAY_MS);
+  timer.unref?.();
 }

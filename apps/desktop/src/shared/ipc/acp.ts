@@ -49,8 +49,19 @@ export const acpContract = {
     ),
     /** Reconnect a session from the index: spawn the agent and `session/load`. */
     load: invoke(Id, SessionStateSchema),
-    /** The current state snapshot of a live session, or null when it is not connected. */
-    state: invoke(Id, SessionStateSchema.nullable()),
+    /**
+     * What to draw for this session right now, and whether it is the truth.
+     *
+     * `live` is a connected adapter's own state and needs nothing else;
+     * `live: false` is the snapshot main filed the last time this session
+     * said anything (`src/main/acp/snapshots.ts`), which the renderer paints
+     * at once — with `Reconnecting…` in the composer's row — while `load`
+     * runs behind it. Null is a session with neither, and gets the spinner.
+     */
+    state: invoke(
+      Id,
+      z.object({ state: SessionStateSchema, live: z.boolean() }).nullable(),
+    ),
     /**
      * Send a prompt. Resolves when the turn ends (the whole turn streams on
      * `session.update` in the meantime), with the agent's stop reason.
