@@ -399,20 +399,18 @@ test("the context panel lists the account's plan limits", async () => {
   await expect(popover).toBeHidden();
 });
 
-test("the + is a menu of the three ways something gets into a prompt", async () => {
-  const plus = page.locator("[data-composer]").getByRole("button", { name: "Add to this prompt" });
-  await plus.click();
-  const menu = page.getByRole("menu");
-  await expect(menu.getByRole("menuitem", { name: "Attach files…" })).toBeVisible();
-  await expect(menu.getByRole("menuitem", { name: "Attach image…" })).toBeVisible();
-  // No CAD file is open in this suite, so the capture is disabled rather
-  // than missing: the answer to "why can I not do that" should be visible.
-  const capture = menu.getByRole("menuitem", { name: "Capture from viewer" });
-  await expect(capture).toBeVisible();
-  await expect(capture).toHaveAttribute("data-disabled", "");
-  await shoot("session-attach-menu.png");
-  await page.keyboard.press("Escape");
-  await expect(menu).toBeHidden();
+test("the paperclip attaches files and photos, and is not a menu", async () => {
+  const clip = page.locator("[data-composer]").getByRole("button", { name: "Attach files or photos" });
+  await expect(clip).toBeVisible();
+  await expect(page.locator("[data-composer]").getByRole("button", { name: "Add to this prompt" })).toHaveCount(0);
+  // One picker for everything: the hidden input takes any file, many at once.
+  // Not clicked — that opens the OS file chooser, which nothing here can
+  // close; the button's job is checked by what it is wired to.
+  const input = page.locator("[data-composer] input[data-attach-input]");
+  await expect(input).toHaveCount(1);
+  await expect(input).toHaveAttribute("multiple", "");
+  await expect(input).not.toHaveAttribute("accept", /.+/);
+  await expect(page.getByRole("menu")).toHaveCount(0);
 });
 
 /**

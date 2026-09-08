@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Image, Paperclip, Plus, X } from "lucide-react";
+import { Paperclip, X } from "lucide-react";
 import { cn } from "cn";
 import { toast } from "sonner";
 
@@ -32,17 +32,9 @@ import {
   QueueSectionTrigger,
 } from "@renderer/components/ai-elements/queue";
 import type { FileUIPart } from "@renderer/components/ai-elements/types";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@renderer/components/ui/dropdown-menu";
 import { NEW_SESSION_KEY, useComposer, useQueue } from "@renderer/state/composer";
-import { useExplorer } from "@renderer/state/explorer";
 import type { AvailableCommand, PromptBlock } from "@shared/acp/types";
 
-import { isCadPath } from "../explorer/renderers/registry";
 import { dataUrlOf, rememberFiles } from "./composer/attachments";
 import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEditor";
 
@@ -380,15 +372,11 @@ function AttachmentSink({ draftKey }: { draftKey: string }) {
 }
 
 /**
- * The `+`: a menu of the three ways something gets into a prompt — a file
- * from disk, an image from disk, and the view in the CAD tab.
- *
- * The file inputs are this component's own rather than the vendored form's:
- * the files have to be remembered (`composer/attachments.ts`) before they
- * become blob URLs, and only this side can do that. `Capture from viewer` is
- * the same capture as the viewer's own camera button and lands in the same
- * place — it is disabled, not hidden, when no CAD file is open, because the
- * answer to "why can I not do that" should be visible.
+ * The paperclip: files and photos from disk, in one picker. The input is this
+ * component's own rather than the vendored form's: the files have to be
+ * remembered (`composer/attachments.ts`) before they become blob URLs, and
+ * only this side can do that. A capture of the CAD view comes from the
+ * viewer's own camera button and lands in the same place.
  *
  * It sits in the row under the box, so the form's attachments reach it
  * through `AttachmentBridge`'s ref rather than through the form's context.
@@ -401,11 +389,6 @@ function AttachButton({
   disabled?: boolean;
 }) {
   const files = useRef<HTMLInputElement | null>(null);
-  const images = useRef<HTMLInputElement | null>(null);
-  const cadTabId = useExplorer((state) => state.tabs.find((tab) => tab.id === state.activeId && isCadTab(tab))?.id
-    ?? state.tabs.find(isCadTab)?.id
-    ?? null);
-  const captureCad = useExplorer((state) => state.captureCad);
   const take = (event: React.ChangeEvent<HTMLInputElement>) => {
     const picked = [...(event.currentTarget.files ?? [])];
     event.currentTarget.value = "";
@@ -415,57 +398,19 @@ function AttachButton({
   };
   return (
     <>
-      <input aria-hidden className="hidden" multiple onChange={take} ref={files} tabIndex={-1} type="file" />
-      <input
-        accept="image/*"
-        aria-hidden
-        className="hidden"
-        multiple
-        onChange={take}
-        ref={images}
-        tabIndex={-1}
-        type="file"
-      />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <PromptInputButton
-            aria-label="Add to this prompt"
-            className="size-7 text-muted-foreground"
-            disabled={disabled}
-            size="icon-sm"
-          >
-            <Plus className="size-4" />
-          </PromptInputButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-56" side="top">
-          <DropdownMenuItem onSelect={() => files.current?.click()}>
-            <Paperclip className="size-3.5" />
-            Attach files…
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => images.current?.click()}>
-            <Image className="size-3.5" />
-            Attach image…
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!cadTabId}
-            onSelect={() => {
-              if (cadTabId) {
-                captureCad(cadTabId);
-              }
-            }}
-          >
-            <Camera className="size-3.5" />
-            Capture from viewer
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <input aria-hidden className="hidden" data-attach-input multiple onChange={take} ref={files} tabIndex={-1} type="file" />
+      <PromptInputButton
+        aria-label="Attach files or photos"
+        className="size-7 text-muted-foreground"
+        disabled={disabled}
+        onClick={() => files.current?.click()}
+        size="icon-sm"
+        title="Attach files or photos"
+      >
+        <Paperclip className="size-4" />
+      </PromptInputButton>
     </>
   );
-}
-
-/** A file tab the CAD viewer is rendering — the one a capture can come from. */
-function isCadTab(tab: { kind: string; path?: string | null }): boolean {
-  return tab.kind === "file" && !!tab.path && isCadPath(tab.path);
 }
 
 /** The files waiting to go with the next prompt, above the textarea. */
