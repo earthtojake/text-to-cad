@@ -1736,6 +1736,10 @@ const CadViewer = forwardRef(function CadViewer({
   });
   const viewportFrameInsetsRef = useRef(normalizedViewportFrameInsets);
   const framedModelKeyRef = useRef("");
+  // The model key this view was framed against once every component had
+  // arrived. A progressive load frames on the first publish so something is on
+  // screen immediately, and that first batch is a fraction of the model.
+  const framedCompleteModelKeyRef = useRef("");
   const modelTransformRef = useRef({
     modelKey: "",
     sceneScaleMode: "",
@@ -3268,6 +3272,7 @@ const CadViewer = forwardRef(function CadViewer({
 
   const handleRuntimeContextRestored = useCallback(() => {
     framedModelKeyRef.current = "";
+    framedCompleteModelKeyRef.current = "";
     lastEmittedPerspectiveRef.current = null;
     defaultPerspectiveResettingRef.current = false;
     viewerAlertChangeRef.current?.(null);
@@ -3953,7 +3958,23 @@ const CadViewer = forwardRef(function CadViewer({
     controls.zoomSpeed = DEFAULT_ZOOM_SPEED;
     runtime.edgePickThreshold = Math.max(radius / 320, 0.65);
 
-    if (framedModelKeyRef.current !== (modelKey || "")) {
+    // A progressive load frames on the first publish, against the handful of
+    // components that have arrived, and the model then grows well outside that
+    // frame. So it frames again once every component is composed — unless the
+    // user has taken the view, in which case their camera stands.
+    const missingComponentIds = meshData?.missingComponentIds;
+    const modelIsComplete = !(Array.isArray(missingComponentIds) && missingComponentIds.length > 0);
+    const reframeForCompleteModel = modelIsComplete
+      && framedModelKeyRef.current === (modelKey || "")
+      && framedCompleteModelKeyRef.current !== (modelKey || "")
+      && !runtime.userMovedCamera;
+    if (modelIsComplete) {
+      framedCompleteModelKeyRef.current = modelKey || "";
+    }
+    if (framedModelKeyRef.current !== (modelKey || "") || reframeForCompleteModel) {
+      if (framedModelKeyRef.current !== (modelKey || "")) {
+        runtime.userMovedCamera = false;
+      }
       const nextPerspective = resolvePerspectiveSnapshot(
         perspectiveRef ? perspectiveRef.current : undefined,
         perspective
@@ -3967,10 +3988,14 @@ const CadViewer = forwardRef(function CadViewer({
         requireCoordinateSystem: true
       });
       runWithoutPerspectiveEvents(() => {
-        if (
-          !nextPerspectiveMatchesScene ||
-          !applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false })
-        ) {
+        // The re-frame always FITS. The perspective it would otherwise restore
+        // is the one this same effect emitted when it framed the first batch,
+        // so honouring it here would just re-apply the too-close view the
+        // re-frame exists to replace.
+        const restored = !reframeForCompleteModel
+          && nextPerspectiveMatchesScene
+          && applyPerspectiveSnapshot(runtime, nextPerspective, { scheduleIdle: false });
+        if (!restored) {
           cancelCameraTransition(runtime);
           const frameMetrics = getViewportFrameMetrics(runtime, viewportFrameInsetsRef.current);
           const camera = runtime.camera;

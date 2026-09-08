@@ -604,6 +604,12 @@ export function useViewerRuntime({
       };
       const handleControlsStart = () => {
         controlsStartDistance = readControlsDistance();
+        // Any drag on the controls — orbit, pan or zoom — means the view is the
+        // user's now. A progressive load re-frames the camera when the model
+        // finishes arriving, and must not do that over someone's shoulder.
+        if (runtimeRef.current) {
+          runtimeRef.current.userMovedCamera = true;
+        }
         cancelCameraTransition(runtimeRef.current);
         beginInteraction();
       };
@@ -627,6 +633,9 @@ export function useViewerRuntime({
         scheduleIdleQuality();
       };
       const handleWheel = (event) => {
+        if (runtimeRef.current) {
+          runtimeRef.current.userMovedCamera = true;
+        }
         runtimeRef.current?.onManualCameraInteraction?.("wheel");
         cancelCameraTransition(runtimeRef.current);
         controls.enableDamping = false;
