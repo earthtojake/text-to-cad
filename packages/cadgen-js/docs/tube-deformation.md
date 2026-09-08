@@ -2,7 +2,7 @@
 
 `m.get(target).deformTube({rest, path, twistDeg=0, maxSegmentLength=1, braid?})`
 animates a continuous tube or hollow sheath already present as a swept STEP
-body. It deforms the original surface and its edge overlays in the same shared
+body. It deforms the original surface and its CAD edge lines in the same shared
 pass used by CAD Viewer and snapshots. It does not create a replacement rope or
 change the STEP artifact. Subsequent rigid occurrence transforms act on the
 deformed result. The paths use assembly coordinates before those transforms.

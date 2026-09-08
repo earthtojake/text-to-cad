@@ -472,8 +472,6 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid)
     indices,
     normals,
     colors: new Float32Array(0),
-    surfaceEdgeBarycentric: new Float32Array(0),
-    surfaceEdgeClass: new Float32Array(0),
     edge_indices: new Uint32Array(0),
     parts,
     assemblyRoot: buildPackageAssemblyRoot(descriptor, parts),

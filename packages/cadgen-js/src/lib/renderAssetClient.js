@@ -670,8 +670,9 @@ export async function loadRenderSurfSelectorBundle(surfUrl, { signal } = {}) {
 }
 
 export async function loadRenderSurfDisplayEdgeBundle(surfUrl, { signal } = {}) {
-  // The barycentric overlay IS the edge rendering; the display-edge bundle
-  // for surface-edge components is metadata only (profile "surface-edges").
+  // The render records draw the CAD edges from the meshData's line segments;
+  // the display-edge bundle for surf components is metadata only (profile
+  // "surface-edges").
   const bundle = await loadCached(displayEdgeCache, surfUrl, async () => {
     const selector = await loadRenderSurfSelectorBundle(surfUrl, { signal });
     return {

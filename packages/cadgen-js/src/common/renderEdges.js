@@ -427,6 +427,85 @@ export function createBasicLineSegments(context = {}, positions, {
   return line;
 }
 
+// Wraps an already-built line geometry — shared by every occurrence of one
+// component — in a LineSegments2 when it is a LineSegmentsGeometry and the
+// context provides the line classes, else in a basic LineSegments. Material
+// registration and disposal match the positions builders above; the geometry
+// belongs to the caller's cache and is not disposed with the object.
+export function createLineSegmentsForGeometry(context = {}, geometry, {
+  color,
+  opacity = 1,
+  lineWidth = 1,
+  renderOrder = 3,
+  depthTest = true,
+  depthWrite = false,
+  depthBias = DEFAULT_LINE_DEPTH_BIAS
+} = {}, materials = null) {
+  if (!geometry) {
+    return null;
+  }
+  if (geometry.isLineSegmentsGeometry && context.LineSegments2 && context.LineMaterial) {
+    const lineMaterial = createScreenSpaceLineMaterial(context.LineMaterial, {
+      color,
+      opacity,
+      lineWidth,
+      depthTest,
+      depthWrite,
+      depthBias
+    });
+    registerLineMaterial(context, lineMaterial, materials);
+    const line = new context.LineSegments2(geometry, lineMaterial);
+    line.renderOrder = renderOrder;
+    line.frustumCulled = false;
+    line.userData.beforeDispose = () => {
+      unregisterLineMaterial(context, lineMaterial, materials);
+    };
+    line.userData.disposeGeometry = false;
+    line.userData.disposeMaterial = true;
+    return line;
+  }
+  const THREE = context.THREE;
+  if (!THREE || geometry.isLineSegmentsGeometry) {
+    return null;
+  }
+  const material = new THREE.LineBasicMaterial({
+    color,
+    transparent: Number(opacity) < 0.999,
+    opacity: clamp(Number(opacity) || 0, 0, 1),
+    depthTest,
+    depthWrite,
+    toneMapped: false
+  });
+  applyLineDepthBias(material, depthBias);
+  const line = new THREE.LineSegments(geometry, material);
+  line.renderOrder = renderOrder;
+  line.frustumCulled = false;
+  line.userData.disposeGeometry = false;
+  line.userData.disposeMaterial = true;
+  return line;
+}
+
+// A record's edge materials: the GLB-era derived line and the wireframe carry
+// one, CAD edge lines carry one per edge class. Class materials remember the
+// colour and opacity they were created with (userData.cadEdgeBaseColor /
+// cadEdgeBaseOpacity) so a highlight pass can override every class and a later
+// pass restore each one without re-reading the theme. `opacityFor` receives
+// the class base opacity (null for a material without one).
+export function syncRecordEdgeMaterials(record, {
+  overrideColor = null,
+  fallbackColor,
+  opacityFor
+}) {
+  for (const material of Array.isArray(record?.edgeMaterials) ? record.edgeMaterials : []) {
+    if (!material) {
+      continue;
+    }
+    material.color?.set?.(overrideColor || material.userData?.cadEdgeBaseColor || fallbackColor);
+    const baseOpacity = Number(material.userData?.cadEdgeBaseOpacity);
+    syncLineMaterialOpacity(material, opacityFor(Number.isFinite(baseOpacity) ? baseOpacity : null));
+  }
+}
+
 export function createScreenSpaceLineSegmentsFromGeometry(context, geometry, options, materials = null) {
   const positions = lineSegmentPositionsFromGeometry(geometry);
   return positions ? createScreenSpaceLineSegments(context, positions, options, materials) : null;

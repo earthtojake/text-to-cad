@@ -1865,6 +1865,7 @@ const CadViewer = forwardRef(function CadViewer({
     edgesVisible,
     topologyDisplayEdgesVisible,
     displayEdgesVisible,
+    cadEdgesVisible: surfaceStepEdgesVisible,
     wireframeMode
   });
   const preserveInteractionPixelRatio = Boolean(

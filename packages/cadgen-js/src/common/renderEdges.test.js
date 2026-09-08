@@ -12,9 +12,11 @@ import {
   TOPOLOGY_LINE_DEPTH_BIAS,
   applyLineDepthBias,
   createDisplayEdgeObject,
+  createLineSegmentsForGeometry,
   createTopologyDisplayEdgeObject,
   lineSegmentPositionsFromGeometry,
   syncLineMaterialOpacity,
+  syncRecordEdgeMaterials,
   syncScreenSpaceLineMaterialResolution,
   topologyLineDepthBiasForWidth
 } from "./renderEdges.js";
@@ -519,4 +521,60 @@ test("line material opacity helper clamps transparency consistently", () => {
   syncLineMaterialOpacity(material, 5);
   assert.equal(material.opacity, 1);
   assert.equal(material.transparent, false);
+});
+
+test("line segments over a shared geometry pick the screen-space or basic material and keep the geometry", () => {
+  const materials = new Set();
+  const context = edgeContext(materials);
+  const shared = new LineSegmentsGeometry();
+  shared.setPositions([0, 0, 0, 1, 0, 0]);
+  const line = createLineSegmentsForGeometry(context, shared, {
+    color: "#123456",
+    opacity: 0.5,
+    lineWidth: 1.15,
+    depthTest: false,
+    depthBias: topologyLineDepthBiasForWidth(1.15, { visibilityClass: "tangent" })
+  }, materials);
+  assert.equal(line instanceof LineSegments2, true);
+  assert.equal(line.geometry, shared);
+  assert.equal(line.userData.disposeGeometry, false);
+  assert.equal(line.material.depthTest, false);
+  assert.equal(line.material.linewidth, 1.15);
+  assert.equal(line.material.polygonOffsetUnits, -6);
+  assert.equal(materials.has(line.material), true);
+  line.userData.beforeDispose(line);
+  assert.equal(materials.has(line.material), false);
+
+  const basic = createLineSegmentsForGeometry({ THREE }, twoPointGeometry(), { color: "#123456", opacity: 1 });
+  assert.equal(basic instanceof THREE.LineSegments, true);
+  assert.equal(basic.material.transparent, false);
+  assert.equal(createLineSegmentsForGeometry({ THREE }, shared, {}), null, "a LineSegmentsGeometry needs the line classes");
+  assert.equal(createLineSegmentsForGeometry(context, null, {}), null);
+});
+
+test("record edge materials override every class or restore each class base style", () => {
+  const plain = new THREE.LineBasicMaterial({ color: "#000000", transparent: true, opacity: 1 });
+  const feature = new THREE.LineBasicMaterial({ color: "#000000", transparent: true, opacity: 1 });
+  feature.userData.cadEdgeBaseColor = "#111111";
+  feature.userData.cadEdgeBaseOpacity = 0.25;
+  const record = { edgeMaterials: [plain, feature] };
+  const seen = [];
+  syncRecordEdgeMaterials(record, {
+    overrideColor: null,
+    fallbackColor: "#abcdef",
+    opacityFor: (classOpacity) => {
+      seen.push(classOpacity);
+      return (classOpacity ?? 0.84) * 0.5;
+    }
+  });
+  assert.deepEqual(seen, [null, 0.25]);
+  assert.equal(plain.color.getHexString(), "abcdef");
+  assert.equal(feature.color.getHexString(), "111111");
+  assert.equal(plain.opacity, 0.42);
+  assert.equal(feature.opacity, 0.125);
+  syncRecordEdgeMaterials(record, { overrideColor: "#ff0000", fallbackColor: "#abcdef", opacityFor: () => 1 });
+  assert.equal(feature.color.getHexString(), "ff0000");
+  assert.equal(feature.opacity, 1);
+  assert.equal(feature.transparent, false);
+  syncRecordEdgeMaterials({ edgeMaterials: null }, { fallbackColor: "#abcdef", opacityFor: () => 1 });
 });

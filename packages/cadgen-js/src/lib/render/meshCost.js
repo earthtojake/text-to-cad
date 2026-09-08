@@ -6,6 +6,7 @@ import {
   entrySourceFormat,
   RENDER_FORMAT
 } from "../fileFormats.js";
+import { MESH_DATA_ARRAY_FIELDS } from "./meshTransfer.js";
 
 export const LARGE_STEP_GLB_BYTES = 32 * 1024 * 1024;
 export const LARGE_MESH_TRIANGLE_COUNT = 1_000_000;
@@ -60,8 +61,7 @@ export function estimateMeshRenderCost(meshData) {
   }
   const arrays = new Set();
   for (const mesh of meshes) {
-    for (const field of ["vertices", "indices", "normals", "colors", "edge_indices",
-      "surfaceEdgeBarycentric", "surfaceEdgeClass", "guide_line_segments"]) {
+    for (const field of MESH_DATA_ARRAY_FIELDS) {
       if (mesh?.[field]) arrays.add(mesh[field]);
     }
   }

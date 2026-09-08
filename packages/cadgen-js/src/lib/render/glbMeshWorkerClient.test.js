@@ -15,10 +15,9 @@ test("mesh transfer list includes unique non-empty typed-array buffers", () => {
     normals: new Float32Array(shared),
     indices: new Uint32Array([0, 1, 2]),
     colors: new Float32Array(0),
-    surfaceEdgeBarycentric: new Float32Array([1, 0, 0]),
-    surfaceEdgeClass: new Uint8Array([1, 0, 0])
+    cadEdgeSegments: new Float32Array([0, 0, 0, 1, 0, 0])
   });
 
-  assert.equal(transferList.length, 4);
+  assert.equal(transferList.length, 3);
   assert.equal(transferList[0], shared);
 });

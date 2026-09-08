@@ -75,7 +75,7 @@ function assertCoherent(label, component, meshData, bundle) {
     cursor += row.triangleCount;
   }
   assert.equal(cursor, meshTriangles, `${label}: runs tile the whole mesh`);
-  // EDGE channel: the bundle's edge tables and the mesh's edge-class overlay
+  // EDGE channel: the bundle's edge tables and the mesh's CAD edge lines
   // must describe the same tessellation's edges.
   const componentEdgeOrds = new Set(component.edges.map((edge) => edge.ord));
   const edgeIds = bundle.buffers.edgeIds;
@@ -86,11 +86,19 @@ function assertCoherent(label, component, meshData, bundle) {
   for (const ord of sideOrds) {
     assert.ok(componentEdgeOrds.has(ord), `${label}: sideOrd ${ord} is a real edge of this tessellation`);
   }
-  assert.equal(
-    meshData.surfaceEdgeClass.length,
-    meshData.indices.length * 3,
-    `${label}: per-corner edge classes sized to THIS mesh`,
+  const lineSegments = meshData.cadEdgeSegments.length / 6;
+  const rangeSegments = meshData.cadEdgeClassRanges.reduce((sum, range) => sum + range.segmentCount, 0);
+  assert.equal(rangeSegments, lineSegments, `${label}: class ranges tile the CAD edge segments`);
+  const polylineSegments = component.edges.reduce(
+    (sum, edge) => sum + (edge.visibilityClass === "none" ? 0 : Math.max(0, edge.polyline.length / 3 - 1)),
+    0,
   );
+  assert.equal(lineSegments, polylineSegments, `${label}: CAD edge lines come from THIS tessellation's polylines`);
+  // Indexed render buffers: the mesh shares the tessellator's vertices instead
+  // of expanding three corners per triangle.
+  assert.equal(meshData.vertices.length, component.positions.length, `${label}: shared vertex buffer`);
+  assert.equal(meshData.parts[0].vertexCount, component.positions.length / 3, `${label}: part vertexCount is the shared count`);
+  assert.equal(meshData.parts[0].triangleCount, meshTriangles, `${label}: part triangleCount`);
 }
 
 function assertTypedArraysEqual(label, a, b) {
@@ -127,9 +135,14 @@ for (const fixture of FIXTURES) {
     const bundleHit = buildSelectorBundleFromSurf(index, floats, { component: decoded.component });
     assertCoherent("cache-hit", decoded.component, meshHit, bundleHit);
     const meshFresh = buildMeshDataFromSurf(index, floats, { component: fresh });
-    for (const key of ["vertices", "indices", "normals", "surfaceEdgeBarycentric", "surfaceEdgeClass"]) {
+    for (const key of ["vertices", "indices", "normals", "cadEdgeSegments"]) {
       assertTypedArraysEqual(`cache-hit meshData.${key}`, meshHit[key], meshFresh[key]);
     }
+    assert.deepEqual(meshHit.cadEdgeClassRanges, meshFresh.cadEdgeClassRanges, "cache-hit class ranges");
+    // A fresh tessellation is shared by reference; a decoded entry (one buffer
+    // for every section) is copied out so the entry can be released.
+    assert.equal(meshFresh.vertices, fresh.positions, "fresh vertices are the tessellator's array");
+    assert.notEqual(meshHit.vertices.buffer, decoded.component.positions.buffer, "cache-hit vertices leave the entry buffer");
     const bundleFresh = buildSelectorBundleFromSurf(index, floats, { component: fresh });
     assertTypedArraysEqual("cache-hit faceRuns", bundleHit.buffers.faceRuns, bundleFresh.buffers.faceRuns);
     assertTypedArraysEqual("cache-hit edgeIds", bundleHit.buffers.edgeIds, bundleFresh.buffers.edgeIds);
@@ -147,7 +160,7 @@ for (const fixture of FIXTURES) {
     assert.ok(surrogate, "v3 entry yields a surrogate index");
     const meshSurrogate = buildMeshDataFromSurf(surrogate, null, { component: decoded.component });
     const meshReal = buildMeshDataFromSurf(index, floats, { component: fresh });
-    for (const key of ["vertices", "indices", "surfaceEdgeClass"]) {
+    for (const key of ["vertices", "indices", "cadEdgeSegments"]) {
       assertTypedArraysEqual(`surrogate meshData.${key}`, meshSurrogate[key], meshReal[key]);
     }
   });

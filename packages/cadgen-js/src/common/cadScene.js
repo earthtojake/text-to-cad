@@ -16,7 +16,10 @@ import {
 } from "./displaySettings.js";
 import {
   createDisplayEdgeObject,
-  syncScreenSpaceLineMaterialResolution
+  createLineSegmentsForGeometry,
+  syncRecordEdgeMaterials,
+  syncScreenSpaceLineMaterialResolution,
+  topologyLineDepthBiasForWidth
 } from "./renderEdges.js";
 import { resolveStepModuleFeatures } from "./stepModule.js";
 import {
@@ -73,15 +76,7 @@ const DEFAULT_THEME = Object.freeze({
   edgeThickness: 1,
   edgeOpacity: CAD_EDGE_OPACITY
 });
-const SURFACE_EDGE_BARYCENTRIC_ATTRIBUTE = "_cad_edge_barycentric";
-const SURFACE_EDGE_CLASS_ATTRIBUTE = "_cad_edge_class";
-const SURFACE_EDGE_CLASS_IDS = Object.freeze(["feature", "tangent", "seam", "degenerate"]);
-const SURFACE_EDGE_CLASS_DEFAULTS = Object.freeze({
-  feature: Object.freeze({ color: "#132232", thickness: 1.15, opacity: 1 }),
-  tangent: Object.freeze({ color: "#132232", thickness: 1.15, opacity: 0.5 }),
-  seam: Object.freeze({ color: "#132232", thickness: 1.15, opacity: 0.85 }),
-  degenerate: Object.freeze({ color: "#132232", thickness: 0, opacity: 1 })
-});
+const CAD_EDGE_LINE_RENDER_ORDER = 3;
 
 const meshGeometryCache = new WeakMap();
 
@@ -235,41 +230,6 @@ function applyGeometryNormals(THREE, geometry, normals, recomputeNormals) {
   geometry.computeVertexNormals();
 }
 
-function setSurfaceEdgeAttributes(THREE, geometry, meshData, vertexOffset = 0, vertexCount = 0) {
-  const barycentric = meshData?.surfaceEdgeBarycentric;
-  const edgeClass = meshData?.surfaceEdgeClass;
-  const componentOffset = Math.max(0, Math.floor(Number(vertexOffset) || 0)) * 3;
-  const componentCount = Math.max(0, Math.floor(Number(vertexCount) || 0)) * 3;
-  if (
-    !(barycentric instanceof Float32Array) ||
-    !(edgeClass instanceof Uint8Array) ||
-    componentCount <= 0 ||
-    barycentric.length < componentOffset + componentCount ||
-    edgeClass.length < componentOffset + componentCount
-  ) {
-    return;
-  }
-  geometry.setAttribute(
-    SURFACE_EDGE_BARYCENTRIC_ATTRIBUTE,
-    new THREE.BufferAttribute(barycentric.subarray(componentOffset, componentOffset + componentCount), 3)
-  );
-  geometry.setAttribute(
-    SURFACE_EDGE_CLASS_ATTRIBUTE,
-    new THREE.BufferAttribute(edgeClass.subarray(componentOffset, componentOffset + componentCount), 3)
-  );
-}
-
-function geometryHasSurfaceEdgeAttributes(geometry) {
-  const barycentric = geometry?.getAttribute?.(SURFACE_EDGE_BARYCENTRIC_ATTRIBUTE);
-  const edgeClass = geometry?.getAttribute?.(SURFACE_EDGE_CLASS_ATTRIBUTE);
-  return Boolean(
-    barycentric?.itemSize === 3 &&
-    edgeClass?.itemSize === 3 &&
-    barycentric.count > 0 &&
-    barycentric.count === edgeClass.count
-  );
-}
-
 function readSourceColor(THREE, value) {
   const normalized = String(value || "").trim();
   if (!HEX_COLOR_PATTERN.test(normalized)) {
@@ -378,191 +338,7 @@ function resolveSourceBaseColor(THREE, {
   return shapeSourceColor(THREE, sourceColor, materialSettings);
 }
 
-function surfaceEdgeClassSetting(edgeSettings = {}, classId, fallbackColor = "#132232") {
-  const fallback = SURFACE_EDGE_CLASS_DEFAULTS[classId] || SURFACE_EDGE_CLASS_DEFAULTS.feature;
-  const source = edgeSettings?.classes?.[classId] || {};
-  return {
-    color: source.color || fallbackColor || fallback.color,
-    thickness: clamp(
-      Number.isFinite(Number(source.thickness)) ? Number(source.thickness) : fallback.thickness,
-      0,
-      6
-    ),
-    opacity: clamp(
-      Number.isFinite(Number(source.opacity)) ? Number(source.opacity) : fallback.opacity,
-      0,
-      1
-    )
-  };
-}
-
-function addCadSurfaceEdgeShader(THREE, material, edgeSettings = {}, baseTheme = DEFAULT_THEME) {
-  const baseEdgeColor = edgeSettings?.color || baseTheme?.edge || DEFAULT_THEME.edge;
-  const classSettings = Object.fromEntries(
-    SURFACE_EDGE_CLASS_IDS.map((classId) => [classId, surfaceEdgeClassSetting(edgeSettings, classId, baseEdgeColor)])
-  );
-  const edgeColor = new THREE.Color(baseEdgeColor);
-  const classColors = Object.fromEntries(
-    Object.entries(classSettings).map(([classId, setting]) => [
-      classId,
-      readSourceColor(THREE, setting.color) || edgeColor.clone()
-    ])
-  );
-  material.userData.cadSurfaceEdges = true;
-  material.userData.cadSurfaceEdgeBaseColor = edgeColor.clone();
-  material.userData.cadSurfaceEdgeColor = edgeColor.clone();
-  material.userData.cadSurfaceEdgeBaseClassSettings = Object.fromEntries(
-    Object.entries(classSettings).map(([classId, setting]) => [classId, { ...setting }])
-  );
-  material.extensions = {
-    ...(material.extensions || {}),
-    derivatives: true
-  };
-  material.onBeforeCompile = (shader) => {
-    const activeEdgeColor = material.userData.cadSurfaceEdgeColor?.isColor
-      ? material.userData.cadSurfaceEdgeColor
-      : edgeColor;
-    material.userData.cadSurfaceEdgeShader = shader;
-    shader.uniforms.cadSurfaceEdgeColor = { value: activeEdgeColor.clone() };
-    shader.uniforms.cadSurfaceFeatureColor = { value: classColors.feature.clone() };
-    shader.uniforms.cadSurfaceTangentColor = { value: classColors.tangent.clone() };
-    shader.uniforms.cadSurfaceSeamColor = { value: classColors.seam.clone() };
-    shader.uniforms.cadSurfaceDegenerateColor = { value: classColors.degenerate.clone() };
-    shader.uniforms.cadSurfaceFeatureThickness = { value: classSettings.feature.thickness };
-    shader.uniforms.cadSurfaceTangentThickness = { value: classSettings.tangent.thickness };
-    shader.uniforms.cadSurfaceSeamThickness = { value: classSettings.seam.thickness };
-    shader.uniforms.cadSurfaceDegenerateThickness = { value: classSettings.degenerate.thickness };
-    shader.uniforms.cadSurfaceFeatureOpacity = { value: classSettings.feature.opacity };
-    shader.uniforms.cadSurfaceTangentOpacity = { value: classSettings.tangent.opacity };
-    shader.uniforms.cadSurfaceSeamOpacity = { value: classSettings.seam.opacity };
-    shader.uniforms.cadSurfaceDegenerateOpacity = { value: classSettings.degenerate.opacity };
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        "#include <common>",
-        `#include <common>
-attribute vec3 ${SURFACE_EDGE_BARYCENTRIC_ATTRIBUTE};
-attribute vec3 ${SURFACE_EDGE_CLASS_ATTRIBUTE};
-varying vec3 vCadSurfaceEdgeBarycentric;
-varying vec3 vCadSurfaceEdgeClass;`
-      )
-      .replace(
-        "#include <begin_vertex>",
-        `#include <begin_vertex>
-vCadSurfaceEdgeBarycentric = ${SURFACE_EDGE_BARYCENTRIC_ATTRIBUTE};
-vCadSurfaceEdgeClass = ${SURFACE_EDGE_CLASS_ATTRIBUTE};`
-      );
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        "#include <common>",
-        `#include <common>
-uniform vec3 cadSurfaceEdgeColor;
-uniform vec3 cadSurfaceFeatureColor;
-uniform vec3 cadSurfaceTangentColor;
-uniform vec3 cadSurfaceSeamColor;
-uniform vec3 cadSurfaceDegenerateColor;
-uniform float cadSurfaceFeatureThickness;
-uniform float cadSurfaceTangentThickness;
-uniform float cadSurfaceSeamThickness;
-uniform float cadSurfaceDegenerateThickness;
-uniform float cadSurfaceFeatureOpacity;
-uniform float cadSurfaceTangentOpacity;
-uniform float cadSurfaceSeamOpacity;
-uniform float cadSurfaceDegenerateOpacity;
-varying vec3 vCadSurfaceEdgeBarycentric;
-varying vec3 vCadSurfaceEdgeClass;
-
-float cadSurfaceEdgeThicknessFor(float classCode) {
-  if (classCode < 0.5) {
-    return 0.0;
-  }
-  if (abs(classCode - 2.0) < 0.5) {
-    return cadSurfaceTangentThickness;
-  }
-  if (abs(classCode - 3.0) < 0.5) {
-    return cadSurfaceSeamThickness;
-  }
-  if (abs(classCode - 4.0) < 0.5) {
-    return cadSurfaceDegenerateThickness;
-  }
-  return cadSurfaceFeatureThickness;
-}
-
-float cadSurfaceEdgeOpacityFor(float classCode) {
-  if (classCode < 0.5) {
-    return 0.0;
-  }
-  if (abs(classCode - 2.0) < 0.5) {
-    return cadSurfaceTangentOpacity;
-  }
-  if (abs(classCode - 3.0) < 0.5) {
-    return cadSurfaceSeamOpacity;
-  }
-  if (abs(classCode - 4.0) < 0.5) {
-    return cadSurfaceDegenerateOpacity;
-  }
-  return cadSurfaceFeatureOpacity;
-}
-
-vec3 cadSurfaceEdgeColorFor(float classCode) {
-  if (classCode < 0.5) {
-    return cadSurfaceEdgeColor;
-  }
-  if (abs(classCode - 2.0) < 0.5) {
-    return cadSurfaceTangentColor;
-  }
-  if (abs(classCode - 3.0) < 0.5) {
-    return cadSurfaceSeamColor;
-  }
-  if (abs(classCode - 4.0) < 0.5) {
-    return cadSurfaceDegenerateColor;
-  }
-  return cadSurfaceFeatureColor;
-}
-
-float cadSurfaceEdgeCoverage(float barycentric, float classCode) {
-  float thickness = cadSurfaceEdgeThicknessFor(classCode);
-  float opacity = cadSurfaceEdgeOpacityFor(classCode);
-  if (thickness <= 0.0 || opacity <= 0.0) {
-    return 0.0;
-  }
-  float pixelDistance = barycentric / max(fwidth(barycentric), 1e-6);
-  float halfWidth = max(thickness * 0.5, 0.001);
-  float coverage = 1.0 - smoothstep(max(halfWidth - 0.75, 0.0), halfWidth + 0.75, pixelDistance);
-  return clamp(coverage * opacity, 0.0, 1.0);
-}
-
-vec4 cadSurfaceEdgeLayerFor(float barycentric, float classCode) {
-  float edgeAlpha = cadSurfaceEdgeCoverage(barycentric, classCode);
-  return vec4(cadSurfaceEdgeColorFor(classCode), edgeAlpha);
-}
-
-vec4 cadSurfaceEdgeLayer() {
-  vec4 edge0 = cadSurfaceEdgeLayerFor(vCadSurfaceEdgeBarycentric.x, vCadSurfaceEdgeClass.x);
-  vec4 edge1 = cadSurfaceEdgeLayerFor(vCadSurfaceEdgeBarycentric.y, vCadSurfaceEdgeClass.y);
-  vec4 edge2 = cadSurfaceEdgeLayerFor(vCadSurfaceEdgeBarycentric.z, vCadSurfaceEdgeClass.z);
-  vec4 edge = edge0;
-  if (edge1.a > edge.a) {
-    edge = edge1;
-  }
-  if (edge2.a > edge.a) {
-    edge = edge2;
-  }
-  return edge;
-}`
-      )
-      .replace(
-        "#include <opaque_fragment>",
-        `vec4 cadSurfaceEdgeMix = cadSurfaceEdgeLayer();
-if (cadSurfaceEdgeMix.a > 0.0) {
-  outgoingLight = mix(outgoingLight, cadSurfaceEdgeMix.rgb, cadSurfaceEdgeMix.a);
-}
-#include <opaque_fragment>`
-      );
-  };
-  material.customProgramCacheKey = () => "cad-surface-edges-v2";
-}
-
-function createSurfaceMaterial(THREE, baseTheme, { color, useVertexColors = false, edgeSettings = null } = {}) {
+function createSurfaceMaterial(THREE, baseTheme, { color, useVertexColors = false } = {}) {
   const opacity = Number.isFinite(Number(baseTheme?.surfaceOpacity))
     ? Number(baseTheme.surfaceOpacity)
     : 1;
@@ -582,9 +358,6 @@ function createSurfaceMaterial(THREE, baseTheme, { color, useVertexColors = fals
     polygonOffsetFactor: 0,
     polygonOffsetUnits: 0
   });
-  if (edgeSettings?.enabled) {
-    addCadSurfaceEdgeShader(THREE, material, edgeSettings, baseTheme);
-  }
   return material;
 }
 
@@ -745,13 +518,6 @@ function buildPartGeometryEntry(THREE, meshData, part, recomputeNormals = false)
         new THREE.BufferAttribute(new Float32Array(rawColors), 3)
       );
     }
-    if (sourceMesh) {
-      // Shared component geometry: source the (triangle-local) surface-edge attributes from
-      // the component itself so packages still render CAD edges on the shared-geometry path.
-      setSurfaceEdgeAttributes(THREE, geometry, sourceMesh, 0, vertexCount);
-    } else {
-      setSurfaceEdgeAttributes(THREE, geometry, meshData, vertexOffset, vertexCount);
-    }
     applyGeometryNormals(THREE, geometry, localNormals, recomputeNormals);
     geometry.computeBoundingSphere();
     return {
@@ -763,16 +529,19 @@ function buildPartGeometryEntry(THREE, meshData, part, recomputeNormals = false)
 
 function buildWholeGeometryEntry(THREE, meshData, recomputeNormals = false) {
   return geometryCacheEntry(THREE, meshData, MODEL_PART_ID, () => {
+    // Component buffers are immutable and already typed on the surf path: wrap
+    // them rather than duplicating every vertex of a single-part model.
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(meshData.vertices || []), 3));
-    geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(meshData.indices || []), 1));
+    const vertices = meshData.vertices instanceof Float32Array ? meshData.vertices : new Float32Array(meshData.vertices || []);
+    const indices = meshData.indices instanceof Uint32Array ? meshData.indices : new Uint32Array(meshData.indices || []);
+    geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
     const rawColors = shouldUseDisplayVertexColors(meshData) && meshData.colors?.length === meshData.vertices?.length
       ? new Float32Array(meshData.colors)
       : null;
     if (rawColors) {
       geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(rawColors), 3));
     }
-    setSurfaceEdgeAttributes(THREE, geometry, meshData, 0, Math.floor((meshData.vertices?.length || 0) / 3));
     applyGeometryNormals(THREE, geometry, meshData.normals, recomputeNormals);
     geometry.computeBoundingSphere();
     return {
@@ -883,20 +652,6 @@ function getEdgeThickness(edgeSettings = null, baseTheme = null) {
   return Number.isFinite(Number(edgeSettings?.thickness))
     ? clamp(Number(edgeSettings.thickness), 0.5, 6)
     : fallbackThickness;
-}
-
-function syncLineMaterialOpacity(material, opacity) {
-  if (!material) {
-    return;
-  }
-  const nextOpacity = clamp(Number(opacity) || 0, 0, 1);
-  const nextTransparent = nextOpacity < 0.999;
-  material.opacity = nextOpacity;
-  material.depthWrite = false;
-  if (material.transparent !== nextTransparent) {
-    material.transparent = nextTransparent;
-    material.needsUpdate = true;
-  }
 }
 
 function createDefaultEdgeObject(THREE, geometry, baseTheme, edgeSettings, partId, displayMode) {
@@ -1165,67 +920,6 @@ function syncSurfaceTransparency(record, forceTransparent, opacity, {
   material.depthWrite = nextTransparent && !writeTransparentDepth ? false : record.baseDepthWrite;
 }
 
-const CAD_SURFACE_EDGE_OPACITY_UNIFORMS = Object.freeze({
-  feature: "cadSurfaceFeatureOpacity",
-  tangent: "cadSurfaceTangentOpacity",
-  seam: "cadSurfaceSeamOpacity",
-  degenerate: "cadSurfaceDegenerateOpacity"
-});
-
-const CAD_SURFACE_EDGE_COLOR_UNIFORMS = Object.freeze({
-  feature: "cadSurfaceFeatureColor",
-  tangent: "cadSurfaceTangentColor",
-  seam: "cadSurfaceSeamColor",
-  degenerate: "cadSurfaceDegenerateColor"
-});
-
-function syncCadSurfaceEdgeHighlight(THREE, record, edgeColor, edgeOpacity = null) {
-  const material = record?.material;
-  const userData = material?.userData;
-  if (!material || userData?.cadSurfaceEdges !== true) {
-    return;
-  }
-  const nextColor = edgeColor?.isColor
-    ? edgeColor
-    : readSourceColor(THREE, edgeColor) || userData.cadSurfaceEdgeBaseColor;
-  if (nextColor?.isColor) {
-    userData.cadSurfaceEdgeColor = nextColor.clone();
-    const colorUniform = userData.cadSurfaceEdgeShader?.uniforms?.cadSurfaceEdgeColor;
-    if (colorUniform?.value?.copy) {
-      colorUniform.value.copy(nextColor);
-    }
-  }
-
-  const highlightedOpacity = edgeOpacity !== null && edgeOpacity !== undefined && Number.isFinite(Number(edgeOpacity))
-    ? clamp(Number(edgeOpacity), 0, 1)
-    : null;
-  const baseClassSettings = userData.cadSurfaceEdgeBaseClassSettings || {};
-  const uniforms = userData.cadSurfaceEdgeShader?.uniforms || null;
-  const overrideClassColor = highlightedOpacity !== null ||
-    (nextColor?.isColor && userData.cadSurfaceEdgeBaseColor?.isColor && !nextColor.equals(userData.cadSurfaceEdgeBaseColor));
-  for (const [classId, uniformName] of Object.entries(CAD_SURFACE_EDGE_COLOR_UNIFORMS)) {
-    const baseClassColor = readSourceColor(THREE, baseClassSettings[classId]?.color) ||
-      userData.cadSurfaceEdgeBaseColor;
-    const nextClassColor = overrideClassColor ? nextColor : baseClassColor;
-    if (nextClassColor?.isColor && uniforms?.[uniformName]?.value?.copy) {
-      uniforms[uniformName].value.copy(nextClassColor);
-    }
-  }
-  for (const [classId, uniformName] of Object.entries(CAD_SURFACE_EDGE_OPACITY_UNIFORMS)) {
-    const baseOpacity = Number(baseClassSettings[classId]?.opacity);
-    const nextOpacity = highlightedOpacity === null
-      ? (Number.isFinite(baseOpacity) ? baseOpacity : null)
-      : highlightedOpacity;
-    if (nextOpacity === null) {
-      continue;
-    }
-    userData[`cadSurfaceEdge${classId}Opacity`] = nextOpacity;
-    if (uniforms?.[uniformName]) {
-      uniforms[uniformName].value = nextOpacity;
-    }
-  }
-}
-
 export function applyPartVisualState(THREE, records, {
   baseTheme = DEFAULT_THEME,
   edgeSettings,
@@ -1365,16 +1059,15 @@ export function applyPartVisualState(THREE, records, {
       : isHovered
         ? hoveredEdgeColor
         : effectEdgeColor || baseEdgeColor;
-    syncCadSurfaceEdgeHighlight(THREE, record, nextEdgeColor, highlightedEdgeOpacity);
-
-    if (record.edgeMaterial) {
-      record.edgeMaterial.color?.set?.(nextEdgeColor);
-      syncLineMaterialOpacity(record.edgeMaterial, isSelected || isHovered
+    syncRecordEdgeMaterials(record, {
+      overrideColor: isSelected || isHovered || effectEdgeColor ? nextEdgeColor : null,
+      fallbackColor: baseEdgeColor,
+      opacityFor: (classOpacity) => isSelected || isHovered
         ? highlightedEdgeOpacity
         : isHidden || isDimmed
           ? nextSurfaceOpacity
-          : baseEdgeOpacity * effectEdgeOpacity);
-    }
+          : (classOpacity ?? baseEdgeOpacity) * effectEdgeOpacity
+    });
 
     syncPartOcclusionGhost(THREE, record, {
       visible: isSelected && !isHidden && !effectHidden,
@@ -1646,7 +1339,7 @@ function syncClip(runtime, clip, bounds, modelOffset = null) {
   runtime.activeClipPlanes = clipPlanes;
   for (const record of runtime.displayRecords) {
     syncMaterialClipPlanes(record.material, clipPlanes);
-    syncMaterialClipPlanes(record.edgeMaterial, clipPlanes);
+    syncMaterialClipPlanes(record.edgeMaterials, clipPlanes);
     syncMaterialClipPlanes(record.silhouette?.material, clipPlanes);
     syncMaterialClipPlanes(record.ghostMaterial, clipPlanes);
   }
@@ -1770,10 +1463,10 @@ function resolveMaterialSettings(theme, settings = {}) {
  *
  * * placement -- every shared component is drawn once at the origin, which is how an
  *   assembly loses all four wheels and grows one in the middle;
- * * CAD EDGES -- the surface-edge attributes live on each part's ``sourceMesh``, not in the
- *   top-level arrays, so the merged geometry has none and the surface-edge material is never
- *   selected. A single-occurrence part hides the first symptom (its local frame IS world) and
- *   shows only the second: a part rendered with no edges at all while assemblies have them.
+ * * CAD EDGES -- the CAD edge lines live on each part's ``sourceMesh``, not in the top-level
+ *   arrays, so the merged geometry has none and falls back to derived mesh edges. A
+ *   single-occurrence part hides the first symptom (its local frame IS world) and shows only
+ *   the second: a part rendered with derived edges while assemblies have CAD edges.
  */
 export function meshDataRequiresPartRendering(meshData) {
   return meshData?.partTransformsBaked === false;
@@ -1839,10 +1532,105 @@ function addEdgeObject(THREE, runtime, record, edgeGeometry, settings) {
   }
   object.userData.partId = record.partId;
   record.edges = object;
-  record.edgeMaterial = material;
-  record.baseEdgeColor = material?.color?.isColor ? material.color.clone() : new THREE.Color(edgeSettings?.color || baseTheme?.edge || DEFAULT_THEME.edge);
-  record.baseEdgeOpacity = Number.isFinite(Number(material?.opacity)) ? Number(material.opacity) : 1;
+  record.edgeMaterials = material ? [material] : [];
   runtime.edgesGroup.add(object);
+}
+
+// CAD edge lines ride the meshData of the surf component that owns them: a
+// composed package part reaches its component through sourceMesh, a
+// single-component meshData carries them at the top level. Baked multi-part
+// meshDatas (GLB-era) have none and keep the edge_indices / EdgesGeometry path.
+function cadEdgeLinesForPart(meshData, part) {
+  const sourceMesh = part?.sourceMesh && typeof part.sourceMesh === "object" ? part.sourceMesh : null;
+  const source = sourceMesh || (!part || toArray(meshData?.parts).length <= 1 ? meshData : null);
+  const segments = source?.cadEdgeSegments;
+  const classRanges = toArray(source?.cadEdgeClassRanges);
+  if (!(segments instanceof Float32Array) || segments.length < 6 || !classRanges.length) {
+    return null;
+  }
+  const key = sourceMesh
+    ? `source:${String(part?.sourceMeshKey || part?.meshUrl || part?.partFileRef || "").trim()}`
+    : String(part?.id || part?.occurrenceId || MODEL_PART_ID);
+  return { segments, classRanges, key };
+}
+
+// One line geometry per component and edge class, shared by every occurrence
+// of that component (the records place it by their own matrix), cached beside
+// the part geometries so a rebuild does not re-upload it.
+function cadEdgeClassLineGeometry(THREE, runtime, meshData, cadEdges, range) {
+  const cache = cacheForMeshData(meshData);
+  const edgeKey = `cad:${runtime.edgeRendering?.mode || "basic"}:${range.classId}:${cadEdges.key}`;
+  const cached = cache.edge.get(edgeKey);
+  if (cached) {
+    return cached;
+  }
+  const positions = cadEdges.segments.subarray(
+    range.segmentStart * 6,
+    (range.segmentStart + range.segmentCount) * 6
+  );
+  let geometry;
+  if (runtime.edgeRendering?.mode === "screen-space" && runtime.LineSegmentsGeometry) {
+    geometry = new runtime.LineSegmentsGeometry();
+    geometry.setPositions(positions);
+  } else {
+    geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  }
+  markCachedGeometry(geometry);
+  cache.edge.set(edgeKey, geometry);
+  return geometry;
+}
+
+// CAD edges drawn by the line pass, one object per edge class so
+// display.edges.classes styles colour, opacity and thickness per class. The
+// group is the record's `edges`: transforms, visibility, highlight render
+// order and tube deformation treat it exactly like the GLB-era single line.
+function addCadEdgeObjects(THREE, runtime, record, meshData, cadEdges) {
+  const edgeSettings = runtime.edgeSettings;
+  const depthTest = edgeSettings?.depthTest !== false;
+  const fallbackColor = edgeSettings?.color || runtime.baseTheme?.edge || DEFAULT_THEME.edge;
+  const group = new THREE.Group();
+  const materials = [];
+  for (const range of cadEdges.classRanges) {
+    const classSetting = edgeSettings?.classes?.[range.classId] || {};
+    const thickness = clamp(toNumber(classSetting.thickness, 0), 0, 6);
+    const opacity = clamp(toNumber(classSetting.opacity, 0), 0, 1);
+    if (thickness <= 0 || opacity <= 0) {
+      continue;
+    }
+    const color = classSetting.color || fallbackColor;
+    const line = createLineSegmentsForGeometry(
+      runtime,
+      cadEdgeClassLineGeometry(THREE, runtime, meshData, cadEdges, range),
+      {
+        color,
+        opacity,
+        lineWidth: thickness,
+        renderOrder: CAD_EDGE_LINE_RENDER_ORDER,
+        depthTest,
+        depthWrite: false,
+        depthBias: topologyLineDepthBiasForWidth(thickness, { visibilityClass: range.classId })
+      },
+      runtime.screenSpaceLineMaterials
+    );
+    if (!line) {
+      continue;
+    }
+    line.userData.partId = record.partId;
+    line.userData.cadEdgeClass = range.classId;
+    line.material.userData.cadEdgeBaseColor = color;
+    line.material.userData.cadEdgeBaseOpacity = opacity;
+    materials.push(line.material);
+    group.add(line);
+  }
+  if (!group.children.length) {
+    return;
+  }
+  group.userData.partId = record.partId;
+  group.renderOrder = CAD_EDGE_LINE_RENDER_ORDER;
+  record.edges = group;
+  record.edgeMaterials = materials;
+  runtime.edgesGroup.add(group);
 }
 
 function buildDisplayRecords(THREE, runtime, meshData, settings) {
@@ -1864,10 +1652,7 @@ function buildDisplayRecords(THREE, runtime, meshData, settings) {
     const wireframeMode = displayModeIsWireframe(displayMode);
     const forceFill = materialSettings.overrideSourceColors === true || wireframeMode;
     const sourceVertexColors = !!geometryEntry.geometry.getAttribute("color");
-    const useSurfaceEdges = !wireframeMode &&
-      !displayModeShowsThroughEdges(displayMode) &&
-      edgeSettings.enabled &&
-      geometryHasSurfaceEdgeAttributes(geometryEntry.geometry);
+    const cadEdges = !wireframeMode && edgeSettings.enabled ? cadEdgeLinesForPart(meshData, part) : null;
     const sourceColor = sourceColorForPart(THREE, part, meshData);
     const sourceOpacity = sourceOpacityForPart(part);
     const hasSourceColor = sourceVertexColors || !!sourceColor;
@@ -1890,10 +1675,13 @@ function buildDisplayRecords(THREE, runtime, meshData, settings) {
           })
         : createSurfaceMaterial(THREE, baseTheme, {
           color: baseColor,
-          useVertexColors: hasVertexColors,
-          edgeSettings: useSurfaceEdges ? edgeSettings : null
+          useVertexColors: hasVertexColors
         });
-    if (edgeSettings.enabled && !wireframeMode && !useSurfaceEdges) {
+    // Line edges sit exactly on the surface they outline, so the surface is
+    // pushed back by its own depth slope plus one unit for them: the constant
+    // line bias alone loses seams on grazing faces (a dashed sphere seam, a
+    // vanished cylinder seam). Depth only, the shading is untouched.
+    if (edgeSettings.enabled && !wireframeMode) {
       material.polygonOffset = true;
       material.polygonOffsetFactor = 1;
       material.polygonOffsetUnits = 1;
@@ -1924,7 +1712,7 @@ function buildDisplayRecords(THREE, runtime, meshData, settings) {
       edges: null,
       silhouette: null,
       material,
-      edgeMaterial: null,
+      edgeMaterials: [],
       baseColor,
       sourceColor,
       sourceOpacity,
@@ -1943,9 +1731,7 @@ function buildDisplayRecords(THREE, runtime, meshData, settings) {
       geometry: geometryEntry.geometry,
       baseOpacity: Number.isFinite(Number(material.opacity)) ? Number(material.opacity) : 1,
       baseEmissiveColor: baseColor ? baseColor.clone() : null,
-      baseEmissiveIntensity: 0,
-      baseEdgeColor: null,
-      baseEdgeOpacity: 1
+      baseEmissiveIntensity: 0
     };
 
     if (useSilhouette) {
@@ -1956,14 +1742,18 @@ function buildDisplayRecords(THREE, runtime, meshData, settings) {
       }
     }
 
-    if (settings.selection?.showEdges !== false && !useSurfaceEdges && (edgeSettings.enabled || wireframeMode)) {
-      addEdgeObject(
-        THREE,
-        runtime,
-        record,
-        buildEdgeGeometry(THREE, meshData, part, geometryEntry.geometry, displayMode, edgeSettings),
-        settings
-      );
+    if (settings.selection?.showEdges !== false && (edgeSettings.enabled || wireframeMode)) {
+      if (cadEdges) {
+        addCadEdgeObjects(THREE, runtime, record, meshData, cadEdges);
+      } else {
+        addEdgeObject(
+          THREE,
+          runtime,
+          record,
+          buildEdgeGeometry(THREE, meshData, part, geometryEntry.geometry, displayMode, edgeSettings),
+          settings
+        );
+      }
     }
 
     applyMaterialSettingsToRecord(THREE, record, materialSettings, {
