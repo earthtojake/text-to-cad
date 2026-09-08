@@ -559,7 +559,10 @@ test("the surf leash is byte-bounded: large entries evict oldest-first down to t
   }
   const stats = renderAssetCacheStats();
   assert.ok(stats.surfLeash.bytes <= stats.surfLeash.maxBytes, `bytes ${stats.surfLeash.bytes} within ${stats.surfLeash.maxBytes}`);
-  assert.ok(stats.surfLeash.entries <= 2 && stats.surfLeash.entries >= 1, `entries ${stats.surfLeash.entries}: two large entries fit, not 24`);
+  // A component retains two leash entries sharing one set of arrays (payload +
+  // meshData), so two components fit the ceiling: four entries, not 24.
+  assert.ok(stats.surfLeash.entries <= 4 && stats.surfLeash.entries >= 1, `entries ${stats.surfLeash.entries}: two large components fit, not 24`);
+  assert.ok(stats.surfPayload.entries <= 2, `surf payloads retained: ${stats.surfPayload.entries}`);
   assert.notEqual(await loadRenderSurf(url(0)), first, "the oldest entry was evicted first");
   // The count floor holds a few entries whatever they weigh.
   configureSurfLeash({ maxBytes: 1, minEntries: 3 });

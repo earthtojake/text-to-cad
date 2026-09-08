@@ -1737,16 +1737,68 @@ function attachCadEdgeInstance(THREE, runtime, record, cadEdges) {
   };
 }
 
+function disposeCadEdgeInstanceSet(runtime, set) {
+  for (const material of set.materials) {
+    runtime.unregisterScreenSpaceLineMaterial(material);
+  }
+  set.object.parent?.remove(set.object);
+  set.dispose();
+  runtime.cadEdgeInstanceSets.delete(set);
+  // The segment texture is cached on the component (a later scene reuses its
+  // arrays); its GPU copy goes when no live set draws it, and three re-uploads
+  // it on the next use.
+  if (![...runtime.cadEdgeInstanceSets].some((other) => other.segments === set.segments)) {
+    set.segments.texture.dispose();
+  }
+}
+
 function disposeCadEdgeInstanceSets(runtime) {
-  for (const set of runtime.cadEdgeInstanceSets) {
-    for (const material of set.materials) {
-      runtime.unregisterScreenSpaceLineMaterial(material);
-    }
-    set.object.parent?.remove(set.object);
-    set.dispose();
+  for (const set of [...runtime.cadEdgeInstanceSets]) {
+    disposeCadEdgeInstanceSet(runtime, set);
   }
   runtime.cadEdgeInstanceSets.clear();
   runtime.cadEdgeInstanceSetsByOwner = new WeakMap();
+}
+
+// Sets no record draws any more (every occurrence of the component departed).
+function disposeEmptyCadEdgeInstanceSets(runtime) {
+  for (const set of [...runtime.cadEdgeInstanceSets]) {
+    if (set.liveCount === 0) {
+      disposeCadEdgeInstanceSet(runtime, set);
+    }
+  }
+}
+
+// The component geometry a record renders at rest (a deformed record shows a
+// private copy and keeps the original in its deformation state).
+function recordRestGeometry(record) {
+  return record?.tubeDeformationState?.original || record?.geometry || null;
+}
+
+// Free the GPU buffers and the raycast BVH of component geometries that no
+// remaining record uses. The geometry stays in the component cache with its
+// CPU arrays (a later publish or scene over the same component reuses it and
+// three re-uploads on the next draw); only the GPU copy and the BVH go.
+function releaseUnusedRecordGeometry(releasedRecords, keptRecords) {
+  const kept = new Set();
+  for (const record of keptRecords) {
+    const geometry = recordRestGeometry(record);
+    if (geometry) {
+      kept.add(geometry);
+    }
+  }
+  const released = new Set();
+  for (const record of releasedRecords) {
+    const geometry = recordRestGeometry(record);
+    if (geometry && !kept.has(geometry)) {
+      released.add(geometry);
+    }
+  }
+  for (const geometry of released) {
+    geometry.boundsTree = null;
+    delete geometry.userData.__bvhQueued;
+    geometry.dispose();
+  }
 }
 
 function displayRecordBuildContext(THREE, runtime, meshData, settings) {
@@ -2006,6 +2058,7 @@ function reconcileDisplayRecords(THREE, runtime, meshData, settings) {
     }
   }
   const records = [];
+  const released = [];
   for (const part of renderParts) {
     const geometryEntry = buildPartGeometryEntry(THREE, meshData, part, recomputeNormals);
     if (!geometryEntry) {
@@ -2021,7 +2074,10 @@ function reconcileDisplayRecords(THREE, runtime, meshData, settings) {
       records.push(candidate);
       continue;
     }
-    disposeDisplayRecord(candidate);
+    if (candidate) {
+      released.push(candidate);
+      disposeDisplayRecord(candidate);
+    }
     records.push(createDisplayRecord(THREE, runtime, meshData, settings, {
       part,
       geometryEntry,
@@ -2033,9 +2089,12 @@ function reconcileDisplayRecords(THREE, runtime, meshData, settings) {
   }
   for (const queue of available.values()) {
     for (const record of queue) {
+      released.push(record);
       disposeDisplayRecord(record);
     }
   }
+  releaseUnusedRecordGeometry(released, records);
+  disposeEmptyCadEdgeInstanceSets(runtime);
   return records;
 }
 
@@ -2190,11 +2249,15 @@ export function buildModel(THREE, source, settings = {}) {
   };
 
   const rebuild = (nextSettings = currentSettings) => {
+    const previousRecords = runtime.displayRecords;
     disposeCadEdgeInstanceSets(runtime);
     clearGroup(modelGroup);
     clearGroup(edgesGroup);
     setRuntimeTheme(runtime, nextSettings);
     runtime.displayRecords = buildDisplayRecords(THREE, runtime, meshData, nextSettings);
+    // A rebuild over the same components keeps their uploads; geometry the new
+    // records do not use (a settings change that drops parts) is freed.
+    releaseUnusedRecordGeometry(previousRecords, runtime.displayRecords);
     runtime.records = runtime.displayRecords;
     syncRuntimeBounds();
     currentSignature = settingsSignature(meshData, runtime.theme, nextSettings);
@@ -2318,7 +2381,10 @@ export function buildModel(THREE, source, settings = {}) {
       applyMutableState(currentSettings);
       return api;
     },
-    dispose() {
+    // `releaseGpu: false` keeps the components' GPU buffers and BVHs for a
+    // scene about to be rebuilt over the same model (a display-mode or theme
+    // change); the default frees them, for a model going away.
+    dispose({ releaseGpu = true } = {}) {
       if (disposed) {
         return;
       }
@@ -2326,8 +2392,16 @@ export function buildModel(THREE, source, settings = {}) {
       if (activeParameterSetup) {
         cleanupParameterRuntime(runtime, activeParameters, currentSettings.callbacks);
       }
+      const records = runtime.displayRecords;
       disposeCadEdgeInstanceSets(runtime);
       clearGroup(root);
+      if (releaseGpu) {
+        // Nothing draws these components here any more, so their GPU buffers
+        // and BVHs go too (the component cache keeps the arrays).
+        releaseUnusedRecordGeometry(records, []);
+      }
+      runtime.displayRecords = [];
+      runtime.records = [];
     }
   };
 

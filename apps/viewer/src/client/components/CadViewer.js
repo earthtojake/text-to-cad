@@ -3610,9 +3610,12 @@ const CadViewer = forwardRef(function CadViewer({
       vertexPickGroup
     } = runtime;
 
-    const clearDisplayedModel = ({ preserveModelIdentity = false } = {}) => {
+    // releaseGpu: a model going away frees its components' GPU buffers and
+    // BVHs; a rebuild of the SAME model (theme, display mode) keeps them so the
+    // new records draw without re-uploading every component.
+    const clearDisplayedModel = ({ preserveModelIdentity = false, releaseGpu = true } = {}) => {
       cancelCameraTransition(runtime);
-      runtime.cadScene?.dispose?.();
+      runtime.cadScene?.dispose?.({ releaseGpu });
       runtime.cadScene = null;
       clearSceneGroup(runtime.stageGroup);
       clearSceneGroup(modelGroup);
@@ -3754,7 +3757,7 @@ const CadViewer = forwardRef(function CadViewer({
       cadScene = runtime.cadScene;
       cadScene.update({ source: meshData, ...sceneModelSettings });
     } else {
-      clearDisplayedModel();
+      clearDisplayedModel({ releaseGpu: !runtime.hasVisibleModel || runtime.activeModelKey !== (modelKey || "") });
       cadScene = buildModel(THREE, meshData, {
         theme: sceneTheme,
         displayMode: normalizedDisplayMode,
@@ -3782,6 +3785,7 @@ const CadViewer = forwardRef(function CadViewer({
     }
     runtime.cadScene = cadScene;
     runtime.displayRecords = cadScene.displayRecords;
+    runtime.syncScreenSpaceLineMaterials?.();
     setDisplayRecordsToken((token) => token + 1);
     runtime.hasVisibleModel = true;
     runtime.activeModelKey = modelKey || "";

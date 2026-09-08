@@ -822,7 +822,11 @@ export function useViewerRuntime({
         onManualCameraInteraction,
         onViewportResize,
         registerScreenSpaceLineMaterial,
-        unregisterScreenSpaceLineMaterial
+        unregisterScreenSpaceLineMaterial,
+        // The scene sync calls this after building or updating a model so line
+        // materials created for it (the cadScene's own registry) start at the
+        // viewport's resolution rather than waiting for a resize.
+        syncScreenSpaceLineMaterials
       };
       syncDrawingCanvasSize(runtimeRef.current);
       renderDrawingOverlay();

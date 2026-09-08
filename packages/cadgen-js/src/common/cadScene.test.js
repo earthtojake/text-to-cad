@@ -1229,3 +1229,49 @@ test("update({ source }) rebuilds when the build settings change with it", () =>
   assert.equal(scene.displayRecords[0].edges.geometry.type, "WireframeGeometry");
   scene.dispose();
 });
+
+test("departed components free their GPU buffers, BVH and edge draw; a returning one re-uploads from the cache", () => {
+  const componentA = surfComponentMeshData();
+  const componentB = surfComponentMeshData();
+  const scene = buildModel(THREE, twoComponentPackage(componentA, componentB, [0, 1, 3]), { renderPartsIndividually: true });
+  const [o0, o1, o3] = scene.displayRecords;
+  const geometryB = o1.geometry;
+  assert.equal(o3.geometry, geometryB, "both B occurrences share the component geometry");
+  geometryB.boundsTree = { fake: true };
+  const disposedGeometries = [];
+  geometryB.addEventListener("dispose", () => disposedGeometries.push(geometryB));
+  const setB = o1.edgeInstance.set;
+  const segmentTextureB = setB.segments.texture;
+  const disposedTextures = [];
+  segmentTextureB.addEventListener("dispose", () => disposedTextures.push(segmentTextureB));
+
+  // Publish 2: every B occurrence departs.
+  scene.update({ source: twoComponentPackage(componentA, componentB, [0, 2]) });
+  assert.deepEqual(scene.displayRecords.map((record) => record.partId), ["o0", "o2"]);
+  assert.deepEqual(disposedGeometries, [geometryB], "the component geometry's GPU buffers are released once");
+  assert.equal(geometryB.boundsTree, null, "and its BVH");
+  assert.equal(setB.disposed, true, "the component's edge draw is disposed");
+  assert.equal(setB.object.parent, null);
+  assert.deepEqual(disposedTextures, [segmentTextureB], "and its segment texture's GPU copy");
+  assert.equal(scene.edgesGroup.children.length, 1, "one edge draw left, component A's");
+  assert.equal(scene.runtime.cadEdgeInstanceSets.size, 1);
+  assert.equal(o0.geometry.boundsTree, undefined, "A's geometry is untouched");
+
+  // Publish 3: B returns. Same cached geometry object (three re-uploads it on
+  // the next draw), a fresh edge draw over the cached segment texture.
+  scene.update({ source: twoComponentPackage(componentA, componentB, [0, 1, 2, 3]) });
+  const returned = scene.displayRecords.find((record) => record.partId === "o1");
+  assert.equal(returned.geometry, geometryB);
+  assert.equal(returned.edgeInstance.set.segments.texture, segmentTextureB);
+  assert.notEqual(returned.edgeInstance.set, setB);
+  assert.equal(scene.runtime.cadEdgeInstanceSets.size, 2);
+
+  // Disposing the scene releases every component's GPU copy.
+  const geometryA = o0.geometry;
+  const disposedAtEnd = [];
+  geometryA.addEventListener("dispose", () => disposedAtEnd.push("A"));
+  geometryB.addEventListener("dispose", () => disposedAtEnd.push("B"));
+  scene.dispose();
+  assert.deepEqual(disposedAtEnd.sort(), ["A", "B"]);
+  assert.equal(scene.displayRecords.length, 0);
+});
