@@ -147,3 +147,13 @@ CAD surface. `size` controls its pixel dimensions (default 96), `className` its
 placement, and `active={false}` uses the still pose. The host owns status text.
 It also stays still for OS/app reduced motion and hidden documents. See
 `src/client/assets/brand/README.md` for asset provenance and regeneration.
+
+### Narrow CAD panes
+
+The floating toolbar watches its scene's width, including space taken by the
+Inspector. When the existing button row would overflow, Select, Pan and Measure
+stay visible; Draw, animation playback, Orbit and capture actions move into
+More tools. Widening the scene restores the original full toolbar. Zoom and
+2D/3D controls remain separate and wrap within the available width. In Orbit,
+Exit and playback remain direct controls. The overflow menu uses the same
+handlers, availability and disabled states as the full toolbar.
