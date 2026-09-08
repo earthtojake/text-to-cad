@@ -27,9 +27,6 @@ export function ensureTubeMaterialStage(material, name, create) {
     shared = material.userData.cadTubeShader = { stages: {} };
     material.onBeforeCompile = function (shader, renderer) {
       originalCompile.call(this, shader, renderer);
-      const declaration = `#include <common>\nvarying vec3 ${TUBE_MATERIAL_VARYING};`;
-      shader.vertexShader = shader.vertexShader.replace("#include <common>", declaration);
-      shader.fragmentShader = shader.fragmentShader.replace("#include <common>", declaration);
       for (const stageName of STAGE_ORDER) {
         const stage = shared.stages[stageName];
         if (!stage) {
@@ -38,6 +35,13 @@ export function ensureTubeMaterialStage(material, name, create) {
         Object.assign(shader.uniforms, stage.uniforms);
         stage.apply(shader, shared.stages);
       }
+      // Declared last, so it lands directly under `#include <common>` and above
+      // every stage's code. A stage anchors its own text on that same include,
+      // so declaring first would leave the varying BELOW a stage that reads it
+      // — GLSL rejects the identifier and the whole program fails to compile.
+      const declaration = `#include <common>\nvarying vec3 ${TUBE_MATERIAL_VARYING};`;
+      shader.vertexShader = shader.vertexShader.replace("#include <common>", declaration);
+      shader.fragmentShader = shader.fragmentShader.replace("#include <common>", declaration);
     };
     material.customProgramCacheKey = function () {
       const active = STAGE_ORDER.filter((stageName) => shared.stages[stageName]).join("+");
