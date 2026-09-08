@@ -246,8 +246,10 @@ What an importer TAKES from a model file decides how that file counts:
   reaches it), and shared constants may live in a model file or in `lib/`.
 
 Inputs join the closure too: a `read_step` document is hashed as a build
-input. The render module beside the document (`<name>.step.js`) is NOT one —
-it is the viewer's, and editing it never makes a model stale.
+input, and so is any other data file the model declares with
+`cadgen.declare_input` (below). The render module beside the document
+(`<name>.step.js`) is NOT one — it is the viewer's, and editing it never makes
+a model stale.
 
 Every decorator argument is ordinary Python, evaluated when the module is
 imported: `out=f"{FOLDER}/{NAME}.step"`, `mesh_tolerance=TOL` with `TOL` from
@@ -375,6 +377,38 @@ source documents where the model cannot write them — placement policy belongs
 to `project-layout.md` (`imported/`). Input path and output path being different
 files is the whole rule. If the geometry you want is something the project
 already builds, call that model instead of reading the artifact.
+
+### Inputs: a data file the model reads
+
+`read_step` records the STEP it reads because cadgen reads it for you. For any
+other file a model reads — a JSON routing atlas, a CSV of tap sizes, a table of
+solved offsets — cadgen has no reader, so declare it with
+`cadgen.declare_input`. It returns the resolved path and puts the file's content
+hash in the model's closure; the model does its own parsing.
+
+```python
+import json
+from pathlib import Path
+
+from cadgen import build123d as bd
+from cadgen import declare_input, step
+
+_HERE = Path(__file__).resolve().parent
+
+
+@step
+def plate():
+    atlas = json.loads(declare_input(_HERE / "atlas.json").read_text(encoding="utf-8"))
+    return bd.Box(atlas["width"], 20, 4)
+```
+
+Wrap the path, not the read, so there is no way to declare one file and read
+another. Edit `atlas.json` and the model is stale on its own; rewrite it with
+identical bytes and it stays current, because the input is the content and not
+the mtime. Without the declaration the model reports itself current forever
+after the data changes, and only `--force` gets the truth back. A missing file
+raises before the model's parser sees it. The rule about a model's own output
+applies here too: never declare a file the model writes.
 
 For structuring multi-part projects (folder layout, shared `src/lib/` code,
 commit policy), read `project-layout.md` and `project-template.md`.

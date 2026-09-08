@@ -466,3 +466,132 @@ class OpMemoSubShapeIdentityTest(unittest.TestCase):
         self.assertTrue(held.is_same(twin))
         self.assertEqual(held, twin)
         self.assertEqual(hash(held), hash(twin))
+
+
+class TShapeDigestPurityTest(unittest.TestCase):
+    """``_tshape_digest`` must be a function of the TShape's GEOMETRY alone.
+
+    The digest is memoized by the TShape POINTER, so the first shape that
+    reaches it for a given TShape decides the digest every later sharer of that
+    TShape receives. Anything the digest reads off the passed handle that is not
+    TShape content is therefore not a detail -- it is cache state, and two runs
+    that touch the same geometry in a different order key it differently and
+    re-run kernel work they already have.
+
+    Two such leaks are pinned here, both found by keying the same solid twice:
+
+    * ORIENTATION. A reversed shape shares its TShape with the forward one, so
+      writing the handle as it arrived baked whichever orientation came first
+      into the shared digest -- forward-first gave one digest for BOTH, and
+      reversed-first gave a different digest for BOTH.
+    * TRIANGULATION. The two-argument ``BinTools.Write_s`` alias writes
+      triangulation data, so a shape's digest changed the moment anything
+      meshed it -- and, memoized per TShape, whether that had happened yet was
+      the run's history, not the model's geometry. It was also enormous: a
+      tessellated sphere serialized 68 KB of mesh to be hashed instead of
+      939 bytes of geometry.
+
+    Orientation stays in the KEY (``_shape_key`` carries it explicitly), which
+    is where a distinction that must not alias belongs; the digest is only the
+    content half.
+    """
+
+    def setUp(self):
+        op_memo.clear()
+        self.addCleanup(op_memo.clear)
+
+    @staticmethod
+    def _fresh_box():
+        from build123d.topology import Solid
+
+        return Solid.make_box(10, 8, 6).wrapped
+
+    @staticmethod
+    def _mesh(wrapped, *, linear: float = 0.1, angular: float = 0.5):
+        from OCP.BRepMesh import BRepMesh_IncrementalMesh
+
+        BRepMesh_IncrementalMesh(wrapped, linear, False, angular, True)
+
+    def test_the_digest_does_not_depend_on_which_orientation_arrives_first(self):
+        forward = self._fresh_box()
+        reversed_ = forward.Reversed()
+        self.assertEqual(
+            forward.TShape(), reversed_.TShape(), "precondition: one TShape, two orientations"
+        )
+
+        op_memo._tshape_bytes_memo.clear()
+        forward_first = op_memo._tshape_digest(forward)
+        op_memo._tshape_bytes_memo.clear()
+        reversed_first = op_memo._tshape_digest(reversed_)
+        self.assertEqual(forward_first, reversed_first)
+
+    def test_a_reversed_shape_still_keys_differently(self):
+        """The normalization must not ALIAS the two: a reversed shape flips
+        downstream geometry, so the key has to tell them apart."""
+        from build123d.topology import Solid
+
+        solid = Solid.make_box(10, 8, 6)
+        forward_key = op_memo._shape_key(solid)
+        solid.wrapped = solid.wrapped.Reversed()
+        self.assertNotEqual(forward_key, op_memo._shape_key(solid))
+
+    def _digest(self, wrapped) -> str:
+        op_memo._tshape_bytes_memo.clear()  # the memo is per TShape; re-serialize
+        return op_memo._tshape_digest(wrapped)
+
+    def test_the_mesh_on_a_shape_is_not_in_its_digest(self):
+        """Re-tessellating finer must not move the digest.
+
+        The strongest statement available: if any triangulation reached the
+        hashed bytes, two different mesh densities on the same solid could not
+        agree. Sphere rather than box because a box's mesh is two triangles a
+        face at any tolerance.
+        """
+        from build123d.topology import Solid
+
+        sphere = Solid.make_sphere(10).wrapped
+        self._mesh(sphere, linear=0.05, angular=0.2)
+        coarse = self._digest(sphere)
+        self._mesh(sphere, linear=0.005, angular=0.05)
+        self.assertEqual(coarse, self._digest(sphere))
+
+    def test_removing_a_tessellation_does_not_move_the_digest(self):
+        """The other direction, and the one that says the bytes are geometry:
+        a shape carrying a mesh and the same shape with the mesh dropped
+        (``BRepTools::Clean``) digest alike."""
+        from OCP.BRepTools import BRepTools
+        from build123d.topology import Solid
+
+        sphere = Solid.make_sphere(10).wrapped
+        self._mesh(sphere, linear=0.05, angular=0.2)
+        meshed = self._digest(sphere)
+        BRepTools.Clean_s(sphere)
+        self.assertEqual(meshed, self._digest(sphere))
+
+    def test_placed_shape_key_is_tessellation_independent(self):
+        """``placed_shape_key`` is what the measurement memo keys on -- and a
+        measurement is exactly the thing that tessellates its own input, so a
+        second measurement of the same shape must reach the same entry."""
+        from build123d.topology import Solid
+
+        sphere = Solid.make_sphere(10).wrapped
+        self._mesh(sphere, linear=0.05, angular=0.2)
+        op_memo._tshape_bytes_memo.clear()
+        reference = op_memo.placed_shape_key(sphere)
+
+        self._mesh(sphere, linear=0.005, angular=0.05)
+        op_memo._tshape_bytes_memo.clear()
+        self.assertEqual(reference, op_memo.placed_shape_key(sphere))
+
+    def test_the_location_is_still_out_of_the_digest_and_in_the_key(self):
+        from build123d.geometry import Location
+        from build123d.topology import Solid
+
+        solid = Solid.make_box(10, 8, 6)
+        moved = solid.moved(Location((5, 0, 0)))
+        self.assertEqual(
+            op_memo._tshape_digest(solid.wrapped),
+            op_memo._tshape_digest(moved.wrapped),
+            "a moved copy shares its geometry; only the location key may differ",
+        )
+        self.assertNotEqual(op_memo._shape_key(solid), op_memo._shape_key(moved))

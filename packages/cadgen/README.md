@@ -227,6 +227,9 @@ src/cadgen/
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
   step_scene.py          # read_step and scene loading (recorded inputs)
+  inputs.py              # declare_input: a data file the model reads and
+                         #   cadgen has no reader for (a JSON atlas, a CSV
+                         #   table) is a freshness input once it says so
   assembly.py            # AssemblyHelper — positioning through native joints, labels
   results.py             # the typed Results every verb returns (stdlib-only)
   store/                 # the store (STORE.md): objects, index, records, trees,

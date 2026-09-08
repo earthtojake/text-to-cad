@@ -22,6 +22,7 @@ tested from the outside, on the bytes actually written:
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -71,6 +72,30 @@ def wrapped():
 
 if __name__ == "__main__":
     wrapped()
+'''
+
+
+_JSON_MODEL = '''import json
+from pathlib import Path
+
+from cadgen import build123d as bd
+from cadgen import declare_input, step
+
+HERE = Path(__file__).resolve().parent
+
+
+def _atlas():
+    return json.loads(declare_input(HERE / "atlas.json").read_text(encoding="utf-8"))
+
+
+@step
+def plate():
+    atlas = _atlas()
+    return bd.Box(atlas["width"], 20, 4)
+
+
+if __name__ == "__main__":
+    plate()
 '''
 
 
@@ -443,3 +468,118 @@ class DiscoveredInputRecordingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeclaredDataInputTests(unittest.TestCase):
+    """A model's own data file is a build input once it says so.
+
+    `read_step` covers the files cadgen reads for the model. A JSON routing
+    atlas, a CSV table, a solved-offsets dump -- cadgen has no reader for
+    those, so it cannot record them, and a model that computes its geometry
+    from one used to report itself current forever after the file changed
+    (PR #370 bug record 012, whose workaround was to re-export the data as a
+    Python literal module so the IMPORT closure would carry it).
+
+    `cadgen.declare_input` is the declaration: the model still parses the file
+    itself, and the path it declares joins the closure. The three properties
+    are the same three that matter for `read_step`, because the failure being
+    guarded is the same silent one -- a build that does nothing and says
+    everything is fine.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="declared-inputs-")
+        self.addCleanup(self._tmp.cleanup)
+        self.project = Path(self._tmp.name).resolve()
+        self.environment = dict(os.environ)
+        self.environment.update(
+            {
+                "CADGEN_DAEMON": "0",
+                "CADGEN_COMPONENT_WORKERS": "1",
+                "CADGEN_CACHE_DIR": str(self.project / "store"),
+                "PYTHONPATH": str(CADGEN_SRC),
+            }
+        )
+        (self.project / "plate.py").write_text(_JSON_MODEL, encoding="utf-8")
+        self.atlas = self.project / "atlas.json"
+
+    def _write_atlas(self, width: float) -> None:
+        self.atlas.write_text(json.dumps({"width": width}) + "\n", encoding="utf-8")
+
+    def _run_outcome(self) -> str:
+        completed = subprocess.run(
+            [sys.executable, str(self.project / "plate.py"), "--json"],
+            cwd=str(self.project),
+            env=self.environment,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        return json.loads(completed.stdout.strip().splitlines()[-1])["outcome"]
+
+    def test_a_changed_json_makes_the_model_stale(self) -> None:
+        self._write_atlas(30.0)
+        self.assertEqual(self._run_outcome(), "built")
+        self.assertEqual(self._run_outcome(), "current")
+
+        self._write_atlas(45.0)
+        self.assertEqual(
+            self._run_outcome(), "built", "a changed data file must make the model stale"
+        )
+        self.assertEqual(self._run_outcome(), "current")
+
+    def test_identical_bytes_rewritten_stay_current(self) -> None:
+        """The input is the CONTENT. A checkout or an rsync rewrites a file
+        without changing it, and must not invalidate anything."""
+        self._write_atlas(30.0)
+        self.assertEqual(self._run_outcome(), "built")
+
+        payload = self.atlas.read_bytes()
+        before = self.atlas.stat().st_mtime_ns
+        self.atlas.unlink()
+        self.atlas.write_bytes(payload)
+        self.assertNotEqual(
+            before,
+            self.atlas.stat().st_mtime_ns,
+            "precondition: the input must look newer than the artifact",
+        )
+        self.assertEqual(self._run_outcome(), "current")
+
+    def test_the_declared_file_is_in_the_closure_by_name(self) -> None:
+        self._write_atlas(30.0)
+        self._run_outcome()
+        from unittest import mock
+
+        from cadgen.store.records import read_record
+
+        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": self.environment["CADGEN_CACHE_DIR"]}):
+            recorded = read_record(self.project / "plate.py")
+        self.assertIsNotNone(recorded, "the build must leave a record for the model")
+        self.assertIn("atlas.json", sorted(recorded["closure"]["files"]))
+
+    def test_a_missing_declared_file_fails_loudly(self) -> None:
+        self._write_atlas(30.0)
+        self._run_outcome()
+        self.atlas.unlink()
+        completed = subprocess.run(
+            [sys.executable, str(self.project / "plate.py")],
+            cwd=str(self.project),
+            env=self.environment,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        self.assertNotEqual(completed.returncode, 0, "a missing input must not pass silently")
+        self.assertIn("declare_input", completed.stdout + completed.stderr)
+
+    def test_declaring_outside_a_build_resolves_but_records_nothing(self) -> None:
+        """A REPL, a test or a tool reading a data file is not a build."""
+        from cadgen import declare_input
+        from cadgen._internal.source_hash import record_discovered_inputs
+
+        self._write_atlas(30.0)
+        self.assertEqual(declare_input(self.atlas), self.atlas.resolve())
+        with record_discovered_inputs() as recorded:
+            declare_input(self.atlas)
+        self.assertEqual(recorded, {self.atlas.resolve()})

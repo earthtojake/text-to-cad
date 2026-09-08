@@ -18,8 +18,11 @@ Scope and placement:
 - The cache lives in this module, which survives the generation runner's
   first-party module eviction (cadgen and site-packages are never evicted), so
   a warm daemon worker keeps its cache across requests.
-- Keys hash input shapes by their BinTools BREP bytes: location-stripped bytes
-  memoized per TShape, combined with the shape's location matrix. Fresh
+- Keys hash input shapes by their BinTools BREP bytes: bytes stripped of
+  location, orientation and triangulation, memoized per TShape, combined with
+  the shape's own location matrix and orientation. What the digest strips is
+  what a TShape SHARES with its re-expressions, and it has to be, because the
+  digest is memoized per TShape pointer -- see ``_tshape_digest``. Fresh
   rebuilds of identical geometry serialize byte-identically (verified in the
   design doc's Phase 0 spike), so keys hit across full re-executions.
 - Every consumer — the missing caller, a warm in-memory hit, a disk hit —
@@ -82,7 +85,7 @@ from collections import OrderedDict
 from cadgen._internal.atomic_replace import replace_atomic
 
 # Salt: bump _OP_MEMO_VERSION whenever keying or hit semantics change.
-_OP_MEMO_VERSION = 3
+_OP_MEMO_VERSION = 4
 
 _lock = threading.RLock()
 _cache: OrderedDict[tuple, object] = OrderedDict()
@@ -126,8 +129,47 @@ def _capacity() -> int:
 
 
 def _tshape_digest(wrapped) -> str:
-    """Location-stripped BREP digest of a TopoDS_Shape, memoized per TShape."""
-    from OCP.BinTools import BinTools
+    """Content digest of a TopoDS_Shape's TShape, memoized per TShape.
+
+    The digest must be a pure function of the TShape's GEOMETRY, because the
+    memo is keyed by the TShape pointer: the first shape that reaches this
+    function for a given TShape decides the digest every later sharer of it
+    gets. Anything read off ``wrapped`` that is not TShape content therefore
+    becomes cache state, and two runs that touch the same geometry in a
+    different order key it differently.
+
+    Three things are normalized away, in that spirit:
+
+    - **Location.** Stripped, and folded back in separately by
+      :func:`_location_key`, so a moved copy of a solid serializes once.
+    - **Orientation.** Forced FORWARD. A reversed shape SHARES its TShape with
+      the forward one, so writing ``wrapped`` as it came in baked whichever
+      orientation arrived first into the shared digest: hashing the forward
+      solid first gave one digest for both, hashing the reversed one first gave
+      a different digest for both. Orientation is not lost -- ``_shape_key``
+      carries ``wrapped.Orientation()`` as its own key part, which is where a
+      distinction that must not alias belongs.
+    - **Triangulation and normals.** Written off. The two-argument
+      ``BinTools.Write_s`` alias writes triangulation data, so a shape acquired
+      a different digest the moment anything meshed it (a bounding box, a
+      tessellation, an STL pass) -- and, memoized per TShape, whether that had
+      happened yet was the run's history rather than the model's geometry. The
+      explicit form matches the canonical bytes :func:`_write_brep` and the
+      component store already write.
+
+    NOT normalized, and a known residue: BinTools serializes each TShape's
+    mutable bookkeeping flags, and ``Checked`` is one OCCT clears on every FACE
+    when anything tessellates the shape. So a shape measured (which meshes it)
+    before being keyed still digests differently from the same geometry keyed
+    first -- a missed disk-tier hit, never a wrong result, since every op-memo
+    consumer gets the same canonical reconstruction. The only fix available is
+    to force the flag over the shape and all its sub-shapes before writing,
+    which mutates state the caller owns and costs ~2x per uncached digest
+    (5.6ms -> 10.2ms on a 626-face, 3576-sub-shape solid), so it is a
+    deliberate open item rather than something done quietly here.
+    """
+    from OCP.BinTools import BinTools, BinTools_FormatVersion
+    from OCP.TopAbs import TopAbs_Orientation
     from OCP.TopLoc import TopLoc_Location
 
     tshape = wrapped.TShape()
@@ -136,7 +178,13 @@ def _tshape_digest(wrapped) -> str:
         _tshape_bytes_memo.move_to_end(tshape)
         return cached
     stream = io.BytesIO()
-    BinTools.Write_s(wrapped.Located(TopLoc_Location()), stream)
+    BinTools.Write_s(
+        wrapped.Located(TopLoc_Location()).Oriented(TopAbs_Orientation.TopAbs_FORWARD),
+        stream,
+        False,  # theWithTriangles
+        False,  # theWithNormals
+        BinTools_FormatVersion.BinTools_FormatVersion_CURRENT,
+    )
     digest = hashlib.sha256(stream.getvalue()).hexdigest()
     _tshape_bytes_memo[tshape] = digest
     while len(_tshape_bytes_memo) > _TSHAPE_DIGEST_CAPACITY:
