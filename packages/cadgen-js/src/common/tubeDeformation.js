@@ -923,6 +923,10 @@ export function applyRecordTubeDeformation(THREE, record, deformation) {
   }
   record.effectDeformation = deformation || null;
   applyTubeBraidMaterial(THREE, record.material || record.mesh.material, deformation?.braid || null);
+  if (deformation && record.edgeInstance) {
+    // Instanced CAD edges cannot bend: the record takes a private line object.
+    record.detachEdgeInstance?.();
+  }
   const base = new THREE.Matrix4();
   if (record.baseTransform) {
     base.fromArray(record.baseTransform).transpose();

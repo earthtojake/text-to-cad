@@ -14,8 +14,14 @@ import {
   progressiveLoadStage,
   progressivePublishDue,
   publishMeshCostAccounting,
-  meshStateAcceptsRenderModule
+  meshStateIsComplete,
+  tolerantAnimationClip,
+  createDecodeSizeEstimator,
+  PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
+  PROGRESSIVE_LOAD_UNMEASURED_SHARE
 } from "./packageProgressiveLoad.js";
+import { createAnimationFrame } from "cadgen-js/common/animationRuntime.js";
+import * as THREE from "three";
 
 const IDENTITY_4X4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
@@ -301,10 +307,21 @@ test("recomposition cost per publish: 3000 occurrences / 800 components", async 
   const result = await loader.run();
   const totalMs = performance.now() - started;
   assert.equal(result.publishes, Math.ceil(800 / PROGRESSIVE_PUBLISH_MAX_COMPONENTS));
+  // Per-frame animation binding (label index over every part) at this size —
+  // the cost the render module pays on each publish/frame, not a separate attach.
+  let bindMs = 0;
+  {
+    const lastPublish = buildComposedPackageMeshData(descriptor, Object.fromEntries(
+      Object.keys(descriptor.components).map((cid) => [cid, fakeComponent(cid)])
+    ));
+    const t0 = performance.now();
+    for (let i = 0; i < 5; i += 1) createAnimationFrame(THREE, lastPublish);
+    bindMs = (performance.now() - t0) / 5;
+  }
   const max = Math.max(...composeMs);
   const mean = composeMs.reduce((sum, ms) => sum + ms, 0) / composeMs.length;
   const last = composeMs.at(-1);
-  t.diagnostic(`recompose per publish: mean ${mean.toFixed(2)} ms, max ${max.toFixed(2)} ms, final ${last.toFixed(2)} ms, ${composeMs.length} publishes, run ${totalMs.toFixed(0)} ms`);
+  t.diagnostic(`recompose per publish: mean ${mean.toFixed(2)} ms, max ${max.toFixed(2)} ms, final ${last.toFixed(2)} ms, ${composeMs.length} publishes, run ${totalMs.toFixed(0)} ms; animation label bind over 3000 parts ${bindMs.toFixed(2)} ms`);
   // Generous ceiling: a publish is a reference walk of the occurrence list.
   assert.ok(max < 500, `max recompose ${max} ms`);
 });
@@ -342,41 +359,175 @@ test("window.__cadMeshCost updates on every publish and clears on cancel", async
   }
 });
 
-test("the render module runs on the final publish only, never against a partial composition", async () => {
+test("the render module attaches on the FIRST publish; absent labels are no-ops until they arrive; validation waits for the complete model", async () => {
   const descriptor = makeDescriptor({ componentCount: 9, occurrenceCount: 18 });
   const { loadComponent } = makeLoader(descriptor);
-  // A fake `<name>.step.js`: resolves every occurrence by label, as the real
-  // animation/effects runtime does, and throws on an absent one.
-  let invocations = 0;
-  const renderModule = (meshData) => {
-    invocations += 1;
-    const labels = new Set(meshData.parts.map((part) => part.label));
-    for (const occurrence of descriptor.occurrences) {
-      if (!labels.has(occurrence.name)) {
-        throw new Error(`animation: no occurrence labeled ${JSON.stringify(occurrence.name)}`);
+  // A real clip over the real runtime handle: rotates every occurrence by label.
+  const clip = {
+    id: "wave", duration: 1, loop: true,
+    update(t, m) {
+      for (const occurrence of descriptor.occurrences) {
+        m.get(occurrence.name).rotate([0, 0, 1], 90 * t);
       }
     }
   };
-  const gates = [];
+  const runs = [];
+  const validations = [];
   await createProgressivePackageLoader({
     descriptor,
     loadComponent,
     concurrency: 3,
     maxComponents: 4,
     onPublish: ({ meshData, final }) => {
-      // The hook publishes exactly this state shape (assemblyInteractionReady = final).
       const meshState = { file: "hand.step", meshData, assemblyInteractionReady: final };
-      const accepts = meshStateAcceptsRenderModule(meshState);
-      gates.push(accepts);
-      if (accepts) {
-        renderModule(meshData); // would throw on a partial composition
-      }
+      const complete = meshStateIsComplete(meshState);
+      validations.push(complete);
+      // The workspace hands the viewer the strict clip for the complete model
+      // and the tolerant one while partial; the module is attached either way.
+      const playable = complete ? clip : tolerantAnimationClip(clip);
+      const frame = createAnimationFrame(THREE, meshData);
+      playable.update(0.5, frame.model);
+      runs.push({ bound: frame.matrices.size, present: meshData.parts.length });
     }
   }).run();
-  assert.deepEqual(gates, [false, false, true]);
-  assert.equal(invocations, 1, "attached once, on the final state");
-  assert.equal(meshStateAcceptsRenderModule(null), false);
-  assert.equal(meshStateAcceptsRenderModule({ meshData: { parts: null }, assemblyInteractionReady: false }), false, "assembly preview");
-  assert.equal(meshStateAcceptsRenderModule({ meshData: { parts: [], missingComponentIds: ["c1"] } }), false);
-  assert.equal(meshStateAcceptsRenderModule({ meshData: { parts: [] } }), true, "non-package meshes carry no flag");
+  assert.equal(runs.length, 3, "invoked on every publish, the first included");
+  // Every present occurrence is bound; absent ones were no-ops (no throw).
+  for (const run of runs) {
+    assert.equal(run.bound, run.present);
+  }
+  assert.ok(runs[0].bound > 0 && runs[0].bound < 18, "partial: some occurrences bound, the rest pending");
+  assert.equal(runs.at(-1).bound, 18, "late occurrences bound once they arrived");
+  assert.deepEqual(validations, [false, false, true], "clip validation gate: complete model only");
+  // The strict clip against a partial composition is the failure the wrapper prevents.
+  const partial = buildComposedPackageMeshData(descriptor, { c0: fakeComponent("c0") });
+  assert.throws(() => clip.update(0.5, createAnimationFrame(THREE, partial).model), /no occurrence labeled/);
+  assert.equal(meshStateIsComplete(null), false);
+  assert.equal(meshStateIsComplete({ meshData: { parts: null }, assemblyInteractionReady: false }), false, "assembly preview");
+  assert.equal(meshStateIsComplete({ meshData: { parts: [], missingComponentIds: ["c1"] } }), false);
+  assert.equal(meshStateIsComplete({ meshData: { parts: [] } }), true, "non-package meshes carry no flag");
+  assert.equal(tolerantAnimationClip(null), null);
+});
+
+test("byte-aware admission: decodes in flight stay under the byte budget, and under the count cap", async () => {
+  // Each fake component decodes to exactly its hint (ratio 1): 40 floats*4 + 36 + 12 = 208 B.
+  const descriptor = makeDescriptor({ componentCount: 24, occurrenceCount: 24 });
+  const { loadComponent } = makeLoader(descriptor, { componentFloats: () => 40 });
+  let inFlight = 0;
+  const inFlightAtStart = [];
+  const wrapped = async (cid, component) => {
+    inFlight += 1;
+    inFlightAtStart.push(inFlight);
+    try {
+      return await loadComponent(cid, component);
+    } finally {
+      inFlight -= 1;
+    }
+  };
+  const budget = 500; // fits two 208 B components, not three
+  const loader = createProgressivePackageLoader({
+    descriptor,
+    loadComponent: wrapped,
+    sizeHint: async () => 208,
+    concurrency: 8,
+    maxInFlightBytes: budget,
+    onPublish: () => {}
+  });
+  await loader.run();
+  assert.equal(inFlightAtStart.length, 24);
+  // Before any decode is measured the estimate is budget/4 = 125 B: at most 4 unmeasured admissions.
+  assert.ok(loader.peakInFlight() <= PROGRESSIVE_LOAD_UNMEASURED_SHARE, `peak ${loader.peakInFlight()}`);
+  // Once measured (ratio 1 → 208 B each) only two fit the 500 B budget; the
+  // first eight admissions span the unmeasured→measured transition.
+  assert.ok(inFlightAtStart.slice(8).every((n) => n <= 2), `later admissions ${inFlightAtStart}`);
+  // Count cap still binds when bytes do not.
+  const { loadComponent: load2 } = makeLoader(descriptor, { componentFloats: () => 40 });
+  const wide = createProgressivePackageLoader({
+    descriptor, loadComponent: load2, sizeHint: async () => 1, concurrency: 3,
+    maxInFlightBytes: PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES, onPublish: () => {}
+  });
+  await wide.run();
+  assert.ok(wide.peakInFlight() <= 3 && wide.peakInFlight() >= 2, `count cap ${wide.peakInFlight()}`);
+  // A component larger than the whole budget runs alone rather than never.
+  const { loadComponent: load3 } = makeLoader(descriptor, { componentFloats: () => 400 });
+  const huge = createProgressivePackageLoader({
+    descriptor, loadComponent: load3, sizeHint: async () => 1648, concurrency: 8, maxInFlightBytes: 100, onPublish: () => {}
+  });
+  const result = await huge.run();
+  assert.equal(result.loaded, 24);
+  // The estimator itself.
+  const estimator = createDecodeSizeEstimator({ maxInFlightBytes: 400 });
+  assert.equal(estimator.estimate(10), 100, "unmeasured share");
+  estimator.observe(10, 300);
+  assert.equal(estimator.estimate(20), 600, "hint scaled by the measured ratio");
+  assert.equal(estimator.estimate(null), 300, "no hint: running mean");
+});
+
+test("recomposition cost per publish: 3000 occurrences / 800 components", async (t) => {
+  const descriptor = makeDescriptor({
+    componentCount: 800,
+    occurrenceCount: 3000,
+    transformFor: (i) => translation((i % 37) * 10, (i % 53) * 7, (i % 11) * 3)
+  });
+  const { loadComponent } = makeLoader(descriptor);
+  const composeMs = [];
+  const loader = createProgressivePackageLoader({
+    descriptor,
+    loadComponent,
+    concurrency: 8,
+    onPublish: (publish) => composeMs.push(publish.composeMs)
+  });
+  const started = performance.now();
+  const result = await loader.run();
+  const totalMs = performance.now() - started;
+  assert.equal(result.publishes, Math.ceil(800 / PROGRESSIVE_PUBLISH_MAX_COMPONENTS));
+  // Per-frame animation binding (label index over every part) at this size —
+  // the cost the render module pays on each publish/frame, not a separate attach.
+  let bindMs = 0;
+  {
+    const lastPublish = buildComposedPackageMeshData(descriptor, Object.fromEntries(
+      Object.keys(descriptor.components).map((cid) => [cid, fakeComponent(cid)])
+    ));
+    const t0 = performance.now();
+    for (let i = 0; i < 5; i += 1) createAnimationFrame(THREE, lastPublish);
+    bindMs = (performance.now() - t0) / 5;
+  }
+  const max = Math.max(...composeMs);
+  const mean = composeMs.reduce((sum, ms) => sum + ms, 0) / composeMs.length;
+  const last = composeMs.at(-1);
+  t.diagnostic(`recompose per publish: mean ${mean.toFixed(2)} ms, max ${max.toFixed(2)} ms, final ${last.toFixed(2)} ms, ${composeMs.length} publishes, run ${totalMs.toFixed(0)} ms; animation label bind over 3000 parts ${bindMs.toFixed(2)} ms`);
+  // Generous ceiling: a publish is a reference walk of the occurrence list.
+  assert.ok(max < 500, `max recompose ${max} ms`);
+});
+
+test("window.__cadMeshCost updates on every publish and clears on cancel", async () => {
+  assert.equal(publishMeshCostAccounting({ meshData: {}, componentMeshDataByCid: {}, loaded: 0, total: 0, publishCount: 0, final: false }), null, "no window: harmless");
+  globalThis.window = {};
+  try {
+    const descriptor = makeDescriptor({ componentCount: 6, occurrenceCount: 12 });
+    const { loadComponent } = makeLoader(descriptor, { componentFloats: () => 12 });
+    const seen = [];
+    await createProgressivePackageLoader({
+      descriptor,
+      loadComponent,
+      concurrency: 1,
+      maxComponents: 2,
+      onPublish: (publish) => {
+        publishMeshCostAccounting(publish);
+        seen.push({ ...window.__cadMeshCost });
+      }
+    }).run();
+    assert.deepEqual(seen.map((cost) => cost.publishCount), [1, 2, 3]);
+    assert.deepEqual(seen.map((cost) => cost.componentCount), [2, 4, 6]);
+    assert.deepEqual(seen.map((cost) => cost.final), [false, false, true]);
+    assert.equal(seen.at(-1).totalComponents, 6);
+    // 12 floats * 4 B + 36 B normals + 12 B indices = 96 B per component; one triangle each.
+    assert.deepEqual(seen.map((cost) => cost.componentTotalBytes), [192, 384, 576]);
+    assert.deepEqual(seen.map((cost) => cost.componentTotalTriangles), [2, 4, 6]);
+    assert.equal(seen.at(-1).composed.triangleCount, 12, "composed cost counts every occurrence");
+    assert.ok(seen[1].at >= seen[0].at);
+    publishMeshCostAccounting(null);
+    assert.equal(window.__cadMeshCost, null);
+  } finally {
+    delete globalThis.window;
+  }
 });

@@ -4,6 +4,7 @@
 // into surface geometry, CAD edge lines and raycast BVHs, beside the render
 // asset caches' own accounting. Pure over a runtime's display records.
 import { renderAssetCacheStats } from "cadgen-js/lib/renderAssetClient.js";
+import { cadEdgeInstanceSets } from "cadgen-js/common/cadEdgeInstances.js";
 
 function geometryBuffers(geometry) {
   const buffers = new Set();
@@ -32,6 +33,8 @@ export function renderMemoryAccounting(runtime) {
   const totals = {
     occurrences: 0,
     edgeObjects: 0,
+    edgeInstanceSets: 0,
+    edgeInstances: 0,
     geometries: 0,
     buffers: 0,
     materials: 0,
@@ -75,6 +78,24 @@ export function renderMemoryAccounting(runtime) {
     if (record?.edges) {
       totals.edgeObjects += 1;
       record.edges.traverse ? record.edges.traverse((child) => visit(child, "edge")) : visit(record.edges, "edge");
+    }
+    if (record?.edgeInstance) {
+      totals.edgeInstances += 1;
+    }
+  }
+  // Instanced CAD edges: one draw per component; its segment texture (shared
+  // by every occurrence, cached on the component), instance texture and quad.
+  const seenSegmentTextures = new Set();
+  for (const set of cadEdgeInstanceSets(runtime)) {
+    totals.edgeInstanceSets += 1;
+    visit(set.object, "edge");
+    for (const material of set.materials) {
+      seenMaterials.add(material);
+    }
+    totals.edgeBytes += set.instanceByteLength;
+    if (!seenSegmentTextures.has(set.segments)) {
+      seenSegmentTextures.add(set.segments);
+      totals.edgeBytes += set.segments.byteLength;
     }
   }
   totals.geometries = seenGeometries.size;

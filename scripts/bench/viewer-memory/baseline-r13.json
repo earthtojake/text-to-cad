@@ -1,0 +1,123 @@
+{
+  "args": {
+    "url": "http://127.0.0.1:3390",
+    "file": "assemblies/STEP/anthropomorphic_hand/hand_mechanical_candidate_r13.step",
+    "label": "r13",
+    "runs": 2,
+    "timeoutMs": 900000,
+    "out": "r13.json",
+    "lod": true,
+    "sampleMs": 500
+  },
+  "results": [
+    {
+      "run": 1,
+      "label": "r13",
+      "file": "assemblies/STEP/anthropomorphic_hand/hand_mechanical_candidate_r13.step",
+      "url": "http://127.0.0.1:3390/?file=assemblies%2FSTEP%2Fanthropomorphic_hand%2Fhand_mechanical_candidate_r13.step",
+      "lod": true,
+      "crashed": false,
+      "crashMessage": "",
+      "loaded": true,
+      "timeToFirstPaintMs": 20,
+      "timeToLoadedMs": 86258,
+      "heap": {
+        "samples": 270,
+        "peakUsed": 3481932938,
+        "peakTotal": 3642279726,
+        "lastUsed": 3452280292,
+        "lastTotal": 3624165608
+      },
+      "gpu": {
+        "liveBytes": 2535556800,
+        "peakBytes": 2535556800,
+        "uploadCount": 4386,
+        "liveBufferCount": 4381,
+        "peakBufferCount": 4381,
+        "textureUploads": 106,
+        "contexts": 1
+      },
+      "peakRss": {
+        "all": {
+          "rssBytes": 7680131072,
+          "processCount": 5
+        },
+        "browser": {
+          "rssBytes": 94208000,
+          "processCount": 1
+        },
+        "gpu-process": {
+          "rssBytes": 2786131968,
+          "processCount": 1
+        },
+        "utility": {
+          "rssBytes": 52723712,
+          "processCount": 1
+        },
+        "renderer": {
+          "rssBytes": 4759977984,
+          "processCount": 2
+        }
+      },
+      "lastStageText": "Loading CAD... | LOADING | Loading STEP tree...",
+      "lodEventCount": 0,
+      "pageErrors": [],
+      "inPageErrors": []
+    },
+    {
+      "run": 2,
+      "label": "r13",
+      "file": "assemblies/STEP/anthropomorphic_hand/hand_mechanical_candidate_r13.step",
+      "url": "http://127.0.0.1:3390/?file=assemblies%2FSTEP%2Fanthropomorphic_hand%2Fhand_mechanical_candidate_r13.step",
+      "lod": true,
+      "crashed": false,
+      "crashMessage": "",
+      "loaded": true,
+      "timeToFirstPaintMs": 20,
+      "timeToLoadedMs": 90325,
+      "heap": {
+        "samples": 290,
+        "peakUsed": 3486428762,
+        "peakTotal": 3543245700,
+        "lastUsed": 3480780588,
+        "lastTotal": 3543245700
+      },
+      "gpu": {
+        "liveBytes": 2535556800,
+        "peakBytes": 2535556800,
+        "uploadCount": 4386,
+        "liveBufferCount": 4381,
+        "peakBufferCount": 4381,
+        "textureUploads": 106,
+        "contexts": 1
+      },
+      "peakRss": {
+        "all": {
+          "rssBytes": 7704674304,
+          "processCount": 5
+        },
+        "browser": {
+          "rssBytes": 94404608,
+          "processCount": 1
+        },
+        "gpu-process": {
+          "rssBytes": 2790391808,
+          "processCount": 1
+        },
+        "utility": {
+          "rssBytes": 52363264,
+          "processCount": 1
+        },
+        "renderer": {
+          "rssBytes": 4773576704,
+          "processCount": 2
+        }
+      },
+      "lastStageText": "Loading CAD... | LOADING | Loading STEP tree...",
+      "lodEventCount": 0,
+      "pageErrors": [],
+      "inPageErrors": []
+    }
+  ],
+  "generatedAt": "2026-09-08T03:06:53.654Z"
+}

@@ -92,18 +92,29 @@ buffer) and is never expanded per triangle corner. CAD edges are not a
 surface shader: `surfMeshData.js` emits indexed line segments
 (`cadEdgePositions` + `cadEdgeIndices` + `cadEdgeClassRanges`, from the same
 tessellation's boundary polylines, ~1.5 bytes per surface triangle) and
-`cadScene.js` draws them as ONE `GL_LINES` object per record over ONE shared
-per-component geometry whose vertex colours carry each class's colour and
-opacity — three GPU buffers per component beside the surface's three, one
-extra draw call per occurrence. `display.edges.classes` styles colour and
-opacity per class; thickness is an on/off switch (a class with thickness 0 is
-not drawn), since `GL_LINES` are one pixel wide. The lines ride the record's
-transform, visibility, highlight and tube deformation exactly like the
-GLB-era derived edges. Geometry built from a shared component is cached on
-the component object (`part.sourceMesh`), never on the composed package
-meshData: a package is re-composed on every progressive publish and LOD swap,
-and every occurrence, publish and swap reuses the one upload. Effects that
-change vertex positions or normals acquire
+`cadScene.js` draws them as ONE instanced screen-space line draw per
+component (`cadEdgeInstances.js`): the instances are every (segment,
+occurrence) pair, decoded in the vertex shader from a per-component segment
+texture (32 B per drawn segment, cached on the component) and a per-set
+instance texture (128 B per occurrence: matrix, colour, opacity, visibility,
+highlight). `display.edges.classes` styles colour, opacity AND pixel thickness
+per class. Per-occurrence highlight, dim, hide, focus, exploded placement and
+selection are slots in that texture, written by the same record passes
+(`applyDisplayRecordTransform`, `applyPartVisualState`,
+`syncRecordEdgeMaterials`) that drive a plain line object; highlighted
+occurrences draw in a second pass at the highlight render order. A deformed
+tube leaves its slot for a private `GL_LINES` object (the component's
+polylines with per-point class colours) that bends with the surface. GPU cost
+per component: two textures, one 4-vertex quad, two materials, one draw call
+(+1 while any occurrence is highlighted). Geometry built from a shared
+component is cached on the component object (`part.sourceMesh`), never on the
+composed package meshData: a package is re-composed on every progressive
+publish and LOD swap, and every occurrence, publish and swap reuses the one
+upload. A publish of the same model reaches the live scene through
+`api.update({ source })`, which reconciles records by occurrence id — records
+already on screen keep their mesh, materials, visual and deformation state
+and BVH; only new occurrences are built and only departed ones disposed.
+Effects that change vertex positions or normals acquire
 writable attributes before deforming them; material refreshes leave component
 data unchanged. This keeps large assemblies from duplicating these buffers for
 display. Assemblies keep geometry in their component buffers; they allocate no

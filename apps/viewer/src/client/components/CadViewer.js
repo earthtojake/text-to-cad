@@ -1452,6 +1452,50 @@ function disposeSceneObject(object) {
   }
 }
 
+// Read-only debug/test seam (like __cadModelPlacement): how long each scene
+// sync — the effect that turns a published mesh state into display records —
+// held the main thread, and whether it rebuilt the scene or reused its records.
+// Read by the headless timing harness; never React state.
+function recordSceneSyncTiming(startedAt, { mode, records, reason = "" }) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const ms = performance.now() - startedAt;
+  const stats = window.__cadSceneSync || (window.__cadSceneSync = { count: 0, totalMs: 0, entries: [] });
+  stats.count += 1;
+  stats.totalMs += ms;
+  stats.entries.push({ atMs: Math.round(performance.now()), ms: Math.round(ms * 10) / 10, mode, records, reason });
+}
+
+// Why a live scene was rebuilt rather than reused: the build-key fields that
+// changed (for the timing seam above).
+function sceneBuildKeyDifference(previous, next, runtime, modelKey) {
+  const reasons = [];
+  if (!runtime.hasVisibleModel) {
+    reasons.push("no visible model");
+  }
+  if (runtime.activeModelKey !== (modelKey || "")) {
+    reasons.push("model key");
+  }
+  if (previous.viewerTheme !== next.viewerTheme) {
+    reasons.push("viewer theme");
+  }
+  if (previous.key !== next.key) {
+    try {
+      const before = JSON.parse(previous.key || "{}");
+      const after = JSON.parse(next.key || "{}");
+      for (const field of new Set([...Object.keys(before), ...Object.keys(after)])) {
+        if (JSON.stringify(before[field]) !== JSON.stringify(after[field])) {
+          reasons.push(field);
+        }
+      }
+    } catch {
+      reasons.push("build key");
+    }
+  }
+  return reasons.join(",");
+}
+
 function clearSceneGroup(group) {
   // The 2D drawing line-work is an OVERLAY owned by its own effect (it renders a
   // dimensioned DXF, which has no mesh for this sync to manage). Clearing it here
@@ -1724,6 +1768,8 @@ const CadViewer = forwardRef(function CadViewer({
   // so this is a signal rather than a longer dependency list: the last attempt at a dependency
   // list is why isolating a part while exploded collapsed the model.
   const [displayRecordsToken, setDisplayRecordsToken] = useState(0);
+  // The build settings the live cadScene was built with (see the scene sync effect).
+  const sceneBuildRef = useRef({ key: "", viewerTheme: null });
   const activeViewPlaneFaceRef = useRef("");
   const defaultPerspectiveResettingRef = useRef(false);
   const previewModeRef = useRef(previewMode);
@@ -3599,8 +3645,7 @@ const CadViewer = forwardRef(function CadViewer({
       return;
     }
 
-    clearDisplayedModel();
-
+    const sceneSyncStartedAt = performance.now();
     const { controls } = runtime;
     const hasFillRotation = normalizedThemeSettings.materials.cycleColors === true &&
       Array.isArray(normalizedThemeSettings.materials.fillColors) &&
@@ -3654,28 +3699,25 @@ const CadViewer = forwardRef(function CadViewer({
             enabled: false
           }
         };
-    const cadScene = buildModel(THREE, meshData, {
+    // Everything that decides how the scene's records are BUILT. While it holds
+    // for the same model, a new mesh state (a progressive publish, a LOD swap)
+    // is handed to the existing scene, which reconciles its records instead of
+    // rebuilding them: occurrences already on screen keep their meshes,
+    // materials, visual and deformation state and BVHs.
+    const sceneBuildKey = JSON.stringify({
       theme: sceneTheme,
       displayMode: normalizedDisplayMode,
       applyDisplayModeEdgePolicy: !topologyDisplayEdgesVisible,
       scale: normalizedSceneScaleMode,
-      baseTheme: viewerTheme,
       materialSettings,
       recomputeNormals,
       silhouette: topologyDisplayEdgesVisible && displayEdgeSettings.silhouette === true,
+      wireframeEdgeColor
+    });
+    const sceneModelSettings = {
       parts: shouldRenderParts ? renderedParts : [],
       renderPartsIndividually: effectiveRenderPartsIndividually,
       stepParameters: modelStepParameters,
-      parameterSetup: false,
-      edgeRendering: {
-        mode: "screen-space",
-        Line2: runtime.Line2,
-        LineGeometry: runtime.LineGeometry,
-        LineSegments2: runtime.LineSegments2,
-        LineSegmentsGeometry: runtime.LineSegmentsGeometry,
-        LineMaterial: runtime.LineMaterial,
-        wireframeEdgeColor
-      },
       selection: shouldRenderParts
         ? partVisualStateRef.current
         : {
@@ -3698,9 +3740,46 @@ const CadViewer = forwardRef(function CadViewer({
           });
         }
       }
-    });
-    modelGroup.add(cadScene.modelGroup);
-    edgesGroup.add(cadScene.edgesGroup);
+    };
+    const reuseScene = !!runtime.cadScene &&
+      runtime.hasVisibleModel &&
+      runtime.activeModelKey === (modelKey || "") &&
+      sceneBuildRef.current.key === sceneBuildKey &&
+      sceneBuildRef.current.viewerTheme === viewerTheme;
+    const rebuildReason = !reuseScene && runtime.cadScene
+      ? sceneBuildKeyDifference(sceneBuildRef.current, { key: sceneBuildKey, viewerTheme }, runtime, modelKey)
+      : "";
+    let cadScene;
+    if (reuseScene) {
+      cadScene = runtime.cadScene;
+      cadScene.update({ source: meshData, ...sceneModelSettings });
+    } else {
+      clearDisplayedModel();
+      cadScene = buildModel(THREE, meshData, {
+        theme: sceneTheme,
+        displayMode: normalizedDisplayMode,
+        applyDisplayModeEdgePolicy: !topologyDisplayEdgesVisible,
+        scale: normalizedSceneScaleMode,
+        baseTheme: viewerTheme,
+        materialSettings,
+        recomputeNormals,
+        silhouette: topologyDisplayEdgesVisible && displayEdgeSettings.silhouette === true,
+        parameterSetup: false,
+        edgeRendering: {
+          mode: "screen-space",
+          Line2: runtime.Line2,
+          LineGeometry: runtime.LineGeometry,
+          LineSegments2: runtime.LineSegments2,
+          LineSegmentsGeometry: runtime.LineSegmentsGeometry,
+          LineMaterial: runtime.LineMaterial,
+          wireframeEdgeColor
+        },
+        ...sceneModelSettings
+      });
+      modelGroup.add(cadScene.modelGroup);
+      edgesGroup.add(cadScene.edgesGroup);
+      sceneBuildRef.current = { key: sceneBuildKey, viewerTheme };
+    }
     runtime.cadScene = cadScene;
     runtime.displayRecords = cadScene.displayRecords;
     setDisplayRecordsToken((token) => token + 1);
@@ -3919,6 +3998,7 @@ const CadViewer = forwardRef(function CadViewer({
       });
     }
 
+    recordSceneSyncTiming(sceneSyncStartedAt, { mode: reuseScene ? "reuse" : "rebuild", records: runtime.displayRecords.length, reason: rebuildReason });
     setError("");
     runtime.requestRender();
   }, [

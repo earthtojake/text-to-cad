@@ -18,7 +18,8 @@ import {
   loadRenderSurfSelectorBundle,
   peekRenderJson,
   peekRenderSdf,
-  renderAssetCacheStats
+  renderAssetCacheStats,
+  configureSurfLeash
 } from "./renderAssetClient.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -533,6 +534,39 @@ test("an unset source scope leaves render asset caching untouched", async (t) =>
 
   assert.equal(second, first);
   assert.equal(fetchCount, 1);
+});
+
+test("the surf leash is byte-bounded: large entries evict oldest-first down to the count floor", async (t) => {
+  const surfBytes = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "surf/fixtures/sun_gear.surf"));
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    surfBytes.buffer.slice(surfBytes.byteOffset, surfBytes.byteOffset + surfBytes.byteLength),
+    { status: 200 }
+  );
+  const url = (i) => `https://cache.test/leash-bytes/components/c${i}.surf`;
+  // One decoded component's bytes, measured; then a ceiling that fits two of
+  // them, so every entry is "large" relative to the budget.
+  const first = await loadRenderSurf(url(0));
+  const oneEntryBytes = renderAssetCacheStats().surfLeash.bytes;
+  assert.ok(oneEntryBytes > 0, "a decoded payload weighs something");
+  const previous = configureSurfLeash({ maxBytes: Math.floor(oneEntryBytes * 2.5), minEntries: 1 });
+  t.after(() => {
+    configureSurfLeash(previous);
+    globalThis.fetch = originalFetch;
+  });
+  for (let i = 1; i < 12; i += 1) {
+    await loadRenderSurf(url(i));
+  }
+  const stats = renderAssetCacheStats();
+  assert.ok(stats.surfLeash.bytes <= stats.surfLeash.maxBytes, `bytes ${stats.surfLeash.bytes} within ${stats.surfLeash.maxBytes}`);
+  assert.ok(stats.surfLeash.entries <= 2 && stats.surfLeash.entries >= 1, `entries ${stats.surfLeash.entries}: two large entries fit, not 24`);
+  assert.notEqual(await loadRenderSurf(url(0)), first, "the oldest entry was evicted first");
+  // The count floor holds a few entries whatever they weigh.
+  configureSurfLeash({ maxBytes: 1, minEntries: 3 });
+  for (let i = 20; i < 26; i += 1) {
+    await loadRenderSurf(url(i));
+  }
+  assert.equal(renderAssetCacheStats().surfLeash.entries, 3, "the floor keeps three entries above a 1-byte ceiling");
 });
 
 test("surf payloads and selector bundles live on one bounded leash and re-decode after eviction", async (t) => {

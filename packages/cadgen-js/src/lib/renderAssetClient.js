@@ -578,8 +578,53 @@ const surfPayloadCache = new Map();
 // miss re-decodes from the shared tessellation cache in a worker. Level keys
 // (url + l<chord>-a<angle>) mirror the on-disk tessellation cache tier
 // (`<cid>-l<chord>-a<angle>`).
+//
+// The leash is bounded by COUNT and by BYTES. A count alone pinned whatever the
+// entries weighed: the tendon hand's components decode to ~90 MB each, so 24
+// of them held >2 GB of typed arrays here beside the copies the package and
+// the LOD working set already own, and the tab died at load time. The byte
+// ceiling evicts oldest-first until the decoded bytes fit; the count floor
+// keeps a few entries whatever they weigh, so small models behave as before
+// (their whole working set fits under the ceiling anyway).
 const SURF_CACHE_LIMIT = 24;
+const SURF_CACHE_MIN_ENTRIES = 4;
+const SURF_CACHE_MAX_BYTES = 256 * 1024 * 1024;
+const surfLeashConfig = { limit: SURF_CACHE_LIMIT, minEntries: SURF_CACHE_MIN_ENTRIES, maxBytes: SURF_CACHE_MAX_BYTES };
 const surfEntries = [];
+
+// Test seam: lower the ceilings to exercise eviction with small fixtures.
+// Returns the previous configuration so a test can restore it.
+export function configureSurfLeash(next = {}) {
+  const previous = { ...surfLeashConfig };
+  for (const key of ["limit", "minEntries", "maxBytes"]) {
+    if (Number.isFinite(Number(next[key]))) {
+      surfLeashConfig[key] = Number(next[key]);
+    }
+  }
+  return previous;
+}
+
+// Decoded typed-array bytes the leash retains, each buffer counted once (a
+// surf payload and its meshData entry share arrays). Pending entries weigh zero.
+function surfLeashBytes() {
+  const seen = new Set();
+  let total = 0;
+  for (const entry of surfEntries) {
+    const value = entry.cache.get(entry.key);
+    if (value && typeof value.then !== "function") {
+      total += typedArrayBytesOf(value, seen);
+    }
+  }
+  return total;
+}
+
+function evictOldestSurfEntry() {
+  const evicted = surfEntries.shift();
+  if (evicted.cache.get(evicted.key)?.then === undefined) {
+    evicted.cache.delete(evicted.key);
+    releaseAssetSourceScope(evicted.cache, evicted.key);
+  }
+}
 
 function retainSurfEntry(cache, key) {
   const existing = surfEntries.findIndex((entry) => entry.cache === cache && entry.key === key);
@@ -587,12 +632,11 @@ function retainSurfEntry(cache, key) {
     surfEntries.splice(existing, 1);
   }
   surfEntries.push({ cache, key });
-  while (surfEntries.length > SURF_CACHE_LIMIT) {
-    const evicted = surfEntries.shift();
-    if (evicted.cache.get(evicted.key)?.then === undefined) {
-      evicted.cache.delete(evicted.key);
-      releaseAssetSourceScope(evicted.cache, evicted.key);
-    }
+  while (surfEntries.length > surfLeashConfig.limit) {
+    evictOldestSurfEntry();
+  }
+  while (surfEntries.length > surfLeashConfig.minEntries && surfLeashBytes() > surfLeashConfig.maxBytes) {
+    evictOldestSurfEntry();
   }
 }
 
@@ -644,7 +688,13 @@ export function renderAssetCacheStats() {
     }
     stats[name] = { entries, typedBytes, manifestRows };
   }
-  stats.surfLeash = { entries: surfEntries.length, limit: SURF_CACHE_LIMIT };
+  stats.surfLeash = {
+    entries: surfEntries.length,
+    limit: surfLeashConfig.limit,
+    bytes: surfLeashBytes(),
+    maxBytes: surfLeashConfig.maxBytes,
+    minEntries: surfLeashConfig.minEntries
+  };
   return stats;
 }
 
