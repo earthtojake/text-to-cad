@@ -1,6 +1,6 @@
 import { useHostReference } from "../../file-view/hostReference";
 import { useEffect, useMemo, useRef } from "react";
-import { Box, Boxes, ChevronRight, Eye, EyeOff, X } from "lucide-react";
+import { Box, Boxes, ChevronRight, Eye, EyeOff, Focus, X } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
   STEP_MODEL_ROOT_ID,
@@ -26,17 +26,16 @@ import { buildAnimationControlsTab } from "./AnimationControlsSection";
 import { buildStepReferenceTab } from "./StepReferenceSection";
 import StepMeasurementsSection from "./StepMeasurementsSection";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections";
-const treeChevronButtonClasses = "grid h-5 w-5 shrink-0 place-items-center rounded-sm px-0 text-current/60 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45";
-const treeRowActionButtonClasses = "h-5 w-5 rounded-sm px-0 text-current/60 shadow-none hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45 focus-visible:text-sidebar-accent-foreground";
+const treeChevronButtonClasses = "grid h-7 w-7 shrink-0 place-items-center rounded-sm px-0 text-current/60 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45";
+const treeRowActionButtonClasses = "h-7 w-7 shrink-0 rounded-sm px-0 text-current/60 shadow-none hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45 focus-visible:text-sidebar-accent-foreground";
 const treeRowContentClasses = "h-7 min-w-0 text-xs";
 const treeGroupLabelClasses = "px-2 pb-1 pt-2 text-micro text-sidebar-foreground/45";
 const treeGlyphIconClasses = "size-3.5 shrink-0 text-current/60";
-// One indent level equals the expand-chevron's footprint (w-5 button + gap-1.5),
-// so a leaf row's glyph (which has no chevron) lines up exactly under its
-// expandable parent's glyph instead of sitting a few pixels to the left.
-const treeDepthIndentPx = 26;
-const treeDepthGuideOffsetPx = 14;
-const treeDepthMaxPx = 156;
+// Reserve the same chevron slot for branches and leaves, so siblings align.
+// A smaller indent keeps deep topology readable in the desktop's narrow sheet.
+const treeDepthIndentPx = 16;
+const treeDepthGuideOffsetPx = 22;
+const treeDepthMaxPx = 96;
 const treeSectionId = "tree";
 const measurementsSectionId = FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS;
 const EMPTY_MEASUREMENTS = [];
@@ -241,7 +240,7 @@ function StepTreeDepthGuides({ depth }) {
       {Array.from({ length: normalizedDepth }).map((_, index) => (
         <span
           key={index}
-          className="absolute inset-y-0 border-l border-sidebar-border/65"
+          className="absolute inset-y-0 border-l border-sidebar-border/35"
           style={{ left: `${index * treeDepthIndentPx + treeDepthGuideOffsetPx}px` }}
         />
       ))}
@@ -924,14 +923,13 @@ export default function StepFileSheet({
                               aria-disabled={rowAriaDisabled}
                               tabIndex={rowSelectionDisabled ? -1 : 0}
                               className={cn(
-                                "group/tree-row flex h-7 min-w-0 w-full max-w-full items-center gap-2 rounded-md px-2 outline-none transition-colors",
+                                "group/tree-row flex h-7 min-w-0 w-full max-w-full items-center gap-1 rounded-md px-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-ring",
                                 rowSelectionDisabled
                                   ? "cursor-default text-sidebar-foreground/55"
-                                  : "cursor-pointer text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground",
+                                  : "cursor-pointer text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground",
                                 showSelectedRowState
-                                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                  : hovered && "bg-sidebar-accent text-sidebar-accent-foreground",
-                                (hidden || isolationMuted) && "opacity-45"
+                                  ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground ring-1 ring-inset ring-sidebar-foreground/15"
+                                  : hovered && "bg-sidebar-accent/60 text-sidebar-accent-foreground"
                               )}
                               title={rowTitle}
                               onClick={handleRowClick}
@@ -959,18 +957,18 @@ export default function StepFileSheet({
                                       aria-hidden="true"
                                     />
                                   </Button>
-                                ) : null}
+                                ) : <span className="size-7 shrink-0" aria-hidden="true" />}
                                 <div
                                   className={cn(
                                     treeRowContentClasses,
                                     "flex min-w-0 flex-1 shrink touch-manipulation items-center justify-start gap-1.5 overflow-hidden px-0 text-left",
-                                    rowSelectionDisabled && "text-sidebar-foreground/55"
+                                    (rowSelectionDisabled || hidden || isolationMuted) && "text-sidebar-foreground/45"
                                   )}
                                 >
                                   <StepTreeRowGlyph row={row} />
                                   <span className="min-w-0 flex-1 overflow-hidden">
                                     <span className="flex min-w-0 items-baseline gap-1.5 overflow-hidden text-xs leading-4">
-                                      <span className="min-w-0 truncate">
+                                      <span className="min-w-0 truncate" title={row.label}>
                                         {row.label}
                                       </span>
                                       {inlineRowDetail ? (
@@ -982,6 +980,26 @@ export default function StepFileSheet({
                                   </span>
                                 </div>
                               </div>
+                              {!topologyRow && showTreeVisibilityControls && !focused ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className={cn(
+                                    treeRowActionButtonClasses,
+                                    !showSelectedRowState && !hovered && "opacity-0 group-hover/tree-row:opacity-100 group-focus-within/tree-row:opacity-100"
+                                  )}
+                                  disabled={contextFocusDisabled}
+                                  aria-label={`Isolate ${row.label}`}
+                                  title="Isolate"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    onFocusTreeNode?.(actionNodeIds);
+                                  }}
+                                >
+                                  <Focus className="size-3.5" strokeWidth={1.6} aria-hidden="true" />
+                                </Button>
+                              ) : null}
                               {!topologyRow && showTreeVisibilityControls ? (
                                 <Button
                                   type="button"
@@ -989,8 +1007,7 @@ export default function StepFileSheet({
                                   size="icon-sm"
                                   className={cn(
                                     treeRowActionButtonClasses,
-                                    "ml-1 shrink-0",
-                                    !hidden && !showSelectedRowState && !hovered && !focused && "opacity-0 group-hover/tree-row:opacity-100 focus-visible:opacity-100",
+                                    "shrink-0",
                                     hidden && "text-current/75",
                                     treeSelectionDisabled && "cursor-default text-current/35 hover:!bg-transparent hover:!text-current/35"
                                   )}
@@ -1013,11 +1030,11 @@ export default function StepFileSheet({
                                   }}
                                 >
                                   {focused ? (
-                                    <X className="size-3" strokeWidth={2} aria-hidden="true" />
+                                    <X className="size-3.5" strokeWidth={1.6} aria-hidden="true" />
                                   ) : hidden ? (
-                                    <Eye className="size-3" strokeWidth={1.8} aria-hidden="true" />
+                                    <EyeOff className="size-3.5" strokeWidth={1.6} aria-hidden="true" />
                                   ) : (
-                                    <EyeOff className="size-3" strokeWidth={1.8} aria-hidden="true" />
+                                    <Eye className="size-3.5" strokeWidth={1.6} aria-hidden="true" />
                                   )}
                                 </Button>
                               ) : null}
