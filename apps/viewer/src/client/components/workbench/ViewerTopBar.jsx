@@ -18,7 +18,7 @@ export default function ViewerTopBar() {
   return (
     <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-background px-2 text-foreground">
       <img alt="" aria-hidden className="size-4 shrink-0 rounded-[3px]" src={faviconUrl} />
-      <span className="truncate text-[13px] font-medium tracking-tight">text-to-cad</span>
+      <span className="truncate text-[13px] tracking-tight">Hardcore</span>
       <div className="flex-1" />
       <div className="flex shrink-0 items-center gap-0.5">
         <ViewerLinks />

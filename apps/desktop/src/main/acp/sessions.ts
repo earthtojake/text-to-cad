@@ -970,7 +970,13 @@ export class SessionManager {
       throw new Error(`unknown agent: ${session.agentId}`);
     }
     const status = this.deps.detector.list().find((candidate) => candidate.id === provider.id);
-    if (!provider.launchWithoutBinary && status && !status.installed) {
+    // With a launch override in force every provider is the same test process
+    // and the machine's PATH says nothing about it — the same reasoning the
+    // options probe states above. Without this an agent whose adapter is a
+    // binary rather than an `npx` package (gemini-cli, say) is unreachable on
+    // any machine that has not installed it, fake agent or not.
+    const overridden = Boolean(this.deps.launchOverride?.(provider.id));
+    if (!overridden && !provider.launchWithoutBinary && status && !status.installed) {
       throw new Error(`${provider.name} is not installed`);
     }
     // A worktree removed from Settings, or from a terminal, while its thread

@@ -23,7 +23,7 @@ import {
   type EntryAction,
   type MenuEntryTarget,
 } from "cad-viewer/shell";
-import { EllipsisVertical } from "lucide-react";
+import { Ellipsis } from "lucide-react";
 import { useCallback, useEffect } from "react";
 
 import {
@@ -104,7 +104,7 @@ function CrumbActions({
           title="File actions"
           type="button"
         >
-          <EllipsisVertical className="size-3.5" />
+          <Ellipsis className="size-3.5" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

@@ -103,7 +103,7 @@ export function Breadcrumbs({ crumbs, source, activePath, onOpen }) {
 function CrumbButton({ crumb, last, activePath, onOpen, source }) {
   const className = cn(
     "flex min-w-0 items-center gap-1 truncate rounded-sm px-0.5 outline-none transition-colors",
-    last ? "max-w-[60vw] font-medium text-foreground" : "text-muted-foreground",
+    last ? "max-w-[60vw] text-foreground" : "text-muted-foreground",
     "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:text-foreground"
   );
 

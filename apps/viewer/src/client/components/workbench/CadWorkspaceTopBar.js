@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { EllipsisVertical, LoaderCircle } from "lucide-react";
+import { Ellipsis, LoaderCircle } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -90,7 +90,7 @@ function CrumbActions({ path, capabilities, platform, onAction }) {
           title="File actions"
           type="button"
         >
-          <EllipsisVertical className="size-3.5" />
+          <Ellipsis className="size-3.5" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
