@@ -33,6 +33,23 @@ export function progressiveLoadStage(loaded, total) {
   return `loading components ${loaded}/${total}`;
 }
 
+// Whether a published mesh state may drive the `<name>.step.js` render module
+// (kinematics setup, animation clips, effects). The module resolves
+// occurrences BY LABEL, so against a partial composition its lookups throw
+// ("no occurrence labeled ..."). Only the final publish
+// (assemblyInteractionReady true, every component composed) qualifies; a
+// partial state, the assembly preview, and no state at all do not.
+export function meshStateAcceptsRenderModule(meshState) {
+  if (!meshState?.meshData) {
+    return false;
+  }
+  if (meshState.assemblyInteractionReady === false) {
+    return false;
+  }
+  const missing = meshState.meshData.missingComponentIds;
+  return !(Array.isArray(missing) && missing.length > 0);
+}
+
 // Readable memory accounting for the headless harness (design/viewer-memory.md
 // §7), following the window.__cadModelPlacement / __CAD_VIEWER_LOD__ precedent:
 // written on EVERY progressive publish, nulled on cancel, never React state.

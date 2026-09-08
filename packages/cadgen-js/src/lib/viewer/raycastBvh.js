@@ -20,9 +20,17 @@ function geometryTriangleCount(geometry) {
   return position ? Math.floor(position.count / 3) : 0;
 }
 
+// Builds wait for REAL idle time: a 2 s timeout forced one build every two
+// seconds through a progressive load whose main thread never idles, and a
+// large assembly's builds (~0.35 s per million triangles) then competed with
+// the decode/compose work the load was waiting on. A page that never idles
+// still gets its trees, one every half minute; until then picking uses stock
+// raycasting.
+const BVH_IDLE_TIMEOUT_MS = 30000;
+
 function scheduleIdle(task) {
   if (typeof globalThis.requestIdleCallback === "function") {
-    globalThis.requestIdleCallback(() => task(), { timeout: 2000 });
+    globalThis.requestIdleCallback(() => task(), { timeout: BVH_IDLE_TIMEOUT_MS });
     return;
   }
   setTimeout(task, 0);

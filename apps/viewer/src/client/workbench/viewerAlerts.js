@@ -4,14 +4,14 @@ import {
   renderCapabilities
 } from "cadgen-js/lib/renderCapabilities.js";
 import {
+  failedStepArtifact,
   stepArtifactHasRenderableGlb,
   stepArtifactStatusMessage
-} from "./fileStatusItems.js";
-import { failedStepArtifact } from "./stepArtifactStatus.js";
+} from "./stepArtifactStatus.js";
 import { fileKey } from "./sidebar.js";
 
 // A viewer alert is a TITLE and a DESCRIPTION (`message`), plus `severity` and the
-// short `summary` the sidebar and status tab key on. Nothing else: no resolution
+// short `summary` the sidebar keys on. Nothing else: no resolution
 // paragraph, no rebuild command — the description says what went wrong, and the
 // document's own tooling is where a rebuild happens.
 export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = null) {

@@ -13,7 +13,8 @@ import {
   orderComponentsForProgressiveLoad,
   progressiveLoadStage,
   progressivePublishDue,
-  publishMeshCostAccounting
+  publishMeshCostAccounting,
+  meshStateAcceptsRenderModule
 } from "./packageProgressiveLoad.js";
 
 const IDENTITY_4X4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
@@ -339,4 +340,43 @@ test("window.__cadMeshCost updates on every publish and clears on cancel", async
   } finally {
     delete globalThis.window;
   }
+});
+
+test("the render module runs on the final publish only, never against a partial composition", async () => {
+  const descriptor = makeDescriptor({ componentCount: 9, occurrenceCount: 18 });
+  const { loadComponent } = makeLoader(descriptor);
+  // A fake `<name>.step.js`: resolves every occurrence by label, as the real
+  // animation/effects runtime does, and throws on an absent one.
+  let invocations = 0;
+  const renderModule = (meshData) => {
+    invocations += 1;
+    const labels = new Set(meshData.parts.map((part) => part.label));
+    for (const occurrence of descriptor.occurrences) {
+      if (!labels.has(occurrence.name)) {
+        throw new Error(`animation: no occurrence labeled ${JSON.stringify(occurrence.name)}`);
+      }
+    }
+  };
+  const gates = [];
+  await createProgressivePackageLoader({
+    descriptor,
+    loadComponent,
+    concurrency: 3,
+    maxComponents: 4,
+    onPublish: ({ meshData, final }) => {
+      // The hook publishes exactly this state shape (assemblyInteractionReady = final).
+      const meshState = { file: "hand.step", meshData, assemblyInteractionReady: final };
+      const accepts = meshStateAcceptsRenderModule(meshState);
+      gates.push(accepts);
+      if (accepts) {
+        renderModule(meshData); // would throw on a partial composition
+      }
+    }
+  }).run();
+  assert.deepEqual(gates, [false, false, true]);
+  assert.equal(invocations, 1, "attached once, on the final state");
+  assert.equal(meshStateAcceptsRenderModule(null), false);
+  assert.equal(meshStateAcceptsRenderModule({ meshData: { parts: null }, assemblyInteractionReady: false }), false, "assembly preview");
+  assert.equal(meshStateAcceptsRenderModule({ meshData: { parts: [], missingComponentIds: ["c1"] } }), false);
+  assert.equal(meshStateAcceptsRenderModule({ meshData: { parts: [] } }), true, "non-package meshes carry no flag");
 });

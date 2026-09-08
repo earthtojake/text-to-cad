@@ -266,7 +266,6 @@ export default function CadRenderPane({
   previewMode,
   viewportFrameInsets,
   viewerLoading,
-  progressiveLoadActive = false,
   viewerAlert,
   stepUpdateInProgress,
   referenceSelectionPending = false,
@@ -357,7 +356,7 @@ export default function CadRenderPane({
     }
     return { ...stepAnimation, elapsedSec: liveAnimationElapsedSec };
   }, [stepAnimation, liveAnimationElapsedSec]);
-  const viewerAlertIconLabel = "Viewer error. See the Issues section for details.";
+  const viewerAlertIconLabel = "Viewer error";
   // One capability lookup replaces the per-format mode booleans. Every gate below asks
   // what this format CAN do; none of them ask what it IS.
   const capabilities = renderCapabilities(renderFormat);
@@ -519,7 +518,6 @@ export default function CadRenderPane({
         compactViewPlane={false}
         viewportFrameInsets={viewportFrameInsets}
         isLoading={viewerLoading}
-        progressiveLoadActive={progressiveLoadActive}
         pickMode={!hasTopology && !hasParts && !measureModeActive
           ? VIEWER_PICK_MODE.NONE
           : viewerPickModeForRenderPane({

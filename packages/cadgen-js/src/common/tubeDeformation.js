@@ -822,14 +822,52 @@ export function applyTubeDeformationToLineObject(THREE, object, deformation, bas
   state.geometry.computeBoundingSphere();
 }
 
+// The rest-side work — refining the rest surface at the band step and
+// projecting every vertex onto the rest centerline — depends only on the
+// immutable source geometry, the rest path and the occurrence's base matrix,
+// never on the record. Records are rebuilt on every progressive publish (and
+// occurrences of one component share a source), so the result is cached on the
+// source geometry: a rebuilt record re-deforms with a copy, not a projection.
+const restPreparationCache = new WeakMap();
+
+function restPreparationKey(deformation, base) {
+  return `${restMappingKey(deformation)}|${base.elements.map((value) => Number(value).toPrecision(9)).join(",")}`;
+}
+
+function prepareRestSurface(THREE, source, deformation, base) {
+  let byKey = restPreparationCache.get(source);
+  if (!byKey) {
+    byKey = new Map();
+    restPreparationCache.set(source, byKey);
+  }
+  const key = restPreparationKey(deformation, base);
+  let prepared = byKey.get(key);
+  if (!prepared) {
+    const refined = refineRestMesh(THREE, source, deformation.rest, base, deformation.maxSegmentLength);
+    prepared = { restSource: refined.geometry, sourceTriangles: refined.sourceTriangles, mappings: new Map() };
+    byKey.set(key, prepared);
+  }
+  return prepared;
+}
+
+function preparedMapping(THREE, prepared, deformation, base, gpu) {
+  const key = gpu ? "gpu" : "exact";
+  let mapping = prepared.mappings.get(key);
+  if (!mapping) {
+    mapping = mappingFor(THREE, prepared.restSource.attributes.position, prepared.restSource.attributes.normal, deformation.rest, base, gpu);
+    prepared.mappings.set(key, mapping);
+  }
+  return mapping;
+}
+
 // Build the per-record display geometry over the (possibly refined) rest
 // surface. Only positions and normals ever change: indices and display
 // attributes stay shared with the retained rest surface.
 function createDeformationState(THREE, record, previous, deformation, base) {
   const source = previous?.original || record.mesh.geometry;
   const originalFaceIds = previous?.originalFaceIds || record.mesh.userData?.faceIds;
-  const refined = refineRestMesh(THREE, source, deformation.rest, base, deformation.maxSegmentLength);
-  const restSource = refined.geometry;
+  const refined = prepareRestSurface(THREE, source, deformation, base);
+  const restSource = refined.restSource;
   const geometry = new THREE.BufferGeometry();
   geometry.setIndex(restSource.index);
   for (const [name, attribute] of Object.entries(restSource.attributes)) {
@@ -843,6 +881,7 @@ function createDeformationState(THREE, record, previous, deformation, base) {
     original: source,
     originalFaceIds,
     source: restSource,
+    prepared: refined,
     geometry,
     active: false,
     restKey: restMappingKey(deformation),
@@ -912,7 +951,7 @@ export function applyRecordTubeDeformation(THREE, record, deformation) {
   const inverse = base.clone().invert();
   const gpu = record.gpuTubeDeformationAllowed && deformation.path.length <= GPU_TUBE_MAX_PATH_LENGTH;
   if (!state.mapping) {
-    state.mapping = mappingFor(THREE, state.source.attributes.position, state.source.attributes.normal, deformation.rest, base, gpu);
+    state.mapping = preparedMapping(THREE, state.prepared, deformation, base, gpu);
     if (!state.mapping.gpu) {
       // The CPU path stores braid material coordinates per vertex; the GPU
       // path derives them from its mapping texture instead.
@@ -934,7 +973,7 @@ export function applyRecordTubeDeformation(THREE, record, deformation) {
     // The exact mapping depends only on the rest path, which this state is
     // keyed by; a hover during animation must not re-project every vertex per pose.
     state.exactMapping ??= state.mapping.gpu
-      ? mappingFor(THREE, state.source.attributes.position, state.source.attributes.normal, deformation.rest, base)
+      ? preparedMapping(THREE, state.prepared, deformation, base, false)
       : state.mapping;
     updateAttribute(THREE, state.geometry.attributes.position, state.geometry.attributes.normal, state.exactMapping, deformation, inverse);
     state.geometry.computeBoundingBox();

@@ -223,3 +223,22 @@ test('an unsplit material-only rest surface retains its original triangle topolo
   assert.ok(r.geometry.attributes.cadTubeMaterial);
   assert.equal(r.tubeDeformationState.mapping.indices.length,source.attributes.position.count);
 });
+test('rest projection is cached on the shared source geometry across rebuilt records', () => {
+  const source = fixture();
+  const spec = normalizeTubeDeformation({ rest: straight, path: elbow });
+  const first = record(source);
+  applyRecordTubeDeformation(THREE, first, spec);
+  // A rebuilt record over the same component geometry (a progressive publish)
+  // re-deforms from the cached rest preparation: same refined source, same mapping.
+  const rebuilt = record(source);
+  applyRecordTubeDeformation(THREE, rebuilt, spec);
+  assert.equal(rebuilt.tubeDeformationState.source, first.tubeDeformationState.source);
+  assert.equal(rebuilt.tubeDeformationState.mapping, first.tubeDeformationState.mapping);
+  assert.deepEqual(rebuilt.geometry.attributes.position.array, first.geometry.attributes.position.array);
+  // A different occurrence transform is a different preparation.
+  const moved = record(source);
+  moved.baseTransform = [1, 0, 0, 100, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+  const shifted = normalizeTubeDeformation({ rest: { normal: [0, 0, 1], segments: [line([100, 0, 0], [110, 0, 0])] }, path: { normal: [0, 0, 1], segments: [line([100, 10, 0], [110, 10, 0])] } });
+  applyRecordTubeDeformation(THREE, moved, shifted);
+  assert.notEqual(moved.tubeDeformationState.mapping, first.tubeDeformationState.mapping);
+});

@@ -1599,7 +1599,6 @@ const CadViewer = forwardRef(function CadViewer({
   compactViewPlane = false,
   viewportFrameInsets = null,
   isLoading = false,
-  progressiveLoadActive = false,
   pickMode = VIEWER_PICK_MODE.AUTO,
   panToolActive = false,
   renderPartsIndividually = false,
@@ -1675,28 +1674,15 @@ const CadViewer = forwardRef(function CadViewer({
   const drawingChangeRef = useRef(onDrawingStrokesChange);
   const perspectiveChangeRef = useRef(onPerspectiveChange);
   const viewerAlertChangeRef = useRef(onViewerAlertChange);
+  // The last { title, message } the scene-effects pass raised, so it can be
+  // deduplicated across frames and cleared when a pass runs clean.
+  const sceneEffectsAlertRef = useRef(null);
   const stepModuleTransformDetectedChangeRef = useRef(onStepModuleTransformDetectedChange);
   const lastEmittedPerspectiveRef = useRef(null);
   const lastProjectionRef = useRef(normalizedProjection);
   const suppressPerspectiveEventsRef = useRef(0);
   const drawingIdRef = useRef(0);
   const runtimeRef = useRef(null);
-  // A progressive package load throttles the render loop (useViewerRuntime
-  // reads runtime.progressiveLoadActive); the final publish clears the flag
-  // and the next frame renders at once. The ref lets the model-build effect,
-  // which runs per publish, re-assert the flag without depending on it.
-  const progressiveLoadActiveRef = useRef(progressiveLoadActive === true);
-  progressiveLoadActiveRef.current = progressiveLoadActive === true;
-  useEffect(() => {
-    const runtime = runtimeRef.current;
-    if (!runtime) {
-      return;
-    }
-    runtime.progressiveLoadActive = progressiveLoadActive === true;
-    if (!progressiveLoadActive) {
-      runtime.requestRender?.();
-    }
-  }, [progressiveLoadActive]);
   const explodedViewAnimationRef = useRef({
     rafId: 0,
     progress: 0,
@@ -3859,7 +3845,6 @@ const CadViewer = forwardRef(function CadViewer({
     syncSelectorPickGroups(runtime, displaySelectorRuntime, modelOffset, { clearSceneGroup });
     scheduleRuntimeRaycastBvh(runtime);
     syncRuntimeStepClipPlane(runtime, clipSettingsRef.current);
-    runtime.progressiveLoadActive = progressiveLoadActiveRef.current;
     if (typeof window !== "undefined") {
       // Byte attribution for the headless memory harness (read, never polled here).
       window.__cadRenderMemoryProbe = () => renderMemoryAccounting(runtimeRef.current);
@@ -4141,7 +4126,18 @@ const CadViewer = forwardRef(function CadViewer({
     // Either system can be the only one present: a model may declare mates
     // without shipping clips, or ship clips without declaring a single mate.
     // Only when NEITHER has anything to say does the pass fall back to rest.
+    // An alert this pass raised earlier (e.g. a clip label the composition did
+    // not carry) is cleared the moment a pass runs clean, or the module goes
+    // away; a pass that fails the same way again does not re-raise it every
+    // frame — one clean error per failing state.
+    const clearSceneEffectsAlert = () => {
+      if (sceneEffectsAlertRef.current) {
+        sceneEffectsAlertRef.current = null;
+        viewerAlertChangeRef.current?.(null);
+      }
+    };
     if ((!definition && !animationClip) || isLoading || !meshData) {
+      clearSceneEffectsAlert();
       stepModuleTransformDetectedChangeRef.current?.(false);
       updateTransformedRuntimeState(setTransformedSelectorRuntime, null);
       updateTransformedRuntimeState(setTransformedDisplayEdgeRuntime, null);
@@ -4177,6 +4173,7 @@ const CadViewer = forwardRef(function CadViewer({
     // kinematics update, then the clip merged OVER it — the two systems meet
     // in the effect records and nowhere else.
     let transformDetected = false;
+    let passError = null;
     const sceneState = applySceneState(runtime.THREE, {
       runtime,
       meshData,
@@ -4190,11 +4187,18 @@ const CadViewer = forwardRef(function CadViewer({
       },
       onError: ({ phase, error }) => {
         const title = phase === "animation" ? "Animation update failed" : "Pose update failed";
+        const message = error instanceof Error ? error.message : String(error);
+        passError = { title, message };
+        const previous = sceneEffectsAlertRef.current;
+        if (previous && previous.title === title && previous.message === message) {
+          return;
+        }
+        sceneEffectsAlertRef.current = passError;
         viewerAlertChangeRef.current?.({
           severity: "warning",
           compact: true,
           title,
-          message: error instanceof Error ? error.message : String(error)
+          message
         });
         console.error(title, error);
       },
@@ -4205,6 +4209,9 @@ const CadViewer = forwardRef(function CadViewer({
       }
     });
     void sceneState;
+    if (!passError) {
+      clearSceneEffectsAlert();
+    }
     const useRecordTopologyEdgeTransforms = explodedViewActive || shouldUseRecordTopologyEdgeTransforms({
       transformDetected,
       topologyDisplayEdgesVisible,

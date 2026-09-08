@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { isEditableTarget } from "../../../ui/dom";
-import { progressiveRenderDelay } from "../../../render/progressiveRenderThrottle";
 import {
   isWebGlContextCreationError,
   isSoftwareWebGlRenderer,
@@ -258,8 +257,6 @@ export function useViewerRuntime({
         renderQueued: false,
         renderQueuedAt: 0,
         renderFallbackTimerId: 0,
-        lastRenderAt: 0,
-        throttleTimerId: 0,
         restoreTimerId: 0,
         shadowsDirty: true,
         interactionQuality: false
@@ -375,22 +372,6 @@ export function useViewerRuntime({
 
       let rafId = 0;
       const requestRender = () => {
-        // A progressive package load caps frames to one per interval so the
-        // main thread decodes and composes instead of repainting every publish.
-        const throttleDelay = progressiveRenderDelay({
-          progressiveLoadActive: runtimeRef.current?.progressiveLoadActive === true,
-          lastRenderAt: interactionState.lastRenderAt,
-          now: performance.now()
-        });
-        if (throttleDelay > 0) {
-          if (!interactionState.throttleTimerId) {
-            interactionState.throttleTimerId = window.setTimeout(() => {
-              interactionState.throttleTimerId = 0;
-              requestRender();
-            }, throttleDelay);
-          }
-          return;
-        }
         if (interactionState.renderQueued) {
           const now = typeof performance !== "undefined" && typeof performance.now === "function"
             ? performance.now()
@@ -429,7 +410,6 @@ export function useViewerRuntime({
       function renderFrame(timestamp) {
         interactionState.renderQueued = false;
         interactionState.renderQueuedAt = 0;
-        interactionState.lastRenderAt = performance.now();
         if (interactionState.renderFallbackTimerId) {
           window.clearTimeout(interactionState.renderFallbackTimerId);
           interactionState.renderFallbackTimerId = 0;
@@ -867,9 +847,6 @@ export function useViewerRuntime({
         }
         if (runtime.interactionState.renderFallbackTimerId) {
           window.clearTimeout(runtime.interactionState.renderFallbackTimerId);
-        }
-        if (runtime.interactionState.throttleTimerId) {
-          window.clearTimeout(runtime.interactionState.throttleTimerId);
         }
         cancelCameraTransition(runtime, { scheduleIdle: false });
         window.cancelAnimationFrame(runtime.rafId);
