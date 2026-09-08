@@ -195,14 +195,16 @@ export function SessionRow({
 function StateGlyph({ status }: { status: SessionStatus }) {
   const glyph = sessionGlyphFor(status);
   const label = SESSION_GLYPH_LABELS[glyph];
-  const box = "flex size-4 shrink-0 items-center justify-center";
+  // A 16px box the row centres; `leading-none` so the SVG has no line box to
+  // sit low in — the glyphs are small, and a pixel off centre shows.
+  const box = "flex size-4 shrink-0 items-center justify-center self-center leading-none";
   switch (glyph) {
     case "running":
       return (
         <span className={box} data-session-glyph="running">
           <span
             aria-label={label}
-            className="size-2 animate-pulse rounded-full bg-primary"
+            className="size-1.5 animate-pulse rounded-full bg-primary"
             role="img"
           />
         </span>
@@ -212,26 +214,26 @@ function StateGlyph({ status }: { status: SessionStatus }) {
         <span className={box} data-session-glyph="waiting">
           <TriangleAlert
             aria-label={label}
-            className="size-3.5 text-[color:var(--foreground-warning)]"
+            className="size-3 text-[color:var(--foreground-warning)]"
           />
         </span>
       );
     case "error":
       return (
         <span className={box} data-session-glyph="error">
-          <TriangleAlert aria-label={label} className="size-3.5 text-destructive" />
+          <TriangleAlert aria-label={label} className="size-3 text-destructive" />
         </span>
       );
     case "connecting":
       return (
         <span className={box} data-session-glyph="connecting">
-          <LoaderCircle aria-label={label} className="size-3 animate-spin text-muted-foreground/50" />
+          <LoaderCircle aria-label={label} className="size-2.5 animate-spin text-muted-foreground/50" />
         </span>
       );
     case "idle":
       return (
         <span className={box} data-session-glyph="idle">
-          <Circle aria-label={label} className="size-2.5 text-muted-foreground/60" />
+          <Circle aria-label={label} className="size-2 text-muted-foreground/60" />
         </span>
       );
   }
@@ -250,7 +252,7 @@ function GitGlyph({ session }: { session: Session }) {
   }
   const Icon = glyph === "worktree" ? GitFork : GitBranch;
   return (
-    <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
+    <span className="flex size-4 shrink-0 items-center justify-center self-center leading-none text-muted-foreground">
       <Icon aria-label={gitGlyphLabel(session)} className="size-3" />
     </span>
   );
