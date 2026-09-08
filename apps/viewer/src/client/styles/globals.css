@@ -7,6 +7,13 @@
  * are the loading-overlay tokens and the surface/semantic ladders below.
  */
 @source "../components";
+/* The per-file surface and the shared chrome are scanned like anything else.
+ * Detection is off (`source(none)` above), so a directory missing from this
+ * list is a directory whose classes are silently absent from the stylesheet:
+ * `file-view` was, from the commit that moved the surface there until now,
+ * which is why `z-0` did not exist in the standalone build. */
+@source "../file-view";
+@source "../shell";
 @source "../hooks";
 @source "../ui";
 @source "../workbench";
