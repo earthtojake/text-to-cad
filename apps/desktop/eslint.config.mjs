@@ -60,4 +60,14 @@ export default tseslint.config(
     files: ["src/main/**/*.ts", "scripts/**/*.mjs"],
     rules: { "no-console": "off" },
   },
+  {
+    // `public/` is served verbatim, not bundled: a classic script in the
+    // browser, with no module graph and no TypeScript.
+    files: ["src/renderer/public/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: "script",
+      globals: { ...globals.browser },
+    },
+  },
 );

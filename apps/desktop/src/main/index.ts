@@ -5,11 +5,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, app, nativeImage, shell } from "electron";
+import { BrowserWindow, app, nativeImage, nativeTheme, shell } from "electron";
 
 import { initCad, shutdownCad } from "./cad";
 import { endTrackedChildren, killTrackedChildren } from "./children";
 import { closeDb, databaseFile, db } from "./db";
+import { settings as settingsRepository } from "./db/repositories";
 import { broadcast, registerIpcHandlers } from "./ipc";
 import { shutdownAcp } from "./ipc/acp";
 import { shutdownAgents } from "./ipc/agents";
@@ -35,6 +36,29 @@ const RENDERER_DEV_URL = process.env.ELECTRON_RENDERER_URL;
  * without being told otherwise.
  */
 const DEV_ICON = path.resolve(dirname, "..", "..", "build", "icon.png");
+
+/**
+ * The window's own ground: `--background` of the theme the renderer is about
+ * to paint, so the frame Electron shows before the page has any colour is not
+ * a colour the page will never have.
+ *
+ * It used to be the dark value unconditionally, which was a black flash for a
+ * person on Light — and the renderer's own first paint was a light flash for
+ * everyone else, because the class arrives with React's first effect. Both
+ * halves read the same preference now (`src/renderer/hooks/use-theme.ts`
+ * applies it before render); `system` is resolved here through `nativeTheme`,
+ * which is the same answer `prefers-color-scheme` gives the renderer.
+ */
+function windowBackgroundColor(): string {
+  let preference: "system" | "light" | "dark" = "system";
+  try {
+    preference = settingsRepository.get().theme;
+  } catch {
+    // No database yet is not a reason to refuse to open a window.
+  }
+  const dark = preference === "system" ? nativeTheme.shouldUseDarkColors : preference === "dark";
+  return dark ? "#0a0a0a" : "#ffffff";
+}
 
 /**
  * The app's name decides its data directory (`appData/<name>`), and Electron
@@ -81,7 +105,7 @@ function createWindow() {
           titleBarOverlay: { height: TITLEBAR_HEIGHT },
         }
       : {}),
-    backgroundColor: "#0a0a0a",
+    backgroundColor: windowBackgroundColor(),
     // Windows and Linux take the window's icon from here when unpackaged; a
     // packaged app has it in the executable and the desktop entry.
     ...(app.isPackaged ? {} : { icon: DEV_ICON }),
