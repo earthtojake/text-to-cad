@@ -71,6 +71,16 @@ vocabulary — adding a fifth is a change to that type:
 Aptabase adds the app version, the OS and a per-install random id. Nothing here
 carries a path, a file name, a project name, a prompt, or an agent's output.
 
+## Loading feedback
+
+The silver Hardcore star appears while the CAD runtime/viewer starts and while
+geometry loads. An initial agent connection uses a smaller version; the live
+Thinking/Running status uses a 24px mark with plain, unanimated text. Waiting
+for approval holds a still pose. These reuse `cad-viewer/loading-icon` and its
+baked image (no additional WebGL context). OS/app reduced motion and hidden
+windows use the still image. Existing progress counts and status words remain
+the source of truth.
+
 ## Checks
 
 Interaction motion is scoped to activity/thought reveals, composer reference

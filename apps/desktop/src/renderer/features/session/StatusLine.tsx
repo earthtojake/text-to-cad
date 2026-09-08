@@ -1,14 +1,11 @@
-import { Shimmer } from "@renderer/components/ai-elements/shimmer";
+import LoadingIcon from "cad-viewer/loading-icon";
 
-/**
- * The live italic line at the bottom of a running turn (plan §2):
- * "Running ls -la", "Thinking", "Waiting for your approval". The text is
- * `statusLine()` in view.ts; this only draws it.
- */
-export function StatusLine({ text }: { text: string }) {
+/** The live status keeps its existing words; only actual work animates. */
+export function StatusLine({ text, active }: { text: string; active: boolean }) {
   return (
-    <p className="not-prose mt-1 min-w-0 truncate px-1.5 text-[13px] leading-5 italic" data-status-line title={text}>
-      <Shimmer as="span">{text}</Shimmer>
+    <p className="not-prose mt-1 flex min-w-0 items-center gap-1.5 px-1.5 text-[13px] leading-5 text-muted-foreground" data-status-line title={text}>
+      <LoadingIcon active={active} size={24} />
+      <span className="min-w-0 truncate">{text}</span>
     </p>
   );
 }

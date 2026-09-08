@@ -1,3 +1,4 @@
+import LoadingIcon from "cad-viewer/loading-icon";
 import { useEffect, useMemo } from "react";
 import { AlertCircle, Loader2, RotateCcw } from "lucide-react";
 
@@ -252,7 +253,7 @@ function Reconnecting() {
 function Connecting({ agentName }: { agentName: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center" data-connecting>
-      <Loader2 className="size-4 animate-spin text-muted-foreground" />
+      <LoadingIcon size={64} />
       <p className="text-[13px] text-muted-foreground">Connecting to {agentName}…</p>
     </div>
   );

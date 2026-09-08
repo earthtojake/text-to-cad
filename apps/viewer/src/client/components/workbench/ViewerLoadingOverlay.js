@@ -54,7 +54,7 @@ export default function ViewerLoadingOverlay({
           aria-live="polite"
           className="relative z-10 flex w-[22rem] max-w-[min(90vw,28rem)] flex-col gap-2 text-popover-foreground"
         >
-          <LoadingIcon />
+          <LoadingIcon className="mx-auto mb-3" />
           <div className="flex items-baseline justify-between gap-4">
             {/* smui: status text is uppercase with wide tracking, at the type scale's
                 text-tiny (11px). */}

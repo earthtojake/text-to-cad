@@ -135,3 +135,12 @@ The backend's suite lives with cadgen and is not collected here; running only
 
 Headless UI verification uses Playwright with `--use-angle=metal` —
 the default software WebGL renderer is not what users see.
+
+### Branded loading indicator
+
+`cad-viewer/loading-icon` exports the decorative `LoadingIcon` independently of
+`file-view`, so a host can show loading feedback without eagerly importing the
+CAD surface. `size` controls its pixel dimensions (default 96), `className` its
+placement, and `active={false}` uses the still pose. The host owns status text.
+It also stays still for OS/app reduced motion and hidden documents. See
+`src/client/assets/brand/README.md` for asset provenance and regeneration.

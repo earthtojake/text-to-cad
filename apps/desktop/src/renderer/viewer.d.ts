@@ -93,3 +93,12 @@ declare module "cad-viewer/file-view" {
 
   export function normalizeViewerOrigin(origin: string): string;
 }
+
+/** Small standalone entry; importing a loader must not eagerly load the CAD surface. */
+declare module "cad-viewer/loading-icon" {
+  export default function LoadingIcon(props: {
+    active?: boolean;
+    size?: number;
+    className?: string;
+  }): import("react").ReactElement;
+}

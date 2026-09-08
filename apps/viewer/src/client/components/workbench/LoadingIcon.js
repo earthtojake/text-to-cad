@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
-import animation from "@/assets/brand/hardcore-loading.webp";
-import still from "@/assets/brand/hardcore-still.webp";
+import { createElement, useEffect, useState } from "react";
+import animation from "../../assets/brand/hardcore-loading.webp";
+import still from "../../assets/brand/hardcore-still.webp";
 
 /** Decorative: the surrounding loading status owns the accessible announcement. */
-export default function LoadingIcon() {
+export default function LoadingIcon({ active = true, size = 96, className = "" }) {
   const [animate, setAnimate] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -25,16 +25,16 @@ export default function LoadingIcon() {
     };
   }, []);
 
-  return (
-    <img
-      src={animate && !failed ? animation : still}
-      alt=""
-      aria-hidden="true"
-      width="96"
-      height="96"
-      draggable="false"
-      className="mx-auto mb-3 h-24 w-24 select-none object-contain"
-      onError={() => setFailed(true)}
-    />
-  );
+  // Keep this tiny public entry usable without the CAD surface's JSX transform.
+  return createElement("img", {
+    src: active && animate && !failed ? animation : still,
+    alt: "",
+    "aria-hidden": true,
+    width: size,
+    height: size,
+    draggable: false,
+    className: `shrink-0 select-none object-contain ${className}`,
+    "data-loading-icon": "",
+    onError: () => setFailed(true),
+  });
 }
