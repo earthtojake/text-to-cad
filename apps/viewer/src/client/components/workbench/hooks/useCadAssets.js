@@ -104,6 +104,25 @@ function packageComponentLoadConcurrency() {
   return Math.max(4, Math.min(PACKAGE_COMPONENT_LOAD_CONCURRENCY, Math.floor(hardwareConcurrency)));
 }
 
+async function surfContentLength(url, signal) {
+  if (typeof fetch !== "function") {
+    return null;
+  }
+  try {
+    const response = await fetch(url, { method: "HEAD", signal, cache: "no-store" });
+    if (!response.ok) {
+      return null;
+    }
+    const length = Number(response.headers.get("content-length"));
+    return Number.isFinite(length) && length > 0 ? length : null;
+  } catch (error) {
+    if (isAbortError(error) || signal?.aborted) {
+      throw error;
+    }
+    return null;
+  }
+}
+
 function urdfMeshUrls(urdfData) {
   return [...new Set(
     (Array.isArray(urdfData?.links) ? urdfData.links : [])
@@ -581,6 +600,11 @@ export function useCadAssets({
             loadComponent: (cid, component) => loadRenderSurf(resolvePackageAssetUrl(meshUrl, component.surf), {
               signal: controller.signal
             }),
+            // Byte-aware admission: the .surf's content-length (a HEAD, no body)
+            // sizes the component before its decode is admitted; null when the
+            // server does not answer, and the loader falls back to its running
+            // mean.
+            sizeHint: (cid, component) => surfContentLength(resolvePackageAssetUrl(meshUrl, component.surf), controller.signal),
             // The same staleness guard every publish below re-checks: the
             // request is current and not aborted.
             isCurrent: () => requestId === requestIdRef.current && !controller.signal.aborted,

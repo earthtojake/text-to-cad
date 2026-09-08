@@ -292,7 +292,7 @@ import {
 import {
   normalizeStepModuleParameterValues
 } from "cadgen-js/common/stepModule";
-import { meshStateAcceptsRenderModule } from "./workbench/hooks/packageProgressiveLoad.js";
+import { meshStateIsComplete, tolerantAnimationClip } from "./workbench/hooks/packageProgressiveLoad.js";
 import { loadKinematicsModuleDefinition } from "cadgen-js/common/kinematicsModule";
 import { loadRenderModule, validateRenderModuleClips } from "cadgen-js/common/renderModule";
 import {
@@ -1814,12 +1814,14 @@ export default function CadWorkspace({
   );
   // Progressive publish (design/viewer-memory.md §6): a STEP package paints
   // while it loads, and the partial states carry assemblyInteractionReady=false.
-  // The render module resolves occurrences by label, so it must not be set up,
-  // evaluated or validated against a partial composition — it attaches once, on
-  // the final publish. Until then the sheet sections show "loading".
-  const selectedMeshPartial = selectedMeshMatches && !meshStateAcceptsRenderModule(meshState);
+  // The render module attaches on the FIRST publish and stays live: the viewer
+  // re-runs its setup on every meshData change (the same path a LOD swap
+  // takes), so occurrences bind as they arrive. Pose and animation controls
+  // act on whatever is present; only clip validation waits for the complete
+  // model, and a partial model's clip tolerates labels not yet loaded.
+  const selectedMeshPartial = selectedMeshMatches && !meshStateIsComplete(meshState);
   const selectedStepParameterRuntime = useMemo(() => {
-    if (!selectedStepModuleDefinition || !stepModuleEnabled || selectedMeshPartial) {
+    if (!selectedStepModuleDefinition || !stepModuleEnabled) {
       return null;
     }
     return {
@@ -1829,7 +1831,6 @@ export default function CadWorkspace({
       sourceUrl: selectedStepModuleUrl
     };
   }, [
-    selectedMeshPartial,
     selectedStepModuleCadPath,
     selectedStepModuleDefinition,
     selectedStepModuleUrl,
@@ -1844,17 +1845,20 @@ export default function CadWorkspace({
   // the pose gate above: switched off this memo is null, and null is already how
   // the viewport draws the rest scene — pose only, evaluator never run. So there
   // is no "disabled" render path, only the absence of a frame.
+  const selectedPlayableAnimationClip = useMemo(
+    () => (selectedMeshPartial ? tolerantAnimationClip(selectedActiveAnimationClip) : selectedActiveAnimationClip),
+    [selectedActiveAnimationClip, selectedMeshPartial]
+  );
   const selectedAnimationRuntime = useMemo(() => animationRenderFrame({
-    enabled: animationState.enabled !== false && !selectedMeshPartial,
-    clip: selectedActiveAnimationClip,
+    enabled: animationState.enabled !== false,
+    clip: selectedPlayableAnimationClip,
     elapsedSec: animationState.elapsedSec,
     playing: animationState.playing
   }), [
     animationState.elapsedSec,
     animationState.enabled,
     animationState.playing,
-    selectedActiveAnimationClip,
-    selectedMeshPartial
+    selectedPlayableAnimationClip
   ]);
   const handleStepModuleTransformDetectedChange = useCallback(() => {}, []);
   const stepModuleTreeSelectionDisabled = false;
@@ -2142,7 +2146,8 @@ export default function CadWorkspace({
       return "";
     }
     // A partial progressive state lacks occurrences by design; validating
-    // against it would report every not-yet-loaded label as a clip error.
+    // against it would report every not-yet-loaded label as a clip error, so
+    // validation runs on the complete model only.
     if (selectedMeshPartial) {
       return "";
     }
@@ -7231,7 +7236,7 @@ export default function CadWorkspace({
                 showAllHiddenParts={handleShowAllHiddenParts}
                 exitIsolate={handleExitIsolate}
                 stepModule={{
-                  status: selectedMeshPartial ? "loading" : selectedStepModuleStatus,
+                  status: selectedStepModuleStatus,
                   error: selectedStepModuleError,
                   definition: selectedStepModuleDefinition,
                   enabled: stepModuleEnabled,
@@ -7244,7 +7249,7 @@ export default function CadWorkspace({
                   onPasteParams: handlePasteParameters
                 }}
                 stepAnimation={{
-                  status: selectedMeshPartial ? "loading" : selectedAnimationStatus,
+                  status: selectedAnimationStatus,
                   error: selectedAnimationError,
                   clips: selectedAnimationClipList,
                   activeClipId: animationState.activeClipId,

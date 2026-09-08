@@ -45,4 +45,7 @@ export function applyDisplayRecordTransform(THREE, record) {
   applyObjectMatrix(THREE, record.mesh, combinedMatrix);
   applyObjectMatrix(THREE, record.edges, combinedMatrix);
   applyObjectMatrix(THREE, record.silhouette, combinedMatrix);
+  if (record.edgeInstance && !record.edgeInstance.set.disposed) {
+    record.edgeInstance.set.setMatrix(record.edgeInstance.slot, combinedMatrix);
+  }
 }

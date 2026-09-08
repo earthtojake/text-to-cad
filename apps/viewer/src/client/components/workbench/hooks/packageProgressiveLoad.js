@@ -10,7 +10,6 @@
 // level swap uses (buildComposedPackageMeshData shares component buffers, it
 // copies nothing), publishing each batch. The last publish is the full model.
 import { buildComposedPackageMeshData } from "cadgen-js/lib/assembly/meshData.js";
-import { mapWithConcurrency } from "cadgen-js/lib/async/concurrency.js";
 import { estimateMeshRenderCost } from "cadgen-js/lib/render/meshCost.js";
 
 // A batch publishes as soon as EITHER ceiling is crossed by the components
@@ -29,17 +28,62 @@ export const PROGRESSIVE_PUBLISH_MAX_COMPONENTS = 32;
 // LOD swap, so a publish this size does not stall interaction noticeably.
 export const PROGRESSIVE_PUBLISH_MAX_BYTES = 64 * 1024 * 1024;
 
+// Load-time admission (the peak that killed the tab): a component decodes in a
+// surf worker whose intermediates count against the renderer process, and a
+// hand component reaches ~90 MB of meshData. A count cap alone (8 wide) admits
+// 8 of those at once. Admission is therefore ALSO byte-aware: the estimated
+// decoded bytes of everything in flight stay under this budget (a single
+// component larger than the budget runs alone).
+export const PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES = 256 * 1024 * 1024;
+// Estimated decoded size of a component before anything is known about the
+// model — a quarter of the budget, so at most four unmeasured components are
+// in flight until the first decode calibrates the estimate (below).
+export const PROGRESSIVE_LOAD_UNMEASURED_SHARE = 4;
+
+// Decoded-bytes estimator. A .surf is an exact surface and tessellation expands
+// it many-fold, so its fetched byte length (the HEAD content-length the hook
+// supplies as a hint) is scaled by the decoded/fetched ratio measured on the
+// components already decoded; without a hint, the running mean decoded size;
+// before any decode, the unmeasured share of the budget.
+export function createDecodeSizeEstimator({ maxInFlightBytes = PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES } = {}) {
+  let ratioSum = 0;
+  let ratioCount = 0;
+  let decodedSum = 0;
+  let decodedCount = 0;
+  return {
+    estimate(hintBytes) {
+      const hint = Number(hintBytes);
+      if (Number.isFinite(hint) && hint > 0 && ratioCount > 0) {
+        return hint * (ratioSum / ratioCount);
+      }
+      if (decodedCount > 0) {
+        return decodedSum / decodedCount;
+      }
+      return maxInFlightBytes / PROGRESSIVE_LOAD_UNMEASURED_SHARE;
+    },
+    observe(hintBytes, decodedBytes) {
+      const decoded = Number(decodedBytes) || 0;
+      decodedSum += decoded;
+      decodedCount += 1;
+      const hint = Number(hintBytes);
+      if (Number.isFinite(hint) && hint > 0) {
+        ratioSum += decoded / hint;
+        ratioCount += 1;
+      }
+    }
+  };
+}
+
 export function progressiveLoadStage(loaded, total) {
   return `loading components ${loaded}/${total}`;
 }
 
-// Whether a published mesh state may drive the `<name>.step.js` render module
-// (kinematics setup, animation clips, effects). The module resolves
-// occurrences BY LABEL, so against a partial composition its lookups throw
-// ("no occurrence labeled ..."). Only the final publish
-// (assemblyInteractionReady true, every component composed) qualifies; a
-// partial state, the assembly preview, and no state at all do not.
-export function meshStateAcceptsRenderModule(meshState) {
+// Whether a published mesh state is the COMPLETE model: the final publish
+// (assemblyInteractionReady true, every component composed). The render module
+// attaches on the first publish and stays live across publishes; what waits for
+// the complete state is the clip VALIDATION (validateRenderModuleClips), which
+// reports every label the composition lacks — noise against a partial one.
+export function meshStateIsComplete(meshState) {
   if (!meshState?.meshData) {
     return false;
   }
@@ -48,6 +92,41 @@ export function meshStateAcceptsRenderModule(meshState) {
   }
   const missing = meshState.meshData.missingComponentIds;
   return !(Array.isArray(missing) && missing.length > 0);
+}
+
+// A clip's model handle for a PARTIAL composition. The runtime's m.get() throws
+// on a label no part carries (a typo must never silently animate nothing) —
+// right for the complete model, wrong while occurrences are still arriving.
+// While partial, an absent label resolves to a chainable no-op handle so the
+// clip keeps driving the occurrences that ARE present; on the next publish that
+// carries the occurrence, the same lookup binds to it. The complete model uses
+// the strict clip again, so validation still catches real typos.
+const NOOP_ANIMATION_HANDLE = Object.freeze({
+  deformTube() { return this; },
+  rotate() { return this; },
+  translate() { return this; },
+  opacity() { return this; },
+  visible() { return this; }
+});
+
+export function partialAnimationModel(model) {
+  return {
+    ...model,
+    get(target) {
+      try {
+        return model.get(target);
+      } catch {
+        return NOOP_ANIMATION_HANDLE;
+      }
+    }
+  };
+}
+
+export function tolerantAnimationClip(clip) {
+  if (!clip || typeof clip.update !== "function") {
+    return clip;
+  }
+  return { ...clip, update: (t, model) => clip.update(t, partialAnimationModel(model)) };
 }
 
 // Readable memory accounting for the headless harness (design/viewer-memory.md
@@ -154,12 +233,17 @@ export function orderComponentsForProgressiveLoad(descriptor) {
  *   loadComponent(cid, component),     // -> Promise<meshData> (loadRenderSurf)
  *   concurrency,
  *   isCurrent(),                       // false once the request is superseded or aborted
+ *   sizeHint?(cid, component),         // -> Promise<fetched byte length | null> before admission
+ *   maxInFlightBytes?,                 // estimated decoded bytes in flight (PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES)
  *   swappedComponents?(),              // the live LOD working set (cid -> meshData) or null
  *   onPublish({ meshData, componentMeshDataByCid, loaded, total, final, composeMs, publishCount }),
  *   maxComponents?, maxBytes?
  * }).run() -> Promise<{ loaded, total, publishes }>
  *
- * Every publish re-checks isCurrent() first; a superseded or aborted load
+ * Admission is count- AND byte-capped: a component starts decoding only when
+ * fewer than `concurrency` are in flight and the estimated decoded bytes in
+ * flight (createDecodeSizeEstimator over the sizeHint) fit `maxInFlightBytes`,
+ * or nothing else is in flight. Every publish re-checks isCurrent() first; a superseded or aborted load
  * publishes nothing further, drops its references to every component it
  * loaded (retainedComponentCount() -> 0) and rejects with an AbortError.
  * Composition is `{ ...loadedSoFar, ...swappedComponents() }`, so a viewport
@@ -172,6 +256,8 @@ export function createProgressivePackageLoader({
   loadComponent,
   concurrency = 8,
   isCurrent = () => true,
+  sizeHint = null,
+  maxInFlightBytes = PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
   swappedComponents = () => null,
   onPublish,
   maxComponents = PROGRESSIVE_PUBLISH_MAX_COMPONENTS,
@@ -215,25 +301,93 @@ export function createProgressivePackageLoader({
     onPublish?.({ meshData, componentMeshDataByCid, loaded, total, final, composeMs, publishCount: publishes });
   }
 
-  async function run() {
+  const estimator = createDecodeSizeEstimator({ maxInFlightBytes });
+  let inFlight = 0;
+  let inFlightBytes = 0;
+  let cancelled = false;
+  let waiters = [];
+  let peakInFlight = 0;
+
+  function wakeWaiters() {
+    const pending = waiters;
+    waiters = [];
+    for (const wake of pending) {
+      wake();
+    }
+  }
+
+  function canAdmit(estimate) {
+    return inFlight < concurrency && (inFlight === 0 || inFlightBytes + estimate <= maxInFlightBytes);
+  }
+
+  async function admit(estimate) {
+    while (!canAdmit(estimate)) {
+      if (cancelled) {
+        throw abortError();
+      }
+      await new Promise((resolve) => waiters.push(resolve));
+    }
+    inFlight += 1;
+    inFlightBytes += estimate;
+    peakInFlight = Math.max(peakInFlight, inFlight);
+  }
+
+  function releaseSlot(estimate) {
+    inFlight -= 1;
+    inFlightBytes -= estimate;
+    wakeWaiters();
+  }
+
+  async function loadOne([cid, component]) {
+    if (!isCurrent()) {
+      stop();
+    }
+    let hint = null;
+    if (typeof sizeHint === "function") {
+      try {
+        hint = await sizeHint(cid, component);
+      } catch {
+        hint = null;
+      }
+    }
+    if (!isCurrent()) {
+      stop();
+    }
+    const estimate = estimator.estimate(hint);
+    await admit(estimate);
+    let meshData;
     try {
-      await mapWithConcurrency(componentEntries, concurrency, async ([cid, component]) => {
-        if (!isCurrent()) {
-          stop();
+      if (!isCurrent()) {
+        stop();
+      }
+      meshData = await loadComponent(cid, component);
+    } finally {
+      releaseSlot(estimate);
+    }
+    if (!isCurrent()) {
+      stop();
+    }
+    const decodedBytes = estimateMeshRenderCost(meshData).typedArrayBytes;
+    estimator.observe(hint, decodedBytes);
+    loadedByCid[cid] = meshData;
+    loaded += 1;
+    pendingComponents += 1;
+    pendingBytes += decodedBytes;
+    const final = loaded === total;
+    if (final || progressivePublishDue({ pendingComponents, pendingBytes }, { maxComponents, maxBytes })) {
+      publish(final);
+    }
+  }
+
+  async function run() {
+    const queue = componentEntries.slice();
+    const workerCount = Math.max(1, Math.min(queue.length || 1, Math.floor(Number(concurrency) || 1)));
+    try {
+      await Promise.all(Array.from({ length: workerCount }, async () => {
+        while (queue.length) {
+          await loadOne(queue.shift());
         }
-        const meshData = await loadComponent(cid, component);
-        if (!isCurrent()) {
-          stop();
-        }
-        loadedByCid[cid] = meshData;
-        loaded += 1;
-        pendingComponents += 1;
-        pendingBytes += estimateMeshRenderCost(meshData).typedArrayBytes;
-        const final = loaded === total;
-        if (final || progressivePublishDue({ pendingComponents, pendingBytes }, { maxComponents, maxBytes })) {
-          publish(final);
-        }
-      });
+      }));
       if (!isCurrent()) {
         stop();
       }
@@ -245,7 +399,10 @@ export function createProgressivePackageLoader({
     } catch (error) {
       // An aborted fetch rejects out of loadComponent before any isCurrent()
       // check runs, and a failed component fails the load: neither may keep
-      // the components already loaded alive.
+      // the components already loaded alive, nor leave a worker parked in
+      // admit() forever.
+      cancelled = true;
+      wakeWaiters();
       release();
       throw error;
     }
@@ -255,7 +412,9 @@ export function createProgressivePackageLoader({
   return {
     run,
     total,
-    // Diagnostics: how many loaded components this loader still references.
-    retainedComponentCount: () => Object.keys(loadedByCid).length
+    // Diagnostics: how many loaded components this loader still references,
+    // and the most decodes it ever had in flight at once.
+    retainedComponentCount: () => Object.keys(loadedByCid).length,
+    peakInFlight: () => peakInFlight
   };
 }

@@ -201,6 +201,10 @@ export function applyPartVisualState(THREE, records, {
     if (record.edges) {
       record.edges.visible = showEdges && !effectHidden && !isHidden && !displacedByCurvedPreview;
     }
+    if (record.edgeInstance) {
+      record.edgeInstance.set.setVisible(record.edgeInstance.slot, showEdges && !effectHidden && !isHidden && !displacedByCurvedPreview);
+      record.edgeInstance.set.setHighlighted(record.edgeInstance.slot, isHighlighted);
+    }
     syncHighlightRenderOrder(record, record.mesh, "baseMeshRenderOrder", isHighlighted, PART_HIGHLIGHT_SURFACE_RENDER_ORDER);
     syncHighlightRenderOrder(record, record.edges, "baseEdgeRenderOrder", isHighlighted, PART_HIGHLIGHT_EDGE_RENDER_ORDER);
 

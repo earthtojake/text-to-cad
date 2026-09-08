@@ -5,6 +5,7 @@ import {
 import {
   displayModeIsWireframe
 } from "./displaySettings.js";
+import { syncEdgeInstanceStyle } from "./cadEdgeInstances.js";
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -20,7 +21,10 @@ const COPLANAR_TOPOLOGY_LINE_DEPTH_BIAS = 0.006;
 const COPLANAR_TOPOLOGY_LINE_DEPTH_BIAS_PER_EXTRA_PIXEL = 0.00025;
 const MAX_COPLANAR_TOPOLOGY_LINE_DEPTH_BIAS = 0.008;
 const DEFAULT_VISIBLE_TOPOLOGY_EDGE_CLASSES = Object.freeze(["feature"]);
-const TOPOLOGY_EDGE_CLASS_ORDER = Object.freeze(["feature", "tangent", "seam", "degenerate"]);
+// The CAD edge classes, in the order every per-class table (theme settings,
+// the instanced edge shader's class index) uses.
+export const CAD_EDGE_CLASS_ORDER = Object.freeze(["feature", "tangent", "seam", "degenerate"]);
+const TOPOLOGY_EDGE_CLASS_ORDER = CAD_EDGE_CLASS_ORDER;
 const MAX_TOPOLOGY_LINE_STRIP_POLYLINES = 1200;
 const MAX_TOPOLOGY_LINE_STRIP_POSITION_VALUES = 180000;
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
@@ -477,6 +481,10 @@ export function syncRecordEdgeMaterials(record, {
   fallbackColor,
   fallbackOpacity = 1
 }) {
+  if (record?.edgeInstance) {
+    // An instanced CAD edge slot: the same colour/opacity rules, written per occurrence.
+    syncEdgeInstanceStyle(record.edgeInstance, { color, opacity, opacityScale, fallbackColor });
+  }
   for (const material of Array.isArray(record?.edgeMaterials) ? record.edgeMaterials : []) {
     if (!material) {
       continue;

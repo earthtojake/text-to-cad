@@ -416,7 +416,21 @@ function edgeColorAt(record, point) {
   return [0, 1, 2, 3].map((component) => color.array[point * 4 + component] / 65535);
 }
 
-test("buildModel draws a surf component's CAD edges as one GL_LINES object with per-class vertex colours", () => {
+function linearRgb(hex) {
+  const color = new THREE.Color(hex);
+  return [color.r, color.g, color.b];
+}
+
+function assertClose(actual, expected, message, epsilon = 1e-3) {
+  const actualList = Array.isArray(actual) ? actual : [actual];
+  const expectedList = Array.isArray(expected) ? expected : [expected];
+  assert.equal(actualList.length, expectedList.length, message);
+  for (let index = 0; index < actualList.length; index += 1) {
+    assert.ok(Math.abs(actualList[index] - expectedList[index]) < epsilon, `${message}: ${actualList} vs ${expectedList}`);
+  }
+}
+
+test("buildModel draws a surf component's CAD edges as ONE instanced screen-space draw with per-class colour, opacity and thickness", () => {
   const scene = buildModel(THREE, surfComponentMeshData(), {
     theme: cloneThemePresetSettings("workbench-light"),
     displayMode: CAD_DISPLAY_MODE.SOLID,
@@ -424,62 +438,86 @@ test("buildModel draws a surf component's CAD edges as one GL_LINES object with 
     edgeRendering: { mode: "screen-space", LineSegments2, LineSegmentsGeometry, LineMaterial }
   });
   const record = scene.displayRecords[0];
-  const line = record.edges;
+  assert.equal(record.edges, null, "no per-occurrence line object");
+  const { set, slot } = record.edgeInstance;
 
   assert.equal(scene.edgesGroup.children.length, 1);
-  assert.equal(line.isLineSegments, true, "GL_LINES, not a screen-space quad strip");
-  // Degenerate edges default to zero thickness and are not drawn: 3 + 1 segments.
-  assert.equal(line.geometry.index.count, 8);
-  assert.equal(line.geometry.getAttribute("position").array, record.sourcePart?.cadEdgePositions ?? line.geometry.getAttribute("position").array);
-  assert.equal(line.geometry.getAttribute("color").itemSize, 4);
-  assert.equal(line.geometry.getAttribute("color").normalized, true);
-  const edgeColor = new THREE.Color("#132232");
-  const feature = edgeColorAt(record, 0);
-  const tangent = edgeColorAt(record, 4);
-  assert.ok(Math.abs(feature[0] - edgeColor.r) < 1e-3 && Math.abs(feature[2] - edgeColor.b) < 1e-3, "linear class colour");
-  assert.equal(feature[3], 1, "feature opacity");
-  assert.ok(Math.abs(tangent[3] - 0.5) < 1e-4, "tangent opacity");
-  assert.equal(line.material.vertexColors, true);
-  assert.equal(line.material.transparent, true);
-  assert.equal(line.material.depthTest, true);
-  assert.equal(line.material.polygonOffset, true, "CAD edge lines carry their own depth bias");
-  assert.equal(record.edgeMaterials.length, 1);
+  assert.equal(scene.edgesGroup.children[0], set.object);
+  assert.equal(set.object.isMesh, true);
+  assert.equal(set.object.geometry.isInstancedBufferGeometry, true);
+  // Degenerate edges default to zero thickness and are not drawn: 3 + 1 segments x 1 occurrence.
+  assert.equal(set.segments.segmentCount, 4);
+  assert.equal(set.object.geometry.instanceCount, 4);
+  const segmentData = set.segments.texture.image.data;
+  assert.deepEqual(Array.from(segmentData.subarray(0, 8)), [0, 0, 0, 0, 1, 0, 0, 0], "segment 0: start + feature class, end");
+  assert.deepEqual(Array.from(segmentData.subarray(24, 32)), [0, 1, 0, 1, 0, 0, 0, 0], "segment 3: the tangent edge (class 1)");
+  const classColor = set.uniforms.cadClassColor.value.elements;
+  assertClose(classColor.slice(0, 3), linearRgb("#132232"), "feature class colour (linear)");
+  assert.equal(classColor[3], 1, "feature opacity");
+  assertClose(classColor[7], 0.5, "tangent opacity");
+  // Class widths in pixels for the classes this component carries (no seams here); degenerate is off.
+  assert.deepEqual(set.uniforms.cadClassWidth.value.toArray(), [1.15, 1.15, 0, 0], "per-class thickness in pixels");
+  assert.equal(set.material.glslVersion, THREE.GLSL3);
+  assert.equal(set.material.transparent, true);
+  assert.equal(set.material.depthTest, true);
+  assert.equal(set.material.depthWrite, false);
+  assert.equal(set.material.polygonOffset, true, "CAD edge lines carry their own depth bias");
+  assert.equal(set.material.clipping, false, "clip planes toggle the shader's clipping like every other material (none active)");
+  assert.deepEqual(record.edgeMaterials, []);
   assert.equal(record.material.polygonOffset, true, "the surface is pushed back behind its edge lines");
   assert.equal(record.material.polygonOffsetFactor, 1);
-  assert.equal(record.material.userData.cadSurfaceEdges, undefined);
   assert.equal(record.geometry.getAttribute("position").count, 4, "indexed geometry stays indexed");
-  assert.equal(scene.runtime.screenSpaceLineMaterials.size, 0, "no screen-space materials to resync");
+  assert.equal(scene.runtime.screenSpaceLineMaterials.size, 2, "main and highlight pass resync their resolution");
+  assert.equal(set.object.renderOrder, 3);
+  assert.equal(set.highlightObject.renderOrder, 26);
+  assert.equal(set.highlightObject.visible, false);
+  assert.deepEqual(set.readSlot(slot), { matrix: new THREE.Matrix4().toArray(), color: null, opacity: 1, visible: true, highlighted: false });
 
-  // Selection recolours every class to edges.highlightColor; deselection restores the class colours.
+  // Selection recolours every class to edges.highlightColor at full opacity and
+  // moves the occurrence to the highlight pass; deselection restores the class styles.
   scene.update({ selection: { selectedPartIds: ["surf:0"] } });
-  assert.equal(line.material.vertexColors, false);
-  assert.equal(line.material.color.getHexString(), "8dc5ff");
-  assert.equal(line.material.opacity, 1);
-  assert.equal(record.edges.renderOrder, 26);
+  let state = set.readSlot(slot);
+  assertClose(state.color, linearRgb("#8dc5ff"), "selected edge colour");
+  assert.equal(state.opacity, 1);
+  assert.equal(state.highlighted, true);
+  assert.equal(set.highlightObject.visible, true);
   scene.update({ selection: { selectedPartIds: [] } });
-  assert.equal(line.material.vertexColors, true);
-  assert.equal(line.material.color.getHexString(), "ffffff");
-  assert.equal(line.material.opacity, 1);
-  assert.equal(record.edges.renderOrder, 3);
+  state = set.readSlot(slot);
+  assert.equal(state.color, null);
+  assert.equal(state.opacity, 1);
+  assert.equal(state.highlighted, false);
+  assert.equal(set.highlightObject.visible, false);
+  // Focus dims the others to the surface's dimmed opacity in the base edge colour; hide makes them invisible.
+  scene.update({ selection: { focusedPartId: ["nothing"] } });
+  state = set.readSlot(slot);
+  assertClose(state.opacity, 0.035, "dimmed edge opacity");
+  assert.ok(state.color, "dimmed edges lose their class colours for the base edge colour");
+  scene.update({ selection: { focusedPartId: [], showEdges: false } });
+  assert.equal(set.readSlot(slot).visible, false);
+  scene.update({ selection: { showEdges: true } });
+  assert.equal(set.readSlot(slot).visible, true);
 
-  // Show-through modes drop the depth test on the edge line.
+  // Show-through modes drop the depth test on the edge draw.
   const transparent = buildModel(THREE, surfComponentMeshData(), {
     theme: cloneThemePresetSettings("workbench-light"),
     displayMode: CAD_DISPLAY_MODE.TRANSPARENT,
     renderPartsIndividually: true
   });
-  assert.equal(transparent.displayRecords[0].edgeMaterials[0].depthTest, false);
+  assert.equal(transparent.displayRecords[0].edgeInstance.set.material.depthTest, false);
   assert.equal(transparent.displayRecords[0].material.polygonOffset, true);
   transparent.dispose();
 
   // Rendered mode draws no linework at all; wireframe draws the mesh wires instead.
   const rendered = buildModel(THREE, surfComponentMeshData(), { displayMode: CAD_DISPLAY_MODE.RENDERED, renderPartsIndividually: true });
   assert.equal(rendered.displayRecords[0].edges, null);
+  assert.equal(rendered.displayRecords[0].edgeInstance, null);
   rendered.dispose();
   const wire = buildModel(THREE, surfComponentMeshData(), { displayMode: CAD_DISPLAY_MODE.WIREFRAME, renderPartsIndividually: true });
   assert.equal(wire.displayRecords[0].edges.geometry.type, "WireframeGeometry");
+  assert.equal(wire.displayRecords[0].edgeInstance, null);
   wire.dispose();
   scene.dispose();
+  assert.equal(set.disposed, true, "disposing the scene disposes its instance sets");
 });
 
 // GPU buffers a geometry owns: its index plus one per distinct attribute array.
@@ -505,63 +543,116 @@ function composedPackage(sourceMesh, count) {
   };
 }
 
-test("a component's occurrences share one surface and one edge geometry: 6 buffers, +1 draw call each, reused across publishes", () => {
+test("a component's occurrences share one surface geometry and one instanced edge draw: 5 buffers + 2 textures, draw calls = occurrences + 1", () => {
   const sourceMesh = surfComponentMeshData();
   const first = buildModel(THREE, composedPackage(sourceMesh, 4), { renderPartsIndividually: true });
   const geometries = new Set();
   const buffers = new Set();
   let drawables = 0;
   first.root.traverse((object) => {
-    if (!object.geometry) return;
+    if (!object.geometry || object.userData.cadEdgeInstancesHighlight) return;
     drawables += 1;
     geometries.add(object.geometry);
     for (const buffer of geometryBuffers(object.geometry)) buffers.add(buffer);
   });
-  assert.equal(drawables, 8, "one mesh and one edge line per occurrence");
-  assert.equal(geometries.size, 2, "one surface geometry and one edge geometry for the component");
-  assert.equal(buffers.size, 6, "position, normal, index + edge position, colour, index");
+  assert.equal(drawables, 5, "one mesh per occurrence and one edge draw for the component");
+  assert.equal(geometries.size, 2, "one surface geometry and one edge quad for the component");
+  assert.equal(buffers.size, 5, "position, normal, index + quad position, quad index");
   const [a, b] = first.displayRecords;
-  assert.equal(a.edges.geometry, b.edges.geometry);
-  assert.notEqual(a.edges.material, b.edges.material, "materials are per occurrence");
-  assert.equal(b.edges.matrix.elements[12], 10);
-  assert.deepEqual(b.edges.matrix.elements, b.mesh.matrix.elements, "edge lines ride the occurrence matrix");
-  const edgeBytes = [...geometryBuffers(a.edges.geometry)].reduce((sum, buffer) => sum + buffer.array.byteLength, 0);
-  const surfaceBytes = [...geometryBuffers(a.geometry)].reduce((sum, buffer) => sum + buffer.array.byteLength, 0);
-  assert.ok(edgeBytes > 0 && surfaceBytes > 0);
+  assert.equal(a.edgeInstance.set, b.edgeInstance.set, "occurrences are slots of one set");
+  assert.notEqual(a.edgeInstance.slot, b.edgeInstance.slot);
+  assert.equal(a.edgeInstance.set.object.geometry.instanceCount, 4 * 4, "segments x occurrences");
+  assert.equal(b.edgeInstance.set.readSlot(b.edgeInstance.slot).matrix[12], 10);
+  assert.deepEqual(b.edgeInstance.set.readSlot(b.edgeInstance.slot).matrix, Array.from(b.mesh.matrix.elements), "edge instances ride the occurrence matrix");
+  const set = a.edgeInstance.set;
+  const textures = new Set([set.segments.texture, set.instanceTexture]);
+  assert.equal(textures.size, 2, "one segment texture and one instance texture per component");
 
   // A progressive publish re-composes the package: the next model must find
-  // the component's geometry in the cache instead of uploading it again.
+  // the component's geometry AND segment texture in the cache instead of uploading them again.
   first.dispose();
   const second = buildModel(THREE, composedPackage(sourceMesh, 5), { renderPartsIndividually: true });
   assert.equal(second.displayRecords.length, 5);
   assert.equal(second.displayRecords[0].geometry, a.geometry, "surface geometry reused");
-  assert.equal(second.displayRecords[4].edges.geometry, a.edges.geometry, "edge geometry reused");
+  assert.equal(second.displayRecords[4].edgeInstance.set.segments, set.segments, "segment texture reused");
   second.dispose();
 });
 
-test("occurrences of one component share its CAD edge line geometry and follow their own transforms", () => {
-  const sourceMesh = surfComponentMeshData();
+// A component large enough for the budget to mean something: a 60x60 vertex
+// grid (6,962 triangles) outlined by its four boundary polylines (236 segments).
+function gridComponent(side = 60) {
+  const vertices = new Float32Array(side * side * 3);
+  const normals = new Float32Array(side * side * 3);
+  for (let y = 0; y < side; y += 1) {
+    for (let x = 0; x < side; x += 1) {
+      const index = (y * side + x) * 3;
+      vertices[index] = x;
+      vertices[index + 1] = y;
+      normals[index + 2] = 1;
+    }
+  }
+  const indices = new Uint32Array((side - 1) * (side - 1) * 6);
+  let cursor = 0;
+  for (let y = 0; y + 1 < side; y += 1) {
+    for (let x = 0; x + 1 < side; x += 1) {
+      const a = y * side + x;
+      indices.set([a, a + 1, a + side, a + 1, a + side + 1, a + side], cursor);
+      cursor += 6;
+    }
+  }
+  const boundary = [];
+  for (let x = 0; x < side; x += 1) boundary.push(x);
+  for (let y = 1; y < side; y += 1) boundary.push(y * side + side - 1);
+  for (let x = side - 2; x >= 0; x -= 1) boundary.push((side - 1) * side + x);
+  for (let y = side - 2; y >= 1; y -= 1) boundary.push(y * side);
+  const cadEdgePositions = new Float32Array(boundary.length * 3);
+  boundary.forEach((vertex, point) => cadEdgePositions.set(vertices.subarray(vertex * 3, vertex * 3 + 3), point * 3));
+  const cadEdgeIndices = new Uint32Array(boundary.length * 2);
+  for (let point = 0; point < boundary.length; point += 1) {
+    cadEdgeIndices[point * 2] = point;
+    cadEdgeIndices[point * 2 + 1] = (point + 1) % boundary.length;
+  }
+  return {
+    vertices, normals, indices, cadEdgePositions, cadEdgeIndices,
+    cadEdgeClassRanges: [{ classId: "feature", pointStart: 0, pointCount: boundary.length, segmentStart: 0, segmentCount: boundary.length }],
+    bounds: { min: [0, 0, 0], max: [side - 1, side - 1, 0] },
+    parts: [{ id: "grid", vertexCount: side * side, triangleCount: (side - 1) * (side - 1) * 2, bounds: { min: [0, 0, 0], max: [side - 1, side - 1, 0] } }]
+  };
+}
+
+test("instanced edge GPU budget: edge bytes stay under 10% of surface bytes and a component holds 4 GPU objects for its edges", () => {
+  const component = gridComponent();
   const meshData = {
-    vertices: new Float32Array(0), indices: new Uint32Array(0),
-    bounds: { min: [0, 0, 0], max: [11, 1, 0] },
-    partTransformsBaked: false,
-    parts: ["a", "b"].map((id, index) => ({
-      id, occurrenceId: id, sourceMeshKey: "cid:flat", sourceMesh, vertexCount: 4, triangleCount: 2,
-      transform: [1, 0, 0, index * 10, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
-      bounds: { min: [index * 10, 0, 0], max: [index * 10 + 1, 1, 0] }
+    vertices: new Float32Array(0), indices: new Uint32Array(0), bounds: component.bounds, partTransformsBaked: false,
+    parts: Array.from({ length: 40 }, (_, index) => ({
+      id: `g${index}`, occurrenceId: `g${index}`, sourceMeshKey: "grid:flat", sourceMesh: component,
+      vertexCount: 3600, triangleCount: 6962, transform: [1, 0, 0, index * 100, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], bounds: component.bounds
     }))
   };
   const scene = buildModel(THREE, meshData, { renderPartsIndividually: true });
-  const [a, b] = scene.displayRecords;
-  assert.equal(a.edges.geometry, b.edges.geometry, "one edge geometry per component");
-  assert.equal(a.edges.geometry.getAttribute("position").array, sourceMesh.cadEdgePositions, "the meshData's own points");
-  assert.equal(a.edges.geometry.index.array, sourceMesh.cadEdgeIndices.subarray ? a.edges.geometry.index.array : null);
-  assert.equal(a.edges.matrix.elements[12], 0);
-  assert.equal(b.edges.matrix.elements[12], 10);
+  const record = scene.displayRecords[0];
+  const set = record.edgeInstance.set;
+  const surfaceBytes = [...geometryBuffers(record.geometry)].reduce((sum, buffer) => sum + buffer.array.byteLength, 0);
+  const edgeBytes = set.segments.byteLength + set.instanceByteLength
+    + [...geometryBuffers(set.geometry)].reduce((sum, buffer) => sum + buffer.array.byteLength, 0);
+  assert.equal(set.segments.segmentCount, 236);
+  assert.equal(set.slotCount, 40);
+  assert.equal(set.geometry.instanceCount, 236 * 40);
+  assert.ok(edgeBytes / surfaceBytes <= 0.10, `edge bytes ${edgeBytes} exceed 10% of surface bytes ${surfaceBytes}`);
+  assert.equal(geometryBuffers(set.geometry).size, 2, "quad position + index");
+  assert.equal(new Set([set.segments.texture, set.instanceTexture]).size, 2, "segment + instance texture");
+  assert.equal(scene.edgesGroup.children.length, 1, "one edge draw object for 40 occurrences");
+  // Slots are recycled: a departed occurrence's slot goes to the next arrival, the draw shrinks with a trailing release.
+  scene.update({ source: { ...meshData, parts: meshData.parts.slice(0, 39) } });
+  assert.equal(set.slotCount, 39);
+  assert.equal(set.geometry.instanceCount, 236 * 39);
+  scene.update({ source: { ...meshData, parts: [...meshData.parts.slice(1, 39), meshData.parts[0]] } });
+  assert.equal(set.slotCount, 39, "o0 re-enters in the slot the trailing release freed or o0's own");
+  assert.equal(set.liveCount, 39);
   scene.dispose();
 });
 
-test("component mesh buffers stay shared until a deformation needs writable attributes", () => {
+test("a deformed tube leaves the instanced edge draw for a private, bendable line object; the component buffers stay shared", () => {
   const sourceMesh = surfComponentMeshData();
   const savedPositions = sourceMesh.vertices.slice();
   const savedNormals = sourceMesh.normals.slice();
@@ -575,8 +666,9 @@ test("component mesh buffers stay shared until a deformation needs writable attr
   assert.equal(record.geometry.getAttribute("normal").array, sourceMesh.normals);
   assert.equal(record.geometry.getAttribute("position").array, sourceMesh.vertices);
   assert.equal(record.geometry.index.array, sourceMesh.indices);
+  const set = record.edgeInstance.set;
+  assert.equal(set.liveCount, 1);
   const savedEdgePositions = sourceMesh.cadEdgePositions.slice();
-  assert.equal(record.edges.geometry.getAttribute("position").array, sourceMesh.cadEdgePositions);
   record.gpuTubeDeformationAllowed = false;
   const rest = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 0], end: [3, 0, 0] }] };
   const path = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 2], end: [0, 3, 2] }] };
@@ -585,13 +677,20 @@ test("component mesh buffers stay shared until a deformation needs writable attr
   assert.notDeepEqual(record.geometry.getAttribute("position").array, savedPositions);
   assert.deepEqual(sourceMesh.vertices, savedPositions);
   assert.deepEqual(sourceMesh.normals, savedNormals);
-  // The CAD edge lines bend with the surface on a private, flattened copy that
-  // keeps the class colours; the shared points stay put.
+  // The record left the instanced draw and bends a private, flattened GL_LINES
+  // copy that keeps the class colours; the shared points stay put.
+  assert.equal(record.edgeInstance, null);
+  assert.equal(set.liveCount, 0);
+  assert.equal(set.geometry.instanceCount, 0);
+  assert.equal(record.edges.isLineSegments, true);
+  assert.equal(record.edgeMaterials.length, 1);
+  assert.equal(record.edgeMaterials[0].vertexColors, true);
   const bentEdge = record.edges.geometry.getAttribute("position");
   assert.notEqual(bentEdge.array, sourceMesh.cadEdgePositions);
   assert.equal(record.edges.geometry.index, null);
   assert.equal(record.edges.geometry.getAttribute("color").count, bentEdge.count);
   assert.deepEqual(sourceMesh.cadEdgePositions, savedEdgePositions);
+  assert.deepEqual(record.edges.matrix.elements, record.mesh.matrix.elements);
   scene.dispose();
 });
 
@@ -637,15 +736,15 @@ test("tube deformation writes indexed component geometry per shared vertex on th
   gpuScene.dispose();
 });
 
-test("buildModel rebuilds CAD edge lines when edge class settings change", () => {
+test("buildModel rebuilds the instanced edge draw when edge class settings change", () => {
   const theme = cloneThemePresetSettings("workbench-light");
   const scene = buildModel(THREE, surfComponentMeshData(), {
     theme,
     displayMode: CAD_DISPLAY_MODE.SOLID,
     renderPartsIndividually: true
   });
-  const originalEdges = scene.displayRecords[0].edges;
-  const originalGeometry = originalEdges.geometry;
+  const originalSet = scene.displayRecords[0].edgeInstance.set;
+  const originalSegments = originalSet.segments;
 
   scene.update({
     displayMode: CAD_DISPLAY_MODE.SOLID,
@@ -659,20 +758,25 @@ test("buildModel rebuilds CAD edge lines when edge class settings change", () =>
           tangent: {
             ...DEFAULT_DISPLAY_EDGE_SETTINGS.classes.tangent,
             thickness: 0
+          },
+          feature: {
+            ...DEFAULT_DISPLAY_EDGE_SETTINGS.classes.feature,
+            thickness: 2.5
           }
         }
       }
     }
   });
 
-  const edges = scene.displayRecords[0].edges;
-  assert.notEqual(edges, originalEdges);
-  assert.notEqual(edges.geometry, originalGeometry, "a new class style is a new shared geometry");
-  assert.equal(edges.geometry.index.count, 6, "tangent switched off: only the three feature segments remain");
-  assert.equal(edges.geometry.getAttribute("position").array, originalGeometry.getAttribute("position").array, "points stay shared");
+  const set = scene.displayRecords[0].edgeInstance.set;
+  assert.notEqual(set, originalSet);
+  assert.equal(originalSet.disposed, true, "the previous style's set is disposed with its records");
+  assert.notEqual(set.segments, originalSegments, "a new class style is a new segment texture");
+  assert.equal(set.segments.segmentCount, 3, "tangent switched off: only the three feature segments remain");
+  assert.equal(set.uniforms.cadClassWidth.value.x, 2.5, "feature thickness follows the class setting");
   assert.equal(scene.edgesGroup.children.length, 1);
   scene.update({ theme });
-  assert.equal(scene.displayRecords[0].edges.geometry, originalGeometry, "the previous style's geometry is cached");
+  assert.equal(scene.displayRecords[0].edgeInstance.set.segments, originalSegments, "the previous style's segment texture is cached");
   scene.dispose();
 });
 
@@ -967,5 +1071,161 @@ test("buildModel can apply STEP parameter effects while deferring setup lifecycl
   assert.equal(left.mesh.matrix.elements[12], 5);
   assert.equal(scene.bounds.min[0], 2);
   assert.equal(scene.bounds.max[0], 6);
+  scene.dispose();
+});
+
+// Two components, six occurrences alternating between them, each placed 10 mm apart.
+function twoComponentPackage(componentA, componentB, occurrenceIndexes) {
+  const parts = occurrenceIndexes.map((index) => {
+    const even = index % 2 === 0;
+    return {
+      id: `o${index}`, occurrenceId: `o${index}`, componentId: even ? "a" : "b",
+      sourceMeshKey: even ? "a:flat" : "b:flat", sourceMesh: even ? componentA : componentB,
+      vertexCount: 4, triangleCount: 2,
+      transform: [1, 0, 0, index * 10, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      bounds: { min: [index * 10, 0, 0], max: [index * 10 + 1, 1, 0] }
+    };
+  });
+  const xs = occurrenceIndexes.map((index) => index * 10);
+  return {
+    vertices: new Float32Array(0), indices: new Uint32Array(0),
+    bounds: { min: [Math.min(...xs), 0, 0], max: [Math.max(...xs) + 1, 1, 0] },
+    partTransformsBaked: false,
+    parts
+  };
+}
+
+function materialSnapshot(material) {
+  return {
+    type: material.type,
+    color: material.color?.getHexString?.() ?? null,
+    opacity: material.opacity,
+    transparent: material.transparent,
+    depthWrite: material.depthWrite,
+    depthTest: material.depthTest,
+    vertexColors: material.vertexColors,
+    roughness: material.roughness ?? null,
+    metalness: material.metalness ?? null,
+    emissive: material.emissive?.getHexString?.() ?? null,
+    emissiveIntensity: material.emissiveIntensity ?? null,
+    polygonOffset: material.polygonOffset,
+    polygonOffsetFactor: material.polygonOffsetFactor,
+    polygonOffsetUnits: material.polygonOffsetUnits
+  };
+}
+
+function recordSnapshot(record) {
+  return {
+    partId: record.partId,
+    fillIndex: record.fillIndex,
+    matrix: Array.from(record.mesh.matrix.elements),
+    meshVisible: record.mesh.visible,
+    meshRenderOrder: record.mesh.renderOrder,
+    material: materialSnapshot(record.material),
+    baseColor: record.baseColor?.getHexString?.(),
+    baseOpacity: record.baseOpacity,
+    partBounds: record.partBounds,
+    edgeSegments: record.edgeInstance?.set.segments ?? record.edges?.geometry ?? null,
+    edgeState: record.edgeInstance ? record.edgeInstance.set.readSlot(record.edgeInstance.slot) : null,
+    edgeMaterials: (record.edgeInstance?.set.materials || record.edgeMaterials || []).map(materialSnapshot),
+    ghostVisible: record.ghostMesh?.visible ?? false
+  };
+}
+
+test("update({ source }) reconciles records across publishes into the state a one-shot build produces", () => {
+  const componentA = surfComponentMeshData();
+  const componentB = surfComponentMeshData();
+  const settings = {
+    theme: cloneThemePresetSettings("workbench-light"),
+    renderPartsIndividually: true,
+    edgeRendering: { mode: "screen-space", LineSegments2, LineSegmentsGeometry, LineMaterial }
+  };
+  const selection = { selectedPartIds: ["o2"], hoveredPartId: "o4", focusedPartId: ["o0", "o2", "o4", "o5"] };
+
+  const oneShot = buildModel(THREE, twoComponentPackage(componentA, componentB, [0, 1, 2, 3, 4, 5]), { ...settings, selection });
+
+  // Publish 1: two occurrences. Publish 2: o1 departs, o2/o3 arrive. Publish 3: all six.
+  const scene = buildModel(THREE, twoComponentPackage(componentA, componentB, [0, 1]), settings);
+  const [firstO0, firstO1] = scene.displayRecords;
+  const firstO1Objects = { mesh: firstO1.mesh, edgeInstance: firstO1.edgeInstance, material: firstO1.material, geometry: firstO1.geometry };
+  const disposedMaterials = [];
+  for (const record of scene.displayRecords) {
+    const dispose = record.material.dispose.bind(record.material);
+    record.material.dispose = () => { disposedMaterials.push(record.material); dispose(); };
+  }
+  scene.update({ source: twoComponentPackage(componentA, componentB, [0, 2, 3]), selection: { selectedPartIds: ["o2"] } });
+  assert.deepEqual(scene.displayRecords.map((record) => record.partId), ["o0", "o2", "o3"]);
+  assert.equal(scene.displayRecords[0], firstO0, "an occurrence already on screen keeps its record");
+  assert.equal(firstO1Objects.mesh.parent, null, "a departed occurrence leaves the scene");
+  assert.equal(firstO1Objects.edgeInstance.set.readSlot(firstO1Objects.edgeInstance.slot).visible, false, "its edge slot is released");
+  assert.equal(firstO1Objects.edgeInstance.set.liveCount, 1, "the component's other occurrence keeps the set alive");
+  assert.ok(disposedMaterials.includes(firstO1Objects.material), "its material is disposed");
+  assert.ok(!disposedMaterials.includes(firstO0.material), "kept materials are not");
+  assert.equal(firstO1Objects.geometry.attributes.position.array, componentB.vertices, "component geometry survives (cached)");
+  const secondO2 = scene.displayRecords[1];
+
+  scene.update({ source: twoComponentPackage(componentA, componentB, [0, 1, 2, 3, 4, 5]), selection });
+  assert.deepEqual(scene.displayRecords.map((record) => record.partId), ["o0", "o1", "o2", "o3", "o4", "o5"]);
+  assert.equal(scene.displayRecords[0], firstO0);
+  assert.equal(scene.displayRecords[0].mesh, firstO0.mesh);
+  assert.equal(scene.displayRecords[2], secondO2);
+  assert.notEqual(scene.displayRecords[1], firstO1, "a returning occurrence gets a fresh record");
+
+  // Final state equals the one-shot build: records, matrices, materials, edge objects, groups, bounds.
+  assert.deepEqual(scene.displayRecords.map(recordSnapshot), oneShot.displayRecords.map(recordSnapshot));
+  assert.equal(scene.modelGroup.children.length, oneShot.modelGroup.children.length);
+  assert.equal(scene.edgesGroup.children.length, oneShot.edgesGroup.children.length);
+  assert.deepEqual(new Set(scene.modelGroup.children), new Set(scene.displayRecords.map((record) => record.mesh)));
+  assert.deepEqual(new Set(scene.edgesGroup.children), new Set(scene.displayRecords.map((record) => record.edgeInstance.set.object)));
+  assert.equal(scene.edgesGroup.children.length, 2, "one instanced edge draw per component");
+  assert.deepEqual(scene.bounds, oneShot.bounds);
+  assert.equal(scene.radius, oneShot.radius);
+  assert.equal(scene.meshData.parts.length, 6);
+
+  // Selection state kept applying across the publish: o2 is highlighted exactly as in the one-shot.
+  assert.equal(secondO2.edgeInstance.set.readSlot(secondO2.edgeInstance.slot).highlighted, true);
+  assert.equal(secondO2.material.emissiveIntensity, oneShot.displayRecords[2].material.emissiveIntensity);
+  oneShot.dispose();
+  scene.dispose();
+});
+
+test("update({ source }) keeps a deformed tube's private geometry and deformation state", () => {
+  const component = surfComponentMeshData();
+  const scene = buildModel(THREE, twoComponentPackage(component, component, [0]), { renderPartsIndividually: true });
+  const record = scene.displayRecords[0];
+  record.gpuTubeDeformationAllowed = false;
+  const rest = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 0], end: [3, 0, 0] }] };
+  const path = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 2], end: [0, 3, 2] }] };
+  const spec = normalizeTubeDeformation({ rest, path, maxSegmentLength: 1000 });
+  applyRecordTubeDeformation(THREE, record, spec);
+  const state = record.tubeDeformationState;
+  const privateGeometry = record.geometry;
+  const edgeGeometry = record.edges.geometry;
+  assert.ok(state.active);
+  assert.equal(record.edgeInstance, null, "a deformed tube draws its own edges");
+
+  scene.update({ source: twoComponentPackage(component, component, [0, 2]) });
+  assert.equal(scene.displayRecords[0], record);
+  assert.equal(record.tubeDeformationState, state, "deformation state survives the publish");
+  assert.equal(record.geometry, privateGeometry, "so does its private geometry");
+  assert.equal(record.edges.geometry, edgeGeometry);
+  assert.equal(record.mesh.geometry, privateGeometry);
+  // Without a scene module the publish resets the pose; re-applying the same
+  // deformation reuses the retained state instead of refining the rest surface again.
+  applyRecordTubeDeformation(THREE, record, spec);
+  assert.equal(record.tubeDeformationState, state);
+  assert.equal(record.geometry, privateGeometry);
+  assert.ok(state.active);
+  scene.dispose();
+});
+
+test("update({ source }) rebuilds when the build settings change with it", () => {
+  const component = surfComponentMeshData();
+  const scene = buildModel(THREE, twoComponentPackage(component, component, [0, 1]), { renderPartsIndividually: true });
+  const before = scene.displayRecords[0];
+  scene.update({ source: twoComponentPackage(component, component, [0, 1, 2]), displayMode: CAD_DISPLAY_MODE.WIREFRAME });
+  assert.notEqual(scene.displayRecords[0], before, "a display-mode change rebuilds every record");
+  assert.equal(scene.displayRecords.length, 3);
+  assert.equal(scene.displayRecords[0].edges.geometry.type, "WireframeGeometry");
   scene.dispose();
 });
