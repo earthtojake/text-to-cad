@@ -56,21 +56,24 @@ export const AgentCapabilitiesSchema = z.object({
 });
 export type AgentCapabilities = z.infer<typeof AgentCapabilitiesSchema>;
 
-/** How the app installs its bundled plugin into an agent with a plugin system (plan §8). */
-export const PluginInstallSchema = z.object({
-  /** argv (after the binary) that registers a marketplace directory; `<path>` is substituted. */
-  marketplaceAdd: z.array(z.string()),
-  /** argv that installs a plugin; `<plugin>` is substituted with `name@marketplace`. */
-  install: z.array(z.string()),
-  /**
-   * argv that re-reads an already-declared marketplace; `<marketplace>` is
-   * substituted. For agents whose `marketplaceAdd` keeps its first snapshot.
-   */
-  marketplaceUpdate: z.array(z.string()).optional(),
-  /** argv that moves an installed plugin to the marketplace's version, where `install` refuses to. */
-  update: z.array(z.string()).optional(),
-});
-export type PluginInstall = z.infer<typeof PluginInstallSchema>;
+/**
+ * What this agent does with the skills root Hardcore names in every
+ * `session/new` and `session/load` (plan §8, as revised).
+ *
+ * - `native` — the adapter reads `additionalDirectories` (or the older
+ *   `_meta.additionalRoots`) and loads the skills it finds there itself:
+ *   Claude Code from `<root>/.claude/skills`, Codex from
+ *   `<root>/.agents/skills`. Nothing else is needed, and no preamble is sent.
+ * - `preamble` — the adapter ignores additional directories (Gemini CLI does;
+ *   assume the rest do too), so the first prompt of a session says where the
+ *   root is and what is in it, and the `hardcore` MCP server's `list_skills`
+ *   and `read_skill` tools read the same files.
+ *
+ * The root is sent either way; this only decides whether the preamble goes
+ * with it.
+ */
+export const SkillRootsSchema = z.enum(["native", "preamble"]);
+export type SkillRoots = z.infer<typeof SkillRootsSchema>;
 
 export const AgentProviderSchema = z.object({
   id: z.string(),
@@ -123,9 +126,8 @@ export const AgentProviderSchema = z.object({
   }),
   launch: LaunchSchema,
   capabilities: AgentCapabilitiesSchema,
-  /** Where the agent loads skills from, `~`-relative, if documented. */
-  skillsDir: z.string().nullable(),
-  pluginInstall: PluginInstallSchema.nullable(),
+  /** Whether the agent loads the skills root by itself, or needs to be told about it. */
+  skillRoots: SkillRootsSchema,
 });
 export type AgentProvider = z.infer<typeof AgentProviderSchema>;
 

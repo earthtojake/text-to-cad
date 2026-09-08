@@ -70,10 +70,8 @@ Object.defineProperty(window, "hardcore", {
       writeJob: vi.fn(),
       cancelJob: vi.fn(),
     },
-    plugins: {
-      status: vi.fn(),
-      statusAll: vi.fn(async () => []),
-      install: vi.fn(),
+    skills: {
+      info: vi.fn(async () => ({ root: null, skills: [] })),
     },
     runtime: {
       status: vi.fn(async () => ({

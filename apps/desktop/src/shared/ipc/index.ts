@@ -43,8 +43,8 @@ import { acpContract, acpEvents } from "./acp";
 import { agentOptionsContract, agentOptionsEvents } from "./agent-options";
 import { agentsContract, agentsEvents } from "./agents";
 import { dialogsContract } from "./dialogs";
-import { pluginsContract, pluginsEvents } from "./plugins";
 import { runtimeContract, runtimeEvents } from "./runtime";
+import { skillsContract } from "./skills";
 import { cadEvents, cadIpc } from "./cad";
 import { explorerEvents, explorerIpc } from "./explorer";
 import { gitIpc } from "./git";
@@ -93,8 +93,8 @@ export const ipcContract = defineIpc({
   /** P2: `agentOptions.*` — the model and effort chips before a session exists. */
   ...agentOptionsContract,
 
-  /** P6, stubbed until P5: the bundled plugin's state per agent. */
-  ...pluginsContract,
+  /** P5: the skills root every session is handed. */
+  ...skillsContract,
 
   /** P6, stubbed until P5: the managed Python and cadgen runtime. */
   ...runtimeContract,
@@ -188,7 +188,6 @@ export const ipcEvents = {
   ...acpEvents,
   ...agentsEvents,
   ...agentOptionsEvents,
-  ...pluginsEvents,
   ...runtimeEvents,
   // `files.changed`, `terminal.data` and `terminal.exit` (P3).
   ...explorerEvents,

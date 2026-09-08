@@ -389,7 +389,7 @@ const PERF_NAMES = { tessellate: "cad:tessellate", hoverPick: "cad:hover-pick", 
 
 async function launchApp(userData, cacheEnv) {
   const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
-  const env = { ...inherited, NODE_ENV: "test", HARDCORE_NO_PLUGIN_INSTALL: "1", ...cacheEnv };
+  const env = { ...inherited, NODE_ENV: "test", ...cacheEnv };
   const stdoutLines = [];
   const started = performance.now();
   const app = await electron.launch({

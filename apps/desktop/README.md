@@ -37,7 +37,6 @@ Three environment variables matter in development:
 | --- | --- |
 | `HARDCORE_APTABASE_KEY` | Read at BUILD time and compiled in (see Telemetry). Unset means no network call is ever attempted. |
 | `CAD_DESKTOP_PYTHON` | An interpreter with cadgen installed, used instead of the bundled runtime (see CAD runtime below). A developer's knob; the e2e suite breaks and clears the equivalent setting on purpose. |
-| `HARDCORE_NO_PLUGIN_INSTALL` | Skip the launch-time install of the Hardcore plugin into the user's agents. `NODE_ENV=test` implies it. |
 | `HARDCORE_PREWARM` | Under `NODE_ENV=test` the project pre-warm (viewer child + cadgen daemon on project open) is off; `1` turns it on, as `tests/e2e/prewarm.spec.ts` does. |
 | `HARDCORE_FAKE_AGENT` | Launch this stdio ACP agent instead of whatever the registry says, for every provider. The session and git suites point it at `tests/fake-agent/index.mjs`; a session needs an agent to exist at all, and a real one would make the suite a test of somebody's login state. |
 Two more decide whether the window is seen at all:
@@ -78,12 +77,12 @@ carries a path, a file name, a project name, a prompt, or an agent's output.
 npm run typecheck    # tsc over both projects: node (main/preload/shared) and web (renderer)
 npm test             # vitest: tests/unit/{main,shared} in node, tests/unit/renderer in jsdom
 npm run lint         # eslint flat config
-npm run build        # scripts/build.mjs: compose the plugin, electron-vite build -> out/, bundle the MCP server
+npm run build        # scripts/build.mjs: compose the skills, electron-vite build -> out/, bundle the MCP server
 npm run e2e          # playwright _electron against out/ — run `npm run build` first
 ```
 
 `npm run build` is three steps in one script (`scripts/build.mjs`): the
-Hardcore plugin is composed into `resources/plugin/` (`build:plugin`),
+app's skills are composed into `resources/skills/` (`build:skills`),
 electron-vite builds main, preload and renderer into `out/`, and the MCP
 server is bundled into `out/hardcore-mcp/` (`build:mcp`). Packaging runs the
 same script. The renderer step compiles the CAD Viewer's client from source,
@@ -318,9 +317,9 @@ Development builds report `unsupported` and check nothing.
 
 `resources/runtime/<os>-<arch>/` (the CAD runtime: a pinned Python with
 cadgen and its whole closure installed), `resources/cadgen/` (the wheel and
-its constraints) and `resources/plugin/` (the composed plugin) ship beside
+its constraints) and `resources/skills/` (the composed skills) ship beside
 the app as `extraResources`; all three are build outputs, gitignored under a
-committed `.gitkeep`. `npm run build` fills the plugin; `npm run
+committed `.gitkeep`. `npm run build` fills the skills; `npm run
 cad:resources` fills the wheel directory from a checkout (the release
 workflow drops the wheel it just built into it instead); `npm run
 bundle:runtime` fills the runtime from those two (the release workflow runs
@@ -818,8 +817,8 @@ a packaged app is sure to have is its own Electron binary run as Node.
 
 There is nothing to install and no "installing" state. Settings › About &
 Updates carries a read-only block — the runtime (source and interpreter),
-cadgen's version against the app's, the viewer backend, the Hardcore plugin
-per installed agent — and Repair, which forgets the probe and looks again.
+cadgen's version against the app's, the viewer backend, the skills root
+every session is handed — and Repair, which forgets the probe and looks again.
 A CAD tab whose runtime did not start shows the interpreter's words, the
 log (`userData/cad-runtime.log`: every failed probe, every viewer launch
 that did not come up, the viewer's stderr) and Try again; it never asks the
@@ -845,38 +844,85 @@ after launch had paid 0.9 s for the probe and the viewer and ~3 s for the
 daemon's start inside its first compile; warmed at project open both are done
 before the click, and `viewerOrigin` shares the launch already in flight.
 
-## The plugin and the MCP server
+## Skills and tools in a session
 
-Two things reach the agent from the app (plan §8), and `src/main/cad/`
-owns both:
+Two things reach the agent from the app (plan §8), and `src/main/cad/` owns
+both. Neither is installed: **nothing Hardcore does writes to an agent's own
+configuration** — no plugin, no marketplace, no copy into `~/.claude/skills`.
+Every session is given what it needs when it is created, and a session that
+ends leaves nothing behind.
 
-**The Hardcore plugin** — `resources/plugin/`, composed by
-`scripts/build-plugin.mjs`: the repository's skills minus `cad-viewer` (the
-viewer is beside the chat here) plus `skills/hardcore-app-use` (which replaces
-the `cad` skill's `$cad-viewer` hand-off), with `.claude-plugin/plugin.json`,
-`.claude-plugin/marketplace.json` and `.codex-plugin/plugin.json` naming the
-plugin `cad`, the marketplace `hardcore` and the version the app's. Copies,
-never symlinks. `src/main/cad/plugin.ts` installs it per agent, on first
-launch and after every app update (`userData/plugin-installs.json` records
-which version each agent has), and from the Agents drawer's Plugins block:
+**The skills** — `resources/skills/`, composed by `scripts/build-skills.mjs`:
+the repository's skills minus `cad-viewer` (the viewer is beside the chat here)
+plus `skills/hardcore-app-use` (which replaces the `cad` skill's `$cad-viewer`
+hand-off), one directory each, copies and never symlinks.
 
-| Agent | Install | Read back |
-| --- | --- | --- |
-| Claude Code | `claude plugin marketplace add <resources/plugin>`, `claude plugin marketplace update hardcore`, `claude plugin install cad@hardcore` (then `claude plugin update cad@hardcore` when install says "already installed") — lands in `~/.claude/plugins/cache/hardcore/cad/<version>/` | `claude plugin list --json` |
-| Codex | `codex plugin marketplace add <resources/plugin>`, `codex plugin add cad@hardcore` (idempotent) — `[marketplaces.hardcore]` in `~/.codex/config.toml`, files in `~/.codex/plugins/cache/hardcore/cad/<version>/` | `codex plugin list --json` |
-| agents with only a skills directory | the skills copied to `<skillsDir>/hardcore/<skill>/` beside a `hardcore-plugin.json` version marker | that marker |
+At launch `src/main/cad/skills.ts` materialises them into
+`<userData>/skills/<appVersion>/`, twice, because the two native loaders read
+two layouts:
 
-The user's other plugins and skills are never touched.
+```
+<userData>/skills/<version>/.claude/skills/<skill>/SKILL.md   what Claude Code reads
+<userData>/skills/<version>/.agents/skills/<skill>/SKILL.md   what Codex reads
+```
+
+Real copies both times (packaging and some agents drop symlinks — repo
+`AGENTS.md`), rebuilt when the app's version or the composed set changes,
+idempotent otherwise, and every other version's directory is removed. A
+`hardcore-skills.json` written last is the marker of a complete root.
+
+That one directory is then handed to **every** session, whatever the agent:
+`session/new` and `session/load` both carry it as `additionalDirectories:
+[root]` (ACP's field, SDK 1.4.0) *and* as `_meta: { additionalRoots: [root] }`
+(the older spelling). Both, always: an adapter reads whichever it knows and
+ignores the other, and which one a given version reads is not something this
+app can detect.
+
+Two agents pick the skills up from there by themselves — the registry's
+`skillRoots: "native"`:
+
+| Agent | What it does with the root |
+| --- | --- |
+| Claude Code | `claude-agent-acp` reads `additionalDirectories ?? _meta.additionalRoots` and passes them to the Agent SDK, which loads `<dir>/.claude/skills/<name>/SKILL.md`. Verified on this machine with `claude -p --add-dir`: the skill appears by name, unprefixed |
+| Codex | `codex-acp` reads the same two fields and registers `<root>/.agents/skills` with the Codex app server (`skills/extraRoots/set`), then refreshes its skill list |
+
+Every other agent (`skillRoots: "preamble"` — Gemini CLI's `newSession`
+ignores additional directories, and the rest are assumed to) gets the same
+files by two paths that need nothing of the agent:
+
+- **A preamble.** The first prompt of a session created here carries one text
+  block in front of the person's words: the root's path, the skills with a
+  clipped line of description each, and to read `cad`'s SKILL.md before CAD
+  work. Under 1.5k characters, sent once — never on a later turn, and never on
+  a resumed session, because the transcript already holds it. It is not in the
+  app's transcript: the person sees what they typed.
+- **The MCP server's own tools.** `list_skills()` and `read_skill(name, path?)`
+  read the same root (the server is given it as `HARDCORE_SKILLS_ROOT`), so an
+  agent that ignores everything else can still ask.
+
+**The runtime on the session's PATH.** The environment every adapter is
+spawned with — and so every command a session runs — has the resolved CAD
+runtime in front of its `PATH` (`CadRuntime.sessionPath`,
+`SessionManager.environment`): `cadgen` and `python` inside a session are the
+app's own, pinned to its version, and `hardcore-app-use` tells the agent never
+to install cadgen. A checkout's `.venv/bin` has the console script pip
+installed; the bundled runtime does not (it is a `pip install --target`, and
+the bundler prunes the scripts pip wrote there because their shebang names the
+build machine), so the app writes `<userData>/bin/cadgen` — one line running
+`python -m cadgen.cli`, the same dispatcher the console script runs — and puts
+that directory first.
 
 **The Hardcore MCP server** — `resources/hardcore-mcp/server.mjs`, a stdio
 server on `@modelcontextprotocol/sdk` that every `session/new` carries
 (`SessionManager.deps.mcpServers`). The agent spawns it — this app's own
 Electron binary as Node (`ELECTRON_RUN_AS_NODE=1`), the source in a checkout,
 the bundle in `out/hardcore-mcp/` when packaged — with a per-session token
-and the session's cwd in its environment. Its tools: `open_file(path)`,
-`reveal(path)`, `open_url(url)`, `list_open_tabs()`, `viewer_state()`,
-`attach_snapshot(path)` (returned as image content, so the transcript shows
-the PNG). Each call is one `POST /rpc` to `src/main/cad/mcp-bridge.ts`, a
+and the session's cwd and skills root in its environment. Its tools:
+`open_file(path)`, `reveal(path)`, `open_url(url)`, `list_open_tabs()`,
+`viewer_state()`, `attach_snapshot(path)` (returned as image content, so the
+transcript shows the PNG), and the two that read the skills root without
+touching main — `list_skills()`, `read_skill(name, path?)`. Every other call
+is one `POST /rpc` to `src/main/cad/mcp-bridge.ts`, a
 loopback HTTP listener that refuses anything without a live session's
 token; main resolves the path inside the session's project and relays the
 explorer actions to the renderer as `cad.command`, which
@@ -884,7 +930,7 @@ explorer actions to the renderer as `cad.command`, which
 on `cad.reply`. Snapshots are read in main. Neither adapter wants a `type`
 field on a stdio entry: claude-agent-acp reads one as http/sse.
 
-`tests/unit/main/{cad-runtime,viewer,plugin,build-plugin,mcp-server,mcp-bridge}.test.ts`
+`tests/unit/main/{cad-runtime,viewer,skills,build-skills,mcp-server,mcp-bridge}.test.ts`
 cover each piece with a fake machine, a fake child, a fake CLI, the real
 build script into a temp directory, the SDK's client over an in-memory
 transport, and the bridge over real loopback HTTP.
@@ -915,7 +961,7 @@ src/main/                 the Electron main process: everything with a side effe
                           with, cached between them — see The model and the effort)
   ipc/{acp,agents}.ts     the P1 handler branches, spread into ipc/index.ts
   ipc/agent-options.ts    agentOptions.*: the cache, the probe and the stored defaults
-  ipc/{plugins,runtime}.ts  the plugin and CAD runtime branches (P5's bodies, P6's shape)
+  ipc/{skills,runtime}.ts   the skills root and CAD runtime branches (P5's bodies, P6's shape)
   ipc/dialogs.ts          the native folder and file choosers Settings' path rows use
   ipc/{explorer,cad}.ts   P3's handler branches: files, terminals; cad.viewerOrigin + cad.warm + cad.reply (P5)
   ipc/git.ts              P7's: the review's reads in a session's directory, the
@@ -924,7 +970,7 @@ src/main/                 the Electron main process: everything with a side effe
                           terminal.ts (node-pty sessions + scrollback)
   cad/                    runtime.ts (which Python: override, bundled, checkout), viewer.ts (one viewer per project root),
                           daemon.ts (the warm build daemon, started at project open),
-                          plugin.ts (the composed plugin into each agent), mcp-bridge.ts + actions.ts
+                          skills.ts (the skills root every session is handed), mcp-bridge.ts + actions.ts
                           (the MCP server's way into the explorer), index.ts (the wiring)
   projects/git.ts         status, per-file diff, commit and push; then repository
                           detection, worktrees, the keep-limit sweep and `gh pr create`
@@ -939,7 +985,7 @@ src/shared/               types.ts (domain types as zod schemas)
   ipc/agent-options.ts    agentOptions.* — the model and effort chips before a session exists
   acp/options.ts          which option is the model, which is the effort, which mode is
                           the agent's own auto preset (both processes read this one file)
-  ipc/plugins.ts, ipc/runtime.ts, ipc/dialogs.ts  the plugin, CAD runtime and chooser branches (P6)
+  ipc/skills.ts, ipc/runtime.ts, ipc/dialogs.ts  the skills, CAD runtime and chooser branches (P6)
   agents.ts               provider and status schemas
   acp/types.ts, acp/reduce.ts  SessionState and the pure session/update reducer
   ipc/explorer.ts         explorer.* terminal.* and their events (P3)
@@ -983,7 +1029,7 @@ tests/e2e/                playwright, against the built app
 tests/fake-agent/         a scripted ACP agent on stdio (SDK agent side), also replays fixtures
 tests/fixtures/acp/       recorded adapter transcripts (jsonl), written by the harness
 scripts/acp-harness.mjs   run a real ACP session from the terminal; --record writes a fixture
-scripts/build.mjs         npm run build: build-plugin.mjs + electron-vite + build-mcp.mjs
+scripts/build.mjs         npm run build: build-skills.mjs + electron-vite + build-mcp.mjs
 scripts/cad-resources.mjs the cadgen wheel and constraints into resources/cadgen, from a checkout
 scripts/bundle-runtime.mjs the CAD runtime into resources/runtime/<os>-<arch>: the pinned Python
                           (scripts/python-build.json) with cadgen's closure installed, per target
@@ -991,7 +1037,7 @@ scripts/make-brand.mjs    npm run brand: the wordmark and the H monogram into re
 scripts/make-icons.mjs    npm run icons: that monogram onto its tile -> build/icon.png
 resources/brand/          the committed marks, and the JetBrains Mono face they are set in
 resources/hardcore-mcp/   the MCP server's source (bundled into out/hardcore-mcp by the build)
-skills/hardcore-app-use/      the skill only this app installs; composed into resources/plugin
+skills/hardcore-app-use/      the skill only this app ships; composed into resources/skills
 ```
 
 ## ACP

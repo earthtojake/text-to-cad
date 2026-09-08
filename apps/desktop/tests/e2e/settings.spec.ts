@@ -155,7 +155,13 @@ test("the agent drawer shows an installed agent and a signed-out one", async () 
       const drawer = page.getByRole("dialog");
       await expect(drawer.getByText("Installation")).toBeVisible();
       await expect(drawer.getByText("Authentication")).toBeVisible();
-      await expect(drawer.getByText("Hardcore plugin")).toBeVisible();
+      // What a session is given, read-only. Nothing is installed into the
+      // agent's own configuration, so there is no button here at all.
+      await expect(drawer.getByText("Skills", { exact: true })).toBeVisible();
+      await expect(drawer.getByText(/plugin/i)).toHaveCount(0);
+      // The Installation section's Install button is for the agent's own CLI;
+      // nothing here installs anything into the agent.
+      await expect(drawer.getByRole("button", { name: /reinstall/i })).toHaveCount(0);
       await expect(drawer.getByText("MCP servers")).toBeVisible();
       await expect(drawer.getByText("Advanced")).toBeVisible();
       // The launch line the app would run, from the registry.

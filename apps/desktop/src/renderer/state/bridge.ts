@@ -17,7 +17,6 @@ import { performCadCommand } from "./cad-commands";
 import { useExplorer } from "./explorer";
 import { attachHistory, useHistory } from "./history";
 import { usePathLinks } from "./path-links";
-import { usePlugins } from "./plugins";
 import { useProjects } from "./projects";
 import { useRuntime } from "./runtime";
 import { useSessions } from "./sessions";
@@ -63,9 +62,6 @@ export function subscribeToMain(): () => void {
     }),
     window.hardcore.on("agentOptions.changed", (all) => {
       useAgentOptions.getState().receive(all);
-    }),
-    window.hardcore.on("plugins.status", (statuses) => {
-      usePlugins.getState().receive(statuses);
     }),
     window.hardcore.on("runtime.status", (status) => {
       useRuntime.getState().receive(status);

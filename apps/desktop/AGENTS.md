@@ -22,7 +22,7 @@ phase is not an oversight — it is the seam.
 | P2 | `src/renderer/features/session` — the transcript, activity rows, composer chips, permissions, plan card — plus what the model and effort chips are drawn from before a session exists: `src/shared/acp/options.ts`, `src/{shared,main}/ipc/agent-options.ts`, `src/main/acp/agent-options.ts`, `src/renderer/state/agent-options.ts` |
 | P3 (done) | `src/main/explorer`, `src/main/ipc/{explorer,cad}.ts`, `src/shared/ipc/{explorer,cad}.ts`, `src/renderer/features/explorer` — file tab, tree, Monaco, review, browser, terminal |
 | P4 (done) | `apps/viewer`'s `CadFileView` and its `viewerOrigin` threading; P3's file tab renders it |
-| P5 (done) | `src/main/cad/`, `src/main/ipc/{cad,runtime,plugins}.ts`, `resources/`, `skills/hardcore-app-use`, `scripts/{build,build-plugin,build-mcp,cad-resources,bundle-runtime}.mjs`, `src/renderer/state/cad-commands.ts`, the `reveal` field of the explorer store and tree |
+| P5 (done) | `src/main/cad/`, `src/main/ipc/{cad,runtime,skills}.ts`, `resources/`, `skills/hardcore-app-use`, `scripts/{build,build-skills,build-mcp,cad-resources,bundle-runtime}.mjs`, `src/renderer/state/cad-commands.ts`, the `reveal` field of the explorer store and tree |
 | P6 | `src/renderer/features/settings` — the pages' contents |
 | P7 (done) | `src/main/projects/{git,workspace}.ts`, `src/shared/ipc/git.ts`, `src/main/ipc/git.ts`, `src/renderer/lib/git-mode.ts`, the review tab's scopes and commit popover, Git & Worktrees' per-project cards, `tests/e2e/git.spec.ts` |
 | P8 (done) | `electron-builder.yml`, `build/`, `resources/`, `scripts/{package,make-icons}.mjs`, `updater.ts`, `telemetry.ts`, `src/{shared,main}/ipc/app.ts`, the CI jobs |
@@ -89,6 +89,15 @@ not.
   sweeps a foreground-coloured band rather than a background-coloured one
   (the stock band erases the letters it passes over). Re-vendoring a
   component means redoing those.
+- **Nothing is installed into an agent's configuration.** Hardcore's skills
+  and its tools are given to each session — the skills root as an additional
+  directory on `session/new` and `session/load` (both spellings) plus a
+  preamble for the agents that ignore it, the MCP server in `mcpServers`, the
+  runtime in front of the session's `PATH` (README, "Skills and tools in a
+  session"). There is no plugin, no marketplace, no write to `~/.claude` or
+  `~/.codex`, and no first-launch install step. Do not add one back: a
+  person's own agent configuration is theirs, and an app that edits it is an
+  app they cannot uninstall cleanly.
 - **The CAD runtime ships inside the app.** `resources/runtime/<os>-<arch>/`
   is a complete Python with cadgen installed (`scripts/bundle-runtime.mjs`),
   resolved right after an explicit override; a packaged app downloads and

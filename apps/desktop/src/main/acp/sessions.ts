@@ -62,6 +62,26 @@ export type SessionManagerDeps = {
   forgetProbe?: (probeId: string) => void;
 
   /**
+   * P5: the skills every session gets (src/main/cad/skills.ts). `root` is
+   * named in `session/new` and `session/load` as an additional directory;
+   * `preamble` is the text an agent that ignores those gets in front of its
+   * first prompt, and is asked for per agent (`skillRoots` in the registry).
+   * Injected, so this file knows nothing about where the skills live.
+   */
+  skills?: {
+    root: () => string | null;
+    preamble: () => string | null;
+  };
+
+  /**
+   * P5: the directories the bundled CAD runtime puts in front of a session's
+   * `PATH` — where its `cadgen` and its `python` are. Every adapter, and so
+   * every command a session runs, is spawned with them
+   * (`CadRuntime.sessionPath`).
+   */
+  runtimePath?: () => string[];
+
+  /**
    * P2: what the agents' sessions can be configured with, kept between
    * sessions (`./agent-options.ts`). Injected: this file applies the stored
    * defaults on create and writes back what it sees, and knows nothing about
@@ -341,15 +361,15 @@ export class SessionManager {
       throw new Error(`${input.cwd} does not exist`);
     }
     const probeId = `probe:${input.agentId}:${this.deps.newId()}`;
-    const env = await this.deps.detector.environment();
     const connection = new SessionConnection({
       sessionId: probeId,
       agentId: input.agentId,
       launch: launch ?? provider.launch,
-      env,
+      env: await this.environment(),
       cwd: input.cwd,
       mcpServers:
         this.deps.mcpServers?.({ id: probeId, projectId: input.projectId ?? "", cwd: input.cwd }) ?? [],
+      skillsRoot: this.deps.skills?.root() ?? null,
       spawnTerminal: this.deps.spawnTerminal,
       clientVersion: this.deps.clientVersion,
       onStderr: () => undefined,
@@ -579,6 +599,26 @@ export class SessionManager {
     return this.requireLive(session.id);
   }
 
+  /**
+   * The environment an adapter is spawned with: the login shell's, with the
+   * bundled CAD runtime's bin directory in front of `PATH`. A session's
+   * `cadgen` and `python` are then the app's own, whatever the person's shell
+   * would have found — and nothing about it is installed on the machine.
+   */
+  private async environment(): Promise<Record<string, string>> {
+    const env = await this.deps.detector.environment();
+    const dirs = this.deps.runtimePath?.() ?? [];
+    if (dirs.length === 0) {
+      return env;
+    }
+    // The PATH key's case varies on Windows; whichever one the shell gave us
+    // is the one prepended to, so the value is never split in two.
+    const key = Object.keys(env).find((name) => name.toUpperCase() === "PATH") ?? "PATH";
+    const existing = env[key];
+    const prefix = dirs.join(nodePath.delimiter);
+    return { ...env, [key]: existing ? `${prefix}${nodePath.delimiter}${existing}` : prefix };
+  }
+
   private async connect(session: Session): Promise<SessionConnection> {
     const provider = agentProvider(session.agentId);
     if (!provider) {
@@ -602,14 +642,17 @@ export class SessionManager {
     this.live.get(session.id)?.close();
     this.setStatus(session.id, "connecting");
 
-    const env = await this.deps.detector.environment();
     const connection = new SessionConnection({
       sessionId: session.id,
       agentId: session.agentId,
       launch: this.deps.launchOverride?.(provider.id) ?? provider.launch,
-      env,
+      env: await this.environment(),
       cwd: session.cwd,
       mcpServers: this.deps.mcpServers?.(session) ?? [],
+      // The skills root, to every agent; the preamble only to the ones that
+      // do not load it themselves (plan §8, as revised).
+      skillsRoot: this.deps.skills?.root() ?? null,
+      preamble: provider.skillRoots === "preamble" ? (this.deps.skills?.preamble() ?? null) : null,
       spawnTerminal: this.deps.spawnTerminal,
       approvalMode: this.approval.get(session.id),
       clientVersion: this.deps.clientVersion,

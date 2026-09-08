@@ -2,8 +2,8 @@
  * Agent settings, in a right-hand drawer (Emdash's shape, plan §2).
  *
  * Everything about one agent that the app can answer without starting it: where
- * its binary is, whether the user is signed in, whether Hardcore's plugin is
- * installed into it, and what the app will type when it launches it. The two
+ * its binary is, whether the user is signed in, what it is given in a Hardcore
+ * session, and what the app will type when it launches it. The two
  * long-running actions — install and sign in — are pty jobs in main whose
  * output streams into the log under the button that started them, because an
  * installer that prints nothing for ninety seconds is indistinguishable from
@@ -35,8 +35,8 @@ import {
   useSettingsPatch,
   useSettingsValue,
 } from "@renderer/features/settings/settings-value";
+import { useSkills } from "@renderer/features/settings/use-skills";
 import { useAgents } from "@renderer/state/agents";
-import { usePlugins } from "@renderer/state/plugins";
 import type { AgentStatus, AuthState, Platform } from "@shared/agents";
 
 const AUTH_TONE: Record<AuthState, Tone> = {
@@ -128,7 +128,7 @@ function DrawerBody({ agent, platform }: { agent: AgentStatus; platform: Platfor
       <div className="flex flex-col divide-y">
         <InstallationSection agent={agent} platform={platform} />
         <AuthenticationSection agent={agent} />
-        <PluginSection agent={agent} />
+        <SkillsSection agent={agent} />
         <McpSection agent={agent} />
         <AdvancedSection agent={agent} />
       </div>
@@ -297,53 +297,31 @@ function AuthenticationSection({ agent }: { agent: AgentStatus }) {
 
 /* -------------------------------------------------------------------------- */
 
-function PluginSection({ agent }: { agent: AgentStatus }) {
-  const status = usePlugins((state) => state.statuses[agent.id]);
-  const installing = usePlugins((state) => state.installing === agent.id);
-  const install = usePlugins((state) => state.install);
-  const load = usePlugins((state) => state.load);
-
-  useEffect(() => {
-    if (!status) {
-      void load();
-    }
-  }, [status, load]);
-
-  const state = status?.state ?? "not-installed";
-  const tone: Tone =
-    state === "installed" ? "ok" : state === "update-available" ? "warn" : "idle";
-  const label =
-    state === "installed"
-      ? `Installed ${status?.installedVersion ?? ""}`.trim()
-      : state === "update-available"
-        ? "Update available"
-        : state === "unsupported"
-          ? "No plugin system"
-          : "Not installed";
+function SkillsSection({ agent }: { agent: AgentStatus }) {
+  const skills = useSkills();
+  const count = skills?.skills.length ?? 0;
+  const native = agent.skillRoots === "native";
 
   return (
-    <Section action={<StatusLabel tone={tone}>{label}</StatusLabel>} title="Plugins">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm">Hardcore plugin</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            The cad skills and hardcore-app-use, installed where {agent.name} looks for them, and
-            versioned with this app.
-          </p>
-        </div>
-        <Button
-          className="h-8 gap-1.5"
-          disabled={installing || state === "unsupported"}
-          onClick={() => void install(agent.id)}
-          size="sm"
-          variant={state === "installed" ? "secondary" : "default"}
-        >
-          {installing ? <Loader2 className="size-3.5 animate-spin" /> : null}
-          {state === "update-available" ? "Update" : state === "installed" ? "Reinstall" : "Install"}
-        </Button>
-      </div>
-      {status?.message ? (
-        <p className="mt-2 text-xs text-muted-foreground">{status.message}</p>
+    <Section
+      action={<StatusLabel tone={count > 0 ? "ok" : "idle"}>{count > 0 ? `${count} skills` : "—"}</StatusLabel>}
+      title="Skills"
+    >
+      <p className="text-xs text-muted-foreground">
+        {count > 0
+          ? `Every session in Hardcore is handed the app's skills — the cad, drawing, mesh and
+             robot-description skills plus hardcore-app-use — as an extra directory,
+             ${
+               native
+                 ? `which ${agent.name} loads by itself.`
+                 : `and, because ${agent.name} does not load one, a line in the first prompt saying where they are. The app's MCP server can read them too.`
+             } Nothing is installed into ${agent.name}'s own configuration.`
+          : `Hardcore hands its skills to every session. This build has none composed yet — run \`npm run build\`.`}
+      </p>
+      {skills?.root ? (
+        <p className="mt-2 truncate text-[11px] text-muted-foreground" title={skills.root}>
+          <span data-selectable>{skills.root}</span>
+        </p>
       ) : null}
     </Section>
   );
@@ -352,13 +330,12 @@ function PluginSection({ agent }: { agent: AgentStatus }) {
 /* -------------------------------------------------------------------------- */
 
 function McpSection({ agent }: { agent: AgentStatus }) {
-  const count = usePlugins((state) => state.statuses[agent.id]?.mcpServers ?? 0);
   return (
     <Section title="MCP servers">
       <p className="text-xs text-muted-foreground">
-        {count === 0
-          ? `None configured for ${agent.name}. Every Hardcore session also gets the app's own server, which is how an agent opens a file in the explorer.`
-          : `${count} configured for ${agent.name}, plus Hardcore's own.`}
+        Every Hardcore session gets the app&apos;s own server — how an agent opens a file in the
+        explorer, attaches a snapshot, or reads a skill — beside whatever {agent.name} is
+        configured with itself. That configuration is {agent.name}&apos;s; this app does not touch it.
       </p>
     </Section>
   );

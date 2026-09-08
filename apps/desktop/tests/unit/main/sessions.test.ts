@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -79,8 +79,7 @@ const fakeProvider: AgentProvider = {
   authProbe: { files: [], envVars: [], checkArgs: null },
   launch: { command: process.execPath, args: [FAKE_AGENT], env: {} },
   capabilities: { subagents: true, terminals: true, modes: true, configOptions: true, loadSession: true },
-  skillsDir: null,
-  pluginInstall: null,
+  skillRoots: "preamble",
 };
 
 const managers: SessionManager[] = [];
@@ -438,6 +437,63 @@ describe("SessionManager", () => {
           (entry.payload as { error: string | null }).error?.includes("no longer exists"),
       ),
     ).toBe(true);
+  });
+});
+
+/**
+ * What the app gives a session: the skills root in `session/new`, the preamble
+ * only to an agent that will not read one, and the runtime's `cadgen` in front
+ * of the adapter's PATH. Read back out of the fake agent's record file
+ * (`FAKE_AGENT_RECORD`), which is the wire as the agent received it.
+ */
+describe("what a session is given", () => {
+  async function recorded(agentId: string, deps: Partial<SessionManagerDeps> = {}) {
+    const file = path.join(await mkdtemp(path.join(os.tmpdir(), "hardcore-record-")), "frames.jsonl");
+    const { manager, cwd } = await setup({
+      launchOverride: () => ({ ...fakeProvider.launch, env: { FAKE_AGENT_RECORD: file } }),
+      skills: { root: () => "/data/skills/1.2.3", preamble: () => "SKILLS: /data/skills/1.2.3" },
+      runtimePath: () => ["/app/bin", "/app/runtime/python/bin"],
+      ...deps,
+    });
+    const session = await manager.create({ projectId: "p1", agentId, cwd, gitMode: "none" });
+    await manager.prompt(session.id, [{ type: "text", text: "first" }]);
+    await manager.prompt(session.id, [{ type: "text", text: "second" }]);
+    const lines = (await readFile(file, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as { kind: string; params: Record<string, unknown> });
+    return { manager, session, lines };
+  }
+
+  it("names the skills root in session/new and puts the runtime in front of PATH", async () => {
+    const { lines } = await recorded("claude-code");
+    const params = lines.find((line) => line.kind === "session/new")!.params;
+    expect(params.additionalDirectories).toEqual(["/data/skills/1.2.3"]);
+    expect(params._meta).toMatchObject({ additionalRoots: ["/data/skills/1.2.3"] });
+    // The adapter's own environment: what every command in the session inherits.
+    expect(String(params.PATH).split(path.delimiter).slice(0, 2)).toEqual(["/app/bin", "/app/runtime/python/bin"]);
+  });
+
+  it("leaves PATH alone when there is no runtime", async () => {
+    const { lines } = await recorded("claude-code", { runtimePath: () => [] });
+    const params = lines.find((line) => line.kind === "session/new")!.params;
+    expect(String(params.PATH)).toBe(process.env.PATH ?? "");
+  });
+
+  it("sends no preamble to an agent that loads the root itself", async () => {
+    // claude-code is `skillRoots: "native"` in the registry.
+    const { lines } = await recorded("claude-code");
+    const prompts = lines.filter((line) => line.kind === "prompt");
+    expect(prompts).toHaveLength(2);
+    expect(JSON.stringify(prompts[0]!.params.prompt)).not.toContain("SKILLS:");
+  });
+
+  it("sends it once to an agent that does not, and not on the turn after", async () => {
+    // gemini-cli is `skillRoots: "preamble"`.
+    const { lines } = await recorded("gemini-cli");
+    const prompts = lines.filter((line) => line.kind === "prompt");
+    expect(prompts[0]!.params.prompt).toEqual([
+      { type: "text", text: "SKILLS: /data/skills/1.2.3" },
+      { type: "text", text: "first" },
+    ]);
+    expect(prompts[1]!.params.prompt).toEqual([{ type: "text", text: "second" }]);
   });
 });
 

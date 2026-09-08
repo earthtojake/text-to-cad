@@ -9,6 +9,7 @@ import {
   bundledPaths,
   findCheckout,
   readBundleMarker,
+  runtimeBinDir,
   runtimeLogPath,
   runtimeTarget,
   type ExecResult,
@@ -198,6 +199,60 @@ describe("resolution order", () => {
       python: bundledPaths(m.resources, "win32", "x64").python,
       source: "bundled",
     });
+  });
+});
+
+describe("what a session's PATH gets", () => {
+  it("names the directory an interpreter's console scripts live in, per platform", () => {
+    expect(runtimeBinDir("/R/runtime/mac-arm64/python/bin/python3", "darwin")).toBe("/R/runtime/mac-arm64/python/bin");
+    expect(runtimeBinDir("/proj/.venv/bin/python", "linux")).toBe("/proj/.venv/bin");
+    // Windows: pip writes them to Scripts/ beside the interpreter…
+    expect(runtimeBinDir("R:\\runtime\\win-x64\\python\\python.exe", "win32")).toBe(
+      path.win32.join("R:\\runtime\\win-x64\\python", "Scripts"),
+    );
+    // …except in a venv, where the interpreter is already in Scripts/.
+    expect(runtimeBinDir("R:\\proj\\.venv\\Scripts\\python.exe", "win32")).toBe("R:\\proj\\.venv\\Scripts");
+  });
+
+  it("is the checkout venv's bin when pip put a cadgen there", () => {
+    const fake = machine({ checkout: true, venv: true });
+    const venvBin = path.join(findCheckout(fake.appRoot)!, ".venv", "bin");
+    fs.writeFileSync(path.join(venvBin, "cadgen"), "#!/bin/sh\n");
+    expect(new CadRuntime(fake.host).sessionPath()).toEqual([venvBin]);
+  });
+
+  /**
+   * The bundled runtime is a `pip install --target`, and the bundler prunes
+   * the console scripts pip wrote there — so `cadgen` has to be written for
+   * it, or a packaged app's session would have `python` and no `cadgen`.
+   */
+  it("is a launcher the app writes, plus the interpreter's own bin, when there is no cadgen script", () => {
+    const fake = machine({ bundle: true });
+    const runtime = new CadRuntime(fake.host);
+    const bundled = bundledPaths(fake.resources, "darwin", "arm64");
+
+    const dirs = runtime.sessionPath();
+
+    expect(dirs).toEqual([path.join(fake.userData, "bin"), path.dirname(bundled.python)]);
+    const launcher = path.join(fake.userData, "bin", "cadgen");
+    expect(fs.readFileSync(launcher, "utf8")).toBe(`#!/bin/sh\nexec "${bundled.python}" -m cadgen.cli "$@"\n`);
+    expect(fs.statSync(launcher).mode & 0o111).toBeTruthy();
+
+    // Asked again with nothing changed: the same answer, the same file.
+    const before = fs.statSync(launcher).mtimeMs;
+    expect(runtime.sessionPath()).toEqual(dirs);
+    expect(fs.statSync(launcher).mtimeMs).toBe(before);
+  });
+
+  it("writes a .cmd launcher on Windows", () => {
+    const fake = machine({ bundle: true, platform: "win32", arch: "x64" });
+    const dirs = new CadRuntime(fake.host).sessionPath();
+    expect(dirs[0]).toBe(path.join(fake.userData, "bin"));
+    expect(fs.readFileSync(path.join(fake.userData, "bin", "cadgen.cmd"), "utf8")).toContain("-m cadgen.cli %*");
+  });
+
+  it("is empty when there is no runtime at all", () => {
+    expect(new CadRuntime(machine({}).host).sessionPath()).toEqual([]);
   });
 });
 

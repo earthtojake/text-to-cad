@@ -8,6 +8,10 @@
  *       [--record tests/fixtures/acp/<name>.jsonl]   write every wire frame
  *       [--approval ask|approve-for-me]              default approve-for-me
  *       [--load <acpSessionId>]                      session/load instead of session/new
+ *       [--skills <dir>]                             hand a skills root to the session,
+ *                                                    the way the app does (plan §8): the
+ *                                                    dir is sent as additionalDirectories
+ *                                                    and _meta.additionalRoots
  *       [--json]                                     print raw updates as JSON
  *
  * Prints every session update as it arrives, the permission requests it
@@ -32,13 +36,13 @@ function usage(message) {
     console.error(message);
   }
   console.error(
-    'usage: acp-harness.mjs <agentId> <cwd> "<prompt>" [...] [--record file] [--approval ask|approve-for-me] [--load id] [--json]',
+    'usage: acp-harness.mjs <agentId> <cwd> "<prompt>" [...] [--record file] [--approval ask|approve-for-me] [--load id] [--skills dir] [--json]',
   );
   process.exit(2);
 }
 
 const positional = [];
-const flags = { record: null, approval: "approve-for-me", load: null, json: false };
+const flags = { record: null, approval: "approve-for-me", load: null, skills: null, json: false };
 for (let i = 2; i < process.argv.length; i += 1) {
   const arg = process.argv[i];
   if (arg === "--record") {
@@ -47,6 +51,8 @@ for (let i = 2; i < process.argv.length; i += 1) {
     flags.approval = process.argv[++i];
   } else if (arg === "--load") {
     flags.load = process.argv[++i];
+  } else if (arg === "--skills") {
+    flags.skills = path.resolve(process.argv[++i]);
   } else if (arg === "--json") {
     flags.json = true;
   } else if (arg.startsWith("--")) {
@@ -114,6 +120,7 @@ try {
     launch: provider.launch,
     env,
     cwd,
+    skillsRoot: flags.skills,
     spawnTerminal: acp.spawnProcessTerminal,
     approvalMode: flags.approval,
     clientVersion: "harness",

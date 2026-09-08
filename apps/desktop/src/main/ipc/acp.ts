@@ -15,7 +15,7 @@ import type { ConfigOption } from "../../shared/acp/types";
 import { spawnPtyTerminal } from "../acp/pty-backend";
 import { AgentOptionStore } from "../acp/agent-options";
 import { SessionManager } from "../acp/sessions";
-import { forgetSession, mcpServersFor } from "../cad";
+import { forgetSession, mcpServersFor, sessionPreamble, sessionRuntimePath, skillsRoot } from "../cad";
 import { agentOptions as agentOptionsRepo, projects, sessions, settings } from "../db/repositories";
 import { head } from "../projects/git";
 import { releaseWorkspace, resolveWorkspace } from "../projects/workspace";
@@ -67,6 +67,11 @@ export const sessionManager: SessionManager = new SessionManager({
   // Every session gets the Hardcore MCP server, with a token that names it.
   mcpServers: mcpServersFor,
   forgetProbe: (probeId) => forgetSession(probeId, null),
+  // …the app's skills as an additional directory, and the preamble for an
+  // agent that will not read one (src/main/cad/skills.ts)…
+  skills: { root: skillsRoot, preamble: sessionPreamble },
+  // …and the bundled runtime's `cadgen` and `python` in front of its PATH.
+  runtimePath: sessionRuntimePath,
   agentOptions: {
     defaults: (agentId) => agentOptions.defaults(agentId),
     remember: (agentId, options) => agentOptions.remember(agentId, options),
