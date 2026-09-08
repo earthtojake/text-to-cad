@@ -86,9 +86,12 @@ function assertCoherent(label, component, meshData, bundle) {
   for (const ord of sideOrds) {
     assert.ok(componentEdgeOrds.has(ord), `${label}: sideOrd ${ord} is a real edge of this tessellation`);
   }
-  const lineSegments = meshData.cadEdgeSegments.length / 6;
+  const lineSegments = meshData.cadEdgeIndices.length / 2;
   const rangeSegments = meshData.cadEdgeClassRanges.reduce((sum, range) => sum + range.segmentCount, 0);
+  const rangePoints = meshData.cadEdgeClassRanges.reduce((sum, range) => sum + range.pointCount, 0);
   assert.equal(rangeSegments, lineSegments, `${label}: class ranges tile the CAD edge segments`);
+  assert.equal(rangePoints, meshData.cadEdgePositions.length / 3, `${label}: class ranges tile the CAD edge points`);
+  assert.ok(Array.from(meshData.cadEdgeIndices).every((i) => i < rangePoints), `${label}: edge indices address edge points`);
   const polylineSegments = component.edges.reduce(
     (sum, edge) => sum + (edge.visibilityClass === "none" ? 0 : Math.max(0, edge.polyline.length / 3 - 1)),
     0,
@@ -135,7 +138,7 @@ for (const fixture of FIXTURES) {
     const bundleHit = buildSelectorBundleFromSurf(index, floats, { component: decoded.component });
     assertCoherent("cache-hit", decoded.component, meshHit, bundleHit);
     const meshFresh = buildMeshDataFromSurf(index, floats, { component: fresh });
-    for (const key of ["vertices", "indices", "normals", "cadEdgeSegments"]) {
+    for (const key of ["vertices", "indices", "normals", "cadEdgePositions", "cadEdgeIndices"]) {
       assertTypedArraysEqual(`cache-hit meshData.${key}`, meshHit[key], meshFresh[key]);
     }
     assert.deepEqual(meshHit.cadEdgeClassRanges, meshFresh.cadEdgeClassRanges, "cache-hit class ranges");
@@ -160,7 +163,7 @@ for (const fixture of FIXTURES) {
     assert.ok(surrogate, "v3 entry yields a surrogate index");
     const meshSurrogate = buildMeshDataFromSurf(surrogate, null, { component: decoded.component });
     const meshReal = buildMeshDataFromSurf(index, floats, { component: fresh });
-    for (const key of ["vertices", "indices", "cadEdgeSegments"]) {
+    for (const key of ["vertices", "indices", "cadEdgePositions", "cadEdgeIndices"]) {
       assertTypedArraysEqual(`surrogate meshData.${key}`, meshSurrogate[key], meshReal[key]);
     }
   });

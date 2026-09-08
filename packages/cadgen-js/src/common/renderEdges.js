@@ -427,55 +427,26 @@ export function createBasicLineSegments(context = {}, positions, {
   return line;
 }
 
-// Wraps an already-built line geometry — shared by every occurrence of one
-// component — in a LineSegments2 when it is a LineSegmentsGeometry and the
-// context provides the line classes, else in a basic LineSegments. Material
-// registration and disposal match the positions builders above; the geometry
-// belongs to the caller's cache and is not disposed with the object.
-export function createLineSegmentsForGeometry(context = {}, geometry, {
-  color,
-  opacity = 1,
-  lineWidth = 1,
-  renderOrder = 3,
+// One GL_LINES object per record over a shared per-component geometry whose
+// `color` attribute carries each edge class's linear RGBA (see
+// cadScene.js cadEdgeLineGeometry). The material multiplies that by white at
+// unit opacity until a highlight or dim pass overrides it; the geometry
+// belongs to the component cache and is not disposed with the object.
+export function createCadEdgeLineSegments(THREE, geometry, {
   depthTest = true,
-  depthWrite = false,
-  depthBias = DEFAULT_LINE_DEPTH_BIAS
-} = {}, materials = null) {
-  if (!geometry) {
-    return null;
-  }
-  if (geometry.isLineSegmentsGeometry && context.LineSegments2 && context.LineMaterial) {
-    const lineMaterial = createScreenSpaceLineMaterial(context.LineMaterial, {
-      color,
-      opacity,
-      lineWidth,
-      depthTest,
-      depthWrite,
-      depthBias
-    });
-    registerLineMaterial(context, lineMaterial, materials);
-    const line = new context.LineSegments2(geometry, lineMaterial);
-    line.renderOrder = renderOrder;
-    line.frustumCulled = false;
-    line.userData.beforeDispose = () => {
-      unregisterLineMaterial(context, lineMaterial, materials);
-    };
-    line.userData.disposeGeometry = false;
-    line.userData.disposeMaterial = true;
-    return line;
-  }
-  const THREE = context.THREE;
-  if (!THREE || geometry.isLineSegmentsGeometry) {
-    return null;
-  }
+  renderOrder = 3,
+  depthBias = TOPOLOGY_LINE_DEPTH_BIAS
+} = {}) {
   const material = new THREE.LineBasicMaterial({
-    color,
-    transparent: Number(opacity) < 0.999,
-    opacity: clamp(Number(opacity) || 0, 0, 1),
+    color: "#ffffff",
+    vertexColors: true,
+    transparent: true,
+    opacity: 1,
     depthTest,
-    depthWrite,
+    depthWrite: false,
     toneMapped: false
   });
+  material.userData.cadEdgeVertexColors = true;
   applyLineDepthBias(material, depthBias);
   const line = new THREE.LineSegments(geometry, material);
   line.renderOrder = renderOrder;
@@ -485,24 +456,50 @@ export function createLineSegmentsForGeometry(context = {}, geometry, {
   return line;
 }
 
-// A record's edge materials: the GLB-era derived line and the wireframe carry
-// one, CAD edge lines carry one per edge class. Class materials remember the
-// colour and opacity they were created with (userData.cadEdgeBaseColor /
-// cadEdgeBaseOpacity) so a highlight pass can override every class and a later
-// pass restore each one without re-reading the theme. `opacityFor` receives
-// the class base opacity (null for a material without one).
+function setLineMaterialVertexColors(material, enabled) {
+  if (material.vertexColors !== enabled) {
+    material.vertexColors = enabled;
+    material.needsUpdate = true;
+  }
+}
+
+// A record's edge materials: the GLB-era derived line and the wireframe carry a
+// plain material (its base colour/opacity in userData.cadEdgeBaseColor /
+// cadEdgeBaseOpacity when set), CAD edge lines carry one vertex-coloured
+// material whose class styles live in the geometry. A uniform `opacity`
+// (highlight, dim) overrides every class with `color`; otherwise
+// `opacityScale` scales the class (or base) opacities and `color`, when given,
+// recolours them (an effect edgeColor).
 export function syncRecordEdgeMaterials(record, {
-  overrideColor = null,
+  color = null,
+  opacity = null,
+  opacityScale = 1,
   fallbackColor,
-  opacityFor
+  fallbackOpacity = 1
 }) {
   for (const material of Array.isArray(record?.edgeMaterials) ? record.edgeMaterials : []) {
     if (!material) {
       continue;
     }
-    material.color?.set?.(overrideColor || material.userData?.cadEdgeBaseColor || fallbackColor);
-    const baseOpacity = Number(material.userData?.cadEdgeBaseOpacity);
-    syncLineMaterialOpacity(material, opacityFor(Number.isFinite(baseOpacity) ? baseOpacity : null));
+    const vertexColored = material.userData?.cadEdgeVertexColors === true;
+    if (vertexColored && opacity === null && !color) {
+      setLineMaterialVertexColors(material, true);
+      material.color?.set?.("#ffffff");
+      material.opacity = clamp(Number(opacityScale) || 0, 0, 1);
+      material.transparent = true;
+      material.depthWrite = false;
+      continue;
+    }
+    if (vertexColored) {
+      setLineMaterialVertexColors(material, false);
+    }
+    material.color?.set?.(color || material.userData?.cadEdgeBaseColor || fallbackColor);
+    // A recoloured vertex-coloured line has lost its per-class opacities; the
+    // scale alone applies. Plain lines scale their base opacity.
+    const baseOpacity = vertexColored ? 1 : Number(material.userData?.cadEdgeBaseOpacity);
+    syncLineMaterialOpacity(material, opacity !== null
+      ? opacity
+      : (Number.isFinite(baseOpacity) ? baseOpacity : fallbackOpacity) * opacityScale);
   }
 }
 

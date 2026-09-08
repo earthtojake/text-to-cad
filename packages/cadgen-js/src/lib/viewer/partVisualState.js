@@ -268,15 +268,11 @@ export function applyPartVisualState(THREE, records, {
     }
 
     const nextEdgeColor = highlightEdge || effectEdgeColor || baseEdgeColor;
-    syncRecordEdgeMaterials(record, {
-      overrideColor: highlightEdge || effectEdgeColor ? nextEdgeColor : null,
-      fallbackColor: baseEdgeColor,
-      opacityFor: (classOpacity) => isSelected || isHovered
-        ? highlightedEdgeOpacity
-        : isHidden || isDimmed
-          ? nextSurfaceOpacity
-          : (classOpacity ?? baseEdgeOpacity) * effectEdgeOpacity
-    });
+    syncRecordEdgeMaterials(record, isSelected || isHovered
+      ? { color: nextEdgeColor, opacity: highlightedEdgeOpacity, fallbackColor: baseEdgeColor }
+      : isHidden || isDimmed
+        ? { color: effectEdgeColor, opacity: nextSurfaceOpacity, fallbackColor: baseEdgeColor }
+        : { color: effectEdgeColor, opacityScale: effectEdgeOpacity, fallbackColor: baseEdgeColor, fallbackOpacity: baseEdgeOpacity });
 
     // Occlusion ghost: only a SELECTED part shows its see-through ghost, tinted
     // to the full selection color so it reads as "this is behind something"

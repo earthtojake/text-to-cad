@@ -11,8 +11,8 @@ import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import {
   TOPOLOGY_LINE_DEPTH_BIAS,
   applyLineDepthBias,
+  createCadEdgeLineSegments,
   createDisplayEdgeObject,
-  createLineSegmentsForGeometry,
   createTopologyDisplayEdgeObject,
   lineSegmentPositionsFromGeometry,
   syncLineMaterialOpacity,
@@ -523,58 +523,55 @@ test("line material opacity helper clamps transparency consistently", () => {
   assert.equal(material.transparent, false);
 });
 
-test("line segments over a shared geometry pick the screen-space or basic material and keep the geometry", () => {
-  const materials = new Set();
-  const context = edgeContext(materials);
-  const shared = new LineSegmentsGeometry();
-  shared.setPositions([0, 0, 0, 1, 0, 0]);
-  const line = createLineSegmentsForGeometry(context, shared, {
-    color: "#123456",
-    opacity: 0.5,
-    lineWidth: 1.15,
-    depthTest: false,
-    depthBias: topologyLineDepthBiasForWidth(1.15, { visibilityClass: "tangent" })
-  }, materials);
-  assert.equal(line instanceof LineSegments2, true);
-  assert.equal(line.geometry, shared);
+test("CAD edge line segments wrap a shared vertex-coloured geometry", () => {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0]), 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(new Uint16Array(8), 4, true));
+  geometry.setIndex(new THREE.BufferAttribute(new Uint32Array([0, 1]), 1));
+  const line = createCadEdgeLineSegments(THREE, geometry, { depthTest: false, depthBias: TOPOLOGY_LINE_DEPTH_BIAS });
+  assert.equal(line.isLineSegments, true);
+  assert.equal(line.geometry, geometry);
   assert.equal(line.userData.disposeGeometry, false);
+  assert.equal(line.material.vertexColors, true);
+  assert.equal(line.material.transparent, true);
   assert.equal(line.material.depthTest, false);
-  assert.equal(line.material.linewidth, 1.15);
-  assert.equal(line.material.polygonOffsetUnits, -6);
-  assert.equal(materials.has(line.material), true);
-  line.userData.beforeDispose(line);
-  assert.equal(materials.has(line.material), false);
-
-  const basic = createLineSegmentsForGeometry({ THREE }, twoPointGeometry(), { color: "#123456", opacity: 1 });
-  assert.equal(basic instanceof THREE.LineSegments, true);
-  assert.equal(basic.material.transparent, false);
-  assert.equal(createLineSegmentsForGeometry({ THREE }, shared, {}), null, "a LineSegmentsGeometry needs the line classes");
-  assert.equal(createLineSegmentsForGeometry(context, null, {}), null);
+  assert.equal(line.material.polygonOffsetUnits, -5);
+  assert.equal(line.material.userData.cadEdgeVertexColors, true);
 });
 
-test("record edge materials override every class or restore each class base style", () => {
+test("record edge materials: uniform overrides, scaled restores, per material kind", () => {
   const plain = new THREE.LineBasicMaterial({ color: "#000000", transparent: true, opacity: 1 });
-  const feature = new THREE.LineBasicMaterial({ color: "#000000", transparent: true, opacity: 1 });
-  feature.userData.cadEdgeBaseColor = "#111111";
-  feature.userData.cadEdgeBaseOpacity = 0.25;
-  const record = { edgeMaterials: [plain, feature] };
-  const seen = [];
-  syncRecordEdgeMaterials(record, {
-    overrideColor: null,
-    fallbackColor: "#abcdef",
-    opacityFor: (classOpacity) => {
-      seen.push(classOpacity);
-      return (classOpacity ?? 0.84) * 0.5;
-    }
-  });
-  assert.deepEqual(seen, [null, 0.25]);
+  const based = new THREE.LineBasicMaterial({ color: "#000000", transparent: true, opacity: 1 });
+  based.userData.cadEdgeBaseColor = "#111111";
+  based.userData.cadEdgeBaseOpacity = 0.25;
+  const classed = createCadEdgeLineSegments(THREE, new THREE.BufferGeometry()).material;
+  const record = { edgeMaterials: [plain, based, classed] };
+
+  // Scaled pass (no highlight): plain takes the fallback, based its base style,
+  // the vertex-coloured material keeps its classes and scales them.
+  syncRecordEdgeMaterials(record, { opacityScale: 0.5, fallbackColor: "#abcdef", fallbackOpacity: 0.84 });
   assert.equal(plain.color.getHexString(), "abcdef");
-  assert.equal(feature.color.getHexString(), "111111");
   assert.equal(plain.opacity, 0.42);
-  assert.equal(feature.opacity, 0.125);
-  syncRecordEdgeMaterials(record, { overrideColor: "#ff0000", fallbackColor: "#abcdef", opacityFor: () => 1 });
-  assert.equal(feature.color.getHexString(), "ff0000");
-  assert.equal(feature.opacity, 1);
-  assert.equal(feature.transparent, false);
-  syncRecordEdgeMaterials({ edgeMaterials: null }, { fallbackColor: "#abcdef", opacityFor: () => 1 });
+  assert.equal(based.color.getHexString(), "111111");
+  assert.equal(based.opacity, 0.125);
+  assert.equal(classed.vertexColors, true);
+  assert.equal(classed.color.getHexString(), "ffffff");
+  assert.equal(classed.opacity, 0.5);
+  assert.equal(classed.transparent, true);
+
+  // Uniform pass (highlight): every material takes the colour and opacity.
+  syncRecordEdgeMaterials(record, { color: "#ff0000", opacity: 1, fallbackColor: "#abcdef" });
+  for (const material of record.edgeMaterials) {
+    assert.equal(material.color.getHexString(), "ff0000");
+    assert.equal(material.opacity, 1);
+  }
+  assert.equal(classed.vertexColors, false);
+
+  // An effect edge colour in a scaled pass recolours the classes too.
+  syncRecordEdgeMaterials(record, { color: "#00ff00", opacityScale: 0.5, fallbackColor: "#abcdef", fallbackOpacity: 0.84 });
+  assert.equal(classed.vertexColors, false);
+  assert.equal(classed.color.getHexString(), "00ff00");
+  assert.equal(classed.opacity, 0.5);
+  assert.equal(based.opacity, 0.125);
+  syncRecordEdgeMaterials({ edgeMaterials: null }, { fallbackColor: "#abcdef" });
 });

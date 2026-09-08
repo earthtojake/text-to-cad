@@ -277,77 +277,39 @@ test("occlusion ghost is built lazily and only while the part is selected", () =
   assert.equal(children.length, 1);
 });
 
-test("part visual state highlights every CAD edge class and restores each class style", () => {
+test("part visual state overrides the vertex-coloured CAD edge line on highlight and restores the classes", () => {
   const record = createRecord("part", {
     baseOpacity: 1
   });
-  const classMaterial = (color, opacity) => {
-    const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity });
-    material.userData.cadEdgeBaseColor = color;
-    material.userData.cadEdgeBaseOpacity = opacity;
-    return material;
-  };
-  const feature = classMaterial("#111111", 0.25);
-  const tangent = classMaterial("#224466", 0.15);
-  record.edgeMaterials = [feature, tangent];
-
-  applyPartVisualState(THREE, [record], {
-    viewerTheme: {
-      edge: "#111111",
-      edgeOpacity: 0.4
-    },
-    edgeSettings: {
-      highlightColor: "#8dc5ff",
-      highlightOpacity: 0.9
-    },
-    hiddenPartIds: [],
-    hoveredPartId: "",
-    focusedPartId: [],
-    selectedPartIds: ["part"],
-    showEdges: true
-  });
-
-  assert.equal(feature.color.getHexString(), "8dc5ff");
-  assert.equal(tangent.color.getHexString(), "8dc5ff");
-  assertNear(feature.opacity, 0.9, "selected feature edge opacity");
-  assertNear(tangent.opacity, 0.9, "selected tangent edge opacity");
-
-  applyPartVisualState(THREE, [record], {
-    viewerTheme: {
-      edge: "#111111",
-      edgeOpacity: 0.4
-    },
-    edgeSettings: {
-      highlightColor: "#8dc5ff",
-      highlightOpacity: 0.9
-    },
-    hiddenPartIds: [],
-    hoveredPartId: "",
-    focusedPartId: [],
-    selectedPartIds: [],
-    showEdges: true
-  });
-
-  assert.equal(feature.color.getHexString(), "111111");
-  assert.equal(tangent.color.getHexString(), "224466");
-  assertNear(feature.opacity, 0.25, "restored feature edge opacity");
-  assertNear(tangent.opacity, 0.15, "restored tangent edge opacity");
-
-  // An effect edge colour recolours every class; the class opacities scale by it.
-  record.effectStyle = { edgeColor: "#ff0000", edgeOpacity: 0.5 };
-  applyPartVisualState(THREE, [record], {
+  const classed = new THREE.LineBasicMaterial({ color: "#ffffff", vertexColors: true, transparent: true, opacity: 1 });
+  classed.userData.cadEdgeVertexColors = true;
+  record.edgeMaterials = [classed];
+  const state = (selectedPartIds) => ({
     viewerTheme: { edge: "#111111", edgeOpacity: 0.4 },
-    edgeSettings: {},
+    edgeSettings: { highlightColor: "#8dc5ff", highlightOpacity: 0.9 },
     hiddenPartIds: [],
     hoveredPartId: "",
     focusedPartId: [],
-    selectedPartIds: [],
+    selectedPartIds,
     showEdges: true
   });
-  assert.equal(feature.color.getHexString(), "ff0000");
-  assert.equal(tangent.color.getHexString(), "ff0000");
-  assertNear(feature.opacity, 0.125, "effect-scaled feature edge opacity");
-  assertNear(tangent.opacity, 0.075, "effect-scaled tangent edge opacity");
+
+  applyPartVisualState(THREE, [record], state(["part"]));
+  assert.equal(classed.vertexColors, false, "the highlight colour replaces the class colours");
+  assert.equal(classed.color.getHexString(), "8dc5ff");
+  assertNear(classed.opacity, 0.9, "selected edge opacity");
+
+  applyPartVisualState(THREE, [record], state([]));
+  assert.equal(classed.vertexColors, true, "the class colours come back");
+  assert.equal(classed.color.getHexString(), "ffffff");
+  assertNear(classed.opacity, 1, "class opacities unscaled");
+
+  // An effect edge colour recolours every class; the effect edge opacity scales them.
+  record.effectStyle = { edgeColor: "#ff0000", edgeOpacity: 0.5 };
+  applyPartVisualState(THREE, [record], state([]));
+  assert.equal(classed.vertexColors, false);
+  assert.equal(classed.color.getHexString(), "ff0000");
+  assertNear(classed.opacity, 0.5, "effect-scaled edge opacity");
 });
 
 test("part visual state hides hidden records and ghosts dimmed records", () => {

@@ -89,14 +89,21 @@ Scene geometry is the tessellator's INDEXED output: a surf component's
 meshData shares the tessellation's vertex, normal and index buffers by
 reference (a decoded `.tess` cache entry is copied out of its one entry
 buffer) and is never expanded per triangle corner. CAD edges are not a
-surface shader: `surfMeshData.js` emits per-class line segments
-(`cadEdgeSegments` + `cadEdgeClassRanges`, from the same tessellation's
-boundary polylines) and `cadScene.js` draws them through the line pass as one
-`LineSegments2` per record and edge class, so `display.edges.classes` styles
-colour, opacity and thickness per class and the lines ride the record's
+surface shader: `surfMeshData.js` emits indexed line segments
+(`cadEdgePositions` + `cadEdgeIndices` + `cadEdgeClassRanges`, from the same
+tessellation's boundary polylines, ~1.5 bytes per surface triangle) and
+`cadScene.js` draws them as ONE `GL_LINES` object per record over ONE shared
+per-component geometry whose vertex colours carry each class's colour and
+opacity — three GPU buffers per component beside the surface's three, one
+extra draw call per occurrence. `display.edges.classes` styles colour and
+opacity per class; thickness is an on/off switch (a class with thickness 0 is
+not drawn), since `GL_LINES` are one pixel wide. The lines ride the record's
 transform, visibility, highlight and tube deformation exactly like the
-GLB-era derived edges. One line geometry per component and class is shared by
-every occurrence. Effects that change vertex positions or normals acquire
+GLB-era derived edges. Geometry built from a shared component is cached on
+the component object (`part.sourceMesh`), never on the composed package
+meshData: a package is re-composed on every progressive publish and LOD swap,
+and every occurrence, publish and swap reuses the one upload. Effects that
+change vertex positions or normals acquire
 writable attributes before deforming them; material refreshes leave component
 data unchanged. This keeps large assemblies from duplicating these buffers for
 display. Assemblies keep geometry in their component buffers; they allocate no

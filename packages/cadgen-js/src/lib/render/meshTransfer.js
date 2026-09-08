@@ -6,7 +6,8 @@ export const MESH_DATA_ARRAY_FIELDS = Object.freeze([
   "normals",
   "colors",
   "edge_indices",
-  "cadEdgeSegments",
+  "cadEdgePositions",
+  "cadEdgeIndices",
   "guide_line_segments"
 ]);
 

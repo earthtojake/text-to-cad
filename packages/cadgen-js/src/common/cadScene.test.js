@@ -393,28 +393,30 @@ function surfComponentMeshData() {
     vertices: new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0]),
     indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
     normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]),
-    cadEdgeSegments: new Float32Array([
-      0, 0, 0, 1, 0, 0,
-      1, 0, 0, 1, 1, 0,
-      1, 1, 0, 0, 1, 0,
+    // Three polylines: a 4-point feature outline, a 2-point tangent edge and a
+    // 2-point degenerate edge (points 0-3, 4-5, 6-7).
+    cadEdgePositions: new Float32Array([
+      0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0,
       0, 1, 0, 0, 0, 0,
       0, 0, 0, 1, 1, 0
     ]),
+    cadEdgeIndices: new Uint32Array([0, 1, 1, 2, 2, 3, 4, 5, 6, 7]),
     cadEdgeClassRanges: [
-      { classId: "feature", segmentStart: 0, segmentCount: 3 },
-      { classId: "tangent", segmentStart: 3, segmentCount: 1 },
-      { classId: "degenerate", segmentStart: 4, segmentCount: 1 }
+      { classId: "feature", pointStart: 0, pointCount: 4, segmentStart: 0, segmentCount: 3 },
+      { classId: "tangent", pointStart: 4, pointCount: 2, segmentStart: 3, segmentCount: 1 },
+      { classId: "degenerate", pointStart: 6, pointCount: 2, segmentStart: 4, segmentCount: 1 }
     ],
     bounds: { min: [0, 0, 0], max: [1, 1, 0] },
     parts: [{ id: "surf:0", vertexOffset: 0, vertexCount: 4, triangleOffset: 0, triangleCount: 2, bounds: { min: [0, 0, 0], max: [1, 1, 0] } }]
   };
 }
 
-function edgeLinesByClass(record) {
-  return Object.fromEntries((record?.edges?.children || []).map((line) => [line.userData.cadEdgeClass, line]));
+function edgeColorAt(record, point) {
+  const color = record.edges.geometry.getAttribute("color");
+  return [0, 1, 2, 3].map((component) => color.array[point * 4 + component] / 65535);
 }
 
-test("buildModel draws a surf component's CAD edges as one line object per edge class", () => {
+test("buildModel draws a surf component's CAD edges as one GL_LINES object with per-class vertex colours", () => {
   const scene = buildModel(THREE, surfComponentMeshData(), {
     theme: cloneThemePresetSettings("workbench-light"),
     displayMode: CAD_DISPLAY_MODE.SOLID,
@@ -422,46 +424,51 @@ test("buildModel draws a surf component's CAD edges as one line object per edge 
     edgeRendering: { mode: "screen-space", LineSegments2, LineSegmentsGeometry, LineMaterial }
   });
   const record = scene.displayRecords[0];
-  const lines = edgeLinesByClass(record);
+  const line = record.edges;
 
   assert.equal(scene.edgesGroup.children.length, 1);
-  assert.equal(record.edges.isGroup, true);
-  // Degenerate edges default to zero thickness and are not drawn.
-  assert.deepEqual(Object.keys(lines).sort(), ["feature", "tangent"]);
-  assert.equal(lines.feature instanceof LineSegments2, true);
-  assert.equal(lines.feature.geometry.attributes.instanceStart.count, 3);
-  assert.equal(lines.tangent.geometry.attributes.instanceStart.count, 1);
-  assert.equal(lines.feature.material.opacity, 1);
-  assert.equal(lines.tangent.material.opacity, 0.5);
-  assert.equal(lines.tangent.material.linewidth, 1.15);
-  assert.equal(lines.feature.material.depthTest, true);
-  assert.equal(lines.feature.material.polygonOffset, true, "CAD edge lines carry their own depth bias");
-  assert.equal(record.edgeMaterials.length, 2);
+  assert.equal(line.isLineSegments, true, "GL_LINES, not a screen-space quad strip");
+  // Degenerate edges default to zero thickness and are not drawn: 3 + 1 segments.
+  assert.equal(line.geometry.index.count, 8);
+  assert.equal(line.geometry.getAttribute("position").array, record.sourcePart?.cadEdgePositions ?? line.geometry.getAttribute("position").array);
+  assert.equal(line.geometry.getAttribute("color").itemSize, 4);
+  assert.equal(line.geometry.getAttribute("color").normalized, true);
+  const edgeColor = new THREE.Color("#132232");
+  const feature = edgeColorAt(record, 0);
+  const tangent = edgeColorAt(record, 4);
+  assert.ok(Math.abs(feature[0] - edgeColor.r) < 1e-3 && Math.abs(feature[2] - edgeColor.b) < 1e-3, "linear class colour");
+  assert.equal(feature[3], 1, "feature opacity");
+  assert.ok(Math.abs(tangent[3] - 0.5) < 1e-4, "tangent opacity");
+  assert.equal(line.material.vertexColors, true);
+  assert.equal(line.material.transparent, true);
+  assert.equal(line.material.depthTest, true);
+  assert.equal(line.material.polygonOffset, true, "CAD edge lines carry their own depth bias");
+  assert.equal(record.edgeMaterials.length, 1);
   assert.equal(record.material.polygonOffset, true, "the surface is pushed back behind its edge lines");
   assert.equal(record.material.polygonOffsetFactor, 1);
   assert.equal(record.material.userData.cadSurfaceEdges, undefined);
   assert.equal(record.geometry.getAttribute("position").count, 4, "indexed geometry stays indexed");
-  assert.equal(scene.runtime.screenSpaceLineMaterials.size, 2);
+  assert.equal(scene.runtime.screenSpaceLineMaterials.size, 0, "no screen-space materials to resync");
 
-  // Selection recolours every class to edges.highlightColor; deselection restores each.
+  // Selection recolours every class to edges.highlightColor; deselection restores the class colours.
   scene.update({ selection: { selectedPartIds: ["surf:0"] } });
-  assert.equal(lines.feature.material.color.getHexString(), "8dc5ff");
-  assert.equal(lines.tangent.material.color.getHexString(), "8dc5ff");
-  assert.equal(lines.tangent.material.opacity, 1);
+  assert.equal(line.material.vertexColors, false);
+  assert.equal(line.material.color.getHexString(), "8dc5ff");
+  assert.equal(line.material.opacity, 1);
   assert.equal(record.edges.renderOrder, 26);
   scene.update({ selection: { selectedPartIds: [] } });
-  assert.equal(lines.tangent.material.opacity, 0.5);
+  assert.equal(line.material.vertexColors, true);
+  assert.equal(line.material.color.getHexString(), "ffffff");
+  assert.equal(line.material.opacity, 1);
   assert.equal(record.edges.renderOrder, 3);
 
-  // Show-through modes drop the depth test on every class line.
+  // Show-through modes drop the depth test on the edge line.
   const transparent = buildModel(THREE, surfComponentMeshData(), {
     theme: cloneThemePresetSettings("workbench-light"),
     displayMode: CAD_DISPLAY_MODE.TRANSPARENT,
     renderPartsIndividually: true
   });
-  for (const material of transparent.displayRecords[0].edgeMaterials) {
-    assert.equal(material.depthTest, false);
-  }
+  assert.equal(transparent.displayRecords[0].edgeMaterials[0].depthTest, false);
   assert.equal(transparent.displayRecords[0].material.polygonOffset, true);
   transparent.dispose();
 
@@ -472,9 +479,64 @@ test("buildModel draws a surf component's CAD edges as one line object per edge 
   const wire = buildModel(THREE, surfComponentMeshData(), { displayMode: CAD_DISPLAY_MODE.WIREFRAME, renderPartsIndividually: true });
   assert.equal(wire.displayRecords[0].edges.geometry.type, "WireframeGeometry");
   wire.dispose();
-
   scene.dispose();
-  assert.equal(scene.runtime.screenSpaceLineMaterials.size, 0);
+});
+
+// GPU buffers a geometry owns: its index plus one per distinct attribute array.
+function geometryBuffers(geometry) {
+  const buffers = new Set();
+  if (geometry.index) buffers.add(geometry.index);
+  for (const attribute of Object.values(geometry.attributes)) {
+    buffers.add(attribute.isInterleavedBufferAttribute ? attribute.data : attribute);
+  }
+  return buffers;
+}
+
+function composedPackage(sourceMesh, count) {
+  return {
+    vertices: new Float32Array(0), indices: new Uint32Array(0),
+    bounds: { min: [0, 0, 0], max: [count * 10 + 1, 1, 0] },
+    partTransformsBaked: false,
+    parts: Array.from({ length: count }, (_, index) => ({
+      id: `o${index}`, occurrenceId: `o${index}`, sourceMeshKey: "cid:flat", sourceMesh, vertexCount: 4, triangleCount: 2,
+      transform: [1, 0, 0, index * 10, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      bounds: { min: [index * 10, 0, 0], max: [index * 10 + 1, 1, 0] }
+    }))
+  };
+}
+
+test("a component's occurrences share one surface and one edge geometry: 6 buffers, +1 draw call each, reused across publishes", () => {
+  const sourceMesh = surfComponentMeshData();
+  const first = buildModel(THREE, composedPackage(sourceMesh, 4), { renderPartsIndividually: true });
+  const geometries = new Set();
+  const buffers = new Set();
+  let drawables = 0;
+  first.root.traverse((object) => {
+    if (!object.geometry) return;
+    drawables += 1;
+    geometries.add(object.geometry);
+    for (const buffer of geometryBuffers(object.geometry)) buffers.add(buffer);
+  });
+  assert.equal(drawables, 8, "one mesh and one edge line per occurrence");
+  assert.equal(geometries.size, 2, "one surface geometry and one edge geometry for the component");
+  assert.equal(buffers.size, 6, "position, normal, index + edge position, colour, index");
+  const [a, b] = first.displayRecords;
+  assert.equal(a.edges.geometry, b.edges.geometry);
+  assert.notEqual(a.edges.material, b.edges.material, "materials are per occurrence");
+  assert.equal(b.edges.matrix.elements[12], 10);
+  assert.deepEqual(b.edges.matrix.elements, b.mesh.matrix.elements, "edge lines ride the occurrence matrix");
+  const edgeBytes = [...geometryBuffers(a.edges.geometry)].reduce((sum, buffer) => sum + buffer.array.byteLength, 0);
+  const surfaceBytes = [...geometryBuffers(a.geometry)].reduce((sum, buffer) => sum + buffer.array.byteLength, 0);
+  assert.ok(edgeBytes > 0 && surfaceBytes > 0);
+
+  // A progressive publish re-composes the package: the next model must find
+  // the component's geometry in the cache instead of uploading it again.
+  first.dispose();
+  const second = buildModel(THREE, composedPackage(sourceMesh, 5), { renderPartsIndividually: true });
+  assert.equal(second.displayRecords.length, 5);
+  assert.equal(second.displayRecords[0].geometry, a.geometry, "surface geometry reused");
+  assert.equal(second.displayRecords[4].edges.geometry, a.edges.geometry, "edge geometry reused");
+  second.dispose();
 });
 
 test("occurrences of one component share its CAD edge line geometry and follow their own transforms", () => {
@@ -491,11 +553,11 @@ test("occurrences of one component share its CAD edge line geometry and follow t
   };
   const scene = buildModel(THREE, meshData, { renderPartsIndividually: true });
   const [a, b] = scene.displayRecords;
-  assert.equal(edgeLinesByClass(a).feature.geometry, edgeLinesByClass(b).feature.geometry, "one geometry per component and class");
-  assert.notEqual(edgeLinesByClass(a).feature.material, edgeLinesByClass(b).feature.material, "materials are per occurrence");
+  assert.equal(a.edges.geometry, b.edges.geometry, "one edge geometry per component");
+  assert.equal(a.edges.geometry.getAttribute("position").array, sourceMesh.cadEdgePositions, "the meshData's own points");
+  assert.equal(a.edges.geometry.index.array, sourceMesh.cadEdgeIndices.subarray ? a.edges.geometry.index.array : null);
   assert.equal(a.edges.matrix.elements[12], 0);
   assert.equal(b.edges.matrix.elements[12], 10);
-  assert.deepEqual(b.edges.matrix.elements, b.mesh.matrix.elements, "edge lines ride the occurrence matrix");
   scene.dispose();
 });
 
@@ -513,8 +575,8 @@ test("component mesh buffers stay shared until a deformation needs writable attr
   assert.equal(record.geometry.getAttribute("normal").array, sourceMesh.normals);
   assert.equal(record.geometry.getAttribute("position").array, sourceMesh.vertices);
   assert.equal(record.geometry.index.array, sourceMesh.indices);
-  const savedEdgeSegments = sourceMesh.cadEdgeSegments.slice();
-  assert.equal(edgeLinesByClass(record).feature.geometry.getAttribute("position").array.buffer, sourceMesh.cadEdgeSegments.buffer);
+  const savedEdgePositions = sourceMesh.cadEdgePositions.slice();
+  assert.equal(record.edges.geometry.getAttribute("position").array, sourceMesh.cadEdgePositions);
   record.gpuTubeDeformationAllowed = false;
   const rest = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 0], end: [3, 0, 0] }] };
   const path = { normal: [0, 0, 1], segments: [{ kind: "line", start: [0, 0, 2], end: [0, 3, 2] }] };
@@ -523,10 +585,13 @@ test("component mesh buffers stay shared until a deformation needs writable attr
   assert.notDeepEqual(record.geometry.getAttribute("position").array, savedPositions);
   assert.deepEqual(sourceMesh.vertices, savedPositions);
   assert.deepEqual(sourceMesh.normals, savedNormals);
-  // The CAD edge lines bend with the surface on a private copy; the shared segments stay put.
-  const bentEdge = edgeLinesByClass(record).feature.geometry.getAttribute("position");
-  assert.notEqual(bentEdge.array.buffer, sourceMesh.cadEdgeSegments.buffer);
-  assert.deepEqual(sourceMesh.cadEdgeSegments, savedEdgeSegments);
+  // The CAD edge lines bend with the surface on a private, flattened copy that
+  // keeps the class colours; the shared points stay put.
+  const bentEdge = record.edges.geometry.getAttribute("position");
+  assert.notEqual(bentEdge.array, sourceMesh.cadEdgePositions);
+  assert.equal(record.edges.geometry.index, null);
+  assert.equal(record.edges.geometry.getAttribute("color").count, bentEdge.count);
+  assert.deepEqual(sourceMesh.cadEdgePositions, savedEdgePositions);
   scene.dispose();
 });
 
@@ -577,11 +642,10 @@ test("buildModel rebuilds CAD edge lines when edge class settings change", () =>
   const scene = buildModel(THREE, surfComponentMeshData(), {
     theme,
     displayMode: CAD_DISPLAY_MODE.SOLID,
-    renderPartsIndividually: true,
-    edgeRendering: { mode: "screen-space", LineSegments2, LineSegmentsGeometry, LineMaterial }
+    renderPartsIndividually: true
   });
   const originalEdges = scene.displayRecords[0].edges;
-  const originalGeometry = edgeLinesByClass(scene.displayRecords[0]).tangent.geometry;
+  const originalGeometry = originalEdges.geometry;
 
   scene.update({
     displayMode: CAD_DISPLAY_MODE.SOLID,
@@ -594,21 +658,21 @@ test("buildModel rebuilds CAD edge lines when edge class settings change", () =>
           ...DEFAULT_DISPLAY_EDGE_SETTINGS.classes,
           tangent: {
             ...DEFAULT_DISPLAY_EDGE_SETTINGS.classes.tangent,
-            thickness: 2.5
+            thickness: 0
           }
         }
       }
     }
   });
 
-  const lines = edgeLinesByClass(scene.displayRecords[0]);
-  assert.notEqual(scene.displayRecords[0].edges, originalEdges);
-  assert.equal(lines.tangent.material.linewidth, 2.5);
-  // Class colours are explicit in the default class settings, so the edge
-  // colour does not recolour them (the shader read them the same way).
-  assert.equal(lines.tangent.material.color.getHexString(), "132232");
-  assert.equal(lines.tangent.geometry, originalGeometry, "line geometry is cached across rebuilds");
+  const edges = scene.displayRecords[0].edges;
+  assert.notEqual(edges, originalEdges);
+  assert.notEqual(edges.geometry, originalGeometry, "a new class style is a new shared geometry");
+  assert.equal(edges.geometry.index.count, 6, "tangent switched off: only the three feature segments remain");
+  assert.equal(edges.geometry.getAttribute("position").array, originalGeometry.getAttribute("position").array, "points stay shared");
   assert.equal(scene.edgesGroup.children.length, 1);
+  scene.update({ theme });
+  assert.equal(scene.displayRecords[0].edges.geometry, originalGeometry, "the previous style's geometry is cached");
   scene.dispose();
 });
 

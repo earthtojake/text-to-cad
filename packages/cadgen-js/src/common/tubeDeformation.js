@@ -715,22 +715,37 @@ function refineLineGeometry(THREE, object, source, rest, base, step) {
   if (!starts && !sourcePosition) {
     return geometry;
   }
+  // Ordinary lines may be indexed (CAD edge lines share polyline points); the
+  // refined copy is emitted flat, every other attribute (the per-point class
+  // colour) replicated onto the emitted points.
+  const index = starts ? null : source.index;
   const count = starts
     ? starts.count
-    : object.isLineSegments ? sourcePosition.count / 2 : sourcePosition.count - 1;
+    : index ? index.count / 2 : object.isLineSegments ? sourcePosition.count / 2 : sourcePosition.count - 1;
+  const vertexOf = (i, end) => index ? index.getX(i * 2 + end) : object.isLineSegments ? i * 2 + end : i + end;
+  const extras = starts ? [] : Object.entries(source.attributes).filter(([name]) => name !== "position");
+  const extraValues = Object.fromEntries(extras.map(([name]) => [name, []]));
   const a = new THREE.Vector3();
   const b = new THREE.Vector3();
   const world = new THREE.Vector3();
   const positions = [];
   for (let i = 0; i < count; i++) {
-    a.fromBufferAttribute(starts || sourcePosition, starts ? i : object.isLineSegments ? i * 2 : i);
-    b.fromBufferAttribute(ends || sourcePosition, ends ? i : object.isLineSegments ? i * 2 + 1 : i + 1);
+    const va = starts ? i : vertexOf(i, 0);
+    const vb = ends ? i : vertexOf(i, 1);
+    a.fromBufferAttribute(starts || sourcePosition, va);
+    b.fromBufferAttribute(ends || sourcePosition, vb);
     const sa = projectTubePath(rest, world.copy(a).applyMatrix4(base).toArray()).distance;
     const sb = projectTubePath(rest, world.copy(b).applyMatrix4(base).toArray()).distance;
     const divisions = Math.max(1, Math.ceil(Math.abs(sb - sa) / step));
     for (let j = 0; j < divisions; j++) {
       for (const t of [j / divisions, (j + 1) / divisions]) {
         positions.push(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t);
+        for (const [name, attribute] of extras) {
+          const vertex = t < 1 ? va : vb;
+          for (let component = 0; component < attribute.itemSize; component++) {
+            extraValues[name].push(attribute.array[vertex * attribute.itemSize + component]);
+          }
+        }
       }
     }
   }
@@ -738,6 +753,11 @@ function refineLineGeometry(THREE, object, source, rest, base, step) {
     geometry.setPositions(positions);
   } else {
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    for (const [name, attribute] of extras) {
+      geometry.setAttribute(name, new THREE.BufferAttribute(
+        new attribute.array.constructor(extraValues[name]), attribute.itemSize, attribute.normalized
+      ));
+    }
     geometry.setIndex(null);
   }
   return geometry;

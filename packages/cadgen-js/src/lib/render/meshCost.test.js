@@ -63,13 +63,14 @@ test("mesh render cost uses triangle count and typed-array bytes", () => {
     colors: new Float32Array(0),
     indices: new Uint32Array(3),
     edge_indices: new Uint32Array(2),
-    cadEdgeSegments: new Float32Array(12),
+    cadEdgePositions: new Float32Array(6),
+    cadEdgeIndices: new Uint32Array(2),
     parts: [{ triangleCount: LARGE_MESH_TRIANGLE_COUNT }]
   };
 
   assert.deepEqual(estimateMeshRenderCost(meshData), {
     triangleCount: LARGE_MESH_TRIANGLE_COUNT,
-    typedArrayBytes: 140
+    typedArrayBytes: 124
   });
   assert.equal(isLargeMeshData(meshData), true);
   assert.equal(isLargeMeshData({

@@ -15,8 +15,8 @@ import {
   normalizeDisplayMode
 } from "./displaySettings.js";
 import {
+  createCadEdgeLineSegments,
   createDisplayEdgeObject,
-  createLineSegmentsForGeometry,
   syncRecordEdgeMaterials,
   syncScreenSpaceLineMaterialResolution,
   topologyLineDepthBiasForWidth
@@ -158,8 +158,7 @@ export function centerAndRadiusFromBounds(THREE, bounds, scale = CAD_SCENE_SCALE
   };
 }
 
-function cacheForMeshData(meshData) {
-  const cacheOwner = cacheOwnerForMeshData(meshData);
+function cacheForOwner(cacheOwner) {
   let cache = meshGeometryCache.get(cacheOwner);
   if (!cache) {
     cache = {
@@ -170,6 +169,21 @@ function cacheForMeshData(meshData) {
     meshGeometryCache.set(cacheOwner, cache);
   }
   return cache;
+}
+
+function cacheForMeshData(meshData) {
+  return cacheForOwner(cacheOwnerForMeshData(meshData));
+}
+
+// Geometry built from a shared component (`part.sourceMesh`) is cached on the
+// COMPONENT, not on the composed meshData: a package is re-composed on every
+// progressive publish and every LOD swap, and a cache keyed on those wrappers
+// re-created and re-uploaded every component's buffers each time while the
+// previous copies lingered undisposed (the hand: ~27 publishes, ~170k GPU
+// buffers, ~7 GB). The component object is stable for as long as it is loaded.
+function cacheOwnerForPart(meshData, part) {
+  const sourceMesh = part?.sourceMesh && typeof part.sourceMesh === "object" ? part.sourceMesh : null;
+  return sourceMesh || cacheOwnerForMeshData(meshData);
 }
 
 function cacheKey(parts) {
@@ -434,8 +448,8 @@ export function buildPartFillIndexMap(parts = []) {
   );
 }
 
-function geometryCacheEntry(THREE, meshData, key, createGeometry) {
-  const cache = cacheForMeshData(meshData);
+function geometryCacheEntry(THREE, cacheOwner, key, createGeometry) {
+  const cache = cacheForOwner(cacheOwner);
   const cached = cache.part.get(key) || cache.whole.get(key);
   if (cached) {
     return cached;
@@ -461,7 +475,7 @@ function buildPartGeometryEntry(THREE, meshData, part, recomputeNormals = false)
     ? `source:${String(part?.sourceMeshKey || part?.meshUrl || part?.partFileRef || partId || "").trim()}:${sourceMeshColorMode}`
     : "";
   const key = sourceMeshKey || partId || `${toNumber(part?.vertexOffset)}:${toNumber(part?.triangleOffset)}`;
-  return geometryCacheEntry(THREE, meshData, key, () => {
+  return geometryCacheEntry(THREE, cacheOwnerForPart(meshData, part), key, () => {
     const vertexOffset = sourceMesh ? 0 : toNumber(part?.vertexOffset, 0);
     const vertexCount = sourceMesh
       ? Math.floor((sourceMesh.vertices?.length || 0) / 3)
@@ -528,7 +542,7 @@ function buildPartGeometryEntry(THREE, meshData, part, recomputeNormals = false)
 }
 
 function buildWholeGeometryEntry(THREE, meshData, recomputeNormals = false) {
-  return geometryCacheEntry(THREE, meshData, MODEL_PART_ID, () => {
+  return geometryCacheEntry(THREE, cacheOwnerForMeshData(meshData), MODEL_PART_ID, () => {
     // Component buffers are immutable and already typed on the surf path: wrap
     // them rather than duplicating every vertex of a single-part model.
     const geometry = new THREE.BufferGeometry();
@@ -606,7 +620,7 @@ function buildEdgeGeometryFromIndices(THREE, vertices, edgeIndices) {
 
 function buildEdgeGeometry(THREE, meshData, part, sourceGeometry, displayMode, edgeSettings = {}) {
   void edgeSettings;
-  const cache = cacheForMeshData(meshData);
+  const cache = cacheForOwner(cacheOwnerForPart(meshData, part));
   const partId = part ? String(part?.id || part?.occurrenceId || "").trim() : MODEL_PART_ID;
   const sourceMeshKey = part?.sourceMesh
     ? String(part?.sourceMeshKey || part?.meshUrl || part?.partFileRef || "").trim()
@@ -1059,15 +1073,11 @@ export function applyPartVisualState(THREE, records, {
       : isHovered
         ? hoveredEdgeColor
         : effectEdgeColor || baseEdgeColor;
-    syncRecordEdgeMaterials(record, {
-      overrideColor: isSelected || isHovered || effectEdgeColor ? nextEdgeColor : null,
-      fallbackColor: baseEdgeColor,
-      opacityFor: (classOpacity) => isSelected || isHovered
-        ? highlightedEdgeOpacity
-        : isHidden || isDimmed
-          ? nextSurfaceOpacity
-          : (classOpacity ?? baseEdgeOpacity) * effectEdgeOpacity
-    });
+    syncRecordEdgeMaterials(record, isSelected || isHovered
+      ? { color: nextEdgeColor, opacity: highlightedEdgeOpacity, fallbackColor: baseEdgeColor }
+      : isHidden || isDimmed
+        ? { color: effectEdgeColor, opacity: nextSurfaceOpacity, fallbackColor: baseEdgeColor }
+        : { color: effectEdgeColor, opacityScale: effectEdgeOpacity, fallbackColor: baseEdgeColor, fallbackOpacity: baseEdgeOpacity });
 
     syncPartOcclusionGhost(THREE, record, {
       visible: isSelected && !isHidden && !effectHidden,
@@ -1543,94 +1553,92 @@ function addEdgeObject(THREE, runtime, record, edgeGeometry, settings) {
 function cadEdgeLinesForPart(meshData, part) {
   const sourceMesh = part?.sourceMesh && typeof part.sourceMesh === "object" ? part.sourceMesh : null;
   const source = sourceMesh || (!part || toArray(meshData?.parts).length <= 1 ? meshData : null);
-  const segments = source?.cadEdgeSegments;
+  const positions = source?.cadEdgePositions;
+  const indices = source?.cadEdgeIndices;
   const classRanges = toArray(source?.cadEdgeClassRanges);
-  if (!(segments instanceof Float32Array) || segments.length < 6 || !classRanges.length) {
+  if (!(positions instanceof Float32Array) || !(indices instanceof Uint32Array) || indices.length < 2 || !classRanges.length) {
     return null;
   }
-  const key = sourceMesh
-    ? `source:${String(part?.sourceMeshKey || part?.meshUrl || part?.partFileRef || "").trim()}`
-    : String(part?.id || part?.occurrenceId || MODEL_PART_ID);
-  return { segments, classRanges, key };
+  return { owner: sourceMesh || cacheOwnerForMeshData(meshData), positions, indices, classRanges };
 }
 
-// One line geometry per component and edge class, shared by every occurrence
-// of that component (the records place it by their own matrix), cached beside
-// the part geometries so a rebuild does not re-upload it.
-function cadEdgeClassLineGeometry(THREE, runtime, meshData, cadEdges, range) {
-  const cache = cacheForMeshData(meshData);
-  const edgeKey = `cad:${runtime.edgeRendering?.mode || "basic"}:${range.classId}:${cadEdges.key}`;
+// GL_LINES are one pixel wide, so a class's thickness is an on/off switch here;
+// its colour and opacity are baked per point into the shared geometry.
+function cadEdgeClassStyle(THREE, edgeSettings, fallbackColor, classId) {
+  const classSetting = edgeSettings?.classes?.[classId] || {};
+  const thickness = clamp(toNumber(classSetting.thickness, 0), 0, 6);
+  const opacity = clamp(toNumber(classSetting.opacity, 0), 0, 1);
+  if (thickness <= 0 || opacity <= 0) {
+    return null;
+  }
+  return { color: new THREE.Color(classSetting.color || fallbackColor), opacity };
+}
+
+// ONE geometry per component for every drawn edge class, shared by all of its
+// occurrences and cached on the component: the polyline points as `position`
+// (the meshData's own array), Uint32 segment pairs as the index (the meshData's
+// array when every class is drawn), and a Uint16-normalized linear RGBA
+// `color` per point carrying the class style. Three GPU buffers, one draw call
+// per occurrence, ~1.5 bytes per surface triangle.
+function cadEdgeLineGeometry(THREE, runtime, cadEdges) {
+  const edgeSettings = runtime.edgeSettings;
+  const fallbackColor = edgeSettings?.color || runtime.baseTheme?.edge || DEFAULT_THEME.edge;
+  const drawn = cadEdges.classRanges
+    .map((range) => ({ range, style: cadEdgeClassStyle(THREE, edgeSettings, fallbackColor, range.classId) }))
+    .filter((entry) => entry.style);
+  if (!drawn.length) {
+    return null;
+  }
+  const cache = cacheForOwner(cadEdges.owner);
+  const edgeKey = `cad:${drawn.map(({ range, style }) => `${range.classId}=${style.color.getHexString()}@${style.opacity}`).join(",")}`;
   const cached = cache.edge.get(edgeKey);
   if (cached) {
     return cached;
   }
-  const positions = cadEdges.segments.subarray(
-    range.segmentStart * 6,
-    (range.segmentStart + range.segmentCount) * 6
-  );
-  let geometry;
-  if (runtime.edgeRendering?.mode === "screen-space" && runtime.LineSegmentsGeometry) {
-    geometry = new runtime.LineSegmentsGeometry();
-    geometry.setPositions(positions);
-  } else {
-    geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  let indices = cadEdges.indices;
+  if (drawn.length !== cadEdges.classRanges.length) {
+    indices = new Uint32Array(drawn.reduce((sum, { range }) => sum + range.segmentCount * 2, 0));
+    let cursor = 0;
+    for (const { range } of drawn) {
+      indices.set(cadEdges.indices.subarray(range.segmentStart * 2, (range.segmentStart + range.segmentCount) * 2), cursor);
+      cursor += range.segmentCount * 2;
+    }
   }
+  const colors = new Uint16Array((cadEdges.positions.length / 3) * 4);
+  for (const { range, style } of drawn) {
+    const rgba = [style.color.r, style.color.g, style.color.b, style.opacity].map((value) => Math.round(clamp(value, 0, 1) * 65535));
+    for (let point = range.pointStart; point < range.pointStart + range.pointCount; point += 1) {
+      colors.set(rgba, point * 4);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(cadEdges.positions, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 4, true));
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  geometry.computeBoundingSphere();
   markCachedGeometry(geometry);
   cache.edge.set(edgeKey, geometry);
   return geometry;
 }
 
-// CAD edges drawn by the line pass, one object per edge class so
-// display.edges.classes styles colour, opacity and thickness per class. The
-// group is the record's `edges`: transforms, visibility, highlight render
-// order and tube deformation treat it exactly like the GLB-era single line.
-function addCadEdgeObjects(THREE, runtime, record, meshData, cadEdges) {
-  const edgeSettings = runtime.edgeSettings;
-  const depthTest = edgeSettings?.depthTest !== false;
-  const fallbackColor = edgeSettings?.color || runtime.baseTheme?.edge || DEFAULT_THEME.edge;
-  const group = new THREE.Group();
-  const materials = [];
-  for (const range of cadEdges.classRanges) {
-    const classSetting = edgeSettings?.classes?.[range.classId] || {};
-    const thickness = clamp(toNumber(classSetting.thickness, 0), 0, 6);
-    const opacity = clamp(toNumber(classSetting.opacity, 0), 0, 1);
-    if (thickness <= 0 || opacity <= 0) {
-      continue;
-    }
-    const color = classSetting.color || fallbackColor;
-    const line = createLineSegmentsForGeometry(
-      runtime,
-      cadEdgeClassLineGeometry(THREE, runtime, meshData, cadEdges, range),
-      {
-        color,
-        opacity,
-        lineWidth: thickness,
-        renderOrder: CAD_EDGE_LINE_RENDER_ORDER,
-        depthTest,
-        depthWrite: false,
-        depthBias: topologyLineDepthBiasForWidth(thickness, { visibilityClass: range.classId })
-      },
-      runtime.screenSpaceLineMaterials
-    );
-    if (!line) {
-      continue;
-    }
-    line.userData.partId = record.partId;
-    line.userData.cadEdgeClass = range.classId;
-    line.material.userData.cadEdgeBaseColor = color;
-    line.material.userData.cadEdgeBaseOpacity = opacity;
-    materials.push(line.material);
-    group.add(line);
-  }
-  if (!group.children.length) {
+// The record's `edges` object for a surf component: transforms, visibility,
+// highlight render order and tube deformation treat it exactly like the
+// GLB-era derived line.
+function addCadEdgeObject(THREE, runtime, record, cadEdges) {
+  const geometry = cadEdgeLineGeometry(THREE, runtime, cadEdges);
+  if (!geometry) {
     return;
   }
-  group.userData.partId = record.partId;
-  group.renderOrder = CAD_EDGE_LINE_RENDER_ORDER;
-  record.edges = group;
-  record.edgeMaterials = materials;
-  runtime.edgesGroup.add(group);
+  const line = createCadEdgeLineSegments(THREE, geometry, {
+    depthTest: runtime.edgeSettings?.depthTest !== false,
+    renderOrder: CAD_EDGE_LINE_RENDER_ORDER,
+    // One bias for every class: the coplanar (seam/tangent) value, the larger.
+    depthBias: topologyLineDepthBiasForWidth(1, { visibilityClass: "seam" })
+  });
+  line.userData.partId = record.partId;
+  record.edges = line;
+  record.edgeMaterials = [line.material];
+  runtime.edgesGroup.add(line);
 }
 
 function buildDisplayRecords(THREE, runtime, meshData, settings) {
@@ -1744,7 +1752,7 @@ function buildDisplayRecords(THREE, runtime, meshData, settings) {
 
     if (settings.selection?.showEdges !== false && (edgeSettings.enabled || wireframeMode)) {
       if (cadEdges) {
-        addCadEdgeObjects(THREE, runtime, record, meshData, cadEdges);
+        addCadEdgeObject(THREE, runtime, record, cadEdges);
       } else {
         addEdgeObject(
           THREE,
