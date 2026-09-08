@@ -834,7 +834,7 @@ own menu is the one worth pointing at.
 
 **Right-click a crumb or a tree row** for the entry menu
 (`cad-viewer/shell`'s `entry-menu.js` is the table, `entry-actions.ts` what each item does,
-`EntryContextMenu.tsx` draws one from the other; the tree has one menu over
+`cad-viewer/shell`'s `EntryMenu.jsx` draws one from the other; the tree has one menu over
 the whole list aimed at the row that was clicked, and the empty space under
 the rows is the root). A file: Open (tree rows only — a crumb is the open
 file, and a file is one tab: opening it again by any door focuses that
@@ -846,7 +846,7 @@ in terminal · Reveal · Copy path · Copy relative path · Rename · Move to
 Trash; the root has no Rename and no Trash. The one destructive item is
 alone at the bottom and goes to the OS trash (`shell.trashItem`) with no
 dialog — the trash is the undo. Rename and the two `New …` are typed in
-place (`InlineName.tsx`: Enter commits, Escape cancels, clicking away
+place (`cad-viewer/shell`'s `InlineName.jsx`: Enter commits, Escape cancels, clicking away
 commits, the stem is selected and the extension is not); from a crumb they
 go to the tree, which is shown for them. F2 renames the tree's cursor row,
 ⌘⌫ (Ctrl+Delete) trashes it. Every edit is an `explorer.*` request main
