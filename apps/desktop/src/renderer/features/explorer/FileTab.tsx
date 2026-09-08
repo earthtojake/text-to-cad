@@ -33,7 +33,7 @@ import { rendererFor } from "./renderers/registry";
  * One file, laid out the way Codex lays one out: a header row with the
  * breadcrumb and the actions, the content on the left, and ONE panel column
  * on the right — the file tree, or the CAD surface's theme editor, or its
- * file sheet, or markdown's source over the content itself. Exactly one of
+ * Inspector, or markdown's source over the content itself. Exactly one of
  * them, or none (`renderers/panels.ts`, `FilePanel.tsx`).
  *
  * The state machine is small but has one subtlety worth naming. The editor is
@@ -271,7 +271,7 @@ export function FileTab({
    * One open panel, held as one id in one persisted field of the tab, so the
    * toggles cannot disagree with the column and a reload comes back to the
    * panel the person left up. `null` — nobody has said — resolves to the
-   * renderer's own default: the file sheet for a CAD file, the tree for
+   * renderer's own default: the Inspector for a CAD file, the tree for
    * everything else.
    *
    * `ready` says the body is the renderer's own surface: a CAD tab whose
@@ -299,7 +299,7 @@ export function FileTab({
   const showingSource = traits?.id !== "markdown" || openId === SOURCE_PANEL;
   /**
    * The box the file's renderer draws its own panel into — the CAD surface
-   * portals its theme editor and its file sheet there (`panelSlot`). State
+   * portals its theme editor and its Inspector there (`panelSlot`). State
    * rather than a ref, because the renderer has to be told when it attaches.
    */
   const [panelSlot, setPanelSlot] = useState<HTMLDivElement | null>(null);

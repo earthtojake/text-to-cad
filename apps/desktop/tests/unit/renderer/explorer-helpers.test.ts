@@ -111,7 +111,10 @@ describe("the renderer registry", () => {
     expect(cad.id).toBe("cad");
     expect(cad.panels?.(context).map((panel) => [panel.id, panel.label, panel.content])).toEqual([
       ["cad-theme", "Theme settings", "slot"],
-      ["cad-file-sheet", "File sheet", "slot"],
+      // "Inspector" is the name; the id stays `cad-file-sheet`, because the
+      // tab's stored `panel` field holds it and the viewer's host contract
+      // calls the same panel `fileSheetOpen`.
+      ["cad-file-sheet", "Inspector", "slot"],
     ]);
     // And there are none at all until the surface behind them is up: two
     // toggles over the runtime's failure card would open nothing.
@@ -141,7 +144,7 @@ describe("the renderer registry", () => {
     const cad = panelsFor(rendererForPath("part.step").panels!({ open: "", ready: true }), "");
 
     // The renderer's default is what a tab opens with when nobody has said:
-    // a CAD file's sheet, and the tree for everything else. The tree is
+    // a CAD file's Inspector, and the tree for everything else. The tree is
     // last, so its default never wins over a renderer's own.
     expect(resolveOpenPanel(cad, null)?.id).toBe(CAD_PANEL.fileSheet);
     expect(resolveOpenPanel(panelsFor([], ""), null)?.id).toBe("tree");

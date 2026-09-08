@@ -11,7 +11,6 @@ import { useUi } from "@renderer/state/ui";
 import type { ViewerOrigin } from "@shared/ipc/cad";
 import type { ExplorerRoot } from "@shared/types";
 
-import { cadSceneBackgroundFor } from "../cad-layout";
 import { EmptyState } from "../EmptyState";
 
 /**
@@ -40,11 +39,25 @@ import { EmptyState } from "../EmptyState";
  *
  * Three things are the desktop's to decide, not the surface's, and are passed
  * in: WHERE its panels are drawn (`panelSlot` — the file tab's one panel
- * column, so the theme editor and the file sheet share the frame, the width
+ * column, so the theme editor and the Inspector share the frame, the width
  * and the toggles of the tab's own panels), the layout (always the desktop
  * one, so nothing is ever a drawer over the model), and light/dark
  * (`colorScheme`, the app's theme — the CAD theme paints the scene and
  * nothing around it).
+ *
+ * `layout="desktop"` is a pin, not a measurement: the surface measures its
+ * own root and drops into compact mode — the Inspector as a drawer over the
+ * model — below 1024px, and every explorer pane is narrower than that. Its
+ * panels are drawn in the tab's panel column, so their width is that
+ * column's and this app has no other opinion about the layout.
+ *
+ * The scene's BACKDROP is not one of the three either. It belongs to the CAD
+ * theme, and only the theme named "System" follows this window: the surface
+ * reads the `--background` token off the document for that one and leaves
+ * every other preset its own. This app used to hand the colour over for every
+ * theme (a `sceneBackground` prop and a `cadSceneBackgroundFor` beside it),
+ * which is why picking Cinematic here changed the lights and the floor but
+ * never the background.
  */
 type CadSurfaceProps = {
   origin: string;
@@ -66,7 +79,7 @@ type CadSurfaceProps = {
    * The surface's two panels, driven from here and drawn into `panelSlot`.
    *
    * `layout="desktop"` hides the surface's own top bar, which is where the
-   * theme and file-sheet toggles live standalone — so without these the
+   * theme and Inspector toggles live standalone — so without these the
    * theme panel had no door at all in this app. They are controlled props
    * (`apps/viewer/docs/file-view.md`): the file tab has one open panel, so
    * at most one of these is ever true, and the surface reports the changes
@@ -144,7 +157,6 @@ const CadSurface = lazy(async () => {
             onThemeEditingChange={onThemeEditingChange}
             origin={origin}
             panelSlot={panelSlot}
-            sceneBackground={cadSceneBackgroundFor(colorScheme)}
             selectReference={selectReference}
             themeEditing={themeEditing}
           />

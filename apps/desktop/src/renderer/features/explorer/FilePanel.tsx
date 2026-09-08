@@ -5,13 +5,13 @@ import { PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from "@renderer/state/explorer";
  *
  * There is one of these in a file tab and never two, because there is one
  * open panel (`renderers/panels.ts`). Whatever is in it — the file tree, the
- * CAD theme editor, the CAD file sheet — gets the same border, the same
+ * CAD theme editor, the CAD Inspector — gets the same border, the same
  * width and the same handle, which is the point: they used to be two columns
  * of two designs, the app's tree beside the viewer's own aside, each with its
  * own idea of how wide a panel is.
  *
  * No title bar. Each panel's own top row is its header — the tree's filter,
- * the file sheet's tabs, the theme editor's preset select — and the nav row's
+ * the Inspector's tabs, the theme editor's preset select — and the nav row's
  * toggle is how it closes, the way the viewer's panels have always worked. A
  * title above a tab bar would be a second name for the same thing.
  *
