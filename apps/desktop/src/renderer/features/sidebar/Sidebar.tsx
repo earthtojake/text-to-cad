@@ -1,6 +1,8 @@
 import { FolderPlus, MessageSquarePlus, Search, Settings } from "lucide-react";
 import { cn } from "cn";
 
+import hardcoreMark from "@renderer/assets/brand/hardcore-monochrome.svg";
+
 import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import {
@@ -36,7 +38,10 @@ export function Sidebar() {
       <div className="app-drag shrink-0" style={{ height: "var(--titlebar-height)" }} />
 
       <header className="app-drag flex shrink-0 items-center gap-1 pt-0.5 pr-2 pb-1 pl-3">
-        <span className="app-no-drag truncate text-[17px] font-semibold tracking-tight">Hardcore</span>
+        <span className="app-no-drag flex min-w-0 items-center gap-2">
+          <img alt="" className="size-7 shrink-0 object-contain" src={hardcoreMark} />
+          <span className="truncate text-[17px] font-medium tracking-tight">Hardcore</span>
+        </span>
         <div className="flex-1" />
         <Button
           aria-label="Search"
