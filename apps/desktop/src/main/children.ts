@@ -4,7 +4,7 @@
  * The app quits by `app.quit()`; Electron then waits for the Node side to
  * come down, and the Node side waits for the children it has pipes to. A
  * child that is still running at that moment — a version probe importing
- * OCP, a `git fetch` against a slow remote, a `claude plugin install` — holds
+ * OCP, a `git fetch` against a slow remote, a `pip install` into a cold cache — holds
  * the whole exit until it finishes or its own timeout kills it, which is how
  * quitting took sixty seconds with a STEP file open: `execCommand`'s probe
  * has a sixty-second timeout, and the process left when it did.

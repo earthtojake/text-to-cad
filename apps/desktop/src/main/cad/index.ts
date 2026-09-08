@@ -1,16 +1,20 @@
 /**
  * The CAD runtime this app is built around (plan §8), wired to Electron.
  *
- * Four pieces, each testable on its own without this file:
+ * Three pieces, each testable on its own without this file:
  *
  *   - `runtime.ts`   which Python runs cadgen — the bundled one, normally;
  *   - `viewer.ts`    one `cadgen viewer --api-only` per project root;
- *   - `plugin.ts`    the composed Hardcore plugin, installed into each agent;
  *   - `mcp-bridge.ts` + `actions.ts`  the stdio MCP server every session gets
  *     (`resources/hardcore-mcp/server.mjs`) and what its tools do here.
  *
+ * Skills are the fourth thing this file owns, but they are a directory rather
+ * than a module: `materialiseSkills` below composes `resources/skills` into
+ * the user's data directory, and a session is handed that path. Nothing is
+ * installed into an agent's own configuration.
+ *
  * `initCad` is called once from main after the database is open; `shutdownCad`
- * on quit. The IPC handlers in `src/main/ipc/{cad,runtime,plugins}.ts` reach
+ * on quit. The IPC handlers in `src/main/ipc/{cad,runtime,skills}.ts` reach
  * the singletons through the accessors below.
  */
 import { randomUUID } from "node:crypto";
