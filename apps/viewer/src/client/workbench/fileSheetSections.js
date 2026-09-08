@@ -11,6 +11,7 @@ export const FILE_SHEET_SECTION_IDS = Object.freeze({
   STEP_ANIMATION: "animation",
   ROBOT_SDF: "sdf",
   ROBOT_MOTION: "motion",
+  ROBOT_COMPONENTS: "components",
   ROBOT_JOINTS: "joints",
   DXF_MATERIAL: "material",
   DXF_BENDS: "bends",
@@ -34,6 +35,7 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
   const normalizedKind = normalizeString(kind);
   const isSdf = options.isSdf === true || normalizedKind === "sdf";
   const showJoints = options.showJoints !== false;
+  const showRobotComponents = options.hasRobotComponents === true;
   const status = options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : [];
   switch (normalizedKind) {
     // A drawing HAS controls of its own now. Thickness (and, where the drawing declares
@@ -72,15 +74,12 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
     case "urdf":
     case "srdf":
     case "sdf":
-      // NOTE: no Tree tab yet, though a robot now HAS a link tree and its links are
-      // selectable in the viewport. The Tree panel is 556 lines inside StepFileSheet
-      // reading 20 props and 33 derived locals; sharing it means extracting it, and a
-      // second tree implementation for robots is exactly the parallel stack this effort
-      // exists to remove.
+      // Named robot objects share the viewport picker and expose a Reference inspector.
       return [
         ...status,
         ...(isSdf ? [FILE_SHEET_SECTION_IDS.ROBOT_SDF] : []),
         ...(options.motionEnabled ? [FILE_SHEET_SECTION_IDS.ROBOT_MOTION] : []),
+        ...(showRobotComponents ? [FILE_SHEET_SECTION_IDS.ROBOT_COMPONENTS, FILE_SHEET_SECTION_IDS.STEP_REFERENCE] : []),
         ...(showJoints ? [FILE_SHEET_SECTION_IDS.ROBOT_JOINTS] : [])
       ];
     case "mesh":

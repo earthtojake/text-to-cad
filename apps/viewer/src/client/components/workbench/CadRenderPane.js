@@ -17,6 +17,7 @@ import { RENDER_FORMAT } from "@/workbench/constants";
 import { TUTORIAL_TIP_IDS } from "@/workbench/persistence";
 import {
   PARAMETER_SOURCE,
+  VIEWPORT_CONTENT,
   renderCapabilities,
   supportsTool
 } from "cadgen-js/lib/renderCapabilities";
@@ -290,6 +291,7 @@ export default function CadRenderPane({
   viewPlaneOffsetRight = 16,
   viewerMode,
   assemblyPickingActive = false,
+  robotComponentPicking = false,
   assemblyParts,
   hiddenPartIds,
   selectedPartIds,
@@ -363,7 +365,7 @@ export default function CadRenderPane({
   const drawEnabled = supportsTool(renderFormat, "draw");
   // Formats with no per-part topology to select, annotate or explode: a plain mesh has
   // no parts, so it gets the stripped-down prop set.
-  const hasParts = capabilities.parts;
+  const hasParts = capabilities.parts || (capabilities.content === VIEWPORT_CONTENT.ROBOT && robotComponentPicking);
   const hasTopology = capabilities.topology;
   const displaySettingsActive = capabilities.displayModes && !!displaySettings;
   // Projection is a THEME trait, honoured by every format that declares it — not a
