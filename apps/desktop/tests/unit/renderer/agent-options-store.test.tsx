@@ -45,7 +45,8 @@ const cached = (agentId: string, extra: Partial<AgentOptions> = {}): AgentOption
   modes,
   updatedAt: 1,
   defaultModel: null,
-  defaultEffort: null,
+  defaultEfforts: {},
+  effortOptions: {},
   defaultMode: null,
   ...extra,
 });
@@ -77,21 +78,66 @@ describe("the agent-options store", () => {
 
   it("shows the stored default rather than the snapshot's own current value", () => {
     useAgentOptions.getState().receive([
-      cached("codex", { defaultModel: "smart", defaultEffort: "high" }),
+      cached("codex", { defaultModel: "smart", defaultEfforts: { smart: "high" } }),
     ]);
     const { result } = renderHook(() => useProviderModels([agent("codex", "Codex")]));
     expect(result.current[0]?.model.currentValue).toBe("smart");
-    const { result: effort } = renderHook(() => useProviderEffort("codex"));
+    const { result: effort } = renderHook(() => useProviderEffort("codex", "smart"));
     expect(effort.current?.currentValue).toBe("high");
+  });
+
+  /**
+   * The user's ask: reselecting a model comes back to the level chosen under
+   * it. The store keeps one level per model, so the chip is asked which model
+   * it is standing next to and answers about that one — a level remembered
+   * for the agent would show `smart`'s under `fast` and forget it on the way
+   * back.
+   */
+  it("shows the effort remembered for the model it is asked about", () => {
+    useAgentOptions.getState().receive([
+      cached("codex", { defaultEfforts: { smart: "high", fast: "low" } }),
+    ]);
+    const { result: smart } = renderHook(() => useProviderEffort("codex", "smart"));
+    expect(smart.current?.currentValue).toBe("high");
+    const { result: fast } = renderHook(() => useProviderEffort("codex", "fast"));
+    expect(fast.current?.currentValue).toBe("low");
+    // A model nobody has picked a level for: the level the agent reports.
+    const { result: other } = renderHook(() => useProviderEffort("codex", "opus"));
+    expect(other.current?.currentValue).toBe("low");
+  });
+
+  /**
+   * And the levels themselves are the model's. The snapshot describes
+   * whichever model was current when it was taken, so the cache keeps the
+   * option seen against each model and the chip draws that model's list.
+   */
+  it("draws the levels the model it is asked about offers", () => {
+    useAgentOptions.getState().receive([
+      cached("claude-code", {
+        defaultEfforts: { smart: "xhigh" },
+        effortOptions: {
+          fast: select("effort", "thought_level", ["low", "medium", "high"], "medium"),
+          smart: select("effort", "thought_level", ["low", "medium", "high", "xhigh"], "medium"),
+        },
+      }),
+    ]);
+    const { result: smart } = renderHook(() => useProviderEffort("claude-code", "smart"));
+    expect(smart.current?.options.map((option) => option.value)).toEqual(["low", "medium", "high", "xhigh"]);
+    expect(smart.current?.currentValue).toBe("xhigh");
+    const { result: fast } = renderHook(() => useProviderEffort("claude-code", "fast"));
+    expect(fast.current?.options.map((option) => option.value)).toEqual(["low", "medium", "high"]);
+    // `xhigh` is not one of `fast`'s levels, so it is not what the chip shows
+    // even if it somehow got stored against it.
+    expect(fast.current?.currentValue).toBe("medium");
   });
 
   it("has no effort chip for an agent whose snapshot has no effort levels", () => {
     useAgentOptions.getState().receive([
       cached("codex", { options: [select("model", "model", ["fast"], "fast")] }),
     ]);
-    const { result } = renderHook(() => useProviderEffort("codex"));
+    const { result } = renderHook(() => useProviderEffort("codex", "fast"));
     expect(result.current).toBeNull();
-    const { result: unknown } = renderHook(() => useProviderEffort("nobody"));
+    const { result: unknown } = renderHook(() => useProviderEffort("nobody", null));
     expect(unknown.current).toBeNull();
   });
 

@@ -64,6 +64,7 @@ export function NewSession({ project }: { project: Project }) {
   const setDraft = useComposer((state) => state.setDraft);
   const probeOptions = useAgentOptions((state) => state.probe);
   const setAgentDefaults = useAgentOptions((state) => state.setDefaults);
+  const setAgentEffort = useAgentOptions((state) => state.setEffort);
 
   const [agentId, setAgentId] = useState<string | null>(null);
   const [gitMode, setGitMode] = useState<GitMode | null>(null);
@@ -102,7 +103,12 @@ export function NewSession({ project }: { project: Project }) {
   const providers = useProviderModels(installed);
   const pickedProvider =
     providers.find((provider) => provider.agentId === resolvedAgentId) ?? providers[0] ?? null;
-  const effort = useProviderEffort(pickedProvider?.agentId ?? null);
+  // The model the chip is showing — this provider's remembered one, else the
+  // model it reported as current. The effort is remembered against that
+  // model, and its levels are that model's, so switching the model chip
+  // swaps the effort chip's list and its value in one step.
+  const pickedModel = pickedProvider?.model.currentValue ?? null;
+  const effort = useProviderEffort(pickedProvider?.agentId ?? null, pickedModel);
   // The mode the session will be created in: this agent's stored default,
   // else its own auto-approval preset — which is what main applies right
   // after `session/new` (`applyPreferences`), so the chip is a statement
@@ -115,6 +121,10 @@ export function NewSession({ project }: { project: Project }) {
   const startingAgentId = pickedProvider?.agentId ?? resolvedAgentId;
   const agent = agents.find((candidate) => candidate.id === startingAgentId) ?? null;
 
+  // Picking a model under another provider swaps provider: its remembered
+  // effort and mode come with it, because both are read against the agent the
+  // chips are showing. Nothing here touches the efforts — the level chosen
+  // under the model being left is still that model's.
   const chooseModel = (pickedAgentId: string, value: string) => {
     setAgentId(pickedAgentId);
     setFailure(null);
@@ -122,9 +132,16 @@ export function NewSession({ project }: { project: Project }) {
   };
 
   const chooseEffort = (_configId: string, value: string) => {
-    if (pickedProvider) {
-      void setAgentDefaults(pickedProvider.agentId, { effort: value });
+    if (!pickedProvider) {
+      return;
     }
+    // Pinned to the agent the chips are showing, the way picking a model or a
+    // mode pins it: which agent this screen starts with is otherwise still
+    // moving while the detector answers each one's login, and an effort
+    // stored against whoever was showing at the click is an effort nobody
+    // chose. Keyed by the model it was chosen under, which is that same chip.
+    setAgentId(pickedProvider.agentId);
+    void setAgentEffort(pickedProvider.agentId, pickedProvider.model.currentValue, value);
   };
 
   const chooseMode = (modeId: string) => {

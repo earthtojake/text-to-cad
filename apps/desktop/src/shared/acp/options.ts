@@ -176,3 +176,86 @@ export function withCurrentValue(option: SelectOption, value: string | null | un
   }
   return { ...option, currentValue: value };
 }
+
+/* -------------------------------------------------------------------------- */
+/* What is remembered, and how it resolves                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The key an effort is remembered against for an agent that offers no model
+ * dropdown at all: there is one effort to remember and no model to hang it
+ * on. Every other key is a model option's `value`.
+ */
+export const NO_MODEL = "";
+
+/**
+ * Which model a set of options describes — the key its effort levels, and
+ * the effort picked while it was current, are remembered under.
+ *
+ * The effort option is **per model** on Claude: `Xhigh` exists for one model
+ * and not for the next, and the agent only ever reports the list belonging to
+ * the model the session is on. A snapshot therefore describes one model's
+ * levels, this says which, and the cache keeps a map of them rather than a
+ * single option (`src/main/acp/agent-options.ts`).
+ */
+export function effortModelKey(options: ConfigOption[]): string {
+  return modelOption(options)?.currentValue ?? NO_MODEL;
+}
+
+/**
+ * The effort dropdown to draw for one model: the option as last reported
+ * while that model was current, else the snapshot's own — which belongs to
+ * whichever model was current when it was taken, and is the best there is
+ * for a model nobody has run yet.
+ *
+ * Null when the agent has no effort option at all, which is when no chip is
+ * drawn.
+ */
+export function effortOptionFor(
+  options: ConfigOption[],
+  perModel: Record<string, ConfigOption>,
+  model: string | null,
+): SelectOption | null {
+  const stored = perModel[model ?? NO_MODEL];
+  if (stored && stored.type === "select") {
+    return stored;
+  }
+  return effortOption(options);
+}
+
+/**
+ * The level the effort chip sits at for one model: the level last picked for
+ * **that** model, while it still exists, else the level the agent reports
+ * for it.
+ *
+ * Switching model swaps this, which is the whole point of keying the memory
+ * by model — one effort per agent carries the outgoing model's level onto the
+ * incoming one and forgets the earlier pick.
+ */
+export function preferredEffort(
+  option: SelectOption | null,
+  efforts: Record<string, string>,
+  model: string | null,
+): string | null {
+  if (!option) {
+    return null;
+  }
+  const remembered = efforts[model ?? NO_MODEL];
+  return remembered && option.options.some((candidate) => candidate.value === remembered)
+    ? remembered
+    : option.currentValue;
+}
+
+/**
+ * The mode a session with this agent starts in: the mode the person last
+ * left it in, while the agent still offers it, else the provider's own
+ * auto-approval preset. Shared, because the new-session screen's chip is a
+ * statement about what `SessionManager.create` is about to do and the two
+ * have to agree.
+ */
+export function preferredMode(modes: SessionMode[], remembered: string | null): string | null {
+  return (
+    (remembered && modes.some((mode) => mode.id === remembered) ? remembered : null) ??
+    autoModeId(modes)
+  );
+}

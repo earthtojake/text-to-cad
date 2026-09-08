@@ -6,14 +6,19 @@ import { describe, expect, it } from "vitest";
 
 import { configOptions, sessionModes } from "@shared/acp/reduce";
 import {
+  NO_MODEL,
   autoModeId,
+  effortModelKey,
   effortOption,
+  effortOptionFor,
   fastOption,
   isEffortOption,
   isFullAccessMode,
   modeChoice,
   modeOption,
   modelOption,
+  preferredEffort,
+  preferredMode,
   withCurrentValue,
 } from "@shared/acp/options";
 
@@ -178,5 +183,84 @@ describe("withCurrentValue", () => {
     expect(withCurrentValue(model, "haiku").currentValue).toBe("haiku");
     expect(withCurrentValue(model, "opus-3").currentValue).toBe("sonnet");
     expect(withCurrentValue(model, null)).toBe(model);
+  });
+});
+
+/**
+ * What is remembered at which grain, resolved: the **model** per provider,
+ * the **effort** per provider and model, the **mode** per provider. These are
+ * the three answers the new-session screen's chips draw and the three
+ * `SessionManager.create` applies, so they are one file's decision.
+ *
+ * The effort is the one that needs the model. Claude reports its `effort`
+ * option for whichever model the session is on, with the levels that model
+ * has: `sonnet` is asked at `high`, and a bigger model would offer a level
+ * `sonnet` does not. One level per agent therefore names no model — which is
+ * how switching model carried the old level across and switching back forgot
+ * the earlier pick.
+ */
+describe("the remembered model, effort and mode", () => {
+  /** Claude's shape with a second model whose levels go one further. */
+  const SMART_EFFORT = {
+    id: "effort",
+    name: "Effort",
+    category: "thought_level",
+    type: "select",
+    currentValue: "medium",
+    options: [{ value: "low", name: "Low" }, { value: "medium", name: "Medium" }, { value: "high", name: "High" }, { value: "xhigh", name: "Xhigh" }],
+  };
+
+  it("keys an effort by the model the options were on", () => {
+    expect(effortModelKey(configOptions(CLAUDE_CONFIG))).toBe("sonnet");
+    // An agent with an effort but no model dropdown: one level, no model to
+    // hang it on.
+    expect(effortModelKey(configOptions([CLAUDE_CONFIG[2]!]))).toBe(NO_MODEL);
+    expect(effortModelKey([])).toBe(NO_MODEL);
+  });
+
+  it("draws each model's own levels, and falls back to the snapshot's for one nobody has run", () => {
+    const options = configOptions(CLAUDE_CONFIG);
+    const perModel = { opus: configOptions([SMART_EFFORT])[0]! };
+    expect(effortOptionFor(options, perModel, "opus")?.options.map((option) => option.value)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    // `sonnet` has none cached: the snapshot's own, which was taken with it.
+    expect(effortOptionFor(options, perModel, "sonnet")?.options.map((option) => option.value)).toEqual([
+      "low",
+      "high",
+    ]);
+    expect(effortOptionFor(options, {}, null)?.id).toBe("effort");
+    // No effort option at all is no chip.
+    expect(effortOptionFor(configOptions([CLAUDE_CONFIG[1]!]), {}, "sonnet")).toBeNull();
+  });
+
+  it("sits at the level remembered for that model, else the one the agent reports", () => {
+    const sonnet = effortOption(configOptions(CLAUDE_CONFIG))!;
+    const opus = effortOption(configOptions([SMART_EFFORT]))!;
+    const efforts = { sonnet: "low", opus: "xhigh" };
+    expect(preferredEffort(sonnet, efforts, "sonnet")).toBe("low");
+    expect(preferredEffort(opus, efforts, "opus")).toBe("xhigh");
+    // Nothing remembered for this model: the agent's own current for it.
+    expect(preferredEffort(sonnet, efforts, "haiku")).toBe("high");
+    expect(preferredEffort(sonnet, {}, "sonnet")).toBe("high");
+    // A level that model does not have — `xhigh` under `sonnet` — is not an
+    // answer, so the agent's own stands.
+    expect(preferredEffort(sonnet, { sonnet: "xhigh" }, "sonnet")).toBe("high");
+    // An agent with no model dropdown remembers its one level under NO_MODEL.
+    expect(preferredEffort(sonnet, { [NO_MODEL]: "low" }, null)).toBe("low");
+    expect(preferredEffort(null, efforts, "sonnet")).toBeNull();
+  });
+
+  it("starts in the mode the provider was left in, else its own auto preset", () => {
+    const modes = sessionModes(CLAUDE_MODES);
+    expect(preferredMode(modes, "plan")).toBe("plan");
+    // A mode the agent dropped is not a mode.
+    expect(preferredMode(modes, "yolo")).toBe("auto");
+    expect(preferredMode(modes, null)).toBe("auto");
+    // And an agent with no auto preset is left alone rather than guessed at.
+    expect(preferredMode(sessionModes([{ id: "a", name: "A" }, { id: "b", name: "B" }]), null)).toBeNull();
   });
 });

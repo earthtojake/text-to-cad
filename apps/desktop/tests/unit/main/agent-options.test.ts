@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { AgentOptionStore, type AgentOptionsDeps, type AgentSnapshot } from "@main/acp/agent-options";
+import { effortModelKey, effortOption } from "@shared/acp/options";
 import type { ConfigOption, SessionMode } from "@shared/acp/types";
 import type { AgentOptions } from "@shared/ipc/agent-options";
 
@@ -23,18 +24,25 @@ const model = (currentValue = "fast"): ConfigOption => ({
   ],
 });
 
-const effort = (currentValue = "medium"): ConfigOption => ({
+/**
+ * The effort option, with the levels of one model. `levels` is a parameter
+ * because the list is per model — the point of migration 9 — and `xhigh`
+ * exists for the bigger of the two the way it does on Claude.
+ */
+const effort = (currentValue = "medium", levels = ["low", "medium", "high"]): ConfigOption => ({
   id: "reasoning_effort",
   name: "Effort",
   description: null,
   category: "thought_level",
   type: "select",
   currentValue,
-  options: [
-    { value: "low", name: "Low", description: null, group: null, kind: null },
-    { value: "medium", name: "Medium", description: null, group: null, kind: null },
-    { value: "high", name: "High", description: null, group: null, kind: null },
-  ],
+  options: levels.map((value) => ({
+    value,
+    name: value,
+    description: null,
+    group: null,
+    kind: null,
+  })),
 });
 
 const modes: SessionMode[] = [
@@ -64,7 +72,13 @@ const snapshot = (
   sessionModes: SessionMode[] = [],
 ): AgentSnapshot => ({ configOptions, modes: sessionModes });
 
-/** An in-memory stand-in for the sqlite rows, with the same read/write shape. */
+/**
+ * An in-memory stand-in for the sqlite rows, with the same read/write shape —
+ * including the two maps migration 9 made of the effort: the level picked per
+ * model, and the levels each model offers (filed by `writeOptions` under
+ * whichever model the snapshot was taken with, exactly as the repository
+ * does).
+ */
 function store(overrides: Partial<AgentOptionsDeps> = {}) {
   const rows = new Map<string, AgentOptions>();
   const changes: AgentOptions[][] = [];
@@ -75,23 +89,43 @@ function store(overrides: Partial<AgentOptionsDeps> = {}) {
       modes: [],
       updatedAt: null,
       defaultModel: null,
-      defaultEffort: null,
+      defaultEfforts: {},
+      effortOptions: {},
       defaultMode: null,
     };
   const deps: AgentOptionsDeps = {
     read: () => [...rows.values()],
     get: (agentId) => rows.get(agentId) ?? null,
     writeOptions: (agentId, options, agentModes) => {
-      rows.set(agentId, { ...row(agentId), options, modes: agentModes, updatedAt: 1 });
+      const current = row(agentId);
+      const levels = effortOption(options);
+      rows.set(agentId, {
+        ...current,
+        options,
+        modes: agentModes,
+        updatedAt: 1,
+        effortOptions: levels
+          ? { ...current.effortOptions, [effortModelKey(options)]: levels }
+          : current.effortOptions,
+      });
     },
     writeDefaults: (agentId, defaults) => {
       const current = row(agentId);
       rows.set(agentId, {
         ...current,
         ...(defaults.model === undefined ? {} : { defaultModel: defaults.model }),
-        ...(defaults.effort === undefined ? {} : { defaultEffort: defaults.effort }),
         ...(defaults.mode === undefined ? {} : { defaultMode: defaults.mode }),
       });
+    },
+    writeEffort: (agentId, model, value) => {
+      const current = row(agentId);
+      const efforts = { ...current.defaultEfforts };
+      if (value === null) {
+        delete efforts[model];
+      } else {
+        efforts[model] = value;
+      }
+      rows.set(agentId, { ...current, defaultEfforts: efforts });
     },
     probe: async () => snapshot(),
     onChange: (all) => changes.push(all),
@@ -141,8 +175,73 @@ describe("AgentOptionStore", () => {
     // A boolean, and an option that is none of the three: session-scoped.
     subject.rememberChoice("codex", "web_search", true, options);
     subject.rememberChoice("codex", "collaboration_mode", "plan", options);
-    expect(subject.defaults("codex")).toEqual({ model: "smart", effort: "high", mode: "default" });
+    expect(subject.defaults("codex")).toEqual({ model: "smart", mode: "default" });
+    // The effort is filed against the model the options were on when it was
+    // picked — `fast` — not against the model that was switched to.
+    expect(rows.get("codex")?.defaultEfforts).toEqual({ fast: "high" });
+    expect(subject.effortFor("codex", "fast")).toBe("high");
+    expect(subject.effortFor("codex", "smart")).toBeNull();
     expect(rows.get("codex")?.options).toEqual([]);
+  });
+
+  /**
+   * The user's ask, in the smallest form it fits: pick a level under one
+   * model, pick another under the second, and each model keeps its own. One
+   * `default_effort` per agent could not — the second pick overwrote the
+   * first, and coming back to the first model showed the second's level.
+   */
+  it("keeps one effort per model, and a model pick leaves them all alone", () => {
+    const { subject } = store();
+    subject.rememberChoice("claude-code", "reasoning_effort", "xhigh", [
+      model("smart"),
+      effort("medium", ["low", "medium", "high", "xhigh"]),
+    ]);
+    subject.rememberChoice("claude-code", "reasoning_effort", "low", [model("fast"), effort()]);
+    expect(subject.effortFor("claude-code", "smart")).toBe("xhigh");
+    expect(subject.effortFor("claude-code", "fast")).toBe("low");
+
+    // Switching model — either way round — says nothing about any effort.
+    subject.rememberChoice("claude-code", "model", "smart", [model("fast"), effort()]);
+    subject.rememberChoice("claude-code", "model", "fast", [model("smart"), effort()]);
+    expect(subject.effortFor("claude-code", "smart")).toBe("xhigh");
+    expect(subject.effortFor("claude-code", "fast")).toBe("low");
+    expect(subject.defaults("claude-code").model).toBe("fast");
+  });
+
+  /**
+   * An agent with an effort option but no model dropdown: there is one level
+   * to remember and no model to hang it on, so it goes under `NO_MODEL` and
+   * is found again by an `effortFor` asked with no model.
+   */
+  it("remembers the effort of an agent that offers no models", () => {
+    const { subject, rows } = store();
+    subject.rememberChoice("gemini-cli", "reasoning_effort", "high", [effort()]);
+    expect(rows.get("gemini-cli")?.defaultEfforts).toEqual({ "": "high" });
+    expect(subject.effortFor("gemini-cli", null)).toBe("high");
+  });
+
+  /**
+   * The levels themselves, per model. A snapshot only ever describes the
+   * model it was taken with — Claude reports `effort` for the current model
+   * — so the cache has to accumulate them, or picking a model on the
+   * new-session screen would offer the previous model's list.
+   */
+  it("keeps each model's effort levels as sessions report them", () => {
+    const { subject, rows } = store();
+    subject.remember("claude-code", [model("fast"), effort()], modes);
+    expect(Object.keys(rows.get("claude-code")!.effortOptions)).toEqual(["fast"]);
+
+    subject.remember(
+      "claude-code",
+      [model("smart"), effort("medium", ["low", "medium", "high", "xhigh"])],
+      modes,
+    );
+    const levels = rows.get("claude-code")!.effortOptions;
+    expect(Object.keys(levels).sort()).toEqual(["fast", "smart"]);
+    const smart = levels.smart;
+    expect(smart?.type === "select" ? smart.options.map((option) => option.value) : []).toContain("xhigh");
+    const fast = levels.fast;
+    expect(fast?.type === "select" ? fast.options.map((option) => option.value) : []).not.toContain("xhigh");
   });
 
   it("remembers the mode a live session was switched into", () => {
@@ -206,10 +305,18 @@ describe("AgentOptionStore", () => {
   it("sets one default without clearing the others", () => {
     const { subject } = store();
     subject.setDefaults("codex", { model: "smart" });
-    subject.setDefaults("codex", { effort: "high" });
+    subject.setEffort("codex", "smart", "high");
     subject.setDefaults("codex", { mode: "plan" });
-    expect(subject.defaults("codex")).toEqual({ model: "smart", effort: "high", mode: "plan" });
+    expect(subject.defaults("codex")).toEqual({ model: "smart", mode: "plan" });
+    expect(subject.effortFor("codex", "smart")).toBe("high");
     subject.setDefaults("codex", { model: null });
-    expect(subject.defaults("codex")).toEqual({ model: null, effort: "high", mode: "plan" });
+    expect(subject.defaults("codex")).toEqual({ model: null, mode: "plan" });
+    expect(subject.effortFor("codex", "smart")).toBe("high");
+    // And forgetting one leaves the others: the chip goes back to the level
+    // the agent reports for that model.
+    subject.setEffort("codex", "fast", "low");
+    subject.setEffort("codex", "smart", null);
+    expect(subject.effortFor("codex", "smart")).toBeNull();
+    expect(subject.effortFor("codex", "fast")).toBe("low");
   });
 });
