@@ -52,7 +52,7 @@ export default function ViewerLoadingOverlay({
         <div
           role="status"
           aria-live="polite"
-          className="relative z-10 flex w-[22rem] max-w-[min(90vw,28rem)] flex-col gap-2 text-popover-foreground"
+          className="relative z-10 flex w-[22rem] max-w-full flex-col gap-2 text-popover-foreground"
         >
           <LoadingIcon className="mx-auto mb-3" />
           <div className="flex items-baseline justify-between gap-4">
