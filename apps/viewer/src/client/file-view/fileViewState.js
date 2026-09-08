@@ -41,6 +41,7 @@ export const DEFAULT_SIDEBAR_WIDTH = CAD_WORKSPACE_DEFAULT_SIDEBAR_WIDTH;
 export {
   DESKTOP_TAB_TOOLS_MAX_WIDTH,
   DESKTOP_TAB_TOOLS_MIN_WIDTH,
+  applyColorSchemeUnlessHostPinned,
   hostPrefersDarkForColorScheme,
   normalizeHostSheetWidth,
   resolveHostLayoutMode

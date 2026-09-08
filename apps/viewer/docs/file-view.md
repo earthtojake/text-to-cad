@@ -36,7 +36,7 @@ a build error or, worse, a silently unstyled surface.
 | `layout` | `"auto"` | `"desktop"` pins the desktop layout — the file sheet is a column beside the model, never a drawer over it — however narrow the root is. `"auto"` measures the root and picks desktop or compact. |
 | `fileSheetWidth` | `null` | The sheet's width in px, when the host sizes it for its pane. Clamped to the sheet's own range (240–448) and not resizable from inside the surface. `null` uses the stored width. Ignored when `panelSlot` is given — the host's frame owns the width then. |
 | `panelSlot` | `null` | A DOM element the open panel's content is drawn into. Given one, the surface portals the theme editor or the file sheet there and draws no column of its own; without one it draws the column, which is the standalone case. See "Where the panels are drawn". |
-| `colorScheme` | `null` | `"light"` or `"dark"`: the host's resolved colour scheme, which is the chrome's light/dark. The CAD "system" theme resolves the same way — its light/dark half and the background it borrows from the host's chrome — and the surface stops writing `.dark` / `color-scheme` to the document, because the host owns those. `null` is the standalone case: the surface follows its own colour-scheme preference and the OS, and writes the document itself. Never the CAD theme, in either case: see "Theme is the scene". |
+| `colorScheme` | `null` | `"light"` or `"dark"`: the host's **resolved** colour scheme, which is the chrome's light/dark. The CAD "system" theme resolves the same way — its light/dark half and the background it borrows from the host's chrome — and the surface stops writing `.dark` / `color-scheme` to the document, because the host owns those. `null` is the standalone case: the surface follows its own colour-scheme preference and the OS, and writes the document itself. Resolved, so the literal word `"system"` is *not* a pin: it reads as "no host", and the surface takes the document back. Never the CAD theme, in either case: see "Theme is the scene". |
 | `selectReference` | `null` | `{ selector, key }`: select a reference — `o1.2`, `label.f45`, `bracket`, a comma-separated list (its first member) — once the model is up. Applied once per `key`; a new `key` selects again. See "References and captures". |
 | `onReference` | `null` | `({ file, selector, text, label? }) => void`. Called by explicit Add to prompt actions. Copy actions only write to the clipboard. `null` hides Add to prompt. |
 | `onCapture` | `null` | `({ blob, file, references }) => void`. Given, the floating toolbar shows a camera button that renders the viewport to a PNG and hands it over; `null` shows no button. |
@@ -446,6 +446,15 @@ narrow pane with no viewport at all. Two more things follow for a host:
   scheme resolves the CAD "system" preset and the surface writes nothing to
   the root. The CAD theme is not part of this in either case ("Theme is the
   scene").
+
+  There is exactly one place that write can happen from —
+  `applyColorSchemeUnlessHostPinned` in `hostLayout.js`, which returns without
+  touching the document whenever a host pinned a scheme. It is a named
+  function rather than a condition inside an effect so the rule can be tested
+  on its own, and it is the reason a host does not have to trust the surface:
+  the surface has a colour-scheme preference of its own, and inside a host it
+  is nobody's choice. A write from here turned a whole app light on a mount,
+  on a `storage` event from a second window, and on every theme edit.
 - **One tessellation cache provider per page.** `setTessellationCacheProvider`
   in `cadgen-js` is a module singleton, so a page showing two backends at once
   shares one provider. Register it with the origin you care about:

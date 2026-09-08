@@ -7,9 +7,10 @@
 // document is dark" — and every one of them is nothing at all unless it is
 // asked for, so the standalone app's behaviour does not change.
 //
-// Plain functions in a module with no `@/` imports, so `node --test` can load
-// them without the bundler's aliases.
+// Plain functions, and only relative imports of modules that are plain
+// functions too, so `node --test` can load them without the bundler's aliases.
 import { CAD_WORKSPACE_LAYOUT_MODE } from "../workbench/breakpoints.js";
+import { applyColorSchemeToDocument, resolveColorSchemeMode } from "../ui/colorScheme.js";
 
 export const DESKTOP_TAB_TOOLS_MIN_WIDTH = 240;
 export const DESKTOP_TAB_TOOLS_MAX_WIDTH = 448;
@@ -45,4 +46,39 @@ export function hostPrefersDarkForColorScheme(colorScheme) {
     return false;
   }
   return null;
+}
+
+/**
+ * The surface's ONE write of the document's colour scheme — and the rule that
+ * a host's `colorScheme` cancels it.
+ *
+ * Embedded, the document belongs to the host: it has a light/dark preference
+ * of its own, applies it to `<html>` itself, and hands the resolved answer
+ * down as `colorScheme`. A surface that also wrote the document would be a
+ * second writer with a second preference — the viewer's own stored
+ * `cad-viewer:color-scheme`, which is nobody's choice in a host — and the app
+ * around it would flip light on a mount, a storage event or a theme edit.
+ * Standalone there is no host and the surface's preference is the app's, so it
+ * writes.
+ *
+ * The rule is a function rather than an `if` inside an effect so it can be
+ * tested on its own (hostLayout.test.js) and so there is one place a document
+ * write can happen from at all.
+ *
+ * Answers the mode written, or null when the write was skipped.
+ */
+export function applyColorSchemeUnlessHostPinned(
+  colorScheme,
+  colorSchemePreference,
+  { prefersDark = false, root = undefined } = {}
+) {
+  if (hostPrefersDarkForColorScheme(colorScheme) !== null) {
+    return null;
+  }
+  const target = root || (typeof document === "undefined" ? null : document.documentElement);
+  if (!target) {
+    return null;
+  }
+  applyColorSchemeToDocument(colorSchemePreference, target, { prefersDark });
+  return resolveColorSchemeMode(colorSchemePreference, { prefersDark });
 }

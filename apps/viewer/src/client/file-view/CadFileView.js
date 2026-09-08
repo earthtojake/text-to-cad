@@ -62,7 +62,6 @@ import { useCadDirectorySession } from "../components/workbench/hooks/useCadDire
 import { useCadWorkspaceSelectors } from "../components/workbench/hooks/useCadWorkspaceSelectors";
 import { useCadWorkspaceShortcuts } from "../components/workbench/hooks/useCadWorkspaceShortcuts";
 import {
-  applyColorSchemeToDocument,
   DARK_COLOR_SCHEME_ID,
   LIGHT_COLOR_SCHEME_ID,
   readColorSchemePreference,
@@ -317,6 +316,7 @@ import {
   DESKTOP_TAB_TOOLS_MAX_WIDTH,
   DESKTOP_TAB_TOOLS_MIN_WIDTH,
   EMPTY_LIST,
+  applyColorSchemeUnlessHostPinned,
   capitalizeFirst,
   entryWithoutRenderAssets,
   hostPrefersDarkForColorScheme,
@@ -3272,17 +3272,15 @@ function CadFileViewSurface({
   }, [flushActiveFileSession]);
 
   useEffect(() => {
-    // Embedded, the host owns the document: it passed `colorScheme`, and its
-    // own design system paints the chrome. Standalone the surface writes the
-    // app's colour-scheme preference — the preference and the OS, never the
+    // The surface's only document write, and it is skipped whenever the host
+    // pinned a `colorScheme` — the rule and the reason are on
+    // `applyColorSchemeUnlessHostPinned` (hostLayout.js). Standalone it writes
+    // the app's colour-scheme preference: the preference and the OS, never the
     // theme.
-    if (hostPrefersDark !== null) {
-      return;
-    }
-    applyColorSchemeToDocument(colorSchemePreference, document.documentElement, {
+    applyColorSchemeUnlessHostPinned(colorScheme, colorSchemePreference, {
       prefersDark: systemPrefersDark
     });
-  }, [colorSchemePreference, hostPrefersDark, systemPrefersDark]);
+  }, [colorScheme, colorSchemePreference, systemPrefersDark]);
 
   useEffect(() => {
     const handleStorage = (event) => {
