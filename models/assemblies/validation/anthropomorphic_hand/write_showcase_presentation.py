@@ -50,6 +50,7 @@ sys.path.insert(0, str(SOURCE))
 
 from lib.actuator_kinematics import INPUT_ROLES, OUTPUT_ROLES, actuator_transform  # noqa: E402
 from lib.actuator_payout import solve_rotation  # noqa: E402
+from lib.forearm_routing import forearm_route  # noqa: E402
 from lib.hand_routing import full_tendon_routes  # noqa: E402
 from lib.layout import FINGERS, JOINTS, NEUTRAL_FINGER_FAN, TENDONS  # noqa: E402
 from lib.neutral_routes import NEUTRAL_ROUTES  # noqa: E402
@@ -61,16 +62,19 @@ from lib.path_analysis import path_length  # noqa: E402
 # different body sets, so they keep the static presentation they already have.
 TARGETS = ('hand_mechanical_candidate_r13',)
 
+TENDON_BY_NAME = {tendon['name']: tendon for tendon in TENDONS}
+
 # Poses per second. The pose functions are smooth, so linear interpolation
 # between samples this close stays well under a tenth of a degree; the cost is
 # one route solve (tens of seconds) per sample, run across a process pool.
 KEYFRAME_RATE = 4.0
-# Coordinates are rounded to keep a keyframe small, but not far: consecutive
-# segments meet at numbers that are equal before rounding and therefore equal
-# after it, and `compileTubePath` refuses a join over 1e-5 mm or a tangent turn
-# of more than about 1e-7. Six decimals leaves both a decade of room; three
-# would not.
-COORD_DECIMALS = 6
+# Coordinates are rounded to keep a keyframe small. A join survives any rounding
+# — consecutive segments meet at numbers that are EQUAL before it and therefore
+# equal after it — and the tangent turn that rounding would introduce is undone
+# by the module's own seal, which makes the two handles at a join exactly
+# collinear whatever their inputs. So this is set by what the eye needs, not by
+# `compileTubePath`: a micron, on a cord 0.3 mm across.
+COORD_DECIMALS = 3
 
 
 # --- the choreography -------------------------------------------------------
@@ -204,33 +208,116 @@ def wrist_packet():
 
 
 def solve_pose(pose):
-    """Posed routes, and the capstan rotation each one's payout demands.
+    """The solver's own posed routes, and the payout each one demands.
 
-    The rotation comes from the length the pose asks for, and it turns the spool
-    — but it does NOT re-cut the wrap already on the drum. `forearm_route` emits
-    a different number of Bezier segments at different rotations (16 below zero,
-    15 above), and the module reconstructs every keyframe from ONE segment
-    template, so a re-cut forearm would change the shape of the vector under it.
-    Downstream of the drum the structure is constant across every pose, which is
-    what makes the template work at all; `build` asserts that rather than
-    trusting it. The cost is that the few millimetres of wrap inside the drum do
-    not unwind while the drum turns.
+    Only the expensive part lives here, because this is what the cache holds:
+    `full_tendon_routes` for the pose, and the capstan rotation that keeps each
+    cord's total length constant. Re-cutting the forearm at that rotation is
+    cheap and is done in `build`, where changing it does not cost a re-solve.
     """
     routes = full_tendon_routes(wrist_packet(), pose=pose)
     neutral_length = {route['name']: route['length_mm'] for route in NEUTRAL_ROUTES}
     for route in routes:
-        name = route['name']
         route['capstan_rotation'] = solve_rotation(
-            name, path_length(route['path']) - neutral_length[name])
+            route['name'], path_length(route['path']) - neutral_length[route['name']])
     return routes
+
+
+def split_cubic(segment):
+    """A cubic Bezier as two cubics, exactly (de Casteljau at the midpoint)."""
+    p = [np.array(point, dtype=float) for point in segment['points']]
+    a, b, c = (p[0] + p[1]) / 2, (p[1] + p[2]) / 2, (p[2] + p[3]) / 2
+    d, e = (a + b) / 2, (b + c) / 2
+    mid = (d + e) / 2
+    return [{'kind': 'bezier', 'points': [[*p[0]], [*a], [*d], [*mid]]},
+            {'kind': 'bezier', 'points': [[*mid], [*e], [*c], [*p[3]]]}]
+
+
+# The stored wrap is quarter-turn Beziers plus a partial (capstan_path.stored_path),
+# so its COUNT depends on how much rope is on the drum: twelve at rest, one more
+# as the spool takes rope in. The module rebuilds every keyframe from one
+# template, so the count has to be constant — and it can be, exactly: splitting a
+# cubic at its midpoint reproduces the same curve as two cubics. Every wrap is
+# split up to the most any pose in range needs, which changes no geometry at all.
+WRAP_SEGMENTS = 13
+IDENTITY_3X4 = [1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0.]
+
+
+def normalize_wrap(path, target=WRAP_SEGMENTS):
+    segments = list(path)
+    if len(segments) > target:
+        raise AssertionError(f'wrap has {len(segments)} segments, past the {target} ceiling')
+    while len(segments) < target:
+        longest = max(range(len(segments)),
+                      key=lambda index: np.linalg.norm(
+                          np.array(segments[index]['points'][3])
+                          - np.array(segments[index]['points'][0])))
+        segments[longest:longest + 1] = split_cubic(segments[longest])
+    return segments
+
+
+def wind_forearm(route, rotation):
+    """Re-cut the drum end of one route at the payout angle.
+
+    Without this the spool turns under a cord that does not move with it, which
+    on a model whose whole point is that a motor spools a tendon reads as the
+    cord being painted on. `forearm_route` gives the rope actually on the drum
+    at that rotation; normalizing the wrap's segment count keeps the shape the
+    module's template expects.
+    """
+    forearm = forearm_route(TENDON_BY_NAME[route['name']], rotation)
+    groups = [dict(group) for group in forearm['groups']]
+    for group in groups:
+        if group['label'].endswith('_capstan_wrap'):
+            group['path'] = normalize_wrap(group['path'])
+    tail = route['groups'][len(forearm['groups']):]
+    return groups + [dict(group) for group in tail]
 
 
 def _solve_worker(job):
     time, pose = job
     routes = solve_pose(pose)
     return (time,
-            [route['path'] for route in routes],
+            [[{'label': group['label'], 'path': group['path']} for group in route['groups']]
+             for route in routes],
             [route['capstan_rotation'] for route in routes])
+
+
+def group_points(group):
+    points = []
+    for segment in group['path']:
+        if segment['kind'] == 'bezier':
+            points.extend(segment['points'])
+        elif segment['kind'] == 'line':
+            points.extend([segment['start'], segment['end']])
+        else:
+            points.extend([segment['center'], segment['start']])
+    return np.array(points, dtype=float)
+
+
+def rigid_fit(source, target):
+    """The rigid transform taking `source` points onto `target` (Kabsch).
+
+    A guide that bridges two frames is placed by the ROUTING, not by a link, so
+    the solver never says where it ends up — and riding it on either neighbouring
+    frame throws it out of the hand. What it does ride is the span it guides, and
+    that span's own rigid motion is exactly this fit. Returns a 3x4 row-major
+    transform, or None when the span is too degenerate to fit (a straight run of
+    two points cannot pin a rotation about its own axis, and does not need to).
+    """
+    if len(source) < 3:
+        return None
+    source_center = source.mean(axis=0)
+    target_center = target.mean(axis=0)
+    a = source - source_center
+    b = target - target_center
+    if np.linalg.norm(a) < 1e-9:
+        return None
+    u, _, vt = np.linalg.svd(a.T @ b)
+    d = np.sign(np.linalg.det(vt.T @ u.T))
+    rotation = vt.T @ np.diag([1.0, 1.0, d]) @ u.T
+    translation = target_center - rotation @ source_center
+    return [*rotation[0], translation[0], *rotation[1], translation[1], *rotation[2], translation[2]]
 
 
 def solve_timeline(times):
@@ -246,6 +333,7 @@ def solve_timeline(times):
     # would be nine minutes to reach identical geometry.
     sources = sorted(SOURCE.glob('lib/*.py'))
     key = hashlib.sha256(json.dumps({
+        'shape': 'groups+payout v2',
         'times': times,
         'poses': [tour_pose(time) for time in times],
         'sources': {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in sources},
@@ -435,13 +523,57 @@ def frame_bodies(rows):
     return {frame: sorted(names) for frame, names in sorted(by_frame.items())}, sorted(routed)
 
 
+def wound_path(groups, rotation):
+    return [segment for group in wind_forearm({'name': groups['name'], 'groups': groups['groups']},
+                                              rotation)
+            for segment in group['path']]
+
+
 def build(rows):
     times = keyframe_times()
     neutral = solve_pose({})
-    base = [path_numbers(route['path']) for route in neutral]
-    templates = [path_template(route['path']) for route in neutral]
-    solved = {time: (paths, q) for time, paths, q in solve_timeline(times)}
-    encoded = {time: [path_numbers(path) for path in solved[time][0]] for time in times}
+    neutral_groups = [{'name': route['name'], 'groups': route['groups']} for route in neutral]
+    base = [path_numbers(wound_path(groups, 0.0)) for groups in neutral_groups]
+    templates = [path_template(wound_path(groups, 0.0)) for groups in neutral_groups]
+    solved = {time: (groups, q) for time, groups, q in solve_timeline(times)}
+
+    # The drum end is re-cut at the payout angle here rather than in the solve,
+    # so changing how the rope is wound costs no re-solve.
+    encoded = {}
+    for time in times:
+        groups, rotations = solved[time]
+        encoded[time] = [
+            path_numbers(wound_path({'name': TENDONS[index]['name'], 'groups': route_groups},
+                                    rotations[index]))
+            for index, route_groups in enumerate(groups)
+        ]
+
+    # Guides that bridge two frames ride the span they guide (see rigid_fit).
+    guide_of_group = {}
+    for route in NEUTRAL_ROUTES:
+        for group in route['groups']:
+            if group['frame'] == 'variable':
+                guide_of_group[group['label']] = True
+    guide_names = [row['name'] for row in rows if row['name'] in guide_of_group]
+    neutral_span = {}
+    for route in neutral:
+        for group in route['groups']:
+            if group['label'] in guide_of_group:
+                neutral_span[group['label']] = group_points(group)
+    guide_motion = {}
+    for time in times:
+        placements = {}
+        for route_groups in solved[time][0]:
+            for group in route_groups:
+                label = group['label']
+                if label not in neutral_span:
+                    continue
+                fit = rigid_fit(neutral_span[label], group_points(group))
+                if fit is not None and max(abs(fit[3]), abs(fit[7]), abs(fit[11])) > 1e-9:
+                    placements[label] = [round(value, 6) for value in fit]
+        guide_motion[time] = placements
+    moving_guides = sorted({label for placements in guide_motion.values() for label in placements}
+                           & set(guide_names))
 
     # The module reconstructs every keyframe from ONE segment template, so a
     # route whose shape changed under a pose would be silently truncated by the
@@ -477,6 +609,9 @@ def build(rows):
             'v': [round(numbers[index][position], COORD_DECIMALS)
                   for index, positions in enumerate(varying)
                   for position in positions],
+            'g': [value
+                  for label in moving_guides
+                  for value in (guide_motion[time].get(label) or IDENTITY_3X4)],
         })
     frames, routed = frame_bodies(rows)
     return {
@@ -492,6 +627,7 @@ def build(rows):
         'ropeVarying': varying,
         'ropeNormals': [[t['sign'], 0, 0] for t in TENDONS],
         'ropeNames': [t['name'] for t in TENDONS],
+        'guides': moving_guides,
         'motions': [{'id': m['id'], 'label': m['label'], 'seconds': m['seconds']} for m in MOTIONS],
         'keyframes': keyframes,
     }
@@ -515,6 +651,7 @@ def write_module(path, data, runtime):
         f'const ROPE_TEMPLATES = {dumps(data["ropeTemplates"])};\n'
         f'const ROPE_BASE = {dumps(data["ropeBase"])};\n'
         f'const ROPE_VARYING = {dumps(data["ropeVarying"])};\n'
+        f'const GUIDE_BODIES = {dumps(data["guides"])};\n'
         f'const MOTIONS = {dumps(data["motions"])};\n'
         f'const KEYFRAMES = {dumps(data["keyframes"])};\n'
         + runtime
@@ -532,7 +669,7 @@ def main():
         size = write_module(folder / f'{name}.step.js', data, runtime)
     print(f'wrote {len(TARGETS)} render module(s), {size / 1024:.0f} KB: '
           f'{sum(len(v) for v in data["frames"].values())} bodies on {len(data["frames"])} frames, '
-          f'{len(data["actuatorBodies"])} actuator parts, {len(data["routed"])} routed guides, '
+          f'{len(data["actuatorBodies"])} actuator parts, {len(data["guides"])} fitted guides, '
           f'{len(data["keyframes"])} keyframes')
 
 

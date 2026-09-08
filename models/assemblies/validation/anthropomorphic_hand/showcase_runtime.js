@@ -361,10 +361,38 @@ function applyTendons(m, low, high, alpha) {
 
 // --- clips ------------------------------------------------------------------
 
+// A guide that bridges two frames is placed by the routing, so the generator
+// fits the rigid motion of the span it guides (Kabsch) and bakes it here. The
+// blend of two rotations element by element is not itself a rotation, so the
+// 3x3 is re-orthogonalized before it is handed over — a hair at this keyframe
+// rate, and a squashed pulley without it.
+function applyGuides(m, low, high, alpha) {
+  for (let index = 0; index < GUIDE_BODIES.length; index += 1) {
+    const at = index * 12;
+    const blended = new Array(12);
+    for (let i = 0; i < 12; i += 1) {
+      blended[i] = low.g[at + i] * (1 - alpha) + high.g[at + i] * alpha;
+    }
+    const rows = [blended.slice(0, 3), blended.slice(4, 7), blended.slice(8, 11)];
+    // Gram-Schmidt the three rows back onto an orthonormal basis.
+    const r0 = scale3(rows[0], 1 / (norm3(rows[0]) || 1));
+    let r1 = sub3(rows[1], scale3(r0, r0[0] * rows[1][0] + r0[1] * rows[1][1] + r0[2] * rows[1][2]));
+    r1 = scale3(r1, 1 / (norm3(r1) || 1));
+    const r2 = [r0[1] * r1[2] - r0[2] * r1[1], r0[2] * r1[0] - r0[0] * r1[2], r0[0] * r1[1] - r0[1] * r1[0]];
+    applyMatrix(m.get(GUIDE_BODIES[index]), [
+      r0[0], r0[1], r0[2], blended[3],
+      r1[0], r1[1], r1[2], blended[7],
+      r2[0], r2[1], r2[2], blended[11],
+      0, 0, 0, 1
+    ]);
+  }
+}
+
 function applyAt(m, t) {
   const { low, high, alpha } = bracket(t);
   applyPose(m, blendedPose(low, high, alpha));
   applyActuators(m, low.q.map((value, index) => value * (1 - alpha) + high.q[index] * alpha));
+  applyGuides(m, low, high, alpha);
   applyTendons(m, low, high, alpha);
 }
 
