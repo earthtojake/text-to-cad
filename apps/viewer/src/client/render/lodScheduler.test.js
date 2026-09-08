@@ -196,3 +196,59 @@ test("setComponents resets levels and cancels stale work (model switch)", async 
   assert.equal(scheduler.levelOf("new"), 0);
   scheduler.dispose();
 });
+
+test("setComponents({ preserveLevels }) keeps levels and in-flight work while the same model grows", async () => {
+  const clock = makeClock();
+  const gate = deferred();
+  let aborted = false;
+  const scheduler = createLodScheduler({
+    loadLevel: (cid, level, { signal }) => {
+      signal.addEventListener("abort", () => {
+        aborted = true;
+      });
+      return gate.promise;
+    },
+    applyLevel: () => {},
+    setTimeoutFn: clock.setTimeoutFn,
+    clearTimeoutFn: clock.clearTimeoutFn,
+  });
+  // First progressive batch: "part" loads to a finer level.
+  scheduler.setComponents([{ cid: "part", diagonal: 100 }]);
+  scheduler.onCameraSample(sampleWith({ part: 60 }));
+  clock.fire();
+  assert.ok(scheduler.busy());
+  gate.resolve({});
+  await tick();
+  // The drain steps the near component to the finest rung (as the drain test above).
+  assert.equal(scheduler.levelOf("part"), 2);
+  // A later batch adds a component: the applied level survives.
+  scheduler.setComponents([{ cid: "part", diagonal: 100 }, { cid: "later", diagonal: 50 }], { preserveLevels: true });
+  assert.equal(scheduler.levelOf("part"), 2);
+  assert.equal(scheduler.levelOf("later"), 0);
+  // An in-flight load for a retained cid keeps running across a grow...
+  const gate2 = deferred();
+  const scheduler2 = createLodScheduler({
+    loadLevel: (cid, level, { signal }) => {
+      signal.addEventListener("abort", () => {
+        aborted = true;
+      });
+      return gate2.promise;
+    },
+    applyLevel: () => {},
+    setTimeoutFn: clock.setTimeoutFn,
+    clearTimeoutFn: clock.clearTimeoutFn,
+  });
+  scheduler2.setComponents([{ cid: "part", diagonal: 100 }]);
+  scheduler2.onCameraSample(sampleWith({ part: 60 }));
+  clock.fire();
+  assert.ok(scheduler2.busy());
+  scheduler2.setComponents([{ cid: "part", diagonal: 100 }, { cid: "later", diagonal: 50 }], { preserveLevels: true });
+  assert.equal(aborted, false, "growing the model keeps the in-flight load");
+  assert.ok(scheduler2.busy());
+  // ...but the default (model switch) still resets everything.
+  scheduler2.setComponents([{ cid: "part", diagonal: 100 }]);
+  assert.equal(aborted, true);
+  assert.equal(scheduler2.levelOf("part"), 0);
+  scheduler.dispose();
+  scheduler2.dispose();
+});
