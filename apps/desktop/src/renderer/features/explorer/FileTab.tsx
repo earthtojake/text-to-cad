@@ -1,15 +1,14 @@
+import { buildCrumbs, FileNavRow, PanelToggle, useElementWidth, worktreeMark } from "cad-viewer/shell";
 import { FileText, GitBranch, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { Spinner } from "@renderer/components/ui/spinner";
-import { useElementWidth } from "@renderer/hooks/use-element-width";
 import { useExplorer } from "@renderer/state/explorer";
 import { FILE_PANEL_TREE, type ExplorerRoot, type Project } from "@shared/types";
 import type { FileStat, TextFileResult } from "./types";
 
-import { buildCrumbs, worktreeMark } from "./crumbs";
-import { Breadcrumbs } from "./Breadcrumbs";
+import { useExplorerCrumbSource } from "./crumb-source";
 import { EmptyState } from "./EmptyState";
 import { currentPlatform, type EntryActionContext } from "./entry-actions";
 import { FilePanel } from "./FilePanel";
@@ -31,7 +30,8 @@ import { rendererFor } from "./renderers/registry";
 
 /**
  * One file, laid out the way Codex lays one out: a header row with the
- * breadcrumb and the actions, the content on the left, and ONE panel column
+ * breadcrumb and the actions (`FileNavRow`, which the standalone CAD Viewer
+ * draws too — `cad-viewer/shell`), the content on the left, and ONE panel column
  * on the right — the file tree, or the CAD surface's theme editor, or its
  * Inspector, or markdown's source over the content itself. Exactly one of
  * them, or none (`renderers/panels.ts`, `FilePanel.tsx`).
@@ -44,15 +44,6 @@ import { rendererFor } from "./renderers/registry";
  * no unsaved edits reloads on its own, because there is nothing to lose and a
  * prompt for that is noise.
  */
-
-/**
- * One class for every toggle at the end of the nav row — the renderer's
- * panels and the files toggle — so "highlighted while its panel is open"
- * looks the same on all of them, and the same as the standalone viewer's
- * top-bar toggles (`activeIconButtonClasses` there).
- */
-const PANEL_TOGGLE_CLASSES =
-  "size-6 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground";
 
 type Loaded =
   | { state: "empty" }
@@ -377,26 +368,31 @@ export function FileTab({
     [path, paneWidth, panelColumnWidth],
   );
   const worktree = useMemo(() => worktreeMark(root), [root]);
+  /**
+   * The listings behind those menus, and the entry menus only this app has
+   * (`crumb-source.tsx`). The standalone viewer hands the same component a
+   * source built from its catalog instead.
+   */
+  const crumbSource = useExplorerCrumbSource({
+    ctx: crumbCtx,
+    renaming: renamingCrumb && path !== null,
+    onRenamed: () => setRenamingCrumb(false),
+    onRenameEnd: () => setRenamingCrumb(false),
+  });
 
   return (
     <div className="flex h-full min-h-0 flex-col" ref={rootRef}>
-      <header className="flex h-9 shrink-0 items-center gap-2 border-b px-2">
-        {/*
-          The file's name is the crumb that matters, so it is the one that
-          never shrinks; the project and the folders give up their width
-          first and truncate. Every crumb is `min-w-0` so flex can take the
-          width back — a `shrink-0` on the folders is how they were drawn
-          over each other in a narrow pane.
-        */}
-        <nav
-          aria-label="Breadcrumb"
-          className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-[13px]"
-        >
-          {/*
-            The worktree this file is in, when it is in one — a label, not a
-            crumb (`worktreeMark` in `crumbs.ts` for why it has no menu).
-          */}
-          {worktree ? (
+      <FileNavRow
+        activePath={path}
+        crumbs={crumbs}
+        /*
+          The copy of the tree this file is in, when it is in one — a label,
+          not a crumb (`worktreeMark` for why it has no menu). It goes in the
+          breadcrumb's own overflow box, so it gives up its width and
+          truncates with the folders.
+        */
+        leading={
+          worktree ? (
             <>
               <span
                 className="flex shrink items-center gap-1 truncate rounded-sm px-0.5 text-muted-foreground"
@@ -412,26 +408,20 @@ export function FileTab({
                 </span>
               ) : null}
             </>
-          ) : null}
-          <Breadcrumbs
-            activePath={path}
-            crumbs={crumbs}
-            ctx={crumbCtx}
-            onOpen={openHere}
-            onRenamed={() => setRenamingCrumb(false)}
-            onRenameEnd={() => setRenamingCrumb(false)}
-            renaming={renamingCrumb && path !== null}
-          />
-          {dirty ? (
+          ) : null
+        }
+        onOpen={openHere}
+        source={crumbSource}
+        status={
+          dirty ? (
             <span
               aria-label="Unsaved changes"
               className="ml-1 size-1.5 shrink-0 rounded-full bg-foreground/60"
               title="Unsaved changes"
             />
-          ) : null}
-        </nav>
-
-        {/*
+          ) : null
+        }
+        /*
           The actions that used to be here — Copy path, Open ▾ — live in the
           entry menus now (right-click a crumb or a row). What is left is one
           toggle per panel this file has, in declaration order with the files
@@ -439,26 +429,19 @@ export function FileTab({
           is the same control whatever is open and whatever kind of file this
           is, so it is the one thing in the pane a person can always find in
           the same place.
-        */}
-        <div className="flex shrink-0 items-center gap-0.5">
-          {panels.map((entry) => (
-            <Button
-              aria-label={entry.label}
-              aria-pressed={entry.id === openId}
-              className={PANEL_TOGGLE_CLASSES}
-              data-file-panel={entry.id}
-              {...(entry.id === FILE_PANEL_TREE ? { "data-testid": "tree-toggle" } : {})}
-              key={entry.id}
-              onClick={() => setPanel(nextOpenPanel(openId, entry.id))}
-              size="icon-xs"
-              title={entry.label}
-              variant="ghost"
-            >
-              <entry.icon className="size-3.5" />
-            </Button>
-          ))}
-        </div>
-      </header>
+        */
+        trailing={panels.map((entry) => (
+          <PanelToggle
+            active={entry.id === openId}
+            icon={entry.icon}
+            id={entry.id}
+            key={entry.id}
+            label={entry.label}
+            onClick={() => setPanel(nextOpenPanel(openId, entry.id))}
+            testId={entry.id === FILE_PANEL_TREE ? "tree-toggle" : undefined}
+          />
+        ))}
+      />
 
       {staleOnDisk ? (
         <div className="flex shrink-0 items-center gap-2 border-b bg-amber-500/10 px-3 py-1.5 text-[12px] text-amber-700 dark:text-amber-400">

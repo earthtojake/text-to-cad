@@ -17,7 +17,7 @@ import { cn } from "@renderer/lib/utils";
 import { tabTitle, useExplorer } from "@renderer/state/explorer";
 import type { ExplorerTab, ExplorerTabKind } from "@shared/types";
 
-import { FileIcon } from "./icons";
+import { FileIcon } from "cad-viewer/shell";
 
 /**
  * The one strip. Four kinds, no bottom panel (plan §3).

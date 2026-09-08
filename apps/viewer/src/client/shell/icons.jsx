@@ -1,14 +1,19 @@
 /**
- * One icon per file type, for the tree and the tab strip.
+ * One icon per file type, for a file tree, a breadcrumb menu and a tab strip.
  *
  * lucide only, and one weight: a tree whose rows carry six different icon
  * families reads as noise. What the icon has to do at 14px is separate a
  * config file from a script from a picture — not name the language, which the
  * filename beside it already does.
+ *
+ * The nine formats the CAD Viewer renders are the exception, and they are not
+ * an exception to that rule: they go through the viewer's own `EntryIcon`, so
+ * a `.stl` is the triangle it is made of and a `.step` is a solid cube,
+ * everywhere either app lists files. `cadgen-js`'s `fileFormats` decides
+ * which nine those are — one authority, reachable from both apps.
  */
 import {
   Binary,
-  Box,
   Braces,
   FileCode,
   FileImage,
@@ -20,12 +25,14 @@ import {
   Hash,
   Settings2,
   SquareTerminal,
-  Table,
+  Table
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { createElement } from "react";
+import { renderFormatFromPath } from "cadgen-js/lib/fileFormats.js";
 
-const BY_EXTENSION: Record<string, LucideIcon> = {
+import EntryIcon from "@/components/workbench/EntryIcon";
+
+const BY_EXTENSION = {
   ts: FileCode,
   tsx: FileCode,
   mts: FileCode,
@@ -96,23 +103,17 @@ const BY_EXTENSION: Record<string, LucideIcon> = {
   ico: FileImage,
   avif: FileImage,
 
-  pdf: FileText,
-
-  // The nine the CAD Viewer's surface renders get the one glyph that says so.
-  step: Box,
-  stp: Box,
-  glb: Box,
-  stl: Box,
-  "3mf": Box,
-  dxf: Box,
-  urdf: Box,
-  srdf: Box,
-  sdf: Box,
+  pdf: FileText
 };
 
-/** Which lucide icon a path gets. Exported for the tests, not for rendering. */
-export function fileIconFor(filePath: string): LucideIcon {
-  const name = (filePath.split("/").pop() ?? filePath).toLowerCase();
+/**
+ * Which lucide icon a NON-CAD path gets. Exported for the tests, not for
+ * rendering — a CAD path never reaches this table.
+ *
+ * @param {string} filePath
+ */
+export function fileIconFor(filePath) {
+  const name = (String(filePath || "").split("/").pop() ?? filePath).toLowerCase();
   if (name.startsWith(".")) {
     return Hash;
   }
@@ -128,11 +129,29 @@ export function fileIconFor(filePath: string): LucideIcon {
  * from *defining* one there, which remounts the subtree on every render. These
  * two wrappers are module-level, so a row's icon is stable and the choice is
  * a `createElement` call rather than a JSX element type.
+ *
+ * @param {{ path: string, className?: string }} props
  */
-export function FileIcon({ path, className }: { path: string; className?: string }) {
+export function FileIcon({ path, className }) {
+  const renderFormat = renderFormatFromPath(path);
+  if (renderFormat) {
+    // A file the CAD Viewer renders: its own per-format glyph, from the one
+    // table every surface that lists files already reads.
+    return (
+      <EntryIcon
+        entry={{ file: path, kind: renderFormat }}
+        sourceFormat={renderFormat}
+        className={className}
+        strokeWidth={1.75}
+      />
+    );
+  }
   return createElement(fileIconFor(path), { className, strokeWidth: 1.75 });
 }
 
-export function FolderIcon({ open, className }: { open: boolean; className?: string }) {
+/**
+ * @param {{ open: boolean, className?: string }} props
+ */
+export function FolderIcon({ open, className }) {
   return createElement(open ? FolderOpen : Folder, { className, strokeWidth: 1.75 });
 }

@@ -20,7 +20,7 @@ import { useSessions } from "@renderer/state/sessions";
 import type { DirEntry } from "@shared/ipc/explorer";
 import type { ExplorerRoot, ExplorerTab } from "@shared/types";
 
-import { parentOf } from "./crumbs";
+import { parentOf } from "cad-viewer/shell";
 import type { EntryAction, MenuEntryTarget, Platform } from "./entry-menu";
 
 export type EntryActionContext = {

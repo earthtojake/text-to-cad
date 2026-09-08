@@ -11,7 +11,7 @@ import type { ExplorerRoot } from "@shared/types";
 import { EntryMenuItems, useMenuFocusGuard } from "./EntryContextMenu";
 import { createEntry, currentPlatform, renameEntry, trashEntry, type EntryActionContext } from "./entry-actions";
 import type { MenuEntryTarget } from "./entry-menu";
-import { FileIcon, FolderIcon } from "./icons";
+import { FileIcon, FolderIcon } from "cad-viewer/shell";
 import { fuzzyFilter } from "./fuzzy";
 import { InlineName } from "./InlineName";
 

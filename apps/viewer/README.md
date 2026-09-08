@@ -103,13 +103,16 @@ src/client/ # React app: CadWorkspace (the standalone shell: URL, top bar,
             #   surface, exported as `cad-viewer/file-view` for hosts that
             #   embed it), CadViewer (scene + effects application),
             #   workbench/ (tabs, sections, session state, playback),
-            #   render/ (viewport)
+            #   render/ (viewport), shell/ (the nav row and its breadcrumb,
+            #   exported as `cad-viewer/shell` and drawn by the desktop
+            #   app's file tab too)
 scripts/    # app tooling incl. e2e helpers and selfContained.test.mjs
             #   (the boundary fence) and the dev-backend spawn helpers
 docs/       # subsystem docs; settings-ui.md is the CURATED design-system
             #   reference for all settings UI work — binding, read it
             #   before touching controls; file-view.md is the embedding
-            #   contract (bundler, Tailwind, tokens)
+            #   contract (bundler, Tailwind, tokens) and shell.md is the
+            #   shared chrome's (the source adapter, the crumb rules)
 dist/       # built client (gitignored); what `cadgen viewer` serves in a
             #   checkout and what the wheel bundles
 ```

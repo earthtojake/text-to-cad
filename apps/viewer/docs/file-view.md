@@ -8,9 +8,10 @@ or in the host's ("Where the panels are drawn"). The standalone viewer's shell
 (`src/client/components/CadWorkspace.js`) is one consumer; a host application
 (the desktop app's explorer tab) is the other. There is one implementation.
 
-What it is NOT: the workspace top bar, the file sidebar and the home screen.
-Those are chrome around the surface, and a host that wants them injects them
-through the render slots below.
+What it is NOT: the nav row above the surface, the file sidebar and the home
+screen. Those are chrome around it, and a host that wants them injects them
+through the render slots below. The nav row is shared in its own right —
+`cad-viewer/shell`, see `shell.md` — so the two apps draw one breadcrumb.
 
 ## The entry point
 

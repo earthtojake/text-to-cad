@@ -15,7 +15,6 @@ import { entrySourceFormat } from "cadgen-js/lib/fileFormats";
 import {
   normalizeCadFileQueryParam,
   readCadParam,
-  sidebarLabelForEntry,
   writeCadParam
 } from "@/workbench/sidebar";
 
@@ -68,18 +67,9 @@ export default function CadWorkspace({
       renderTopBar={(chrome) => (
         <CadWorkspaceTopBar
           previewMode={chrome.previewMode}
-          sidebarLabelForEntry={sidebarLabelForEntry}
           directoryTree={chrome.allEntriesTree}
-          selectedKey={chrome.selectedKey}
           selectedEntry={chrome.selectedEntry}
           onSelectEntry={chrome.onSelectEntry}
-          entrySourceFormat={entrySourceFormat}
-          entryHasMesh={entryHasMesh}
-          entryHasDxf={entryHasDxf}
-          entryHasUrdf={entryHasUrdf}
-          activeStepArtifactGenerationFile={chrome.activeStepArtifactGenerationFiles}
-          loadingFiles={chrome.viewerLoadingFiles}
-          stepArtifactGenerationAvailable={chrome.stepArtifactGenerationAvailable}
           filenameLoadActivity={chrome.filenameLoadActivity}
           selectedStepSourceStatus={chrome.selectedStepSourceStatus}
           canCopyFileAssetPaths={chrome.canCopyFileAssetPaths}

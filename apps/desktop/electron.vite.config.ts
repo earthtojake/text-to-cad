@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,6 +7,10 @@ import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import { transformWithEsbuild, type Plugin } from "vite";
 
 import { appVersion } from "./scripts/app-version.mjs";
+// The viewer's peers, pinned to this app's copies. `vitest.config.ts`
+// imports the same builder, so a test run resolves them the way the build
+// does — see the comments there for why every one of them is pinned.
+import { viewerAlias as buildViewerAlias } from "./scripts/viewer-alias.mjs";
 
 const appRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(appRoot, "..", "..");
@@ -24,95 +27,9 @@ const alias = {
   "@shared": path.join(appRoot, "src", "shared"),
 };
 
-/**
- * What the CAD Viewer's `./file-view` entry needs resolved.
- *
- * `cad-viewer` and `cadgen-js` are real dependencies of this app now (`file:`
- * links to the siblings), so their sources are build inputs this app installs
- * for rather than borrows. Borrowing was the CI failure: the viewer's imports
- * were resolved by walking up from `apps/viewer`, which a clean `npm ci` here
- * never populates.
- *
- * Resolution is pinned rather than walked. Every package the siblings depend
- * on is aliased to THIS app's copy — the bare name and each subpath its
- * `exports` map publishes, so `meshoptimizer/decoder` still lands on the file
- * that map names. Walking would find the sibling's own `node_modules` first on
- * a developer's machine and this app's on CI, which is how a build passes in
- * one place and fails in the other; it is also how a stale sibling install
- * (`apps/viewer` currently holds packages older than its own manifest asks
- * for) would quietly become what this app ships.
- *
- * `"@"` is the viewer client's own root alias. It cannot collide with this
- * app's `@renderer`/`@shared` or with a scoped package: Vite matches a string
- * alias as `id === key || id.startsWith(key + "/")`, so `"@"` only ever claims
- * `@/…`. One copy of each peer is the point, not a nicety: two copies of
- * three.js in one bundle is a silent-wrong-render bug rather than a build
- * error. `tests/unit/main/viewer-peers.test.ts` checks the versions agree.
- */
-function dependenciesOf(manifest: string): string[] {
-  return Object.keys(JSON.parse(readFileSync(manifest, "utf8")).dependencies ?? {});
-}
+const viewerAlias = buildViewerAlias();
 
-/**
- * One alias per specifier a package publishes: every `exports` subpath, then
- * the bare name pointing at the package directory. Vite matches a string alias
- * on `id === key || id.startsWith(key + "/")` and takes the first that hits,
- * so the subpaths are emitted before the bare name — otherwise `react` would
- * claim `react/jsx-runtime` and rewrite it to a path inside a file.
- *
- * The subpaths are what a directory alias alone cannot do: `meshoptimizer`
- * publishes `./decoder` as `meshopt_decoder.mjs`, a name no prefix rewrite
- * would ever produce.
- */
-function aliasesForPackage(name: string): Array<[string, string]> {
-  const root = path.join(appRoot, "node_modules", name);
-  const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
-  const target = (value: unknown): string | null => {
-    if (typeof value === "string") {
-      return path.join(root, value);
-    }
-    if (value && typeof value === "object") {
-      const record = value as Record<string, unknown>;
-      return target(record.import ?? record.default ?? record.require ?? record.node);
-    }
-    return null;
-  };
-  const entries: Array<[string, string]> = [];
-  const exported = manifest.exports;
-  if (exported && typeof exported === "object" && !Array.isArray(exported)) {
-    for (const [key, value] of Object.entries(exported as Record<string, unknown>)) {
-      if (!key.startsWith("./")) {
-        continue;
-      }
-      const resolved = target(value);
-      if (!resolved) {
-        continue;
-      }
-      entries.push([
-        `${name}/${key.slice(2)}`.replace(/\/\*$/, ""),
-        resolved.replace(/[\\/]\*$/, ""),
-      ]);
-    }
-  }
-  entries.push([name, root]);
-  return entries;
-}
-
-// `cadgen-js` is in the list like any other: it is a dependency of this app
-// too, and its own `exports` map already points at its sources, so aliasing it
-// needs no special case and no separate source path.
-const linkedPeers = [
-  "cadgen-js",
-  ...dependenciesOf(path.join(viewerAppRoot, "package.json")),
-  ...dependenciesOf(path.join(repoRoot, "packages", "cadgen-js", "package.json")),
-];
-
-const viewerAlias = Object.fromEntries([
-  ["@", path.join(viewerAppRoot, "src", "client")] as [string, string],
-  ...[...new Set(linkedPeers)]
-    .flatMap(aliasesForPackage)
-    .sort(([a], [b]) => b.length - a.length),
-]);// The CAD Viewer's client is JSX written in `.js` files. `apps/viewer`'s own
+// The CAD Viewer's client is JSX written in `.js` files. `apps/viewer`'s own
 // Vite config feeds every source file through esbuild's `jsx` loader:
 //
 //   esbuild: { loader: "jsx", include: /.*\.[jt]sx?$/, exclude: [] }

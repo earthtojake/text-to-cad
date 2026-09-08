@@ -789,8 +789,16 @@ tree's own header when the tree opened; the tree's header is the filter and
 nothing else). There is no `Copy path` button and no `Open ▾`: those are
 items in the entry menus.
 
-**Every crumb is a menu of its neighbours** (`features/explorer/Breadcrumbs.tsx`,
-the model in `crumbs.ts`), the way the CAD Viewer's breadcrumb is. The crumbs
+The row itself is the CAD Viewer's — `cad-viewer/shell`, which the standalone
+viewer draws too, so the two apps have one nav row and not two that resemble
+each other. This app supplies the ends (the branch label, the unsaved dot, its
+panel toggles) and, through a source adapter, the two things only it has:
+where a directory listing comes from and the entry menus on a crumb
+(`features/explorer/crumb-source.tsx`).
+
+**Every crumb is a menu of its neighbours** (`cad-viewer/shell`'s
+`Breadcrumbs.jsx`, the model in its `crumbs.js`), the way the CAD Viewer's
+breadcrumb is. The crumbs
 are the path's segments **below the root** — `STL/link_plate.stl` is `STL ›
 link_plate.stl` — and each one's menu is its **parent's** listing with the
 crumb itself marked: the first crumb drops down the root's entries, a folder
@@ -1155,6 +1163,8 @@ src/renderer/
     ContextMeter.tsx      the context ring at the end of the composer's row, and the
                           panel behind it: the window, the plan limits, the tokens
   features/explorer       the one tab strip and its four kinds of tab
+    crumb-source.tsx      this app's half of the shared nav row: the listings, read a
+                          directory at a time over IPC, and the crumb entry menus
     markdown/document.ts  markdown <-> the editor's document, keeping every block the
                           person did not touch byte for byte (remark; read its header)
     markdown/schema.ts    the editor's schema: TipTap's starter kit plus tables, task

@@ -93,3 +93,114 @@ declare module "cad-viewer/file-view" {
 
   export function normalizeViewerOrigin(origin: string): string;
 }
+
+/**
+ * `cad-viewer/shell` — the chrome AROUND a file surface.
+ *
+ * The nav row above a file, its breadcrumb, the menus that breadcrumb drops
+ * down, the file icons and the panel toggles. This app and the standalone CAD
+ * Viewer draw the same one, so it lives in the package they both depend on
+ * rather than here — the dependency runs one way, and `apps/viewer` must
+ * never import from this app.
+ *
+ * Source again, not a build — JSX in `.jsx`, plain modules in `.js` — so the
+ * same narrow declaration applies: what this app imports and nothing else, so
+ * a rename on the viewer's side is a type error here rather than a blank row.
+ */
+declare module "cad-viewer/shell" {
+  import type { ComponentType, ElementType, ReactNode } from "react";
+
+  export type CrumbKind = "directory" | "file" | "ellipsis";
+
+  /** One crumb: a path segment BELOW the root, and the directory its menu lists. */
+  export type Crumb = {
+    kind: CrumbKind;
+    label: string;
+    title: string;
+    path: string;
+    /** The crumb's PARENT — the menu is its neighbours. Null only for the ellipsis. */
+    menu: string | null;
+    current: string | null;
+    hidden: { label: string; path: string }[];
+  };
+
+  /** One row of a crumb's menu, in the crumb path space. */
+  export type ListingEntry = {
+    path: string;
+    name: string;
+    kind: "file" | "directory";
+    /** The host's own payload, handed back on open. */
+    value?: unknown;
+  };
+
+  /**
+   * Where the breadcrumb's listings and entry menus come from — the one thing
+   * the two hosts do not share. This app's is
+   * `features/explorer/crumb-source.tsx`.
+   */
+  export type CrumbSource = {
+    /**
+     * One directory's entries, or null while they are on their way. Called as
+     * a React hook, unconditionally, once per open menu.
+     */
+    useListing: (directory: string) => readonly ListingEntry[] | null;
+    /** Wraps a crumb's trigger — the right-click entry menu. Never the ellipsis. */
+    wrapCrumb?: (args: { crumb: Crumb; children: ReactNode }) => ReactNode;
+    /** Drawn after the FILE crumb: the `⋯` that opens the same menu by click. */
+    renderCrumbActions?: (args: { crumb: Crumb }) => ReactNode;
+    /** Drawn INSTEAD of the file crumb while the host is renaming it; null draws the crumb. */
+    renderRename?: (args: { crumb: Crumb }) => ReactNode;
+  };
+
+  export function buildCrumbs(input: { path: string | null; narrow: boolean }): Crumb[];
+
+  /** The worktree a file is in, as a label rather than a crumb; null in the project. */
+  export function worktreeMark(root: string | null): { label: string; title: string } | null;
+
+  /** The directory an entry lives in: `""` at the root. */
+  export function parentOf(path: string): string;
+
+  export const Breadcrumbs: ComponentType<{
+    crumbs: Crumb[];
+    source: CrumbSource;
+    activePath: string | null;
+    onOpen: (path: string, entry: ListingEntry) => void;
+  }>;
+
+  /**
+   * The row above a file: the breadcrumb, then whatever the host hangs off the
+   * ends. `leading` sits inside the breadcrumb's overflow box and truncates
+   * with it; `status` follows the last crumb; `trailing` is the right end and
+   * never shrinks.
+   */
+  export const FileNavRow: ComponentType<{
+    crumbs: Crumb[];
+    source: CrumbSource;
+    activePath: string | null;
+    onOpen: (path: string, entry: ListingEntry) => void;
+    leading?: ReactNode;
+    status?: ReactNode;
+    trailing?: ReactNode;
+    className?: string;
+  }>;
+
+  /** One panel's toggle at the end of the nav row; `active` is its panel being open. */
+  export const PanelToggle: ComponentType<{
+    icon: ElementType;
+    label: string;
+    active: boolean;
+    onClick: () => void;
+    id?: string;
+    testId?: string;
+  }>;
+
+  /**
+   * A file's icon. The nine formats the CAD Viewer renders get its own
+   * per-format glyphs; everything else is one lucide table.
+   */
+  export const FileIcon: ComponentType<{ path: string; className?: string }>;
+  export const FolderIcon: ComponentType<{ open: boolean; className?: string }>;
+
+  /** An element's width through a `ResizeObserver`; `0` until first measured. */
+  export function useElementWidth(): [(element: HTMLElement | null) => void, number];
+}
