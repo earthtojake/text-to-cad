@@ -27,8 +27,8 @@ import { GIT_MODE_LABELS, gitModeAvailability, localGitMode } from "@renderer/li
 import { recentProjects } from "@renderer/lib/projects";
 import { useProjects } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
-import { currentName, type SelectOption } from "@shared/acp/options";
-import type { ApprovalMode, SessionMode } from "@shared/acp/types";
+import { currentName, isFullAccessMode, type SelectOption } from "@shared/acp/options";
+import type { SessionMode } from "@shared/acp/types";
 import type { ProjectGitInfo } from "@shared/ipc/git";
 import type { GitMode, Project } from "@shared/types";
 
@@ -42,14 +42,14 @@ import type { GitMode, Project } from "@shared/types";
  * chevron earns its place where nothing else says a thing opens; here the
  * hover, the icon and the row all do.
  *
- * A new session shows Project / Git mode / Model / Effort in a strip above
- * the composer and `+` / Approval in the row under it; a live session shows
- * `+`, Approval and the agent's modes on the left of that row, the model,
- * the effort and the context ring on the right. The two screens draw the
- * **same** model and effort chips: on the new-session screen the model menu
- * lists every installed provider's models and picking one picks the agent,
- * and in a live session it is scoped to that session's agent. What a session
- * cannot change — its project — is the sidebar's.
+ * A new session shows Project / Git mode in a strip above the composer and
+ * `+` / Mode in the row under it; a live session shows `+` and the mode on
+ * the left of that row, the model, the effort and the context ring on the
+ * right. The two screens draw the **same** mode, model and effort chips: on
+ * the new-session screen they come from the agent's cached snapshot and say
+ * what the session will be created as, and in a live session they are that
+ * session's own. What a session cannot change — its project — is the
+ * sidebar's.
  */
 export function Chip({
   icon,
@@ -229,69 +229,21 @@ export function GitModeChip({
   );
 }
 
-export const APPROVAL_MODES: { value: ApprovalMode; label: string; description: string }[] = [
-  { value: "ask", label: "Ask", description: "Every permission request waits for you" },
-  { value: "approve-for-me", label: "Approve for me", description: "Requests are allowed once, automatically" },
-];
-
 /**
- * Codex's `Approve for me` chip. Two things live behind it: the agent's
- * own approval preset when it exposes one (Codex's `mode` config option:
- * ask / approve for me / full access — what the agent asks about), and
- * what Hardcore does with the requests that do arrive (ask, or allow once
- * automatically). The label is the agent's preset when there is one.
+ * The mode — **the** permission control, and the only one (README,
+ * "Permissions"). What the agent asks about is what the agent's own mode
+ * says, so the app has no approval setting of its own over the top of it:
+ * one chip, on the new-session screen and in a live thread, with the names
+ * the agent gave and nothing added to them.
+ *
+ * Whichever shape the agent sends its modes in reaches this component the
+ * same way (`modeChoice` in `shared/acp/options`); the caller owns the
+ * setter, which is `session/set_mode` or a `mode` config option.
+ *
+ * No sublabels — the agent's `description` is a paragraph under every row —
+ * with one exception: the mode that asks about nothing gets a muted note
+ * saying so, because it is the one choice that removes every checkpoint.
  */
-export function ApprovalChip({
-  mode,
-  onChange,
-  preset,
-  onPresetChange,
-}: {
-  mode: ApprovalMode;
-  onChange: (mode: ApprovalMode) => void;
-  preset?: SelectOption | null;
-  onPresetChange?: (configId: string, value: string) => void;
-}) {
-  const current = APPROVAL_MODES.find((candidate) => candidate.value === mode) ?? APPROVAL_MODES[0]!;
-  const presetName = preset
-    ? (preset.options.find((option) => option.value === preset.currentValue)?.name ?? preset.currentValue)
-    : null;
-  return (
-    <Chip
-      icon={<ShieldCheck />}
-      label={presetName ?? current.label}
-      menu={
-        <>
-          {preset && onPresetChange ? (
-            <>
-              <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">{preset.name}</DropdownMenuLabel>
-              <OptionGroup onChange={(value) => onPresetChange(preset.id, value)} option={preset} />
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">When it asks</DropdownMenuLabel>
-            </>
-          ) : null}
-          <DropdownMenuRadioGroup onValueChange={(value) => onChange(value as ApprovalMode)} value={mode}>
-            {APPROVAL_MODES.map((candidate) => (
-              <DropdownMenuRadioItem key={candidate.value} value={candidate.value}>
-                <span className="flex flex-col">
-                  <span>{candidate.label}</span>
-                  <span className="text-[11px] text-muted-foreground">{candidate.description}</span>
-                </span>
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </>
-      }
-      testId="approval"
-      title={preset?.description ?? "What Hardcore does with the agent's permission requests"}
-    />
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Live-session chips                                                          */
-/* -------------------------------------------------------------------------- */
-
 export function ModeChip({
   modes,
   currentModeId,
@@ -304,27 +256,34 @@ export function ModeChip({
   const current = modes.find((mode) => mode.id === currentModeId) ?? null;
   return (
     <Chip
-      icon={<Sparkles />}
+      icon={<ShieldCheck />}
       label={current?.name ?? "Mode"}
+      maxWidth={160}
       menu={
         <DropdownMenuRadioGroup onValueChange={onChange} value={currentModeId ?? ""}>
           {modes.map((mode) => (
             <DropdownMenuRadioItem key={mode.id} value={mode.id}>
-              <span className="flex flex-col">
-                <span>{mode.name}</span>
-                {mode.description ? (
-                  <span className="text-[11px] text-muted-foreground">{mode.description}</span>
-                ) : null}
-              </span>
+              {isFullAccessMode(mode) ? (
+                <span className="flex flex-col" data-mode-full-access>
+                  <span className="truncate">{mode.name}</span>
+                  <span className="text-[11px] text-muted-foreground">Never asks</span>
+                </span>
+              ) : (
+                <span className="truncate">{mode.name}</span>
+              )}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
       }
       testId="mode"
-      title="Session mode"
+      title={current?.description ?? "What this agent asks you about"}
     />
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Live-session chips                                                          */
+/* -------------------------------------------------------------------------- */
 
 /** One installed provider's models, as the model menu groups them. */
 export type ModelProvider = {

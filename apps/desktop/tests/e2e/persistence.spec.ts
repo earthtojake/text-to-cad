@@ -110,6 +110,11 @@ test("a project and its session survive a quit and a relaunch", async () => {
     const secondStrip = second.page.locator("[data-new-session] [data-composer-row]");
     await expect(secondStrip.locator("[data-chip=model]")).toContainText("Smart");
     await expect(secondStrip.locator("[data-chip=effort]")).toContainText("High");
+    // The modes survived with the options (migration 8), so the one
+    // permission control is drawn from the cache too — on the agent's own
+    // auto preset, because creating a session in it is not somebody
+    // choosing it, and nobody chose anything else.
+    await expect(secondStrip.locator("[data-chip=mode]")).toContainText("Auto");
     const row = second.page.locator("[data-session-row]");
     await expect(row).toHaveCount(1);
     await expect(row).toContainText("keep this one around");

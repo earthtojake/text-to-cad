@@ -18,7 +18,6 @@ const open: SessionConnection[] = [];
 function connect(options: {
   cwd: string;
   fixture?: string;
-  approvalMode?: "ask" | "approve-for-me";
   onEvent?: (event: SessionEvent) => void;
   record?: (frame: RecordedFrame) => void;
   onTerminalOutput?: (terminalId: string, data: string) => void;
@@ -32,7 +31,6 @@ function connect(options: {
     env: { PATH: process.env.PATH ?? "" },
     cwd: options.cwd,
     spawnTerminal: spawnProcessTerminal,
-    approvalMode: options.approvalMode,
     onEvent: options.onEvent,
     record: options.record,
     onTerminalOutput: options.onTerminalOutput,
@@ -115,14 +113,22 @@ describe("SessionConnection against the fake agent", () => {
     expect(lastAgentText(connection.state)).toBe("ok");
   });
 
-  it("approve-for-me answers allow_once without waiting", async () => {
-    const connection = connect({ cwd: await scratch(), approvalMode: "approve-for-me" });
+  /**
+   * The only way nothing is asked. The client answers no request on
+   * anybody's behalf, so a turn with no permission request in it is a turn
+   * the agent chose not to ask about — here because the session is in the
+   * fake's full-access mode, the way Claude's `Bypass permissions` and
+   * Codex's `Full access` behave.
+   */
+  it("a full-access session gets no permission request at all", async () => {
+    const connection = connect({ cwd: await scratch() });
     await connection.newSession();
+    await connection.setMode("full");
     const response = await connection.prompt([{ type: "text", text: "needs permission" }]);
     expect(response.stopReason).toBe("end_turn");
     expect(connection.state.pendingPermissions).toEqual([]);
-    const permissionPart = connection.state.turns[1]?.parts.find((part) => part.type === "permission_request");
-    expect(permissionPart).toMatchObject({ outcome: { state: "selected", optionId: "allow-once" } });
+    expect(connection.state.turns[1]?.parts.some((part) => part.type === "permission_request")).toBe(false);
+    expect(allToolCalls(connection.state)[0]).toMatchObject({ id: "cmd-1", status: "completed" });
   });
 
   it("a rejected permission fails the tool call", async () => {

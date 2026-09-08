@@ -140,6 +140,8 @@ under three scopes, before and after a commit, the sidebar's worktree glyph,
 Settings' per-project worktree card), the session states in both themes with
 the composer at 1280×800 and 1680×1050, `session-new-model-menu` (the model
 menu open on the new-session screen, a group per installed provider),
+`session-new-mode-menu` (the mode menu open on the new-session screen, the
+`Never asks` note under the full-access row),
 `session-attach-menu` (the composer's `+`), `session-context` (the context
 panel open over the composer, its breakdown expanded) and
 `session-context-limits` (the same panel with the account's plan limits in
@@ -169,7 +171,10 @@ rasterising. Commit them or discard them, but do not go looking for the change
 The session suite (`session-*.png`) drives the session UI through each of its
 states with `tests/fake-agent` (`HARDCORE_FAKE_AGENT` points main at it in place
 of every adapter); `codex.spec.ts` runs one real Codex session when
-`HARDCORE_E2E_CODEX=1`. `keyboard.spec.ts` presses every shortcut the
+`HARDCORE_E2E_CODEX=1`. `mode-option.spec.ts` runs the same fake with
+`--mode-option`, which sends its modes as a `mode` config option instead of
+as `modes`: the one mode chip has to be drawn from either shape, and an
+adapter that sends only the option used to get no chip at all. `keyboard.spec.ts` presses every shortcut the
 Shortcuts page lists except back and forward, which `panes.spec.ts` covers
 along with the pane drags, the overshoot collapse and the too-narrow window; `quit.spec.ts` times `app.quit()` with a repository
 watched, a shell, a session and the CAD viewer all running, and fails above
@@ -550,7 +555,7 @@ beside send: there is no dictation backend behind one, macOS's own dictation
 already types into this box, and a permanently disabled button is a promise
 the app does not keep.
 
-## The model and the effort
+## The model, the effort and the mode
 
 The composer has a chip for the model and one for how hard it should think,
 and **so does the new-session screen** — which is where the decision actually
@@ -570,19 +575,46 @@ probe is speculative. An agent that cannot answer — not installed, not signed
 in, adapter will not start — contributes **no** models, which is the whole of
 "do not show models that cannot be run".
 
-So the new-session strip is project · git mode · model · effort, and the
+So the new-session strip is project · git mode above the box, with the mode,
+the model and the effort in the row under it, and the
 model chip **is** the agent chip: its menu is grouped by provider, one group
 per installed agent that answered, and picking `Opus` picks Claude Code the
 way picking `GPT-6-Astra` picks Codex. In a live session the same chip is
 scoped to that session's agent. Either way the choice is stored against the
 agent, so the next session starts where the last one was left, and
 `SessionManager.create` applies it: the model, **then** the effort (switching
-model is what changes which effort levels exist), then the agent's own
-auto-approval preset — `_meta.kind: auto_review`, which is Claude's `auto` and
-Codex's `agent` — instead of the adapter's most cautious default. Every one of
+model is what changes which effort levels exist), then the mode. Every one of
 those is best-effort: an adapter that refuses one logs and the session goes
-on. The app's own `approvalMode` ("ask" / "approve for me") is a separate
-decision and is untouched.
+on.
+
+The mode is the third of them and the one worth spelling out, because it is
+**the** permission control (below). Its default is the mode the person last
+left this agent in, remembered against the agent like the model and the
+effort; until they have picked one it is the provider's own auto-approval
+preset — `_meta.kind: auto_review`, which is Claude's `auto` and Codex's
+`agent` — rather than the adapter's most cautious default. Whichever of ACP's
+two shapes the agent sends its modes in is where the answer goes:
+`session/set_mode` over `modes`, or a `mode`-category config option
+(`modeChoice` in `src/shared/acp/options.ts`, which prefers `modes` — it is
+the protocol's own field and the one both adapters' `current_mode_update`
+reports against). Changing the mode in a live thread stores it as that
+agent's default too, so the next session starts where the last was left.
+
+**Permissions are the mode, and only the mode.** There were two levels for a
+while: the agent's own mode *and* an approval setting of Hardcore's own ("Ask"
+/ "Approve for me") which could answer an incoming `session/request_permission`
+with the agent's allow-once option before the person saw it. That is two
+answers to one question — and no way to tell, when a request did not appear,
+which of the two decided it. The app-side one is gone: nothing in
+`src/main/acp/client.ts` answers a request, every request that arrives is a
+card in the transcript with the agent's own options as its buttons, and what
+the agent asks about at all is what its mode says. So the one mode chip is
+also the one permission control, and it is on the new-session screen as well
+as in a live thread — a shield, the agent's names, no sublabels. The single
+exception to "no sublabels" is the mode whose `_meta.kind` is `full_access`
+(Claude's `Bypass permissions`, Codex's `Full access`), which carries a muted
+`Never asks` under its name: it is the one choice that removes every
+checkpoint, and the menu should say so before it is made.
 
 Which option is which lives in `src/shared/acp/options.ts`, read by both
 processes, because main applies these answers and the chips draw them and one
@@ -612,12 +644,12 @@ agent a person's plugins had installed — behind a settings glyph. The
 composer is four decisions, not a settings panel.
 
 All of it is one row **under** the box, not inside it. The box holds the
-sentence and send; `+` and the chips sit on a 28px line beneath it — `+`,
-approval and the mode on the left, the model, the effort and the context
+sentence and send; `+` and the chips sit on a 28px line beneath it — `+` and
+the mode on the left, the model, the effort and the context
 ring on the right, with a wider gap between those three because they are
 three decisions rather than one run of text. The new-session screen is the
-same shape: its context strip (project · git mode · model · effort) above
-the box, the same `+` and approval row below it. No chip has a chevron:
+same shape: its context strip (project · git mode) above
+the box, the same `+`, mode, model and effort row below it. No chip has a chevron:
 six of them saying "this opens" about six controls that are visibly the
 same control is six glyphs' worth of a row that would rather spend the
 space on a label.
@@ -958,7 +990,7 @@ src/renderer/
   features/session        the new-session state, the transcript, the composer
     view.ts               SessionState -> rows: activity-row labels, folding, the status line (pure)
     parts/                activity rows (+ Monaco diff, terminal), thoughts, permission cards, subagents
-    ComposerChips.tsx     project / git mode / approval / mode / model / effort chips
+    ComposerChips.tsx     project / git mode / mode / model / effort chips
     ContextMeter.tsx      the context ring at the end of the composer's row, and the
                           panel behind it: the window, the plan limits, the tokens
   features/explorer       the one tab strip and its four kinds of tab
@@ -1009,9 +1041,12 @@ node scripts/acp-harness.mjs codex /tmp/scratch "What did we do?" --load <acpSes
 ```
 
 The harness runs the same `SessionConnection` main does (child_process
-terminals instead of node-pty), prints every update, auto-answers permission
-requests (`--approval ask` to answer by hand), and `--record` writes every
-wire frame as jsonl. Those recordings are the reducer's test corpus
+terminals instead of node-pty), prints every update, and `--record` writes
+every wire frame as jsonl. A permission request is answered by the script
+itself, with the agent's own allow-once option: the app answers none — the
+session's mode decides what is asked and a request that arrives is answered
+in the transcript — and a terminal with no transcript has to say something,
+unattended, for a recording run to finish. Those recordings are the reducer's test corpus
 (`tests/unit/shared/reduce.test.ts`) and what `tests/fake-agent` replays for
 the connection tests. Re-record after an adapter upgrade; never run the
 harness against this repository, use a scratch directory.

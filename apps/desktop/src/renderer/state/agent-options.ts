@@ -1,7 +1,15 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 
-import { effortOption, modelOption, withCurrentValue, type SelectOption } from "@shared/acp/options";
+import {
+  autoModeId,
+  effortOption,
+  modeChoice,
+  modelOption,
+  withCurrentValue,
+  type ModeChoice,
+  type SelectOption,
+} from "@shared/acp/options";
 import type { AgentOptions } from "@shared/ipc/agent-options";
 import type { AgentStatus } from "@shared/agents";
 
@@ -9,12 +17,12 @@ import type { AgentStatus } from "@shared/agents";
  * What each agent's sessions can be configured with, and what the person
  * chose to start the next one as (`src/shared/ipc/agent-options.ts`).
  *
- * This is what lets the new-session screen show a model and an effort chip
- * before any agent is running: main remembers every live session's config
- * options against its agent and probes an agent nobody has run yet. An agent
- * with no snapshot contributes nothing — no group in the model menu, no
- * placeholder, no spinner — because a model that cannot be run is not a
- * choice.
+ * This is what lets the new-session screen show a model, an effort and a
+ * mode chip before any agent is running: main remembers every live session's
+ * config options and modes against its agent and probes an agent nobody has
+ * run yet. An agent with no snapshot contributes nothing — no group in the
+ * model menu, no placeholder, no spinner — because a model that cannot be run
+ * is not a choice.
  */
 type AgentOptionsState = {
   byAgent: Record<string, AgentOptions>;
@@ -25,7 +33,7 @@ type AgentOptionsState = {
   probe: (agentId: string, projectId: string | null) => Promise<void>;
   setDefaults: (
     agentId: string,
-    defaults: { model?: string | null; effort?: string | null },
+    defaults: { model?: string | null; effort?: string | null; mode?: string | null },
   ) => Promise<void>;
   receive: (all: AgentOptions[]) => void;
 };
@@ -103,5 +111,38 @@ export function useProviderEffort(agentId: string | null): SelectOption | null {
   return useMemo(() => {
     const effort = cached ? effortOption(cached.options) : null;
     return effort && cached ? withCurrentValue(effort, cached.defaultEffort) : null;
+  }, [cached]);
+}
+
+/**
+ * One agent's modes, and the mode the next session with it will start in:
+ * the one the person last left it in, else the agent's own auto-approval
+ * preset — which is exactly what `SessionManager.create` applies
+ * (`main/acp/sessions.ts`), so the chip on the new-session screen shows what
+ * is going to happen rather than a guess at it.
+ *
+ * The source is the snapshot's `modes` when the agent sends any and its
+ * `mode` config option otherwise (`shared/acp/options`), so one chip covers
+ * both adapters. Null for an agent with no snapshot or one mode: nothing to
+ * choose between.
+ */
+export function useProviderMode(agentId: string | null): ModeChoice | null {
+  const cached = useAgentOptions((state) => (agentId ? (state.byAgent[agentId] ?? null) : null));
+  return useMemo(() => {
+    if (!cached) {
+      return null;
+    }
+    const choice = modeChoice({
+      modes: cached.modes,
+      configOptions: cached.options,
+      currentModeId: null,
+    });
+    if (!choice) {
+      return null;
+    }
+    const stored = choice.modes.some((mode) => mode.id === cached.defaultMode)
+      ? cached.defaultMode
+      : null;
+    return { ...choice, currentModeId: stored ?? autoModeId(choice.modes) ?? choice.currentModeId };
   }, [cached]);
 }
