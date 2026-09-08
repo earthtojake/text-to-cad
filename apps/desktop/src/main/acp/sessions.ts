@@ -481,14 +481,30 @@ export class SessionManager {
     // than back at the adapter's default. Matched against the options as they
     // were *before* the call, because a model switch rewrites the effort list.
     const session = this.deps.repo.get(id);
-    if (session) {
-      this.deps.agentOptions?.rememberChoice(session.agentId, configId, value, before);
-      this.deps.agentOptions?.remember(
-        session.agentId,
-        connection.state.configOptions,
-        connection.state.modes,
-      );
+    if (!session) {
+      return;
     }
+    this.deps.agentOptions?.rememberChoice(session.agentId, configId, value, before);
+    // A model switched mid-thread brings its own remembered effort with it,
+    // the way a new session would: the adapter resets the level to the new
+    // model's default, and the person's last choice for that model is the
+    // higher authority. Only when there is one, and only when it differs.
+    if (modelOption(before)?.id === configId && typeof value === "string") {
+      const wanted = this.deps.agentOptions?.effortFor(session.agentId, value) ?? null;
+      const effort = effortOption(connection.state.configOptions);
+      if (wanted && effort && effort.currentValue !== wanted && effort.options.some((option) => option.value === wanted)) {
+        try {
+          await connection.setConfigOption(effort.id, wanted);
+        } catch (error) {
+          console.warn(`[acp] the model's remembered effort was refused: ${String(error)}`);
+        }
+      }
+    }
+    this.deps.agentOptions?.remember(
+      session.agentId,
+      connection.state.configOptions,
+      connection.state.modes,
+    );
   }
 
   respondPermission(id: string, requestId: string, optionId: string | null): void {

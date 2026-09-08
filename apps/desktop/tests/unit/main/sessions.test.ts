@@ -354,6 +354,14 @@ describe("SessionManager", () => {
     };
   }
 
+  /** The fake agent's current model and effort, as it reports them (tests/fake-agent, `settings`). */
+  async function settingsIn(manager: SessionManager, sessionId: string): Promise<string> {
+    await manager.prompt(sessionId, [{ type: "text", text: "settings" }]);
+    const parts = manager.state(sessionId)!.turns.at(-1)!.parts;
+    const text = parts.find((part) => part.type === "text");
+    return text?.type === "text" ? text.text : "";
+  }
+
   /** What the fake agent says it was configured with, in order (tests/fake-agent). */
   async function appliedIn(manager: SessionManager, sessionId: string): Promise<string> {
     await manager.prompt(sessionId, [{ type: "text", text: "applied" }]);
@@ -463,6 +471,20 @@ describe("SessionManager", () => {
     // new-session screen, so it becomes this agent's default too.
     await manager.setMode(session.id, "plan");
     expect(recorder.modes).toEqual([{ agentId: "claude-code", modeId: "plan" }]);
+  });
+
+  it("brings a model's remembered effort along when the model is switched mid-thread", async () => {
+    // The fake agent resets its level to Medium on every model switch, so
+    // only the app's memory can put Xhigh back.
+    const recorder = optionRecorder({ model: null, efforts: { smart: "xhigh" } });
+    const { manager, cwd } = await setup({ agentOptions: recorder.deps });
+    const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    await manager.setConfigOption(session.id, "model", "smart");
+    expect(recorder.asked).toContain("smart");
+    expect(await settingsIn(manager, session.id)).toMatch(/model=smart effort=xhigh/);
+    // A model with nothing remembered keeps whatever the agent gave it.
+    await manager.setConfigOption(session.id, "model", "fast");
+    expect(await settingsIn(manager, session.id)).toMatch(/model=fast effort=medium/);
   });
 
   it("probes an agent for its config options without leaving a session behind", async () => {
