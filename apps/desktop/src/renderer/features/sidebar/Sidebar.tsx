@@ -6,6 +6,7 @@ import { Button } from "@renderer/components/ui/button";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { SessionSection } from "@renderer/features/sidebar/SessionSection";
 import { SidebarFilterMenu } from "@renderer/features/sidebar/SidebarFilterMenu";
+import { Wordmark } from "@renderer/features/sidebar/Wordmark";
 import { useOpenFolder } from "@renderer/hooks/use-open-folder";
 import { useProjects } from "@renderer/state/projects";
 import { useSessions, useSidebarSections } from "@renderer/state/sessions";
@@ -58,22 +59,7 @@ export function Sidebar() {
       </div>
 
       <header className="app-drag flex shrink-0 items-center gap-1 pt-0.5 pr-2 pb-1 pl-3">
-        {/* The wordmark, live (`.brand-wordmark` in globals.css): the ink over
-            the icon's blue, and a glitch on hover. */}
-        <span aria-label="Hardcore" className="brand-wordmark app-no-drag" data-text="HARDCORE" role="img">
-          <span aria-hidden>HARDCORE</span>
-        </span>
-        <div className="flex-1" />
-        <Button
-          aria-label="Search"
-          className="app-no-drag size-7 text-muted-foreground"
-          onClick={toggleCommandPalette}
-          size="icon-sm"
-          variant="ghost"
-        >
-          <Search className="size-3.5" />
-        </Button>
-        <SidebarFilterMenu />
+        <Wordmark />
       </header>
 
       {/* The nav list, which is one row: `New`, the accent-ringed plus — the
@@ -82,12 +68,26 @@ export function Sidebar() {
           `Open folder…` at the bottom of the project chip's menu, where
           picking a folder already happens, and the card below for the one
           state that has no chip to open — no projects at all. */}
-      <nav className="shrink-0 px-2 pb-1">
-        <SidebarLink
-          icon={<CirclePlus className="size-4 text-primary" />}
-          label="New"
-          onClick={() => setActiveSession(null)}
-        />
+      <nav className="flex shrink-0 items-center gap-0.5 px-2 pb-1">
+        <div className="min-w-0 flex-1">
+          <SidebarLink
+            icon={<CirclePlus className="size-4 text-primary" />}
+            label="New"
+            onClick={() => setActiveSession(null)}
+          />
+        </div>
+        {/* Search and the filters, small, at the row's right: they act on the
+            list below, so they sit at its head rather than beside the name. */}
+        <Button
+          aria-label="Search"
+          className="size-7 text-muted-foreground"
+          onClick={toggleCommandPalette}
+          size="icon-sm"
+          variant="ghost"
+        >
+          <Search className="size-3.5" />
+        </Button>
+        <SidebarFilterMenu />
       </nav>
 
       {/* Radix lays the viewport's content out as a table that grows to its

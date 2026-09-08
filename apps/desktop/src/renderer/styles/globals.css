@@ -352,9 +352,12 @@
 /* The wordmark, drawn live rather than as the PNG so it can move: JetBrains
  * Mono ExtraBold Italic (resources/brand/fonts, OFL), the ink over a copy in
  * the icon's blue offset down-right by 9% of the cap height — the same
- * geometry `scripts/make-brand.mjs` renders. Hovering glitches it: the copy
- * runs through red, green and blue while both layers jitter. `.reduce-motion`
- * stills every animation, this one included. */
+ * geometry `scripts/make-brand.mjs` renders. Both layers are one span per
+ * letter (features/sidebar/Wordmark.tsx), and hovering glitches them letter
+ * by letter: each shadow letter runs its own loop through red, green and blue
+ * turned by a hue of its own (`--h`), at its own pace (`--t`), out of phase
+ * (`--d`) and thrown by its own distance (`--k`); each ink letter shivers by
+ * its own `--jx`/`--jy`. `.reduce-motion` stills every animation, these too. */
 @font-face {
   font-family: "JetBrains Mono Brand";
   font-style: italic;
@@ -368,15 +371,20 @@
   --brand-offset: 0.0657em; /* 9% of a 0.73em cap height */
   position: relative;
   display: inline-block;
-  font: italic 800 30px/1 "JetBrains Mono Brand", ui-monospace, monospace;
+  font: italic 800 28px/1 "JetBrains Mono Brand", ui-monospace, monospace;
   letter-spacing: -0.02em;
   color: var(--foreground);
   user-select: none;
   cursor: default;
+  white-space: nowrap;
 }
 
-.brand-wordmark::before {
-  content: attr(data-text);
+.brand-wordmark-shadow,
+.brand-wordmark-ink {
+  display: inline-block;
+}
+
+.brand-wordmark-shadow {
   position: absolute;
   inset: 0;
   transform: translate(var(--brand-offset), var(--brand-offset));
@@ -384,34 +392,44 @@
   z-index: 0;
 }
 
-.brand-wordmark > span {
+.brand-wordmark-ink {
   position: relative;
   z-index: 1;
 }
 
-.brand-wordmark:hover::before {
-  animation: brand-glitch-shadow 0.6s steps(1, end) infinite;
+.brand-wordmark-shadow > span,
+.brand-wordmark-ink > span {
+  display: inline-block;
 }
 
-.brand-wordmark:hover > span {
-  animation: brand-glitch-ink 0.6s steps(1, end) infinite;
+.brand-wordmark:hover .brand-wordmark-shadow > span {
+  animation: brand-glitch-shadow var(--t, 0.5s) steps(1, end) var(--d, 0s) infinite;
+  filter: hue-rotate(var(--h, 0deg));
 }
 
+.brand-wordmark:hover .brand-wordmark-ink > span {
+  animation: brand-glitch-ink var(--t, 0.6s) steps(1, end) var(--d, 0s) infinite;
+}
+
+/* The shadow's colours are red, green and blue before the letter's own hue
+ * turns them; the throws are multiples of the resting offset scaled by `--k`. */
 @keyframes brand-glitch-shadow {
-  0% { color: #ff3b30; transform: translate(calc(var(--brand-offset) * -1), var(--brand-offset)); }
-  20% { color: #34c759; transform: translate(var(--brand-offset), calc(var(--brand-offset) * -1)); }
-  40% { color: #62b7ec; transform: translate(calc(var(--brand-offset) * 1.8), var(--brand-offset)); }
-  60% { color: #ff3b30; transform: translate(var(--brand-offset), calc(var(--brand-offset) * 1.8)); }
-  80% { color: #34c759; transform: translate(calc(var(--brand-offset) * -1.2), calc(var(--brand-offset) * -0.6)); }
+  0% { color: #ff3b30; transform: translate(calc(var(--brand-offset) * -1 * var(--k, 1)), calc(var(--brand-offset) * var(--k, 1))); }
+  14% { color: #34c759; transform: translate(calc(var(--brand-offset) * var(--k, 1)), calc(var(--brand-offset) * -1.4 * var(--k, 1))); }
+  31% { color: #62b7ec; transform: translate(calc(var(--brand-offset) * 2.2 * var(--k, 1)), calc(var(--brand-offset) * 0.4)); }
+  47% { color: #ff3b30; transform: translate(0, calc(var(--brand-offset) * 2 * var(--k, 1))); }
+  58% { color: #34c759; transform: translate(calc(var(--brand-offset) * -1.6 * var(--k, 1)), calc(var(--brand-offset) * -0.5)); }
+  73% { color: #62b7ec; transform: translate(calc(var(--brand-offset) * 1.2), calc(var(--brand-offset) * 1.6 * var(--k, 1))); }
+  86% { color: #ff3b30; transform: translate(calc(var(--brand-offset) * -0.4 * var(--k, 1)), 0); }
   100% { color: #62b7ec; transform: translate(var(--brand-offset), var(--brand-offset)); }
 }
 
 @keyframes brand-glitch-ink {
-  0% { transform: translate(0.02em, 0); }
-  20% { transform: translate(-0.02em, 0.01em); }
-  40% { transform: translate(0.01em, -0.02em); }
-  60% { transform: translate(-0.015em, 0); }
-  80% { transform: translate(0.02em, 0.015em); }
+  0% { transform: translate(var(--jx, 0), 0); }
+  22% { transform: translate(calc(var(--jx, 0) * -1), var(--jy, 0)); }
+  41% { transform: translate(calc(var(--jx, 0) * 0.5), calc(var(--jy, 0) * -1.5)) skewX(-4deg); }
+  63% { transform: translate(calc(var(--jx, 0) * -0.7), 0); }
+  79% { transform: translate(var(--jx, 0), var(--jy, 0)) skewX(3deg); }
   100% { transform: translate(0, 0); }
 }
 
