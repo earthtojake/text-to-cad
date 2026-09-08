@@ -584,17 +584,30 @@ the model and the effort in the row under it, and the
 model chip **is** the agent chip: its menu is grouped by provider, one group
 per installed agent that answered, and picking `Opus` picks Claude Code the
 way picking `GPT-6-Astra` picks Codex. In a live session the same chip is
-scoped to that session's agent. Either way the choice is stored against the
-agent, so the next session starts where the last one was left, and
-`SessionManager.create` applies it: the model, **then** the effort (switching
-model is what changes which effort levels exist), then the mode. Every one of
-those is best-effort: an adapter that refuses one logs and the session goes
-on.
+scoped to that session's agent. Either way the choice is stored, so the next
+session starts where the last one was left, and `SessionManager.create`
+applies it: the model, **then** the effort (switching model is what changes
+which effort levels exist), then the mode. Every one of those is best-effort:
+an adapter that refuses one logs and the session goes on.
+
+**The effort belongs to the model, the model and the mode to the provider**
+(migration 9). Claude reports its `effort` option for whichever model the
+session is on, with the levels *that* model has — one has `Xhigh` and the next
+does not — so a single level per agent named no model in particular: switching
+model carried the outgoing model's level onto the incoming one, and switching
+back forgot the earlier pick. `agent_options` therefore keeps two maps beside
+`default_model` and `default_mode`: `default_efforts`, the level picked per
+model, and `effort_options`, the levels each model offers — filled in as live
+sessions report them, because a session on one model is the only thing that
+ever says what the other's are. Reselecting a model brings its level and its
+list back together; picking a model touches neither. On create the effort is
+read *after* the model has landed, against the model the session is actually
+on, so a refused model does not drag the wanted model's level in behind it.
 
 The mode is the third of them and the one worth spelling out, because it is
 **the** permission control (below). Its default is the mode the person last
-left this agent in, remembered against the agent like the model and the
-effort; until they have picked one it is the provider's own auto-approval
+left this agent in, remembered against the provider like the model; until
+they have picked one it is the provider's own auto-approval
 preset — `_meta.kind: auto_review`, which is Claude's `auto` and Codex's
 `agent` — rather than the adapter's most cautious default. Whichever of ACP's
 two shapes the agent sends its modes in is where the answer goes:

@@ -42,6 +42,7 @@ export const agentOptions: AgentOptionStore = new AgentOptionStore({
   get: (agentId) => agentOptionsRepo.get(agentId),
   writeOptions: (agentId, options, modes) => agentOptionsRepo.setOptions(agentId, options, modes),
   writeDefaults: (agentId, defaults) => agentOptionsRepo.setDefaults(agentId, defaults),
+  writeEffort: (agentId, model, effort) => agentOptionsRepo.setEffort(agentId, model, effort),
   probe: async (agentId, projectId): Promise<AgentSnapshot> => {
     const project = projectId
       ? (projects.list().find((candidate) => candidate.id === projectId) ?? null)
@@ -74,6 +75,7 @@ export const sessionManager: SessionManager = new SessionManager({
   runtimePath: sessionRuntimePath,
   agentOptions: {
     defaults: (agentId) => agentOptions.defaults(agentId),
+    effortFor: (agentId, model) => agentOptions.effortFor(agentId, model),
     remember: (agentId, options, modes) => agentOptions.remember(agentId, options, modes),
     rememberChoice: (agentId, configId, value, options) =>
       agentOptions.rememberChoice(agentId, configId, value, options),

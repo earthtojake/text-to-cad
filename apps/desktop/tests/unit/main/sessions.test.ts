@@ -308,21 +308,35 @@ describe("SessionManager", () => {
   /* P2: the model, the effort and the mode                              */
   /* ------------------------------------------------------------------ */
 
-  /** A stand-in for the option store, recording what the manager asked it. */
+  /**
+   * A stand-in for the option store, recording what the manager asked it.
+   *
+   * `efforts` is a map from model value to level, the way the store keeps it
+   * (migration 9): the manager asks for the effort of the model the session
+   * ended up on, so a recorder with one level for the whole agent could not
+   * show that it asked about the right one. `asked` is every model it asked
+   * about, in order.
+   */
   function optionRecorder(defaults: {
     model: string | null;
-    effort: string | null;
+    efforts?: Record<string, string>;
     mode?: string | null;
   }) {
     const remembered: { agentId: string; ids: string[]; modes: string[] }[] = [];
     const choices: { agentId: string; configId: string; value: string | boolean }[] = [];
     const modes: { agentId: string; modeId: string }[] = [];
+    const asked: (string | null)[] = [];
     return {
       remembered,
       choices,
       modes,
+      asked,
       deps: {
-        defaults: () => ({ ...defaults, mode: defaults.mode ?? null }),
+        defaults: () => ({ model: defaults.model, mode: defaults.mode ?? null }),
+        effortFor: (_agentId: string, model: string | null) => {
+          asked.push(model);
+          return defaults.efforts?.[model ?? ""] ?? null;
+        },
         remember: (agentId: string, options: { id: string }[], sessionModes: { id: string }[]) => {
           remembered.push({
             agentId,
@@ -349,15 +363,18 @@ describe("SessionManager", () => {
   }
 
   it("applies the stored model before the effort, then the agent's own auto mode", async () => {
-    const recorder = optionRecorder({ model: "smart", effort: "high" });
+    const recorder = optionRecorder({ model: "smart", efforts: { smart: "high" } });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
 
     // The order is the assertion: the model decides which effort levels the
-    // agent has, so an effort set first would be set against the old list.
-    // The mode is last, and is the fake's `auto_review` preset — not the
-    // `default` it starts in.
+    // agent has *and* which effort was remembered, so an effort read or set
+    // first would be the outgoing model's. The mode is last, and is the
+    // fake's `auto_review` preset — not the `default` it starts in.
     expect(await appliedIn(manager, session.id)).toBe("applied: model,reasoning_effort,mode:auto in auto");
+    // Asked about `smart`, after it landed — not about `fast`, where the
+    // session started.
+    expect(recorder.asked).toEqual(["smart"]);
     const state = manager.state(session.id)!;
     expect(state.configOptions.find((option) => option.id === "model")?.currentValue).toBe("smart");
     expect(state.currentModeId).toBe("auto");
@@ -373,7 +390,7 @@ describe("SessionManager", () => {
    * and `create` is where it is applied.
    */
   it("creates the session in the stored mode rather than the auto one", async () => {
-    const recorder = optionRecorder({ model: null, effort: null, mode: "plan" });
+    const recorder = optionRecorder({ model: null, mode: "plan" });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
     expect(await appliedIn(manager, session.id)).toBe("applied: mode:plan in plan");
@@ -385,7 +402,7 @@ describe("SessionManager", () => {
    * rather than being moved to the auto preset.
    */
   it("leaves the agent where it starts when that is the stored mode", async () => {
-    const recorder = optionRecorder({ model: null, effort: null, mode: "default" });
+    const recorder = optionRecorder({ model: null, mode: "default" });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
     expect(await appliedIn(manager, session.id)).toBe("applied:  in default");
@@ -393,21 +410,21 @@ describe("SessionManager", () => {
 
   /** A mode the agent dropped is not a mode; the auto preset is the fallback. */
   it("ignores a stored mode the agent no longer offers", async () => {
-    const recorder = optionRecorder({ model: null, effort: null, mode: "yolo" });
+    const recorder = optionRecorder({ model: null, mode: "yolo" });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
     expect(await appliedIn(manager, session.id)).toBe("applied: mode:auto in auto");
   });
 
   it("sets nothing it does not have to: no defaults, and a mode already auto", async () => {
-    const recorder = optionRecorder({ model: null, effort: null });
+    const recorder = optionRecorder({ model: null });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
     expect(await appliedIn(manager, session.id)).toBe("applied: mode:auto in auto");
   });
 
   it("ignores a stored model the agent no longer offers", async () => {
-    const recorder = optionRecorder({ model: "gpt-9", effort: null });
+    const recorder = optionRecorder({ model: "gpt-9" });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
     expect(await appliedIn(manager, session.id)).toBe("applied: mode:auto in auto");
@@ -418,16 +435,22 @@ describe("SessionManager", () => {
     // an account cannot use.
     const refusing = { ...fakeProvider.launch, env: { FAKE_AGENT_REFUSE: "model" } };
     (claude as { launch: AgentProvider["launch"] }).launch = refusing;
-    const recorder = optionRecorder({ model: "smart", effort: "high" });
+    const recorder = optionRecorder({ model: "smart", efforts: { smart: "high", fast: "low" } });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
     expect(session.status).toBe("idle");
-    // The effort and the mode still landed; only the model did not.
+    // The effort and the mode still landed; only the model did not — and the
+    // effort is `fast`'s, because that is the model the session is on. A
+    // refused model must not drag the wanted model's level in behind it.
     expect(await appliedIn(manager, session.id)).toBe("applied: reasoning_effort,mode:auto in auto");
+    expect(recorder.asked).toEqual(["fast"]);
+    expect(manager.state(session.id)!.configOptions.find((option) => option.id === "reasoning_effort")?.currentValue).toBe(
+      "low",
+    );
   });
 
   it("remembers the model, effort and mode a live session was switched to", async () => {
-    const recorder = optionRecorder({ model: null, effort: null });
+    const recorder = optionRecorder({ model: null });
     const { manager, cwd } = await setup({ agentOptions: recorder.deps });
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
     await manager.setConfigOption(session.id, "model", "smart");

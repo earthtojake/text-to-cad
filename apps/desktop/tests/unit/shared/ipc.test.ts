@@ -65,6 +65,7 @@ describe("the contract", () => {
       "agentOptions.list",
       "agentOptions.probe",
       "agentOptions.setDefaults",
+      "agentOptions.setEffort",
       "skills.info",
       "runtime.status",
       "runtime.repair",

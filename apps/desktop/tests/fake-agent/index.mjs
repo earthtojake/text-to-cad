@@ -62,6 +62,15 @@
  *                 session applies the stored model before the effort (the
  *                 model decides which efforts exist) and lands in the mode
  *                 the new-session screen's chip was on
+ *   "settings"    reply with the model and effort the session ended up on —
+ *                 `settings: model=smart effort=xhigh` — which is what the
+ *                 agent itself thinks, so a test can prove the client sent
+ *                 the level remembered for THAT model rather than another's
+ *
+ * The two models do not have the same effort levels: `Fast` offers Low,
+ * Medium and High, `Smart` those plus `Xhigh`, the way Claude's do. A model
+ * switch resets the agent's own level to Medium, so the only thing that can
+ * bring `Xhigh` back on reselecting `Smart` is the app's memory of it.
  *
  * and always ends with the text "ok" and `end_turn` (or `cancelled`).
  *
@@ -118,6 +127,29 @@ const stream = ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(proce
  * the session now is, which is what the agents do.
  */
 const chosen = { model: "fast", reasoning_effort: "medium" };
+
+/**
+ * The effort levels, **per model**, the way Claude reports them: the option
+ * describes whichever model the session is on, and the bigger model has a
+ * level the smaller one does not.
+ *
+ * The agent's own current level resets to `medium` on a model switch, so it
+ * cannot be the thing that brings `xhigh` back — only the app's memory of
+ * what was picked for `smart` can (`agent_options.default_efforts`).
+ */
+const EFFORT_LEVELS = {
+  fast: [
+    { value: "low", name: "Low" },
+    { value: "medium", name: "Medium" },
+    { value: "high", name: "High" },
+  ],
+  smart: [
+    { value: "low", name: "Low" },
+    { value: "medium", name: "Medium" },
+    { value: "high", name: "High" },
+    { value: "xhigh", name: "Xhigh" },
+  ],
+};
 /**
  * Which mode the session is in, and every configuration the client applied,
  * in order (`applied` above). A real session starts in the adapter's own
@@ -182,11 +214,7 @@ function configOptions() {
       category: "thought_level",
       type: "select",
       currentValue: chosen.reasoning_effort,
-      options: [
-        { value: "low", name: "Low" },
-        { value: "medium", name: "Medium" },
-        { value: "high", name: "High" },
-      ],
+      options: EFFORT_LEVELS[chosen.model] ?? EFFORT_LEVELS.fast,
     },
   ];
 }
@@ -270,6 +298,13 @@ new AgentSideConnection((conn) => ({
     if (params.configId in chosen) {
       chosen[params.configId] = String(params.value);
     }
+    if (params.configId === "model") {
+      // A model switch rewrites the effort list and the agent's own level
+      // goes back to this model's default — the way Claude's does, and the
+      // reason a level remembered per agent could never bring the earlier
+      // pick back.
+      chosen.reasoning_effort = "medium";
+    }
     if (params.configId === "mode") {
       currentModeId = String(params.value);
     }
@@ -330,6 +365,14 @@ async function script(conn, params) {
     await send({
       sessionUpdate: "agent_message_chunk",
       content: { type: "text", text: `applied: ${applied.join(",")} in ${currentModeId}` },
+    });
+    return { stopReason: "end_turn" };
+  }
+
+  if (text.includes("settings")) {
+    await send({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: `settings: model=${chosen.model} effort=${chosen.reasoning_effort}` },
     });
     return { stopReason: "end_turn" };
   }

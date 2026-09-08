@@ -183,6 +183,33 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE agent_options ADD COLUMN default_mode TEXT;
     `,
   },
+  {
+    version: 9,
+    name: "agent-effort-per-model",
+    // The effort belongs to the model, not to the agent. Claude's `effort`
+    // option is reported for whichever model the session is on and its
+    // levels change with it — `Xhigh` exists for one model and not the next
+    // — so one `default_effort` per agent carried the outgoing model's level
+    // onto the incoming one and forgot the earlier pick. It becomes a map:
+    //
+    //   default_efforts  {"<model value>": "<effort value>"}
+    //   effort_options   {"<model value>": <the effort ConfigOption>}
+    //
+    // `default_efforts` is what the person picked, per model; `effort_options`
+    // is the levels each model offers, filled in whenever a live session
+    // reports its options — the only place a model's list is ever said. Both
+    // are JSON for the reason `options` is (migration 6): a cache of a wire
+    // shape, re-probed rather than migrated when it stops parsing.
+    //
+    // The old column goes, with nothing left behind to read it: a level
+    // stored against no model is not an answer to "which effort for this
+    // model", and a shim that guessed one would be a wrong answer.
+    up: `
+      ALTER TABLE agent_options ADD COLUMN default_efforts TEXT;
+      ALTER TABLE agent_options ADD COLUMN effort_options TEXT;
+      ALTER TABLE agent_options DROP COLUMN default_effort;
+    `,
+  },
 ];
 
 /**

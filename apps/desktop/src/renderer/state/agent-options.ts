@@ -2,10 +2,11 @@ import { useMemo } from "react";
 import { create } from "zustand";
 
 import {
-  defaultModeId,
-  effortOption,
+  effortOptionFor,
   modeChoice,
   modelOption,
+  preferredEffort,
+  preferredMode,
   withCurrentValue,
   type ModeChoice,
   type SelectOption,
@@ -23,6 +24,11 @@ import type { AgentStatus } from "@shared/agents";
  * run yet. An agent with no snapshot contributes nothing — no group in the
  * model menu, no placeholder, no spinner — because a model that cannot be run
  * is not a choice.
+ *
+ * What is remembered, and at which grain: the **model** and the **mode** per
+ * provider, the **effort** per provider *and model*. Reselecting a model
+ * comes back to the effort that was chosen under it, which it cannot do if
+ * one level is kept for the whole agent.
  */
 type AgentOptionsState = {
   byAgent: Record<string, AgentOptions>;
@@ -31,10 +37,13 @@ type AgentOptionsState = {
   load: () => Promise<void>;
   /** Ask main to take a first snapshot of this agent if it has none. */
   probe: (agentId: string, projectId: string | null) => Promise<void>;
-  setDefaults: (
-    agentId: string,
-    defaults: { model?: string | null; effort?: string | null; mode?: string | null },
-  ) => Promise<void>;
+  setDefaults: (agentId: string, defaults: { model?: string | null; mode?: string | null }) => Promise<void>;
+  /**
+   * The effort picked for one model. Separate from `setDefaults` on purpose:
+   * an effort is only ever an answer about a model, and picking a model must
+   * not touch any of them.
+   */
+  setEffort: (agentId: string, model: string, effort: string | null) => Promise<void>;
   receive: (all: AgentOptions[]) => void;
 };
 
@@ -54,6 +63,10 @@ export const useAgentOptions = create<AgentOptionsState>((set) => ({
 
   setDefaults: async (agentId, defaults) => {
     set({ byAgent: index(await window.hardcore.agentOptions.setDefaults({ agentId, ...defaults })) });
+  },
+
+  setEffort: async (agentId, model, effort) => {
+    set({ byAgent: index(await window.hardcore.agentOptions.setEffort({ agentId, model, effort })) });
   },
 
   receive: (all) => set({ byAgent: index(all), ready: true }),
@@ -102,16 +115,26 @@ export function useProviderModels(agents: AgentStatus[]): ProviderModels[] {
 }
 
 /**
- * One agent's effort dropdown, with the stored default applied — null when
- * that agent has no snapshot or the chosen model has no effort levels, which
- * is when the chip is not drawn at all.
+ * The effort dropdown for one agent **on one model** — the levels that model
+ * offers, sitting at the level last picked for it. Null when the agent has no
+ * snapshot or no effort option at all, which is when the chip is not drawn.
+ *
+ * Both halves are per model: Claude reports the option for whichever model
+ * the session is on, so the cache keeps the levels against each model it has
+ * seen (`effortOptions`) and the picks against each model they were made
+ * under (`defaultEfforts`). Passing the model the chip beside it is showing
+ * is what makes switching it swap this one — list and value together — rather
+ * than carry the outgoing model's level across.
  */
-export function useProviderEffort(agentId: string | null): SelectOption | null {
+export function useProviderEffort(agentId: string | null, model: string | null): SelectOption | null {
   const cached = useAgentOptions((state) => (agentId ? (state.byAgent[agentId] ?? null) : null));
   return useMemo(() => {
-    const effort = cached ? effortOption(cached.options) : null;
-    return effort && cached ? withCurrentValue(effort, cached.defaultEffort) : null;
-  }, [cached]);
+    if (!cached) {
+      return null;
+    }
+    const option = effortOptionFor(cached.options, cached.effortOptions, model);
+    return option ? withCurrentValue(option, preferredEffort(option, cached.defaultEfforts, model)) : null;
+  }, [cached, model]);
 }
 
 /**
@@ -140,9 +163,9 @@ export function useProviderMode(agentId: string | null): ModeChoice | null {
     if (!choice) {
       return null;
     }
-    const stored = choice.modes.some((mode) => mode.id === cached.defaultMode)
-      ? cached.defaultMode
-      : null;
-    return { ...choice, currentModeId: stored ?? defaultModeId(agentId, choice.modes) ?? choice.currentModeId };
+    return {
+      ...choice,
+      currentModeId: preferredMode(agentId, choice.modes, cached.defaultMode) ?? choice.currentModeId,
+    };
   }, [cached, agentId]);
 }

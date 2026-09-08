@@ -260,7 +260,7 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   // Model and effort are two dropdowns, not two groups in one menu: each
   // sets its own config option and the other stays where it was.
   await chipRow.locator("[data-chip=effort]").click();
-  await page.getByRole("menuitemradio", { name: "High" }).click();
+  await page.getByRole("menuitemradio", { name: "High", exact: true }).click();
   await expect(chipRow.locator("[data-chip=effort]")).toContainText("High");
   await expect(chipRow.locator("[data-chip=model]")).toContainText("Fast");
 

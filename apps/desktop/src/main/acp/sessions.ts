@@ -16,7 +16,7 @@ import nodePath from "node:path";
 
 import type { McpServer } from "@agentclientprotocol/sdk";
 
-import { defaultModeId, effortOption, modeChoice, modelOption } from "../../shared/acp/options";
+import { effortOption, modeChoice, modelOption, preferredMode } from "../../shared/acp/options";
 import type {
   ConfigOption,
   PromptBlock,
@@ -88,7 +88,12 @@ export type SessionManagerDeps = {
    * where they are stored.
    */
   agentOptions?: {
-    defaults(agentId: string): { model: string | null; effort: string | null; mode: string | null };
+    defaults(agentId: string): { model: string | null; mode: string | null };
+    /**
+     * The effort remembered for one of this agent's models — asked after the
+     * model has landed, because the levels are the model's (`options.ts`).
+     */
+    effortFor(agentId: string, model: string | null): string | null;
     remember(agentId: string, options: ConfigOption[], modes: SessionMode[]): void;
     rememberChoice(
       agentId: string,
@@ -266,18 +271,21 @@ export class SessionManager {
 
   /**
    * The model, then the effort, then the mode — in that order, and the order
-   * matters: switching model is what changes which effort levels the agent
-   * offers, so an effort set first would be set against the outgoing model's
-   * list.
+   * matters twice over: switching model is what changes which effort levels
+   * the agent offers, *and* which effort was remembered. An effort read or
+   * set first would be the outgoing model's.
    *
    * Every step is best-effort. An adapter that refuses one of them logs and
-   * the session goes on.
+   * the session goes on — including a refused model, after which the effort
+   * is read against the model the session is actually on rather than the one
+   * that was wanted.
    */
   private async applyPreferences(session: Session, connection: SessionConnection): Promise<void> {
-    const defaults =
-      this.deps.agentOptions?.defaults(session.agentId) ?? { model: null, effort: null, mode: null };
+    const defaults = this.deps.agentOptions?.defaults(session.agentId) ?? { model: null, mode: null };
     await this.applyConfigOption(connection, modelOption(connection.state.configOptions), defaults.model);
-    await this.applyConfigOption(connection, effortOption(connection.state.configOptions), defaults.effort);
+    const model = modelOption(connection.state.configOptions)?.currentValue ?? null;
+    const effort = this.deps.agentOptions?.effortFor(session.agentId, model) ?? null;
+    await this.applyConfigOption(connection, effortOption(connection.state.configOptions), effort);
     await this.applyMode(connection, defaults.mode, session.agentId);
     this.deps.agentOptions?.remember(
       session.agentId,
@@ -322,9 +330,7 @@ export class SessionManager {
       if (!choice) {
         return;
       }
-      const wanted =
-        (preferred && choice.modes.some((mode) => mode.id === preferred) ? preferred : null) ??
-        defaultModeId(agentId, choice.modes);
+      const wanted = preferredMode(agentId, choice.modes, preferred);
       if (!wanted || wanted === choice.currentModeId) {
         return;
       }

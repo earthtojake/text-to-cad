@@ -11,6 +11,7 @@ import path from "node:path";
 
 import { z } from "zod";
 
+import { effortModelKey, effortOption } from "../../shared/acp/options";
 import {
   ConfigOptionSchema,
   SessionModeSchema,
@@ -230,9 +231,15 @@ type AgentOptionsRow = {
   modes: string | null;
   options_at: number | null;
   default_model: string | null;
-  default_effort: string | null;
+  /** `{"<model value>": "<effort value>"}` (migration 9). */
+  default_efforts: string | null;
+  /** `{"<model value>": <the effort ConfigOption>}` (migration 9). */
+  effort_options: string | null;
   default_mode: string | null;
 };
+
+const EffortsSchema = z.record(z.string(), z.string());
+const EffortOptionsSchema = z.record(z.string(), ConfigOptionSchema);
 
 /**
  * A row that no longer parses is a snapshot of an adapter that has changed
@@ -243,19 +250,22 @@ type AgentOptionsRow = {
 const toAgentOptions = (row: AgentOptionsRow): AgentOptions => {
   const parsed = z.array(ConfigOptionSchema).safeParse(safeJson(row.options ?? "null"));
   const modes = z.array(SessionModeSchema).safeParse(safeJson(row.modes ?? "null"));
+  const efforts = EffortsSchema.safeParse(safeJson(row.default_efforts ?? "null"));
+  const effortOptions = EffortOptionsSchema.safeParse(safeJson(row.effort_options ?? "null"));
   return {
     agentId: row.agent_id,
     options: parsed.success ? parsed.data : [],
     modes: modes.success ? modes.data : [],
     updatedAt: parsed.success ? row.options_at : null,
     defaultModel: row.default_model,
-    defaultEffort: row.default_effort,
+    defaultEfforts: efforts.success ? efforts.data : {},
+    effortOptions: effortOptions.success ? effortOptions.data : {},
     defaultMode: row.default_mode,
   };
 };
 
 const AGENT_OPTIONS_COLUMNS =
-  "agent_id, options, modes, options_at, default_model, default_effort, default_mode";
+  "agent_id, options, modes, options_at, default_model, default_efforts, effort_options, default_mode";
 
 export const agentOptions = {
   list(): AgentOptions[] {
@@ -272,22 +282,38 @@ export const agentOptions = {
     return row ? toAgentOptions(row) : null;
   },
 
-  /** Replace the snapshot — options and modes together; the defaults are untouched. */
+  /**
+   * Replace the snapshot — options and modes together; the defaults are
+   * untouched.
+   *
+   * The effort levels in it are also filed under the model they belong to.
+   * The agent reports the effort option for whichever model the session is
+   * on, so one snapshot only ever describes one model's levels and this is
+   * the only place the others' survive — every model the person has run is
+   * remembered, and the effort chip can offer the right list the moment the
+   * model chip changes.
+   */
   setOptions(agentId: string, options: ConfigOption[], modes: SessionMode[] = [], at = Date.now()): void {
-    db()
+    const connection = db();
+    connection
       .prepare(
         `INSERT INTO agent_options (agent_id, options, modes, options_at) VALUES (?, ?, ?, ?)
          ON CONFLICT(agent_id) DO UPDATE SET options = excluded.options, modes = excluded.modes,
            options_at = excluded.options_at`,
       )
       .run(agentId, JSON.stringify(options), JSON.stringify(modes), at);
+    const effort = effortOption(options);
+    if (!effort) {
+      return;
+    }
+    const merged = { ...readJsonColumn(agentId, "effort_options", EffortOptionsSchema), [effortModelKey(options)]: effort };
+    connection
+      .prepare("UPDATE agent_options SET effort_options = ? WHERE agent_id = ?")
+      .run(JSON.stringify(merged), agentId);
   },
 
   /** Set the defaults given; an absent key leaves that default as it was. */
-  setDefaults(
-    agentId: string,
-    defaults: { model?: string | null; effort?: string | null; mode?: string | null },
-  ): void {
+  setDefaults(agentId: string, defaults: { model?: string | null; mode?: string | null }): void {
     const connection = db();
     connection
       .prepare("INSERT INTO agent_options (agent_id) VALUES (?) ON CONFLICT(agent_id) DO NOTHING")
@@ -297,18 +323,52 @@ export const agentOptions = {
         .prepare("UPDATE agent_options SET default_model = ? WHERE agent_id = ?")
         .run(defaults.model, agentId);
     }
-    if (defaults.effort !== undefined) {
-      connection
-        .prepare("UPDATE agent_options SET default_effort = ? WHERE agent_id = ?")
-        .run(defaults.effort, agentId);
-    }
     if (defaults.mode !== undefined) {
       connection
         .prepare("UPDATE agent_options SET default_mode = ? WHERE agent_id = ?")
         .run(defaults.mode, agentId);
     }
   },
+
+  /**
+   * The effort picked for one model, merged into that agent's map. `null`
+   * forgets it, which sends the chip back to the level the agent reports.
+   */
+  setEffort(agentId: string, model: string, effort: string | null): void {
+    const connection = db();
+    connection
+      .prepare("INSERT INTO agent_options (agent_id) VALUES (?) ON CONFLICT(agent_id) DO NOTHING")
+      .run(agentId);
+    const efforts = { ...readJsonColumn(agentId, "default_efforts", EffortsSchema) };
+    if (effort === null) {
+      delete efforts[model];
+    } else {
+      efforts[model] = effort;
+    }
+    connection
+      .prepare("UPDATE agent_options SET default_efforts = ? WHERE agent_id = ?")
+      .run(JSON.stringify(efforts), agentId);
+  },
 };
+
+/**
+ * One JSON column of an `agent_options` row, parsed, for the two writes that
+ * merge into a map rather than replacing it. A column that no longer parses
+ * reads as empty — a cache, the same as the rest of this table.
+ *
+ * The column name is a literal from this file, never a caller's string.
+ */
+function readJsonColumn<T>(
+  agentId: string,
+  column: "default_efforts" | "effort_options",
+  schema: z.ZodType<Record<string, T>>,
+): Record<string, T> {
+  const row = db()
+    .prepare(`SELECT ${column} AS value FROM agent_options WHERE agent_id = ?`)
+    .get(agentId) as { value: string | null } | undefined;
+  const parsed = schema.safeParse(safeJson(row?.value ?? "null"));
+  return parsed.success ? parsed.data : {};
+}
 
 /* -------------------------------------------------------------------------- */
 /* Explorer tabs                                                               */

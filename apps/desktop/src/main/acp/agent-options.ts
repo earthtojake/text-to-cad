@@ -11,6 +11,14 @@
  * chosen anywhere are stored as that agent's defaults, which
  * `SessionManager.create` applies to the next one.
  *
+ * **The effort belongs to the model, not to the agent.** Claude reports its
+ * `effort` option for whichever model the session is on, with the levels that
+ * model has — `Xhigh` for one, not for the next — so the memory is a map from
+ * model value to level (`setEffort`, `effortFor`), and so is the cache of the
+ * levels themselves (`AgentOptions.effortOptions`, filled by `remember`).
+ * Switching model and switching back comes back to the level that was chosen
+ * there; the model and the mode stay per provider.
+ *
  * A probe that fails is silence, not an error: an agent that is not installed
  * or not signed in contributes no models to the new-session menu, which is
  * exactly what "do not show uninstalled models" means. One probe per agent is
@@ -21,7 +29,7 @@
  * has no Electron, no sqlite and no adapter of its own.
  */
 import type { ConfigOption, SessionMode } from "../../shared/acp/types";
-import { effortOption, modeOption, modelOption } from "../../shared/acp/options";
+import { NO_MODEL, effortModelKey, effortOption, modeOption, modelOption } from "../../shared/acp/options";
 import type { AgentOptions } from "../../shared/ipc/agent-options";
 
 /** What an agent last said a session of its own can be configured with. */
@@ -31,10 +39,9 @@ export type AgentOptionsDeps = {
   read(): AgentOptions[];
   get(agentId: string): AgentOptions | null;
   writeOptions(agentId: string, options: ConfigOption[], modes: SessionMode[]): void;
-  writeDefaults(
-    agentId: string,
-    defaults: { model?: string | null; effort?: string | null; mode?: string | null },
-  ): void;
+  writeDefaults(agentId: string, defaults: { model?: string | null; mode?: string | null }): void;
+  /** The effort picked for one of this agent's models; `null` forgets it. */
+  writeEffort(agentId: string, model: string, effort: string | null): void;
   /** Spawn the agent far enough to read its `session/new` reply. */
   probe(agentId: string, projectId: string | null): Promise<AgentSnapshot>;
   onChange(all: AgentOptions[]): void;
@@ -57,14 +64,24 @@ export class AgentOptionStore {
     return this.deps.get(agentId);
   }
 
-  /** The values a new session with this agent should start at. */
-  defaults(agentId: string): { model: string | null; effort: string | null; mode: string | null } {
+  /**
+   * The per-provider values a new session with this agent should start at.
+   * The effort is not among them: it is remembered per model and read with
+   * `effortFor`, once the model the session is actually on is known.
+   */
+  defaults(agentId: string): { model: string | null; mode: string | null } {
     const row = this.deps.get(agentId);
-    return {
-      model: row?.defaultModel ?? null,
-      effort: row?.defaultEffort ?? null,
-      mode: row?.defaultMode ?? null,
-    };
+    return { model: row?.defaultModel ?? null, mode: row?.defaultMode ?? null };
+  }
+
+  /**
+   * The effort level the person last picked for one of this agent's models,
+   * and nothing else — no fallback to another model's level, and none to the
+   * agent's own current, which is where a session already is. `null` means
+   * "leave it alone".
+   */
+  effortFor(agentId: string, model: string | null): string | null {
+    return this.deps.get(agentId)?.defaultEfforts[model ?? NO_MODEL] ?? null;
   }
 
   /**
@@ -89,6 +106,10 @@ export class AgentOptionStore {
    * session starts where the last one ended. Anything else the agent exposes
    * is session-scoped and is not remembered.
    *
+   * `options` is the set as it was *before* the call, which is what makes the
+   * effort keyable: the model in it is the model the level was picked under,
+   * and a model switch would have rewritten it.
+   *
    * The mode is here as well as in `rememberMode` because an agent that
    * sends its modes as a `mode` config option (Codex) switches them through
    * `set_config_option`, and one that sends `modes` (Claude) through
@@ -102,9 +123,12 @@ export class AgentOptionStore {
     const effort = effortOption(options);
     const mode = modeOption(options);
     if (model && configId === model.id) {
+      // Deliberately nothing about the effort: the levels of the model being
+      // left are still that model's, and the one being arrived at keeps
+      // whatever was chosen there last.
       this.setDefaults(agentId, { model: value });
     } else if (effort && configId === effort.id) {
-      this.setDefaults(agentId, { effort: value });
+      this.setEffort(agentId, effortModelKey(options), value);
     } else if (mode && configId === mode.id) {
       this.setDefaults(agentId, { mode: value });
     }
@@ -115,11 +139,16 @@ export class AgentOptionStore {
     this.setDefaults(agentId, { mode: modeId });
   }
 
-  setDefaults(
-    agentId: string,
-    defaults: { model?: string | null; effort?: string | null; mode?: string | null },
-  ): AgentOptions[] {
+  setDefaults(agentId: string, defaults: { model?: string | null; mode?: string | null }): AgentOptions[] {
     this.deps.writeDefaults(agentId, defaults);
+    const all = this.list();
+    this.deps.onChange(all);
+    return all;
+  }
+
+  /** The effort for one model, remembered against that model alone. */
+  setEffort(agentId: string, model: string, effort: string | null): AgentOptions[] {
+    this.deps.writeEffort(agentId, model, effort);
     const all = this.list();
     this.deps.onChange(all);
     return all;
