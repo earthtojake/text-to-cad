@@ -3,17 +3,12 @@ export const SELECTION_FILTERS = [
   { id: 'parts', label: 'Parts', detail: 'Whole components' },
   { id: 'faces', label: 'Faces', detail: 'Faces only' },
   { id: 'edges', label: 'Edges', detail: 'Edges only' },
-  { id: 'groups', label: 'Feature groups', detail: 'Recognized hole and slot walls' },
 ];
 
-export function filterSelectionReferences(references, filter, groups = []) {
+export function filterSelectionReferences(references, filter) {
   if (filter === 'parts') return [];
   if (filter === 'faces') return references.filter(r => r.selectorType === 'face');
   if (filter === 'edges') return references.filter(r => r.selectorType === 'edge');
-  if (filter === 'groups') {
-    const ids = new Set(groups.flatMap(group => group.faceIds));
-    return references.filter(r => r.selectorType === 'face' && ids.has(r.id));
-  }
   return references;
 }
 

@@ -156,6 +156,10 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
       if (!snapshot.rootId && server?.rootId) publish({ rootId: server.rootId });
       return server;
     },
+    requestDesignOutline(file, { signal } = {}) {
+      if (!file) return Promise.reject(new Error('Missing file'));
+      return request('/__cad/design-outline', { file, signal });
+    },
     requestArtifactStatus(file, { signal } = {}) {
       if (!file) return Promise.reject(new Error('Missing file'));
       return request('/__cad/artifact', { file, signal });

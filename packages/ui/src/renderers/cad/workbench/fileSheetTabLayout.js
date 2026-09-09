@@ -56,6 +56,7 @@ export function clampSplitRatio(ratio) {
 // conditional Bends/Layers tabs below.
 const TOP_PANE_SECTION_IDS = Object.freeze(new Set([
   FILE_SHEET_SECTION_IDS.STEP_TREE,
+  FILE_SHEET_SECTION_IDS.STEP_FEATURES,
   FILE_SHEET_SECTION_IDS.DXF_MATERIAL
 ]));
 

@@ -119,7 +119,6 @@ function DesktopFloatingToolBar({
   selectionFilter = null,
   onSelectionFilterChange,
   selectionFilterNotice = "",
-  groupsAvailable = false,
   selectionToolActive,
   referenceSelectionPending = false,
   referenceSelectionUnavailable = false,
@@ -391,7 +390,7 @@ function DesktopFloatingToolBar({
                     <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />
                   </ToolbarButton>
 
-                  {!compact && selectionFilter !== null && <SelectionFilterMenu value={selectionFilter} onChange={onSelectionFilterChange} groupsAvailable={groupsAvailable} disabled={viewerLoading || !viewportContent} />}
+                  {!compact && selectionFilter !== null && <SelectionFilterMenu value={selectionFilter} onChange={onSelectionFilterChange} disabled={viewerLoading || !viewportContent} />}
                   <ToolbarButton
                     label="Pan"
                     active={panToolActive}
@@ -447,7 +446,7 @@ function DesktopFloatingToolBar({
       </TooltipProvider>
       {!previewMode && selectionToolActive && selectionFilter !== null && (compact || selectionFilter !== "all") && (
         <div className={`pointer-events-auto max-w-full rounded-md px-1 py-0.5 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
-          {compact ? <SelectionFilterMenu compact value={selectionFilter} onChange={onSelectionFilterChange} groupsAvailable={groupsAvailable} disabled={viewerLoading || !viewportContent} />
+          {compact ? <SelectionFilterMenu compact value={selectionFilter} onChange={onSelectionFilterChange} disabled={viewerLoading || !viewportContent} />
             : <span className="px-1 text-micro text-muted-foreground">{SELECTION_FILTERS.find(item => item.id === selectionFilter)?.label}</span>}
         </div>
       )}
