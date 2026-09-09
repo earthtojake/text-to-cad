@@ -5394,7 +5394,7 @@ function CadFileViewSurface({
     const normalizedMode = mode === TAB_TOOL_MODE.DRAW || mode === TAB_TOOL_MODE.MEASURE || mode === TAB_TOOL_MODE.PAN
       ? mode
       : TAB_TOOL_MODE.REFERENCES;
-    setTabToolMode(normalizedMode);
+    setTabToolMode(current => normalizedMode === TAB_TOOL_MODE.MEASURE && current === normalizedMode ? TAB_TOOL_MODE.REFERENCES : normalizedMode);
     if (normalizedMode === TAB_TOOL_MODE.DRAW && drawingTool === DRAWING_TOOL.SURFACE_LINE) {
       setDrawingTool(DRAWING_TOOL.FREEHAND);
     }
