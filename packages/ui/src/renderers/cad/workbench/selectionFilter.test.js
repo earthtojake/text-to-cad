@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { filterSelectionReferences, toggleFaceGroupSelection } from './selectionFilter.js';
+const refs = [{id:'f1',selectorType:'face'}, {id:'f2',selectorType:'face'}, {id:'e1',selectorType:'edge'}];
+test('strict filters exclude other entity types and unrecognized faces', () => {
+  assert.deepEqual(filterSelectionReferences(refs,'faces').map(r=>r.id),['f1','f2']);
+  assert.deepEqual(filterSelectionReferences(refs,'edges').map(r=>r.id),['e1']);
+  assert.deepEqual(filterSelectionReferences(refs,'parts'),[]);
+  assert.deepEqual(filterSelectionReferences(refs,'groups',[{faceIds:['f2']}]).map(r=>r.id),['f2']);
+  assert.deepEqual(filterSelectionReferences(refs,'groups'),[]);
+  assert.equal(filterSelectionReferences(refs,'all'),refs);
+});
+test('shift adds a whole group and toggles it off only when all members are selected', () => {
+  assert.deepEqual(toggleFaceGroupSelection(['f1'],['f2','f3'],true),['f1','f2','f3']);
+  assert.deepEqual(toggleFaceGroupSelection(['f1','f2'],['f2','f3'],true),['f1','f2','f3']);
+  assert.deepEqual(toggleFaceGroupSelection(['f1','f2','f3'],['f2','f3'],true),['f1']);
+  assert.deepEqual(toggleFaceGroupSelection(['f1'],['f2','f3']),['f2','f3']);
+});

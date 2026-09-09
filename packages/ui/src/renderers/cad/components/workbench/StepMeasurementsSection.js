@@ -34,7 +34,7 @@ export default function StepMeasurementsSection({
         <Ruler className="size-4 text-muted-foreground/45" strokeWidth={1.5} aria-hidden="true" />
         <p className="text-tiny text-muted-foreground">
           {measureModeActive
-            ? "Click two points on the model to measure"
+            ? "Select two points, edges, or faces to measure"
             : "Pick the Measure tool to start measuring"}
         </p>
       </div>

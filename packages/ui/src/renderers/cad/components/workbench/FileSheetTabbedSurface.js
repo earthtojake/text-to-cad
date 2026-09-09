@@ -161,13 +161,17 @@ function FileSheetTabPane({
           </span>
         ) : null}
       </div>
-      <ScrollArea
+      {activeSection?.scrollsContent ? (
+        <div className="min-h-0 flex-1 overflow-hidden" data-file-sheet-tab-panel={activeId}>
+          {activeSection.content}
+        </div>
+      ) : <ScrollArea
         className="min-h-0 flex-1"
         viewportClassName="h-full"
         data-file-sheet-tab-panel={activeId || undefined}
       >
         {activeSection ? activeSection.content : null}
-      </ScrollArea>
+      </ScrollArea>}
     </section>
   );
 }

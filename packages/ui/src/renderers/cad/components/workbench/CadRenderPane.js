@@ -341,6 +341,7 @@ export default function CadRenderPane({
   copyButtonLabel,
   copyButtonCountLabel = "",
   copyReferenceTipActive = false,
+  selectionFilter = "all",
   panToolActive = false,
   handleCopySelection,
   handleAddSelection = null,
@@ -485,6 +486,7 @@ export default function CadRenderPane({
         pickMode={!hasTopology && !hasParts && !measureModeActive
           ? VIEWER_PICK_MODE.NONE
           : viewerPickModeForRenderPane({
+            selectionFilter,
             panToolActive,
             topologySelectionPending,
             topologySelectionUnavailable,
