@@ -32,3 +32,7 @@ test('keeps concrete renderers out of the FileViewer import graph',()=>fixture({
   'packages/ui/src/file-viewer/index.ts':"export * from '../renderers/cad';",
   'packages/ui/src/renderers/cad/index.ts':'export const cad = 1;',
 },result=>assert.ok(result.errors.some(error=>error.includes('eagerly imports')))));
+test('rejects desktop renderer imports of main-process modules',()=>fixture({
+  'apps/desktop/src/renderer/view.ts':"import '../main/private';",
+  'apps/desktop/src/main/private.ts':'export const secret = 1;',
+},result=>assert.ok(result.errors.some(error=>error.includes('renderer imports main')))));
