@@ -432,3 +432,28 @@ test("buildTransformedDisplayEdgeRuntime applies occurrence transforms to edge p
   assert.deepEqual(Array.from(transformed.proxy.edgeIndices), [0, 1]);
   assert.deepEqual(Array.from(transformed.proxy.edgeIds), [0]);
 });
+
+
+test("edge tangency and adjacency survive remapping into separate assembly occurrences", () => {
+  const bundle={manifest:{tables:{
+    occurrenceColumns:["id"],
+    faceColumns:["id","occurrenceId","shapeId","ordinal"],
+    edgeColumns:["id","occurrenceId","shapeId","ordinal","faceStart","faceCount","visibilityClass"],
+  },occurrences:[["o1"]],faces:[["o1.f1","o1","o1.s1",1],["o1.f2","o1","o1.s1",2]],
+  edges:[["o1.e1","o1","o1.s1",1,0,2,"tangent"]],relations:{edgeFaceRows:[0,1]}},buffers:{}};
+  const runtimes=["o1.1","o1.2"].map(id=>buildSelectorRuntime(bundle,{partId:id,remapOccurrenceId:id}));
+  const edges=composeSelectorRuntimes(runtimes).references.filter(ref=>ref.selectorType==="edge");
+  assert.deepEqual(edges.map(ref=>ref.pickData.visibilityClass),["tangent","tangent"]);
+  assert.deepEqual(edges.map(ref=>ref.pickData.adjacentSelectors),[["o1.1.f1","o1.1.f2"],["o1.2.f1","o1.2.f2"]]);
+});
+
+test('edge chain endpoints use proxy connectivity and follow occurrence transforms', () => {
+  const bundle = {manifest:{tables:{edgeColumns:['id','occurrenceId','shapeId','ordinal','curveType','segmentStart','segmentCount']},
+    edges:[['o1.e1','o1','o1.s1',1,'line',0,2],['o1.e2','o1','o1.s1',2,'circle',2,3]]},
+    buffers:{edgePositions:new Float32Array([0,0,0,1,0,0,2,0,0,0,1,0]),edgeIndices:new Uint32Array([0,1,1,2,0,1,1,3,3,0])}};
+  const runtime=buildSelectorRuntime(bundle);
+  assert.deepEqual(runtime.references[0].pickData.chainEndpoints,[{point:[0,0,0],direction:[1,0,0]},{point:[2,0,0],direction:[-1,0,0]}]);
+  assert.deepEqual(runtime.references[1].pickData.chainEndpoints,[]);
+  const moved=buildSelectorRuntime(bundle,{transform:[1,0,0,10,0,1,0,20,0,0,1,30,0,0,0,1],remapOccurrenceId:'o2'});
+  assert.deepEqual(moved.references[0].pickData.chainEndpoints[0].point,[10,20,30]);
+});

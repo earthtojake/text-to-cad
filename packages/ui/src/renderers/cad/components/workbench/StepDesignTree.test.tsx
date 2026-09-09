@@ -25,7 +25,7 @@ it('shows source parameters read-only and navigates nested operations with arrow
   fireEvent.click(row);
   expect(screen.getByRole('region', {name:'Feature properties'}).textContent).toContain('10');
   fireEvent.keyDown(row, {key:'ArrowRight'});
-  expect(screen.getByText('Sketch')).toBeTruthy();
+  expect(screen.getByRole('treeitem',{name:'Sketch',exact:true})).toBeTruthy();
   fireEvent.keyDown(row, {key:'ArrowRight'});
   expect(document.activeElement?.textContent).toContain('Sketch');
   fireEvent.keyDown(document.activeElement!, {key:'ArrowLeft'});
@@ -149,7 +149,7 @@ it('drills into a single associated face and previews temporary dimensions witho
   const onHighlight=vi.fn();
   const client={requestDesignOutline:vi.fn().mockResolvedValue({...result,geometryLinks:{schema:1,faces:descriptors,lines:{'5':[0,1]}}})};
   const {unmount}=render(<StepDesignTree client={client} file="case.step" references={references} onHighlight={onHighlight} />);
-  fireEvent.click(await screen.findByRole('button',{name:'Expand Extrude · body'}));
+  await screen.findByRole('button',{name:'Collapse Extrude · body'});
   fireEvent.click(screen.getByRole('button',{name:'Expand Associated faces (2)'}));
   fireEvent.click(screen.getByRole('treeitem',{name:'Face f0 · plane',exact:true}));
   expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:['f0'],partIds:[]});
@@ -176,4 +176,28 @@ it('provides source context for unlinked parameters without telling the person t
   expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:[],partIds:[]});
   expect(onHighlight.mock.lastCall?.[2]).toMatchObject({file:'case.step',source:'case.py',parameters:[{name:'WALL',value:1.8}]});
   expect(screen.queryByText(/Rebuild this model|Geometry links unavailable/)).toBeNull();
+});
+
+
+it('shows authored sketches when Features opens without expanding unrelated repeats', async () => {
+  const repeat={id:'repeat',label:'Repeat',type:'pattern',parameters:[],children:[{id:'nested',label:'Nested cut',type:'extrude',parameters:[],children:[]}]};
+  render(<StepDesignTree client={{requestDesignOutline:vi.fn().mockResolvedValue({...result,features:[...result.features,repeat]})}} file="case.step" />);
+  expect(await screen.findByRole('treeitem',{name:'Sketch',exact:true})).toBeTruthy();
+  expect(screen.getByRole('button',{name:'Collapse Extrude · body'})).toBeTruthy();
+  expect(screen.getByRole('button',{name:'Expand Repeat'})).toBeTruthy();
+  expect(screen.queryByRole('treeitem',{name:'Nested cut',exact:true})).toBeNull();
+});
+
+it('keeps model visibility available without feature links on a single solid', async () => {
+  const onToggleVisibility=vi.fn();
+  const props={client:{requestDesignOutline:vi.fn().mockResolvedValue(result)},file:'case.step',label:'Case',parts:[]};
+  const actions={modelId:'model-root',hiddenIds:[],onToggleVisibility};
+  const {rerender}=render(<StepDesignTree {...props} partActions={actions} />);
+  fireEvent.click(await screen.findByRole('button',{name:'Hide Case',exact:true}));
+  expect(onToggleVisibility).toHaveBeenCalledWith('model-root');
+  expect(screen.queryByRole('button',{name:/^Isolate/})).toBeNull();
+  rerender(<StepDesignTree {...props} partActions={{...actions,hiddenIds:['model-root']}} />);
+  fireEvent.click(screen.getByRole('button',{name:'Show Case',exact:true}));
+  expect(onToggleVisibility).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole('button',{name:'Hide Extrude · body'})).toBeNull();
 });

@@ -1,9 +1,11 @@
+import { buildEdgeChainGraph } from "../workbench/edgeChainSelection.js";
 "use client";
 
 import StepMeasurementsSection from "../components/workbench/StepMeasurementsSection.js";
 import SelectionFilterMenu from "../components/workbench/SelectionFilterMenu.jsx";
 import { designFeatureContextText, designFeaturePromptText } from "../workbench/designFeaturePrompt.js";
-import { filterSelectionReferences, toggleFaceGroupSelection, MEASURE_SELECTION_FILTERS } from "../workbench/selectionFilter.js";
+import { filterSelectionReferences, toggleReferenceGroupSelection, connectedReferenceIds, MEASURE_SELECTION_FILTERS } from "../workbench/selectionFilter.js";
+import { buildTangentFaceGraph } from "../workbench/tangentFaceSelection.js";
 
 import { TutorialTipsContext } from "../workbench/tutorialTips.js";
 import { FileSheetTabPreferencesContext } from "../workbench/fileSheetTabPreferences.js";
@@ -4023,7 +4025,7 @@ function CadFileViewSurface({
     else setLargeFileState(current => ({ ...current, selectableTopologyEnabled: true }));
   }, [isAssemblyView]);
   useEffect(() => {
-    if (!["faces", "edges"].includes(selectionFilter)) {
+    if (!["faces", "edges", "tangent-faces", "edge-chain"].includes(selectionFilter)) {
       setSelectionFilterNotice("");
       return;
     }
@@ -4038,9 +4040,9 @@ function CadFileViewSurface({
       setExpandedStepTreeNodeIds(current => current.includes(partIds[0]) ? current : [...current, partIds[0]]);
     }
   }, [isAssemblyView, loadableStepTreeTopologyNodeIdSet]);
-  const selectFeatureFaces = useCallback((faceIds, { multiSelect = false } = {}) => {
-    if (stepUpdateInProgress || !faceIds.length || !faceIds.every(id => effectiveActiveReferenceMap.get(id)?.selectorType === "face")) return;
-    const next = toggleFaceGroupSelection(selectedReferenceIdsRef.current, faceIds, multiSelect);
+  const selectReferenceGroup = useCallback((referenceIds, { multiSelect = false } = {}) => {
+    if (stepUpdateInProgress || !referenceIds.length || !referenceIds.every(id => ["face", "edge"].includes(effectiveActiveReferenceMap.get(id)?.selectorType))) return;
+    const next = toggleReferenceGroupSelection(selectedReferenceIdsRef.current, referenceIds, multiSelect);
     selectedPartIdsRef.current = [];
     setSelectedPartIds([]);
     setSelectedRenderPartIdByAssemblyPartId({});
@@ -4332,7 +4334,7 @@ function CadFileViewSurface({
       if (resolvedFaces.some(value => !value)) return;
       if (resolvedFaces.every(value => value.kind === "reference" && effectiveActiveReferenceMap.get(value.id)?.selectorType === "face")) {
         if (stepUpdateInProgress) return;
-        selectFeatureFaces(resolvedFaces.map(value => value.id));
+        selectReferenceGroup(resolvedFaces.map(value => value.id));
         const lastFace = resolvedFaces[resolvedFaces.length - 1].id;
         revealStepTreeNode(findStepTreeTopologyNodeIdForReference(displayStepTreeRoot, lastFace) || referencePartId(effectiveActiveReferenceMap.get(lastFace)), { source: "reference" });
         appliedSelectReferenceKeyRef.current = selectReference.key;
@@ -4362,7 +4364,7 @@ function CadFileViewSurface({
     selectReference,
     viewerLoading,
     stepUpdateInProgress,
-    selectFeatureFaces,
+    selectReferenceGroup,
     referencePartId,
     effectiveActiveReferenceMap,
     displayStepTreeRoot,
@@ -4781,6 +4783,14 @@ function CadFileViewSurface({
     stepModuleTreeSelectionDisabled
   ]);
 
+  const tangentFaces = useMemo(() => buildTangentFaceGraph(
+    selectionFilter === "tangent-faces" ? [...effectiveActiveReferenceMap.values()] : EMPTY_LIST
+  ), [selectionFilter, effectiveActiveReferenceMap]);
+
+  const edgeChains = useMemo(() => buildEdgeChainGraph(
+    selectionFilter === "edge-chain" ? [...effectiveActiveReferenceMap.values()] : EMPTY_LIST
+  ), [selectionFilter, effectiveActiveReferenceMap]);
+
   const handleModelReferenceActivate = useCallback((referenceId, { multiSelect = false } = {}) => {
     if (stepUpdateInProgress || stepModuleTreeSelectionDisabled) {
       return;
@@ -4797,6 +4807,16 @@ function CadFileViewSurface({
       return;
     }
     const topologyReference = effectiveActiveReferenceMap.get(nextReferenceId) || null;
+    if (selectionFilter === "edge-chain" && topologyReference?.selectorType === "edge") {
+      setDesignHighlight(null);
+      selectReferenceGroup(connectedReferenceIds(edgeChains, topologyReference.id), { multiSelect });
+      return;
+    }
+    if (selectionFilter === "tangent-faces" && topologyReference?.selectorType === "face") {
+      setDesignHighlight(null);
+      selectReferenceGroup(connectedReferenceIds(tangentFaces, topologyReference.id), { multiSelect });
+      return;
+    }
     if (topologyReference && isViewerTopologyReference(topologyReference)) {
       toggleReferenceSelection(nextReferenceId, { multiSelect });
       return;
@@ -4818,7 +4838,9 @@ function CadFileViewSurface({
   }, [
     clearAssemblySelection,
     selectionFilter,
-    selectFeatureFaces,
+    tangentFaces,
+    edgeChains,
+    selectReferenceGroup,
     isAssemblyView,
     effectiveActiveReferenceMap,
     isViewerTopologyReference,

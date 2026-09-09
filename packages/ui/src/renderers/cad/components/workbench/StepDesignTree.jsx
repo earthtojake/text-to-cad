@@ -8,7 +8,7 @@ import { designFeatureLabel as featureLabel, designFeatureTitle as title, design
 import { designFeatureDimension, designFeatureMeasurements } from '../../workbench/designFeatureMeasurements.js';
 const EMPTY = [];
 
-const iconFor = type => ({ 'geometry-face': SquareRoundCorner, 'geometry-faces': Layers, sketch: PencilRuler, revolve: RotateCw, hole: Circle, fillet: SquareRoundCorner, chamfer: Scissors, pattern: Layers, parameters: Variable, parameter: Variable, group: Layers })[type] || Box;
+const iconFor = type => ({ 'geometry-face': SquareRoundCorner, 'geometry-faces': Layers, sketch: PencilRuler, profile: SquareRoundCorner, revolve: RotateCw, hole: Circle, fillet: SquareRoundCorner, chamfer: Scissors, pattern: Layers, parameters: Variable, parameter: Variable, group: Layers })[type] || Box;
 
 function flatten(nodes, expanded, depth = 0) {
   return nodes.flatMap(node => [{ ...node, depth }, ...(expanded.has(node.id) ? flatten(node.children || [], expanded, depth + 1) : [])]);
@@ -36,7 +36,13 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
       return () => controller.abort();
     }
     client.requestDesignOutline(file, { signal: controller.signal }).then(result => {
-      if (!controller.signal.aborted) setState(result);
+      if (!controller.signal.aborted) {
+        setState(result);
+        // Expose authored profile inputs immediately on opening Features. Keep
+        // repeats and assembly part groups collapsed so large trees stay usable.
+        setExpanded(new Set(['model', 'parts', ...(result.features || [])
+          .filter(node => node.children?.some(child => ['sketch', 'profile'].includes(child.type))).map(node => node.id)]));
+      }
     }).catch(error => {
       if (!controller.signal.aborted) setState({ status: 'error', error: error.message });
     });
@@ -119,7 +125,7 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
       <div role="tree" aria-label="Features" className="p-1.5">
         {state.status !== 'loading' && rows.map((node, index) => {
           const Icon = iconFor(node.type), hasChildren = Boolean(node.children?.length || node.hasFaceChildren), open = expanded.has(node.id);
-          const partId = node.type === 'part' ? node.partIds[0] : null;
+          const partId = node.type === 'part' ? node.partIds[0] : node.type === 'model' ? partActions?.modelId : null;
           const hidden = partId && partActions?.hiddenIds?.includes(partId);
           const isolated = partId && partActions?.focusedIds?.includes(partId);
           const selectable = !Array.isArray(partActions?.selectableIds) || partActions.selectableIds.includes(partId);
