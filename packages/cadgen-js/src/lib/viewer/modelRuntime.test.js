@@ -113,7 +113,7 @@ test("model runtime helpers build and sync STEP clip planes", () => {
     },
     modelGroup: new THREE.Group(),
     renderer: {},
-    displayRecords: [{ material, edgeMaterial }],
+    displayRecords: [{ material, edgeMaterials: [edgeMaterial] }],
     facePickGroup: new THREE.Group(),
     edgePickGroup: new THREE.Group(),
     vertexPickGroup: new THREE.Group(),

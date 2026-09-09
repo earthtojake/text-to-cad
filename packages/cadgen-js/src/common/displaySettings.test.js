@@ -138,9 +138,12 @@ test("display modes normalize common CAD aliases", () => {
 });
 
 test("display mode policies describe edge and surface behavior", () => {
-  assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.SOLID, { enabled: false }), true);
+  // Edge VISIBILITY is the mode's alone -- `solid` is shaded-with-edges and
+  // `rendered` is shaded-without, so there is no edge setting to pass here.
+  assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.SOLID), true);
   assert.equal(displayModeForcesEdges(CAD_DISPLAY_MODE.SOLID), true);
-  assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.RENDERED, { enabled: true }), false);
+  assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.RENDERED), false);
+  assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.WIREFRAME), true);
   assert.equal(displayModeShowsThroughEdges(CAD_DISPLAY_MODE.HIDDEN_EDGES), true);
   assert.equal(displayModeShowsThroughEdges(CAD_DISPLAY_MODE.TRANSPARENT), true);
   assert.equal(displayModeUsesUnlitSurfaces(CAD_DISPLAY_MODE.UNSHADED), true);

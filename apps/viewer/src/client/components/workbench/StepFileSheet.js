@@ -19,7 +19,6 @@ import FileSheet, {
 } from "./FileSheet";
 import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
 import AssemblyContextMenuItems from "./AssemblyContextMenuItems";
-import { buildFileStatusTab } from "./FileStatusSection";
 import { buildPoseControlsTab } from "./PoseControlsSection";
 import { buildAnimationControlsTab } from "./AnimationControlsSection";
 import { buildStepReferenceTab } from "./StepReferenceSection";
@@ -436,7 +435,6 @@ export default function StepFileSheet({
   stepAnimation = null,
   viewerServerInfo = null,
   suppressDynamicMetadataStatus = false,
-  statusItems = [],
   themeTabs = [],
   openSectionIds = [],
   onOpenSectionIdsChange
@@ -1142,11 +1140,7 @@ export default function StepFileSheet({
       runtime: stepAnimation
     }),
     measurementsSection,
-    ...themeTabs,
-    // "Issues" is a diagnostic shown only when there are warnings/errors, so it trails the
-    // content + display tabs as the last item in the top section (null when there are none;
-    // the surface filters falsy tabs).
-    buildFileStatusTab(statusItems)
+    ...themeTabs
   ];
 
   return (

@@ -1,0 +1,105 @@
+{
+  "input": "models/assemblies/STEP/anthropomorphic_hand/routing_layout_review.step",
+  "mode": "view",
+  "theme": "models/assemblies/src/anthropomorphic_hand/presentation-theme.json",
+  "display": {
+    "mode": "solid",
+    "edges": {
+      "enabled": false
+    }
+  },
+  "animation": {
+    "clip": "presentation",
+    "time": 0
+  },
+  "render": {
+    "sizeProfile": "presentation-large",
+    "padding": 0.1,
+    "tessellation": {
+      "chordTolerance": 0.001,
+      "angleTolerance": 0.18
+    }
+  },
+  "outputs": [
+    {
+      "path": "tmp/anthropomorphic_hand/routed_palm.png",
+      "width": 1800,
+      "height": 2800,
+      "camera": {
+        "position": [
+          -12,
+          99,
+          360
+        ],
+        "target": [
+          -12,
+          99,
+          0
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/routed_dorsal.png",
+      "width": 1800,
+      "height": 2800,
+      "camera": {
+        "position": [
+          -12,
+          99,
+          -360
+        ],
+        "target": [
+          -12,
+          99,
+          0
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/routed_whole.png",
+      "camera": {
+        "direction": [
+          0.7,
+          -0.5,
+          1
+        ],
+        "up": [
+          0.85,
+          0.5,
+          0
+        ]
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/routed_joint_macro.png",
+      "camera": {
+        "position": [
+          7,
+          125,
+          31
+        ],
+        "target": [
+          -15.9,
+          149.8,
+          0
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    }
+  ],
+  "timeoutSeconds": 900
+}

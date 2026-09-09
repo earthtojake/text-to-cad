@@ -1,13 +1,12 @@
 import FileSheet from "./FileSheet";
 import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
-import { buildFileStatusTab } from "./FileStatusSection";
 import StepMeasurementsSection from "./StepMeasurementsSection";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections";
 
 const EMPTY_MEASUREMENTS = [];
 
-// Status plus, for kind="mesh", the Measure tab. DXF reuses this sheet
-// with extra themeTabs and does not pass measurements.
+// For kind="mesh", the Measure tab. DXF reuses this sheet with extra
+// themeTabs and does not pass measurements.
 export default function MeshFileSheet({
   open,
   kind = "mesh",
@@ -19,7 +18,6 @@ export default function MeshFileSheet({
   onStartResize,
   viewerServerInfo = null,
   suppressDynamicMetadataStatus = false,
-  statusItems = [],
   themeTabs = [],
   openSectionIds = [],
   onOpenSectionIdsChange,
@@ -47,7 +45,6 @@ export default function MeshFileSheet({
     }
     : null;
   const sections = [
-    buildFileStatusTab(statusItems),
     ...(measureTab ? [measureTab] : []),
     ...themeTabs
   ];

@@ -275,7 +275,12 @@ export function displayModeAllowsEdges(value) {
   ].includes(normalizeDisplayMode(value));
 }
 
-export function displayModeShowsEdges(value, edgeSettings = null) {
+// The MODE decides whether CAD linework is drawn at all, and nothing else does:
+// `solid` IS shaded-with-edges (so is `transparent`, `hidden_edges`,
+// `hidden_lines_removed`), `wireframe` is linework only, and `rendered`/`unshaded`
+// draw none. This took an `edgeSettings` argument it never read, which read as a
+// bug at every call site; `edges` styles the linework the mode has decided to draw.
+export function displayModeShowsEdges(value) {
   const mode = normalizeDisplayMode(value);
   return mode === CAD_DISPLAY_MODE.WIREFRAME ||
     displayModeForcesEdges(mode);

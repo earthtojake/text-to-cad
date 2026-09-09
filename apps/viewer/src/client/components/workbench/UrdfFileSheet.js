@@ -28,7 +28,6 @@ import FileSheet, {
   parseFileSheetNumberInput
 } from "./FileSheet";
 import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
-import { buildFileStatusTab } from "./FileStatusSection";
 
 const compactNumericInputClasses = FILE_SHEET_COMPACT_NUMERIC_INPUT_CLASSES;
 const compactButtonClasses = FILE_SHEET_COMPACT_BUTTON_CLASSES;
@@ -269,7 +268,6 @@ export default function UrdfFileSheet({
   sdf = null,
   viewerServerInfo = null,
   suppressDynamicMetadataStatus = false,
-  statusItems = [],
   themeTabs = [],
   openSectionIds = [],
   onOpenSectionIdsChange
@@ -303,7 +301,6 @@ export default function UrdfFileSheet({
   const activeGroupStateLabel = activeGroupStateValue === "__custom__" ? "custom" : String(activeGroupState?.label || activeGroupState?.name || activeGroupStateValue);
 
   const sections = [
-    buildFileStatusTab(statusItems),
     isSdf ? {
       id: "sdf",
       title: "SDF",

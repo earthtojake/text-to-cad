@@ -1,0 +1,1067 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#eeede8">
+<title>Tendon hand — Kinematic study</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #cfd4d7; --paper: #f5f3ef; --ink: #252a2b; --dim: #62696b;
+    --edge: rgba(36,43,45,.17); --accent: #356bd7;
+    --red: #d2372c; --green: #3f9e58; --blue: #2f6fd0; --yellow: #e0b325;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); overflow: hidden;
+    font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  button, input, summary { -webkit-tap-highlight-color: transparent; }
+  button, input { font: inherit; }
+  button, summary, label { touch-action: manipulation; }
+  button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
+  button { cursor: pointer; }
+  [hidden] { display: none !important; }
+  .mono, .label, .edition, .time, .motion::before, #stats, #hint {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+  .masthead { position: fixed; z-index: 20; top: 0; left: 36px; right: 36px; height: 76px;
+    display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--edge);
+    pointer-events: none; }
+  .edition { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+  .edition span { color: var(--accent); margin-right: 15px; }
+  .masthead .meta { font-size: 11px; color: var(--dim); letter-spacing: .025em; }
+  .panel { position: fixed; z-index: 20; }
+  #hud { top: 108px; left: 36px; width: 236px; bottom: 140px; overflow: auto; scrollbar-width: thin;
+    scrollbar-color: #8c9291 transparent; padding-right: 4px; }
+  #hud h1 { font-family: Georgia, "Times New Roman", serif; font-size: 41px; font-weight: 400;
+    line-height: 1.03; letter-spacing: -.045em; margin: 0 0 17px; }
+  .sub { font-size: 12px; color: var(--dim); line-height: 1.6; max-width: 220px; margin-bottom: 33px; }
+  .label { margin: 0 0 12px; color: var(--dim); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; }
+  .section-label { display: flex; justify-content: space-between; align-items: center; }
+  .section-label span:last-child { color: var(--accent); }
+  .motions { display: grid; counter-reset: motion; }
+  .motion { counter-increment: motion; display: flex; align-items: center; gap: 11px; width: 100%;
+    padding: 13px 8px 13px 0; text-align: left; border: 0; border-top: 1px solid var(--edge);
+    border-radius: 0; background: transparent; color: var(--ink); line-height: 1.35;
+    transition: background .18s ease, padding .18s ease, color .18s ease; }
+  .motion:disabled { cursor: progress; opacity: .65; }
+  .motion:last-child { border-bottom: 1px solid var(--edge); }
+  .motion::before { content: "0" counter(motion); font-size: 10px; color: var(--dim); min-width: 20px; }
+  .motion::after { content: "↗"; font-size: 16px; margin-left: auto; color: var(--accent); opacity: 0; transition: opacity .18s; }
+  .motion:hover { background: rgba(245,243,239,.42); padding-left: 7px; }
+  .motion[aria-current="true"] { color: var(--accent); background: rgba(245,243,239,.6); padding-left: 7px; }
+  .motion[aria-current="true"]::after { opacity: 1; }
+  .motion[aria-current="true"]::before { color: var(--accent); }
+  .motion .dot { display: none; }
+  .motion small { display: block; color: var(--dim); font-size: 10px; margin-top: 3px; line-height: 1.4; max-width: 164px; }
+  details { border-top: 1px solid var(--edge); }
+  summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center;
+    padding: 13px 0; font-size: 11px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "+"; font: 17px/1 monospace; color: var(--dim); }
+  details[open] > summary::after { content: "−"; }
+  .settings { margin-top: 25px; }
+  .toggles { display: grid; gap: 11px; padding: 0 0 17px; }
+  .toggle { display: flex; gap: 9px; align-items: center; cursor: pointer; font-size: 11px; color: var(--dim); }
+  .toggle input { appearance: none; width: 25px; height: 14px; border-radius: 10px; background: #a1a8a8;
+    margin: 0; position: relative; flex-shrink: 0; cursor: pointer; transition: background .18s; }
+  .toggle input::before { content: ""; position: absolute; top: 3px; left: 3px; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--paper); transition: transform .18s; }
+  .toggle input:checked { background: var(--accent); }
+  .toggle input:checked::before { transform: translateX(11px); }
+  .toggle:has(input:checked) { color: var(--ink); }
+  .player { position: fixed; z-index: 21; bottom: 44px; left: 50%; transform: translateX(-50%);
+    width: min(620px, calc(100% - 72px)); background: rgba(246,244,240,.95); padding: 17px 22px 15px;
+    border: 1px solid rgba(255,255,255,.7); box-shadow: 0 8px 30px rgba(31,41,43,.08); border-radius: 4px; }
+  .transport { display: flex; gap: 10px; align-items: center; }
+  .transport button { min-height: 34px; border: 1px solid transparent; background: transparent;
+    color: var(--ink); border-radius: 2px; padding: 7px 13px; font-size: 11px; transition: background .18s; }
+  .transport button:hover { background: #e6e2da; }
+  .transport button.primary { background: var(--ink); color: #fff; min-width: 77px; }
+  .transport button.primary:hover { background: var(--accent); }
+  .transport .time { color: var(--dim); font-size: 11px; margin-left: auto; }
+  .timeline-label { font-size: 9px; letter-spacing: .1em; color: var(--dim); margin-left: 12px; text-transform: uppercase; }
+  #scrub { display: block; width: 100%; height: 16px; margin: 12px 0 0; appearance: none; cursor: pointer; background: transparent; }
+  #scrub::-webkit-slider-runnable-track { height: 2px; background: #c7c6bf; }
+  #scrub::-webkit-slider-thumb { appearance: none; width: 10px; height: 10px; background: var(--accent);
+    margin-top: -4px; border-radius: 50%; box-shadow: 0 0 0 4px var(--paper); }
+  #scrub::-moz-range-track { height: 2px; background: #c7c6bf; }
+  #scrub::-moz-range-thumb { width: 10px; height: 10px; border: 0; background: var(--accent); border-radius: 50%; }
+  #teach { right: 36px; top: 113px; width: 247px; bottom: 152px; overflow: auto;
+    scrollbar-width: thin; scrollbar-color: #8c9291 transparent; }
+  .annotation-head { display: flex; align-items: center; gap: 8px; }
+  .annotation-head::before { content: ""; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; }
+  #beat { padding: 15px 0 20px; border-top: 1px solid var(--edge); }
+  #beat h2 { margin: 0 0 14px; font: 400 25px/1.12 Georgia, "Times New Roman", serif; letter-spacing: -.035em; }
+  #beat p { margin: 0 0 12px; font-size: 12px; line-height: 1.65; color: #51585b; }
+  #beat p:last-child { margin-bottom: 0; }
+  .fig { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+  #facts { border-top: 1px solid var(--edge); padding: 18px 0 21px; display: grid; grid-template-columns: 1fr 1fr; gap: 17px 12px; }
+  #facts div { color: var(--dim); font-size: 10px; line-height: 1.4; }
+  #facts b { display: block; font-size: 23px; line-height: 1; font-weight: 400; letter-spacing: -.04em; color: var(--ink); margin-bottom: 7px; }
+  #key { display: grid; gap: 8px; padding: 2px 0 17px; }
+  #key div { display: flex; align-items: center; gap: 10px; font-size: 10px; color: var(--dim); }
+  #key i { width: 21px; height: 2px; flex-shrink: 0; }
+  #key b { font-weight: 500; color: var(--ink); }
+  #key .legend-note { display: block; font-size: 10px; line-height: 1.5; margin-top: 4px; }
+  #caveat { padding: 0 0 15px; color: var(--dim); font-size: 11px; line-height: 1.6; }
+  #hint { position: fixed; z-index: 20; bottom: 15px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; color: #555e61; white-space: nowrap; pointer-events: none; }
+  .diagnostics { position: fixed; z-index: 23; bottom: 14px; left: 36px; border: 0; }
+  .diagnostics summary { font-size: 9px; color: var(--dim); gap: 12px; padding: 0; }
+  .diagnostics summary::after { font-size: 12px; }
+  #stats { position: absolute; left: 0; bottom: 28px; width: 300px; background: var(--paper);
+    border: 1px solid var(--edge); padding: 14px; font-size: 10px; line-height: 1.7; color: var(--dim); }
+  .footer-meta { position: fixed; right: 36px; bottom: 14px; font-size: 9px; color: var(--dim); }
+  #boot { position: fixed; inset: 0; z-index: 40; display: grid; place-content: center;
+    gap: 20px; text-align: center; background: #f0efeb; transition: opacity .6s ease; }
+  #boot.gone { opacity: 0; pointer-events: none; }
+  .boot-kicker { font: 10px/1.5 "SFMono-Regular", Consolas, monospace; text-transform: uppercase;
+    letter-spacing: .16em; color: var(--accent); }
+  #boot h1 { margin: 0; font: 400 clamp(34px, 5vw, 56px)/1.1 Georgia, serif; letter-spacing: -.05em; }
+  #bar { width: min(280px, 70vw); height: 2px; background: #d5d3cd; margin: 4px auto 0; overflow: hidden; }
+  #bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s linear; }
+  #bootnote { color: var(--dim); font: 11px/1.5 "SFMono-Regular", Consolas, monospace; }
+  #bootwarn { color: var(--dim); font-size: 11px; max-width: 330px; margin: 0 auto; }
+  .err { left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 60; width: min(520px,90vw);
+    padding: 25px; background: var(--paper); border: 1px solid var(--accent); }
+  .err code { color: var(--accent); }
+  .fade { animation: arrive .4s ease both; }
+  #hud:not([hidden]), #teach:not([hidden]) { animation: panel-in .65s ease both; }
+  #teach:not([hidden]) { animation-delay: .08s; }
+  @keyframes panel-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes arrive { from { opacity: 0; translate: 0 7px; } to { opacity: 1; translate: 0 0; } }
+  @media (min-width: 1600px) { #hud { left: 48px; width: 260px; } #teach { right: 48px; width: 270px; }
+    .masthead { left: 48px; right: 48px; } #hud h1 { font-size: 49px; } #beat p { font-size: 13px; } }
+  @media (min-width: 941px) and (max-width: 1150px) {
+    .masthead { left: 24px; right: 24px; } #hud { left: 24px; width: 205px; }
+    #teach { right: 24px; width: 218px; } #hud h1 { font-size: 36px; }
+    #beat p { font-size: 11px; } .sub { font-size: 11px; } }
+  @media (max-width: 940px) {
+    body { overflow: auto; background: #eeede8; }
+    canvas { height: 58vh; }
+    .masthead { position: absolute; left: 20px; right: 20px; height: 58px; }
+    .masthead .meta { font-size: 10px; } .edition { font-size: 9px; }
+    #hud, #teach { position: relative; left: auto; right: auto; top: auto; bottom: auto;
+      width: auto; overflow: visible; margin: 0 22px; padding: 22px 0; animation: none !important; }
+    #hud h1 { font-size: 38px; } #hud h1 br { display: none; }
+    .sub { max-width: 420px; margin-bottom: 25px; }
+    .motions { grid-template-columns: 1fr 1fr; column-gap: 18px; }
+    .motion:last-child { grid-column: 1/-1; }
+    .motion small { max-width: none; }
+    .player { position: relative; left: auto; bottom: auto; transform: none; width: 100%;
+      margin: 24px 0; padding: 15px; box-shadow: none; }
+    #teach { border-top: 1px solid var(--edge); padding-top: 28px; }
+    #facts { grid-template-columns: repeat(4,1fr); }
+    #hint { position: absolute; top: calc(58vh - 22px); bottom: auto; font-size: 8px; }
+    .diagnostics { position: relative; left: auto; bottom: auto; margin: 8px 22px 22px; }
+    #stats { bottom: 25px; width: min(330px, calc(100vw - 44px)); }
+    .footer-meta { display: none; } #beat { max-width: 550px; }
+  }
+  @media (max-width: 440px) { .masthead .meta { max-width: 100px; text-align: right; line-height: 1.5; }
+    #facts { grid-template-columns: 1fr 1fr; } .timeline-label { display: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+
+  /* One inspector leaves the rest of the stage open for the mechanism. */
+  #inspector { position: fixed; z-index: 20; top: 103px; right: 36px; bottom: 66px;
+    width: 278px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #9ba3a5 transparent;
+    padding: 0 5px 15px 0; }
+  #hud, #teach { position: static; width: auto; height: auto; margin: 0; padding: 0;
+    overflow: visible; animation: none !important; }
+  #hud h1 { font-size: 36px; line-height: 1.05; margin-bottom: 12px; }
+  #hud h1 br { display: none; }
+  #hud h1 br::after { content: " "; }
+  #hud .sub { max-width: none; margin-bottom: 25px; }
+  .motion { padding-top: 10px; padding-bottom: 10px; }
+  .motion small { max-width: 218px; }
+  .settings { margin-top: 19px; }
+  #teach { margin-top: 20px; padding-top: 19px; border-top: 1px solid var(--edge); }
+  #beat h2 { font-size: 24px; }
+  #beat p { font-size: 12px; }
+  .player { bottom: 18px; left: 24px; transform: none; width: 340px; min-height: 38px;
+    display: flex; align-items: center; gap: 11px; padding: 5px 9px;
+    background: transparent; border: 0;
+    box-shadow: none; border-radius: 3px; }
+  .transport { display: contents; }
+  .transport button { min-height: 26px; padding: 3px 5px; font-size: 10px; }
+  .transport button.primary { background: transparent; color: var(--ink); min-width: 37px; }
+  .transport button.primary:hover { color: var(--accent); background: rgba(53,107,215,.07); }
+  .transport .time { order: 3; margin: 0; min-width: 43px; font-size: 9px; text-align: right; }
+  .timeline-label { display: none; }
+  #scrub { order: 2; width: auto; flex: 1; min-width: 60px; margin: 0; height: 16px; }
+  #scrub::-webkit-slider-thumb { width: 7px; height: 7px; margin-top: -2.5px; box-shadow: none; }
+  #scrub::-moz-range-thumb { width: 7px; height: 7px; }
+  .diagnostics { left: auto; right: 36px; bottom: 25px; }
+  #stats { left: auto; right: 0; }
+  .footer-meta { display: none; }
+  #hint { bottom: 29px; font-size: 8px; }
+  @media (min-width: 1600px) { #inspector { right: 48px; width: 292px; } }
+  @media (min-width: 941px) and (max-width: 1150px) {
+    #inspector { right: 24px; width: 260px; } #hud h1 { font-size: 34px; } #hint { display: none; }
+  }
+  @media (max-width: 940px) {
+    body { padding-bottom: 68px; }
+    #inspector { position: relative; top: auto; right: auto; bottom: auto; width: auto;
+      overflow: visible; margin: 0 22px; padding: 24px 0; }
+    #hud h1 { font-size: 36px; } #hud .sub { max-width: 460px; }
+    #teach { margin-top: 21px; padding-top: 25px; }
+    .player { position: fixed; bottom: 12px; left: 12px; right: 12px;
+      width: min(360px, calc(100% - 24px)); margin: 0; }
+    #hint { display: block; top: calc(58vh - 22px); bottom: auto; }
+    .diagnostics { position: relative; right: auto; bottom: auto; margin: 0 22px 20px; }
+    #stats { left: 0; right: auto; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="view" aria-label="Interactive tendon-driven robot hand"></canvas>
+<header class="masthead">
+  <div class="edition"><span>01 /</span> Kinematic study</div>
+  <div class="meta">Right hand &nbsp; / &nbsp; Human scale</div>
+</header>
+<div id="boot" role="status" aria-live="polite">
+  <div class="boot-kicker">Anatomy in motion</div>
+  <h1>Loading the tendon hand</h1>
+  <div id="bar"><i></i></div>
+  <div id="bootnote">3,259 bodies · 48 cords · 24 driven joints</div>
+  <div id="bootwarn">Full CAD detail. Preparing the model and its motion.</div>
+</div>
+<aside id="inspector" aria-label="Hand study controls and explanation">
+<section class="panel" id="hud" hidden aria-label="Motion and view controls">
+  <h1>Tendon hand.</h1>
+  <div class="sub">An open-frame hand. Follow the cords from the forearm to the fingertips.</div>
+  <p class="label section-label"><span>Movement library</span><span>05 studies</span></p>
+  <div class="motions" id="motions" aria-label="Choose a motion"></div>
+  <div class="player" aria-label="Playback controls">
+    <div class="transport">
+      <button id="play" class="primary">Play</button>
+      <button id="restart" title="Restart the current motion">Restart</button>
+      <span class="timeline-label">Motion timeline</span>
+      <span class="time" id="clock">0.00 s</span>
+    </div>
+    <input type="range" id="scrub" aria-label="Motion timeline" min="0" max="1000" value="0" step="1">
+  </div>
+  <details class="settings">
+    <summary>View &amp; visibility</summary>
+    <div class="toggles">
+      <label class="toggle"><input type="checkbox" id="tSpin"> Slow turntable</label>
+      <label class="toggle" title="Contact shadows double the GPU load"><input type="checkbox" id="tShadow"> Contact shadows</label>
+      <label class="toggle"><input type="checkbox" id="tFocus"> Focus on the hand</label>
+      <label class="toggle"><input type="checkbox" id="tMotors"> Focus on the motors</label>
+      <label class="toggle"><input type="checkbox" id="tCords" checked> Cords</label>
+      <label class="toggle" title="The tubes the cords run in"><input type="checkbox" id="tSheaths"> Bowden sheaths</label>
+      <label class="toggle" title="Sealed inside; 59% of the model"><input type="checkbox" id="tInternals"> Gearbox internals</label>
+    </div>
+  </details>
+</section>
+<section class="panel" id="teach" hidden aria-label="How the mechanism works">
+  <p class="label annotation-head">Inside the movement</p>
+  <div id="beat"></div>
+  <div id="facts">
+    <div><b>48</b>cords in antagonist pairs</div>
+    <div><b>24</b>independently driven joints</div>
+    <div><b>7 mm</b>capstan radius</div>
+    <div><b>4:1</b>planetary reduction</div>
+  </div>
+  <details open>
+    <summary>Read the cords</summary>
+    <div id="key">
+      <div><i style="background:var(--red)"></i><span><b>Red</b> — flexion</span></div>
+      <div><i style="background:var(--green)"></i><span><b>Green</b> — abduction</span></div>
+      <div><i style="background:var(--blue)"></i><span><b>Blue</b> — middle joint</span></div>
+      <div><i style="background:var(--yellow)"></i><span><b>Yellow</b> — fingertip joint</span></div>
+      <div class="legend-note">The darker cord in each pair is the antagonist paying out.</div>
+    </div>
+  </details>
+  <details><summary>About the motion</summary><div id="caveat"></div></details>
+</section>
+</aside>
+<div id="hint">DRAG to orbit &nbsp; / &nbsp; SCROLL to zoom &nbsp; / &nbsp; RIGHT-DRAG to pan</div>
+<details class="diagnostics"><summary>Scene details</summary><div id="stats"></div></details>
+<div class="footer-meta mono">48 cords. One continuous mechanism.</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+// ---------------------------------------------------------------------------
+// Each original GLB is loaded, parsed and warmed during startup. Selecting
+// a motion only swaps prepared scenes; it performs no I/O or parsing.
+// ---------------------------------------------------------------------------
+const MOTIONS = [
+  { id: "fist",  file: "hand_fist.glb",  name: "Make a fist", note: "four fingers close, thumb opposes" },
+  { id: "wave",  file: "hand_wave.glb",  name: "Ripple",      note: "all four curling at once, a beat apart" },
+  { id: "pinch", file: "hand_pinch.glb", name: "Pinch",       note: "thumb and index meet in space" },
+  { id: "signs", file: "hand_signs.glb", name: "Hand signs",    note: "peace, metal, shaka" },
+  { id: "drive", file: "hand_drive.glb", name: "Every actuator", note: "44 cords, 22 joints, full range" },
+];
+
+// Narration, keyed to seconds WITHIN each motion.
+const BEATS = {
+  fist: [
+    { at: 0, title: "At rest", body: [
+      "Find one cord where it leaves a spool in the forearm. Follow it up the arm, across the wrist, and into a finger. That single path is the entire drive train for one joint.",
+      "There is no motor anywhere in the hand. There is no room for one — which is exactly the problem tendons solve."] },
+    { at: 1.3, title: "The spools take up rope", body: [
+      "Watch the drums in the forearm turn — the notch cut across each drive boss is there so you can see the angle change. Each is a <span class='fig'>7 mm</span> capstan behind a <span class='fig'>4:1</span> planetary gearbox.",
+      "The governing rule is conservation of length: rope arriving on the spool has to leave from somewhere, and the only somewhere is the finger."] },
+    { at: 2.6, title: "The little finger leads", body: [
+      "A real hand does not close as a block. The little finger starts first and the index trails, so the closing edge reads as a wave rather than a clamp.",
+      "Each finger is three joints, and the pulley radii at each are sized so they flex in a fixed ratio off one pull."] },
+    { at: 4.1, title: "The thumb opposes", body: [
+      "The thumb does not curl in the plane of the palm; it rotates across it. That takes two extra joints at its base, each with its own pair of cords.",
+      "Opposition is the whole difference between a hand and a gripper."] },
+    { at: 5.2, title: "And it releases", body: [
+      "Nothing springs back. Cords come in antagonist pairs — the saturated one pulls while its pale partner pays out at the matching rate — so the joint is driven in <em>both</em> directions and stops where the motors stop."] },
+  ],
+  wave: [
+    { at: 0, title: "One pattern, four channels", body: [
+      "Identical hardware to the fist; the only change is timing. Each finger is handed the same curl a beat after the one before it.",
+      "The roll is software. Nothing in the mechanism couples the fingers together."] },
+    { at: 2.2, title: "Why they can be independent", body: [
+      "<span class='fig'>48</span> cords over <span class='fig'>24</span> joints: two per joint, each pair reaching its own motor. Nothing is shared, so nothing is dragged along.",
+      "A cheap gripper couples its fingers to one actuator. This spends 48 cords instead, and buys a hand that can hold a pen."] },
+    { at: 4.6, title: "Routing under motion", body: [
+      "Notice the cords stay inside the finger as it curls. A guide at each joint holds the rope at a fixed radius from the pivot, so the moment arm — and the fingertip force — does not fall away as the joint closes."] },
+  ],
+  pinch: [
+    { at: 0, title: "A two-finger task", body: [
+      "Only the thumb and index do real work. Everything else holds position, which a tendon hand gets for free: an unloaded cord stays exactly where it was left."] },
+    { at: 1.7, title: "Meeting in mid-air", body: [
+      "The thumb swings across the palm while the index curls to meet it. Two independent kinematic chains have to arrive at the same point in space at the same instant.",
+      "This is where per-joint control earns back its 48 cords."] },
+    { at: 3.5, title: "Holding", body: [
+      "At contact the antagonists load against each other. Grip force is the <em>difference</em> between the two cord tensions — no brake, no ratchet, just two motors pulling against one another through the finger."] },
+  ],
+  signs: [
+    { at: 0, title: "Peace", body: [
+      "Index and middle up and splayed apart, ring and little shut, the thumb folded across to hold them down. Four fingers doing four different things at once.",
+      "Watch which cords are taut — red on the two that are shut, green on the two that are spread."] },
+    { at: 3.7, title: "Metal", body: [
+      "Index and little up, middle and ring shut under the thumb. The two raised fingers are not neighbours, so no linkage could produce this shape.",
+      "A gripper couples its fingers to one actuator and cannot make it at all. Two cords per joint is what buys it."] },
+    { at: 7.3, title: "Shaka", body: [
+      "Thumb and little out, the middle three shut. And the thumb does something different here: it <em>abducts</em> without flexing, pointing away from the palm rather than folding across it.",
+      "That is a separate joint with its own antagonist pair, and it is the whole difference between this and a fist."] },
+  ],
+  drive: [
+    { at: 0, title: "Everything at once", body: [
+      "Not a gesture — a demonstration. Every one of the <span class='fig'>22</span> driven joints sweeps its full range together, putting <span class='fig'>44</span> of the 48 cords to work simultaneously.",
+      "The wrist sits it out: its routing is only solved at neutral, so the model does not pretend about it."] },
+    { at: 1.5, title: "Reading the drums", body: [
+      "A capstan turns by the joint angle times its drive radius over the 7 mm drum, so the knuckles — widest range, biggest radius — turn theirs furthest: about <span class='fig'>297°</span> across this clip against a 194° average.",
+      "The black mark on each drum face is there to make that legible."] },
+    { at: 3.0, title: "Both directions", body: [
+      "The sweep runs out to each joint's positive limit, back through rest, out to its negative limit and back — twice. Every drum reverses, and each antagonist takes up what its partner pays out.",
+      "None of this is springs. Both directions are driven."] },
+  ],
+};
+
+// The cords: coloured by which joint they drive, and the one part of the model
+// that changes its own shape rather than just its placement.
+const CORD = /_(positive|negative)$/;
+
+// The planetary internals -- sun, three planets, carrier, spindle, bearings,
+// ring -- are 528 bodies and 55.4 M triangles: 59% of the whole model, sealed
+// inside a closed gearbox housing where not one of them is ever visible. They
+// turn (the planets at twice the carrier), and you cannot see them turn. Hidden
+// by default, because paying 59% of the frame for occluded geometry is what
+// made this page crash a browser on orbit.
+const GEARBOX_INTERNALS = /gearbox_(sun|planet|carrier|spindle|bearing|ring)/i;
+
+// Everything that turns with the capstan: the drum, its retainer screw and the
+// bond line, all at rotation q. Against a frame that is now one uniform
+// aluminium they were invisible, which is the whole reason the motors read as
+// stationary. Bronze is the convention for a wear surface and it separates them
+// from the structure at a glance.
+const SPINNING = /_(capstan|capstan_retainer_screw|capstan_terminal_bond_line|terminal_ferrule)$/;
+const DRUM = /_capstan$/;
+const SPIN_COLOR = 0xc2762e;
+
+// The structural frame, forced to the servo pack's anodised black.
+//
+// This belongs in lib/palette.py, and it IS there -- `apply_palette` sets
+// #17242d on all 3,029 frame bodies and an instrumented build confirms it runs.
+// The colour is then lost before the STEP is written, because cadgen keys a
+// cached component on its GEOMETRY: a colour-only edit does not move that hash,
+// so the stale component ships with its original grey. A cold cache would dodge
+// it but the model cannot assemble cold (native_integration.overlay's label
+// assert fails), so the artefact is corrected here until the cache bug is fixed.
+const FRAME_GREY = 0xa9b7c1;
+// Gunmetal: 65% of the way from the servo pack's anodised black back toward the
+// original aluminium. Dark enough to sit with the motor frame rather than
+// against it, light enough that the frame still reads as machined metal and the
+// cords still have something to contrast with.
+const FRAME_GUNMETAL = 0x76848d;
+
+// Cord colour, decided HERE rather than taken from the file.
+//
+// The model's own palette makes each antagonist a 45%-toward-white tint of its
+// partner's hue, which is a fine idea on paper and renders as plain white the
+// moment a specular highlight lands on it — which on a 0.6 mm tube is most of
+// its surface. So the paying-out cord gets a DARKER shade of the same hue
+// instead of a paler one: same "these two are a pair" reading, no colour left
+// for the highlight to wash out.
+// The bowden sheaths -- translucent liners the cords run THROUGH. They arrive
+// at the model's own alpha 0.28 now that `cad_material` carries the opacity;
+// it used to ride only on the shape's colour, which the exporter turns into a
+// hex string on the way into the GLB, so it was dropped and 170 sheaths shipped
+// opaque. Those were the white "wires", and the reason they read as colliding
+// with the motor cases: an opaque sheath through a drum looks like a mistake, a
+// translucent one looks like the sleeve it is.
+const SHEATH = /_(exit_guide|wrist_guide|metacarpal_guide|drive_guide)$|_reaction$/;
+
+const CORD_HUES = [
+  [/_(mcp_flexion|cmc_flexion)_|^wrist_flexion_|^palm_cup_/, 0xd2372c, 0x7d1d16],
+  [/_(mcp_abduction|cmc_abduction)_|^wrist_abduction_/,      0x3f9e58, 0x1f5c31],
+  [/_pip_/,                                                  0x2f6fd0, 0x17417f],
+  [/_(dip|ip)_/,                                             0xe0b325, 0x8a6a0e],
+];
+
+function cordColor(name) {
+  for (const [test, positive, negative] of CORD_HUES) {
+    if (test.test(name)) return name.endsWith("_positive") ? positive : negative;
+  }
+  return null;
+}
+
+// ------------------------------------------------------------------ renderer
+const canvas = document.getElementById("view");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+// A 2x pixel ratio on a 2560-wide panel is a 5120x2880 buffer; at 94 M
+// triangles the fill cost is not worth the sharpness.
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+// Filmic tone mapping over physically-lit materials is most of what separates a
+// render from a viewport: highlights roll off instead of clipping to white.
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.72;
+renderer.shadowMap.enabled = false;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+canvas.addEventListener("webglcontextlost", (event) => {
+  event.preventDefault();
+  fail("The GPU dropped this scene.",
+    "94 M triangles plus the morph textures went past what this browser would hold. " +
+    "The page is fine; the graphics context is gone. Reload, and close other GPU-heavy tabs — " +
+    "or use a coarser export.");
+}, false);
+canvas.addEventListener("webglcontextrestored", () => location.reload(), false);
+
+const scene = new THREE.Scene();
+// The model ships a presentation theme (`presentation-theme.json`): a light
+// studio, #f0efed to #b8bfc3 at 145 degrees. That is not decoration — polished
+// steel and anodised aluminium are mostly a picture of their surroundings, and
+// against a black void they collapse to charcoal with no colour in them.
+scene.background = (() => {
+  const c = document.createElement("canvas");
+  c.width = c.height = 512;
+  const ctx = c.getContext("2d");
+  const a = (145 * Math.PI) / 180;
+  const g = ctx.createLinearGradient(256 - Math.cos(a) * 256, 256 - Math.sin(a) * 256,
+                                     256 + Math.cos(a) * 256, 256 + Math.sin(a) * 256);
+  g.addColorStop(0, "#f0efed");
+  g.addColorStop(1, "#b8bfc3");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 512, 512);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+
+const camera = new THREE.PerspectiveCamera(35, 1, 1, 1e5);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.055;
+controls.autoRotate = false;
+controls.autoRotateSpeed = 0.45;
+// The default of 1 crawls on a model this size. Zoom is also made proportional
+// to distance by OrbitControls, so a big number here only feels fast far out.
+controls.zoomSpeed = 3.0;
+controls.zoomToCursor = true;
+let userMovedCamera = false;
+controls.addEventListener("start", () => { userMovedCamera = true; });
+
+// Image-based lighting from a procedural room: no HDR to fetch, and it gives
+// the machined metal something to reflect. The rig below is the theme's own.
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.03).texture;
+
+// Only the key casts. 3,259 shadow-casting bodies against five lights is five
+// depth passes for a gain nobody can see.
+const key = new THREE.DirectionalLight(0xfff9f0, 1.15);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.0004;
+key.shadow.normalBias = 0.8;
+const spot = new THREE.DirectionalLight(0xe3efff, 0.55);
+const point = new THREE.PointLight(0xffffff, 0.22);
+scene.add(key, key.target, spot, point,
+  new THREE.AmbientLight(0xffffff, 0.10),
+  new THREE.HemisphereLight(0xedf4ff, 0x575453, 0.30));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.22 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+ground.visible = false;
+scene.add(ground);
+
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h) return;
+  const dpr = renderer.getPixelRatio();
+  if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    // Keep the full-width studio backdrop, but center the optical axis in
+    // the stage left of the inspector. Orbit target and viewing angle stay put.
+    if (matchMedia("(min-width: 941px)").matches) {
+      const stageWidth = document.getElementById("inspector").getBoundingClientRect().left;
+      camera.setViewOffset(w, h, (w - stageWidth) / 2, 0, w, h);
+    } else {
+      camera.clearViewOffset();
+      camera.updateProjectionMatrix();
+    }
+    if (root && !userMovedCamera) {
+      view(document.getElementById("tMotors")?.checked ? "motors"
+        : document.getElementById("tFocus")?.checked ? "hand" : "wide");
+    }
+  }
+}
+addEventListener("resize", resize);
+
+// ------------------------------------------------------------------- loading
+const boot = document.getElementById("boot");
+const bar = document.querySelector("#bar i");
+const bootnote = document.getElementById("bootnote");
+
+function fail(title, detail) {
+  boot.classList.add("gone");
+  const el = document.createElement("div");
+  el.className = "panel err";
+  el.innerHTML = `<b>${title}</b><p style="color:var(--dim);margin:.6em 0 0">${detail}</p>`;
+  document.body.append(el);
+}
+
+let root = null, mixer = null, action = null, motion = MOTIONS[0], playing = false;
+let center = new THREE.Vector3(), radius = 1;
+const box = new THREE.Box3();
+let cords = [];
+let internals = [];
+let spinning = [];
+let sheaths = [];
+const loader = new GLTFLoader();
+
+const preparedMotions = new Map();
+
+function releasePreparedScenes() {
+  const geometries = new Set(), materials = new Set();
+  const roots = new Set([...preparedMotions.values()].map(item => item.root));
+  if (root) roots.add(root);
+  for (const item of preparedMotions.values()) {
+    item.mixer.stopAllAction();
+    item.mixer.uncacheRoot(item.root);
+  }
+  for (const model of roots) {
+    scene.remove(model);
+    model.traverse(object => {
+      if (!object.isMesh) return;
+      geometries.add(object.geometry);
+      for (const material of (Array.isArray(object.material) ? object.material : [object.material])) {
+        if (material) materials.add(material);
+      }
+    });
+    model.clear();
+  }
+  for (const geometry of geometries) geometry.dispose();
+  for (const material of materials) material.dispose();
+  preparedMotions.clear();
+  root = null; mixer = null; action = null;
+  cords = []; sheaths = []; internals = []; spinning = [];
+  window.hand = null;
+  renderer.renderLists.dispose();
+  renderer.dispose();
+  renderer.forceContextLoss();
+}
+addEventListener("pagehide", event => {
+  if (!event.persisted) releasePreparedScenes();
+});
+
+function capturePerspective() {
+  return { position: camera.position.clone(), quaternion: camera.quaternion.clone(),
+    target: controls.target.clone(), zoom: camera.zoom, near: camera.near, far: camera.far, userMoved: userMovedCamera };
+}
+function restorePerspective(saved) {
+  camera.position.copy(saved.position);
+  camera.quaternion.copy(saved.quaternion);
+  camera.zoom = saved.zoom;
+  camera.near = saved.near; camera.far = saved.far;
+  controls.target.copy(saved.target);
+  camera.updateProjectionMatrix();
+  userMovedCamera = saved.userMoved;
+}
+
+async function readMotionBytes(file, progress) {
+  const response = await fetch(file, { cache: "no-store" });
+  if (!response.ok) throw new Error(`${file}: HTTP ${response.status}`);
+  const total = Number(response.headers.get("Content-Length"));
+  if (!Number.isSafeInteger(total) || total <= 0 || !response.body) {
+    throw new Error(`${file}: the server must provide Content-Length and a response body.`);
+  }
+  // Fill one allocation directly. Repacking a gigabyte response through a
+  // second ReadableStream/Response temporarily retains another full body.
+  const bytes = new Uint8Array(total);
+  const reader = response.body.getReader();
+  let received = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (received + value.byteLength > total) throw new Error(`${file}: response exceeds Content-Length.`);
+      bytes.set(value, received);
+      received += value.byteLength;
+      progress(received / total);
+    }
+  } finally { reader.releaseLock(); }
+  if (received !== total) throw new Error(`${file}: received ${received} of ${total} bytes.`);
+  return bytes.buffer;
+}
+
+async function prepareMotion(next) {
+  motion = next;
+  if (root) scene.remove(root);
+  root = null; mixer = null; action = null;
+  cords = []; internals = []; spinning = []; sheaths = [];
+  bootnote.textContent = `Preparing ${next.name.toLowerCase()} · ${preparedMotions.size + 1} / ${MOTIONS.length}`;
+
+  let gltf;
+  try {
+    bootnote.textContent = `Preparing ${next.name.toLowerCase()} · ${preparedMotions.size + 1} / ${MOTIONS.length}`;
+    const bytes = await readMotionBytes(next.file, fraction => {
+      bar.style.width = `${(preparedMotions.size + fraction) / MOTIONS.length * 100}%`;
+      bootnote.textContent = `Preparing ${next.name.toLowerCase()} · ${preparedMotions.size + 1} / ${MOTIONS.length} · ${Math.round(fraction * 100)}%`;
+    });
+    gltf = await loader.parseAsync(bytes, new URL(".", location.href).href);
+  } catch (err) {
+    console.error("Motion preparation failed", err?.stack || err);
+    throw new Error(`Could not prepare ${next.name.toLowerCase()}: ${err?.message || err}`);
+  }
+  // Release the parser's dependency cache; retain only the prepared scene and
+  // animation clips, not another full copy of each downloaded GLB buffer.
+  gltf.parser = null;
+  root = gltf.scene;
+  // Authored lying down: long axis Z, hand at -Z, motor pack at +Z. A quarter
+  // turn about X stands it up, hand above the motors.
+  root.rotation.x = Math.PI / 2;
+  root.updateMatrixWorld(true);
+
+  let meshes = 0, triangles = 0, morphed = 0, targets = 0, hiddenTriangles = 0, reframed = 0;
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    meshes += 1;
+    // Set lazily by the shadow toggle: flagging 3,259 objects as casters costs
+    // a whole extra depth pass over 94 M triangles on every frame.
+    o.castShadow = false;
+    o.receiveShadow = false;
+    const index = o.geometry.index;
+    triangles += (index ? index.count : o.geometry.attributes.position.count) / 3;
+    if (o.morphTargetInfluences?.length) {
+      morphed += 1;
+      targets = Math.max(targets, o.morphTargetInfluences.length);
+    }
+    if (CORD.test(o.name || "")) cords.push(o);
+    if (GEARBOX_INTERNALS.test(o.name || "")) {
+      internals.push(o);
+      o.visible = internalsToggle.checked;
+      hiddenTriangles += (index ? index.count : o.geometry.attributes.position.count) / 3;
+    }
+    // The GLB carries the model's own finish — metalness, roughness and
+    // KHR_materials_clearcoat — so there is nothing to reconstruct here.
+    if (o.material?.isMeshStandardMaterial) {
+      o.material.envMapIntensity = 0.5;
+      if (o.material.color.getHex() === FRAME_GREY) {
+        o.material.color.setHex(FRAME_GUNMETAL);
+        reframed += 1;
+      }
+      if (SPINNING.test(o.name || "")) {
+        o.material.color.setHex(SPIN_COLOR);
+        o.material.metalness = 0.9;
+        o.material.roughness = 0.28;
+        spinning.push(o);
+        if (DRUM.test(o.name)) addDrumMark(o);
+      }
+      // Gate on CORD: an actuator is named after the joint its cord drives, so
+      // `..._mcp_flexion_positive_capstan` matches the joint patterns too and
+      // would take the cord's colour instead of its own.
+      if (SHEATH.test(o.name || "")) {
+        const m = o.material;
+        // The file now carries alphaMode BLEND at the model's own 0.28, so the
+        // opacity is NOT set here -- the loader already read it. What the file
+        // cannot express is draw order: a translucent tube must not occlude the
+        // cord running inside it, which is a renderer concern, not a material one.
+        m.depthWrite = false;
+        // Tint it with the cord it carries, so a sheath reads as belonging to its
+        // own drive train rather than as generic pipework.
+        const carried = cordColor(o.name);
+        if (carried !== null) m.color.setHex(carried).lerp(new THREE.Color(0xffffff), 0.55);
+        o.renderOrder = 3;
+        sheaths.push(o);
+      }
+      const hue = CORD.test(o.name || "") ? cordColor(o.name) : null;
+      if (hue !== null) {
+        o.material.color.setHex(hue);
+        // Dyed braided fibre: no metal, and rough enough that the highlight
+        // never takes the whole tube.
+        o.material.metalness = 0.0;
+        o.material.roughness = 0.72;
+        o.material.envMapIntensity = 0.35;
+      }
+    }
+  });
+  scene.add(root);
+  // A handle for the console: this page is the only place the assembled scene
+  // exists at runtime, and being unable to inspect it made a blank canvas take
+  // far longer to diagnose than it should have.
+  window.hand = { THREE, scene, camera, renderer, controls, root, get action() { return action; } };
+  if (!preparedMotions.size) frame();
+  mixer = new THREE.AnimationMixer(root);
+  const clip = (gltf.animations || [])[0];
+  if (!clip) {
+    fail("That file carries no animation.", `<code>${next.file}</code> loaded, but has no clip.`);
+    return;
+  }
+  action = mixer.clipAction(clip);
+  action.loop = THREE.LoopRepeat;
+  action.play();
+  action.time = 0;
+  action.paused = true;
+  mixer.update(0);
+  scrub.value = "0";
+  clock.textContent = "0.00 s";
+  duration = clip.duration || 1;
+  cordsToggle.checked = true;
+
+  const size = box.getSize(new THREE.Vector3());
+  const diag = document.getElementById("stats");
+  diag.textContent =
+    `${meshes.toLocaleString()} meshes · ${sheaths.length} sheaths · ${reframed} reframed · ${Math.round(triangles - (internalsToggle.checked ? 0 : hiddenTriangles)).toLocaleString()} of ${Math.round(triangles / 1e6)}M triangles drawn · ` +
+    (morphed ? `${morphed} deforming cords, ${targets} morph targets` : `${cords.length} cords, rigid`) +
+    ` · canvas ${canvas.clientWidth}x${canvas.clientHeight}@${renderer.getPixelRatio()}` +
+    ` · model ${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)}` +
+    ` · cam ${camera.position.distanceTo(controls.target).toFixed(2)}`;
+  // An empty or non-finite bounding box means the scene is there but has no
+  // extent, which draws exactly nothing and looks identical to a GPU failure.
+  if (!(size.x > 0 && size.y > 0 && size.z > 0)) {
+    fail("The model loaded but has no extent.",
+      `${meshes} meshes, bounding box ${size.x}x${size.y}x${size.z}. Nothing to draw.`);
+    return;
+  }
+  // Report the first frame's real draw count, once, after a render has happened.
+  setTimeout(() => {
+    const info = renderer.info.render;
+    diag.textContent += ` · drew ${info.calls} calls / ${(info.triangles / 1e6).toFixed(1)} M tri`;
+    if (!info.calls) {
+      fail("The scene never drew.",
+        "The render loop is not producing draw calls — the WebGL context is probably gone. " +
+        "Check the browser console for a context-lost warning.");
+    }
+  }, 2000);
+  document.getElementById("caveat").textContent = morphed
+    ? "The cords deform for real: their centrelines are baked as glTF morph targets, so the rope on "
+      + "each drum winds and pays out with the motor instead of being carried along rigidly."
+    : "The cords in this file ship at rest shape — this export carried no morph targets.";
+  await renderer.compileAsync(scene, camera);
+  renderer.render(scene, camera);
+  preparedMotions.set(next.id, { root, mixer, action, duration, cords, internals,
+    spinning, sheaths, diagnostics: diag.textContent,
+    caveat: document.getElementById("caveat").textContent });
+}
+
+function activateMotion(next) {
+  const ready = preparedMotions.get(next.id);
+  if (!ready) return;
+  const perspective = capturePerspective();
+  setPlaying(false);
+  if (root) scene.remove(root);
+  ({ root, mixer, action, duration, cords, internals, spinning, sheaths } = ready);
+  motion = next;
+  mixer.stopAllAction();
+  action.reset().play();
+  action.paused = true;
+  mixer.update(0);
+  scene.add(root);
+  for (const o of cords) o.visible = cordsToggle.checked;
+  for (const o of sheaths) o.visible = document.getElementById("tSheaths").checked;
+  for (const o of internals) o.visible = internalsToggle.checked;
+  const shadows = document.getElementById("tShadow").checked;
+  root.traverse((o) => { if (o.isMesh) { o.castShadow = shadows; o.receiveShadow = shadows; } });
+  restorePerspective(perspective);
+  scrub.value = "0";
+  clock.textContent = "0.00 s";
+  document.getElementById("stats").textContent = ready.diagnostics;
+  document.getElementById("caveat").textContent = ready.caveat;
+  for (const b of menu.children) b.setAttribute("aria-current", String(b.dataset.id === next.id));
+  window.hand = { THREE, scene, camera, renderer, controls, root, get action() { return action; } };
+  lastBeat = -1;
+  narrate(0);
+}
+
+async function start() {
+  buildMenu();
+  // Retire only the temporary asset cache created by the earlier preview.
+  if (typeof caches !== "undefined") void caches.delete("tendon-hand-motions-5e1259974eaf71f3").catch(() => {});
+  const autoRotate = controls.autoRotate;
+  controls.autoRotate = false;
+  try {
+    for (const next of MOTIONS) {
+      await prepareMotion(next);
+      bar.style.width = `${preparedMotions.size / MOTIONS.length * 100}%`;
+      // Let the boot status paint between the large, sequential scene builds.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    activateMotion(MOTIONS[0]);
+    controls.autoRotate = autoRotate;
+    boot.classList.add("gone");
+    boot.setAttribute("aria-hidden", "true");
+    document.getElementById("hud").hidden = false;
+    document.getElementById("teach").hidden = false;
+  } catch (err) {
+    fail("Could not prepare the motion library.", String(err?.message || err));
+  }
+}
+
+const MARK_MATERIAL = new THREE.MeshStandardMaterial({
+  color: 0x101418, roughness: 0.55, metalness: 0.0,
+});
+
+function addDrumMark(mesh) {
+  const g = mesh.geometry;
+  if (!g.boundingBox) g.computeBoundingBox();
+  const bb = g.boundingBox;
+  const size = bb.getSize(new THREE.Vector3());
+  const centre = bb.getCenter(new THREE.Vector3());
+  const dims = [size.x, size.y, size.z];
+  // The drum is a disc: its axis is simply its shortest extent.
+  const axis = dims.indexOf(Math.min(...dims));
+  const [a, b] = [0, 1, 2].filter((i) => i !== axis);
+  const radius = Math.max(dims[a], dims[b]) / 2;
+
+  const box = [0, 0, 0];
+  box[axis] = radius * 0.02;
+  box[a] = radius * 0.94;
+  box[b] = radius * 0.13;
+
+  for (const end of ["min", "max"]) {
+    const mark = new THREE.Mesh(new THREE.BoxGeometry(box[0], box[1], box[2]), MARK_MATERIAL);
+    mark.position.copy(centre);
+    // Proud of the face by a hair so it cannot z-fight with the flange.
+    mark.position.setComponent(axis, bb[end].getComponent(axis) + (end === "max" ? 1 : -1) * radius * 0.008);
+    mark.position.setComponent(a, centre.getComponent(a) + radius * 0.47);
+    mark.renderOrder = 2;
+    mesh.add(mark);
+  }
+}
+
+// --------------------------------------------------------------- framing
+function frame() {
+  box.setFromObject(root);
+  box.getCenter(center);
+  const size = box.getSize(new THREE.Vector3());
+  radius = Math.max(size.x, size.y, size.z) * 0.5 || 1;
+
+  ground.scale.setScalar(radius * 16);
+  ground.position.set(center.x, box.min.y - radius * 0.008, center.z);
+
+  const d = radius * 3;
+  key.position.set(center.x + d * 0.8, center.y + d * 1.2, center.z + d * 0.55);
+  key.target.position.copy(center);
+  const cam = key.shadow.camera;
+  cam.left = -radius * 1.35; cam.right = radius * 1.35;
+  cam.top = radius * 1.35; cam.bottom = -radius * 1.35;
+  cam.near = radius * 0.5; cam.far = d * 5;
+  cam.updateProjectionMatrix();
+  spot.position.set(center.x + d * 0.6, center.y - d * 0.2, center.z + d * 0.55);
+  point.position.set(center.x - d * 0.5, center.y - d * 0.3, center.z - d * 0.45);
+  point.distance = d * 6;
+
+  camera.near = radius / 200;
+  camera.far = radius * 80;
+  view("wide");
+}
+
+// Fitted rather than guessed at a multiple of the radius: the arm is roughly
+// four times as tall as it is wide, so a distance that frames it on a wide
+// monitor crops it on a narrow one. Both half-angles get a say.
+function fitDistance(halfHeight, halfWidth) {
+  const v = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  return Math.max(halfHeight / v, halfWidth / (v * camera.aspect));
+}
+
+function view(mode = "wide") {
+  const focusHand = mode === "hand" || mode === true;
+  const size = box.getSize(new THREE.Vector3());
+  const target = center.clone();
+  let distance;
+  if (mode === "motors") {
+    // The pack is the bottom half; frame it tightly enough that a 15 mm drum is
+    // a readable object rather than two per cent of the frame height.
+    const span = size.y * 0.34;
+    target.y = box.min.y + span * 0.62;
+    distance = fitDistance(span * 0.62, Math.max(size.x, size.z) * 0.72);
+  } else if (focusHand) {
+    const span = size.y * 0.30;
+    target.y = box.max.y - span * 0.52;
+    distance = fitDistance(span * 0.60, Math.max(size.x, size.z) * 0.85);
+  } else {
+    distance = fitDistance(size.y * 0.58, Math.max(size.x, size.z) * 0.7);
+  }
+  controls.target.copy(target);
+  camera.position.copy(target).add(new THREE.Vector3(0.74, 0.20, 0.64).normalize().multiplyScalar(distance));
+  camera.updateProjectionMatrix();
+  controls.update();
+}
+
+// -------------------------------------------------------------- interaction
+const menu = document.getElementById("motions");
+const playBtn = document.getElementById("play");
+const scrub = document.getElementById("scrub");
+const clock = document.getElementById("clock");
+const beatEl = document.getElementById("beat");
+const spinToggle = document.getElementById("tSpin");
+const cordsToggle = document.getElementById("tCords");
+const internalsToggle = document.getElementById("tInternals");
+internalsToggle.addEventListener("change", (e) => {
+  for (const o of internals) o.visible = e.target.checked;
+});
+let duration = 1;
+
+function buildMenu() {
+  menu.innerHTML = "";
+  for (const m of MOTIONS) {
+    const b = document.createElement("button");
+    b.className = "motion";
+    b.dataset.id = m.id;
+    b.innerHTML = `<span class="dot"></span><span>${m.name}<small>${m.note}</small></span>`;
+    b.addEventListener("click", () => select(m.id));
+    menu.append(b);
+  }
+}
+
+function select(id) {
+  const next = MOTIONS.find((m) => m.id === id);
+  if (next && next.id !== motion.id) activateMotion(next);
+}
+
+function seek(time) {
+  if (!action) return;
+  const previous = action.time;
+  action.time = time;
+  // The mixer advances by a delta, so hand it the jump we just made.
+  mixer.update(time - previous || 1e-6);
+}
+
+function applySpin() { controls.autoRotate = spinToggle.checked && !playing; }
+
+// The turntable is for looking at a still model; while a motion runs it fights
+// the motion for attention. Dragging still works throughout.
+function setPlaying(next) {
+  playing = next;
+  if (action) action.paused = !playing;
+  playBtn.textContent = playing ? "Pause" : "Play";
+  applySpin();
+}
+
+playBtn.addEventListener("click", () => setPlaying(!playing));
+document.getElementById("restart").addEventListener("click", () => seek(0));
+scrub.addEventListener("input", () => {
+  setPlaying(false);
+  seek((scrub.value / 1000) * duration);
+});
+spinToggle.addEventListener("change", applySpin);
+document.getElementById("tShadow").addEventListener("change", (e) => {
+  const on = e.target.checked;
+  ground.visible = on;
+  renderer.shadowMap.enabled = on;
+  if (root) root.traverse((o) => { if (o.isMesh) { o.castShadow = on; o.receiveShadow = on; } });
+  scene.traverse((o) => { if (o.isMesh && o.material) o.material.needsUpdate = true; });
+});
+document.getElementById("tFocus").addEventListener("change", (e) => {
+  userMovedCamera = false;
+  if (e.target.checked) document.getElementById("tMotors").checked = false;
+  view(e.target.checked ? "hand" : "wide");
+});
+document.getElementById("tMotors").addEventListener("change", (e) => {
+  userMovedCamera = false;
+  if (e.target.checked) document.getElementById("tFocus").checked = false;
+  view(e.target.checked ? "motors" : "wide");
+});
+document.getElementById("tSheaths").addEventListener("change", (e) => {
+  for (const o of sheaths) o.visible = e.target.checked;
+});
+cordsToggle.addEventListener("change", (e) => {
+  for (const cord of cords) cord.visible = e.target.checked;
+});
+
+// ---------------------------------------------------------------- narration
+let lastBeat = -1;
+function narrate(t) {
+  const beats = BEATS[motion.id] || [];
+  let index = 0;
+  for (let i = 0; i < beats.length; i += 1) if (t >= beats[i].at) index = i;
+  if (index === lastBeat) return;
+  lastBeat = index;
+  const beat = beats[index];
+  if (!beat) return;
+  beatEl.innerHTML = `<h2>${beat.title}</h2>` + beat.body.map((p) => `<p>${p}</p>`).join("");
+  beatEl.classList.remove("fade");
+  void beatEl.offsetWidth;
+  beatEl.classList.add("fade");
+}
+
+// --------------------------------------------------------------------- loop
+const wall = new THREE.Clock();
+// The loop is driven by requestAnimationFrame, UNCONDITIONALLY. A hidden pane
+// or background tab never fires rAF, so a timer takes over -- but only once it
+// is clear rAF is genuinely dead, and never in a way that can stop the normal
+// path from rescheduling itself. The obvious-looking version of this
+// (`if (rafAlive) requestAnimationFrame(tick)`) renders exactly one frame in a
+// visible tab, because nothing has set the flag yet when the first frame runs.
+let rafAlive = false;
+function loop() {
+  rafAlive = true;
+  requestAnimationFrame(loop);
+  tick();
+}
+requestAnimationFrame(loop);
+setTimeout(() => { if (!rafAlive) setInterval(tick, 1000 / 30); }, 800);
+
+function tick() {
+  resize();
+  const dt = wall.getDelta();
+  if (mixer && playing) mixer.update(dt);
+  if (action) {
+    const t = duration ? action.time % duration : 0;
+    clock.textContent = t.toFixed(2) + " s";
+    if (playing) scrub.value = String(Math.round((t / duration) * 1000));
+    narrate(t);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+start();
+</script>
+</body>
+</html>

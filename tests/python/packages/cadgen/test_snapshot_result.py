@@ -168,6 +168,12 @@ class JsonShape(unittest.TestCase):
                     "view": "ISO",
                     "input": "",
                     "tree": "",
+                    # A still is a video of nothing: `--video` fills these and a
+                    # PNG leaves them at zero. They are on the FILE because that
+                    # is what they describe.
+                    "frames": 0,
+                    "fps": 0,
+                    "seconds": 0.0,
                 }
             ],
         )

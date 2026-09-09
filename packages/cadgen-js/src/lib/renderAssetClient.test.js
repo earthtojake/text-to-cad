@@ -14,9 +14,16 @@ import {
   loadRenderDisplayEdgeBundle,
   loadRenderSelectorBundle,
   loadRenderTopologyIndex,
+  loadRenderSurf,
+  loadRenderSurfSelectorBundle,
   peekRenderJson,
-  peekRenderSdf
+  peekRenderSdf,
+  renderAssetCacheStats,
+  configureSurfLeash
 } from "./renderAssetClient.js";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   setRenderAssetSourceScope
 } from "./renderAssetSourceScope.js";
@@ -527,4 +534,72 @@ test("an unset source scope leaves render asset caching untouched", async (t) =>
 
   assert.equal(second, first);
   assert.equal(fetchCount, 1);
+});
+
+test("the surf leash is byte-bounded: large entries evict oldest-first down to the count floor", async (t) => {
+  const surfBytes = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "surf/fixtures/sun_gear.surf"));
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    surfBytes.buffer.slice(surfBytes.byteOffset, surfBytes.byteOffset + surfBytes.byteLength),
+    { status: 200 }
+  );
+  const url = (i) => `https://cache.test/leash-bytes/components/c${i}.surf`;
+  // One decoded component's bytes, measured; then a ceiling that fits two of
+  // them, so every entry is "large" relative to the budget.
+  const first = await loadRenderSurf(url(0));
+  const oneEntryBytes = renderAssetCacheStats().surfLeash.bytes;
+  assert.ok(oneEntryBytes > 0, "a decoded payload weighs something");
+  const previous = configureSurfLeash({ maxBytes: Math.floor(oneEntryBytes * 2.5), minEntries: 1 });
+  t.after(() => {
+    configureSurfLeash(previous);
+    globalThis.fetch = originalFetch;
+  });
+  for (let i = 1; i < 12; i += 1) {
+    await loadRenderSurf(url(i));
+  }
+  const stats = renderAssetCacheStats();
+  assert.ok(stats.surfLeash.bytes <= stats.surfLeash.maxBytes, `bytes ${stats.surfLeash.bytes} within ${stats.surfLeash.maxBytes}`);
+  // A component retains two leash entries sharing one set of arrays (payload +
+  // meshData), so two components fit the ceiling: four entries, not 24.
+  assert.ok(stats.surfLeash.entries <= 4 && stats.surfLeash.entries >= 1, `entries ${stats.surfLeash.entries}: two large components fit, not 24`);
+  assert.ok(stats.surfPayload.entries <= 2, `surf payloads retained: ${stats.surfPayload.entries}`);
+  assert.notEqual(await loadRenderSurf(url(0)), first, "the oldest entry was evicted first");
+  // The count floor holds a few entries whatever they weigh.
+  configureSurfLeash({ maxBytes: 1, minEntries: 3 });
+  for (let i = 20; i < 26; i += 1) {
+    await loadRenderSurf(url(i));
+  }
+  assert.equal(renderAssetCacheStats().surfLeash.entries, 3, "the floor keeps three entries above a 1-byte ceiling");
+});
+
+test("surf payloads and selector bundles live on one bounded leash and re-decode after eviction", async (t) => {
+  const surfBytes = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "surf/fixtures/sun_gear.surf"));
+  const originalFetch = globalThis.fetch;
+  let fetches = 0;
+  globalThis.fetch = async () => {
+    fetches += 1;
+    return new Response(surfBytes.buffer.slice(surfBytes.byteOffset, surfBytes.byteOffset + surfBytes.byteLength), { status: 200 });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  const url = (i) => `https://cache.test/pkg/components/c${i}.surf`;
+  const first = await loadRenderSurf(url(0));
+  assert.ok(first.vertices instanceof Float32Array);
+  assert.equal(fetches, 1);
+  // A selector bundle for the same component reuses the payload (no refetch).
+  await loadRenderSurfSelectorBundle(url(0));
+  assert.equal(fetches, 1);
+  for (let i = 1; i < 30; i += 1) {
+    await loadRenderSurf(url(i));
+  }
+  const stats = renderAssetCacheStats();
+  assert.ok(stats.surfLeash.entries <= stats.surfLeash.limit, "leash bounded");
+  assert.ok(stats.surfPayload.entries <= stats.surfLeash.limit, `surf payload cache bounded (${stats.surfPayload.entries})`);
+  assert.ok(stats.surfPayload.typedBytes > 0 && stats.surfPayload.manifestRows > 0, "stats attribute retained bytes and rows");
+  // The first component was evicted: loading it again decodes a FRESH payload
+  // (the array-buffer cache may absorb the fetch itself).
+  const again = await loadRenderSurf(url(0));
+  assert.notEqual(again, first, "evicted entry is re-decoded, not retained");
+  assert.ok(fetches >= 30);
 });

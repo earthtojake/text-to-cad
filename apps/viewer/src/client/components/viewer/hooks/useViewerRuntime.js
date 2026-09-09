@@ -9,6 +9,9 @@ import {
   createCadWebGlRenderer
 } from "cadgen-js/common/webglRenderer";
 import {
+  screenSpaceLineDeviceResolution
+} from "cadgen-js/common/renderEdges";
+import {
   resolveInteractionPixelRatioCap
 } from "cadgen-js/lib/viewer/renderQuality";
 import { updateOrbitControls } from "../orbitControls.js";
@@ -278,9 +281,19 @@ export function useViewerRuntime({
         Number(runtimeRef.current?.cadScene?.runtime?.screenSpaceLineMaterials?.size || 0)
       );
 
+      // A screen-space line's `resolution` is the DRAWING BUFFER, in device
+      // pixels — not the CSS size the container reports and `setSize` takes.
+      // The shaders normalise their extrusion by resolution.y, so syncing CSS
+      // pixels would make every configured edge thickness devicePixelRatio
+      // times wider on screen. See screenSpaceLineDeviceResolution.
+      const lineMaterialResolution = () => screenSpaceLineDeviceResolution(
+        renderer,
+        container.clientWidth || width || 1,
+        container.clientHeight || height || 1
+      );
+
       const syncScreenSpaceLineMaterials = () => {
-        const nextWidth = container.clientWidth || width || 1;
-        const nextHeight = container.clientHeight || height || 1;
+        const { width: nextWidth, height: nextHeight } = lineMaterialResolution();
         for (const material of screenSpaceLineMaterials) {
           material?.resolution?.set?.(nextWidth, nextHeight);
         }
@@ -292,7 +305,8 @@ export function useViewerRuntime({
           return;
         }
         screenSpaceLineMaterials.add(material);
-        material.resolution.set(container.clientWidth || width || 1, container.clientHeight || height || 1);
+        const { width: nextWidth, height: nextHeight } = lineMaterialResolution();
+        material.resolution.set(nextWidth, nextHeight);
       };
 
       const unregisterScreenSpaceLineMaterial = (material) => {
@@ -604,6 +618,12 @@ export function useViewerRuntime({
       };
       const handleControlsStart = () => {
         controlsStartDistance = readControlsDistance();
+        // Any drag on the controls — orbit, pan or zoom — means the view is the
+        // user's now. A progressive load re-frames the camera when the model
+        // finishes arriving, and must not do that over someone's shoulder.
+        if (runtimeRef.current) {
+          runtimeRef.current.userMovedCamera = true;
+        }
         cancelCameraTransition(runtimeRef.current);
         beginInteraction();
       };
@@ -627,6 +647,9 @@ export function useViewerRuntime({
         scheduleIdleQuality();
       };
       const handleWheel = (event) => {
+        if (runtimeRef.current) {
+          runtimeRef.current.userMovedCamera = true;
+        }
         runtimeRef.current?.onManualCameraInteraction?.("wheel");
         cancelCameraTransition(runtimeRef.current);
         controls.enableDamping = false;
@@ -822,7 +845,11 @@ export function useViewerRuntime({
         onManualCameraInteraction,
         onViewportResize,
         registerScreenSpaceLineMaterial,
-        unregisterScreenSpaceLineMaterial
+        unregisterScreenSpaceLineMaterial,
+        // The scene sync calls this after building or updating a model so line
+        // materials created for it (the cadScene's own registry) start at the
+        // viewport's resolution rather than waiting for a resize.
+        syncScreenSpaceLineMaterials
       };
       syncDrawingCanvasSize(runtimeRef.current);
       renderDrawingOverlay();

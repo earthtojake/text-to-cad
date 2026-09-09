@@ -1,0 +1,184 @@
+{
+  "input": "models/assemblies/STEP/anthropomorphic_hand/fingernail_review.step",
+  "mode": "view",
+  "outputs": [
+    {
+      "path": "models/assemblies/validation/anthropomorphic_hand/fingernail_tip_macro.png",
+      "camera": {
+        "direction": [
+          0.3,
+          -0.7,
+          -1.0
+        ]
+      }
+    }
+  ],
+  "render": {
+    "sizeProfile": "presentation-large",
+    "padding": 0.13,
+    "tessellation": {
+      "chordTolerance": 0.003,
+      "angleTolerance": 0.1
+    }
+  },
+  "display": {
+    "mode": "solid",
+    "edges": {
+      "enabled": false
+    }
+  },
+  "theme": {
+    "projection": "perspective",
+    "materials": {
+      "defaultColor": "#a7b3bc",
+      "cycleColors": false,
+      "overrideSourceColors": false,
+      "tintStrength": 0,
+      "saturation": 1.02,
+      "contrast": 1.04,
+      "brightness": 1.0,
+      "roughness": 0.34,
+      "metalness": 0.75,
+      "clearcoat": 0.18,
+      "clearcoatRoughness": 0.24,
+      "opacity": 1,
+      "envMapIntensity": 1.3,
+      "emissiveIntensity": 0
+    },
+    "background": {
+      "type": "linear",
+      "solidColor": "#e4e5e5",
+      "linearStart": "#f0efed",
+      "linearEnd": "#b8bfc3",
+      "linearAngle": 145
+    },
+    "floor": {
+      "enabled": false,
+      "grid": {
+        "enabled": false
+      },
+      "axis": {
+        "enabled": false
+      }
+    },
+    "environment": {
+      "enabled": true,
+      "presetId": "studio-hdri-43",
+      "intensity": 0.75,
+      "rotationY": 0.4,
+      "useAsBackground": false
+    },
+    "lighting": {
+      "toneMappingExposure": 1.1,
+      "directional": {
+        "enabled": true,
+        "color": "#fff9f0",
+        "intensity": 2.4,
+        "position": {
+          "x": -220,
+          "y": 260,
+          "z": 340
+        }
+      },
+      "spot": {
+        "enabled": true,
+        "color": "#e3efff",
+        "intensity": 1.4,
+        "angle": 0.85,
+        "distance": 0,
+        "position": {
+          "x": 230,
+          "y": -80,
+          "z": 200
+        }
+      },
+      "point": {
+        "enabled": true,
+        "color": "#ffffff",
+        "intensity": 0.5,
+        "distance": 0,
+        "position": {
+          "x": -180,
+          "y": -100,
+          "z": -160
+        }
+      },
+      "ambient": {
+        "enabled": true,
+        "color": "#ffffff",
+        "intensity": 0.22
+      },
+      "hemisphere": {
+        "enabled": true,
+        "skyColor": "#edf4ff",
+        "groundColor": "#575453",
+        "intensity": 0.65
+      }
+    }
+  },
+  "selection": {
+    "hide": [
+      "#o1.7",
+      "#o1.8",
+      "#o1.9",
+      "#o1.10",
+      "#o1.11",
+      "#o1.12",
+      "#o1.13",
+      "#o1.14",
+      "#o1.15",
+      "#o1.16",
+      "#o1.17",
+      "#o1.18",
+      "#o1.19",
+      "#o1.20",
+      "#o1.21",
+      "#o1.22",
+      "#o1.23",
+      "#o1.24",
+      "#o1.25",
+      "#o1.26",
+      "#o1.27",
+      "#o1.28",
+      "#o1.29",
+      "#o1.30",
+      "#o1.37",
+      "#o1.38",
+      "#o1.39",
+      "#o1.40",
+      "#o1.41",
+      "#o1.42",
+      "#o1.43",
+      "#o1.44",
+      "#o1.45",
+      "#o1.46",
+      "#o1.47",
+      "#o1.48",
+      "#o1.49",
+      "#o1.50",
+      "#o1.51",
+      "#o1.52",
+      "#o1.53",
+      "#o1.54",
+      "#o1.55",
+      "#o1.56",
+      "#o1.57",
+      "#o1.58",
+      "#o1.59",
+      "#o1.60",
+      "#o1.61",
+      "#o1.62",
+      "#o1.64",
+      "#o1.65",
+      "#o1.66",
+      "#o1.67",
+      "#o1.68",
+      "#o1.69",
+      "#o1.70",
+      "#o1.71",
+      "#o1.72",
+      "#o1.73",
+      "#o1.74"
+    ]
+  }
+}

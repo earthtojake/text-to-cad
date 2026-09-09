@@ -468,15 +468,18 @@ def _load_fallback_occurrence_tree(
     )
 
 
-def load_step_scene(step_path: Path) -> LoadedStepScene:
+def load_step_scene(step_path: Path, *, record_read: bool = True) -> LoadedStepScene:
     resolved_step_path = step_path.expanduser().resolve()
     if not resolved_step_path.exists():
         raise FileNotFoundError(f"STEP file does not exist: {resolved_step_path}")
-    # OCCT reads the file in C++, invisible to Python audit events; report it
-    # to any active closure recording so imported STEP data is a freshness input.
-    from cadgen._internal.scope_capture import note_scope_read
+    if record_read:
+        # OCCT reads the file in C++, invisible to Python audit events; report it
+        # to any active closure recording so imported STEP data is a freshness
+        # input. A build re-reading the STEP it just WROTE passes False: its own
+        # output is not its input.
+        from cadgen._internal.scope_capture import note_scope_read
 
-    note_scope_read(resolved_step_path)
+        note_scope_read(resolved_step_path)
     load_started = time.perf_counter()
     (
         roots,

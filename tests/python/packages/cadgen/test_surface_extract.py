@@ -376,6 +376,48 @@ class SurfaceExtractTest(unittest.TestCase):
             read_surf(b"GLBX" + bytes(self.data[4:]))
 
 
+class TightBoundsTest(unittest.TestCase):
+    """A face's or edge's reported bbox must bound the SURFACE, not its poles.
+
+    ``BRepBndLib::Add`` bounds a B-spline by its control polygon: a NURBS
+    circle of radius r reports r/cos(22.5 deg) = 1.082 r, so every rounded
+    surface came back ~8% too big and `inspect refs --facts` bounds could
+    invent a clash that is not there (PR #370 bug record 004).
+    """
+
+    def _nurbs_cylinder(self, radius: float, height: float):
+        import build123d as bd
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert
+
+        solid = bd.Cylinder(radius=radius, height=height)
+        return BRepBuilderAPI_NurbsConvert(solid.wrapped, True).Shape()
+
+    def test_nurbs_cylinder_face_bounds_match_the_radius(self) -> None:
+        from cadgen._internal.surface_extract import extract_surface_component, read_surf
+
+        radius, height = 7.5, 4.0
+        index, _ = read_surf(bytes(extract_surface_component(self._nurbs_cylinder(radius, height))))
+        lateral = [f for f in index["faces"] if f["surface"]["kind"] == "nurbs" and f["bbox"][5] - f["bbox"][2] > height / 2]
+        self.assertTrue(lateral, "fixture must produce a NURBS lateral face")
+        for face in lateral:
+            xmin, ymin, _zmin, xmax, ymax, _zmax = face["bbox"]
+            for value in (xmax, ymax, -xmin, -ymin):
+                self.assertAlmostEqual(value, radius, places=4)
+
+    def test_component_bounds_match_the_radius(self) -> None:
+        from cadgen._internal.surface_extract import extract_surface_component, read_surf
+        from cadgen._internal.surf_tables import selector_bundle_from_surf_index
+
+        radius, height = 7.5, 4.0
+        index, _ = read_surf(bytes(extract_surface_component(self._nurbs_cylinder(radius, height))))
+        bundle = selector_bundle_from_surf_index(index)
+        bbox = bundle.manifest["bbox"]
+        self.assertAlmostEqual(bbox["max"][0], radius, places=4)
+        self.assertAlmostEqual(bbox["max"][1], radius, places=4)
+        self.assertAlmostEqual(bbox["min"][0], -radius, places=4)
+        self.assertAlmostEqual(bbox["max"][2], height / 2, places=4)
+
+
 class ClampedUvBoundsTest(unittest.TestCase):
     """UVBounds_s can return a bound a floating-point hair OUTSIDE the
     surface's own domain (vendor STEPs: -0.0 vs 0.0, a few 1e-6 past a
@@ -475,6 +517,50 @@ class PeriodicSeamWindowTest(unittest.TestCase):
             Geom_RectangularTrimmedSurface(cylinder, 0.0, 2 * math.pi, 0.0, 10.0))
         self.assertTrue(nurbs.IsUPeriodic())
         return nurbs
+
+    def _swept_periodic_face(self):
+        import build123d as bd
+        from OCP.BRep import BRep_Tool
+        from OCP.Geom import Geom_BSplineSurface
+
+        path = bd.Wire([bd.Edge.make_bezier((0, 0, 0), (1, 3, 2), (2, 6, 0), (3, 9, 3))])
+        solid = bd.sweep(bd.Plane(origin=(0, 0, 0), z_dir=path.tangent_at(0)) * bd.Circle(.7), path=path)
+        for face in solid.faces():
+            surface = BRep_Tool.Surface_s(face.wrapped)
+            if isinstance(surface, Geom_BSplineSurface) and surface.IsUPeriodic():
+                return face.wrapped, surface
+        self.fail("fixture must contain a periodic swept NURBS surface")
+
+    def test_extension_knots_do_not_shift_an_in_domain_face(self) -> None:
+        from cadgen._internal import surface_extract
+
+        face, surface = self._swept_periodic_face()
+        copy = surface.Copy()
+        copy.SetUNotPeriodic()
+        self.assertLess(copy.UKnot(1), copy.Bounds()[0])
+        bin_out = surface_extract._Bin()
+        payload = surface_extract._surface_payload(face, bin_out)
+        window = surface_extract.BRepTools.UVBounds_s(face)
+        surface_extract._assert_surface_covers_face(payload, *window, bin_out)
+        rebuilt = _rebuild_bspline_surface(payload, bin_out.payload())
+        u0, u1, v0, v1 = window
+        for a in (.1, .5, .9):
+            for b in (.1, .5, .9):
+                u, v = u0 + a * (u1-u0), v0 + b * (v1-v0)
+                self.assertLess(surface.Value(u, v).Distance(rebuilt.Value(u, v)), 2e-6)
+
+    def test_coverage_guard_uses_active_domain_between_extension_knots(self) -> None:
+        from cadgen._internal import surface_extract
+
+        face, surface = self._swept_periodic_face()
+        copy = surface.Copy()
+        copy.SetUNotPeriodic()
+        surface_extract._shift_knots(surface.UPeriod(), copy.NbUKnots, copy.UKnot, copy.SetUKnot)
+        bin_out = surface_extract._Bin()
+        payload = surface_extract._nurbs_surface_payload(copy, bin_out)
+        window = surface_extract.BRepTools.UVBounds_s(face)
+        with self.assertRaisesRegex(surface_extract.Unextractable, "extrapolate"):
+            surface_extract._assert_surface_covers_face(payload, *window, bin_out)
 
     def test_seam_straddling_window_is_covered_in_the_face_frame(self) -> None:
         from unittest import mock

@@ -450,7 +450,8 @@ def _export_mesh_jobs(
     *,
     logger: CliLogger,
     force: bool = False,
-) -> "frozenset[Path]":
+    render_module: Path | None = None,
+) -> "tuple[frozenset[Path], dict[Path, dict]]":
     """Export every requested mesh job from ONE package: the store package
     when the model resolved current, else a one-shot temp package extracted
     from the scene. OCCT meshes nothing on either path (the GLB is Y-up glTF
@@ -463,7 +464,10 @@ def _export_mesh_jobs(
     `step build`'s job (design/format-doors.md, decision 5).
 
     RETURNS the outputs this call actually wrote, so a caller can report which
-    of its jobs the ledger had already satisfied."""
+    of its jobs the ledger had already satisfied, and what the builder BAKED for
+    each of them -- the clip and the sample count of an animated GLB, which is
+    derived (a clip states its own duration) and therefore worth reporting back
+    the way a video reports its frame count."""
     name = spec.step_path.stem
     default_color = _color_hex(spec.color)
     if package_dir is not None:
@@ -484,6 +488,11 @@ def _export_mesh_jobs(
             variant = dict(
                 mesh_tolerance=job.mesh_tolerance,
                 mesh_angular_tolerance=job.mesh_angular_tolerance,
+                # An animated GLB is a function of the clip and the render
+                # module as well as the bytes, so it is its own variant: a
+                # static file at the same path can never satisfy it, and an
+                # edited .step.js makes the ledgered one a miss.
+                animation_key=job.animation_key,
             )
             by_document = document_mesh_current(job.out, document_hash=document_hash, fmt=job.fmt, **variant)
             if model is None:
@@ -496,11 +505,12 @@ def _export_mesh_jobs(
 
         pending = [job for job in jobs if force or not _current(job)]
         if not pending:
-            return frozenset()
+            return frozenset(), {}
         for job in pending:
             job.out.parent.mkdir(parents=True, exist_ok=True)
-        run_mesh_exporter(
-            package_dir, pending, name=name, default_color=default_color, logger=logger
+        payload = run_mesh_exporter(
+            package_dir, pending, name=name, default_color=default_color, logger=logger,
+            render_module=render_module,
         )
         if document_hash:
             for job in pending:
@@ -508,6 +518,7 @@ def _export_mesh_jobs(
                     fmt=job.fmt,
                     mesh_tolerance=job.mesh_tolerance,
                     mesh_angular_tolerance=job.mesh_angular_tolerance,
+                    animation_key=job.animation_key,
                 )
                 # A script run ledgers on its record (which also notes the document
                 # entry); a bare door ledgers on the document entry alone.
@@ -515,7 +526,7 @@ def _export_mesh_jobs(
                     record_mesh_export(job.out, model=model, document_hash=document_hash, **variant)
                 else:
                     record_document_mesh(job.out, document_hash=document_hash, **variant)
-        return frozenset(job.out for job in pending)
+        return frozenset(job.out for job in pending), _baked_animations(payload)
     import tempfile
 
     if scene is None:
@@ -525,12 +536,62 @@ def _export_mesh_jobs(
     with tempfile.TemporaryDirectory(prefix="cadgen-mesh-export-") as tmp:
         temp_package = Path(tmp) / "package"
         _build_export_package_from_scene(spec, scene, temp_package, logger=logger)
-        run_mesh_exporter(
-            temp_package, jobs, name=name, default_color=default_color, logger=logger
+        payload = run_mesh_exporter(
+            temp_package, jobs, name=name, default_color=default_color, logger=logger,
+            render_module=render_module,
         )
     # A one-shot package has no document identity to key a ledger record on, so
     # nothing here is gated and everything is written.
-    return frozenset(job.out for job in jobs)
+    return frozenset(job.out for job in jobs), _baked_animations(payload)
+
+
+def _baked_animations(payload: dict) -> "dict[Path, dict]":
+    """The builder's per-output ``animation`` block, keyed by the path it wrote.
+
+    Only an animated GLB has one. It arrives WHOLE, warnings included: what the
+    sampling could not carry is the caller's answer, not a log line, and
+    ``export_cad_target`` lifts it out of here into the result so ``--json``
+    hears it too."""
+    baked: dict[Path, dict] = {}
+    for entry in payload.get("files") or []:
+        summary = entry.get("animation")
+        if isinstance(summary, dict):
+            baked[Path(str(entry["path"]))] = dict(summary)
+    return baked
+
+
+def _ledgered_animation(job: "MeshExportJob") -> "dict | None":
+    """What a SKIPPED animated GLB carries, read off the request that wrote it.
+
+    A job the ledger satisfied was never sampled, so the builder's summary does
+    not exist — but the file at that path is the one this request produced, and
+    reporting ``None`` for it would say "static export" (what a null animation
+    means, results.MeshExportFile) about a file with a clip baked into it. The
+    sample and moving counts stay absent because nothing on this side knows
+    them; the clip and the schedule are the request's own."""
+    if job.animation is None:
+        return None
+    return {
+        "clip": job.animation.get("clip"),
+        "fps": job.animation.get("fps"),
+        "samples": None,
+        "seconds": job.animation.get("seconds"),
+        "start": job.animation.get("start"),
+        "channels": None,
+    }
+
+
+def _bakes_effects_static(job: "MeshExportJob") -> bool:
+    """Whether this request told the sampler to FREEZE something — the only case
+    where a skipped export has warnings it is not repeating.
+
+    ``drop`` bakes an effect's value at start; ``deform: "rest"`` ships a moving
+    tube at its rest shape. Both leave named occurrences standing still in a file
+    that otherwise moves. ``deform: "morph"`` freezes nothing — it bakes the
+    deformation as morph targets, which is why it exists — and ``refuse`` never
+    produced a file at all."""
+    request = job.animation or {}
+    return bool(request.get("drop")) or request.get("deform") == "rest"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -663,6 +724,7 @@ def export_cad_target(
     repo_root: Path | None = None,
     mesh_tolerance: float | None = None,
     mesh_angular_tolerance: float | None = None,
+    animation: str | dict | None = None,
     force: bool = False,
     verbose: bool = False,
     logger: CliLogger | None = None,
@@ -676,7 +738,9 @@ def export_cad_target(
     format from one tessellation, so all formats come from identical geometry.
     ``outputs`` pairs a format name with an explicit output path, or ``None`` for the
     sibling default beside the document. ``force`` re-exports past the ledger. Nothing here moves geometry: a mesh is the
-    document's tree, tessellated.
+    document's tree, tessellated — with ONE exception, ``animation``, which does
+    not move it either: it writes the clip the document's render module declares
+    into the GLB as glTF node animation, so a reader moves the geometry itself.
 
     Writes no ``.step`` and no beside-source artifacts; a document missing its render
     package compiles one into the SHARED store (content keyed — the same package every
@@ -693,6 +757,22 @@ def export_cad_target(
                 f"Unsupported export format: {fmt}. "
                 f"Supported formats: {', '.join(MESH_EXPORT_FORMATS)}."
             )
+        # Not a door-level guard duplicated: this is the ENGINE, and a caller
+        # reaching it with a clip and a format that has nowhere to put one must
+        # not have the clip silently dropped on the way to the builder.
+        if animation is not None and fmt != "glb":
+            raise ValueError(
+                f"{fmt} carries no animation: only `cadgen glb build --animation` writes a "
+                "clip into a file — the other mesh formats have nowhere to put one"
+            )
+    # Same reason, for the other half of the request: a None output resolves to
+    # the model's DECLARED artifact below, and an animated file written there
+    # silently replaces the model's static output at a committed path.
+    if animation is not None and any(raw is None for _, raw in outputs):
+        raise ValueError(
+            "an animated export is ad hoc: name an output path. A None output is the model's "
+            "DECLARED artifact, which is its static one"
+        )
     repo_root = Path(repo_root).expanduser().resolve() if repo_root else Path.cwd()
     target_path = Path(target).expanduser().resolve()
     mesh_tolerance = normalize_mesh_numeric(mesh_tolerance, field_name="mesh_tolerance")
@@ -707,6 +787,19 @@ def export_cad_target(
             raise ValueError(script_target_message(target_path))
         raise ValueError(f"Export target must be a .step/.stp document: {target}")
     step_path: Path = target_path
+
+    # The clip name and the render module are resolved BEFORE any tessellation:
+    # a typo must fail as a clean CLI error naming the clips the model has, not
+    # after a minute of meshing. The token it returns is what keeps an edited
+    # `.step.js` from being served out of the ledger (mesh_animation).
+    render_module: Path | None = None
+    animation_request: dict[str, object] | None = None
+    animation_key: str | None = None
+    if animation is not None:
+        from cadgen._internal.mesh_animation import parse_animation_option, resolve_animation
+
+        animation_request = parse_animation_option(animation)
+        render_module, animation_key = resolve_animation(step_path, animation_request)
 
     spec, package_dir, scene = _resolve_mesh_package(
         repo_root,
@@ -733,6 +826,8 @@ def export_cad_target(
                 out=out,
                 mesh_tolerance=chord,
                 mesh_angular_tolerance=angle,
+                animation=animation_request,
+                animation_key=animation_key,
             )
         )
 
@@ -750,19 +845,40 @@ def export_cad_target(
         )
         _add(fmt, out, chord, angle)
 
-    written = _export_mesh_jobs(spec, package_dir, scene, resolved, logger=logger, force=force)
-    files = [
-        {
-            "format": job.fmt,
-            "path": str(job.out),
-            "skipped": job.out not in written,
-            "meshTolerance": job.mesh_tolerance,
-            "meshAngularTolerance": job.mesh_angular_tolerance,
-        }
-        for job in resolved
-    ]
+    written, baked = _export_mesh_jobs(
+        spec, package_dir, scene, resolved, logger=logger, force=force,
+        render_module=render_module,
+    )
+    files = []
+    warnings: list[str] = []
+    for job in resolved:
+        skipped = job.out not in written
+        summary = baked.get(job.out)
+        if summary is not None:
+            # The warnings ride OUT of the per-file block and into the run's own,
+            # so one place answers "what did this export not carry" whether the
+            # caller reads human lines or --json.
+            warnings.extend(str(text) for text in (summary.pop("warnings", None) or ()))
+        elif skipped:
+            summary = _ledgered_animation(job)
+            if summary is not None and _bakes_effects_static(job):
+                warnings.append(
+                    f"{job.out.name} is current for clip {summary['clip']}: a skipped export "
+                    "re-samples nothing, so the occurrences its drop/deform froze are not "
+                    "named again — re-run with --force to hear them"
+                )
+        files.append(
+            {
+                "format": job.fmt,
+                "path": str(job.out),
+                "skipped": skipped,
+                "meshTolerance": job.mesh_tolerance,
+                "meshAngularTolerance": job.mesh_angular_tolerance,
+                "animation": summary,
+            }
+        )
     logger.total()
-    return {"ok": True, "files": files}
+    return {"ok": True, "files": files, "warnings": warnings}
 
 
 def run_cli_payload(argv: list[str] | None = None) -> dict[str, object]:

@@ -64,7 +64,7 @@ python <model>.py            # its __main__ calls the model, which builds it
 cadgen step build IN OUT     # re-emit an existing STEP as a new one, with kinematics
 cadgen stl build ...         # one door per mesh format; `3mf` and `glb` are the others
 cadgen step inspect ...      # refs, measure, align, frame, diff
-cadgen step snapshot ...     # PNG visual review packets, for STEP
+cadgen step snapshot ...     # PNG visual review packets (and clip videos), for STEP
 cadgen stl snapshot ...      # the same, for a mesh file; `3mf` and `glb` again
 cadgen store why <model>.py  # why the model is stale or current, clause by clause
 cadgen daemon status         # the warm workers and the jobs they are running
@@ -280,7 +280,7 @@ A failed child raises at the site in the parent that first read its geometry, na
 
 ## Snapshots
 
-**Snapshot inputs.** One format, one door, and the same `TARGET [OUT]` grammar `build` uses. `cadgen step snapshot` renders `.step`/`.stp` documents — nothing else (a model script is refused by name: run `python <model>.py`, then snapshot the STEP it wrote). A mesh file goes to its own door: `cadgen stl snapshot`, `cadgen 3mf snapshot`, `cadgen glb snapshot`. A mesh has no CAD topology, so the STEP-only options (`--focus`/`--hide`, `--display`, `--kinematics`, `--animation`/`--time`, `--mode section`) are not on those commands at all — check `--help` and the door tells you what it can do. Robot descriptions belong to the `urdf`/`srdf`/`sdf` skills. Each door refuses what is not its own format, and names the door that takes it.
+**Snapshot inputs.** One format, one door, and the same `TARGET [OUT]` grammar `build` uses. `cadgen step snapshot` renders `.step`/`.stp` documents — nothing else (a model script is refused by name: run `python <model>.py`, then snapshot the STEP it wrote). A mesh file goes to its own door: `cadgen stl snapshot`, `cadgen 3mf snapshot`, `cadgen glb snapshot`. A mesh has no CAD topology, so the STEP-only options (`--focus`/`--hide`, `--display`, `--kinematics`, `--animation`/`--time`/`--video`, `--mode section`) are not on those commands at all — check `--help` and the door tells you what it can do. Robot descriptions belong to the `urdf`/`srdf`/`sdf` skills. Each door refuses what is not its own format, and names the door that takes it.
 
 ```bash
 cadgen step snapshot STEP/bracket.step tmp/review.png
@@ -337,8 +337,8 @@ Load these files only when their trigger applies:
 - `references/inspection-and-validation.md` — validation sequence, selector refs, facts, planes, measurements, alignment, diff, frame, and validation reporting.
 - `references/snapshot-review.md` — mandatory snapshot policy, packet sizing, targeted views, and converting visual findings into geometry checks.
 - `references/positioning.md` — part-local datums and origins, assembly transforms, build123d joints, CLI alignment validation, and positioning reports.
-- `references/kinematics.md` — articulating, posing, or animating a STEP model: typed mates (`kinematics=` on the decorators — mates, couplings, pose presets, export-at-pose), and the render module beside the document (`<name>.step.js`: the choreography contract, loaded by the viewer, read by no build).
-- `references/supported-exports.md` — STL/3MF/native GLB outputs: declared exports, mesh-only models, and the `cadgen stl|3mf|glb build` doors.
+- `references/kinematics.md` — articulating, posing, or animating a STEP model: typed mates (`kinematics=` on the decorators — mates, couplings, pose presets, export-at-pose), and the render module beside the document (`<name>.step.js`: the choreography contract, loaded by the viewer, read by no build). Also how a clip leaves the repo: `snapshot --video` for pixels, `glb build --animation` for a GLB that carries the motion itself.
+- `references/supported-exports.md` — STL/3MF/native GLB outputs: declared exports, mesh-only models, the `cadgen stl|3mf|glb build` doors, and `glb build --animation` (a clip baked into the file as glTF animation).
 - `references/repair-loop.md` — diagnosis and repair procedures.
 - `references/project-layout.md` — project structure for anything bigger than a couple of loose models: `src/` for model scripts and shared code, format folders (`STEP/`, `DXF/`, `STL/`) for raw outputs, naming, and commit policy; `references/project-template.md` is the copyable exemplar. Read them when a project has more than a couple of models or when asked how to organise CAD code and artifacts.
 - `references/migrations.md` — the tooling disagreeing with a model you believe is correct: recognizing a project authored against an older cadgen, and where the migration guides live.

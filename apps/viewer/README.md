@@ -24,13 +24,15 @@ to `cadgen viewer` over `/__cad` and `/__tess_cache`, and to nothing else.
   from outside this directory (`scripts/selfContained.test.mjs` is the fence).
   The backend is not here: its code, its tests and its laws live with cadgen.
 - **Three-input law**: everything renders from the artifact file, its
-  sidecar (`<name>.step.json`), and the cache. The viewer never reads
+  sidecar (`<name>.step.json`), its optional adjacent render module
+  (`<name>.step.js`), and the cache. The viewer never reads
   source code and never rebuilds on source changes — generated outputs are
   detached, and a stale artifact stays stale until someone runs its script.
 - **Kinematics/animation independence**: the Kinematics tab drives the sidecar's
   mate data through the shared FK runtime; the Animation tab evaluates the
-  sidecar's copied `.anim.js` clips. They compose in the effect records and
-  nowhere else.
+  `clips` the authored render module beside the artifact (`<name>.step.js`)
+  exports, fetched live — an edit to it is a reload, never a rebuild. They
+  compose in the effect records and nowhere else.
 - **Loud failure**: a missing entry, an unresolvable ref, or a failed
   compile surfaces as an alert — never a silently wrong scene.
 

@@ -108,6 +108,48 @@ class ReportCliErrorTest(unittest.TestCase):
         text = self._report(ValueError("no traceback here"))
         self.assertIn("FAILED: ValueError: no traceback here", text)
 
+    def test_the_hint_is_offered_when_the_command_takes_the_flag(self):
+        self.assertIn("re-run with --verbose", self._report(_raise_from_model(self.model)))
+
+    def test_the_hint_is_dropped_when_the_command_has_no_such_flag(self):
+        # `--verbose` exists only where the verb declares a `verbose` parameter (the
+        # snapshot doors do not). Telling an agent to re-run with a flag that command
+        # refuses costs it a failed invocation.
+        text = self._report(_raise_from_model(self.model), verbose_hint=False)
+        self.assertNotIn("--verbose", text)
+        self.assertIn("FAILED: ValueError: bad radius", text)
+
+
+class VerboseHintFollowsTheParserTest(unittest.TestCase):
+    """The generated CLI decides the hint from the verb's own signature."""
+
+    def _run(self, func) -> str:
+        import contextlib
+
+        from cadgen._internal.cli_from_function import run_cli
+
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = run_cli(func, [], prog="cadgen fake door", stdout=io.StringIO())
+        self.assertEqual(1, code)
+        return stderr.getvalue()
+
+    def test_a_verb_without_verbose_gets_no_verbose_hint(self):
+        def snapshot() -> object:
+            """A door with no verbose parameter, so its CLI has no --verbose."""
+            raise ValueError("boom")
+
+        text = self._run(snapshot)
+        self.assertIn("FAILED: ValueError: boom", text)
+        self.assertNotIn("--verbose", text)
+
+    def test_a_verb_with_verbose_keeps_the_hint(self):
+        def build(*, verbose: bool = False) -> object:
+            """A door that does take --verbose."""
+            raise ValueError("boom")
+
+        self.assertIn("re-run with --verbose", self._run(build))
+
 
 if __name__ == "__main__":
     unittest.main()

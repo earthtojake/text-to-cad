@@ -1,3 +1,5 @@
+import { normalizeTubeDeformation } from "./tubeDeformation.js";
+
 // The choreography half: evaluate the clips a document's render module
 // (`<name>.step.js`, loaded by renderModule.js) declares and drive raw
 // per-occurrence transforms. Total independence by construction: this module
@@ -22,6 +24,8 @@
 //   .translate(vec3)
 //   .opacity(value 0..1)
 //   .visible(bool)
+//   .deformTube({rest, path, twistDeg = 0, maxSegmentLength = 1})
+// Tube paths and their world-space frame contract: docs/tube-deformation.md.
 // Successive transform calls PREMULTIPLY (later calls act in world space on
 // the already-moved part): h.rotate(spin about own center) then
 // h.rotate(orbit about the assembly origin) makes the spin ride the orbit.
@@ -91,6 +95,7 @@ export function createAnimationFrame(THREE, meshData) {
   const byLabel = partIdsByLabel(meshData);
   const matrices = new Map(); // partId -> THREE.Matrix4
   const styles = new Map(); // partId -> {opacity?, visible?}
+  const deformations = new Map(); // partId -> analytic rest/posed tube paths
 
   const handleFor = (label) => {
     const partIds = byLabel.get(String(label).replace(/^#/, ""))
@@ -117,6 +122,11 @@ export function createAnimationFrame(THREE, meshData) {
       }
     };
     return {
+      deformTube(spec) {
+        const deformation = normalizeTubeDeformation(spec);
+        for (const partId of partIds) deformations.set(partId, deformation);
+        return this;
+      },
       rotate(axis, degrees, origin = [0, 0, 0]) {
         const axisVec = new THREE.Vector3(axis[0], axis[1], axis[2]).normalize();
         const rotation = new THREE.Matrix4().makeRotationAxis(axisVec, (Number(degrees) || 0) * DEG_TO_RAD);
@@ -147,7 +157,7 @@ export function createAnimationFrame(THREE, meshData) {
     // Labels are enumerable so a clip can iterate without hardcoding.
     labels: () => [...byLabel.keys()].sort()
   };
-  return { model, matrices, styles };
+  return { model, matrices, styles, deformations };
 }
 
 // Evaluate one clip at time t: a fresh frame each call (purity by
@@ -162,7 +172,7 @@ export function evaluateAnimationClip(THREE, meshData, clip, t) {
     localT = Math.min(localT, duration);
   }
   clip.update(localT, frame.model);
-  return { matrices: frame.matrices, styles: frame.styles };
+  return { matrices: frame.matrices, styles: frame.styles, deformations: frame.deformations };
 }
 
 // Merge an evaluated frame into the viewer's per-part effect records — the same
@@ -200,6 +210,10 @@ export function applyAnimationFrameToEffects(THREE, effectsByPartId, frame) {
       ? new THREE.Matrix4().multiplyMatrices(matrix, effect.matrix)
       : matrix.clone();
     transformCount += 1;
+  }
+  for (const [partId, deformation] of frame.deformations || []) {
+    const effect = ensureEffect(partId);
+    if (effect) { effect.deformation = deformation; transformCount += 1; }
   }
   for (const [partId, style] of frame.styles || []) {
     const effect = ensureEffect(partId);

@@ -21,6 +21,9 @@ export const LOD_DEBOUNCE_MS = 200;
  *
  * Host contract:
  *  - setComponents([{ cid, diagonal }]) once per model load (resets levels);
+ *    `{ preserveLevels: true }` when the SAME model grows (progressive
+ *    publish adds components per batch): retained cids keep their level and
+ *    an in-flight load for a retained cid keeps running;
  *  - onCameraSample({ camera, viewportHeightPx, distanceFor(cid) }) per
  *    camera change — cheap, just stamps state and re-arms the debounce;
  *  - dispose() on unmount.
@@ -43,14 +46,20 @@ export function createLodScheduler({
   let inFlight = null; // { cid, level, controller }
   let disposed = false;
 
-  function setComponents(list) {
+  function setComponents(list, { preserveLevels = false } = {}) {
+    const previous = preserveLevels ? new Map(components) : null;
     components.clear();
     for (const { cid, diagonal } of list || []) {
       if (cid && Number.isFinite(diagonal) && diagonal > 0) {
-        components.set(cid, { diagonal, level: 0 });
+        components.set(cid, { diagonal, level: previous?.get(cid)?.level ?? 0 });
       }
     }
-    cancelInFlight();
+    // A model switch cancels stale work; a growing model keeps a load whose
+    // component is still present (its level would otherwise be re-requested,
+    // or a finer displayed level re-stepped through a coarser one).
+    if (!preserveLevels || !inFlight || !components.has(inFlight.cid)) {
+      cancelInFlight();
+    }
   }
 
   function cancelInFlight() {

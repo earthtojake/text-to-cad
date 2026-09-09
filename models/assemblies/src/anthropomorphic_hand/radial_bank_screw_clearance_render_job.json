@@ -1,0 +1,20 @@
+{
+  "input": "models/assemblies/STEP/anthropomorphic_hand/radial_bank_screw_clearance_candidate.step",
+  "outputs": [
+    {
+      "path": "tmp/anthropomorphic_hand/radial_bank_screw_clearance_iso.png",
+      "camera": "iso"
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/radial_bank_screw_clearance_back.png",
+      "camera": "225:30"
+    }
+  ],
+  "render": {
+    "sizeProfile": "presentation",
+    "tessellation": {
+      "chordTolerance": 0.003,
+      "angleTolerance": 0.18
+    }
+  }
+}

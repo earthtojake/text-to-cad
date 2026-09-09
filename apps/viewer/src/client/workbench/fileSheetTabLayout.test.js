@@ -108,28 +108,28 @@ test("normalize drops missing tabs and slots new ones into their default pane", 
   assert.equal(normalized.ratio, 0.6);
 });
 
-test("issues and pose slot into render order when they first appear", () => {
-  // Stored from a plain STEP file; the next one has both issues and pose.
+test("pose slots into render order when it first appears", () => {
+  // Stored from a plain STEP file; the next one declares mates, so pose renders.
   const stored = { split: true, top: ["tree"], bottom: ["reference", "display"] };
   const normalized = normalizeFileSheetTabArrangement(
     stored,
     "step",
-    ["status", "tree", "reference", "pose", "display"]
+    ["tree", "reference", "pose", "display"]
   );
-  // Issues leads, pose sits between reference and display — not appended.
-  assert.deepEqual(normalized.bottom, ["status", "reference", "pose", "display"]);
-  // Leftmost is the pane fallback, so Issues is what you land on.
-  assert.equal(resolveFileSheetTabPanes(normalized, "step", []).panes[1].activeId, "status");
+  // Pose sits between reference and display — not appended after it.
+  assert.deepEqual(normalized.bottom, ["reference", "pose", "display"]);
+  // Leftmost is the pane fallback, so reference is what you land on.
+  assert.equal(resolveFileSheetTabPanes(normalized, "step", []).panes[1].activeId, "reference");
 });
 
 test("a tab the user dragged keeps its stored position", () => {
-  const stored = { split: true, top: ["tree"], bottom: ["reference", "status", "display"] };
+  const stored = { split: true, top: ["tree"], bottom: ["reference", "pose", "display"] };
   const normalized = normalizeFileSheetTabArrangement(
     stored,
     "step",
-    ["status", "tree", "reference", "display"]
+    ["tree", "reference", "pose", "display"]
   );
-  assert.deepEqual(normalized.bottom, ["reference", "status", "display"]);
+  assert.deepEqual(normalized.bottom, ["reference", "pose", "display"]);
 });
 
 test("normalize de-dupes a tab present in both panes (top wins)", () => {
@@ -251,7 +251,6 @@ test("layout store tolerates missing storage and bad json", () => {
 
 test("measurements defaults to the bottom pane, after reference", () => {
   const arrangement = defaultFileSheetTabArrangement("step", [
-    "status",
     "tree",
     "reference",
     "measurements",
@@ -259,7 +258,7 @@ test("measurements defaults to the bottom pane, after reference", () => {
   ]);
   assert.equal(arrangement.split, true);
   assert.deepEqual(arrangement.top, ["tree"]);
-  assert.deepEqual(arrangement.bottom, ["status", "reference", "measurements", "display"]);
+  assert.deepEqual(arrangement.bottom, ["reference", "measurements", "display"]);
 });
 
 test("activating measurements makes it the bottom pane's live tab", () => {

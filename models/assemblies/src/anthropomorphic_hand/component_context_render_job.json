@@ -1,0 +1,145 @@
+{
+  "input": "models/assemblies/STEP/anthropomorphic_hand/phalanx_beauty_context.step",
+  "mode": "view",
+  "theme": "models/assemblies/src/anthropomorphic_hand/presentation-theme.json",
+  "display": {
+    "mode": "solid",
+    "edges": {
+      "enabled": true,
+      "classes": {
+        "feature": {
+          "opacity": 0,
+          "thickness": 0
+        },
+        "tangent": {
+          "opacity": 0,
+          "thickness": 0
+        },
+        "seam": {
+          "opacity": 0,
+          "thickness": 0
+        },
+        "degenerate": {
+          "opacity": 0,
+          "thickness": 0
+        }
+      },
+      "silhouette": false
+    }
+  },
+  "render": {
+    "sizeProfile": "presentation-large",
+    "padding": 0.1,
+    "tessellation": {
+      "chordTolerance": 0.001,
+      "angleTolerance": 0.18
+    }
+  },
+  "outputs": [
+    {
+      "path": "tmp/anthropomorphic_hand/context_universal_macro.png",
+      "camera": {
+        "position": [
+          35,
+          58,
+          48
+        ],
+        "target": [
+          -12,
+          106,
+          0
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/context_fingernail_macro.png",
+      "camera": {
+        "position": [
+          -39,
+          200,
+          -33
+        ],
+        "target": [
+          -19,
+          188,
+          0
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/context_palm_frame_macro.png",
+      "camera": {
+        "position": [
+          15,
+          20,
+          -100
+        ],
+        "target": [
+          -6,
+          60,
+          0
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/context_wrist_macro.png",
+      "camera": {
+        "position": [
+          65,
+          -45,
+          45
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/context_actuator_macro.png",
+      "camera": {
+        "position": [
+          30,
+          -225,
+          96
+        ],
+        "target": [
+          -5,
+          -230,
+          30
+        ],
+        "up": [
+          0,
+          1,
+          0
+        ]
+      }
+    }
+  ],
+  "timeoutSeconds": 900,
+  "animation": {
+    "clip": "presentation",
+    "time": 0
+  }
+}

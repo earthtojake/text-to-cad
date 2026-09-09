@@ -1,0 +1,188 @@
+{
+  "input": "models/assemblies/STEP/anthropomorphic_hand/palm_hardware_context_review.step",
+  "mode": "view",
+  "outputs": [
+    {
+      "path": "tmp/anthropomorphic_hand/palm_hardware_palmar.png",
+      "camera": {
+        "direction": [
+          0.55,
+          -0.5,
+          0.82
+        ]
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/palm_hardware_dorsal.png",
+      "camera": {
+        "direction": [
+          -0.55,
+          0.5,
+          -0.82
+        ]
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/palm_hardware_pad_macro.png",
+      "camera": {
+        "position": [
+          -18,
+          45,
+          22
+        ],
+        "target": [
+          -24,
+          55,
+          11.5
+        ],
+        "up": [
+          0,
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "path": "tmp/anthropomorphic_hand/palm_hardware_wrist_macro.png",
+      "camera": {
+        "position": [
+          -33,
+          5,
+          -1
+        ],
+        "target": [
+          -24,
+          14,
+          -11.5
+        ],
+        "up": [
+          0,
+          0,
+          1
+        ]
+      }
+    }
+  ],
+  "render": {
+    "sizeProfile": "presentation-large",
+    "padding": 0.13,
+    "tessellation": {
+      "chordTolerance": 0.001,
+      "angleTolerance": 0.12
+    }
+  },
+  "display": {
+    "mode": "solid",
+    "edges": {
+      "enabled": true,
+      "classes": {
+        "feature": {
+          "opacity": 0,
+          "thickness": 0
+        },
+        "tangent": {
+          "opacity": 0,
+          "thickness": 0
+        },
+        "seam": {
+          "opacity": 0,
+          "thickness": 0
+        },
+        "degenerate": {
+          "opacity": 0,
+          "thickness": 0
+        }
+      },
+      "silhouette": false
+    }
+  },
+  "theme": {
+    "projection": "perspective",
+    "materials": {
+      "defaultColor": "#a7b3bc",
+      "cycleColors": false,
+      "overrideSourceColors": false,
+      "tintStrength": 0,
+      "saturation": 1.02,
+      "contrast": 1.04,
+      "brightness": 1.0,
+      "roughness": 0.34,
+      "metalness": 0.75,
+      "clearcoat": 0.18,
+      "clearcoatRoughness": 0.24,
+      "opacity": 1,
+      "envMapIntensity": 1.3,
+      "emissiveIntensity": 0
+    },
+    "background": {
+      "type": "linear",
+      "solidColor": "#e4e5e5",
+      "linearStart": "#f0efed",
+      "linearEnd": "#b8bfc3",
+      "linearAngle": 145
+    },
+    "floor": {
+      "enabled": false,
+      "grid": {
+        "enabled": false
+      },
+      "axis": {
+        "enabled": false
+      }
+    },
+    "environment": {
+      "enabled": true,
+      "presetId": "studio-hdri-43",
+      "intensity": 0.75,
+      "rotationY": 0.4,
+      "useAsBackground": false
+    },
+    "lighting": {
+      "toneMappingExposure": 1.1,
+      "directional": {
+        "enabled": true,
+        "color": "#fff9f0",
+        "intensity": 2.4,
+        "position": {
+          "x": -220,
+          "y": 260,
+          "z": 340
+        }
+      },
+      "spot": {
+        "enabled": true,
+        "color": "#e3efff",
+        "intensity": 1.4,
+        "angle": 0.85,
+        "distance": 0,
+        "position": {
+          "x": 230,
+          "y": -80,
+          "z": 200
+        }
+      },
+      "point": {
+        "enabled": true,
+        "color": "#ffffff",
+        "intensity": 0.5,
+        "distance": 0,
+        "position": {
+          "x": -180,
+          "y": -100,
+          "z": -160
+        }
+      },
+      "ambient": {
+        "enabled": true,
+        "color": "#ffffff",
+        "intensity": 0.22
+      },
+      "hemisphere": {
+        "enabled": true,
+        "skyColor": "#edf4ff",
+        "groundColor": "#575453",
+        "intensity": 0.65
+      }
+    }
+  }
+}

@@ -28,6 +28,7 @@ import {
   shouldUseRecordTopologyEdgeTransforms
 } from "./topologyDisplayEdgeRuntime.js";
 import {
+  screenSpaceLineDeviceResolution,
   syncScreenSpaceLineMaterialResolution
 } from "./renderEdges.js";
 import {
@@ -343,8 +344,10 @@ function resolveSectionPlane(section = {}) {
 }
 
 function sectionSegments(meshData, section = {}) {
-  const vertices = meshData.vertices || new Float32Array(0);
-  const indices = meshData.indices || new Uint32Array(0);
+  const parts = Array.isArray(meshData.parts) ? meshData.parts : [];
+  const chunks = parts.length && parts.every((part) => part.sourceMesh)
+    ? parts.map((part) => ({ mesh: part.sourceMesh, transform: part.transform }))
+    : [{ mesh: meshData, transform: null }];
   const { normal, at, u, v } = resolveSectionPlane(section);
   const point = new THREE.Vector3();
   const tri = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
@@ -354,27 +357,35 @@ function sectionSegments(meshData, section = {}) {
     const relative = new THREE.Vector3().subVectors(candidate, at);
     return [relative.dot(u), relative.dot(v)];
   };
-  for (let index = 0; index + 2 < indices.length; index += 3) {
-    for (let corner = 0; corner < 3; corner += 1) {
-      const vertexIndex = Number(indices[index + corner]) * 3;
-      tri[corner].set(vertices[vertexIndex], vertices[vertexIndex + 1], vertices[vertexIndex + 2]);
-    }
-    const distances = tri.map((corner) => signedDistance(corner));
-    const intersections = [];
-    for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
-      const da = distances[a];
-      const db = distances[b];
-      if (Math.abs(da) < 1e-7) {
-        intersections.push(tri[a].clone());
+  for (const chunk of chunks) {
+    const vertices = chunk.mesh.vertices || new Float32Array(0);
+    const indices = chunk.mesh.indices || new Uint32Array(0);
+    const transform = Array.isArray(chunk.transform) && chunk.transform.length === 16
+      ? new THREE.Matrix4().set(...chunk.transform)
+      : null;
+    for (let index = 0; index + 2 < indices.length; index += 3) {
+      for (let corner = 0; corner < 3; corner += 1) {
+        const vertexIndex = Number(indices[index + corner]) * 3;
+        tri[corner].set(vertices[vertexIndex], vertices[vertexIndex + 1], vertices[vertexIndex + 2]);
+        if (transform) tri[corner].applyMatrix4(transform);
       }
-      if ((da < 0 && db > 0) || (da > 0 && db < 0)) {
-        const t = da / (da - db);
-        point.copy(tri[a]).lerp(tri[b], t);
-        intersections.push(point.clone());
+      const distances = tri.map((corner) => signedDistance(corner));
+      const intersections = [];
+      for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
+        const da = distances[a];
+        const db = distances[b];
+        if (Math.abs(da) < 1e-7) {
+          intersections.push(tri[a].clone());
+        }
+        if ((da < 0 && db > 0) || (da > 0 && db < 0)) {
+          const t = da / (da - db);
+          point.copy(tri[a]).lerp(tri[b], t);
+          intersections.push(point.clone());
+        }
       }
-    }
-    if (intersections.length >= 2) {
-      segments.push([project(intersections[0]), project(intersections[1])]);
+      if (intersections.length >= 2) {
+        segments.push([project(intersections[0]), project(intersections[1])]);
+      }
     }
   }
   return segments;
@@ -746,7 +757,7 @@ export function renderJobContext(meshData, job = {}) {
     depthTest: displayModeShowsThroughEdges(displayMode) ? false : baseEdgeSettings.depthTest
   };
   const wireframeMode = displayModeIsWireframe(displayMode);
-  const edgesVisible = stepDisplayEnabled && displayModeShowsEdges(displayMode, edgeSettings);
+  const edgesVisible = stepDisplayEnabled && displayModeShowsEdges(displayMode);
   const selectorRuntime = job.stepParameters?.selectorRuntime || job.selectorRuntime || null;
   const displayEdgeRuntime = job.stepParameters?.displayEdgeRuntime || job.displayEdgeRuntime || null;
   const topologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
@@ -879,7 +890,13 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
     LineMaterial
   });
   scene.add(model.root);
-  addFloor(scene, model.bounds || context.bounds, context.theme, context.sceneScale);
+  // `floorBounds` is what a locked camera will frame, for a caller that knows
+  // more than this pose does. The stage plane and grid are sized and centred on
+  // whatever they are handed, and `model.bounds` is the pose the model happens
+  // to be in right now — right for a still, which is posed before it gets here,
+  // and wrong for a video, whose camera frames the union across its frames and
+  // would otherwise show the grid's edge with the moving part walking off it.
+  addFloor(scene, viewportOptions.floorBounds || model.bounds || context.bounds, context.theme, context.sceneScale);
   const orthographicCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.001, 10000);
   const perspectiveCamera = new THREE.PerspectiveCamera(48, firstSize.width / Math.max(firstSize.height, 1), 0.1, 50000);
   return {
@@ -1054,12 +1071,31 @@ export async function captureModel(viewport, captureOptions = {}) {
     const parameters = parametersForOutput(output);
     const { width, height } = outputSize(output, job);
     viewport.renderer.setSize(width, height, false);
-    const baseOutputBounds = parameters
-      ? viewport.model.update({ stepParameters: parameters }).bounds
-      : viewport.model.update({ stepParameters: null }).bounds;
+    // ONE update per output. `modelState` is a patch a caller needs applied in
+    // the same pass -- a video's `callbacks.animation` for this frame -- because
+    // applying it separately first means the clip evaluator and the effects pass
+    // over every display record run twice for one image.
+    const posedBounds = viewport.model.update({
+      stepParameters: parameters,
+      ...(captureOptions.modelState || null)
+    }).bounds;
+    // `frameBounds` locks what the camera frames on. A still frames the model
+    // it just posed, which is right for one image and wrong for a sequence:
+    // every frame of a video would re-fit to that frame's pose and the camera
+    // would breathe as the model moves. A video passes the union across its
+    // frames, computed once (headlessRenderEntry sequenceFrameBounds).
+    const baseOutputBounds = captureOptions.frameBounds || posedBounds;
     const outputBounds = applyViewportExplodedView(viewport, baseOutputBounds);
     syncViewportTopologyDisplayEdges(viewport);
-    syncScreenSpaceLineMaterialResolution(viewport.model.runtime.screenSpaceLineMaterials, width, height);
+    // Device pixels: renderScale is the renderer's pixel ratio, so a PNG at
+    // renderScale 2 has a 2x drawing buffer and `thickness` stays a
+    // drawing-buffer width there exactly as it does on a Retina viewport.
+    const lineResolution = screenSpaceLineDeviceResolution(viewport.renderer, width, height);
+    syncScreenSpaceLineMaterialResolution(
+      viewport.model.runtime.screenSpaceLineMaterials,
+      lineResolution.width,
+      lineResolution.height
+    );
     const cameraSpec = output.camera || job.camera || "iso";
     const outputProjection = resolveOutputCameraProjection(context, cameraSpec);
     const usePerspectiveCamera = outputProjection === CAMERA_PROJECTION.PERSPECTIVE;
@@ -1068,7 +1104,11 @@ export async function captureModel(viewport, captureOptions = {}) {
       ? fitPerspectiveCamera(viewport.perspectiveCamera, cameraSpec, outputBounds, width, height, sceneScale)
       : fitCamera(viewport.orthographicCamera, cameraView, outputBounds, width, height, null, padding, sceneScale);
     const renderCamera = usePerspectiveCamera ? viewport.perspectiveCamera : viewport.orthographicCamera;
-    if (!usePerspectiveCamera && tightFrameEnabled(job)) {
+    // The tight frame is a per-POSE refinement: it re-fits to the vertices the
+    // records project right now. Running it on every frame of a sequence is the
+    // breathing `frameBounds` exists to stop, and there is no one pose to run it
+    // against, so a locked frame keeps the bounds fit and skips it.
+    if (!usePerspectiveCamera && !captureOptions.frameBounds && tightFrameEnabled(job)) {
       viewport.scene.updateMatrixWorld(true);
       applyTightOrthographicFrame(renderCamera, viewport.model.displayRecords, width, height, padding, cameraView?.zoom);
     }

@@ -133,24 +133,88 @@ def _transform_from_location(location: Any) -> list[float]:
     ]
 
 
-def _bbox_from_shape(shape: Any) -> dict[str, list[float]] | None:
-    """The world-frame axis-aligned bounding box of a composed shape, as the
-    ``{"min": [...], "max": [...]}`` the assembly.json records so a cheap whole-entry
-    inspect summary does not have to re-mesh + extract full topology.
+def optimal_box(wrapped: Any) -> list[float] | None:
+    """The TIGHT world-frame bounds of one ``TopoDS_Shape`` as
+    ``[xmin, ymin, zmin, xmax, ymax, zmax]``, or None when it bounds nothing.
 
-    Computed from the geometric representation (``useTriangulation=False``) so it
-    never tessellates the shape — meshing would mutate the shared ``TShape`` and
-    break content-addressed component dedup on a later in-process rebuild."""
+    ``BRepBndLib::Add`` bounds a B-spline by its CONTROL POLYGON: a NURBS
+    circle of radius r reports r/cos(22.5 deg) = 1.082 r, so every rounded body
+    came back ~8% too big and a reported bound could invent a clash that is not
+    there (PR #370 bug record 004). ``AddOptimal`` subdivides instead.
+    ``useTriangulation=False``: meshing here would mutate the shared ``TShape``
+    and break content-addressed component dedup on a later in-process rebuild.
+    """
     try:
         from OCP.Bnd import Bnd_Box
         from OCP.BRepBndLib import BRepBndLib
 
         box = Bnd_Box()
-        BRepBndLib.Add_s(shape.wrapped, box, False)
+        BRepBndLib.AddOptimal_s(wrapped, box, False, False)
+        if box.IsVoid():
+            return None
         xmin, ymin, zmin, xmax, ymax, zmax = box.Get()
+        return [float(xmin), float(ymin), float(zmin), float(xmax), float(ymax), float(zmax)]
+    except Exception:  # noqa: BLE001 - OCP bounds reads can raise on odd shapes
+        return None
+
+
+def _world_leaves(wrapped: Any) -> list[Any]:
+    """The shape's leaves, each carrying its WORLD location.
+
+    ``TopoDS_Iterator`` composes the parent's location into every child it
+    yields, so recursing containers hands back exactly the placed bodies the
+    occurrences describe — one leaf per occurrence, links included.
+    """
+    from OCP.TopAbs import TopAbs_ShapeEnum
+    from OCP.TopoDS import TopoDS_Iterator
+
+    containers = (TopAbs_ShapeEnum.TopAbs_COMPOUND, TopAbs_ShapeEnum.TopAbs_COMPSOLID)
+    leaves: list[Any] = []
+    stack = [wrapped]
+    while stack:
+        node = stack.pop()
+        if node.ShapeType() not in containers:
+            leaves.append(node)
+            continue
+        iterator = TopoDS_Iterator(node)
+        while iterator.More():
+            stack.append(iterator.Value())
+            iterator.Next()
+    return leaves
+
+
+def _bbox_from_shape(shape: Any) -> dict[str, list[float]] | None:
+    """The world-frame axis-aligned bounding box of a composed shape, as the
+    ``{"min": [...], "max": [...]}`` the assembly.json records so a cheap whole-entry
+    inspect summary does not have to re-mesh + extract full topology.
+
+    Measured PER LEAF and merged, not once over the whole compound, because a
+    leaf's box is a pure function of (its location-stripped content, its world
+    placement) and so can be memoized: ``op_memo.memoized_value`` keeps it in
+    the warm worker and on disk, and a rebuild that moved one occurrence pays
+    for that one box. Tight bounds cost ~0.08 ms per face, which a whole
+    150k-face assembly could not absorb on every finalize but an unchanged
+    occurrence never pays twice.
+    """
+    try:
+        from cadgen._internal import op_memo
+
+        boxes = []
+        for leaf in _world_leaves(shape.wrapped):
+            box = op_memo.memoized_value(
+                # The op_name names the FUNCTION: change what this computes and
+                # change the name (or _OP_MEMO_VERSION) with it.
+                "occurrence_bbox.optimal",
+                op_memo.placed_shape_key(leaf),
+                lambda leaf=leaf: optimal_box(leaf),
+            )
+            if box is not None:
+                boxes.append(box)
+        if not boxes:
+            return None
         return {
-            "min": [float(xmin), float(ymin), float(zmin)],
-            "max": [float(xmax), float(ymax), float(zmax)],
+            "min": [min(box[axis] for box in boxes) for axis in (0, 1, 2)],
+            "max": [max(box[axis] for box in boxes) for axis in (3, 4, 5)],
         }
     except Exception:  # noqa: BLE001 - OCP bounds reads can raise on odd shapes; a component without bounds is None
         return None
@@ -274,6 +338,15 @@ def _build123d_shape_from_brep_bytes(payload: bytes) -> Any:
     BinTools.Read_s(topo, io.BytesIO(payload))
     if topo.IsNull():
         raise RuntimeError("component BREP payload deserialized to a null shape")
+    return _build123d_shape_from_topods(topo)
+
+
+def _build123d_shape_from_topods(topo: Any) -> Any:
+    """Wrap a bare ``TopoDS_Shape`` in the build123d class matching its ShapeType
+    (a Solid stays a Solid; anything unknown is a Compound)."""
+    import build123d
+    from OCP.TopAbs import TopAbs_ShapeEnum
+
     by_type = {
         TopAbs_ShapeEnum.TopAbs_COMPOUND: build123d.Compound,
         TopAbs_ShapeEnum.TopAbs_COMPSOLID: build123d.Compound,

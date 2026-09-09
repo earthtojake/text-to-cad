@@ -1,0 +1,9 @@
+# Representative PIP pulley-hub refinement
+
+The fresh critic identified excessive exposed shaft length relative to the paired drums. Two separate turned stainless captive spacers fill the inner portion of the exposed middle-PIP shaft. Native axis bands are +1.75..+3.65 and −3.65..−1.75 mm. The circular running bore is R1.03, the maximum outside radius is 2.82 mm, and the profile has continuously drawn rounded transitions. The existing drum and child eye capture each collar axially. This is a freely rotating captive spacer, not an asserted keyed torque joint.
+
+Every original pulley radius, groove width, groove location, tendon path, shaft fit, bearing face and phalanx remains unchanged. The first longer version reached ±5.55 mm and was rejected because the full-fist DIP reaction liner crossed it. The final shorter version ends before the ±4.2 mm liner corridors. It passed the native strict validator and the neutral, fist and pinch geometry checks. The complete 225-pose check remains in progress; consult pulley_hub_gate.json for completion.
+
+Source: src/anthropomorphic_hand/lib/pulley_hub_extension.py. Native review: STEP/anthropomorphic_hand/pulley_hub_review.step. Context: the frozen 3151-body full hand with the previously accepted phalanx refinements and two added collars, explicitly 3153 bodies; it is not a claim that the context includes the newest wrist/palm revisions. Geometry validation uses the latest full native rigid registry and records each native revision hash.
+
+The first complete latest-native context render hit an existing browser ArrayBuffer allocation failure. The retry uses the previously successful frozen component-comparison context. Both use JSON jobs, solid presentation theme, large macro size and all 48 braided native tendon paths. No render is an animation acceptance test.

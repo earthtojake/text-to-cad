@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { cidFromSurfUrl, loadSurfComponentInWorker } from "./surfWorkerClient.js";
+import { cidFromSurfUrl, loadSurfComponentInWorker, releaseSurfWorkerPool } from "./surfWorkerClient.js";
 
 test("cidFromSurfUrl accepts only components/<cid>.surf", () => {
   assert.equal(
@@ -55,4 +55,37 @@ test("cidFromSurfUrl reads the viewer's query-form asset URLs", () => {
 
 test("loadSurfComponentInWorker returns null where Workers do not exist (node)", () => {
   assert.equal(loadSurfComponentInWorker("/pkg/components/abc.surf"), null);
+});
+
+test("releaseSurfWorkerPool terminates idle workers and the next request builds a fresh pool", async () => {
+  const terminated = [];
+  const created = [];
+  class FakeWorker {
+    constructor() { this.listeners = {}; created.push(this); }
+    addEventListener(type, handler) { this.listeners[type] = handler; }
+    postMessage(message) {
+      // Answer on a later turn, as a real worker does.
+      setTimeout(() => this.listeners.message?.({
+        data: { id: message.id, ok: true, meshData: { parts: [] }, bundle: null }
+      }), 0);
+    }
+    terminate() { terminated.push(this); }
+  }
+  const savedWorker = globalThis.Worker;
+  globalThis.Worker = FakeWorker;
+  try {
+    assert.equal(releaseSurfWorkerPool(), false, "nothing to release before the first request");
+    const inFlight = loadSurfComponentInWorker("http://x/components/aa.surf");
+    assert.ok(created.length > 0, "the first request builds the pool");
+    assert.equal(releaseSurfWorkerPool(), false, "a request in flight keeps the pool");
+    await inFlight;
+    assert.equal(releaseSurfWorkerPool(), true);
+    assert.equal(terminated.length, created.length, "every worker was terminated");
+    const before = created.length;
+    await loadSurfComponentInWorker("http://x/components/bb.surf");
+    assert.ok(created.length > before, "the next request builds a fresh pool");
+    releaseSurfWorkerPool();
+  } finally {
+    globalThis.Worker = savedWorker;
+  }
 });

@@ -154,13 +154,15 @@ def scene_to_build123d_compound(scene: LoadedStepScene, *, label: str | None = N
 def import_step(step_path: Path, *, label: str | None = None) -> Any:
     """``build123d.import_step`` backed by the store.
 
-    Returns a shape topologically identical to ``import_step`` — including the root
-    itself, not a wrapper around it — but
-    reuses the cached binary BREP, so warm loads are ~tens of ms instead of a full
-    text-STEP re-parse. Cold loads cost the same as ``import_step`` (plus a small
-    cache write). Per-occurrence and prototype STEP colors are applied via
-    ``scene_to_build123d_compound``, so the returned shape is a colored drop-in.
-    Falls back to a raw import if the scene cannot be reconstructed.
+    Returns the file's geometry as ``import_step`` reads it — the root itself,
+    not a wrapper around it — but reuses the tree's binary BREP when the store
+    has one for these bytes, so warm loads are ~tens of ms instead of a full
+    text-STEP parse. The tree's components are the STEP's own re-read
+    prototypes (``build_tree_through_step``), never the shapes a script
+    returned, so a warm load and a cold parse cannot disagree. Per-occurrence
+    and prototype STEP colors are applied via ``scene_to_build123d_compound``,
+    so the returned shape is a colored drop-in. Falls back to a raw import if
+    the scene cannot be reconstructed.
     """
     import build123d
 

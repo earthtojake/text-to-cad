@@ -1,0 +1,95 @@
+{
+  "input": "models/assemblies/STEP/anthropomorphic_hand/fingertip_pad_review.step",
+  "mode": "view",
+  "outputs": [
+    {
+      "path": "models/assemblies/validation/anthropomorphic_hand/fingertip_pad_macro.png",
+      "camera": {
+        "direction": [
+          0.25,
+          -0.7,
+          1.0
+        ]
+      }
+    },
+    {
+      "path": "models/assemblies/validation/anthropomorphic_hand/fingertip_pad_underside.png",
+      "camera": {
+        "direction": [
+          0.25,
+          -0.65,
+          -1.0
+        ]
+      }
+    }
+  ],
+  "render": {
+    "sizeProfile": "presentation-large",
+    "padding": 0.13,
+    "tessellation": {
+      "chordTolerance": 0.0005,
+      "angleTolerance": 0.1
+    }
+  },
+  "display": {
+    "mode": "solid",
+    "edges": {
+      "enabled": false
+    }
+  },
+  "theme": {
+    "background": {
+      "type": "linear",
+      "linearStart": "#344553",
+      "linearEnd": "#111B24",
+      "linearAngle": 135
+    },
+    "materials": {
+      "overrideSourceColors": false,
+      "cycleColors": false,
+      "roughness": 0.28,
+      "metalness": 0.88,
+      "envMapIntensity": 1.4
+    },
+    "floor": {
+      "enabled": false,
+      "grid": {
+        "enabled": false
+      },
+      "axis": {
+        "enabled": false
+      }
+    },
+    "environment": {
+      "enabled": true,
+      "presetId": "studio-hdri-43",
+      "intensity": 0.8,
+      "rotationY": 0.5,
+      "useAsBackground": false
+    },
+    "lighting": {
+      "toneMappingExposure": 1.1,
+      "directional": {
+        "enabled": true,
+        "color": "#FFFFFF",
+        "intensity": 1.6,
+        "position": {
+          "x": -210,
+          "y": 260,
+          "z": 270
+        }
+      },
+      "ambient": {
+        "enabled": true,
+        "color": "#FFFFFF",
+        "intensity": 0.45
+      },
+      "hemisphere": {
+        "enabled": true,
+        "skyColor": "#F4F8FF",
+        "groundColor": "#334454",
+        "intensity": 0.85
+      }
+    }
+  }
+}

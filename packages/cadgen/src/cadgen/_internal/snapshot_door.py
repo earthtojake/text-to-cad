@@ -63,6 +63,7 @@ def _run(
     kinematics: object = None,
     animation: object = None,
     time: float | None = None,
+    video: object = None,
     joint_values: object = None,
     focus: tuple[str, ...] = (),
     hide: tuple[str, ...] = (),
@@ -106,8 +107,21 @@ def _run(
     # clip — and means nothing without the clip it indexes.
     if time is not None and animation is None:
         raise ValueError("time requires animation: name the clip the frame is taken from")
+    # `video` is the other half of the same request: the SPAN of the clip rather
+    # than one moment of it. It needs the clip for the same reason `time` does,
+    # and it cannot be combined with `time` — one frame or a sequence, never
+    # both, and silently honouring one of them would answer the wrong question.
+    if video is not None and animation is None:
+        raise ValueError("video requires animation: name the clip the sequence renders")
+    if video is not None and time is not None:
+        raise ValueError(
+            "video and time cannot be used together: time freezes one frame, video renders "
+            "the span — use video start/seconds to say where the sequence begins"
+        )
     if animation is not None:
         options.animation, options.animation_time, options.animation_specified = animation, time, True
+    if video is not None:
+        options.video, options.video_specified = video, True
     if joint_values is not None:
         options.joint_values, options.joint_values_specified = joint_values, True
     if focus:
@@ -137,6 +151,7 @@ def step_snapshot_verb(door: str):
         kinematics: str | dict | None = None,
         animation: str | dict | None = None,
         time: float | None = None,
+        video: str | dict | None = None,
         focus: tuple[str, ...] = (),
         hide: tuple[str, ...] = (),
         width: int | None = None,
@@ -171,6 +186,10 @@ def step_snapshot_verb(door: str):
             or {"clip": name, "time": seconds} JSON; layered over the
             kinematics pose the way the viewer does.
         time: seconds into the animation clip (default 0); requires animation.
+        video: render the clip as a VIDEO instead of one frame, into the .mp4 or
+            .gif OUT names — {"fps": 30, "seconds": <what is left of the clip>,
+            "start": 0, "quality": "review", "loop": true} JSON or a path to it;
+            requires animation, excludes time, and needs ffmpeg on PATH.
         focus: occurrence ref rendered at full opacity (repeatable); the
             rest of the assembly is ghosted in place.
         hide: occurrence ref left out of the render (repeatable).
@@ -185,7 +204,7 @@ def step_snapshot_verb(door: str):
             kinds,
             target=target, out=out, job=job, mode=mode,
             camera=camera, theme=theme, display=display, kinematics=kinematics,
-            animation=animation, time=time,
+            animation=animation, time=time, video=video,
             focus=focus, hide=hide, width=width, height=height,
             size_profile=size_profile, view_labels=view_labels, debug=debug,
         )
@@ -317,6 +336,7 @@ def polymorphic_snapshot_verb():
         kinematics: str | dict | None = None,
         animation: str | dict | None = None,
         time: float | None = None,
+        video: str | dict | None = None,
         joint_values: str | dict | None = None,
         focus: tuple[str, ...] = (),
         hide: tuple[str, ...] = (),
@@ -343,6 +363,10 @@ def polymorphic_snapshot_verb():
         animation: one still frame of a STEP model's clip — the clip name
             (with --time), or {"clip": name, "time": seconds} JSON.
         time: seconds into the animation clip (default 0); requires animation.
+        video: render a STEP model's clip as a VIDEO into a .mp4/.gif OUT —
+            {"fps": 30, "seconds": <what is left of the clip>, "start": 0,
+            "quality": "review", "loop": true} JSON or a path to it; requires
+            animation, excludes time, and needs ffmpeg on PATH.
         joint_values: {joint: degrees} JSON posing a robot description.
         focus: occurrence ref rendered at full opacity (STEP only).
         hide: occurrence ref left out of the render (STEP only).
@@ -357,7 +381,7 @@ def polymorphic_snapshot_verb():
             ALL_KINDS,
             target=target, out=out, job=job, mode=mode,
             camera=camera, theme=theme, display=display, kinematics=kinematics,
-            animation=animation, time=time,
+            animation=animation, time=time, video=video,
             joint_values=joint_values, focus=focus, hide=hide,
             width=width, height=height, size_profile=size_profile,
             view_labels=view_labels, debug=debug,
