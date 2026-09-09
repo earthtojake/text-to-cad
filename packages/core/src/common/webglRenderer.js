@@ -1,4 +1,5 @@
 export function cadWebGlRendererAttributes({
+  stencil = true,
   alpha = true,
   antialias = true,
   powerPreference = "high-performance",
@@ -6,6 +7,7 @@ export function cadWebGlRendererAttributes({
   logarithmicDepthBuffer = true
 } = {}) {
   return {
+    stencil,
     alpha,
     antialias,
     powerPreference,

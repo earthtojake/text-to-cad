@@ -1,5 +1,9 @@
 "use client";
 
+import StepMeasurementsSection from "../components/workbench/StepMeasurementsSection.js";
+import { recognizeStepFeatures } from "@hardcore/core/lib/step/recognizeFeatures.js";
+import { filterSelectionReferences, toggleFaceGroupSelection } from "../workbench/selectionFilter.js";
+
 import { TutorialTipsContext } from "../workbench/tutorialTips.js";
 import { FileSheetTabPreferencesContext } from "../workbench/fileSheetTabPreferences.js";
 import * as THREE from "three";
@@ -343,6 +347,9 @@ function CadFileViewSurface({
   const [largeFileState, setLargeFileState] = useState(() => normalizeLargeFileState(DEFAULT_LARGE_FILE_STATE));
   const [hoveredListReferenceId, setHoveredListReferenceId] = useState("");
   const [hoveredModelReferenceId, setHoveredModelReferenceId] = useState("");
+  const [selectionFilter, setSelectionFilter] = useState("all");
+  const [featureRecognitionRequest, setFeatureRecognitionRequest] = useState(null);
+  const [selectionFilterNotice, setSelectionFilterNotice] = useState("");
   const [selectedPartIds, setSelectedPartIds] = useState([]);
   const [selectedRenderPartIdByAssemblyPartId, setSelectedRenderPartIdByAssemblyPartId] = useState({});
   const [selectedWholeEntryCadRefToken, setSelectedWholeEntryCadRefToken] = useState("");
@@ -2669,6 +2676,16 @@ function CadFileViewSurface({
     referenceState.referenceHash === buildReferenceCacheKey(selectedEntry) &&
     (referenceState.loadedTopologyKey || "*") === requestedTopologyKey;
   const selectedSelectorRuntime = selectedReferencesMatch ? referenceState?.selectorRuntime || null : null;
+  const featureRecognitionRevision = buildReferenceCacheKey(selectedEntry);
+  const activeFeatureRequest = featureRecognitionRequest?.revision === featureRecognitionRevision ? featureRecognitionRequest : null;
+  const recognizedFeatures = useMemo(() => activeFeatureRequest && selectedSelectorRuntime
+    ? recognizeStepFeatures(selectedSelectorRuntime, { partId: activeFeatureRequest.partId }) : null,
+    [activeFeatureRequest, selectedSelectorRuntime]);
+  const recognizedGroups = recognizedFeatures?.groups || EMPTY_LIST;
+  useEffect(() => {
+    setSelectionFilter("all");
+    setSelectionFilterNotice("");
+  }, [selectedKey, featureRecognitionRevision]);
   const selectedDisplayEdgesMatch =
     !!displayEdgeState &&
     !!selectedEntry &&
@@ -3088,6 +3105,7 @@ function CadFileViewSurface({
       return [];
     }
     if (isAssemblyView) {
+      if (selectionFilter !== "all" || tabToolMode === TAB_TOOL_MODE.MEASURE) return assemblyStepTreeTopologyReferences;
       if (!visibleStepTreeTopologyReferenceIdSet.size) {
         return [];
       }
@@ -3098,6 +3116,8 @@ function CadFileViewSurface({
     return effectiveVisibleReferences;
   }, [
     assemblyStepTreeTopologyReferences,
+    selectionFilter,
+    tabToolMode,
     effectiveVisibleReferences,
     isAssemblyView,
     stepModuleTreeSelectionDisabled,
@@ -3124,14 +3144,20 @@ function CadFileViewSurface({
     tabToolMode === TAB_TOOL_MODE.MEASURE &&
     Boolean(selectedMeshData) &&
     !viewerLoading;
+  const [measureSelectionFilter, setMeasureSelectionFilter] = useState("all");
+  useEffect(() => setMeasureSelectionFilter("all"), [selectedKey]);
   const [measureRulerState, setMeasureRulerState] = useState(null);
   const [activeMeasureId, setActiveMeasureId] = useState("");
   const handleMeasurePick = useCallback((pick) => {
+    if (measureSelectionFilter === "edges" && pick?.snapKind !== "edge") return;
+    if (measureSelectionFilter === "faces" && pick?.snapKind !== "face") return;
     setMeasureRulerState((current) => applyMeasureRulerPick(current, pick));
-  }, []);
+  }, [measureSelectionFilter]);
   const handleMeasureHoverPoint = useCallback((hover) => {
-    setMeasureRulerState((current) => applyMeasureRulerHover(current, hover));
-  }, []);
+    const accepted = (measureSelectionFilter !== "edges" || hover?.snapKind === "edge") &&
+      (measureSelectionFilter !== "faces" || hover?.snapKind === "face");
+    setMeasureRulerState((current) => applyMeasureRulerHover(current, accepted ? hover : null));
+  }, [measureSelectionFilter]);
   const handleMeasureDelete = useCallback((measurementId) => {
     setMeasureRulerState((current) => applyMeasureRulerDelete(current, measurementId));
   }, []);
@@ -3186,6 +3212,10 @@ function CadFileViewSurface({
     ));
   }, [measureMeasurements, renderedSelectedFileSheetSectionIds, setTabToolsOpen]);
 
+  const filteredViewerReferences = useMemo(() => filterSelectionReferences(viewerPickableReferences, selectionFilter, recognizedGroups),
+    [viewerPickableReferences, selectionFilter, recognizedGroups]);
+  const filteredViewerFaces = useMemo(() => filteredViewerReferences.filter(isFaceReference), [filteredViewerReferences, isFaceReference]);
+  const filteredViewerEdges = useMemo(() => filteredViewerReferences.filter(isEdgeReference), [filteredViewerReferences, isEdgeReference]);
   const measureToolDisabled = viewerLoading || !selectedMeshData || !supportsMeasure;
   const topologySelectionActive =
     (isAssemblyView && requestedStepTreeTopologyNodeIds.length > 0) ||
@@ -3984,13 +4014,29 @@ function CadFileViewSurface({
     if (stepUpdateInProgress) return;
     for (const reference of referencesForHost(text)) onReference?.(reference);
   }, [onReference, referencesForHost, stepUpdateInProgress]);
-  const requestFeatureTopology = useCallback((target) => {
+  const loadFilterTopology = useCallback((target) => {
+    if (!target) return;
     if (isAssemblyView) setExpandedStepTreeNodeIds(current => uniqueStringList([...current, target.id]));
     else setLargeFileState(current => ({ ...current, selectableTopologyEnabled: true }));
   }, [isAssemblyView]);
-  const selectFeatureFaces = useCallback((faceIds) => {
+  useEffect(() => {
+    if (!["faces", "edges"].includes(selectionFilter)) {
+      setSelectionFilterNotice("");
+      return;
+    }
+    if (featureRecognitionTarget) {
+      loadFilterTopology(featureRecognitionTarget);
+      setSelectionFilterNotice("");
+    } else setSelectionFilterNotice("Select a part in Tree to load its faces and edges.");
+  }, [selectionFilter, featureRecognitionTarget, loadFilterTopology]);
+  const requestFeatureTopology = useCallback((target) => {
+    setFeatureRecognitionRequest({ ...target, revision: featureRecognitionRevision });
+    if (isAssemblyView) setExpandedStepTreeNodeIds(current => uniqueStringList([...current, target.id]));
+    else setLargeFileState(current => ({ ...current, selectableTopologyEnabled: true }));
+  }, [isAssemblyView, featureRecognitionRevision]);
+  const selectFeatureFaces = useCallback((faceIds, { multiSelect = false } = {}) => {
     if (stepUpdateInProgress || !faceIds.length || !faceIds.every(id => effectiveActiveReferenceMap.get(id)?.selectorType === "face")) return;
-    const next = uniqueStringList(faceIds);
+    const next = toggleFaceGroupSelection(selectedReferenceIdsRef.current, faceIds, multiSelect);
     selectedPartIdsRef.current = [];
     setSelectedPartIds([]);
     setSelectedRenderPartIdByAssemblyPartId({});
@@ -4724,7 +4770,18 @@ function CadFileViewSurface({
     }
     const nextReferenceId = String(referenceId || "").trim();
     if (!nextReferenceId) {
+      if (multiSelect) return;
       clearAssemblySelection();
+      return;
+    }
+    if (selectionFilter === "groups") {
+      const group = recognizedGroups.find(item => item.faceIds.includes(nextReferenceId));
+      if (group) selectFeatureFaces(group.faceIds, { multiSelect });
+      return;
+    }
+    if (selectionFilter === "parts") {
+      const partId = isAssemblyView ? nextReferenceId : STEP_MODEL_ROOT_ID;
+      togglePartSelection(partId, { multiSelect, renderPartId: nextReferenceId, source: "tree" });
       return;
     }
     const topologyReference = effectiveActiveReferenceMap.get(nextReferenceId) || null;
@@ -4748,6 +4805,10 @@ function CadFileViewSurface({
     toggleReferenceSelection(nextReferenceId, { multiSelect });
   }, [
     clearAssemblySelection,
+    selectionFilter,
+    recognizedGroups,
+    selectFeatureFaces,
+    isAssemblyView,
     effectiveActiveReferenceMap,
     isViewerTopologyReference,
     resolvePickedAssemblyPartId,
@@ -5426,6 +5487,8 @@ function CadFileViewSurface({
   }, [scheduleActiveFileSessionSave, onLodCameraMoved]);
 
   useCadWorkspaceShortcuts({
+    selectionActive: selectedPartIds.length > 0 || selectedReferenceIds.length > 0,
+    onClearSelection: clearAssemblySelection,
     copyStatus,
     screenshotStatus,
     setCopyStatus,
@@ -5657,6 +5720,10 @@ function CadFileViewSurface({
       className={cn("relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground", className)}
       data-slot="cad-file-view"
       data-cad-surface
+      tabIndex={-1}
+      onPointerDownCapture={event => {
+        if (event.target instanceof Element && event.target.closest("canvas")) event.currentTarget.focus({ preventScroll: true });
+      }}
       ref={hostRef}
     >
       <div className="relative z-10 flex h-full min-w-0 flex-col overflow-hidden bg-transparent">
@@ -5731,9 +5798,10 @@ function CadFileViewSurface({
                   selectedReferenceIds={selectedReferenceIds}
                   selectorRuntime={effectiveSelectorRuntime}
                   displayEdgeRuntime={selectedDisplayEdgeRuntime}
-                  pickableFaces={viewerPickableFaces}
-                  pickableEdges={viewerPickableEdges}
-                  pickableVertices={viewerPickableVertices}
+                  selectionFilter={selectionFilter}
+                  pickableFaces={measureModeActive ? (["all", "faces"].includes(measureSelectionFilter) ? viewerPickableFaces : EMPTY_LIST) : filteredViewerFaces}
+                  pickableEdges={measureModeActive ? (["all", "edges"].includes(measureSelectionFilter) ? viewerPickableEdges : EMPTY_LIST) : filteredViewerEdges}
+                  pickableVertices={(measureModeActive ? ["all", "points"].includes(measureSelectionFilter) : selectionFilter === "all") ? viewerPickableVertices : EMPTY_LIST}
                   focusedPartIds={viewerFocusedPartIds}
                   boundsAnimationActive={robotBoundsAnimationActive}
                   drawToolActive={drawToolActive}
@@ -5791,6 +5859,10 @@ function CadFileViewSurface({
                 zoomPercent={viewerZoomPercent}
                 onZoomPercentChange={handleViewerZoomPercentChange}
                 onZoomReset={handleViewerZoomReset}
+                selectionFilter={effectiveRenderFormat === RENDER_FORMAT.STEP ? selectionFilter : null}
+                onSelectionFilterChange={value => { setSelectionFilter(value); handleSelectTabToolMode("references"); }}
+                selectionFilterNotice={selectionFilterNotice}
+                groupsAvailable={recognizedGroups.length > 0}
                 selectionToolActive={selectionToolActive}
                 referenceSelectionPending={referenceSelectionPending}
                 referenceSelectionUnavailable={referenceSelectionUnavailable}
@@ -5801,6 +5873,19 @@ function CadFileViewSurface({
                 handleAnimationPlayToggle={activeAnimationRuntime?.onPlayToggle}
                 drawToolActive={drawToolActive}
                 measureModeActive={measureModeActive}
+                measurementPanel={effectiveRenderFormat === RENDER_FORMAT.STEP ? <>
+                  <label className="flex items-center justify-between gap-2 px-2 py-2 text-xs"><span>Snap to</span>
+                    <select aria-label="Measure selection filter" className="rounded-md border bg-background px-2 py-1" value={measureSelectionFilter} onChange={event => {
+                      setMeasureSelectionFilter(event.target.value); handleMeasureCancelDraft();
+                      if (featureRecognitionTarget) loadFilterTopology(featureRecognitionTarget);
+                    }}>
+                      <option value="all">Any geometry</option><option value="points">Points</option><option value="edges">Edges</option><option value="faces">Faces</option>
+                    </select>
+                  </label>
+                  <StepMeasurementsSection
+                  measurements={measureMeasurements} activeId={activeMeasureId} measureModeActive={measureModeActive}
+                  onActivate={setActiveMeasureId} onDelete={handleMeasureDelete} onClear={handleMeasureClear}
+                /></> : null}
                 measureDisabled={measureToolDisabled}
                 panToolActive={panToolActive}
                 handleSelectTabToolMode={handleSelectTabToolMode}
@@ -5853,6 +5938,8 @@ function CadFileViewSurface({
                   revisionKey: buildReferenceCacheKey(selectedEntry),
                   target: featureRecognitionTarget,
                   runtime: selectedSelectorRuntime,
+                  request: activeFeatureRequest,
+                  result: recognizedFeatures,
                   error: referenceError,
                   loading: referenceStatus === REFERENCE_STATUS.LOADING,
                   onRequestTopology: requestFeatureTopology,
@@ -5867,12 +5954,6 @@ function CadFileViewSurface({
                 selectedEntry={selectedEntry}
                 viewerLoading={viewerLoading || assemblySidebarLoading}
                 isAssemblyView={isAssemblyView}
-                measurements={measureMeasurements}
-                activeMeasurementId={activeMeasureId}
-                measureModeActive={measureModeActive}
-                onMeasurementActivate={setActiveMeasureId}
-                onMeasurementDelete={handleMeasureDelete}
-                onMeasurementsClear={handleMeasureClear}
                 stepTreeRoot={displayStepTreeRoot}
                 expandedTreeNodeIds={expandedStepTreeNodeIds}
                 loadableTreeNodeIds={loadableStepTreeTopologyNodeIds}

@@ -1,3 +1,4 @@
+import { disposeSectionCaps } from "@hardcore/core/lib/viewer/sectionCaps.js";
 import { useEffect } from "react";
 import { isEditableTarget } from "../../../ui/dom.js";
 import {
@@ -861,6 +862,7 @@ export function useViewerRuntime({
         document.removeEventListener("visibilitychange", handleVisibilityChange);
         runtime.controls.dispose();
         clearSceneGroup(runtime.stageGroup);
+        disposeSectionCaps(runtime);
         clearSceneGroup(runtime.modelGroup);
         clearSceneGroup(runtime.edgesGroup);
         clearSceneGroup(runtime.facePickGroup);
