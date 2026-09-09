@@ -295,10 +295,10 @@ test("navigates by the breadcrumb's menus", async () => {
   await expect(siblings.getByRole("menuitem", { name: "components", exact: true })).toBeVisible();
   await siblings.getByRole("menuitem", { name: "workbench" }).hover();
   const submenu = page.getByRole("menu", { name: "workbench" });
-  await expect(submenu.getByRole("menuitem", { name: "breadcrumbs.js", exact: true })).toBeVisible();
-  await submenu.getByRole("menuitem", { name: "breadcrumbs.js", exact: true }).click();
-  await expect(page.getByRole("tab", { name: /breadcrumbs\.js/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Browse breadcrumbs.js", exact: true })).toBeVisible();
+  await expect(submenu.getByRole("menuitem", { name: "persistence.js", exact: true })).toBeVisible();
+  await submenu.getByRole("menuitem", { name: "persistence.js", exact: true }).click();
+  await expect(page.getByRole("tab", { name: /persistence\.js/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Browse persistence.js", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: /^unboundIdentifiers\.test\.js/ })).toHaveCount(0);
   await expect(page.locator(".view-lines").first()).toBeVisible();
   await expect(page.getByRole("menu")).toHaveCount(0);
@@ -313,7 +313,7 @@ test("navigates by the breadcrumb's menus", async () => {
   await pick("Copy relative path");
   await expect
     .poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
-    .toBe("apps/web/src/client/workbench/breadcrumbs.js");
+    .toBe("apps/web/src/client/workbench/persistence.js");
 
   // Escape closes a crumb's menu.
   await page.getByRole("button", { name: "Browse workbench", exact: true }).click();
@@ -329,7 +329,7 @@ test("navigates by the breadcrumb's menus", async () => {
 
   await restoreLayout();
   await resizeWindow(1440, 900);
-  await page.getByRole("tab", { name: /breadcrumbs\.js/ }).getByRole("button", { name: "Close breadcrumbs.js" }).click();
+  await page.getByRole("tab", { name: /persistence\.js/ }).getByRole("button", { name: "Close persistence.js" }).click();
 });
 
 test("keeps the files toggle where it is when the tree opens and shuts", async () => {

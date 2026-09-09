@@ -25,11 +25,13 @@
 //
 // Reads the REAL framebuffer via page.screenshot() (see e2e-format-sweep.mjs).
 //
-// Usage:
-//   node viewer/scripts/e2e-part-picking.mjs --dir <models-root> [--url http://127.0.0.1:3245]
+// Usage (from the repository root):
+//   node apps/web/scripts/e2e-part-picking.mjs --dir <models-root> --url <viewer-url>
 //
-// Requires: a viewer serving <models-root>; playwright; the part built in the
-// examples project (python models/examples/src/cam_follower_roller.py).
+// Requires a viewer already serving <models-root>: run
+// `cadgen viewer --host 127.0.0.1 --json` there and pass its printed URL.
+// Requires playwright and the part built in the examples project
+// (python models/examples/src/cam_follower_roller.py).
 
 import fs from "node:fs";
 import os from "node:os";

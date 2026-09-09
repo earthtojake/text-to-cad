@@ -11,16 +11,17 @@
 // Reads the REAL framebuffer via page.screenshot(). Do NOT sample the canvas with
 // drawImage: the drawing buffer is not preserved, so every format reports blank.
 //
-// Usage:
-//   node viewer/scripts/e2e-format-sweep.mjs --dir <models-root> [--url http://127.0.0.1:3245]
-//                                            [--out <dir>]
+// Usage (from the repository root):
+//   node apps/web/scripts/e2e-format-sweep.mjs --dir <models-root> --url <viewer-url>
+//                                               [--out <dir>]
 //
 // Asserts, per format: the viewport is not blank, no page errors, the whole viewport tool
 // cluster is present and usable, and the right-click viewport menu offers the camera
 // actions (with assembly-tree entries only where the `parts` capability is declared).
 //
-// Requires a viewer already serving <models-root> (npm run start) and
-// playwright available. Exits non-zero on the first failing format.
+// Requires a viewer already serving <models-root>: run
+// `cadgen viewer --host 127.0.0.1 --json` there and pass its printed URL.
+// Requires playwright. Exits non-zero on the first failing format.
 
 import fs from "node:fs";
 import path from "node:path";
