@@ -90,7 +90,7 @@ function FileSheetTab({
       }}
       onDragEnd={onDragEnd}
       className={cn(
-        "group/file-sheet-tab relative -mb-px flex h-8 max-w-[12rem] shrink-0 cursor-pointer select-none items-center gap-1.5 whitespace-nowrap border-r border-sidebar-border/50 border-b-2 px-2 text-[11px] font-medium leading-none transition-colors",
+        "group/file-sheet-tab relative -mb-px flex h-8 max-w-[12rem] shrink-0 cursor-pointer select-none items-center gap-1.5 whitespace-nowrap border-r border-sidebar-border/50 border-b-2 px-2 text-tiny leading-none transition-colors",
         active
           ? "border-b-primary bg-accent/40 text-foreground"
           : "border-b-transparent text-muted-foreground hover:bg-accent/25 hover:text-foreground",
@@ -381,7 +381,7 @@ export default function FileSheetTabbedSurface({
                 : "border-sidebar-border/70 bg-background/30"
             )}
           >
-            <span className="pointer-events-none flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <span className="pointer-events-none flex items-center gap-1.5 text-tiny text-muted-foreground">
               <Rows2 className="size-3.5" strokeWidth={2} aria-hidden="true" />
               Drop here to split
             </span>

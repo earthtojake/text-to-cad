@@ -98,17 +98,34 @@ the build — detection only; it keeps serving.
 ## The shape of the app
 
 ```
-src/client/ # React app: CadWorkspace (state root), CadViewer (scene +
-            #   effects application), workbench/ (tabs, sections, session
-            #   state, playback), render/ (viewport)
+src/client/ # React app: CadWorkspace (the standalone shell: URL, top bar,
+            #   sidebar, home), file-view/ (CadFileView — the whole per-file
+            #   surface, exported as `cad-viewer/file-view` for hosts that
+            #   embed it), CadViewer (scene + effects application),
+            #   workbench/ (tabs, sections, session state, playback),
+            #   render/ (viewport), shell/ (the nav row and its breadcrumb,
+            #   exported as `cad-viewer/shell` and drawn by the desktop
+            #   app's file tab too)
 scripts/    # app tooling incl. e2e helpers and selfContained.test.mjs
             #   (the boundary fence) and the dev-backend spawn helpers
 docs/       # subsystem docs; settings-ui.md is the CURATED design-system
             #   reference for all settings UI work — binding, read it
-            #   before touching controls
+            #   before touching controls; file-view.md is the embedding
+            #   contract (bundler, Tailwind, tokens) and shell.md is the
+            #   shared chrome's (the source adapter, the crumb rules)
 dist/       # built client (gitignored); what `cadgen viewer` serves in a
             #   checkout and what the wheel bundles
 ```
+
+## Embedding the per-file surface
+
+`<CadFileView>` is everything the viewer draws for ONE file. `CadWorkspace` is
+one consumer; a host application embedding the same surface is the other, and
+`origin` is the only thing that differs between them — `""` (this app, served by
+its own backend) or the absolute origin of a `cadgen viewer` somewhere else.
+Every `/__cad` and `/__tess_cache` URL is built against that one value. The
+package exports the SOURCE at `cad-viewer/file-view`; `docs/file-view.md` says
+what a consumer's bundler, Tailwind entry and token layer have to be told.
 
 ## Testing
 
@@ -121,3 +138,22 @@ The backend's suite lives with cadgen and is not collected here; running only
 
 Headless UI verification uses Playwright with `--use-angle=metal` —
 the default software WebGL renderer is not what users see.
+
+### Branded loading indicator
+
+`cad-viewer/loading-icon` exports the decorative `LoadingIcon` independently of
+`file-view`, so a host can show loading feedback without eagerly importing the
+CAD surface. `size` controls its pixel dimensions (default 96), `className` its
+placement, and `active={false}` uses the still pose. The host owns status text.
+It also stays still for OS/app reduced motion and hidden documents. See
+`src/client/assets/brand/README.md` for asset provenance and regeneration.
+
+### Narrow CAD panes
+
+The floating toolbar watches its scene's width, including space taken by the
+Inspector. When the existing button row would overflow, Select, Pan and Measure
+stay visible; Draw, animation playback, Orbit and capture actions move into
+More tools. Widening the scene restores the original full toolbar. Zoom and
+2D/3D controls remain separate and wrap within the available width. In Orbit,
+Exit and playback remain direct controls. The overflow menu uses the same
+handlers, availability and disabled states as the full toolbar.

@@ -195,6 +195,182 @@ jobs:
           # pushing anything; the version check inside it runs for real.
           scripts/release/publish-github-release.sh --target HEAD --dry-run --publish
 
+  # The Hardcore desktop app, built from the same release commit on all three
+  # platforms (plan §11). Runs on build-test too: a rehearsal that does not produce
+  # installers has not rehearsed the half of the release that most easily breaks.
+  #
+  # `needs: publish` for the version and the gate, and for the wheel -- the app bundles
+  # the cadgen release of its own number (plan §8), and the only wheel guaranteed to BE
+  # that number is the one the publish job just built and uploaded as `cadgen-<version>`.
+  # Downloading it beats `pip download cadgen==<version>` from PyPI, which on a first
+  # release is a package that does not exist yet.
+  #
+  # Signing is decided by the environment inside scripts/package.mjs and nowhere else:
+  # the CSC_*/APPLE_* secrets below are empty until they are added, and an empty secret
+  # is an unsigned build with CSC_IDENTITY_AUTO_DISCOVERY=false. Adding the secrets is
+  # the entire act of turning signing on.
+  desktop:
+    name: Desktop (${{ matrix.name }})
+    needs: publish
+    if: ${{ needs.publish.outputs.should_publish == 'true' }}
+    runs-on: ${{ matrix.runner }}
+    # Linux is best-effort and unsigned (plan §14): a distribution-packaging failure
+    # must not be able to hold up a release whose mac and win installers are fine.
+    continue-on-error: ${{ matrix.best_effort }}
+
+    strategy:
+      # Every platform that can build, builds. One failing does not cancel the others.
+      fail-fast: false
+      matrix:
+        include:
+          # macos-14 is Apple silicon; electron-builder cross-builds the x64 half of
+          # the pair from it, so one job produces all four mac artifacts.
+          - name: macOS
+            runner: macos-14
+            script: package:mac
+            args: --arm64 --x64
+            runtime_targets: --target mac-arm64 --target mac-x64
+            best_effort: false
+          - name: Windows
+            runner: windows-latest
+            script: package:win
+            args: ""
+            runtime_targets: --target win-x64
+            best_effort: false
+          - name: Linux
+            runner: ubuntu-latest
+            script: package:linux
+            args: ""
+            runtime_targets: --target linux-x64
+            best_effort: true
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.publish.outputs.release_sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      # The wheel this very release is publishing, into the directory the runtime
+      # bundler installs from (and electron-builder's extraResources copies, so a
+      # person can see what shipped). The artifact is the whole distribution, so the
+      # sdist lands here too -- a few hundred kilobytes, and cheaper than a second
+      # artifact upload to separate them. The constraints file beside it is written
+      # next, from the runner's own Python, so the bundle pins the closure the
+      # release was tested against.
+      - name: Download the cadgen wheel
+        uses: actions/download-artifact@v7
+        with:
+          name: cadgen-${{ needs.publish.outputs.version }}
+          path: apps/desktop/resources/cadgen
+
+      - name: Set up Python for the constraints file
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      # `pip freeze` of cadgen's closure, from a venv that has this release's wheel
+      # installed: what `scripts/cad-resources.mjs` writes from a checkout's .venv,
+      # written here from the wheel itself. The bundler passes it to pip as `-c`.
+      - name: Write constraints.txt
+        run: |
+          python -m venv "$RUNNER_TEMP/cadgen-venv"
+          "$RUNNER_TEMP/cadgen-venv/bin/python" -m pip install --quiet --find-links apps/desktop/resources/cadgen "cadgen==${{ needs.publish.outputs.version }}"
+          node apps/desktop/scripts/cad-resources.mjs --no-wheel --python "$RUNNER_TEMP/cadgen-venv/bin/python"
+        shell: bash
+        if: runner.os != 'Windows'
+
+      - name: Write constraints.txt (Windows)
+        run: |
+          python -m venv "$RUNNER_TEMP/cadgen-venv"
+          "$RUNNER_TEMP/cadgen-venv/Scripts/python.exe" -m pip install --quiet --find-links apps/desktop/resources/cadgen "cadgen==${{ needs.publish.outputs.version }}"
+          node apps/desktop/scripts/cad-resources.mjs --no-wheel --python "$RUNNER_TEMP/cadgen-venv/Scripts/python.exe"
+        shell: bash
+        if: runner.os == 'Windows'
+
+      # postinstall runs `electron-builder install-app-deps`, which rebuilds
+      # better-sqlite3 and node-pty against Electron's ABI. Skipping scripts here would
+      # ship an app whose database cannot open.
+      - name: Install desktop dependencies
+        run: npm --prefix apps/desktop ci
+
+      # The CAD runtime ships INSIDE the app: a pinned python-build-standalone with
+      # cadgen and its whole dependency closure installed (scripts/bundle-runtime.mjs),
+      # one directory per target under apps/desktop/resources/runtime/, copied beside
+      # the app as an extraResource. About 1.2 GB per target, and the point of the
+      # product -- scripts/package.mjs refuses to package without it.
+      #
+      # Each leg bundles its own host's runtime with the runtime's own pip, which is
+      # also what probes it (`import cadgen`, `import cadgen.viewer`). The mac leg
+      # bundles mac-x64 too, for the x64 app it cross-builds: pip resolves the x64
+      # closure with --platform/--only-binary (it never runs the x64 interpreter),
+      # and Rosetta on the macos-14 runner executes the result for the probe.
+      #
+      # The interpreter tarball is cached on the pin (scripts/python-build.json), so
+      # a release that does not move the pin downloads nothing for Python; the wheels
+      # are cached by pip under the same key's second path.
+      - name: Cache the pinned Python and the wheel cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/hardcore/python
+          key: hardcore-python-${{ runner.os }}-${{ hashFiles('apps/desktop/scripts/python-build.json', 'apps/desktop/resources/cadgen/constraints.txt') }}
+          restore-keys: |
+            hardcore-python-${{ runner.os }}-
+
+      - name: Bundle the CAD runtime
+        run: npm --prefix apps/desktop run bundle:runtime -- ${{ matrix.runtime_targets }}
+        shell: bash
+
+      # scripts/package.mjs builds (electron-vite) and then packages
+      # (electron-builder --publish never), stamping the repository's VERSION as
+      # extraMetadata.version, after checking a bundled runtime exists for every
+      # target it is about to produce. Publishing is this workflow's job, not the
+      # builder's: tag-release attaches the artifacts to the Release it creates.
+      - name: Build and package
+        env:
+          # Empty until the secrets exist. See the note above the job.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          HARDCORE_APTABASE_KEY: ${{ secrets.HARDCORE_APTABASE_KEY }}
+          # electron-builder's own GitHub client reads this; `--publish never` means it
+          # never uses it, and leaving it unset avoids any ambiguity about that.
+          GH_TOKEN: ""
+        run: npm --prefix apps/desktop run ${{ matrix.script }} -- ${{ matrix.args }}
+        shell: bash
+
+      # The installers and the update metadata, not the whole of release/: that
+      # directory also holds the UNPACKED app (mac-arm64/, win-unpacked/, …), which is
+      # a gigabyte of the same bytes the installers already contain. The latest*.yml
+      # files are not optional -- they are the feed electron-updater reads.
+      #
+      # No `!cancelled()` guard: a packaging failure should report itself on the step
+      # above, not as "no files found" here. Which leaves `if-no-files-found: error`
+      # saying the thing worth saying -- packaging SUCCEEDED and produced nothing,
+      # which is what a renamed artifactName looks like.
+      - name: Upload the installers as workflow artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: hardcore-${{ matrix.name }}-${{ needs.publish.outputs.version }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml
+          if-no-files-found: error
+
   # The docs site is built from the release commit itself: main is the source tree,
   # and apps/docs/package.json carries the stamped version the header reads.
   deploy-docs:
@@ -210,9 +386,17 @@ jobs:
     name: Tag and GitHub Release
     # The tag records what was published; a docs deploy failing must not leave a
     # PyPI release untagged (Deploy Docs can be re-run on its own).
+    #
+    # `desktop` is a need so the installers exist by the time this uploads them, but
+    # deliberately NOT a condition: `always()` plus an explicit test of `publish`
+    # means a desktop build that failed on one platform delays the tag rather than
+    # preventing it -- the wheel is already on PyPI at that point, and an untagged
+    # release is the worse outcome. The upload step below tolerates whatever is or
+    # is not there.
     needs:
       - publish
-    if: ${{ needs.publish.outputs.should_publish == 'true' && needs.publish.outputs.is_main == 'true' }}
+      - desktop
+    if: ${{ always() && needs.publish.result == 'success' && needs.publish.outputs.should_publish == 'true' && needs.publish.outputs.is_main == 'true' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -248,3 +432,32 @@ jobs:
             args+=(--publish)
           fi
           scripts/release/publish-github-release.sh "${args[@]}"
+
+      # Whatever the desktop matrix produced, flattened into one directory. Nothing
+      # is required: a platform that failed simply has no artifact, and the release
+      # still gets the ones that succeeded.
+      - name: Download the desktop installers
+        uses: actions/download-artifact@v7
+        with:
+          pattern: hardcore-*
+          merge-multiple: true
+          path: desktop-artifacts
+
+      # Attached to the Release the step above created -- draft or published, the API
+      # is the same. `--clobber` so a resumed run replaces an asset instead of
+      # failing on it; the tag name comes from release-tags.sh, the one place that
+      # knows both spellings.
+      - name: Attach the desktop installers to the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.publish.outputs.version }}
+        run: |
+          shopt -s nullglob
+          assets=(desktop-artifacts/*)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No desktop installers were produced; the release keeps the wheel only." >&2
+            exit 0
+          fi
+          tag_name="$(source scripts/release/release-tags.sh && release_tag_name "$VERSION")"
+          gh release upload "$tag_name" "${assets[@]}" --clobber
+          echo "Attached ${#assets[@]} desktop artifacts to $tag_name."

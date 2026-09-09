@@ -34,6 +34,7 @@ import {
 import { Input } from "../ui/input";
 import { Slider } from "../ui/slider";
 import { cn } from "@/ui/utils";
+import { useSystemPrefersDark } from "@/ui/useSystemPrefersDark";
 import {
   CUSTOM_THEME_ID,
   DEFAULT_FILL_LIGHT_SETTINGS,
@@ -421,7 +422,7 @@ function FillColorEditor({ colors, onChange }) {
               type="button"
               variant="outline"
               size="icon-xs"
-              className="absolute -right-1.5 -top-1.5 z-10 size-4 rounded-full border-border !bg-[rgb(245_247_250)] p-0 text-muted-foreground shadow-xs hover:!bg-[rgb(245_247_250)] hover:text-foreground dark:!bg-[rgb(12_15_22)] dark:hover:!bg-[rgb(12_15_22)]"
+              className="absolute -right-1.5 -top-1.5 z-10 size-4 rounded-full border-border !bg-surface-elevated p-0 text-muted-foreground shadow-xs hover:!bg-surface-elevated-hover hover:text-foreground"
               onClick={() => commitColors(resolvedColors.filter((_, colorIndex) => colorIndex !== index))}
               aria-label={`Remove color ${index + 1}`}
               title={`Remove color ${index + 1}`}
@@ -454,7 +455,7 @@ function FillColorEditor({ colors, onChange }) {
 // parts from a dark theme with light parts.
 function PresetSwatch({ preview = null }) {
   return (
-    <span className="inline-flex shrink-0 overflow-hidden rounded-[3px] border border-border/70" aria-hidden="true">
+    <span className="inline-flex shrink-0 overflow-hidden rounded-xs border border-border/70" aria-hidden="true">
       <span
         className="block size-3.5"
         style={{ background: preview?.background || "var(--muted)" }}
@@ -484,25 +485,10 @@ function customThemePreview(themeSettings) {
 }
 
 // Tracks the OS light/dark preference so the System entry can name the preset it
-// currently resolves to.
+// currently resolves to. The same hook the surface resolves its chrome with
+// (@/ui/useSystemPrefersDark) — one watcher, one answer.
 export function useSystemDefaultThemePresetId() {
-  const [prefersDark, setPrefersDark] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return undefined;
-    }
-    let query;
-    try {
-      query = window.matchMedia("(prefers-color-scheme: dark)");
-    } catch {
-      return undefined;
-    }
-    const sync = () => setPrefersDark(query.matches === true);
-    sync();
-    query.addEventListener?.("change", sync);
-    return () => query.removeEventListener?.("change", sync);
-  }, []);
-  return resolveSystemThemePresetId({ prefersDark });
+  return resolveSystemThemePresetId({ prefersDark: useSystemPrefersDark() });
 }
 
 // The theme picker: System, then the built-in presets. Presets are read-only, so
@@ -653,7 +639,7 @@ function PositionPad({ value, onChange }) {
         <div
           className="absolute inset-0 opacity-45"
           style={{
-            backgroundImage: "radial-gradient(circle, rgba(154, 169, 188, 0.65) 1.5px, transparent 1.5px)",
+            backgroundImage: "radial-gradient(circle, color-mix(in srgb, var(--border-1) 65%, transparent) 1.5px, transparent 1.5px)",
             backgroundSize: "22px 22px"
           }}
           aria-hidden="true"
@@ -666,7 +652,7 @@ function PositionPad({ value, onChange }) {
           aria-hidden="true"
         />
       </div>
-      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+      <div className="flex items-center justify-between text-micro text-muted-foreground">
         <span>X {Math.round(x)}</span>
         <span>Z {Math.round(z)}</span>
         <span>range ±{extent}</span>

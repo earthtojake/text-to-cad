@@ -155,3 +155,64 @@ jobs:
       # is shipped to a Windows user, and none of its answers can differ by operating system;
       # running it here only asks whether `bash` on a Windows runner behaves like bash, which
       # it does not (it resolves to the WSL stub and answers in UTF-16).
+
+  # A THIRD separate job, for the same reason `test-windows` is one: `Test` is a
+  # required status check on main, and turning either of the jobs above into a matrix
+  # would rename its check and leave every pull request waiting for a check that no
+  # longer exists.
+  #
+  # macOS because the desktop app's two native modules (better-sqlite3, node-pty) are
+  # rebuilt against Electron's ABI by `npm ci`'s postinstall, and macOS is both the
+  # platform this app is developed on and the one whose packaging (hardened runtime,
+  # notarisation, arm64 + x64) has the most that can go wrong. Its own `npm ci`: the
+  # desktop app is a standalone npm project like apps/viewer, and the Linux job's
+  # setup-deps knows nothing about it.
+  #
+  # The Playwright step drives the BUILT app through `_electron`, so no browser
+  # download is needed -- `playwright install` would fetch three browsers this suite
+  # never opens -- and no xvfb, because macOS has a display server.
+  desktop:
+    name: Desktop (macOS)
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      # postinstall runs `electron-builder install-app-deps`, which is what rebuilds
+      # better-sqlite3 and node-pty for Electron. A plain `npm ci --ignore-scripts`
+      # would install them for Node's ABI and every database test would fail to load.
+      - name: Install desktop dependencies
+        run: npm --prefix apps/desktop ci
+
+      - name: Typecheck
+        run: npm --prefix apps/desktop run typecheck
+
+      - name: Lint
+        run: npm --prefix apps/desktop run lint
+
+      - name: Run unit tests
+        run: npm --prefix apps/desktop test
+
+      - name: Build
+        run: npm --prefix apps/desktop run build
+
+      - name: Run the Electron smoke test
+        run: npm --prefix apps/desktop run e2e
+
+      # The screenshots the e2e writes are the cheapest review of whether the app
+      # still looks like an app; a failed run's are the more interesting ones.
+      - name: Upload Playwright screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-screenshots
+          path: apps/desktop/tests/e2e/__screenshots__/*.png
+          if-no-files-found: ignore

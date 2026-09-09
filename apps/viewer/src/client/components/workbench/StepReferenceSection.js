@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Copy, SquareMousePointer } from "lucide-react";
 import { cn } from "@/ui/utils";
 import { copyTextToClipboard } from "@/ui/clipboard";
+import { useHostReference } from "@/file-view/hostReference.js";
 import { FILE_SHEET_SECTION_IDS } from "@/workbench/fileSheetSections";
 import { Button } from "../ui/button";
 
@@ -96,6 +97,8 @@ function isPartNode(item) {
 function CopyButton({ text, className }) {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef(null);
+  // Embedded, the host hears the copy as well (hostReference.js).
+  const host = useHostReference();
   useEffect(() => () => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -113,7 +116,11 @@ function CopyButton({ text, className }) {
       aria-label="Copy reference"
       title="Copy reference"
       onClick={() => {
-        copyTextToClipboard(text);
+        if (host) {
+          void host.deliverReference(text);
+        } else {
+          copyTextToClipboard(text);
+        }
         setCopied(true);
         if (timerRef.current) {
           clearTimeout(timerRef.current);
@@ -135,14 +142,14 @@ function DetailHeader({ typeLabel, subtitle, selector, copyText }) {
     <>
       <div className="flex items-center gap-2 px-2 pb-1.5 pt-1">
         {subtitle ? (
-          <span className="min-w-0 truncate text-[11px] font-medium text-sidebar-foreground">{subtitle}</span>
+          <span className="min-w-0 truncate text-tiny text-sidebar-foreground">{subtitle}</span>
         ) : null}
-        <span className="shrink-0 rounded-sm bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
+        <span className="shrink-0 rounded-sm bg-muted px-1 py-0.5 font-mono text-micro text-muted-foreground">
           {typeLabel}
         </span>
         <span className="ml-auto inline-flex shrink-0 items-center gap-1">
           {selector ? (
-            <code className="max-w-[8rem] truncate rounded-sm bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
+            <code className="max-w-[8rem] truncate rounded-sm bg-muted px-1 py-0.5 font-mono text-micro text-muted-foreground">
               {selector}
             </code>
           ) : null}
@@ -159,8 +166,8 @@ function DetailHeader({ typeLabel, subtitle, selector, copyText }) {
 function InfoRow({ label, children }) {
   return (
     <div className="flex items-baseline gap-3 px-2 py-1">
-      <span className="w-[4.5rem] shrink-0 text-[11px] text-muted-foreground">{label}</span>
-      <div className="min-w-0 flex-1 text-[11px] text-sidebar-foreground">{children}</div>
+      <span className="w-[4.5rem] shrink-0 text-tiny text-muted-foreground">{label}</span>
+      <div className="min-w-0 flex-1 text-tiny text-sidebar-foreground">{children}</div>
     </div>
   );
 }
@@ -175,7 +182,7 @@ function CoordValue({ vector, digits = 2 }) {
     <span className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 font-mono tabular-nums">
       {AXES.map((axis, index) => (
         <span key={axis.key} className="inline-flex items-baseline gap-1">
-          <span className={cn("text-[9px] font-semibold", axis.className)}>{axis.key}</span>
+          <span className={cn("text-[9px]", axis.className)}>{axis.key}</span>
           <span>{formatNumber(values[index], digits)}</span>
         </span>
       ))}
@@ -305,7 +312,7 @@ export function StepReferenceSection({ references = [] }) {
     return (
       <div className="flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 px-4 py-5 text-center">
         <SquareMousePointer className="size-4 text-muted-foreground/45" strokeWidth={1.5} aria-hidden="true" />
-        <p className="text-[11px] text-muted-foreground">Select geometry to inspect</p>
+        <p className="text-tiny text-muted-foreground">Select geometry to inspect</p>
       </div>
     );
   }
@@ -316,7 +323,7 @@ export function StepReferenceSection({ references = [] }) {
     <div className="flex min-w-0 flex-col pb-2">
       {count > 1 ? (
         <div className="flex items-center justify-between gap-2 border-b border-sidebar-border/60 px-2 py-1">
-          <span className="text-[11px] text-muted-foreground">{count} selected</span>
+          <span className="text-tiny text-muted-foreground">{count} selected</span>
           <div className="inline-flex items-center gap-0.5">
             <Button
               type="button"
@@ -329,7 +336,7 @@ export function StepReferenceSection({ references = [] }) {
             >
               <ChevronLeft className="size-3.5" strokeWidth={2} aria-hidden="true" />
             </Button>
-            <span className="min-w-[2.75rem] text-center font-mono text-[11px] tabular-nums text-sidebar-foreground">
+            <span className="min-w-[2.75rem] text-center font-mono text-tiny tabular-nums text-sidebar-foreground">
               {safeIndex + 1} / {count}
             </span>
             <Button
@@ -359,7 +366,7 @@ export function buildStepReferenceTab({ references = [] } = {}) {
       <span className="flex min-w-0 items-center gap-1.5">
         <span>Reference</span>
         {count > 1 ? (
-          <span className="rounded-full bg-accent px-1.5 text-[10px] font-medium tabular-nums text-accent-foreground">
+          <span className="rounded-full bg-accent px-1.5 text-micro tabular-nums text-accent-foreground">
             {count}
           </span>
         ) : null}

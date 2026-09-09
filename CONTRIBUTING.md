@@ -279,6 +279,51 @@ Do not call `scripts/bundle/cadgen-runtime.sh` directly as part of routine
 iteration; its per-stage flags (`scripts/README.md`) are for debugging a
 production-output check.
 
+## Desktop App In This Repo
+
+Hardcore, the Electron agent workbench, lives in `apps/desktop/`. Its own
+`README.md` is the playbook — dev, checks, packaging, the layout tree — and
+`apps/desktop/AGENTS.md` says which phase owns which directory. What belongs
+here is the repo-side half.
+
+It is a standalone npm project like `apps/viewer`, with two native modules
+(`better-sqlite3`, `node-pty`) that `npm ci`'s postinstall rebuilds against
+Electron's ABI:
+
+```bash
+npm --prefix apps/desktop ci        # postinstall rebuilds the native modules
+npm --prefix apps/desktop run dev   # or the desktop-dev entry in .claude/launch.json
+npm --prefix apps/desktop run package:mac   # or :win, :linux -> apps/desktop/release/
+```
+
+**Install it, do not link it.** The `node_modules` symlink trick above works for
+the viewer and does not work here: electron-builder walks the dependency tree by
+real path, and a `node_modules` whose real path is outside the project resolves
+every transitive dependency to `undefined` — the build succeeds, and the app it
+produces dies at launch on a missing module. A worktree that packages the
+desktop app needs its own `npm ci`.
+
+`scripts/test/test-js.sh` runs the desktop typecheck and vitest when
+`apps/desktop/node_modules` exists and skips them with a note when it does not,
+so a checkout without the desktop dependencies is not blocked. CI does not rely
+on that: `test.yml`'s `Desktop (macOS)` job installs them and runs typecheck,
+lint, vitest, the build and a Playwright Electron smoke test.
+
+The app's version is `VERSION`, like everything else. `apps/desktop/package.json`
+stays at `0.0.0` and `scripts/package.mjs` stamps the real number as
+electron-builder's `extraMetadata.version`, so `sync-version.mjs` has nothing to
+stamp here and `check-version.sh` has nothing to check. Do not hand-edit it, and
+do not add it to `sync-version.mjs`.
+
+The design document is **not** in this repository (`~/robots/text-to-cad-notes/design/desktop-app.md`,
+user policy: design notes are never committed). The "plan §N" references in the
+app's comments point at it. Do not write a copy into the checkout.
+
+Releases build it: `release-publish.yml`'s `desktop` job packages mac, Windows
+and Linux from the release commit and `tag-release` attaches the installers to
+the GitHub Release, which is also the feed electron-updater reads. See Releases
+below.
+
 ## Branch Layout
 
 `main` is the source tree, what installers clone, and what releases are cut
@@ -363,10 +408,25 @@ is involved) and deletes the branch. The merged commit is THE release commit.
    viewer --help`, `cadgen doctor skills/cad-viewer` — then
    `scripts/test/test-installed.sh`; the distribution is uploaded as a workflow
    artifact (`cadgen-<version>`).
-4. **On `main` only:** PyPI upload (`skip-existing`, so a rerun is a no-op),
-   `Deploy Docs`, then the `v<VERSION>` tag and the GitHub Release. Nothing is
-   committed or pushed to `main` after the release PR merge: the tag points at
-   the source commit, and `git describe` on `main` is meaningful.
+4. The `desktop` job, in parallel on `macos-14` (arm64 + x64 from one runner),
+   `windows-latest` and `ubuntu-latest`: it downloads that `cadgen-<version>`
+   artifact into `apps/desktop/resources/cadgen/`, installs, and packages with
+   `electron-builder --publish never`. The installers and the `latest*.yml`
+   update feed become workflow artifacts. Linux is `continue-on-error`.
+   Signing is decided by the presence of the `CSC_*`/`APPLE_*` secrets and
+   nothing else, so today's builds are unsigned and adding the secrets is the
+   whole act of turning signing on.
+5. **On `main` only:** PyPI upload (`skip-existing`, so a rerun is a no-op),
+   `Deploy Docs`, then the `v<VERSION>` tag and the GitHub Release, with the
+   desktop installers attached to it (`gh release upload --clobber`) — that
+   Release is the feed electron-updater reads. Nothing is committed or pushed
+   to `main` after the release PR merge: the tag points at the source commit,
+   and `git describe` on `main` is meaningful.
+
+   `tag-release` `needs` the desktop job but does not require it to have
+   succeeded: a platform that failed to package delays the tag rather than
+   preventing it, because by then the wheel is on PyPI and an untagged release
+   is the worse outcome.
 
 ### Resuming and republishing
 

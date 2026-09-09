@@ -12,6 +12,7 @@ import {
   resolveInteractionPixelRatioCap
 } from "cadgen-js/lib/viewer/renderQuality";
 import { updateOrbitControls } from "../orbitControls.js";
+import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "cadgen-js/lib/viewer/perfMarks.js";
 
 // Perf experiment: render with a model-fitted depth range instead of a
 // logarithmic depth buffer so early-Z rejection stays enabled. Flip to false
@@ -52,8 +53,6 @@ export function useViewerRuntime({
   getViewerThemeValue,
   getPixelRatioCap,
   applySceneBackground,
-  applyCameraFrameInsets,
-  frameInsetsRef,
   applyInitialPerspective,
   updateGridHelper,
   clearSceneGroup,
@@ -408,6 +407,7 @@ export function useViewerRuntime({
       };
 
       function renderFrame(timestamp) {
+        const frameStartedAt = perfStart();
         interactionState.renderQueued = false;
         interactionState.renderQueuedAt = 0;
         if (interactionState.renderFallbackTimerId) {
@@ -424,6 +424,7 @@ export function useViewerRuntime({
         renderer.shadowMap.needsUpdate = interactionState.shadowsDirty === true;
         interactionState.shadowsDirty = false;
         renderer.render(scene, runtimeRef.current?.camera || camera);
+        perfMeasure(PERF_MEASURE_NAMES.frame, frameStartedAt, { interacting: interactionState.active === true });
         const previewOrbitActive = !!runtimeRef.current?.previewOrbitEnabled;
         if (!previewOrbitActive) {
           const nextActiveFace = getActiveViewPlaneFaceId(runtimeRef.current);
@@ -509,7 +510,6 @@ export function useViewerRuntime({
         renderer.setSize(w, h);
         syncCameraViewport(perspectiveCamera, w, h);
         syncCameraViewport(orthographicCamera, w, h);
-        applyCameraFrameInsets?.(runtimeRef.current, frameInsetsRef?.current, { updateProjection: false });
         syncScreenSpaceLineMaterials();
         syncDrawingCanvasSize(runtimeRef.current);
         renderDrawingOverlay();
@@ -817,8 +817,6 @@ export function useViewerRuntime({
         refreshRenderQuality: () => {
           applyRenderQuality(interactionState.pixelRatioCap, { force: true });
         },
-        applyCameraFrameInsets,
-        frameInsetsRef,
         onManualCameraInteraction,
         onViewportResize,
         registerScreenSpaceLineMaterial,
@@ -827,7 +825,6 @@ export function useViewerRuntime({
       syncDrawingCanvasSize(runtimeRef.current);
       renderDrawingOverlay();
       applySceneBackground(runtimeRef.current, viewerTheme);
-      applyCameraFrameInsets?.(runtimeRef.current, frameInsetsRef?.current);
       applyInitialPerspective?.(runtimeRef.current);
       window.addEventListener("keydown", handleKeyDown);
       window.addEventListener("keyup", handleKeyUp);

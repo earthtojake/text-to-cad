@@ -176,3 +176,15 @@ export function renderFormatFromExtension(extension) {
 export function renderFormatFromPath(value, options = {}) {
   return renderFormatFromExtension(fileExtensionFromPath(value, options));
 }
+
+/**
+ * Does this path name a file the CAD Viewer renders?
+ *
+ * The one authority on that question for the two apps that ask it. The shared
+ * entry menu (`apps/viewer/src/client/shell/entry-menu.js`) offers `Copy
+ * reference` only for a file a selector can point into, and "which formats
+ * are CAD" must not become a list either app keeps of its own.
+ */
+export function isCadFile(value, options = {}) {
+  return renderFormatFromPath(value, options) !== "";
+}

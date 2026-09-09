@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  Camera,
+  Check,
+  Ellipsis,
   Focus,
   Hand,
   MousePointer2,
@@ -15,13 +18,17 @@ import {
   supportsTool
 } from "cadgen-js/lib/renderCapabilities";
 import { TooltipProvider } from "../ui/tooltip";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger
+} from "../ui/dropdown-menu";
 import DrawingToolbar from "./DrawingToolbar";
 import { ToolbarButton } from "./ToolbarButton";
 import { ZoomControl } from "../viewer/ZoomControl";
 import { CAD_WORKSPACE_TOOLBAR_DESKTOP_WIDTH_CLASS } from "./ToolbarShell";
 
 const FLOATING_TOOL_BAR_SURFACE_CLASS =
-  "cad-glass-surface border border-sidebar-border text-sidebar-foreground shadow-sm";
+  "bg-background border border-border text-foreground shadow-sm";
 const PREVIEW_TOOLBAR_HIDE_DELAY_MS = 2500;
 
 // In orbit/preview mode the toolbar stays available but auto-hides: it appears
@@ -134,6 +141,7 @@ function DesktopFloatingToolBar({
   drawingStrokes,
   handleEnterPreviewMode,
   handleScreenshotCopy,
+  handleCapture = null,
   selectedEntry
 }) {
   // What this format can do, from the one capability table — never re-derived from
@@ -156,6 +164,93 @@ function DesktopFloatingToolBar({
   const showAnimationPlay = capabilities.animations && animationAvailable;
   const animationPlayDisabled = viewerLoading || !viewportContent || animationDisabled;
   const animationLabel = animationPlaying ? "Pause" : "Play";
+
+  const toolbarRef = useRef(null);
+  const [compact, setCompact] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const hasCapture = typeof handleCapture === "function";
+  // Each existing button is 24px, with 2px gaps and 10px of pill border/padding.
+  // Measure the scene, not the window: the Inspector can leave a very thin viewport.
+  const fullButtonCount = previewMode
+    ? 2 + Number(hasCapture) + Number(showAnimationPlay)
+    : 2 + Number(hasCapture) + (showToolCluster ? 4 + Number(showAnimationPlay) : 0);
+  useLayoutEffect(() => {
+    const scene = toolbarRef.current?.parentElement;
+    if (!scene) return undefined;
+    const update = () => setCompact(scene.clientWidth < 28 + 8 + fullButtonCount * 26);
+    const observer = new ResizeObserver(update);
+    observer.observe(scene);
+    update();
+    return () => observer.disconnect();
+  }, [fullButtonCount]);
+  useEffect(() => { setMoreOpen(false); }, [compact, previewMode]);
+
+  const moreMenu = compact ? (
+    <DropdownMenu open={moreOpen} onOpenChange={(open) => {
+      setMoreOpen(open);
+      if (open) onToolbarEnter?.();
+      else onToolbarLeave?.();
+    }}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="More tools"
+          title="More tools"
+          className={`${FLOATING_TOOL_BAR_BUTTON_CLASSES} ${drawToolActive || animationPlaying ? "bg-sidebar-accent" : ""}`}
+        >
+          <Ellipsis className="size-3" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        sideOffset={6}
+        collisionPadding={8}
+        // Escape dismisses this menu, not the Inspector or tool underneath it.
+        onEscapeKeyDown={(event) => event.stopPropagation()}
+        className="pointer-events-auto w-52 max-w-[calc(100vw-16px)]"
+        onCloseAutoFocus={(event) => {
+          if (!compact) {
+            event.preventDefault();
+            toolbarRef.current?.querySelector("button:not(:disabled)")?.focus();
+          }
+        }}
+      >
+        {!previewMode && showToolCluster ? (
+          <DropdownMenuItem
+            disabled={viewerLoading || !viewportContent}
+            onSelect={() => handleSelectTabToolMode("draw")}
+          >
+            <PenTool className="size-3.5" aria-hidden="true" />
+            Draw
+            {drawToolActive ? <Check className="ml-auto size-3.5" aria-label="Active" /> : null}
+          </DropdownMenuItem>
+        ) : null}
+        {!previewMode && showToolCluster && showAnimationPlay ? (
+          <DropdownMenuItem disabled={animationPlayDisabled} onSelect={handleAnimationPlayToggle}>
+            {animationPlaying ? <Pause className="size-3.5" aria-hidden="true" /> : <Play className="size-3.5" aria-hidden="true" />}
+            {animationLabel}
+          </DropdownMenuItem>
+        ) : null}
+        {!previewMode ? (
+          <>
+            <DropdownMenuItem disabled={captureDisabled} onSelect={handleEnterPreviewMode}>
+              <Orbit className="size-3.5" aria-hidden="true" />Orbit
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
+        <DropdownMenuItem disabled={captureDisabled} onSelect={() => { void handleScreenshotCopy(); }}>
+          <Focus className="size-3.5" aria-hidden="true" />Copy screenshot
+        </DropdownMenuItem>
+        {hasCapture ? (
+          <DropdownMenuItem disabled={captureDisabled} onSelect={() => { void handleCapture(); }} data-testid="capture-to-chat">
+            <Camera className="size-3.5" aria-hidden="true" />Ask about this view
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : null;
+
 
   // Buttons shared between the full toolbar and the reduced orbit-mode toolbar.
   const animationButton = showAnimationPlay ? (
@@ -186,6 +281,21 @@ function DesktopFloatingToolBar({
     </ToolbarButton>
   );
 
+  // Only a host that takes captures gets the button (docs/file-view.md,
+  // `onCapture`): standalone there is no chat for the picture to go to.
+  const captureButton = typeof handleCapture === "function" ? (
+    <ToolbarButton
+      label="Ask about this view"
+      onClick={() => {
+        void handleCapture();
+      }}
+      disabled={captureDisabled}
+      data-testid="capture-to-chat"
+    >
+      <Camera className="size-3" strokeWidth={2} aria-hidden="true" />
+    </ToolbarButton>
+  ) : null;
+
   // A drawing's own toolbar, in its own pill to the LEFT of the shared one: 2D and 3D are a
   // property of the drawing being viewed, not a tool that acts on it, so grouping them with
   // select/pan/draw would read as a fourth mode of the same kind.
@@ -202,14 +312,14 @@ function DesktopFloatingToolBar({
         active={drawingViewMode === "2d"}
         onClick={() => onDrawingViewModeChange?.("2d")}
       >
-        <span className="text-[10px] font-medium leading-none">2D</span>
+        <span className="text-micro leading-none">2D</span>
       </ToolbarButton>
       <ToolbarButton
         label="3D view"
         active={drawingViewMode !== "2d"}
         onClick={() => onDrawingViewModeChange?.("3d")}
       >
-        <span className="text-[10px] font-medium leading-none">3D</span>
+        <span className="text-micro leading-none">3D</span>
       </ToolbarButton>
     </div>
   ) : null;
@@ -231,10 +341,14 @@ function DesktopFloatingToolBar({
   return (
     <div
       className={`absolute z-20 flex flex-col items-end gap-1 transition-opacity duration-300 ${toolbarHidden ? "opacity-0" : "opacity-100"}`}
-      style={floatingCadToolbarPosition}
+      ref={toolbarRef}
+      data-cad-toolbar={compact ? "compact" : "full"}
+      style={{ ...floatingCadToolbarPosition, maxWidth: "calc(100% - 28px)" }}
     >
       <TooltipProvider delayDuration={250}>
-        <div className="flex w-fit items-center gap-1 self-end">
+        {/* Wraps: in a host pane too narrow for the zoom pill beside the
+            tools, the pill drops under them rather than off the left edge. */}
+        <div className="flex w-fit max-w-full flex-wrap items-center justify-end gap-1 self-end">
         {zoomToolbar}
         {drawingViewToolbar}
         <div
@@ -247,7 +361,7 @@ function DesktopFloatingToolBar({
             // explicit exit (X). No select/draw/pose/orbit/export here.
             <>
               {animationButton}
-              {screenshotButton}
+              {compact ? moreMenu : <>{screenshotButton}{captureButton}</>}
               <ToolbarButton label="Exit orbit" onClick={handleExitPreviewMode}>
                 <X className="size-3" strokeWidth={2} aria-hidden="true" />
               </ToolbarButton>
@@ -290,6 +404,7 @@ function DesktopFloatingToolBar({
                     <Ruler className="size-3" strokeWidth={2} aria-hidden="true" />
                   </ToolbarButton>
 
+                  {!compact ? <>
                   <ToolbarButton
                     label="Draw"
                     active={drawToolActive}
@@ -301,9 +416,11 @@ function DesktopFloatingToolBar({
                   </ToolbarButton>
 
                   {animationButton}
+                  </> : null}
                 </>
               ) : null}
 
+              {compact ? moreMenu : <>
               <ToolbarButton
                 label="Orbit"
                 onClick={handleEnterPreviewMode}
@@ -313,6 +430,8 @@ function DesktopFloatingToolBar({
               </ToolbarButton>
 
               {screenshotButton}
+              {captureButton}
+              </>}
             </>
           )}
         </div>
@@ -322,7 +441,7 @@ function DesktopFloatingToolBar({
 
       {!previewMode && supportsTool(renderFormat, "draw") && drawToolActive ? (
         <DrawingToolbar
-          className={CAD_WORKSPACE_TOOLBAR_DESKTOP_WIDTH_CLASS}
+          className={`${CAD_WORKSPACE_TOOLBAR_DESKTOP_WIDTH_CLASS} max-w-full`}
           drawingToolOptions={drawingToolOptions}
           drawingTool={drawingTool}
           handleSelectDrawingTool={handleSelectDrawingTool}

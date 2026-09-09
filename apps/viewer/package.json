@@ -3,6 +3,12 @@
   "private": true,
   "type": "module",
   "version": "0.5.1",
+  "exports": {
+    "./loading-icon": "./src/client/components/workbench/LoadingIcon.js",
+    "./file-view": "./src/client/file-view/index.js",
+    "./shell": "./src/client/shell/index.js",
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -15,8 +21,8 @@
     "lucide-react": "^1.39.0",
     "meshoptimizer": "^1.2.0",
     "radix-ui": "^1.6.7",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
+    "react": "^18.3.1 || ^19.0.0",
+    "react-dom": "^18.3.1 || ^19.0.0",
     "tailwind-merge": "^3.6.0",
     "three": "0.185.1"
   },

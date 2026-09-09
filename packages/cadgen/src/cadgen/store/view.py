@@ -50,6 +50,50 @@ def descriptor_for_view(tree_hash: str) -> dict[str, Any] | None:
     return descriptor
 
 
+# A tree is a content-addressed, immutable object, so the cid -> object map
+# read out of it is the same on every call and is kept per (store root, tree)
+# for the process's life. The viewer server resolves one component request
+# per component of an assembly through here, and flattening a 600-occurrence
+# tree costs ~11 ms of CPU each time: 485 requests for one 483-component
+# model spent ~5.6 s re-deriving one answer. Keyed by the store root because
+# the root is read from the environment per call and a suite may move it.
+# A tree that is not there yet is NOT remembered — a compile in flight will
+# make it appear. Bounded so a long-lived server holding hundreds of trees
+# does not grow without limit.
+_COMPONENT_OBJECTS_MEMO_MAX = 64
+_component_objects_memo: dict[tuple[str, str], dict[str, Any]] = {}
+_component_objects_lock = threading.Lock()
+
+
+def _component_objects_for_tree(tree_hash: str) -> dict[str, Any] | None:
+    """A descriptor-shaped ``{"components": {cid: {"surfObject", "brepObject"}}}``
+    for the tree, memoised; None when the tree is missing."""
+    from cadgen.store.paths import store_root
+
+    key = (str(store_root()), tree_hash)
+    with _component_objects_lock:
+        cached = _component_objects_memo.get(key)
+    if cached is not None:
+        return cached
+    descriptor = descriptor_for_view(tree_hash)
+    if descriptor is None:
+        return None
+    objects = {
+        "components": {
+            cid: {
+                "surfObject": str((entry or {}).get("surfObject") or ""),
+                "brepObject": str((entry or {}).get("brepObject") or ""),
+            }
+            for cid, entry in (descriptor.get("components") or {}).items()
+        }
+    }
+    with _component_objects_lock:
+        while len(_component_objects_memo) >= _COMPONENT_OBJECTS_MEMO_MAX:
+            _component_objects_memo.pop(next(iter(_component_objects_memo)))
+        _component_objects_memo[key] = objects
+    return objects
+
+
 def component_object_for_ref(ref: str, descriptor: dict[str, Any] | None = None) -> tuple[str, str] | None:
     """``components/<cid>.surf`` -> (object hash, suffix) through ``assembly.json``
     (a view's assembly.json); a bare object hash in place of the cid also resolves.
@@ -142,7 +186,7 @@ def virtual_path(rel: str) -> tuple[bytes | Path | None, str]:
             return None, ""
         return json.dumps(descriptor).encode("utf-8"), "application/json"
     if len(parts) == 3 and parts[1] == COMPONENT_DIRNAME:
-        resolved = component_object_for_ref(parts[2], descriptor_for_view(tree_hash))
+        resolved = component_object_for_ref(parts[2], _component_objects_for_tree(tree_hash))
         if resolved is None:
             return None, ""
         digest, suffix = resolved

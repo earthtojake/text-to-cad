@@ -13,6 +13,7 @@ import {
   tessellationOptionsCacheable,
   writeBackEntryBytes,
 } from "./tessellationCache.js";
+import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "../viewer/perfMarks.js";
 
 let pool = null;
 let nextWorkerIndex = 0;
@@ -107,6 +108,7 @@ function ensurePool() {
         pendingRequests.delete(message.id);
         request.cleanup();
         if (message.ok) {
+          perfMeasure(PERF_MEASURE_NAMES.tessellate, request.startedAt, { cid: request.cid, cacheHit: request.cacheHit });
           if (message.entryBytes && request.writeBack) {
             request.writeBack(message.entryBytes); // fire-and-forget
           }
@@ -143,6 +145,7 @@ export function loadSurfComponentInWorker(url, { signal, tessellation } = {}) {
   }
   const id = nextRequestId;
   nextRequestId += 1;
+  const startedAt = perfStart();
   const worker = workers[nextWorkerIndex % workers.length];
   nextWorkerIndex += 1;
   // The shared tessellation cache lives on THIS thread's provider (a fetch
@@ -169,15 +172,20 @@ export function loadSurfComponentInWorker(url, { signal, tessellation } = {}) {
       resolve,
       reject,
       cleanup,
+      startedAt,
+      cid,
+      cacheHit: false,
       writeBack: cacheable
         ? (entryBytes) => { writeBackEntryBytes(cid, tessellation || {}, entryBytes); }
         : null,
     });
     signal?.addEventListener?.("abort", abort, { once: true });
     const post = (cachedEntry) => {
-      if (!pendingRequests.has(id)) {
+      const request = pendingRequests.get(id);
+      if (!request) {
         return; // aborted while the cache lookup was in flight
       }
+      request.cacheHit = Boolean(cachedEntry);
       worker.postMessage(
         {
           type: "loadSurf",

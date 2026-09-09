@@ -92,20 +92,24 @@ stack and section primitives so rhythm cannot drift per surface.
 
 | Role | Style |
 | --- | --- |
-| Section header | 12px, medium, full-strength `sidebar-foreground` (the navbar's size) |
-| Row label | 11px, medium, muted (`FILE_SHEET_FIELD_LABEL_CLASSES`) |
-| Control text / values | 11px, medium; numerics `tabular-nums`; hex/coords mono |
-| Secondary line, units, meta | 10px, muted |
-| Status / empty / loading text | 11px, muted, `px-2` |
+| Section header | `text-xs` (12px), full-strength `sidebar-foreground` (the navbar's size) |
+| Row label | `text-tiny` (11px), muted (`FILE_SHEET_FIELD_LABEL_CLASSES`) |
+| Control text / values | `text-tiny` (11px); numerics `tabular-nums`; hex/coords mono |
+| Secondary line, units, meta | `text-micro` (10px), muted |
+| Status / empty / loading text | `text-tiny` (11px), muted, `px-2` |
 
-A section header matches the navbar's 12px medium, so a sheet's headings and
+A section header matches the navbar's 12px, so a sheet's headings and
 the chrome above them read as one level of structure. Row labels stay 11px and
 muted, so a header separates from its rows by size *and* colour. Never reach
 for uppercase or letter-spacing to mark a header — and never make it smaller
 than its rows.
 
-- Muted text is always `text-muted-foreground`. `var(--ui-text-muted)` is a
-  legacy alias; do not introduce new uses.
+- Sizes come from the type scale in `src/client/styles/globals.css`
+  (`text-micro` 10, `text-tiny` 11, `text-xs` 12, `text-sm` 13, `text-base`
+  14); never write a literal `text-[11px]`.
+- Muted text is always `text-muted-foreground`; passive glyphs and hints are
+  `text-foreground-passive`. Colours, radii and shadows come from the same
+  token file — no `rgb(...)` literals and no `--ui-*` aliases in components.
 - Labels are sentence case, 1–3 words, leading with the distinguishing word
   ("Motion resolution", not "Resolution for motion"). No trailing colons.
 - Boolean labels name the thing, not the action: "Floor", not "Enable floor".
@@ -213,7 +217,7 @@ the *kind* of thing ("Bends"); the groups are the *instances* ("Bend 1",
 "Bend 2"). Splitting the instances into sibling sections is wrong — it promotes
 an index to a concept and fills the panel with rules.
 
-- Item label: 11px, medium, full-strength `sidebar-foreground` — heavier than a
+- Item label: 11px, full-strength `sidebar-foreground` — heavier than a
   muted row label, smaller than the 12px section header, so the three levels
   (section › item › row) read as three levels.
 - Rows inside a group sit the standard 12px apart; the label takes 4px to bind

@@ -17,7 +17,7 @@ function AccordionItem({
   return (
     <AccordionPrimitive.Item
       data-slot="accordion-item"
-      className={cn("border-b border-[var(--ui-border)] last:border-b-0", className)}
+      className={cn("border-b border-border last:border-b-0", className)}
       {...props} />
   );
 }
@@ -32,13 +32,13 @@ function AccordionTrigger({
       <AccordionPrimitive.Trigger
         data-slot="accordion-trigger"
         className={cn(
-          "group flex min-h-9 flex-1 items-center justify-between gap-2 px-2 py-2 text-left text-[13px] font-normal text-[var(--ui-text)] outline-none transition-colors hover:bg-[var(--ui-panel-muted)] focus-visible:bg-[var(--ui-panel-muted)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ui-accent-ring)] [&[data-state=open]>svg]:rotate-180",
+          "group flex min-h-9 flex-1 items-center justify-between gap-2 px-2 py-2 text-left text-sm text-foreground outline-none transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 [&[data-state=open]>svg]:rotate-180",
           className
         )}
         {...props}
       >
         {children}
-        <ChevronDownIcon className="size-4 shrink-0 text-[var(--ui-text-faint)]" />
+        <ChevronDownIcon className="size-4 shrink-0 text-foreground-passive" />
       </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
   );

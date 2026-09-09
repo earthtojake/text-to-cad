@@ -9,6 +9,7 @@ import {
 import { buildEdgeLinePositionsFromProxy } from "cadgen-js/lib/viewer/referenceGeometry.js";
 import { pointVisibleByClipPlane } from "cadgen-js/lib/viewer/clipPlane.js";
 import { screenLimitedPickThreshold } from "cadgen-js/lib/viewer/pickingThresholds.js";
+import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "cadgen-js/lib/viewer/perfMarks.js";
 import { createViewerContextMenuGestureState } from "./viewerContextMenuGesture.js";
 import { partIdFromIntersection, shouldRaycastRecordForPick } from "./partPicking.js";
 
@@ -1034,7 +1035,10 @@ export function useViewerPicking({
         commitHoverState(measured.referenceId || "");
         return;
       }
-      commitHoverState(pickReferenceAtPosition(hoverState.x, hoverState.y, { hover: true }));
+      const pickStartedAt = perfStart();
+      const hovered = pickReferenceAtPosition(hoverState.x, hoverState.y, { hover: true });
+      perfMeasure(PERF_MEASURE_NAMES.hoverPick, pickStartedAt, { hit: Boolean(hovered) });
+      commitHoverState(hovered);
     }
 
     function scheduleHoverPick(clientX, clientY) {

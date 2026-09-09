@@ -138,8 +138,14 @@ export function missingFileRefForCatalog({
   return normalizedFileParam;
 }
 
-export function selectedEntryKeyFromUrl(entries, { defaultFile = readDefaultCadParam() } = {}) {
-  const explicitFilePath = readCadParam();
+// Which catalog entry a served-root-relative file path selects, falling back to
+// the build's configured default file when the path is empty.
+//
+// The file surface is told which file to show (<CadFileView file=…>); the URL is
+// the STANDALONE app's way of saying it, and selectedEntryKeyFromUrl below is
+// that one caller. An embedded surface has no `?file=` to read.
+export function selectedEntryKeyForFile(entries, filePath, { defaultFile = readDefaultCadParam() } = {}) {
+  const explicitFilePath = normalizeCadFileQueryParam(filePath);
   if (explicitFilePath) {
     const match = findEntryByUrlPath(entries, explicitFilePath);
     return match ? fileKey(match) : "";
@@ -147,6 +153,10 @@ export function selectedEntryKeyFromUrl(entries, { defaultFile = readDefaultCadP
 
   const match = findEntryByUrlPath(entries, normalizeCadFileQueryParam(defaultFile));
   return match ? fileKey(match) : "";
+}
+
+export function selectedEntryKeyFromUrl(entries, options) {
+  return selectedEntryKeyForFile(entries, readCadParam(), options);
 }
 
 export function writeCadParam(urlPath, { history = "replace" } = {}) {

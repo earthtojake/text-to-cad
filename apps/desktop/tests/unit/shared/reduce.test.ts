@@ -1,0 +1,558 @@
+import path from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+import { allToolCalls, lastAgentText, reduce } from "@shared/acp/reduce";
+import {
+  SessionEventSchema,
+  SessionStateSchema,
+  initialSessionState,
+  type SessionEvent,
+  type SessionState,
+} from "@shared/acp/types";
+
+import { FIXTURE_DIR, eventsFromFrames, fixtureFiles, readFixture, stateFromFixture } from "./fixtures";
+
+const at = 1_000;
+const root = "root-session";
+
+function connected(state = initialSessionState("s1", "fake")): SessionState {
+  return reduce(state, {
+    type: "session/connected",
+    acpSessionId: root,
+    modes: { currentModeId: "default", availableModes: [{ id: "default", name: "Default", description: null, kind: null }] },
+    configOptions: null,
+    loading: false,
+    at,
+  });
+}
+
+function update(state: SessionState, update: Record<string, unknown>, acpSessionId = root): SessionState {
+  return reduce(state, {
+    type: "session/update",
+    acpSessionId,
+    update: update as SessionEvent extends { update: infer U } ? U : never,
+    at,
+  });
+}
+
+function started(state: SessionState): SessionState {
+  return reduce(state, { type: "prompt/start", turnId: "t1", content: [{ type: "text", text: "hi" }], at });
+}
+
+describe("reduce: turns and chunks", () => {
+  it("opens a user turn and an agent turn on prompt/start and closes them on prompt/end", () => {
+    let state = started(connected());
+    expect(state.status).toBe("running");
+    expect(state.turns.map((turn) => turn.role)).toEqual(["user", "agent"]);
+    expect(state.turns[0]?.parts).toEqual([{ type: "text", text: "hi" }]);
+    state = reduce(state, {
+      type: "prompt/end",
+      stopReason: "end_turn",
+      usage: { totalTokens: 3, inputTokens: 2, outputTokens: 1, thoughtTokens: null, cachedReadTokens: null, cachedWriteTokens: null },
+      at,
+    });
+    expect(state.status).toBe("idle");
+    expect(state.turns[1]?.endedAt).toBe(at);
+    expect(state.turns[1]?.stopReason).toBe("end_turn");
+    expect(state.turns[1]?.parts.map((part) => part.type)).not.toContain("usage");
+    expect(state.lastTurnUsage?.totalTokens).toBe(3);
+  });
+
+  it("concatenates text chunks and thought chunks separately, and splits them around a tool call", () => {
+    let state = started(connected());
+    state = update(state, { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "hm" } });
+    state = update(state, { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "m" } });
+    state = update(state, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "o" } });
+    state = update(state, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "k" } });
+    state = update(state, { sessionUpdate: "tool_call", toolCallId: "c1", title: "ls", kind: "execute" });
+    state = update(state, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "done" } });
+    expect(state.turns[1]?.parts.map((part) => (part.type === "tool_call" ? "tool_call" : `${part.type}:${"text" in part ? part.text : ""}`))).toEqual([
+      "thought:hmm",
+      "text:ok",
+      "tool_call",
+      "text:done",
+    ]);
+  });
+
+  it("builds turns from replayed history without a prompt/start", () => {
+    let state = reduce(initialSessionState("s1", "fake"), {
+      type: "session/connected",
+      acpSessionId: root,
+      modes: null,
+      configOptions: null,
+      loading: true,
+      at,
+    });
+    expect(state.status).toBe("connecting");
+    state = update(state, { sessionUpdate: "user_message_chunk", content: { type: "text", text: "earlier" } });
+    state = update(state, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "reply" } });
+    state = update(state, { sessionUpdate: "user_message_chunk", content: { type: "text", text: "again" } });
+    state = reduce(state, { type: "session/loaded", at });
+    expect(state.status).toBe("idle");
+    expect(state.turns.map((turn) => `${turn.role}:${turn.endedAt === null ? "open" : "closed"}`)).toEqual([
+      "user:closed",
+      "agent:closed",
+      "user:closed",
+    ]);
+  });
+});
+
+describe("reduce: tool calls", () => {
+  it("upserts by id, replacing the fields an update carries and keeping the rest", () => {
+    let state = started(connected());
+    state = update(state, {
+      sessionUpdate: "tool_call",
+      toolCallId: "c1",
+      title: "Edit a.txt",
+      kind: "edit",
+      status: "pending",
+      rawInput: { path: "a.txt" },
+      locations: [{ path: "/p/a.txt", line: 3 }],
+    });
+    state = update(state, {
+      sessionUpdate: "tool_call_update",
+      toolCallId: "c1",
+      status: "completed",
+      content: [{ type: "diff", path: "/p/a.txt", oldText: "a", newText: "b" }],
+    });
+    const calls = allToolCalls(state);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      id: "c1",
+      title: "Edit a.txt",
+      kind: "edit",
+      status: "completed",
+      input: { path: "a.txt" },
+      locations: [{ path: "/p/a.txt", line: 3 }],
+      content: [{ type: "diff", path: "/p/a.txt", oldText: "a", newText: "b" }],
+    });
+  });
+
+  it("creates a tool call for an update nobody announced", () => {
+    let state = started(connected());
+    state = update(state, { sessionUpdate: "tool_call_update", toolCallId: "ghost", status: "in_progress" });
+    expect(allToolCalls(state)).toMatchObject([{ id: "ghost", status: "in_progress", kind: "other" }]);
+  });
+
+  it("nests Claude's flattened subagent activity under the parent tool call", () => {
+    let state = started(connected());
+    state = update(state, { sessionUpdate: "tool_call", toolCallId: "task-1", title: "Task", kind: "think" });
+    state = update(state, {
+      sessionUpdate: "tool_call",
+      toolCallId: "child-1",
+      title: "Read",
+      kind: "read",
+      _meta: { claudeCode: { parentToolUseId: "task-1" } },
+    });
+    state = update(state, {
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: "child text" },
+      _meta: { claudeCode: { parentToolUseId: "task-1" } },
+    });
+    const [task] = allToolCalls(state);
+    expect(task?.children.map((part) => part.type)).toEqual(["tool_call", "text"]);
+    expect(state.turns[1]?.parts).toHaveLength(1);
+  });
+});
+
+describe("reduce: draft native subagents", () => {
+  it("routes a child session's updates into its subagent part and tracks its state", () => {
+    const child = "child-session";
+    let state = started(connected());
+    state = update(state, { sessionUpdate: "subagent_spawned", subagentSessionId: child, name: "explorer", task: "look" });
+    state = update(state, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "hi from child" } }, child);
+    state = update(state, { sessionUpdate: "tool_call", toolCallId: "c-read", title: "Read", kind: "read", status: "completed" }, child);
+    state = update(state, { sessionUpdate: "subagent_state_update", subagentSessionId: child, state: "completed" });
+    const [part] = state.turns[1]!.parts;
+    expect(part).toMatchObject({ type: "subagent", sessionId: child, name: "explorer", task: "look", state: "completed" });
+    expect(part?.type === "subagent" && part.parts.map((p) => p.type)).toEqual(["text", "tool_call"]);
+    expect(state.subagentSessionIds).toEqual([child]);
+    expect(allToolCalls(state).map((call) => call.id)).toEqual(["c-read"]);
+  });
+});
+
+describe("reduce: permissions", () => {
+  const request = {
+    requestId: "perm-1",
+    acpSessionId: root,
+    toolCallId: "c1",
+    title: "Run ls",
+    description: null,
+    kind: "execute" as const,
+    input: { command: "ls" },
+    options: [
+      { optionId: "allow-once", name: "Yes", kind: "allow_once" as const, description: null },
+      { optionId: "reject", name: "No", kind: "reject_once" as const, description: null },
+    ],
+  };
+
+  it("parks the request, marks the session waiting, and records the answer", () => {
+    let state = started(connected());
+    state = reduce(state, { type: "permission/request", request, at });
+    expect(state.status).toBe("waiting");
+    expect(state.pendingPermissions).toHaveLength(1);
+    expect(state.turns[1]?.parts.at(-1)).toMatchObject({ type: "permission_request", outcome: { state: "pending" } });
+    state = reduce(state, { type: "permission/resolve", requestId: "perm-1", outcome: { state: "selected", optionId: "allow-once" }, at });
+    expect(state.status).toBe("running");
+    expect(state.pendingPermissions).toEqual([]);
+    expect(state.turns[1]?.parts.at(-1)).toMatchObject({ outcome: { state: "selected", optionId: "allow-once" } });
+  });
+
+  it("drops unanswered requests when the turn ends", () => {
+    let state = started(connected());
+    state = reduce(state, { type: "permission/request", request, at });
+    state = reduce(state, { type: "prompt/end", stopReason: "cancelled", usage: null, at });
+    expect(state.pendingPermissions).toEqual([]);
+    expect(state.status).toBe("idle");
+  });
+
+  /**
+   * There is no app-side approval level any more: the session's mode is the
+   * whole of what the person decides, so a state that carried an
+   * `approvalMode` and an event that changed it would be a second answer to
+   * a question that has one.
+   */
+  it("has no approval mode of its own, in the state or in the events", () => {
+    expect(initialSessionState("s1", "fake")).not.toHaveProperty("approvalMode");
+    expect(
+      SessionEventSchema.safeParse({ type: "approval", mode: "approve-for-me", at }).success,
+    ).toBe(false);
+  });
+});
+
+describe("reduce: session-level facts", () => {
+  it("updates modes, config options, commands, usage and title whether or not a turn is open", () => {
+    let state = connected();
+    state = update(state, { sessionUpdate: "current_mode_update", currentModeId: "plan" });
+    state = update(state, { sessionUpdate: "available_commands_update", availableCommands: [{ name: "review", description: "Review", input: { hint: "what" } }] });
+    state = update(state, { sessionUpdate: "usage_update", used: 10, size: 100, cost: { amount: 0.5, currency: "USD" } });
+    state = update(state, { sessionUpdate: "session_info_update", title: "Hello" });
+    state = update(state, {
+      sessionUpdate: "config_option_update",
+      configOptions: [
+        { id: "model", name: "Model", type: "select", currentValue: "a", options: [{ group: "g", name: "Group", options: [{ value: "a", name: "A" }] }] },
+        { id: "fast", name: "Fast", type: "boolean", currentValue: true },
+      ],
+    });
+    expect(state.currentModeId).toBe("plan");
+    expect(state.availableCommands).toEqual([{ name: "review", description: "Review", hint: "what" }]);
+    expect(state.contextUsage).toEqual({ used: 10, size: 100, cost: { amount: 0.5, currency: "USD" }, breakdown: null });
+    expect(state.title).toBe("Hello");
+    expect(state.configOptions).toMatchObject([
+      { id: "model", type: "select", currentValue: "a", options: [{ value: "a", name: "A", group: "Group" }] },
+      { id: "fast", type: "boolean", currentValue: true },
+    ]);
+    // No turn was open, so none of it became a part.
+    expect(state.turns).toEqual([]);
+  });
+
+  it("adds every turn's usage up and keeps the last turn's", () => {
+    let state = connected();
+    const turn = (index: number, usage: Record<string, number>) => {
+      state = reduce(state, { type: "prompt/start", turnId: `t${index}`, content: [{ type: "text", text: "hi" }], at });
+      state = reduce(state, {
+        type: "prompt/end",
+        stopReason: "end_turn",
+        usage: {
+          thoughtTokens: null,
+          cachedReadTokens: null,
+          cachedWriteTokens: null,
+          ...usage,
+        } as never,
+        at,
+      });
+    };
+    expect(state.sessionUsage).toBeNull();
+    turn(1, { totalTokens: 100, inputTokens: 10, outputTokens: 20, cachedReadTokens: 30, cachedWriteTokens: 40 });
+    turn(2, { totalTokens: 7, inputTokens: 1, outputTokens: 2 });
+    expect(state.sessionUsage).toEqual({
+      turns: 2,
+      totalTokens: 107,
+      inputTokens: 11,
+      outputTokens: 22,
+      // The second turn reported neither cache field, which counts as zero.
+      cachedReadTokens: 30,
+      cachedWriteTokens: 40,
+    });
+    expect(state.lastTurnUsage?.totalTokens).toBe(7);
+    // A turn that reported nothing leaves both alone.
+    state = reduce(state, { type: "prompt/start", turnId: "t3", content: [{ type: "text", text: "hi" }], at });
+    state = reduce(state, { type: "prompt/end", stopReason: "cancelled", usage: null, at });
+    expect(state.sessionUsage?.turns).toBe(2);
+    expect(state.lastTurnUsage?.totalTokens).toBe(7);
+  });
+
+  it("reads a category breakdown out of usage_update's _meta, and none when there is none", () => {
+    // No adapter sends one today, so `_meta` is where one can arrive at all:
+    // any key ending in `breakdown`, bare or namespaced the way the Claude
+    // adapter namespaces its own metadata.
+    let state = update(connected(), {
+      sessionUpdate: "usage_update",
+      used: 31_500,
+      size: 258_400,
+      _meta: {
+        contextBreakdown: [
+          { id: "system_prompt", name: "System prompt", tokens: 2_800 },
+          { id: "messages", name: "Messages", tokens: 11_500 },
+          // Nothing in it is nothing to draw.
+          { id: "empty", name: "Empty", tokens: 0 },
+        ],
+      },
+    });
+    expect(state.contextUsage?.breakdown).toEqual([
+      { id: "system_prompt", name: "System prompt", tokens: 2_800 },
+      { id: "messages", name: "Messages", tokens: 11_500 },
+    ]);
+
+    // A namespaced key and a plain name → tokens map read the same way.
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 10,
+      size: 100,
+      _meta: { "_claude/contextBreakdown": { "System prompt": 4, Messages: 6 } },
+    });
+    expect(state.contextUsage?.breakdown).toEqual([
+      { id: "System prompt", name: "System prompt", tokens: 4 },
+      { id: "Messages", name: "Messages", tokens: 6 },
+    ]);
+
+    // The real shape of both adapters: no `_meta`, or one about something
+    // else. The popover then shows no categories rather than inventing any.
+    state = update(state, { sessionUpdate: "usage_update", used: 32_658, size: 1_000_000 });
+    expect(state.contextUsage?.breakdown).toBeNull();
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 32_658,
+      size: 1_000_000,
+      cost: { amount: 0.28, currency: "USD" },
+      _meta: { "_claude/origin": { kind: "human" } },
+    });
+    expect(state.contextUsage?.breakdown).toBeNull();
+  });
+
+  it("keeps the latest of each plan limit out of usage_update's _meta", () => {
+    // What the Claude adapter forwards: the SDK's `rate_limit_event`
+    // verbatim under `_claude/rateLimit`, on a `usage_update` carrying the
+    // window. One event is one limit type.
+    let state = update(connected(), {
+      sessionUpdate: "usage_update",
+      used: 292_300,
+      size: 1_000_000,
+      _meta: {
+        "_claude/rateLimit": {
+          status: "allowed",
+          rateLimitType: "five_hour",
+          utilization: 0.17,
+          resetsAt: 1_800_000_000,
+        },
+      },
+    });
+    expect(state.rateLimits.five_hour).toEqual({
+      type: "five_hour",
+      status: "allowed",
+      utilization: 0.17,
+      // Epoch seconds on the wire, epoch milliseconds in the state.
+      resetsAt: 1_800_000_000_000,
+      isUsingOverage: null,
+    });
+    // The window came along with it and is not lost to the limit.
+    expect(state.contextUsage?.used).toBe(292_300);
+
+    // A second type is a second row, and a second event of a type replaces
+    // it rather than adding to it.
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 292_300,
+      size: 1_000_000,
+      _meta: {
+        "_claude/rateLimit": {
+          status: "allowed_warning",
+          rateLimitType: "seven_day",
+          utilization: 0.63,
+          isUsingOverage: true,
+        },
+      },
+    });
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 292_300,
+      size: 1_000_000,
+      _meta: {
+        "_claude/rateLimit": { status: "rejected", rateLimitType: "seven_day", utilization: 0.96 },
+      },
+    });
+    expect(Object.keys(state.rateLimits).sort()).toEqual(["five_hour", "seven_day"]);
+    expect(state.rateLimits.seven_day).toMatchObject({ status: "rejected", utilization: 0.96 });
+    expect(state.rateLimits.five_hour?.utilization).toBe(0.17);
+
+    // Milliseconds already, and a percentage where a fraction was expected:
+    // both are read for what they can only mean.
+    state = update(state, {
+      sessionUpdate: "usage_update",
+      used: 1,
+      size: 2,
+      _meta: {
+        "_claude/rateLimit": {
+          status: "allowed",
+          rateLimitType: "seven_day_opus",
+          utilization: 96,
+          resetsAt: 1_800_000_000_000,
+        },
+      },
+    });
+    expect(state.rateLimits.seven_day_opus).toMatchObject({
+      utilization: 0.96,
+      resetsAt: 1_800_000_000_000,
+    });
+  });
+
+  it("ignores a malformed rate limit rather than throwing on it", () => {
+    const before = update(connected(), {
+      sessionUpdate: "usage_update",
+      used: 10,
+      size: 100,
+      _meta: { "_claude/rateLimit": { status: "allowed", rateLimitType: "five_hour", utilization: 0.4 } },
+    });
+    const malformed = [
+      // No type: `rateLimits` is keyed by it and there is nowhere to put this.
+      { status: "allowed", utilization: 0.4 },
+      // No utilization: a bar with no length.
+      { status: "allowed", rateLimitType: "five_hour" },
+      // The wrong shapes entirely.
+      { rateLimitType: 7, utilization: "lots" },
+      "rejected",
+      null,
+      [],
+    ];
+    for (const value of malformed) {
+      const after = update(before, {
+        sessionUpdate: "usage_update",
+        used: 10,
+        size: 100,
+        _meta: { "_claude/rateLimit": value },
+      });
+      expect(after.rateLimits).toEqual(before.rateLimits);
+    }
+    // An unknown status is the harmless one; the rest of the event stands.
+    const odd = update(before, {
+      sessionUpdate: "usage_update",
+      used: 10,
+      size: 100,
+      _meta: { "_claude/rateLimit": { status: "hmm", rateLimitType: "overage", utilization: 150 } },
+    });
+    // An unreadable status reads as `allowed` and a bar cannot run past its end.
+    expect(odd.rateLimits.overage).toMatchObject({ status: "allowed", utilization: 1 });
+    // And an update with no window at all still lands its limit.
+    const windowless = update(before, {
+      sessionUpdate: "usage_update",
+      _meta: { "_claude/rateLimit": { status: "allowed", rateLimitType: "seven_day", utilization: 0.5 } },
+    });
+    expect(windowless.rateLimits.seven_day?.utilization).toBe(0.5);
+    expect(windowless.contextUsage).toEqual(before.contextUsage);
+  });
+
+  it("keeps the latest plan as one part per turn", () => {
+    let state = started(connected());
+    state = update(state, { sessionUpdate: "plan", entries: [{ content: "a", priority: "high", status: "pending" }] });
+    state = update(state, { sessionUpdate: "plan", entries: [{ content: "a", priority: "high", status: "completed" }] });
+    const plans = state.turns[1]!.parts.filter((part) => part.type === "plan");
+    expect(plans).toHaveLength(1);
+    expect(state.plan?.[0]?.status).toBe("completed");
+    state = update(state, { sessionUpdate: "plan_removed", planId: "x" });
+    expect(state.plan).toBeNull();
+  });
+
+  it("surfaces a prompt error as a part and an error status", () => {
+    let state = started(connected());
+    state = reduce(state, { type: "prompt/error", message: "Authentication required", at });
+    expect(state.status).toBe("error");
+    expect(state.error).toBe("Authentication required");
+    expect(state.turns[1]?.parts.at(-1)).toEqual({ type: "error", message: "Authentication required" });
+    expect(state.turns[1]?.endedAt).toBe(at);
+  });
+});
+
+describe("reduce: recorded adapter transcripts", () => {
+  it("has recordings to test against", () => {
+    expect(fixtureFiles().length).toBeGreaterThan(0);
+  });
+
+  it.each(fixtureFiles().map((file) => [path.basename(file), file]))(
+    "%s folds into a schema-valid state with every event applied",
+    (_name, file) => {
+      const frames = readFixture(file);
+      const events = eventsFromFrames(frames);
+      expect(events.length).toBeGreaterThan(0);
+      const state = stateFromFixture(file);
+      expect(() => SessionStateSchema.parse(state)).not.toThrow();
+      expect(state.acpSessionId).toBeTruthy();
+      expect(state.turns.length).toBeGreaterThan(0);
+      // Every turn the fixture closed is closed; the session is not stuck running.
+      expect(state.status).not.toBe("running");
+    },
+  );
+
+  it("codex-session: two turns, the second with a terminal-backed command", () => {
+    const state = stateFromFixture(path.join(FIXTURE_DIR, "codex-session.jsonl"));
+    expect(state.status).toBe("idle");
+    expect(state.currentModeId).toBe("agent");
+    expect(state.modes.map((mode) => mode.id)).toEqual(["read-only", "agent", "agent-full-access"]);
+    expect(state.configOptions.map((option) => option.id)).toEqual([
+      "mode",
+      "collaboration_mode",
+      "model",
+      "reasoning_effort",
+      "fast-mode",
+    ]);
+    expect(state.availableCommands.length).toBeGreaterThan(10);
+    expect(state.title).toBe("Reply with exactly ok");
+    expect(state.contextUsage?.size).toBe(258400);
+    expect(state.turns.map((turn) => turn.role)).toEqual(["user", "agent", "user", "agent"]);
+
+    const [first] = state.turns.filter((turn) => turn.role === "agent");
+    expect(first?.parts.find((part) => part.type === "text")).toEqual({ type: "text", text: "ok" });
+
+    const calls = allToolCalls(state);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      kind: "execute",
+      status: "completed",
+      content: [{ type: "terminal" }],
+    });
+    expect(calls[0]?.title).toContain("hello.txt");
+    expect(lastAgentText(state)).toContain("hello.txt");
+    expect(state.lastTurnUsage?.totalTokens).toBe(19598);
+  });
+
+  it("codex-load: session/load replays the earlier turns as closed history before the new prompt", () => {
+    const state = stateFromFixture(path.join(FIXTURE_DIR, "codex-load.jsonl"));
+    expect(state.status).toBe("idle");
+    expect(state.acpSessionId).toBe("01a0755c-9b28-7702-b62c-7c527c3c3cc0");
+    expect(state.turns.map((turn) => `${turn.role}:${turn.endedAt === null ? "open" : "closed"}`)).toEqual([
+      "user:closed",
+      "agent:closed",
+      "user:closed",
+      "agent:closed",
+      "user:closed",
+      "agent:closed",
+    ]);
+    // The replayed tool call arrives already completed, terminal ref and all.
+    expect(allToolCalls(state)).toMatchObject([{ kind: "execute", status: "completed", content: [{ type: "terminal" }] }]);
+    expect(state.turns[1]?.parts).toEqual([{ type: "text", text: "ok" }]);
+    expect(lastAgentText(state)).toBe("hello.txt");
+    expect(state.title).toBe("Reply with exactly ok");
+  });
+
+  it("claude-code-auth-required: the -32000 error ends the turn in an error state", () => {
+    const state = stateFromFixture(path.join(FIXTURE_DIR, "claude-code-auth-required.jsonl"));
+    expect(state.status).toBe("error");
+    expect(state.error).toContain("Authentication required");
+    expect(state.modes.map((mode) => mode.id)).toEqual(["default", "acceptEdits", "plan", "auto", "bypassPermissions"]);
+    expect(state.configOptions.map((option) => option.id)).toEqual(["mode", "model", "effort", "agent"]);
+    expect(state.availableCommands.length).toBeGreaterThan(0);
+    expect(state.contextUsage).toEqual({ used: 0, size: 1_000_000, cost: { amount: 0, currency: "USD" }, breakdown: null });
+    const agentTurn = state.turns.find((turn) => turn.role === "agent");
+    expect(agentTurn?.parts.map((part) => part.type)).toEqual(["available_commands", "available_commands", "error"]);
+  });
+});

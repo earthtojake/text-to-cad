@@ -1,3 +1,4 @@
+import { useHostReference } from "../../file-view/hostReference";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CadViewer from "../CadViewer";
 import { CircleAlert, X } from "lucide-react";
@@ -45,31 +46,28 @@ const VIEWPORT_ISSUE_META = Object.freeze({
   }
 });
 
-function viewportInsetPx(value) {
-  const numericValue = Number(value);
-  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0;
-}
-
 function viewportIssueMetaForAlert(alert) {
   return alert?.severity === "warning"
     ? VIEWPORT_ISSUE_META.warning
     : VIEWPORT_ISSUE_META.error;
 }
 
-function viewerContextMenuAnchorStyle(menu, viewportFrameInsets) {
+// The menu anchors at the pointer, in window coordinates, kept a margin in
+// from the window's edges so the menu has somewhere to open.
+function viewerContextMenuAnchorStyle(menu) {
   if (!menu) {
     return null;
   }
   const margin = 8;
   const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 0;
   const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 0;
-  const minX = viewportInsetPx(viewportFrameInsets?.left) + margin;
-  const minY = viewportInsetPx(viewportFrameInsets?.top) + margin;
+  const minX = margin;
+  const minY = margin;
   const maxX = viewportWidth > 0
-    ? Math.max(minX, viewportWidth - viewportInsetPx(viewportFrameInsets?.right) - margin)
+    ? Math.max(minX, viewportWidth - margin)
     : Number(menu.x) || minX;
   const maxY = viewportHeight > 0
-    ? Math.max(minY, viewportHeight - viewportInsetPx(viewportFrameInsets?.bottom) - margin)
+    ? Math.max(minY, viewportHeight - margin)
     : Number(menu.y) || minY;
   const x = Math.min(Math.max(Number(menu.x) || minX, minX), maxX);
   const y = Math.min(Math.max(Number(menu.y) || minY, minY), maxY);
@@ -101,6 +99,7 @@ function ViewerContextMenu({
   onExpandAll,
   onCollapseAll
 }) {
+  const hostReference = useHostReference();
   if (!menu || !positionStyle) {
     return null;
   }
@@ -207,6 +206,7 @@ function ViewerContextMenu({
             isolated={focused}
             hidden={hidden}
             actionCount={menu.actionCount}
+            onAddToPrompt={hostReference ? () => handleAction((item) => hostReference.addReference(item.copyText)) : undefined}
             copyReferenceDisabled={!String(menu.copyText || "").trim()}
             selectDisabled={menu.selectDisabled === true}
             showIsolate={menu.showIsolate !== false}
@@ -250,7 +250,7 @@ function ViewerContextMenu({
 
 // Width and typography shared by the copy button and the hidden ruler that decides whether
 // its label fits. One constant so the two cannot drift apart.
-const CTA_METRICS_CLASS = "h-9 w-fit min-w-0 max-w-full sm:max-w-[min(28rem,calc(100%-16rem))] shrink overflow-hidden px-4 text-[12px] font-semibold max-sm:w-full max-sm:pr-32";
+const CTA_METRICS_CLASS = "h-9 w-fit min-w-0 max-w-full sm:max-w-[min(28rem,calc(100%-16rem))] shrink overflow-hidden px-4 text-xs max-sm:w-full max-sm:pr-32";
 
 export default function CadRenderPane({
   viewerRef,
@@ -264,7 +264,6 @@ export default function CadRenderPane({
   viewerPerspectiveRef,
   themeSettings,
   previewMode,
-  viewportFrameInsets,
   viewerLoading,
   viewerAlert,
   stepUpdateInProgress,
@@ -287,7 +286,6 @@ export default function CadRenderPane({
   drawingIsDocument = false,
   drawingThicknessMm = 0,
   onCameraZoomPercentChange = null,
-  viewPlaneOffsetRight = 16,
   viewerMode,
   assemblyPickingActive = false,
   assemblyParts,
@@ -344,6 +342,7 @@ export default function CadRenderPane({
   copyReferenceTipActive = false,
   panToolActive = false,
   handleCopySelection,
+  handleAddSelection = null,
   handleScreenshotCopy,
 }) {
   // The clock is the ONE thing that changes per frame during playback, and this
@@ -408,25 +407,6 @@ export default function CadRenderPane({
     : (hasParts || hasTopology) && selectionCount > 0
       ? "selection"
       : "";
-  const bottomOverlayStyle = {
-    bottom: "1rem"
-  };
-  const modelViewportOverlayStyle = {
-    left: `${viewportInsetPx(viewportFrameInsets?.left)}px`,
-    right: `${viewportInsetPx(viewportFrameInsets?.right)}px`,
-    top: `${viewportInsetPx(viewportFrameInsets?.top)}px`,
-    bottom: `${viewportInsetPx(viewportFrameInsets?.bottom)}px`
-  };
-  const modelViewportBottomOverlayStyle = {
-    left: `${viewportInsetPx(viewportFrameInsets?.left)}px`,
-    right: `${viewportInsetPx(viewportFrameInsets?.right)}px`,
-    bottom: `calc(${viewportInsetPx(viewportFrameInsets?.bottom)}px + 1rem)`
-  };
-  const ctaOverlayStyle = {
-    ...bottomOverlayStyle,
-    left: `calc(${viewportInsetPx(viewportFrameInsets?.left)}px + 1rem)`,
-    right: `calc(${viewportInsetPx(viewportFrameInsets?.right)}px + 1rem)`
-  };
   // A ref cut off mid-token reads like a broken ref rather than a long one, so when it does
   // not fit we show the count instead. Whether it fits depends on the viewport, not the
   // string, so it is measured rather than guessed from a length threshold.
@@ -436,7 +416,8 @@ export default function CadRenderPane({
   // the ref back in, and so on.
   const ctaFullLabelRef = useRef(null);
   const [ctaLabelFits, setCtaLabelFits] = useState(true);
-  const ctaRefLabel = ctaMode === "screenshot" ? "Copy Screenshot" : copyButtonLabel;
+  const ctaMetricsClass = handleAddSelection ? "h-9 w-fit min-w-0 max-w-full shrink overflow-hidden px-4 text-xs" : CTA_METRICS_CLASS;
+  const ctaRefLabel = ctaMode === "screenshot" ? "Copy Screenshot" : handleAddSelection ? "Add to prompt" : copyButtonLabel;
   useLayoutEffect(() => {
     const ruler = ctaFullLabelRef.current;
     if (!ruler) {
@@ -458,11 +439,11 @@ export default function CadRenderPane({
       observer?.disconnect();
     };
   }, [ctaRefLabel]);
-  const ctaLabel = ctaLabelFits || !copyButtonCountLabel || ctaMode === "screenshot"
+  const ctaLabel = handleAddSelection || ctaLabelFits || !copyButtonCountLabel || ctaMode === "screenshot"
     ? ctaRefLabel
     : copyButtonCountLabel;
   // The title always carries the full ref, so the truncated case is still discoverable.
-  const ctaTitle = ctaMode === "screenshot" ? "Copy screenshot to clipboard" : copyButtonLabel;
+  const ctaTitle = ctaMode === "screenshot" ? "Copy screenshot to clipboard" : ctaRefLabel;
   const ctaDisabled = ctaMode === "screenshot"
     ? viewerLoading || !viewportHasRenderableContent
     : false;
@@ -475,8 +456,8 @@ export default function CadRenderPane({
     : null;
   const viewportIssueMeta = viewportIssueMetaForAlert(blockingViewerAlert);
   const viewerContextMenuStyle = useMemo(
-    () => viewerContextMenuAnchorStyle(viewerContextMenu, viewportFrameInsets),
-    [viewerContextMenu, viewportFrameInsets]
+    () => viewerContextMenuAnchorStyle(viewerContextMenu),
+    [viewerContextMenu]
   );
 
 
@@ -513,10 +494,8 @@ export default function CadRenderPane({
         previewMode={previewMode}
         showViewPlane={!previewMode}
         scale={capabilities.sceneScale === "urdf" ? VIEWER_SCENE_SCALE.URDF : VIEWER_SCENE_SCALE.CAD}
-        viewPlaneOffsetRight={viewPlaneOffsetRight}
         viewPlaneOffsetBottom="1rem"
         compactViewPlane={false}
-        viewportFrameInsets={viewportFrameInsets}
         isLoading={viewerLoading}
         pickMode={!hasTopology && !hasParts && !measureModeActive
           ? VIEWER_PICK_MODE.NONE
@@ -596,15 +575,12 @@ export default function CadRenderPane({
         />
       ) : null}
       {!previewMode && missingFileLabel ? (
-        <div
-          className="pointer-events-none absolute z-30 flex min-w-0 items-center justify-center px-4 py-4"
-          style={modelViewportOverlayStyle}
-        >
+        <div className="pointer-events-none absolute inset-0 z-30 flex min-w-0 items-center justify-center px-4 py-4">
           <Alert
             variant="destructive"
-            className="cad-glass-popover pointer-events-auto w-full max-w-xl min-w-0 p-4 text-center shadow-lg"
+            className="bg-popover pointer-events-auto w-full max-w-xl min-w-0 p-4 text-center shadow-lg"
           >
-            <p className="col-start-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-destructive">
+            <p className="col-start-1 text-tiny uppercase tracking-[0.16em] text-destructive">
               {missingFileOutsideRoot ? "Outside this viewer's root" : "File does not exist"}
             </p>
             <AlertTitle className="col-start-1 mt-1 line-clamp-none text-lg text-foreground">
@@ -626,16 +602,13 @@ export default function CadRenderPane({
         </div>
       ) : null}
       {!previewMode && blockingViewerAlert ? (
-        <div
-          className="pointer-events-none absolute z-30 flex min-w-0 items-center justify-center px-3 py-3 sm:px-4"
-          style={modelViewportOverlayStyle}
-        >
+        <div className="pointer-events-none absolute inset-0 z-30 flex min-w-0 items-center justify-center px-3 py-3 sm:px-4">
           <div
             role="alert"
             aria-label={viewerAlertIconLabel}
             title={viewerAlertIconLabel}
             className={cn(
-              "cad-glass-popover pointer-events-auto flex w-full max-w-sm min-w-0 flex-col items-center gap-2 rounded-md border px-4 py-3 text-center shadow-md",
+              "bg-popover pointer-events-auto flex w-full max-w-sm min-w-0 flex-col items-center gap-2 rounded-md border px-4 py-3 text-center shadow-md",
               viewportIssueMeta.borderClassName
             )}
           >
@@ -647,12 +620,12 @@ export default function CadRenderPane({
             </span>
             <div className="min-w-0 max-w-full">
               <span className={cn(
-                "text-[10px] font-medium uppercase tracking-[0.08em]",
+                "text-micro uppercase tracking-[0.08em]",
                 viewportIssueMeta.labelClassName
               )}>
                 {viewportIssueMeta.label}
               </span>
-              <div className="mt-1 line-clamp-2 min-w-0 max-w-full break-words text-sm font-medium leading-5 text-foreground">
+              <div className="mt-1 line-clamp-2 min-w-0 max-w-full break-words text-sm leading-5 text-foreground">
                 {viewerAlert.title || viewerAlert.summary || "Viewer issue"}
               </div>
               {viewerAlert.message ? (
@@ -665,37 +638,34 @@ export default function CadRenderPane({
         </div>
       ) : null}
       {!previewMode && stepUpdateInProgress ? (
-        <div className="pointer-events-none absolute z-20 flex justify-center px-4" style={modelViewportBottomOverlayStyle}>
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
           <Alert
             role="status"
-            className="cad-glass-popover w-auto px-3 py-1.5 text-[11px] font-medium text-popover-foreground shadow-sm"
+            className="bg-popover w-auto px-3 py-1.5 text-tiny text-popover-foreground shadow-sm"
           >
             STEP changed. Updating/regenerating references...
           </Alert>
         </div>
       ) : null}
       {!previewMode && !stepUpdateInProgress && topologySelectionPending ? (
-        <div className="pointer-events-none absolute z-20 flex justify-center px-4" style={modelViewportBottomOverlayStyle}>
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4">
           <Alert
             role="status"
-            className="cad-glass-popover w-auto px-3 py-1.5 text-[11px] font-medium text-popover-foreground shadow-sm"
+            className="bg-popover w-auto px-3 py-1.5 text-tiny text-popover-foreground shadow-sm"
           >
             Preparing selectable topology...
           </Alert>
         </div>
       ) : null}
       {!previewMode && ctaMode && !stepUpdateInProgress && !topologySelectionPending && !topologySelectionUnavailable && !topologySelectionDeferred ? (
-        <div
-          className="pointer-events-none absolute z-20 flex min-w-0 justify-center"
-          style={ctaOverlayStyle}
-        >
+        <div className={cn("pointer-events-none absolute inset-x-4 z-20 flex min-w-0 justify-center", handleAddSelection ? "bottom-36" : "bottom-4")}>
           {/* A hidden ruler carrying the FULL ref label under the same width constraints as
               the button. Measured to decide whether the button can show the ref at all.
               Deliberately independent of what the button currently displays: measuring the
               visible label instead would latch, because swapping in the shorter count label
               shrinks the box and makes the ref look permanently too wide. Kept outside the
               button so the button's textContent stays exactly its label. */}
-          <span aria-hidden="true" className={cn("pointer-events-none invisible absolute left-0 top-0", CTA_METRICS_CLASS)}>
+          <span aria-hidden="true" className={cn("pointer-events-none invisible absolute left-0 top-0", ctaMetricsClass)}>
             <span ref={ctaFullLabelRef} className="block min-w-0 max-w-full truncate">{ctaRefLabel}</span>
           </span>
           <TutorialTip
@@ -710,7 +680,7 @@ export default function CadRenderPane({
               size="sm"
               className={cn(
                 "pointer-events-auto border border-primary/20 bg-primary/85 text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/75 focus-visible:ring-primary/35",
-                CTA_METRICS_CLASS
+                ctaMetricsClass
               )}
               disabled={ctaDisabled}
               onClick={() => {
@@ -718,7 +688,8 @@ export default function CadRenderPane({
                   void handleScreenshotCopy?.();
                   return;
                 }
-                void handleCopySelection();
+                if (handleAddSelection) handleAddSelection();
+                else void handleCopySelection();
               }}
               title={ctaTitle}
             >

@@ -206,7 +206,7 @@ export default function PoseControlsSection({
                       disabled={!enabled}
                       inputMode="text"
                       ariaLabel={`${parameter.label} value`}
-                      className="w-40 max-w-[min(12rem,55vw)] text-left font-medium tabular-nums"
+                      className="w-40 max-w-[min(12rem,55vw)] text-left tabular-nums"
                     />
                   )}
                 />
@@ -220,7 +220,7 @@ export default function PoseControlsSection({
                 label={driver ? (
                   <>
                     {parameter.label}
-                    <span className="ml-1 font-normal opacity-70">{`· driven by ${driver.coupling}`}</span>
+                    <span className="ml-1 opacity-70">{`· driven by ${driver.coupling}`}</span>
                   </>
                 ) : parameter.label}
                 value={`${formatControlNumber(currentValue)}${parameter.unit ? ` ${parameter.unit}` : ""}`}

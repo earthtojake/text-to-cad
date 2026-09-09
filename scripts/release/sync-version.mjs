@@ -9,6 +9,14 @@ const repoRoot = path.resolve(scriptDir, "../..");
 const canonicalVersionPath = "VERSION";
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
+// `apps/desktop` is deliberately absent, and its absence is the policy, not an
+// omission: its package.json stays at 0.0.0 forever. The desktop app's version
+// reaches the installer, `app.getVersion()` and the updater feed as
+// electron-builder's `extraMetadata.version`, stamped from VERSION by
+// apps/desktop/scripts/package.mjs at package time. Adding it here would create
+// a second stamped copy that only the release PR keeps current, and a checkout
+// would then report a version its build does not use. Nothing checks the
+// desktop's package.json version, because there is nothing there to check.
 export const jsonTargets = [
   { path: "apps/docs/package.json", fields: [["version"]] },
   { path: "apps/docs/package-lock.json", fields: [["version"], ["packages", "", "version"]] },

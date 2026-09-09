@@ -2,6 +2,17 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "desktop-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "apps/desktop",
+        "run",
+        "dev"
+      ],
+      "port": 5273
+    },
+    {
       "name": "cad-viewer-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
