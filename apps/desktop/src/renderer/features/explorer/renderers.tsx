@@ -22,6 +22,7 @@ export function createDesktopRenderers(projectId: string, root: ExplorerRoot, ta
     client: (context) => connection.acquire(context),
     preferences: desktopCadPreferences(),
     onReference: (reference) => addToDraft(projectId, root, { references: [reference] }),
+    onPromptContext: (context) => addToDraft(projectId, root, { ...context, deduplicateText: true }),
     onCapture: ({ blob, file, references }) => {
       const stem = (file.split("/").pop() ?? "view").replace(/\.[^.]+$/, "");
       const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);

@@ -1,7 +1,7 @@
 import { useSyncExternalStore, type ComponentType } from 'react';
 import type { FileActivity, FileRendererProps, JsonValue } from '../../file-viewer/types.js';
 import type { CadClient, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
-import type { CadCapture, CadCommands, CadReference, PreparedCadDocument } from './index.js';
+import type { CadCapture, CadCommands, CadPromptContext, CadReference, PreparedCadDocument } from './index.js';
 import type { CadPreferences } from './preferences.js';
 import CadFileView from './file-view/CadFileView.js';
 
@@ -27,6 +27,7 @@ interface CadSurfaceProps {
   selectReference?: CadCommands['selectReference'];
   captureRequest?: CadCommands['captureRequest'];
   onReference?: (reference: CadReference) => void;
+  onPromptContext?: (context: CadPromptContext) => void;
   onCapture?: (capture: CadCapture) => void;
 }
 const Surface = CadFileView as ComponentType<CadSurfaceProps>;
@@ -57,6 +58,7 @@ export default function CadRenderer(props: FileRendererProps<PreparedCadDocument
     state={props.state}
     onStateChange={props.onStateChange}
     onReference={data.services.onReference}
+    onPromptContext={data.services.onPromptContext}
     onCapture={data.services.onCapture}
     selectReference={commands.selectReference}
     captureRequest={commands.captureRequest}
