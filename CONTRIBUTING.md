@@ -323,6 +323,19 @@ npm ci
 npm run native:rebuild --workspace hardcore
 ```
 
+There is one root lockfile. Do not run standalone installs that create nested
+lockfiles. Do not link desktop dependencies to another checkout. Rebuild the
+shared packages after editing them; Vite/Next consume their `dist` exports.
+
+Shared UI tests also need `npx --no-install playwright install chromium` from
+the root (add `--with-deps` on Linux if needed). This is the npm Playwright
+browser; Python's snapshot browser may be a different Chromium revision.
+
+The backend remains `cadgen viewer`; its cwd is the served root. Create a local
+`.venv` with `requirements-dev.txt` when Python is needed. Development assets
+are explicit overrides; Python no longer searches parent directories for JS
+source or a web build:
+
 The self-contained browser regression suite checks supported formats, picking,
 placement, and Inspect/Render quality transitions. It creates tiny inputs and
 starts its own viewer with an isolated cache; no sample builds are needed.
