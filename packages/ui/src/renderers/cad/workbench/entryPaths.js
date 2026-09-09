@@ -13,58 +13,6 @@ export function cadPathForEntry(entry) {
   return file.replace(/\.(step|stp|stl|3mf|glb|dxf|urdf|srdf|sdf)$/i, "");
 }
 
-function normalizeUrlPath(value) {
-  const normalized = String(value || "").trim().replace(/\\/g, "/").replace(/\/+$/, "");
-  return normalized.replace(/^\/+/, "");
-}
-
-export function normalizeCadFileQueryParam(value) {
-  return normalizeUrlPath(value);
-}
-
-function sourceExtensionForPath(value) {
-  const match = /\.([^.\/]+)$/.exec(String(value || "").trim());
-  return match ? `.${match[1]}` : "";
-}
-
-function appendExtension(value, extension) {
-  const normalizedValue = normalizeUrlPath(value);
-  const normalizedExtension = String(extension || "").trim();
-  if (!normalizedValue || !normalizedExtension) {
-    return normalizedValue;
-  }
-  return normalizedValue.toLowerCase().endsWith(normalizedExtension.toLowerCase())
-    ? normalizedValue
-    : `${normalizedValue}${normalizedExtension}`;
-}
-
-function fileAliasesForEntry(entry) {
-  const aliases = new Set();
-  const addAlias = (value) => {
-    const normalizedValue = normalizeUrlPath(value);
-    if (normalizedValue) {
-      aliases.add(normalizedValue);
-    }
-  };
-
-  const file = cadFileParamForEntry(entry);
-  addAlias(file);
-
-  const cadPath = cadPathForEntry(entry);
-  const extension = sourceExtensionForPath(file);
-  addAlias(appendExtension(cadPath, extension));
-
-  return aliases;
-}
-
-export function findEntryByUrlPath(entries, urlPath) {
-  const normalizedUrlPath = normalizeCadFileQueryParam(urlPath);
-  if (!normalizedUrlPath) {
-    return null;
-  }
-  return entries.find((entry) => fileAliasesForEntry(entry).has(normalizedUrlPath)) || null;
-}
-
 function entryLeafName(entry) {
   const file = fileKey(entry);
   if (!file) {
@@ -72,13 +20,6 @@ function entryLeafName(entry) {
   }
   const parts = file.split("/");
   return parts[parts.length - 1] || file;
-}
-
-export function sidebarDirectoryIdForEntry(entry) {
-  const file = String(entry?.rootRelativeFile || fileKey(entry) || "").trim();
-  const parts = file.split("/").filter(Boolean);
-  parts.pop();
-  return parts.join("/");
 }
 
 export function filenameLabelForEntry(entry) {

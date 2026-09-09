@@ -3,7 +3,7 @@
 //
 // The viewer has ONE theme and one renderer behind it: the mesh path (three.js materials
 // and lights). A theme owns both the shared stage and the model's own surface, and the
-// capability table in viewer/docs/render-types.md declares what each render type honours.
+// capability table in packages/ui/docs/render-types.md declares what each render type honours.
 //
 // So this asserts: SURFACE RESPONSE, recorded — the model's own pixels must CHANGE when
 // the theme changes. A renderer that ignores a theme still starts up and still draws,
@@ -11,16 +11,19 @@
 // to catch: `lighting.fill` and `lighting.rim` were once dropped at normalization and
 // every theme rendered with the same rig.
 //
-// Usage:
-//   node viewer/scripts/e2e-theme-conformance.mjs --dir <models-root> [--url http://127.0.0.1:3245]
-//                                                 [--out <dir>] [--baseline <file>]
+// Usage (from the repository root):
+//   node apps/web/scripts/e2e-theme-conformance.mjs --dir <models-root> --url <viewer-url>
+//                                                    [--out <dir>] [--baseline <file>]
 //
-// Requires a viewer already serving <models-root> (npm run start) and
-// playwright available. Exits non-zero on a parity failure or an unresponsive surface.
+// Requires a viewer already serving <models-root>: run
+// `cadgen viewer --host 127.0.0.1 --json` there and pass its printed URL.
+// Requires playwright. Exits non-zero on a parity failure or an unresponsive surface.
 
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+// Use the host's schema version so seeded themes are accepted at bootstrap.
+import { THEME_STORAGE_KEY, THEME_STORAGE_VERSION } from "../src/client/workbench/persistence.js";
 
 const require = createRequire(import.meta.url);
 
@@ -43,12 +46,6 @@ const THEME_IDS = [
 const SCENES = [
   { renderer: "mesh", file: "fun/miniature_spiral_staircase_highres.stl" }
 ];
-
-const THEME_STORAGE_KEY = "cad-viewer:theme";
-// Must match THEME_STORAGE_VERSION in viewer/src/client/workbench/persistence.js. A stale
-// version is ignored on read, which would silently run all eight passes on the default
-// theme and report perfect parity.
-const THEME_STORAGE_VERSION = 12;
 
 const VIEWPORT = { width: 1440, height: 900 };
 // Top-left of the viewport: stage backdrop under every fixture, clear of the toolbar, the

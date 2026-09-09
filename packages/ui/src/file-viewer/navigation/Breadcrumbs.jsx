@@ -25,10 +25,9 @@ import { FileIcon, FolderIcon } from "./icons.jsx";
  * in `crumbs.js`. A folder inside a menu is a submenu of its own listing.
  *
  * Where those listings come from is the one thing the two apps do not share,
- * so it is a prop rather than an import. The desktop reads a directory at a
- * time over IPC and caches it in the explorer store beside the tree's; the
- * standalone viewer already holds the whole catalog and walks the directory
- * tree it builds from it (`catalogFileSource.js`). Both answer the same
+ * so it is a prop rather than an import. FileViewer caches directory listings
+ * from the host's FileSource: desktop reads them over IPC, while the web host
+ * derives them from its catalog. Both answer the same
  * question — "what is in this directory" — and neither knows about the other.
  *
  * @typedef {import("./crumbs.js").Crumb} Crumb

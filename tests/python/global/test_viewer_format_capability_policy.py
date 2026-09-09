@@ -129,7 +129,6 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
             # advice, the wrong icon or no spinner at all.
             CLIENT_ROOT / "workbench/viewerAlerts.js",
             UI_ROOT / "file-viewer/navigation/entryIconKind.js",
-            CLIENT_ROOT / "workbench/entryIconStatus.js",
             # The file list, which is now the SHARED file tree and the adapter that
             # feeds it — drawn by the standalone viewer and by the desktop app alike,
             # so a format check in either is a format one app lists and the other
@@ -137,7 +136,7 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
             # `components/workbench/FileViewerSidebar.js`, which were the standalone's
             # own home screen and left sidebar.)
             UI_ROOT / "file-viewer/navigation/FileTree.jsx",
-            REPO_ROOT / "apps/web/src/adapters/catalogTreeSource.js",
+            REPO_ROOT / "apps/web/src/adapters/fileSource.ts",
         ):
             source = path.read_text(encoding="utf-8")
             relative = path.relative_to(REPO_ROOT).as_posix()

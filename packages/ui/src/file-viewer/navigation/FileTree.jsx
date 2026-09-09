@@ -35,9 +35,8 @@ import { InlineName } from "./InlineName.jsx";
  * Where a listing comes from is the one thing the two hosts do not share, so
  * it is a prop rather than an import — the same shape `Breadcrumbs.jsx` takes,
  * for the same reason. The desktop reads a directory at a time over IPC with
- * gitignore semantics and a watcher behind it; the standalone viewer walks the
- * catalog directory tree it already holds in memory
- * (`catalogTreeSource.js`), so its tree shows the CAD files the catalog knows
+ * gitignore semantics and a watcher behind it; the web host derives listings
+ * from its catalog, so its tree shows the CAD files the catalog knows
  * and the directories containing them. That is the honest web subset and the
  * one place the two trees legitimately differ in CONTENT — the rows, the
  * glyphs, the indentation, the expand/collapse, the keyboard and the filter

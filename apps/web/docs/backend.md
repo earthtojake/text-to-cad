@@ -1,255 +1,155 @@
 # Backend
 
-The CAD Viewer client never reads filesystem paths. It talks to HTTP routes under
-`/__cad/*` and to catalog URLs, and a backend on the other side resolves those to
-files. The viewer is a local-filesystem app, so there is exactly one backend.
+The browser host talks to `cadgen.viewer`, the HTTP service shipped in the
+`cadgen` Python distribution. Its source lives in
+`packages/cadgen/src/cadgen/viewer/`; this app owns the React host and its build.
+The wheel includes that build at `cadgen/_runtime/viewer`, alongside the Node
+and browser runtimes used by the CLI. Skills invoke the installed distribution.
 
-That backend is **stdlib-only Python**: `server/`, no web framework and no third-party
-import, on an interpreter of **3.11 or newer**. It owns everything the viewer does —
-the catalog scan, path containment, asset serving, the SPA, artifact status, the STEP
-import bridge, the instance registry. The viewer is a STATIC
-VISUALIZATION TOOL: its render path runs no CAD kernel. It renders artifacts that
-exist — render packages, sibling `.dxf` files — and the CLIs own generation and
-export. The one build-shaped thing it does is importing a raw foreign STEP, which
-calls cadgen's compile entry point in a worker process (below).
+The HTTP layer uses Python's standard library and requires Python 3.11 or newer.
+It imports the lightweight cadgen catalog and store helpers, but never imports
+the CAD kernel at module scope. Viewing renders existing artifacts, their
+optional `<name>.step.json` kinematics sidecar and `<name>.step.js` authored
+render module, and their cached geometry. Model source changes never trigger a
+rebuild. The one compile operation offered by the viewer is importing a foreign
+STEP through cadgen's build worker pool.
 
-`cadgen` is a SOFT dependency, needed only for that import: nothing under `server/`
-imports it at module scope (`tests_server/test_module_boundaries.py` is the fence), so
-with no cadgen installed the viewer still scans, serves and renders, and only imports
-answer with a hint. The version floor is checked at startup rather than discovered on
-the first request — macOS ships 3.9 as `python3`, and on 3.9 the server booted, printed
-its URL, and then failed the catalog with a raw `TypeError`. It now refuses to start,
-naming the version it needs and how to select another interpreter.
+## Launching
 
-## Where it runs
+Run the installed CLI from the directory to serve. Its working directory is
+the root; there is no directory flag:
 
-Both modes run the same `server/main.py`, so a behaviour difference between them
-is a bug. It is one implementation reached two ways, not two code paths — dev
-adds a proxy hop and nothing else:
-
-- **Dev** (`npm run dev`) — Vite serves the client from source with HMR and spawns
-  `server/main.py --ephemeral --no-registry --api-only`, proxying `/__cad` and
-  `/__tess_cache` to it. `VIEWER_PYTHON` chooses the interpreter (default `python3`);
-  `VIEWER_BACKEND_URL` attaches to a backend you started yourself instead, which is
-  how you put a debugger on it. Dev lives on Vite's canonical port (5173), is strict
-  about it (taken port → pick another with `--port`), and never enters the instance
-  registry — `--no-registry` is what guarantees that, and it is correctness rather
-  than tidiness: a registered dev backend would be REUSED by a later real launch on
-  the same root, handing an agent a URL served by Vite's proxy target. `--api-only`
-  is why dev needs no build first: Vite owns the client here, so this process serves
-  only the two API prefixes and the SPA routes answer 404. (`dist/` is gitignored, so
-  requiring one made `npm run dev` fail on every fresh clone.)
-- **Production** (`npm run build`, then `python server/main.py`) — one process serves
-  the built `dist/` and the API, and a missing `dist/` is a hard refusal naming the
-  build. The cad-viewer agent skill ships the same files (built dist + this server)
-  and starts them the same way; cadgen ships no viewer at all.
-
-## Launching (unconditional, Jupyter-style)
-
-Running `main.py` from a directory always ends with the URL of a live, correct
-Viewer for that directory. Order of operations:
-
-1. **Reuse**: unless `--new` (or an explicit `--port`) is given, the launcher looks for
-   a registry entry whose `realpath(served directory)` and identity token match,
-   identity-probed (`/__cad/server` must answer as the recorded pid). The token is the
-   viewer version SALTED with the newest mtime across `server/`'s `.py` files and the
-   built `dist/` (`identity_token` in `server/http_app.py`, the shape of cadgen's
-   daemon token), recorded at the instance's START — so in a checkout a `git pull` or
-   rebuild changes the token and a stale resident simply fails the match, while in a
-   published bundle the files never change and this is exactly version-keyed reuse.
-   On a match it prints that URL with `action:"reused"` and exits 0. The key is never
-   the port or the pid — keying reuse on the port was the old source-blind-reuse bug,
-   and keying it on the bare version was its dev-checkout remnant.
-2. **Roll**: otherwise it binds the first free port from 3245 upward (binding IS the
-   probe; a lost race just moves to the next candidate) and prints `action:"started"`.
-3. **Strict `--port`**: an explicit port is a demand — taken means exit 1, naming the
-   holder when the registry knows it. No reuse, no rolling.
-
-The printed URL (and `--json`'s `{url,port,action}` line) is the whole contract; the
-port is an output of launch. A running instance keeps executing the code it started
-with — the mtime salt means an edited/pulled/rebuilt checkout starts fresh on the next
-launch without asking; `--new` remains the escape for forcing a second instance of the
-SAME code.
-
-Deliberately NOT adopted from the Jupyter model it parallels: **no auth token** (this
-server executes nothing and serves read-only inside one root; the Host-header
-rebinding guard and the preflight-forcing POST header cover the actual threat model),
-and **no HTTP shutdown route** (`stop`'s identity-probed signal can never kill a
-port-squatter, which is stronger than an authenticated endpoint).
-
-## One root per instance
-
-An instance serves ONE directory: the one it is launched from. There is no flag
-for it — the cwd IS the served directory, so the caller chooses what to serve by
-choosing where to run (dev hands the choice down the same way, as the spawned
-backend's cwd). Requests never name a directory: there is no `?dir=` param, and
-`?file=` is always resolved inside the served root. Anything resolving outside that
-root is refused, unconditionally. Serving a second directory means launching again
-from it (reuse-or-start makes it idempotent); `python server/main.py list`
-reports which root each running instance holds (and `stop --port <n>` ends one).
-
-The root is resolved and checked once, in `LocalAssetBackend`'s constructor
-(`server/backend.py`), so every later request is measured against a directory
-already known to exist.
-
-## Interface
-
-`server/backend.py` holds `LocalAssetBackend` (root containment, catalog
-absolutization, the guarded path resolver); `server/scanner.py` holds the catalog
-scan; `server/cadgen_ops.py` holds the cadgen delegation:
-
-```python
-backend.resolve_root()                        # the served root, resolved once
-backend.read_catalog()                        # scan -> schema v4 entries
-backend.asset_path_for_file_ref(file_ref)     # guarded path for bytes we will send
-backend.catalog_entry_for_file_ref(catalog, file_ref)
-ops.artifact_status(file_ref)                 # freshness verdict + advisory progress
-ops.build_artifact(file_ref, force=False)     # compiles a raw STEP via cadgen; else a CLI hint
+```bash
+cadgen viewer --host 127.0.0.1 --json
 ```
 
-`read_catalog()` scans the served root and returns schema v4 entries whose `file`
-values are absolute paths plus `rootRelativeFile` values for URL navigation. Nothing
-is written to `catalog.json` or any hidden catalog cache.
+The equivalent Python entry point is `python -m cadgen.viewer`, using the
+interpreter where cadgen is installed. The launcher serves the client bundled
+with cadgen. To use a checkout's client, build it from the repository root and
+select it explicitly:
 
-`asset_path_for_file_ref` answers "may the server send this file's contents", so on
-top of the root and hidden-path rules it applies the served-asset extension filter,
-which excludes a model script. It throws on anything outside the root.
+```bash
+npm run build:web
+export CADGEN_VIEWER_DIST="$PWD/apps/web/dist"
+cd <the directory to serve>
+cadgen viewer --host 127.0.0.1 --json
+```
 
-The outside-the-root half of that is `require_contained(root, candidate)`, and it
-is ONE function on purpose: the artifact routes call it too, because "refused
-unconditionally" has to include the route that COMPILES. Without it,
-`GET /__cad/asset?file=<outside>.step` was correctly 403 while
-`POST /__cad/artifact?file=<outside>.step` compiled that file into the shared
-store — after which `/__cad/store` served its geometry component by component,
-a file outside the served root readable in full. Absolute refs are not the
-problem and are not refused as a class (the catalog absolutizes every entry's
-`file` and the client sends exactly that back); an absolute ref that LANDS
-outside is.
+`--dist <directory>` is the command-line equivalent of `CADGEN_VIEWER_DIST`.
+Repository setup and editable-install instructions live in
+[CONTRIBUTING.md](../../../CONTRIBUTING.md).
 
-## Artifact status (file reads only), and where builds live
+The launcher reuses a live instance for the same resolved root and code identity.
+That identity includes the cadgen version and the newest server/client file
+mtime, so rebuilding a checkout changes the reuse key. Otherwise it binds the
+first free port from 3245 upward. `--new` forces another instance of the same
+code; an explicit `--port` is strict and fails if occupied. Always use the
+printed URL, including its port. The JSON response reports `url`, `port`, and
+`action` only after the socket is bound and the app is attached.
 
-Artifact STATUS has exactly one authority: `server/artifact_status.py`, pure file
-reads in this process — package existence, schema version, payload files, the
-no-bake gate, and the imported-file digest gate. Generated-vs-imported is decided
-by the source sidecar's EXISTENCE (`<package>/source.json`, written only by
-generation): the descriptor (`assembly.json`) is a pure function of the STEP
-bytes and carries no provenance; everything source-derived — source path/hashes,
-the pose block, assembly mates — rides the sidecar. Generated outputs are
-DETACHED from their source code: the viewer never treats "the generator changed
-since this artifact was built" as a reason to rebuild, and it does not rebuild
-generated entries at all — a generated model with no artifact reports an error
-that names the build (`python <model>.py`), not a build offer.
+`cadgen viewer list` reports running instances and their roots.
+`cadgen viewer stop --port <port>` stops an instance after verifying its identity.
+Do not stop an instance you did not start.
 
-A CLI build in flight is shown ADVISORILY: the build's status record
-(`.<name>.generation.progress.json`, written by cadgen's coordination layer) is
-read for a `generating` badge with progress when it is fresh and non-terminal.
-The viewer takes no action on that state — it never contends for the generation
-lock — so the kernel-lock rules in `cadgen/coordination/lock.py` are not being
-re-inferred here; a killed build's badge simply ages out within seconds.
+## Development
 
-This authority mirrors cadgen's store layout — the cache schema version, the
-package and record directories, the path-key derivation — in `server/store_paths.py`,
-a deliberate duplicate so that merely VIEWING never requires cadgen. The duplicate is
-paid for by `tests_server/test_store_paths.py`, which asks both implementations the
-same questions over a matrix of environment states and requires identical answers. It
-skips where cadgen is absent (here, by design); set `VIEWER_REQUIRE_CADGEN_PARITY=1`
-and an absent cadgen becomes a failure instead, which is how the workbench that
-develops both sides runs it.
+After the root workspace dependencies and shared packages are built, run Vite
+from `apps/web`:
 
-`/__cad/server` reports `stepArtifactGenerationAvailable: false`, always: the
-capability does not exist in the viewer by design. `stepImportAvailable` reports
-whether a runnable cadgen was found (see the import section below); viewing is
-unaffected either way.
+```bash
+VIEWER_PYTHON=<checkout>/.venv/bin/python npm run dev -- --host 127.0.0.1
+```
 
-## STEP import (via cadgen)
+Vite serves the client from source with HMR. It spawns
+`python -m cadgen.viewer --ephemeral --no-registry --api-only` and proxies
+`/__cad` and `/__tess_cache` to that process. `VIEWER_PYTHON` selects its
+interpreter; the default is `python3`. `VIEWER_BACKEND_URL` attaches to a backend
+you started separately. The app needs no production build in this mode, but
+shared package imports still resolve to their compiled `dist/` exports.
 
-A raw `.step`/`.stp` with no render package (or a stale one — the file changed after
-import) is importable right here: the server calls cadgen's compile entry point —
-the single import producer — inside a private worker process it owns, which parses
-the STEP natively and writes the standard package. Results, errors and PROGRESS
-come back as framed data on a dedicated channel rather than being scraped from
-stdout and exit codes.
+Vite defaults to port 5173 and refuses to roll to another port; pass `--port`
+when needed. The development backend never enters the production instance
+registry, and its API-only mode does not serve a SPA. See the
+[app README](../README.md) for the complete development and launcher contract.
 
-cadgen is a SOFT dependency of the interpreter running the server, and that
-interpreter is the only place it is looked for: no `CADGEN_PYTHON`, no `cadgen` on
-PATH, no `<served-root>/.venv`. Dropping that ladder also closed a real hole — the
-served directory could supply the interpreter that got executed, so opening an
-untrusted folder shipping a `.venv` was an execution vector the moment an import
-ran. Do not reintroduce interpreter discovery in any form. Without an importable
-cadgen, status and build answer with one actionable message and viewing is
-untouched; `/__cad/server` reports it as `stepImportAvailable`.
+## Root and catalog
 
-The worker is a separate process on purpose: OCCT segfaults are a real failure mode
-in this repo, and a kernel crash must cost one worker rather than the viewer. A
-crash surfaces as the ordinary `{ok:false, state:"error"}` the client already
-renders, the write lock releases at process death (it is `flock`), and the next
-request lazily spawns a replacement.
+Each instance serves one fixed filesystem root. `LocalAssetBackend` resolves
+and checks it at construction. Catalog entries include an absolute `file` and
+a `rootRelativeFile` for navigation. The scan skips dot-directories and writes
+no `catalog.json` or hidden catalog cache.
 
-The child is spawned with `--lock-timeout 5` and cwd set to the STEP's own
-directory. A `contended` answer (a peer process holds the package lock) maps to
-`generating`, which the client already treats as "attach to the running build".
-A bare `.step` with no package is simply importable, whatever produced it —
-STEP files carry no cadgen metadata of any kind, so there is nothing to read
-from the file beyond its geometry.
+Both `/__cad/server` and `/__cad/catalog` expose `rootId`, a stable identity for
+the normalized filesystem root. The host uses it for source and session-state
+identity; changing the server port does not name a different root.
 
-Progress needs no protocol of its own: `cadgen step compile` writes the standard build
-progress record beside the package (phase fields flattened, the exact shape the
-client badge renders), and the status route serves it through the same reader
-used for CLI builds (`build_progress_snapshot` in `build_progress.py`). One reader,
-every producer.
+`/__cad/asset` applies root containment, hidden-path rules and the served-asset
+extension filter. Model scripts are excluded. Absolute references returned by
+the catalog are valid only when they resolve inside the root. Artifact status
+and compile routes apply the same containment rule, so compilation cannot be
+used to reach an outside file indirectly through the store.
 
-## Routes
+## Artifacts and the shared store
 
-- `GET /__cad/server`
-- `GET /__cad/catalog`
-- `GET /__cad/asset?file=...`
-- `GET /__cad/artifact?file=...` (status)
-- `POST /__cad/artifact?file=...` (build; `&force=1` to rebuild)
-- `GET /__tess_cache/<key>.tess`, `POST /__tess_cache/<key>.tess`,
-  `POST /__tess_cache/batch` — the shared component-tessellation cache
-  (`<cache root>/meshes`, the same store the export CLI and the snapshot host
-  use; the entry codec, the key scheme — `<cid>-t<tessellator-version>-l<chord>-a<angle>` —
-  and the TESB batch format live in @hardcore/core `lib/surf/tessellationCache.js`). The client registers a provider at
-  bootstrap, so component loads and viewport-LOD level re-tessellations are
-  cache hits whenever ANY consumer — a snapshot, an export, a previous viewer
-  session — tessellated the component before, and misses write back. Entries
-  are opaque bytes living OUTSIDE every served root, so names are strictly
-  validated (`server/tess_cache.py`; its store I/O is an independent Python
-  implementation of the same layout as @hardcore/core's `tessellationCacheFs`, kept
-  honest by an equality test against cadgen, because the bundled skill runtime
-  ships no @hardcore/core tree). `CADGEN_MESH_CACHE=0` disables both directions,
-  and every cache failure degrades to plain in-page tessellation.
+`cadgen.viewer.artifact_status` reads artifact/store state and advisory build
+progress. Generated artifacts stay detached from their source: the viewer does
+not execute model scripts or rebuild generated outputs. When generation is
+needed, the alert names the CLI command. `/__cad/server` therefore reports
+`stepArtifactGenerationAvailable: false`.
 
-### Storage tiers, in one rule
+A raw foreign `.step` or `.stp` without a current render artifact can be
+imported. `cadgen.viewer.cadgen_ops` delegates to cadgen's compile entry point in
+a worker process; the kernel runs there, and failures and progress return as
+structured results. Import availability is reported as `stepImportAvailable`.
+The service uses its own installed cadgen runtime, never an interpreter found
+inside the served directory.
 
-`~/.cache/cadgen` (or `$CADGEN_CACHE_DIR`, or the platform cache dir —
-`$XDG_CACHE_HOME`/`%LOCALAPPDATA%`; one resolution rule in cadgen's
-`_internal/cache_paths.py`, mirrored by `cadgen_cache_root_dir` in `server/store_paths.py`
-and equality-tested against it) holds everything CONTENT-ADDRESSED and DISPOSABLE:
-the component store, the kernel-op memo, and this mesh cache. Deleting any of
-it costs a rebuild, never correctness. The model's own folder holds everything
-meaningful: the artifact and its store package
-(hardlinked into the store where possible, so the heavy bytes exist once).
-Version bumps orphan whole cache generations by design; `cadgen cache info` /
-`cadgen cache gc` are the only sweepers — nothing collects garbage
-automatically.
+Store layout and I/O have one implementation. `cadgen.viewer.store_paths` is a
+thin adapter over `cadgen.catalog`, `cadgen.store` and the source-sidecar helpers;
+it returns the strings and dictionaries expected by HTTP routes. The viewer
+does not maintain a second store layout. See
+[cadgen's store contract](../../../packages/cadgen/STORE.md) for objects,
+document indexes, output records and cache-root resolution.
 
-`asset` streams asset bytes for rendering, never for saving — there is no download
-route and no content-disposition header anywhere. It serves OUTPUTS only — the
-artifacts the viewer may have to regenerate — and never source code: a model script
-(`.py`) is not in the served-asset extension set, so it is not reachable through any
-route.
+The tessellation routes likewise delegate reads, writes and TESB batch framing
+to `cadgen.store.tess_cache`. `index/mesh/<key>` points to the object containing
+the cached bytes. The shared JavaScript entry codec and key scheme live in
+`@hardcore/core/lib/surf/tessellationCache.js`. Cache names are validated before
+access because this shared store is outside the served root.
 
-No route hands a path to a desktop program. The server answers with bytes and JSON;
-it never spawns a file manager or any other GUI application on the user's machine,
-and a route that did would be a new class of thing for this backend to be.
+The browser host constructs a `CadClient` from `@hardcore/core/client` and
+injects it into the CAD renderer. Catalog subscriptions share the client's
+two-second poll and stop when its last subscriber leaves. Each prepared render
+session owns its tessellation provider, work queue and cancellation signal;
+there is no page-global provider registration. Session disposal releases its
+resources, and the host disposes the client when finished. A cache miss or
+failure falls back to ordinary tessellation; `CADGEN_MESH_CACHE=0` disables
+cache reads and writes.
 
-**Every POST must send `x-cadgen-viewer: 1`.** The value carries no meaning — a custom
-header is what forces a browser to preflight a cross-origin request, and the backend
-answers no CORS, so the preflight fails and a hostile page can never reach a route
-that builds (and therefore executes a generator). A POST without it gets 403. GETs are
-unaffected. A second gate refuses any Host header naming a non-local name
-(DNS-rebinding defense). See the trust-model comment in `server/http_app.py`.
+## HTTP routes
 
-**The viewer never touches the network.** Every byte it serves or reads is local;
-the import spawns a local process, never a fetch.
+| Route | Purpose |
+|---|---|
+| `GET /__cad/server` | Server identity, root and capabilities. |
+| `GET /__cad/catalog` | Current catalog and root identity. |
+| `GET /__cad/asset?file=...` | Allowed artifact bytes inside the served root. |
+| `GET /__cad/store?file=...` | Virtual render assets from the shared store. |
+| `GET /__cad/artifact?file=...` | Artifact status and advisory progress. |
+| `POST /__cad/artifact?file=...` | Import a foreign STEP; `&force=1` requests a rebuild. |
+| `GET /__tess_cache/<key>.tess` | Read a tessellation-cache entry. |
+| `POST /__tess_cache/<key>.tess` | Best-effort tessellation-cache write-back. |
+| `POST /__tess_cache/batch` | Read a batch of entries in a TESB container. |
+
+Every POST must send `x-cadgen-viewer: 1`. The custom header forces a browser
+preflight for cross-origin POSTs, and the server sends no CORS headers. When
+bound to loopback, Host validation also refuses non-local names as a
+DNS-rebinding defense. The trust model is documented in
+`cadgen.viewer.http_app`; keep these gates intact.
+
+The service serves local bytes and JSON. It has no download/export, native
+file-manager or HTTP shutdown route. CLI generation/export and host-native
+actions remain outside this HTTP interface.
+
+Backend tests live in `tests/python/packages/cadgen/viewer` and are run by
+`scripts/test/test-python.sh`. The web app's `npm run test` covers its JavaScript
+host only.

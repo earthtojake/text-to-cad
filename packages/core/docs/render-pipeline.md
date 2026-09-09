@@ -299,7 +299,7 @@ import { renderModel } from "@hardcore/core/common/renderModel.js";
 const source = await loadSource({
   kind: "step",
   glbUrl: "/models/.part.step.glb",
-  stepParameterUrl: "/models/.part.step.js",
+  stepParameterUrl: "/models/part.step.json",
   cadPath: "models/part.step",
   kinematics: { drive: 180 }
 });

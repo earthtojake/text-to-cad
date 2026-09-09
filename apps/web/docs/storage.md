@@ -2,8 +2,9 @@
 
 The web host owns browser persistence; shared UI receives state and callbacks.
 This pure refactor retains existing preference values and session lifetimes.
-CAD Viewer has four browser persistence tiers. Choose the smallest tier that
-matches the lifetime and sharing behavior the user expects.
+Choose the smallest persistence tier that matches the lifetime and sharing
+behavior the user expects. New view-state writes use the root-scoped record
+below; legacy records remain readable for migration.
 
 This doc covers browser state only. Catalogs, CAD assets, and hidden STEP
 GLB/topology artifacts are backend concerns; use [backend.md](./backend.md) for
@@ -31,32 +32,38 @@ Current intended use:
 
 - `cad-viewer:theme`: the active theme id (`system`, a built-in preset id, or
   `custom`) plus the single custom settings blob, if the user has edited one.
-  Presets are read-only and are never stored — only named. The key is absent
-  while the theme is `system` with no custom slot.
+  Presets are read-only and are never stored — only named. An absent key
+  resolves to `system` with no custom slot.
 - `cad-viewer:tutorial-tips:v1`: ids of the one-shot tutorial tips the user has
   dismissed. A tip is recorded only when its close button is pressed — clicking
   away, Escape, and reloads all leave it unrecorded, so it comes back on the next
   chance until it is actually acknowledged. Cleared by `?resetTips=1`.
+- `cad-viewer:file-sheet-tab-layout:v5`: the Inspector's per-kind tab order,
+  pane assignment, split state and split ratio. The active tab remains per-file
+  state.
+
+The host adapter is [cadPreferences.ts](../src/persistence/cadPreferences.ts).
+It injects preferences into the shared renderer and retains the existing theme
+storage-event synchronization.
 
 Avoid adding file-specific state to `localStorage`. If the value depends on the
 selected file, the active root directory, a generated asset hash, or a tab
 interaction, it belongs in per-file session state instead.
 
-## Directory sessionStorage
+## Legacy directory sessionStorage
 
-Use directory-level `sessionStorage` for temporary app-wide UI state that should
-survive reloads in the same browser tab, should not become a durable global
-preference, and should not vary by selected file. Use
-`src/client/workbench/persistence.js` rather than creating one-off storage keys.
+The host reads the existing directory record through
+[persistence.js](../src/client/workbench/persistence.js). Its panel and tree
+fields seed root-scoped FileViewer state when no newer record exists. The host
+continues writing the tab's theme override here through `cadPreferences.ts`.
 
-Current keys:
+Retained key:
 
 ```text
 cad-viewer:directory-session:v1
-cad-viewer:active-dir:v1
 ```
 
-Current `cad-viewer:directory-session:v1` fields:
+Recognized `cad-viewer:directory-session:v1` fields:
 
 - `fileViewerOpen`: whether the **file tree** is the open panel. Nullable:
   absent is "nobody has said", which resolves to the shared panel list's own
@@ -79,14 +86,16 @@ Do not put selected-file state, model controls, drawing state, or
 generated-asset decisions in directory session state. Those belong in per-file
 session state.
 
-## Per-File sessionStorage
+## Legacy per-file sessionStorage
 
-Prefer per-file `sessionStorage` for viewer state that should survive reloads in
-the same browser tab without becoming a durable global preference. Use
-`src/client/workbench/fileSessionState.js` rather than creating one-off storage
-keys.
+Per-file state survives reloads in the same browser tab without becoming a
+durable global preference. The host's
+[fileViewer.ts](../src/persistence/fileViewer.ts) restores existing records with
+the validated reader exported by `@hardcore/ui/renderers/cad/state`.
 
-Per-file state is namespaced by the active root directory and keyed by file:
+Legacy records use a namespace and file key; the former standalone web host
+used the default namespace. They remain readable without being rewritten or
+deleted:
 
 ```text
 cad-viewer:file-session:v1:<namespace>:<fileKey>
@@ -106,17 +115,20 @@ Existing slice intent:
 - `urdf`: joint values and motion-planning controls.
 - `largeFile`: large-file decisions such as selectable topology opt-in.
 
-When adding another large-file control, reuse the `largeFile` slice instead of
-adding a separate session storage key.
+Current writes store these slices in the CAD renderer's per-file state inside
+the root-scoped record. Reuse the existing slices when adding a control instead
+of adding a separate storage key.
 
 ## Root-scoped FileViewer state
 
-`hardcore:file-viewer:v1:<encoded rootId>` in sessionStorage holds the shared
+The host's [fileViewer.ts](../src/persistence/fileViewer.ts) reads and writes
+`hardcore:file-viewer:v1:<encoded rootId>` in `sessionStorage`. It holds the shared
 panel/width, expanded directories and renderer state keyed by file and renderer.
 `rootId` is the server's normalized filesystem-root identity, independent of
 its port. The host restores legacy directory and validated per-file session
-records without deleting them. Global theme and tutorial-tip keys keep their
-existing names and meanings. The URL remains the selected-file authority;
+records without deleting them or replacing newer renderer state. Global theme,
+tutorial-tip and Inspector-layout keys keep their existing names and meanings.
+The URL remains the selected-file authority;
 opening the root without a file does not silently select a different artifact.
 
 CAD state normalizers are supplied by `@hardcore/ui/renderers/cad/state`.
