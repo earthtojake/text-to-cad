@@ -4,7 +4,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuRad
 import { SELECTION_FILTERS } from '../../workbench/selectionFilter.js';
 import { FileSheetPortalContext } from './FileSheet.js';
 
-export default function SelectionFilterMenu({ value, onChange, groupsAvailable, disabled, compact }) {
+export default function SelectionFilterMenu({ value, onChange, disabled, compact }) {
   const boundary = useContext(FileSheetPortalContext);
   const label = SELECTION_FILTERS.find(item => item.id === value)?.label || 'All';
   return <DropdownMenu>
@@ -17,12 +17,12 @@ export default function SelectionFilterMenu({ value, onChange, groupsAvailable, 
     <DropdownMenuContent align="start" sideOffset={8} collisionBoundary={boundary} collisionPadding={8} className="w-60 max-w-[min(240px,var(--radix-dropdown-menu-content-available-width))]" onEscapeKeyDown={event => event.stopPropagation()}>
       <DropdownMenuLabel>Selection filter</DropdownMenuLabel>
       <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
-        {SELECTION_FILTERS.map(item => <DropdownMenuRadioItem key={item.id} value={item.id} disabled={item.id === 'groups' && !groupsAvailable}>
+        {SELECTION_FILTERS.map(item => <DropdownMenuRadioItem key={item.id} value={item.id}>
           <span><span className="block">{item.label}</span><span className="block text-micro text-muted-foreground">{item.detail}</span></span>
         </DropdownMenuRadioItem>)}
       </DropdownMenuRadioGroup>
       <DropdownMenuSeparator />
-      <p className="px-2 py-1.5 text-micro text-muted-foreground">{groupsAvailable ? 'Shift-click adds or removes from selection.' : 'Recognize features in Tree to enable groups.'}</p>
+      <p className="px-2 py-1.5 text-micro text-muted-foreground">Shift-click adds or removes from selection.</p>
     </DropdownMenuContent>
   </DropdownMenu>;
 }
