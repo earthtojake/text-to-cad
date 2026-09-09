@@ -1,4 +1,4 @@
-import { Ruler, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import {
   MEASURE_SNAP_LABELS,
@@ -10,7 +10,7 @@ import { measureLabelText, measureSeriesColor } from "@hardcore/core/lib/viewer/
 import { MEASURE_RULER_MAX_MEASUREMENTS } from "../../workbench/measureRulerState.js";
 import { cn } from "@hardcore/ui/utils";
 
-const groupLabelClasses = "px-2 pb-1 pt-2 text-micro text-sidebar-foreground/45";
+const groupLabelClasses = "px-2 py-1.5 text-sm font-medium";
 
 // What each endpoint bound to, so an exact edge or face reading is visibly
 // different from a free point taken off the tessellated surface.
@@ -30,9 +30,8 @@ export default function StepMeasurementsSection({
 }) {
   if (!measurements.length) {
     return (
-      <div className="flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 px-4 py-5 text-center">
-        <Ruler className="size-4 text-muted-foreground/45" strokeWidth={1.5} aria-hidden="true" />
-        <p className="text-tiny text-muted-foreground">
+      <div className="px-2 py-1.5">
+        <p className="text-micro text-muted-foreground">
           {measureModeActive
             ? "Select two points, edges, or faces to measure"
             : "Pick the Measure tool to start measuring"}
@@ -46,13 +45,13 @@ export default function StepMeasurementsSection({
       <div className="flex items-center justify-between gap-2 pr-1">
         <div className={groupLabelClasses}>
           Measurements
-          <span className="ml-1.5 tabular-nums text-sidebar-foreground/35">
+          <span className="ml-1.5 text-micro font-normal tabular-nums text-muted-foreground">
             {measurements.length}/{MEASURE_RULER_MAX_MEASUREMENTS}
           </span>
         </div>
         <button
           type="button"
-          className="rounded-sm px-1.5 py-0.5 text-micro text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          className="rounded-sm px-2 py-1.5 text-micro text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => onClear?.()}
         >
           Clear
@@ -80,10 +79,10 @@ export default function StepMeasurementsSection({
                 }
               }}
               className={cn(
-                "group/measure-row flex h-7 min-w-0 w-full max-w-full cursor-pointer items-center gap-2 rounded-md px-2 outline-none transition-colors",
+                "group/measure-row flex min-w-0 w-full max-w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 outline-none transition-colors",
                 active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground"
+                  ? "bg-accent text-accent-foreground"
+                  : "hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
               )}
             >
               {/* The row's colour is the line's colour, so the two identify each
@@ -93,17 +92,17 @@ export default function StepMeasurementsSection({
                 className="size-2 shrink-0 rounded-full"
                 style={{ backgroundColor: measureSeriesColor(item.colorIndex) }}
               />
-              <span className="min-w-0 flex-1 truncate text-tiny tabular-nums">
+              <span className="min-w-0 flex-1 truncate text-sm tabular-nums">
                 {labelText}
                 {angleText ? <span className="ml-1.5">{angleText}</span> : null}
                 {snapText ? (
-                  <span className="ml-1.5 text-micro text-current/45">{snapText}</span>
+                  <span className="block text-micro text-muted-foreground">{snapText}</span>
                 ) : null}
               </span>
               <button
                 type="button"
                 aria-label={`Delete measurement ${index + 1}`}
-                className="grid size-4 shrink-0 place-items-center rounded-sm text-current/45 opacity-0 transition group-hover/measure-row:opacity-100 focus-visible:opacity-100 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                className="grid size-4 shrink-0 place-items-center rounded-sm text-muted-foreground opacity-0 transition group-hover/measure-row:opacity-100 focus-visible:opacity-100 hover:bg-accent hover:text-accent-foreground"
                 onClick={(event) => {
                   event.stopPropagation();
                   onDelete?.(item.id);

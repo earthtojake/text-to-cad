@@ -5,6 +5,13 @@ export const SELECTION_FILTERS = [
   { id: 'edges', label: 'Edges', detail: 'Edges only' },
 ];
 
+export const MEASURE_SELECTION_FILTERS = [
+  { id: 'all', label: 'Any geometry', detail: 'Points, edges and faces' },
+  { id: 'points', label: 'Points', detail: 'Point-to-point distance' },
+  { id: 'edges', label: 'Edges', detail: 'Snap to edges only' },
+  { id: 'faces', label: 'Faces', detail: 'Snap to faces only' },
+];
+
 export function filterSelectionReferences(references, filter) {
   if (filter === 'parts') return [];
   if (filter === 'faces') return references.filter(r => r.selectorType === 'face');
