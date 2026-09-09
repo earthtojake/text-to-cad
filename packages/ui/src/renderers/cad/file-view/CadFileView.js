@@ -350,6 +350,9 @@ function CadFileViewSurface({
   const [hoveredModelReferenceId, setHoveredModelReferenceId] = useState("");
   const [selectionFilter, setSelectionFilter] = useState("all");
   const [designHighlight, setDesignHighlight] = useState(null);
+  const handleDesignHighlight = useCallback((selection, label) => {
+    setDesignHighlight(selection ? { ...selection, label } : null);
+  }, []);
   const [selectionFilterNotice, setSelectionFilterNotice] = useState("");
   const [selectedPartIds, setSelectedPartIds] = useState([]);
   const [selectedRenderPartIdByAssemblyPartId, setSelectedRenderPartIdByAssemblyPartId] = useState({});
@@ -4058,6 +4061,14 @@ function CadFileViewSurface({
     for (const reference of referencesForHost(text)) onReference({ ...reference, label });
   }, [viewerLoading, stepUpdateInProgress, onReference, effectiveActiveReferenceMap, selectedMeshData, selectedEntry, referencesForHost]);
 
+  const handleAddCurrentSelection = useCallback(() => {
+    if (designHighlight) {
+      if (designHighlight.label) handleAddDesignFeature(designHighlight, designHighlight.label);
+      return;
+    }
+    handleAddSelection();
+  }, [designHighlight, handleAddDesignFeature, handleAddSelection]);
+
   const handleCopySelection = useCallback(async () => {
     setScreenshotStatus("");
     if (stepUpdateInProgress) {
@@ -5621,7 +5632,10 @@ function CadFileViewSurface({
   const selectionToolActive = hasCapability(effectiveRenderFormat, "topology") &&
     tabToolMode === TAB_TOOL_MODE.REFERENCES;
   const drawToolActive = drawModeActive;
-  const selectionCount = selectionCountBase;
+  const selectionCount = designHighlight
+    ? (typeof onReference === "function" && designHighlight.label && !viewerLoading
+      ? designHighlight.faceIds.length + designHighlight.partIds.length : 0)
+    : selectionCountBase;
   const activeReferenceId = String(selectedReferenceIds[selectedReferenceIds.length - 1] || "").trim();
   const activeReferencePartTreeNodeId = useMemo(() => {
     if (!activeReferenceId) {
@@ -5829,7 +5843,7 @@ function CadFileViewSurface({
                   copyReferenceTipActive={copyReferenceTipActive}
                   panToolActive={panToolActive}
                   handleCopySelection={handleCopySelection}
-                  handleAddSelection={typeof onReference === "function" ? handleAddSelection : null}
+                  handleAddSelection={typeof onReference === "function" ? handleAddCurrentSelection : null}
                   handleScreenshotCopy={handleScreenshotCopy}
                 />
               </div>
@@ -5919,7 +5933,7 @@ function CadFileViewSurface({
             {selectedFileSheetKind === "step" ? (
               <StepFileSheet
                 key={`step:${selectedKey}`}
-                designOutline={{ client, file: selectedEntry?.file, revision: artifactRevision, onOpenFile, references: !viewerLoading && !stepUpdateInProgress ? selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: setDesignHighlight, onLoadTopology: loadDesignTopology, onAddToPrompt: typeof onReference === "function" ? handleAddDesignFeature : null }}
+                designOutline={{ client, file: selectedEntry?.file, revision: artifactRevision, onOpenFile, references: !viewerLoading && !stepUpdateInProgress ? selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: handleDesignHighlight, onLoadTopology: loadDesignTopology }}
                 open={fileSheetOpen}
                 isDesktop={isDesktop}
                 width={activeSheetWidth || tabToolsWidth}

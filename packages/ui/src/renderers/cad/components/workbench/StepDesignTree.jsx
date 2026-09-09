@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Box, ChevronRight, Circle, Eye, EyeOff, Focus, Layers, PencilRuler, Plus, RotateCw, Scissors, SquareRoundCorner, Variable, X } from 'lucide-react';
+import { Box, ChevronRight, Circle, Eye, EyeOff, Focus, Layers, PencilRuler, RotateCw, Scissors, SquareRoundCorner, Variable, X } from 'lucide-react';
 import { ScrollArea } from '@hardcore/ui/primitives/scroll-area';
-import { Button } from '@hardcore/ui/primitives/button';
 import { cn } from '@hardcore/ui/utils';
 import { resolveDesignFeatureLinks, designFeatureSelection } from '../../workbench/designFeatureSelection.js';
 import { groupDesignFeatures, sourceParameterNode } from '../../workbench/designFeatureTree.js';
@@ -17,7 +16,7 @@ function flatten(nodes, expanded, depth = 0) {
   return nodes.flatMap(node => [{ ...node, depth }, ...(expanded.has(node.id) ? flatten(node.children || [], expanded, depth + 1) : [])]);
 }
 
-export default function StepDesignTree({ client, file, revision, label, onOpenFile, references = EMPTY, parts = EMPTY, onHighlight, onLoadTopology, onAddToPrompt, partActions }) {
+export default function StepDesignTree({ client, file, revision, label, onOpenFile, references = EMPTY, parts = EMPTY, onHighlight, onLoadTopology, partActions }) {
   const [state, setState] = useState({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [expanded, setExpanded] = useState(new Set(['model', 'parts']));
@@ -74,9 +73,9 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
     if (state.geometryLinks?.faces?.length) onLoadTopology?.();
   }, [state.geometryLinks, onLoadTopology]);
   useEffect(() => {
-    onHighlight?.(selectionRequest ? geometrySelection : null);
+    onHighlight?.(selectionRequest ? geometrySelection : null, selected.type === "model" || selected.type === "parameters" ? null : title(selected.label));
     return () => onHighlight?.(null);
-  }, [geometrySelection, selectionRequest, onHighlight]);
+  }, [geometrySelection, selectionRequest, onHighlight, selected.type, selected.label]);
   const rows = flatten(roots, expanded);
   const runPartAction = (event, action, id) => {
     event.stopPropagation();
@@ -159,14 +158,6 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
       </button>)}</div> : <p className="text-xs text-muted-foreground">{selected.type === 'imported' ? 'This STEP contains geometry, not an authored feature history.' : selected.type === 'part' ? selected.children.length ? `${selected.children.length} source operations` : 'No individual source operations linked.' : selected.type === 'group' ? `${selected.children.length} items` : 'No static parameter values available.'}</p>}
       {(selected.line || selected.type === 'parameter' || selected.type === 'part') && <p className="mt-3 text-micro text-muted-foreground">{geometrySelection?.partIds.length ? `${geometrySelection.partIds.length} associated ${geometrySelection.partIds.length === 1 ? "part" : "parts"}` : geometrySelection?.faceIds.length ? `${geometrySelection.faceIds.length} associated ${geometrySelection.faceIds.length === 1 ? "face" : "faces"}` : state.geometryLinks ? 'No matching geometry available' : 'Rebuild this model to link its geometry'}</p>}
     </section>}
-    {onAddToPrompt && selected.type !== 'model' && selected.type !== 'parameters' && <div className="shrink-0 border-t border-sidebar-border/60 px-3 py-2">
-      <Button type="button" variant="outline" size="sm" className="h-auto min-h-7 w-full gap-1.5 whitespace-normal text-xs"
-        disabled={!geometrySelection.faceIds.length && !geometrySelection.partIds.length}
-        title={geometrySelection.faceIds.length || geometrySelection.partIds.length ? 'Add this feature’s linked geometry to the prompt' : 'No linked geometry available to add'}
-        onClick={() => onAddToPrompt(geometrySelection, title(selected.label))}>
-        <Plus className="size-3.5 shrink-0" aria-hidden="true" />Add to prompt
-      </Button>
-    </div>}
     <div className="shrink-0 border-t border-sidebar-border/60 px-3 py-2 text-micro text-muted-foreground">
       {state.source ? <><button className="max-w-full truncate text-left underline-offset-2 hover:underline" title={state.source} onClick={() => onOpenFile?.(state.source)}>{state.source.split('/').pop()}</button></> : <p>{state.status === 'ambiguous' ? 'Multiple source candidates. No feature history was assumed.' : state.status === 'loading' ? 'Reading matching source without running it.' : 'No source feature history available.'}</p>}
     </div>
