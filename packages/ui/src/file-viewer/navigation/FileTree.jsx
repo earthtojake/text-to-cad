@@ -99,9 +99,8 @@ const INDENT = 12;
  *   for the reveal and the scroll; the open file stays highlighted too.
  * @param {TreeEdit|null} [props.edit] A rename or a create the breadcrumb asked for.
  * @param {(path: string) => void} props.onOpen
- * @param {import('react').ReactNode} [props.headerActions] Host-owned file actions beside the filter.
  */
-export function FileTree({ source, activePath, reveal = null, edit = null, onOpen, headerActions }) {
+export function FileTree({ source, activePath, reveal = null, edit = null, onOpen }) {
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(null);
   /** @type {[TreeEditRequest|null, Function]} */
@@ -541,7 +540,6 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
         </div>
       </div>
 
-      {headerActions ? <div className="flex shrink-0 items-center justify-end border-b px-2 py-1.5">{headerActions}</div> : null}
       <ContextMenu modal={false}>
         <ContextMenuTrigger asChild>
           <div

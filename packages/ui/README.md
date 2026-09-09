@@ -110,7 +110,3 @@ integration tests for renderer preparation, saves/conflicts, root changes,
 multiple instances, cancellation and disposal. App integration and packaged
 runtime checks remain with their hosts. See [renderer contracts](docs/renderers.md)
 for the non-CAD behavior that must remain unchanged.
-
-Hosts may supply `presentation.treeActions` for actions above the file tree,
-such as the desktop's native Add files button. FileViewer only renders this slot;
-file picking and copying remain host services.
