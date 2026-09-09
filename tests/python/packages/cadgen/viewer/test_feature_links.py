@@ -22,7 +22,7 @@ def part():
 class FeatureLinksTests(unittest.TestCase):
     def test_translated_tool_repeat_and_geometry_unchanged(self):
         with tempfile.TemporaryDirectory() as tmp:
-            source = Path(tmp, 'models', 'part.py'); source.parent.mkdir(); source.write_text(SOURCE)
+            source = Path(tmp, 'models', 'part.py'); source.parent.mkdir(); source.write_text(SOURCE, encoding="utf-8")
             spec = importlib.util.spec_from_file_location('feature_fixture', source)
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             baseline = module.part()
@@ -43,22 +43,22 @@ class FeatureLinksTests(unittest.TestCase):
     def test_cache_requires_exact_source_and_step_bytes(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'CADGEN_CACHE_DIR':tmp}):
             models = Path(tmp, 'models'); models.mkdir()
-            source = models / 'part.py'; source.write_text(SOURCE)
-            document = models / 'part.step'; document.write_text('test artifact')
+            source = models / 'part.py'; source.write_text(SOURCE, encoding="utf-8")
+            document = models / 'part.step'; document.write_text('test artifact', encoding="utf-8")
             digest = hashlib.sha256(source.read_bytes()).hexdigest()
             links = {'schema':1,'sourceHash':digest,'faces':[], 'lines':{}}
             publish_links(source,document,links)
             self.assertEqual(read_links(digest,document),links)
-            source.write_text(SOURCE+'\n')
+            source.write_text(SOURCE+'\n', encoding="utf-8")
             self.assertIsNone(read_links(hashlib.sha256(source.read_bytes()).hexdigest(),document))
-            document.write_text('changed artifact')
+            document.write_text('changed artifact', encoding="utf-8")
             self.assertIsNone(read_links(digest,document))
             publish_links(source,document,links)
             self.assertIsNone(read_links(digest,document))
 
     def test_mismatched_loaded_source_and_existing_debugger_disable_capture(self):
         with tempfile.TemporaryDirectory() as tmp:
-            source = Path(tmp,'part.py'); source.write_text(SOURCE)
+            source = Path(tmp,'part.py'); source.write_text(SOURCE, encoding="utf-8")
             with FeatureTrace(source,'part',source_hash='wrong') as trace:
                 self.assertFalse(trace.active)
             previous = sys.gettrace()
@@ -87,7 +87,7 @@ def assembly():
     return bd.Compound(children=parts)
 """
         with tempfile.TemporaryDirectory() as tmp:
-            source = Path(tmp, 'models', 'assembly.py'); source.parent.mkdir(); source.write_text(source_text)
+            source = Path(tmp, 'models', 'assembly.py'); source.parent.mkdir(); source.write_text(source_text, encoding="utf-8")
             spec = importlib.util.spec_from_file_location('assembly_fixture', source)
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             with FeatureTrace(source, 'assembly') as trace:
