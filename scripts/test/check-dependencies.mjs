@@ -12,7 +12,10 @@ function existing(file) {
   const base = file.replace(/\.(?:js|jsx)$/, '');
   return [file, ...extensions.map(ext => base + ext)].find(candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
 }
-function owner(file) { return path.relative(repo, file).split(path.sep).slice(0, 2).join('/'); }
+// Keep filesystem paths native in the graph; classify repository locations
+// with one separator so these boundaries also run on Windows.
+function repoPath(file) { return path.relative(repo, file).split(path.sep).join('/'); }
+function owner(file) { return repoPath(file).split('/').slice(0, 2).join('/'); }
 function resolveImport(specifier, file) {
   const clean = specifier.split('?')[0];
   if (clean.startsWith('.')) return existing(path.resolve(path.dirname(file), clean));
@@ -69,7 +72,7 @@ for (const file of files) {
     if (from.startsWith('packages/') && to?.startsWith('apps/')) errors.push(`${label}: package depends on app source`);
     if (from === 'packages/core' && (/^(react(?:-dom)?(?:\/|$)|electron(?:\/|$)|next(?:\/|$)|@hardcore\/ui(?:\/|$))/.test(item.name) || to === 'packages/ui')) errors.push(`${label}: core depends on UI/platform framework`);
     if (from === 'packages/ui' && (isBuiltin(item.name) || /^(electron(?:\/|$)|@renderer\/|@main\/|@shared\/|@\/)/.test(item.name))) errors.push(`${label}: UI depends on a host or Node module`);
-    if (from === 'apps/desktop' && file.includes('/src/renderer/') && to === from && resolved.includes('/src/main/')) errors.push(`${label}: renderer imports main`);
+    if (from === 'apps/desktop' && repoPath(file).startsWith('apps/desktop/src/renderer/') && to === from && repoPath(resolved).startsWith('apps/desktop/src/main/')) errors.push(`${label}: renderer imports main`);
     if (item.name.startsWith('@hardcore/') && !resolved && !item.name.endsWith('.css')) errors.push(`${label}: missing package export/source`);
     if (item.name.startsWith('.') && !resolved && !/\.(css|svg|png|webp|ico|glb|wasm|json)$/.test(item.name.split('?')[0])) errors.push(`${label}: unresolved relative module`);
     if (resolved && !item.typesOnly) edges.set(file, [...(edges.get(file) || []), resolved]);
@@ -80,13 +83,13 @@ const start = path.join(repo, 'packages/ui/src/file-viewer/index.ts');
 const visited = new Set();
 function inspect(file) {
   if (visited.has(file)) return; visited.add(file);
-  if (file.includes('/packages/ui/src/renderers/') || file.includes('/packages/core/src/common/')) errors.push(`FileViewer eagerly imports ${path.relative(repo, file)}`);
+  if (repoPath(file).startsWith('packages/ui/src/renderers/') || repoPath(file).startsWith('packages/core/src/common/')) errors.push(`FileViewer eagerly imports ${path.relative(repo, file)}`);
   for (const dependency of edges.get(file) || []) inspect(dependency);
 }
 inspect(start);
 // Any Node-only helper reachable from UI or an app's browser renderer is a leak,
 // even through a re-export or an otherwise framework-independent core module.
-for (const root of files.filter(file => file.includes('/packages/ui/') || file.includes('/apps/web/') || file.includes('/apps/docs/') || file.includes('/apps/desktop/src/renderer/'))) {
+for (const root of files.filter(file => ['packages/ui/', 'apps/web/', 'apps/docs/', 'apps/desktop/src/renderer/'].some(prefix => repoPath(file).startsWith(prefix)))) {
   const seen = new Set();
   function checkBrowser(file) {
     if (seen.has(file)) return; seen.add(file);
