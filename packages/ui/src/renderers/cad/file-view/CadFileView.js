@@ -2,6 +2,7 @@
 
 import StepMeasurementsSection from "../components/workbench/StepMeasurementsSection.js";
 import SelectionFilterMenu from "../components/workbench/SelectionFilterMenu.jsx";
+import { designFeaturePromptText } from "../workbench/designFeaturePrompt.js";
 import { filterSelectionReferences, toggleFaceGroupSelection, MEASURE_SELECTION_FILTERS } from "../workbench/selectionFilter.js";
 
 import { TutorialTipsContext } from "../workbench/tutorialTips.js";
@@ -4047,6 +4048,15 @@ function CadFileViewSurface({
   const handleAddSelection = useCallback(() => {
     addReferenceText(canonicalCopySelectionLines.join("\n"));
   }, [addReferenceText, canonicalCopySelectionLines]);
+  const handleAddDesignFeature = useCallback((selection, label) => {
+    if (viewerLoading || stepUpdateInProgress || typeof onReference !== "function") return;
+    const text = designFeaturePromptText(selection, {
+      referenceMap: effectiveActiveReferenceMap,
+      parts: selectedMeshData?.parts || EMPTY_LIST,
+      entry: selectedEntry,
+    });
+    for (const reference of referencesForHost(text)) onReference({ ...reference, label });
+  }, [viewerLoading, stepUpdateInProgress, onReference, effectiveActiveReferenceMap, selectedMeshData, selectedEntry, referencesForHost]);
 
   const handleCopySelection = useCallback(async () => {
     setScreenshotStatus("");
@@ -4375,7 +4385,7 @@ function CadFileViewSurface({
     stepTreeRoot
   ]);
 
-  const focusStepTreeNode = useCallback((nodeId) => {
+  const focusStepTreeNode = useCallback((nodeId, { reveal = true } = {}) => {
     if (!isAssemblyView || !assemblyRoot) {
       return;
     }
@@ -4408,7 +4418,7 @@ function CadFileViewSurface({
       const next = current.filter((id) => !targetLeafIdSet.has(String(id || "").trim()));
       return next.length === current.length ? current : next;
     });
-    for (const targetNodeId of targetNodeIds) {
+    for (const targetNodeId of reveal ? targetNodeIds : []) {
       revealStepTreeNode(targetNodeId, {
         expandSelf: true,
         source: "tree"
@@ -5909,7 +5919,7 @@ function CadFileViewSurface({
             {selectedFileSheetKind === "step" ? (
               <StepFileSheet
                 key={`step:${selectedKey}`}
-                designOutline={{ client, file: selectedEntry?.file, revision: artifactRevision, onOpenFile, references: !viewerLoading && !stepUpdateInProgress ? selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: setDesignHighlight, onLoadTopology: loadDesignTopology }}
+                designOutline={{ client, file: selectedEntry?.file, revision: artifactRevision, onOpenFile, references: !viewerLoading && !stepUpdateInProgress ? selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: setDesignHighlight, onLoadTopology: loadDesignTopology, onAddToPrompt: typeof onReference === "function" ? handleAddDesignFeature : null }}
                 open={fileSheetOpen}
                 isDesktop={isDesktop}
                 width={activeSheetWidth || tabToolsWidth}

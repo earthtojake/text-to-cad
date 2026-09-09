@@ -180,6 +180,10 @@ part are nested under that part in **Parts**. Operations spanning several parts,
 including repeated features, appear once under **Assembly operations**; unmapped
 source operations stay there too. Single-body models retain their direct operation
 list. This grouping does not invent missing helper internals or part history.
+Part rows expose the existing hide/show and isolate controls, synchronized with
+Tree. Isolating from Features leaves that tab open; row and panel exit controls
+restore the normal view. Face-only source operations remain highlightable rather
+than acquiring a misleading feature-suppression action.
 Tree remains the default, with selected geometry details.
 
 Features reads a same-stem Python source through `GET /__cad/design-outline`.
@@ -214,6 +218,15 @@ Clicking or using arrow keys in Features previews the associated geometry using
 the viewer's existing selection colour. It does not change CAD or replace the
 user's actual reference selection. Escape, a viewport click, leaving Features,
 or changing files clears the preview. The footer shows only the source filename.
+
+When the host supports prompt references, selecting a feature, part, repeat or
+linked parameter exposes **Add to prompt**. It sends the linked geometry through
+the existing host reference callback, with a display label for the source feature.
+Canonical STEP selectors and the actual file path remain the reference payload;
+source row IDs are never geometry selectors. A multi-face or multi-part feature
+becomes a grouped reference. Missing geometry disables the action, and the current
+document is checked again before delivery. Selection alone does not modify the
+draft; the action adds context without submitting a prompt.
 
 Parameters expand into individual read-only rows. Selecting a source constant
 previews the linked operations that explicitly reference it, including tracked
@@ -254,3 +267,15 @@ non-pickable display fill, not new topology or an edit to the STEP. Only meshes
 whose bounds intersect the active plane receive the two extra stencil passes;
 disabling clipping releases the fill and materials without disposing the model's
 geometry. Open/non-manifold meshes cannot guarantee a solid section fill.
+
+Features part rows reuse Tree's hide/show and isolate controls. These affect
+viewer visibility only; they never suppress an authored operation. Isolation
+keeps Features open and offers an exit in the panel. Source-free imports list
+actual parts under Imported geometry, without inventing construction history.
+
+Selected rows show associated geometry's world-axis bounding size, summed face
+area when the entire face selection has area data, and available cylindrical or
+spherical surface radii. Source parameters are labelled separately. Bounds do
+not imply extrusion depth or volume; surface radii do not imply recognised holes.
+Missing geometry/data is not replaced with zero or a partial total. Part bounds
+come from the display geometry and may reflect tessellation precision.
