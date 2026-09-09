@@ -53,6 +53,7 @@ describe("the document", () => {
       "  leading and trailing  ",
       "",
       "models/x.step#o1.2",
+      'say "bracket.step" without changing my quotes',
     ]) {
       expect(textFromDoc(docFromText(text)), JSON.stringify(text)).toBe(text);
     }
@@ -158,5 +159,25 @@ describe("the composer store", () => {
     expect(useComposer.getState().takeFiles("s1")).toEqual([file]);
     expect(useComposer.getState().pendingFiles.s1).toBeUndefined();
     expect(useComposer.getState().takeFiles("s1")).toEqual([]);
+  });
+});
+
+describe("imported filenames", () => {
+  it("keeps full paths and selected geometry through draft reloads and repeated adds", () => {
+    useComposer.setState({drafts:{},referenceLabels:{}});
+    for (const file of ['models/Hex Drive Screw (2).STEP', 'models/café #1 "screw".STEP']) {
+      const reference = {file,selector:'o1.f2,o1.f3',label:'Inside faces'};
+      useComposer.getState().addContext('import', {references:[reference]});
+      useComposer.getState().addContext('import', {references:[reference]});
+    }
+    const text = useComposer.getState().drafts.import!;
+    const doc = docFromText(text);
+    const chips = doc.content![0]!.content!.filter(node => node.type === 'reference');
+    expect(chips.map(node=>node.attrs)).toEqual([
+      {file:'models/Hex Drive Screw (2).STEP',selector:'o1.f2,o1.f3'},
+      {file:'models/café #1 "screw".STEP',selector:'o1.f2,o1.f3'},
+    ]);
+    expect(textFromDoc(doc)).toBe(text);
+    expect(docFromText(textFromDoc(doc))).toEqual(doc);
   });
 });

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 
 import { useAcp } from "./acp";
+import { parseSegments } from "../features/session/composer/references";
 import type { PromptBlock } from "@shared/acp/types";
 import { referenceText, type CadReference } from "@shared/cad-refs";
 
@@ -74,7 +75,7 @@ export const useComposer = create<ComposerState>((set, get) => ({
     const labels = { ...state.referenceLabels[key] };
     for (const reference of context.references ?? []) {
       const token = referenceText(reference);
-      if (!text.split(/\s+/).includes(token)) text += `${text && !/\s$/.test(text) ? " " : ""}${token} `;
+      if (!parseSegments(text).some(segment => segment.type === "reference" && referenceText(segment.reference) === token)) text += `${text && !/\s$/.test(text) ? " " : ""}${token} `;
       if (reference.label?.trim()) labels[token] = reference.label.trim();
     }
     if (context.text) text += `${text.trim() ? "\n\n" : ""}${context.text}`;
