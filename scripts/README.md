@@ -30,7 +30,7 @@ where those files ship, so these scripts are what produces them.
   `check-builds.sh`, the pre-commit hook.
 - `cadgen-runtime.sh` — builds the three runtime stages: `--node` (esbuilt Node
   builders), `--browser` (snapshot browser bundle), `--viewer` (vite build of
-  `apps/viewer`). `--print-outputs` lists the two directories a bundle always
+  `apps/web`). `--print-outputs` lists the two directories a bundle always
   produces; `--check` skips the viewer stage, which needs the client's
   `node_modules` and which nothing in a checkout reads. Called by `bundle.sh`,
   `check-builds.sh`, `test/test-installed.sh`, and `test/common.sh` when a test
@@ -39,14 +39,14 @@ where those files ship, so these scripts are what produces them.
   `test_js_runtime_reproducibility.py`. Call it directly only to debug one stage.
 - `lib/node_builders.sh`, `lib/snapshot_runtime.sh` — sourced by
   `cadgen-runtime.sh`; esbuild the Node builders and the browser bundle with
-  `three`/`meshoptimizer` pinned from `packages/cadgen-js/package-lock.json`.
+  `three`/`meshoptimizer` pinned from `package-lock.json`.
 
 `test/` — test runners.
 
 - `test.sh` — `test-js.sh`, then `test-python.sh`, then `test-global.sh`: the
   whole tree on one machine. Called by `release-publish.yml`; `test.yml` calls
   the focused runners per job instead.
-- `test-js.sh` — `packages/cadgen-js` and `apps/viewer` client suites, then the
+- `test-js.sh` — `packages/core` and `apps/web` client suites, then the
   `node --test` units under `bench/viewer-memory/` (the benchmark drivers are
   manual; their pure helpers are not).
 - `test-python.sh [--keep-going] [--select GROUP] [--print-weights]`
@@ -83,7 +83,7 @@ where those files ship, so these scripts are what produces them.
   changes. Generates its inputs in a temporary project and owns its viewer and
   cache; `--out DIR` keeps the screenshots it grades. Needs a bundled Viewer
   (`bundle.sh`) and the Node Playwright's Chromium
-  (`npx --prefix packages/cadgen-js playwright install chromium`; `test.yml`
+  (`npx --prefix packages/core playwright install chromium`; `test.yml`
   installs the Python one). Called by nobody: it is a manual gate, because one
   run is over six minutes — too slow for `test.yml`, which already covers launch
   and reuse with `test-viewer-launch.sh`.

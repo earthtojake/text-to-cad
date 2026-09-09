@@ -1,4 +1,4 @@
-import { FILE_PANEL_TREE, PANEL_DEFAULT_WIDTH, clampPanelWidth } from "cad-viewer/shell";
+import { FILE_PANEL_TREE, PANEL_DEFAULT_WIDTH, clampPanelWidth } from "@hardcore/ui/navigation";
 import { create } from "zustand";
 
 import type { DirEntry } from "@shared/ipc/explorer";

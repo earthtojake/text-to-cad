@@ -79,6 +79,9 @@ async function mount() {
   const tab = useExplorer.getState().open("file", { path: MARKDOWN });
   const view = render(<Host tabId={tab!.id} />);
   await waitFor(() => expect(screen.getByRole("tree")).toBeInTheDocument());
+  // Registrations load their components lazily; the tree can render while
+  // Markdown's document module is still being prepared.
+  await screen.findByRole("button", { name: "View source" });
   return { tabId: tab!.id, view };
 }
 

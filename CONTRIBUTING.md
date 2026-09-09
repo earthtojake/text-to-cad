@@ -119,7 +119,8 @@ client the wheel carries.
 For CAD Viewer development:
 
 ```bash
-npm --prefix apps/viewer install
+npm ci
+npm run build:packages
 ```
 
 The skills ship no launcher scripts: every operational verb is a `cadgen`
@@ -234,7 +235,7 @@ are no shards: each job parallelises internally (`unittest_files.py --jobs`,
 everything downstream runs — the skills are thin entrypoints over its CLIs, the
 viewer is served by `cadgen.viewer`, the docs site documents its commands, the
 wheel packages it — so a cadgen change runs the cadgen, viewer, skills, docs and
-packaging jobs. `packages/cadgen-js` is bundled into the runtime cadgen
+packaging jobs. `packages/core` is bundled into the runtime cadgen
 executes and imported by the viewer and the docs hero, so it fans out the same
 way plus its own unit tests. A viewer-client change runs the viewer and
 packaging jobs; a docs change runs docs; a skills change runs skills and docs
@@ -323,24 +324,24 @@ is gone. cadgen now carries the JavaScript it executes as well as the Python.
 Canonical source directories are:
 
 - `skills/*` for skill instructions, references, and the thin entrypoints.
-- `apps/viewer/` for the CAD Viewer's React client. Its backend is
+- `apps/web/` for the CAD Viewer's React client. Its backend is
   `cadgen.viewer` (in `packages/cadgen`), and its built `dist/` ships inside the
   cadgen wheel as `cadgen/_runtime/viewer` — built at release time, never
   committed.
 - `packages/*` for the shared runtimes. `packages/cadgen` is the published
-  distribution; `packages/cadgen-js` is its JS build input, and the client's.
+  distribution; `packages/core` is its JS build input, and the client's.
 
 One source tree ships whole and must work in isolation outside this repo — the
 ships-alone law, enforced by the markdown-isolation check in
 `tests/python/global/test_package_boundaries.py`: `packages/cadgen` builds into
-the PyPI wheel with cadgen-js and the viewer client bundled in at build time; its
+the PyPI wheel with @hardcore/core and the viewer client bundled in at build time; its
 README is the PyPI long description. Markdown under it must be true and
-actionable with this repo gone: name the bundled thing ("the cadgen-js runtime
+actionable with this repo gone: name the bundled thing ("the @hardcore/core runtime
 bundled at build time"), never the repo path to its source, and keep commands
 relative to the package itself. Repo-development guidance belongs here, not in
-the package. `apps/viewer` is a client package with a boundary of its own
-(`apps/viewer/scripts/selfContained.test.mjs`): it imports cadgen-js by name and
-nothing else from outside its directory.
+the package. `apps/web` is a client package with a boundary of its own
+(`apps/web/scripts/selfContained.test.mjs`): it imports @hardcore/core and @hardcore/ui by their public exports; relative
+imports remain inside its directory.
 
 ## Working On cadgen In This Repo
 
@@ -357,22 +358,25 @@ nothing else from outside its directory.
 
 ## Viewer Development In This Repo
 
-`apps/viewer/README.md` keeps the app-facing half (launcher contract, dev vs
-prod, behaviours worth knowing, testing); everything below is workbench-only
-and deliberately lives here.
+The three apps are docs, web and desktop. Shared framework-independent code is
+`@hardcore/core`; the complete FileViewer and injectable renderers are
+`@hardcore/ui`. Apps import public compiled exports. No app imports another
+app, and no shared package imports app source. `npm run check:boundaries`
+checks the source graph, including aliases, re-exports and dynamic imports.
 
-The backend is `cadgen viewer` — the `cadgen.viewer` package, so the
-interpreter that has cadgen is the server. The served directory is the cwd
-(there is no directory flag), so `cd` into the worktree's `models/` first. From
-a lightweight worktree, use the primary checkout's venv with the WORKTREE's
-cadgen sources on `PYTHONPATH`, or the worktree exercises the main checkout's
-cadgen. The client resolves to `apps/viewer/dist` in a checkout (`npm run
-build` there first); `--dist` or `CADGEN_VIEWER_DIST` point elsewhere:
+This restructure is a pure refactor. Preserve every app's UI, UX and behavior;
+renderer/package extraction is not permission to change controls, layouts,
+defaults, file actions or persistence. Package/app READMEs describe ownership.
+
+Keep worktrees lightweight. Install only the workflow being exercised:
 
 ```bash
-cd <worktree>/models && \
-PYTHONPATH=<worktree>/packages/cadgen/src \
-<main>/.venv/bin/python -m cadgen.viewer --host 127.0.0.1 --json
+# Web/docs work (no Electron rebuild):
+npm ci --workspace @hardcore/core --workspace @hardcore/ui --workspace @hardcore/web --workspace cad-skills-docs
+npm run build:packages
+# All JS work, including desktop:
+npm ci
+npm run native:rebuild --workspace hardcore
 ```
 
 The self-contained browser regression suite checks supported formats, picking,
@@ -388,23 +392,23 @@ scripts/test/test-viewer-browser.sh --only kinematics   # one gate while working
 ```
 
 Mesh exports (`@stl`/`@3mf`/`@glb`) and DXF previews run the checkout's live
-`packages/cadgen-js/bin` builders in Node, which import `three` and friends
-from `packages/cadgen-js/node_modules`. A fresh worktree has none, and cadgen
+`packages/core/bin` builders in Node, which import `three` and friends
+from `packages/core/node_modules`. A fresh worktree has none, and cadgen
 refuses with an error naming this paragraph rather than letting the child die
 with `ERR_MODULE_NOT_FOUND`. Symlink both `node_modules` directories from the
 primary checkout (they are gitignored) or `npm install` in each package:
 
 ```bash
-ln -s <main>/packages/cadgen-js/node_modules <worktree>/packages/cadgen-js/node_modules
-mkdir <worktree>/apps/viewer/node_modules
-for e in <main>/apps/viewer/node_modules/* <main>/apps/viewer/node_modules/.bin; do
-  [ "$(basename "$e")" = cadgen-js ] || ln -s "$e" <worktree>/apps/viewer/node_modules/
+ln -s <main>/packages/core/node_modules <worktree>/packages/core/node_modules
+mkdir <worktree>/apps/web/node_modules
+for e in <main>/apps/web/node_modules/* <main>/apps/web/node_modules/.bin; do
+  [ "$(basename "$e")" = cadgen-js ] || ln -s "$e" <worktree>/apps/web/node_modules/
 done
-ln -s <worktree>/packages/cadgen-js <worktree>/apps/viewer/node_modules/cadgen-js
+ln -s <worktree>/packages/core <worktree>/apps/web/node_modules/cadgen-js
 ```
 
 Do NOT symlink the Viewer's `node_modules` directory whole. Its `cadgen-js`
-entry is a RELATIVE link (`../../../packages/cadgen-js`) that resolves against
+entry is a RELATIVE link (`../../../packages/core`) that resolves against
 the primary checkout, so the worktree's Viewer tests and dev server would run
 the primary checkout's cadgen-js and silently ignore every cadgen-js edit in
 the worktree. Link the entries individually and point `cadgen-js` at the
@@ -416,15 +420,17 @@ server's floor and refused at startup with a message naming the version and
 this variable, and a `python3` without cadgen has no server to run at all. The
 dev plugin logs the interpreter it resolved:
 
-```bash
-VIEWER_PYTHON=<main>/.venv/bin/python \
-PYTHONPATH=<worktree>/packages/cadgen/src \
-npm --prefix <worktree>/apps/viewer run dev
-```
+The stable HTTP `rootId` identifies a normalized real filesystem root across
+port changes. The web host owns URL/history and browser preferences; desktop
+owns IPC services, projects and native processes. FileViewer state is scoped by
+root, path and renderer. A CAD client owns its subscriptions and render sessions;
+each session owns cache-provider and worker lifetimes.
 
-`npm run dev` needs no `npm run build` first: the plugin spawns the backend with
-`--api-only`, and Vite serves the client. Production is the opposite — no built
-`dist/`, no start.
+Viewer backend tests remain under `tests/python/packages/cadgen/viewer`.
+Nothing in `cadgen.viewer` loads the CAD kernel at module scope. Launcher reuse,
+root containment, `--api-only`, fixed ports and instance ownership are unchanged.
+Never stop an instance you did not start. See `apps/web/README.md` for the
+launcher contract and catalog/link behavior.
 
 The backend's tests live at `tests/python/packages/cadgen/viewer/` and run with
 the cadgen package suite (`scripts/test/test-python.sh`, on Linux through
@@ -448,13 +454,13 @@ dependencies linked — `three-mesh-bvh` included, which an earlier version of
 this recipe omitted:
 
 ```bash
-# apps/viewer/node_modules: per-entry links with cadgen-js pointing at THIS
+# apps/web/node_modules: per-entry links with cadgen-js pointing at THIS
 # worktree -- see "Viewer Development In This Repo" above for why not one link.
-mkdir -p packages/cadgen-js/node_modules
+mkdir -p packages/core/node_modules
 for dep in three three-mesh-bvh meshoptimizer; do
-  ln -s <main>/packages/cadgen-js/node_modules/$dep packages/cadgen-js/node_modules/$dep
+  ln -s <main>/packages/core/node_modules/$dep packages/core/node_modules/$dep
 done
-npm --prefix apps/viewer run build
+npm --prefix apps/web run build
 ```
 
 Do not extend the trick to the docs app: Turbopack rejects a symlinked
@@ -514,7 +520,7 @@ The `Test` workflow runs on pushes to `main` and PRs against it: it runs
 without rebuilding it, runs documentation checks, and runs the code tests
 against that generated output. `main` commits no generated runtime at all —
 cadgen's Node builders, its snapshot bundle and the Viewer client are built from
-`packages/cadgen-js` and `apps/viewer` on demand, and ship only inside the
+`packages/core` and `apps/web` on demand, and ship only inside the
 wheel. What IS committed and therefore checked for freshness is the version
 metadata derived from `VERSION`, asserted by the separate `Version Check` job
 (`scripts/release/check-version.sh` and `sync-version.mjs --check`).
@@ -548,7 +554,7 @@ Where the built things live instead:
   PyPI (the install channel every skill pins against), and attaches that same
   wheel and sdist to the GitHub Release as the provenance copy of what shipped.
 - **A checkout** builds its own: run `scripts/bundle/bundle.sh` once after
-  cloning (and after pulling changes to `packages/cadgen-js`); a missing runtime
+  cloning (and after pulling changes to `packages/core`); a missing runtime
   fails with a message that says so.
 
 ### Shipping a release
@@ -768,7 +774,7 @@ Use path-targeted validation. Common checks from the repo root:
 scripts/test/test.sh
 scripts/release/check-version.sh
 scripts/bundle/bundle.sh --check          # the packaged runtime builds, whole
-npm --prefix apps/viewer run test        # the Viewer's CLIENT half only
+npm --prefix apps/web run test        # the Viewer's CLIENT half only
 scripts/test/test-python.sh              # includes the Viewer's BACKEND suite
 scripts/test/test-python.sh --select viewer   # the Viewer's backend alone (~11 s)
 npm --prefix apps/docs run check
@@ -792,11 +798,11 @@ suite is `tests/python/packages/cadgen/viewer/`, part of the cadgen package suit
 For fast CAD Viewer source iteration, run the root viewer app in dev mode. Do
 not run the packaged viewer from an installed cadgen while modifying Viewer
 behavior. Run it from the DIRECTORY YOU WANT SERVED — the dev backend has no
-directory flag, so the served root is npm's `INIT_CWD`, and `apps/viewer` is
+directory flag, so the served root is npm's `INIT_CWD`, and `apps/web` is
 excluded from that choice on purpose:
 
 ```bash
-npm --prefix apps/viewer run dev -- --host 127.0.0.1
+npm --prefix apps/web run dev -- --host 127.0.0.1
 ```
 
 The dev server serves ONE root, fixed at startup; the page is the bare origin

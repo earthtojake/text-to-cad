@@ -1,7 +1,7 @@
 /**
  * What each item of the entry menu does — this app's half.
  *
- * What there IS in the menu is `cad-viewer/shell`'s `entry-menu.js`, shared
+ * What there IS in the menu is `@hardcore/ui/navigation`'s `entry-menu.js`, shared
  * with the standalone CAD Viewer; what an item does is per host, because
  * "copy this path" is an IPC round trip here and a clipboard write in a
  * browser tab. The tree's rows and the breadcrumb's crumbs share these, so
@@ -23,8 +23,8 @@ import { useSessions } from "@renderer/state/sessions";
 import type { DirEntry } from "@shared/ipc/explorer";
 import type { ExplorerRoot, ExplorerTab } from "@shared/types";
 
-import type { EntryAction, MenuEntryTarget, Platform } from "cad-viewer/shell";
-import { parentOf } from "cad-viewer/shell";
+import type { EntryAction, MenuEntryTarget, Platform } from "@hardcore/ui/navigation";
+import { parentOf } from "@hardcore/ui/navigation";
 
 export type EntryActionContext = {
   projectId: string;

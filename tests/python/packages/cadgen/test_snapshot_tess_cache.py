@@ -238,7 +238,7 @@ class SnapshotBrowserTessCacheIntegrationTest(unittest.TestCase):
     def test_cold_surface_write_is_a_warm_hit_after_the_surface_is_gone(self) -> None:
         repo = Path(__file__).resolve().parents[4]
         surface_bytes = (
-            repo / "packages/cadgen-js/src/lib/surf/fixtures/cam_follower_roller.surf"
+            repo / "packages/core/src/lib/surf/fixtures/cam_follower_roller.surf"
         ).read_bytes()
 
         async def exercise(root: Path) -> None:

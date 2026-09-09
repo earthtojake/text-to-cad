@@ -3,7 +3,7 @@
 # directory that is not this repo.
 #
 # Every other check in this repo runs against the source tree, where the repo root is on
-# sys.path and `packages/cadgen-js/bin` exists. None of
+# sys.path and `packages/core/bin` exists. None of
 # that is true after `pip install cadgen`, so the failures this catches are exactly the
 # ones no other check can: an asset left out of package-data, a module that resolves only
 # because a sibling directory happened to be adjacent, a builder that still imports a bare
@@ -49,7 +49,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 step() { printf '\n== %s\n' "$*"; }
 
 step "Build the wheel"
-"$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" >/dev/null
+"$REPO_ROOT/scripts/bundle/bundle.sh" >/dev/null
 "$PYTHON_BIN" -m build --wheel --outdir "$DIST" "$REPO_ROOT/packages/cadgen" >"$WORK/build.log" 2>&1 \
   || { cat "$WORK/build.log" >&2; fail "wheel build"; }
 WHEEL="$(find "$DIST" -name '*.whl' -type f | head -n 1)"

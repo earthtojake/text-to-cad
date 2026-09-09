@@ -1,0 +1,86 @@
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+@source "../";
+/* Shared FileViewer and renderer styles. Hosts own document-level appearance. */
+/* The per-file surface and the shared chrome are scanned like anything else.
+ * Detection is off (`source(none)` above), so a directory missing from this
+ * list is a directory whose classes are silently absent from the stylesheet:
+ * `file-view` was, from the commit that moved the surface there until now,
+ * which is why `z-0` did not exist in the standalone build. */
+
+@import "./tokens.css";
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  .cad-loading-overlay {
+    background:
+      radial-gradient(circle at 50% 14%, color-mix(in srgb, var(--primary) 18%, transparent) 0%, transparent 38%),
+      linear-gradient(180deg, color-mix(in srgb, var(--ui-loading-overlay) 72%, transparent) 0%, var(--ui-loading-overlay-strong) 100%);
+    -webkit-backdrop-filter: blur(14px) saturate(1.12);
+    backdrop-filter: blur(14px) saturate(1.12);
+  }
+
+  .theme-preset-menu-item:not([data-action-hover="true"]) > .theme-preset-menu-row:hover,
+  .theme-preset-menu-item:not([data-action-hover="true"]) > .theme-preset-menu-row[data-highlighted] {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+
+  .theme-preset-menu-item[data-active="true"] > .theme-preset-menu-row {
+    background: var(--sidebar-accent);
+    color: var(--sidebar-accent-foreground);
+  }
+
+  .theme-preset-menu-item[data-action-hover="true"]:not([data-active="true"]) > .theme-preset-menu-row {
+    background: transparent !important;
+    color: var(--popover-foreground) !important;
+  }
+
+  .theme-preset-menu-item[data-active="true"] [data-theme-menu-default-badge] {
+    border-color: color-mix(in srgb, var(--sidebar-accent-foreground) 18%, transparent);
+    color: color-mix(in srgb, var(--sidebar-accent-foreground) 68%, transparent);
+  }
+
+  [data-slot="sidebar-wrapper"][data-sidebar-resizing="true"] [data-slot="sidebar-gap"],
+  [data-slot="sidebar-wrapper"][data-sidebar-resizing="true"] [data-slot="sidebar-container"] {
+    transition: none !important;
+  }
+
+  .cad-file-viewer-scroll [data-slot="scroll-area-viewport"] {
+    overflow-x: hidden !important;
+  }
+
+  .cad-file-viewer-scroll [data-slot="scroll-area-viewport"] > div {
+    display: block !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  ::selection {
+    background: var(--selection);
+    color: var(--selection-foreground);
+  }
+}
+
+@keyframes cad-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.cad-progress-indeterminate {
+  animation: cad-progress-slide 1.15s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cad-progress-indeterminate {
+    animation-duration: 2.4s;
+    animation-timing-function: linear;
+  }
+}

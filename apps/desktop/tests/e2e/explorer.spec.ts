@@ -152,7 +152,7 @@ test("opens a markdown file as a preview, then as source", async () => {
   await shoot("file-markdown-preview.png");
 
   /*
-    The source view is markdown's one PANEL (`cad-viewer/shell`'s `panels.js`), declared
+    The source view is markdown's one PANEL (`@hardcore/ui/navigation`'s `panels.js`), declared
     the same way a CAD file declares its two: an icon button with
     `aria-pressed`, at the right end of the row and immediately left of the
     files toggle, which stays last. It used to be a special case in the
@@ -198,43 +198,43 @@ test("opens a markdown file as a preview, then as source", async () => {
 test("expands three levels of the tree, and keeps them", async () => {
   await newTab(page, "File");
 
-  // Jake's repro: `apps`, then `apps/viewer`, then `apps/viewer/src`. Each
+  // Jake's repro: `apps`, then `apps/web`, then `apps/web/src`. Each
   // one is a lazy `explorer.list`, and each one used to be a click that shut
   // the tree instead of opening it once a file was open under any of them.
   const folder = (relative: string) => page.locator(`[role="treeitem"][data-path="${relative}"]`);
 
   await folder("apps").click();
-  await expect(folder("apps/viewer")).toBeVisible();
-  await folder("apps/viewer").click();
-  await expect(folder("apps/viewer/src")).toBeVisible();
-  await folder("apps/viewer/src").click();
+  await expect(folder("apps/web")).toBeVisible();
+  await folder("apps/web").click();
+  await expect(folder("apps/web/src")).toBeVisible();
+  await folder("apps/web/src").click();
 
   // The leaves of the third level, which is what "nothing happened" cost.
-  await expect(folder("apps/viewer/src/client")).toBeVisible();
-  await expect(folder("apps/viewer/src/shared")).toBeVisible();
-  await expect(folder("apps/viewer/src")).toHaveAttribute("aria-expanded", "true");
+  await expect(folder("apps/web/src/client")).toBeVisible();
+  await expect(folder("apps/web/src/shared")).toBeVisible();
+  await expect(folder("apps/web/src")).toHaveAttribute("aria-expanded", "true");
 
   // Opening a file makes a tab, and a tab is a remount: the three levels have
   // to still be there afterwards, and a click on one of them has to shut it
   // rather than do nothing.
-  await folder("apps/viewer/src/client").click();
-  await page.locator(`[role="treeitem"][data-path="apps/viewer/src/client/main.jsx"]`).click();
-  await expect(page.getByRole("tab", { name: /main\.jsx/ })).toBeVisible();
-  await expect(folder("apps/viewer/src/client")).toBeVisible();
+  await folder("apps/web/src/client").click();
+  await page.locator(`[role="treeitem"][data-path="apps/web/src/client/unboundIdentifiers.test.js"]`).click();
+  await expect(page.getByRole("tab", { name: /unboundIdentifiers\.test\.js/ })).toBeVisible();
+  await expect(folder("apps/web/src/client")).toBeVisible();
 
-  await folder("apps/viewer").click();
-  await expect(folder("apps/viewer/src")).toHaveCount(0);
-  await folder("apps/viewer").click();
-  await expect(folder("apps/viewer/src/client")).toBeVisible();
+  await folder("apps/web").click();
+  await expect(folder("apps/web/src")).toHaveCount(0);
+  await folder("apps/web").click();
+  await expect(folder("apps/web/src/client")).toBeVisible();
 
   await shoot("file-tree-deep.png");
-  await page.getByRole("tab", { name: /main\.jsx/ }).getByRole("button", { name: "Close main.jsx" }).click();
+  await page.getByRole("tab", { name: /unboundIdentifiers\.test\.js/ }).getByRole("button", { name: "Close unboundIdentifiers.test.js" }).click();
 });
 
 test("navigates by the breadcrumb's menus", async () => {
   await newTab(page, "File");
-  await openFromTree("apps/viewer/src/client/main.jsx");
-  await expect(page.getByRole("tab", { name: /main\.jsx/ })).toBeVisible();
+  await openFromTree("apps/web/src/client/unboundIdentifiers.test.js");
+  await expect(page.getByRole("tab", { name: /unboundIdentifiers\.test\.js/ })).toBeVisible();
 
   // The header is the breadcrumb, the view toggle and the files toggle. The
   // copy button and the `Open ▾` menu are gone: their items live in the
@@ -255,7 +255,7 @@ test("navigates by the breadcrumb's menus", async () => {
   // `apps` is the first of them and the project's own name is not a crumb at
   // all. A crumb for the root would have to list the root's neighbours, which
   // are outside the project.
-  // `apps › viewer › src › client › main.jsx`, and no sixth crumb for the
+  // `apps › web › src › client › unboundIdentifiers.test.js`, and no sixth crumb for the
   // project the five of them are in.
   const nav = header.getByRole("navigation", { name: "Breadcrumb" });
   await expect(nav.getByRole("button", { name: /^Browse / })).toHaveCount(5);
@@ -269,12 +269,12 @@ test("navigates by the breadcrumb's menus", async () => {
   // the length of its exit animation.
   await page.getByRole("button", { name: "Browse client", exact: true }).click();
   const menu = page.getByRole("menu", { name: "Browse client" });
-  // `client` lives in `apps/viewer/src`, so the menu is that folder: itself
+  // `client` lives in `apps/web/src`, so the menu is that folder: itself
   // marked, and `shared` beside it.
   await expect(menu.getByRole("menuitem", { name: "client", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(menu.getByRole("menuitem", { name: "shared", exact: true })).toBeVisible();
   // Not its own children, which is what it used to list.
-  await expect(menu.getByRole("menuitem", { name: "main.jsx", exact: true })).toHaveCount(0);
+  await expect(menu.getByRole("menuitem", { name: "unboundIdentifiers.test.js", exact: true })).toHaveCount(0);
   // Directories first: every one of these is a submenu, above any files.
   await expect(menu.getByRole("menuitem").first()).toHaveAttribute("aria-haspopup", "menu");
   await shoot("file-crumb-menu.png", true);
@@ -288,17 +288,17 @@ test("navigates by the breadcrumb's menus", async () => {
 
   // The file crumb lists its siblings, with itself marked; a sibling folder
   // is a submenu of its own listing, and picking a file opens it in this tab.
-  await page.getByRole("button", { name: "Browse main.jsx", exact: true }).click();
-  const siblings = page.getByRole("menu", { name: "Browse main.jsx" });
-  await expect(siblings.getByRole("menuitem", { name: "main.jsx", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect(siblings.getByRole("menuitem", { name: "unboundIdentifiers.test.js" })).toBeVisible();
+  await page.getByRole("button", { name: "Browse unboundIdentifiers.test.js", exact: true }).click();
+  const siblings = page.getByRole("menu", { name: "Browse unboundIdentifiers.test.js" });
+  await expect(siblings.getByRole("menuitem", { name: "unboundIdentifiers.test.js", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(siblings.getByRole("menuitem", { name: "components", exact: true })).toBeVisible();
   await siblings.getByRole("menuitem", { name: "workbench" }).hover();
   const submenu = page.getByRole("menu", { name: "workbench" });
   await expect(submenu.getByRole("menuitem", { name: "breadcrumbs.js", exact: true })).toBeVisible();
   await submenu.getByRole("menuitem", { name: "breadcrumbs.js", exact: true }).click();
   await expect(page.getByRole("tab", { name: /breadcrumbs\.js/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Browse breadcrumbs.js", exact: true })).toBeVisible();
-  await expect(page.getByRole("tab", { name: /^main\.jsx/ })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: /^unboundIdentifiers\.test\.js/ })).toHaveCount(0);
   await expect(page.locator(".view-lines").first()).toBeVisible();
   await expect(page.getByRole("menu")).toHaveCount(0);
 
@@ -312,7 +312,7 @@ test("navigates by the breadcrumb's menus", async () => {
   await pick("Copy relative path");
   await expect
     .poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
-    .toBe("apps/viewer/src/client/workbench/breadcrumbs.js");
+    .toBe("apps/web/src/client/workbench/breadcrumbs.js");
 
   // Escape closes a crumb's menu.
   await page.getByRole("button", { name: "Browse workbench", exact: true }).click();
@@ -321,7 +321,7 @@ test("navigates by the breadcrumb's menus", async () => {
   await expect(page.getByRole("menu")).toHaveCount(0);
 
   // A code file declares no panels of its own, so the tree is the whole list
-  // and the row's right end is the files toggle alone (`cad-viewer/shell`'s `panels.js`).
+  // and the row's right end is the files toggle alone (`@hardcore/ui/navigation`'s `panels.js`).
   await expect(header.locator("[data-file-panel]")).toHaveCount(1);
   await expect(header.locator("[data-file-panel]")).toHaveAttribute("data-file-panel", "tree");
   await expect(header.getByTestId("tree-toggle")).toBeVisible();
@@ -356,8 +356,8 @@ test("keeps the files toggle where it is when the tree opens and shuts", async (
 
 test("copies a relative path from a row's context menu", async () => {
   await newTab(page, "File");
-  await openFromTree("apps/viewer/src/client/main.jsx");
-  const row = page.locator(`[role="treeitem"][data-path="apps/viewer/src/client/main.jsx"]`);
+  await openFromTree("apps/web/src/client/unboundIdentifiers.test.js");
+  const row = page.locator(`[role="treeitem"][data-path="apps/web/src/client/unboundIdentifiers.test.js"]`);
   await expect(row).toBeVisible();
 
   await row.click({ button: "right" });
@@ -366,15 +366,15 @@ test("copies a relative path from a row's context menu", async () => {
   await expect(menu.getByRole("menuitem", { name: "Move to Trash" })).toBeVisible();
   await shoot("file-context-menu.png");
   await pick("Copy relative path");
-  await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe("apps/viewer/src/client/main.jsx");
+  await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe("apps/web/src/client/unboundIdentifiers.test.js");
 
   // Copy path is the absolute one, and Copy reference is there for a CAD file.
   await row.click({ button: "right" });
   await pick("Copy path");
   await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe(
-    fs.realpathSync(path.join(repoRoot, "apps/viewer/src/client/main.jsx")),
+    fs.realpathSync(path.join(repoRoot, "apps/web/src/client/unboundIdentifiers.test.js")),
   );
-  await page.locator(`[role="treeitem"][data-path="apps/viewer/src/client"]`).click();
+  await page.locator(`[role="treeitem"][data-path="apps/web/src/client"]`).click();
   const step = page.locator(`[role="treeitem"][data-path="${STEP}"]`);
   await page.getByLabel("Filter files").fill(STEP);
   await page.getByRole("option", { name: STEP, exact: false }).first().click({ button: "right" });
@@ -382,7 +382,7 @@ test("copies a relative path from a row's context menu", async () => {
   await page.keyboard.press("Escape");
   await page.getByLabel("Filter files").fill("");
   await expect(step).toHaveCount(0);
-  await page.getByRole("tab", { name: /main\.jsx/ }).getByRole("button", { name: "Close main.jsx" }).click();
+  await page.getByRole("tab", { name: /unboundIdentifiers\.test\.js/ }).getByRole("button", { name: "Close unboundIdentifiers.test.js" }).click();
 });
 
 test("opens an image with its dimensions", async () => {
@@ -418,7 +418,7 @@ test("shows the runtime's own error for a STEP file when the runtime cannot star
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Runtime status" })).toBeVisible();
   // And no CAD panel toggles: the surface that draws those panels never came
-  // up, so the CAD declaration offers none (`cad-viewer/shell`'s `panels.js`) and the
+  // up, so the CAD declaration offers none (`@hardcore/ui/navigation`'s `panels.js`) and the
   // tree is the whole list. Two lit buttons over a failure card would open
   // nothing.
   await expect(page.locator("[data-file-panel]")).toHaveCount(1);
@@ -582,7 +582,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await tree.click();
 
   /*
-    A CAD file's two panels (`cad-viewer/shell`'s `panels.js`): the viewer's theme editor
+    A CAD file's two panels (`@hardcore/ui/navigation`'s `panels.js`): the viewer's theme editor
     and its Inspector, which `layout="desktop"` had left with no door in this
     app because that layout hides the top bar their toggles live in. Both sit
     left of the files toggle, which stays last and does not move for them, and
@@ -870,7 +870,7 @@ test("edits a markdown file in place and saves the lines it changed", async () =
 
   // The file on disk. The edited paragraph is re-printed; every other line of
   // a 210-line document is exactly the line it was — which is the whole point
-  // of `src/renderer/features/explorer/markdown/document.ts`.
+  // of `packages/ui/src/renderers/markdown/document.ts`.
   const before = fs.readFileSync(path.join(repoRoot, "AGENTS.md"), "utf8");
   const after = fs.readFileSync(path.join(docsDir, "AGENTS.md"), "utf8");
   // Re-wrapped to the column the file wraps at, so the typed words can land on
@@ -1109,7 +1109,7 @@ function panels(target: Page) {
 /**
  * The Inspector is a column beside the model, never a drawer over it.
  *
- * It is the app's own panel column now (`cad-viewer/shell`'s `FilePanelColumn.jsx`) with the viewer's
+ * It is the app's own panel column now (`@hardcore/ui/navigation`'s `FilePanelColumn.jsx`) with the viewer's
  * panel portaled into it, so it sits BESIDE the surface rather than inside
  * it: the model gets the whole surface and the pane is what the column takes
  * its width from.

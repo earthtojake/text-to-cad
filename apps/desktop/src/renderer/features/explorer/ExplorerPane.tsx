@@ -9,7 +9,7 @@ import type { ExplorerTab } from "@shared/types";
 import type { Project } from "@shared/types";
 
 import { BrowserTab } from "./BrowserTab";
-import { EmptyState } from "cad-viewer/shell";
+import { EmptyState } from "@hardcore/ui/navigation";
 import { FileTab } from "./FileTab";
 import { ReviewTab } from "./ReviewTab";
 import { TabStrip } from "./TabStrip";

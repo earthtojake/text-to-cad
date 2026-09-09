@@ -1175,7 +1175,7 @@ def resolve_step_render_job(
     )
     if kinematics_block:
         # Typed mates are the articulation mechanism: --kinematics DOF values
-        # fold through the shared FK evaluator (cadgen-js kinematicsModule),
+        # fold through the shared FK evaluator (@hardcore/core kinematicsModule),
         # which reads the sidecar's kinematics section.
         resolved["stepParameterUrl"] = asset_url_for_path(source_sidecar_path(source_path), root_path)
     # Animation and materials come from the same pinned annotation snapshot.

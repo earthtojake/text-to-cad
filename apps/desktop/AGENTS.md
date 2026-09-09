@@ -21,7 +21,7 @@ phase is not an oversight — it is the seam.
 | P1 (done) | `src/main/agents`, `src/main/acp`, `src/shared/acp`, `src/shared/agents.ts`, `src/shared/ipc/{acp,agents}.ts`, `src/main/ipc/{acp,agents}.ts`, `src/renderer/state/{acp,agents}.ts`, `scripts/acp-harness.mjs`, `tests/fake-agent`, `tests/fixtures/acp` |
 | P2 | `src/renderer/features/session` — the transcript, activity rows, composer chips, permissions, plan card — plus what the model and effort chips are drawn from before a session exists: `src/shared/acp/options.ts`, `src/{shared,main}/ipc/agent-options.ts`, `src/main/acp/agent-options.ts`, `src/renderer/state/agent-options.ts` |
 | P3 (done) | `src/main/explorer`, `src/main/ipc/{explorer,cad}.ts`, `src/shared/ipc/{explorer,cad}.ts`, `src/renderer/features/explorer` — file tab, tree, Monaco, review, browser, terminal |
-| P4 (done) | `apps/viewer`'s `CadFileView` and its `viewerOrigin` threading; P3's file tab renders it |
+| P4 (done) | `@hardcore/ui` CAD renderer and explicit `@hardcore/core/client`; FileTab hosts the shared FileViewer |
 | P5 (done) | `src/main/cad/`, `src/main/ipc/{cad,runtime,skills}.ts`, `resources/`, `skills/hardcore-app-use`, `scripts/{build,build-skills,build-mcp,cad-resources,bundle-runtime}.mjs`, `src/renderer/state/cad-commands.ts`, the `reveal` field of the explorer store and tree |
 | P6 | `src/renderer/features/settings` — the pages' contents |
 | P7 (done) | `src/main/projects/{git,workspace}.ts`, `src/shared/ipc/git.ts`, `src/main/ipc/git.ts`, `src/renderer/lib/git-mode.ts`, the review tab's scopes and commit popover, Git & Worktrees' per-project cards, `tests/e2e/git.spec.ts` |
@@ -57,6 +57,10 @@ not.
 
 ## Rules that are easy to break here
 
+- **Pure refactor:** package moves preserve all app UI/UX and functionality.
+  FileTab hosts `@hardcore/ui/file-viewer`; renderers live in UI, IPC/native
+  services and app state stay here. Never import web app source.
+
 - **The renderer imports from `src/main` never, and from `src/shared` types
   only.** Its one way off the page is `window.hardcore`, built from the
   contract in `src/shared/ipc/index.ts`.
@@ -65,10 +69,10 @@ not.
   handler. Do not add an `ipcMain.handle` outside it. A branch is its own module
   under `src/shared/ipc/`, spread into the contract; `invoke` comes from
   `./define`, because importing `../ipc` from a branch is a load-time cycle.
-- **`node_modules` here is installed, never symlinked.** electron-builder walks
+- **Root workspace dependencies are installed in this checkout, never borrowed.** electron-builder walks
   the tree by real path: a symlinked `node_modules` resolves every transitive
   dependency to `undefined`, packages an app missing half its modules, and does
-  not fail while doing it. The viewer's worktree trick does not apply.
+  not fail while doing it. Use root `npm ci` and explicit `npm run native:rebuild --workspace hardcore`.
 - **Nothing reads `process.env` for a build-time secret.** The Aptabase key is
   compiled in as `__APTABASE_KEY__` (`electron.vite.config.ts`); a packaged app
   has no build environment, and a key the launcher can set is a key anyone can
