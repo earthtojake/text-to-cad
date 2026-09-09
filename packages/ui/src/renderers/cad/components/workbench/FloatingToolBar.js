@@ -453,10 +453,12 @@ function DesktopFloatingToolBar({
       {!previewMode && selectionToolActive && selectionFilterNotice && <p role="status" className="max-w-56 rounded-md border bg-background px-2 py-1 text-micro text-muted-foreground shadow-sm">{selectionFilterNotice}</p>}
 
 
-      {!previewMode && measureModeActive && measurementPanel && <section aria-label="Measurements" className={`pointer-events-auto w-72 max-w-full max-h-64 overflow-y-auto rounded-md ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
-        <div className="flex items-center justify-between gap-2 border-b px-2 py-1.5 text-xs"><span>Measure</span><button type="button" className="rounded-sm p-1 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring" aria-label="Finish measuring" onClick={() => handleSelectTabToolMode("references")}><X className="size-3" aria-hidden="true" /></button></div>
+      {!previewMode && measureModeActive && measurementPanel && <section aria-label="Measurements" className="pointer-events-auto w-60 max-w-full max-h-64 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+        <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm font-medium"><span>Measure</span><button type="button" className="rounded-sm p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Finish measuring" onClick={() => handleSelectTabToolMode("references")}><X className="size-3" aria-hidden="true" /></button></div>
+        <div className="-mx-1 my-1 h-px bg-border" />
         {measurementPanel}
-        <p className="px-2 pb-2 text-micro text-muted-foreground">Clears when you leave Measure.</p>
+        <div className="-mx-1 my-1 h-px bg-border" />
+        <p className="px-2 py-1.5 text-micro text-muted-foreground">Clears when you leave Measure.</p>
       </section>}
       {!previewMode && supportsTool(renderFormat, "draw") && drawToolActive ? (
         <DrawingToolbar

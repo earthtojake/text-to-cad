@@ -175,7 +175,12 @@ The optional `@hardcore/ui/renderers/cad/empty` entry exports `EmptyCadBackdrop`
 
 STEP keeps its geometry **Tree** and adds a separate **Features** tab. The upper
 list uses an operation/sketch hierarchy; selecting a row shows read-only
-properties below it. Tree remains the default, with selected geometry details.
+properties below it. With verified assembly links, operations belonging to one
+part are nested under that part in **Parts**. Operations spanning several parts,
+including repeated features, appear once under **Assembly operations**; unmapped
+source operations stay there too. Single-body models retain their direct operation
+list. This grouping does not invent missing helper internals or part history.
+Tree remains the default, with selected geometry details.
 
 Features reads a same-stem Python source through `GET /__cad/design-outline`.
 The backend parses its AST without importing or executing it. It supports direct
@@ -210,6 +215,15 @@ the viewer's existing selection colour. It does not change CAD or replace the
 user's actual reference selection. Escape, a viewport click, leaving Features,
 or changing files clears the preview. The footer shows only the source filename.
 
+Parameters expand into individual read-only rows. Selecting a source constant
+previews the linked operations that explicitly reference it, including tracked
+scalar aliases, helper arguments, helper globals and repeat inputs. Reassigned,
+shadowed and uncertain bindings do not imply a global-parameter link. This is a
+bounded source association, not complete dependency analysis. An operation's
+property values are also clickable and preview that operation's geometry.
+Neither interaction creates a dimension annotation: parameter values alone do
+not establish measurement endpoints. Missing associations remain unhighlighted.
+
 ## Selection and inspection tools
 
 STEP's Select tool offers All, Parts, Faces, and Edges. Explicit
@@ -220,7 +234,9 @@ selection after any open menu or first-use tip has been dismissed. Input fields
 keep their own Escape behaviour.
 
 Measure has a temporary panel below its toolbar button, with Any geometry,
-Points, Edges and Faces snap filters. Leaving Measure or changing models clears
+Points, Edges and Faces snap filters. Measure reuses the selection-filter dropdown
+component, including radio rows and keyboard behaviour; its panel uses the same
+popover surface, spacing and type styles. Leaving Measure or changing models clears
 completed rulers and the current draft. Escape first cancels a draft, then exits
 the tool. The existing measurement engine supplies planar-face spacing and
 angles, straight-edge angles, circular-edge centre spacing, and point distances;
