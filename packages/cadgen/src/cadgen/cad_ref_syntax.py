@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 
@@ -9,7 +10,8 @@ from dataclasses import dataclass
 # meaningful when it is pasted into a prompt that spans several files. It lives LEFT of the '#'
 # on purpose: the selector grammar owns everything to the right, so a prefix can never collide
 # with a label, its ':' qualifiers, or an entity's '.'.
-CAD_TOKEN_RE = re.compile(r"^\s*([^#\s]*)#([^\s]*)")
+# JSON-quoted paths mirror the JS parser, including literal filename delimiters.
+CAD_TOKEN_RE = re.compile(r'^\s*("(?:[^"\\\r\n]|\\.)*"|[^#"\s]*)#([^\s]*)')
 OCCURRENCE_SELECTOR_RE = re.compile(r"^o((?:\d+)(?:\.\d+)*)$")
 OCCURRENCE_ENTITY_SELECTOR_RE = re.compile(r"^o((?:\d+)(?:\.\d+)*)\.([sfev])(\d+)$")
 ENTITY_SELECTOR_RE = re.compile(r"^([sfev])(\d+)$")
@@ -67,6 +69,11 @@ def parse_cad_tokens(text: str) -> list[ParsedToken]:
         # resolves a prefix back to a file does so by literal suffix match against project
         # paths -- normalizing here would break that contract.
         cad_path = str(match.group(1) or "")
+        if cad_path.startswith('"'):
+            try:
+                cad_path = json.loads(cad_path)
+            except ValueError:
+                continue
         selector_text = str(match.group(2) or "")
         tokens.append(
             ParsedToken(
@@ -295,4 +302,6 @@ def build_cad_token(cad_path: str, selector: str = "") -> str:
     `<prefix>#` with no selectors is meaningful -- it names a whole file.
     """
     prefix = str(cad_path or "").strip()
+    if re.search(r'[\s#"\\]', prefix):
+        prefix = json.dumps(prefix, ensure_ascii=False)
     return f"{prefix}#{selector or ''}"

@@ -513,6 +513,30 @@
       "selectors": [
         "f1"
       ]
+    },
+    {
+      "why": "Imported filenames preserve whitespace and delimiters",
+      "text": "\"models/Hex Drive Screw (2).STEP\"#o1.f2,f3 note",
+      "cadPath": "models/Hex Drive Screw (2).STEP",
+      "selectors": [
+        "o1.f2",
+        "o1.f3"
+      ]
+    },
+    {
+      "why": "Imported filenames preserve whitespace and delimiters",
+      "text": "\"models/café #1 \\\"screw\\\".STEP\"#o1.f2,f3 note",
+      "cadPath": "models/café #1 \"screw\".STEP",
+      "selectors": [
+        "o1.f2",
+        "o1.f3"
+      ]
+    },
+    {
+      "why": "Malformed quoted filenames are not partial references",
+      "text": "\"broken name.step#o1",
+      "cadPath": "",
+      "selectors": null
     }
   ]
 }

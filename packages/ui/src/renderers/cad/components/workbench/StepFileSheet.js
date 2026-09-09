@@ -438,7 +438,11 @@ export default function StepFileSheet({
   const hostReference = useHostReference();
   const rowRefs = useRef(new Map());
   const lastActiveTreeNodeScrollKeyRef = useRef("");
-  const selectedIds = Array.isArray(selectedPartIds) ? selectedPartIds : [];
+  const selectedIds = [...(Array.isArray(selectedPartIds) ? selectedPartIds : [])];
+  // A standalone STEP's occurrence reference represents this same model row.
+  if (!isAssemblyView && stepTreeRoot?.id === STEP_MODEL_ROOT_ID && selectedReferences.some(reference => reference.selectorType === "occurrence") && !selectedIds.includes(STEP_MODEL_ROOT_ID)) {
+    selectedIds.push(STEP_MODEL_ROOT_ID);
+  }
   const selectedReferenceIdSet = useMemo(
     () => new Set((Array.isArray(selectedReferenceIds) ? selectedReferenceIds : []).map((id) => String(id || "").trim()).filter(Boolean)),
     [selectedReferenceIds]
@@ -592,7 +596,7 @@ export default function StepFileSheet({
 
   useEffect(() => {
     const scrollKey = String(activeTreeNodeScrollKey || "").trim();
-    if (!scrollKey || scrollKey === lastActiveTreeNodeScrollKeyRef.current || !activeTreeNodeId || !treeSectionOpen) {
+    if (!open || !scrollKey || scrollKey === lastActiveTreeNodeScrollKeyRef.current || !activeTreeNodeId || !treeSectionOpen) {
       return;
     }
     const scrollToActiveTreeNode = () => {
@@ -613,7 +617,7 @@ export default function StepFileSheet({
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [activeTreeNodeId, activeTreeNodeIsTopology, activeTreeNodeScrollKey, treeSectionOpen, visibleRowIdsSignature]);
+  }, [open, activeTreeNodeId, activeTreeNodeIsTopology, activeTreeNodeScrollKey, treeSectionOpen, visibleRowIdsSignature]);
 
   if (!selectedEntry) {
     return null;

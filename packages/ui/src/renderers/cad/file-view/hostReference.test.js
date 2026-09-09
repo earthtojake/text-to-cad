@@ -90,3 +90,10 @@ test("resolveSelectorSelection: reference map first, then the tree, then a label
   assert.equal(resolveSelectorSelection("", options), null);
   assert.equal(resolveSelectorSelection("o1", {}), null);
 });
+
+test("quoted imported paths preserve the group rather than becoming whole-file references", () => {
+  const text = '"Hex Drive Screw (2).STEP"#o1.f2,o1.f3';
+  assert.deepEqual(referenceFromCopyText(text, 'models/Hex Drive Screw (2).STEP'), {
+    file:'models/Hex Drive Screw (2).STEP', selector:'o1.f2,o1.f3', text,
+  });
+});
