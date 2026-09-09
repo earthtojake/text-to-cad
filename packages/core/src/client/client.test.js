@@ -120,3 +120,18 @@ test('polling keeps its two-second cadence, obeys host visibility and stops with
   assert.equal(count, 2);
   client.dispose();
 });
+
+test('source outline requests use the client origin and cancel with the selected file', async () => {
+  const pending = deferred();
+  let call;
+  const client = createCadClient({ origin: 'http://one.test', fetch: (url, options) => { call = {url, options}; return pending.promise; } });
+  const controller = new AbortController();
+  const request = client.requestDesignOutline('models/case.step', { signal: controller.signal });
+  assert.equal(new URL(call.url).pathname, '/__cad/design-outline');
+  assert.equal(new URL(call.url).searchParams.get('file'), 'models/case.step');
+  controller.abort();
+  assert.equal(call.options.signal.aborted, true);
+  pending.resolve(json({status:'ready',features:[],parameters:[]}));
+  await assert.rejects(request, {name:'AbortError'});
+  client.dispose();
+});

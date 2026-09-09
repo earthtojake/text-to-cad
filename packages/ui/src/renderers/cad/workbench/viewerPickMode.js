@@ -30,7 +30,7 @@ export function viewerPickModeForRenderPane({
   if (measureMode) {
     return VIEWER_PICK_MODE.MEASURE;
   }
-  if (["faces", "edges", "groups"].includes(selectionFilter)) return VIEWER_PICK_MODE.TOPOLOGY;
+  if (["faces", "edges"].includes(selectionFilter)) return VIEWER_PICK_MODE.TOPOLOGY;
   if (
     viewerMode === "assembly" &&
     !topologyPickingActive &&
