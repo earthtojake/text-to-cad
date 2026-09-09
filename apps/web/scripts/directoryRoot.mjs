@@ -1,7 +1,7 @@
 import path from "node:path";
 
-// By name: this module runs only in development (vite.config.mjs and its tests),
-// where node_modules links @hardcore/core through the package.json `file:` dependency.
+// Development tooling and its tests consume the root workspace's compiled
+// @hardcore/core export, just like the app.
 import { pathIsInside } from "@hardcore/core/lib/pathUtils.mjs";
 
 export function resolveDirectoryRoot({
