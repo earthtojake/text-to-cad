@@ -347,6 +347,7 @@ function CadFileViewSurface({
   const [hoveredListReferenceId, setHoveredListReferenceId] = useState("");
   const [hoveredModelReferenceId, setHoveredModelReferenceId] = useState("");
   const [selectionFilter, setSelectionFilter] = useState("all");
+  const [designHighlight, setDesignHighlight] = useState(null);
   const [selectionFilterNotice, setSelectionFilterNotice] = useState("");
   const [selectedPartIds, setSelectedPartIds] = useState([]);
   const [selectedRenderPartIdByAssemblyPartId, setSelectedRenderPartIdByAssemblyPartId] = useState({});
@@ -2678,6 +2679,7 @@ function CadFileViewSurface({
   useEffect(() => {
     setSelectionFilter("all");
     setSelectionFilterNotice("");
+    setDesignHighlight(null);
   }, [selectedKey, artifactRevision]);
   const selectedDisplayEdgesMatch =
     !!displayEdgeState &&
@@ -4022,6 +4024,9 @@ function CadFileViewSurface({
       setSelectionFilterNotice("");
     } else setSelectionFilterNotice("Select a part in Tree to load its faces and edges.");
   }, [selectionFilter, topologyTarget, loadFilterTopology]);
+  const loadDesignTopology = useCallback(() => {
+    if (!isAssemblyView) setLargeFileState(current => current.selectableTopologyEnabled ? current : ({ ...current, selectableTopologyEnabled: true }));
+  }, [isAssemblyView]);
   const selectFeatureFaces = useCallback((faceIds, { multiSelect = false } = {}) => {
     if (stepUpdateInProgress || !faceIds.length || !faceIds.every(id => effectiveActiveReferenceMap.get(id)?.selectorType === "face")) return;
     const next = toggleFaceGroupSelection(selectedReferenceIdsRef.current, faceIds, multiSelect);
@@ -5693,7 +5698,7 @@ function CadFileViewSurface({
       data-cad-surface
       tabIndex={-1}
       onPointerDownCapture={event => {
-        if (event.target instanceof Element && event.target.closest("canvas")) event.currentTarget.focus({ preventScroll: true });
+        if (event.target instanceof Element && event.target.closest("canvas")) { setDesignHighlight(null); event.currentTarget.focus({ preventScroll: true }); }
       }}
       ref={hostRef}
     >
@@ -5763,10 +5768,10 @@ function CadFileViewSurface({
                   assemblyPickingActive={viewerInAssemblyMode}
                   assemblyParts={viewerAssemblyRenderParts}
                   hiddenPartIds={viewerHiddenPartIds}
-                  selectedPartIds={viewerSelectedPartIds}
+                  selectedPartIds={designHighlight ? designHighlight.partIds : viewerSelectedPartIds}
                   hoveredPartId={viewerHoveredPartIds}
                   hoveredReferenceId={effectiveHoveredReferenceId}
-                  selectedReferenceIds={selectedReferenceIds}
+                  selectedReferenceIds={designHighlight ? designHighlight.faceIds : selectedReferenceIds}
                   selectorRuntime={effectiveSelectorRuntime}
                   displayEdgeRuntime={selectedDisplayEdgeRuntime}
                   selectionFilter={selectionFilter}
@@ -5904,7 +5909,7 @@ function CadFileViewSurface({
             {selectedFileSheetKind === "step" ? (
               <StepFileSheet
                 key={`step:${selectedKey}`}
-                designOutline={{ client, file: selectedEntry?.file, revision: artifactRevision, onOpenFile }}
+                designOutline={{ client, file: selectedEntry?.file, revision: artifactRevision, onOpenFile, references: !viewerLoading && !stepUpdateInProgress ? selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: setDesignHighlight, onLoadTopology: loadDesignTopology }}
                 open={fileSheetOpen}
                 isDesktop={isDesktop}
                 width={activeSheetWidth || tabToolsWidth}
