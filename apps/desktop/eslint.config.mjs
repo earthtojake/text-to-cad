@@ -14,6 +14,7 @@ export default tseslint.config(
       "out/**",
       "release/**",
       "dist/**",
+      "tmp/**", // Local comparison builds and disposable verification scripts.
       "node_modules/**",
       "tests/e2e/__screenshots__/**",
       // Build outputs: the composed skills and the bundled CAD runtime, which

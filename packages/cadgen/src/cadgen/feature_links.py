@@ -8,10 +8,10 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
-import os
 from pathlib import Path
 import sys
 import time
+from cadgen._internal.atomic_replace import write_bytes_atomic
 
 SCHEMA = 1
 
@@ -40,15 +40,7 @@ def publish_links(source, document, links):
     if not links or links['sourceHash'] != _digest(source):
         return
     path = _cache_path(links['sourceHash'], _digest(document))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    import tempfile
-    with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, delete=False) as stream:
-        tmp = Path(stream.name)
-        json.dump(links, stream, separators=(',', ':'), allow_nan=False)
-    try:
-        os.replace(tmp, path)
-    finally:
-        tmp.unlink(missing_ok=True)
+    write_bytes_atomic(path, json.dumps(links, separators=(',', ':'), allow_nan=False).encode('utf-8'))
 
 
 class FeatureTrace:
