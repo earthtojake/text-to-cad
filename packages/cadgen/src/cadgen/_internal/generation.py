@@ -569,6 +569,12 @@ def _generate_part_outputs(
                 stats["published"] = False
                 return stats
         write_record(model_path, record)
+        if generated and spec.script_path and spec.step_path and Path(spec.step_path).is_file():
+            from cadgen.feature_links import publish_links
+            try:
+                publish_links(spec.script_path, spec.step_path, getattr(scene, "design_feature_links", None))
+            except (OSError, ValueError):
+                pass  # Optional inspection cache must not fail a model build.
         from cadgen.store.records import note_document_tree, note_output
 
         # Artifact side: the bytes of the document this tree describes → the tree
