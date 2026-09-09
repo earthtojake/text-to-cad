@@ -61,6 +61,16 @@ export type CadReference = {
  * nothing on either side.
  */
 export function splitReference(text: string): CadReference | null {
+  // JSON-quoted file paths keep whitespace and literal '#' characters intact.
+  if (text.startsWith('"')) {
+    const quoted = text.match(/^("(?:[^"\\\r\n]|\\.)*")(.*)$/);
+    if (!quoted) return null;
+    let file: string;
+    try { file = JSON.parse(quoted[1]!); } catch { return null; }
+    const tail = quoted[2]!;
+    if (!tail) return file ? { file, selector: "" } : null;
+    return tail.startsWith("#") && isSelectorList(tail.slice(1)) ? { file, selector: tail.slice(1) } : null;
+  }
   const hash = text.indexOf("#");
   if (hash < 0) {
     return text ? { file: text, selector: "" } : null;
@@ -75,5 +85,6 @@ export function splitReference(text: string): CadReference | null {
 
 /** The plain text form: `file#selector`, `#selector`, or `file`. */
 export function referenceText(reference: CadReference): string {
-  return reference.selector ? `${reference.file}#${reference.selector}` : reference.file;
+  const file = /[\s#"\\]/.test(reference.file) ? JSON.stringify(reference.file) : reference.file;
+  return reference.selector ? `${file}#${reference.selector}` : file;
 }

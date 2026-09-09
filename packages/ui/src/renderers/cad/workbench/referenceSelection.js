@@ -219,8 +219,7 @@ export function canonicalCadRefCopyText(text, { allowPlain = false } = {}) {
   if (!normalizedText.includes("#")) {
     return allowPlain ? normalizedText : "";
   }
-  const token = normalizedText.split(/\s+/)[0];
-  return token || "";
+  return parseCadRefToken(normalizedText)?.token || "";
 }
 
 export function copySelectedReferenceText(references) {
@@ -272,7 +271,9 @@ export function withFileRefPrefix(line, prefix) {
   if (!text || !filePrefix || !text.includes("#")) {
     return text;
   }
-  return text.startsWith("#") ? `${filePrefix}${text}` : text;
+  return text.startsWith("#")
+    ? buildCadRefToken({ cadPath: filePrefix, selectors: parseCadRefToken(text)?.selectors || [] })
+    : text;
 }
 
 /** The file prefix a copied ref should carry, or "" when the entry has none. */
