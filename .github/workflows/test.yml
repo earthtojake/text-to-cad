@@ -206,3 +206,11 @@ jobs:
           name: desktop-screenshots
           path: apps/desktop/tests/e2e/__screenshots__/*.png
           if-no-files-found: ignore
+
+      - name: Upload failed Electron traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-test-results
+          path: apps/desktop/test-results/
+          if-no-files-found: ignore

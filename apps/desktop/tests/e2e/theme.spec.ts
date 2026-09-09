@@ -33,8 +33,7 @@ import {
  * with it. In this app only the app writes the document
  * (`src/renderer/hooks/use-theme.ts`); the surface renders from the
  * `colorScheme` prop it is handed and may only read
- * (`apps/web/docs/file-view.md`, and the rule itself in
- * `apps/web/src/client/file-view/hostLayout.js`). Its signature is the two
+ * (`packages/ui/docs/cad-renderer.md`). Its signature is the two
  * attributes only IT writes — `data-theme` and `data-theme-preference` — so
  * their absence after a file, a theme panel, a slider and a preset is the
  * assertion.
@@ -144,11 +143,11 @@ async function drainDisagreements(target: Page, expected: "light" | "dark" | nul
 /**
  * No sample since the last drain was the wrong colour.
  *
- * A couple of frames of sleep first, so a step that took less than one is
- * still judged on a frame rather than on nothing at all.
+ * Wait for actual sampled frames: a fixed delay need not contain a frame on
+ * a busy CI runner. Keep every sample while waiting, including any wrong one.
  */
 async function expectNeverMoved(target: Page, expected: "light" | "dark" | null, what: string) {
-  await target.waitForTimeout(60);
+  await target.waitForFunction(() => window.__schemeFrames >= 2);
   const seen = await drainDisagreements(target, expected);
   expect(seen.total, `${what}: the sampler never ran`).toBeGreaterThan(0);
   expect(seen.wrong, `${what}: ${seen.wrong.length} of ${seen.total} samples were the wrong scheme`).toEqual([]);

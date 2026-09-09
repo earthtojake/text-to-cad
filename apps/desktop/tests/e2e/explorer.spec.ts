@@ -1003,6 +1003,9 @@ async function openFromTree(target: string) {
   const filter = page.getByLabel("Filter files");
   await filter.fill(target);
   await page.getByRole("option", { name: target, exact: false }).first().click();
+  // Selection changes the mounted FileViewer. Do not clear the old tree or
+  // open a context menu before the host has activated the requested file.
+  await expect(page.locator('[role="tab"][aria-selected="true"]')).toHaveAttribute("title", target);
   // A CAD file in a narrow pane hides the tree, filter and all.
   if (await filter.isVisible()) {
     await filter.fill("");
@@ -1283,4 +1286,10 @@ const gitEnv = {
 async function newTab(page: Page, label: "File" | "Review" | "Browser" | "Terminal") {
   await page.getByRole("button", { name: "New tab", exact: true }).click();
   await page.getByRole("menuitem", { name: label }).click();
+  // A closing Radix menu can consume the next outside click. Start the next
+  // interaction only after it has closed and the new file view has mounted.
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  if (label === "File") {
+    await expect(page.getByText("No file open", { exact: true })).toBeVisible();
+  }
 }

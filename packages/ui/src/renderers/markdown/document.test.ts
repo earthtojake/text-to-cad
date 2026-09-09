@@ -27,6 +27,14 @@ const FILES: [string, string][] = [
   ["AGENTS.md", AGENTS],
   ["CONTRIBUTING.md", CONTRIBUTING],
 ];
+const LINE_ENDINGS = [["LF", "\n"], ["CRLF", "\r\n"]] as const;
+// Exercise both checkout conventions on every platform; the serializer still
+// receives and must return the exact bytes of each input.
+const FILE_CASES = FILES.flatMap(([name, source]) =>
+  LINE_ENDINGS.map(([ending, newline]) => [
+    `${name} (${ending})`, source.replace(/\r?\n/g, newline),
+  ] as const),
+);
 
 /**
  * A line diff, so "unrelated lines" means unrelated *lines* and not unrelated
@@ -72,12 +80,12 @@ function findBlock(doc: JSONContent, type: string): { index: number; node: JSONC
 }
 
 describe("markdown round trip", () => {
-  it.each(FILES)("re-emits %s byte for byte when nothing is edited", (_name, source) => {
+  it.each(FILE_CASES)("re-emits %s byte for byte when nothing is edited", (_name, source) => {
     const { doc, frame } = markdownToDocument(source);
     expect(documentToMarkdown(doc, frame)).toBe(source);
   });
 
-  it.each(FILES)("rewrites only the edited paragraph in %s", (_name, source) => {
+  it.each(FILE_CASES)("rewrites only the edited paragraph in %s", (_name, source) => {
     const { doc, frame } = markdownToDocument(source);
 
     // The edit a person makes: one word, in one paragraph, in place.
@@ -89,14 +97,17 @@ describe("markdown round trip", () => {
     const next = { ...doc, content: doc.content!.map((b, at) => (at === index ? edited : b)) };
 
     const out = documentToMarkdown(next, frame);
-    const { removed, added } = diff(source.split("\n"), out.split("\n"));
+    // A CRLF delimiter is one line break, not a trailing content character.
+    const { removed, added } = diff(source.split(/\r?\n/), out.split(/\r?\n/));
 
     // Exactly the paragraph's own lines out, and the one line that replaced
     // them in. A whole-document serializer moves 18 lines of README.md and
     // 149 of AGENTS.md on this same edit.
-    expect(removed).toEqual((node.attrs?.mdSource as string).split("\n"));
+    expect(removed).toEqual((node.attrs?.mdSource as string).split(/\r?\n/));
     expect(added).toEqual(["Edited by the test."]);
-    expect(out).toContain("Edited by the test.");
+    // Line comparisons above ignore delimiters; this still checks that all
+    // bytes outside the edited block, including CRLF gaps, are unchanged.
+    expect(out).toBe(source.replace(node.attrs?.mdSource as string, "Edited by the test."));
   });
 
   it("keeps a table's alignment when a cell is edited", () => {
@@ -148,8 +159,8 @@ describe("markdown round trip", () => {
     expect(documentToMarkdown(next, frame)).toContain("* ONE\n* two");
   });
 
-  it("re-prints only the list item that changed", () => {
-    const source = AGENTS;
+  it.each(LINE_ENDINGS)("re-prints only the list item that changed (%s)", (_ending, newline) => {
+    const source = AGENTS.replace(/\r?\n/g, newline);
     const { doc, frame } = markdownToDocument(source);
     const { index, node } = findBlock(doc, "bulletList");
     expect(node.content!.length).toBeGreaterThanOrEqual(2);
@@ -167,15 +178,17 @@ describe("markdown round trip", () => {
       content: doc.content!.map((b, at) => (at === index ? { ...node, content: items } : b)),
     };
 
-    const { removed, added } = diff(source.split("\n"), documentToMarkdown(next, frame).split("\n"));
+    const out = documentToMarkdown(next, frame);
+    const { removed, added } = diff(source.split(/\r?\n/), out.split(/\r?\n/));
     // The one bullet's lines, not the whole list's. Without per-item sources
     // every other bullet in the list comes back as one long line.
-    expect(removed).toEqual((node.content![1]!.attrs?.mdSource as string).split("\n"));
+    expect(removed).toEqual((node.content![1]!.attrs?.mdSource as string).split(/\r?\n/));
     expect(added).toEqual(["- Rewritten."]);
+    expect(out).toBe(source.replace(node.content![1]!.attrs?.mdSource as string, "- Rewritten."));
   });
 
-  it("re-wraps an edited paragraph at the column the file wraps at", () => {
-    const source = AGENTS;
+  it.each(LINE_ENDINGS)("re-wraps an edited paragraph at the column the file wraps at (%s)", (_ending, newline) => {
+    const source = AGENTS.replace(/\r?\n/g, newline);
     const { doc, frame } = markdownToDocument(source);
     expect(frame.wrap).toBeGreaterThan(60);
     expect(frame.wrap).toBeLessThanOrEqual(100);
@@ -189,7 +202,7 @@ describe("markdown round trip", () => {
       ),
     };
 
-    const { added } = diff(source.split("\n"), documentToMarkdown(next, frame).split("\n"));
+    const { added } = diff(source.split(/\r?\n/), documentToMarkdown(next, frame).split(/\r?\n/));
     expect(added.length).toBeGreaterThan(1);
     for (const line of added) {
       expect(line.length).toBeLessThanOrEqual(frame.wrap!);

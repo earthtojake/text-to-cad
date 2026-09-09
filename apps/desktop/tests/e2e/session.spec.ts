@@ -294,12 +294,35 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
  * this was broken.
  */
 test("text in an agent's message can be selected with the mouse", async () => {
-  const prose = page.locator("[data-part=text]").first();
+  // Playwright restarts the worker for a retry, so beforeAll gives this test
+  // an empty project rather than the preceding test's completed transcript.
+  // Prepare that same turn when this test runs on its own as well.
+  if ((await page.locator("[data-part=text]").count()) === 0) {
+    await expect(page.locator("[data-new-session] [data-chip=model]")).toContainText("Fast");
+    const composer = page.getByPlaceholder("Do anything");
+    await composer.fill("showcase: write a greeting script and tidy up");
+    await composer.press("Enter");
+    await page.locator("[data-permission][data-outcome=pending]").getByRole("button", { name: "Yes", exact: true }).click();
+    await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
+  }
+  const prose = page.locator("[data-part=text]").first().locator("p").first();
   await expect(prose).toBeVisible();
-  const box = (await prose.boundingBox())!;
-  await page.mouse.move(box.x + 2, box.y + 8);
+  // The previous test expands the tool details, which can scroll this first
+  // paragraph above the viewport. Visible means rendered, not on screen.
+  await prose.scrollIntoViewIfNeeded();
+  await expect(prose).toBeInViewport();
+  // Measure the first text line, not the paragraph's full-width box or its
+  // padding. This Range only measures; the mouse must still select the text.
+  const box = await prose.evaluate((node) => {
+    const range = node.ownerDocument.createRange();
+    range.selectNodeContents(node);
+    const rect = range.getClientRects()[0];
+    if (!rect) throw new Error("the agent's paragraph has no rendered text line");
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  });
+  await page.mouse.move(box.x + 1, box.y + box.height / 2);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width - 4, box.y + box.height - 6, { steps: 16 });
+  await page.mouse.move(box.x + box.width - 1, box.y + box.height / 2, { steps: 16 });
   await page.mouse.up();
   const selected = await page.evaluate(() => window.getSelection()?.toString() ?? "");
   expect(selected.trim().length, "nothing was selected in the agent's prose").toBeGreaterThan(0);
