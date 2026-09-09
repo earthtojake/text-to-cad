@@ -33,7 +33,6 @@ import {
   writeTextFile,
   IgnoreRules,
 } from "../explorer/fs";
-import { addProjectFile } from "../explorer/add-files";
 import { Terminals } from "../explorer/terminal";
 import * as git from "../projects/git";
 import { projectWorktreeDir, resolveProjectRoot } from "../projects/workspace";
@@ -344,28 +343,6 @@ export const explorerHandlers = {
         } catch (error) {
           throw new IpcError(`could not open the file that way: ${error instanceof Error ? error.message : String(error)}`);
         }
-      }),
-
-    addFiles: ({ projectId, root }: { projectId: string; root?: string }, ctx: IpcContext) =>
-      fsCall(async () => {
-        const base = rootOf(projectId, root);
-        const window = BrowserWindow.fromWebContents(ctx.sender);
-        const options: Electron.OpenDialogOptions = {
-          title: "Add files to this project",
-          message: "Copy files into this project. STEP, images, PDFs, code and other files are welcome.",
-          buttonLabel: "Add files",
-          properties: ["openFile", "multiSelections"],
-        };
-        const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
-        if (result.canceled || !result.filePaths.length) return null;
-        if (rootOf(projectId, root) !== base) throw new IpcError("The project changed. Try adding files again.");
-        const paths: string[] = [];
-        const errors: string[] = [];
-        for (const source of result.filePaths) {
-          try { paths.push((await addProjectFile(base, source)).path); }
-          catch (error) { errors.push(`${path.basename(source)}: ${error instanceof Error ? error.message : String(error)}`); }
-        }
-        return { paths, errors };
       }),
 
     reveal: ({ projectId, root, path: target }: AtPath) =>

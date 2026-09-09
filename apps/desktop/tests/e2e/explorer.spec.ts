@@ -524,11 +524,11 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
   const tree = page.getByRole("tab", { name: "Tree" });
   await expect(tree).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByRole("tab", { name: "Measure" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Features" })).toBeVisible();
 
   /*
     A CAD tab opens with the viewer's Inspector as its ONE panel — a STEP
-    file's tree and its measurements are why the tab is open — so the files
+    file's geometry and source features are why the tab is open — so the files
     toggle offers the tree rather than hiding it. The Inspector is drawn in
     this app's panel column (`panelSlot`), which is the same column the tree
     would be in, to the right of the model and never a drawer over it, at
@@ -553,11 +553,11 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
   await expect(page.getByLabel("Filter files")).toBeVisible();
   await expect(panels(page)).toHaveCount(1);
-  await expect(page.getByRole("tab", { name: "Measure" })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Features" })).toHaveCount(0);
   await shoot("file-cad-tree.png", true);
   // ...and the Inspector's own toggle brings it back, closing the tree.
   await page.locator("header [data-file-panel='cad-file-sheet']").click();
-  await expect(page.getByRole("tab", { name: "Measure" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Features" })).toBeVisible();
   await expect(page.getByLabel("Filter files")).toHaveCount(0);
   await expect(panels(page)).toHaveCount(1);
   await resizeWindow(1440, 900);
@@ -576,11 +576,17 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await shoot("file-cad-1280x800.png", true);
   await resizeWindow(1440, 900);
 
-  // The sheets are live: switching to Measure shows its empty state.
-  await page.getByRole("tab", { name: "Measure" }).click();
-  await expect(page.getByRole("tab", { name: "Measure" })).toHaveAttribute("aria-selected", "true");
+  // Measurements live under the toolbar tool and close when it is toggled off.
+  const measure = page.getByRole("button", { name: "Measure", exact: true });
+  await measure.click();
+  await expect(measure).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("Select two points, edges, or faces to measure", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Finish measuring" })).toBeVisible();
   await shoot("file-cad-measure.png", true);
-  await tree.click();
+  await measure.click();
+  await expect(measure).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "Finish measuring" })).toHaveCount(0);
+  await expect(tree).toBeVisible();
 
   /*
     A CAD file's two panels (`@hardcore/ui/navigation`'s `panels.js`): the viewer's theme editor
@@ -620,7 +626,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   // Declaration order: theme, then the Inspector, then the files toggle.
   expect((await themePanel.boundingBox())!.x).toBeLessThan((await sheetPanel.boundingBox())!.x);
 
-  // The Inspector is open at this point (its Tree/Measure tabs are on
+  // The Inspector is open at this point (its Tree/Features tabs are on
   // screen), so its toggle is the pressed one.
   await expect(sheetPanel).toHaveAttribute("aria-pressed", "true");
   await expect(themePanel).toHaveAttribute("aria-pressed", "false");
@@ -665,7 +671,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(sheetPanel).toHaveAttribute("aria-pressed", "true");
   await expect(themePanel).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("tab", { name: "Tree" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Measure" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Features" })).toBeVisible();
   await expect(panels(page)).toHaveCount(1);
   await expect(panels(page)).toHaveAttribute("data-file-panel-container", "cad-file-sheet");
   await expectInspectorBesideModel();

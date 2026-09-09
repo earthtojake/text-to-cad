@@ -82,7 +82,7 @@ export function FileViewer({ file, source, renderers, state, onStateChange, onOp
     <div className="relative flex min-h-0 flex-1">
       <div className="min-w-0 flex-1 overflow-hidden">{body}</div>
       {chromeVisible && openPanel && openPanel.content !== "body" ? <FilePanelColumn id={openPanel.id} label={openPanel.label} width={panelWidth} onWidthChange={(nextWidth) => changeState((previous) => ({ ...previous, panelWidth: clampPanelWidth(nextWidth) }))}>
-        {openPanel.content === "tree" ? <FileTree key={source.id} headerActions={presentation?.treeActions} source={navigation.tree} activePath={selectedPath} edit={navigation.edit} reveal={reveal} onOpen={(next) => onOpenFile(next, { target: "new" })} /> : <div className="h-full min-h-0" ref={setPanelSlot} />}
+        {openPanel.content === "tree" ? <FileTree key={source.id} source={navigation.tree} activePath={selectedPath} edit={navigation.edit} reveal={reveal} onOpen={(next) => onOpenFile(next, { target: "new" })} /> : <div className="h-full min-h-0" ref={setPanelSlot} />}
       </FilePanelColumn> : null}
     </div>
   </div>;
