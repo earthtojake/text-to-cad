@@ -5,6 +5,21 @@ import StepDesignTree from './StepDesignTree.jsx';
 Object.assign(globalThis, { React });
 afterEach(cleanup);
 const result = {status:'ready',source:'case.py',parameters:[{name:'WALL',value:1.8,expression:'1.8'}],features:[{id:'extrude',label:'Extrude · body',type:'extrude',line:5,parameters:[{name:'depth',value:10,expression:'DEPTH'}],children:[{id:'sketch',label:'Sketch',type:'sketch',parameters:[],children:[]}]}]};
+it('adds only explicitly requested linked feature geometry and disables the action when links disappear', async () => {
+  const descriptor={area:1,center:[0,0,0],bbox:{min:[0,0,0],max:[1,1,0]}};
+  const onAddToPrompt=vi.fn();
+  const client={requestDesignOutline:vi.fn().mockResolvedValue({...result,geometryLinks:{schema:1,faces:[descriptor],lines:{'5':[0]}}})};
+  const props={client,file:'case.step',onAddToPrompt};
+  const {rerender}=render(<StepDesignTree {...props} references={[{id:'f7',selectorType:'face',pickData:descriptor}]} />);
+  fireEvent.click(await screen.findByText('Extrude · body'));
+  expect(onAddToPrompt).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'Add to prompt',exact:true}));
+  expect(onAddToPrompt).toHaveBeenCalledWith({faceIds:['f7'],partIds:[]},'Extrude · body');
+  rerender(<StepDesignTree {...props} references={[]} />);
+  expect(screen.getByRole('button',{name:'Add to prompt',exact:true}).hasAttribute('disabled')).toBe(true);
+  fireEvent.click(screen.getByRole('button',{name:'Add to prompt',exact:true}));
+  expect(onAddToPrompt).toHaveBeenCalledTimes(1);
+});
 it('shows source parameters read-only and navigates nested operations with arrows', async () => {
   render(<StepDesignTree client={{requestDesignOutline:vi.fn().mockResolvedValue(result)}} file="case.step" label="case.step" />);
   const tree = screen.getByRole('tree', {name:'Features'});
@@ -78,4 +93,39 @@ it('groups assembly operations by part and selects global and operation paramete
   fireEvent.keyDown(screen.getByRole('button',{name:'Highlight WALL'}),{key:'Escape'});
   await waitFor(()=>expect(onHighlight.mock.lastCall?.[0]).toBeNull());
   expect(document.querySelectorAll('input,textarea,select').length).toBe(0);
+});
+
+it('uses existing part visibility and isolate actions without selecting or editing an operation', async () => {
+  const box={min:[0,0,0],max:[1,1,1]};
+  const client={requestDesignOutline:vi.fn().mockResolvedValue({...result,geometryLinks:{schema:1,parts:[{name:'Body',bbox:box}],partLines:{'5':[0]}}})};
+  const actions={onIsolate:vi.fn(),onToggleVisibility:vi.fn(),onExitIsolate:vi.fn(),onExitAllIsolate:vi.fn(),hiddenIds:[],focusedIds:[]};
+  const props={client,file:'case.step',parts:[{id:'o1',name:'Body',bounds:box}]};
+  const {rerender}=render(<StepDesignTree {...props} partActions={actions} />);
+  fireEvent.click(await screen.findByRole('button',{name:'Hide Body'}));
+  expect(actions.onToggleVisibility).toHaveBeenCalledWith('o1');
+  expect(screen.queryByRole('region',{name:'Feature properties'})).toBeNull();
+  rerender(<StepDesignTree {...props} partActions={{...actions,hiddenIds:['o1']}} />);
+  expect(screen.getByRole('button',{name:'Show Body'})).toBeTruthy();
+  fireEvent.click(screen.getByRole('button',{name:'Isolate Body'}));
+  expect(actions.onIsolate).toHaveBeenCalledWith('o1');
+  rerender(<StepDesignTree {...props} partActions={{...actions,focusedIds:['o1']}} />);
+  fireEvent.click(screen.getByRole('button',{name:'Exit isolate for Body'}));
+  expect(actions.onExitIsolate).toHaveBeenCalledWith('o1');
+  fireEvent.click(screen.getByRole('button',{name:'Exit isolate',exact:true}));
+  expect(actions.onExitAllIsolate).toHaveBeenCalled();
+});
+
+it('shows real imported parts and their dimensions without inventing source operations or parameters', async () => {
+  const onHighlight=vi.fn();
+  const onAddToPrompt=vi.fn();
+  render(<StepDesignTree client={{requestDesignOutline:vi.fn().mockResolvedValue({status:'unavailable',features:[],parameters:[]})}} file="imported.step"
+    parts={[{id:'o1',name:'Imported bracket',bounds:{min:[-5,2,0],max:[5,8,3]}}]} onHighlight={onHighlight} onAddToPrompt={onAddToPrompt} />);
+  fireEvent.click(await screen.findByRole('button',{name:'Expand Imported geometry',exact:true}));
+  fireEvent.click(screen.getByRole('treeitem',{name:'Imported bracket',exact:true}));
+  expect(screen.getByRole('region',{name:'Feature properties'}).textContent).toContain('10 × 6 × 3 mm');
+  expect(screen.queryByText('Source parameters')).toBeNull();
+  expect(screen.queryByText('Face area')).toBeNull();
+  await waitFor(()=>expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:[],partIds:['o1']}));
+  fireEvent.click(screen.getByRole('button',{name:'Add to prompt',exact:true}));
+  expect(onAddToPrompt).toHaveBeenCalledWith({faceIds:[],partIds:['o1']},'Imported bracket');
 });
