@@ -486,43 +486,6 @@ function buildUrdfPrimitiveMesh(primitive) {
   return null;
 }
 
-// A link mesh may carry its colour PER PART rather than per vertex: a GLB with one material
-// per primitive produces `has_source_colors` with an empty `colors` buffer and the colour on
-// `parts[].color`. A URDF link is ONE renderable part, so that detail had nowhere to go and
-// the whole link fell back to default grey — an authored two-colour hand rendered as a grey
-// stub, with no warning, purely because the colour was a material rather than an attribute.
-// Expand it into the per-vertex buffer the composer already reads, which is exactly what the
-// composer does for a `<material>` the URDF itself declares.
-function withPerVertexPartColors(partMesh) {
-  const vertices = partMesh?.vertices;
-  if (!partMesh?.has_source_colors || !vertices?.length || partMesh.colors?.length) {
-    return partMesh;
-  }
-  const parts = Array.isArray(partMesh.parts) ? partMesh.parts : [];
-  if (!parts.length) {
-    return partMesh;
-  }
-  const colors = new Float32Array(vertices.length);
-  let painted = false;
-  for (const part of parts) {
-    const rgb = parseHexColorToLinearRgb(String(part?.color || "").trim());
-    const offset = Number(part?.vertexOffset);
-    const count = Number(part?.vertexCount);
-    if (!rgb || !Number.isFinite(offset) || !Number.isFinite(count) || count <= 0) {
-      continue;
-    }
-    const end = Math.min(offset + count, Math.floor(vertices.length / 3));
-    for (let index = Math.max(offset, 0); index < end; index += 1) {
-      colors[index * 3] = rgb[0];
-      colors[index * 3 + 1] = rgb[1];
-      colors[index * 3 + 2] = rgb[2];
-    }
-    painted = true;
-  }
-  // A part the loader left uncoloured keeps white, which multiplies to the theme fill.
-  return painted ? { ...partMesh, colors } : partMesh;
-}
-
 function resolveUrdfVisuals(urdfData, meshesByUrl) {
   const links = Array.isArray(urdfData?.links) ? urdfData.links : [];
   const resolvedVisuals = [];
@@ -532,13 +495,12 @@ function resolveUrdfVisuals(urdfData, meshesByUrl) {
     for (const visual of visuals) {
       const meshUrl = String(visual?.meshUrl || "");
       const partFileRef = String(visual?.partFileRef || "");
-      const loadedMesh = visual?.primitive
+      const partMesh = visual?.primitive
         ? buildUrdfPrimitiveMesh(visual.primitive)
         : resolveVisualMesh(meshesByUrl, meshUrl, partFileRef);
-      if (!loadedMesh) {
+      if (!partMesh) {
         continue;
       }
-      const partMesh = withPerVertexPartColors(loadedMesh);
       resolvedVisuals.push({
         linkName,
         meshUrl,
@@ -604,12 +566,6 @@ export function buildUrdfMeshGeometry(urdfData, meshesByUrl, options = {}) {
       parts,
       has_source_colors: hasAuthoredDisplayColors,
       lightweightGeometry: true,
-      // A robot's link meshes are NEVER in world space: each one keeps the units and the
-      // frame of its own mesh file, and the `<mesh scale>`, the visual `<origin>` and the
-      // joint FK all live in the part transform. Declaring that here is what makes the
-      // renderer apply it — without the flag every link is drawn once, unscaled, at the
-      // origin, which is a metre-scale robot rendered as a pile of millimetre-scale meshes.
-      partTransformsBaked: false,
       geometrySource: {
         type: "urdf-source-parts",
         urdfData,
@@ -709,10 +665,7 @@ export function buildUrdfMeshGeometry(urdfData, meshesByUrl, options = {}) {
     edge_indices: new Uint32Array(0),
     bounds: mergeBounds(parts.map((part) => part.bounds)),
     parts,
-    has_source_colors: hasSourceColors,
-    // Merged too: the concatenated buffer holds each link mesh's own local vertices, so
-    // placement still lives only in the part transform. See the lightweight branch.
-    partTransformsBaked: false
+    has_source_colors: hasSourceColors
   };
 }
 
@@ -724,21 +677,6 @@ function urdfMeshHasSourceColors(partMesh) {
 
 function urdfVisualHasDisplayColors(visualColor, partMesh) {
   return !!parseHexColorToLinearRgb(visualColor) || (!visualColor && urdfMeshHasSourceColors(partMesh));
-}
-
-function posedPartPlacement(part, linkWorldTransforms) {
-  const linkWorldTransform = linkWorldTransforms.get(String(part?.linkName || "")) || [...IDENTITY_TRANSFORM];
-  const transform = multiplyTransforms(linkWorldTransform, toTransformArray(part?.localTransform));
-  return { transform, bounds: transformBounds(part?.sourceBounds || part?.bounds, transform) };
-}
-
-// The ZERO pose: every joint at its declared default, whatever the caller has
-// driven them to. A posed robot carries this beside its live `bounds` so a
-// renderer can ground a camera fit on the robot at rest -- moving a joint
-// changes what is lit and clipped, never how the model is framed.
-function urdfRestBounds(urdfData, sourceParts) {
-  const restTransforms = solveUrdfLinkWorldTransforms(urdfData, {});
-  return mergeBounds(sourceParts.map((part) => posedPartPlacement(part, restTransforms).bounds));
 }
 
 export function poseUrdfMeshData(urdfData, meshData, jointValuesByName = {}, linkWorldTransformOverrides = null) {
@@ -756,17 +694,23 @@ export function poseUrdfMeshData(urdfData, meshData, jointValuesByName = {}, lin
   const geometrySource = meshData?.geometrySource && typeof meshData.geometrySource === "object"
     ? meshData.geometrySource
     : meshData;
-  const posedParts = sourceParts.map((part) => ({
-    ...part,
-    ...posedPartPlacement(part, linkWorldTransforms)
-  }));
+  const posedParts = sourceParts.map((part) => {
+    const linkWorldTransform = linkWorldTransforms.get(String(part?.linkName || "")) || [...IDENTITY_TRANSFORM];
+    const localTransform = toTransformArray(part?.localTransform);
+    const worldTransform = multiplyTransforms(linkWorldTransform, localTransform);
+    const sourceBounds = part?.sourceBounds || part?.bounds;
+    return {
+      ...part,
+      transform: worldTransform,
+      bounds: transformBounds(sourceBounds, worldTransform)
+    };
+  });
 
   return {
     meshData: {
       ...meshData,
       geometrySource,
       bounds: mergeBounds(posedParts.map((part) => part.bounds)),
-      restBounds: urdfRestBounds(urdfData, sourceParts),
       parts: posedParts
     },
     linkWorldTransforms
@@ -780,7 +724,6 @@ export function applyUrdfPoseToMeshData(urdfData, meshData, jointValuesByName = 
   }
   meshData.geometrySource = posed.meshData.geometrySource || meshData.geometrySource || meshData;
   meshData.bounds = posed.meshData.bounds;
-  meshData.restBounds = posed.meshData.restBounds;
   meshData.parts = posed.meshData.parts;
   return {
     ...posed,

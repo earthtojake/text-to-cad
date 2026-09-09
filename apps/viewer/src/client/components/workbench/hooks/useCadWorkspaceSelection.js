@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { filterPreservingIdentity } from "../../../workbench/valueUtils.js";
 
 export function useCadWorkspaceSelection({
   isAssemblyView,
@@ -24,8 +23,8 @@ export function useCadWorkspaceSelection({
     if (isAssemblyView || selectedEntryHasReferences) {
       return;
     }
-    if (selectedReferenceIdsRef.current.length) selectedReferenceIdsRef.current = [];
-    setSelectedReferenceIds((current) => current.length ? [] : current);
+    selectedReferenceIdsRef.current = [];
+    setSelectedReferenceIds([]);
     setHoveredListReferenceId("");
     setHoveredModelReferenceId("");
   }, [
@@ -42,9 +41,9 @@ export function useCadWorkspaceSelection({
       return;
     }
     if (!supportsPartSelection) {
-      if (selectedPartIdsRef.current.length) selectedPartIdsRef.current = [];
-      setSelectedPartIds((current) => current.length ? [] : current);
-      setHiddenPartIds((current) => current.length ? [] : current);
+      selectedPartIdsRef.current = [];
+      setSelectedPartIds([]);
+      setHiddenPartIds([]);
       setHoveredListPartId("");
       setHoveredModelPartId("");
       return;
@@ -59,20 +58,17 @@ export function useCadWorkspaceSelection({
         .map((id) => String(id || "").trim())
         .filter(Boolean)
     );
-    // LOD changes the valid-ID containers without changing their members.
-    // Replacing equal selections here causes a second workspace render and
-    // rebuilds persistence callbacks, retaining earlier render contexts.
-    selectedPartIdsRef.current = filterPreservingIdentity(selectedPartIdsRef.current, (id) => validIds.has(id));
-    setSelectedPartIds((current) => filterPreservingIdentity(current, (id) => validIds.has(id)));
-    selectedReferenceIdsRef.current = filterPreservingIdentity(selectedReferenceIdsRef.current, (id) => {
+    selectedPartIdsRef.current = selectedPartIdsRef.current.filter((id) => validIds.has(id));
+    setSelectedPartIds((current) => current.filter((id) => validIds.has(id)));
+    selectedReferenceIdsRef.current = selectedReferenceIdsRef.current.filter((id) => {
       const parsed = parseAssemblyPartReferenceSelectionId(id);
       return !parsed || validIds.has(parsed.partId);
     });
-    setSelectedReferenceIds((current) => filterPreservingIdentity(current, (id) => {
+    setSelectedReferenceIds((current) => current.filter((id) => {
       const parsed = parseAssemblyPartReferenceSelectionId(id);
       return !parsed || validIds.has(parsed.partId);
     }));
-    setHiddenPartIds((current) => filterPreservingIdentity(current, (id) => validHiddenIds.has(id)));
+    setHiddenPartIds((current) => current.filter((id) => validHiddenIds.has(id)));
     setHoveredListPartId((current) => (current && !validIds.has(current) ? "" : current));
     setHoveredModelPartId((current) => (current && !validIds.has(current) ? "" : current));
     setHoveredListReferenceId((current) => {

@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-import { availableParallelism } from "node:os";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // The backend is cadgen.viewer (Python, in packages/cadgen); its suite runs with
@@ -37,47 +36,13 @@ if (!tests.length) {
   process.exit(1);
 }
 
-// Component and hook tests render through scripts/reactHarness.mjs, and so
-// import the client's own sources — which are authored the way Vite builds
-// them: JSX inside `.js`, the `@/` alias, extensionless relative imports. Those
-// files need the module hooks in scripts/jsxLoaderHooks.mjs. Registering the
-// hooks starts a worker thread in every `node --test` process, which cost more
-// than the rest of the suite put together, so the handful of tests that need
-// them run as their own batch.
-function rendersComponents(testPath) {
-  return fs.readFileSync(testPath, "utf8").includes("reactHarness.mjs");
-}
+const result = spawnSync(process.execPath, [
+  "--test",
+  ...tests,
+], {
+  cwd: packageRoot,
+  env: process.env,
+  stdio: "inherit",
+});
 
-const batches = [
-  { tests: tests.filter((test) => !rendersComponents(test)), nodeArgs: [] },
-  {
-    tests: tests.filter(rendersComponents),
-    // A file URL, not a path: Node's ESM loader parses a Windows absolute path
-    // (`D:\...`) as a URL with scheme `d:` and refuses it (test.yml's Windows job).
-    nodeArgs: ["--import", pathToFileURL(path.join(packageRoot, "scripts", "registerJsxLoader.mjs")).href],
-  },
-];
-
-// Each test file is its own process, and most of a file's life here is process
-// startup and reading fixtures, not CPU. node:test's default is
-// availableParallelism() - 1, which is ONE on the two-core runner CI gets, so every
-// file's startup is paid end to end. The floor of four overlaps those waits even
-// where there are not four cores to run them on.
-const testConcurrency = Math.max(4, availableParallelism());
-
-let status = 0;
-for (const batch of batches) {
-  if (!batch.tests.length) {
-    continue;
-  }
-  const result = spawnSync(process.execPath, [
-    ...batch.nodeArgs, "--test", `--test-concurrency=${testConcurrency}`, ...batch.tests,
-  ], {
-    cwd: packageRoot,
-    env: process.env,
-    stdio: "inherit",
-  });
-  status = status || (result.status ?? 1);
-}
-
-process.exit(status);
+process.exit(result.status ?? 1);

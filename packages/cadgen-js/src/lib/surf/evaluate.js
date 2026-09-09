@@ -7,9 +7,6 @@
 // kernels against these.
 
 import { floatSpan } from "./container.js";
-// Deterministic sin/cos: `Math.sin`/`Math.cos` are engine-dependent and these
-// values are tessellated into content-addressed bytes (see trig.js).
-import { cos, sin } from "./trig.js";
 
 // --- NURBS basics ----------------------------------------------------------
 //
@@ -102,13 +99,13 @@ const CURVE3_EVALUATORS = {
     return [origin[0] + t * dir[0], origin[1] + t * dir[1], origin[2] + t * dir[2]];
   },
   circle(payload, t) {
-    const c = cos(t) * payload.radius;
-    const s = sin(t) * payload.radius;
+    const c = Math.cos(t) * payload.radius;
+    const s = Math.sin(t) * payload.radius;
     return frameMix(payload, c, s, 0);
   },
   ellipse(payload, t) {
-    const c = cos(t) * payload.majorRadius;
-    const s = sin(t) * payload.minorRadius;
+    const c = Math.cos(t) * payload.majorRadius;
+    const s = Math.sin(t) * payload.minorRadius;
     return frameMix(payload, c, s, 0);
   },
 };
@@ -171,21 +168,20 @@ const SURFACE_EVALUATORS = {
   },
   cylinder(payload, u, v) {
     const r = payload.radius;
-    return frameMix(payload, r * cos(u), r * sin(u), v);
+    return frameMix(payload, r * Math.cos(u), r * Math.sin(u), v);
   },
   cone(payload, u, v) {
-    let r = payload.radius + v * sin(payload.semiAngle);
-    if (Math.abs(r) < (Math.abs(payload.radius) + Math.abs(v)) * Number.EPSILON * 4) r = 0;
-    return frameMix(payload, r * cos(u), r * sin(u), v * cos(payload.semiAngle));
+    const r = payload.radius + v * Math.sin(payload.semiAngle);
+    return frameMix(payload, r * Math.cos(u), r * Math.sin(u), v * Math.cos(payload.semiAngle));
   },
   sphere(payload, u, v) {
     const r = payload.radius;
-    const cv = Math.abs(cos(v)) < Number.EPSILON * 4 ? 0 : cos(v);
-    return frameMix(payload, r * cv * cos(u), r * cv * sin(u), r * sin(v));
+    const cv = Math.cos(v);
+    return frameMix(payload, r * cv * Math.cos(u), r * cv * Math.sin(u), r * Math.sin(v));
   },
   torus(payload, u, v) {
-    const ring = payload.majorRadius + payload.minorRadius * cos(v);
-    return frameMix(payload, ring * cos(u), ring * sin(u), payload.minorRadius * sin(v));
+    const ring = payload.majorRadius + payload.minorRadius * Math.cos(v);
+    return frameMix(payload, ring * Math.cos(u), ring * Math.sin(u), payload.minorRadius * Math.sin(v));
   },
 };
 
@@ -217,37 +213,22 @@ function rotateAroundAxis(point, origin, axis, angle) {
   const py = point[1] - origin[1];
   const pz = point[2] - origin[2];
   const [ax, ay, az] = axis;
-  const ca = cos(angle);
-  const sa = sin(angle);
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
   const dot = ax * px + ay * py + az * pz;
   const crossX = ay * pz - az * py;
   const crossY = az * px - ax * pz;
   const crossZ = ax * py - ay * px;
   return [
-    origin[0] + px * ca + crossX * sa + ax * dot * (1 - ca),
-    origin[1] + py * ca + crossY * sa + ay * dot * (1 - ca),
-    origin[2] + pz * ca + crossZ * sa + az * dot * (1 - ca),
+    origin[0] + px * cos + crossX * sin + ax * dot * (1 - cos),
+    origin[1] + py * cos + crossY * sin + ay * dot * (1 - cos),
+    origin[2] + pz * cos + crossZ * sin + az * dot * (1 - cos),
   ];
 }
 
-// Analytic normals preserve limiting directions at sphere poles and cone
-// apices, and avoid translation-sensitive finite differences. Freeform and
-// swept surfaces use central differences of the same reference evaluator.
+// Central-difference normal; the WGSL kernel mirrors this (exact partials
+// come later per surface kind if goldens demand them).
 export function evaluateSurfaceNormal(payload, floats, u, v, uvBox, flip) {
-  if (["plane", "cylinder", "cone", "sphere", "torus"].includes(payload.kind)) {
-    const { xdir: x, ydir: y, zdir: z } = payload;
-    const cross = [x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]];
-    const handedness = cross[0] * z[0] + cross[1] * z[1] + cross[2] * z[2] < 0 ? -1 : 1;
-    let nx = 0, ny = 0, nz = 1;
-    if (payload.kind !== "plane") {
-      const latitude = payload.kind === "cone" ? -payload.semiAngle : payload.kind === "cylinder" ? 0 : v;
-      nx = cos(u) * cos(latitude);
-      ny = sin(u) * cos(latitude);
-      nz = sin(latitude);
-    }
-    const sign = (flip ? -1 : 1) * handedness;
-    return [0, 1, 2].map((d) => sign * (nx * x[d] + ny * y[d] + nz * z[d]));
-  }
   const [u0, u1, v0, v1] = uvBox;
   const hu = Math.max((u1 - u0) * 1e-4, 1e-7);
   const hv = Math.max((v1 - v0) * 1e-4, 1e-7);
@@ -260,8 +241,7 @@ export function evaluateSurfaceNormal(payload, floats, u, v, uvBox, flip) {
   let nx = du[1] * dv[2] - du[2] * dv[1];
   let ny = du[2] * dv[0] - du[0] * dv[2];
   let nz = du[0] * dv[1] - du[1] * dv[0];
-  // Math.sqrt, not Math.hypot: exactly defined arithmetic only (trig.js).
-  const length = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+  const length = Math.hypot(nx, ny, nz) || 1;
   const sign = flip ? -1 : 1;
   nx = (nx / length) * sign;
   ny = (ny / length) * sign;

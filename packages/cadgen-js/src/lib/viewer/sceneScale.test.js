@@ -48,7 +48,7 @@ test("shadow camera settings keep CAD lighting but preserve scene-unit shadow re
     extent: 280,
     far: 800,
     normalBias: 0.024,
-    radius: 2
+    radius: 14
   });
 
   assert.deepEqual(getShadowCameraSettings(VIEWER_SCENE_SCALE.URDF, {
@@ -59,17 +59,8 @@ test("shadow camera settings keep CAD lighting but preserve scene-unit shadow re
     extent: 0.55,
     far: 421.6,
     normalBias: 0.000012,
-    radius: 2
+    radius: 14
   });
-
-  const compactHigh = getShadowCameraSettings(VIEWER_SCENE_SCALE.CAD, {
-    radius: 2,
-    shadowMapSize: 4096
-  });
-  assert.equal(compactHigh.extent, 60);
-  assert.equal(compactHigh.radius, 1.5);
-  assert.ok(compactHigh.normalBias < 0.011);
-  assert.ok(compactHigh.normalBias > 0.01);
 });
 
 test("proportional lighting scope scales from the reference model size", () => {

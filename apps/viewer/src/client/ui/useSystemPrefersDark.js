@@ -12,16 +12,8 @@ import { useEffect, useState } from "react";
  * engine), which is `prefers-color-scheme: light` — the same fallback
  * `resolveColorSchemeMode` takes.
  */
-export function readSystemPrefersDark(target = typeof window === "undefined" ? null : window) {
-  try {
-    return target?.matchMedia?.("(prefers-color-scheme: dark)").matches === true;
-  } catch {
-    return false;
-  }
-}
-
 export function useSystemPrefersDark() {
-  const [prefersDark, setPrefersDark] = useState(readSystemPrefersDark);
+  const [prefersDark, setPrefersDark] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return undefined;

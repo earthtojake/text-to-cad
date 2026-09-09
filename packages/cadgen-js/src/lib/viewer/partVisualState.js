@@ -1,4 +1,4 @@
-import { syncRecordEdgeMaterials } from "../../common/renderEdges.js";
+import { syncLineMaterialOpacity } from "../../common/renderEdges.js";
 import {
   CAD_DISPLAY_MODE,
   displayModeUsesTransparentSurfaces
@@ -126,6 +126,67 @@ function syncSurfaceTransparency(record, forceTransparent, opacity, {
   material.depthWrite = nextTransparent && !writeTransparentDepth ? false : record.baseDepthWrite;
 }
 
+const CAD_SURFACE_EDGE_OPACITY_UNIFORMS = Object.freeze({
+  feature: "cadSurfaceFeatureOpacity",
+  tangent: "cadSurfaceTangentOpacity",
+  seam: "cadSurfaceSeamOpacity",
+  degenerate: "cadSurfaceDegenerateOpacity"
+});
+
+const CAD_SURFACE_EDGE_COLOR_UNIFORMS = Object.freeze({
+  feature: "cadSurfaceFeatureColor",
+  tangent: "cadSurfaceTangentColor",
+  seam: "cadSurfaceSeamColor",
+  degenerate: "cadSurfaceDegenerateColor"
+});
+
+function syncCadSurfaceEdgeHighlight(THREE, record, edgeColor, edgeOpacity = null) {
+  const material = record?.material;
+  const userData = material?.userData;
+  if (!material || userData?.cadSurfaceEdges !== true) {
+    return;
+  }
+  const nextColor = edgeColor?.isColor
+    ? edgeColor
+    : readSourceColor(THREE, edgeColor) || userData.cadSurfaceEdgeBaseColor;
+  if (nextColor?.isColor) {
+    userData.cadSurfaceEdgeColor = nextColor.clone();
+    const colorUniform = userData.cadSurfaceEdgeShader?.uniforms?.cadSurfaceEdgeColor;
+    if (colorUniform?.value?.copy) {
+      colorUniform.value.copy(nextColor);
+    }
+  }
+
+  const highlightedOpacity = edgeOpacity !== null && edgeOpacity !== undefined && Number.isFinite(Number(edgeOpacity))
+    ? clamp(Number(edgeOpacity), 0, 1)
+    : null;
+  const baseClassSettings = userData.cadSurfaceEdgeBaseClassSettings || {};
+  const uniforms = userData.cadSurfaceEdgeShader?.uniforms || null;
+  const overrideClassColor = highlightedOpacity !== null ||
+    (nextColor?.isColor && userData.cadSurfaceEdgeBaseColor?.isColor && !nextColor.equals(userData.cadSurfaceEdgeBaseColor));
+  for (const [classId, uniformName] of Object.entries(CAD_SURFACE_EDGE_COLOR_UNIFORMS)) {
+    const baseClassColor = readSourceColor(THREE, baseClassSettings[classId]?.color) ||
+      userData.cadSurfaceEdgeBaseColor;
+    const nextClassColor = overrideClassColor ? nextColor : baseClassColor;
+    if (nextClassColor?.isColor && uniforms?.[uniformName]?.value?.copy) {
+      uniforms[uniformName].value.copy(nextClassColor);
+    }
+  }
+  for (const [classId, uniformName] of Object.entries(CAD_SURFACE_EDGE_OPACITY_UNIFORMS)) {
+    const baseOpacity = Number(baseClassSettings[classId]?.opacity);
+    const nextOpacity = highlightedOpacity === null
+      ? (Number.isFinite(baseOpacity) ? baseOpacity : null)
+      : highlightedOpacity;
+    if (nextOpacity === null) {
+      continue;
+    }
+    userData[`cadSurfaceEdge${classId}Opacity`] = nextOpacity;
+    if (uniforms?.[uniformName]) {
+      uniforms[uniformName].value = nextOpacity;
+    }
+  }
+}
+
 export function applyPartVisualState(THREE, records, {
   viewerTheme,
   edgeSettings,
@@ -134,7 +195,7 @@ export function applyPartVisualState(THREE, records, {
   focusedPartId,
   selectedPartIds,
   showEdges,
-  displayMode = CAD_DISPLAY_MODE.SHADED_EDGES
+  displayMode = CAD_DISPLAY_MODE.SOLID
 }) {
   const hidden = new Set(Array.isArray(hiddenPartIds) ? hiddenPartIds : []);
   const selected = new Set(Array.isArray(selectedPartIds) ? selectedPartIds : []);
@@ -200,10 +261,6 @@ export function applyPartVisualState(THREE, records, {
     record.mesh.visible = !effectHidden && !isHidden && !displacedByCurvedPreview;
     if (record.edges) {
       record.edges.visible = showEdges && !effectHidden && !isHidden && !displacedByCurvedPreview;
-    }
-    if (record.edgeInstance) {
-      record.edgeInstance.set.setVisible(record.edgeInstance.slot, showEdges && !effectHidden && !isHidden && !displacedByCurvedPreview);
-      record.edgeInstance.set.setHighlighted(record.edgeInstance.slot, isHighlighted);
     }
     syncHighlightRenderOrder(record, record.mesh, "baseMeshRenderOrder", isHighlighted, PART_HIGHLIGHT_SURFACE_RENDER_ORDER);
     syncHighlightRenderOrder(record, record.edges, "baseEdgeRenderOrder", isHighlighted, PART_HIGHLIGHT_EDGE_RENDER_ORDER);
@@ -272,11 +329,16 @@ export function applyPartVisualState(THREE, records, {
     }
 
     const nextEdgeColor = highlightEdge || effectEdgeColor || baseEdgeColor;
-    syncRecordEdgeMaterials(record, isSelected || isHovered
-      ? { color: nextEdgeColor, opacity: highlightedEdgeOpacity, fallbackColor: baseEdgeColor }
-      : isHidden || isDimmed
-        ? { color: effectEdgeColor, opacity: nextSurfaceOpacity, fallbackColor: baseEdgeColor }
-        : { color: effectEdgeColor, opacityScale: effectEdgeOpacity, fallbackColor: baseEdgeColor, fallbackOpacity: baseEdgeOpacity });
+    syncCadSurfaceEdgeHighlight(THREE, record, nextEdgeColor, highlightedEdgeOpacity);
+
+    if (record.edgeMaterial) {
+      record.edgeMaterial.color.set(nextEdgeColor);
+      syncLineMaterialOpacity(record.edgeMaterial, isSelected || isHovered
+        ? highlightedEdgeOpacity
+        : isHidden || isDimmed
+          ? nextSurfaceOpacity
+          : baseEdgeOpacity * effectEdgeOpacity);
+    }
 
     // Occlusion ghost: only a SELECTED part shows its see-through ghost, tinted
     // to the full selection color so it reads as "this is behind something"

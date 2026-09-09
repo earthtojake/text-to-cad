@@ -178,9 +178,7 @@ export const RENDER_CAPABILITIES = Object.freeze({
     ...DEFAULT_CAPABILITIES,
     ...MESH_CAPABILITIES,
     iconKind: ENTRY_ICON_KIND.GLB_MESH,
-    label: "GLB",
-    // Content-gated after parse: only embedded playable clips mount controls.
-    animations: true
+    label: "GLB"
   }),
   [RENDER_FORMAT.DXF]: Object.freeze({
     ...DEFAULT_CAPABILITIES,

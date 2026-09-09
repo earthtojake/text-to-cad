@@ -1,17 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
-import { serverErrorMessage } from "../../../workbench/viewerRequest.js";
-
 import { requestArtifact, requestArtifactStatus } from "../../../workbench/cadManifestStore.js";
 import {
   ARTIFACT_PROGRESS_FIRST_POLL_MS,
   ARTIFACT_PROGRESS_POLL_MS,
-  ARTIFACT_STATUS_FAILURE_LIMIT,
-  ARTIFACT_STATUS_TIMEOUT_MS,
-  artifactProgressConnectionLost,
-  artifactStatusFailure,
-  normalizeArtifactProgress,
-  refreshArtifactProgress
+  normalizeArtifactProgress
 } from "../../../workbench/artifactProgress.js";
 import {
   ARTIFACT_ACTION_ATTACH,
@@ -21,7 +14,6 @@ import {
   artifactAdvisoryFor,
   reconcileArtifactRun
 } from "../../../workbench/artifactResolution.js";
-import { artifactWarningItems } from "../../../workbench/artifactWarnings.js";
 
 // useArtifact — the client half of the render-artifact pipeline.
 //
@@ -48,20 +40,16 @@ import { artifactWarningItems } from "../../../workbench/artifactWarnings.js";
 // reported ratio is monotonic only within a single run and carrying it across a handoff is what
 // made the bar jump backwards.
 
-// One shared empty list, so `warnings` keeps a stable identity across renders
-// and the memo that builds the warning alert does not rerun for every frame.
-const NO_WARNINGS = Object.freeze([]);
-
-const READY = { status: "compiled", error: "", progress: null, advisory: null, warnings: NO_WARNINGS };
+const READY = { status: "rendered", error: "", progress: null, advisory: null };
 
 function isAbortError(error) {
-  return error?.name === "AbortError";
+  return error?.name === "AbortError" || /abort/i.test(String(error?.message || ""));
 }
 
-export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {}) {
+export function useArtifact(fileRef, { enabled = true, freshnessKey = "", origin = "" } = {}) {
   const activeRef = String(enabled ? fileRef || "" : "").trim();
   const key = activeRef ? `${activeRef}:${freshnessKey}` : "";
-  const [state, setState] = useState({ key: "", status: "compiled", error: "", progress: null });
+  const [state, setState] = useState({ key: "", status: "rendered", error: "", progress: null });
   const requestSeqRef = useRef(0);
 
   useEffect(() => {
@@ -78,15 +66,10 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
     };
 
     // Polls the status route alongside the in-flight build and merges whatever position it
-    // reports into the existing `generating` state. A single missed response retains the
-    // last useful frame and marks the connection as lost; repeated misses become an
-    // actionable status failure. The compile POST itself has no elapsed-time timeout.
+    // reports into the existing `generating` state. Any failure (a poll racing the build's
+    // own request, a sidecar not written yet) simply leaves the last known progress in place —
+    // this is decoration, and it must never turn into an error the user sees.
     let pollTimer = 0;
-    let statusFailures = 0;
-    // A status GET already in flight may reject after the compile POST has completed.
-    // Once a final result wins, that stale read must not put the same key back into a
-    // waiting or failed state. A peer handoff reopens polling in showGenerating().
-    let finished = false;
     // True when we are watching a build we did NOT start. Nothing else will tell us it
     // finished, so the poll has to notice the state leaving `generating` and re-resolve.
     let attached = false;
@@ -102,62 +85,18 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
     // position across a handoff is what made the bar jump backwards. On a new runId the
     // bar resets instead.
     let shownRunId = null;
-    // Advisory warnings about the document's NEIGHBOURS. They ride every status
-    // payload and mean nothing about the state, so the last successful READ owns
-    // them: the compile POST answers without them and must not erase what the
-    // status route reported about a file that is still sitting there.
-    let warnings = NO_WARNINGS;
-    const readWarnings = (status) => {
-      const items = artifactWarningItems(status);
-      warnings = items.length > 0 ? items : NO_WARNINGS;
-    };
-
-    const noteStatusFailure = (error) => {
-      if (finished || !isCurrent() || controller.signal.aborted || isAbortError(error)) {
-        return false;
-      }
-      statusFailures += 1;
-      const source = error?.failure || { detail: error instanceof Error ? error.message : String(error) };
-      const terminal = statusFailures >= ARTIFACT_STATUS_FAILURE_LIMIT;
-      const failure = terminal ? artifactStatusFailure(error, statusFailures) : null;
-      if (terminal) {
-        finished = true;
-        stopPolling();
-      }
-      setState((current) => {
-        const progress = artifactProgressConnectionLost(
-          current.key === key ? current.progress : null,
-          source,
-          statusFailures
-        );
-        const base = current.key === key
-          ? current
-          : { key, status: "compiling", error: "", progress, advisory: null, warnings };
-        return terminal
-          ? { ...base, status: "failed", error: failure.detail, failure, progress }
-          : { ...base, progress };
-      });
-      return !terminal;
-    };
-
-    const statusReadSucceeded = () => {
-      statusFailures = 0;
-    };
 
     const mergeProgress = (status) => {
-      if (finished || !isCurrent()) {
+      if (!isCurrent()) {
         return;
       }
       const reconciled = reconcileArtifactRun(
         shownRunId,
         status,
-        refreshArtifactProgress(normalizeArtifactProgress(status?.progress))
+        normalizeArtifactProgress(status?.progress)
       );
       shownRunId = reconciled.runId;
       if (!reconciled.progress && !reconciled.handedOff) {
-        setState((current) => current.key === key && current.progress?.connectionLost
-          ? { ...current, progress: null }
-          : current);
         return;
       }
       setState((current) =>
@@ -166,72 +105,53 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
     };
 
     const pollProgress = async () => {
-      if (finished || !isCurrent() || controller.signal.aborted) {
+      if (!isCurrent() || controller.signal.aborted) {
         return;
       }
       let reported = "";
       try {
-        const status = await requestArtifactStatus(activeRef, {
-          signal: controller.signal,
-          timeoutMs: ARTIFACT_STATUS_TIMEOUT_MS
-        });
-        statusReadSucceeded();
-        readWarnings(status);
+        const status = await requestArtifactStatus(activeRef, { origin, signal: controller.signal });
         reported = String(status?.state || "");
         mergeProgress(status);
-      } catch (error) {
-        if (!noteStatusFailure(error)) return;
+      } catch {
+        // ignored on purpose — see above
       }
       // ATTACHED to a peer's build (we did not POST, so nothing else will tell us it
       // finished): keep polling until the run leaves `generating`, then re-resolve.
-      if (!finished && attached && isCurrent() && !controller.signal.aborted && reported && reported !== "compiling") {
+      if (attached && isCurrent() && !controller.signal.aborted && reported && reported !== "compiling") {
         stopPolling();
         resolve();
         return;
       }
-      if (!finished && isCurrent() && !controller.signal.aborted) {
+      if (isCurrent() && !controller.signal.aborted) {
         pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_POLL_MS);
       }
     };
 
     const showGenerating = (status) => {
-      finished = false;
-      statusReadSucceeded();
       shownRunId = status?.runId ? String(status.runId) : null;
       settle({
         status: "compiling",
         error: "",
-        warnings,
-        progress: refreshArtifactProgress(normalizeArtifactProgress(status?.progress))
+        progress: normalizeArtifactProgress(status?.progress)
       });
     };
 
     async function resolve() {
-      let readingStatus = true;
       try {
-        const status = await requestArtifactStatus(activeRef, {
-          signal: controller.signal,
-          timeoutMs: ARTIFACT_STATUS_TIMEOUT_MS
-        });
-        readingStatus = false;
-        statusReadSucceeded();
-        readWarnings(status);
+        const status = await requestArtifactStatus(activeRef, { origin, signal: controller.signal });
         if (!isCurrent()) {
           return;
         }
         const action = artifactActionFor(status);
         if (action === ARTIFACT_ACTION_READY) {
-          // Ready may carry advisory flags (stale package compiled as-is, generator
+          // Ready may carry advisory flags (stale package rendered as-is, generator
           // busy elsewhere); keep them for the file sheet's status section.
-          finished = true;
-          stopPolling();
-          settle({ ...READY, advisory: artifactAdvisoryFor(status), warnings });
+          settle({ ...READY, advisory: artifactAdvisoryFor(status) });
           return;
         }
         if (action === ARTIFACT_ACTION_ERROR) {
-          finished = true;
-          stopPolling();
-          settle({ status: "failed", error: serverErrorMessage(status), warnings });
+          settle({ status: "failed", error: String(status?.error || status?.reason || "The document could not be compiled.") });
           return;
         }
         if (action === ARTIFACT_ACTION_ATTACH) {
@@ -248,8 +168,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
         attached = false;
         showGenerating(status);
         pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);
-        const result = await requestArtifact(activeRef, { signal: controller.signal });
-        finished = true;
+        const result = await requestArtifact(activeRef, { origin, signal: controller.signal });
         stopPolling();
         if (!isCurrent()) {
           return;
@@ -262,23 +181,13 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
           pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);
           return;
         }
-        settle(result?.ok && result.state === "compiled"
-          ? { ...READY, advisory: artifactAdvisoryFor(result), warnings }
-          : { status: "failed", error: serverErrorMessage(result), warnings });
+        settle(result?.ok && result.state === "rendered"
+          ? { ...READY, advisory: artifactAdvisoryFor(result) }
+          : { status: "failed", error: String(result?.error || "Compiling the document failed.") });
       } catch (error) {
-        if (readingStatus && noteStatusFailure(error)) {
-          pollTimer = window.setTimeout(resolve, ARTIFACT_PROGRESS_POLL_MS);
-          return;
-        }
-        if (readingStatus) return;
-        finished = true;
         stopPolling();
         if (isCurrent() && !isAbortError(error) && !controller.signal.aborted) {
-          settle({
-            status: "failed", error: error instanceof Error ? error.message : String(error),
-            warnings,
-            failure: error?.failure || { kind: "response", operation: "checking display assets" }
-          });
+          settle({ status: "failed", error: error instanceof Error ? error.message : String(error) });
         }
       }
     }
@@ -286,21 +195,18 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "" } = {})
     resolve();
 
     return () => {
-      finished = true;
       stopPolling();
       controller.abort();
     };
-  }, [activeRef, key]);
+  }, [activeRef, key, origin]);
 
   // Optimistic-ready until this exact key has settled, so a fresh selection renders without a flash.
   return state.key === key
     ? {
       status: state.status,
       error: state.error,
-      failure: state.failure || null,
       progress: state.progress,
-      advisory: state.advisory || null,
-      warnings: state.warnings || NO_WARNINGS
+      advisory: state.advisory || null
     }
     : READY;
 }

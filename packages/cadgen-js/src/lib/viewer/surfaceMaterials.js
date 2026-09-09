@@ -1,6 +1,4 @@
 import { resolveThemeFillColor } from "../themeSettings.js";
-import { syncRecordBaseEmissiveColor } from "../../common/surfaceMaterialState.js";
-import { applyColorGrading } from "../../common/colorGrading.js";
 import {
   CAD_DISPLAY_MODE,
   displayModeIsWireframe,
@@ -88,7 +86,19 @@ export function shapeSourceColor(THREE, sourceColor, materialSettings = {}, { ap
     }
   }
 
-  return applyColorGrading(shaped, materialSettings);
+  const saturation = clamp(Number(materialSettings.saturation) || 1, 0, 2.5);
+  if (Math.abs(saturation - 1) > 1e-4) {
+    const hsl = {};
+    shaped.getHSL(hsl);
+    shaped.setHSL(hsl.h, clamp(hsl.s * saturation, 0, 1), hsl.l);
+  }
+
+  const contrast = clamp(Number(materialSettings.contrast) || 1, 0, 2.5);
+  const brightness = clamp(Number(materialSettings.brightness) || 1, 0, 2);
+  shaped.r = clamp(((shaped.r - 0.5) * contrast + 0.5) * brightness, 0, 1);
+  shaped.g = clamp(((shaped.g - 0.5) * contrast + 0.5) * brightness, 0, 1);
+  shaped.b = clamp(((shaped.b - 0.5) * contrast + 0.5) * brightness, 0, 1);
+  return shaped;
 }
 
 export function shapeSourceColorBuffer(THREE, colors, materialSettings = {}) {
@@ -152,13 +162,11 @@ export function resolveSourceBaseColor(THREE, {
 }
 
 export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
-  displayMode = CAD_DISPLAY_MODE.SHADED_EDGES
+  displayMode = CAD_DISPLAY_MODE.SOLID
 } = {}) {
   if (!record?.material || !materialSettings) {
     return;
   }
-  const previousVertexColors = record.material.vertexColors;
-  const previousTransparent = record.material.transparent;
   const wireframeMode = displayModeIsWireframe(displayMode);
   const forceFill = materialSettings.overrideSourceColors === true || wireframeMode;
   const hasVertexColors = !forceFill && !!record.hasVertexColors;
@@ -206,7 +214,7 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
     record.material.color.copy(record.baseColor);
   }
   record.baseEmissiveIntensity = clamp(Number(materialSettings.emissiveIntensity) || 0, 0, 2);
-  syncRecordBaseEmissiveColor(record);
+  record.baseEmissiveColor = record.baseColor ? record.baseColor.clone() : null;
   if ("emissive" in record.material && record.material.emissive) {
     if (record.baseEmissiveColor && record.baseEmissiveIntensity > 0) {
       record.material.emissive.copy(record.baseEmissiveColor);
@@ -215,9 +223,5 @@ export function applyMaterialSettingsToRecord(THREE, record, materialSettings, {
     }
     record.material.emissiveIntensity = record.baseEmissiveIntensity;
   }
-  // Uniform updates do not invalidate the shader program. The physical
-  // material's setters handle feature switches such as clearcoat themselves.
-  if (previousVertexColors !== record.material.vertexColors || previousTransparent !== record.material.transparent) {
-    record.material.needsUpdate = true;
-  }
+  record.material.needsUpdate = true;
 }

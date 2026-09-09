@@ -86,29 +86,6 @@ export function findAssemblyNode(root, nodeId) {
   return null;
 }
 
-// The same lookup semantics as nodeIds.map(id => findAssemblyNode(root, id)),
-// with one DFS for the requested IDs. Keep this index call-local: display trees
-// can change between publications, including edits that preserve node IDs.
-export function findAssemblyNodes(root, nodeIds) {
-  const ids = nodeIds.map((id) => String(id || "").trim());
-  const remaining = new Set(ids.filter((id) => id && id !== "root"));
-  const matches = new Map();
-  const stack = root && remaining.size ? [root] : [];
-  while (stack.length && remaining.size) {
-    const node = stack.pop();
-    const id = String(node?.id || "").trim();
-    if (remaining.delete(id)) {
-      matches.set(id, node); // first DFS match wins, including duplicate IDs
-      if (!remaining.size) break;
-    }
-    const children = Array.isArray(node?.children) ? node.children : [];
-    for (let index = children.length - 1; index >= 0; index -= 1) {
-      stack.push(children[index]);
-    }
-  }
-  return ids.map((id) => !id || id === "root" ? root || null : matches.get(id) || null);
-}
-
 export function rootAssemblyInspectionNodeId(root) {
   return String(root?.id || "").trim() || "root";
 }
@@ -375,87 +352,10 @@ function boundsForTransformedBox(box, matrix) {
   return Number.isFinite(min[0]) ? { min, max } : (box || null);
 }
 
-// Process-local composition ownership. A caller may carry the immediately
-// preceding same-file composition into a replacement revision. Rows cross that
-// boundary only when every descriptor input consumed below is equal and the
-// exact component/source-part objects are still live. Weak keys cannot keep an
-// obsolete composition or its component arrays alive.
-const composedPackageInputs = new WeakMap();
-
-function equalVector(left, right) {
-  return left === right || (Array.isArray(left) && Array.isArray(right)
-    && left.length === right.length && left.every((value, index) => value === right[index]));
-}
-
-function equalBounds(left, right) {
-  return left === right || Boolean(left && right
-    && equalVector(left.min, right.min) && equalVector(left.max, right.max));
-}
-
-function equalJsonValue(left, right) {
-  if (left === right && (!left || typeof left !== "object")) return true;
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return Array.isArray(left) && Array.isArray(right)
-      && left.length === right.length
-      && left.every((value, index) => equalJsonValue(value, right[index]));
-  }
-  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
-  const leftKeys = Object.keys(left).sort();
-  const rightKeys = Object.keys(right).sort();
-  return leftKeys.length === rightKeys.length
-    && leftKeys.every((key, index) => key === rightKeys[index]
-      && equalJsonValue(left[key], right[key]));
-}
-
-function snapshotJsonValue(value) {
-  if (Array.isArray(value)) return value.map(snapshotJsonValue);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.keys(value).map((key) => [key, snapshotJsonValue(value[key])]));
-}
-
-// Compare the complete occurrence record, rather than a hand-picked set of
-// currently rendered keys. Descriptors are closed JSON data; this conservative
-// rule makes a future consumed field invalidate reuse automatically. Numeric
-// transform normalization still belongs to row construction, but byte/value
-// differences here deliberately take the safe fresh-row path.
-function equalOccurrenceInput(left, right) {
-  return equalJsonValue(left, right);
-}
-
-// Internal provenance seam for cadScene's zero-work exact-row branch. Object
-// identity alone is not proof because buildModel also accepts mutable public
-// mesh data; the current composed result must explicitly own this row.
-export function composedPackageOwnsPartRow(meshData, part) {
-  return composedPackageInputs.get(meshData)?.parts?.has(part) === true;
-}
-
-function equalAssemblyLeaf(previous, part) {
-  return previous.componentId === part?.componentId
-    && previous.color === part?.color
-    && previous.sourceColor === part?.sourceColor
-    && previous.materialId === part?.materialId
-    && previous.materialName === part?.materialName
-    && equalJsonValue(previous.material, part?.material)
-    && previous.opacity === part?.opacity
-    && previous.sourceOpacity === part?.sourceOpacity
-    && equalVector(previous.transform, part?.transform)
-    && equalBounds(previous.bounds, part?.bounds)
-    && equalBounds(previous.sourceBounds, part?.sourceBounds);
-}
-
-export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid, { previous = null } = {}) {
-  const priorInputs = previous && composedPackageInputs.get(previous);
-  const reuse = priorInputs || null;
-  const partsByOccurrence = new Map();
-  const partsById = new Map();
+export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid) {
   const occurrences = Array.isArray(descriptor?.occurrences) ? descriptor.occurrences : [];
   if (!occurrences.length) {
     throw new Error("Assembly tree has no occurrences");
-  }
-  const occurrenceIdCounts = new Map();
-  for (const occurrence of occurrences) {
-    const id = String(occurrence?.id || "").trim();
-    if (id) occurrenceIdCounts.set(id, (occurrenceIdCounts.get(id) || 0) + 1);
   }
 
   const placements = [];
@@ -476,51 +376,68 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
     throw new Error("Assembly package matched no renderable component GLBs");
   }
 
-  // Every occurrence renders its component's sourceMesh at its own transform.
-  // No aggregate copy is consumed by that path. A single component can expose
-  // its existing arrays directly; several components stay in their own buffers
-  // instead of allocating gigabytes of duplicate positions, normals and indices.
+  // Shared-geometry package rendering. Baking each occurrence's transform into fresh
+  // world-space vertices inflates GPU memory ~12x on large packages (falcon_heavy: 114k
+  // unique -> 1.4M composed) and stalls the main thread. Instead, every occurrence renders
+  // as a THREE.Mesh over its component's OWN geometry — uploaded once per cid (cadScene
+  // caches by sourceMeshKey) and placed by its occurrence transform at render time
+  // (partTransformsBaked: false). The top-level arrays hold each unique component's geometry
+  // ONCE, only for the render gate + the whole-mesh fallback (which per-part packages never
+  // hit). Selectors are unaffected: sourcePartRanges are component-local triangle offsets and
+  // the per-occurrence selector runtime is built + placed from the occurrence transform
+  // elsewhere; mirrored occurrences render correctly because the surface material is DoubleSide.
+
+  // One copy of each unique component's geometry (component-local) for the gate/fallback.
   const uniqueComponents = new Map();
-  for (const { occurrence, componentMeshData } of placements) {
-    uniqueComponents.set(String(occurrence.component).trim(), componentMeshData);
+  for (const placement of placements) {
+    const cid = String(placement.occurrence?.component || "").trim();
+    if (cid && !uniqueComponents.has(cid)) {
+      uniqueComponents.set(cid, placement.componentMeshData);
+    }
   }
-  const singleComponent = uniqueComponents.size === 1
-    ? uniqueComponents.values().next().value
-    : null;
-  const vertices = singleComponent?.vertices || new Float32Array(0);
-  const normals = singleComponent?.normals || new Float32Array(0);
-  const indices = singleComponent?.indices || new Uint32Array(0);
+  let uniqueVertexCount = 0;
+  let uniqueIndexCount = 0;
+  for (const component of uniqueComponents.values()) {
+    uniqueVertexCount += Math.floor((component?.vertices?.length || 0) / 3);
+    uniqueIndexCount += component?.indices?.length || 0;
+  }
+  const vertices = new Float32Array(uniqueVertexCount * 3);
+  const normals = new Float32Array(uniqueVertexCount * 3);
+  const indices = new Uint32Array(uniqueIndexCount);
+  {
+    let uniqueVertexOffset = 0;
+    let uniqueIndexOffset = 0;
+    for (const component of uniqueComponents.values()) {
+      const cv = component?.vertices || new Float32Array(0);
+      const cn = component?.normals || new Float32Array(0);
+      const ci = component?.indices || new Uint32Array(0);
+      vertices.set(cv, uniqueVertexOffset * 3);
+      if (cn.length === cv.length) {
+        normals.set(cn, uniqueVertexOffset * 3);
+      }
+      for (let i = 0; i < ci.length; i += 1) {
+        indices[uniqueIndexOffset + i] = ci[i] + uniqueVertexOffset;
+      }
+      uniqueVertexOffset += Math.floor(cv.length / 3);
+      uniqueIndexOffset += ci.length;
+    }
+  }
 
   const parts = [];
   for (const { occurrence, componentMeshData, sourceParts } of placements) {
-    const occurrenceId = String(occurrence?.id || "").trim();
-    const prior = reuse?.partsByOccurrence.get(occurrence)
-      || (occurrenceId && occurrenceIdCounts.get(occurrenceId) === 1
-        ? reuse?.partsById.get(occurrenceId)
-        : null);
-    if (prior?.part.sourceMesh === componentMeshData && prior.sourceParts === sourceParts
-      && prior.lodLevel === componentMeshData.lodLevel
-      && equalOccurrenceInput(prior.occurrenceSnapshot, occurrence)) {
-      parts.push(prior.part);
-      partsByOccurrence.set(occurrence, prior);
-      if (occurrenceIdCounts.get(occurrenceId) === 1) partsById.set(occurrenceId, prior);
-      continue;
-    }
     // Component geometry loads in CAD units (mm) and the occurrence transform is authored in
     // mm, so it places each (local-frame) component directly. Applied as the Mesh matrix.
     const matrix = toTransformArray(occurrence?.transform);
     const mirrored = matrixDeterminant3(matrix) < 0;
+    const occurrenceId = String(occurrence?.id || "").trim();
     const cid = String(occurrence?.component || "").trim();
     const overrideColor = toVectorArray(occurrence?.color);
-    const overrideBaseColor = /^#[0-9a-fA-F]{6}$/.test(String(occurrence?.baseColor || ""))
-      ? String(occurrence.baseColor).toUpperCase()
-      : "";
     // Optional per-occurrence PBR overrides (descriptor "material") and
     // opacity (4th color channel or material.opacity). linearRgbToHex drops
     // alpha by design, so opacity must ride separately.
     const overrideMaterial =
       occurrence?.material && typeof occurrence.material === "object" && !Array.isArray(occurrence.material)
-        ? snapshotJsonValue(occurrence.material)
+        ? occurrence.material
         : null;
     // NB: toVectorArray keeps only RGB, so alpha must come from the raw
     // descriptor color array.
@@ -528,22 +445,16 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
     const overrideAlpha = Array.isArray(rawColor) && rawColor.length >= 4 && Number.isFinite(Number(rawColor[3]))
       ? Number(rawColor[3])
       : null;
-    const materialOpacity = overrideMaterial && Number.isFinite(Number(overrideMaterial.opacity))
-      ? Math.min(Math.max(Number(overrideMaterial.opacity), 0), 1)
-      : 1;
-    const componentOpacity = Number(sourceParts[0]?.opacity);
-    const sourceOpacity = overrideAlpha === null
-      ? (Number.isFinite(componentOpacity) ? Math.min(Math.max(componentOpacity, 0), 1) : 1)
-      : Math.min(Math.max(overrideAlpha, 0), 1);
-    const overrideOpacity = sourceOpacity * materialOpacity;
-    const sourceColor = (overrideColor && linearRgbToHex(overrideColor)) || sourceParts[0]?.color || null;
+    const overrideOpacity = overrideAlpha !== null && overrideAlpha < 0.999
+      ? overrideAlpha
+      : (overrideMaterial && Number.isFinite(Number(overrideMaterial.opacity)) ? Number(overrideMaterial.opacity) : null);
     const sourceVertices = componentMeshData?.vertices || new Float32Array(0);
     const sourceColors = componentMeshData?.colors || new Float32Array(0);
     const hasComponentColors = sourceColors.length === sourceVertices.length && sourceColors.length > 0;
     // A per-occurrence override colour drives the material (part.color) — it can't bake into
     // shared vertices. A component's own COLOR_0 rides on the shared geometry and is used only
     // when there is no override.
-    const useComponentVertexColors = !overrideColor && !overrideBaseColor && hasComponentColors;
+    const useComponentVertexColors = !overrideColor && hasComponentColors;
 
     // Selector face ranges: triangle offsets into the COMPONENT's own geometry (the render
     // mesh via sourceMesh), so buildGlbFaceIdsForPart maps render triangles -> faces. These are
@@ -557,7 +468,7 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
 
     const bounds = boundsForTransformedBox(componentMeshData?.bounds, matrix);
     const displayName = String(occurrence?.name || occurrenceId || cid || meshPartId(sourceParts[0])).trim();
-    const part = {
+    parts.push({
       id: occurrenceId || cid,
       occurrenceId: occurrenceId || cid,
       componentId: cid,
@@ -568,13 +479,9 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
       mirrored,
       bounds,
       sourceBounds: bounds,
-      color: overrideBaseColor || sourceColor,
-      sourceColor,
-      materialId: String(occurrence?.materialId || "").trim() || undefined,
-      materialName: String(occurrence?.materialName || "").trim() || undefined,
+      color: (overrideColor && linearRgbToHex(overrideColor)) || sourceParts[0]?.color || null,
       material: overrideMaterial,
-      opacity: overrideOpacity < 0.999 ? overrideOpacity : undefined,
-      sourceOpacity,
+      opacity: overrideOpacity !== null ? overrideOpacity : undefined,
       hasSourceColors: useComponentVertexColors,
       // Shared component geometry: cadScene caches one BufferGeometry per sourceMeshKey and
       // reuses it across every occurrence of this cid (+ colour mode). A viewport-LOD level
@@ -582,40 +489,27 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
       // uploads fresh buffers and flips every occurrence of the cid at once.
       sourceMesh: componentMeshData,
       sourceMeshKey: `${cid}:${useComponentVertexColors ? "src" : "flat"}${
-        componentMeshData?.lodLevel != null && Number.isFinite(Number(componentMeshData.lodLevel))
-          ? `:l${Number(componentMeshData.lodLevel)}`
-          : ""
+        componentMeshData?.lodLevel ? `:l${componentMeshData.lodLevel}` : ""
       }`,
       vertexCount: Math.floor(sourceVertices.length / 3),
       triangleCount: Math.floor((componentMeshData?.indices?.length || 0) / 3),
       sourcePartRanges,
       edgeIndexOffset: 0,
       edgeIndexCount: 0
-    };
-    parts.push(part);
-    const entry = {
-      occurrenceSnapshot: snapshotJsonValue(occurrence),
-      part,
-      sourceParts,
-      lodLevel: componentMeshData.lodLevel
-    };
-    partsByOccurrence.set(occurrence, entry);
-    if (occurrenceId && occurrenceIdCounts.get(occurrenceId) === 1) partsById.set(occurrenceId, entry);
+    });
   }
 
-  const assemblyRoot = buildPackageAssemblyRoot(descriptor, parts, reuse ? previous.assemblyRoot : null);
-  const composed = {
+  return {
     vertices,
     indices,
     normals,
     colors: new Float32Array(0),
+    surfaceEdgeBarycentric: new Float32Array(0),
+    surfaceEdgeClass: new Float32Array(0),
     edge_indices: new Uint32Array(0),
     parts,
-    appearance: descriptor?.appearance || null,
-    assemblyRoot,
-    bounds: assemblyRoot && assemblyRoot === previous?.assemblyRoot
-      ? previous.bounds
-      : mergeBounds(parts.map((part) => part.bounds)),
+    assemblyRoot: buildPackageAssemblyRoot(descriptor, parts),
+    bounds: mergeBounds(parts.map((part) => part.bounds)),
     missingComponentIds,
     // Each occurrence is placed by its transform at render time over shared component
     // geometry (each part carries its own sourceMesh above); nothing here is baked into
@@ -623,18 +517,14 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
     partTransformsBaked: false,
     has_source_colors: false
   };
-  composedPackageInputs.set(composed, { partsByOccurrence, partsById, parts: new Set(parts) });
-  return composed;
 }
 
 // The package descriptor records a flat list of occurrences (the assembly hierarchy is collapsed
 // at emit time), so synthesize a one-level assembly tree — a root node whose children are the
 // placed parts — so the viewer's structure tree is expandable and every occurrence is selectable.
-function enrichPackageAssemblyNode(node, partById, previous = null) {
+function enrichPackageAssemblyNode(node, partById) {
   const rawChildren = Array.isArray(node?.children) ? node.children : [];
-  const children = rawChildren.length
-    ? rawChildren.map((child, index) => enrichPackageAssemblyNode(child, partById, previous?.children?.[index]))
-    : previous?.children?.length === 0 ? previous.children : [];
+  const children = rawChildren.map((child) => enrichPackageAssemblyNode(child, partById));
   const nodeType = String(node?.nodeType || "").trim() || (children.length ? "subassembly" : "part");
   const id = String(node?.id || "").trim();
   const name = String(node?.name || node?.label || id).trim();
@@ -646,17 +536,6 @@ function enrichPackageAssemblyNode(node, partById, previous = null) {
     : (children.length
       ? children.flatMap((child) => child.leafPartIds)
       : (id ? [id] : []));
-  // Tessellation changes triangle ranges and buffers, but usually leaves tree
-  // metadata identical. Preserve those objects (and their leaf-ID arrays) so
-  // tree consumers do not allocate a new full assembly on every LOD swap.
-  if (previous && previous.children.length === children.length
-    && children.every((child, index) => child === previous.children[index])
-    && previous.id === id && previous.occurrenceId === id
-    && previous.name === name && previous.label === name && previous.nodeType === nodeType
-    && equalVector(previous.leafPartIds, leafPartIds)
-    && (nodeType !== "part" || equalAssemblyLeaf(previous, partById.get(id)))) {
-    return previous;
-  }
   const out = { id, occurrenceId: id, name, label: name, nodeType, leafPartIds, children };
   if (nodeType === "part") {
     // Enrich the leaf with its composed render part (transform/bounds/color drive highlighting).
@@ -667,12 +546,6 @@ function enrichPackageAssemblyNode(node, partById, previous = null) {
       out.bounds = part.bounds;
       out.sourceBounds = part.sourceBounds;
       out.color = part.color;
-      out.sourceColor = part.sourceColor;
-      out.materialId = part.materialId;
-      out.materialName = part.materialName;
-      out.material = part.material;
-      out.opacity = part.opacity;
-      out.sourceOpacity = part.sourceOpacity;
     }
   } else {
     out.transform = [...IDENTITY_TRANSFORM];
@@ -681,7 +554,7 @@ function enrichPackageAssemblyNode(node, partById, previous = null) {
   return out;
 }
 
-function buildPackageAssemblyRoot(descriptor, parts, previous = null) {
+function buildPackageAssemblyRoot(descriptor, parts) {
   // A single-component part has no internal assembly structure: it renders as a topology
   // tree (solids/faces/edges) exactly like a monolithic STEP part. Returning null lets
   // buildStepTreeRoot fall through to buildStepPartRoot instead of showing a spurious
@@ -699,5 +572,5 @@ function buildPackageAssemblyRoot(descriptor, parts, previous = null) {
   if (!descriptorRoot || typeof descriptorRoot !== "object") {
     throw new Error("Assembly tree has no assembly.root hierarchy");
   }
-  return enrichPackageAssemblyNode(descriptorRoot, partById, previous);
+  return enrichPackageAssemblyNode(descriptorRoot, partById);
 }

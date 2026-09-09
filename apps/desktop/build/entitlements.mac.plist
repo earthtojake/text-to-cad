@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The hardened runtime's exceptions, kept to what Hardcore actually does.
+
+  JIT and unsigned executable memory: V8. Dyld environment variables: Electron's
+  own helper processes. The two file entitlements: the app opens whatever
+  directory the person points it at, and reads and writes their projects.
+  Network client: the agent adapters, the CAD Viewer's local server and the
+  update check.
+
+  Nothing here is speculative. An entitlement that is not needed is an
+  entitlement that has to be justified later, so add one when a feature fails
+  without it, not in case it might.
+-->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+  </dict>
+</plist>

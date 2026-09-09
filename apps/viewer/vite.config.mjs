@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig, transformWithOxc } from "vite";
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 import { resolveDirectoryRoot as resolveViewerDirectoryRoot } from "./scripts/directoryRoot.mjs";
@@ -19,16 +19,6 @@ import {
 // look like (or collide with) a launched Viewer. Taken port → pick another
 // with --port; nothing rolls or reuses here.
 const DEFAULT_DEV_PORT = 5173;
-
-// A supervisor that assigns ports (the agent harness) says so through PORT.
-// Honouring it is what lets dev be launched without pinning a number in a
-// config file — pinning one is how this collided with a resident Viewer on
-// 3251 in the first place. `strictPort` still stands: an assigned port that is
-// taken is a mistake to report, not to roll away from.
-function devPort() {
-  const assigned = Number(process.env.PORT);
-  return Number.isInteger(assigned) && assigned > 0 ? assigned : DEFAULT_DEV_PORT;
-}
 
 const viewerAppRoot = path.dirname(fileURLToPath(import.meta.url));
 const viewerClientRoot = path.join(viewerAppRoot, "src", "client");
@@ -183,49 +173,6 @@ function readFirstJsonLine(stream) {
   });
 }
 
-// Vite 8 transforms with Oxc instead of esbuild, and Oxc picks its parser from
-// the file EXTENSION: a `.js` file is read as plain JavaScript, so the client's
-// JSX-inside-`.js` is a syntax error. Vite 7 said this in one line —
-// `esbuild: { loader: "jsx" }` — but Oxc has no per-extension loader map, and
-// the blanket `oxc.lang` the migration guide offers is honoured only by the
-// JavaScript transform path (dev), not by the native one `vite build` runs. So
-// the client's own `.js` sources are transformed here instead, ahead of Vite's
-// transform (`enforce: "pre"`), which then sees ordinary JavaScript. The
-// already-emitted `react/jsx-runtime` import is what keeps Fast Refresh on for
-// these files — @vitejs/plugin-react looks for exactly that.
-//
-// Only the client's own sources: nothing else in the graph writes JSX into a
-// `.js` file. scripts/jsxLoaderHooks.mjs is the same translation for
-// `node --test`.
-const JSX_IN_JS = /<\/|\/>/u;
-
-function jsxInJsPlugin() {
-  const clientRoot = normalizeSlashes(viewerClientRoot);
-  let isProduction = true;
-  return {
-    name: "cad-viewer-jsx-in-js",
-    enforce: "pre",
-    configResolved(config) {
-      isProduction = config.isProduction;
-    },
-    async transform(code, id) {
-      const [file] = normalizeSlashes(id).split("?");
-      if (!file.startsWith(clientRoot) || !file.endsWith(".js") || !JSX_IN_JS.test(code)) {
-        return null;
-      }
-      const transformed = await transformWithOxc(code, id, {
-        lang: "jsx",
-        jsx: { runtime: "automatic", development: !isProduction },
-      });
-      return { code: transformed.code, map: transformed.map };
-    },
-  };
-}
-
-function normalizeSlashes(value) {
-  return value.replace(/\\/gu, "/");
-}
-
 function serverLifetimePlugin() {
   return {
     name: "cad-viewer-server-lifetime",
@@ -259,7 +206,6 @@ export default defineConfig(async ({ command }) => ({
   root: viewerAppRoot,
   envPrefix: "VIEWER_",
   plugins: [
-    jsxInJsPlugin(),
     react(),
     serverLifetimePlugin(),
   ],
@@ -274,34 +220,39 @@ export default defineConfig(async ({ command }) => ({
       "three/examples": path.join(viewerNodeModulesRoot, "three", "examples"),
     },
   },
+  esbuild: {
+    loader: "jsx",
+    include: /.*\.[jt]sx?$/,
+    exclude: [],
+  },
   optimizeDeps: {
-    // The dependency optimizer is Rolldown now; module types replace esbuild's
-    // loaders (`optimizeDeps.esbuildOptions.loader`).
-    rolldownOptions: {
-      moduleTypes: {
+    esbuildOptions: {
+      loader: {
         ".js": "jsx",
       },
     },
   },
   build: {
     chunkSizeWarningLimit: 800,
-    // `build.rollupOptions` is Rolldown's `build.rolldownOptions` in Vite 8.
-    rolldownOptions: {
+    rollupOptions: {
       output: {
-        // Rolldown removed the object form of `output.manualChunks` and
-        // deprecated the function form; `codeSplitting.groups` is the
-        // replacement. Same four vendor chunks, matched against the module id
-        // in declaration order ([\\/] rather than / so a Windows build groups
-        // them too). A group also captures what its modules import, so the
-        // packages these depend on (react's scheduler, three's addons) travel
-        // with them instead of landing in the entry chunk.
-        codeSplitting: {
-          groups: [
-            { name: "vendor-three", test: /[\\/]node_modules[\\/]three[\\/]/ },
-            { name: "vendor-react", test: /[\\/]node_modules[\\/]react(?:-dom)?[\\/]/ },
-            { name: "vendor-ui", test: /[\\/]node_modules[\\/]@?radix-ui[\\/]/ },
-            { name: "vendor-icons", test: /[\\/]node_modules[\\/]lucide-react[\\/]/ },
-          ],
+        manualChunks(id) {
+          if (!id.includes("node_modules")) {
+            return undefined;
+          }
+          if (id.includes("/three/")) {
+            return "vendor-three";
+          }
+          if (id.includes("/react/") || id.includes("/react-dom/")) {
+            return "vendor-react";
+          }
+          if (id.includes("/radix-ui/") || id.includes("/@radix-ui/")) {
+            return "vendor-ui";
+          }
+          if (id.includes("/lucide-react/")) {
+            return "vendor-icons";
+          }
+          return undefined;
         },
       },
     },
@@ -311,7 +262,7 @@ export default defineConfig(async ({ command }) => ({
   },
   server: {
     host: "127.0.0.1",
-    port: devPort(),
+    port: DEFAULT_DEV_PORT,
     // Fail on a taken port instead of silently rolling: dev is hand-managed,
     // so the agent picks another port explicitly. (The bundled launcher is the
     // one that rolls/reuses; dev stays out of that machinery entirely.)

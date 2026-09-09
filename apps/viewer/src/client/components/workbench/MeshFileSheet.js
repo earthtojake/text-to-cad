@@ -1,13 +1,13 @@
 import FileSheet from "./FileSheet";
 import FileSheetTabbedSurface from "./FileSheetTabbedSurface";
+import { buildFileStatusTab } from "./FileStatusSection";
 import StepMeasurementsSection from "./StepMeasurementsSection";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections";
-import { buildAnimationControlsTab } from "./AnimationControlsSection";
 
 const EMPTY_MEASUREMENTS = [];
 
-// For kind="mesh", the Measure tab. DXF reuses this sheet with extra
-// settingsTabs and does not pass measurements.
+// Status plus, for kind="mesh", the Measure tab. DXF reuses this sheet
+// with extra themeTabs and does not pass measurements.
 export default function MeshFileSheet({
   open,
   kind = "mesh",
@@ -19,10 +19,8 @@ export default function MeshFileSheet({
   onStartResize,
   viewerServerInfo = null,
   suppressDynamicMetadataStatus = false,
-  renderMode = false,
-  settingsTabs = [],
-  animationRuntime = null,
-  measurementAvailable = true,
+  statusItems = [],
+  themeTabs = [],
   openSectionIds = [],
   onOpenSectionIdsChange,
   measurements = EMPTY_MEASUREMENTS,
@@ -32,8 +30,7 @@ export default function MeshFileSheet({
   onMeasurementDelete = null,
   onMeasurementsClear = null
 }) {
-  const animationTab = buildAnimationControlsTab({ runtime: animationRuntime });
-  const measureTab = kind === "mesh" && measurementAvailable
+  const measureTab = kind === "mesh"
     ? {
       id: FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS,
       title: "Measure",
@@ -49,20 +46,11 @@ export default function MeshFileSheet({
       )
     }
     : null;
-  const allSections = [
-    ...(animationTab ? [animationTab] : []),
+  const sections = [
+    buildFileStatusTab(statusItems),
     ...(measureTab ? [measureTab] : []),
-    ...settingsTabs
+    ...themeTabs
   ];
-  const sections = renderMode
-    ? [
-        ...settingsTabs.filter((section) => (
-          section?.id === FILE_SHEET_SECTION_IDS.RENDER ||
-          section?.id === FILE_SHEET_SECTION_IDS.MATERIALS
-        )),
-        ...(animationTab ? [animationTab] : [])
-      ]
-    : allSections;
 
   return (
     <FileSheet
@@ -76,8 +64,6 @@ export default function MeshFileSheet({
     >
       <FileSheetTabbedSurface
         kind={kind}
-        layoutMode={renderMode ? "render" : "cad"}
-        layoutScope={selectedEntry?.rootRelativeFile || selectedEntry?.file || ""}
         sections={sections}
         openSectionIds={openSectionIds}
         onOpenSectionIdsChange={onOpenSectionIdsChange}

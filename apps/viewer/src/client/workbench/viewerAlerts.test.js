@@ -1,224 +1,242 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  buildViewerAnnotationAlert,
-  buildViewerEditAlert,
-  buildViewerMeshAlert,
-  fileStatusAlertKey,
-  resolveFileStatusAlert
+  buildViewerMeshAlert
 } from "./viewerAlerts.js";
 
-const step = { file: "STEP/moonwatch.step", kind: "part" };
-
-test("connection failure explains recovery without blaming the compiler", () => {
-  const alert = buildViewerMeshAlert(step, false, "", {
-    status: "failed", error: "Failed to fetch",
-    failure: { kind: "network", method: "GET", operation: "checking display assets", url: "/__cad/artifact?file=STEP%2Fmoonwatch.step" }
-  });
-  assert.equal(alert.summary, "Connection lost");
-  assert.match(alert.title, /reach the viewer/);
-  assert.match(alert.message, /checking display assets.*moonwatch.step/);
-  assert.match(alert.message, /viewer is running/);
-  assert.match(alert.details, /Request: GET/);
-  assert.equal(alert.reload, true);
+test("buildViewerMeshAlert reports missing sidecar meshes", () => {
+  assert.deepEqual(
+    buildViewerMeshAlert({ file: "meshes/part.stl", kind: "stl" }, false, ""),
+    {
+      severity: "error",
+      summary: "Mesh unavailable",
+      title: "No mesh data is available",
+      message: "The selected entry is listed in the CAD catalog but no renderable mesh data could be loaded for it."
+    }
+  );
 });
 
-test("disconnected POST warns that the build may still be running", () => {
-  const alert = buildViewerMeshAlert(step, false, "", {
-    status: "failed", error: "Load failed", failure: { kind: "network", method: "POST" }
-  });
-  assert.match(alert.recovery, /may still be running/);
-  assert.doesNotMatch(alert.title, /compil/i);
-});
-
-test("worker-unavailable HTTP errors identify the service and retain diagnostics", () => {
-  const alert = buildViewerMeshAlert(step, false, "", {
-    status: "failed", error: "Worker unavailable", failure: { kind: "http", status: 503 }
-  });
-  assert.equal(alert.summary, "Viewer service failed");
-  assert.equal(alert.title, "Couldn’t prepare the model");
-  assert.equal(alert.reason, undefined);
-  assert.match(alert.details, /HTTP status: 503/);
-  assert.match(alert.details, /Worker unavailable/);
-});
-
-test("compile failure preserves the full diagnostic, context and useful recovery", () => {
-  const reason = "Unsupported DXF entity HATCH\n" + "compiler diagnostic ".repeat(500).trim();
-  const alert = buildViewerMeshAlert({ file: "drawings/plate.dxf", kind: "dxf" }, false, "", { status: "failed", error: reason });
-  assert.equal(alert.summary, "Compile failed");
-  assert.equal(alert.reason, reason);
-  assert.ok(alert.details.endsWith(reason));
-  assert.match(alert.message, /plate.dxf/);
-  assert.match(alert.recovery, /terminal output/);
-  assert.match(alert.recovery, /rebuild/);
-});
-
-test("missing compiler diagnostic is stated honestly", () => {
-  const alert = buildViewerMeshAlert(step, false, "", { status: "failed", error: "" });
-  assert.match(alert.reason, /No diagnostic was returned/);
-  assert.match(alert.recovery, /terminal output/);
-});
-
-test("a failed replacement stays actionable without blocking usable geometry", () => {
-  const alert = buildViewerMeshAlert(step, true, "", { status: "failed", error: "Invalid edge loop" });
-  assert.equal(alert.blocking, false);
-  assert.match(alert.message, /existing model remains visible/i);
-  assert.equal(alert.reason, "Invalid edge loop");
-});
-
-test("worker protocol failures identify the viewer service without blaming the source", () => {
-  const diagnostic = "artifact request failed or lost its protocol; no cold retry: worker exited";
-  const alert = buildViewerMeshAlert(step, false, "", { status: "failed", error: diagnostic });
-  assert.equal(alert.summary, "Viewer service failed");
-  assert.equal(alert.title, "Couldn’t prepare the model");
-  assert.match(alert.message, /viewer (?:couldn’t finish processing|did not respond while preparing) this model/);
-  assert.doesNotMatch(alert.recovery, /correct|rebuild the source/i);
-  assert.equal(alert.reason, undefined);
-  assert.ok(alert.details.endsWith(diagnostic));
-});
-
-test("status and timeout failures also identify the processing service", () => {
-  for (const kind of ["status", "timeout"]) {
-    const alert = buildViewerMeshAlert(step, false, "", {
-      status: "failed",
-      error: "Request did not complete",
-      failure: { kind, detail: "Request did not complete" }
-    });
-    assert.equal(alert.summary, "Viewer service failed");
-    assert.match(alert.message, /viewer (?:couldn’t finish processing|did not respond while preparing) this model/);
-    assert.match(alert.details, /Request did not complete/);
-  }
-});
-
-test("failed STEP artifact explains what is missing and retains a renderable fallback", () => {
-  for (const [code, reason] of [["missing_glb", "Generated GLB is missing"], ["missing_step_topology", "missing STEP topology metadata"]]) {
-    const entry = { ...step, artifact: { ok: false, error: code, message: "Original diagnostic" } };
-    const alert = buildViewerMeshAlert(entry, false, "");
-    assert.equal(alert.severity, "error");
-    assert.ok(alert.message.includes(reason));
-    assert.match(alert.details, /Original diagnostic/);
-    assert.equal(buildViewerMeshAlert(entry, true, ""), null);
-    const fallback = { ...entry, url: "/models/.part.step.glb", hash: "glb-hash" };
-    const warning = buildViewerMeshAlert(fallback, false, "");
-    assert.equal(warning.severity, "warning");
-    assert.equal(warning.blocking, false);
-    const failedFallback = buildViewerMeshAlert(fallback, false, "GLB parser failed");
-    assert.equal(failedFallback.summary, "Mesh load failed");
-    assert.match(failedFallback.reason, /GLB parser failed/);
-  }
-});
-
-test("mesh errors also recognize browser transport messages", () => {
-  for (const kind of ["stl", "3mf", "glb", "dxf"]) {
-    const entry = { file: `parts/panel.${kind}`, kind };
-    const alert = buildViewerMeshAlert(entry, false, "Failed to fetch");
-    assert.equal(alert.summary, "Connection lost");
-    assert.match(alert.message, /loading geometry/);
-    assert.equal(buildViewerMeshAlert(entry, false, "Invalid file header").reason, "Invalid file header");
-  }
-});
-
-test("missing geometry gives file context and a next step; empty drawings stay valid", () => {
-  const alert = buildViewerMeshAlert({ file: "meshes/part.stl", kind: "stl" }, false, "");
-  assert.equal(alert.summary, "Mesh unavailable");
-  assert.match(alert.message, /meshes\/part.stl/);
-  assert.match(alert.recovery, /saved completely/);
-  const drawing = { file: "plans/panel.dxf.py", kind: "dxf" };
-  assert.equal(buildViewerMeshAlert(drawing, false, ""), null);
-  assert.equal(buildViewerMeshAlert(drawing, false, "bad DXF").summary, "Mesh load failed");
-  assert.equal(buildViewerMeshAlert(null, false, "failure"), null);
-});
-
-test("edit alerts keep disconnects and healthy preview expiry quiet", () => {
-  assert.equal(buildViewerEditAlert({ state: "disconnected", error: "Connection closed" }, false, false), null);
-  assert.equal(buildViewerEditAlert({
-    state: "done",
-    error: "Preview geometry is no longer available in the cache",
-    previewUnavailable: true,
-    saved: { tree: "saved" }
-  }, false, true), null);
-
-  const blocked = buildViewerEditAlert({
-    state: "done",
-    error: "Preview geometry is no longer available in the cache",
-    previewUnavailable: true
-  }, false, false);
-  assert.equal(blocked.summary, "Open failed");
-  assert.equal(blocked.blocking, undefined);
-});
-
-test("a failed save explains that the updated model is visible and keeps the diagnostic", () => {
-  const alert = buildViewerEditAlert({
-    state: "failed",
-    error: "Disk full\nwrite trace",
-    file: "STEP/moonwatch.step",
-    revision: 8
-  }, true, true);
-  assert.equal(alert.summary, "Update failed");
-  assert.equal(alert.message, "The updated model is visible, but the STEP file could not be written.");
-  assert.equal(alert.title, "Couldn’t write the STEP file");
-  assert.equal(alert.blocking, false);
-  assert.equal(alert.reason, "Disk full\nwrite trace");
-  assert.match(alert.details, /Revision: 8/);
-});
-
-test("edit worker failures are distinct from invalid-model failures", () => {
-  const worker = buildViewerEditAlert({
-    state: "failed",
-    error: "artifact request failed or lost its protocol; no cold retry"
-  }, false, true);
-  assert.equal(worker.summary, "Viewer service failed");
-  assert.equal(worker.kind, "service");
-  assert.equal(worker.blocking, false);
-  assert.equal(worker.reason, undefined);
-  assert.match(worker.details, /no cold retry/);
-
-  const invalid = buildViewerEditAlert({ state: "failed", error: "Fillet radius is too large" }, false, false);
-  assert.equal(invalid.summary, "Open failed");
-  assert.match(invalid.recovery, /correct the model/i);
-  assert.equal(invalid.reason, "Fillet radius is too large");
-});
-
-test("invalid model annotations retain diagnostics without blocking geometry", () => {
-  const entry = { ...step, annotationError: "unsupported sidecar schema" };
-  const alert = buildViewerAnnotationAlert(entry);
-  assert.equal(alert.severity, "warning");
-  assert.equal(alert.blocking, false);
-  assert.match(alert.details, /unsupported sidecar schema/);
-  assert.match(alert.recovery, /Rebuild/);
-  assert.equal(buildViewerAnnotationAlert({ ...entry, editingPreview: true }), null);
-  assert.equal(buildViewerAnnotationAlert(step), null);
-});
-
-test("file status alerts stay unavailable while the displayed status is busy", () => {
-  const annotation = buildViewerAnnotationAlert({ ...step, annotationError: "invalid settings" });
-  assert.equal(resolveFileStatusAlert({ label: "Opening", tone: "info", busy: true }, null, annotation), null);
-  assert.equal(resolveFileStatusAlert(null, { severity: "error", title: "Failed" }), null);
+test("buildViewerMeshAlert reports STEP artifact errors only when no mesh rendered", () => {
+  assert.deepEqual(
+    buildViewerMeshAlert({
+      file: "fun/part.step",
+      kind: "part",
+      artifact: {
+        ok: false,
+        error: "missing_source_path",
+        message: "Topology source path is missing."
+      }
+    }, false, ""),
+    {
+      severity: "error",
+      compact: true,
+      summary: "STEP artifact unavailable",
+      title: "STEP artifact unavailable",
+      message: "Generated GLB metadata is missing its source path."
+    }
+  );
 
   assert.equal(
-    resolveFileStatusAlert({ label: "Model warning", title: annotation.message, tone: "warning", busy: false }, null, annotation),
-    annotation
+    buildViewerMeshAlert({
+      file: "fun/part.step",
+      kind: "part",
+      artifact: {
+        ok: false,
+        error: "missing_source_path",
+        message: "Topology source path is missing."
+      }
+    }, true, ""),
+    null
+  );
+
+  assert.deepEqual(
+    buildViewerMeshAlert({
+      file: "fun/stale.step",
+      kind: "part",
+      artifact: {
+        ok: false,
+        error: "missing_glb",
+        message: "STEP artifact is missing."
+      }
+    }, false, ""),
+    {
+      severity: "error",
+      compact: true,
+      summary: "STEP artifact missing",
+      title: "STEP artifact missing",
+      message: "Generated GLB is missing."
+    }
+  );
+
+  assert.deepEqual(
+    buildViewerMeshAlert({
+      file: "fun/renderable-stale.step",
+      kind: "part",
+      url: "/models/step/parts/.renderable-stale.step.glb?v=hash",
+      hash: "glb-hash",
+      artifact: {
+        ok: false,
+        error: "missing_glb",
+        message: "STEP artifact is missing."
+      }
+    }, false, ""),
+    {
+      severity: "warning",
+      blocking: false,
+      compact: true,
+      summary: "STEP artifact missing",
+      title: "STEP artifact missing",
+      message: "Generated GLB is missing."
+    }
+  );
+
+  assert.deepEqual(
+    buildViewerMeshAlert({
+      file: "fun/renderable-stale.step",
+      kind: "part",
+      url: "/models/step/parts/.renderable-stale.step.glb?v=hash",
+      hash: "glb-hash",
+      artifact: {
+        ok: false,
+        error: "missing_glb",
+        message: "STEP artifact is missing."
+      }
+    }, false, "GLB parser failed"),
+    {
+      severity: "error",
+      summary: "Mesh load failed",
+      title: "Failed to load render mesh",
+      message: "GLB parser failed"
+    }
+  );
+
+  assert.deepEqual(
+    buildViewerMeshAlert({
+      file: "fun/missing.step",
+      kind: "part",
+      artifact: {
+        ok: false,
+        error: "missing_glb",
+        message: "GLB artifact is missing."
+      }
+    }, false, ""),
+    {
+      severity: "error",
+      compact: true,
+      summary: "STEP artifact missing",
+      title: "STEP artifact missing",
+      message: "Generated GLB is missing."
+    }
+  );
+
+  assert.deepEqual(
+    buildViewerMeshAlert({
+      file: "fun/missing.step",
+      kind: "part",
+      artifact: {
+        ok: false,
+        error: "missing_glb",
+        message: "Generated GLB is missing."
+      }
+    }, false, "STEP artifact generation is not enabled for this CAD Viewer backend"),
+    {
+      severity: "error",
+      compact: true,
+      summary: "STEP artifact missing",
+      title: "STEP artifact missing",
+      message: "Generated GLB is missing."
+    }
   );
 });
 
-test("file status alert identity tracks warning diagnostics and selected file", () => {
-  const first = buildViewerAnnotationAlert({ ...step, annotationError: "schema 1" });
-  const changed = buildViewerAnnotationAlert({ ...step, annotationError: "schema 2" });
-  assert.equal(fileStatusAlertKey("STEP/moonwatch.step", null), "");
-  assert.notEqual(
-    fileStatusAlertKey("STEP/moonwatch.step", first),
-    fileStatusAlertKey("STEP/moonwatch.step", changed)
-  );
-  assert.notEqual(
-    fileStatusAlertKey("STEP/moonwatch.step", first),
-    fileStatusAlertKey("STEP/other.step", first)
+test("a DXF entry reports through the ordinary mesh alert", () => {
+  // DXF has no alert builder of its own any more. Its geometry is a baked package GLB, so a
+  // missing or failed one is exactly a missing mesh, and buildViewerMeshAlert already names
+  // the DXF rebuild command for it.
+  const entry = { file: "flat/panel.dxf", kind: "dxf" };
+  assert.equal(buildViewerMeshAlert(entry, true, ""), null);
+  assert.deepEqual(
+    buildViewerMeshAlert(entry, false, "network failed"),
+    {
+      severity: "error",
+      summary: "Mesh load failed",
+      title: "Failed to load render mesh",
+      message: "network failed"
+    }
   );
 });
 
-test("progressive geometry is valid while loading but cannot mask a failed first load", () => {
-  assert.equal(buildViewerMeshAlert(step, true, "", null, { partial: true }), null);
-  const failed = buildViewerMeshAlert(step, true, "Decode failed", null, { partial: true });
-  assert.notEqual(failed.blocking, false);
-  assert.equal(failed.severity, "error");
-  assert.doesNotMatch(failed.message, /existing model remains visible/);
+
+test("a failed compile reports its own reason, not \"no mesh data\"", () => {
+  // The generic card told the user only that nothing loaded. The reason -- which entity the
+  // DXF builder rejected -- was already on the artifact record and simply never shown, so a
+  // drawing that can never render looked identical to one needing a rebuild.
+  const entry = { file: "drawings/plate.dxf", kind: "dxf" };
+  const artifact = { status: "failed", error: "dxf-artifact.mjs failed (exit 1): Unsupported DXF entity HATCH" };
+
+  const alert = buildViewerMeshAlert(entry, false, "", artifact);
+
+  assert.equal(alert.severity, "error");
+  assert.equal(alert.title, "Compile failed");
+  assert.match(alert.message, /Unsupported DXF entity HATCH/);
+});
+
+test("an artifact error is not raised once a mesh is in hand", () => {
+  // A stale error alongside a rendered mesh would be noise: the entry is on screen.
+  const entry = { file: "drawings/plate.dxf", kind: "dxf" };
+  const artifact = { status: "failed", error: "boom" };
+
+  assert.equal(buildViewerMeshAlert(entry, true, "", artifact), null);
+});
+
+test("a failed compile with no reason still says it could not be compiled", () => {
+  const entry = { file: "drawings/plate.dxf", kind: "dxf" };
+
+  const alert = buildViewerMeshAlert(entry, false, "", { status: "failed", error: "" });
+
+  assert.equal(alert.title, "Compile failed");
+  assert.ok(alert.message.length > 0);
+});
+
+test("a meshless DXF is not an error, but a failed build still is", () => {
+  // A dimensioned drawing encloses nothing to extrude, so it has no mesh BY DESIGN — and the
+  // profile is decided from the PARSED file now, which this alert path cannot see, so every
+  // meshless DXF stays quiet: a layout's mesh comes from the same parse, and a genuinely
+  // broken file reports through loadError.
+  const drawing = { file: "plans/panel.dxf.py", kind: "dxf" };
+  assert.equal(buildViewerMeshAlert(drawing, false, ""), null);
+  const layout = { file: "parts/bracket.dxf.py", kind: "dxf" };
+  assert.equal(buildViewerMeshAlert(layout, false, ""), null);
+  // A parse/load failure still reports.
+  assert.equal(buildViewerMeshAlert(layout, false, "bad DXF")?.summary, "Mesh load failed");
+  // And a drawing whose BUILD failed reports the build failure, which outranks the mesh card.
+  const failed = buildViewerMeshAlert(drawing, false, "", { status: "failed", error: "bad entity" });
+  assert.equal(failed?.summary, "Compile failed");
+  assert.match(failed?.message, /bad entity/u);
+});
+
+test("buildViewerMeshAlert puts a failed compile's own reason under a plain title", () => {
+  assert.deepEqual(
+    buildViewerMeshAlert(
+      { file: "STEP/moonwatch.step", kind: "part" },
+      false,
+      "",
+      { status: "failed", error: "component be20a9eae6b94690 build failed: Unextractable: surface domain does not cover face UV" }
+    ),
+    {
+      severity: "error",
+      summary: "Compile failed",
+      title: "Compile failed",
+      message: "component be20a9eae6b94690 build failed: Unextractable: surface domain does not cover face UV"
+    }
+  );
+  assert.deepEqual(
+    buildViewerMeshAlert({ file: "STEP/moonwatch.step", kind: "part" }, false, "", { status: "failed", error: "" }),
+    {
+      severity: "error",
+      summary: "Compile failed",
+      title: "Compile failed",
+      message: "The document could not be compiled."
+    }
+  );
 });
