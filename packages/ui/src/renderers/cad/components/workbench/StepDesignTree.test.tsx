@@ -80,6 +80,7 @@ it('groups assembly operations by part and selects global and operation paramete
   const part=await screen.findByRole('treeitem',{name:'Body',exact:true});
   fireEvent.keyDown(part,{key:'ArrowRight'});
   fireEvent.click(screen.getByText('Extrude · body'));
+  fireEvent.click(screen.getByText('Operation inputs'));
   fireEvent.click(screen.getByRole('button',{name:'Highlight depth'}));
   await waitFor(()=>expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:[],partIds:['body-7']}));
   expect(screen.getByRole('button',{name:'Highlight depth'}).getAttribute('aria-pressed')).toBe('true');
@@ -118,7 +119,9 @@ it('shows real imported parts and their dimensions without inventing source oper
     parts={[{id:'o1',name:'Imported bracket',bounds:{min:[-5,2,0],max:[5,8,3]}}]} onHighlight={onHighlight} />);
   fireEvent.click(await screen.findByRole('button',{name:'Expand Imported geometry',exact:true}));
   fireEvent.click(screen.getByRole('treeitem',{name:'Imported bracket',exact:true}));
-  expect(screen.getByRole('region',{name:'Feature properties'}).textContent).toContain('10 × 6 × 3 mm');
+  expect(screen.getByRole('button',{name:'Show X extent'}).textContent).toContain('10 mm');
+  expect(screen.getByRole('button',{name:'Show Y extent'}).textContent).toContain('6 mm');
+  expect(screen.getByRole('button',{name:'Show Z extent'}).textContent).toContain('3 mm');
   expect(screen.queryByText('Source parameters')).toBeNull();
   expect(screen.queryByText('Face area')).toBeNull();
   await waitFor(()=>expect(onHighlight.mock.lastCall?.[0]).toEqual({faceIds:[],partIds:['o1']}));
@@ -200,4 +203,26 @@ it('keeps model visibility available without feature links on a single solid', a
   fireEvent.click(screen.getByRole('button',{name:'Show Case',exact:true}));
   expect(onToggleVisibility).toHaveBeenCalledTimes(2);
   expect(screen.queryByRole('button',{name:'Hide Extrude · body'})).toBeNull();
+});
+
+it('retains inspection when inactive without overwriting the active geometry selection', async () => {
+  const onHighlight=vi.fn();
+  const props={client:{requestDesignOutline:vi.fn().mockResolvedValue(result)},file:'case.step',onHighlight};
+  const {rerender}=render(<StepDesignTree {...props} />);
+  fireEvent.click(await screen.findByRole('treeitem',{name:/Extrude/}));
+  const resize=screen.getByRole('separator',{name:'Resize selection details'});
+  fireEvent.keyDown(resize,{key:'ArrowUp'});
+  expect(resize.getAttribute('aria-valuenow')).toBe('37');
+  fireEvent.click(screen.getByRole('button',{name:'Hide selection details'}));
+  expect(screen.queryByRole('separator')).toBeNull();
+  rerender(<StepDesignTree {...props} active={false} />);
+  expect(onHighlight.mock.lastCall?.[0]).toBeNull();
+  onHighlight.mockClear();
+  rerender(<StepDesignTree {...props} active={false} references={[]} />);
+  expect(onHighlight).not.toHaveBeenCalled();
+  rerender(<StepDesignTree {...props} active />);
+  expect(screen.getByRole('treeitem',{name:/Extrude/}).getAttribute('aria-selected')).toBe('true');
+  fireEvent.click(screen.getByRole('button',{name:'Show selection details'}));
+  expect(screen.getByRole('separator').getAttribute('aria-valuenow')).toBe('37');
+  expect(props.client.requestDesignOutline).toHaveBeenCalledTimes(1);
 });

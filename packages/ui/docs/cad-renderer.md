@@ -206,9 +206,9 @@ Without an unambiguous source, the view shows Imported geometry. No automatic fe
 Feature groups selection mode is offered. Existing saved multi-face references
 continue to work through Tree and the host's reference callbacks.
 
-Normal model generation now records optional geometry links. For single-solid
-algebraic models within its size limits, the recorder associates source statements
-with surviving faces and carries a placed cutting tool's association back to its source
+Normal model generation now records optional geometry links. For bounded,
+single-solid algebraic models with planar/cylindrical faces, the recorder associates source statements with
+surviving faces and carries a placed cutting tool's association back to its source
 row. Named assembly components are linked when their identity survives into the
 returned assembly. Repeat rows combine their child associations; sketch rows
 highlight their consuming operation's faces, not a reconstructed sketch overlay.
@@ -348,3 +348,27 @@ overlap of unsupported curved patches remains unlinked. Fillets consuming a
 previously collected edge list still compare against the prior result, so they
 cannot claim unchanged faces from earlier operations. Source and STEP hashes
 and the viewer's unique face matching remain required before highlighting.
+
+
+### STEP inspector layout
+
+The STEP inspector uses Geometry and Source features tabs. Display mode, explode,
+and clipping reuse their existing per-file controls in the toolbar's Display
+popover; they no longer occupy a lower inspector pane. Stored tab layouts drop
+the absent Display tab through the existing normalization.
+
+Visited geometry/source trees remain mounted across tab switches to retain their
+scroll position and disclosures. Inactive source inspection does not request
+selection topology or publish a highlight. Both trees use the same collapsible
+selection-details area with a draggable, keyboard-accessible divider. Feature
+measurements appear before expandable operation inputs, with each bounding extent
+shown once as its existing dimension-preview button. File state, reference
+callbacks, model geometry, and display-setting persistence are unchanged.
+
+The toolbar has stable View, Inspect, and Markup/capture groups. View groups zoom,
+a View controls menu (Pan, Orbit, and authored animation playback), and Display.
+Inspect groups Select, selection filtering, and Measure. Draw stays beside a
+separate Capture menu containing Copy screenshot and Ask about this view. The
+groups wrap independently at narrow widths; actions keep the same group at every
+width. Compact zoom keeps the editable percentage and Reset view; plus/minus
+return when the viewport widens. Capture actions do not contain navigation tools.
