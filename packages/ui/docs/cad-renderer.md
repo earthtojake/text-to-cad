@@ -110,6 +110,9 @@ not persistence namespaces for new state.
 served-root-relative path; `selector` excludes the `#`, and is empty for the
 whole file. Clipboard references keep the original shortest unique suffix.
 Copy actions stay clipboard actions; Add to prompt invokes the host callback.
+Reference text JSON-quotes filenames containing spaces or delimiters, for example
+`"Hex Drive Screw (2).STEP"#o1`. The callback's `file` remains the literal path;
+quoting only protects the text form through clipboard and prompt round trips.
 
 `onCapture` receives `{ blob, file, references? }`: the original PNG composite
 and its selected canonical references, captured together before the async
@@ -118,6 +121,10 @@ image operation. The host decides how to attach it to its composer.
 An optional `CadCommandSource` has the same subscription shape and publishes
 `selectReference: { selector, key? }` or `captureRequest: { key }`. A fresh key
 requests another operation even when its selector or target file is unchanged.
+Selecting a reference also activates the Inspector's Tree tab, expands the
+matching row's ancestors, and scrolls it into view. Repeating the request
+reveals the existing selection again without toggling it off; a face-group
+reference keeps the group highlighted and reveals its active face.
 Both toolbar capture and host capture commands use the same implementation.
 
 `@hardcore/ui/renderers/cad/presentation` exports the lightweight

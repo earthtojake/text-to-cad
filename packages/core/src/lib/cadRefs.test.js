@@ -158,3 +158,10 @@ test("bare tokens carry no file prefix", () => {
     assert.equal(parseCadRefToken(text).cadPath, "", `${text} must carry no prefix`);
   }
 });
+
+test("imported file tokens quote and round-trip filename delimiters", () => {
+  for (const cadPath of ['Hex Drive Screw (2).STEP', 'models/café #1 "screw".STEP']) {
+    const token = buildCadRefToken({cadPath, selectors:['o2','o1']});
+    assert.deepEqual(parseCadRefToken(token), {token, cadPath, selectors:['o1','o2']});
+  }
+});

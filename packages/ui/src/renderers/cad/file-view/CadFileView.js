@@ -2144,7 +2144,7 @@ function CadFileViewSurface({
     );
   }, [renderedSelectedFileSheetSectionIds]);
 
-  const openFileSheetSection = useCallback((sectionId, { openSheet = true } = {}) => {
+  const openFileSheetSection = useCallback((sectionId, { openSheet = true, activate = false } = {}) => {
     const normalizedSectionId = String(sectionId || "").trim();
     if (!normalizedSectionId || !renderedSelectedFileSheetSectionIds.includes(normalizedSectionId)) {
       return false;
@@ -2158,11 +2158,11 @@ function CadFileViewSurface({
         Array.isArray(current) ? current : effectiveFileSheetOpenSectionIds,
         renderedSelectedFileSheetSectionIds
       );
-      if (baseSectionIds.includes(normalizedSectionId)) {
+      if (baseSectionIds.includes(normalizedSectionId) && !activate) {
         return baseSectionIds;
       }
       return normalizeFileSheetOpenSectionIds(
-        [...baseSectionIds, normalizedSectionId],
+        [...baseSectionIds.filter(id => id !== normalizedSectionId), normalizedSectionId],
         renderedSelectedFileSheetSectionIds
       );
     });
@@ -2909,8 +2909,9 @@ function CadFileViewSurface({
     if (explicitPartId) {
       return explicitPartId;
     }
+    if (!isAssemblyView && reference?.selectorType === "occurrence") return STEP_MODEL_ROOT_ID;
     return parseAssemblyPartReferenceSelectionId(reference?.id)?.partId || "";
-  }, []);
+  }, [isAssemblyView]);
 
   const assemblyStepTreeTopologyReferences = useMemo(() => {
     if (!supportsTopology || !isAssemblyView || !selectedReferencesMatch) {
@@ -3917,11 +3918,12 @@ function CadFileViewSurface({
     if (!normalizedNodeId || selectedFileSheetKind !== "step") {
       return;
     }
-    setActiveTreeNodeScrollKey(source === "viewer" ? `${Date.now()}:${normalizedNodeId}` : "");
+    setActiveTreeNodeScrollKey(source === "viewer" || source === "reference" ? `${Date.now()}:${normalizedNodeId}` : "");
     openFileSheetSection(FILE_SHEET_SECTION_IDS.STEP_TREE, {
-      openSheet: shouldOpenFileSheetForSelectionReveal({ isDesktop, source })
+      openSheet: shouldOpenFileSheetForSelectionReveal({ isDesktop, source }),
+      activate: source === "reference"
     });
-    if (expandAncestors || expandSelf) {
+    if (expandAncestors || expandSelf || source === "reference") {
       expandStepTreeAroundNode(normalizedNodeId, { expandSelf });
     }
   }, [
@@ -4323,6 +4325,8 @@ function CadFileViewSurface({
       if (resolvedFaces.every(value => value.kind === "reference" && effectiveActiveReferenceMap.get(value.id)?.selectorType === "face")) {
         if (stepUpdateInProgress) return;
         selectFeatureFaces(resolvedFaces.map(value => value.id));
+        const lastFace = resolvedFaces[resolvedFaces.length - 1].id;
+        revealStepTreeNode(findStepTreeTopologyNodeIdForReference(displayStepTreeRoot, lastFace) || referencePartId(effectiveActiveReferenceMap.get(lastFace)), { source: "reference" });
         appliedSelectReferenceKeyRef.current = selectReference.key;
         return;
       }
@@ -4337,20 +4341,21 @@ function CadFileViewSurface({
     appliedSelectReferenceKeyRef.current = selectReference.key;
     if (resolved.kind === "reference") {
       if (selectedReferenceIdsRef.current.includes(resolved.id)) {
-        revealStepTreeNode(findStepTreeTopologyNodeIdForReference(displayStepTreeRoot, resolved.id) || resolved.id, { source: "tree" });
+        revealStepTreeNode(findStepTreeTopologyNodeIdForReference(displayStepTreeRoot, resolved.id) || referencePartId(effectiveActiveReferenceMap.get(resolved.id)) || resolved.id, { source: "reference" });
       } else {
-        toggleReferenceSelection(resolved.id, { source: "tree" });
+        toggleReferenceSelection(resolved.id, { source: "reference" });
       }
     } else if (selectedPartIdsRef.current.includes(resolved.id)) {
-      revealStepTreeNode(resolved.id, { source: "tree" });
+      revealStepTreeNode(resolved.id, { source: "reference" });
     } else {
-      togglePartSelection(resolved.id, { source: "tree" });
+      togglePartSelection(resolved.id, { source: "reference" });
     }
   }, [
     selectReference,
     viewerLoading,
     stepUpdateInProgress,
     selectFeatureFaces,
+    referencePartId,
     effectiveActiveReferenceMap,
     displayStepTreeRoot,
     stepTreeRoot,

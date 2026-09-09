@@ -25,24 +25,26 @@ const TRAILING_RE = /[.,;:!?)\]]+$/;
 
 /** Is this word, on its own, a reference? */
 export function parseReference(word: string): CadReference | null {
-  if (!word || /\s/.test(word) || word.includes("://")) {
+  if (!word || (!word.startsWith('"') && /\s/.test(word)) || word.includes("://")) {
     return null;
   }
   const split = splitReference(word);
   if (!split) {
     return null;
   }
+  // Only consume our canonical quoted form; leave ordinary quoted prose intact.
+  if (word.startsWith('"') && referenceText(split) !== word) return null;
   if (split.selector) {
     // `#o1` alone, or `<file>#o1` where the file half is a path, not a word
     // with a hash in it (`C#`, `issue#12`).
-    return split.file === "" || isReferenceHost(split.file) ? split : null;
+    return split.file === "" || isReferenceHost(split.file, word.startsWith('"')) ? split : null;
   }
-  return isReferenceHost(split.file) ? split : null;
+  return isReferenceHost(split.file, word.startsWith('"')) ? split : null;
 }
 
 /** A file a reference can name: a CAD file, or the generator that makes one. */
-function isReferenceHost(file: string): boolean {
-  if (!file || file.startsWith("#") || /[<>"'`|]/.test(file)) {
+function isReferenceHost(file: string, quoted = false): boolean {
+  if (!file || (!quoted && (file.startsWith("#") || /[<>"'`|]/.test(file)))) {
     return false;
   }
   return isCadFile(file) || /\.(step|stp)\.py$/i.test(file);
@@ -59,7 +61,7 @@ export function parseSegments(text: string): Segment[] {
     }
   };
   // Split keeping the whitespace, so the text between chips is exact.
-  for (const piece of text.split(/(\s+)/)) {
+  for (const piece of text.match(/"(?:[^"\\\r\n]|\\.)*"(?:#[^\s]*)?|[^\s]+|\s+/g) ?? []) {
     if (!piece || /^\s+$/.test(piece)) {
       pending += piece;
       continue;

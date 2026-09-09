@@ -19,3 +19,11 @@ test('missing geometry rejects the whole group instead of adding a misleading pa
   assert.equal(designFeaturePromptText({partIds:['source:20']},{entry,parts:[{id:'source:20'}]}), '');
   assert.equal(designFeaturePromptText({faceIds:[],partIds:[]},{entry,referenceMap}), '');
 });
+
+test('imported parts and grouped faces keep the full filename and native selectors', () => {
+  const entry = {file:'models/Hex Drive Screw (2).STEP', fileRefPrefix:'Hex Drive Screw (2).STEP'};
+  const parts = [{id:'o1'}, {id:'o2',name:'same label'}, {id:'o3',name:'same label'}];
+  assert.equal(designFeaturePromptText({partIds:['o3','o1','o2']},{entry,parts}), '"Hex Drive Screw (2).STEP"#o1,o2,o3');
+  const referenceMap = new Map(['o1.f2','o1.f3'].map(id => [id,{id,selectorType:'face',copyText:`"Hex Drive Screw (2).STEP"#${id} surface info`}]));
+  assert.equal(designFeaturePromptText({faceIds:['o1.f3','o1.f2']},{entry,referenceMap}), '"Hex Drive Screw (2).STEP"#o1.f2,o1.f3');
+});

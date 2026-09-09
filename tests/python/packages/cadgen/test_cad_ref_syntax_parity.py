@@ -211,3 +211,12 @@ class RefFileGuardTest(unittest.TestCase):
         self.assertFalse(path_has_suffix("a/b/plate.stl", "late.stl"))
         self.assertFalse(path_has_suffix("plate.stl", "a/plate.stl"))
         self.assertFalse(path_has_suffix("a/b/plate.stl", ""))
+
+class ImportedFilenameTokenTests(unittest.TestCase):
+    def test_quoted_paths_round_trip(self) -> None:
+        for path in ['models/Hex Drive Screw (2).STEP', 'models/café #1 "screw".STEP']:
+            token = build_cad_token(path, 'o1.f2,o1.f3')
+            parsed = parse_cad_tokens(token)
+            self.assertEqual(1, len(parsed))
+            self.assertEqual(path, parsed[0].cad_path)
+            self.assertEqual(('o1.f2', 'o1.f3'), parsed[0].selectors)
