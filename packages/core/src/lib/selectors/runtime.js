@@ -425,6 +425,7 @@ function buildReference({
       center: row.center || null,
       normal: row.normal || null,
       params: row.params || null,
+      inwardCylinder: row.inwardCylinder ?? null,
       triangleStart: row.triangleStart ?? 0,
       triangleCount: row.triangleCount ?? 0,
       segmentStart: row.segmentStart ?? 0,
@@ -546,7 +547,7 @@ export function buildSelectorRuntime(bundle, {
   })));
   references.push(...faces.map((row, rowIndex) => buildReference({
     selectorType: "face",
-    row,
+    row: { ...row, inwardCylinder: buffers.inwardCylinders ? buffers.inwardCylinders[rowIndex] === 1 : null },
     rowIndex,
     singleOccurrenceId,
     copyCadPath,

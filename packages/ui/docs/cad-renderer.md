@@ -170,3 +170,29 @@ See [settings controls](settings-ui.md), [render capabilities](render-types.md)
 and [renderer contracts](renderers.md) for changes inside the shared package.
 
 The optional `@hardcore/ui/renderers/cad/empty` entry exports `EmptyCadBackdrop` for the web host’s missing-file presentation. It lazily mounts the same empty CAD viewport with the host’s `preferences` and `colorScheme`, and overlays its `children`. It owns no file access, catalog subscription, or persisted state. This preserves the original grid and camera behind `MissingFileAlert` without loading CAD into the master viewer.
+
+## Read-only feature groups
+
+The STEP Tree panel offers **Recognize features** for the model or one selected
+assembly part. This opt-in analysis uses loaded artifact topology and the current
+surface tessellation; it never reads a model recipe or modifies the STEP file.
+The ordinary geometry tree remains available without recognition.
+
+The first recognizer supports constant-radius cylindrical hole walls and straight
+rounded slots consisting of two semicylinders and two tangent planar walls. It
+checks inward-facing geometry so exterior bosses are excluded. Groups contain
+wall faces only, not rims or end faces. Dimensions are measured geometric values
+in millimetres, not editable parameters or recovered modeling history. Unsupported
+and freeform features remain accessible through the ordinary tree. Recognition
+is limited to 20,000 faces per target part.
+
+Clicking a group selects all of its faces. Expand it to select an individual face;
+**Copy reference** uses the existing CAD selector format, and **Add to prompt**
+uses the host's existing reference callback. Reopening a grouped face reference
+selects the whole group. Results are transient and reset when the file's artifact
+revision changes. References and measurements retain their existing panels.
+
+The regression fixture `models/examples/src/recognition_fixture.py` produces a
+30 × 8 mm slot, a 6 mm hole, and an exterior boss. The core recognition tests use
+its surface artifact extracted after a STEP export/reimport, without the source
+recipe or a Python runtime.
