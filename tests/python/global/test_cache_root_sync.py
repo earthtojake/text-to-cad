@@ -1,7 +1,7 @@
 """The user-level cache root is a CROSS-LANGUAGE contract.
 
 Python (cadgen/_internal/cache_paths.py) and JS (cadgenCacheRootDir in
-packages/cadgen-js/src/lib/surf/tessellationCacheFs.mjs) must resolve the SAME
+packages/core/src/lib/surf/tessellationCacheFs.mjs) must resolve the SAME
 directory from the same environment, or the "one cache warms every consumer"
 property silently splits into per-language stores. Same spirit as
 test_render_contract_sync: a one-sided change fails here before it can ship.
@@ -24,8 +24,8 @@ from unittest import mock
 from cadgen._internal import cache_paths
 
 ROOT = Path(__file__).resolve().parents[3]
-CADJS_FS = ROOT / "packages" / "cadgen-js" / "src" / "lib" / "surf" / "tessellationCacheFs.mjs"
-TESSELLATE_JS = ROOT / "packages" / "cadgen-js" / "src" / "lib" / "surf" / "tessellate.js"
+CADJS_FS = ROOT / "packages" / "core" / "src" / "lib" / "surf" / "tessellationCacheFs.mjs"
+TESSELLATE_JS = ROOT / "packages" / "core" / "src" / "lib" / "surf" / "tessellate.js"
 
 
 def _node_resolve_root(env_overrides: dict[str, str]) -> str:
@@ -108,7 +108,7 @@ class CacheRootSyncTest(unittest.TestCase):
     def test_key_scheme_carries_the_version_salt(self) -> None:
         # Policy: the key must salt the algorithm version. Grep-level pin so a
         # JS-side refactor cannot drop it without failing a Python-side gate.
-        cache_js = (ROOT / "packages" / "cadgen-js" / "src" / "lib" / "surf" / "tessellationCache.js").read_text(encoding="utf-8")
+        cache_js = (ROOT / "packages" / "core" / "src" / "lib" / "surf" / "tessellationCache.js").read_text(encoding="utf-8")
         self.assertIn("-t${TESSELLATION_VERSION}-", cache_js)
 
 

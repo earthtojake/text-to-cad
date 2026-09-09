@@ -6,7 +6,7 @@ viewer scanner's package-path constants drifted silently once nothing compared
 them) — these greps are the structural version of that comparison: a one-sided
 bump fails CI before it can ship a viewer that cannot read what cadgen writes.
 
-The CLIENT half of that boundary is JS — ``packages/cadgen-js`` parses ``.surf``
+The CLIENT half of that boundary is JS — ``packages/core`` parses ``.surf``
 in the browser — so the SURF_VERSION pin stays here. The viewer BACKEND is
 ``cadgen.viewer`` now and reads the store through cadgen's own helpers, so there
 is no second derivation of a store key left to compare; what remains for it here
@@ -44,7 +44,7 @@ class RenderContractSyncTest(unittest.TestCase):
         )
         js_version = _extract(
             r"^export const SURF_VERSION = (\d+);$",
-            ROOT / "packages/cadgen-js/src/lib/surf/container.js",
+            ROOT / "packages/core/src/lib/surf/container.js",
         )
         self.assertEqual(
             python_version,
@@ -63,7 +63,7 @@ class RenderContractSyncTest(unittest.TestCase):
             _extract(r"^SOURCE_SIDECAR_SCHEMA_VERSION = (\d+)$", sidecar_module),
             _extract(
                 r"^export const SOURCE_SIDECAR_SCHEMA_VERSION = (\d+);",
-                ROOT / "packages/cadgen-js/src/common/kinematicsModule.js",
+                ROOT / "packages/core/src/common/kinematicsModule.js",
             ),
             "SOURCE_SIDECAR_SCHEMA_VERSION diverged between cadgen and the JS "
             "kinematics loader — the loader REFUSES any other schema, so a "

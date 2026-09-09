@@ -1,4 +1,4 @@
-import LoadingIcon from "cad-viewer/loading-icon";
+import LoadingIcon from "@hardcore/ui/loading-icon";
 import { useEffect, useMemo } from "react";
 import { AlertCircle, Loader2, RotateCcw } from "lucide-react";
 

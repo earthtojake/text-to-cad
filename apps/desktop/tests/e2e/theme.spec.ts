@@ -33,8 +33,8 @@ import {
  * with it. In this app only the app writes the document
  * (`src/renderer/hooks/use-theme.ts`); the surface renders from the
  * `colorScheme` prop it is handed and may only read
- * (`apps/viewer/docs/file-view.md`, and the rule itself in
- * `apps/viewer/src/client/file-view/hostLayout.js`). Its signature is the two
+ * (`apps/web/docs/file-view.md`, and the rule itself in
+ * `apps/web/src/client/file-view/hostLayout.js`). Its signature is the two
  * attributes only IT writes — `data-theme` and `data-theme-preference` — so
  * their absence after a file, a theme panel, a slider and a preset is the
  * assertion.

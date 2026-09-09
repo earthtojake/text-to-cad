@@ -4,7 +4,7 @@ The published distribution: everything that turns CAD source into documents,
 documents into derived state, and derived state into pixels and meshes. One
 PyPI package carrying both language halves — the Python engine under
 `src/cadgen/`, and the built JavaScript it executes under
-`src/cadgen/_runtime/` (the cadgen-js runtime and the CAD Viewer's client,
+`src/cadgen/_runtime/` (the @hardcore/core runtime and the CAD Viewer's client,
 bundled in at build time; the JS *source* lives in its own packages and never
 ships as source).
 
@@ -15,12 +15,16 @@ snapshots, the warm daemon and its build pool, and the CAD Viewer
 instance).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily,
-never at namespace-import time) and the *built outputs* of `cadgen-js`.
-Never app code, never `cadgen-js` source at runtime.
+never at namespace-import time) and the *built outputs* of `@hardcore/core`.
+Never app code, never `@hardcore/core` source at runtime.
 
 **DEPENDED ON BY** — every skill (as a pinned installed distribution). The
 CAD Viewer is not a dependent but a part: `cadgen.viewer` serves the client and
 submits a document's compile as a job to the same build pool every door uses.
+
+The shared-package migration is a pure refactor. All applications retain their
+existing UI, UX and functionality; CLI behavior, file formats, cache formats
+and bundled runtime paths remain unchanged.
 
 ## The design laws
 
@@ -29,20 +33,21 @@ when it works. Each carries a pressure-test to apply before writing code.
 
 ### 1. Generated files are totally independent of their source code
 
-A generated file (STEP, DXF, STL, GLB, 3MF) and its sidecar
-(`<name>.step.json`) stand alone, forever.
+A generated file (STEP, DXF, STL, GLB, 3MF), its optional kinematics sidecar
+(`<name>.step.json`), and its optional authored render module
+(`<name>.step.js`) stand alone, forever.
 
-*Pressure-test*: a generated file must be fully renderable — viewer,
-snapshot, inspect — by reading ONLY the generated file(s), the sidecar, and
-the store's artifact side. Never the source. A file whose bytes have no tree
-in the store is compiled from those bytes (`cadgen step compile` semantics),
-never from source. Deleting every `.py` in a project must not change what
-renders.
+*Pressure-test*: a generated file must be fully renderable — viewer, snapshot,
+inspect — by reading ONLY the generated file(s), its optional sidecar and render
+module, and the store's artifact side. Never the model source. A file whose
+bytes have no tree in the store is compiled from those bytes (`cadgen step
+compile` semantics), never from source. Deleting every `.py` in a project must
+not change what renders.
 
-- Nothing a renderer reads references the source tree: the sidecar's
-  kinematics are resolved numbers and labels, its animation is COPIED
-  module text; a tree and its components carry no path, script or record key
-  ([`STORE.md`](STORE.md) §2, the two-sides law).
+- Nothing a renderer reads references the source tree: the sidecar's kinematics
+  are resolved numbers and labels, while choreography lives in the authored
+  render module beside the document; a tree and its components carry no path,
+  script or record key ([`STORE.md`](STORE.md) §2, the two-sides law).
 - A door never refuses a document and never auto-rebuilds: whether a
   document is behind its script is the model's record's question, answered
   by `cadgen store why` and the build tree, never by a render path.
@@ -60,6 +65,12 @@ layout, formats, gate, two-sides law and invariants are the contract in
 reads from the store. Where this document and `STORE.md` disagree, `STORE.md`
 is right and this one is stale.
 
+Component tessellation bytes cross the shared `store.tess_cache` boundary.
+Hosts validate and decode their own transport inputs, then pass validated keys
+and opaque bytes to the store. Viewer and snapshot callers therefore share one
+cache implementation and the store's TESB framing without making cache hits a
+correctness requirement.
+
 *Pressure-test*: everything in the store is (a) a pure function of some
 source or document, (b) safely deletable at any time, and (c) rebuildable
 by running the models again. If losing a store entry would lose information,
@@ -75,18 +86,20 @@ concurrent outcome, and no reader ever waits on a build.
 
 ### 3. One sidecar per artifact, and it belongs to that artifact alone
 
-`part.step` gets `part.step.json` — schema-versioned sections (kinematics,
-animation). New capability = new section + schema bump, never a second sidecar
-file. Model-side, beside the artifact, so it travels with the file it
-describes — and it exists only when law 17 says it must.
+`part.step` gets `part.step.json` only when it declares kinematics. That sidecar
+is schema-versioned; new persisted declarations require a schema bump, never a
+second sidecar file. Model-side, beside the artifact, it travels with the file
+it describes — and it exists only when law 17 says it must. Render-only
+choreography lives separately in the authored `part.step.js` render module.
 
 A sidecar describes the model that declared it — never its parent, never its
 children. A parent composing a child receives GEOMETRY (tree, labels, colors,
-placements, exact shape) and nothing else: the child's kinematics and
-animation are written by the child's own build into the child's own sidecar,
-and an assembly that needs a relation declares it on the assembly. This is
-what lets a cached child stand in for its function: the cache carries
-geometry, and geometry is all a parent may read.
+placements, exact shape) and nothing else: the child's kinematics are written
+by the child's own build into the child's own sidecar, while its authored
+render module remains beside the child's document. An assembly that needs a
+relation declares it on the assembly. This is what lets a cached child stand in
+for its function: the cache carries geometry, and geometry is all a parent may
+read.
 *Pressure-test*: build a child that declares `kinematics=`, then build a parent
 that composes it. The parent's sidecar must contain only the parent's own
 declarations, and the child's sidecar must be unchanged by the parent's build.
@@ -152,7 +165,7 @@ The cardinal sin is plausible-wrong output at exit 0. No silent fallbacks,
 no globs, no guessing; a failed render leaves NO file at the requested
 path.
 
-### 11–14. Runtime laws (shared with cadgen-js)
+### 11–14. Runtime laws (shared with @hardcore/core)
 
 Kinematics is pure data and choreography is pure JS, fully independent
 (11). Clients render from file + sidecar + the store's artifact side and never
@@ -161,7 +174,7 @@ store hit (13). Composition: importing binds, calling links — a parent
 depends on a child by its RESULT (the pinned tree), on a constant by its
 VALUE, on a helper by its FILE — and a model must never `read_step` its own
 output (14). The bundled runtime under `_runtime/` is the JS half of these;
-the laws' JS statements live with the cadgen-js source.
+the laws' JS statements live with the @hardcore/core source.
 
 ### 15. The package ships alone
 
@@ -170,9 +183,15 @@ bundled `_runtime/`, and this document. It works with the repository it
 was built from gone — and its markdown must read that way, referring to
 nothing outside the package.
 
+Runtime lookup uses the packaged `_runtime/` by default. Development hosts can
+explicitly override its Node builders, browser runtime, or Viewer assets with
+`CADGEN_NODE_BUILDERS_DIR`, `CADGEN_BROWSER_RUNTIME_DIR`, and
+`CADGEN_VIEWER_DIST` (or the Viewer's `--dist` option). Installed code never
+searches parent directories or assumes a checkout layout.
+
 *Pressure-test*: every sentence in the package's markdown must be true and
 actionable for someone who only ran `pip install cadgen`. Naming a bundled
-thing ("the cadgen-js runtime bundled at build time") passes; a repo path
+thing ("the @hardcore/core runtime bundled at build time") passes; a repo path
 to its source, a repo script, or a repo workflow does not.
 
 ### 16. Decorator inputs never change the geometry
@@ -228,7 +247,8 @@ src/cadgen/
   assembly.py            # AssemblyHelper — positioning through native joints, labels
   results.py             # the typed Results every verb returns (stdlib-only)
   store/                 # the store (STORE.md): objects, index, records, trees,
-                         #   closure, gate, materialize, publish, lazy, gc, view
+                         #   tess cache/framing, closure, gate, materialize,
+                         #   publish, lazy, gc, view
   cli/                   # generated command shells, one per <format> <verb>
   cli_tree.py            # the build tree on stderr / JSONL events
   daemon/                # the build pool: executors (daemon + transient),

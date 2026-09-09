@@ -4,7 +4,15 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { PYTHON_BUILD, TARGETS, bundledRuntime, hostTarget, pythonBuildUrl, runtimeLayout } from "../../../scripts/bundle-runtime.mjs";
+import {
+  PYTHON_BUILD,
+  TARGETS,
+  bundledRuntime,
+  hostTarget,
+  pythonBuildUrl,
+  runtimeLayout,
+  runtimePipInstallArgs,
+} from "../../../scripts/bundle-runtime.mjs";
 import { bundledPaths, runtimeTarget } from "@main/cad/runtime";
 
 /**
@@ -80,5 +88,25 @@ describe("the layout", () => {
     expect(bundledRuntime(out, "mac-arm64", "9.9.9")).toBeNull();
     fs.writeFileSync(layout.marker, JSON.stringify({ target: "mac-arm64", cadgen: "9.9.9", python: "3.13.15" }));
     expect(bundledRuntime(out, "mac-arm64", "9.9.9")).toMatchObject({ cadgen: "9.9.9", target: "mac-arm64" });
+  });
+});
+
+describe("the runtime install", () => {
+  it("installs the exact supplied cadgen wheel while resolving only its dependencies", () => {
+    const wheel = path.join("/release", "cadgen-9.9.9-py3-none-any.whl");
+    const constraints = path.join("/release", "constraints.txt");
+    const layout = runtimeLayout(path.join("/runtime", "linux-x64"), "linux-x64");
+    const args = runtimePipInstallArgs({
+      layout,
+      asset: PYTHON_BUILD.targets["linux-x64"],
+      pyMinor: "3.13",
+      wheel,
+      constraints,
+    });
+
+    expect(args.at(-1)).toBe(wheel);
+    expect(args).toContain(constraints);
+    expect(args).not.toContain("cadgen==9.9.9");
+    expect(args).not.toContain("--find-links");
   });
 });

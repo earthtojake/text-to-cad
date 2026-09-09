@@ -73,7 +73,7 @@ publish:
   repo: text-to-cad
   releaseType: release
 
-# better-sqlite3 and node-pty are native. `npm run postinstall` runs
+# better-sqlite3 and node-pty are native. `npm run native:rebuild` runs
 # `electron-builder install-app-deps`, which rebuilds them against the Electron
 # version above; asarUnpack keeps their .node files outside the archive so
 # dlopen can find them at run time.

@@ -6,7 +6,7 @@ import { ExplorerToggle } from "@renderer/app/PaneToggles";
 import { SettingCard, SettingRow } from "@renderer/features/settings/SettingCard";
 import { SettingsRoute } from "@renderer/features/settings/SettingsRoute";
 import { ExplorerPane } from "@renderer/features/explorer/ExplorerPane";
-import { TooltipProvider } from "@renderer/components/ui/tooltip";
+import { TooltipProvider } from "@hardcore/ui/primitives/tooltip";
 import { useExplorer } from "@renderer/state/explorer";
 import { useProjects } from "@renderer/state/projects";
 import { useUi } from "@renderer/state/ui";

@@ -17,7 +17,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--prefix",
-        "apps/viewer",
+        "apps/web",
         "run",
         "dev",
         "--",

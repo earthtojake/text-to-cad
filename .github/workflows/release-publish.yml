@@ -256,7 +256,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: apps/desktop/package-lock.json
+          cache-dependency-path: package-lock.json
 
       # The wheel this very release is publishing, into the directory the runtime
       # bundler installs from (and electron-builder's extraResources copies, so a
@@ -281,25 +281,30 @@ jobs:
       # written here from the wheel itself. The bundler passes it to pip as `-c`.
       - name: Write constraints.txt
         run: |
+          wheel="$(python -c 'import pathlib, sys; matches = list(pathlib.Path("apps/desktop/resources/cadgen").glob(f"cadgen-{sys.argv[1]}-*.whl")); sys.exit(f"expected one cadgen {sys.argv[1]} wheel, found {len(matches)}") if len(matches) != 1 else sys.stdout.write(str(matches[0].resolve()))' "${{ needs.publish.outputs.version }}")"
           python -m venv "$RUNNER_TEMP/cadgen-venv"
-          "$RUNNER_TEMP/cadgen-venv/bin/python" -m pip install --quiet --find-links apps/desktop/resources/cadgen "cadgen==${{ needs.publish.outputs.version }}"
+          "$RUNNER_TEMP/cadgen-venv/bin/python" -m pip install --quiet "$wheel"
           node apps/desktop/scripts/cad-resources.mjs --no-wheel --python "$RUNNER_TEMP/cadgen-venv/bin/python"
         shell: bash
         if: runner.os != 'Windows'
 
       - name: Write constraints.txt (Windows)
         run: |
+          wheel="$(python -c 'import pathlib, sys; matches = list(pathlib.Path("apps/desktop/resources/cadgen").glob(f"cadgen-{sys.argv[1]}-*.whl")); sys.exit(f"expected one cadgen {sys.argv[1]} wheel, found {len(matches)}") if len(matches) != 1 else sys.stdout.write(str(matches[0].resolve()))' "${{ needs.publish.outputs.version }}")"
           python -m venv "$RUNNER_TEMP/cadgen-venv"
-          "$RUNNER_TEMP/cadgen-venv/Scripts/python.exe" -m pip install --quiet --find-links apps/desktop/resources/cadgen "cadgen==${{ needs.publish.outputs.version }}"
+          "$RUNNER_TEMP/cadgen-venv/Scripts/python.exe" -m pip install --quiet "$wheel"
           node apps/desktop/scripts/cad-resources.mjs --no-wheel --python "$RUNNER_TEMP/cadgen-venv/Scripts/python.exe"
         shell: bash
         if: runner.os == 'Windows'
 
-      # postinstall runs `electron-builder install-app-deps`, which rebuilds
+      # The explicit native:rebuild step rebuilds
       # better-sqlite3 and node-pty against Electron's ABI. Skipping scripts here would
       # ship an app whose database cannot open.
       - name: Install desktop dependencies
-        run: npm --prefix apps/desktop ci
+        run: |
+          npm ci
+          npm run native:rebuild -w hardcore
+          npm run build:packages
 
       # The CAD runtime ships INSIDE the app: a pinned python-build-standalone with
       # cadgen and its whole dependency closure installed (scripts/bundle-runtime.mjs),

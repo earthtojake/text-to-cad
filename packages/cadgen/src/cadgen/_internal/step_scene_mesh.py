@@ -301,7 +301,7 @@ def adaptive_mesh_resolution_from_hints(hints: dict[str, Any]) -> AdaptiveMeshRe
     profile + hints into the visibility classes the tree is built with, so a
     scene that lands on ``coarse-assembly`` renders feature edges only. It
     decides nothing about tessellation — the one tessellator is JS
-    (``packages/cadgen-js/src/lib/surf/tessellate.js``) and takes relative
+    (``packages/core/src/lib/surf/tessellate.js``) and takes relative
     tolerances of its own.
 
     The thresholds below are therefore a complexity ladder, not a quality

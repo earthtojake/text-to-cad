@@ -196,6 +196,7 @@ class ServerInfo(HttpLayerTestCase):
         self.assertEqual(info["backend"], "local-fs")
         self.assertEqual(info["serverMode"], "serve")
         self.assertEqual(info["serverFeatures"], ["path-directory"])
+        self.assertRegex(info["rootId"], r"^local-fs:[0-9a-f]{64}$")
         self.assertEqual(info["stepArtifactGenerationAvailable"], False)
         self.assertEqual(info["pid"], os.getpid())
         self.assertEqual(info["port"], self.fixture.port)
@@ -209,7 +210,7 @@ class ServerInfo(HttpLayerTestCase):
         text = body.decode("utf-8")
         order = [
             '"app"', '"viewerVersion"', '"identityToken"', '"serverMode"', '"serverFeatures"', '"backend"',
-            '"rootPath"', '"rootName"', '"port"', '"pid"',
+            '"rootId"', '"rootPath"', '"rootName"', '"port"', '"pid"',
             '"stepArtifactGenerationAvailable"',
             '"packageDir"', '"startedAt"', '"url"',
         ]
@@ -220,6 +221,35 @@ class ServerInfo(HttpLayerTestCase):
         _, _, body = self.fixture.request("GET", "/__cad/server")
         self.assertNotIn(b", ", body)
         self.assertNotIn(b'": ', body)
+
+    def test_root_identity_follows_realpath_and_not_port(self):
+        second = create_cad_app(
+            root=self.fixture.root,
+            host="127.0.0.1",
+            port=self.fixture.port + 1,
+            dist_dir=self.fixture.dist,
+        )
+        self.assertEqual(second.root_id, self.fixture.app.root_id)
+
+        alias = Path(self.fixture.tmp.name, "models-alias")
+        try:
+            alias.symlink_to(self.fixture.root, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"directory symlinks unavailable: {exc}")
+        through_alias = create_cad_app(
+            root=str(alias),
+            host="127.0.0.1",
+            port=self.fixture.port + 2,
+            dist_dir=self.fixture.dist,
+        )
+        self.assertEqual(through_alias.root_id, self.fixture.app.root_id)
+
+    def test_catalog_carries_the_same_stable_root_identity(self):
+        import json
+
+        _, _, server_body = self.fixture.request("GET", "/__cad/server")
+        _, _, catalog_body = self.fixture.request("GET", "/__cad/catalog")
+        self.assertEqual(json.loads(catalog_body)["rootId"], json.loads(server_body)["rootId"])
 
     def test_the_file_param_the_client_sends_is_ignored(self):
         status, _, _ = self.fixture.request("GET", "/__cad/server?file=/anything.step")

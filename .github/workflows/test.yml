@@ -162,10 +162,10 @@ jobs:
   # longer exists.
   #
   # macOS because the desktop app's two native modules (better-sqlite3, node-pty) are
-  # rebuilt against Electron's ABI by `npm ci`'s postinstall, and macOS is both the
+  # rebuilt explicitly against Electron's ABI, and macOS is both the
   # platform this app is developed on and the one whose packaging (hardened runtime,
   # notarisation, arm64 + x64) has the most that can go wrong. Its own `npm ci`: the
-  # desktop app is a standalone npm project like apps/viewer, and the Linux job's
+  # desktop app participates in the root npm workspace, and the Linux job's
   # setup-deps knows nothing about it.
   #
   # The Playwright step drives the BUILT app through `_electron`, so no browser
@@ -184,13 +184,16 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: apps/desktop/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      # postinstall runs `electron-builder install-app-deps`, which is what rebuilds
+      # The explicit native:rebuild step runs electron-builder install-app-deps for
       # better-sqlite3 and node-pty for Electron. A plain `npm ci --ignore-scripts`
       # would install them for Node's ABI and every database test would fail to load.
       - name: Install desktop dependencies
-        run: npm --prefix apps/desktop ci
+        run: |
+          npm ci
+          npm run native:rebuild -w hardcore
+          npm run build:packages
 
       - name: Typecheck
         run: npm --prefix apps/desktop run typecheck

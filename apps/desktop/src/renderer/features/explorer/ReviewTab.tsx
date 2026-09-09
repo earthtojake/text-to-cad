@@ -43,10 +43,14 @@ import {
 } from "@shared/types";
 import type { Project } from "@shared/types";
 
-import { EmptyState } from "cad-viewer/shell";
-import { FileIcon } from "cad-viewer/shell";
-import { SHARED_EDITOR_OPTIONS, languageFor, monacoTheme } from "./monaco";
-import { setupMonaco } from "./monaco-setup";
+import { EmptyState } from "@hardcore/ui/navigation";
+import { FileIcon } from "@hardcore/ui/navigation";
+import {
+  SHARED_EDITOR_OPTIONS,
+  languageFor,
+  monacoTheme,
+  setupMonaco,
+} from "@hardcore/ui/renderers/code/editor";
 import type { ChangedFile, FileDiff, GitStatus } from "./types";
 
 /**

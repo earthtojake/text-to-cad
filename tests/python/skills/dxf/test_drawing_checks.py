@@ -163,15 +163,15 @@ class LayerIntentTokenTest(unittest.TestCase):
         # Two hand-copied tables with a comment saying they mirror each other, and nothing
         # pinning them: validation would accept a drawing the viewer then renders as cut paths.
         source = (
-            REPO_ROOT / "packages" / "cadgen-js" / "src" / "lib" / "dxf" / "parseDxf.js"
+            REPO_ROOT / "packages" / "core" / "src" / "lib" / "dxf" / "parseDxf.js"
         ).read_text(encoding="utf-8")
         block = re.search(r"LAYER_INTENT_BY_TOKEN = new Map\(\[(.*?)\]\);", source, re.DOTALL)
-        self.assertIsNotNone(block, "cadgen-js must declare LAYER_INTENT_BY_TOKEN")
+        self.assertIsNotNone(block, "@hardcore/core must declare LAYER_INTENT_BY_TOKEN")
         js_pairs = dict(re.findall(r'\["([a-z0-9]+)",\s*"([a-z]+)"\]', block.group(1)))
         self.assertEqual(
             drawing_checks._LAYER_INTENT_BY_TOKEN,
             js_pairs,
-            "cadgen and cadgen-js disagree on layer intent; validation and rendering would classify "
+            "cadgen and @hardcore/core disagree on layer intent; validation and rendering would classify "
             "the same drawing differently",
         )
 def _drawing_with_dimensions():

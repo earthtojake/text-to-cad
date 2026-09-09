@@ -89,7 +89,7 @@ packages/cadgen/build/
 
 # The CAD Viewer client's place in the cadgen wheel. Written by
 # `scripts/bundle/bundle.sh` (the --viewer stage) right before `python -m build`;
-# never committed, because a checkout serves apps/viewer/dist directly.
+# never committed, because development can explicitly select apps/web/dist.
 packages/cadgen/src/cadgen/_runtime/viewer/
 
 # Design notes are local working files, never committed (user policy 2026-08-29).

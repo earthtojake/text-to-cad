@@ -3,5 +3,6 @@
   "git": {
     "deploymentEnabled": false
   },
-  "buildCommand": "npm run build"
+  "installCommand": "cd ../.. && npm ci --workspace @hardcore/core --workspace cad-skills-docs",
+  "buildCommand": "cd ../.. && npm run build:docs"
 }

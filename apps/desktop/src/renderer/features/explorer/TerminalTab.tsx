@@ -11,7 +11,7 @@ import { useResolvedTheme } from "@renderer/hooks/use-theme";
 import { useExplorer } from "@renderer/state/explorer";
 import type { Project } from "@shared/types";
 
-import { EmptyState } from "cad-viewer/shell";
+import { EmptyState } from "@hardcore/ui/navigation";
 
 /**
  * xterm.js over a pty in main.

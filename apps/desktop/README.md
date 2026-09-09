@@ -9,21 +9,37 @@ Electron 40 · electron-vite · React 19 · TypeScript · Tailwind v4 ·
 shadcn/ui (stock neutral) · Vercel AI Elements · `@agentclientprotocol/sdk` ·
 Monaco (code) · TipTap over remark (markdown).
 
-A standalone npm project, like `apps/viewer` — there is no root `package.json`,
-so every command below runs from `apps/desktop` (or with
-`npm --prefix apps/desktop`).
+This app is a root npm workspace. Install dependencies in this checkout with
+`npm ci` from the repository root, build shared packages, then rebuild native
+modules explicitly. Do not borrow another checkout's `node_modules`: packaged
+Electron dependency resolution must be verified from this workspace's tree.
 
-Unlike `apps/viewer`, a worktree cannot borrow another checkout's
-`node_modules` through a symlink: electron-builder resolves the dependency tree
-by real path, and a `node_modules` that lives outside the project resolves every
-transitive dependency to `undefined`. The build still succeeds; the app it
-produces dies at launch on a missing module. Run `npm ci` here.
+The migration to `@hardcore/core` and `@hardcore/ui` is a **pure refactor**.
+All existing UI, UX and functionality are preserved: window/session layout,
+file renderers, controls, shortcuts, editing/saves/conflicts, CAD tools,
+reference chips, preferences, themes and native services. Desktop's local
+controls keep their appearance; the shared file viewer keeps the viewer's.
+
+`features/explorer/FileTab.tsx` is a thin host of `@hardcore/ui/file-viewer`.
+Its adapters translate IPC file access, source capabilities, root identity,
+persistence and CAD commands into package contracts. `renderers.tsx` registers
+the shared CAD, Markdown, code, image, PDF and fallback renderers. The whole
+file-tab interface is shared with web. Projects, sessions, browser/terminal/
+review tabs, agent integrations and native services remain in this app.
+Neither shared package imports app source, and desktop imports no web source.
+The host keeps CAD themes, seen tutorial tips and file-sheet tab layouts in
+one window-wide preference store backed by their existing global storage keys.
+Active and newly opened roots share those preferences; document and panel
+state remain scoped to their root or tab.
 
 ## Dev
 
 ```sh
-npm install          # postinstall rebuilds better-sqlite3 and node-pty for Electron
-npm run dev          # electron-vite dev: main, preload and the renderer, with HMR
+# From the repository root:
+npm ci
+npm run build:packages
+npm run native:rebuild --workspace hardcore
+npm run dev:desktop  # electron-vite: main, preload and renderer with HMR
 ```
 
 The repo's `.claude/launch.json` has a `desktop-dev` entry that runs the same
@@ -76,7 +92,7 @@ carries a path, a file name, a project name, a prompt, or an agent's output.
 The silver Hardcore star appears while the CAD runtime/viewer starts and while
 geometry loads. An initial agent connection uses a smaller version; the live
 Thinking/Running status uses a 24px mark with plain, unanimated text. Waiting
-for approval holds a still pose. These reuse `cad-viewer/loading-icon` and its
+for approval holds a still pose. These reuse `@hardcore/ui/loading-icon` and its
 baked image (no additional WebGL context). OS/app reduced motion and hidden
 windows use the still image. Existing progress counts and status words remain
 the source of truth.
@@ -101,11 +117,10 @@ npm run e2e          # playwright _electron against out/ — run `npm run build`
 app's skills are composed into `resources/skills/` (`build:skills`),
 electron-vite builds main, preload and renderer into `out/`, and the MCP
 server is bundled into `out/hardcore-mcp/` (`build:mcp`). Packaging runs the
-same script. The renderer step compiles the CAD Viewer's client from source,
-so `apps/viewer/node_modules` and `packages/cadgen-js/node_modules` have to
-exist — in a worktree, symlink them from a checkout that has run `npm install`
-in each (those two links are fine; only this app's own `node_modules` must be
-real, see above).
+same script. The renderer consumes the compiled shared-package exports and
+bundles their lazy renderers, CSS, assets and workers. Run
+`npm run build:packages` from the repository root after shared code changes;
+app source continues to use HMR. Tests consume the same exports.
 
 ### Windows nobody sees
 
@@ -321,6 +336,12 @@ runtime is 1.24 GB on disk, the app 1.6 GB, the dmg 456 MB, the zip 468 MB
 — and that is the point (plan §8, as revised): nothing downloads at first
 launch.
 
+The runtime bundler installs the exact wheel file under `resources/cadgen/`.
+Release CI validates that there is one wheel matching the release version and
+uses that path both to derive dependency constraints and to build every target
+runtime; pip indexes and caches may supply dependencies, but never substitute a
+different cadgen build.
+
 | Platform | Targets |
 | --- | --- |
 | macOS | dmg + zip, arm64 and x64 |
@@ -516,7 +537,7 @@ the pane's width, and only a person's own toggle or drag writes it: an agent
 opening a file shows the pane without deciding anything for next time.
 
 A CAD file in the explorer is laid out by the desktop, not measured by the
-viewer (`renderers/CadRenderer.tsx`): the surface is pinned to its desktop
+shared FileViewer frame: the surface is pinned to its desktop
 layout so nothing is ever a drawer over the model, its panels are drawn in
 the file tab's own panel column (so their width is that column's — see "The
 panels a file has"), and light/dark is the app's colour scheme rather than
@@ -534,8 +555,8 @@ already uses. A whole-document serializer moves 18 lines of this
 repository's `README.md` and 149 of its `AGENTS.md` on a one-word edit; this
 moves the block. Raw HTML, link reference definitions and footnotes have no
 node in the schema and are held as their own bytes. See
-`features/explorer/markdown/document.ts` for the whole argument, and
-`tests/unit/renderer/markdown-*.test.ts` for the proof, which is run against
+`@hardcore/ui`'s Markdown document bridge for the whole argument, and
+`packages/ui/src/renderers/markdown/{document,editor}.test.ts` for the proof, which is run against
 these three files.
 
 **Paths in a transcript are links** when they exist (plan §8, and what the
@@ -549,7 +570,7 @@ the `a` component draws a candidate as a button once it is known to be a
 file or a folder, and as the words it was otherwise. A file opens in the
 explorer with its renderer; a folder is revealed in the tree; a path with
 a selector (`bracket.step#o1.2`, `#label.f45`) opens the file in the
-viewer and hands the selector to `CadFileView`'s `selectReference`. Paths
+viewer and hands the selector to the CAD renderer's command source. Paths
 are relative to the thread's root — its worktree when it has one.
 
 Activity summaries stay neutral even when a call fails. A separate red failure count marks a folded group, and its failed rows show a red **Failed** indicator; expand a row for the original error. Completed thinking rows use an ellipsis, with a spinner while thinking is active. Status comes from the agent’s tool-call status, not from words in its output.
@@ -569,7 +590,7 @@ A CAD reference typed into it — `models/bracket.step#o1.2`, `#label.f45`,
 `bracket.step` — becomes a chip the moment the space after it lands, a
 pasted prompt's references become chips at once, and the viewer's Add to
 prompt action places a chip in the box and focuses it
-(`CadFileView`'s `onReference`). The chip is an inline atom in a
+(the CAD renderer's `onReference` callback). The chip is an inline atom in a
 one-paragraph ProseMirror document: Backspace removes it whole, the arrow
 keys step over it and select it as a unit, and it prints back to its plain
 token on send, so what the agent reads is exactly the text. The draft in
@@ -799,14 +820,14 @@ tree's own header when the tree opened; the tree's header is the filter and
 nothing else). There is no `Copy path` button and no `Open ▾`: those are
 items in the entry menus.
 
-The row itself is the CAD Viewer's — `cad-viewer/shell`, which the standalone
+The row itself is the CAD Viewer's — `@hardcore/ui/navigation`, inside the complete shared FileViewer that web
 viewer draws too, so the two apps have one nav row and not two that resemble
 each other. This app supplies the ends (the branch label, the unsaved dot, its
 panel toggles) and, through a source adapter, the two things only it has:
 where a directory listing comes from and the entry menus on a crumb
-(`features/explorer/crumb-source.tsx`).
+(`features/explorer/adapters/fileSource.ts`).
 
-**Every crumb is a menu of its neighbours** (`cad-viewer/shell`'s
+**Every crumb is a menu of its neighbours** (`@hardcore/ui/navigation`'s
 `Breadcrumbs.jsx`, the model in its `crumbs.js`), the way the CAD Viewer's
 breadcrumb is. The crumbs
 are the path's segments **below the root** — `STL/link_plate.stl` is `STL ›
@@ -828,13 +849,13 @@ has read costs the menu nothing and the two never disagree.
 
 **The file crumb carries a `⋯`** immediately after its name ("File actions"),
 which opens the same entry menu the right-click does — one table
-(`cad-viewer/shell`'s `entry-menu.js`), one set of actions, drawn as a dropdown instead of a
+(`@hardcore/ui/navigation`'s `entry-menu.js`), one set of actions, drawn as a dropdown instead of a
 context menu. A right-click is not a control anybody can see, and the file's
 own menu is the one worth pointing at.
 
 **Right-click a crumb or a tree row** for the entry menu
-(`cad-viewer/shell`'s `entry-menu.js` is the table, `entry-actions.ts` what each item does,
-`cad-viewer/shell`'s `EntryMenu.jsx` draws one from the other; the tree has one menu over
+(`@hardcore/ui/navigation`'s `entry-menu.js` is the table, `entry-actions.ts` what each item does,
+`@hardcore/ui/navigation`'s `EntryMenu.jsx` draws one from the other; the tree has one menu over
 the whole list aimed at the row that was clicked, and the empty space under
 the rows is the root). A file: Open (tree rows only — a crumb is the open
 file, and a file is one tab: opening it again by any door focuses that
@@ -846,7 +867,7 @@ in terminal · Reveal · Copy path · Copy relative path · Rename · Move to
 Trash; the root has no Rename and no Trash. The one destructive item is
 alone at the bottom and goes to the OS trash (`shell.trashItem`) with no
 dialog — the trash is the undo. Rename and the two `New …` are typed in
-place (`cad-viewer/shell`'s `InlineName.jsx`: Enter commits, Escape cancels, clicking away
+place (`@hardcore/ui/navigation`'s `InlineName.jsx`: Enter commits, Escape cancels, clicking away
 commits, the stem is selected and the extension is not); from a crumb they
 go to the tree, which is shown for them. F2 renames the tree's cursor row,
 ⌘⌫ (Ctrl+Delete) trashes it. Every edit is an `explorer.*` request main
@@ -861,7 +882,7 @@ folder are re-pointed or closed. `Open in terminal` on a folder is the one
 ### The panels a file has
 
 **One panel column, one list of panels, one open at a time**
-(`cad-viewer/shell`'s `panels.js`; the column is its `FilePanelColumn.jsx`).
+(`@hardcore/ui/navigation`'s `panels.js`; the column is its `FilePanelColumn.jsx`).
 The list is what the open file's renderer declares plus the **file tree**,
 which is the last entry and not a special case; the nav row draws one icon
 button per entry with `aria-pressed`, highlighted while its panel is open,
@@ -900,8 +921,7 @@ panels cannot be open however the writes interleave. `null` is "nobody has
 said" and resolves to the renderer's own default — the Inspector for a CAD
 file, the tree for everything else; `""` is nothing open, which a tab closed
 on purpose comes back to. The CAD pair is *controlled* in the viewer's
-surface (`themeEditing` / `onThemeEditingChange`, `fileSheetOpen` /
-`onFileSheetOpenChange`): at most one of the two is ever true, and the
+surface (`openPanel` / `onPanelOpen`): at most one of the two is ever true, and the
 surface reports the changes it makes itself — a measurement landing opens
 the Inspector — so the highlight follows what is on screen. A CAD tab whose
 runtime did not start declares no panels: two toggles over the failure card
@@ -924,7 +944,7 @@ turns the background charcoal here exactly as it does in the standalone
 viewer, and switching the app light or dark then leaves it alone. The app
 used to hand its background to the surface for every theme, which made eight
 presets one colour in this window; the surface reads the token itself now
-(`apps/viewer/src/client/file-view/chromeBackdrop.js`), so there is nothing
+(the shared CAD renderer's `chromeBackdrop.js`), so there is nothing
 for this app to pass.
 
 ## Quitting
@@ -1173,7 +1193,7 @@ src/renderer/
     ContextMeter.tsx      the context ring at the end of the composer's row, and the
                           panel behind it: the window, the plan limits, the tokens
   features/explorer       the one tab strip and its four kinds of tab
-    crumb-source.tsx      this app's half of the shared nav row: the listings, read a
+    adapters/fileSource.ts  this app's file/navigation service: the listings, read a
                           directory at a time over IPC, and the crumb entry menus
     markdown/document.ts  markdown <-> the editor's document, keeping every block the
                           person did not touch byte for byte (remark; read its header)
@@ -1190,7 +1210,7 @@ src/renderer/
   state/                  one zustand store per domain, plus bridge.ts for main's pushes and
                           cad-commands.ts for an agent's tool calls against the stores
     history.ts            back and forward over the top level, recorded from the selection
-  styles/globals.css      stock shadcn neutral tokens — the same ones apps/viewer uses
+  styles/globals.css      stock shadcn neutral tokens — the same ones apps/web uses
 tests/unit/               vitest
 tests/e2e/                playwright, against the built app
 tests/fake-agent/         a scripted ACP agent on stdio (SDK agent side), also replays fixtures
@@ -1413,20 +1433,19 @@ The preload needs no edit: it builds the client from the contract. Components
 read stores, never IPC, so a change pushed from the menu or another window
 lands in the same place a click would.
 
-## Notes for later phases
+## Shared package integration
 
-- The renderer's Tailwind tokens are stock shadcn neutral, identical to
-  `apps/viewer`'s, so P4's `CadFileView` inherits them instead of bringing a
-  second theme.
-- The CAD Viewer's `./file-view` entry is compiled from source by this app's
-  bundler, so `electron.vite.config.ts` and `styles/globals.css` carry what
-  `apps/viewer/docs/file-view.md` asks for: the scoped JSX-in-`.js` plugin,
-  the `@` / `cadgen-js` / `three` aliases, `worker: { format: "es" }`, a dev
-  `server.fs.allow`, the `@source` line, and the viewer's own `--ui-*` /
-  `--surface-*` token block copied verbatim into both `:root` and `.dark`.
-  `features/explorer/renderers/CadRenderer.tsx` imports it lazily — the
-  closure is three.js and the whole viewer client, and a window that only
-  opens a README should not pay for it at startup.
+`@hardcore/ui/file-viewer` owns the whole file-tab interface. Desktop's thin
+FileTab binds IPC, persisted explorer state and host commands. Renderer
+registrations load shared implementations lazily. The package supplies compiled
+ESM, declarations, CSS and workers; consumer source aliases, copied tokens,
+JSX loaders and handwritten viewer declarations are removed.
+
+Root workspace installation keeps React, ReactDOM, Three.js and Radix identities
+consistent. `viewer-peers.test.ts` verifies the installed package graph; real
+Electron tests verify the rendered integration. Packaging still bundles the
+complete Python runtime and native Node dependency closure.
+
 - `src/renderer/components/ai-elements/types.ts` holds local copies of the
   handful of types those components take from Vercel's `ai` package. All twelve
   imports were `import type`, so the package is not a dependency. Re-vendoring a

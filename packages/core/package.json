@@ -1,0 +1,47 @@
+{
+  "name": "@hardcore/core",
+  "version": "0.5.1",
+  "private": true,
+  "type": "module",
+  "description": "Reusable CAD render/viewer runtime for docs, CAD Viewer, and generated snapshot browser assets.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
+    },
+    "./common/*": "./dist/common/*",
+    "./glb/*": "./dist/lib/glb/*",
+    "./lib/*": "./dist/lib/*",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "node scripts/run-tests.mjs",
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "sideEffects": [
+    "./dist/common/headlessRenderEntry.js"
+  ],
+  "dependencies": {
+    "meshoptimizer": "^1.2.0",
+    "three": "0.185.1",
+    "three-mesh-bvh": "0.9.14"
+  },
+  "devDependencies": {
+    "playwright": "^1.52.0",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3",
+    "@types/three": "^0.185.4",
+    "@types/node": "22.20.1"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "docs",
+    "README.md"
+  ]
+}

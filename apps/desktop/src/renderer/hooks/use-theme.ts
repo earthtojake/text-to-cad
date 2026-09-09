@@ -9,7 +9,7 @@ import { ThemePreferenceSchema, type ThemePreference } from "@shared/types";
  *
  * One class, not a `data-theme` attribute, because that is what Tailwind's
  * `@custom-variant dark (&:is(.dark *))` and every shadcn component compile
- * against — and it is what `apps/viewer` uses, so a viewer surface embedded
+ * against — and it is what `apps/web` uses, so a viewer surface embedded
  * here (P4) flips with the app instead of against it.
  *
  * In this app the APP writes it and nothing else does: the embedded surface is

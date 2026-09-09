@@ -18,7 +18,7 @@ import type { AccentColor, CodeFont, UiFontSize } from "@shared/types";
  * dark, so an accent cannot be one colour for both: each entry gives the light
  * and the dark value, and `--ring` follows `--primary` so focus rings stay in
  * the same family. `neutral` writes nothing at all, which is what keeps the
- * default app identical to the token set `apps/viewer` ships (plan §7).
+ * default app identical to the token set `apps/web` ships (plan §7).
  */
 export const ACCENTS: Record<
   Exclude<AccentColor, "neutral">,

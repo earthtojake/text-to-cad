@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vitest/config";
 
-import { viewerClientRoot, viewerPeerNames } from "./scripts/viewer-alias.mjs";
 
 const appRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(appRoot, "..", "..");
@@ -33,13 +32,7 @@ const alias = [
   // `id.replace(find, replacement)`, so `/\?worker$/` alone would leave the
   // module path glued to the front of the stub's.
   { find: /^.*\?worker$/, replacement: path.join(appRoot, "tests", "stubs", "worker.ts") },
-  /**
-   * The CAD Viewer client's own root alias. The file tab draws
-   * `cad-viewer/shell`, so the renderer suite renders the viewer's sources and
-   * has to resolve their `@/…` imports the way the build does. It cannot
-   * claim `@renderer`: a string alias matches `id === "@"` or a `"@/"` prefix.
-   */
-  { find: "@", replacement: viewerClientRoot },
+
 ];
 
 /**
@@ -57,18 +50,8 @@ const alias = [
  * plain Node process. Anything that needs them belongs in the Playwright e2e,
  * which runs the real app.
  */
-/**
- * One copy of every package the viewer's sources import by name — this app's.
- *
- * The build pins them by alias (`scripts/viewer-alias.mjs`, shared with
- * `electron.vite.config.ts`); here they are deduped instead, which is the same
- * statement in the terms Vite's dev/SSR resolver understands. Left alone they
- * resolve from the importing file's location, which is `apps/viewer`'s own
- * `node_modules` — a second React, whose first symptom is "an element from an
- * older version of React was rendered" rather than an import error, and a
- * second radix, whose contexts do not match the first's.
- */
-const dedupe = viewerPeerNames();
+// Packages resolve through the root workspace; preserve shared context identities.
+const dedupe = ["react", "react-dom", "three", "radix-ui"];
 
 export default defineConfig({
   resolve: { alias, dedupe },

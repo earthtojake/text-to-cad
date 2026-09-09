@@ -152,7 +152,7 @@ describe("ExplorerTab", () => {
     });
     // No panel choice yet: which one a tab opens with is the renderer's
     // default, resolved when the file's kind is known, not a value stamped
-    // on the row (`cad-viewer/shell`'s `panels.js`).
+    // on the row (`@hardcore/ui/navigation`'s `panels.js`).
     expect(file.kind === "file" ? file.panel : "missing").toBeNull();
 
     const terminal = ExplorerTabSchema.parse({

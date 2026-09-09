@@ -87,7 +87,7 @@ def path_has_suffix(path: str, suffix: str) -> bool:
     """Does ``suffix`` name ``path``? Segment-aligned, never a substring match.
 
     ``plate.stl`` names ``a/b/plate.stl``; ``late.stl`` names nothing. Mirrors ``pathHasSuffix``
-    in ``cadgen-js/lib/filePathSuffix.js``.
+    in ``@hardcore/core/lib/filePathSuffix.js``.
     """
     path_segments = _path_segments(path)
     suffix_segments = _path_segments(suffix)
@@ -101,7 +101,7 @@ def _ref_display_candidates(display_name: str) -> set[str]:
 
     A ref shows a ``.step.py`` generator as a bare stem, so ``bracket`` is what the Viewer emits
     for ``bracket.step.py``. Every other file keeps its suffix and is already literal, which is
-    why only the bare form expands. Mirrors ``refDisplayName`` in ``cadgen-js/lib/filePathSuffix.js``.
+    why only the bare form expands. Mirrors ``refDisplayName`` in ``@hardcore/core/lib/filePathSuffix.js``.
     """
     name = str(display_name or "").strip()
     if not name:

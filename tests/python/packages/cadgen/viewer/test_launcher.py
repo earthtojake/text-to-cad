@@ -469,7 +469,7 @@ class ApiOnly(LauncherFixture):
         #
         # CADGEN_VIEWER_DIST wins the default-dist resolution, so pointing it
         # at an EMPTY directory makes "no client anywhere" true regardless of
-        # whether this checkout has built apps/viewer. Skipping when the
+        # whether this checkout has built apps/web. Skipping when the
         # developer's own checkout happens to be built would mean skipping in
         # CI too, which builds the client before it runs the tests.
         nowhere = self.make_root()

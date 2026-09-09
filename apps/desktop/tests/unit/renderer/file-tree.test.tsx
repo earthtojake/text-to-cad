@@ -1,20 +1,20 @@
-import { FileTree } from "cad-viewer/shell";
+import { FileViewer, defineFileRenderer } from "@hardcore/ui/file-viewer";
+import { useMemo } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { currentPlatform } from "@renderer/features/explorer/entry-actions";
-import { useExplorerTreeSource } from "@renderer/features/explorer/tree-source";
-import { useExplorer } from "@renderer/state/explorer";
+import { createDesktopFileSource } from "@renderer/features/explorer/adapters/fileSource";
+import { useExplorer, useTree } from "@renderer/state/explorer";
 import type { DirEntry } from "@shared/ipc/explorer";
 
 /**
- * The SHARED tree (`cad-viewer/shell`) over THIS app's source adapter
- * (`features/explorer/tree-source.ts`), against a small project listed one
+ * The SHARED tree (`@hardcore/ui/navigation`) over THIS app's source adapter
+ * (`features/explorer/adapters/fileSource.ts`), against a small project listed one
  * level at a time, the way `src/main/explorer/fs.ts` lists one.
  *
  * The component is the standalone CAD Viewer's too, and its pure halves are
- * tested beside it (`apps/viewer/src/client/shell/*.test.js`). What is under
+ * tested beside it (`packages/ui/src/file-viewer/navigation/*.test.js`). What is under
  * test here is the half that needs a DOM and an IPC bridge: that this app's
  * adapter reads the directories the tree asks for, and that the rows, the
  * menus and the keyboard behave over it.
@@ -27,11 +27,11 @@ import type { DirEntry } from "@shared/ipc/explorer";
 
 const TREE: Record<string, string[]> = {
   "": ["apps/", "README.md"],
-  apps: ["apps/desktop/", "apps/docs/", "apps/viewer/"],
+  apps: ["apps/desktop/", "apps/docs/", "apps/web/"],
   "apps/desktop": ["apps/desktop/README.md"],
-  "apps/viewer": ["apps/viewer/src/", "apps/viewer/README.md"],
-  "apps/viewer/src": ["apps/viewer/src/client/", "apps/viewer/src/main.jsx"],
-  "apps/viewer/src/client": ["apps/viewer/src/client/CadViewer.js"],
+  "apps/web": ["apps/web/src/", "apps/web/README.md"],
+  "apps/web/src": ["apps/web/src/client/", "apps/web/src/main.jsx"],
+  "apps/web/src/client": ["apps/web/src/client/CadViewer.js"],
   "apps/docs": ["apps/docs/index.md"],
 };
 
@@ -70,18 +70,17 @@ beforeEach(() => {
  * The tree as the file tab draws it: the shared component over this app's
  * adapter. A component rather than a call, because the adapter is a hook.
  */
+const testRenderers = [defineFileRenderer({
+  id: "test", priority: 0, matches: () => true,
+  prepare: async () => ({ data: null }), load: async () => ({ default: () => null }),
+})];
 function Tree({ activePath = null }: { activePath?: string | null }) {
-  const source = useExplorerTreeSource({
-    ctx: {
-      projectId: "p1",
-      root: null,
-      platform: currentPlatform(),
-      beginRename: () => {},
-      beginCreate: () => {},
-    },
-    projectName: "text-to-cad",
-  });
-  return <FileTree activePath={activePath} onOpen={() => {}} source={source} />;
+  const source = useMemo(() => createDesktopFileSource({ projectId: "p1", root: null, projectName: "text-to-cad" }), []);
+  const { open } = useTree(null);
+  return <FileViewer file={activePath} source={source} renderers={testRenderers}
+    state={{ panel: "tree", panelWidth: 300, expandedDirectories: [...open] }}
+    onStateChange={(next) => useExplorer.getState().setTreeOpen(null, () => new Set(next.expandedDirectories))}
+    onOpenFile={() => {}} />;
 }
 
 function mount(props: { activePath?: string | null } = {}) {
@@ -99,37 +98,37 @@ describe("FileTree", () => {
 
     await waitFor(() => expect(rowExists("apps")).toBe(true));
     await user.click(row("apps"));
-    await waitFor(() => expect(rowExists("apps/viewer")).toBe(true));
-    await user.click(row("apps/viewer"));
-    await waitFor(() => expect(rowExists("apps/viewer/src")).toBe(true));
-    await user.click(row("apps/viewer/src"));
+    await waitFor(() => expect(rowExists("apps/web")).toBe(true));
+    await user.click(row("apps/web"));
+    await waitFor(() => expect(rowExists("apps/web/src")).toBe(true));
+    await user.click(row("apps/web/src"));
 
-    await waitFor(() => expect(rowExists("apps/viewer/src/client")).toBe(true));
-    expect(rowExists("apps/viewer/src/main.jsx")).toBe(true);
+    await waitFor(() => expect(rowExists("apps/web/src/client")).toBe(true));
+    expect(rowExists("apps/web/src/main.jsx")).toBe(true);
     // The leaf of the fourth level, to prove the recursion does not stop.
-    await user.click(row("apps/viewer/src/client"));
-    await waitFor(() => expect(rowExists("apps/viewer/src/client/CadViewer.js")).toBe(true));
+    await user.click(row("apps/web/src/client"));
+    await waitFor(() => expect(rowExists("apps/web/src/client/CadViewer.js")).toBe(true));
 
-    expect(listed).toEqual(["", "apps", "apps/viewer", "apps/viewer/src", "apps/viewer/src/client"]);
+    expect(listed).toEqual(["", "apps", "apps/web", "apps/web/src", "apps/web/src/client"]);
   });
 
   it("expands a folder the tree opened by itself instead of shutting it", async () => {
     const user = userEvent.setup();
-    // A file three levels down: `apps`, `apps/viewer` and `apps/viewer/src`
+    // A file three levels down: `apps`, `apps/web` and `apps/web/src`
     // are revealed, so they are already open when the tree first draws.
-    mount({ activePath: "apps/viewer/src/main.jsx" });
+    mount({ activePath: "apps/web/src/main.jsx" });
 
-    await waitFor(() => expect(rowExists("apps/viewer/src/client")).toBe(true));
+    await waitFor(() => expect(rowExists("apps/web/src/client")).toBe(true));
     expect(row("apps")).toHaveAttribute("aria-expanded", "true");
 
     // A click on an open folder shuts it, and a click on the shut one opens it
     // again with its children — the sequence that used to leave the person
     // clicking folders that never opened.
-    await user.click(row("apps/viewer"));
-    await waitFor(() => expect(rowExists("apps/viewer/src")).toBe(false));
-    await user.click(row("apps/viewer"));
-    await waitFor(() => expect(rowExists("apps/viewer/src")).toBe(true));
-    expect(rowExists("apps/viewer/src/client")).toBe(true);
+    await user.click(row("apps/web"));
+    await waitFor(() => expect(rowExists("apps/web/src")).toBe(false));
+    await user.click(row("apps/web"));
+    await waitFor(() => expect(rowExists("apps/web/src")).toBe(true));
+    expect(rowExists("apps/web/src/client")).toBe(true);
 
     // And a sibling two levels down still opens on one click.
     await user.click(row("apps/desktop"));
@@ -142,15 +141,15 @@ describe("FileTree", () => {
 
     await waitFor(() => expect(rowExists("apps")).toBe(true));
     await user.click(row("apps"));
-    await waitFor(() => expect(rowExists("apps/viewer")).toBe(true));
+    await waitFor(() => expect(rowExists("apps/web")).toBe(true));
     await user.click(row("apps"));
-    await waitFor(() => expect(rowExists("apps/viewer")).toBe(false));
+    await waitFor(() => expect(rowExists("apps/web")).toBe(false));
 
     // Opening a file under it has to bring it back, or the tree marks a row
     // as selected inside a subtree it is not showing.
-    view.rerender(<Tree activePath="apps/viewer/src/main.jsx" />);
-    await waitFor(() => expect(rowExists("apps/viewer/src/main.jsx")).toBe(true));
-    expect(row("apps/viewer/src/main.jsx")).toHaveAttribute("aria-selected", "true");
+    view.rerender(<Tree activePath="apps/web/src/main.jsx" />);
+    await waitFor(() => expect(rowExists("apps/web/src/main.jsx")).toBe(true));
+    expect(row("apps/web/src/main.jsx")).toHaveAttribute("aria-selected", "true");
   });
 
   it("keeps what is open when the tab is remounted", async () => {
@@ -159,9 +158,9 @@ describe("FileTree", () => {
 
     await waitFor(() => expect(rowExists("apps")).toBe(true));
     await user.click(row("apps"));
-    await waitFor(() => expect(rowExists("apps/viewer")).toBe(true));
-    await user.click(row("apps/viewer"));
-    await waitFor(() => expect(rowExists("apps/viewer/src")).toBe(true));
+    await waitFor(() => expect(rowExists("apps/web")).toBe(true));
+    await user.click(row("apps/web"));
+    await waitFor(() => expect(rowExists("apps/web/src")).toBe(true));
 
     // Opening a file makes a tab, and the pane mounts one tab at a time: this
     // is the remount that used to throw the three levels away. The file is at
@@ -169,7 +168,7 @@ describe("FileTree", () => {
     // remembering what was open, not re-deriving it from the open file.
     view.unmount();
     mount({ activePath: "README.md" });
-    await waitFor(() => expect(rowExists("apps/viewer/src")).toBe(true));
+    await waitFor(() => expect(rowExists("apps/web/src")).toBe(true));
   });
 
   it("aims one context menu at the row that was clicked, and at the root elsewhere", async () => {
@@ -221,13 +220,13 @@ describe("FileTree", () => {
   it("filters to a flat list of paths", async () => {
     const user = userEvent.setup();
     stub("paths", async () => ({
-      paths: ["apps/viewer/src/main.jsx", "README.md"],
+      paths: ["apps/web/src/main.jsx", "README.md"],
       truncated: false,
     }));
     mount();
 
     await user.type(screen.getByLabelText("Filter files"), "main");
     await waitFor(() => expect(screen.getByRole("option")).toBeInTheDocument());
-    expect(screen.getByRole("option")).toHaveAttribute("title", "apps/viewer/src/main.jsx");
+    expect(screen.getByRole("option")).toHaveAttribute("title", "apps/web/src/main.jsx");
   });
 });

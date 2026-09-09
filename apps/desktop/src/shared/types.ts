@@ -185,7 +185,7 @@ export const FileTabSchema = z.object({
   root: ExplorerRootSchema.default(null),
   /**
    * Which of the tab's panels is open, by id — and only one is
-   * (`cad-viewer/shell`'s `panels.js`).
+   * (`@hardcore/ui/navigation`'s `panels.js`).
    *
    * A file tab has one panel column and a list of things that can be in it:
    * the file tree (`FILE_PANEL_TREE`, in the shared shell), and whatever the file's renderer
@@ -358,7 +358,7 @@ export type ThemePreference = z.infer<typeof ThemePreferenceSchema>;
  * The accent, applied by overriding `--primary` and `--ring` on `<html>`
  * (`src/renderer/hooks/use-appearance.ts`). `neutral` is stock shadcn and
  * writes no override at all, so the default app is exactly the token set
- * `apps/viewer` ships (plan §7).
+ * `apps/web` ships (plan §7).
  */
 export const AccentColorSchema = z.enum(["neutral", "blue", "violet", "green", "orange", "rose"]);
 export type AccentColor = z.infer<typeof AccentColorSchema>;

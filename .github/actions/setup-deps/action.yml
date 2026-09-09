@@ -18,10 +18,7 @@ runs:
       with:
         node-version: "22"
         cache: npm
-        cache-dependency-path: |
-          packages/cadgen-js/package-lock.json
-          apps/viewer/package-lock.json
-          apps/docs/package-lock.json
+        cache-dependency-path: package-lock.json
 
     - name: Install Python dependencies
       shell: bash
@@ -44,6 +41,5 @@ runs:
     - name: Install Node dependencies
       shell: bash
       run: |
-        npm ci --prefix packages/cadgen-js
-        npm ci --prefix apps/viewer
-        npm ci --prefix apps/docs
+        npm ci --workspace @hardcore/core --workspace @hardcore/ui --workspace @hardcore/web --workspace cad-skills-docs
+        npm run build:packages

@@ -2,7 +2,7 @@
 
 cadgen tessellates a DXF by spawning a Node child
 (``cadgen._internal.node_runtime``), and finds that child through ``cadgen.assets.
-node_builders_dir()`` -- the repo's live ``packages/cadgen-js/bin`` in a checkout, and the
+node_builders_dir()`` -- the repo's live ``packages/core/bin`` in a checkout, and the
 packaged ``cadgen/_runtime/node`` in an installed wheel.
 
 This is the regression guard for a failure that only ever appears at the far end: a
@@ -88,7 +88,7 @@ class NodeBuilderBundleTests(unittest.TestCase):
                 )
 
     def test_emitted_builder_directory_is_marked_as_esm(self) -> None:
-        # The emitted directory declares ESM, matching packages/cadgen-js itself, so a builder
+        # The emitted directory declares ESM, matching packages/core itself, so a builder
         # emitted as a bare `.js` would still parse as a module rather than as CommonJS.
         manifest = RUNTIME_DIR / "package.json"
         self.assertTrue(manifest.is_file(), f"Missing {manifest.relative_to(REPO_ROOT)}")

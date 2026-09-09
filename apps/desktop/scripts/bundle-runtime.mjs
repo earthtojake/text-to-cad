@@ -14,10 +14,10 @@
  *   1. the pinned interpreter (`scripts/python-build.json`) is fetched into
  *      the cache — `~/.cache/hardcore/python` or `--cache`, which CI keys on
  *      the pin file — checked against the pinned sha256 and unpacked;
- *   2. `pip install --target <site-packages>` puts cadgen and every pin of
- *      `resources/cadgen/constraints.txt` into it, from the wheel in
- *      `resources/cadgen` (`npm run cad:resources`, or the wheel the release
- *      workflow just built) and PyPI, with `--only-binary=:all:` and the
+ *   2. `pip install --target <site-packages> <cadgen-wheel>` puts that exact
+ *      release wheel and every pin of `resources/cadgen/constraints.txt` into
+ *      it; PyPI supplies only the wheel's dependencies. The command uses
+ *      `--only-binary=:all:` and the
  *      target's platform tags — so this works for a FOREIGN target too: pip
  *      never runs the target's interpreter, it only picks wheels for it;
  *   3. what a runtime never needs is pruned (the stdlib's test suite, every
@@ -268,6 +268,24 @@ function directorySize(dir) {
   return total;
 }
 
+/** Pip arguments that install the selected release wheel and its pinned closure. */
+export function runtimePipInstallArgs({ layout, asset, pyMinor, wheel, constraints }) {
+  const [major, minor] = pyMinor.split(".");
+  return [
+    "-m", "pip", "install",
+    "--no-compile",
+    "--no-warn-script-location",
+    "--only-binary=:all:",
+    "--python-version", pyMinor,
+    "--implementation", "cp",
+    "--abi", `cp${major}${minor}`,
+    ...asset.pip.platforms.flatMap((platform) => ["--platform", platform]),
+    "--target", layout.sitePackages,
+    "-c", constraints,
+    wheel,
+  ];
+}
+
 export async function bundleRuntime({ target, out, cache, wheels, version, python: explicitPython, build = PYTHON_BUILD }) {
   const asset = build.targets[target];
   if (!asset) {
@@ -286,6 +304,7 @@ export async function bundleRuntime({ target, out, cache, wheels, version, pytho
   const layout = runtimeLayout(root, target, build.version);
   const [major, minor] = build.version.split(".");
   const pyMinor = `${major}.${minor}`;
+  const wheelPath = path.resolve(wheels, wheel);
   console.info(`\n== ${target}: Python ${build.version}, cadgen ${version} (${wheel}) -> ${path.relative(appRoot, root)}`);
 
   // 1. the interpreter
@@ -308,20 +327,7 @@ export async function bundleRuntime({ target, out, cache, wheels, version, pytho
     PIP_REQUIRE_VIRTUALENV: "",
     PYTHONDONTWRITEBYTECODE: "1",
   };
-  run(pipPython, [
-    "-m", "pip", "install",
-    "--no-compile",
-    "--no-warn-script-location",
-    "--only-binary=:all:",
-    "--python-version", pyMinor,
-    "--implementation", "cp",
-    "--abi", `cp${major}${minor}`,
-    ...asset.pip.platforms.flatMap((platform) => ["--platform", platform]),
-    "--target", layout.sitePackages,
-    "--find-links", wheels,
-    "-c", constraints,
-    `cadgen==${version}`,
-  ], { env: pipEnv });
+  run(pipPython, runtimePipInstallArgs({ layout, asset, pyMinor, wheel: wheelPath, constraints }), { env: pipEnv });
 
   // 3. prune, then bytecode
   const removed = prune(layout);

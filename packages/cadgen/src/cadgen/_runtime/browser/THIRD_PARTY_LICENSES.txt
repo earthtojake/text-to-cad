@@ -5,7 +5,7 @@ The JavaScript in this directory is bundled output. It inlines third-party code:
 
 Each bundle carries the originating licence banners at end of file
 (esbuild --legal-comments=eof). Exact versions are pinned by
-packages/cadgen-js/package-lock.json at the commit that produced these files.
+package-lock.json at the commit that produced these files.
 
 MIT License
 

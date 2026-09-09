@@ -13,7 +13,7 @@
 import * as monaco from "monaco-editor";
 // The explorer owns the worker environment and the base themes; the session
 // only adds two transparent variants so a diff sits on the transcript itself.
-import { setupMonaco } from "@renderer/features/explorer/monaco-setup";
+import { languageFor, setupMonaco } from "@hardcore/ui/renderers/code/editor";
 
 let configured = false;
 
@@ -39,38 +39,5 @@ export function configureMonaco(): typeof monaco {
 
 /** Monaco's language id for a path, by extension; plain text otherwise. */
 export function languageForPath(file: string): string {
-  const ext = file.split(".").pop()?.toLowerCase() ?? "";
-  const known: Record<string, string> = {
-    ts: "typescript",
-    tsx: "typescript",
-    mts: "typescript",
-    js: "javascript",
-    jsx: "javascript",
-    mjs: "javascript",
-    cjs: "javascript",
-    py: "python",
-    json: "json",
-    md: "markdown",
-    css: "css",
-    html: "html",
-    yml: "yaml",
-    yaml: "yaml",
-    toml: "ini",
-    sh: "shell",
-    bash: "shell",
-    zsh: "shell",
-    rs: "rust",
-    go: "go",
-    c: "c",
-    h: "c",
-    cpp: "cpp",
-    hpp: "cpp",
-    java: "java",
-    xml: "xml",
-    urdf: "xml",
-    sdf: "xml",
-    srdf: "xml",
-    sql: "sql",
-  };
-  return known[ext] ?? "plaintext";
+  return languageFor(file);
 }

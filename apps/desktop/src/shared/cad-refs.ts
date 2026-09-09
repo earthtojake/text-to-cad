@@ -4,7 +4,7 @@
  * A reference is `<file>#<selectors>`, either half optional:
  * `models/bracket.step#o1.2`, `bracket.step#label.f45`, `#o1`, or a bare
  * `models/bracket.step`. The selector half mirrors `cadRefs.js` in
- * `packages/cadgen-js` (and `cad_ref_syntax.py` in cadgen), which are the
+ * `packages/core` (and `cad_ref_syntax.py` in cadgen), which are the
  * two authorities; this module accepts what they emit and never invents a
  * form of its own. It is pure — the transcript's links and the composer's
  * chips both read it, and a unit test can too.
