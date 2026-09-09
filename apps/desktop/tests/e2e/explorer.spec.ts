@@ -9,6 +9,7 @@ import {
   expect,
   test,
   type ElectronApplication,
+  type Locator,
   type Page,
 } from "@playwright/test";
 
@@ -360,7 +361,7 @@ test("copies a relative path from a row's context menu", async () => {
   const row = page.locator(`[role="treeitem"][data-path="apps/web/src/client/unboundIdentifiers.test.js"]`);
   await expect(row).toBeVisible();
 
-  await row.click({ button: "right" });
+  await openContextMenu(row);
   const menu = page.getByRole("menu");
   await expect(menu.getByRole("menuitem", { name: "Copy reference" })).toHaveCount(0);
   await expect(menu.getByRole("menuitem", { name: "Move to Trash" })).toBeVisible();
@@ -369,7 +370,7 @@ test("copies a relative path from a row's context menu", async () => {
   await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe("apps/web/src/client/unboundIdentifiers.test.js");
 
   // Copy path is the absolute one, and Copy reference is there for a CAD file.
-  await row.click({ button: "right" });
+  await openContextMenu(row);
   await pick("Copy path");
   await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe(
     fs.realpathSync(path.join(repoRoot, "apps/web/src/client/unboundIdentifiers.test.js")),
@@ -377,7 +378,7 @@ test("copies a relative path from a row's context menu", async () => {
   await page.locator(`[role="treeitem"][data-path="apps/web/src/client"]`).click();
   const step = page.locator(`[role="treeitem"][data-path="${STEP}"]`);
   await page.getByLabel("Filter files").fill(STEP);
-  await page.getByRole("option", { name: STEP, exact: false }).first().click({ button: "right" });
+  await openContextMenu(page.getByRole("option", { name: STEP, exact: false }).first());
   await expect(page.getByRole("menu").getByRole("menuitem", { name: "Copy reference" })).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByLabel("Filter files").fill("");
@@ -907,7 +908,7 @@ test("makes a folder from the tree's menu, renames it, and moves it to the trash
   await expect(folder("README.md")).toBeVisible();
 
   // The empty space under the rows is the root: New folder, typed in place.
-  await tree.click({ button: "right", position: { x: 40, y: 200 } });
+  await openContextMenu(tree, { x: 40, y: 200 });
   await pick("New folder");
   const field = page.getByLabel("New folder name");
   await expect(field).toBeFocused();
@@ -917,7 +918,7 @@ test("makes a folder from the tree's menu, renames it, and moves it to the trash
   expect(fs.statSync(path.join(docsDir, "parts")).isDirectory()).toBe(true);
 
   // Rename, in the row. The stem is what is selected, so typing replaces it.
-  await folder("parts").click({ button: "right" });
+  await openContextMenu(folder("parts"));
   await pick("Rename");
   const rename = page.getByLabel("Rename parts");
   await expect(rename).toBeFocused();
@@ -929,7 +930,7 @@ test("makes a folder from the tree's menu, renames it, and moves it to the trash
   expect(fs.existsSync(path.join(docsDir, "parts"))).toBe(false);
 
   // A file inside it, from the folder's own menu, opens once it is made.
-  await folder("assemblies").click({ button: "right" });
+  await openContextMenu(folder("assemblies"));
   await pick("New file");
   await page.getByLabel("New file name").fill("notes.md");
   await page.keyboard.press("Enter");
@@ -947,7 +948,7 @@ test("makes a folder from the tree's menu, renames it, and moves it to the trash
   await expect(folder("assemblies/notes.md")).toBeVisible();
 
   // Move to Trash: no dialog, the row goes, the tab that showed the file goes.
-  await folder("assemblies").click({ button: "right" });
+  await openContextMenu(folder("assemblies"));
   await pick("Move to Trash");
   await expect(folder("assemblies")).toHaveCount(0);
   await expect(page.getByRole("tab", { name: /notes\.md/ })).toHaveCount(0);
@@ -1010,6 +1011,37 @@ async function openFromTree(target: string) {
   if (await filter.isVisible()) {
     await filter.fill("");
   }
+}
+
+/**
+ * macOS opens a context menu on right-button down. During its entry animation
+ * a clamped popup can overlap the initiating pointer, and Radix interprets a
+ * release over an item as drag-selection (including Move to Trash). Let the
+ * popup settle before release so these tests exercise their explicit item
+ * click, not an accidental drag-selection. Other platforms open on release.
+ */
+async function openContextMenu(target: Locator, position?: { x: number; y: number }) {
+  if (process.platform !== "darwin") {
+    await target.click({ button: "right", ...(position ? { position } : {}) });
+  } else {
+    await target.scrollIntoViewIfNeeded();
+    const box = await target.boundingBox();
+    if (!box) throw new Error("the context-menu target has no visible bounds");
+    await page.mouse.move(box.x + (position?.x ?? box.width / 2), box.y + (position?.y ?? box.height / 2));
+    await page.mouse.down({ button: "right" });
+    try {
+      const menu = page.getByRole("menu");
+      await expect(menu).toBeVisible();
+      await menu.evaluate((node) => Promise.all(
+        node.getAnimations({ subtree: true }).map((animation: { finished: Promise<unknown> }) =>
+          animation.finished.catch(() => {}),
+        ),
+      ));
+    } finally {
+      await page.mouse.up({ button: "right" });
+    }
+  }
+  await expect(page.getByRole("menu")).toBeVisible();
 }
 
 /**

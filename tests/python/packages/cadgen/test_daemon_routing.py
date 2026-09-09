@@ -50,12 +50,13 @@ if __name__ == "__main__":
 
 SLOW_PART = """\
 import os
+from pathlib import Path
 
 from cadgen import step
 from cadgen import build123d as bd
 
 
-@step(out=os.path.join(os.environ["CADGEN_CACHE_DIR"], "slow.step"))
+@step(out=(Path(os.environ["CADGEN_CACHE_DIR"]) / "slow.step").as_posix())
 def slow():
     import time; time.sleep(4.0)
     return bd.Box(5.0, 4.0, 2.0)
