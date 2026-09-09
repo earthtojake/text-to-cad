@@ -190,9 +190,37 @@ Clicking a group selects all of its faces. Expand it to select an individual fac
 **Copy reference** uses the existing CAD selector format, and **Add to prompt**
 uses the host's existing reference callback. Reopening a grouped face reference
 selects the whole group. Results are transient and reset when the file's artifact
-revision changes. References and measurements retain their existing panels.
+revision changes. Selection details appear below the geometry in Tree; the two
+areas scroll independently.
 
 The regression fixture `models/examples/src/recognition_fixture.py` produces a
 30 × 8 mm slot, a 6 mm hole, and an exterior boss. The core recognition tests use
 its surface artifact extracted after a STEP export/reimport, without the source
 recipe or a Python runtime.
+
+
+## Selection and inspection tools
+
+STEP's Select tool offers All, Parts, Faces, Edges, and Feature groups. Explicit
+filters never fall back to a different entity type. Faces and Edges load topology
+for the selected leaf part; selecting another part in Tree changes that target.
+Feature groups becomes available after recognition and picks all wall faces from
+one hit. Shift-click adds/removes entities or whole groups. Escape clears the
+selection after any open menu or first-use tip has been dismissed. Input fields
+keep their own Escape behaviour.
+
+Measure has a temporary panel below its toolbar button, with Any geometry,
+Points, Edges and Faces snap filters. Leaving Measure or changing models clears
+completed rulers and the current draft. Escape first cancels a draft, then exits
+the tool. The existing measurement engine supplies planar-face spacing and
+angles, straight-edge angles, circular-edge centre spacing, and point distances;
+this UI does not add general minimum-distance calculations for curved surfaces.
+STEP no longer has separate Reference or Measure tabs. Other renderers retain
+their existing inspector tabs.
+
+Clip mode colours cut surfaces amber using stencil winding over the display
+meshes. Holes remain open for closed, consistently oriented solids. This is a
+non-pickable display fill, not new topology or an edit to the STEP. Only meshes
+whose bounds intersect the active plane receive the two extra stencil passes;
+disabling clipping releases the fill and materials without disposing the model's
+geometry. Open/non-manifold meshes cannot guarantee a solid section fill.

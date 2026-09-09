@@ -138,22 +138,11 @@ test("measure ruler survives unrelated state changes", () => {
   assert.equal(measureRulerStateForChange(draft), draft);
 });
 
-test("measure ruler keeps committed measurements when the tool deactivates", () => {
+test("leaving Measure clears both the draft and completed measurements", () => {
   const draft = applyMeasureRulerPick(null, FIRST_PICK);
-  // Leaving the tool abandons the half-finished draft only.
-  assert.deepEqual(measureRulerStateForChange(draft, { toolActive: false }), {
-    draft: null,
-    hover: null,
-    measurements: []
-  });
-
   const committed = applyMeasureRulerPick(draft, SECOND_PICK);
-  assert.deepEqual(
-    measureRulerStateForChange(committed, { toolActive: false }).measurements,
-    committed.measurements
-  );
-  // Nothing to abandon means the same object back, so React can bail out.
-  assert.equal(measureRulerStateForChange(committed, { toolActive: false }), committed);
+  assert.equal(measureRulerStateForChange(draft, { toolActive: false }), null);
+  assert.equal(measureRulerStateForChange(committed, { toolActive: false }), null);
 });
 
 test("measure ruler drops everything on entry change", () => {
