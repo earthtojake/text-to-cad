@@ -137,8 +137,9 @@ npm run test    # client + app tooling (node:test, beside the code)
 The backend's suite lives with cadgen and is not collected here; running only
 `npm run test` leaves that half unchecked.
 
-Headless UI verification uses Playwright with `--use-angle=metal` —
-the default software WebGL renderer is not what users see.
+Headless CAD checks use Playwright with Metal on macOS and SwiftShader on
+Linux/Windows. Use the same graphics backend for baseline/refactor image
+comparisons.
 
 ### Branded loading indicator
 
