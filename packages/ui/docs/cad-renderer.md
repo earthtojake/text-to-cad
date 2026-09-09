@@ -226,7 +226,9 @@ Canonical STEP selectors and the actual file path remain the reference payload;
 source row IDs are never geometry selectors. A multi-face or multi-part feature
 becomes a grouped reference. Missing geometry disables the action, and the current
 document is checked again before delivery. Selection alone does not modify the
-draft; the action adds context without submitting a prompt.
+draft; the action adds context without submitting a prompt. Features uses the
+same floating viewer action as Tree, with the feature label and linked geometry
+as its context. There is no separate Features sidebar action.
 
 Parameters expand into individual read-only rows. Selecting a source constant
 previews the linked operations that explicitly reference it, including tracked
