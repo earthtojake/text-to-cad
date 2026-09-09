@@ -37,7 +37,6 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 | `params` | `sidecar` (the model's `@step(pose=...)` block), or `null`. |
 | `animations` | Has animation clips, so transport controls apply. |
 | `artifactManaged` | Builds a package before it can render. A format listed here that the backend cannot produce a package for blocks forever, so a format the viewer renders from its own file belongs out. |
-| `exportFormats` | What `/__cad/export` can produce for it. |
 
 ### Rules
 
@@ -99,13 +98,21 @@ every artifact-managed kind.
 
 ## Standing gate
 
-`scripts/e2e-format-sweep.mjs` loads one fixture per format against a running
+`apps/web/scripts/e2e-format-sweep.mjs` loads one fixture per format against a running
 viewer and asserts each draws something with no page errors:
 
 ```bash
-npm run start -- --port 3245 --host 127.0.0.1   # from the models root
-node scripts/e2e-format-sweep.mjs --dir <abs-models-root> [--out <dir>]
+# From the models root:
+cadgen viewer --host 127.0.0.1 --json
+
+# From the repository root, using the URL printed by the launcher:
+node apps/web/scripts/e2e-format-sweep.mjs --dir <abs-models-root> --url <viewer-url> [--out <dir>]
 ```
+
+The fixtures must exist under the served root. To test this checkout's client,
+build it and select its `dist/` explicitly as described in the
+[web app README](../../../apps/web/README.md#launching). The harnesses belong to
+the web host because they exercise the shared renderer through a running app.
 
 Run it for any change to shared viewer code. It uses `page.screenshot()` against a
 Metal-backed context on purpose: a blank-but-error-free viewport is the signature failure
@@ -140,7 +147,7 @@ ignored. One copy, one normalization, and that failure mode is gone.
 ### Conformance harness
 
 ```bash
-node scripts/e2e-theme-conformance.mjs --dir <abs-models-root> [--out <dir>] [--baseline <file>]
+node apps/web/scripts/e2e-theme-conformance.mjs --dir <abs-models-root> --url <viewer-url> [--out <dir>] [--baseline <file>]
 ```
 
 Loads one mesh scene under all eight presets and asserts **surface response** — the
@@ -149,5 +156,6 @@ still starts up and still draws while rendering all eight identically, which is 
 what happened while `lighting.fill` and `lighting.rim` were being dropped at
 normalization.
 
-`scripts/theme-conformance-baseline.json` records the measured means so a change of
+Run from the repository root against the viewer launched above.
+`apps/web/scripts/theme-conformance-baseline.json` records the measured means so a change of
 look is visible in a diff rather than only in a pass/fail.
