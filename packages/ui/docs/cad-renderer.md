@@ -226,13 +226,29 @@ the viewer's existing selection colour. It does not change CAD or replace the
 user's actual reference selection. Escape, a viewport click, leaving Features,
 or changing files clears the preview. The footer shows only the source filename.
 
-When the host supports prompt references, selecting a feature, part, repeat or
-linked parameter exposes **Add to prompt**. It sends the linked geometry through
+Linked operations and loaded parts expand into an **Associated faces** group.
+Each child selects one actual face and shows that face's measured properties;
+these rows are topology, not reconstructed source features. Part inspection loads
+one part's topology on demand, never an entire assembly's faces at once.
+The X/Y/Z extent buttons preview a temporary dimension between world-axis bounding
+limits using the existing ruler overlay. These are measured extents, not inferred
+sketch dimensions, wall thicknesses or source parameter values. Clicking a radius
+filters the preview to associated cylindrical/spherical faces with that radius.
+Clicking the active measurement again, selecting another row, Escape, leaving
+Features or changing files clears the temporary dimension. Inspection dimensions
+are not added to the Measure tool's list or saved with the model.
+
+When the host supports prompt context, every Features row and parameter exposes
+**Add to prompt**, including source operations without geometry links. Sketch and
+operation inputs appear before measured result geometry in the property panel.
+The draft receives the selected source inputs, location and measured values as
+plain text; valid geometry links also become the existing reference chips.
+Hosts supporting only geometry references retain the linked-selection action. It sends the linked geometry through
 the existing host reference callback, with a display label for the source feature.
 Canonical STEP selectors and the actual file path remain the reference payload;
 source row IDs are never geometry selectors. A multi-face or multi-part feature
-becomes a grouped reference. Missing geometry disables the action, and the current
-document is checked again before delivery. Selection alone does not modify the
+becomes a grouped reference. Missing geometry contributes no face/part tokens; source context remains usable.
+The current document is checked again before delivery. Selection alone does not modify the
 draft; the action adds context without submitting a prompt. Features uses the
 same floating viewer action as Tree, with the feature label and linked geometry
 as its context. There is no separate Features sidebar action.
@@ -281,6 +297,10 @@ Features part rows reuse Tree's hide/show and isolate controls. These affect
 viewer visibility only; they never suppress an authored operation. Isolation
 keeps Features open and offers an exit in the panel. Source-free imports list
 actual parts under Imported geometry, without inventing construction history.
+Single-body imports expose hide/show in both views, mapped to the existing whole-model
+render target. Their context menu omits isolate/hide-other actions because there
+are no other components to isolate from. Tree visibility actions use the row's
+selection target, including visual rows that alias a part.
 
 Selected rows show associated geometry's world-axis bounding size, summed face
 area when the entire face selection has area data, and available cylindrical or

@@ -263,7 +263,8 @@ beside “Hardcore” in the regular system typeface (`features/sidebar/Wordmark
 The mark in `src/renderer/assets/brand` embeds the original star pixels with
 an SVG saturation filter and exterior clip. It is not a path-only vector.
 
-The packaged icon and export assets below use the existing H treatment.
+The Dock and packaged app icon use this same grayscale star on a dark tile.
+The legacy H export assets below remain available separately.
 
 HARDCORE, set in JetBrains Mono ExtraBold Italic and drawn twice: a light-blue
 copy of the glyphs offset down and right, then the foreground copy on top. No
@@ -272,22 +273,21 @@ scaled, printed, and at 16px.
 
 ```sh
 npm run brand   # resources/brand/*.png
-npm run icons   # then build/icon.png, from resources/brand/hardcore-h.png
+npm run icons   # build/icon.png, from src/renderer/assets/brand/hardcore-monochrome.svg
 ```
 
 | File | What it is |
 | --- | --- |
 | `resources/brand/hardcore-wordmark-dark.png`, `…-dark@2x.png` | the wordmark for dark surfaces — white ink over the blue. Transparent, cropped to the ink plus one margin: 1002×196 and 2004×392 |
 | `resources/brand/hardcore-wordmark-light.png`, `…-light@2x.png` | the same for light surfaces, ink `#0a0a0a` |
-| `resources/brand/hardcore-h.png` | the H alone, 1024×1024, transparent, dark-surface colours. What `make-icons.mjs` composites |
+| `resources/brand/hardcore-h.png` | the H alone, 1024×1024, transparent, dark-surface colours. Legacy export asset |
 | `resources/brand/hardcore-h-dark.png`, `hardcore-h-light.png` | the H on a solid `#0a0a0a` / `#ffffff` square, 1024×1024 |
-| `build/icon.png` | the app icon: that H on a dark squircle tile, on macOS's icon grid |
+| `build/icon.png` | the app icon: the grayscale star on a dark squircle tile, on macOS's icon grid |
 
 Three numbers decide how it looks, and each is a named constant in
 `scripts/make-brand.mjs`:
 
-- **The blue is `#62b7ec`**, and it is the app icon's own blue rather than a new
-  one — the same mark, the same colour. The icon this replaced
+- **The blue is `#62b7ec`**, for the legacy H exports. The icon this replaced
   (`apps/docs/public/favicon.png`, still the docs site's favicon and untouched)
   is a shaded 3D render with no single hex, so the constant is the mean of its
   opaque unambiguously-blue pixels in the light luminance band: the star's lit
@@ -296,10 +296,7 @@ Three numbers decide how it looks, and each is a named constant in
   the light reads as coming from the top left. Cap height, not font size,
   because that is what the eye measures an offset against. Much under 6% and the
   blue vanishes under the ink at this weight.
-- **The monogram's ink is 72% of its square**, on its taller axis. The icon
-  script draws that whole square at its tile's size, so the share carries over
-  with no second scale factor: the H lands inside the inner 80% macOS's icon
-  grid asks for, clear of where the tile's corners curve.
+- **The monogram's ink is 72% of its square**, on its taller axis. This applies to the legacy H exports; the star icon uses its own centered inset.
 
 `scripts/make-brand.mjs` renders every PNG in headless Chromium (the project's
 Playwright), from an SVG whose `<text>` baseline is placed off the real face's
@@ -317,7 +314,7 @@ directory and must stay there.
 
 ```sh
 npm run brand            # the wordmark and the H into resources/brand (committed)
-npm run icons            # the H onto a tile -> build/icon.png (committed)
+npm run icons            # the sidebar star onto a tile -> build/icon.png (committed)
 npm run cad:resources    # the cadgen wheel + constraints into resources/cadgen (from the .venv)
 npm run bundle:runtime   # THE CAD RUNTIME into resources/runtime/<os>-<arch> (~1.2 GB, once per pin)
 npm run package:mac      # or :win, :linux -> release/
@@ -354,7 +351,7 @@ stays at `0.0.0` because `VERSION` is the one canonical release version
 (AGENTS.md) — and passes anything else through to electron-builder, so
 `npm run package:mac -- --arm64 --x64` works.
 
-`npm run icons` composites the brand's H monogram onto its tile and writes
+`npm run icons` composites the sidebar's grayscale star onto its tile and writes
 `build/icon.png`; the mark lives in one place and electron-builder derives the
 platform containers — the macOS `.icns`, the Windows `.ico` — from that one PNG
 at package time. An unpackaged app (`npm run dev`, `npx electron .`) runs inside
@@ -623,7 +620,10 @@ workspace. A bare selector requires a CAD tab in that same workspace;
 otherwise the app asks you to open the model first. This uses the viewer’s
 existing `selectReference` contract; hover does not alter its selection.
 
-References added from a named part show its assembly name in the chip. The
+References added from a named part or feature show the model filename alongside
+its label, for example `car.step · wheel_front_left`. Switching model tabs does
+not change a reference's filename. Long names truncate within the chip; the
+full label is available on hover. The
 full file/selector remains in the tooltip and is still the text sent to the
 agent. Names are optional display metadata scoped to the draft; typed or
 unresolved references keep their file/selector fallback. The viewer’s compact
@@ -1221,7 +1221,7 @@ scripts/cad-resources.mjs the cadgen wheel and constraints into resources/cadgen
 scripts/bundle-runtime.mjs the CAD runtime into resources/runtime/<os>-<arch>: the pinned Python
                           (scripts/python-build.json) with cadgen's closure installed, per target
 scripts/make-brand.mjs    npm run brand: the wordmark and the H monogram into resources/brand
-scripts/make-icons.mjs    npm run icons: that monogram onto its tile -> build/icon.png
+scripts/make-icons.mjs    npm run icons: the sidebar star onto its tile -> build/icon.png
 resources/brand/          the committed marks, and the JetBrains Mono face they are set in
 resources/hardcore-mcp/   the MCP server's source (bundled into out/hardcore-mcp by the build)
 skills/hardcore-app-use/      the skill only this app ships; composed into resources/skills

@@ -2,7 +2,7 @@
 
 import StepMeasurementsSection from "../components/workbench/StepMeasurementsSection.js";
 import SelectionFilterMenu from "../components/workbench/SelectionFilterMenu.jsx";
-import { designFeaturePromptText } from "../workbench/designFeaturePrompt.js";
+import { designFeatureContextText, designFeaturePromptText } from "../workbench/designFeaturePrompt.js";
 import { filterSelectionReferences, toggleFaceGroupSelection, MEASURE_SELECTION_FILTERS } from "../workbench/selectionFilter.js";
 
 import { TutorialTipsContext } from "../workbench/tutorialTips.js";
@@ -286,7 +286,7 @@ export default function CadFileView(props) {
 
 function CadFileViewSurface({
   client, entry, serverInfo, renderSession, preferences, onPreferenceChange, onOpenFile, className = "",
-  panelSlot, colorScheme = "light", selectReference, onReference, onCapture, captureRequest,
+  panelSlot, colorScheme = "light", selectReference, onReference, onPromptContext, onCapture, captureRequest,
   openPanel = "", onPanelOpen, onChromeVisibilityChange, onActivityChange, state, onStateChange
 }) {
   const animationClock = useAnimationClockStore();
@@ -350,8 +350,8 @@ function CadFileViewSurface({
   const [hoveredModelReferenceId, setHoveredModelReferenceId] = useState("");
   const [selectionFilter, setSelectionFilter] = useState("all");
   const [designHighlight, setDesignHighlight] = useState(null);
-  const handleDesignHighlight = useCallback((selection, label) => {
-    setDesignHighlight(selection ? { ...selection, label } : null);
+  const handleDesignHighlight = useCallback((selection, label, context) => {
+    setDesignHighlight(selection ? { ...selection, label, context } : null);
   }, []);
   const [selectionFilterNotice, setSelectionFilterNotice] = useState("");
   const [selectedPartIds, setSelectedPartIds] = useState([]);
@@ -3186,6 +3186,7 @@ function CadFileViewSurface({
   }, [selectedKey]);
   useEffect(() => {
     setMeasureRulerState((current) => measureRulerStateForChange(current, { toolActive: measureModeActive }));
+    if (measureModeActive) setDesignHighlight(null);
   }, [measureModeActive]);
   // A new measurement reveals the tab that holds it. Re-appending (rather than
   // just ensuring membership) moves it to the end, and last-in-pane wins tab
@@ -4031,9 +4032,12 @@ function CadFileViewSurface({
       setSelectionFilterNotice("");
     } else setSelectionFilterNotice("Select a part in Tree to load its faces and edges.");
   }, [selectionFilter, topologyTarget, loadFilterTopology]);
-  const loadDesignTopology = useCallback(() => {
+  const loadDesignTopology = useCallback((partIds = []) => {
     if (!isAssemblyView) setLargeFileState(current => current.selectableTopologyEnabled ? current : ({ ...current, selectableTopologyEnabled: true }));
-  }, [isAssemblyView]);
+    else if (partIds.length === 1 && loadableStepTreeTopologyNodeIdSet.has(partIds[0])) {
+      setExpandedStepTreeNodeIds(current => current.includes(partIds[0]) ? current : [...current, partIds[0]]);
+    }
+  }, [isAssemblyView, loadableStepTreeTopologyNodeIdSet]);
   const selectFeatureFaces = useCallback((faceIds, { multiSelect = false } = {}) => {
     if (stepUpdateInProgress || !faceIds.length || !faceIds.every(id => effectiveActiveReferenceMap.get(id)?.selectorType === "face")) return;
     const next = toggleFaceGroupSelection(selectedReferenceIdsRef.current, faceIds, multiSelect);
@@ -4054,14 +4058,18 @@ function CadFileViewSurface({
     addReferenceText(canonicalCopySelectionLines.join("\n"));
   }, [addReferenceText, canonicalCopySelectionLines]);
   const handleAddDesignFeature = useCallback((selection, label) => {
-    if (viewerLoading || stepUpdateInProgress || typeof onReference !== "function") return;
+    if (viewerLoading || stepUpdateInProgress) return;
     const text = designFeaturePromptText(selection, {
       referenceMap: effectiveActiveReferenceMap,
       parts: selectedMeshData?.parts || EMPTY_LIST,
       entry: selectedEntry,
     });
-    for (const reference of referencesForHost(text)) onReference({ ...reference, label });
-  }, [viewerLoading, stepUpdateInProgress, onReference, effectiveActiveReferenceMap, selectedMeshData, selectedEntry, referencesForHost]);
+    const references = referencesForHost(text).map(reference => ({ ...reference, label }));
+    if (typeof onPromptContext === "function" && selection.context?.file === selectedEntry?.file) {
+      const context = { ...selection.context, file: cadFileParamForEntry(selectedEntry) };
+      onPromptContext({ text: designFeatureContextText(context, { includeModel: !references.length }), references });
+    } else for (const reference of references) onReference?.(reference);
+  }, [viewerLoading, stepUpdateInProgress, onReference, onPromptContext, effectiveActiveReferenceMap, selectedMeshData, selectedEntry, referencesForHost]);
 
   const handleAddCurrentSelection = useCallback(() => {
     if (designHighlight) {
@@ -5637,10 +5645,16 @@ function CadFileViewSurface({
   const selectionToolActive = hasCapability(effectiveRenderFormat, "topology") &&
     tabToolMode === TAB_TOOL_MODE.REFERENCES;
   const drawToolActive = drawModeActive;
-  const selectionCount = designHighlight
-    ? (typeof onReference === "function" && designHighlight.label && !viewerLoading
-      ? designHighlight.faceIds.length + designHighlight.partIds.length : 0)
-    : selectionCountBase;
+  const canAddFeatureContext = typeof onPromptContext === "function" &&
+    designHighlight?.context?.file === selectedEntry?.file;
+  let selectionCount = selectionCountBase;
+  if (designHighlight) {
+    selectionCount = 0;
+    if (designHighlight.label && !viewerLoading && !stepUpdateInProgress) {
+      if (canAddFeatureContext) selectionCount = 1;
+      else if (typeof onReference === "function") selectionCount = designHighlight.faceIds.length + designHighlight.partIds.length;
+    }
+  }
   const activeReferenceId = String(selectedReferenceIds[selectedReferenceIds.length - 1] || "").trim();
   const activeReferencePartTreeNodeId = useMemo(() => {
     if (!activeReferenceId) {
@@ -5822,8 +5836,8 @@ function CadFileViewSurface({
                   handleModelReferenceContext={handleModelReferenceContext}
                   onMeasurePick={handleMeasurePick}
                   onMeasureHoverPoint={handleMeasureHoverPoint}
-                  activeMeasurementId={activeMeasureId}
-                  measureState={measureRulerState}
+                  activeMeasurementId={designHighlight?.measurement?.id || activeMeasureId}
+                  measureState={designHighlight?.measurement ? { measurements: [designHighlight.measurement] } : measureRulerState}
                   viewerContextMenu={viewerContextMenu}
                   onViewerContextMenuClose={closeViewerContextMenu}
                   onViewerContextMenuCopyReference={copyViewerContextMenuReference}
@@ -5848,7 +5862,7 @@ function CadFileViewSurface({
                   copyReferenceTipActive={copyReferenceTipActive}
                   panToolActive={panToolActive}
                   handleCopySelection={handleCopySelection}
-                  handleAddSelection={typeof onReference === "function" ? handleAddCurrentSelection : null}
+                  handleAddSelection={typeof onReference === "function" || typeof onPromptContext === "function" ? handleAddCurrentSelection : null}
                   handleScreenshotCopy={handleScreenshotCopy}
                 />
               </div>
@@ -5938,7 +5952,7 @@ function CadFileViewSurface({
             {selectedFileSheetKind === "step" ? (
               <StepFileSheet
                 key={`step:${selectedKey}`}
-                designOutline={{ client, file: selectedEntry?.file, revision: artifactRevision, onOpenFile, references: !viewerLoading && !stepUpdateInProgress ? selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: handleDesignHighlight, onLoadTopology: loadDesignTopology }}
+                designOutline={{ client, file: selectedEntry?.file, revision: artifactRevision, onOpenFile, references: !viewerLoading && !stepUpdateInProgress ? isAssemblyView ? assemblyStepTreeTopologyReferences : selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST, parts: !viewerLoading && !stepUpdateInProgress ? selectedMeshData?.parts || EMPTY_LIST : EMPTY_LIST, onHighlight: handleDesignHighlight, onLoadTopology: loadDesignTopology }}
                 open={fileSheetOpen}
                 isDesktop={isDesktop}
                 width={activeSheetWidth || tabToolsWidth}
