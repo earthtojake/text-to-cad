@@ -27,7 +27,10 @@ import {
 
 /** `page.evaluate` bodies run in the renderer; see the note in shell.spec.ts. */
 declare const window: {
-  hardcore: { settings: { set(patch: Record<string, unknown>): Promise<unknown> } };
+  hardcore: {
+    settings: { set(patch: Record<string, unknown>): Promise<unknown> };
+    agents: { list(): Promise<{ installed: boolean }[]> };
+  };
 };
 declare const document: { documentElement: object };
 declare function getComputedStyle(element: object): { getPropertyValue(name: string): string };
@@ -76,7 +79,20 @@ test("every page renders, in both themes", async () => {
       // The agent list arrives from a PATH probe; wait for it once so the
       // Agents shot is of the answer rather than of the spinner.
       if (slug === "agents") {
-        await expect(page.getByText(/^Installed \(\d+\)$/)).toBeVisible();
+        await expect.poll(() => page.evaluate(async () => (await window.hardcore.agents.list()).length)).toBeGreaterThan(0);
+        const installed = await page.evaluate(async () => (await window.hardcore.agents.list()).filter((agent) => agent.installed).length);
+        // Empty groups are intentionally absent. A clean runner has no
+        // installed CLI, but still lists the registry's recommended agents.
+        const installedGroup = page.getByText(/^Installed \(\d+\)$/);
+        if (installed > 0) {
+          await expect(installedGroup).toHaveText(`Installed (${installed})`);
+          await expect(installedGroup).toBeVisible();
+        } else {
+          await expect(installedGroup).toHaveCount(0);
+        }
+        await expect(page.getByText("Looking for agents on this machine…")).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Codex", exact: true }).first()).toBeVisible();
+        await expect(page.getByRole("button", { name: "Claude Code", exact: true }).first()).toBeVisible();
       }
       // The runtime block probes the interpreter (`import cadgen` takes
       // seconds); the About shot is of the answer, whichever it is.
