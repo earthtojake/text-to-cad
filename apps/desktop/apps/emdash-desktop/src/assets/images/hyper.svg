@@ -1,0 +1,12 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="hyper-border" x1="67" y1="30" x2="188" y2="226" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F640B5" />
+      <stop offset="0.52" stop-color="#F96F7E" />
+      <stop offset="1" stop-color="#FFC857" />
+    </linearGradient>
+  </defs>
+  <rect x="31" y="31" width="194" height="194" rx="49" fill="#050505" stroke="url(#hyper-border)" stroke-width="14" />
+  <path d="M95.25 62L62 96.7L81.75 105.6L68.75 146L103 105.65L83.25 97.75L95.25 62Z" fill="white" />
+  <rect x="106" y="113" width="37" height="8" rx="1" fill="white" />
+</svg>

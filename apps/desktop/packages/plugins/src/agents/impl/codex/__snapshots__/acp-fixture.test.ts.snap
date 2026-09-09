@@ -1,0 +1,1124 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Codex ACP fixture parsing > agents 1`] = `[]`;
+
+exports[`Codex ACP fixture parsing > config 1`] = `
+{
+  "availableCommands": [
+    {
+      "description": "List configured Model Context Protocol (MCP) tools.",
+      "name": "mcp",
+      "source": "provider-command",
+    },
+    {
+      "description": "List available skills.",
+      "name": "skills",
+      "source": "provider-command",
+    },
+    {
+      "description": "Display session configuration and token usage.",
+      "name": "status",
+      "source": "provider-command",
+    },
+    {
+      "description": "Review uncommitted changes, or review with custom instructions.",
+      "inputHint": "optional review instructions",
+      "name": "review",
+      "source": "provider-command",
+    },
+    {
+      "description": "Review changes relative to a base branch.",
+      "inputHint": "branch name",
+      "name": "review-branch",
+      "source": "provider-command",
+    },
+    {
+      "description": "Review a specific commit.",
+      "inputHint": "commit sha",
+      "name": "review-commit",
+      "source": "provider-command",
+    },
+    {
+      "description": "Summarize conversation to avoid hitting the context limit.",
+      "name": "compact",
+      "source": "provider-command",
+    },
+    {
+      "description": "Set, pause, resume, or clear a task goal.",
+      "inputHint": "[<objective>|clear|pause|resume]",
+      "name": "goal",
+      "source": "provider-command",
+    },
+    {
+      "description": "Sign out of Codex. This option is available when you are logged in via ChatGPT.",
+      "name": "logout",
+      "source": "provider-command",
+    },
+    {
+      "description": "Build, review, refactor, or architect ASP.NET Core web applications using current official guidance for .NET web development. Use when working on Blazor Web Apps, Razor Pages, MVC, Minimal APIs, controller-based Web APIs, SignalR, gRPC, middleware, dependency injection, configuration, authentication, authorization, testing, performance, deployment, or ASP.NET Core upgrades.",
+      "name": "$aspnet-core",
+      "source": "provider-command",
+    },
+    {
+      "description": "Control the in-app Browser. Use to open, navigate, inspect, test, click, type, screenshot, or verify local targets such as localhost, 127.0.0.1, ::1, file://, the current in-app browser tab, and websites shown side by side inside Codex.",
+      "name": "$browser:control-in-app-browser",
+      "source": "provider-command",
+    },
+    {
+      "description": "Create, edit, redline, and comment on \`.docx\`, Word, and Google Docs-targeted document artifacts inside the container, with a strict render-and-verify workflow. Use \`render_docx.py\` to generate page PNGs (and optional PDF) for visual QA, then iterate until layout is flawless before delivering the final document.",
+      "name": "$documents:documents",
+      "source": "provider-command",
+    },
+    {
+      "description": "Read, create, inspect, render, and verify PDF files where visual layout matters. Use Poppler rendering plus Python tools such as reportlab, pdfplumber, and pypdf for generation and extraction.",
+      "name": "$pdf:pdf",
+      "source": "provider-command",
+    },
+    {
+      "description": "Create or edit PowerPoint or Google Slides decks",
+      "name": "$presentations:Presentations",
+      "source": "provider-command",
+    },
+    {
+      "description": "Use this skill when a user requests to create, modify, analyze, visualize, or work with spreadsheet files (\`.xlsx\`, \`.xls\`, \`.csv\`, \`.tsv\`) or Google Sheets-targeted spreadsheet artifacts with formulas, formatting, charts, tables, and recalculation.",
+      "name": "$spreadsheets:Spreadsheets",
+      "source": "provider-command",
+    },
+    {
+      "description": "Create or update a reusable personal Codex artifact-template skill. Use when the user invokes $template-creator or asks in natural language to create a template using, from, or based on an attached Word document, PowerPoint presentation, or Excel workbook, or explicitly asks to edit or update a passed artifact-template skill. Do not use for one-off artifact creation from an existing template.",
+      "name": "$template-creator:template-creator",
+      "source": "provider-command",
+    },
+    {
+      "description": "Generate or edit raster images when the task benefits from AI-created bitmap visuals such as photos, illustrations, textures, sprites, mockups, or transparent-background cutouts. Use when Codex should create a brand-new image, transform an existing image, or derive visual variants from references, and the output should be a bitmap asset rather than repo-native code or vector. Do not use when the task is better handled by editing existing SVG/vector/code-native assets, extending an established icon or logo system, or building the visual directly in HTML/CSS/canvas.",
+      "name": "$imagegen",
+      "source": "provider-command",
+    },
+    {
+      "description": "Use when the user asks how to build with OpenAI products or APIs, asks about Codex itself or choosing Codex surfaces, needs up-to-date official documentation with citations, help choosing the latest model for a use case, or model upgrade and prompt-upgrade guidance; use OpenAI docs MCP tools for non-Codex docs questions, use the Codex manual helper first for broad Codex self-knowledge, and restrict fallback browsing to official OpenAI domains.",
+      "name": "$openai-docs",
+      "source": "provider-command",
+    },
+    {
+      "description": "Create and scaffold plugin directories for Codex with a required \`.codex-plugin/plugin.json\`, optional plugin folders/files, valid manifest defaults, and personal-marketplace entries by default. Use when Codex needs to create a new personal plugin, add optional plugin structure, generate or update marketplace entries for plugin ordering and availability metadata, or update an existing local plugin during development with the CLI-driven cachebuster and reinstall flow.",
+      "name": "$plugin-creator",
+      "source": "provider-command",
+    },
+    {
+      "description": "Create or update a skill",
+      "name": "$skill-creator",
+      "source": "provider-command",
+    },
+    {
+      "description": "Install curated skills from openai/skills or other repos",
+      "name": "$skill-installer",
+      "source": "provider-command",
+    },
+  ],
+  "efforts": {
+    "available": [
+      {
+        "description": "Fast responses with lighter reasoning",
+        "id": "low",
+        "name": "low",
+      },
+      {
+        "description": "Balances speed and reasoning depth for everyday tasks",
+        "id": "medium",
+        "name": "medium",
+      },
+      {
+        "description": "Greater reasoning depth for complex problems",
+        "id": "high",
+        "name": "high",
+      },
+      {
+        "description": "Extra high reasoning depth for complex problems",
+        "id": "xhigh",
+        "name": "xhigh",
+      },
+    ],
+    "configId": "reasoning_effort",
+    "selected": "low",
+  },
+  "modeOptions": {
+    "available": [
+      {
+        "description": "Requires approval to edit files and run commands.",
+        "id": "read-only",
+        "name": "Read-only",
+      },
+      {
+        "description": "Read and edit files, and run commands.",
+        "id": "agent",
+        "name": "Agent",
+      },
+      {
+        "description": "Codex can edit files outside this workspace and run commands with network access. Exercise caution when using.",
+        "id": "agent-full-access",
+        "name": "Agent (full access)",
+      },
+    ],
+    "configId": "mode",
+    "selected": "agent",
+  },
+  "modelOptions": {
+    "available": [
+      {
+        "description": "Frontier model for complex coding, research, and real-world work.",
+        "id": "gpt-5.5",
+        "name": "GPT-5.5",
+      },
+      {
+        "description": "Small, fast, and cost-efficient model for simpler coding tasks.",
+        "id": "gpt-5.4-mini",
+        "name": "GPT-5.4-Mini",
+      },
+    ],
+    "configId": "model",
+    "selected": "gpt-5.4-mini",
+  },
+}
+`;
+
+exports[`Codex ACP fixture parsing > plan 1`] = `null`;
+
+exports[`Codex ACP fixture parsing > title 1`] = `null`;
+
+exports[`Codex ACP fixture parsing > transcript 1`] = `
+{
+  "active": null,
+  "committed": [
+    {
+      "durationMs": 0,
+      "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:0",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:0:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "In one sentence, without reading any files, what is emdash?",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:0:message:auto:assistant:0",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 1,
+          "text": "Emdash is a local-first Electron desktop app for running multiple AI coding agents in isolated Git worktrees, coordinating their chat, terminal, provider, issue, PR, and release workflows.",
+        },
+      ],
+      "seq": 0,
+      "startedAt": 1577836800000,
+      "timingSource": "live",
+    },
+    {
+      "durationMs": 0,
+      "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:1",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:1:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Think about how to explore this repo, then read \`AGENTS.md\` and give me the Repository Structure section as exactly 3 bullet points.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:1:message:auto:assistant:0",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 1,
+          "text": "I’ll verify the repo guidance from \`AGENTS.md\` directly, then condense only its Repository Structure section into three bullets.",
+        },
+        {
+          "command": "sed -n '/^## Repository Structure$/,/^## Build & Development Commands$/p' AGENTS.md",
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:1:tool:call_dMOHUTSuSmcFB4JThBpPj5nZ",
+          "kind": "execute-tool-call",
+          "seq": 2,
+          "status": "done",
+          "terminalId": "call_dMOHUTSuSmcFB4JThBpPj5nZ",
+          "title": "sed -n '/^## Repository Structure$/,/^## Build & Development Commands$/p' AGENTS.md",
+          "toolCallId": "call_dMOHUTSuSmcFB4JThBpPj5nZ",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:1:message:auto:assistant:1",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 3,
+          "text": "- Emdash is a pnpm workspace monorepo with the Electron app in \`apps/emdash-desktop/\` and shared packages under \`packages/\`.
+- The repo root contains app/package directories, agent docs, GitHub workflow files, workspace config, Nx config, formatting/linting config, and lockfile metadata.
+- \`apps/emdash-desktop/\` contains packaging assets, Drizzle migrations, scripts, Electron main/preload code, React renderer code, shared app types, ambient types, and tooling.",
+        },
+      ],
+      "seq": 1,
+      "startedAt": 1577836800000,
+      "timingSource": "live",
+    },
+    {
+      "durationMs": 0,
+      "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:2",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:2:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Search the codebase for the definition of \`toAgentUpdate\` — give the file path and line number.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:2:message:auto:assistant:0",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 1,
+          "text": "I’ll search by symbol name with \`rg\` so the result is tied to the actual checkout rather than memory.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:2:tool:call_sqP7LTqUlaTMofbbig96Qk08",
+          "kind": "search-tool-call",
+          "query": "for 'toAgentUpdate'",
+          "seq": 2,
+          "status": "done",
+          "title": "Search for 'toAgentUpdate'",
+          "toolCallId": "call_sqP7LTqUlaTMofbbig96Qk08",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:2:message:auto:assistant:1",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 3,
+          "text": "\`packages/core/src/acp/agent-update.ts:122\`",
+        },
+      ],
+      "seq": 2,
+      "startedAt": 1577836800000,
+      "timingSource": "live",
+    },
+    {
+      "durationMs": 0,
+      "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:3",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:3:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Read \`packages/core/src/acp/agent-update.ts\` and \`packages/core/src/acp/session-machine.ts\`, then explain in two sentences how they relate.",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:3:thinking:auto:thinking:0",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:0",
+          "seq": 1,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Considering answer format**
+
+I think I need to form an answer after reviewing the relevant information. Using a specific tool seems necessary for this task to ensure accuracy and reliability in my response. I want to make sure that I gather all the essential details before crafting my answer. I'll do my best to summarize everything clearly and be helpful for the user's understanding!",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:3:message:auto:assistant:0",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "I’ll read those two ACP core files directly and compare the data flow between the converter and the state machine.",
+        },
+        {
+          "children": [
+            {
+              "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:3:tool:call_8Xe7CkBGWr56UnafQajA6tJm",
+              "kind": "read-tool-call",
+              "path": "/tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/agent-update.ts",
+              "seq": 3,
+              "status": "done",
+              "title": "Read file '/tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/agent-update.ts'",
+              "toolCallId": "call_8Xe7CkBGWr56UnafQajA6tJm",
+            },
+            {
+              "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:3:tool:call_x033kE3l2l9CKnHIIMOL1MlJ",
+              "kind": "read-tool-call",
+              "path": "/tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/session-machine.ts",
+              "seq": 4,
+              "status": "done",
+              "title": "Read file '/tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/session-machine.ts'",
+              "toolCallId": "call_x033kE3l2l9CKnHIIMOL1MlJ",
+            },
+            {
+              "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:3:tool:call_cJhMBU98lbEuPzKi0p4PHRCt",
+              "kind": "read-tool-call",
+              "path": "/tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/session-machine.ts",
+              "seq": 5,
+              "status": "done",
+              "title": "Read file '/tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/session-machine.ts'",
+              "toolCallId": "call_cJhMBU98lbEuPzKi0p4PHRCt",
+            },
+          ],
+          "groupKind": "read-batch",
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:3:tool:call_8Xe7CkBGWr56UnafQajA6tJm:group",
+          "kind": "tool-group",
+          "label": "3 file reads",
+          "seq": 3,
+          "status": "done",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:3:message:auto:assistant:1",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 6,
+          "text": "I’ve got the converter and the main state transitions; I’m reading the wrapper section too so the explanation reflects how updates actually enter the machine.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:3:tool:call_EpbDQ39xyA1D5C7qfQS7LEVO",
+          "kind": "read-tool-call",
+          "path": "/tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/session-machine.ts",
+          "seq": 7,
+          "status": "done",
+          "title": "Read file '/tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/session-machine.ts'",
+          "toolCallId": "call_EpbDQ39xyA1D5C7qfQS7LEVO",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:3:message:auto:assistant:2",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 8,
+          "text": "\`agent-update.ts\` defines the provider-neutral \`AgentUpdate\` shape and \`toAgentUpdate()\`, which decodes raw ACP \`SessionUpdate\` messages into that internal vocabulary. \`session-machine.ts\` consumes those \`AgentUpdate\` values in commands/events, appending them to active turns, assigning sequence numbers, committing completed turns, and emitting update effects for the runtime or renderer.",
+        },
+      ],
+      "seq": 3,
+      "startedAt": 1577836800000,
+      "timingSource": "live",
+    },
+    {
+      "durationMs": 0,
+      "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:4",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:4:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Make a checklist / todo plan for adding an optional \`foo: string\` field to AgentUpdate. Do NOT edit any files.",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:4:thinking:auto:thinking:0",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:0",
+          "seq": 1,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Creating a checklist plan**
+
+I need to respond with just a plan since the user is asking for a checklist or to-do plan. It seems like there’s no need for extra detail, but to be accurate, maybe I should check the relevant files. The user asked not to edit, but reading files is still possible. I probably should mention the relevant locations. I think I can use a search tool to look into AgentUpdate uses and create that checklist.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:4:message:auto:assistant:0",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "I’m mapping the touchpoints for \`AgentUpdate\` first so the checklist covers the actual decode, state, and renderer paths instead of just the type definition.",
+        },
+        {
+          "children": [
+            {
+              "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:4:tool:call_L8H2vFMxU8sqVLUvHG38FwYj",
+              "kind": "read-tool-call",
+              "path": "/tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/agent-update.test.ts",
+              "seq": 3,
+              "status": "done",
+              "title": "Read file '/tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/agent-update.test.ts'",
+              "toolCallId": "call_L8H2vFMxU8sqVLUvHG38FwYj",
+            },
+            {
+              "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:4:tool:call_4aV1pRthSPJZGbDql5SiEfWG",
+              "kind": "read-tool-call",
+              "path": "/tmp/emdash-acp-fixture-1783042314643/apps/emdash-desktop/src/renderer/features/tasks/acp/acp-update-mapper.ts",
+              "seq": 4,
+              "status": "done",
+              "title": "Read file '/tmp/emdash-acp-fixture-1783042314643/apps/emdash-desktop/src/renderer/features/tasks/acp/acp-update-mapper.ts'",
+              "toolCallId": "call_4aV1pRthSPJZGbDql5SiEfWG",
+            },
+          ],
+          "groupKind": "read-batch",
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:4:tool:call_L8H2vFMxU8sqVLUvHG38FwYj:group",
+          "kind": "tool-group",
+          "label": "2 file reads",
+          "seq": 3,
+          "status": "done",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:4:tool:call_nutYXe2pUBohJK0zZA75dd6x",
+          "kind": "search-tool-call",
+          "query": "for 'AgentUpdate|toAgentUpdate|kind: 'message'|kind: 'thinking'|kind: 'tool_call'|kind: 'tool_update'|kind: 'plan'' in acp",
+          "seq": 5,
+          "status": "done",
+          "title": "Search for 'AgentUpdate|toAgentUpdate|kind: 'message'|kind: 'thinking'|kind: 'tool_call'|kind: 'tool_update'|kind: 'plan'' in acp",
+          "toolCallId": "call_nutYXe2pUBohJK0zZA75dd6x",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:4:message:auto:assistant:1",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 6,
+          "text": "- [ ] Update the \`AgentUpdate\` union in [\`packages/core/src/acp/agent-update.ts\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/agent-update.ts ) to add \`foo?: string\` on the variant(s) that should carry it, and decide whether \`foo\` is baseline-only or part of the ACP decode path.
+- [ ] Thread \`foo\` through \`toAgentUpdate()\` in the same file, including any provider-enrichment behavior if \`foo\` is meant to come from raw ACP metadata instead of being synthesized later.
+- [ ] Update tests in [\`packages/core/src/acp/agent-update.test.ts\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/agent-update.test.ts ) to cover the new field for each supported variant and to lock down the unchanged cases.
+- [ ] Trace downstream consumers that pattern-match on \`AgentUpdate\`, especially [\`packages/core/src/acp/session-machine.ts\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/session-machine.ts ) and [\`apps/emdash-desktop/src/renderer/features/tasks/acp/acp-update-mapper.ts\`]( /tmp/emdash-acp-fixture-1783042314643/apps/emdash-desktop/src/renderer/features/tasks/acp/acp-update-mapper.ts ), and pass \`foo\` through only if the UI or state machine needs it.
+- [ ] Update any fixture, snapshot, or runtime tests that assert the full \`AgentUpdate\` shape, including ACP runtime tests and renderer mapper tests, so the new field does not create accidental breakage.",
+        },
+      ],
+      "seq": 4,
+      "startedAt": 1577836800000,
+      "timingSource": "live",
+    },
+    {
+      "durationMs": 0,
+      "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:5",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:5:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Run \`git rev-parse --abbrev-ref HEAD\` and tell me the current branch name.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:5:message:auto:assistant:0",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 1,
+          "text": "I’m checking the branch name directly from git so I can give you the exact current ref.",
+        },
+        {
+          "command": "git rev-parse --abbrev-ref HEAD",
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:5:tool:call_dTkKdvmjAKbcGOqxLos2Hl3A",
+          "kind": "execute-tool-call",
+          "seq": 2,
+          "status": "done",
+          "terminalId": "call_dTkKdvmjAKbcGOqxLos2Hl3A",
+          "title": "git rev-parse --abbrev-ref HEAD",
+          "toolCallId": "call_dTkKdvmjAKbcGOqxLos2Hl3A",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:5:thinking:auto:thinking:0",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:0",
+          "seq": 3,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Clarifying branch status**
+
+I need to mention that if the branch name is "HEAD," it might be in a detached state. I’ve got to make sure I communicate that clearly so anyone working with git understands what it means for their version control. It’s essential to emphasize what being in a detached HEAD state implies regarding committing changes, as it can lead to confusion if not properly addressed. I'll keep it straightforward and informative!",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:5:message:auto:assistant:1",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 4,
+          "text": "\`HEAD\` — this checkout is in a detached HEAD state, not on a named branch.",
+        },
+      ],
+      "seq": 5,
+      "startedAt": 1577836800000,
+      "timingSource": "live",
+    },
+    {
+      "durationMs": 0,
+      "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:6",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:6:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Run \`ls packages\` and list the workspace package names.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:6:message:auto:assistant:0",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 1,
+          "text": "I’m listing the \`packages/\` directory now and will report the workspace package folders that are present.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:6:tool:call_DagRCdNzm1jDfGHSmO0H6Awg",
+          "kind": "read-tool-call",
+          "seq": 2,
+          "status": "done",
+          "title": "List files in 'packages'",
+          "toolCallId": "call_DagRCdNzm1jDfGHSmO0H6Awg",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:6:message:auto:assistant:1",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 3,
+          "text": "\`chat-ui\`, \`core\`, \`plugins\`, \`shared\`, and \`ui\`.",
+        },
+      ],
+      "seq": 6,
+      "startedAt": 1577836800000,
+      "timingSource": "live",
+    },
+    {
+      "durationMs": 0,
+      "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:7",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:7:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Create the file \`.acp-fixture-scratch/NOTES.md\` containing exactly this line: \`# ACP fixture notes\`",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:7:thinking:auto:thinking:0",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:0",
+          "seq": 1,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Editing file correctly**
+
+I'm thinking about how to edit a file effectively. I need to use apply_patch, but first, I might want to ensure that the directory exists. I want to be careful because apply_patch can also create the file if the path is specified correctly. Making sure everything is in place will help avoid errors and complications later on. I just need to keep these steps in mind for a smooth process!",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:7:message:auto:assistant:0",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "I’m creating the requested notes file with the exact one-line content, and I’ll keep it scoped to that path only.",
+        },
+        {
+          "content": "# ACP fixture notes
+",
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:7:tool:call_5G3PTdzqpvPGdY6lSvFGLGJH:/tmp/emdash-acp-fixture-1783042314643/.acp-fixture-scratch/NOTES.md",
+          "kind": "create-file-tool-call",
+          "path": "/tmp/emdash-acp-fixture-1783042314643/.acp-fixture-scratch/NOTES.md",
+          "seq": 3,
+          "status": "done",
+          "title": "Editing files",
+          "toolCallId": "call_5G3PTdzqpvPGdY6lSvFGLGJH",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:7:message:auto:assistant:1",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 4,
+          "text": "Created \`.acp-fixture-scratch/NOTES.md\` with exactly \`# ACP fixture notes\`.",
+        },
+      ],
+      "seq": 7,
+      "startedAt": 1577836800000,
+      "timingSource": "live",
+    },
+    {
+      "durationMs": 0,
+      "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:8",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:8:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Append the line \`generated by fixture script\` to \`.acp-fixture-scratch/NOTES.md\`.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:8:message:auto:assistant:0",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 1,
+          "text": "I’m appending the requested line to the existing notes file and leaving the original content intact.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:8:tool:call_tXyN5u55PGr31y1rBSbwDPRP:/tmp/emdash-acp-fixture-1783042314643/.acp-fixture-scratch/NOTES.md",
+          "kind": "modify-file-tool-call",
+          "newText": "# ACP fixture notes
+generated by fixture script
+",
+          "oldText": "# ACP fixture notes
+",
+          "path": "/tmp/emdash-acp-fixture-1783042314643/.acp-fixture-scratch/NOTES.md",
+          "seq": 2,
+          "status": "done",
+          "title": "Editing files",
+          "toolCallId": "call_tXyN5u55PGr31y1rBSbwDPRP",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:8:message:auto:assistant:1",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 3,
+          "text": "Appended \`generated by fixture script\` to \`.acp-fixture-scratch/NOTES.md\`.",
+        },
+      ],
+      "seq": 8,
+      "startedAt": 1577836800000,
+      "timingSource": "live",
+    },
+    {
+      "durationMs": 0,
+      "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:9",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:9:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Rename \`.acp-fixture-scratch/NOTES.md\` to \`.acp-fixture-scratch/NOTES2.md\`, then delete \`.acp-fixture-scratch/NOTES2.md\`.",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:9:thinking:auto:thinking:0",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:0",
+          "seq": 1,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Considering file management**
+
+I need to rename a file first, then possibly apply a patch. After that, I might move it to a new location and then delete the original. It feels a bit convoluted, but I think breaking it into steps helps ensure I’m not missing anything important. Maybe I should confirm all the necessary changes before committing to the deletions to avoid errors later! Let's just take it step by step.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:9:message:auto:assistant:0",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "I’m renaming the file first, then removing the renamed file so the scratch directory ends up clean.",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:9:thinking:auto:thinking:1",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:1",
+          "seq": 3,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Considering content changes**
+
+I need to figure out if I should move content or maybe make some changes. It's looking like I might use the delete/add method. I don’t think renaming is necessary. I can add the new content first, and then I can go ahead and delete the old stuff. That seems like a straightforward approach! I wonder if there’s a more efficient way, but this sounds like it could work well.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:9:message:auto:assistant:1",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 4,
+          "text": "The rename helper needs a non-empty hunk, so I’m using a file move pattern that preserves the current contents before deleting the target.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:9:tool:call_krldrCarRuXYq8c00DESs1zE:/tmp/emdash-acp-fixture-1783042314643/.acp-fixture-scratch/NOTES.md",
+          "kind": "modify-file-tool-call",
+          "newText": "",
+          "oldText": "# ACP fixture notes
+generated by fixture script
+",
+          "path": "/tmp/emdash-acp-fixture-1783042314643/.acp-fixture-scratch/NOTES.md",
+          "seq": 5,
+          "status": "done",
+          "title": "Editing files",
+          "toolCallId": "call_krldrCarRuXYq8c00DESs1zE",
+        },
+        {
+          "content": "# ACP fixture notes
+generated by fixture script
+",
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:9:tool:call_krldrCarRuXYq8c00DESs1zE:/tmp/emdash-acp-fixture-1783042314643/.acp-fixture-scratch/NOTES2.md",
+          "kind": "create-file-tool-call",
+          "path": "/tmp/emdash-acp-fixture-1783042314643/.acp-fixture-scratch/NOTES2.md",
+          "seq": 6,
+          "status": "done",
+          "title": "Editing files",
+          "toolCallId": "call_krldrCarRuXYq8c00DESs1zE",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:9:message:auto:assistant:2",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 7,
+          "text": "The rename-and-delete is done, and the scratch path now has no lingering \`NOTES.md\`.Renamed \`.acp-fixture-scratch/NOTES.md\` to \`.acp-fixture-scratch/NOTES2.md\`, then deleted \`.acp-fixture-scratch/NOTES2.md\`.",
+        },
+      ],
+      "seq": 9,
+      "startedAt": 1577836800000,
+      "timingSource": "live",
+    },
+    {
+      "durationMs": 0,
+      "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Use a subagent (Task tool) to find all files under \`packages/core/src/acp\` that contain the string \`stopReason\`, then summarize what each file does.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:message:auto:assistant:0",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 1,
+          "text": "I’m finding the Task/subagent tool first, then I’ll delegate the search and summarize the results from the files it finds.",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:thinking:auto:thinking:0",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:0",
+          "seq": 2,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Exploring file summaries**
+
+I think I need to spawn an explorer and likely use one subagent for this task. I want to read about the AGENTS already in context. I’ll use the explorer to search for files that contain “stopReason” under packages/core/src/acp, and I'll summarize what each file does. I might ask to use a tool like rg and read the matching files for more details. Let's see what I can discover!",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:message:auto:assistant:1",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 3,
+          "text": "I have the subagent tool; I’m delegating the file search so I can use its findings to summarize each ACP file without duplicating the scan locally.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:tool:call_U0X3lVrvv8SibOVvfLqNv1UL",
+          "kind": "unknown-tool-call",
+          "name": "spawnAgent",
+          "seq": 4,
+          "status": "done",
+          "title": "spawnAgent",
+          "toolCallId": "call_U0X3lVrvv8SibOVvfLqNv1UL",
+          "toolKind": "other",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:message:auto:assistant:2",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 5,
+          "text": "The search is running in the subagent now. I’m waiting for the result so I can turn it into a clean per-file summary.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:tool:call_rdtvueUm8DZ67xoFXfH6t5iV",
+          "kind": "unknown-tool-call",
+          "name": "wait",
+          "seq": 6,
+          "status": "done",
+          "title": "wait",
+          "toolCallId": "call_rdtvueUm8DZ67xoFXfH6t5iV",
+          "toolKind": "other",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:thinking:auto:thinking:1",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:1",
+          "seq": 7,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Considering agent status**
+
+I need to think about whether I should send a request to check the agent's status or not. I could inspect things locally while I wait. I wonder if it's okay to continue without overlapping with the subagent's work. But since the user specifically asked to use the subagent, I might just wait a bit longer or send a progress inquiry. It feels like the agent is still busy, so maybe waiting more is better.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:message:auto:assistant:3",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 8,
+          "text": "The subagent hasn’t finished yet, so I’m giving it more time rather than redoing its search.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:tool:call_Uf7LkLGngCf0W6f3PHkD5cyM",
+          "kind": "unknown-tool-call",
+          "name": "wait",
+          "seq": 9,
+          "status": "done",
+          "title": "wait",
+          "toolCallId": "call_Uf7LkLGngCf0W6f3PHkD5cyM",
+          "toolKind": "other",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:thinking:auto:thinking:2",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:2",
+          "seq": 10,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Considering interrupt options**
+
+I need to decide if I should use send_input to ask for a complete response. Maybe I could handle this myself? Since the user requested the use of a subagent, I wonder if I should mention that it might stall. But it could be better if the agent just runs. I think I’ll query with an interrupt to request a concise report. That seems like a good way to get clarity!",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:message:auto:assistant:4",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 11,
+          "text": "I’m nudging the subagent for the concrete output now so I can finish the summary instead of leaving it hanging.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:tool:call_HD9SvVJVnuIV8lFW4GouE71Y",
+          "kind": "unknown-tool-call",
+          "name": "sendInput",
+          "seq": 12,
+          "status": "done",
+          "title": "sendInput",
+          "toolCallId": "call_HD9SvVJVnuIV8lFW4GouE71Y",
+          "toolKind": "other",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:message:auto:assistant:5",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 13,
+          "text": "The agent has been interrupted with a tighter request; I’m waiting once more for the confirmed list.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:tool:call_zlWroMrQjIwsLNdyjbuvoI9m",
+          "kind": "unknown-tool-call",
+          "name": "wait",
+          "seq": 14,
+          "status": "done",
+          "title": "wait",
+          "toolCallId": "call_zlWroMrQjIwsLNdyjbuvoI9m",
+          "toolKind": "other",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:thinking:auto:thinking:3",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:3",
+          "seq": 15,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Considering search options**
+
+It seems the subagent might be unavailable, so I'm thinking we could conduct a local search ourselves. The user requested that we use the subagent, though, so I wonder if I should mention that it didn't return any results. However, if the subagent stalled, we could still summarize the findings from a local search. I'll use local rg to gather data on stopReason files and see what we can put together.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:message:auto:assistant:6",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 16,
+          "text": "The subagent didn’t come back in time, so I’m finishing the same bounded search locally to avoid blocking the answer.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:tool:call_VY8bGhbVARun0bPiMEW0ZPJ4",
+          "kind": "search-tool-call",
+          "query": "for 'stopReason' in acp",
+          "seq": 17,
+          "status": "done",
+          "title": "Search for 'stopReason' in acp",
+          "toolCallId": "call_VY8bGhbVARun0bPiMEW0ZPJ4",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:tool:call_rNvzMKvIYbci6gHFNcpP4NNR",
+          "kind": "read-tool-call",
+          "seq": 18,
+          "status": "done",
+          "title": "List files in 'acp'",
+          "toolCallId": "call_rNvzMKvIYbci6gHFNcpP4NNR",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:thinking:auto:thinking:4",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:4",
+          "seq": 19,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Filtering files for stopReason**
+
+I need to filter out files containing the term "stopReason" from the output. The relevant files likely include session-machine.ts, acp-session-runtime.ts, and a few test files like acp-session-runtime.test.ts. The user wants a summary of what each file does, focusing on all matches in the specified directory, although I might skip the snapshots. I should list out the unique matching files using the rg command effectively. Let's proceed concisely!",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:message:auto:assistant:7",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 20,
+          "text": "I have the matching file set now; I’m narrowing it to the actual files that contain \`stopReason\` so the summary stays precise.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:tool:call_53oAy9tdQgqO3XurfmMoYdKq",
+          "kind": "search-tool-call",
+          "query": "for 'stopReason' in acp",
+          "seq": 21,
+          "status": "done",
+          "title": "Search for 'stopReason' in acp",
+          "toolCallId": "call_53oAy9tdQgqO3XurfmMoYdKq",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:thinking:auto:thinking:5",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:5",
+          "seq": 22,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Considering file summaries**
+
+I need to summarize what each file does. I'm wondering if mentioning that the subagent is stalled is necessary—probably not. Should I close the agent? Maybe that's a good idea! Closing after the final summary could help keep things tidy. Let’s aim to close it at the end! It feels like a good plan to keep everything organized, which will help us stay on track with what we're doing.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:message:auto:assistant:8",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 23,
+          "text": "I’m wrapping up by closing the subagent since the answer is assembled from the repo scan and the agent didn’t need to stay open.",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:tool:call_CN8W72UrQ7vpQbpLIxpbw6ad",
+          "kind": "unknown-tool-call",
+          "name": "closeAgent",
+          "seq": 24,
+          "status": "done",
+          "title": "closeAgent",
+          "toolCallId": "call_CN8W72UrQ7vpQbpLIxpbw6ad",
+          "toolKind": "other",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:10:message:auto:assistant:9",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 25,
+          "text": "\`stopReason\` appears in these \`packages/core/src/acp\` files:
+
+- [\`packages/core/src/acp/session-machine.ts\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/session-machine.ts ): the pure ACP session state machine; it tracks turn lifecycle, commits finished turns, and records the last stop reason from completed turns.
+- [\`packages/core/src/acp/acp-session-runtime.ts\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/acp-session-runtime.ts ): the runtime that drives ACP sessions and turns provider stop reasons into \`TurnOutcome\` values for the state machine.
+- [\`packages/core/src/acp/session-machine.test.ts\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/session-machine.test.ts ): unit tests for the session machine, including assertions about how stop reasons are stored on committed turns.
+- [\`packages/core/src/acp/acp-test-support.ts\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/acp-test-support.ts ): reusable test helpers and fakes for ACP runtime tests, with default prompt results that include a stop reason.
+- [\`packages/core/src/acp/acp-session-runtime.test.ts\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/acp-session-runtime.test.ts ): integration-style tests for the ACP session runtime, covering how prompt results and stop reasons flow through turn completion.
+- [\`packages/core/src/acp/acp-transcript-parser/__snapshots__/acp-transcript-parser.fixture.test.ts.snap\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/acp-transcript-parser/__snapshots__/acp-transcript-parser.fixture.test.ts.snap ): snapshot output for transcript-parser fixture tests, preserving expected parsed transcript text that mentions stop reasons.
+- [\`packages/core/src/acp/acp-transcript-parser/acp-transcript-parser.fixture.test.ts\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/acp-transcript-parser/acp-transcript-parser.fixture.test.ts ): fixture-driven tests for the transcript parser, including transcript data that carries stopReason fields.
+- [\`packages/core/src/acp/acp-transcript-parser/fixtures/claude-acp-transcript.json\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/acp-transcript-parser/fixtures/claude-acp-transcript.json ): sample Claude ACP transcript fixture used by parser tests, with embedded stopReason values in recorded session data.
+- [\`packages/core/src/acp/acp-transcript-parser/parser.ts\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/acp-transcript-parser/parser.ts ): parses ACP transcript records into structured events, and documents that stop reasons are consumed when a prompt resolves.
+- [\`packages/core/src/acp/acp-transcript-parser/model.ts\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/acp-transcript-parser/model.ts ): type definitions for transcript parsing, including the model note that stop reasons are ephemeral session data.
+- [\`packages/core/src/acp/state.ts\`]( /tmp/emdash-acp-fixture-1783042314643/packages/core/src/acp/state.ts ): shared ACP turn/session state types, where each turn stores a \`stopReason\` for completed turns.",
+        },
+      ],
+      "seq": 10,
+      "startedAt": 1577836800000,
+      "timingSource": "live",
+    },
+    {
+      "durationMs": 0,
+      "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:11",
+      "initiator": "user",
+      "items": [
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:11:message:auto:user:0",
+          "kind": "message",
+          "role": "user",
+          "seq": 0,
+          "text": "Explain the ACP session lifecycle in detail, using markdown headings for each phase and including a fenced code block showing an example sequence of events.",
+        },
+        {
+          "durationMs": 0,
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:11:thinking:auto:thinking:0",
+          "kind": "thinking",
+          "segmentId": "auto:thinking:0",
+          "seq": 1,
+          "startedAt": 1577836800000,
+          "status": "done",
+          "text": "
+
+**Crafting a detailed response**
+
+I need to gather information from the files I've already read. There's no need to browse for new sources. I can use existing knowledge from session-machine.ts as a foundation. My goal is to ensure the answer is detailed while also being concise. I think using headings for each phase will help organize the information effectively. Let’s get started on crafting this response!",
+        },
+        {
+          "id": "019f259a-9386-7e20-9af4-b4fdcd67bdac:turn:11:message:auto:assistant:0",
+          "kind": "message",
+          "role": "assistant",
+          "seq": 2,
+          "text": "## Starting
+The session begins in \`starting\`, which is the pre-connection phase. In the state machine, nothing interactive is allowed here yet: the runtime is still establishing the ACP session, and the machine is waiting for either a \`SessionReady\` event from \`newSession\` or a \`ReplayStarted\` event if it is reconstructing a prior session.
+
+## Replaying
+A \`ReplayStarted\` event moves the machine from \`starting\` to \`replaying\`. This phase is used when an existing session is being loaded back in, so the machine creates a replay turn and collects historical turn data until \`ReplayEnded\` arrives. When replay finishes, the replay turn is committed and the machine transitions to \`ready\`.
+
+## Ready
+\`ready\` is the idle, interactive phase. The user can submit a prompt here, which the machine validates through \`decide(Prompt, ...)\` and then converts into a \`PromptStarted\` event. The first thing \`PromptStarted\` does is open a live turn and record the synthesized user message as the first update in that turn.
+
+## Working
+\`working\` means a live turn is in progress. Incoming \`Updated\` events are folded into the active turn, each one getting a sequence number and being appended to the turn’s update list. The machine stays in \`working\` until the runtime signals \`TurnEnded\`, which commits the turn, records its final \`stopReason\` when present, and returns the session to \`ready\`.
+
+## Cancelling
+\`cancelling\` is a transient phase entered when the user cancels an in-flight turn. The machine first drains any pending permission requests as cancelled, then keeps the active turn in place while the runtime finishes shutting down the agent-side work. When \`TurnEnded\` eventually arrives, the turn is committed and the machine returns to \`ready\`.
+
+## Closed
+\`closed\` is the terminal phase. It is entered when the underlying process exits or the connection is closed, via \`ProcessClosed\`. If a turn is still active at that moment, the machine commits it as an error turn, clears pending permissions, and records the exit code on the phase.
+
+## Example Event Flow
+\`\`\`text
+starting
+  -> ReplayStarted
+replaying
+  -> ReplayEnded
+ready
+  -> PromptStarted
+working
+  -> Updated
+working
+  -> Updated
+working
+  -> TurnEnded(stopReason = "end_turn")
+ready
+  -> ProcessClosed(exitCode = 0)
+closed
+\`\`\`
+
+## How The Pieces Fit
+\`session-machine.ts\` owns the lifecycle rules, validation, and state folding. \`acp-session-runtime.ts\` sits above it, translating ACP client activity into domain events like \`SessionReady\`, \`PromptStarted\`, \`Updated\`, \`TurnEnded\`, and \`ProcessClosed\`, so the machine stays pure and deterministic.",
+        },
+      ],
+      "seq": 11,
+      "startedAt": 1577836800000,
+      "timingSource": "live",
+    },
+  ],
+}
+`;
+
+exports[`Codex ACP fixture parsing > usage 1`] = `
+{
+  "contextSize": 258400,
+  "contextUsed": 73018,
+  "cost": null,
+}
+`;

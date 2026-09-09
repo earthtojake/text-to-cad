@@ -1,0 +1,5 @@
+# Browser DevTools performance trace files captured during profiling sessions.
+# These are large (100k–2M lines) and must not be committed to the repository.
+src/**/*.json
+src/**/*.json.gz
+storybook-static/

@@ -1,0 +1,51 @@
+{
+  "name": "@emdash/plugins",
+  "version": "1.0.0",
+  "description": "Plugin interfaces and helpers for agent providers",
+  "keywords": [],
+  "license": "Apache-2.0",
+  "author": "",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./agents": {
+      "development": "./src/agents/registry.ts",
+      "types": "./dist/agents.d.mts",
+      "default": "./dist/agents.mjs"
+    },
+    "./agents/types": {
+      "development": "./src/agents/types.ts",
+      "types": "./dist/agents/types.d.mts",
+      "default": "./dist/agents/types.mjs"
+    }
+  },
+  "scripts": {
+    "dev": "tsdown --config-loader tsx --watch",
+    "build": "tsdown --config-loader tsx && tsx tooling/validate-adapters.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "oxfmt --write",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint src",
+    "typecheck": "tsgo --noEmit",
+    "generate:acp-fixture": "tsx tooling/fixtures/create-acp-transcript.ts"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^1.1.0",
+    "@emdash/core": "workspace:*",
+    "@emdash/shared": "workspace:*",
+    "smol-toml": "^1.6.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@agentclientprotocol/claude-agent-acp": "^0.54.1",
+    "@agentclientprotocol/codex-acp": "^1.0.2",
+    "@typescript/native-preview": "7.0.0-dev.20260609.1",
+    "oxfmt": "^0.51.0",
+    "oxlint": "^1.69.0",
+    "tsdown": "^0.22.2",
+    "tsx": "^4.22.4",
+    "vitest": "^3.1.4"
+  },
+  "packageManager": "pnpm@10.28.2"
+}

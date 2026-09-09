@@ -1,0 +1,2 @@
+# .prettierignore — repo uses oxfmt, not prettier. Neutralize `nx format`.
+**

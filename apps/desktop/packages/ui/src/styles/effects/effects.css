@@ -1,0 +1,67 @@
+/*
+ * effects/effects.css — shared, token-driven visual effect utilities.
+ *
+ * Consumed via @import '@emdash/ui/styles/effects.css' in any CSS build.
+ * Also @imported by styles/theme.base.css so UI-package Storybook picks it up.
+ */
+
+:root {
+  --animate-text-shimmer: text-shimmer-move 3s linear infinite;
+}
+
+@keyframes text-shimmer-move {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Sweeps a subtle band across text using a clipped animated gradient.
+   Base: --em-foreground-passive; peak: --em-foreground-muted (one step below full
+   contrast) so the sweep is noticeable but not attention-grabbing. */
+.text-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--em-foreground-passive) 0%,
+    var(--em-foreground-passive) 30%,
+    var(--em-foreground-muted) 50%,
+    var(--em-foreground-passive) 70%,
+    var(--em-foreground-passive) 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: var(--animate-text-shimmer);
+}
+
+/* Static top-edge fade overlay — surface color fading to transparent.
+   Token-driven: callers set --fade-color (defaults to --em-background) and
+   --fade-softness (default 0.4, already defined in theme.css) to control the
+   paint. oklab interpolation avoids the premultiplied-alpha gray smear that
+   a plain `transparent` stop produces. Height must be set by the caller. */
+.fade-overlay-top {
+  background: linear-gradient(
+    to bottom,
+    var(--fade-color, var(--em-background)) 0%,
+    color-mix(in oklab, var(--fade-color, var(--em-background)), transparent 50%)
+      calc(var(--fade-softness, 0.4) * 100%),
+    color-mix(in oklab, var(--fade-color, var(--em-background)), transparent 100%) 100%
+  );
+}
+
+/* Static bottom-edge fade overlay — mirror of fade-overlay-top. Surface color
+   sits at the bottom edge and fades up to transparent, signalling clipped
+   content below. Same token contract: --fade-color and --fade-softness. */
+.fade-overlay-bottom {
+  background: linear-gradient(
+    to top,
+    var(--fade-color, var(--em-background)) 0%,
+    color-mix(in oklab, var(--fade-color, var(--em-background)), transparent 50%)
+      calc(var(--fade-softness, 0.4) * 100%),
+    color-mix(in oklab, var(--fade-color, var(--em-background)), transparent 100%) 100%
+  );
+}

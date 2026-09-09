@@ -1,0 +1,374 @@
+{
+  "name": "@emdash/core",
+  "version": "1.0.0",
+  "description": "Transport-agnostic core runtime primitives for Hardcore",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Hardcore Contributors",
+    "url": "https://github.com/amywork777/hardcore"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "imports": {
+    "#runtimes/*": [
+      "./src/runtimes/*",
+      "./src/runtimes/*.ts",
+      "./src/runtimes/*/index.ts"
+    ],
+    "#services/*": [
+      "./src/services/*",
+      "./src/services/*.ts",
+      "./src/services/*/index.ts"
+    ],
+    "#primitives/*": [
+      "./src/primitives/*",
+      "./src/primitives/*.ts",
+      "./src/primitives/*/index.ts"
+    ],
+    "#workspace-server/*": [
+      "./src/workspace-server/*",
+      "./src/workspace-server/*.ts",
+      "./src/workspace-server/*/index.ts"
+    ]
+  },
+  "exports": {
+    "./primitives/path/api": {
+      "development": "./src/primitives/path/api/index.ts",
+      "types": "./dist/primitives-path-api.d.mts",
+      "default": "./dist/primitives-path-api.mjs"
+    },
+    "./primitives/host/api": {
+      "development": "./src/primitives/host/api/index.ts",
+      "types": "./dist/primitives-host-api.d.mts",
+      "default": "./dist/primitives-host-api.mjs"
+    },
+    "./primitives/git-credentials/api": {
+      "development": "./src/primitives/git-credentials/api/index.ts",
+      "types": "./dist/primitives-git-credentials-api.d.mts",
+      "default": "./dist/primitives-git-credentials-api.mjs"
+    },
+    "./primitives/exclusion-policy/api": {
+      "development": "./src/primitives/exclusion-policy/api/index.ts",
+      "types": "./dist/primitives-exclusion-policy-api.d.mts",
+      "default": "./dist/primitives-exclusion-policy-api.mjs"
+    },
+    "./primitives/skills/api": {
+      "development": "./src/primitives/skills/api/index.ts",
+      "types": "./dist/primitives-skills-api.d.mts",
+      "default": "./dist/primitives-skills-api.mjs"
+    },
+    "./primitives/mcp/api": {
+      "development": "./src/primitives/mcp/api/index.ts",
+      "types": "./dist/primitives-mcp-api.d.mts",
+      "default": "./dist/primitives-mcp-api.mjs"
+    },
+    "./primitives/exec/api": {
+      "development": "./src/primitives/exec/api/index.ts",
+      "types": "./dist/primitives-exec-api.d.mts",
+      "default": "./dist/primitives-exec-api.mjs"
+    },
+    "./primitives/host-dependencies/api": {
+      "development": "./src/primitives/host-dependencies/api/index.ts",
+      "types": "./dist/primitives-host-dependencies-api.d.mts",
+      "default": "./dist/primitives-host-dependencies-api.mjs"
+    },
+    "./primitives/kv/api": {
+      "development": "./src/primitives/kv/api/index.ts",
+      "types": "./dist/primitives-kv-api.d.mts",
+      "default": "./dist/primitives-kv-api.mjs"
+    },
+    "./primitives/terminal-shell/api": {
+      "development": "./src/primitives/terminal-shell/api/index.ts",
+      "types": "./dist/primitives-terminal-shell-api.d.mts",
+      "default": "./dist/primitives-terminal-shell-api.mjs"
+    },
+    "./primitives/kv/node": {
+      "development": "./src/primitives/kv/node/index.ts",
+      "types": "./dist/primitives-kv-node.d.mts",
+      "default": "./dist/primitives-kv-node.mjs"
+    },
+    "./primitives/emdash-config/api": {
+      "development": "./src/primitives/emdash-config/api/index.ts",
+      "types": "./dist/primitives-emdash-config-api.d.mts",
+      "default": "./dist/primitives-emdash-config-api.mjs"
+    },
+    "./primitives/versioned-schema/api": {
+      "development": "./src/primitives/versioned-schema/api/index.ts",
+      "types": "./dist/primitives-versioned-schema-api.d.mts",
+      "default": "./dist/primitives-versioned-schema-api.mjs"
+    },
+    "./primitives/runtime-resolution/api": {
+      "development": "./src/primitives/runtime-resolution/api/index.ts",
+      "types": "./dist/primitives-runtime-resolution-api.d.mts",
+      "default": "./dist/primitives-runtime-resolution-api.mjs"
+    },
+    "./primitives/sqlite-store/api": {
+      "development": "./src/primitives/sqlite-store/api/index.ts",
+      "types": "./dist/primitives-sqlite-store-api.d.mts",
+      "default": "./dist/primitives-sqlite-store-api.mjs"
+    },
+    "./primitives/sqlite-store/codegen": {
+      "development": "./src/primitives/sqlite-store/codegen/index.ts",
+      "types": "./dist/primitives-sqlite-store-codegen.d.mts",
+      "default": "./dist/primitives-sqlite-store-codegen.mjs"
+    },
+    "./primitives/sqlite-store/node": {
+      "development": "./src/primitives/sqlite-store/node/index.ts",
+      "types": "./dist/primitives-sqlite-store-node.d.mts",
+      "default": "./dist/primitives-sqlite-store-node.mjs"
+    },
+    "./services/exec/api": {
+      "development": "./src/services/exec/api/index.ts",
+      "types": "./dist/services-exec-api.d.mts",
+      "default": "./dist/services-exec-api.mjs"
+    },
+    "./services/shell-env/api": {
+      "development": "./src/services/shell-env/api/index.ts",
+      "types": "./dist/services-shell-env-api.d.mts",
+      "default": "./dist/services-shell-env-api.mjs"
+    },
+    "./services/shell-env/node": {
+      "development": "./src/services/shell-env/node/index.ts",
+      "types": "./dist/services-shell-env-node.d.mts",
+      "default": "./dist/services-shell-env-node.mjs"
+    },
+    "./services/pty/api": {
+      "development": "./src/services/pty/api/index.ts",
+      "types": "./dist/services-pty-api.d.mts",
+      "default": "./dist/services-pty-api.mjs"
+    },
+    "./services/host-dependencies/api": {
+      "development": "./src/services/host-dependencies/api/index.ts",
+      "types": "./dist/services-host-dependencies-api.d.mts",
+      "default": "./dist/services-host-dependencies-api.mjs"
+    },
+    "./services/host-dependencies/node": {
+      "development": "./src/services/host-dependencies/node/index.ts",
+      "types": "./dist/services-host-dependencies-node.d.mts",
+      "default": "./dist/services-host-dependencies-node.mjs"
+    },
+    "./services/runtime-broker/api": {
+      "development": "./src/services/runtime-broker/api/index.ts",
+      "types": "./dist/services-runtime-broker-api.d.mts",
+      "default": "./dist/services-runtime-broker-api.mjs"
+    },
+    "./services/agent-plugins/api/plugins": {
+      "development": "./src/services/agent-plugins/api/plugins/index.ts",
+      "types": "./dist/services-agent-plugins-api-plugins.d.mts",
+      "default": "./dist/services-agent-plugins-api-plugins.mjs"
+    },
+    "./services/agent-plugins/api/plugins/helpers": {
+      "development": "./src/services/agent-plugins/api/plugins/helpers/index.ts",
+      "types": "./dist/services-agent-plugins-api-plugins-helpers.d.mts",
+      "default": "./dist/services-agent-plugins-api-plugins-helpers.mjs"
+    },
+    "./services/agent-plugins/api/plugins/capabilities/auth": {
+      "development": "./src/services/agent-plugins/api/plugins/capabilities/auth.ts",
+      "types": "./dist/services-agent-plugins-api-plugins-capabilities-auth.d.mts",
+      "default": "./dist/services-agent-plugins-api-plugins-capabilities-auth.mjs"
+    },
+    "./services/session-intents/api": {
+      "development": "./src/services/session-intents/api/index.ts",
+      "types": "./dist/services-session-intents-api.d.mts",
+      "default": "./dist/services-session-intents-api.mjs"
+    },
+    "./services/session-intents/node": {
+      "development": "./src/services/session-intents/node/index.ts",
+      "types": "./dist/services-session-intents-node.d.mts",
+      "default": "./dist/services-session-intents-node.mjs"
+    },
+    "./services/fs-watch/api": {
+      "development": "./src/services/fs-watch/api/index.ts",
+      "types": "./dist/services-fs-watch-api.d.mts",
+      "default": "./dist/services-fs-watch-api.mjs"
+    },
+    "./services/fs-watch/node": {
+      "development": "./src/services/fs-watch/node/index.ts",
+      "types": "./dist/services-fs-watch-node.d.mts",
+      "default": "./dist/services-fs-watch-node.mjs"
+    },
+    "./runtimes/git/api": {
+      "development": "./src/runtimes/git/api/index.ts",
+      "types": "./dist/runtimes-git-api.d.mts",
+      "default": "./dist/runtimes-git-api.mjs"
+    },
+    "./runtimes/git/node": {
+      "development": "./src/runtimes/git/node/index.ts",
+      "types": "./dist/runtimes-git-node.d.mts",
+      "default": "./dist/runtimes-git-node.mjs"
+    },
+    "./runtimes/files/api": {
+      "development": "./src/runtimes/files/api/index.ts",
+      "types": "./dist/runtimes-files-api.d.mts",
+      "default": "./dist/runtimes-files-api.mjs"
+    },
+    "./runtimes/files/node": {
+      "development": "./src/runtimes/files/node/index.ts",
+      "types": "./dist/runtimes-files-node.d.mts",
+      "default": "./dist/runtimes-files-node.mjs"
+    },
+    "./runtimes/file-search/api": {
+      "development": "./src/runtimes/file-search/api/index.ts",
+      "types": "./dist/runtimes-file-search-api.d.mts",
+      "default": "./dist/runtimes-file-search-api.mjs"
+    },
+    "./runtimes/file-search/node": {
+      "development": "./src/runtimes/file-search/node/index.ts",
+      "types": "./dist/runtimes-file-search-node.d.mts",
+      "default": "./dist/runtimes-file-search-node.mjs"
+    },
+    "./runtimes/acp/api": {
+      "development": "./src/runtimes/acp/api/index.ts",
+      "types": "./dist/runtimes-acp-api.d.mts",
+      "default": "./dist/runtimes-acp-api.mjs"
+    },
+    "./runtimes/acp/api/client": {
+      "development": "./src/runtimes/acp/api/client.ts",
+      "types": "./dist/runtimes-acp-api-client.d.mts",
+      "default": "./dist/runtimes-acp-api-client.mjs"
+    },
+    "./runtimes/acp/api/transport": {
+      "development": "./src/runtimes/acp/api/transport.ts",
+      "types": "./dist/runtimes-acp-api-transport.d.mts",
+      "default": "./dist/runtimes-acp-api-transport.mjs"
+    },
+    "./runtimes/acp/node": {
+      "development": "./src/runtimes/acp/node/index.ts",
+      "types": "./dist/runtimes-acp-node.d.mts",
+      "default": "./dist/runtimes-acp-node.mjs"
+    },
+    "./runtimes/agent-config/api": {
+      "development": "./src/runtimes/agent-config/api/index.ts",
+      "types": "./dist/runtimes-agent-config-api.d.mts",
+      "default": "./dist/runtimes-agent-config-api.mjs"
+    },
+    "./runtimes/agent-config/node": {
+      "development": "./src/runtimes/agent-config/node/index.ts",
+      "types": "./dist/runtimes-agent-config-node.d.mts",
+      "default": "./dist/runtimes-agent-config-node.mjs"
+    },
+    "./runtimes/conversations/api": {
+      "development": "./src/runtimes/conversations/api/index.ts",
+      "types": "./dist/runtimes-conversations-api.d.mts",
+      "default": "./dist/runtimes-conversations-api.mjs"
+    },
+    "./runtimes/conversations/node": {
+      "development": "./src/runtimes/conversations/node/index.ts",
+      "types": "./dist/runtimes-conversations-node.d.mts",
+      "default": "./dist/runtimes-conversations-node.mjs"
+    },
+    "./runtimes/tui-agents/api": {
+      "development": "./src/runtimes/tui-agents/api/index.ts",
+      "types": "./dist/runtimes-tui-agents-api.d.mts",
+      "default": "./dist/runtimes-tui-agents-api.mjs"
+    },
+    "./runtimes/tui-agents/node": {
+      "development": "./src/runtimes/tui-agents/node/index.ts",
+      "types": "./dist/runtimes-tui-agents-node.d.mts",
+      "default": "./dist/runtimes-tui-agents-node.mjs"
+    },
+    "./runtimes/terminals/api": {
+      "development": "./src/runtimes/terminals/api/index.ts",
+      "types": "./dist/runtimes-terminals-api.d.mts",
+      "default": "./dist/runtimes-terminals-api.mjs"
+    },
+    "./runtimes/terminals/node": {
+      "development": "./src/runtimes/terminals/node/index.ts",
+      "types": "./dist/runtimes-terminals-node.d.mts",
+      "default": "./dist/runtimes-terminals-node.mjs"
+    },
+    "./runtimes/workspace-registry/api": {
+      "development": "./src/runtimes/workspace-registry/api/index.ts",
+      "types": "./dist/runtimes-workspace-registry-api.d.mts",
+      "default": "./dist/runtimes-workspace-registry-api.mjs"
+    },
+    "./runtimes/workspace-registry/node": {
+      "development": "./src/runtimes/workspace-registry/node/index.ts",
+      "types": "./dist/runtimes-workspace-registry-node.d.mts",
+      "default": "./dist/runtimes-workspace-registry-node.mjs"
+    },
+    "./runtimes/resource-usage/api": {
+      "development": "./src/runtimes/resource-usage/api/index.ts",
+      "types": "./dist/runtimes-resource-usage-api.d.mts",
+      "default": "./dist/runtimes-resource-usage-api.mjs"
+    },
+    "./runtimes/resource-usage/node": {
+      "development": "./src/runtimes/resource-usage/node/index.ts",
+      "types": "./dist/runtimes-resource-usage-node.d.mts",
+      "default": "./dist/runtimes-resource-usage-node.mjs"
+    },
+    "./runtimes/host-settings/api": {
+      "development": "./src/runtimes/host-settings/api/index.ts",
+      "types": "./dist/runtimes-host-settings-api.d.mts",
+      "default": "./dist/runtimes-host-settings-api.mjs"
+    },
+    "./runtimes/host-settings/node": {
+      "development": "./src/runtimes/host-settings/node/index.ts",
+      "types": "./dist/runtimes-host-settings-node.d.mts",
+      "default": "./dist/runtimes-host-settings-node.mjs"
+    },
+    "./runtimes/scripts/api": {
+      "development": "./src/runtimes/scripts/api/index.ts",
+      "types": "./dist/runtimes-scripts-api.d.mts",
+      "default": "./dist/runtimes-scripts-api.mjs"
+    },
+    "./runtimes/scripts/node": {
+      "development": "./src/runtimes/scripts/node/index.ts",
+      "types": "./dist/runtimes-scripts-node.d.mts",
+      "default": "./dist/runtimes-scripts-node.mjs"
+    },
+    "./workspace-server": {
+      "development": "./src/workspace-server/index.ts",
+      "types": "./dist/workspace-server.d.mts",
+      "default": "./dist/workspace-server.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "dev": "tsdown --watch",
+    "build": "tsdown",
+    "test": "vitest run",
+    "lint": "oxlint .",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "typecheck": "tsgo --noEmit -p tsconfig.json",
+    "db:generate:automations": "drizzle-kit generate --config drizzle-automations.config.ts && tsx scripts/bundle-drizzle-migrations.ts src/runtimes/automations/node/persistence/migrations",
+    "db:generate:conversations": "drizzle-kit generate --config drizzle-conversations.config.ts && tsx scripts/bundle-drizzle-migrations.ts src/runtimes/conversations/node/persistence/migrations",
+    "db:generate:file-search": "drizzle-kit generate --config drizzle-file-search.config.ts && tsx scripts/bundle-drizzle-migrations.ts src/runtimes/file-search/node/storage/migrations",
+    "db:generate:workspace-registry": "drizzle-kit generate --config drizzle-workspace-registry.config.ts && tsx scripts/bundle-drizzle-migrations.ts src/runtimes/workspace-registry/node/persistence/migrations"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^1.1.0",
+    "@emdash/shared": "workspace:*",
+    "@emdash/wire": "workspace:*",
+    "@parcel/watcher": "^2.5.6",
+    "better-sqlite3": "^12.10.0",
+    "drizzle-orm": "^0.45.2",
+    "minimatch": "^10.2.5",
+    "semver": "^7.8.4",
+    "smol-toml": "^1.6.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.13.1",
+    "@types/semver": "^7.7.1",
+    "@typescript/native-preview": "7.0.0-dev.20260609.1",
+    "drizzle-kit": "^0.31.10",
+    "node-pty": "1.1.0",
+    "tsdown": "^0.22.2",
+    "tsx": "^4.22.4",
+    "vitest": "^4.1.0"
+  },
+  "peerDependencies": {
+    "node-pty": "1.1.0"
+  },
+  "peerDependenciesMeta": {
+    "node-pty": {
+      "optional": true
+    }
+  }
+}

@@ -1,0 +1,69 @@
+# Hardcore CAD runtime lock.
+#
+# This is intentionally owned by the desktop app rather than Jake's source
+# package: cadgen stays installed from the canonical Text-to-CAD package, while
+# every third-party distribution it resolves is constrained to the versions
+# exercised by Hardcore's packaged-runtime smoke test. Constraints do not
+# force platform-specific packages to install, but any package pip selects must
+# use the exact version listed here.
+
+Pygments==2.21.0
+anytree==2.13.0
+asttokens==3.0.2
+build123d==0.11.1
+cadquery-ocp==7.9.3.1.1
+cadquery-ocp-novtk==7.9.3.1.1
+cadquery-ocp-proxy==7.9.3.1.1
+certifi==2026.7.22
+charset-normalizer==3.5.1
+colorama==0.4.6
+contourpy==1.3.3
+cycler==0.12.1
+executing==2.2.1
+ezdxf==1.4.4
+fonttools==4.63.0
+idna==3.19
+ipython==9.17.0
+ipython-pygments-lexers==1.1.1
+jedi==0.20.0
+joblib==1.5.3
+kiwisolver==1.5.1
+lib3mf==2.5.0
+matplotlib==3.11.1
+matplotlib-inline==0.2.2
+mpmath==1.3.0
+narwhals==2.25.0
+numpy==2.4.6
+ocp-gordon==0.2.2
+ocpsvg==0.6.0
+packaging==26.3
+parso==0.8.7
+pexpect==4.9.0
+pillow==12.3.0
+pip==25.2
+prompt-toolkit==3.0.53
+psutil==7.2.2
+ptyprocess==0.7.0
+pure-eval==0.2.3
+pyparsing==3.3.2
+python-dateutil==2.9.0.post0
+requests==2.34.2
+scikit-learn==1.9.0
+scipy==1.17.1
+setuptools==80.9.0
+shapely==2.1.2
+six==1.17.0
+stack-data==0.6.3
+svgelements==1.9.6
+svgpathtools==1.7.4
+svgwrite==1.4.3
+sympy==1.14.0
+threadpoolctl==3.6.0
+traitlets==5.16.1
+trianglesolver==1.2
+typing-extensions==4.16.0
+urllib3==2.7.0
+vtk==9.6.2
+wcwidth==0.8.3
+webcolors==24.8.0
+wheel==0.45.1

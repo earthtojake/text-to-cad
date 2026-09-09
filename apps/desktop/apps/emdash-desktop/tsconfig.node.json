@@ -1,0 +1,40 @@
+{
+  // Node-environment program: main + entries (incl. preload) + core node/api
+  // surfaces + tooling. No DOM lib and no @renderer alias — a main file
+  // importing a renderer path or an api file touching `window` fails this
+  // program. Shared contributions (commands, settings, palette, mementos,
+  // subject) ride in through the shared manifests that aggregate them.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node", "electron-vite/node"],
+    "paths": {
+      "@core/*": ["./src/core/*"],
+      "@main/*": ["./src/main/*"],
+      "@root/*": ["./*"],
+      "@/assets/*": ["./src/assets/*"],
+      "@tooling/*": ["./tooling/*"],
+      // The real cross-fetch d.ts pulls `/// <reference lib="dom" />` into the
+      // program; see the shim for the full chain.
+      "cross-fetch": ["./tooling/types/cross-fetch.node.d.ts"]
+    }
+  },
+  "include": [
+    "src/entry/**/*",
+    "src/main/**/*",
+    "src/core/**/node/**/*",
+    "src/core/**/api/**/*",
+    "src/core/manifests/shared/**/*",
+    "src/core/**/contributions/worker.ts",
+    "src/types/**/*",
+    "tooling/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "out",
+    "**/_*/**",
+    // `api/**` is isomorphic except its browser-only subtree.
+    "src/core/**/api/browser/**"
+  ]
+}

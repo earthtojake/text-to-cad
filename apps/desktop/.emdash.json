@@ -1,0 +1,15 @@
+{
+  "preservePatterns": [
+    ".env",
+    ".env.keys",
+    ".env.local",
+    ".env.*.local",
+    ".envrc",
+    "docker-compose.override.yml"
+  ],
+  "scripts": {
+    "setup": "",
+    "run": "",
+    "teardown": ""
+  }
+}

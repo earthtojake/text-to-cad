@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "allowJs": false,
+    "noEmit": true,
+    "jsx": "react-jsx"
+  }
+}

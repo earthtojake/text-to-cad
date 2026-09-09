@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hardcore Recovery</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+        background: Canvas;
+        color: CanvasText;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 28px;
+      }
+      main {
+        width: min(100%, 520px);
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 24px;
+      }
+      p {
+        margin: 0 0 18px;
+        color: color-mix(in srgb, CanvasText 72%, transparent);
+        line-height: 1.5;
+      }
+      #status {
+        min-height: 24px;
+        margin-bottom: 14px;
+        font-size: 13px;
+      }
+      progress {
+        width: 100%;
+        margin: 0 0 16px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+      button {
+        border: 1px solid color-mix(in srgb, CanvasText 22%, transparent);
+        border-radius: 7px;
+        padding: 8px 12px;
+        background: color-mix(in srgb, Canvas 92%, CanvasText);
+        color: CanvasText;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: white;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.5;
+      }
+      details {
+        margin-top: 8px;
+        font-size: 12px;
+      }
+      pre {
+        max-height: 110px;
+        overflow: auto;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        padding: 10px;
+        border-radius: 6px;
+        background: color-mix(in srgb, CanvasText 7%, transparent);
+      }
+      footer {
+        margin-top: 16px;
+        font-size: 11px;
+        color: color-mix(in srgb, CanvasText 55%, transparent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Something went wrong</h1>
+      <p>
+        Hardcore could not finish starting. You can check for an update, restart Hardcore, or open
+        the logs for more information.
+      </p>
+      <div id="status" role="status"></div>
+      <progress id="progress" max="100" value="0" hidden></progress>
+      <div class="actions">
+        <button id="update" class="primary">Check for updates</button>
+        <button onclick="navigate('restart')">Restart Hardcore</button>
+        <button onclick="navigate('open-logs')">Open logs</button>
+        <button onclick="navigate('quit')">Quit</button>
+      </div>
+      <details id="error-details">
+        <summary>Error details</summary>
+        <pre id="error"></pre>
+      </details>
+      <footer id="version"></footer>
+    </main>
+    <script>
+      // Bootstrap state is injected synchronously by main before loadURL.
+      // The sentinel below is replaced with a JSON literal at build time by
+      // recovery-window.ts so there is no async round-trip on first render.
+      var state = __RECOVERY_BOOTSTRAP__;
+
+      var statusEl = document.querySelector('#status');
+      var progressEl = document.querySelector('#progress');
+      var updateBtn = document.querySelector('#update');
+      var errorEl = document.querySelector('#error');
+      var errorDetails = document.querySelector('#error-details');
+      var versionEl = document.querySelector('#version');
+
+      function navigate(action) {
+        window.location.href = 'hardcore-recovery://' + action;
+      }
+
+      window.renderState = function (next) {
+        state = next;
+        errorEl.textContent = next.errorMessage || '';
+        versionEl.textContent = 'Version ' + next.version;
+
+        // Auto-expand error details whenever an error message is present.
+        if (next.errorMessage) {
+          errorDetails.open = true;
+        }
+
+        progressEl.hidden = next.updateStatus !== 'downloading';
+        progressEl.value = next.downloadProgress || 0;
+
+        updateBtn.disabled =
+          !next.updaterActive ||
+          next.updateStatus === 'checking' ||
+          next.updateStatus === 'downloading' ||
+          next.updateStatus === 'installing';
+
+        switch (next.updateStatus) {
+          case 'available':
+            statusEl.textContent = 'Version ' + next.availableVersion + ' is available.';
+            updateBtn.textContent = 'Download update';
+            break;
+          case 'downloading':
+            statusEl.textContent =
+              'Downloading update\u2026 ' + Math.round(next.downloadProgress || 0) + '%';
+            updateBtn.textContent = 'Downloading\u2026';
+            break;
+          case 'downloaded':
+            statusEl.textContent = 'Version ' + next.availableVersion + ' is ready to install.';
+            updateBtn.textContent = 'Install and restart';
+            break;
+          case 'checking':
+            statusEl.textContent = 'Checking for updates\u2026';
+            updateBtn.textContent = 'Checking\u2026';
+            break;
+          case 'installing':
+            statusEl.textContent = 'Installing update\u2026';
+            updateBtn.textContent = 'Installing\u2026';
+            break;
+          case 'error':
+            statusEl.textContent = next.error || 'The update check failed.';
+            updateBtn.textContent = 'Check again';
+            break;
+          default:
+            statusEl.textContent = next.updaterActive
+              ? 'Recovery mode is ready.'
+              : 'Automatic updates are unavailable in this build.';
+            updateBtn.textContent = 'Check for updates';
+        }
+      };
+
+      // Update button cycles: check → download → install based on current state.
+      updateBtn.addEventListener('click', function () {
+        var action =
+          state.updateStatus === 'available'
+            ? 'download'
+            : state.updateStatus === 'downloaded'
+              ? 'install'
+              : 'check';
+        navigate(action);
+      });
+
+      // Render initial state synchronously from the injected bootstrap payload.
+      window.renderState(state);
+    </script>
+  </body>
+</html>

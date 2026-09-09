@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hardcore</title>
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('hardcore-theme') || localStorage.getItem('emdash-theme');
+          var pref = raw ? JSON.parse(raw) : null;
+          var effective =
+            pref === 'emlight' || pref === 'emdark'
+              ? pref
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'emdark'
+                : 'emlight';
+          document.documentElement.classList.add(effective);
+          // Jake's SMUI/Nord tokens are repeated here intentionally so the first
+          // Electron paint matches the app before generated CSS is available.
+          var dark = effective === 'emdark';
+          var style = document.documentElement.style;
+          style.backgroundColor = dark ? '#1a1e23' : '#eceff4';
+          style.setProperty('--boot-splash-bg', dark ? '#1a1e23' : '#eceff4');
+          style.setProperty('--boot-splash-fg', dark ? '#d8e0e9' : '#2f3541');
+          style.setProperty('--boot-splash-accent', dark ? '#86c0d0' : '#456387');
+        } catch (_) {}
+      })();
+    </script>
+    <style>
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 28px;
+        background-color: var(--boot-splash-bg, #eceff4);
+        color: var(--boot-splash-fg, #2f3541);
+        font-family: 'IBM Plex Sans', 'Aptos', 'Segoe UI', sans-serif;
+        user-select: none;
+        cursor: default;
+        opacity: 1;
+        transition: opacity 180ms ease-out;
+        -webkit-app-region: drag;
+      }
+      #boot-splash.boot-splash-done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #boot-splash .boot-splash-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 20px;
+        font-weight: 500;
+        opacity: 0.9;
+      }
+      #boot-splash .boot-splash-mark {
+        width: 25px;
+        height: 25px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.6;
+      }
+      #boot-splash .boot-splash-progress {
+        position: relative;
+        width: 132px;
+        height: 2px;
+        border-radius: 9999px;
+        overflow: hidden;
+        background-color: color-mix(in srgb, var(--boot-splash-fg, #2f3541) 14%, transparent);
+        opacity: 0;
+        animation: boot-splash-reveal 240ms ease-out 1200ms forwards;
+      }
+      #boot-splash .boot-splash-progress::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 40%;
+        border-radius: 9999px;
+        background-color: var(--boot-splash-accent, #456387);
+        animation: boot-splash-slide 1.3s ease-in-out infinite;
+      }
+      #boot-splash-escape {
+        position: absolute;
+        bottom: 48px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        font-size: 13px;
+        color: color-mix(in srgb, var(--boot-splash-fg, #2f3541) 72%, transparent);
+      }
+      #boot-splash-escape[hidden] {
+        display: none;
+      }
+      #boot-splash-escape p {
+        margin: 0;
+      }
+      .boot-splash-escape-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .boot-splash-escape-actions button {
+        -webkit-app-region: no-drag;
+        appearance: none;
+        font: inherit;
+        font-size: 11px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--boot-splash-fg, #2f3541);
+        background: transparent;
+        border: 1px solid color-mix(in srgb, var(--boot-splash-fg, #2f3541) 30%, transparent);
+        border-radius: 8px;
+        padding: 5px 12px;
+        cursor: pointer;
+        transition:
+          background-color 120ms ease,
+          border-color 120ms ease;
+      }
+      .boot-splash-escape-actions button:hover {
+        background-color: color-mix(in srgb, var(--boot-splash-fg, #2f3541) 8%, transparent);
+      }
+      .boot-splash-escape-actions button:focus-visible {
+        outline: 3px solid var(--boot-splash-accent, #456387);
+        outline-offset: 2px;
+      }
+      @keyframes boot-splash-reveal {
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes boot-splash-slide {
+        0% {
+          left: -40%;
+        }
+        100% {
+          left: 100%;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-splash .boot-splash-progress {
+          animation-duration: 1ms;
+        }
+        #boot-splash .boot-splash-progress::before {
+          animation: none;
+          left: 30%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="boot-splash">
+      <div class="boot-splash-brand" aria-label="Hardcore">
+        <svg class="boot-splash-mark" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m12 2.8 8 4.6v9.2l-8 4.6-8-4.6V7.4Z" />
+          <path d="m4.3 7.6 7.7 4.5 7.7-4.5M12 12.1v8.7" />
+        </svg>
+        <span>Hardcore</span>
+      </div>
+      <div class="boot-splash-progress"></div>
+      <div id="boot-splash-escape" hidden>
+        <p>Hardcore is taking longer than expected to start.</p>
+        <div class="boot-splash-escape-actions">
+          <button id="boot-splash-restart" type="button">Restart Hardcore</button>
+          <button id="boot-splash-recovery" type="button">Open recovery</button>
+        </div>
+      </div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

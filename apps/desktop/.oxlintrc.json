@@ -1,0 +1,181 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "react"],
+  "jsPlugins": ["./tooling/oxlint/index.js"],
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2020": true
+  },
+  "categories": {
+    "correctness": "error"
+  },
+  "ignorePatterns": ["dist/**", "out/**", "build/**", "node_modules/**", "**/_*/**"],
+  "options": {
+    "typeAware": true,
+    "respectEslintDisableDirectives": false,
+    "reportUnusedDisableDirectives": "warn"
+  },
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    "prefer-const": "error",
+    "typescript/no-explicit-any": "warn",
+    "typescript/consistent-type-imports": [
+      "warn",
+      {
+        "prefer": "type-imports",
+        "fixStyle": "inline-type-imports"
+      }
+    ],
+    "no-empty": ["warn", { "allowEmptyCatch": true }],
+    "no-control-regex": "off",
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn",
+    "typescript/no-floating-promises": "off",
+    "typescript/no-misused-promises": "off",
+    "typescript/await-thenable": "off",
+    "typescript/no-base-to-string": "off",
+    "typescript/no-meaningless-void-operator": "off",
+    "typescript/no-redundant-type-constituents": "off",
+    "typescript/no-useless-default-assignment": "off",
+    "typescript/restrict-template-expressions": "off",
+    "typescript/unbound-method": "off",
+    "emdash/core-host-boundaries": "error",
+    "emdash/core-module-boundaries": "error",
+    "emdash/no-dynamic-imports": "error",
+    "emdash/no-tsx-in-api": "error"
+  },
+  "overrides": [
+    {
+      "files": ["apps/emdash-desktop/src/core/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@core/services/app-db/node/schema",
+                "importNames": ["workspaces"],
+                "message": "The Workspace Registry is the sole writer. Import workspaceRegistryTable/liveWorkspaces from @core/features/workspaces/api/node/registry."
+              },
+              {
+                "name": "@core/services/app-db/node/schema",
+                "importNames": ["conversations"],
+                "message": "The Conversation Registry is the sole writer. Import conversationRegistryTable/liveConversations from @core/features/conversations/api/node/registry."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "apps/emdash-desktop/src/core/features/workspaces/api/node/registry/**/*.{ts,tsx}",
+        "apps/emdash-desktop/src/core/features/conversations/api/node/registry/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": ["apps/emdash-desktop/src/**/*.{ts,tsx}"],
+      "rules": {
+        "typescript/no-floating-promises": "warn",
+        "typescript/no-misused-promises": [
+          "warn",
+          {
+            "checksVoidReturn": {
+              "attributes": false
+            }
+          }
+        ],
+        "typescript/await-thenable": "warn"
+      }
+    },
+    {
+      "files": [
+        "apps/emdash-desktop/src/entry/**/*.{ts,tsx}",
+        "apps/emdash-desktop/src/main/**/*.{ts,tsx}",
+        "apps/emdash-desktop/src/renderer/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "emdash/no-tooling-imports": "error"
+      }
+    },
+    {
+      "files": ["apps/emdash-desktop/src/main/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "electron",
+                "message": "Import Electron only from main/host, main/gateway, or main/bootstrap."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "apps/emdash-desktop/src/main/host/**/*.{ts,tsx}",
+        "apps/emdash-desktop/src/main/gateway/**/*.{ts,tsx}",
+        "apps/emdash-desktop/src/main/bootstrap/**/*.{ts,tsx}",
+        "apps/emdash-desktop/src/main/core/**/*.{ts,tsx}",
+        "apps/emdash-desktop/src/main/db/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": ["apps/emdash-desktop/src/renderer/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@emdash/core/services/host-dependencies/api",
+                  "@emdash/core/services/host-dependencies/api/*"
+                ],
+                "message": "Import dependency types from @core/primitives/agents/api instead of @emdash/core/services/host-dependencies/api*."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "apps/emdash-desktop/src/entry/**/*.{ts,tsx}",
+        "apps/emdash-desktop/src/main/bootstrap/**/*.{ts,tsx}",
+        "apps/emdash-desktop/src/main/host/recovery/**/*.{ts,tsx}",
+        "apps/emdash-desktop/scripts/**",
+        "apps/emdash-desktop/src/core/features/editor/browser/monaco/monaco-bootstrap.ts",
+        "apps/workspace-server/scripts/**",
+        "packages/ui/src/react/components/markdown/highlight.ts"
+      ],
+      "rules": {
+        "emdash/no-dynamic-imports": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.{js,jsx,ts,tsx}"],
+      "rules": {
+        "typescript/no-explicit-any": "off",
+        "emdash/no-dynamic-imports": "off",
+        "emdash/no-tooling-imports": "off"
+      }
+    }
+  ]
+}

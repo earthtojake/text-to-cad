@@ -1,0 +1,1 @@
+ALTER TABLE `workspaces` ADD `deletion_tombstone` text;
