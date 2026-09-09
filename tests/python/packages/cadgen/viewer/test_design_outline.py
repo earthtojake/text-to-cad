@@ -123,10 +123,10 @@ def case():
     def test_read_is_contained_and_never_runs_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp, 'models'); root.mkdir()
-            step = root / 'case.step'; step.write_text('fixture')
+            step = root / 'case.step'; step.write_text('fixture', encoding="utf-8")
             source = root / 'case.py'
             marker = root / 'executed'
-            source.write_text(f"open({str(marker)!r}, 'w').write('bad')\n@step\ndef case():\n    Box(1,2,3)\n")
+            source.write_text(f"open({str(marker)!r}, 'w').write('bad')\n@step\ndef case():\n    Box(1,2,3)\n", encoding="utf-8")
             before = (source.read_bytes(), step.read_bytes())
             result = read_design_outline(str(root), 'case.step')
             self.assertEqual(result['status'], 'ready')
@@ -135,7 +135,7 @@ def case():
             self.assertEqual(before, (source.read_bytes(), step.read_bytes()))
             source.unlink()
             self.assertEqual(read_design_outline(str(root), 'case.step')['status'], 'unavailable')
-            outside = Path(tmp, 'outside.py'); outside.write_text('Box(1,2,3)')
+            outside = Path(tmp, 'outside.py'); outside.write_text('Box(1,2,3)', encoding="utf-8")
             source.symlink_to(outside)
             with self.assertRaises(Exception):
                 read_design_outline(str(root), 'case.step')
@@ -145,9 +145,9 @@ def case():
     def test_ambiguous_sources_and_oversize_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp, 'models'); root.mkdir()
-            (root / 'case.step').write_text('fixture')
-            (root / 'case.py').write_text('Box(1,2,3)')
-            alternate = root / 'case.step.py'; alternate.write_text('Cylinder(1,2)')
+            (root / 'case.step').write_text('fixture', encoding="utf-8")
+            (root / 'case.py').write_text('Box(1,2,3)', encoding="utf-8")
+            alternate = root / 'case.step.py'; alternate.write_text('Cylinder(1,2)', encoding="utf-8")
             self.assertEqual(read_design_outline(str(root), 'case.step')['status'], 'ambiguous')
             alternate.unlink()
             (root / 'case.py').write_bytes(b'#' * (512 * 1024 + 1))
