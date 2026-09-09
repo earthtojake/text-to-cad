@@ -1,3 +1,5 @@
+import SelectionFilterMenu from "./SelectionFilterMenu.jsx";
+import { SELECTION_FILTERS } from "../../workbench/selectionFilter.js";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Camera,
@@ -114,6 +116,10 @@ function DesktopFloatingToolBar({
   onToolbarEnter,
   onToolbarLeave,
   handleExitPreviewMode,
+  selectionFilter = null,
+  onSelectionFilterChange,
+  selectionFilterNotice = "",
+  groupsAvailable = false,
   selectionToolActive,
   referenceSelectionPending = false,
   referenceSelectionUnavailable = false,
@@ -124,6 +130,7 @@ function DesktopFloatingToolBar({
   handleAnimationPlayToggle,
   drawToolActive,
   measureModeActive = false,
+  measurementPanel = null,
   measureDisabled = false,
   panToolActive,
   handleSelectTabToolMode,
@@ -173,7 +180,7 @@ function DesktopFloatingToolBar({
   // Measure the scene, not the window: the Inspector can leave a very thin viewport.
   const fullButtonCount = previewMode
     ? 2 + Number(hasCapture) + Number(showAnimationPlay)
-    : 2 + Number(hasCapture) + (showToolCluster ? 4 + Number(showAnimationPlay) : 0);
+    : 2 + Number(hasCapture) + Number(selectionFilter !== null) + (showToolCluster ? 4 + Number(showAnimationPlay) : 0);
   useLayoutEffect(() => {
     const scene = toolbarRef.current?.parentElement;
     if (!scene) return undefined;
@@ -384,6 +391,7 @@ function DesktopFloatingToolBar({
                     <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />
                   </ToolbarButton>
 
+                  {!compact && selectionFilter !== null && <SelectionFilterMenu value={selectionFilter} onChange={onSelectionFilterChange} groupsAvailable={groupsAvailable} disabled={viewerLoading || !viewportContent} />}
                   <ToolbarButton
                     label="Pan"
                     active={panToolActive}
@@ -437,8 +445,20 @@ function DesktopFloatingToolBar({
         </div>
         </div>
       </TooltipProvider>
+      {!previewMode && selectionToolActive && selectionFilter !== null && (compact || selectionFilter !== "all") && (
+        <div className={`pointer-events-auto max-w-full rounded-md px-1 py-0.5 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
+          {compact ? <SelectionFilterMenu compact value={selectionFilter} onChange={onSelectionFilterChange} groupsAvailable={groupsAvailable} disabled={viewerLoading || !viewportContent} />
+            : <span className="px-1 text-micro text-muted-foreground">{SELECTION_FILTERS.find(item => item.id === selectionFilter)?.label}</span>}
+        </div>
+      )}
+      {!previewMode && selectionToolActive && selectionFilterNotice && <p role="status" className="max-w-56 rounded-md border bg-background px-2 py-1 text-micro text-muted-foreground shadow-sm">{selectionFilterNotice}</p>}
 
 
+      {!previewMode && measureModeActive && measurementPanel && <section aria-label="Measurements" className={`pointer-events-auto w-72 max-w-full max-h-64 overflow-y-auto rounded-md ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
+        <div className="flex items-center justify-between gap-2 border-b px-2 py-1.5 text-xs"><span>Measure</span><button type="button" className="rounded-sm p-1 hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring" aria-label="Finish measuring" onClick={() => handleSelectTabToolMode("references")}><X className="size-3" aria-hidden="true" /></button></div>
+        {measurementPanel}
+        <p className="px-2 pb-2 text-micro text-muted-foreground">Clears when you leave Measure.</p>
+      </section>}
       {!previewMode && supportsTool(renderFormat, "draw") && drawToolActive ? (
         <DrawingToolbar
           className={`${CAD_WORKSPACE_TOOLBAR_DESKTOP_WIDTH_CLASS} max-w-full`}

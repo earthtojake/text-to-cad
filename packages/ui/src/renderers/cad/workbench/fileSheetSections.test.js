@@ -56,35 +56,27 @@ test("rendered file sheet sections include closed-by-default sections", () => {
   }), [
     "status",
     "tree",
-    "reference",
     // Pose sits directly after Reference: it is the one tab in this strip that MOVES
     // the geometry, so it takes the position nearest the default rather than trailing
     // the readouts. Animation follows it.
     "pose",
     "animation",
-    "measurements",
     "display"
   ]);
   // The two systems are gated independently: a model may declare mates without
   // shipping clips, ship clips without declaring mates, or do neither.
   assert.deepEqual(renderedFileSheetSectionIds("step", { hasStepPosePanel: true }), [
     "tree",
-    "reference",
     "pose",
-    "measurements",
     "display"
   ]);
   assert.deepEqual(renderedFileSheetSectionIds("step", { hasStepAnimationPanel: true }), [
     "tree",
-    "reference",
     "animation",
-    "measurements",
     "display"
   ]);
   assert.deepEqual(renderedFileSheetSectionIds("step"), [
     "tree",
-    "reference",
-    "measurements",
     "display"
   ]);
   assert.deepEqual(renderedFileSheetSectionIds("srdf"), ["joints"]);

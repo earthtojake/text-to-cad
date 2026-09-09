@@ -122,11 +122,8 @@ export function measureRulerDraftMeasurement(state) {
 }
 
 /**
- * Committed measurements belong to the model, not to the tool. Leaving Measure
- * keeps them — the panel still lists them and the overlay still draws them, the
- * way a CAD measurement stays on screen once taken — and only abandons the
- * half-finished draft. Opening a different entry drops all of them, because the
- * points are world-space against the model that is going away.
+ * Measurements are temporary tool state. Leaving Measure or opening another
+ * model clears the draft and completed rulers together.
  */
 export function measureRulerStateForChange(state, { entryChanged = false, toolActive = true } = {}) {
   if (!state) {
@@ -136,7 +133,7 @@ export function measureRulerStateForChange(state, { entryChanged = false, toolAc
     return null;
   }
   if (!toolActive) {
-    return state.draft ? { draft: null, hover: null, measurements: state.measurements || [] } : state;
+    return null;
   }
   return state;
 }

@@ -1,3 +1,4 @@
+import { syncSectionCaps } from "./sectionCaps.js";
 import {
   applyDisplayRecordTransform,
   buildStepClipPlane,
@@ -132,4 +133,5 @@ export function syncRuntimeStepClipPlane(runtime, clipSettings) {
   syncObjectClipPlanes(runtime.vertexPickGroup, clipPlanes);
   syncObjectClipPlanes(runtime.surfaceLineGroup, clipPlanes);
   syncObjectClipPlanes(runtime.topologyDisplayEdgeLine, clipPlanes);
+  syncSectionCaps(runtime, clipPlane);
 }

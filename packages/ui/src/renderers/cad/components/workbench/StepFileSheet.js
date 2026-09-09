@@ -8,6 +8,7 @@ import {
   stepTreeNodeChildren
 } from "@hardcore/core/lib/step/stepTree.js";
 import { Button } from "@hardcore/ui/primitives/button";
+import { ScrollArea } from "@hardcore/ui/primitives/scroll-area";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -24,7 +25,6 @@ import { buildFileStatusTab } from "./FileStatusSection.js";
 import { buildPoseControlsTab } from "./PoseControlsSection.js";
 import { buildAnimationControlsTab } from "./AnimationControlsSection.js";
 import { buildStepReferenceTab } from "./StepReferenceSection.js";
-import StepMeasurementsSection from "./StepMeasurementsSection.js";
 import StepFeatureGroups from "./StepFeatureGroups.jsx";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 const treeChevronButtonClasses = "grid h-7 w-7 shrink-0 place-items-center rounded-sm px-0 text-current/60 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45";
@@ -38,8 +38,6 @@ const treeDepthIndentPx = 16;
 const treeDepthGuideOffsetPx = 22;
 const treeDepthMaxPx = 96;
 const treeSectionId = "tree";
-const measurementsSectionId = FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS;
-const EMPTY_MEASUREMENTS = [];
 const treeRevealScrollPaddingTopPx = 120;
 
 function leafIdsHidden(leafPartIds, hiddenPartIds) {
@@ -392,12 +390,6 @@ function StepTreeRowGlyph({ row }) {
 export default function StepFileSheet({
   open,
   featureRecognition = null,
-  measurements = EMPTY_MEASUREMENTS,
-  activeMeasurementId = "",
-  measureModeActive = false,
-  onMeasurementActivate,
-  onMeasurementDelete,
-  onMeasurementsClear,
   isDesktop,
   width,
   onOpenChange,
@@ -627,28 +619,15 @@ export default function StepFileSheet({
     return null;
   }
 
-  const measurementsSection = {
-    id: measurementsSectionId,
-    title: "Measure",
-    content: (
-      <StepMeasurementsSection
-        measurements={measurements}
-        activeId={activeMeasurementId}
-        measureModeActive={measureModeActive}
-        onActivate={onMeasurementActivate}
-        onDelete={onMeasurementDelete}
-        onClear={onMeasurementsClear}
-      />
-    )
-  };
-
   const sections = [
     {
       id: treeSectionId,
       title: "Tree",
+      scrollsContent: true,
       titleAttr: treeSelectionTitle || undefined,
       content: (
-            <div className="max-w-full overflow-hidden pb-2">
+            <div className="flex h-full min-h-0 max-w-full flex-col overflow-hidden">
+              <ScrollArea className="min-h-0 flex-1 pb-2">
               {featureRecognition && <StepFeatureGroups
                 key={featureRecognition.revisionKey}
                 {...featureRecognition}
@@ -1145,11 +1124,15 @@ export default function StepFileSheet({
                 </FileSheetStatusText>
               ) : null}
               </div>
+              </ScrollArea>
+              {selectedReferences.length > 0 && <section aria-label="Selection details" className="max-h-[45%] shrink-0 overflow-y-auto border-t border-sidebar-border/70">
+                <h3 className="px-2 py-2 text-micro text-muted-foreground">Selection</h3>
+                {buildStepReferenceTab({ references: selectedReferences }).content}
+              </section>}
             </div>
       )
     },
-    buildStepReferenceTab({ references: selectedReferences }),
-    // Pose then Animation, directly after Reference and ahead of the readouts: they are
+    // Pose then Animation, directly after Tree and ahead of the readouts: they are
     // the tabs in this strip that MOVE the geometry, so they take the positions nearest
     // the default. This array is what orders the tab strip; renderedFileSheetSectionIds
     // decides which sections exist, and the two have to agree.
@@ -1169,7 +1152,6 @@ export default function StepFileSheet({
       value: FILE_SHEET_SECTION_IDS.STEP_ANIMATION,
       runtime: stepAnimation
     }),
-    measurementsSection,
     ...themeTabs,
     // "Issues" is a diagnostic shown only when there are warnings/errors, so it trails the
     // content + display tabs as the last item in the top section (null when there are none;

@@ -3,6 +3,7 @@ import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
 // Callers decide whether picking is enabled (parts, topology, or Measure).
 // This helper stays format-agnostic.
 export function viewerPickModeForRenderPane({
+  selectionFilter = "all",
   panToolActive = false,
   topologySelectionPending = false,
   topologySelectionUnavailable = false,
@@ -18,6 +19,7 @@ export function viewerPickModeForRenderPane({
   if (panToolActive) {
     return VIEWER_PICK_MODE.NONE;
   }
+  if (!measureMode && selectionFilter === "parts") return VIEWER_PICK_MODE.PARTS;
   if (topologySelectionPending || topologySelectionUnavailable || topologySelectionDeferred) {
     return VIEWER_PICK_MODE.NONE;
   }
@@ -28,6 +30,7 @@ export function viewerPickModeForRenderPane({
   if (measureMode) {
     return VIEWER_PICK_MODE.MEASURE;
   }
+  if (["faces", "edges", "groups"].includes(selectionFilter)) return VIEWER_PICK_MODE.TOPOLOGY;
   if (
     viewerMode === "assembly" &&
     !topologyPickingActive &&

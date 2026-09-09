@@ -57,7 +57,6 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
       return [
         ...status,
         FILE_SHEET_SECTION_IDS.STEP_TREE,
-        FILE_SHEET_SECTION_IDS.STEP_REFERENCE,
         // Pose sits directly after Reference when the model declares mates: it is the
         // one tab here that MOVES the geometry, so it earns the position nearest the
         // default rather than trailing the readouts. Animation follows it — same model,
@@ -66,7 +65,6 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
         ...(options.hasStepAnimationPanel ? [FILE_SHEET_SECTION_IDS.STEP_ANIMATION] : []),
         // Measurements then follows: it and Reference are both readouts about geometry the
         // user has picked, as against the Tree's inventory of what is in the file.
-        FILE_SHEET_SECTION_IDS.STEP_MEASUREMENTS,
         FILE_SHEET_SECTION_IDS.THEME_DISPLAY
       ];
     case "urdf":

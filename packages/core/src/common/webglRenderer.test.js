@@ -8,6 +8,7 @@ import {
 
 test("shared CAD WebGL renderer attributes match viewer depth defaults", () => {
   assert.deepEqual(cadWebGlRendererAttributes(), {
+    stencil: true,
     alpha: true,
     antialias: true,
     powerPreference: "high-performance",
@@ -19,6 +20,7 @@ test("shared CAD WebGL renderer attributes match viewer depth defaults", () => {
 
 test("shared CAD WebGL renderer fallback preserves snapshot/viewer compatibility knobs", () => {
   assert.deepEqual(fallbackCadWebGlRendererAttributes(), {
+    stencil: true,
     alpha: true,
     antialias: false,
     powerPreference: "default",

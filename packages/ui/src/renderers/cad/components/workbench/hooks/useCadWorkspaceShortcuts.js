@@ -3,6 +3,8 @@ import { isEditableTarget } from "../../../ui/dom.js";
 import { TAB_TOOL_MODE } from "../../../workbench/constants.js";
 
 export function useCadWorkspaceShortcuts({
+  selectionActive = false,
+  onClearSelection = null,
   copyStatus,
   screenshotStatus,
   setCopyStatus,
@@ -40,7 +42,7 @@ export function useCadWorkspaceShortcuts({
   }, [copyStatus, screenshotStatus, setCopyStatus, setScreenshotStatus]);
 
   useEffect(() => {
-    if (!(previewMode || viewerAlertOpen || themeSheetOpen || tabToolsOpen || (!isDesktop && filesPanelOpen) || tabToolMode === TAB_TOOL_MODE.MEASURE)) {
+    if (!(selectionActive || previewMode || viewerAlertOpen || themeSheetOpen || tabToolsOpen || (!isDesktop && filesPanelOpen) || tabToolMode === TAB_TOOL_MODE.MEASURE)) {
       return undefined;
     }
 
@@ -69,7 +71,7 @@ export function useCadWorkspaceShortcuts({
         }
       }
 
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !event.defaultPrevented && !isEditableTarget(event.target)) {
         if (previewMode) {
           const previousUiState = previewUiStateRef.current;
           previewUiStateRef.current = null;
@@ -94,6 +96,10 @@ export function useCadWorkspaceShortcuts({
           setTabToolMode(TAB_TOOL_MODE.REFERENCES);
           return;
         }
+        if (selectionActive && onClearSelection) {
+          onClearSelection();
+          return;
+        }
         setViewerAlertOpen(false);
         setThemeEditing(false);
         setTabToolsOpen(false);
@@ -108,6 +114,8 @@ export function useCadWorkspaceShortcuts({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [
+    selectionActive,
+    onClearSelection,
     drawingRedoStackRef,
     drawingUndoStackRef,
     handleRedoDrawing,

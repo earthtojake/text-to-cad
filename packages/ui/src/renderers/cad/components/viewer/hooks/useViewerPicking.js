@@ -897,7 +897,7 @@ export function useViewerPicking({
       setPointerFromPosition(clientX, clientY);
       const modelIntersections = intersectVisibleModelMeshes();
       const pickMode = pickModeRef.current;
-      if (preferTopology) {
+      if (preferTopology && pickMode !== VIEWER_PICK_MODE.PARTS) {
         const topologyReference = pickTopologyReference(modelIntersections, clientX, clientY, { hover });
         if (topologyReference) {
           return topologyReference;
@@ -913,7 +913,7 @@ export function useViewerPicking({
         return pickTopologyReference(modelIntersections, clientX, clientY, { hover }) ||
           pickPartReferenceFromIntersections(modelIntersections);
       }
-      if (pickMode === VIEWER_PICK_MODE.MEASURE) {
+      if (pickMode === VIEWER_PICK_MODE.MEASURE || pickMode === VIEWER_PICK_MODE.TOPOLOGY) {
         return pickTopologyReference(modelIntersections, clientX, clientY, { hover });
       }
       return null;
