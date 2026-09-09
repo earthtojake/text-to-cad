@@ -86,7 +86,7 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
   };
   const toggle = id => setExpanded(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
-  return <div className="flex h-full min-h-0 flex-col" aria-label="Design features" onKeyDown={event => {
+  return <div className="flex h-full min-h-0 min-w-0 flex-col" aria-label="Design features" onKeyDown={event => {
     if (event.key === 'Escape') { event.stopPropagation(); setSelectionRequest(0); setSelectedParameter(null); onHighlight?.(null); }
   }}>
     <div className="flex shrink-0 items-center justify-between gap-2 border-b border-sidebar-border/60 px-3 py-2 text-micro text-muted-foreground">
@@ -136,35 +136,35 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
         })}
       </div>
     </ScrollArea>
-    {selected.type !== 'model' && <section aria-label="Feature properties" className="max-h-[32%] shrink-0 overflow-y-auto border-t border-sidebar-border/70 px-3 py-2.5">
-      <h3 className="mb-2 text-xs">{title(selected.label)}</h3>
+    {selected.type !== 'model' && <section aria-label="Feature properties" className="max-h-[32%] min-w-0 shrink-0 overflow-x-hidden overflow-y-auto border-t border-sidebar-border/70 px-3 py-2.5">
+      <h3 className="mb-2 text-xs [overflow-wrap:anywhere]">{title(selected.label)}</h3>
       {(measurements.size || measurements.area !== null || measurements.radii.length > 0) && <div className="mb-3" aria-label="Associated geometry measurements">
         <h4 className="mb-1.5 text-micro text-muted-foreground">Associated geometry</h4>
         <dl className="space-y-1.5 text-xs">
           {measurements.size && <div><dt className="text-muted-foreground" title="Bounding size along the model’s X, Y and Z axes">Overall size · X × Y × Z</dt><dd className="mt-0.5 tabular-nums">{measurements.size.map(measurement).join(' × ')} mm</dd></div>}
-          {measurements.area !== null && <div className="flex justify-between gap-2"><dt className="text-muted-foreground">Face area</dt><dd className="tabular-nums">{measurement(measurements.area)} mm²</dd></div>}
+          {measurements.area !== null && <div className="flex flex-wrap justify-between gap-x-2 gap-y-1"><dt className="shrink-0 text-muted-foreground">Face area</dt><dd className="max-w-full tabular-nums [overflow-wrap:anywhere]">{measurement(measurements.area)} mm²</dd></div>}
           {measurements.radii.length > 0 && <div><dt className="text-muted-foreground" title="Radii of linked cylindrical or spherical faces">Surface {measurements.radii.length === 1 ? 'radius' : 'radii'}</dt><dd className="mt-0.5 tabular-nums">{measurements.radii.slice(0, 6).map(measurement).join(', ')}{measurements.radii.length > 6 ? '…' : ''} mm</dd></div>}
         </dl>
       </div>}
       {selected.parameters?.length ? <div className="space-y-1 text-xs"><h4 className="mb-1 text-micro text-muted-foreground">Source parameters</h4>{selected.parameters.map((param, i) => <button key={`${param.name}:${i}`} type="button"
         aria-label={`Highlight ${title(param.name)}`} aria-pressed={selected.type === 'parameter' ? selectionRequest > 0 : selectedParameter === i}
-        title={param.expression} className={cn('flex w-full items-baseline justify-between gap-3 rounded px-1.5 py-1.5 text-left hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring', selectedParameter === i && 'bg-sidebar-accent text-sidebar-accent-foreground')}
+        title={param.expression} className={cn('flex w-full min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded px-1.5 py-1.5 text-left hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring', selectedParameter === i && 'bg-sidebar-accent text-sidebar-accent-foreground')}
         onClick={() => {
           if (selected.type === 'parameters') {
             setExpanded(current => new Set([...current, 'parameters']));
             selectRow(parameterNodes[i].id);
           } else { setSelectedParameter(i); setSelectionRequest(value => value + 1); }
         }}>
-        <span className="min-w-0 break-words text-muted-foreground">{title(param.name)}</span><span className="min-w-0 break-words text-right tabular-nums">{param.value == null ? param.expression : number(param.value)}</span>
+        <span className="max-w-full shrink-0 text-muted-foreground [overflow-wrap:anywhere]">{title(param.name)}</span><span className={cn("min-w-0 max-w-full tabular-nums [overflow-wrap:anywhere]", typeof param.value === "number" ? "ml-auto text-right" : "basis-full text-left")}>{param.value == null ? param.expression : number(param.value)}</span>
       </button>)}</div> : <p className="text-xs text-muted-foreground">{selected.type === 'imported' ? 'This STEP contains geometry, not an authored feature history.' : selected.type === 'part' ? selected.children.length ? `${selected.children.length} source operations` : 'No individual source operations linked.' : selected.type === 'group' ? `${selected.children.length} items` : 'No static parameter values available.'}</p>}
       {(selected.line || selected.type === 'parameter' || selected.type === 'part') && <p className="mt-3 text-micro text-muted-foreground">{geometrySelection?.partIds.length ? `${geometrySelection.partIds.length} associated ${geometrySelection.partIds.length === 1 ? "part" : "parts"}` : geometrySelection?.faceIds.length ? `${geometrySelection.faceIds.length} associated ${geometrySelection.faceIds.length === 1 ? "face" : "faces"}` : state.geometryLinks ? 'No matching geometry available' : 'Rebuild this model to link its geometry'}</p>}
     </section>}
     {onAddToPrompt && selected.type !== 'model' && selected.type !== 'parameters' && <div className="shrink-0 border-t border-sidebar-border/60 px-3 py-2">
-      <Button type="button" variant="outline" size="sm" className="h-7 w-full gap-1.5 text-xs"
+      <Button type="button" variant="outline" size="sm" className="h-auto min-h-7 w-full gap-1.5 whitespace-normal text-xs"
         disabled={!geometrySelection.faceIds.length && !geometrySelection.partIds.length}
         title={geometrySelection.faceIds.length || geometrySelection.partIds.length ? 'Add this feature’s linked geometry to the prompt' : 'No linked geometry available to add'}
         onClick={() => onAddToPrompt(geometrySelection, title(selected.label))}>
-        <Plus className="size-3.5" aria-hidden="true" />Add to prompt
+        <Plus className="size-3.5 shrink-0" aria-hidden="true" />Add to prompt
       </Button>
     </div>}
     <div className="shrink-0 border-t border-sidebar-border/60 px-3 py-2 text-micro text-muted-foreground">
