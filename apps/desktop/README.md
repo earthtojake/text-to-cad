@@ -32,19 +32,6 @@ one window-wide preference store backed by their existing global storage keys.
 Active and newly opened roots share those preferences; document and panel
 state remain scoped to their root or tab.
 
-## Add existing files
-
-Use **Add files…** in the file explorer or empty viewer to choose files from
-anywhere on your computer. The description explicitly includes STEP, images,
-PDFs and code; the native picker accepts every file type and multiple files.
-Files are copied into the current workspace folder. Originals are preserved,
-duplicate names get a numbered suffix, and cancellation changes nothing. The
-first successfully added file opens using the existing viewers; any files that
-could not be copied are reported alongside the successful copies. Adding a file
-does not execute it or reconstruct CAD source parameters or history. **Open a
-file** still browses all files already in the project; **+ → File** opens that
-browser with the same Add files action available.
-
 ## Dev
 
 ```sh
