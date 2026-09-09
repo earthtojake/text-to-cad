@@ -236,7 +236,11 @@ keep their own Escape behaviour.
 Measure has a temporary panel below its toolbar button, with Any geometry,
 Points, Edges and Faces snap filters. Measure reuses the selection-filter dropdown
 component, including radio rows and keyboard behaviour; its panel uses the same
-popover surface, spacing and type styles. Leaving Measure or changing models clears
+popover surface, spacing and type styles. Draw uses the same tool chooser and
+panel shell, with labelled Undo/Redo/Clear actions. The compact toolbar's More
+tools menu shares the dropdown width, offset and collision boundary. Direct
+actions such as Pan, Orbit and screenshot capture remain direct actions.
+Leaving Measure or changing models clears
 completed rulers and the current draft. Escape first cancels a draft, then exits
 the tool. The existing measurement engine supplies planar-face spacing and
 angles, straight-edge angles, circular-edge centre spacing, and point distances;
