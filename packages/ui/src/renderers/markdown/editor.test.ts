@@ -30,6 +30,13 @@ const FILES: [string, string][] = [
   ["AGENTS.md", AGENTS],
   ["CONTRIBUTING.md", CONTRIBUTING],
 ];
+const LINE_ENDINGS = [["LF", "\n"], ["CRLF", "\r\n"]] as const;
+// Test Windows and Unix inputs regardless of this checkout's line endings.
+const FILE_CASES = FILES.flatMap(([name, source]) =>
+  LINE_ENDINGS.map(([ending, newline]) => [
+    `${name} (${ending})`, source.replace(/\r?\n/g, newline),
+  ] as const),
+);
 
 let editor: Editor | null = null;
 
@@ -50,13 +57,13 @@ function open(source: string) {
 }
 
 describe("the markdown editor", () => {
-  it.each(FILES)("gives %s back unchanged when nothing is typed", (_name, source) => {
+  it.each(FILE_CASES)("gives %s back unchanged when nothing is typed", (_name, source) => {
     const { editor: instance, frame } = open(source);
     expect(documentToMarkdown(instance.getJSON(), frame)).toBe(source);
   });
 
-  it("rewrites one block's lines and no others", () => {
-    const source = AGENTS;
+  it.each(LINE_ENDINGS)("rewrites one block's lines and no others (%s)", (_ending, newline) => {
+    const source = AGENTS.replace(/\r?\n/g, newline);
     const { editor: instance, frame } = open(source);
     const edited = instance.getJSON().content![0]!.attrs!.mdSource as string;
 
@@ -70,11 +77,14 @@ describe("the markdown editor", () => {
 
     // Every other line of the file is still there, and the count of lines that
     // are not is the one paragraph's.
-    const before = new Set(source.split("\n"));
-    const after = new Set(out.split("\n"));
+    const before = new Set(source.split(/\r?\n/));
+    const after = new Set(out.split(/\r?\n/));
     const gone = [...before].filter((line) => !after.has(line) && line.trim() !== "");
     // The block the caret was in, and nothing else in a 210-line file.
-    expect(gone).toEqual(edited.split("\n"));
+    expect(gone).toEqual(edited.split(/\r?\n/));
+    // Also compare bytes, so ignoring line delimiters cannot hide a rewrite
+    // of an untouched block or its surrounding whitespace.
+    expect(out).toBe(source.replace(edited, `${edited} Really.`));
   });
 
   it("writes a heading typed with markdown as a heading", () => {

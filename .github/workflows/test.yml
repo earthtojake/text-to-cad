@@ -322,3 +322,60 @@ jobs:
       # repo-relative path shows up.
       - name: Run installed-mode checks
         run: scripts/test/test-installed.sh
+
+  desktop:
+    name: Desktop (macOS)
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # The explicit native:rebuild step runs electron-builder install-app-deps for
+      # better-sqlite3 and node-pty for Electron. A plain `npm ci --ignore-scripts`
+      # would install them for Node's ABI and every database test would fail to load.
+      - name: Install desktop dependencies
+        run: |
+          npm ci
+          npm run native:rebuild -w hardcore
+          npm run build:packages
+
+      - name: Typecheck
+        run: npm --prefix apps/desktop run typecheck
+
+      - name: Lint
+        run: npm --prefix apps/desktop run lint
+
+      - name: Run unit tests
+        run: npm --prefix apps/desktop test
+
+      - name: Build
+        run: npm --prefix apps/desktop run build
+
+      - name: Run the Electron smoke test
+        run: npm --prefix apps/desktop run e2e
+
+      # The screenshots the e2e writes are the cheapest review of whether the app
+      # still looks like an app; a failed run's are the more interesting ones.
+      - name: Upload Playwright screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-screenshots
+          path: apps/desktop/tests/e2e/__screenshots__/*.png
+          if-no-files-found: ignore
+
+      - name: Upload failed Electron traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-test-results
+          path: apps/desktop/test-results/
+          if-no-files-found: ignore
