@@ -3,11 +3,12 @@ import { Box, ChevronRight, Circle, Layers, PencilRuler, RotateCw, Scissors, Squ
 import { ScrollArea } from '@hardcore/ui/primitives/scroll-area';
 import { cn } from '@hardcore/ui/utils';
 import { resolveDesignFeatureLinks, designFeatureSelection } from '../../workbench/designFeatureSelection.js';
+import { groupDesignFeatures, sourceParameterNode } from '../../workbench/designFeatureTree.js';
 const EMPTY = [];
 
 const title = value => String(value || '').replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
 const number = value => typeof value === 'number' ? value.toLocaleString(undefined, { maximumFractionDigits: 5 }) : String(value);
-const iconFor = type => ({ sketch: PencilRuler, revolve: RotateCw, hole: Circle, fillet: SquareRoundCorner, chamfer: Scissors, pattern: Layers, parameters: Variable })[type] || Box;
+const iconFor = type => ({ sketch: PencilRuler, revolve: RotateCw, hole: Circle, fillet: SquareRoundCorner, chamfer: Scissors, pattern: Layers, parameters: Variable, parameter: Variable, group: Layers })[type] || Box;
 
 function flatten(nodes, expanded, depth = 0) {
   return nodes.flatMap(node => [{ ...node, depth }, ...(expanded.has(node.id) ? flatten(node.children || [], expanded, depth + 1) : [])]);
@@ -16,15 +17,17 @@ function flatten(nodes, expanded, depth = 0) {
 export default function StepDesignTree({ client, file, revision, label, onOpenFile, references = EMPTY, parts = EMPTY, onHighlight, onLoadTopology }) {
   const [state, setState] = useState({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
-  const [expanded, setExpanded] = useState(new Set(['model']));
+  const [expanded, setExpanded] = useState(new Set(['model', 'parts']));
   const [selectedId, setSelectedId] = useState('model');
   const [selectionRequest, setSelectionRequest] = useState(0);
-  const selectRow = id => { setSelectionRequest(value => value + 1); setSelectedId(id); };
+  const [selectedParameter, setSelectedParameter] = useState(null);
+  const selectRow = id => { setSelectedParameter(null); setSelectionRequest(value => value + 1); setSelectedId(id); };
   useEffect(() => {
     const controller = new AbortController();
     setState({ status: 'loading' });
-    setExpanded(new Set(['model']));
+    setExpanded(new Set(['model', 'parts']));
     setSelectedId('model');
+    setSelectedParameter(null);
     setSelectionRequest(0);
     if (!client?.requestDesignOutline || !file) {
       setState({ status: 'unavailable' });
@@ -38,17 +41,27 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
     return () => controller.abort();
   }, [client, file, revision, attempt]);
 
+  const resolvedLinks = useMemo(() => resolveDesignFeatureLinks(state.geometryLinks, references, parts), [state.geometryLinks, references, parts]);
+  const parameterNodes = useMemo(() => (state.parameters || []).map(parameter => sourceParameterNode(parameter, state.features || EMPTY)), [state]);
   const roots = useMemo(() => [{ id: 'model', label: label || 'Model', type: 'model', parameters: [], children: [
-    ...(state.parameters?.length ? [{ id: 'parameters', label: 'Parameters', type: 'parameters', parameters: state.parameters, children: [] }] : []),
-    ...(state.features?.length ? state.features : [{ id: 'imported', label: 'Imported geometry', type: 'imported', parameters: [], children: [] }]),
-  ] }], [state, label]);
+    ...(parameterNodes.length ? [{ id: 'parameters', label: 'Parameters', type: 'parameters', parameters: state.parameters, children: parameterNodes }] : []),
+    ...(state.features?.length ? groupDesignFeatures(state.features, resolvedLinks, parts) : [{ id: 'imported', label: 'Imported geometry', type: 'imported', parameters: [], children: [] }]),
+  ] }], [state, label, parameterNodes, resolvedLinks, parts]);
   const allNodes = useMemo(() => {
     const result = new Map();
     const visit = nodes => nodes.forEach(node => { result.set(node.id, node); visit(node.children || []); });
     visit(roots); return result;
   }, [roots]);
+  // Geometry can arrive after the outline. Keep a selected operation visible
+  // when verified links move it under its owning part.
+  useEffect(() => {
+    const parents = new Map();
+    allNodes.forEach(node => (node.children || []).forEach(child => parents.set(child.id, node.id)));
+    const ancestors = [];
+    for (let id = parents.get(selectedId); id; id = parents.get(id)) ancestors.push(id);
+    setExpanded(current => ancestors.every(id => current.has(id)) ? current : new Set([...current, ...ancestors]));
+  }, [allNodes, selectedId]);
   const selected = allNodes.get(selectedId) || roots[0];
-  const resolvedLinks = useMemo(() => resolveDesignFeatureLinks(state.geometryLinks, references, parts), [state.geometryLinks, references, parts]);
   const parent = [...allNodes.values()].find(node => node.children?.some(child => child.id === selected.id));
   const geometrySelection = useMemo(() => designFeatureSelection(selected, resolvedLinks, parent?.line), [selected, resolvedLinks, parent?.line]);
   useEffect(() => {
@@ -62,7 +75,7 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
   const toggle = id => setExpanded(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
   return <div className="flex h-full min-h-0 flex-col" aria-label="Design features" onKeyDown={event => {
-    if (event.key === 'Escape') { event.stopPropagation(); setSelectionRequest(0); onHighlight?.(null); }
+    if (event.key === 'Escape') { event.stopPropagation(); setSelectionRequest(0); setSelectedParameter(null); onHighlight?.(null); }
   }}>
     <div className="flex shrink-0 items-center justify-between gap-2 border-b border-sidebar-border/60 px-3 py-2 text-micro text-muted-foreground">
       <span>{state.source ? 'Source operations' : 'Model features'}</span>
@@ -75,7 +88,7 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
         {state.status !== 'loading' && rows.map((node, index) => {
           const Icon = iconFor(node.type), hasChildren = Boolean(node.children?.length), open = expanded.has(node.id);
           return <div key={node.id} role="treeitem" aria-level={node.depth + 1} aria-expanded={hasChildren ? open : undefined} aria-selected={selected.id === node.id}
-            tabIndex={selected.id === node.id ? 0 : -1} title={node.label}
+            tabIndex={selected.id === node.id ? 0 : -1} title={node.label} aria-label={node.type === 'parameter' ? `${title(node.label)}: ${number(node.parameters[0].value)}` : undefined}
             className={cn('flex h-8 min-w-0 cursor-default items-center gap-1 rounded-md pr-2 text-xs outline-none hover:bg-sidebar-accent/50 focus-visible:ring-2 focus-visible:ring-sidebar-ring', selected.id === node.id && 'bg-sidebar-accent text-sidebar-accent-foreground')}
             style={{ paddingLeft: 4 + Math.min(node.depth, 6) * 16 }}
             onClick={() => selectRow(node.id)}
@@ -92,17 +105,25 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
             {hasChildren ? <button type="button" tabIndex={-1} aria-label={`${open ? 'Collapse' : 'Expand'} ${node.label}`} className="grid size-6 shrink-0 place-items-center rounded-sm hover:bg-sidebar-accent" onClick={event => { event.stopPropagation(); selectRow(node.id); toggle(node.id); }}>
               <ChevronRight className={cn('size-3.5 text-current/50', open && 'rotate-90')} aria-hidden="true" />
             </button> : <span className="size-6 shrink-0" />}
-            <Icon className="mr-1 size-3.5 shrink-0 text-current/60" aria-hidden="true" /><span className="min-w-0 truncate">{title(node.label)}</span>
+            <Icon className="mr-1 size-3.5 shrink-0 text-current/60" aria-hidden="true" /><span className="min-w-0 flex-1 truncate">{title(node.label)}</span>{node.type === 'parameter' && <span className="shrink-0 text-muted-foreground tabular-nums">{number(node.parameters[0].value)}</span>}
           </div>;
         })}
       </div>
     </ScrollArea>
     {selected.type !== 'model' && <section aria-label="Feature properties" className="max-h-[32%] shrink-0 overflow-y-auto border-t border-sidebar-border/70 px-3 py-2.5">
       <h3 className="mb-2 text-xs">{title(selected.label)}</h3>
-      {selected.parameters?.length ? <dl className="space-y-2 text-xs">{selected.parameters.map((param, i) => <div key={`${param.name}:${i}`} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <dt className="text-muted-foreground">{title(param.name)}</dt><dd title={param.expression} className="max-w-full break-words text-right tabular-nums">{param.value == null ? param.expression : number(param.value)}</dd>
-      </div>)}</dl> : <p className="text-xs text-muted-foreground">{selected.type === 'imported' ? 'This STEP contains geometry, not an authored feature history.' : selected.type === 'model' ? 'Select an operation to inspect its parameters.' : 'No static parameter values available.'}</p>}
-      {selected.line && <p className="mt-3 text-micro text-muted-foreground">{geometrySelection?.partIds.length ? `${geometrySelection.partIds.length} associated ${geometrySelection.partIds.length === 1 ? "part" : "parts"}` : geometrySelection?.faceIds.length ? `${geometrySelection.faceIds.length} associated ${geometrySelection.faceIds.length === 1 ? "face" : "faces"}` : state.geometryLinks ? 'No matching geometry available' : 'Rebuild this model to link its geometry'}</p>}
+      {selected.parameters?.length ? <div className="space-y-1 text-xs">{selected.parameters.map((param, i) => <button key={`${param.name}:${i}`} type="button"
+        aria-label={`Highlight ${title(param.name)}`} aria-pressed={selected.type === 'parameter' ? selectionRequest > 0 : selectedParameter === i}
+        title={param.expression} className={cn('flex w-full items-baseline justify-between gap-3 rounded px-1.5 py-1.5 text-left hover:bg-sidebar-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring', selectedParameter === i && 'bg-sidebar-accent text-sidebar-accent-foreground')}
+        onClick={() => {
+          if (selected.type === 'parameters') {
+            setExpanded(current => new Set([...current, 'parameters']));
+            selectRow(parameterNodes[i].id);
+          } else { setSelectedParameter(i); setSelectionRequest(value => value + 1); }
+        }}>
+        <span className="min-w-0 break-words text-muted-foreground">{title(param.name)}</span><span className="min-w-0 break-words text-right tabular-nums">{param.value == null ? param.expression : number(param.value)}</span>
+      </button>)}</div> : <p className="text-xs text-muted-foreground">{selected.type === 'imported' ? 'This STEP contains geometry, not an authored feature history.' : selected.type === 'part' ? selected.children.length ? `${selected.children.length} source operations` : 'No individual source operations linked.' : selected.type === 'group' ? `${selected.children.length} items` : 'No static parameter values available.'}</p>}
+      {(selected.line || selected.type === 'parameter' || selected.type === 'part') && <p className="mt-3 text-micro text-muted-foreground">{geometrySelection?.partIds.length ? `${geometrySelection.partIds.length} associated ${geometrySelection.partIds.length === 1 ? "part" : "parts"}` : geometrySelection?.faceIds.length ? `${geometrySelection.faceIds.length} associated ${geometrySelection.faceIds.length === 1 ? "face" : "faces"}` : state.geometryLinks ? 'No matching geometry available' : 'Rebuild this model to link its geometry'}</p>}
     </section>}
     <div className="shrink-0 border-t border-sidebar-border/60 px-3 py-2 text-micro text-muted-foreground">
       {state.source ? <><button className="max-w-full truncate text-left underline-offset-2 hover:underline" title={state.source} onClick={() => onOpenFile?.(state.source)}>{state.source.split('/').pop()}</button></> : <p>{state.status === 'ambiguous' ? 'Multiple source candidates. No feature history was assumed.' : state.status === 'loading' ? 'Reading matching source without running it.' : 'No source feature history available.'}</p>}

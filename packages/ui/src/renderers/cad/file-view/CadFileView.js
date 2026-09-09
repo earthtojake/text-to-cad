@@ -1,7 +1,8 @@
 "use client";
 
 import StepMeasurementsSection from "../components/workbench/StepMeasurementsSection.js";
-import { filterSelectionReferences, toggleFaceGroupSelection } from "../workbench/selectionFilter.js";
+import SelectionFilterMenu from "../components/workbench/SelectionFilterMenu.jsx";
+import { filterSelectionReferences, toggleFaceGroupSelection, MEASURE_SELECTION_FILTERS } from "../workbench/selectionFilter.js";
 
 import { TutorialTipsContext } from "../workbench/tutorialTips.js";
 import { FileSheetTabPreferencesContext } from "../workbench/fileSheetTabPreferences.js";
@@ -5849,14 +5850,13 @@ function CadFileViewSurface({
                 drawToolActive={drawToolActive}
                 measureModeActive={measureModeActive}
                 measurementPanel={effectiveRenderFormat === RENDER_FORMAT.STEP ? <>
-                  <label className="flex items-center justify-between gap-2 px-2 py-2 text-xs"><span>Snap to</span>
-                    <select aria-label="Measure selection filter" className="rounded-md border bg-background px-2 py-1" value={measureSelectionFilter} onChange={event => {
-                      setMeasureSelectionFilter(event.target.value); handleMeasureCancelDraft();
+                  <div className="py-1">
+                    <p className="px-2 py-1 text-micro text-muted-foreground">Snap to</p>
+                    <SelectionFilterMenu fullWidth options={MEASURE_SELECTION_FILTERS} menuLabel="Measure selection filter" hint="" value={measureSelectionFilter} onChange={value => {
+                      setMeasureSelectionFilter(value); handleMeasureCancelDraft();
                       if (topologyTarget) loadFilterTopology(topologyTarget);
-                    }}>
-                      <option value="all">Any geometry</option><option value="points">Points</option><option value="edges">Edges</option><option value="faces">Faces</option>
-                    </select>
-                  </label>
+                    }} />
+                  </div>
                   <StepMeasurementsSection
                   measurements={measureMeasurements} activeId={activeMeasureId} measureModeActive={measureModeActive}
                   onActivate={setActiveMeasureId} onDelete={handleMeasureDelete} onClear={handleMeasureClear}
