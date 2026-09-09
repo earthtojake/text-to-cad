@@ -26,7 +26,8 @@ function formatZoomPercent(value) {
 export function ZoomControl({
   zoomPercent,
   onZoomPercentChange,
-  onZoomReset
+  onZoomReset,
+  compact = false
 }) {
   const [editing, setEditing] = useState(false);
   const [inputValue, setInputValue] = useState(formatZoomPercent(zoomPercent));
@@ -55,13 +56,13 @@ export function ZoomControl({
   return (
     <div
       className="flex h-6 items-center gap-0.5"
-      style={{ width: ZOOM_CONTROL_CONTENT_WIDTH }}
+      style={{ width: compact ? "3.625rem" : ZOOM_CONTROL_CONTENT_WIDTH }}
       aria-label="Zoom controls"
       onPointerDown={(event) => {
         event.stopPropagation();
       }}
     >
-      <button
+      {!compact && <button
         type="button"
         aria-label="Zoom out"
         title="Zoom out"
@@ -72,7 +73,7 @@ export function ZoomControl({
         }}
       >
         <Minus className="size-3" strokeWidth={2.25} aria-hidden="true" />
-      </button>
+      </button>}
       <input
         type="text"
         inputMode="numeric"
@@ -124,7 +125,7 @@ export function ZoomControl({
           }
         }}
       />
-      <button
+      {!compact && <button
         type="button"
         aria-label="Zoom in"
         title="Zoom in"
@@ -135,7 +136,7 @@ export function ZoomControl({
         }}
       >
         <Plus className="size-3" strokeWidth={2.25} aria-hidden="true" />
-      </button>
+      </button>}
       <button
         type="button"
         aria-label="Reset view"

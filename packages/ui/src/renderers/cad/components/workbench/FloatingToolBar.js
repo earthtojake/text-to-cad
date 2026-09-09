@@ -1,10 +1,10 @@
+import DisplayPopover from "./DisplayPopover.jsx";
 import SelectionFilterMenu from "./SelectionFilterMenu.jsx";
 import { SELECTION_FILTERS } from "../../workbench/selectionFilter.js";
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Camera,
   Check,
-  Ellipsis,
   Focus,
   Hand,
   MousePointer2,
@@ -102,6 +102,29 @@ function usePreviewToolbarVisibility(previewMode) {
 const FLOATING_TOOL_BAR_BUTTON_CLASSES =
   "grid size-6 shrink-0 place-items-center rounded-sm text-sidebar-foreground/70 shadow-none transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 disabled:pointer-events-none disabled:opacity-50 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground";
 
+function ToolbarMenu({ label, Icon, active = false, resetKey, onEnter, onLeave, children }) {
+  const boundary = useContext(FileSheetPortalContext);
+  const [open, setOpen] = useState(false);
+  useEffect(() => setOpen(false), [resetKey]);
+  return <DropdownMenu open={open} onOpenChange={next => {
+    setOpen(next);
+    if (next) onEnter?.(); else onLeave?.();
+  }}>
+    <DropdownMenuTrigger asChild>
+      <button type="button" aria-label={label} title={label}
+        className={`${FLOATING_TOOL_BAR_BUTTON_CLASSES} ${active ? "bg-sidebar-accent" : ""}`}>
+        <Icon className="size-3" aria-hidden="true" />
+      </button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" sideOffset={8} collisionBoundary={boundary} collisionPadding={8}
+      onEscapeKeyDown={event => event.stopPropagation()}
+      className="pointer-events-auto w-60 max-w-[min(240px,var(--radix-dropdown-menu-content-available-width))]">
+      <DropdownMenuLabel>{label}</DropdownMenuLabel>
+      {children}
+    </DropdownMenuContent>
+  </DropdownMenu>;
+}
+
 function DesktopFloatingToolBar({
   renderFormat,
   floatingCadToolbarPosition,
@@ -131,6 +154,7 @@ function DesktopFloatingToolBar({
   drawToolActive,
   measureModeActive = false,
   measurementPanel = null,
+  displayPanel = null,
   measureDisabled = false,
   panToolActive,
   handleSelectTabToolMode,
@@ -173,94 +197,47 @@ function DesktopFloatingToolBar({
   const animationLabel = animationPlaying ? "Pause" : "Play";
 
   const toolbarRef = useRef(null);
-  const boundary = useContext(FileSheetPortalContext);
   const [compact, setCompact] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const hasCapture = typeof handleCapture === "function";
-  // Each existing button is 24px, with 2px gaps and 10px of pill border/padding.
-  // Measure the scene, not the window: the Inspector can leave a very thin viewport.
-  const fullButtonCount = previewMode
-    ? 2 + Number(hasCapture) + Number(showAnimationPlay)
-    : 2 + Number(hasCapture) + Number(selectionFilter !== null) + (showToolCluster ? 4 + Number(showAnimationPlay) : 0);
+  // The widest group is View: full zoom (110px), navigation and Display.
+  // Groups wrap independently; compact zoom keeps even that group inside a thin scene.
+  const viewWidth = (zoomControlsVisible ? 110 : 0) + (showToolCluster ? 26 : 0) + (displayPanel ? 31 : 0) + 10;
   useLayoutEffect(() => {
     const scene = toolbarRef.current?.parentElement;
     if (!scene) return undefined;
-    const update = () => setCompact(scene.clientWidth < 28 + 8 + fullButtonCount * 26);
+    const update = () => setCompact(scene.clientWidth < 28 + Math.max(viewWidth, 100));
     const observer = new ResizeObserver(update);
     observer.observe(scene);
     update();
     return () => observer.disconnect();
-  }, [fullButtonCount]);
-  useEffect(() => { setMoreOpen(false); }, [compact, previewMode]);
-
-  const moreMenu = compact ? (
-    <DropdownMenu open={moreOpen} onOpenChange={(open) => {
-      setMoreOpen(open);
-      if (open) onToolbarEnter?.();
-      else onToolbarLeave?.();
-    }}>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label="More tools"
-          title="More tools"
-          className={`${FLOATING_TOOL_BAR_BUTTON_CLASSES} ${drawToolActive || animationPlaying ? "bg-sidebar-accent" : ""}`}
-        >
-          <Ellipsis className="size-3" aria-hidden="true" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        sideOffset={8}
-        collisionBoundary={boundary}
-        collisionPadding={8}
-        // Escape dismisses this menu, not the Inspector or tool underneath it.
-        onEscapeKeyDown={(event) => event.stopPropagation()}
-        className="pointer-events-auto w-60 max-w-[min(240px,var(--radix-dropdown-menu-content-available-width))]"
-        onCloseAutoFocus={(event) => {
-          if (!compact) {
-            event.preventDefault();
-            toolbarRef.current?.querySelector("button:not(:disabled)")?.focus();
-          }
-        }}
-      >
-        <DropdownMenuLabel>More tools</DropdownMenuLabel>
-        {!previewMode && showToolCluster ? (
-          <DropdownMenuItem
-            disabled={viewerLoading || !viewportContent}
-            onSelect={() => handleSelectTabToolMode("draw")}
-          >
-            <PenTool className="size-3.5" aria-hidden="true" />
-            Draw
-            {drawToolActive ? <Check className="ml-auto size-3.5" aria-label="Active" /> : null}
-          </DropdownMenuItem>
-        ) : null}
-        {!previewMode && showToolCluster && showAnimationPlay ? (
-          <DropdownMenuItem disabled={animationPlayDisabled} onSelect={handleAnimationPlayToggle}>
-            {animationPlaying ? <Pause className="size-3.5" aria-hidden="true" /> : <Play className="size-3.5" aria-hidden="true" />}
-            {animationLabel}
-          </DropdownMenuItem>
-        ) : null}
-        {!previewMode ? (
-          <>
-            <DropdownMenuItem disabled={captureDisabled} onSelect={handleEnterPreviewMode}>
-              <Orbit className="size-3.5" aria-hidden="true" />Orbit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-          </>
-        ) : null}
-        <DropdownMenuItem disabled={captureDisabled} onSelect={() => { void handleScreenshotCopy(); }}>
-          <Focus className="size-3.5" aria-hidden="true" />Copy screenshot
-        </DropdownMenuItem>
-        {hasCapture ? (
-          <DropdownMenuItem disabled={captureDisabled} onSelect={() => { void handleCapture(); }} data-testid="capture-to-chat">
-            <Camera className="size-3.5" aria-hidden="true" />Ask about this view
-          </DropdownMenuItem>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  ) : null;
-
+  }, [viewWidth]);
+  const menuProps = { resetKey: `${compact}:${previewMode}`, onEnter: onToolbarEnter, onLeave: onToolbarLeave };
+  const viewMenu = <ToolbarMenu label="View controls" Icon={Orbit} active={panToolActive || animationPlaying} {...menuProps}>
+    {!previewMode && <>
+      <DropdownMenuItem disabled={viewerLoading || !viewportContent} onSelect={() => handleSelectTabToolMode("pan")}>
+        <Hand className="size-3.5" aria-hidden="true" />Pan
+        {panToolActive && <Check className="ml-auto size-3.5" aria-label="Active" />}
+      </DropdownMenuItem>
+      <DropdownMenuItem disabled={captureDisabled} onSelect={handleEnterPreviewMode}>
+        <Orbit className="size-3.5" aria-hidden="true" />Orbit
+      </DropdownMenuItem>
+    </>}
+    {showAnimationPlay && <>
+      {!previewMode && <DropdownMenuSeparator />}
+      <DropdownMenuItem disabled={animationPlayDisabled} onSelect={handleAnimationPlayToggle}>
+        {animationPlaying ? <Pause className="size-3.5" aria-hidden="true" /> : <Play className="size-3.5" aria-hidden="true" />}{animationLabel}
+      </DropdownMenuItem>
+    </>}
+  </ToolbarMenu>;
+  const captureMenu = <ToolbarMenu label="Capture" Icon={Camera} {...menuProps}>
+    <DropdownMenuItem disabled={captureDisabled} onSelect={() => { void handleScreenshotCopy(); }}>
+      <Focus className="size-3.5" aria-hidden="true" />Copy screenshot
+    </DropdownMenuItem>
+    {hasCapture && <DropdownMenuItem disabled={captureDisabled} onSelect={() => { void handleCapture(); }} data-testid="capture-to-chat">
+      <Camera className="size-3.5" aria-hidden="true" />Ask about this view
+    </DropdownMenuItem>}
+  </ToolbarMenu>;
+  const groupClasses = `${toolbarHidden ? "pointer-events-none" : "pointer-events-auto"} inline-flex h-8 w-fit items-center gap-0.5 rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`;
 
   // Buttons shared between the full toolbar and the reduced orbit-mode toolbar.
   const animationButton = showAnimationPlay ? (
@@ -276,33 +253,6 @@ function DesktopFloatingToolBar({
       ) : (
         <Play className="size-3" strokeWidth={2} aria-hidden="true" />
       )}
-    </ToolbarButton>
-  ) : null;
-
-  const screenshotButton = (
-    <ToolbarButton
-      label="Copy screenshot"
-      onClick={() => {
-        void handleScreenshotCopy();
-      }}
-      disabled={captureDisabled}
-    >
-      <Focus className="size-3" strokeWidth={2} aria-hidden="true" />
-    </ToolbarButton>
-  );
-
-  // Only a host that takes captures gets the button (docs/cad-renderer.md,
-  // `onCapture`): standalone there is no chat for the picture to go to.
-  const captureButton = typeof handleCapture === "function" ? (
-    <ToolbarButton
-      label="Ask about this view"
-      onClick={() => {
-        void handleCapture();
-      }}
-      disabled={captureDisabled}
-      data-testid="capture-to-chat"
-    >
-      <Camera className="size-3" strokeWidth={2} aria-hidden="true" />
     </ToolbarButton>
   ) : null;
 
@@ -334,17 +284,20 @@ function DesktopFloatingToolBar({
     </div>
   ) : null;
 
-  const zoomToolbar = zoomControlsVisible ? (
-    <div
+  const zoomToolbar = zoomControlsVisible || displayPanel || showToolCluster ? (
+    <div role="group" aria-label="View"
       className={`${toolbarHidden ? "pointer-events-none" : "pointer-events-auto"} inline-flex h-8 w-fit items-center gap-0.5 rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}
       onPointerEnter={onToolbarEnter}
       onPointerLeave={onToolbarLeave}
     >
-      <ZoomControl
+      {zoomControlsVisible && <ZoomControl
+        compact={compact}
         zoomPercent={zoomPercent}
         onZoomPercentChange={onZoomPercentChange}
         onZoomReset={onZoomReset}
-      />
+      />}
+      {!previewMode && showToolCluster && viewMenu}
+      {displayPanel && <><span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" /><DisplayPopover key={selectedEntry?.file} disabled={viewerLoading || !viewportContent}>{displayPanel}</DisplayPopover></>}
     </div>
   ) : null;
 
@@ -361,97 +314,37 @@ function DesktopFloatingToolBar({
         <div className="flex w-fit max-w-full flex-wrap items-center justify-end gap-1 self-end">
         {zoomToolbar}
         {drawingViewToolbar}
-        <div
-          className={`${toolbarHidden ? "pointer-events-none" : "pointer-events-auto"} inline-flex h-8 w-fit items-center gap-0.5 self-end rounded-md p-1 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}
-          onPointerEnter={onToolbarEnter}
-          onPointerLeave={onToolbarLeave}
-        >
-          {previewMode ? (
-            // Orbit mode: only tools that make sense while orbiting, plus an
-            // explicit exit (X). No select/draw/pose/orbit/export here.
-            <>
-              {animationButton}
-              {compact ? moreMenu : <>{screenshotButton}{captureButton}</>}
-              <ToolbarButton label="Exit orbit" onClick={handleExitPreviewMode}>
-                <X className="size-3" strokeWidth={2} aria-hidden="true" />
-              </ToolbarButton>
-            </>
-          ) : (
-            <>
-              {/* Select/Pan/Draw. Pan and Draw are camera and 2D-overlay tools that
-                  work against any viewport; Select is only meaningful where there is
-                  something to pick. Each button asks the capability table, so enabling
-                  one for a new format is a data change. */}
-              {showToolCluster ? (
-                <>
-                  <ToolbarButton
-                    label={selectLabel}
-                    active={referenceSelectionDeferred ? false : selectionToolActive}
-                    onClick={() => handleSelectTabToolMode("references")}
-                    disabled={selectDisabled}
-                    aria-pressed={referenceSelectionDeferred ? false : selectionToolActive}
-                  >
-                    <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />
-                  </ToolbarButton>
-
-                  {!compact && selectionFilter !== null && <SelectionFilterMenu value={selectionFilter} onChange={onSelectionFilterChange} disabled={viewerLoading || !viewportContent} />}
-                  <ToolbarButton
-                    label="Pan"
-                    active={panToolActive}
-                    onClick={() => handleSelectTabToolMode("pan")}
-                    disabled={viewerLoading || !viewportContent}
-                    aria-pressed={panToolActive}
-                  >
-                    <Hand className="size-3" strokeWidth={2} aria-hidden="true" />
-                  </ToolbarButton>
-
-                  <ToolbarButton
-                    label="Measure"
-                    active={measureModeActive}
-                    onClick={() => handleSelectTabToolMode("measure")}
-                    disabled={measureDisabled}
-                    aria-pressed={measureModeActive}
-                  >
-                    <Ruler className="size-3" strokeWidth={2} aria-hidden="true" />
-                  </ToolbarButton>
-
-                  {!compact ? <>
-                  <ToolbarButton
-                    label="Draw"
-                    active={drawToolActive}
-                    onClick={() => handleSelectTabToolMode("draw")}
-                    disabled={viewerLoading || !viewportContent}
-                    aria-pressed={drawToolActive}
-                  >
-                    <PenTool className="size-3" strokeWidth={2} aria-hidden="true" />
-                  </ToolbarButton>
-
-                  {animationButton}
-                  </> : null}
-                </>
-              ) : null}
-
-              {compact ? moreMenu : <>
-              <ToolbarButton
-                label="Orbit"
-                onClick={handleEnterPreviewMode}
-                disabled={captureDisabled}
-              >
-                <Orbit className="size-3" strokeWidth={2} aria-hidden="true" />
-              </ToolbarButton>
-
-              {screenshotButton}
-              {captureButton}
-              </>}
-            </>
-          )}
+        {!previewMode && showToolCluster && <div role="group" aria-label="Inspect" className={groupClasses} onPointerEnter={onToolbarEnter} onPointerLeave={onToolbarLeave}>
+          <ToolbarButton label={selectLabel} active={referenceSelectionDeferred ? false : selectionToolActive}
+            onClick={() => handleSelectTabToolMode("references")} disabled={selectDisabled}
+            aria-pressed={referenceSelectionDeferred ? false : selectionToolActive}>
+            <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />
+          </ToolbarButton>
+          {selectionFilter !== null && <SelectionFilterMenu value={selectionFilter} onChange={onSelectionFilterChange} disabled={viewerLoading || !viewportContent} />}
+          <ToolbarButton label="Measure" active={measureModeActive} onClick={() => handleSelectTabToolMode("measure")}
+            disabled={measureDisabled} aria-pressed={measureModeActive}>
+            <Ruler className="size-3" strokeWidth={2} aria-hidden="true" />
+          </ToolbarButton>
+        </div>}
+        <div role="group" aria-label="Markup and capture" className={groupClasses} onPointerEnter={onToolbarEnter} onPointerLeave={onToolbarLeave}>
+          {!previewMode && supportsTool(renderFormat, "draw") && <>
+            <ToolbarButton label="Draw" active={drawToolActive} onClick={() => handleSelectTabToolMode("draw")}
+              disabled={viewerLoading || !viewportContent} aria-pressed={drawToolActive}>
+              <PenTool className="size-3" strokeWidth={2} aria-hidden="true" />
+            </ToolbarButton>
+            <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
+          </>}
+          {previewMode && animationButton}
+          {captureMenu}
+          {previewMode && <ToolbarButton label="Exit orbit" onClick={handleExitPreviewMode}>
+            <X className="size-3" aria-hidden="true" />
+          </ToolbarButton>}
         </div>
         </div>
       </TooltipProvider>
-      {!previewMode && selectionToolActive && selectionFilter !== null && (compact || selectionFilter !== "all") && (
-        <div className={`pointer-events-auto max-w-full rounded-md px-1 py-0.5 ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
-          {compact ? <SelectionFilterMenu compact value={selectionFilter} onChange={onSelectionFilterChange} disabled={viewerLoading || !viewportContent} />
-            : <span className="px-1 text-micro text-muted-foreground">{SELECTION_FILTERS.find(item => item.id === selectionFilter)?.label}</span>}
+      {!previewMode && selectionToolActive && selectionFilter !== null && selectionFilter !== "all" && (
+        <div className={`pointer-events-auto max-w-full rounded-md px-2 py-0.5 text-micro text-muted-foreground ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
+          {SELECTION_FILTERS.find(item => item.id === selectionFilter)?.label}
         </div>
       )}
       {!previewMode && selectionToolActive && selectionFilterNotice && <p role="status" className="max-w-56 rounded-md border bg-background px-2 py-1 text-micro text-muted-foreground shadow-sm">{selectionFilterNotice}</p>}

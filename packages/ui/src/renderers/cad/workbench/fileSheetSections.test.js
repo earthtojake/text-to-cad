@@ -15,8 +15,7 @@ test("file sheet section defaults match current sheet behavior", () => {
   assert.deepEqual(defaultOpenFileSheetSectionIds("dxf", { hasFileStatus: true }), ["status"]);
   assert.deepEqual(defaultOpenFileSheetSectionIds("step"), ["tree"]);
   assert.deepEqual(defaultOpenFileSheetSectionIds("step", { hasFileStatus: true }), ["status", "tree"]);
-  // In the tabbed layout the Tree is the only default-open section; Display is
-  // the default-active bottom tab, resolved by the tab layout, not this list.
+  // Geometry is the default-open section; Display lives in the toolbar.
   assert.deepEqual(
     defaultOpenFileSheetSectionIds("step", { hasStepPosePanel: true, hasStepAnimationPanel: true }),
     ["tree"]
@@ -61,27 +60,23 @@ test("rendered file sheet sections include closed-by-default sections", () => {
     // the geometry, so it takes the position nearest the default rather than trailing
     // the readouts. Animation follows it.
     "pose",
-    "animation",
-    "display"
+    "animation"
   ]);
   // The two systems are gated independently: a model may declare mates without
   // shipping clips, ship clips without declaring mates, or do neither.
   assert.deepEqual(renderedFileSheetSectionIds("step", { hasStepPosePanel: true }), [
     "tree",
     "features",
-    "pose",
-    "display"
+    "pose"
   ]);
   assert.deepEqual(renderedFileSheetSectionIds("step", { hasStepAnimationPanel: true }), [
     "tree",
     "features",
-    "animation",
-    "display"
+    "animation"
   ]);
   assert.deepEqual(renderedFileSheetSectionIds("step"), [
     "tree",
-    "features",
-    "display"
+    "features"
   ]);
   assert.deepEqual(renderedFileSheetSectionIds("srdf"), ["joints"]);
   assert.deepEqual(renderedFileSheetSectionIds("mesh"), ["measurements"]);

@@ -4032,7 +4032,7 @@ function CadFileViewSurface({
     if (topologyTarget) {
       loadFilterTopology(topologyTarget);
       setSelectionFilterNotice("");
-    } else setSelectionFilterNotice("Select a part in Tree to load its faces and edges.");
+    } else setSelectionFilterNotice("Select a part in Geometry to load its faces and edges.");
   }, [selectionFilter, topologyTarget, loadFilterTopology]);
   const loadDesignTopology = useCallback((partIds = []) => {
     if (!isAssemblyView) setLargeFileState(current => current.selectableTopologyEnabled ? current : ({ ...current, selectableTopologyEnabled: true }));
@@ -5914,6 +5914,7 @@ function CadFileViewSurface({
                 handleAnimationPlayToggle={activeAnimationRuntime?.onPlayToggle}
                 drawToolActive={drawToolActive}
                 measureModeActive={measureModeActive}
+                displayPanel={effectiveRenderFormat === RENDER_FORMAT.STEP ? themeTabs[0]?.content : null}
                 measurementPanel={effectiveRenderFormat === RENDER_FORMAT.STEP ? <>
                   <div className="py-1">
                     <p className="px-2 py-1 text-micro text-muted-foreground">Snap to</p>
@@ -6048,7 +6049,7 @@ function CadFileViewSurface({
                 viewerServerInfo={viewerServerInfo}
                 suppressDynamicMetadataStatus={selectedArtifactGenerating}
                 statusItems={selectedFileStatusItems}
-                themeTabs={themeTabs}
+                themeTabs={[]}
                 openSectionIds={effectiveFileSheetOpenSectionIds}
                 onOpenSectionIdsChange={handleFileSheetOpenSectionIdsChange}
               />

@@ -52,9 +52,7 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
         ...(options.hasDxfLayersPanel ? [FILE_SHEET_SECTION_IDS.DXF_LAYERS] : [])
       ];
     case "step":
-      // Display is the one theme-adjacent tab rendered in the sheet — display
-      // mode plus the section-plane and exploded-view transforms, all per-file
-      // state. Theme settings are global and live in the navbar theme editor.
+      // Geometry and source inspection live here; Display is a toolbar popover.
       return [
         ...status,
         FILE_SHEET_SECTION_IDS.STEP_TREE,
@@ -65,9 +63,6 @@ export function renderedFileSheetSectionIds(kind, options = {}) {
         // separate system, and present only when the model ships clips.
         ...(options.hasStepPosePanel ? [FILE_SHEET_SECTION_IDS.STEP_POSE] : []),
         ...(options.hasStepAnimationPanel ? [FILE_SHEET_SECTION_IDS.STEP_ANIMATION] : []),
-        // Measurements then follows: it and Reference are both readouts about geometry the
-        // user has picked, as against the Tree's inventory of what is in the file.
-        FILE_SHEET_SECTION_IDS.THEME_DISPLAY
       ];
     case "urdf":
     case "srdf":
@@ -102,8 +97,7 @@ export function defaultOpenFileSheetSectionIds(kind, options = {}) {
         ...(options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : [])
       ];
     case "step":
-      // In the tabbed layout the default-active bottom tab is Display, so the
-      // STEP default-open list is just the Tree (the default-active top tab).
+      // Open the geometry tree by default.
       return [
         ...(options.hasFileStatus ? [FILE_SHEET_SECTION_IDS.FILE_STATUS] : []),
         FILE_SHEET_SECTION_IDS.STEP_TREE

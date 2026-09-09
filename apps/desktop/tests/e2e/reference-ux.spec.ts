@@ -81,6 +81,7 @@ test("viewer context and revision requests stay with the right draft and workspa
     await expect(chip).toHaveText("car.step · wheel_front_left");
     await page.mouse.move(350, 80);
     await page.screenshot({ path: test.info().outputPath("named-wheel-reference.png"), animations: "disabled" });
+    await page.getByRole("button", { name: "Capture", exact: true }).click();
     await page.getByTestId("capture-to-chat").click();
     await expect(page.locator("[data-composer]").getByText(/car-.*\.png/)).toHaveCount(1);
     await expect(chip).toHaveCount(1);
@@ -140,6 +141,7 @@ test("viewer context and revision requests stay with the right draft and workspa
     await expect(wheel).toBeVisible();
     if (await wheel.getAttribute("aria-selected") !== "true") await wheel.click();
     await expect(wheel).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("button", { name: "Capture", exact: true }).click();
     await page.getByTestId("capture-to-chat").click();
     const startHere = page.getByRole("button", { name: "Start chat here", exact: true });
     await expect(startHere).toBeVisible();

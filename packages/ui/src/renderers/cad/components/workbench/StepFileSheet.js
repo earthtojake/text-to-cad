@@ -26,6 +26,7 @@ import { buildFileStatusTab } from "./FileStatusSection.js";
 import { buildPoseControlsTab } from "./PoseControlsSection.js";
 import { buildAnimationControlsTab } from "./AnimationControlsSection.js";
 import { buildStepReferenceTab } from "./StepReferenceSection.js";
+import InspectorSplit from "./InspectorSplit.jsx";
 import StepDesignTree from "./StepDesignTree.jsx";
 import { FILE_SHEET_SECTION_IDS } from "../../workbench/fileSheetSections.js";
 const treeChevronButtonClasses = "grid h-7 w-7 shrink-0 place-items-center rounded-sm px-0 text-current/60 hover:bg-sidebar-accent/45 hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent/45";
@@ -627,11 +628,14 @@ export default function StepFileSheet({
   const sections = [
     {
       id: treeSectionId,
-      title: "Tree",
+      title: "Geometry",
+      keepMounted: true,
       scrollsContent: true,
       titleAttr: treeSelectionTitle || undefined,
       content: (
             <div className="flex h-full min-h-0 max-w-full flex-col overflow-hidden">
+              <InspectorSplit title={selectedReferences.length === 1 ? 'Selected geometry' : `${selectedReferences.length} selected items`}
+                details={selectedReferences.length > 0 ? buildStepReferenceTab({ references: selectedReferences }).content : null}>
               <ScrollArea className="min-h-0 flex-1 pb-2">
               <div
                 className="select-none space-y-px"
@@ -1124,18 +1128,16 @@ export default function StepFileSheet({
               ) : null}
               </div>
               </ScrollArea>
-              {selectedReferences.length > 0 && <section aria-label="Selection details" className="max-h-[45%] shrink-0 overflow-y-auto border-t border-sidebar-border/70">
-                <h3 className="px-2 py-2 text-micro text-muted-foreground">Selection</h3>
-                {buildStepReferenceTab({ references: selectedReferences }).content}
-              </section>}
+              </InspectorSplit>
             </div>
       )
     },
     {
       id: FILE_SHEET_SECTION_IDS.STEP_FEATURES,
-      title: "Features",
+      title: "Source features",
+      keepMounted: true,
       scrollsContent: true,
-      content: <StepDesignTree key={selectedEntry.file} {...designOutline} label={selectedEntry.name || selectedEntry.file?.split('/').pop()}
+      content: active => <StepDesignTree active={active} key={selectedEntry.file} {...designOutline} label={selectedEntry.name || selectedEntry.file?.split('/').pop()}
         partActions={showTreeVisibilityControls ? {
           modelId: isAssemblyView ? null : STEP_MODEL_ROOT_ID,
           hiddenIds: isAssemblyView ? hiddenIds : hiddenIds.includes(STEP_MODEL_RENDER_PART_ID) ? [STEP_MODEL_ROOT_ID, ...(designOutline?.parts || []).map(part => part.id)] : [],

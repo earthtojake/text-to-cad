@@ -98,6 +98,18 @@ function FileSheetTab({
   );
 }
 
+// Keep visited inspection trees mounted so tab switches retain disclosure and scroll state.
+// Other sections retain their existing mount/unmount lifecycle.
+function FileSheetTabContent({ section, active }) {
+  const [visited, setVisited] = useState(active);
+  useEffect(() => { if (active) setVisited(true); }, [active]);
+  if (!active && (!section.keepMounted || !visited)) return null;
+  const content = typeof section.content === "function" ? section.content(active) : section.content;
+  return <div hidden={!active} className={cn("min-h-0 flex-1 overflow-hidden", active && "flex flex-col")} data-file-sheet-tab-panel={section.id}>
+    {section.scrollsContent ? content : <ScrollArea className="min-h-0 flex-1" viewportClassName="h-full">{content}</ScrollArea>}
+  </div>;
+}
+
 function FileSheetTabPane({
   pane,
   tabs,
@@ -114,7 +126,6 @@ function FileSheetTabPane({
   onPaneDragLeave
 }) {
   const stripRef = useRef(null);
-  const activeSection = activeId ? sectionsById.get(activeId) : null;
 
   return (
     <section
@@ -161,17 +172,10 @@ function FileSheetTabPane({
           </span>
         ) : null}
       </div>
-      {activeSection?.scrollsContent ? (
-        <div className="min-h-0 flex-1 overflow-hidden" data-file-sheet-tab-panel={activeId}>
-          {activeSection.content}
-        </div>
-      ) : <ScrollArea
-        className="min-h-0 flex-1"
-        viewportClassName="h-full"
-        data-file-sheet-tab-panel={activeId || undefined}
-      >
-        {activeSection ? activeSection.content : null}
-      </ScrollArea>}
+      {tabs.map(id => {
+        const section = sectionsById.get(id);
+        return section ? <FileSheetTabContent key={id} section={section} active={id === activeId} /> : null;
+      })}
     </section>
   );
 }
