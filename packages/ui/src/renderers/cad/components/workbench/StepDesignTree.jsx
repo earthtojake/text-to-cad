@@ -3,6 +3,7 @@ import { Box, ChevronRight, Circle, Eye, EyeOff, Focus, Layers, PencilRuler, Rot
 import { ScrollArea } from '@hardcore/ui/primitives/scroll-area';
 import { cn } from '@hardcore/ui/utils';
 import { resolveDesignFeatureLinks, designFeatureSelection } from '../../workbench/designFeatureSelection.js';
+import InspectorSplit from './InspectorSplit.jsx';
 import StepDesignProperties from './StepDesignProperties.jsx';
 import { designFeatureLabel as featureLabel, designFeatureTitle as title, designFeatureValue as number, groupDesignFeatures, sourceParameterNode, withDesignFaceRows } from '../../workbench/designFeatureTree.js';
 import { designFeatureDimension, designFeatureMeasurements } from '../../workbench/designFeatureMeasurements.js';
@@ -14,7 +15,7 @@ function flatten(nodes, expanded, depth = 0) {
   return nodes.flatMap(node => [{ ...node, depth }, ...(expanded.has(node.id) ? flatten(node.children || [], expanded, depth + 1) : [])]);
 }
 
-export default function StepDesignTree({ client, file, revision, label, onOpenFile, references = EMPTY, parts = EMPTY, onHighlight, onLoadTopology, partActions }) {
+export default function StepDesignTree({ client, file, revision, label, onOpenFile, references = EMPTY, parts = EMPTY, onHighlight, onLoadTopology, partActions, active = true }) {
   const [state, setState] = useState({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [expanded, setExpanded] = useState(new Set(['model', 'parts']));
@@ -93,12 +94,13 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
     measurements: designFeatureMeasurements(previewSelection, references, parts), inspection,
   }), [file, state.source, selected, selectedParameter, previewSelection, references, parts, inspection]);
   useEffect(() => {
-    if (state.geometryLinks?.faces?.length || selectionRequest) onLoadTopology?.(geometrySelection.partIds.length === 1 ? geometrySelection.partIds : []);
-  }, [state.geometryLinks, selectionRequest, geometrySelection, onLoadTopology]);
+    if (active && (state.geometryLinks?.faces?.length || selectionRequest)) onLoadTopology?.(geometrySelection.partIds.length === 1 ? geometrySelection.partIds : []);
+  }, [active, state.geometryLinks, selectionRequest, geometrySelection, onLoadTopology]);
   useEffect(() => {
+    if (!active) return;
     onHighlight?.(selectionRequest ? previewSelection : null, promptContext.label, promptContext);
     return () => onHighlight?.(null);
-  }, [previewSelection, selectionRequest, onHighlight, promptContext]);
+  }, [active, previewSelection, selectionRequest, onHighlight, promptContext]);
   const inspect = (kind, value) => { setSelectedParameter(null); setInspection(current => current?.kind === kind && current.value === value ? null : { kind, value }); setSelectionRequest(current => current + 1); };
   const rows = flatten(roots, expanded);
   const runPartAction = (event, action, id) => {
@@ -121,6 +123,10 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
     </div>}
     {state.status === 'loading' ? <p role="status" className="p-3 text-xs text-muted-foreground">Reading source…</p> : null}
     {state.status === 'error' ? <div role="alert" className="p-3 text-xs text-muted-foreground"><p>{state.error || 'Could not read source features.'}</p><button className="mt-2 underline" onClick={() => setAttempt(value => value + 1)}>Retry</button></div> : null}
+    <InspectorSplit title={featureLabel(selected)} label="Feature properties" details={selected.type !== 'model' ? <StepDesignProperties key={selected.id} selected={selected} selectedParameter={selectedParameter} selectionRequest={selectionRequest}
+      measurements={measurements} inspection={inspection} geometrySelection={geometrySelection} inspect={inspect}
+      onSelectParameter={i => { setExpanded(current => new Set([...current, 'parameters'])); selectRow(parameterNodes[i].id); }}
+      onInspectParameter={i => { setInspection(null); setSelectedParameter(i); setSelectionRequest(value => value + 1); }} /> : null}>
     <ScrollArea className="min-h-0 flex-1">
       <div role="tree" aria-label="Features" className="p-1.5">
         {state.status !== 'loading' && rows.map((node, index) => {
@@ -159,10 +165,7 @@ export default function StepDesignTree({ client, file, revision, label, onOpenFi
         })}
       </div>
     </ScrollArea>
-    <StepDesignProperties key={selected.id} selected={selected} selectedParameter={selectedParameter} selectionRequest={selectionRequest}
-      measurements={measurements} inspection={inspection} geometrySelection={geometrySelection} inspect={inspect}
-      onSelectParameter={i => { setExpanded(current => new Set([...current, 'parameters'])); selectRow(parameterNodes[i].id); }}
-      onInspectParameter={i => { setInspection(null); setSelectedParameter(i); setSelectionRequest(value => value + 1); }} />
+    </InspectorSplit>
     <div className="shrink-0 border-t border-sidebar-border/60 px-3 py-2 text-micro text-muted-foreground">
       {state.source ? <><button className="max-w-full truncate text-left underline-offset-2 hover:underline" title={state.source} onClick={() => onOpenFile?.(state.source)}>{state.source.split('/').pop()}</button></> : <p>{state.status === 'ambiguous' ? 'Multiple source candidates. No feature history was assumed.' : state.status === 'loading' ? 'Reading matching source without running it.' : 'No source feature history available.'}</p>}
     </div>
