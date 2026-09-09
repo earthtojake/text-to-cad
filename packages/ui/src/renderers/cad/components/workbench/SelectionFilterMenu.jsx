@@ -1,5 +1,5 @@
 import { ChevronDown, ListFilter } from 'lucide-react';
-import { useContext } from 'react';
+import { Fragment, useContext } from 'react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator } from '@hardcore/ui/primitives/dropdown-menu';
 import { SELECTION_FILTERS } from '../../workbench/selectionFilter.js';
 import { FileSheetPortalContext } from './FileSheet.js';
@@ -17,9 +17,11 @@ export default function SelectionFilterMenu({ value, onChange, disabled, compact
     <DropdownMenuContent align="start" sideOffset={8} collisionBoundary={boundary} collisionPadding={8} className="w-60 max-w-[min(240px,var(--radix-dropdown-menu-content-available-width))]" onEscapeKeyDown={event => event.stopPropagation()}>
       <DropdownMenuLabel>{menuLabel}</DropdownMenuLabel>
       <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
-        {options.map(item => <DropdownMenuRadioItem key={item.id} value={item.id}>
+        {options.map((item, index) => <Fragment key={item.id}>
+          {item.section && item.section !== options[index - 1]?.section && <><DropdownMenuSeparator /><DropdownMenuLabel>{item.section}</DropdownMenuLabel></>}
+          <DropdownMenuRadioItem value={item.id}>
           <span><span className="block">{item.label}</span>{item.detail && <span className="block text-micro text-muted-foreground">{item.detail}</span>}</span>
-        </DropdownMenuRadioItem>)}
+        </DropdownMenuRadioItem></Fragment>)}
       </DropdownMenuRadioGroup>
       {hint && <><DropdownMenuSeparator /><p className="px-2 py-1.5 text-micro text-muted-foreground">{hint}</p></>}
     </DropdownMenuContent>

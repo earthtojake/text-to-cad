@@ -100,3 +100,29 @@ def assembly():
             self.assertEqual(wing['name'], 'wing')
             self.assertAlmostEqual(wing['bbox']['min'][0], 15, places=5)
             self.assertEqual(len(links['partLines']['10']), 2)
+
+    def test_rounded_faces_keep_verified_links_without_reassigning_older_fillets(self):
+        source_text = """from cadgen import build123d as bd
+
+def part():
+    body = bd.Cylinder(10, 8)
+    upper_edges = body.edges().filter_by(bd.GeomType.CIRCLE).sort_by(bd.Axis.Z)[-1:]
+    body = bd.fillet(upper_edges, 1)
+    lower_edges = body.edges().filter_by(bd.GeomType.CIRCLE).sort_by(bd.Axis.Z)[:1]
+    body = bd.fillet(lower_edges, 0.5)
+    return body
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp, 'part.py'); source.write_text(source_text, encoding='utf-8')
+            spec = importlib.util.spec_from_file_location('rounded_fixture', source)
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            with FeatureTrace(source, 'part') as trace:
+                shape = module.part()
+            links = trace.finish(shape)
+            self.assertIsNotNone(links)
+            self.assertTrue(links['lines']['4'])
+            upper, lower = links['lines']['6'], links['lines']['8']
+            self.assertEqual(len(upper), 1)
+            self.assertEqual(len(lower), 1)
+            self.assertFalse(set(upper) & set(lower))
+            self.assertGreater(links['faces'][upper[0]]['center'][2], links['faces'][lower[0]]['center'][2])

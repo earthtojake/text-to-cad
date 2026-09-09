@@ -146,8 +146,8 @@ def parse_design_outline(source, model_name=None):
         for child in ast.walk(template):
             if child is template or not isinstance(child, ast.Call) or call_name(child) not in SKETCHES:
                 continue
-            children.append({"id": f"sketch:{call.lineno}:{child.lineno}:{child.col_offset}", "label": call_name(child), "type": "sketch", "line": child.lineno, "parameters": parameters(child, child_scope), "children": []})
-        return {"id": f"source:{call.lineno}:{call.col_offset}", "label": label, "type": "sketch" if op in SKETCHES else op.lower(), "sourceParameters": helper_dependencies(helper) if helper else [], "line": call.lineno, "parameters": parameters(call, scope), "children": children}
+            children.append({"id": f"sketch:{call.lineno}:{child.lineno}:{child.col_offset}", "label": call_name(child), "type": "profile", "line": child.lineno, "parameters": parameters(child, child_scope), "children": []})
+        return {"id": f"source:{call.lineno}:{call.col_offset}", "label": label, "type": "profile" if op in SKETCHES else op.lower(), "sourceParameters": helper_dependencies(helper) if helper else [], "line": call.lineno, "parameters": parameters(call, scope), "children": children}
 
     def collect(statements, scope):
         nodes, pending_sketch = [], None

@@ -43,7 +43,7 @@ export function designFeatureSelection(node, resolved, inheritedLine = null) {
   const partIds = new Set();
   const collect = (item, parentLine) => {
     if (item.type === 'part') item.partIds.filter(id => resolved.parts.includes(id)).forEach(id => partIds.add(id));
-    const line = item.type === 'sketch' ? parentLine : item.line;
+    const line = ['sketch', 'profile'].includes(item.type) ? parentLine : item.line;
     if (line) lines.add(String(line));
     for (const child of item.children || []) collect(child, line);
   };

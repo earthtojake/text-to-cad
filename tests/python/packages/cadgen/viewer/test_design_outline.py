@@ -89,6 +89,7 @@ with BuildPart() as part:
 ''')
         self.assertEqual(len(result['features']), 1)
         self.assertEqual(result['features'][0]['children'][0]['type'], 'sketch')
+        self.assertEqual(result['features'][0]['children'][0]['children'][0]['type'], 'profile')
 
     def test_controls_are_not_unrolled_or_treated_as_evaluated_values(self):
         result = parse_design_outline('''
@@ -153,3 +154,10 @@ def case():
             (root / 'case.py').write_bytes(b'#' * (512 * 1024 + 1))
             with self.assertRaisesRegex(ValueError, '512 KB'):
                 read_design_outline(str(root), 'case.step')
+
+    def test_inline_profiles_do_not_invent_sketches(self):
+        result = parse_design_outline('@step\ndef part():\n    return extrude(Rectangle(20, 10), amount=5)')
+        operation = result['features'][0]
+        self.assertEqual(operation['type'], 'extrude')
+        self.assertEqual(operation['children'][0]['type'], 'profile')
+        self.assertEqual(operation['children'][0]['label'], 'Rectangle')
