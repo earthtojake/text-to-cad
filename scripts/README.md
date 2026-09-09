@@ -93,6 +93,10 @@ where those files ship, so these scripts are what produces them.
 
 `release/` — the version and the release identity.
 
+- `check-pr-version.sh BASE_REF HEAD_REF HEAD_SHA` — rejects VERSION edits
+  outside `release/*`, comparing with the current target branch's merge base
+  so inherited releases are not mistaken for PR edits. Requires fetched remote
+  history; called by `test.yml`.
 - `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, every
   skill pins `cadgen==VERSION`, and (with the flag) `VERSION` is greater than the
   one at `REF`. Called by `test.yml`, `release-prepare.yml`, `release-publish.yml`,
