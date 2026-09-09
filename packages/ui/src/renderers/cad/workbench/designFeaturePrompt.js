@@ -4,19 +4,23 @@ import { buildSelectionCopyPayload, canonicalCadRefCopyText, withFileRefPrefix }
 // plain text: source operation IDs are never fabricated geometry references.
 export function designFeatureContextText(context, { includeModel = true } = {}) {
   if (!context?.file || !context?.label) return '';
-  const lines = [`Feature context: ${context.label}`];
-  if (includeModel) lines.push(`Model: ${/[\s#"\\]/.test(context.file) ? JSON.stringify(context.file) : context.file}`);
-  if (context.source) lines.push(`Source: ${context.source}${context.line ? ` (line ${context.line})` : ''}`);
-  if (context.parameters?.length) lines.push(`Source inputs: ${context.parameters.map(param => `${param.name} = ${param.value == null ? param.expression : String(param.value)}`).join('; ')}`);
-  if (context.children?.length) lines.push(`Contains: ${context.children.join('; ')}`);
-  const values = context.measurements;
-  const format = value => Number(value.toFixed(5));
-  if (values?.size) lines.push(`Measured result extents (X × Y × Z): ${values.size.map(format).join(' × ')} mm`);
-  if (values?.area != null) lines.push(`Measured face area: ${format(values.area)} mm²`);
-  if (values?.radii?.length) lines.push(`Measured surface radii: ${values.radii.map(format).join(', ')} mm`);
-  if (context.inspection?.kind === 'axis') lines.push(`Selected measurement: ${['X', 'Y', 'Z'][context.inspection.value]} extent`);
-  if (context.inspection?.kind === 'radius') lines.push(`Selected surface radius: ${context.inspection.value} mm`);
-  return lines.join('\n');
+  const quote = value => /[\s#"\\]/.test(value) ? JSON.stringify(value) : value;
+  const details = [];
+  if (context.inspection?.kind === 'axis') {
+    const axis = context.inspection.value, value = context.measurements?.size?.[axis];
+    details.push(`${['X', 'Y', 'Z'][axis]} extent${Number.isFinite(value) ? ` = ${Number(value.toFixed(5))} mm` : ''}`);
+  }
+  if (context.inspection?.kind === 'radius') details.push(`radius = ${context.inspection.value} mm`);
+  // A clicked parameter may need its expression; entire parameter/child lists
+  // and unrelated measured facts belong in inspection, not the user's draft.
+  if (context.parameters?.length === 1 && !context.inspection) {
+    const param = context.parameters[0];
+    const value = param.value == null ? param.expression : String(param.value);
+    if (value != null && String(value).length <= 80) details.push(`${param.name} = ${value}`);
+  }
+  if (!context.source && !includeModel && !details.length) return '';
+  const location = [includeModel ? quote(context.file) : '', context.source ? `${quote(context.source)}${context.line ? `:${context.line}` : ''}` : ''].filter(Boolean).join(' · ');
+  return [context.label, ...details, location].filter(Boolean).join(' · ');
 }
 
 // Preview IDs must resolve against the current document before becoming a

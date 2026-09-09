@@ -195,6 +195,7 @@ function transformPickData(pickData, transform) {
   }
   return {
     ...pickData,
+    chainEndpoints: pickData.chainEndpoints?.map(({ point, direction }) => ({ point: transformPoint(transform, point), direction: transformVector(transform, direction) })),
     bbox: pickData.bbox ? transformBBox(transform, pickData.bbox) : pickData.bbox,
     center: Array.isArray(pickData.center) ? transformPoint(transform, pickData.center) : pickData.center,
     normal: Array.isArray(pickData.normal) ? transformVector(transform, pickData.normal) : pickData.normal,
@@ -418,6 +419,7 @@ function buildReference({
       bbox: row.bbox || null,
       surfaceType: row.surfaceType || null,
       curveType: row.curveType || null,
+      visibilityClass: row.visibilityClass || null,
       // Measured quantities the topology already computed exactly. Rigid
       // occurrence transforms preserve both, so they pass through unchanged.
       length: Number.isFinite(Number(row.length)) ? Number(row.length) : null,
@@ -433,6 +435,40 @@ function buildReference({
       transform: selectorTransform || null,
     },
   };
+}
+
+// Use each edge's own tessellation endpoints. Closed or branched edge proxies
+// have no unique pair and must not be guessed into an open chain.
+function edgeChainEndpoints(reference, proxy) {
+  const { segmentStart: start, segmentCount: count, curveType, params } = reference.pickData;
+  const points = proxy.edgePositions, indices = proxy.edgeIndices;
+  if (!Number.isInteger(start) || !Number.isInteger(count) || count < 1 || (start + count) * 2 > indices.length) return [];
+  const vertices = new Map();
+  for (let i = start * 2; i < (start + count) * 2; i += 2) {
+    const pair = [indices[i], indices[i + 1]].map(index => Array.from(points.slice(index * 3, index * 3 + 3)));
+    if (pair.some(point => point.length !== 3 || !point.every(Number.isFinite))) return [];
+    if (JSON.stringify(pair[0]) === JSON.stringify(pair[1])) continue;
+    for (let j = 0; j < 2; j++) {
+      const key = JSON.stringify(pair[j]);
+      const vertex = vertices.get(key) || { point: pair[j], neighbor: pair[1-j], count: 0 };
+      vertex.count++; vertices.set(key, vertex);
+    }
+  }
+  if ([...vertices.values()].some(vertex => vertex.count > 2)) return [];
+  const ends = [...vertices.values()].filter(vertex => vertex.count === 1);
+  if (ends.length !== 2) return [];
+  return ends.map(({ point, neighbor }) => {
+    let direction = neighbor.map((value, i) => value - point[i]);
+    if (curveType === 'circle' && params?.center?.length === 3 && params?.axis?.length === 3) {
+      const radial = point.map((value, i) => value - params.center[i]);
+      const a = params.axis;
+      const tangent = [a[1]*radial[2]-a[2]*radial[1], a[2]*radial[0]-a[0]*radial[2], a[0]*radial[1]-a[1]*radial[0]];
+      const sign = tangent.reduce((sum, value, i) => sum + value * direction[i], 0) < 0 ? -1 : 1;
+      direction = tangent.map(value => value * sign);
+    }
+    const length = Math.hypot(...direction);
+    return { point, direction: length ? direction.map(value => value / length) : [0, 0, 0] };
+  });
 }
 
 function buildLeafOccurrenceIds(shapes) {
@@ -578,6 +614,9 @@ export function buildSelectorRuntime(bundle, {
     remapOccurrencePrefix,
     targetSelectorType: "face",
   })));
+  for (const reference of references) {
+    if (reference.selectorType === 'edge') reference.pickData.chainEndpoints = edgeChainEndpoints(reference, selectorBuffers);
+  }
   const visibleReferences = references.filter((reference) => String(reference?.normalizedSelector || "").trim());
   const referenceMap = new Map(visibleReferences.map((reference) => [reference.id, reference]));
   const referenceByNormalizedSelector = new Map(
