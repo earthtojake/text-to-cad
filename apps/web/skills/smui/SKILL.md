@@ -2,8 +2,8 @@
 
 The CAD Viewer is a Vite and Tailwind v4 host of `@hardcore/ui`. Shared
 components and CAD controls live in that package; the web app owns its top bar
-and browser-specific composition. Read the
-[UI package boundary](../../../../packages/ui/README.md) before changing a
+and browser-specific composition. In a repository checkout, read
+`packages/ui/README.md` before changing a
 shared control.
 
 The package migration is a pure refactor. Preserve the current appearance and
@@ -15,7 +15,7 @@ both color schemes and at narrow widths.
 ## Tokens and ownership
 
 - Canonical tokens live in
-  [packages/ui/src/styles/tokens.css](../../../../packages/ui/src/styles/tokens.css).
+  `packages/ui/src/styles/tokens.css`.
   The current palette is neutral, with light and dark variants and the existing
   radius scale. Reuse those values and semantic utilities such as
   `bg-background`, `text-muted-foreground`, `border-border` and
@@ -33,7 +33,7 @@ both color schemes and at narrow widths.
   uppercase-label rule or monospace requirement to apply.
 - Import reusable controls through `@hardcore/ui/primitives/*` and `cn` through
   `@hardcore/ui/utils`. The class-merging helper lives in
-  [packages/ui/src/lib/utils.js](../../../../packages/ui/src/lib/utils.js).
+  `packages/ui/src/lib/utils.js`.
   Keep existing host-specific controls when their appearance or behavior differs.
 
 ## Controls and interaction
@@ -45,7 +45,7 @@ existing Lucide icons and tooltips. Status and error text must convey meaning
 without relying only on color.
 
 For CAD Inspector and theme-editor rows, follow
-[settings-ui.md](../../../../packages/ui/docs/settings-ui.md). It defines the
+`packages/ui/docs/settings-ui.md`. It defines the
 existing row types, control widths, units, section structure and accessible
 label conventions. Reuse those CAD controls inside the renderer instead of
 adding a second settings layout.
@@ -60,7 +60,7 @@ change a control's availability or alter selection and navigation behavior.
 Check the affected app and shared component in light and dark modes, at the
 normal and narrow layouts, and with keyboard as well as pointer input. For CAD
 changes, include the existing Inspector, toolbar, loading/error and preview
-states; the [render checks](../../../../packages/ui/docs/render-types.md) cover
+states; the `packages/ui/docs/render-types.md` cover
 cross-format and theme behavior. Rebuild shared package output before checking
 an app that consumes it, following the package README. Do not use a migration
 or documentation update to change the styling baseline.
