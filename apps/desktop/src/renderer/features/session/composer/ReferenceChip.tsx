@@ -12,7 +12,8 @@ import { openComposerReference, ReferenceScopeContext } from "./ReferenceScope";
 
 /**
  * How a reference looks in the composer: a file icon, the file's name and
- * the selector as a badge — `bracket.step` `o1.2`. A bare selector (`#o1.2`,
+ * its part/feature label (or selector badge) — `bracket.step · Mount`.
+ * A friendly label never replaces the model name. A bare selector (`#o1.2`,
  * the current file's) shows a hash instead of a file. The whole token is
  * the tooltip, and the chip is what the arrow keys land on; `selected` is
  * ProseMirror's NodeSelection, drawn as a ring so a keyboard user can see
@@ -22,7 +23,7 @@ import { openComposerReference, ReferenceScopeContext } from "./ReferenceScope";
 export function ReferenceChip({ node, selected }: NodeViewProps) {
   const scope = useContext(ReferenceScopeContext);
   const reference = node.attrs as CadReference;
-  const name = reference.file ? (reference.file.split("/").pop() ?? reference.file) : "";
+  const name = reference.file ? (reference.file.split(/[\\/]/).pop() ?? reference.file) : "";
   const token = referenceToken(reference);
   const label = useComposer((state) => scope?.draftKey ? state.referenceLabels[scope.draftKey]?.[token] : undefined);
   return (
@@ -41,7 +42,7 @@ export function ReferenceChip({ node, selected }: NodeViewProps) {
     >
       <button
         aria-label={`Show ${label ? `${label} (${token})` : token} in viewer`}
-        className="inline-flex max-w-full items-center gap-1 rounded-md px-1.5 py-px transition-colors duration-120 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
+        className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-1.5 py-px transition-colors duration-120 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none"
         disabled={!scope}
         type="button"
         onMouseDown={(event) => event.preventDefault()}
@@ -56,16 +57,20 @@ export function ReferenceChip({ node, selected }: NodeViewProps) {
           }
         }}
       >
-        {label || name ? (
-          <>
-            <Box aria-hidden className="size-3 shrink-0 opacity-70" />
-            <span className="max-w-[160px] truncate">{label || name}</span>
-          </>
+        {name ? (
+          <Box aria-hidden className="size-3 shrink-0 opacity-70" />
         ) : (
           <Hash aria-hidden className="size-3 shrink-0 opacity-70" />
         )}
+        {name ? (
+          <span className="min-w-0 max-w-[160px] truncate" data-reference-model>{name}</span>
+        ) : null}
+        {name && label ? <span aria-hidden className="shrink-0 text-muted-foreground"> · </span> : null}
+        {label ? (
+          <span className="min-w-0 max-w-[160px] truncate text-muted-foreground" data-reference-label title={label}>{label}</span>
+        ) : null}
         {!label && reference.selector ? (
-          <span className="rounded-sm bg-primary/10 px-1 font-mono text-[11px] text-primary" data-selector-badge>
+          <span className="min-w-0 max-w-[160px] truncate rounded-sm bg-primary/10 px-1 font-mono text-[11px] text-primary" data-selector-badge>
             {reference.selector}
           </span>
         ) : null}

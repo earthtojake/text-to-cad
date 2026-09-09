@@ -1,4 +1,23 @@
+import { measurementFromPicks } from '@hardcore/core/lib/viewer/measurement.js';
+
 const validBox = box => box && ['min', 'max'].every(key => Array.isArray(box[key]) && box[key].length === 3 && box[key].every(Number.isFinite)) && box.min.every((value, axis) => value <= box.max[axis]);
+
+// These are world-axis bounding extents, not inferred construction dimensions.
+export function designFeatureDimension(selection, references, parts, axis) {
+  if (![0, 1, 2].includes(axis)) return null;
+  const faces = new Map(references.filter(ref => ref.selectorType === 'face').map(ref => [ref.id, ref.pickData]));
+  const bodies = new Map(parts.map(part => [part.id, part]));
+  const boxes = [...new Set(selection?.faceIds || [])].map(id => faces.get(id)?.bbox)
+    .concat([...new Set(selection?.partIds || [])].map(id => bodies.get(id)?.bounds));
+  if (!boxes.length || !boxes.every(validBox)) return null;
+  const min = [0, 1, 2].map(i => Math.min(...boxes.map(box => box.min[i])));
+  const max = [0, 1, 2].map(i => Math.max(...boxes.map(box => box.max[i])));
+  if (max[axis] - min[axis] < 1e-6) return null;
+  const a = [...min], b = [...min];
+  b[axis] = max[axis];
+  const pickA = { point: a }, pickB = { point: b };
+  return { id: 'feature-dimension', colorIndex: 0, pickA, pickB, measurement: measurementFromPicks(pickA, pickB) };
+}
 
 // Read the linked final geometry, never infer construction dimensions or volume.
 export function designFeatureMeasurements(selection, references, parts) {
@@ -17,7 +36,7 @@ export function designFeatureMeasurements(selection, references, parts) {
   const area = !partIds.length && faces.length && faces.every(face => Number.isFinite(face?.area) && face.area >= 0) ? faces.reduce((sum, face) => sum + face.area, 0) : null;
   const radii = [...new Set(faces.flatMap(face => {
     const params = face?.params;
-    return ['cylinder', 'sphere'].includes(face?.surfaceType || params?.kind) && Number.isFinite(params.radius) && params.radius > 0 ? [Number(params.radius.toPrecision(10))] : [];
+    return ['cylinder', 'sphere'].includes(face?.surfaceType || params?.kind) && Number.isFinite(params?.radius) && params.radius > 0 ? [Number(params.radius.toPrecision(10))] : [];
   }))].sort((a, b) => a - b);
   return { size, area, radii };
 }

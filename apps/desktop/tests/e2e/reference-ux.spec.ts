@@ -66,7 +66,7 @@ test("viewer context and revision requests stay with the right draft and workspa
     await expect(draft).toHaveText("Make this wheel wider:");
     await page.getByRole("button", { name: "Add to prompt", exact: true }).click();
     await expect(draft).toBeFocused();
-    await expect(chip).toHaveText("wheel_front_left");
+    await expect(chip).toHaveText("car.step · wheel_front_left");
     await wheel.click({ button: "right" });
     await page.getByRole("menuitem", { name: "Add to prompt", exact: true }).click();
     await expect(chip).toHaveCount(1);
@@ -78,7 +78,7 @@ test("viewer context and revision requests stay with the right draft and workspa
     await chip.getByRole("button").click();
     await expect(wheel).toHaveAttribute("aria-selected", "true");
     await expect(tip).toHaveCount(0);
-    await expect(chip).toHaveText("wheel_front_left");
+    await expect(chip).toHaveText("car.step · wheel_front_left");
     await page.mouse.move(350, 80);
     await page.screenshot({ path: test.info().outputPath("named-wheel-reference.png"), animations: "disabled" });
     await page.getByTestId("capture-to-chat").click();
@@ -145,7 +145,7 @@ test("viewer context and revision requests stay with the right draft and workspa
     await expect(startHere).toBeVisible();
     await expect(draft).toHaveText("Preserve my other workspace draft.");
     await startHere.click();
-    await expect(chip).toHaveText("wheel_front_left");
+    await expect(chip).toHaveText("car.step · wheel_front_left");
     await expect(page.locator("[data-composer]").getByText(/car-.*\.png/)).toHaveCount(1);
     await expect(draft).toBeFocused();
     const sessions = await page.evaluate((projectId) => window.hardcore.sessions.list({ projectId }), added.id);
@@ -156,7 +156,7 @@ test("viewer context and revision requests stay with the right draft and workspa
     await page.locator("[data-composer]").getByRole("button", { name: "Remove", exact: true }).click();
     await expect(page.getByRole("button", { name: /^Enlarge car-/ })).toHaveCount(0);
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(chip).toHaveText("wheel_front_left");
+    await expect(chip).toHaveText("car.step · wheel_front_left");
     await page.locator(`[data-session-row="${other.id}"]`).getByRole("button").first().click();
     await expect(draft).toHaveText("Preserve my other workspace draft.");
   } catch (error) {

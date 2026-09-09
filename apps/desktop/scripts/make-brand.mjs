@@ -16,8 +16,8 @@
  *
  *   npm run brand
  *
- * Deterministic: same font, same Chromium, same bytes. `npm run icons` reads
- * `hardcore-h.png` from here, so run this first when the mark changes.
+ * Deterministic: same font, same Chromium, same bytes. These are legacy H
+ * export assets; `npm run icons` independently uses the sidebar star.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -31,8 +31,7 @@ const fontFile = path.join(brandDir, "fonts", "JetBrainsMono-ExtraBoldItalic.wof
 /**
  * The palette.
  *
- * `BLUE` is the app icon's own blue, so the wordmark and the icon are the same
- * mark. The icon (`apps/docs/public/favicon.png`, which `make-icons.mjs` drew
+ * `BLUE` was sampled from the original blue star. The icon (`apps/docs/public/favicon.png`, which `make-icons.mjs` drew
  * from until this script existed) is a shaded 3D render and therefore has no
  * single hex: this is the mean of its opaque, unambiguously blue pixels
  * (b - r > 40) in the light luminance band (0.2126r + 0.7152g + 0.0722b
@@ -68,12 +67,8 @@ const MONOGRAM_PX = 1024;
  * The monogram's ink box — both copies together — fills this much of its
  * square, on the taller of its two axes.
  *
- * This number is also the icon's, because `make-icons.mjs` draws this whole
- * square onto the icon's tile: whatever share of the square the ink takes, it
- * takes of the tile, with no second scale factor to keep in step. 0.72 puts it
- * inside the inner 80% macOS's icon grid asks for and leaves the H's arms clear
- * of where the tile's corners start to curve; at 0.80 exactly the bottom-left
- * foot crowds the corner and the icon reads a size larger than its neighbours.
+ * The legacy monogram exports retain their original 72% ink coverage.
+ * The current star app icon is sized independently by make-icons.mjs.
  */
 const MONOGRAM_INK_FRACTION = 0.72;
 

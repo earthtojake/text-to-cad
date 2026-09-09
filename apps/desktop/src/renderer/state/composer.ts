@@ -35,7 +35,7 @@ export type QueuedPrompt = {
 export const NEW_SESSION_KEY = "__new__";
 export const newSessionKey = (projectId: string) => `${NEW_SESSION_KEY}:${projectId}`;
 
-export type DraftContext = { text?: string; references?: CadReference[]; files?: File[] };
+export type DraftContext = { text?: string; references?: CadReference[]; files?: File[]; deduplicateText?: boolean };
 
 type ComposerState = {
   focusRequest: { key: string; nonce: number } | null;
@@ -78,7 +78,7 @@ export const useComposer = create<ComposerState>((set, get) => ({
       if (!parseSegments(text).some(segment => segment.type === "reference" && referenceText(segment.reference) === token)) text += `${text && !/\s$/.test(text) ? " " : ""}${token} `;
       if (reference.label?.trim()) labels[token] = reference.label.trim();
     }
-    if (context.text) text += `${text.trim() ? "\n\n" : ""}${context.text}`;
+    if (context.text && !(context.deduplicateText && text.includes(context.text))) text += `${text.trim() ? "\n\n" : ""}${context.text}`;
     return {
       drafts: { ...state.drafts, [key]: text },
       referenceLabels: { ...state.referenceLabels, [key]: labels },

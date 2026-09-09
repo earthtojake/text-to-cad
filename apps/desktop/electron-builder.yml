@@ -61,7 +61,7 @@ extraResources:
   - from: resources/skills
     to: skills
 
-# One icon source, build/icon.png (scripts/make-icons.mjs copies the docs favicon;
+# One icon source, build/icon.png (scripts/make-icons.mjs renders the sidebar star;
 # committed). electron-builder derives the macOS .icns and Windows .ico from it.
 
 # The updater feed. `release-publish.yml` attaches the installers to the same

@@ -9,6 +9,7 @@ import { cadPanels } from '../../file-viewer/navigation/panels.js';
 
 export interface CadReference { file: string; selector: string; label?: string; text?: string }
 export interface CadCapture { blob: Blob; file: string; references?: CadReference[] }
+export interface CadPromptContext { text: string; references: CadReference[] }
 export interface CadCommands {
   selectReference?: { selector: string; key?: string | number } | null;
   captureRequest?: { key: string | number } | null;
@@ -20,6 +21,7 @@ export interface CadCommandSource {
 export interface CadRendererOptions {
   client: CadClient | ((context: PrepareContext) => Promise<CadClient>);
   onReference?: (reference: CadReference) => void;
+  onPromptContext?: (context: CadPromptContext) => void;
   onCapture?: (capture: CadCapture) => void;
   commands?: CadCommandSource;
   preferences?: CadPreferenceSource;
